@@ -1,3 +1,5 @@
+#!/bin/bash
+
 cd ~/carcassonne-gg-backups
 curl -s https://api.carcassonne.com.ua/matches -o matches.json
 git add matches.json
