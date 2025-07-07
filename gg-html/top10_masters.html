@@ -83,7 +83,7 @@
 <script>
   async function fetchTop10Players() {
     const primaryURL = "https://api.carcassonne.com.ua/players";
-    const backupURL = "https://zaharik-ua.github.io/carcassonne-gg-backups/masters.json";
+    const backupURL = "https://zaharik-ua.github.io/carcassonne-gg/fallback-data/masters.json";
 
     async function tryFetch(url) {
       const res = await fetch(url);
