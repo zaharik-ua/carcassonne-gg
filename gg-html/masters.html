@@ -1,0 +1,445 @@
+<!-- ШРИФТ + ІКОНКИ -->
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- СТИЛІ -->
+<style>
+  body {
+    font-family: 'Montserrat', sans-serif;
+  }
+
+  .section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #222;
+    margin: 15px 0 6px 0;
+    padding: 0 8px;
+  }
+
+  .filter-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #222;
+    margin: 6px 0 4px 0;
+    padding: 0 8px;
+  }
+
+  .filter-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 8px 4px;
+  }
+
+  .clear-filters-button {
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 6px;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    height: 20px;
+    line-height: 16px;
+    transition: all 0.2s ease;
+  }
+
+  .clear-filters-button:hover {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.4);
+  }
+
+  .count-display {
+    font-size: 14px;
+    color: #333333;
+  }
+
+  .count-display .label,
+  .count-display .value {
+    font-size: 14px;
+    color: #333333;
+  }
+
+  .count-display .label {
+    font-weight: 400;
+  }
+
+  .count-display .value {
+    font-weight: 600;
+  }
+
+  .tournament-card {
+    background: white;
+    border-radius: 4px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .player-row {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background-color: white;
+    border-top: 1px solid #ccc;
+    box-sizing: border-box;
+  }
+
+  .player-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .player-flag {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+
+  .player-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+  }
+
+  .player-nick a {
+    font-size: 16px;
+    font-weight: normal;
+    text-decoration: none;
+    color: #333333;
+    transition: color 0.2s ease;
+  }
+
+  .player-nick a:hover {
+    color: #0277BD;
+  }
+
+  .player-name {
+    font-size: 14px;
+    color: #555;
+  }
+
+  .player-achievements {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .player-achievements img {
+    height: 20px;
+    margin-left: 4px;
+  }
+
+  .player-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .elo-rating {
+    color: #fff;
+    background-color: #a99bc9;
+    font-weight: bold;
+    font-size: 12px;
+    border-radius: 2px;
+    height: auto;
+    padding: 3px 5px;
+    line-height: 1;
+    margin-top: 0px;
+    white-space: nowrap;
+  }
+
+  .player-date {
+    font-size: 14px;
+  }
+
+  #flag-filter-wrapper,
+  #type-filter-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    margin-bottom: 4px;
+    padding-left: 8px;
+  }
+
+  #flag-filter-wrapper img {
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    border-radius: 3px;
+    border: 2px solid transparent;
+    transition: border 0.2s ease;
+  }
+
+  #flag-filter-wrapper img.active {
+    border-color: #0277BD;
+  }
+
+  .type-filter-option {
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background-color: #fffde5;
+    color: #333;
+    transition: all 0.2s ease;
+  }
+
+  .type-filter-option.active {
+    border-color: #0277BD;
+    background-color: #fbf092;
+  }
+</style>
+
+<div class="section-title">BGA Carcassonne Masters</div>
+<div class="filter-title">Country</div>
+<div id="flag-filter-wrapper"></div>
+<div class="filter-title">Achievements</div>
+<div id="type-filter-wrapper"></div>
+<div class="filter-row">
+  <button class="clear-filters-button" onclick="clearAllFilters()">Clear filters</button>
+  <div class="count-display"><span class="label">Count: </span><span class="value" id="player-count"></span></div>
+</div>
+<div id="players-container"></div>
+
+<script>
+  let allPlayers = [];
+  let selectedCountry = null;
+  let selectedAchievementType = null;
+  let allAchievementTypes = [];
+  let achievementMap = new Map();
+
+  function updatePlayerCount(count) {
+    document.getElementById("player-count").textContent = count;
+  }
+
+  function clearAllFilters() {
+    selectedCountry = null;
+    selectedAchievementType = null;
+    document.querySelectorAll("#flag-filter-wrapper img").forEach(i => i.classList.remove("active"));
+    document.querySelectorAll(".type-filter-option").forEach(b => b.classList.remove("active"));
+    renderFilteredPlayers();
+  }
+
+  function createPlayerElement(player) {
+    const container = document.createElement("div");
+    container.className = "player-row";
+
+    const leftDiv = document.createElement("div");
+    leftDiv.className = "player-left";
+
+    const flag = document.createElement("img");
+    flag.className = "player-flag";
+    flag.src = player.flag;
+    flag.alt = "flag";
+    leftDiv.appendChild(flag);
+
+    const textContainer = document.createElement("div");
+    textContainer.className = "player-text";
+
+    const nick = document.createElement("div");
+    nick.className = "player-nick";
+    const nickLink = document.createElement("a");
+    nickLink.href = `https://boardgamearena.com/player?id=${player.id}`;
+    nickLink.target = "_blank";
+    nickLink.textContent = player.player;
+    nick.appendChild(nickLink);
+
+    const name = document.createElement("div");
+    name.className = "player-name";
+    name.textContent = player.name;
+
+    textContainer.appendChild(nick);
+    textContainer.appendChild(name);
+    leftDiv.appendChild(textContainer);
+
+    if (player.achievements && player.achievements.length > 0) {
+      const achievementsDiv = document.createElement("div");
+      achievementsDiv.className = "player-achievements";
+      player.achievements.forEach(name => {
+        const info = achievementMap.get(name);
+        if (info && info.logo_url) {
+          const img = document.createElement("img");
+          img.src = info.logo_url;
+          img.alt = name;
+          img.title = name;
+          achievementsDiv.appendChild(img);
+        }
+      });
+      leftDiv.appendChild(achievementsDiv);
+    }
+
+    const rightDiv = document.createElement("div");
+    rightDiv.className = "player-right";
+
+    if (player.top_elo) {
+      const elo = document.createElement("code");
+      elo.className = "elo-rating gamerank_expert";
+      elo.textContent = `${player.top_elo}`;
+      rightDiv.appendChild(elo);
+    }
+    if (player.master_title_date && !player.top_elo) {
+      const date = document.createElement("div");
+      date.className = "player-date";
+      date.textContent = player.master_title_date;
+      rightDiv.appendChild(date);
+    }
+
+    if (player.profile) {
+      const link = document.createElement("a");
+      link.href = player.profile;
+      link.target = "_blank";
+      link.innerHTML = '<i class="fas fa-user" style="font-size: 14px;"></i>';
+      rightDiv.appendChild(link);
+    }
+
+    container.appendChild(leftDiv);
+    container.appendChild(rightDiv);
+    return container;
+  }
+
+  function renderPlayersSection(container, title, players) {
+    if (!players || players.length === 0) return;
+    updatePlayerCount(players.length);
+    const card = document.createElement("div");
+    card.className = "tournament-card";
+    players.forEach(player => card.appendChild(createPlayerElement(player)));
+    container.appendChild(card);
+  }
+
+  function renderFilteredPlayers() {
+  let filtered = [...allPlayers];
+  if (selectedCountry) {
+    filtered = filtered.filter(p => p.country === selectedCountry);
+  }
+  if (selectedAchievementType) {
+    filtered = filtered.filter(p => {
+      return p.achievements?.some(a => {
+        const info = achievementMap.get(a);
+        return info?.type === selectedAchievementType;
+      });
+    });
+  }
+
+  filtered.sort((a, b) => {
+    const eloA = a.top_elo || 0;
+    const eloB = b.top_elo || 0;
+
+    if (eloA && eloB) return eloB - eloA; // сортуємо за elo, якщо обидва є
+    if (eloA) return -1; // a має elo, b — ні
+    if (eloB) return 1;  // b має elo, a — ні
+
+    const hasDateA = !!a.master_title_date;
+    const hasDateB = !!b.master_title_date;
+
+    if (hasDateA && hasDateB) {
+      const dateA = new Date(a.master_title_date.split('.').reverse().join('-'));
+      const dateB = new Date(b.master_title_date.split('.').reverse().join('-'));
+      return dateA - dateB; // від найстарішого до нового
+    }
+    if (hasDateA) return -1; // a має дату, b — ні
+    if (hasDateB) return 1;  // b має дату, a — ні
+
+    return a.player.localeCompare(b.player); // сортуємо за ніком
+  });
+
+  const container = document.getElementById("players-container");
+  container.innerHTML = "";
+  renderPlayersSection(container, "BGA Carcassonne Masters", filtered);
+}
+
+  function setupCountryFlags(players) {
+    const countries = [...new Map(players.map(p => [p.country, p.flag])).entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]));
+
+    const wrapper = document.getElementById("flag-filter-wrapper");
+    wrapper.innerHTML = "";
+
+    countries.forEach(([country, flagUrl]) => {
+      const img = document.createElement("img");
+      img.src = flagUrl;
+      img.alt = country;
+      img.title = country;
+      img.addEventListener("click", () => {
+        if (selectedCountry === country) {
+          selectedCountry = null;
+          img.classList.remove("active");
+        } else {
+          selectedCountry = country;
+          wrapper.querySelectorAll("img").forEach(i => i.classList.remove("active"));
+          img.classList.add("active");
+        }
+        renderFilteredPlayers();
+      });
+      wrapper.appendChild(img);
+    });
+  }
+
+  function setupAchievementTypeFilter(types) {
+    const wrapper = document.getElementById("type-filter-wrapper");
+    wrapper.innerHTML = "";
+
+    types.forEach(type => {
+      const btn = document.createElement("div");
+      btn.className = "type-filter-option";
+      btn.textContent = type;
+      btn.addEventListener("click", () => {
+        if (selectedAchievementType === type) {
+          selectedAchievementType = null;
+          btn.classList.remove("active");
+        } else {
+          selectedAchievementType = type;
+          wrapper.querySelectorAll(".type-filter-option").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+        }
+        renderFilteredPlayers();
+      });
+      wrapper.appendChild(btn);
+    });
+  }
+
+async function fetchAndRenderPlayers() {
+  const primaryPlayersURL = "https://api.carcassonne.com.ua/players";
+  const primaryAchievementsURL = "https://api.carcassonne.com.ua/achievements";
+  const fallbackPlayersURL = "https://zaharik-ua.github.io/carcassonne-gg-backups/masters.json";
+  const fallbackAchievementsURL = "https://zaharik-ua.github.io/carcassonne-gg-backups/achievements.json";
+
+  let playersRes, achievementsRes;
+
+  try {
+    playersRes = await fetch(primaryPlayersURL);
+    if (!playersRes.ok) throw new Error("Primary players source failed");
+    achievementsRes = await fetch(primaryAchievementsURL);
+    if (!achievementsRes.ok) throw new Error("Primary achievements source failed");
+  } catch (error) {
+    console.warn("⚠️ Using fallback data from GitHub Pages.");
+    playersRes = await fetch(fallbackPlayersURL);
+    achievementsRes = await fetch(fallbackAchievementsURL);
+  }
+
+  try {
+    const playersData = await playersRes.json();
+    const achievementsData = await achievementsRes.json();
+
+    allPlayers = playersData.masters;
+    achievementsData.achievements.forEach(a => achievementMap.set(a.achievement, a));
+    allAchievementTypes = [...new Set(achievementsData.achievements.map(a => a.type))].sort();
+
+    setupCountryFlags(allPlayers);
+    setupAchievementTypeFilter(allAchievementTypes);
+    renderFilteredPlayers();
+  } catch (error) {
+    console.error("❌ Failed to parse player or achievement data:", error);
+  }
+}
+
+  document.addEventListener("DOMContentLoaded", fetchAndRenderPlayers);
+</script>

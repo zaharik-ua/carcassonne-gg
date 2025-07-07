@@ -1,0 +1,159 @@
+<!-- ШРИФТ + ІКОНКИ -->
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+
+<!-- СТИЛІ -->
+<style>
+  body {
+    font-family: 'Montserrat', sans-serif;
+    color: #333333;
+  }
+
+  .header-row {
+    background-color: #2C6DA3;
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 8px;
+  }
+
+  .header-row a {
+    color: white;
+    text-decoration: none;
+  }
+
+  .top-players {
+    background: white;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .player-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background-color: white;
+    border-top: 1px solid #ccc;
+    box-sizing: border-box;
+  }
+
+  .player-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .player-flag {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+
+  .player-nick a {
+    font-size: 15px;
+    font-weight: normal;
+    text-decoration: none;
+    color: #333333;
+    transition: color 0.2s ease;
+  }
+
+  .player-nick a:hover {
+    color: #0277BD;
+  }
+
+  .top-elo-rating {
+    color: #fff;
+    background-color: #a99bc9;
+    font-weight: bold;
+    font-size: 11px;
+    border-radius: 2px;
+    padding: 2px 4px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+</style>
+
+<!-- HTML-КОНТЕЙНЕР -->
+<div id="top10-container"></div>
+
+<!-- СКРИПТ -->
+<script>
+  async function fetchTop10Players() {
+    const primaryURL = "https://api.carcassonne.com.ua/players";
+    const backupURL = "https://zaharik-ua.github.io/carcassonne-gg-backups/masters.json";
+
+    async function tryFetch(url) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Fetch failed from ${url}`);
+      return res.json();
+    }
+
+    try {
+      const data = await tryFetch(primaryURL);
+      renderTop10(data.masters);
+    } catch (err1) {
+      console.warn("⚠️ Primary source failed. Trying backup...");
+      try {
+        const data = await tryFetch(backupURL);
+        renderTop10(data.masters);
+      } catch (err2) {
+        console.error("❌ Failed to load players from both sources:", err2);
+      }
+    }
+  }
+
+  function renderTop10(playersData) {
+    const players = playersData
+      .filter(p => p.top_elo)
+      .sort((a, b) => b.top_elo - a.top_elo)
+      .slice(0, 10);
+
+    const container = document.getElementById("top10-container");
+    const card = document.createElement("div");
+    card.className = "top-players";
+
+    const header = document.createElement("div");
+    header.className = "header-row";
+    header.innerHTML = '<a href="https://carcassonne.gg/Masters/" target="_self">See all players</a>';
+
+    players.forEach(player => {
+      const row = document.createElement("div");
+      row.className = "player-row";
+
+      const left = document.createElement("div");
+      left.className = "player-left";
+
+      const flag = document.createElement("img");
+      flag.className = "player-flag";
+      flag.src = player.flag;
+      flag.alt = "flag";
+
+      const nick = document.createElement("div");
+      nick.className = "player-nick";
+      const link = document.createElement("a");
+      link.href = `https://boardgamearena.com/player?id=${player.id}`;
+      link.target = "_blank";
+      link.textContent = player.player;
+      nick.appendChild(link);
+
+      left.appendChild(flag);
+      left.appendChild(nick);
+
+      const elo = document.createElement("code");
+      elo.className = "top-elo-rating";
+      elo.textContent = `${player.top_elo}`;
+
+      row.appendChild(left);
+      row.appendChild(elo);
+      card.appendChild(row);
+    });
+
+    card.appendChild(header);
+    container.appendChild(card);
+  }
+
+  document.addEventListener("DOMContentLoaded", fetchTop10Players);
+</script>

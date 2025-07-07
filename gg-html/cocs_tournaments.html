@@ -1,0 +1,391 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- СТИЛІ -->
+<style>
+  body {
+    font-family: 'Montserrat', sans-serif;
+    color: #333333;
+  }
+
+  .assosiation-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin: 0 0 6px 0; 
+  }
+
+  .associations,
+  .tournaments {
+    background: white;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    margin: 0 0 12px 0;
+    overflow: hidden;
+  }
+
+  .assosiation-row,
+  .tournament-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background-color: white;
+    border-top: 1px solid #ccc;
+    box-sizing: border-box;
+    line-height: 1.2;
+  }
+
+  .assosiation-left,
+  .tournament-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .assosiation-flag {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+
+  .assosiation-nick,
+  .tournament-title {
+    font-size: 15px;
+  }
+
+  .assosiation-nick a,
+  .tournament-title a {
+    font-weight: normal;
+    text-decoration: none;
+    color: #333333;
+    transition: color 0.2s ease;
+  }
+
+  .assosiation-nick a:hover,
+  .tournament-title a:hover {
+    color: #0277BD;
+  }
+
+  .assosiation-nick.current,
+  .tournament-title.current {
+    font-weight: 600;
+  }
+
+  @media (max-width: 600px) {
+    .desktop-only {
+      display: none;
+    }
+
+    .mobile-toggle {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px;
+      background-color: white;
+      border: 1px solid #ccc;
+      border-radius: 2px;
+      font-size: 15px;
+      cursor: pointer;
+      box-shadow: 1.4px 1.4px 2px #b2b2b2;
+      margin-bottom: 0;
+    }
+
+    .mobile-toggle.open {
+      border-bottom: none;
+    }
+
+    .mobile-toggle span {
+      color: #333;
+    }
+
+    .mobile-toggle.select-placeholder span {
+      color: #999;
+    }
+
+    .mobile-toggle .chevron {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+    }
+
+    .mobile-toggle .chevron i {
+      transition: transform 0.3s ease;
+    }
+
+    .mobile-toggle.open .chevron i {
+      transform: rotate(180deg);
+    }
+
+    .arrow {
+      font-size: 12px;
+      margin-left: 8px;
+    }
+
+    .mobile-content {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.3s ease;
+    }
+
+    .mobile-content.open {
+      border: 1px solid #ccc;
+      border-top: none;
+      border-radius: 0 0 2px 2px;
+      max-height: 1000px;
+    }
+
+    .mobile-block-wrapper {
+      margin-bottom: 15px;
+    }
+  }
+
+  @media (min-width: 601px) {
+    .mobile-toggle,
+    .mobile-content {
+      display: none;
+    }
+  }
+</style>
+
+<!-- HTML-КОНТЕЙНЕР -->
+<div id="coc-container"></div>
+
+<!-- СКРИПТ -->
+<script>
+  function setupToggle(toggle, content) {
+    let open = false;
+    toggle.addEventListener("click", () => {
+      open = !open;
+      content.classList.toggle("open", open);
+      content.style.maxHeight = open ? content.scrollHeight + "px" : "0";
+      const icon = toggle.querySelector(".chevron i");
+      icon.style.transform = open ? "rotate(180deg)" : "rotate(0deg)";
+    });
+  }
+
+  async function fetchCOCTournaments() {
+    try {
+      const res = await fetch("https://api.carcassonne.com.ua/coc_tournaments");
+      const data = await res.json();
+      const tournaments = data.coc_tournaments;
+      const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
+      const container = document.getElementById("coc-container");
+      const isMobile = window.innerWidth <= 600;
+
+      const currentTournament = tournaments.find(t => t.tournament_id === path);
+      const currentCountry = currentTournament ? currentTournament.country : null;
+
+      const countryMap = {};
+      tournaments.forEach(t => {
+        if (!countryMap[t.country]) countryMap[t.country] = [];
+        countryMap[t.country].push(t);
+      });
+      const sortedCountries = Object.keys(countryMap).sort((a, b) => a.localeCompare(b));
+
+      // === Tournaments ===
+      if (currentCountry) {
+        const title = document.createElement("div");
+        title.className = "assosiation-title";
+        title.textContent = "Tournaments";
+        container.appendChild(title);
+
+        if (isMobile) {
+          const toggle = document.createElement("div");
+          toggle.className = "mobile-toggle";
+          toggle.innerHTML = `<span>${currentTournament.title}</span>`;
+
+          const toggleBtn = document.createElement("div");
+          toggleBtn.className = "chevron";
+
+          const chevronIcon = document.createElement("i");
+          chevronIcon.className = "fas fa-chevron-down";
+          chevronIcon.style.transition = "transform 0.3s ease";
+          chevronIcon.style.fontSize = "12px";
+          chevronIcon.style.padding = "0 4px";
+
+          toggleBtn.appendChild(chevronIcon);
+          toggle.appendChild(toggleBtn);
+
+          const content = document.createElement("div");
+          content.className = "mobile-content";
+
+          countryMap[currentCountry].forEach(t => {
+            const row = document.createElement("div");
+            row.className = "tournament-row";
+            const left = document.createElement("div");
+            left.className = "tournament-left";
+            const title = document.createElement("div");
+            title.className = "tournament-title";
+            if (t.tournament_id === path) {
+              title.classList.add("current");
+              title.textContent = t.title;
+            } else {
+              const link = document.createElement("a");
+              link.href = `https://carcassonne.gg/${t.tournament_id}/`;
+              link.target = "_self";
+              link.textContent = t.title;
+              title.appendChild(link);
+            }
+            left.appendChild(title);
+            row.appendChild(left);
+            content.appendChild(row);
+          });
+
+          const wrapper = document.createElement("div");
+          wrapper.className = "mobile-block-wrapper";
+          wrapper.appendChild(toggle);
+          wrapper.appendChild(content);
+          container.appendChild(wrapper);
+          setupToggle(toggle, content);
+
+        } else {
+          const card = document.createElement("div");
+          card.className = "tournaments desktop-only";
+          countryMap[currentCountry].forEach(t => {
+            const row = document.createElement("div");
+            row.className = "tournament-row";
+            const left = document.createElement("div");
+            left.className = "tournament-left";
+            const title = document.createElement("div");
+            title.className = "tournament-title";
+            if (t.tournament_id === path) {
+              title.classList.add("current");
+              title.textContent = t.title;
+            } else {
+              const link = document.createElement("a");
+              link.href = `https://carcassonne.gg/${t.tournament_id}/`;
+              link.target = "_self";
+              link.textContent = t.title;
+              title.appendChild(link);
+            }
+            left.appendChild(title);
+            row.appendChild(left);
+            card.appendChild(row);
+          });
+          container.appendChild(card);
+        }
+      }
+
+      // === Associations ===
+      const title = document.createElement("div");
+      title.className = "assosiation-title";
+      title.textContent = "Associations";
+      container.appendChild(title);
+
+      if (isMobile) {
+        let labelHTML = "";
+        if (currentCountry) {
+          const currentTourney = countryMap[currentCountry].find(t => t.tournament_id === path) || countryMap[currentCountry][0];
+          labelHTML = `<img src="${currentTourney.flag}" class="assosiation-flag" alt="flag"> <span>${currentCountry}</span>`;
+        }
+        const toggle = document.createElement("div");
+        toggle.className = "mobile-toggle";
+        if (!currentCountry) toggle.classList.add("select-placeholder");
+        toggle.innerHTML = `<div class="assosiation-left">${labelHTML}</div>`;
+
+        const toggleBtn = document.createElement("div");
+        toggleBtn.className = "chevron";
+
+        const chevronIcon = document.createElement("i");
+        chevronIcon.className = "fas fa-chevron-down";
+        chevronIcon.style.transition = "transform 0.3s ease";
+        chevronIcon.style.fontSize = "12px";
+        chevronIcon.style.padding = "0 4px";
+
+        toggleBtn.appendChild(chevronIcon);
+        toggle.appendChild(toggleBtn);
+
+        if (!currentCountry) {
+          toggle.querySelector("div.assosiation-left").innerHTML = `<span>Select...</span>`;
+        }
+
+        const content = document.createElement("div");
+        content.className = "mobile-content";
+
+        sortedCountries.forEach(country => {
+          const tourneys = countryMap[country];
+          const latest = tourneys.find(t => t.start_date) || tourneys[0];
+          const row = document.createElement("div");
+          row.className = "assosiation-row";
+          const left = document.createElement("div");
+          left.className = "assosiation-left";
+
+          const flag = document.createElement("img");
+          flag.className = "assosiation-flag";
+          flag.src = latest.flag;
+          flag.alt = "flag";
+
+          const nick = document.createElement("div");
+          nick.className = "assosiation-nick";
+
+          if (country === currentCountry) {
+            nick.classList.add("current");
+            nick.textContent = latest.country;
+          } else {
+            const link = document.createElement("a");
+            link.href = latest.external_link ? latest.external_link : `https://carcassonne.gg/${latest.tournament_id}/`;
+            link.target = latest.external_link ? "_blank" : "_self";
+            link.textContent = latest.country;
+            nick.appendChild(link);
+          }
+
+          left.appendChild(flag);
+          left.appendChild(nick);
+          row.appendChild(left);
+          content.appendChild(row);
+        });
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "mobile-block-wrapper";
+        wrapper.appendChild(toggle);
+        wrapper.appendChild(content);
+        container.appendChild(wrapper);
+        setupToggle(toggle, content);
+
+      } else {
+        const card = document.createElement("div");
+        card.className = "associations desktop-only";
+
+        sortedCountries.forEach(country => {
+          const tourneys = countryMap[country];
+          const latest = tourneys.find(t => t.start_date) || tourneys[0];
+          const row = document.createElement("div");
+          row.className = "assosiation-row";
+          const left = document.createElement("div");
+          left.className = "assosiation-left";
+
+          const flag = document.createElement("img");
+          flag.className = "assosiation-flag";
+          flag.src = latest.flag;
+          flag.alt = "flag";
+
+          const nick = document.createElement("div");
+          nick.className = "assosiation-nick";
+
+          if (country === currentCountry) {
+            nick.classList.add("current");
+            nick.textContent = latest.country;
+          } else {
+            const link = document.createElement("a");
+            link.href = latest.external_link ? latest.external_link : `https://carcassonne.gg/${latest.tournament_id}/`;
+            link.target = latest.external_link ? "_blank" : "_self";
+            link.textContent = latest.country;
+            nick.appendChild(link);
+          }
+
+          left.appendChild(flag);
+          left.appendChild(nick);
+          row.appendChild(left);
+          card.appendChild(row);
+        });
+
+        container.appendChild(card);
+      }
+    } catch (e) {
+      console.error("❌ Failed to load COC data", e);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", fetchCOCTournaments);
+</script>
