@@ -1,5 +1,8 @@
 #!/bin/bash
 
+cd /home/carcassonne-gg-backups || exit 1
+echo "=== $(date) ===" >> /home/carcassonne-gg-backups/cron_backup.log
+
 curl -s https://api.carcassonne.com.ua/matches -o matches.json
 git add matches.json
 curl -s https://api.carcassonne.com.ua/players -o masters.json
