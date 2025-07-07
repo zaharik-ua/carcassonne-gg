@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd /home/carcassonne-gg-backups || exit 1
+cd /home/carcassonne-gg-backups/fallback-data || exit 1
 echo "=== $(date) ===" >> /home/carcassonne-gg-backups/cron_backup.log
 
 curl -s https://api.carcassonne.com.ua/matches -o matches.json
