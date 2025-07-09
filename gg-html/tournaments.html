@@ -275,63 +275,55 @@
   // Determine currentTournamentId either from test default or from the page URL
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
-    ? "UCOC-2025"
+    ? "TW-2024-CCLQ"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
 
-  function fetchTournamentsAndInit() {
-    // --- FETCH TOURNAMENTS ---
-    // Load tournament metadata and initialize tournament display
-    if (useTestData) {
-      const allTournaments = [
-       {"about":"<p><strong>Ukrainian Carcassonne Online Championship (UCOC) 2025</strong> is a national tournament in which we play on the Board Game Arena (BGA) platform, in weekly one-on-one matches in the Best of Three format.</p><p>Each season takes place once a year, organized by player divisions with promotion and relegation. Only Ukrainian players are admitted to the championship.</p><p><strong>Dates:</strong> January 20 - April 6, 2025</p><p>In addition to enjoying the competition and the community built around Carcassonne, the winner of the top division of UCOC 2025 will get the chance to represent Ukraine in the Carcassonne Champions League 2026.</p><p>The tournament was recognized as the official Online Carcassonne Championship of Ukraine by Feelindigo, the publisher of the game in Ukraine.</p>","country":"Ukraine","end_date":"6/4/25","external_link":"","final_ranking":"1,bazilyuk,\ud83e\udd47;2,pavelbrin,\ud83e\udd48;3,Lawyer,\ud83e\udd49","flag":"https://carcassonne.gg/gallery/ukraine.png","format":[],"groups":"","name":"Ukrainian Carcassonne Online Championship 2025. Super League","playoffs":[],"start_date":"20/1/25","status":"Done","title":"2025 - Championship","tournament_id":"UCOC-2025","type":"Round-robin"}
-      ];
-      currentTournament = allTournaments.find(t => t.tournament_id === currentTournamentId);
-      if (currentTournament) {
-        document.getElementById("tournament-title").textContent = currentTournament.name;
-      }
-      fetchGamesAndStandings();
-    } else {
-      fetch("https://api.carcassonne.com.ua/coc_tournaments")
-        .then(res => res.json())
-        .then(data => {
-          const allTournaments = data.coc_tournaments;
-          currentTournament = allTournaments.find(t => t.tournament_id === currentTournamentId);
-          if (currentTournament) {
-            document.getElementById("tournament-title").textContent = currentTournament.name;
-          }
-          fetchGamesAndStandings();
-        });
-    }
-  }
-
+  let matches = [];
   let games = [];
   let standings = [];
+  let players = [];
+  let tournament_players = [];
+  let countries = [];
+  let teams = [];
+  let streams = [];
 
-  function fetchGamesAndStandings() {
-    // --- FETCH GAMES AND STANDINGS ---
-    // Load games and standings data for the selected tournament (test or real)
-    if (useTestData) {
-      games = [
-        {"format":"Bo3","game_id":"","group":"","knockout_stage":"","next_game_loss":"","next_game_win":"","player1":"zaharik","player1_id":"84375106","player1_logo":"https://x.boardgamearena.net/data/avatar/0/84/84375/84375106_184.jpg","player2":"Spitki","player2_id":"94099302","player2_logo":"https://x.boardgamearena.net/data/avatar/defaults/default-2374.jpg","result1":"1","result2":"0","round":"Round 1","round_order":"","score1":"2","score2":"1","stage":"Round-robin","status":"DONE","time":"22.01 22:00","tournament_id":"UCOC-2025","type":""}
-      ];
-      standings = [
-        {"games_difference":"2","games_lost":"13","games_won":"15","group":"","matches_difference":"1","matches_lost":"5","matches_played":"11","matches_won":"6","player":"zaharik","player_id":"84375106","player_logo":"https://x.boardgamearena.net/data/avatar/0/84/84375/84375106_184.jpg","tournament_id":"UCOC-2025"}
-      ];
-    } else {
-      const gamesPromise = fetch("https://api.carcassonne.com.ua/coc_games").then(res => res.json());
-      const standingsPromise = fetch("https://api.carcassonne.com.ua/coc_standings").then(res => res.json());
-      Promise.all([gamesPromise, standingsPromise])
-        .then(([gamesData, standingsData]) => {
-          games = gamesData.coc_games;
-          standings = standingsData.coc_standings;
-          initAndRenderTournamentContent(currentTournament);
-        });
-    }
+  function fetchTournamentsAndInit() {
+    // --- FETCH TOURNAMENT DATA ---
+    // Load all tournament-related data from one unified API endpoint
+    fetch("https://api.carcassonne.com.ua/tournaments")
+      .then(res => {
+        if (!res.ok) throw new Error("Primary fetch failed");
+        return res.json();
+      })
+      .catch(() => {
+        console.warn("⚠️ Using fallback tournament data from GitHub.");
+        return fetch("https://zaharik-ua.github.io/carcassonne-gg/fallback-data/tournaments.json")
+          .then(res => res.json());
+      })
+      .then(data => {
+        if (!data || !data.tournaments || !Array.isArray(data.tournaments)) {
+          document.getElementById("tab-standing-content").textContent = "❌ Failed to load tournament data";
+          return;
+        }
 
-    if (useTestData) {
-      initAndRenderTournamentContent(currentTournament);
-    }
+        const allTournaments = data.tournaments;
+        currentTournament = allTournaments.find(t => t.tournament_id === currentTournamentId);
+        if (currentTournament) {
+          document.getElementById("tournament-title").textContent = currentTournament.name;
+        }
+
+        // Збереження відповідних частин даних
+        games = data.duels || [];
+        standings = data.standings || [];
+        matches = data.matches || [];
+        players = data.players || [];
+        tournament_players = data.tournament_players || [];
+        countries = data.countries || [];
+        teams = data.teams || [];
+        streams = data.streams || [];
+        initAndRenderTournamentContent(currentTournament);
+      });
   }
 
   function initAndRenderTournamentContent(currentTournament) {
@@ -347,7 +339,7 @@
     // Always show overview tab
     document.querySelector('[data-tab="overview"]').style.display = "block";
 
-    const type = currentTournament.type;
+    const type = currentTournament.tournament_format;
     const tabs = document.querySelectorAll(".tab");
     tabs.forEach(tab => {
       if (tab.dataset.tab !== "overview") {
@@ -465,7 +457,7 @@
         grouped[row.group].push(row);
       });
 
-    for (const [group, players] of Object.entries(grouped)) {
+    for (const [group, groupPlayers] of Object.entries(grouped)) {
       const section = document.createElement("div");
       section.className = "group-section";
 
@@ -474,7 +466,7 @@
       title.textContent = `Group ${group}`;
       section.appendChild(title);
 
-      players.sort((a, b) => {
+      groupPlayers.sort((a, b) => {
         const mwDiff = +b.matches_won - +a.matches_won;
         if (mwDiff !== 0) return mwDiff;
         const mdDiff = +b.matches_difference - +a.matches_difference;
@@ -497,13 +489,16 @@
         </tr>
       `;
 
-      players.forEach((p, index) => {
+      groupPlayers.forEach((p, index) => {
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>${index + 1}</td>
           <td style="text-align:left;">
             <div style="display: flex; align-items: center; gap: 7px;">
-              ${p.player_logo ? `<img src="${p.player_logo}" class="player-logo">` : ''}
+              ${(() => {
+                const found = players.find(pl => pl.player_id === p.player_id);
+                return found && found.avatar ? `<img src="${found.avatar}" class="player-logo">` : '';
+              })()}
               <a href="https://boardgamearena.com/player?id=${p.player_id}" target="_blank" style="display: inline-block; white-space: normal; word-break: break-word;">${p.player}</a>
             </div>
           </td>
@@ -665,15 +660,15 @@
       groupedByRound[roundNum]
         .filter(m => m.knockout_stage !== "third_place")
         .forEach(m => {
-          const sources = sortedRounds[i - 1] ? groupedByRound[sortedRounds[i - 1]].filter(pm => pm.next_game_win === m.game_id) : [];
+          const sources = sortedRounds[i - 1] ? groupedByRound[sortedRounds[i - 1]].filter(pm => pm.next_game_win === m.knockout_id) : [];
           let cord_top = 0;
           if (sources.length === 2) {
-            const cord_top1 = groupedByRound[sortedRounds[i - 1]].find(pm => pm.game_id === sources[0].game_id).cord_top;
-            const cord_top2 = groupedByRound[sortedRounds[i - 1]].find(pm => pm.game_id === sources[1].game_id).cord_top;
+            const cord_top1 = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[0].knockout_id).cord_top;
+            const cord_top2 = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[1].knockout_id).cord_top;
             const center = (cord_top1 + cord_top2 + MATCH_HEIGHT) / 2;
             cord_top = center - MATCH_HEIGHT / 2;
           } else if (sources.length === 1) {
-            cord_top = groupedByRound[sortedRounds[i - 1]].find(pm => pm.game_id === sources[0].game_id).cord_top;
+            cord_top = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[0].knockout_id).cord_top;
           }
           const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
           const cord_bottom = cord_top + MATCH_HEIGHT;
@@ -690,26 +685,26 @@
       groupedByRound[nextRound]
         .filter(s => s.knockout_stage !== "third_place")
         .forEach(s => {
-          const predecessors = groupedByRound[roundNum]?.filter(m => m.next_game_win === s.game_id) || [];
+          const predecessors = groupedByRound[roundNum]?.filter(m => m.next_game_win === s.knockout_id) || [];
           if (predecessors.length === 1) {
-            const cord_top = groupedByRound[nextRound].find(m => m.game_id === s.game_id).cord_top;
+            const cord_top = groupedByRound[nextRound].find(m => m.knockout_id === s.knockout_id).cord_top;
             const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
             const cord_bottom = cord_top + MATCH_HEIGHT;
-            const match = groupedByRound[roundNum].find(m => m.game_id === predecessors[0].game_id);
+            const match = groupedByRound[roundNum].find(m => m.knockout_id === predecessors[0].knockout_id);
             if (match) {
               match.cord_top = cord_top;
               match.cord_left = cord_left;
               match.cord_bottom = cord_bottom;
             }
           } else if (predecessors.length === 2) {
-            const cord_topCenter = groupedByRound[nextRound].find(m => m.game_id === s.game_id).cord_top + MATCH_HEIGHT / 2;
+            const cord_topCenter = groupedByRound[nextRound].find(m => m.knockout_id === s.knockout_id).cord_top + MATCH_HEIGHT / 2;
             const cord_top1 = cord_topCenter - VERTICAL_SPACING / 2 - MATCH_HEIGHT;
             const cord_top2 = cord_topCenter + VERTICAL_SPACING / 2;
             const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
             const cord_bottom1 = cord_top1 + MATCH_HEIGHT;
             const cord_bottom2 = cord_top2 + MATCH_HEIGHT;
-            const match1 = groupedByRound[roundNum].find(m => m.game_id === predecessors[0].game_id);
-            const match2 = groupedByRound[roundNum].find(m => m.game_id === predecessors[1].game_id);
+            const match1 = groupedByRound[roundNum].find(m => m.knockout_id === predecessors[0].knockout_id);
+            const match2 = groupedByRound[roundNum].find(m => m.knockout_id === predecessors[1].knockout_id);
             if (match1) {
               match1.cord_top = cord_top1;
               match1.cord_left = cord_left;
@@ -728,10 +723,10 @@
     const thirdPlaceMatch = data.coc_games.find(g => g.tournament_id === currentTournamentId && g.knockout_stage === "third_place");
     if (thirdPlaceMatch) {
       const thirdPlaceRound = Number(thirdPlaceMatch.round_order);
-      const existingMatch = groupedByRound[thirdPlaceRound]?.find(m => m.game_id === thirdPlaceMatch.game_id);
+      const existingMatch = groupedByRound[thirdPlaceRound]?.find(m => m.knockout_id === thirdPlaceMatch.knockout_id);
       if (existingMatch) {
         let startTop = 0;
-        const matchesInRound = groupedByRound[thirdPlaceRound].filter(m => m.game_id !== thirdPlaceMatch.game_id);
+        const matchesInRound = groupedByRound[thirdPlaceRound].filter(m => m.knockout_id !== thirdPlaceMatch.knockout_id);
         if (matchesInRound.length > 0) {
           const lastMatch = matchesInRound[matchesInRound.length - 1];
           startTop = lastMatch.cord_bottom + THIRD_PLACE_VERTICAL_OFFSET;
@@ -790,9 +785,11 @@
         player1Div.className = m.result1 === "1" ? "match-row-winner" : "match-row-loser";
         // Player 1: logo + link
         let player1Logo = null;
-        if (m.player1_logo) {
+        const player1Avatar = players.find(pl => pl.player_id === m.player1_id)?.avatar;
+        debugger;
+        if (player1Avatar) {
           player1Logo = document.createElement("img");
-          player1Logo.src = m.player1_logo;
+          player1Logo.src = player1Avatar;
           player1Logo.className = "player-logo";
         }
         const player1Link = document.createElement("a");
@@ -822,9 +819,10 @@
         player2Div.className = m.result2 === "1" ? "match-row-winner" : "match-row-loser";
         // Player 2: logo + link
         let player2Logo = null;
-        if (m.player2_logo) {
+        const player2Avatar = players.find(pl => pl.player_id === m.player2_id)?.avatar;
+        if (player2Avatar) {
           player2Logo = document.createElement("img");
-          player2Logo.src = m.player2_logo;
+          player2Logo.src = player2Avatar;
           player2Logo.className = "player-logo";
         }
         const player2Link = document.createElement("a");
@@ -857,10 +855,10 @@
     });
     
     // --- DRAW LINES ---
-    // Build a map of game_id -> match for all matches
+    // Build a map of knockout_id -> match for all matches
     const matchById = {};
     Object.values(groupedByRound).flat().forEach(m => {
-      matchById[m.game_id] = m;
+      matchById[m.knockout_id] = m;
     });
 
     // Build playoffConnectors array
@@ -868,7 +866,7 @@
     sortedRounds.forEach(roundNum => {
       groupedByRound[roundNum].forEach(match => {
         if (!match.next_game_win) return;
-        const from = matchById[match.game_id];
+        const from = matchById[match.knockout_id];
         const to = matchById[match.next_game_win];
         if (!from || !to) return;
 
@@ -883,7 +881,7 @@
         const xTo = toLeft;
 
         const connector = {
-          game_from: match.game_id,
+          game_from: match.knockout_id,
           game_to: match.next_game_win,
           lines: []
         };
