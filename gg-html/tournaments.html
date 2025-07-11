@@ -482,7 +482,7 @@
         } else if (stage1_format === "Single Elimination") {
           const grouped = {};
           duels
-            .filter(d => d.tournament_id === currentTournamentId && d.stage === "Group" && d.round_order !== null && d.group)
+            .filter(d => d.tournament_id === currentTournamentId && d.stage === "Groups" && d.round_order !== null && d.group)
             .forEach(d => {
               if (!grouped[d.group]) grouped[d.group] = [];
               grouped[d.group].push(d);
@@ -525,11 +525,11 @@
       const stage2Container = document.getElementById("tab-stage2-content");
       stage2Container.innerHTML = "";
       if (stage2_format === "Single Elimination") {
+        debugger;
         renderPlayoffData(
           duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs"),
           stage2Container
         );
-        debugger;
       } else if (stage2_format === "Double Elimination") {
         stage2Container.textContent = "Double Elimination support coming soon.";
       } else if (stage2_format === "Round-robin" || stage2_format === "Swiss") {
@@ -736,7 +736,7 @@
       const table = document.createElement("table");
       table.className = "match-table";
 
-      const isGroupStage = roundDuels[0]?.stage === "Group";
+      const isGroupStage = roundDuels[0]?.stage === "Groups";
 
       roundDuels.forEach(g => {
         const row = document.createElement("tr");
@@ -972,7 +972,6 @@
         // Player 1: logo + link
         let player1Logo = null;
         const player1Avatar = players.find(pl => pl.player_id === m.player1_id)?.avatar;
-        debugger;
         if (player1Avatar) {
           player1Logo = document.createElement("img");
           player1Logo.src = player1Avatar;
