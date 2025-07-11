@@ -255,18 +255,12 @@
 
 <!-- HTML -->
 <div id="tournament-title" style="font-size:18px; font-weight:700; line-height:20px; padding:0 0 10px;"></div>
-<div class="tab-container">
-  <div class="tab active" data-tab="overview">Overview</div>
-  <div class="tab" data-tab="playoff">Playoff</div>
-  <div class="tab" data-tab="standing">Standing</div>
-  <div class="tab" data-tab="matches">Matches</div>
-</div>
-<div id="tab-overview-content" style="display:block;"></div>
-<div id="tab-standing-content" style="display:block;"></div>
+<div class="tab-container" id="tab-container"></div>
+<div id="tab-overview-content" style="display:none;"></div>
 <div id="tab-matches-content" style="display:none;"></div>
-<div id="tab-playoff-content" style="display:none;">
-  <div id="playoff-bracket"></div>
-</div>
+<div id="tab-stage1-content" style="display:none;"></div>
+<div id="tab-stage2-content" style="display:none;"></div>
+<div id="tab-rules-content" style="display:none;"></div>
 
 <!-- СКРИПТ -->
 <script>
@@ -275,12 +269,12 @@
   // Determine currentTournamentId either from test default or from the page URL
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
-    ? "TW-2024-CCLQ"
+    ? "MX-2025-CCLQ"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
 
   let matches = [];
-  let games = [];
+  let duels = [];
   let standings = [];
   let players = [];
   let tournament_players = [];
@@ -314,7 +308,7 @@
         }
 
         // Збереження відповідних частин даних
-        games = data.duels || [];
+        duels = data.duels || [];
         standings = data.standings || [];
         matches = data.matches || [];
         players = data.players || [];
@@ -328,46 +322,235 @@
 
   function initAndRenderTournamentContent(currentTournament) {
     // --- INIT TOURNAMENT CONTENT ---
-    // Determine which tabs and render functions to activate based on tournament type
-    const tabContainer = document.querySelector(".tab-container");
+    // Dynamically create tabs and content containers based on tournament configuration
+    const tabContainer = document.getElementById("tab-container");
+    tabContainer.innerHTML = ""; // clear previous tabs
+
+    // Hide all content containers by default
+    document.getElementById("tab-overview-content").style.display = "none";
+    document.getElementById("tab-matches-content").style.display = "none";
+    document.getElementById("tab-stage1-content").style.display = "none";
+    document.getElementById("tab-stage2-content").style.display = "none";
+    document.getElementById("tab-rules-content").style.display = "none";
+
     if (!currentTournament) {
       tabContainer.style.display = "none";
-      document.getElementById("tab-standing-content").textContent = "No tournament found with appropriate ID";
+      // Optionally show an error message
+      document.getElementById("tab-overview-content").style.display = "block";
+      document.getElementById("tab-overview-content").textContent = "No tournament found with appropriate ID";
       return;
     }
 
-    // Always show overview tab
-    document.querySelector('[data-tab="overview"]').style.display = "block";
+    // --- Collect tournament structure info ---
+    const tournament_format = currentTournament.tournament_format || "";
+    const stage1_format = currentTournament.stage1_format || "";
+    const stage2_format = currentTournament.stage2_format || "";
+    const stage1_groups = currentTournament.stage1_groups || null;
+    const rules = currentTournament.rules || "";
 
-    const type = currentTournament.tournament_format;
-    const tabs = document.querySelectorAll(".tab");
-    tabs.forEach(tab => {
-      if (tab.dataset.tab !== "overview") {
-        tab.style.display = "none";
+    // --- Build tabs in fixed order: Overview, Stage 2 (if present), Stage 1, Matches, Rules (if present) ---
+    const tabDefs = [];
+    tabDefs.push({ id: "overview", label: "Overview" });
+
+    // Stage 2 tab (conditionally shown if tournament_format === "2 Stages")
+    let stage2Tab = null;
+    if (tournament_format === "2 Stages") {
+      let stage2Label = "";
+      if (stage2_format === "Single Elimination" || stage2_format === "Double Elimination") {
+        stage2Label = "Playoffs";
+      } else if (stage2_format === "Round-robin" || stage2_format === "Swiss") {
+        stage2Label = "Final Stage";
+      } else {
+        stage2Label = "Stage 2";
       }
+      stage2Tab = { id: "stage2", label: stage2Label };
+      tabDefs.push(stage2Tab);
+    }
+
+    // Stage 1 tab (always shown)
+    let stage1Label = "";
+    if (tournament_format === "1 Stage") {
+      if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
+        stage1Label = "Standings";
+      } else if (stage1_format === "Single Elimination") {
+        stage1Label = "Single Elimination Bracket";
+      } else if (stage1_format === "Double Elimination") {
+        stage1Label = "Double Elimination Bracket";
+      } else {
+        stage1Label = "Stage 1";
+      }
+    } else if (tournament_format === "2 Stages") {
+      if (stage1_groups === "Groups") {
+        stage1Label = "Groups Stage";
+      } else if (stage1_groups === null && stage1_format === "Round-robin") {
+        stage1Label = "Round-robin Stage";
+      } else if (stage1_groups === null && stage1_format === "Swiss") {
+        stage1Label = "Swiss Stage";
+      } else {
+        stage1Label = "Stage 1";
+      }
+    } else {
+      stage1Label = "Stage 1";
+    }
+    let stage1Tab = { id: "stage1", label: stage1Label };
+    tabDefs.push(stage1Tab);
+
+    // Matches tab (always shown)
+    tabDefs.push({ id: "matches", label: "Matches" });
+
+    // Rules tab (conditionally shown if rules exist)
+    let rulesTab = null;
+    if (rules && rules.trim() !== "") {
+      rulesTab = { id: "rules", label: "Rules" };
+      tabDefs.push(rulesTab);
+    }
+
+    // --- Render tabs ---
+    tabDefs.forEach((tab, idx) => {
+      const tabEl = document.createElement("div");
+      tabEl.className = "tab" + (idx === 0 ? " active" : "");
+      tabEl.dataset.tab = tab.id;
+      tabEl.textContent = tab.label;
+      tabContainer.appendChild(tabEl);
     });
 
-    if (type === "Group Stage + Playoff") {
-      tabs.forEach(tab => tab.style.display = "block");
-    } else if (type === "Single Elimination") {
-      document.querySelector('[data-tab="matches"]').style.display = "block";
-      document.querySelector('[data-tab="playoff"]').style.display = "block";
-      showTab("matches");
-    } else if (type === "Round-robin") {
-      document.querySelector('[data-tab="standing"]').style.display = "block";
-      document.querySelector('[data-tab="matches"]').style.display = "block";
+    // --- Tab click logic ---
+    function showTab(tabId) {
+      // Remove .active from all tabs, add to the selected tab
+      tabContainer.querySelectorAll(".tab").forEach(tabEl => {
+        tabEl.classList.toggle("active", tabEl.dataset.tab === tabId);
+      });
+      // Hide all content containers
+      document.getElementById("tab-overview-content").style.display = "none";
+      document.getElementById("tab-matches-content").style.display = "none";
+      document.getElementById("tab-stage1-content").style.display = "none";
+      document.getElementById("tab-stage2-content").style.display = "none";
+      document.getElementById("tab-rules-content").style.display = "none";
+      // Show the selected
+      if (tabId === "overview") {
+        document.getElementById("tab-overview-content").style.display = "block";
+      } else if (tabId === "matches") {
+        document.getElementById("tab-matches-content").style.display = "block";
+      } else if (tabId === "stage1") {
+        document.getElementById("tab-stage1-content").style.display = "block";
+      } else if (tabId === "stage2") {
+        document.getElementById("tab-stage2-content").style.display = "block";
+      } else if (tabId === "rules") {
+        document.getElementById("tab-rules-content").style.display = "block";
+      }
     }
+    // Attach click listeners
+    tabContainer.querySelectorAll(".tab").forEach(tabEl => {
+      tabEl.addEventListener("click", () => {
+        showTab(tabEl.dataset.tab);
+      });
+    });
 
-    // Render Overview content (new function)
+    // --- Render content for each tab ---
+    // Overview
     renderOverviewContent();
+    // Matches
+    renderMatchesData(duels);
 
-    if (type.includes("Round-robin") || type.includes("Group Stage")) {
-      renderStandingsData({ coc_standings: standings });
+    // Stage 1 content
+    const stage1Container = document.getElementById("tab-stage1-content");
+    stage1Container.innerHTML = "";
+
+    if (tournament_format === "1 Stage") {
+      if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
+        renderStandingsData(
+          standings.filter(s => s.tournament_id === currentTournamentId),
+          stage1Container
+        );
+      } else if (stage1_format === "Single Elimination") {
+        renderPlayoffData(
+          duels.filter(d => d.tournament_id === currentTournamentId),
+          stage1Container
+        );
+      } else if (stage1_format === "Double Elimination") {
+        stage1Container.textContent = "Double Elimination support coming soon.";
+      } else {
+        stage1Container.textContent = "Stage 1 info not available.";
+      }
+    } else if (tournament_format === "2 Stages") {
+      if (stage1_groups === "Groups") {
+        if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
+          renderStandingsData(
+            standings.filter(s => s.tournament_id === currentTournamentId && (!s.stage || s.stage === "Stage 1")),
+            stage1Container
+          );
+        } else if (stage1_format === "Single Elimination") {
+          const grouped = {};
+          duels
+            .filter(d => d.tournament_id === currentTournamentId && d.stage === "Group" && d.round_order !== null && d.group)
+            .forEach(d => {
+              if (!grouped[d.group]) grouped[d.group] = [];
+              grouped[d.group].push(d);
+            });
+
+          for (const [group, duelsInGroup] of Object.entries(grouped)) {
+            const groupSection = document.createElement("div");
+            const groupTitle = document.createElement("div");
+            groupTitle.className = "group-title";
+            groupTitle.textContent = `Group ${group}`;
+            groupSection.appendChild(groupTitle);
+            stage1Container.appendChild(groupSection);
+            renderPlayoffData(duelsInGroup, groupSection);
+          }
+        } else if (stage1_format === "Double Elimination") {
+          stage1Container.textContent = "Double Elimination support coming soon.";
+        } else {
+          stage1Container.textContent = "Stage 1 info not available.";
+        }
+      } else if (stage1_groups === null && stage1_format === "Round-robin") {
+        renderStandingsData(
+          standings.filter(s => s.tournament_id === currentTournamentId && (!s.stage || s.stage === "Stage 1")),
+          stage1Container
+        );
+      } else if (stage1_groups === null && stage1_format === "Swiss") {
+        renderStandingsData(
+          standings.filter(s => s.tournament_id === currentTournamentId && (!s.stage || s.stage === "Stage 1")),
+          stage1Container
+        );
+      } else {
+        stage1Container.textContent = "Stage 1 info not available.";
+      }
+    } else {
+      stage1Container.textContent = "Stage 1 info not available.";
     }
-    renderMatchesData({ coc_games: games });
-    if (type.includes("Group Stage + Playoff") || type.includes("Single Elimination")) {
-      renderPlayoffData({ coc_games: games });
+
+    // Stage 2 content (if present)
+    if (stage2Tab) {
+      debugger;
+      const stage2Container = document.getElementById("tab-stage2-content");
+      stage2Container.innerHTML = "";
+      if (stage2_format === "Single Elimination") {
+        renderPlayoffData(
+          duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs"),
+          stage2Container
+        );
+        debugger;
+      } else if (stage2_format === "Double Elimination") {
+        stage2Container.textContent = "Double Elimination support coming soon.";
+      } else if (stage2_format === "Round-robin" || stage2_format === "Swiss") {
+        renderStandingsData(
+          standings.filter(s => s.tournament_id === currentTournamentId && s.stage === "Stage 2"),
+          stage2Container
+        );
+      } else {
+        stage2Container.textContent = "Stage 2 info not available.";
+      }
     }
+
+    // Rules content (if present)
+    if (rulesTab) {
+      const rulesContainer = document.getElementById("tab-rules-content");
+      rulesContainer.innerHTML = "";
+      rulesContainer.innerHTML = `<div style="font-size:14px;">${currentTournament.rules}</div>`;
+    }
+
+    // Show the first tab by default
+    showTab(tabDefs[0].id);
   }
 
   function renderOverviewContent() {
@@ -431,27 +614,19 @@
     }
   }
 
-  function showTab(tab) {
-    // --- TOGGLE TABS ---
-    // Handle switching between Standing, Matches, Playoff, and Overview views
-    document.querySelectorAll(".tab").forEach(el => {
-      el.classList.toggle("active", el.dataset.tab === tab);
-    });
-    document.getElementById("tab-overview-content").style.display = tab === "overview" ? "block" : "none";
-    document.getElementById("tab-standing-content").style.display = tab === "standing" ? "block" : "none";
-    document.getElementById("tab-matches-content").style.display = tab === "matches" ? "block" : "none";
-    document.getElementById("tab-playoff-content").style.display = tab === "playoff" ? "block" : "none";
-  }
+  // showTab is now defined inside initAndRenderTournamentContent
 
-  function renderStandingsData(data) {
+  function renderStandingsData(standings_list, containerOverride) {
     // --- RENDER STANDINGS ---
     // Build standings tables grouped by group, sorted and styled with logos
-    const container = document.getElementById("tab-standing-content");
+    const container = containerOverride || document.getElementById("tab-standing-content");
     container.innerHTML = '';
     const grouped = {};
-
-    data.coc_standings
-      .filter(row => row.tournament_id === currentTournamentId)
+    standings_list
+      .filter(row => row.tournament_id === currentTournamentId && (
+        (container.id === "tab-stage1-content" && (!row.stage || row.stage === "Stage 1")) ||
+        (container.id === "tab-stage2-content" && row.stage === "Stage 2")
+      ))
       .forEach(row => {
         if (!grouped[row.group]) grouped[row.group] = [];
         grouped[row.group].push(row);
@@ -521,14 +696,14 @@
     container.appendChild(explanation);
   }
 
-  function renderMatchesData(data) {
+  function renderMatchesData(duels_list) {
     // --- RENDER MATCHES ---
     // Group matches by round and build collapsible sections for each round
     const container = document.getElementById("tab-matches-content");
     container.innerHTML = '';
 
     const grouped = {};
-    data.coc_games
+    duels_list
       .filter(game => game.tournament_id === currentTournamentId)
       .forEach(game => {
         if (!grouped[game.round]) grouped[game.round] = [];
@@ -537,7 +712,7 @@
 
     let openAccordion = null;
 
-    for (const [round, games] of Object.entries(grouped)) {
+    for (const [round, roundDuels] of Object.entries(grouped)) {
       const section = document.createElement("div");
       section.className = "group-section";
 
@@ -561,9 +736,9 @@
       const table = document.createElement("table");
       table.className = "match-table";
 
-      const isGroupStage = games[0]?.stage === "Group";
+      const isGroupStage = roundDuels[0]?.stage === "Group";
 
-      games.forEach(g => {
+      roundDuels.forEach(g => {
         const row = document.createElement("tr");
         row.innerHTML = `
           <td class="date-cell">${g.time}</td>
@@ -602,11 +777,22 @@
   }
 
 
-  function renderPlayoffData(data) {
+  function renderPlayoffData(duels_list, containerOverride) {
     // --- RENDER PLAYOFF BRACKET ---
     // Build layout and UI for playoff bracket including match positions, labels, and connectors
-    const container = document.getElementById("playoff-bracket");
-    container.innerHTML = '';
+    let container;
+    if (containerOverride) {
+      container = containerOverride;
+      container.innerHTML = '';
+      // Add a wrapper for the bracket
+      let bracketDiv = document.createElement("div");
+      bracketDiv.id = "playoff-bracket";
+      container.appendChild(bracketDiv);
+      container = bracketDiv;
+    } else {
+      container = document.getElementById("playoff-bracket");
+      container.innerHTML = '';
+    }
 
     const BRACKET_MARGIN = 15;
     const MATCH_HEIGHT = 60;
@@ -616,10 +802,10 @@
     const HORIZONTAL_SPACING = 30;
     const THIRD_PLACE_VERTICAL_OFFSET = 50;
 
-    // Filter playoff matches with round_order defined, tournament_id matches, stage is "Playoff", and not "third_place"
-    const playoffMatches = data.coc_games.filter(game =>
+    // Filter playoff matches with round_order defined, tournament_id matches, stage is "Playoffs", and not "third_place"
+    const playoffMatches = duels_list.filter(game =>
       game.tournament_id === currentTournamentId &&
-      game.stage === "Playoff" &&
+      game.stage === "Playoffs" &&
       game.round_order !== undefined &&
       game.round_order !== null
     );
@@ -720,7 +906,7 @@
     }
 
     // 5. Add 3rd place match if exists
-    const thirdPlaceMatch = data.coc_games.find(g => g.tournament_id === currentTournamentId && g.knockout_stage === "third_place");
+    const thirdPlaceMatch = duels_list.find(g => g.tournament_id === currentTournamentId && g.knockout_stage === "third_place");
     if (thirdPlaceMatch) {
       const thirdPlaceRound = Number(thirdPlaceMatch.round_order);
       const existingMatch = groupedByRound[thirdPlaceRound]?.find(m => m.knockout_id === thirdPlaceMatch.knockout_id);
@@ -956,7 +1142,7 @@
 
     // --- HOVER HIGHLIGHT LOGIC ---
     // After rendering all matches, add hover event for .match-row-winner and .match-row-loser
-    const playoffContainer = document.getElementById("playoff-bracket");
+    const playoffContainer = container;
     playoffContainer.querySelectorAll(".match-row-winner, .match-row-loser").forEach(row => {
       const playerName = row.getAttribute("data-player-name");
       if (playerName !== "null") {
@@ -977,12 +1163,5 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     fetchTournamentsAndInit();
-    showTab("overview");
-    //useTestData ? showTab("playoff") : showTab("overview")
-    document.querySelectorAll(".tab").forEach(tabEl => {
-      tabEl.addEventListener("click", () => {
-        showTab(tabEl.dataset.tab);
-      });
-    });
   });
 </script>
