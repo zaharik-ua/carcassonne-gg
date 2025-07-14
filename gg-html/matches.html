@@ -540,17 +540,27 @@ function renderSection(container, title, tournaments, matches) {
 
 const autoUpdate = new URLSearchParams(window.location.search).get("autoupdate") === "true";
 
+function fetchWithTimeout(resource, options = {}) {
+  const { timeout = 5000 } = options;
+  return Promise.race([
+    fetch(resource, options),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Request timed out")), timeout)
+    )
+  ]);
+}
+
 function fetchAndRenderMatches() {
   const primaryURL = "https://api.carcassonne.com.ua/matches";
   const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/fallback-data/matches.json";
 
-  fetch(primaryURL)
+  fetchWithTimeout(primaryURL, { timeout: 5000 })
     .then(res => {
       if (!res.ok) throw new Error("Primary source failed");
       return res.json();
     })
     .catch(err => {
-      console.warn("⚠️ Using fallback match data from GitHub Pages.");
+      console.warn("⚠️ Using fallback match data due to error or timeout:", err.message);
       return fetch(fallbackURL).then(res => res.json());
     })
     .then(({ matches_today, matches_scheduled, matches_finished, tournaments_today, tournaments_scheduled, tournaments_finished }) => {
@@ -562,7 +572,7 @@ function fetchAndRenderMatches() {
       renderSection(container, "Last Results", tournaments_finished, matches_finished);
     })
     .catch(err => {
-      console.error("❌ Failed to load matches data:", err);
+      console.error("❌ Failed to load any match data:", err);
     });
 }
 

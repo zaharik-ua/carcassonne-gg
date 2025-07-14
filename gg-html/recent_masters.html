@@ -67,9 +67,30 @@
 
 <!-- СКРИПТ -->
 <script>
+  // Reusable fetchWithTimeout helper
+  function fetchWithTimeout(resource, options = {}) {
+    const { timeout = 5000 } = options;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+
+    return fetch(resource, {
+      ...options,
+      signal: controller.signal
+    }).finally(() => clearTimeout(id));
+  }
+
+  const fallbackPlayersURL = "https://zaharik-ua.github.io/carcassonne-gg/fallback-data/masters.json";
+
   async function fetchAndRenderLastMasters() {
     try {
-      const res = await fetch("https://api.carcassonne.com.ua/players");
+      let res;
+      try {
+        res = await fetchWithTimeout("https://api.carcassonne.com.ua/players", { timeout: 5000 });
+        if (!res.ok) throw new Error("Primary source failed");
+      } catch (err) {
+        console.warn("⚠️ Using fallback player data:", err.message);
+        res = await fetchWithTimeout(fallbackPlayersURL, { timeout: 5000 });
+      }
       const data = await res.json();
       const allPlayers = data.masters;
 

@@ -406,6 +406,17 @@
     });
   }
 
+function fetchWithTimeout(resource, options = {}) {
+  const { timeout = 5000 } = options;
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
+  return fetch(resource, {
+    ...options,
+    signal: controller.signal
+  }).finally(() => clearTimeout(id));
+}
+
 async function fetchAndRenderPlayers() {
   const primaryPlayersURL = "https://api.carcassonne.com.ua/players";
   const primaryAchievementsURL = "https://api.carcassonne.com.ua/achievements";
@@ -415,14 +426,14 @@ async function fetchAndRenderPlayers() {
   let playersRes, achievementsRes;
 
   try {
-    playersRes = await fetch(primaryPlayersURL);
+    playersRes = await fetchWithTimeout(primaryPlayersURL, { timeout: 5000 });
     if (!playersRes.ok) throw new Error("Primary players source failed");
-    achievementsRes = await fetch(primaryAchievementsURL);
+    achievementsRes = await fetchWithTimeout(primaryAchievementsURL, { timeout: 5000 });
     if (!achievementsRes.ok) throw new Error("Primary achievements source failed");
   } catch (error) {
     console.warn("⚠️ Using fallback data from GitHub Pages.");
-    playersRes = await fetch(fallbackPlayersURL);
-    achievementsRes = await fetch(fallbackAchievementsURL);
+    playersRes = await fetchWithTimeout(fallbackPlayersURL, { timeout: 5000 });
+    achievementsRes = await fetchWithTimeout(fallbackAchievementsURL, { timeout: 5000 });
   }
 
   try {
