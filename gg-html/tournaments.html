@@ -3,6 +3,11 @@
 
 <!-- СТИЛІ -->
 <style>
+  :root {
+    --main-bg-color: #2C6DA3;   /* синій за замовчуванням */
+    --hover-bg-color: #24598a; /* синій hover за замовчуванням */
+  }
+
   body {
     font-family: 'Montserrat', sans-serif;
   }
@@ -26,8 +31,8 @@
   }
 
   .tab.active,
-  .tab:hover {
-    background-color: #2C6DA3;
+  .tab:hover { 
+    background-color: var(--main-bg-color);
     color: white;
   }
 
@@ -65,7 +70,7 @@
   }
 
   .group-table th {
-    background-color: #2C6DA3;
+    background-color: var(--main-bg-color);
     color: white;
     font-weight: 600;
     padding: 6px;
@@ -208,7 +213,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background-color: #2C6DA3;
+    background-color: var(--main-bg-color);
     color: white;
     font-weight: 400;
     font-size: 15px;
@@ -220,7 +225,7 @@
   }
 
   .accordion-toggle:hover {
-    background-color: #24598a;
+    background-color: var(--hover-bg-color);
   }
 
   .accordion-toggle .chevron {
@@ -366,6 +371,12 @@
     //? "TW-2024-CCLQ"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
+
+  // --- Dynamic theme colors ---
+  if (currentTournamentId === "Asian-Cup-2025") {
+    document.documentElement.style.setProperty('--main-bg-color', '#d85c5c');
+    document.documentElement.style.setProperty('--hover-bg-color', '#c64a4b');
+  }
 
   let matches = [];
   let duels = [];
