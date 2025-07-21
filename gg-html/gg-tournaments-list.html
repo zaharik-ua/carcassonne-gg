@@ -1,0 +1,21 @@
+
+  <style>
+    iframe {
+      width: 100%;
+      border: none;
+    }
+  </style>
+
+  <iframe
+    src="https://zaharik-ua.github.io/carcassonne-gg/gg-html/tournaments_list.html"
+    loading="lazy"
+  ></iframe>
+  <script>
+    window.addEventListener("message", (event) => {
+      if (event.origin !== "https://zaharik-ua.github.io") return;
+      const iframe = document.querySelector("iframe");
+      if (iframe && event.data && event.data.type === "setHeight") {
+        iframe.style.height = event.data.height + "px";
+      }
+    });
+  </script>
