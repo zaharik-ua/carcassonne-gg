@@ -1,0 +1,24 @@
+<!-- Встав у <body> або у консоль браузера -->
+<script>
+(async () => {
+  const start = performance.now();
+
+  try {
+    const r1 = await fetch("https://api.carcassonne.com.ua/tournaments_list");
+    if (!r1.ok) throw new Error("tournaments_list failed");
+
+    const r2 = await fetch("https://api.carcassonne.com.ua/tournaments");
+    if (!r2.ok) throw new Error("tournaments failed");
+
+    const totalTime = Math.round(performance.now() - start);
+    const note = document.createElement("div");
+    note.textContent = `Success (${totalTime} ms)`;
+    document.body.appendChild(note);
+  } catch (err) {
+    const totalTime = Math.round(performance.now() - start);
+    const note = document.createElement("div");
+    note.textContent = `Error (${totalTime} ms)`;
+    document.body.appendChild(note);
+  }
+})();
+</script>
