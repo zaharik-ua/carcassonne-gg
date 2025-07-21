@@ -166,9 +166,12 @@
 
   async function fetchCOCTournaments() {
     try {
-      const res = await fetch("https://api.carcassonne.com.ua/coc_tournaments");
+      const res = await fetch("https://zaharik-ua.github.io/carcassonne-gg/fallback-data/tournaments_list.json");
+      if (!res.ok) throw new Error("Fallback fetch failed");
       const data = await res.json();
-      const tournaments = data.coc_tournaments;
+      const tournaments = data.tournaments.filter(t => t.type === "COC");
+      const countriesData = data.countries || [];
+
       const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
       const container = document.getElementById("coc-container");
       const isMobile = window.innerWidth <= 600;
@@ -277,7 +280,8 @@
         let labelHTML = "";
         if (currentCountry) {
           const currentTourney = countryMap[currentCountry].find(t => t.tournament_id === path) || countryMap[currentCountry][0];
-          labelHTML = `<img src="${currentTourney.flag}" class="assosiation-flag" alt="flag"> <span>${currentCountry}</span>`;
+          const currentFlag = (countriesData.find(c => c.team === currentCountry) || {}).flag;
+          labelHTML = `<img src="${currentFlag}" class="assosiation-flag" alt="flag"> <span>${currentCountry}</span>`;
         }
         const toggle = document.createElement("div");
         toggle.className = "mobile-toggle";
@@ -313,7 +317,7 @@
 
           const flag = document.createElement("img");
           flag.className = "assosiation-flag";
-          flag.src = latest.flag;
+          flag.src = (countriesData.find(c => c.team === latest.country) || {}).flag;
           flag.alt = "flag";
 
           const nick = document.createElement("div");
@@ -357,7 +361,7 @@
 
           const flag = document.createElement("img");
           flag.className = "assosiation-flag";
-          flag.src = latest.flag;
+          flag.src = (countriesData.find(c => c.team === latest.country) || {}).flag;
           flag.alt = "flag";
 
           const nick = document.createElement("div");

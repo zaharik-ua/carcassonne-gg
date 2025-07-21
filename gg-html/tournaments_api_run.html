@@ -13,6 +13,7 @@
     const totalTime = Math.round(performance.now() - start);
     const note = document.createElement("div");
     note.textContent = `Success (${totalTime} ms)`;
+    note.style.fontSize = "10px";
     document.body.appendChild(note);
   } catch (err) {
     const totalTime = Math.round(performance.now() - start);
