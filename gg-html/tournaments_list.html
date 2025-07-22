@@ -158,7 +158,6 @@
     parent.postMessage({ type: 'setHeight', height: height }, '*');
   }
 
-  window.addEventListener('load', sendHeight);
   window.addEventListener('resize', sendHeight);
   window.addEventListener("message", (event) => {
     if (event.data?.type === "getHeight") {

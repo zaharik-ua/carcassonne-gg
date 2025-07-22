@@ -20,15 +20,4 @@
       iframe.style.height = event.data.height + "px";
     }
   });
-
-  // Після завантаження фрейму — попросити його надіслати висоту ще раз
-  iframe.addEventListener("load", () => {
-    // Надсилаємо запит на висоту кілька разів для надійності
-    const sendGetHeight = () => {
-      iframe.contentWindow?.postMessage({ type: "getHeight" }, "https://zaharik-ua.github.io");
-    };
-    sendGetHeight();
-    setTimeout(sendGetHeight, 300);
-    setTimeout(sendGetHeight, 1000);
-  });
 </script>
