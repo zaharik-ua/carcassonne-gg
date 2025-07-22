@@ -176,6 +176,7 @@
     });
   }
 
+  let isMobile = false;
   async function fetchCOCTournaments() {
     try {
       const res = await fetch("https://zaharik-ua.github.io/carcassonne-gg/fallback-data/tournaments_list.json");
@@ -186,7 +187,6 @@
 
       const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
       const container = document.getElementById("coc-container");
-      const isMobile = (window.parent?.innerWidth || window.innerWidth) <= 600;
 
       const currentTournament = tournaments.find(t => t.tournament_id === path);
       const currentCountry = currentTournament ? currentTournament.country : null;
@@ -411,5 +411,13 @@ window.addEventListener("message", (event) => {
   }
 });
 
-  document.addEventListener("DOMContentLoaded", fetchCOCTournaments);
+  // document.addEventListener("DOMContentLoaded", fetchCOCTournaments);
+
+  // Чекаємо реальну ширину від батьківської сторінки
+  window.addEventListener("message", (event) => {
+    if (event.data?.type === "viewportWidth" && typeof event.data.width === "number") {
+      isMobile = event.data.width <= 600;
+      fetchCOCTournaments(); // запускаємо рендер після отримання ширини
+    }
+  });
 </script>
