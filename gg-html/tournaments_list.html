@@ -160,7 +160,7 @@
 
   window.addEventListener('load', sendHeight);
   window.addEventListener('resize', sendHeight);
-    window.addEventListener("message", (event) => {
+  window.addEventListener("message", (event) => {
     if (event.data?.type === "getHeight") {
       sendHeight();
     }
@@ -399,6 +399,7 @@
 
         container.appendChild(card);
       }
+      sendHeight();
     } catch (e) {
       console.error("❌ Failed to load COC data", e);
     }

@@ -1,28 +1,34 @@
+<style>
+  iframe {
+    width: 100%;
+    border: none;
+  }
+</style>
 
-  <style>
-    iframe {
-      width: 100%;
-      border: none;
+<iframe
+  src="https://zaharik-ua.github.io/carcassonne-gg/gg-html/tournaments_list.html"
+  loading="lazy"
+  style="height: 1px;"
+></iframe>
+<script>
+  const iframe = document.querySelector("iframe");
+
+  // Слухач для отримання висоти
+  window.addEventListener("message", (event) => {
+    if (event.origin !== "https://zaharik-ua.github.io") return;
+    if (iframe && event.data && event.data.type === "setHeight") {
+      iframe.style.height = event.data.height + "px";
     }
-  </style>
+  });
 
-  <iframe
-    src="https://zaharik-ua.github.io/carcassonne-gg/gg-html/tournaments_list.html"
-    loading="lazy"
-  ></iframe>
-  <script>
-    const iframe = document.querySelector("iframe");
-
-    // Слухач для отримання висоти
-    window.addEventListener("message", (event) => {
-      if (event.origin !== "https://zaharik-ua.github.io") return;
-      if (iframe && event.data && event.data.type === "setHeight") {
-        iframe.style.height = event.data.height + "px";
-      }
-    });
-
-    // Після завантаження фрейму — попросити його надіслати висоту ще раз
-    iframe.addEventListener("load", () => {
+  // Після завантаження фрейму — попросити його надіслати висоту ще раз
+  iframe.addEventListener("load", () => {
+    // Надсилаємо запит на висоту кілька разів для надійності
+    const sendGetHeight = () => {
       iframe.contentWindow?.postMessage({ type: "getHeight" }, "https://zaharik-ua.github.io");
-    });
-  </script>
+    };
+    sendGetHeight();
+    setTimeout(sendGetHeight, 300);
+    setTimeout(sendGetHeight, 1000);
+  });
+</script>
