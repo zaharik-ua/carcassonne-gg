@@ -208,7 +208,7 @@
         if (isMobile) {
           const toggle = document.createElement("div");
           toggle.className = "mobile-toggle";
-          toggle.innerHTML = `<span>${currentTournament.title}</span>`;
+          toggle.innerHTML = `<span>${currentTournament.short_title}</span>`;
 
           const toggleBtn = document.createElement("div");
           toggleBtn.className = "chevron";
@@ -234,12 +234,12 @@
             title.className = "tournament-title";
             if (t.tournament_id === path) {
               title.classList.add("current");
-              title.textContent = t.title;
+              title.textContent = t.short_title;
             } else {
               const link = document.createElement("a");
               link.href = `https://carcassonne.gg/${t.tournament_id}/`;
               link.target = "_self";
-              link.textContent = t.title;
+              link.textContent = t.short_title;
               title.appendChild(link);
             }
             left.appendChild(title);
@@ -266,12 +266,12 @@
             title.className = "tournament-title";
             if (t.tournament_id === path) {
               title.classList.add("current");
-              title.textContent = t.title;
+              title.textContent = t.short_title;
             } else {
               const link = document.createElement("a");
               link.href = `https://carcassonne.gg/${t.tournament_id}/`;
               link.target = "_self";
-              link.textContent = t.title;
+              link.textContent = t.short_title;
               title.appendChild(link);
             }
             left.appendChild(title);
