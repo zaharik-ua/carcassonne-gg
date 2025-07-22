@@ -404,12 +404,6 @@
     }
   }
 
-// Вислуховування повідомлення про ширину
-window.addEventListener("message", (event) => {
-  if (event.data?.type === "viewportWidth" && typeof event.data.width === "number") {
-    window.innerWidth = event.data.width;
-  }
-});
 
   // document.addEventListener("DOMContentLoaded", fetchCOCTournaments);
 
