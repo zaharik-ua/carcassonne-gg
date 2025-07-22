@@ -186,7 +186,7 @@
 
       const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
       const container = document.getElementById("coc-container");
-      const isMobile = window.innerWidth <= 600;
+      const isMobile = (window.parent?.innerWidth || window.innerWidth) <= 600;
 
       const currentTournament = tournaments.find(t => t.tournament_id === path);
       const currentCountry = currentTournament ? currentTournament.country : null;
@@ -403,6 +403,13 @@
       console.error("❌ Failed to load COC data", e);
     }
   }
+
+// Вислуховування повідомлення про ширину
+window.addEventListener("message", (event) => {
+  if (event.data?.type === "viewportWidth" && typeof event.data.width === "number") {
+    window.innerWidth = event.data.width;
+  }
+});
 
   document.addEventListener("DOMContentLoaded", fetchCOCTournaments);
 </script>

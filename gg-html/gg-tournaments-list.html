@@ -13,6 +13,14 @@
 <script>
   const iframe = document.querySelector("iframe");
 
+  // Надсилання ширини батьківського вікна у фрейм після завантаження
+  iframe.addEventListener("load", () => {
+    iframe.contentWindow?.postMessage(
+      { type: "viewportWidth", width: window.innerWidth },
+      "https://zaharik-ua.github.io"
+    );
+  });
+
   // Слухач для отримання висоти
   window.addEventListener("message", (event) => {
     if (event.origin !== "https://zaharik-ua.github.io") return;
