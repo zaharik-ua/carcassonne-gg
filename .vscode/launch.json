@@ -9,7 +9,7 @@
             "type": "chrome",
             "request": "launch",
             "name": "Open tournaments.html",
-            "file": "/Users/sergeyzakharenko/Documents/visualstudio/carcassonne-gg/gg-html/cocs_tournaments.html"
+            "file": "/Users/sergeyzakharenko/Documents/visualstudio/carcassonne-gg/gg-html/tournaments_list.html"
         }
     ]
 }

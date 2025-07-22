@@ -11,11 +11,18 @@
     loading="lazy"
   ></iframe>
   <script>
+    const iframe = document.querySelector("iframe");
+
+    // Слухач для отримання висоти
     window.addEventListener("message", (event) => {
       if (event.origin !== "https://zaharik-ua.github.io") return;
-      const iframe = document.querySelector("iframe");
       if (iframe && event.data && event.data.type === "setHeight") {
         iframe.style.height = event.data.height + "px";
       }
+    });
+
+    // Після завантаження фрейму — попросити його надіслати висоту ще раз
+    iframe.addEventListener("load", () => {
+      iframe.contentWindow?.postMessage({ type: "getHeight" }, "https://zaharik-ua.github.io");
     });
   </script>

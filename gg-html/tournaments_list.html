@@ -160,6 +160,12 @@
 
   window.addEventListener('load', sendHeight);
   window.addEventListener('resize', sendHeight);
+    window.addEventListener("message", (event) => {
+    if (event.data?.type === "getHeight") {
+      sendHeight();
+    }
+  });
+  
   function setupToggle(toggle, content) {
     let open = false;
     toggle.addEventListener("click", () => {
