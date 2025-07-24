@@ -1,7 +1,7 @@
 #!/bin/bash
 
-cd /home/carcassonne-gg-backups/tournaments-done || exit 1
-echo "=== $(date) ===" >> /home/carcassonne-gg-backups/cron_backup.log
+cd /home/carcassonne-gg/tournaments-done || exit 1
+echo "=== $(date) ===" >> /home/carcassonne-gg/cron_backup.log
 
 
 # List of tournament IDs
