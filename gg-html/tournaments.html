@@ -378,10 +378,6 @@
     document.documentElement.style.setProperty('--hover-bg-color', '#c64a4b');
   }
 
-  // ─── SIMPLE PROFILER ─────────────────────────────────────────────
-  function tic(label) { console.time(label); }
-  function toc(label) { console.timeEnd(label); }
-
   function fetchWithTimeout(resource, ms = 5000, options = {}) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), ms);
@@ -400,32 +396,17 @@
   let tournaments_list = [];
 
   function loadTournamentsList() {
-    tic("⏱ loadTournamentsList");
-    // primary fetch (max 3 сек.)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-    return fetch("https://api.carcassonne.com.ua/tournaments_list", {
-      signal: controller.signal,
-    })
-      .then(r => {
-        clearTimeout(timeoutId);
-        if (!r.ok) throw new Error("Primary list fetch failed");
-        return r.json();
-      })
-      .catch(() => {
-        console.warn("⚠️ tournaments_list: using fallback data.");
-        return fetch("https://zaharik-ua.github.io/carcassonne-gg/fallback-data/tournaments_list.json")
-          .then(r => r.json());
-      })
+    return fetch("https://zaharik-ua.github.io/carcassonne-gg/fallback-data/tournaments_list.json")
+      .then(r => r.json())
       .then(json => {
         tournaments_list = Array.isArray(json.tournaments) ? json.tournaments : [];
-        toc("⏱ loadTournamentsList");
+      })
+      .catch(err => {
+        console.error("❌ Failed to load tournaments list", err);
       });
   }
 
   function fetchTournamentsAndInit() {
-    tic("⏱ fetchTournamentsAndInit");
     // 1️⃣ Знаходимо турнір у tournaments_list
     const tournamentMeta = tournaments_list.find(
       t => t.tournament_id === currentTournamentId
@@ -441,8 +422,7 @@
       dataUrl = "https://api.carcassonne.com.ua/tournaments?tournament_id";
     }
 
-    // 3️⃣ Завантажуємо дані (із таймаутом 5 сек і fallback’ом)
-    tic("   ⏱ fetch main JSON");
+    // 3️⃣ Завантажуємо дані (із таймаутом 10 сек і fallback’ом)
     fetchWithTimeout(dataUrl, 10000)
       .then(r => {
         if (!r.ok) throw new Error("Primary source failed");
@@ -454,8 +434,6 @@
           .then(r => r.json());
       })
     .then(data => {
-      toc("   ⏱ fetch main JSON");
-      tic("   ⏱ processing & render");
       if (!data || !data.tournaments || !Array.isArray(data.tournaments)) {
         document.getElementById("tab-standing-content").textContent = "❌ Failed to load tournament data";
         return;
@@ -477,8 +455,6 @@
       teams = data.teams || [];
       streams = data.streams || [];
       initAndRenderTournamentContent(currentTournament);
-      toc("   ⏱ processing & render");
-      toc("⏱ fetchTournamentsAndInit");
     });
   }
 

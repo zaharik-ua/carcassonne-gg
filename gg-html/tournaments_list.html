@@ -28,7 +28,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 8px;
+    padding: 6px 4px 6px 8px;
     background-color: white;
     border-top: 1px solid #ccc;
     box-sizing: border-box;
@@ -41,6 +41,7 @@
     align-items: center;
     gap: 6px;
     min-width: 0;
+    flex: 1;
   }
 
   .assosiation-flag {
@@ -52,6 +53,7 @@
   .assosiation-nick,
   .tournament-title {
     font-size: 15px;
+    flex: 1;
   }
 
   .assosiation-nick a,
@@ -72,6 +74,57 @@
     font-weight: 600;
   }
 
+  .status-icon {
+    width: 8px;
+    height: 8px;
+    margin-left: 7px;
+  }
+
+  /* New styles for tournament-title */
+  .tournament-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .tournament-logo {
+    flex: 0 0 20px;
+    max-width: 20px;
+    height: 18px;
+    object-fit: contain;
+  }
+
+  .tt-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .tournament-status {
+    flex: 0 0 auto;
+    max-width: 70px;
+    font-size: 11px;
+    line-height: 12px;
+    padding: 0 6px;
+    border: 1px solid;
+    border-radius: 2px;
+    font-weight: 600;
+    white-space: nowrap;
+    margin-left: auto;
+  }
+
+  .status-live {
+    color: #2e7d32;
+    border-color: #2e7d32;
+  }
+
+  .status-planned {
+    color: #ef6c00;
+    border-color: #ef6c00;
+    padding: 0 3px;
+  }
+  
   @media (max-width: 600px) {
     .desktop-only {
       display: none;
@@ -140,12 +193,6 @@
     }
   }
 
-  @media (min-width: 601px) {
-    .mobile-toggle,
-    .mobile-content {
-      display: none;
-    }
-  }
 </style>
 
 <!-- HTML-КОНТЕЙНЕР -->
@@ -153,17 +200,6 @@
 
 <!-- СКРИПТ -->
 <script>
-  function sendHeight() {
-    const height = document.body.scrollHeight;
-    parent.postMessage({ type: 'setHeight', height: height }, '*');
-  }
-
-  window.addEventListener('resize', sendHeight);
-  window.addEventListener("message", (event) => {
-    if (event.data?.type === "getHeight") {
-      sendHeight();
-    }
-  });
   
   function setupToggle(toggle, content) {
     let open = false;
@@ -176,7 +212,33 @@
     });
   }
 
-  let isMobile = false;
+  const GREEN_DOT = "https://carcassonne.gg/gallery/green-dot.png";
+  const ORANGE_DOT = "https://carcassonne.gg/gallery/orange-dot.png";
+
+  function getStatusIcon(tourneys) {
+    if (tourneys.some(t => t.status === "In progress")) {
+      return `<img src="${GREEN_DOT}" class="status-icon" alt="active">`;
+    }
+    if (tourneys.some(t => t.status === "Planned")) {
+      return `<img src="${ORANGE_DOT}" class="status-icon" alt="planned">`;
+    }
+    return "";
+  }
+
+  function getLogoHtml(t) {
+    return t.logo_image ? `<img src="${t.logo_image}" class="tournament-logo" alt="logo">` : "";
+  }
+
+  function getStatusLabel(t) {
+    if (t.status === "In progress") {
+      return `<span class="tournament-status status-live">LIVE</span>`;
+    }
+    if (t.status === "Planned") {
+      return `<span class="tournament-status status-planned">PLAN.</span>`;
+    }
+    return "";
+  }
+
   async function fetchCOCTournaments() {
     try {
       const res = await fetch("https://zaharik-ua.github.io/carcassonne-gg/fallback-data/tournaments_list.json");
@@ -187,6 +249,7 @@
 
       const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
       const container = document.getElementById("coc-container");
+      const isMobile = window.innerWidth <= 600;
 
       const currentTournament = tournaments.find(t => t.tournament_id === path);
       const currentCountry = currentTournament ? currentTournament.country : null;
@@ -234,13 +297,26 @@
             title.className = "tournament-title";
             if (t.tournament_id === path) {
               title.classList.add("current");
-              title.textContent = t.short_title;
+              const logoFragment = document.createRange().createContextualFragment(getLogoHtml(t));
+              const statusFragment = document.createRange().createContextualFragment(getStatusLabel(t));
+              const nameEl = document.createElement("span");
+              nameEl.className = "tt-name";
+              nameEl.textContent = t.short_title;
+              title.appendChild(logoFragment);
+              title.appendChild(nameEl);
+              title.appendChild(statusFragment);
             } else {
+              const logo = getLogoHtml(t);
+              const label = getStatusLabel(t);
               const link = document.createElement("a");
               link.href = `https://carcassonne.gg/${t.tournament_id}/`;
               link.target = "_self";
               link.textContent = t.short_title;
+              link.className = "tt-name";
+
+              title.appendChild(document.createRange().createContextualFragment(logo));
               title.appendChild(link);
+              title.insertAdjacentHTML("beforeend", label);
             }
             left.appendChild(title);
             row.appendChild(left);
@@ -266,13 +342,26 @@
             title.className = "tournament-title";
             if (t.tournament_id === path) {
               title.classList.add("current");
-              title.textContent = t.short_title;
+              const logoFragment = document.createRange().createContextualFragment(getLogoHtml(t));
+              const statusFragment = document.createRange().createContextualFragment(getStatusLabel(t));
+              const nameEl = document.createElement("span");
+              nameEl.className = "tt-name";
+              nameEl.textContent = t.short_title;
+              title.appendChild(logoFragment);
+              title.appendChild(nameEl);
+              title.appendChild(statusFragment);
             } else {
+              const logo = getLogoHtml(t);
+              const label = getStatusLabel(t);
               const link = document.createElement("a");
               link.href = `https://carcassonne.gg/${t.tournament_id}/`;
               link.target = "_self";
               link.textContent = t.short_title;
+              link.className = "tt-name";
+
+              title.appendChild(document.createRange().createContextualFragment(logo));
               title.appendChild(link);
+              title.insertAdjacentHTML("beforeend", label);
             }
             left.appendChild(title);
             row.appendChild(left);
@@ -335,14 +424,19 @@
           const nick = document.createElement("div");
           nick.className = "assosiation-nick";
 
+          // Status Icon logic
+          const statusIcon = getStatusIcon(tourneys);
+
           if (country === currentCountry) {
             nick.classList.add("current");
-            nick.textContent = latest.country;
+            nick.innerHTML = latest.country + statusIcon;
           } else {
             const link = document.createElement("a");
             link.href = latest.external_link ? latest.external_link : `https://carcassonne.gg/${latest.tournament_id}/`;
             link.target = latest.external_link ? "_blank" : "_self";
-            link.textContent = latest.country;
+            // Use innerHTML for icon
+            const linkStatusIcon = getStatusIcon(tourneys);
+            link.innerHTML = latest.country + linkStatusIcon;
             nick.appendChild(link);
           }
 
@@ -379,14 +473,19 @@
           const nick = document.createElement("div");
           nick.className = "assosiation-nick";
 
+          // Status Icon logic
+          const statusIcon = getStatusIcon(tourneys);
+
           if (country === currentCountry) {
             nick.classList.add("current");
-            nick.textContent = latest.country;
+            nick.innerHTML = latest.country + statusIcon;
           } else {
             const link = document.createElement("a");
             link.href = latest.external_link ? latest.external_link : `https://carcassonne.gg/${latest.tournament_id}/`;
             link.target = latest.external_link ? "_blank" : "_self";
-            link.textContent = latest.country;
+            // Use innerHTML for icon
+            const linkStatusIcon = getStatusIcon(tourneys);
+            link.innerHTML = latest.country + linkStatusIcon;
             nick.appendChild(link);
           }
 
@@ -398,20 +497,10 @@
 
         container.appendChild(card);
       }
-      sendHeight();
     } catch (e) {
       console.error("❌ Failed to load COC data", e);
     }
   }
 
-
-  // document.addEventListener("DOMContentLoaded", fetchCOCTournaments);
-
-  // Чекаємо реальну ширину від батьківської сторінки
-  window.addEventListener("message", (event) => {
-    if (event.data?.type === "viewportWidth" && typeof event.data.width === "number") {
-      isMobile = event.data.width <= 600;
-      fetchCOCTournaments(); // запускаємо рендер після отримання ширини
-    }
-  });
+  document.addEventListener("DOMContentLoaded", fetchCOCTournaments);
 </script>
