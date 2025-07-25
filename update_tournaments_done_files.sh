@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd /home/carcassonne-gg/tournaments-done || exit 1
+cd /home/carcassonne-gg/json-data/tournaments-done || exit 1
 echo "=== $(date) ===" >> /home/carcassonne-gg/cron_backup.log
 
 
