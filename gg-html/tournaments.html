@@ -396,7 +396,7 @@
   let tournaments_list = [];
 
   function loadTournamentsList() {
-    return fetch("https://zaharik-ua.github.io/carcassonne-gg/fallback-data/tournaments_list.json")
+    return fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-list.json")
       .then(r => r.json())
       .then(json => {
         tournaments_list = Array.isArray(json.tournaments) ? json.tournaments : [];
@@ -407,55 +407,46 @@
   }
 
   function fetchTournamentsAndInit() {
-    // 1️⃣ Знаходимо турнір у tournaments_list
     const tournamentMeta = tournaments_list.find(
       t => t.tournament_id === currentTournamentId
     );
-    // 2️⃣ Визначаємо, звідки качати основний JSON
+    
     let dataUrl;
 
     if (tournamentMeta && tournamentMeta.status === "Done") {
-      // ✅ Турнір завершений: беремо готовий статичний JSON
       dataUrl = `https://zaharik-ua.github.io/carcassonne-gg/tournaments-done/${currentTournamentId}.json`;
     } else {
-      // 🔄 Турнір ще триває: спершу пробуємо live‑API
-      dataUrl = "https://api.carcassonne.com.ua/tournaments?tournament_id";
+      dataUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json";
     }
 
-    // 3️⃣ Завантажуємо дані (із таймаутом 10 сек і fallback’ом)
-    fetchWithTimeout(dataUrl, 10000)
+    fetch(dataUrl)
       .then(r => {
-        if (!r.ok) throw new Error("Primary source failed");
+        if (!r.ok) throw new Error("Failed to fetch data");
         return r.json();
       })
-      .catch(() => {
-        console.warn("⚠️ Primary source недоступний — використовую fallback JSON.");
-        return fetch("https://zaharik-ua.github.io/carcassonne-gg/fallback-data/tournaments.json")
-          .then(r => r.json());
-      })
-    .then(data => {
-      if (!data || !data.tournaments || !Array.isArray(data.tournaments)) {
-        document.getElementById("tab-standing-content").textContent = "❌ Failed to load tournament data";
-        return;
-      }
+      .then(data => {
+        if (!data || !data.tournaments || !Array.isArray(data.tournaments)) {
+          document.getElementById("tab-standing-content").textContent = "❌ Failed to load tournament data";
+          return;
+        }
 
-      const allTournaments = data.tournaments;
-      currentTournament = allTournaments.find(t => t.tournament_id === currentTournamentId);
-      if (currentTournament) {
-        document.getElementById("tournament-title").textContent = currentTournament.name;
-      }
+        const allTournaments = data.tournaments;
+        currentTournament = allTournaments.find(t => t.tournament_id === currentTournamentId);
+        if (currentTournament) {
+          document.getElementById("tournament-title").textContent = currentTournament.name;
+        }
 
-      // Збереження відповідних частин даних
-      duels = data.duels || [];
-      standings = data.standings || [];
-      matches = data.matches || [];
-      players = data.players || [];
-      tournament_players = data.tournament_players || [];
-      countries = data.countries || [];
-      teams = data.teams || [];
-      streams = data.streams || [];
-      initAndRenderTournamentContent(currentTournament);
-    });
+        // Збереження відповідних частин даних
+        duels = data.duels || [];
+        standings = data.standings || [];
+        matches = data.matches || [];
+        players = data.players || [];
+        tournament_players = data.tournament_players || [];
+        countries = data.countries || [];
+        teams = data.teams || [];
+        streams = data.streams || [];
+        initAndRenderTournamentContent(currentTournament);
+      });
   }
 
   function initAndRenderTournamentContent(currentTournament) {

@@ -35,6 +35,12 @@
     line-height: 1.2;
   }
 
+  .association-link-row {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+
   .assosiation-left,
   .tournament-left {
     display: flex;
@@ -241,8 +247,8 @@
 
   async function fetchCOCTournaments() {
     try {
-      const res = await fetch("https://zaharik-ua.github.io/carcassonne-gg/fallback-data/tournaments_list.json");
-      if (!res.ok) throw new Error("Fallback fetch failed");
+      const res = await fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-list.json");
+      if (!res.ok) throw new Error("Json fetch failed");
       const data = await res.json();
       const tournaments = data.tournaments.filter(t => t.type === "COC");
       const countriesData = data.countries || [];
@@ -411,8 +417,16 @@
         sortedCountries.forEach(country => {
           const tourneys = countryMap[country];
           const latest = tourneys.find(t => t.start_date) || tourneys[0];
-          const row = document.createElement("div");
-          row.className = "assosiation-row";
+          let row;
+          if (country === currentCountry) {
+            row = document.createElement("div");
+            row.className = "assosiation-row";
+          } else {
+            row = document.createElement("a");
+            row.className = "assosiation-row association-link-row";
+            row.href = latest.external_link ? latest.external_link : `https://carcassonne.gg/${latest.tournament_id}/`;
+            row.target = latest.external_link ? "_blank" : "_self";
+          }
           const left = document.createElement("div");
           left.className = "assosiation-left";
 
@@ -431,13 +445,9 @@
             nick.classList.add("current");
             nick.innerHTML = latest.country + statusIcon;
           } else {
-            const link = document.createElement("a");
-            link.href = latest.external_link ? latest.external_link : `https://carcassonne.gg/${latest.tournament_id}/`;
-            link.target = latest.external_link ? "_blank" : "_self";
             // Use innerHTML for icon
             const linkStatusIcon = getStatusIcon(tourneys);
-            link.innerHTML = latest.country + linkStatusIcon;
-            nick.appendChild(link);
+            nick.innerHTML = latest.country + linkStatusIcon;
           }
 
           left.appendChild(flag);
@@ -460,8 +470,16 @@
         sortedCountries.forEach(country => {
           const tourneys = countryMap[country];
           const latest = tourneys.find(t => t.start_date) || tourneys[0];
-          const row = document.createElement("div");
-          row.className = "assosiation-row";
+          let row;
+          if (country === currentCountry) {
+            row = document.createElement("div");
+            row.className = "assosiation-row";
+          } else {
+            row = document.createElement("a");
+            row.className = "assosiation-row association-link-row";
+            row.href = latest.external_link ? latest.external_link : `https://carcassonne.gg/${latest.tournament_id}/`;
+            row.target = latest.external_link ? "_blank" : "_self";
+          }
           const left = document.createElement("div");
           left.className = "assosiation-left";
 
@@ -480,13 +498,9 @@
             nick.classList.add("current");
             nick.innerHTML = latest.country + statusIcon;
           } else {
-            const link = document.createElement("a");
-            link.href = latest.external_link ? latest.external_link : `https://carcassonne.gg/${latest.tournament_id}/`;
-            link.target = latest.external_link ? "_blank" : "_self";
             // Use innerHTML for icon
             const linkStatusIcon = getStatusIcon(tourneys);
-            link.innerHTML = latest.country + linkStatusIcon;
-            nick.appendChild(link);
+            nick.innerHTML = latest.country + linkStatusIcon;
           }
 
           left.appendChild(flag);
