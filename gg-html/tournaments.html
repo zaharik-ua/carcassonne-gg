@@ -366,9 +366,9 @@
   // Determine currentTournamentId either from test default or from the page URL
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
-    ? "Asian-Cup-2025"
+    //? "Asian-Cup-2025"
     //? "TECS-2025"
-    //? "TW-2024-CCLQ"
+    ? "TW-2024-CCLQ"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
 
@@ -414,9 +414,9 @@
     let dataUrl;
 
     if (tournamentMeta && tournamentMeta.status === "Done") {
-      dataUrl = `https://zaharik-ua.github.io/carcassonne-gg/tournaments-done/${currentTournamentId}.json`;
+      dataUrl = `https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-done/${currentTournamentId}.json`;
     } else {
-      dataUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json";
+      dataUrl = `https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open/${currentTournamentId}.json`;
     }
 
     fetch(dataUrl)
