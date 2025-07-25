@@ -3,6 +3,10 @@
 cd /home/carcassonne-gg/json-data || exit 1
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') ===" >> /home/carcassonne-gg/cron_update_open.log
 
+echo "PATH: $PATH" >> /home/carcassonne-gg/cron_update_open.log
+which jq >> /home/carcassonne-gg/cron_update_open.log
+which curl >> /home/carcassonne-gg/cron_update_open.log
+
 changes_made=false
 
 # List of tournament IDs
