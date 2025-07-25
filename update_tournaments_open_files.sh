@@ -9,19 +9,33 @@ changes_made=false
 tournaments=("Asian-Cup-2025" "TECS-2025" "UCOCup-2025" "BCPL-2025-Sum")
 
 for tournament_id in "${tournaments[@]}"; do
-  curl -s "https://api.carcassonne.com.ua/tournaments?tournament_id=${tournament_id}" -o "tournaments-open/${tournament_id}.json"
-  if ! git diff --quiet "tournaments-open/${tournament_id}.json"; then
-    git add "tournaments-open/${tournament_id}.json"
-    echo "Updated: tournaments-open/${tournament_id}.json" >> /home/carcassonne-gg/cron_update_open.log
-    changes_made=true
+  temp_file=$(mktemp)
+  curl -s "https://api.carcassonne.com.ua/tournaments?tournament_id=${tournament_id}" -o "$temp_file"
+  if jq empty "$temp_file" > /dev/null 2>&1; then
+    mv "$temp_file" "tournaments-open/${tournament_id}.json"
+    if ! git diff --quiet "tournaments-open/${tournament_id}.json"; then
+      git add "tournaments-open/${tournament_id}.json"
+      echo "Updated: tournaments-open/${tournament_id}.json" >> /home/carcassonne-gg/cron_update_open.log
+      changes_made=true
+    fi
+  else
+    echo "❌ Failed to fetch or parse ${tournament_id}" >> /home/carcassonne-gg/cron_update_open.log
+    rm "$temp_file"
   fi
 done
 
-curl -s https://api.carcassonne.com.ua/tournaments_list -o tournaments-list.json
-if ! git diff --quiet tournaments-list.json; then
-  git add tournaments-list.json
-  echo "Updated: tournaments-list.json" >> /home/carcassonne-gg/cron_update_open.log
-  changes_made=true
+temp_file=$(mktemp)
+curl -s https://api.carcassonne.com.ua/tournaments_list -o "$temp_file"
+if jq empty "$temp_file" > /dev/null 2>&1; then
+  mv "$temp_file" tournaments-list.json
+  if ! git diff --quiet tournaments-list.json; then
+    git add tournaments-list.json
+    echo "Updated: tournaments-list.json" >> /home/carcassonne-gg/cron_update_open.log
+    changes_made=true
+  fi
+else
+  echo "❌ Failed to fetch or parse tournaments-list.json" >> /home/carcassonne-gg/cron_update_open.log
+  rm "$temp_file"
 fi
 
 if [ "$changes_made" = true ]; then
