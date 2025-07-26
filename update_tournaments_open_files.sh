@@ -19,7 +19,7 @@ for tournament_id in "${tournaments[@]}"; do
       changes_made=true
     fi
   else
-    echo "❌ Failed to fetch or parse ${tournament_id}" >> /home/carcassonne-gg/cron_update_open.log
+    echo "❌ Failed to fetch or parse ${tournament_id} (response: $(cat "$temp_file" | head -c 200))" >> /home/carcassonne-gg/cron_update_open.log
     rm "$temp_file"
   fi
 done
@@ -34,7 +34,7 @@ if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
     changes_made=true
   fi
 else
-  echo "❌ Failed to fetch or parse tournaments-list.json" >> /home/carcassonne-gg/cron_update_open.log
+  echo "❌ Failed to fetch or parse tournaments-list.json (response: $(cat "$temp_file" | head -c 200))" >> /home/carcassonne-gg/cron_update_open.log
   rm "$temp_file"
 fi
 
