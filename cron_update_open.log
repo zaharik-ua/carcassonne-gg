@@ -1,0 +1,44 @@
+=== 2025-07-26 08:15:01 ===
+Updated: tournaments-open/Asian-Cup-2025.json
+[main cdac0ea] Update json-files from server
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+   32ecdfb..cdac0ea  main -> main
+=== 2025-07-26 08:30:01 ===
+Updated: tournaments-open/BCPL-2025-Sum.json
+[main 387126c] Update json-files from server
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+   cdac0ea..387126c  main -> main
+=== 2025-07-26 08:45:01 ===
+No updates
+=== 2025-07-26 08:56:17 ===
+No updates
+=== 2025-07-26 08:58:01 ===
+No updates
+=== 2025-07-26 09:00:01 ===
+No updates
+=== 2025-07-26 09:00:51 ===
+No updates
+=== 2025-07-26 09:05:00 ===
+Updated: news.json
+=== 2025-07-26 09:15:01 ===
+No updates
+=== 2025-07-26 09:29:58 ===
+=== 2025-07-26 09:30:01 ===
+Updated: tournaments-open/Asian-Cup-2025.json
+Updated: tournaments-open/TECS-2025.json
+Updated: tournaments-open/UCOCup-2025.json
+Updated: tournaments-open/BCPL-2025-Sum.json
+❌ Failed to fetch or parse BCPL-2025-Sum (response: {"message":"<HttpError 429 when requesting https://sheets.googleapis.com/v4/spreadsheets/10hlH2p9i4YE7R-pxIa3excX5n_CkKv67Wc9lZo7ippk/values/Streams%21A%3AG?alt=json returned \"Quota exceeded for quot)
+❌ Failed to fetch or parse tournaments-list.json (response: {"message":"<HttpError 429 when requesting https://sheets.googleapis.com/v4/spreadsheets/10hlH2p9i4YE7R-pxIa3excX5n_CkKv67Wc9lZo7ippk/values/Tournaments%21A%3AQ?alt=json returned \"Quota exceeded for )
+[main 1438567] Update json-files from server
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+ rewrite json-data/tournaments-open/UCOCup-2025.json (69%)
+❌ Failed to fetch or parse tournaments-list.json (response: {"message":"<HttpError 429 when requesting https://sheets.googleapis.com/v4/spreadsheets/10hlH2p9i4YE7R-pxIa3excX5n_CkKv67Wc9lZo7ippk/values/Tournaments%21A%3AQ?alt=json returned \"Quota exceeded for )
+To github.com:zaharik-ua/carcassonne-gg.git
+   f9b574b..1438567  main -> main
+=== 2025-07-26 09:45:01 ===
+No updates
+=== 2025-07-26 10:00:01 ===
+No updates
