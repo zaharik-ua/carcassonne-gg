@@ -42,3 +42,756 @@ To github.com:zaharik-ua/carcassonne-gg.git
 No updates
 === 2025-07-26 10:00:01 ===
 No updates
+=== 2025-07-26 10:03:01 ===
+Updated: news.json
+[main d7cbb58] Update json-files from server
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+   412e17a..d7cbb58  main -> main
+=== 2025-07-26 10:13:54 ===
+Updated: news.json
+=== 2025-07-26 10:15:01 ===
+No updates
+=== 2025-07-26 10:30:01 ===
+No updates
+=== 2025-07-26 10:45:01 ===
+No updates
+=== 2025-07-26 11:00:01 ===
+No updates
+=== 2025-07-26 11:03:01 ===
+No updates
+=== 2025-07-26 11:15:01 ===
+No updates
+=== 2025-07-26 11:30:01 ===
+No updates
+=== 2025-07-26 11:45:01 ===
+No updates
+=== 2025-07-26 12:00:02 ===
+No updates
+=== 2025-07-26 12:03:02 ===
+No updates
+=== 2025-07-26 12:15:01 ===
+No updates
+=== 2025-07-26 12:30:01 ===
+No updates
+=== 2025-07-26 12:45:01 ===
+No updates
+=== 2025-07-26 13:00:01 ===
+No updates
+=== 2025-07-26 13:03:01 ===
+No updates
+=== 2025-07-26 13:15:01 ===
+No updates
+=== 2025-07-26 13:30:01 ===
+No updates
+=== 2025-07-26 13:45:02 ===
+No updates
+=== 2025-07-26 14:00:01 ===
+❌ Failed to fetch or parse TECS-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse UCOCup-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse BCPL-2025-Sum (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse tournaments-list.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-26 14:03:01 ===
+No updates
+=== 2025-07-26 14:15:01 ===
+No updates
+=== 2025-07-26 14:30:01 ===
+No updates
+=== 2025-07-26 14:45:01 ===
+No updates
+=== 2025-07-26 15:00:01 ===
+No updates
+=== 2025-07-26 15:03:01 ===
+No updates
+=== 2025-07-26 15:15:01 ===
+No updates
+=== 2025-07-26 15:30:01 ===
+No updates
+=== 2025-07-26 15:45:01 ===
+No updates
+=== 2025-07-26 16:00:01 ===
+No updates
+=== 2025-07-26 16:03:01 ===
+No updates
+=== 2025-07-26 16:15:01 ===
+No updates
+=== 2025-07-26 16:30:01 ===
+No updates
+=== 2025-07-26 16:45:01 ===
+No updates
+=== 2025-07-26 17:00:01 ===
+No updates
+=== 2025-07-26 17:03:01 ===
+No updates
+=== 2025-07-26 17:15:02 ===
+No updates
+=== 2025-07-26 17:30:01 ===
+No updates
+=== 2025-07-26 17:45:02 ===
+❌ Failed to fetch or parse Asian-Cup-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse TECS-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse UCOCup-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-26 18:00:01 ===
+No updates
+=== 2025-07-26 18:03:01 ===
+No updates
+=== 2025-07-26 18:15:01 ===
+No updates
+=== 2025-07-26 18:30:01 ===
+No updates
+=== 2025-07-26 18:45:02 ===
+❌ Failed to fetch or parse Asian-Cup-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse TECS-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse UCOCup-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse BCPL-2025-Sum (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse tournaments-list.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-26 19:00:01 ===
+No updates
+=== 2025-07-26 19:03:01 ===
+No updates
+=== 2025-07-26 19:15:01 ===
+No updates
+=== 2025-07-26 19:30:01 ===
+No updates
+=== 2025-07-26 19:45:01 ===
+No updates
+=== 2025-07-26 20:00:01 ===
+No updates
+=== 2025-07-26 20:03:01 ===
+No updates
+=== 2025-07-26 20:15:01 ===
+No updates
+=== 2025-07-26 20:30:01 ===
+No updates
+=== 2025-07-26 20:45:01 ===
+No updates
+=== 2025-07-26 21:00:01 ===
+No updates
+=== 2025-07-26 21:03:01 ===
+No updates
+=== 2025-07-26 21:15:01 ===
+No updates
+=== 2025-07-26 21:30:01 ===
+No updates
+=== 2025-07-26 21:45:01 ===
+No updates
+=== 2025-07-26 22:00:01 ===
+No updates
+=== 2025-07-26 22:03:01 ===
+No updates
+=== 2025-07-26 22:15:01 ===
+No updates
+=== 2025-07-26 22:30:01 ===
+No updates
+=== 2025-07-26 22:45:01 ===
+❌ Failed to fetch or parse tournaments-list.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-26 23:00:01 ===
+No updates
+=== 2025-07-26 23:03:01 ===
+No updates
+=== 2025-07-26 23:15:01 ===
+No updates
+=== 2025-07-26 23:30:01 ===
+No updates
+=== 2025-07-26 23:45:01 ===
+No updates
+=== 2025-07-27 00:00:01 ===
+No updates
+=== 2025-07-27 00:03:01 ===
+No updates
+=== 2025-07-27 00:15:01 ===
+No updates
+=== 2025-07-27 00:30:01 ===
+No updates
+=== 2025-07-27 00:45:01 ===
+❌ Failed to fetch or parse BCPL-2025-Sum (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse tournaments-list.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-27 01:00:01 ===
+No updates
+=== 2025-07-27 01:03:01 ===
+No updates
+=== 2025-07-27 01:15:01 ===
+No updates
+=== 2025-07-27 01:30:01 ===
+No updates
+=== 2025-07-27 01:45:02 ===
+No updates
+=== 2025-07-27 02:00:01 ===
+❌ Failed to fetch or parse tournaments-list.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-27 02:03:01 ===
+No updates
+=== 2025-07-27 02:15:01 ===
+No updates
+=== 2025-07-27 02:30:01 ===
+No updates
+=== 2025-07-27 02:45:01 ===
+No updates
+=== 2025-07-27 03:00:01 ===
+No updates
+=== 2025-07-27 03:03:01 ===
+No updates
+=== 2025-07-27 03:15:01 ===
+No updates
+=== 2025-07-27 03:30:01 ===
+No updates
+=== 2025-07-27 03:45:01 ===
+❌ Failed to fetch or parse TECS-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse UCOCup-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse BCPL-2025-Sum (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse tournaments-list.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-27 04:00:01 ===
+No updates
+=== 2025-07-27 04:03:01 ===
+❌ Failed to fetch or parse news.json (response: {"message":"<HttpError 503 when requesting https://sheets.googleapis.com/v4/spreadsheets/1h9eJEOMLCuxpoko0oedBN2ru1L8v0AynDKRKIQPbEqM/values/ALL?alt=json returned \"The service is currently unavailabl)
+No updates
+=== 2025-07-27 04:15:01 ===
+No updates
+=== 2025-07-27 04:30:01 ===
+No updates
+=== 2025-07-27 04:45:01 ===
+No updates
+=== 2025-07-27 05:00:01 ===
+No updates
+=== 2025-07-27 05:03:01 ===
+No updates
+=== 2025-07-27 05:15:01 ===
+No updates
+=== 2025-07-27 05:30:01 ===
+No updates
+=== 2025-07-27 05:45:01 ===
+No updates
+=== 2025-07-27 06:00:01 ===
+No updates
+=== 2025-07-27 06:03:01 ===
+No updates
+=== 2025-07-27 06:15:01 ===
+No updates
+=== 2025-07-27 06:30:01 ===
+No updates
+=== 2025-07-27 06:45:01 ===
+No updates
+=== 2025-07-27 07:00:01 ===
+No updates
+=== 2025-07-27 07:03:01 ===
+No updates
+=== 2025-07-27 07:15:01 ===
+No updates
+=== 2025-07-27 07:30:01 ===
+No updates
+=== 2025-07-27 07:45:01 ===
+No updates
+=== 2025-07-27 08:00:01 ===
+No updates
+=== 2025-07-27 08:03:01 ===
+No updates
+=== 2025-07-27 08:15:01 ===
+No updates
+=== 2025-07-27 08:30:01 ===
+No updates
+=== 2025-07-27 08:45:01 ===
+No updates
+=== 2025-07-27 09:00:01 ===
+No updates
+=== 2025-07-27 09:03:01 ===
+No updates
+=== 2025-07-27 09:15:01 ===
+No updates
+=== 2025-07-27 09:30:01 ===
+No updates
+=== 2025-07-27 09:45:02 ===
+No updates
+=== 2025-07-27 10:00:01 ===
+No updates
+=== 2025-07-27 10:03:01 ===
+No updates
+=== 2025-07-27 10:15:01 ===
+No updates
+=== 2025-07-27 10:30:01 ===
+No updates
+=== 2025-07-27 10:45:01 ===
+No updates
+=== 2025-07-27 11:00:01 ===
+No updates
+=== 2025-07-27 11:03:01 ===
+No updates
+=== 2025-07-27 11:15:01 ===
+No updates
+=== 2025-07-27 11:30:01 ===
+❌ Failed to fetch or parse BCPL-2025-Sum (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse tournaments-list.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-27 11:45:01 ===
+No updates
+=== 2025-07-27 12:00:01 ===
+No updates
+=== 2025-07-27 12:03:01 ===
+No updates
+=== 2025-07-27 12:15:01 ===
+No updates
+=== 2025-07-27 12:30:01 ===
+No updates
+=== 2025-07-27 12:45:01 ===
+No updates
+=== 2025-07-27 13:00:01 ===
+No updates
+=== 2025-07-27 13:03:01 ===
+No updates
+=== 2025-07-27 13:15:01 ===
+No updates
+=== 2025-07-27 13:30:01 ===
+No updates
+=== 2025-07-27 13:45:01 ===
+No updates
+=== 2025-07-27 14:00:01 ===
+No updates
+=== 2025-07-27 14:03:01 ===
+No updates
+=== 2025-07-27 14:15:01 ===
+No updates
+=== 2025-07-27 14:30:01 ===
+No updates
+=== 2025-07-27 14:45:01 ===
+No updates
+=== 2025-07-27 15:00:01 ===
+No updates
+=== 2025-07-27 15:03:01 ===
+No updates
+=== 2025-07-27 15:15:01 ===
+No updates
+=== 2025-07-27 15:30:01 ===
+No updates
+=== 2025-07-27 15:45:01 ===
+No updates
+=== 2025-07-27 15:55:27 ===
+Updated: news.json
+=== 2025-07-27 16:00:01 ===
+No updates
+=== 2025-07-27 16:03:01 ===
+❌ Failed to fetch or parse news.json (response: {"message":"<HttpError 503 when requesting https://sheets.googleapis.com/v4/spreadsheets/1h9eJEOMLCuxpoko0oedBN2ru1L8v0AynDKRKIQPbEqM/values/ALL?alt=json returned \"The service is currently unavailabl)
+No updates
+=== 2025-07-27 16:15:01 ===
+No updates
+=== 2025-07-27 16:30:01 ===
+No updates
+=== 2025-07-27 16:45:01 ===
+No updates
+=== 2025-07-27 17:00:01 ===
+No updates
+=== 2025-07-27 17:03:01 ===
+Updated: news.json
+[main d6e0e0d] Update json-files from server
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+   d44c656..d6e0e0d  main -> main
+=== 2025-07-27 17:15:01 ===
+No updates
+=== 2025-07-27 17:30:01 ===
+❌ Failed to fetch or parse Asian-Cup-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse TECS-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse UCOCup-2025 (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse BCPL-2025-Sum (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+❌ Failed to fetch or parse tournaments-list.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-27 17:45:01 ===
+No updates
+=== 2025-07-27 18:00:01 ===
+No updates
+=== 2025-07-27 18:03:01 ===
+No updates
+=== 2025-07-27 18:15:01 ===
+No updates
+=== 2025-07-27 18:30:01 ===
+No updates
+=== 2025-07-27 18:45:01 ===
+No updates
+=== 2025-07-27 19:00:01 ===
+No updates
+=== 2025-07-27 19:03:01 ===
+No updates
+=== 2025-07-27 19:15:01 ===
+No updates
+=== 2025-07-27 19:30:01 ===
+No updates
+=== 2025-07-27 19:45:01 ===
+No updates
+=== 2025-07-27 20:00:01 ===
+No updates
+=== 2025-07-27 20:03:01 ===
+No updates
+=== 2025-07-27 20:15:01 ===
+No updates
+=== 2025-07-27 20:30:01 ===
+No updates
+=== 2025-07-27 20:45:01 ===
+No updates
+=== 2025-07-27 21:00:01 ===
+No updates
+=== 2025-07-27 21:03:02 ===
+No updates
+=== 2025-07-27 21:15:01 ===
+No updates
+=== 2025-07-27 21:30:01 ===
+No updates
+=== 2025-07-27 21:45:01 ===
+No updates
+=== 2025-07-27 22:00:01 ===
+No updates
+=== 2025-07-27 22:03:01 ===
+No updates
+=== 2025-07-27 22:15:01 ===
+No updates
+=== 2025-07-27 22:30:01 ===
+No updates
+=== 2025-07-27 22:45:01 ===
+No updates
+=== 2025-07-27 23:00:01 ===
+No updates
+=== 2025-07-27 23:03:01 ===
+No updates
+=== 2025-07-27 23:15:01 ===
+No updates
+=== 2025-07-27 23:30:01 ===
+No updates
+=== 2025-07-27 23:45:01 ===
+No updates
+=== 2025-07-28 00:00:01 ===
+No updates
+=== 2025-07-28 00:03:01 ===
+No updates
+=== 2025-07-28 00:15:01 ===
+No updates
+=== 2025-07-28 00:30:01 ===
+No updates
+=== 2025-07-28 00:45:01 ===
+No updates
+=== 2025-07-28 01:00:01 ===
+No updates
+=== 2025-07-28 01:03:01 ===
+❌ Failed to fetch or parse news.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-28 01:15:01 ===
+No updates
+=== 2025-07-28 01:30:01 ===
+No updates
+=== 2025-07-28 01:45:01 ===
+No updates
+=== 2025-07-28 02:00:01 ===
+No updates
+=== 2025-07-28 02:03:01 ===
+No updates
+=== 2025-07-28 02:15:01 ===
+No updates
+=== 2025-07-28 02:30:01 ===
+No updates
+=== 2025-07-28 02:45:01 ===
+No updates
+=== 2025-07-28 03:00:01 ===
+No updates
+=== 2025-07-28 03:03:01 ===
+No updates
+=== 2025-07-28 03:15:01 ===
+No updates
+=== 2025-07-28 03:30:01 ===
+No updates
+=== 2025-07-28 03:45:01 ===
+No updates
+=== 2025-07-28 04:00:01 ===
+No updates
+=== 2025-07-28 04:03:01 ===
+No updates
+=== 2025-07-28 04:15:01 ===
+No updates
+=== 2025-07-28 04:30:01 ===
+No updates
+=== 2025-07-28 04:45:01 ===
+No updates
+=== 2025-07-28 05:00:01 ===
+No updates
+=== 2025-07-28 05:03:01 ===
+No updates
+=== 2025-07-28 05:15:01 ===
+No updates
+=== 2025-07-28 05:30:01 ===
+No updates
+=== 2025-07-28 05:45:01 ===
+No updates
+=== 2025-07-28 06:00:01 ===
+No updates
+=== 2025-07-28 06:03:01 ===
+No updates
+=== 2025-07-28 06:15:01 ===
+❌ Failed to fetch or parse tournaments-list.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-28 06:30:01 ===
+No updates
+=== 2025-07-28 06:45:01 ===
+No updates
+=== 2025-07-28 07:00:01 ===
+No updates
+=== 2025-07-28 07:03:01 ===
+❌ Failed to fetch or parse news.json (response: {"message":"<HttpError 503 when requesting https://sheets.googleapis.com/v4/spreadsheets/1h9eJEOMLCuxpoko0oedBN2ru1L8v0AynDKRKIQPbEqM/values/ALL?alt=json returned \"The service is currently unavailabl)
+No updates
+=== 2025-07-28 07:15:01 ===
+No updates
+=== 2025-07-28 07:30:01 ===
+No updates
+=== 2025-07-28 07:45:01 ===
+No updates
+=== 2025-07-28 08:00:01 ===
+No updates
+=== 2025-07-28 08:03:02 ===
+No updates
+=== 2025-07-28 08:15:01 ===
+No updates
+=== 2025-07-28 08:30:01 ===
+Updated: tournaments-open/Asian-Cup-2025.json
+Updated: tournaments-open/TECS-2025.json
+Updated: tournaments-open/UCOCup-2025.json
+Updated: tournaments-open/BCPL-2025-Sum.json
+[main 3b68b3e] Update json-files from server
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+ rewrite json-data/tournaments-open/Asian-Cup-2025.json (64%)
+ rewrite json-data/tournaments-open/UCOCup-2025.json (71%)
+To github.com:zaharik-ua/carcassonne-gg.git
+   d6e0e0d..3b68b3e  main -> main
+=== 2025-07-28 08:45:01 ===
+Updated: tournaments-open/Asian-Cup-2025.json
+Updated: tournaments-open/TECS-2025.json
+Updated: tournaments-open/UCOCup-2025.json
+Updated: tournaments-open/BCPL-2025-Sum.json
+[main 95a2fd9] Update json-files from server
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+   3b68b3e..95a2fd9  main -> main
+=== 2025-07-28 09:00:01 ===
+No updates
+=== 2025-07-28 09:03:01 ===
+Updated: news.json
+[main ef41581] Update json-files from server
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+   95a2fd9..ef41581  main -> main
+=== 2025-07-28 09:15:01 ===
+No updates
+=== 2025-07-28 09:30:01 ===
+No updates
+=== 2025-07-28 09:45:01 ===
+No updates
+=== 2025-07-28 10:00:01 ===
+No updates
+=== 2025-07-28 10:03:01 ===
+Updated: news.json
+[main 8ebf9d7] Update json-files from server
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+ ! [rejected]        main -> main (fetch first)
+error: failed to push some refs to 'github.com:zaharik-ua/carcassonne-gg.git'
+hint: Updates were rejected because the remote contains work that you do
+hint: not have locally. This is usually caused by another repository pushing
+hint: to the same ref. You may want to first integrate the remote changes
+hint: (e.g., 'git pull ...') before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+=== 2025-07-28 10:15:01 ===
+No updates
+=== 2025-07-28 10:30:02 ===
+No updates
+=== 2025-07-28 10:45:01 ===
+❌ Failed to fetch or parse Asian-Cup-2025 (response: <html>
+<head><title>504 Gateway Time-out</title></head>
+<body>
+<center><h1>504 Gateway Time-out</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-07-28 11:00:01 ===
+No updates
+=== 2025-07-28 11:03:01 ===
+No updates
+=== 2025-07-28 11:13:25 ===
+No updates
+=== 2025-07-28 11:15:01 ===
+No updates
+=== 2025-07-28 11:30:01 ===
+No updates
