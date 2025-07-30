@@ -552,7 +552,7 @@ function fetchWithTimeout(resource, options = {}) {
 
 function fetchAndRenderMatches() {
   const primaryURL = "https://api.carcassonne.com.ua/matches";
-  const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/fallback-data/matches.json";
+  const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches.json";
 
   fetchWithTimeout(primaryURL, { timeout: 5000 })
     .then(res => {
