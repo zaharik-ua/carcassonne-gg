@@ -40,7 +40,25 @@ fi
 
 if [ "$changes_made" = true ]; then
   git commit -m "Update json-files from server"
-  git push origin main
+
+  if ! git push origin main; then
+    echo "🔁 Push failed. Attempting to rebase and retry..." >> /home/carcassonne-gg/cron_update_open.log
+
+    # Save any remaining changes before rebase
+    git add .
+    git commit -m "Auto-commit before rebase" || echo "No changes to commit"
+
+    git pull --rebase origin main
+
+    git push origin main
+    if [ $? -eq 0 ]; then
+      echo "✅ Push successful after rebase" >> /home/carcassonne-gg/cron_update_open.log
+    else
+      echo "❌ Push still failed after rebase" >> /home/carcassonne-gg/cron_update_open.log
+    fi
+  else
+    echo "✅ Push successful" >> /home/carcassonne-gg/cron_update_open.log
+  fi
 else
   echo "No updates" >> /home/carcassonne-gg/cron_update_open.log
 fi
