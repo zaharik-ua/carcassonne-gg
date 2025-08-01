@@ -19,12 +19,10 @@ else
   rm "$temp_file"
 fi
 
-if ! git diff --quiet news.json; then
-  git add news.json
-  echo "Updated (retry): news.json" >> /home/carcassonne-gg/cron_update_open.log
+if git diff --cached --quiet; then
+  echo "No updates" >> /home/carcassonne-gg/cron_update_open.log
+else
   git commit -m "Update json-files from server"
   git pull --rebase origin main
   git push origin main
-else
-  echo "No updates" >> /home/carcassonne-gg/cron_update_open.log
 fi
