@@ -1,4 +1,4 @@
-#!/bin/bash
+	#!/bin/bash
 
 cd /home/carcassonne-gg/json-data || exit 1
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') ===" >> /home/carcassonne-gg/cron_update_open.log
@@ -6,7 +6,7 @@ echo "=== $(date '+%Y-%m-%d %H:%M:%S') ===" >> /home/carcassonne-gg/cron_update_
 changes_made=false
 
 # List of tournament IDs
-tournaments=("Asian-Cup-2025" "TECS-2025" "UCOCup-2025" "BCPL-2025-Sum" "CZ-2025-COC")
+tournaments=("Asian-Cup-2025" "TECS-2025" "UCOCup-2025" "BCPL-2025-Sum" "CZ-2025-COC" "HR-2025-OC-2")
 
 for tournament_id in "${tournaments[@]}"; do
   temp_file=$(mktemp)

@@ -3484,3 +3484,139 @@ Updated: tournaments-open/BCPL-2025-Sum.json
 ✅ Push successful
 === 2025-08-03 09:39:01 ===
 No updates
+=== 2025-08-03 09:45:01 ===
+No updates
+=== 2025-08-03 10:00:01 ===
+Updated: tournaments-open/Asian-Cup-2025.json
+Updated: tournaments-open/TECS-2025.json
+Updated: tournaments-open/UCOCup-2025.json
+Updated: tournaments-open/BCPL-2025-Sum.json
+Updated: tournaments-open/CZ-2025-COC.json
+[main 440eaec] Update json-files from server
+ 5 files changed, 5 insertions(+), 5 deletions(-)
+ rewrite json-data/tournaments-open/CZ-2025-COC.json (90%)
+To github.com:zaharik-ua/carcassonne-gg.git
+   9899a37..440eaec  main -> main
+✅ Push successful
+=== 2025-08-03 10:03:01 ===
+❌ Failed to fetch or parse news.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-08-03 10:15:01 ===
+Updated: tournaments-open/CZ-2025-COC.json
+[main a554565] Update json-files from server
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+ rewrite json-data/tournaments-open/CZ-2025-COC.json (88%)
+To github.com:zaharik-ua/carcassonne-gg.git
+   440eaec..a554565  main -> main
+✅ Push successful
+=== 2025-08-03 10:30:01 ===
+Updated: tournaments-open/CZ-2025-COC.json
+[main 90b45da] Update json-files from server
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+   a554565..90b45da  main -> main
+✅ Push successful
+=== 2025-08-03 10:45:01 ===
+No updates
+=== 2025-08-03 11:00:01 ===
+No updates
+=== 2025-08-03 11:03:01 ===
+Updated: news.json
+[main 6b520b8] Update json-files from server
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+error: cannot pull with rebase: You have unstaged changes.
+error: please commit or stash them.
+To github.com:zaharik-ua/carcassonne-gg.git
+   90b45da..6b520b8  main -> main
+=== 2025-08-03 11:15:01 ===
+No updates
+=== 2025-08-03 11:30:01 ===
+No updates
+=== 2025-08-03 11:45:01 ===
+No updates
+=== 2025-08-03 12:00:01 ===
+No updates
+=== 2025-08-03 12:03:01 ===
+No updates
+=== 2025-08-03 12:15:01 ===
+❌ Failed to fetch or parse tournaments-list.json (response: <html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-08-03 12:30:01 ===
+No updates
+=== 2025-08-03 12:45:01 ===
+No updates
+=== 2025-08-03 13:00:01 ===
+No updates
+=== 2025-08-03 13:03:01 ===
+❌ Failed to fetch or parse news.json (response: <html>
+<head><title>504 Gateway Time-out</title></head>
+<body>
+<center><h1>504 Gateway Time-out</h1></center>
+<hr><center>nginx/1.18.0 (Ubuntu)</center>
+</body>
+</html>)
+No updates
+=== 2025-08-03 13:15:01 ===
+Updated: tournaments-open/Asian-Cup-2025.json
+Updated: tournaments-open/TECS-2025.json
+Updated: tournaments-open/UCOCup-2025.json
+Updated: tournaments-open/BCPL-2025-Sum.json
+Updated: tournaments-open/CZ-2025-COC.json
+[main 4888432] Update json-files from server
+ 5 files changed, 5 insertions(+), 5 deletions(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+   6b520b8..4888432  main -> main
+✅ Push successful
+=== 2025-08-03 13:30:01 ===
+Updated: tournaments-open/Asian-Cup-2025.json
+Updated: tournaments-open/TECS-2025.json
+Updated: tournaments-open/UCOCup-2025.json
+Updated: tournaments-open/BCPL-2025-Sum.json
+Updated: tournaments-open/CZ-2025-COC.json
+[main 4b2daf2] Update json-files from server
+ 5 files changed, 5 insertions(+), 5 deletions(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+   4888432..4b2daf2  main -> main
+✅ Push successful
+=== 2025-08-03 13:45:01 ===
+No updates
+=== 2025-08-03 14:00:01 ===
+No updates
+=== 2025-08-03 14:03:01 ===
+No updates
+=== 2025-08-03 14:15:01 ===
+No updates
+=== 2025-08-03 14:30:01 ===
+Updated: tournaments-open/CZ-2025-COC.json
+[main b5562bd] Update json-files from server
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+   4b2daf2..b5562bd  main -> main
+✅ Push successful
+=== 2025-08-03 14:45:01 ===
+Updated: tournaments-list.json
+[main 8255366] Update json-files from server
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+To github.com:zaharik-ua/carcassonne-gg.git
+   b5562bd..8255366  main -> main
+✅ Push successful
+=== 2025-08-03 14:53:07 ===
+Updated: tournaments-open/Asian-Cup-2025.json
+Updated: tournaments-open/TECS-2025.json
+Updated: tournaments-open/UCOCup-2025.json
+Updated: tournaments-open/BCPL-2025-Sum.json
+Updated: tournaments-open/CZ-2025-COC.json
+Updated: tournaments-list.json
+✅ Push successful
