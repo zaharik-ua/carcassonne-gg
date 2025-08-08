@@ -1,0 +1,274 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- СТИЛІ -->
+<style>
+  body {
+    font-family: 'Montserrat', sans-serif;
+    color: #333333;
+  }
+
+  .assosiation-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin: 0 0 6px 0; 
+  }
+
+  .associations,
+  .tournaments {
+    background: white;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    margin: 0 0 12px 0;
+    overflow: hidden;
+  }
+
+  .assosiation-row,
+  .tournament-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 4px 6px 8px;
+    background-color: white;
+    border-top: 1px solid #ccc;
+    box-sizing: border-box;
+    line-height: 1.2;
+  }
+
+  .association-link-row {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+
+  .assosiation-left,
+  .tournament-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .assosiation-flag {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+
+  .assosiation-nick,
+  .tournament-title {
+    font-size: 15px;
+    flex: 1;
+  }
+
+  .assosiation-nick a,
+  .tournament-title a {
+    font-weight: normal;
+    text-decoration: none;
+    color: #333333;
+    transition: color 0.2s ease;
+  }
+
+  .assosiation-nick a:hover,
+  .tournament-title a:hover {
+    color: #0277BD;
+  }
+
+  .assosiation-nick.current,
+  .tournament-title.current {
+    font-weight: 600;
+  }
+
+  .status-icon {
+    width: 8px;
+    height: 8px;
+    margin-left: 7px;
+  }
+
+  /* New styles for tournament-title */
+  .tournament-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .tournament-logo {
+    flex: 0 0 20px;
+    max-width: 20px;
+    height: 18px;
+    object-fit: contain;
+  }
+
+  .tt-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .tournament-status {
+    flex: 0 0 auto;
+    max-width: 70px;
+    font-size: 11px;
+    line-height: 12px;
+    padding: 0 6px;
+    border: 1px solid;
+    border-radius: 2px;
+    font-weight: 600;
+    white-space: nowrap;
+    margin-left: auto;
+  }
+
+  .status-live {
+    color: #2e7d32;
+    border-color: #2e7d32;
+  }
+
+  .status-planned {
+    color: #ef6c00;
+    border-color: #ef6c00;
+    padding: 0 3px;
+  }
+
+</style>
+
+<!-- HTML-КОНТЕЙНЕР -->
+<div class="coc-container"></div>
+
+<!-- СКРИПТ -->
+<script>
+  
+  function setupToggle(toggle, content) {
+    let open = false;
+    toggle.addEventListener("click", () => {
+      open = !open;
+      content.classList.toggle("open", open);
+      content.style.maxHeight = open ? content.scrollHeight + "px" : "0";
+      const icon = toggle.querySelector(".chevron i");
+      icon.style.transform = open ? "rotate(180deg)" : "rotate(0deg)";
+    });
+  }
+
+  const GREEN_DOT = "https://carcassonne.gg/gallery/green-dot.png";
+  const ORANGE_DOT = "https://carcassonne.gg/gallery/orange-dot.png";
+
+  function getStatusIcon(tourneys) {
+    if (tourneys.some(t => t.status === "In progress")) {
+      return `<img src="${GREEN_DOT}" class="status-icon" alt="active">`;
+    }
+    if (tourneys.some(t => t.status === "Planned")) {
+      return `<img src="${ORANGE_DOT}" class="status-icon" alt="planned">`;
+    }
+    return "";
+  }
+
+  function getLogoHtml(t) {
+    return t.logo_image ? `<img src="${t.logo_image}" class="tournament-logo" alt="logo">` : "";
+  }
+
+  function getStatusLabel(t) {
+    if (t.status === "In progress") {
+      return `<span class="tournament-status status-live">LIVE</span>`;
+    }
+    if (t.status === "Planned") {
+      return `<span class="tournament-status status-planned">PLAN.</span>`;
+    }
+    return "";
+  }
+
+  async function fetchCOCTournaments() {
+    try {
+      const res = await fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-list.json");
+      if (!res.ok) throw new Error("Json fetch failed");
+      const data = await res.json();
+      const tournaments = data.tournaments.filter(t => t.type === "COC" && (t.status === "Planned" || t.status === "In progress"));
+      const countriesData = data.countries || [];
+
+      const containers = document.querySelectorAll(".coc-container");
+      containers.forEach(container => {
+        container.innerHTML = "";
+
+        const createRow = (t, detailsHTML = "", hideLogo = false) => {
+        const row = document.createElement("a");
+        row.className = "tournament-row";
+        row.href = `https://carcassonne.gg/${t.tournament_id}/`;
+        row.target = "_self";
+        row.style.textDecoration = "none";
+        row.style.color = "inherit";
+
+        const left = document.createElement("div");
+        left.className = "tournament-left";
+
+        const flag = document.createElement("img");
+        flag.className = "assosiation-flag";
+        flag.src = (countriesData.find(c => c.team === t.country) || {}).flag || "";
+        flag.alt = "flag";
+
+        const textBlock = document.createElement("div");
+        textBlock.style.display = "flex";
+        textBlock.style.flexDirection = "column";
+
+        const titleLine = document.createElement("div");
+        titleLine.style.display = "flex";
+        titleLine.style.alignItems = "center";
+        titleLine.style.gap = "6px";
+
+
+        const titleText = document.createElement("span");
+        titleText.textContent = t.short_title;
+        titleLine.appendChild(titleText);
+
+        textBlock.appendChild(titleLine);
+
+        if (detailsHTML) {
+          const detailsLine = document.createElement("div");
+          detailsLine.innerHTML = detailsHTML;
+          detailsLine.style.fontSize = "12px";
+          detailsLine.style.color = "#555";
+          textBlock.appendChild(detailsLine);
+        }
+
+        left.appendChild(flag);
+
+        left.appendChild(textBlock);
+        row.appendChild(left);
+        return row;
+      };
+
+        const addSection = (titleText, filterFn, extraHTMLCallback, container) => {
+          const title = document.createElement("div");
+          title.className = "assosiation-title";
+          title.textContent = titleText;
+          container.appendChild(title);
+
+          const box = document.createElement("div");
+          box.className = "tournaments";
+
+          tournaments
+            .filter(filterFn)
+            .sort((a, b) => {
+              const parseDate = (str) => {
+                const [day, month, year] = (str || "").split("/");
+                return new Date(`${year}-${month}-${day}`);
+              };
+              return parseDate(a.start_date) - parseDate(b.start_date);
+            })
+            .forEach(t => {
+              const row = createRow(t, extraHTMLCallback(t), titleText === "Upcoming");
+              box.appendChild(row);
+            });
+
+          container.appendChild(box);
+        };
+
+        addSection("Live", t => t.status === "In progress", () => "", container);
+        addSection("Upcoming", t => t.status === "Planned", t => `Start date: ${t.start_date || "TBD"}`, container);
+      });
+    } catch (e) {
+      console.error("❌ Failed to load COC data", e);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", fetchCOCTournaments);
+</script>
