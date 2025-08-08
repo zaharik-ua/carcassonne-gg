@@ -24,7 +24,7 @@
     background: white;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 5px;
     border-top: 1px solid #ccc;
     padding: 7px 5px;
     font-size: 13px;
@@ -105,8 +105,14 @@
 
           const icon = document.createElement("img");
           icon.className = "news-icon";
-          icon.src = newsItem.icon;
+          icon.src = newsItem.icon1;
           row.appendChild(icon);
+          if (newsItem.icon2) {
+            const icon2 = document.createElement("img");
+            icon2.className = "news-icon";
+            icon2.src = newsItem.icon2;
+            row.appendChild(icon2);
+          }
 
           const title = document.createElement("div");
           title.className = "news-title";

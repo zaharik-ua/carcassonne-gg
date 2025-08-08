@@ -102,6 +102,7 @@
     color: #0277BD;
   }
 
+  /* MATCH TABLE STYLES */
   .match-table {
     width: 100%;
     border-collapse: collapse;
@@ -111,32 +112,27 @@
     overflow: hidden;
   }
 
-  .match-table th {
-    background-color: #e0f0ff;
-    padding: 6px;
-    text-align: left;
-    font-size: 15px;
-  }
-
-  .match-table td:not(.lineup-cell) {
+  .match-table tr.match-row {
     background-color: white;
-    padding: 6px;
-    font-size: 15px;
-    line-height: 17px;
     border-top: 1px solid #ccc;
   }
 
-  .match-table td.lineup-cell {
-    padding: 0;
+  .match-table td {
+    font-size: 15px;
+    line-height: 17px;
   }
+
   .match-table td.date-cell {
     font-size: 13px;
     text-align: left;
-    line-height: 15px;
+    line-height: 13px;
+    padding: 2px 4px 2px 6px;
   }
+
   .match-table td.player-cell {
     text-align: center;
   }
+  
   .match-table td.score-cell {
     text-align: center;
     font-weight: 600;
@@ -156,16 +152,61 @@
     display: block;
     line-height: 17px;
   }
+  /* End MATCH TABLE STYLES */
 
-  .match-table td a {
-    color: #333333;
-    text-decoration: none;
-    word-break: break-word;
+  /* LINEUP TABLE STYLES */
+  .lineup {
+    height: 0;
+    overflow: hidden;
+    font-size: 14px;
+    transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+    background-color: #f5f5f5;
   }
 
-  .match-table td a:hover {
+  .match-table tr.lineup-row td {
+    border: none;
+    padding: 0;
+    vertical-align: middle;
+  }
+
+  .lineup-player {
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 15px;
+    text-decoration: none;
+    color: inherit;
+    padding: 0 7px;
+    vertical-align: middle;
+  }
+
+  .match-table .lineup-score {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    padding: 0 5px !important;
+  }
+
+  .lineup-player:hover {
     color: #0277BD;
   }
+
+  .lineup-separator {
+    font-weight: 600;
+    margin: 0 3px;
+  }
+
+  .lineup__overview {
+    padding: 0 10px;
+    line-height: 18px;
+  }
+
+  @media (max-width: 600px) {
+    .lineup__overview {
+      font-size: 14px;
+      line-height: 18px;
+    }
+  }
+  /* End LINEUP TABLE STYLES */
 
   /* Match Icon Wrapper and Icon */
   .match-icon-wrapper {
@@ -187,26 +228,6 @@
     padding: 0;
     position: static;
     line-height: 1;
-  }
-
-  .lineup__overview {
-    padding: 0 10px;
-    line-height: 18px;
-  }
-
-  @media (max-width: 600px) {
-    .lineup__overview {
-      font-size: 14px;
-      line-height: 18px;
-    }
-  }
-
-  .lineup {
-    height: 0;
-    overflow: hidden;
-    font-size: 14px;
-    transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
-    background-color: #f5f5f5;
   }
 
   .accordion-toggle {
@@ -302,14 +323,19 @@
     object-fit: contain;
     margin-right: 0px;
     border-radius: 2px;
+    vertical-align: middle;
+    margin-top: 2px;
+    margin-bottom: 2px;
   }
-   .team-logo {
+
+  .team-logo {
     height: 20px;
     width: 20px;
     object-fit: contain;
     margin-right: 0px;
     border-radius: 2px;
   }
+  
   .match-box a {
     color: #333333;
     text-decoration: none;
@@ -366,9 +392,10 @@
   // Determine currentTournamentId either from test default or from the page URL
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
-    //? "Asian-Cup-2025"
-    //? "TECS-2025"
-    ? "TW-2024-CCLQ"
+    ? "Asian-Cup-2025"
+    //? "HR-2025-OC-2"
+    //? "BCPL-2025-Sum"
+    //? "TW-2024-CCLQ"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
 
@@ -564,6 +591,14 @@
         document.getElementById("tab-overview-content").style.display = "block";
       } else if (tabId === "matches") {
         document.getElementById("tab-matches-content").style.display = "block";
+        document.querySelectorAll(".accordion-toggle[data-should-open='true']").forEach(toggle => {
+          const content = toggle.nextElementSibling;
+          toggle.classList.add("open");
+          content.style.maxHeight = content.scrollHeight + "px";
+          toggle.removeAttribute("data-should-open");
+          content.removeAttribute("data-should-open");
+          openAccordion = content;
+        });
       } else if (tabId === "stage1") {
         document.getElementById("tab-stage1-content").style.display = "block";
       } else if (tabId === "stage2") {
@@ -747,7 +782,7 @@
           const avatar = player?.avatar;
           const playerRow = document.createElement("tr");
           playerRow.innerHTML = `
-            <td style="text-align:left;" colspan="2">
+            <td style="text-align:left; padding: 4px 6px;" colspan="2">
               <div style="display: flex; align-items: center; gap: 7px;">
                 ${avatar ? `<img src="${avatar}" class="player-logo">` : ""}
                 ${playerEntry.player ? `<a href="https://boardgamearena.com/player?id=${playerEntry.player_id}" target="_blank">${playerEntry.player}</a>` : ""}
@@ -1026,6 +1061,20 @@ function renderStandingsData(standings_list, containerOverride) {
         groupedByRound[match.round].push(match);
       });
 
+    // --- BEGIN: Determine which round to open by default if tournament is "In progress" ---
+    const hasOpenRound = currentTournament.status === "In progress";
+    let roundToOpen = null;
+    if (hasOpenRound) {
+      for (const round of Object.keys(groupedByRound)) {
+        const roundMatches = groupedByRound[round];
+        if (roundMatches.some(m => m.status !== "DONE")) {
+          roundToOpen = round;
+          break;
+        }
+      }
+    }
+    // --- END: Determine open round ---
+
     let openAccordion = null;
 
     for (const [round, roundMatches] of Object.entries(groupedByRound)) {
@@ -1056,6 +1105,7 @@ function renderStandingsData(standings_list, containerOverride) {
 
       roundMatches.forEach(g => {
         const row = document.createElement("tr");
+        row.className = "match-row";
 
         if (currentTournament.type === "TEAM") {
           // --- TEAM LOGIC: render team name + logo ---
@@ -1125,26 +1175,48 @@ function renderStandingsData(standings_list, containerOverride) {
             lineupDiv = document.createElement("div");
             lineupDiv.className = "lineup";
 
-            const lineupContDiv = document.createElement("div");
-            lineupContDiv.className = "lineup__overview";
-
+            // Render lineup as a table, each duel as a row
+            const lineupTable = document.createElement("table");
             const relevantDuels = duels.filter(d => d.match_id === g.match_id);
-            lineupContDiv.innerHTML = relevantDuels.map(duel => {
+            relevantDuels.forEach(duel => {
               const player1Avatar = players.find(p => p.player_id === duel.player1_id)?.avatar;
               const player2Avatar = players.find(p => p.player_id === duel.player2_id)?.avatar;
-              const player1 = `<a href="https://boardgamearena.com/player?id=${duel.player1_id}" target="_blank" style="text-decoration: none; color: inherit;">
-                ${player1Avatar ? `<img src="${player1Avatar}" class="player-logo" style="margin-right: 5px; height: 15px; width: 15px; vertical-align: middle;">` : ""}
-                ${duel.player1}
-              </a>`;
-              const player2 = `<a href="https://boardgamearena.com/player?id=${duel.player2_id}" target="_blank" style="text-decoration: none; color: inherit;">
-                ${duel.player2}
-                ${player2Avatar ? `<img src="${player2Avatar}" class="player-logo" style="margin-left: 5px; height: 15px; width: 15px; vertical-align: middle;">` : ""}
-              </a>`;
-              const score = duel.score1 !== null && duel.score2 !== null ? `<strong>${duel.score1} - ${duel.score2}</strong>` : `<strong>vs</strong>`;
-              return `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">${player1} ${score} ${player2}</div>`;
-            }).join("");
 
-            lineupDiv.appendChild(lineupContDiv);
+              // --- player1: icon cell then name cell (icon | name) ---
+              const player1IconCell = document.createElement("td");
+              player1IconCell.innerHTML = player1Avatar ? `<img src="${player1Avatar}" class="player-logo" style="margin-left:10px;">` : "";
+
+              const player1NameCell = document.createElement("td");
+              player1NameCell.style.textAlign = "left";
+              player1NameCell.innerHTML = `<a href="https://boardgamearena.com/player?id=${duel.player1_id}" target="_blank" class="lineup-player">${duel.player1}</a>`;
+
+              // --- center cell: score or vs ---
+              const centerCell = document.createElement("td");
+              centerCell.className = "lineup-score";
+              if (duel.score1 !== "" && duel.score2 !== "" && duel.score1 !== null && duel.score2 !== null) {
+                centerCell.textContent = `${duel.score1} - ${duel.score2}`;
+              } else {
+                centerCell.textContent = "vs";
+              }
+
+              // --- player2: name cell then icon cell (name | icon) ---
+              const player2NameCell = document.createElement("td");
+              player2NameCell.style.textAlign = "right";
+              player2NameCell.innerHTML = `<a href="https://boardgamearena.com/player?id=${duel.player2_id}" target="_blank" class="lineup-player">${duel.player2}</a>`;
+
+              const player2IconCell = document.createElement("td");
+              player2IconCell.innerHTML = player2Avatar ? `<img src="${player2Avatar}" class="player-logo">` : "";
+
+              // Build row: icon1 | name1 | center | name2 | icon2
+              const tr = document.createElement("tr");
+              tr.appendChild(player1IconCell);
+              tr.appendChild(player1NameCell);
+              tr.appendChild(centerCell);
+              tr.appendChild(player2NameCell);
+              tr.appendChild(player2IconCell);
+              lineupTable.appendChild(tr);
+            });
+            lineupDiv.appendChild(lineupTable);
             // --- END: Insert lineup dropdown ---
           }
           // Append the cell in all cases to maintain row alignment
@@ -1152,6 +1224,7 @@ function renderStandingsData(standings_list, containerOverride) {
           table.appendChild(row);
           if (lineupDiv) {
             const lineupRow = document.createElement("tr");
+            lineupRow.className = "lineup-row";
             const lineupCell = document.createElement("td");
             lineupCell.className = "lineup-cell";
             lineupCell.colSpan = row.children.length; // на всю ширину
@@ -1170,7 +1243,7 @@ function renderStandingsData(standings_list, containerOverride) {
                 lineupDiv.style.opacity = "0";
                 lineupDiv.style.padding = "0";
               } else {
-                lineupDiv.style.height = lineupDiv.scrollHeight + "px";
+                lineupDiv.style.height = (lineupDiv.scrollHeight + 20) + "px"; // include 10px top + 10px bottom padding
                 lineupDiv.style.opacity = "1";
                 lineupDiv.style.padding = "10px 0";
               }
@@ -1218,7 +1291,22 @@ function renderStandingsData(standings_list, containerOverride) {
       section.appendChild(content);
       container.appendChild(section);
 
+      // --- BEGIN: Open the first unfinished round if tournament is "In progress" ---
+      if (hasOpenRound && round === roundToOpen) {
+        toggle.dataset.shouldOpen = "true";
+        content.dataset.shouldOpen = "true";
+      }
+      // --- END: Open the first unfinished round ---
+
       toggle.addEventListener("click", () => {
+        // Close all other open toggles
+        document.querySelectorAll(".accordion-toggle.open").forEach(openToggle => {
+          if (openToggle !== toggle) {
+            openToggle.classList.remove("open");
+            const openContent = openToggle.nextElementSibling;
+            if (openContent) openContent.style.maxHeight = "0px";
+          }
+        });
         const isOpen = toggle.classList.contains("open");
 
         if (openAccordion && openAccordion !== content) {
