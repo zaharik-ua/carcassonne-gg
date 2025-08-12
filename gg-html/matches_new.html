@@ -1,0 +1,723 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+body {
+    font-family: 'Montserrat', sans-serif;
+}
+code {
+    color: #444444;
+    font-size: 11px;
+    background-color: transparent;
+}
+@media (max-width: 600px) {
+    code {
+        color: #444444;
+        font-size: 9px;
+        background-color: transparent;
+    } 
+}
+.history-score {
+  display: inline-block;
+  min-width: 50px;
+}
+
+.elo-rating{
+    color: #fff;
+    font-weight: bold;
+    border-radius: 2px;
+    height: 14px;
+    padding: 1px 5px;
+}
+.gamerank_apprentice,.gamerank_beginner {
+    background-color: #74bed1;
+}
+
+.gamerank_average {
+    background-color: #84b8de;
+}
+
+.gamerank_good {
+    background-color: #94acd6;
+}
+
+.gamerank_strong {
+    background-color: #9ba5d0;
+}
+
+.gamerank_expert {
+    background-color: #a99bc9;
+}
+
+.gamerank_master {
+    background-color: #b593c4;
+}
+.section-title {
+    font-size: 20px;
+    font-style: normal;
+    font-weight: 700;
+    color: #222;
+    margin: 15px 0 10px 0;
+    padding: 0 8px;
+}
+.tournament-card {
+    background: white;
+    border-radius: 4px;
+    box-shadow: 1.4142px 1.4142px 2px 0 #b2b2b2;
+    margin-bottom: 20px;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/*.tournament-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 2px 4px 8px rgba(0, 0, 0, 0.1);
+}*/
+
+  .match-row {
+    display: flex;
+    align-items: center;
+    height: 48px;
+    background-color: white;
+    border-top: 1px solid #ccc;
+    padding: 4px 8px;
+    box-sizing: border-box;
+  }
+
+  .match-time {
+    width: 46px;
+    min-width: 46px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 14px;
+    font-weight: bold;
+  }
+
+  .divider-vertical {
+    width: 2px;
+    height: 90%;
+    background-color: #dfdfdf;
+    margin: 0 6px;
+  }
+
+  .teams {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .teams-stream {
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .team-row {
+    display: flex;
+    align-items: center;
+    font-size: 16px;
+    gap: 6px;
+  }
+
+  .team-row span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .team-flag {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+
+  .players {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .players-stream {
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .player-row {
+    display: flex;
+    align-items: center;
+    font-size: 16px;
+    gap: 6px;
+  }
+
+  .player-row span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .player-avatar {
+    height: 18px;
+    width: 18px;
+    object-fit: contain;
+    border: 0.5px solid #444;
+    border-radius: 2px;
+  }
+
+  .match-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .live-icon {
+    width: 30px;
+    height: auto;
+  }
+
+  .score-box {
+    width: 13px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 18px;
+    line-height: 20px;
+  }
+
+  .score-box-stream {
+    margin: 0 4px 0 12px;
+    width: 13px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 18px;
+    line-height: 20px;
+  }
+  
+  @media (min-width: 601px) {
+    .score-box {
+      margin-left: 15px;
+    }
+  }
+
+  .score-box-alt {
+    width: 20px;
+    text-align: center;
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .score-box-alt-stream {
+    flex-grow: 1;
+    display: flex;
+    width: 20px;
+    text-align: center;
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .stream-icon {
+    width: 22px;
+    border-radius: 4px;
+    height: auto;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+  }
+
+  .stream-icon:hover {
+    opacity: 1;
+  }
+
+  .stream-score-spacer {
+    width: 30px;
+  }
+
+  @media (max-width: 600px) {
+    .stream-score-spacer {
+      width: 0;
+    }
+  }
+
+  .tournament-header {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    background-color: white;
+    font-size: 13px;
+    font-weight: bold;
+    margin: 8px 0;
+    padding: 0 8px;
+  }
+
+  .tournament-header a {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: inherit;
+    gap: 6px;
+  }
+
+  .tournament-icon {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+  }
+
+  .lineup__overview {
+      padding: 10px 0;
+      line-height: 22px;
+  }
+  
+  @media (max-width: 600px) {
+      .lineup__overview {
+        font-size: 13px;
+        line-height: 18px;
+      }
+    }
+    
+  @media (max-width: 600px) {
+  .lineup td a {
+    word-break: break-word;
+    white-space: normal;
+    }
+  }
+  
+.lineup {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+  background-color: #f5f5f5;
+}
+
+.lineup td, th {
+    padding: 0px 2px;
+}
+
+.lineup a {
+  color: #333333;
+  text-decoration: none;
+}
+
+.lineup a:hover {
+  color: #146997;
+}
+
+.lineup a:active {
+  color: #333333;
+}
+
+.chevron {
+  cursor: pointer;
+  font-size: 16px;
+  user-select: none;
+  transition: transform 0.3s ease;
+  transform: rotate(180deg);
+}
+
+/* .chevron.rotated {
+  transform: rotate(0deg);
+} */
+
+</style>
+
+<div id="matches-container"></div>
+
+<script>
+let openLineupsSet = new Set();
+const openMatchId = new URLSearchParams(window.location.search).get("open");
+if (openMatchId) {
+  openMatchId.split(',').forEach(id => openLineupsSet.add(id));
+}
+const streamsOff = new URLSearchParams(window.location.search).get("streams") === "false";
+
+function createMatchElement(match) {
+  // Only for TEAM tournaments
+  const wrapper = document.createElement("div");
+  wrapper.className = "match-wrapper";
+
+  const container = document.createElement("div");
+  container.className = "match-row";
+  container.dataset.id = match.id;
+
+  const toggleBtn = document.createElement("div");
+  toggleBtn.className = "chevron";
+
+  const chevronIcon = document.createElement("i");
+  chevronIcon.className = "fas fa-chevron-down";
+  chevronIcon.style.transition = "transform 0.3s ease";
+  chevronIcon.style.transform = "rotate(180deg)";
+  chevronIcon.style.fontSize = "12px";
+  chevronIcon.style.padding = "0 4px";
+  toggleBtn.appendChild(chevronIcon);
+
+  const lineupDiv = document.createElement("div");
+  lineupDiv.className = "lineup";
+
+  const lineupContDiv = document.createElement("div");
+  lineupContDiv.innerHTML = match.lineups;
+  lineupContDiv.className = "lineup__overview";
+  lineupDiv.appendChild(lineupContDiv);
+
+  if (match.lineups) {
+    const isOpen = openLineupsSet.has(match.id);
+    if (isOpen) {
+      lineupDiv.classList.add("open");
+      lineupDiv.style.height = "auto";
+      chevronIcon.style.transform = "rotate(0deg)";
+    }
+
+    toggleBtn.addEventListener("click", () => {
+      const isOpen = lineupDiv.classList.contains("open");
+
+      if (isOpen) {
+        lineupDiv.style.height = lineupDiv.scrollHeight + "px";
+        requestAnimationFrame(() => {
+          lineupDiv.style.height = "0px";
+          lineupDiv.classList.remove("open");
+          chevronIcon.style.transform = "rotate(180deg)";
+          openLineupsSet.delete(match.id);
+        });
+      } else {
+        lineupDiv.style.height = "0px";
+        lineupDiv.classList.add("open");
+        chevronIcon.style.transform = "rotate(0deg)";
+        openLineupsSet.add(match.id);
+
+        requestAnimationFrame(() => {
+          lineupDiv.style.height = lineupDiv.scrollHeight + "px";
+        });
+
+        lineupDiv.addEventListener("transitionend", function handler() {
+          if (lineupDiv.classList.contains("open")) {
+            lineupDiv.style.height = "auto";
+          }
+          lineupDiv.removeEventListener("transitionend", handler);
+        });
+      }
+    });
+  }
+  
+  if(!streamsOff) {
+      const [datePart, timePart] = match.time.split(" ");
+      const [day, month, year] = datePart.split(".");
+      const [hour, minute, second] = timePart.split(":");
+      const utcTimestamp = Date.UTC(+year, +month - 1, +day, +hour, +minute, +second);
+      const dateObj = new Date(utcTimestamp);
+    
+      const dayStr = dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const timeStr = dateObj.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+    
+      const timeDiv = document.createElement("div");
+      timeDiv.className = "match-time";
+      timeDiv.innerHTML = `<div>${dayStr} ${timeStr}</div>`;
+      container.appendChild(timeDiv);
+      const divider = document.createElement("div");
+      divider.className = "divider-vertical";
+      container.appendChild(divider);
+  }
+
+  const teamsDiv = document.createElement("div");
+  teamsDiv.className = streamsOff ? "teams-stream" : "teams";
+
+  ["team1", "team2"].forEach((teamKey, i) => {
+    const row = document.createElement("div");
+    row.className = "team-row";
+
+    const flag = document.createElement("img");
+    flag.className = "team-flag";
+    flag.src = i === 0 ? match.flag1 : match.flag2;
+    flag.alt = match[teamKey];
+
+    const span = document.createElement("span");
+    span.textContent = match[teamKey];
+
+    row.appendChild(flag);
+    row.appendChild(span);
+    teamsDiv.appendChild(row);
+  });
+  container.appendChild(teamsDiv);
+  
+  if(streamsOff) {
+    if (match.dw1 || match.dw2 || match.gw1 || match.gw2) {
+        const scoreBox = document.createElement("div");
+        scoreBox.className = "score-box-stream";
+        scoreBox.innerHTML = `<div>${match.dw1}</div><div>${match.dw2}</div>`;
+        container.appendChild(scoreBox);
+    
+        const scoreBoxAlt = document.createElement("div");
+        scoreBoxAlt.className = "score-box-alt-stream";
+        scoreBoxAlt.innerHTML = `<div>(${match.gw1})</div><div>(${match.gw2})</div>`;
+        container.appendChild(scoreBoxAlt);
+    } 
+  }
+
+  const rightDiv = document.createElement("div");
+  rightDiv.className = "match-right";
+
+  if (match.status === "IN PROGRESS") {
+    const liveIcon = document.createElement("img");
+    liveIcon.className = "live-icon";
+    liveIcon.src = "https://carcassonne.gg/gallery_gen/f4d6792e3ac5f7356502e64aefa51f32_60x28_fit.png";
+    liveIcon.alt = "LIVE";
+    rightDiv.appendChild(liveIcon);
+  }
+
+  if (!streamsOff && match.streamers && match.streams && match.streamers.length === match.streams.length) {
+    match.streamers.forEach((iconUrl, i) => {
+      const streamLink = document.createElement("a");
+      streamLink.href = match.streams[i];
+      streamLink.target = "_blank";
+      streamLink.rel = "noopener noreferrer";
+
+      const streamerIcon = document.createElement("img");
+      streamerIcon.className = "stream-icon";
+      streamerIcon.src = iconUrl;
+      streamerIcon.alt = "Stream";
+
+      streamLink.appendChild(streamerIcon);
+      rightDiv.appendChild(streamLink);
+    });
+  }
+
+  if(streamsOff) {
+      const [datePart, timePart] = match.time.split(" ");
+      const [day, month, year] = datePart.split(".");
+      const [hour, minute, second] = timePart.split(":");
+      const utcTimestamp = Date.UTC(+year, +month - 1, +day, +hour, +minute, +second);
+      const dateObj = new Date(utcTimestamp);
+    
+      const dayStr = dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const timeStr = dateObj.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+    
+      const timeDiv = document.createElement("div");
+      timeDiv.className = "match-time";
+      timeDiv.innerHTML = `<div>${dayStr} ${timeStr}</div>`;
+      rightDiv.appendChild(timeDiv); 
+  } else {
+      if (match.dw1 || match.dw2 || match.gw1 || match.gw2) {
+        const scoreBox = document.createElement("div");
+        scoreBox.className = "score-box";
+        scoreBox.innerHTML = `<div>${match.dw1}</div><div>${match.dw2}</div>`;
+        rightDiv.appendChild(scoreBox);
+
+        const scoreBoxAlt = document.createElement("div");
+        scoreBoxAlt.className = "score-box-alt";
+        scoreBoxAlt.innerHTML = `<div>(${match.gw1})</div><div>(${match.gw2})</div>`;
+        rightDiv.appendChild(scoreBoxAlt);
+      }
+  }
+
+  if (match.lineups) {
+    rightDiv.appendChild(toggleBtn);
+  }
+
+  container.appendChild(rightDiv);
+  wrapper.appendChild(container);
+  if (match.lineups) wrapper.appendChild(lineupDiv);
+
+  return wrapper;
+}
+
+function createDuelElement(match) {
+  // Copied from createMatchElement, but for COC (duel) type, lineups logic removed
+  const wrapper = document.createElement("div");
+  wrapper.className = "match-wrapper";
+
+  const container = document.createElement("div");
+  container.className = "match-row";
+  container.dataset.id = match.id;
+
+  // Always render the default (streams on) rendering.
+  const [datePart, timePart] = match.time.split(" ");
+  const [day, month, year] = datePart.split(".");
+  const [hour, minute, second] = timePart.split(":");
+  const utcTimestamp = Date.UTC(+year, +month - 1, +day, +hour, +minute, +second);
+  const dateObj = new Date(utcTimestamp);
+
+  const dayStr = dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  const timeStr = dateObj.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+  const timeDiv = document.createElement("div");
+  timeDiv.className = "match-time";
+  timeDiv.innerHTML = `<div>${dayStr} ${timeStr}</div>`;
+  container.appendChild(timeDiv);
+  const divider = document.createElement("div");
+  divider.className = "divider-vertical";
+  container.appendChild(divider);
+
+  // Стало
+  const playersDiv = document.createElement("div");
+  playersDiv.className = "players";
+
+  ["player1", "player2"].forEach((playerKey, i) => {
+    const row = document.createElement("div");
+    row.className = "player-row";
+
+    const avatar = document.createElement("img");
+    avatar.className = "player-avatar";
+    avatar.src = i === 0 ? match.flag1 : match.flag2;
+    avatar.alt = match[playerKey];
+
+    const span = document.createElement("span");
+    span.textContent = match[playerKey];
+
+    row.appendChild(avatar);
+    row.appendChild(span);
+    playersDiv.appendChild(row);
+  });
+  container.appendChild(playersDiv);
+
+  const rightDiv = document.createElement("div");
+  rightDiv.className = "match-right";
+
+  if (match.status === "IN PROGRESS") {
+    const liveIcon = document.createElement("img");
+    liveIcon.className = "live-icon";
+    liveIcon.src = "https://carcassonne.gg/gallery_gen/f4d6792e3ac5f7356502e64aefa51f32_60x28_fit.png";
+    liveIcon.alt = "LIVE";
+    rightDiv.appendChild(liveIcon);
+  }
+
+  if (match.streamers && match.streams && match.streamers.length === match.streams.length) {
+    match.streamers.forEach((iconUrl, i) => {
+      const streamLink = document.createElement("a");
+      streamLink.href = match.streams[i];
+      streamLink.target = "_blank";
+      streamLink.rel = "noopener noreferrer";
+
+      const streamerIcon = document.createElement("img");
+      streamerIcon.className = "stream-icon";
+      streamerIcon.src = iconUrl;
+      streamerIcon.alt = "Stream";
+
+      streamLink.appendChild(streamerIcon);
+      rightDiv.appendChild(streamLink);
+    });
+  }
+
+  // Only show gw1/gw2 for COC
+  if (match.gw1 || match.gw2) {
+    const scoreBox = document.createElement("div");
+    scoreBox.className = "score-box";
+    scoreBox.innerHTML = `<div>${match.gw1}</div><div>${match.gw2}</div>`;
+    rightDiv.appendChild(scoreBox);
+  }
+
+  container.appendChild(rightDiv);
+  wrapper.appendChild(container);
+
+  return wrapper;
+}
+
+function createTournamentHeader(tournament) {
+  const header = document.createElement("div");
+  header.className = "tournament-header";
+
+  const a = document.createElement("a");
+  a.href = tournament.link;
+  a.target = "_self";
+  a.rel = "noopener noreferrer";
+
+  const icon = document.createElement("img");
+  icon.className = "tournament-icon";
+  icon.src = tournament.logo;
+  icon.alt = tournament.name;
+
+  const span = document.createElement("span");
+  span.textContent = tournament.name;
+
+  a.appendChild(icon);
+  a.appendChild(span);
+  header.appendChild(a);
+
+  return header;
+}
+
+
+function renderSection(container, title, tournaments, matches) {
+  if (!matches || matches.length === 0) return;
+
+  const sectionTitle = document.createElement("div");
+  sectionTitle.className = "section-title";
+  sectionTitle.textContent = title;
+  container.appendChild(sectionTitle);
+
+  tournaments.forEach(tournament => {
+    const card = document.createElement("div");
+    card.className = "tournament-card";
+    const header = createTournamentHeader(tournament);
+
+    card.appendChild(header);
+
+    matches
+      .filter(m => m.tournament === tournament.name)
+      .forEach(match => {
+        let el;
+        if (tournament.type === "TEAM") {
+          el = createMatchElement(match);
+        } else if (tournament.type === "COC") {
+          el = createDuelElement(match);
+        } else {
+          el = createMatchElement(match); // fallback
+        }
+        card.appendChild(el);
+      });
+
+    container.appendChild(card);
+  });
+}
+
+const autoUpdate = new URLSearchParams(window.location.search).get("autoupdate") === "true";
+
+function fetchWithTimeout(resource, options = {}) {
+  const { timeout = 5000 } = options;
+  return Promise.race([
+    fetch(resource, options),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Request timed out")), timeout)
+    )
+  ]);
+}
+
+function fetchAndRenderMatches() {
+  const primaryURL = "https://api.carcassonne.com.ua/matches_new";
+  const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches_new.json";
+
+  fetchWithTimeout(primaryURL, { timeout: 5000 })
+    .then(res => {
+      if (!res.ok) throw new Error("Primary source failed");
+      return res.json();
+    })
+    .catch(err => {
+      console.warn("⚠️ Using fallback match data due to error or timeout:", err.message);
+      return fetch(fallbackURL).then(res => res.json());
+    })
+    .then(({ matches_today, matches_scheduled, matches_finished, tournaments_today, tournaments_scheduled, tournaments_finished }) => {
+      const container = document.getElementById("matches-container");
+      container.innerHTML = "";
+
+      renderSection(container, "Today", tournaments_today, matches_today);
+      renderSection(container, "Upcoming Matches", tournaments_scheduled, matches_scheduled);
+      renderSection(container, "Last Results", tournaments_finished, matches_finished);
+    })
+    .catch(err => {
+      console.error("❌ Failed to load any match data:", err);
+    });
+}
+
+fetchAndRenderMatches();
+
+if (autoUpdate) {
+  setInterval(fetchAndRenderMatches, 60000);
+}
+</script>

@@ -29,7 +29,7 @@ function importAllTournamentData() {
       fileId: "1POamfnVvDgT24iQjsBTbfpQVT5oqLtpH6g5moP-Tfec",
       sheets: {
         "2025 Matches": { targetSheet: "Matches", startCol: 2, endCol: 19 }, // B–S
-        "2025 Duels": { targetSheet: "Duels", startCol: 3, endCol: 21, tournamentId: "Asian-Cup-2025" },     // C–U
+        "2025 Duels": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "Asian-Cup-2025" },     // C–V
         "2025 Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 5 }, // A–E
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
@@ -40,7 +40,7 @@ function importAllTournamentData() {
       fileId: "1m3xbUbH1-99Qtn1qq3k9PFoVAvge-9pjtIAefeiYDOM",
       sheets: {
         "2025 Matches": { targetSheet: "Matches", startCol: 2, endCol: 19 }, // B–S
-        "2025 Duels": { targetSheet: "Duels", startCol: 3, endCol: 21, tournamentId: "Friendly-Matches-2025" },     // C–V
+        "2025 Duels": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "Friendly-Matches-2025" },     // C–V
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     },
@@ -50,7 +50,7 @@ function importAllTournamentData() {
       fileId: "1KaZXBqDYzQMulvu6ueEDr7a86Z5YRY_WNnGNMPuEelI",
       sheets: {
         "TECS-2025 Matches": { targetSheet: "Matches", startCol: 2, endCol: 19 }, // B–S
-        "TECS-2025 Duels": { targetSheet: "Duels", startCol: 3, endCol: 21, tournamentId: "TECS-2025" },     // C–V
+        "TECS-2025 Duels": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "TECS-2025" },     // C–V
         "TECS-2025 Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 5 }, // A–E
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
@@ -60,7 +60,7 @@ function importAllTournamentData() {
     {
       fileId: "17sAfGdBHuwSTfyLtfjiYslbeFt3LGzDnDUKyBZverZM",
       sheets: {
-        "BCPL-2025-Sum": { targetSheet: "Duels", startCol: 3, endCol: 21, tournamentId: "BCPL-2025-Sum" },     // C–V
+        "BCPL-2025-Sum": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "BCPL-2025-Sum" },     // C–V
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     },
@@ -69,7 +69,7 @@ function importAllTournamentData() {
     {
       fileId: "1K6lVrUCZAXBE6rVojhO1YsQpOxSxS9EcOVLpmvfl-9Y",
       sheets: {
-        "CZ-2025-COC": { targetSheet: "Duels", startCol: 3, endCol: 21, tournamentId: "CZ-2025-COC" },     // C–V
+        "CZ-2025-COC": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "CZ-2025-COC" },     // C–V
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     },
@@ -78,7 +78,7 @@ function importAllTournamentData() {
     {
       fileId: "1tsH-p-zILqEhXgQn2TKSPwV5GHUkq8J--auhi0iv8l0",
       sheets: {
-        "HR-2025-OC-2": { targetSheet: "Duels", startCol: 3, endCol: 21, tournamentId: "HR-2025-OC-2" },     // C–V
+        "HR-2025-OC-2": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "HR-2025-OC-2" },     // C–V
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     }
@@ -127,7 +127,17 @@ function importAllTournamentData() {
       if (rowCount < 2) continue;
 
       const colCount = config.endCol - config.startCol + 1;
-      const values = sheet.getRange(2, config.startCol, rowCount - 1, colCount).getDisplayValues();
+      let values = sheet.getRange(2, config.startCol, rowCount - 1, colCount).getDisplayValues();
+
+      // For Matches, exclude columns O–R (indexes 13–16, 0-based)
+      if (config.targetSheet === "Matches") {
+        // Keep B–M (0–11) and S (18)
+        values = values.map(row => {
+          let kept = row.slice(0, 12); // B–M: 0–12
+          if (row.length > 17) kept.push(row[17]); // S
+          return kept;
+        });
+      }
 
       // Фільтруємо порожні рядки (навіть якщо є формули з "")
       const nonEmptyRows = values.filter(row => row.some(cell => cell !== ""));

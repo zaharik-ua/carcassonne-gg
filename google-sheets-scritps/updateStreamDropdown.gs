@@ -35,15 +35,14 @@ function updateStreamDropdown() {
   // --- DUELS => Column D in Streams ---
   const duelsData = duelsSheet.getRange("A2:O" + duelsSheet.getLastRow()).getValues();
   const futureDuels = duelsData
-    .filter((row, index) => {
+    .filter(row => {
       const matchId = row[3];       // column D
-      const date = row[14];         // column O
+      const date = row[14];          // column O
 
-      const isDateTime = (typeof date === "number") && (date % 1 !== 0);
-      return !matchId &&
+      return !matchId &&            
              date instanceof Date &&
              date > now &&
-             isDateTime;
+             (date.getHours() + date.getMinutes() + date.getSeconds()) > 0;
     })
     .map(row => row[0]); // column A
 
