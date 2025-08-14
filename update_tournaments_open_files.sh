@@ -6,7 +6,8 @@ echo "=== $(date '+%Y-%m-%d %H:%M:%S') ===" >> /home/carcassonne-gg/cron_update_
 changes_made=false
 
 # List of tournament IDs
-tournaments=("Asian-Cup-2025" "TECS-2025" "UCOCup-2025" "BCPL-2025-Sum" "CZ-2025-COC" "HR-2025-OC-2")
+tournaments=("Asian-Cup-2025" "TECS-2025" "UCOCup-2025" "BCPL-2025-Sum" "CZ-2025-COC" "HR-2025-OC-2" "UCOCup-2025" "AR-2025-LNE" "FI-2025-OC")
+# tournaments=("FI-2025-OC" "AR-2025-LNE" )
 
 for tournament_id in "${tournaments[@]}"; do
   temp_file=$(mktemp)
