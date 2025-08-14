@@ -137,7 +137,7 @@ code {
     object-fit: contain;
   }
 
-  .players {
+  .duel-players {
     flex-grow: 1;
     display: flex;
     flex-direction: column;
@@ -155,26 +155,38 @@ code {
     min-width: 0;
   }
 
-  .player-row {
+  .duel-player-row {
     display: flex;
     align-items: center;
     font-size: 16px;
     gap: 6px;
   }
 
-  .player-row span {
+  .duel-player-row span {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
   }
 
-  .player-avatar {
-    height: 18px;
-    width: 18px;
+  .duel-player-avatar {
+    height: 16px;
+    width: 16px;
     object-fit: contain;
     border: 0.5px solid #444;
     border-radius: 2px;
+    margin-top: 1px;
+    margin-bottom: 1px;
+  }
+
+  .duel-player-row a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .duel-player-row a:hover {
+    color: #0277BD;
+    text-decoration: none;
   }
 
   .match-right {
@@ -188,12 +200,21 @@ code {
     height: auto;
   }
 
-  .score-box {
+  .score-box.match-score {
     width: 13px;
     text-align: center;
     font-weight: bold;
     font-size: 18px;
     line-height: 20px;
+  }
+
+  .score-box.duel-score {
+    width: 13px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 16px;
+    line-height: 20px;
+    margin-right: 7px;
   }
 
   .score-box-stream {
@@ -206,7 +227,10 @@ code {
   }
   
   @media (min-width: 601px) {
-    .score-box {
+    .score-box.match-score {
+      margin-left: 15px;
+    }
+    .score-box.duel-score {
       margin-left: 15px;
     }
   }
@@ -506,7 +530,7 @@ function createMatchElement(match) {
   } else {
       if (match.dw1 || match.dw2 || match.gw1 || match.gw2) {
         const scoreBox = document.createElement("div");
-        scoreBox.className = "score-box";
+        scoreBox.className = "score-box match-score";
         scoreBox.innerHTML = `<div>${match.dw1}</div><div>${match.dw2}</div>`;
         rightDiv.appendChild(scoreBox);
 
@@ -555,24 +579,30 @@ function createDuelElement(match) {
   divider.className = "divider-vertical";
   container.appendChild(divider);
 
-  // Стало
+  // Players (always from team1/team2 in JSON)
   const playersDiv = document.createElement("div");
-  playersDiv.className = "players";
+  playersDiv.className = "duel-players";
 
-  ["player1", "player2"].forEach((playerKey, i) => {
+  const names = [match.team1, match.team2];
+  const ids = [match.opponent1_id, match.opponent2_id];
+
+  names.forEach((name, i) => {
     const row = document.createElement("div");
-    row.className = "player-row";
+    row.className = "duel-player-row";
 
     const avatar = document.createElement("img");
-    avatar.className = "player-avatar";
+    avatar.className = "duel-player-avatar";
     avatar.src = i === 0 ? match.flag1 : match.flag2;
-    avatar.alt = match[playerKey];
+    avatar.alt = name || "";
 
-    const span = document.createElement("span");
-    span.textContent = match[playerKey];
+    const link = document.createElement("a");
+    link.href = `https://boardgamearena.com/player?id=${ids[i]}`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = name || "";
 
     row.appendChild(avatar);
-    row.appendChild(span);
+    row.appendChild(link);
     playersDiv.appendChild(row);
   });
   container.appendChild(playersDiv);
@@ -608,7 +638,7 @@ function createDuelElement(match) {
   // Only show gw1/gw2 for COC
   if (match.gw1 || match.gw2) {
     const scoreBox = document.createElement("div");
-    scoreBox.className = "score-box";
+    scoreBox.className = "score-box duel-score";
     scoreBox.innerHTML = `<div>${match.gw1}</div><div>${match.gw2}</div>`;
     rightDiv.appendChild(scoreBox);
   }
@@ -662,14 +692,10 @@ function renderSection(container, title, tournaments, matches) {
     matches
       .filter(m => m.tournament === tournament.name)
       .forEach(match => {
-        let el;
-        if (tournament.type === "TEAM") {
-          el = createMatchElement(match);
-        } else if (tournament.type === "COC") {
-          el = createDuelElement(match);
-        } else {
-          el = createMatchElement(match); // fallback
-        }
+        const tType = tournament.type || match.tournament_type;
+        const el = (tType === "COC")
+          ? createDuelElement(match)
+          : createMatchElement(match);
         card.appendChild(el);
       });
 

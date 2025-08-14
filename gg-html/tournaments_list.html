@@ -316,7 +316,11 @@
               const label = getStatusLabel(t);
               const link = document.createElement("a");
               link.href = `https://carcassonne.gg/${t.tournament_id}/`;
-              link.target = "_self";
+              if (link.href.includes("carcassonne.gg")) {
+                link.target = "_self";
+              } else {
+                link.target = "_blank";
+              }
               link.textContent = t.short_title;
               link.className = "tt-name";
 
@@ -361,7 +365,11 @@
               const label = getStatusLabel(t);
               const link = document.createElement("a");
               link.href = `https://carcassonne.gg/${t.tournament_id}/`;
-              link.target = "_self";
+              if (link.href.includes("carcassonne.gg")) {
+                link.target = "_self";
+              } else {
+                link.target = "_blank";
+              }
               link.textContent = t.short_title;
               link.className = "tt-name";
 
@@ -425,7 +433,11 @@
             row = document.createElement("a");
             row.className = "assosiation-row association-link-row";
             row.href = latest.external_link ? latest.external_link : `https://carcassonne.gg/${latest.tournament_id}/`;
-            row.target = latest.external_link ? "_blank" : "_self";
+            if (row.href.includes("carcassonne.gg")) {
+              row.target = "_self";
+            } else {
+              row.target = "_blank";
+            }
           }
           const left = document.createElement("div");
           left.className = "assosiation-left";
@@ -478,7 +490,11 @@
             row = document.createElement("a");
             row.className = "assosiation-row association-link-row";
             row.href = latest.external_link ? latest.external_link : `https://carcassonne.gg/${latest.tournament_id}/`;
-            row.target = latest.external_link ? "_blank" : "_self";
+            if (row.href.includes("carcassonne.gg")) {
+              row.target = "_self";
+            } else {
+              row.target = "_blank";
+            }
           }
           const left = document.createElement("div");
           left.className = "assosiation-left";

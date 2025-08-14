@@ -88,6 +88,7 @@
 
   /* New styles for tournament-title */
   .tournament-title {
+    font-size: 16px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -192,8 +193,21 @@
         const createRow = (t, detailsHTML = "", hideLogo = false) => {
         const row = document.createElement("a");
         row.className = "tournament-row";
-        row.href = `https://carcassonne.gg/${t.tournament_id}/`;
-        row.target = "_self";
+
+        // Choose URL: prefer external_link if present; otherwise default to carcassonne.gg/tournament_id
+        const href = (t.external_link && String(t.external_link).trim() !== "")
+          ? t.external_link
+          : `https://carcassonne.gg/${t.tournament_id}/`;
+        row.href = href;
+
+        // Target logic: same tab for carcassonne.gg, new tab otherwise
+        if (href.includes("carcassonne.gg")) {
+          row.target = "_self";
+        } else {
+          row.target = "_blank";
+          row.rel = "noopener noreferrer";
+        }
+
         row.style.textDecoration = "none";
         row.style.color = "inherit";
 
@@ -216,6 +230,7 @@
 
 
         const titleText = document.createElement("span");
+        titleText.className = "tournament-title";
         titleText.textContent = t.short_title;
         titleLine.appendChild(titleText);
 

@@ -30,6 +30,19 @@ function updateStreamDropdown() {
     const rangeC = streamsSheet.getRange(startRowC + 1, 3, endRowC - startRowC + 1);
     rangeC.setDataValidation(matchRule);
     Logger.log(`✅ Applied dropdown validation in column C from row ${startRowC + 1} to ${endRowC}`);
+  } else {
+    Logger.log("ℹ️ No upcoming matches found — setting 'no matches planned' for empty cells.");
+    const matchRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(["no matches planned"], true)
+      .setAllowInvalid(false)
+      .build();
+
+    const columnC = streamsSheet.getRange("C2:C1000").getValues();
+    for (let i = 0; i < columnC.length; i++) {
+      if (!columnC[i][0]) {
+        streamsSheet.getRange(i + 2, 3).setDataValidation(matchRule);
+      }
+    }
   }
 
   // --- DUELS => Column D in Streams ---
@@ -63,5 +76,18 @@ function updateStreamDropdown() {
     const rangeD = streamsSheet.getRange(startRowD + 1, 4, endRowD - startRowD + 1);
     rangeD.setDataValidation(duelRule);
     Logger.log(`✅ Applied dropdown validation in column D from row ${startRowD + 1} to ${endRowD}`);
+  } else {
+    Logger.log("ℹ️ No upcoming duels found — setting 'no duels planned' for empty cells.");
+    const duelRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(["no duels planned"], true)
+      .setAllowInvalid(false)
+      .build();
+
+    const columnD = streamsSheet.getRange("D2:D1000").getValues();
+    for (let i = 0; i < columnD.length; i++) {
+      if (!columnD[i][0]) {
+        streamsSheet.getRange(i + 2, 4).setDataValidation(duelRule);
+      }
+    }
   }
 }
