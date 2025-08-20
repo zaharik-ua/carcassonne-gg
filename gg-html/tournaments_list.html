@@ -315,11 +315,15 @@
               const logo = getLogoHtml(t);
               const label = getStatusLabel(t);
               const link = document.createElement("a");
-              link.href = `https://carcassonne.gg/${t.tournament_id}/`;
-              if (link.href.includes("carcassonne.gg")) {
+              const href = (t.external_link && String(t.external_link).trim() !== "")
+                ? t.external_link
+                : `https://carcassonne.gg/${t.tournament_id}/`;
+              link.href = href;
+              if (href.includes("carcassonne.gg")) {
                 link.target = "_self";
               } else {
                 link.target = "_blank";
+                link.rel = "noopener noreferrer";
               }
               link.textContent = t.short_title;
               link.className = "tt-name";
@@ -364,11 +368,15 @@
               const logo = getLogoHtml(t);
               const label = getStatusLabel(t);
               const link = document.createElement("a");
-              link.href = `https://carcassonne.gg/${t.tournament_id}/`;
-              if (link.href.includes("carcassonne.gg")) {
+              const href = (t.external_link && String(t.external_link).trim() !== "")
+                ? t.external_link
+                : `https://carcassonne.gg/${t.tournament_id}/`;
+              link.href = href;
+              if (href.includes("carcassonne.gg")) {
                 link.target = "_self";
               } else {
                 link.target = "_blank";
+                link.rel = "noopener noreferrer";
               }
               link.textContent = t.short_title;
               link.className = "tt-name";

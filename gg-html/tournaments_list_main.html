@@ -88,7 +88,7 @@
 
   /* New styles for tournament-title */
   .tournament-title {
-    font-size: 16px;
+    font-size: 15px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -183,7 +183,11 @@
       const res = await fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-list.json");
       if (!res.ok) throw new Error("Json fetch failed");
       const data = await res.json();
-      const tournaments = data.tournaments.filter(t => t.type === "COC" && (t.status === "Planned" || t.status === "In progress"));
+      const tournaments = data.tournaments.filter(t =>
+        t.type === "COC"
+        && (t.status === "Planned" || t.status === "In progress")
+        && String(t.hidden).toLowerCase() !== "yes"
+      );
       const countriesData = data.countries || [];
 
       const containers = document.querySelectorAll(".coc-container");

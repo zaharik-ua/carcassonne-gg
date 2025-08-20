@@ -404,10 +404,11 @@
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
     //? "Asian-Cup-2025"
-    //? "UCOCup-2025"
-    ? "HR-2025-OC-2"
+    //? "UCOCup-2024"
+    ? "TECS-2025"
+    //? "HR-2025-OC-2"
     //? "TW-2024-CCLQ"
-    //? "USCC-2025"
+    //? "CZ-2025-COC"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
 
@@ -415,6 +416,13 @@
   if (currentTournamentId === "Asian-Cup-2025") {
     document.documentElement.style.setProperty('--main-bg-color', '#d85c5c');
     document.documentElement.style.setProperty('--hover-bg-color', '#c64a4b');
+  }
+
+  function fetchWithTimeout(resource, ms = 5000, options = {}) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), ms);
+    return fetch(resource, { ...options, signal: controller.signal })
+      .finally(() => clearTimeout(id));
   }
 
   let matches = [];
@@ -642,13 +650,7 @@
     // Stage 1 content
     const stage1Container = document.getElementById("tab-stage1-content");
     stage1Container.innerHTML = "";
-    const stage1Html = (currentTournament && typeof currentTournament.stage1_html === "string")
-      ? currentTournament.stage1_html.trim()
-      : "";
-    if (stage1Html) {
-      // If stage1_html is provided, render it as-is
-      stage1Container.innerHTML = stage1Html;
-    } else if (tournament_format === "1 Stage") {
+    if (tournament_format === "1 Stage") {
       if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
         renderStandingsData(
           standings.filter(s => s.tournament_id === currentTournamentId),
@@ -660,11 +662,17 @@
             ? matches.filter(d => d.tournament_id === currentTournamentId)
             : duels.filter(d => d.tournament_id === currentTournamentId),
           stage1Container,
-          currentTournament.type,
-          'single'
+          currentTournament.type
         );
       } else if (stage1_format === "Double Elimination") {
-        stage1Container.textContent = "Double Elimination support coming soon.";
+        renderDoubleEliminationData(
+          (currentTournament.type === "TEAM"
+            ? matches.filter(d => d.tournament_id === currentTournamentId)
+            : duels.filter(d => d.tournament_id === currentTournamentId)
+          ),
+          stage1Container,
+          currentTournament.type
+        );
       } else {
         stage1Container.textContent = "Stage 1 info not available.";
       }
@@ -703,12 +711,39 @@
             renderPlayoffData(
               duelsInGroup,
               groupBracketWrapper,
-              currentTournament.type,
-              'single'
+              currentTournament.type
             );
           }
         } else if (stage1_format === "Double Elimination") {
-          stage1Container.textContent = "Double Elimination support coming soon.";
+          const grouped = {};
+          (currentTournament.type === "TEAM" ? matches : duels)
+            .filter(d => d.tournament_id === currentTournamentId && (d.stage === "Groups" || d.stage === "Groups Stage") && d.round_order !== null && d.group)
+            .forEach(d => {
+              if (!grouped[d.group]) grouped[d.group] = [];
+              grouped[d.group].push(d);
+            });
+
+          for (const [group, duelsInGroup] of Object.entries(grouped)) {
+            const groupSection = document.createElement("div");
+            groupSection.className = "group-section";
+
+            const groupTitle = document.createElement("div");
+            groupTitle.className = "group-title";
+            groupTitle.textContent = `Group ${group}`;
+
+            const groupBracketWrapper = document.createElement("div");
+            groupBracketWrapper.className = "group-bracket";
+
+            groupSection.appendChild(groupTitle);
+            groupSection.appendChild(groupBracketWrapper);
+            stage1Container.appendChild(groupSection);
+
+            renderDoubleEliminationData(
+              duelsInGroup,
+              groupBracketWrapper,
+              currentTournament.type
+            );
+          }
         } else {
           stage1Container.textContent = "Stage 1 info not available.";
         }
@@ -739,11 +774,17 @@
             ? matches.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs")
             : duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs"),
           stage2Container,
-          currentTournament.type,
-          'single'
+          currentTournament.type
         );
       } else if (stage2_format === "Double Elimination") {
-        stage2Container.textContent = "Double Elimination support coming soon.";
+        renderDoubleEliminationData(
+          (currentTournament.type === "TEAM"
+            ? matches.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs")
+            : duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs")
+          ),
+          stage2Container,
+          currentTournament.type
+        );
       } else if (stage2_format === "Round-robin" || stage2_format === "Swiss") {
         renderStandingsData(
           standings.filter(s => s.tournament_id === currentTournamentId && s.stage === "Stage 2"),
@@ -1136,7 +1177,7 @@
               </div>
             </td>
             <td>${p.matches_played}</td>
-            <td style="font-weight:600;">${p.matches_won}</td>
+            <td style="font-weight:600;">${standing.matches_won}</td>
             <td>${p.matches_lost}</td>
             <td>${p.games_won}</td>
             <td>${p.games_lost}</td>
@@ -1188,6 +1229,33 @@
       explanation.innerHTML = '<span class="highlight-text">MP:</span> Matches Played <span class="highlight-text">MW:</span> Matches Won <span class="highlight-text">ML:</span> Matches Lost <span class="highlight-text">GW:</span> Games Won <span class="highlight-text">GL:</span> Games Lost<br><br>The final positions in the group will be determined in the following order:<br>1. Number of MW<br>2. The difference between GW and GL<br>3. Number of GW<br>4. Tiebreakers 1-3, but applied only to confrontations between players with equal results<br>5. The difference in points scored in confrontations between players with equal results<br>6. Random draw';
       container.appendChild(explanation);
     }
+  }
+
+  // Format match time to local TZ
+  function formatMatchTime(raw) {
+    if (!raw || typeof raw !== "string") return "";
+    const s = raw.trim();
+    // With time: DD.MM.YYYY HH:MM:SS
+    if (/^\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}:\d{2}$/.test(s)) {
+      const [datePart, timePart] = s.split(/\s+/);
+      const [dd, mm, yyyy] = datePart.split(".").map(Number);
+      const [HH, MM, SS] = timePart.split(":").map(Number);
+      const ts = Date.UTC(yyyy, mm - 1, dd, HH, MM, SS);
+      const d = new Date(ts);
+      const dayMon = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const hm = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+      return `${dayMon} ${hm}`; // e.g., 12 Aug 14:00
+    }
+    // Date only: DD.MM.YYYY → show as DD Mon
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(s)) {
+      const [dd, mm, yyyy] = s.split(".").map(Number);
+      // Use noon UTC to avoid TZ shifting date
+      const ts = Date.UTC(yyyy, mm - 1, dd, 12, 0, 0);
+      const d = new Date(ts);
+      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    }
+    // Fallback: return as-is
+    return s;
   }
 
   function renderMatchesData() {
@@ -1291,7 +1359,7 @@
           }
 
           row.innerHTML = `
-            <td class="date-cell">${g.time || ''}</td>
+            <td class="date-cell">${formatMatchTime(g.time)}</td>
             ${g.group ? `<td>${g.group}</td>` : ""}
             ${team1Cell}
             ${scoreCellHtml}
@@ -1420,7 +1488,7 @@
             </div>
           </td>`;
           row.innerHTML = `
-            <td class="date-cell">${g.time}</td>
+            <td class="date-cell">${formatMatchTime(g.time)}</td>
             ${isGroupStage ? `<td>${g.group}</td>` : ""}
             ${player1Cell}
             <td class="score-cell">${g.score1} - ${g.score2}</td>
@@ -1472,7 +1540,7 @@
     }
   }
 
-  function renderPlayoffData(playoffMatches, containerOverride, tournamentType, bracketType = 'single') {
+  function renderPlayoffData(playoffMatches, containerOverride, tournamentType) {
     // --- RENDER PLAYOFF BRACKET ---
     // Build layout and UI for playoff bracket including match positions, labels, and connectors
     let container;
@@ -1507,6 +1575,11 @@
       // Accept numeric or numeric string, including 0
       return (cfg !== null && cfg !== undefined && cfg !== "" && !isNaN(+cfg)) ? +cfg : 50;
     })();
+    // Consider any of these as a third-place match (upper/lower variants included)
+    const isThirdPlace = (m) => {
+      const ks = (m && m.knockout_stage ? String(m.knockout_stage) : "").toLowerCase();
+      return ks === "third_place" || ks === "upper_third_place" || ks === "lower_third_place";
+    };
     
     // Group matches by numeric round_order
     const groupedByRound = {};
@@ -1528,7 +1601,7 @@
 
     // 2. Layout matches of maxMatchRound
     groupedByRound[maxMatchRound]
-      .filter(m => m.knockout_stage !== "third_place")
+      .filter(m => !isThirdPlace(m))
       .forEach((m, index) => {
         const cord_top = BRACKET_MARGIN+ ROUND_TITLE_TO_MATCH_SPACING + index * (MATCH_HEIGHT + VERTICAL_SPACING);
         const cord_left = BRACKET_MARGIN + roundIndexMap[maxMatchRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
@@ -1542,7 +1615,7 @@
     for (let i = sortedRounds.indexOf(maxMatchRound) + 1; i < sortedRounds.length; i++) {
       const roundNum = sortedRounds[i];
       groupedByRound[roundNum]
-        .filter(m => m.knockout_stage !== "third_place")
+        .filter(m => !isThirdPlace(m))
         .forEach(m => {
           const sources = sortedRounds[i - 1] ? groupedByRound[sortedRounds[i - 1]].filter(pm => pm.next_game_win === m.knockout_id) : [];
           let cord_top = 0;
@@ -1567,7 +1640,7 @@
       const roundNum = sortedRounds[i];
       const nextRound = sortedRounds[i + 1];
       groupedByRound[nextRound]
-        .filter(s => s.knockout_stage !== "third_place")
+        .filter(s => !isThirdPlace(s))
         .forEach(s => {
           const predecessors = groupedByRound[roundNum]?.filter(m => m.next_game_win === s.knockout_id) || [];
           if (predecessors.length === 1) {
@@ -1604,7 +1677,7 @@
     }
 
     // 5. Add 3rd place match if exists
-    const thirdPlaceMatch = playoffMatches.find(g => g.tournament_id === currentTournamentId && g.knockout_stage === "third_place");
+    const thirdPlaceMatch = playoffMatches.find(g => g.tournament_id === currentTournamentId && isThirdPlace(g));
     if (thirdPlaceMatch) {
       const thirdPlaceRound = Number(thirdPlaceMatch.round_order);
       const existingMatch = groupedByRound[thirdPlaceRound]?.find(m => m.knockout_id === thirdPlaceMatch.knockout_id);
@@ -1630,7 +1703,7 @@
       // Додаємо назву раунду (label)
       const label = document.createElement("div");
       label.className = "round-label";
-      label.textContent = matches.find(m => m.knockout_stage !== "third_place")?.round || `Round ${roundNum}`;
+      label.textContent = matches.find(m => !isThirdPlace(m))?.round || `Round ${roundNum}`;
       label.style.position = "absolute";
       label.style.width = `${MATCH_WIDTH}px`;
       label.style.textAlign = "center";
@@ -1647,7 +1720,7 @@
         matchBox.style.position = "absolute";
 
         let topOffset = m.cord_top;
-        if (m.knockout_stage === "third_place") {
+        if (isThirdPlace(m)) {
           // Назву раунду для матчу за 3-є місце додаємо окремо нижче
           const label = document.createElement("div");
           label.className = "round-label";
@@ -1912,6 +1985,56 @@
     });
   }
 
+  function renderDoubleEliminationData(allMatches, containerOverride, tournamentType) {
+    const container = containerOverride || document.getElementById("tab-stage1-content");
+    container.innerHTML = "";
+
+    const upper = (allMatches || []).filter(m => {
+      const ks = (m.knockout_stage || "").toLowerCase();
+      return ks === "upper" || ks === "upper_third_place";
+    });
+    const lower = (allMatches || []).filter(m => {
+      const ks = (m.knockout_stage || "").toLowerCase();
+      return ks === "lower" || ks === "lower_third_place";
+    });
+
+    const section = document.createElement("div");
+    section.className = "group-section";
+
+    // --- Upper bracket ---
+    if (upper.length) {
+      const upperTitle = document.createElement("div");
+      upperTitle.className = "group-title";
+      section.appendChild(upperTitle);
+
+      const upperWrapper = document.createElement("div");
+      section.appendChild(upperWrapper);
+
+      // Будуємо upper за логікою renderPlayoffData (всередині неї – max round, вправо, вліво)
+      renderPlayoffData(upper, upperWrapper, tournamentType);
+    }
+
+    // --- Вертикальний відступ 2 x VERTICAL_SPACING (20px у renderPlayoffData) ---
+    if (upper.length && lower.length) {
+      const spacer = document.createElement("div");
+    }
+
+    // --- Lower bracket ---
+    if (lower.length) {
+      const lowerTitle = document.createElement("div");
+      lowerTitle.className = "group-title";
+      section.appendChild(lowerTitle);
+
+      const lowerWrapper = document.createElement("div");
+      section.appendChild(lowerWrapper);
+
+      // Будуємо lower за тією ж схемою
+      renderPlayoffData(lower, lowerWrapper, tournamentType);
+    }
+
+    container.appendChild(section);
+  }
+  
   document.addEventListener("DOMContentLoaded", () => {
     loadTournamentsList()
       .then(() => {

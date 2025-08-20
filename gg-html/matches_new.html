@@ -275,12 +275,11 @@ code {
   .tournament-header {
     display: flex;
     align-items: center;
-    height: 22px;
+    height: auto;
     background-color: white;
     font-size: 13px;
     font-weight: bold;
-    margin: 8px 0;
-    padding: 0 8px;
+    padding: 6px 8px;
   }
 
   .tournament-header a {
@@ -348,9 +347,25 @@ code {
   transform: rotate(180deg);
 }
 
-/* .chevron.rotated {
-  transform: rotate(0deg);
-} */
+/* Last Results: grid for COC duels (2 per row desktop, 1 per row mobile) */
+.lastresults-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 600px) {
+  .lastresults-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Трішки ущільнимо ряд для компактних дуелей (опціонально) */
+.match-row.duel-compact {
+  height: 48px; /* було 48px; можна залишити 48, якщо хочеш */
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+}
 
 </style>
 
@@ -457,15 +472,18 @@ function createMatchElement(match) {
     const row = document.createElement("div");
     row.className = "team-row";
 
-    const flag = document.createElement("img");
-    flag.className = "team-flag";
-    flag.src = i === 0 ? match.flag1 : match.flag2;
-    flag.alt = match[teamKey];
+    const flagSrc = i === 0 ? match.flag1 : match.flag2;
+    if (flagSrc && flagSrc.trim() !== "") {
+      const flag = document.createElement("img");
+      flag.className = "team-flag";
+      flag.src = flagSrc;
+      flag.alt = match[teamKey] || "";
+      row.appendChild(flag);
+    }
 
     const span = document.createElement("span");
     span.textContent = match[teamKey];
 
-    row.appendChild(flag);
     row.appendChild(span);
     teamsDiv.appendChild(row);
   });
@@ -590,10 +608,14 @@ function createDuelElement(match) {
     const row = document.createElement("div");
     row.className = "duel-player-row";
 
-    const avatar = document.createElement("img");
-    avatar.className = "duel-player-avatar";
-    avatar.src = i === 0 ? match.flag1 : match.flag2;
-    avatar.alt = name || "";
+    const flag = i === 0 ? match.flag1 : match.flag2;
+    if (flag && flag.trim() !== "") {
+      const avatar = document.createElement("img");
+      avatar.className = "duel-player-avatar";
+      avatar.src = flag;
+      avatar.alt = name || "";
+      row.appendChild(avatar);
+    }
 
     const link = document.createElement("a");
     link.href = `https://boardgamearena.com/player?id=${ids[i]}`;
@@ -601,7 +623,88 @@ function createDuelElement(match) {
     link.rel = "noopener noreferrer";
     link.textContent = name || "";
 
-    row.appendChild(avatar);
+    row.appendChild(link);
+    playersDiv.appendChild(row);
+  });
+  container.appendChild(playersDiv);
+
+  const rightDiv = document.createElement("div");
+  rightDiv.className = "match-right";
+
+  if (match.status === "IN PROGRESS") {
+    const liveIcon = document.createElement("img");
+    liveIcon.className = "live-icon";
+    liveIcon.src = "https://carcassonne.gg/gallery_gen/f4d6792e3ac5f7356502e64aefa51f32_60x28_fit.png";
+    liveIcon.alt = "LIVE";
+    rightDiv.appendChild(liveIcon);
+  }
+
+  if (match.streamers && match.streams && match.streamers.length === match.streams.length) {
+    match.streamers.forEach((iconUrl, i) => {
+      const streamLink = document.createElement("a");
+      streamLink.href = match.streams[i];
+      streamLink.target = "_blank";
+      streamLink.rel = "noopener noreferrer";
+
+      const streamerIcon = document.createElement("img");
+      streamerIcon.className = "stream-icon";
+      streamerIcon.src = iconUrl;
+      streamerIcon.alt = "Stream";
+
+      streamLink.appendChild(streamerIcon);
+      rightDiv.appendChild(streamLink);
+    });
+  }
+
+  // Only show gw1/gw2 for COC
+  if (match.gw1 || match.gw2) {
+    const scoreBox = document.createElement("div");
+    scoreBox.className = "score-box duel-score";
+    scoreBox.innerHTML = `<div>${match.gw1}</div><div>${match.gw2}</div>`;
+    rightDiv.appendChild(scoreBox);
+  }
+
+  container.appendChild(rightDiv);
+  wrapper.appendChild(container);
+
+  return wrapper;
+}
+
+function createDuelElementCompact(match) {
+  // Compact COC duel: no time, no divider; keep players, streams, score
+  const wrapper = document.createElement("div");
+  wrapper.className = "match-wrapper";
+
+  const container = document.createElement("div");
+  container.className = "match-row duel-compact";
+  container.dataset.id = match.id;
+
+  // Players (from team1/team2 in JSON)
+  const playersDiv = document.createElement("div");
+  playersDiv.className = "duel-players";
+
+  const names = [match.team1, match.team2];
+  const ids = [match.opponent1_id, match.opponent2_id];
+
+  names.forEach((name, i) => {
+    const row = document.createElement("div");
+    row.className = "duel-player-row";
+
+    const flag = i === 0 ? match.flag1 : match.flag2;
+    if (flag && flag.trim() !== "") {
+      const avatar = document.createElement("img");
+      avatar.className = "duel-player-avatar";
+      avatar.src = flag;
+      avatar.alt = name || "";
+      row.appendChild(avatar);
+    }
+
+    const link = document.createElement("a");
+    link.href = `https://boardgamearena.com/player?id=${ids[i]}`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = name || "";
+
     row.appendChild(link);
     playersDiv.appendChild(row);
   });
@@ -689,15 +792,39 @@ function renderSection(container, title, tournaments, matches) {
 
     card.appendChild(header);
 
-    matches
-      .filter(m => m.tournament === tournament.name)
-      .forEach(match => {
+    const filtered = matches.filter(m => m.tournament === tournament.name);
+
+    if (title === "Last Results") {
+      // For Last Results: COC → compact in grid; TEAM → as-is
+      // 1) TEAM (as-is)
+      filtered
+        .filter(m => (tournament.type || m.tournament_type) !== "COC")
+        .forEach(match => {
+          const el = createMatchElement(match); // TEAM: без змін
+          card.appendChild(el);
+        });
+
+      // 2) COC (compact grid)
+      const cocList = filtered.filter(m => (tournament.type || m.tournament_type) === "COC");
+      if (cocList.length > 0) {
+        const grid = document.createElement("div");
+        grid.className = "lastresults-grid";
+        cocList.forEach(match => {
+          const el = createDuelElementCompact(match); // без часу, без divider, 2 в ряд на десктопі
+          grid.appendChild(el);
+        });
+        card.appendChild(grid);
+      }
+    } else {
+      // Other sections: original behavior
+      filtered.forEach(match => {
         const tType = tournament.type || match.tournament_type;
         const el = (tType === "COC")
           ? createDuelElement(match)
           : createMatchElement(match);
         card.appendChild(el);
       });
+    }
 
     container.appendChild(card);
   });
