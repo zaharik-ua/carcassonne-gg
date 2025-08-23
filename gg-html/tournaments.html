@@ -404,8 +404,9 @@
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
     //? "Asian-Cup-2025"
+    ? "Copa-America-2021"
     //? "UCOCup-2025"
-    ? "HR-2025-OC-2"
+    //? "HR-2025-OC-2"
     //? "TW-2024-CCLQ"
     //? "USCC-2025"
     : window.location.pathname.split('/').filter(Boolean).pop();
@@ -415,6 +416,13 @@
   if (currentTournamentId === "Asian-Cup-2025") {
     document.documentElement.style.setProperty('--main-bg-color', '#d85c5c');
     document.documentElement.style.setProperty('--hover-bg-color', '#c64a4b');
+  }
+
+  function fetchWithTimeout(resource, ms = 5000, options = {}) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), ms);
+    return fetch(resource, { ...options, signal: controller.signal })
+      .finally(() => clearTimeout(id));
   }
 
   let matches = [];
@@ -660,8 +668,7 @@
             ? matches.filter(d => d.tournament_id === currentTournamentId)
             : duels.filter(d => d.tournament_id === currentTournamentId),
           stage1Container,
-          currentTournament.type,
-          'single'
+          currentTournament.type
         );
       } else if (stage1_format === "Double Elimination") {
         stage1Container.textContent = "Double Elimination support coming soon.";
@@ -703,8 +710,7 @@
             renderPlayoffData(
               duelsInGroup,
               groupBracketWrapper,
-              currentTournament.type,
-              'single'
+              currentTournament.type
             );
           }
         } else if (stage1_format === "Double Elimination") {
@@ -739,8 +745,7 @@
             ? matches.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs")
             : duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs"),
           stage2Container,
-          currentTournament.type,
-          'single'
+          currentTournament.type
         );
       } else if (stage2_format === "Double Elimination") {
         stage2Container.textContent = "Double Elimination support coming soon.";
@@ -845,29 +850,72 @@
       section.appendChild(title);
 
       const table = document.createElement("table");
-      // Apply special styling for Final Ranking table only
       table.className = "group-table";
-      table.style.maxWidth = "400px";
+      table.style.maxWidth = "500px";
       table.style.margin = "0 auto";
 
-      table.innerHTML = `
-        <tr>
-          <th style="width:10%; min-width:40px;">Rank</th>
-          <th style="width:90%; min-width:100px; text-align:left;">Player</th>
-        </tr>
-      `;
+      const theadRow = document.createElement("tr");
+      const thRank = document.createElement("th");
+      thRank.style.width = "10%";
+      thRank.style.minWidth = "40px";
+      thRank.textContent = "Rank";
+      const thName = document.createElement("th");
+      thName.style.width = "90%";
+      thName.style.minWidth = "120px";
+      thName.style.textAlign = "left";
+      const isTeamTournament = (currentTournament && currentTournament.type === "TEAM");
+      thName.textContent = isTeamTournament ? "Team" : "Player";
+      theadRow.appendChild(thRank);
+      theadRow.appendChild(thName);
+      table.appendChild(theadRow);
 
       const entries = currentTournament.final_ranking.split(';').map(entry => {
-        const [order, player, icon] = entry.split(',');
-        return { order: parseInt(order), player, icon };
+        const [order, name, icon] = entry.split(',');
+        return { order: parseInt(order), name, icon };
       });
 
       entries.sort((a, b) => a.order - b.order).forEach(entry => {
         const row = document.createElement("tr");
-        row.innerHTML = `
-          <td style="text-align:center;">${entry.icon}</td>
-          <td style="text-align:left;">${entry.player}</td>
-        `;
+        const tdRank = document.createElement("td");
+        tdRank.style.textAlign = "center";
+        tdRank.textContent = entry.icon || String(entry.order);
+
+        const tdName = document.createElement("td");
+        tdName.style.textAlign = "left";
+        const wrap = document.createElement("div");
+        wrap.style.display = "flex";
+        wrap.style.alignItems = "center";
+        wrap.style.gap = "7px";
+
+        if (isTeamTournament) {
+          // TEAM: logo + team name
+          const teamObj = (teams || []).find(t => t.team === entry.name);
+          if (teamObj && teamObj.logo) {
+            const img = document.createElement("img");
+            img.src = teamObj.logo;
+            img.className = "team-logo";
+            wrap.appendChild(img);
+          }
+          const span = document.createElement("span");
+          span.textContent = entry.name || "";
+          wrap.appendChild(span);
+        } else {
+          // COC: avatar + player nickname
+          const playerObj = (players || []).find(p => p.player === entry.name);
+          if (playerObj && playerObj.avatar) {
+            const img = document.createElement("img");
+            img.src = playerObj.avatar;
+            img.className = "player-logo";
+            wrap.appendChild(img);
+          }
+          const span = document.createElement("span");
+          span.textContent = entry.name || "";
+          wrap.appendChild(span);
+        }
+
+        tdName.appendChild(wrap);
+        row.appendChild(tdRank);
+        row.appendChild(tdName);
         table.appendChild(row);
       });
 
@@ -1190,6 +1238,33 @@
     }
   }
 
+  // Format match time to local TZ
+  function formatMatchTime(raw) {
+    if (!raw || typeof raw !== "string") return "";
+    const s = raw.trim();
+    // With time: DD.MM.YYYY HH:MM:SS
+    if (/^\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}:\d{2}$/.test(s)) {
+      const [datePart, timePart] = s.split(/\s+/);
+      const [dd, mm, yyyy] = datePart.split(".").map(Number);
+      const [HH, MM, SS] = timePart.split(":").map(Number);
+      const ts = Date.UTC(yyyy, mm - 1, dd, HH, MM, SS);
+      const d = new Date(ts);
+      const dayMon = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const hm = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+      return `${dayMon} ${hm}`; // e.g., 12 Aug 14:00
+    }
+    // Date only: DD.MM.YYYY → show as DD Mon
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(s)) {
+      const [dd, mm, yyyy] = s.split(".").map(Number);
+      // Use noon UTC to avoid TZ shifting date
+      const ts = Date.UTC(yyyy, mm - 1, dd, 12, 0, 0);
+      const d = new Date(ts);
+      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    }
+    // Fallback: return as-is
+    return s;
+  }
+
   function renderMatchesData() {
     // --- RENDER MATCHES ---
     // Group matches by round and build collapsible sections for each round
@@ -1291,7 +1366,7 @@
           }
 
           row.innerHTML = `
-            <td class="date-cell">${g.time || ''}</td>
+            <td class="date-cell">${formatMatchTime(g.time)}</td>
             ${g.group ? `<td>${g.group}</td>` : ""}
             ${team1Cell}
             ${scoreCellHtml}
@@ -1420,7 +1495,7 @@
             </div>
           </td>`;
           row.innerHTML = `
-            <td class="date-cell">${g.time}</td>
+            <td class="date-cell">${formatMatchTime(g.time)}</td>
             ${isGroupStage ? `<td>${g.group}</td>` : ""}
             ${player1Cell}
             <td class="score-cell">${g.score1} - ${g.score2}</td>
@@ -1472,7 +1547,7 @@
     }
   }
 
-  function renderPlayoffData(playoffMatches, containerOverride, tournamentType, bracketType = 'single') {
+  function renderPlayoffData(playoffMatches, containerOverride, tournamentType) {
     // --- RENDER PLAYOFF BRACKET ---
     // Build layout and UI for playoff bracket including match positions, labels, and connectors
     let container;
