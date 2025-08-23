@@ -144,7 +144,7 @@
 
   .elo-rating {
     color: #fff;
-    background-color: #a99bc9;
+    background-color: #b593c4;
     font-weight: bold;
     font-size: 12px;
     border-radius: 2px;
@@ -154,6 +154,12 @@
     margin-top: 0px;
     white-space: nowrap;
   }
+  .gamerank_beginner { background-color: #74bed1; }
+  .gamerank_average { background-color: #84b8de; }
+  .gamerank_good { background-color: #94acd6; }
+  .gamerank_strong { background-color: #9ba5d0; }
+  .gamerank_expert { background-color: #a99bc9; }
+  .gamerank_master { background-color: #b593c4; }
 
   .player-date {
     font-size: 14px;
@@ -197,6 +203,63 @@
     border-color: #0277BD;
     background-color: #fbf092;
   }
+
+  /* Masters table */
+  .masters-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .masters-table thead th {
+    text-align: left;
+    font-size: 15px;
+    line-height: 17px;
+    font-weight: 600;
+    padding: 8px;
+    border-bottom: 1px solid #ccc;
+    background: #fafafa;
+    white-space: normal;
+    word-break: break-word;
+  }
+  .masters-table thead th.col-elo,
+  .masters-table thead th.col-peak {
+    text-align: center;
+    /* Ensure these columns also wrap and break words */
+    white-space: normal;
+    word-break: normal;
+  }
+  /* Make Peak column header interactive and highlight when sorted */
+  .masters-table thead th.col-peak { cursor: pointer; }
+  .masters-table thead th.col-peak.sorted { background: #e3f2fd; }
+  .masters-table tbody td {
+    padding: 6px 8px;
+    border-top: 1px solid #ccc;
+    vertical-align: middle;
+    background: #fff;
+  }
+  .masters-table .col-player {
+    width: 100%;
+  }
+  .masters-table .col-elo,
+  .masters-table .col-peak {
+    white-space: nowrap;
+    text-align: center;
+  }
+  .masters-table .col-profile {
+    width: 36px;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .player-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .player-cell .player-text { line-height: 1.1; }
+  .player-cell .player-nick a { font-size: 16px; font-weight: normal; text-decoration: none; color: #333; transition: color .2s ease; }
+  .player-cell .player-nick a:hover { color: #0277BD; }
+  .player-cell .player-name { font-size: 14px; color: #555; }
+  .player-cell .player-achievements img { height: 20px; margin-left: 4px; }
 </style>
 
 <div class="section-title">BGA Carcassonne Masters</div>
@@ -216,6 +279,7 @@
   let selectedAchievementType = null;
   let allAchievementTypes = [];
   let achievementMap = new Map();
+  let sortByPeakActive = false; // controls sorting by 2025 Peak column
 
   function updatePlayerCount(count) {
     document.getElementById("player-count").textContent = count;
@@ -230,17 +294,22 @@
   }
 
   function createPlayerElement(player) {
-    const container = document.createElement("div");
-    container.className = "player-row";
+    const tr = document.createElement("tr");
 
-    const leftDiv = document.createElement("div");
-    leftDiv.className = "player-left";
+    // Player column
+    const tdPlayer = document.createElement("td");
+    tdPlayer.className = "col-player";
 
-    const flag = document.createElement("img");
-    flag.className = "player-flag";
-    flag.src = player.flag;
-    flag.alt = "flag";
-    leftDiv.appendChild(flag);
+    const playerCell = document.createElement("div");
+    playerCell.className = "player-cell";
+
+    if (player.flag && String(player.flag).trim() !== "") {
+      const flag = document.createElement("img");
+      flag.className = "player-flag";
+      flag.src = player.flag;
+      flag.alt = "flag";
+      playerCell.appendChild(flag);
+    }
 
     const textContainer = document.createElement("div");
     textContainer.className = "player-text";
@@ -255,11 +324,11 @@
 
     const name = document.createElement("div");
     name.className = "player-name";
-    name.textContent = player.name;
+    name.textContent = player.name || "";
 
     textContainer.appendChild(nick);
-    textContainer.appendChild(name);
-    leftDiv.appendChild(textContainer);
+    if (player.name) textContainer.appendChild(name);
+    playerCell.appendChild(textContainer);
 
     if (player.achievements && player.achievements.length > 0) {
       const achievementsDiv = document.createElement("div");
@@ -274,87 +343,202 @@
           achievementsDiv.appendChild(img);
         }
       });
-      leftDiv.appendChild(achievementsDiv);
+      playerCell.appendChild(achievementsDiv);
     }
 
-    const rightDiv = document.createElement("div");
-    rightDiv.className = "player-right";
+    tdPlayer.appendChild(playerCell);
+    tr.appendChild(tdPlayer);
 
-    if (player.top_elo) {
-      const elo = document.createElement("code");
-      elo.className = "elo-rating gamerank_expert";
-      elo.textContent = `${player.top_elo}`;
-      rightDiv.appendChild(elo);
+    // Top Elo column (or master_title_date) — with range-based background
+    const tdElo = document.createElement("td");
+    tdElo.className = "col-elo";
+    {
+      const rawTop = (player.top_elo ?? "").toString().trim();
+      if (rawTop !== "") {
+        const val = Number(rawTop);
+        if (Number.isFinite(val)) {
+          const codeEl = document.createElement("code");
+          codeEl.classList.add("elo-rating");
+          if (val < 100) codeEl.classList.add("gamerank_beginner");
+          else if (val < 200) codeEl.classList.add("gamerank_average");
+          else if (val < 300) codeEl.classList.add("gamerank_good");
+          else if (val < 500) codeEl.classList.add("gamerank_strong");
+          else if (val < 700) codeEl.classList.add("gamerank_expert");
+          else codeEl.classList.add("gamerank_master");
+          codeEl.textContent = `${val}`;
+          tdElo.appendChild(codeEl);
+        } else {
+          // Non-numeric value present → show plain text (no background)
+          const span = document.createElement("span");
+          span.textContent = rawTop;
+          tdElo.appendChild(span);
+        }
+      } else if (player.master_title_date) {
+        const date = document.createElement("div");
+        date.className = "player-date";
+        date.textContent = player.master_title_date;
+        tdElo.appendChild(date);
+      } else {
+        tdElo.textContent = "";
+      }
     }
-    if (player.master_title_date && !player.top_elo) {
-      const date = document.createElement("div");
-      date.className = "player-date";
-      date.textContent = player.master_title_date;
-      rightDiv.appendChild(date);
-    }
+    tr.appendChild(tdElo);
 
+    // 2025 Peak Elo column
+    const tdPeak = document.createElement("td");
+    tdPeak.className = "col-peak";
+    {
+      const rawPeak = (player.peak_elo_2025 ?? "").toString().trim();
+      const val = Number(rawPeak);
+      if (rawPeak !== "" && Number.isFinite(val)) {
+        const codeEl = document.createElement("code");
+        codeEl.classList.add("elo-rating");
+        if (val < 100) codeEl.classList.add("gamerank_beginner");
+        else if (val < 200) codeEl.classList.add("gamerank_average");
+        else if (val < 300) codeEl.classList.add("gamerank_good");
+        else if (val < 500) codeEl.classList.add("gamerank_strong");
+        else if (val < 700) codeEl.classList.add("gamerank_expert");
+        else codeEl.classList.add("gamerank_master");
+        codeEl.textContent = `${val}`;
+        tdPeak.appendChild(codeEl);
+      } else if (rawPeak) {
+        // Non-numeric value present → show as plain text (no background)
+        const span = document.createElement("span");
+        span.textContent = rawPeak;
+        tdPeak.appendChild(span);
+      } else {
+        tdPeak.textContent = "";
+      }
+    }
+    tr.appendChild(tdPeak);
+
+    // Profile icon column (no header)
+    const tdProfile = document.createElement("td");
+    tdProfile.className = "col-profile";
     if (player.profile) {
       const link = document.createElement("a");
       link.href = player.profile;
       link.target = "_blank";
       link.innerHTML = '<i class="fas fa-user" style="font-size: 14px;"></i>';
-      rightDiv.appendChild(link);
+      tdProfile.appendChild(link);
     }
+    tr.appendChild(tdProfile);
 
-    container.appendChild(leftDiv);
-    container.appendChild(rightDiv);
-    return container;
+    return tr;
   }
 
   function renderPlayersSection(container, title, players) {
     if (!players || players.length === 0) return;
     updatePlayerCount(players.length);
+
     const card = document.createElement("div");
     card.className = "tournament-card";
-    players.forEach(player => card.appendChild(createPlayerElement(player)));
+
+    const table = document.createElement("table");
+    table.className = "masters-table";
+
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+
+    const thPlayer = document.createElement("th");
+    thPlayer.textContent = "Player";
+    hr.appendChild(thPlayer);
+
+    const thTopElo = document.createElement("th");
+    thTopElo.className = "col-elo";
+    thTopElo.textContent = "Top Elo";
+    hr.appendChild(thTopElo);
+
+    // Make Peak column header clickable and highlight when active
+    const thPeak = document.createElement("th");
+    thPeak.className = "col-peak";
+    thPeak.textContent = "2025 Peak*";
+    if (sortByPeakActive) thPeak.classList.add("sorted");
+    thPeak.addEventListener("click", () => {
+      sortByPeakActive = !sortByPeakActive;
+      renderFilteredPlayers();
+    });
+    hr.appendChild(thPeak);
+
+    const thProfile = document.createElement("th");
+    thProfile.textContent = ""; // profile icon column (no header label)
+    hr.appendChild(thProfile);
+
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    players.forEach(player => tbody.appendChild(createPlayerElement(player)));
+    table.appendChild(tbody);
+
+    card.appendChild(table);
     container.appendChild(card);
+
+    // Add note after the table card
+    const note = document.createElement("div");
+    note.textContent = "* player's peak Elo in 2025 (updated on 21/08/2025)";
+    container.appendChild(note);
   }
 
   function renderFilteredPlayers() {
-  let filtered = [...allPlayers];
-  if (selectedCountry) {
-    filtered = filtered.filter(p => p.country === selectedCountry);
-  }
-  if (selectedAchievementType) {
-    filtered = filtered.filter(p => {
-      return p.achievements?.some(a => {
-        const info = achievementMap.get(a);
-        return info?.type === selectedAchievementType;
-      });
-    });
-  }
-
-  filtered.sort((a, b) => {
-    const eloA = a.top_elo || 0;
-    const eloB = b.top_elo || 0;
-
-    if (eloA && eloB) return eloB - eloA; // сортуємо за elo, якщо обидва є
-    if (eloA) return -1; // a має elo, b — ні
-    if (eloB) return 1;  // b має elo, a — ні
-
-    const hasDateA = !!a.master_title_date;
-    const hasDateB = !!b.master_title_date;
-
-    if (hasDateA && hasDateB) {
-      const dateA = new Date(a.master_title_date.split('.').reverse().join('-'));
-      const dateB = new Date(b.master_title_date.split('.').reverse().join('-'));
-      return dateA - dateB; // від найстарішого до нового
+    let filtered = [...allPlayers];
+    if (selectedCountry) {
+      filtered = filtered.filter(p => p.country === selectedCountry);
     }
-    if (hasDateA) return -1; // a має дату, b — ні
-    if (hasDateB) return 1;  // b має дату, a — ні
+    if (selectedAchievementType) {
+      filtered = filtered.filter(p => {
+        return p.achievements?.some(a => {
+          const info = achievementMap.get(a);
+          return info?.type === selectedAchievementType;
+        });
+      });
+    }
 
-    return a.player.localeCompare(b.player); // сортуємо за ніком
-  });
+    if (sortByPeakActive) {
+      // Sort by 2025 Peak: numeric values first (desc), then non-numeric by player name
+      filtered.sort((a, b) => {
+        const aRaw = (a.peak_elo_2025 ?? "").toString().trim();
+        const bRaw = (b.peak_elo_2025 ?? "").toString().trim();
+        const aNum = Number(aRaw);
+        const bNum = Number(bRaw);
+        const aIsNum = Number.isFinite(aNum);
+        const bIsNum = Number.isFinite(bNum);
 
-  const container = document.getElementById("players-container");
-  container.innerHTML = "";
-  renderPlayersSection(container, "BGA Carcassonne Masters", filtered);
-}
+        if (aIsNum && bIsNum) return bNum - aNum; // desc
+        if (aIsNum) return -1;  // numeric first
+        if (bIsNum) return 1;   // numeric first
+
+        return a.player.localeCompare(b.player);
+      });
+    } else {
+      // Base sorting (existing behavior)
+      filtered.sort((a, b) => {
+        const eloA = a.top_elo || 0;
+        const eloB = b.top_elo || 0;
+
+        if (eloA && eloB) return eloB - eloA; // sort by elo if both exist
+        if (eloA) return -1; // a has elo, b — not
+        if (eloB) return 1;  // b has elo, a — not
+
+        const hasDateA = !!a.master_title_date;
+        const hasDateB = !!b.master_title_date;
+
+        if (hasDateA && hasDateB) {
+          const dateA = new Date(a.master_title_date.split('.').reverse().join('-'));
+          const dateB = new Date(b.master_title_date.split('.').reverse().join('-'));
+          return dateA - dateB; // from oldest to newest
+        }
+        if (hasDateA) return -1; // a has date
+        if (hasDateB) return 1;  // b has date
+
+        return a.player.localeCompare(b.player); // fallback by nickname
+      });
+    }
+
+    const container = document.getElementById("players-container");
+    container.innerHTML = "";
+    renderPlayersSection(container, "BGA Carcassonne Masters", filtered);
+  }
 
   function setupCountryFlags(players) {
     const countries = [...new Map(players.map(p => [p.country, p.flag])).entries()]
