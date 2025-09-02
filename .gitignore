@@ -1,3 +1,4 @@
 cron_backup.log
 cron_update_open.log
 log_archive/
+cron_update_inperson.log
