@@ -6,7 +6,7 @@ echo "=== $(date '+%Y-%m-%d %H:%M:%S') ===" >> /home/carcassonne-gg/cron_update_
 changes_made=false
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/ua2024 -o "$temp_file"
+curl -s https://api.carcassonne.com.ua/public/ua2024 -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" ua2024.json
   if ! git diff --quiet ua2024.json; then
