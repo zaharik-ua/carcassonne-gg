@@ -1,4 +1,4 @@
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
 body {
@@ -76,11 +76,13 @@ code {
   .match-row {
     display: flex;
     align-items: center;
-    height: 48px;
+    min-height: 48px;
+    height: auto;
     background-color: white;
     border-top: 1px solid #ccc;
     padding: 4px 8px;
     box-sizing: border-box;
+    position: relative; /* allows top-right badge */
   }
 
   .match-time {
@@ -94,9 +96,10 @@ code {
 
   .divider-vertical {
     width: 2px;
-    height: 90%;
     background-color: #dfdfdf;
     margin: 0 6px;
+    align-self: stretch; /* stretch full row height even when row is auto-height */
+    border-radius: 1px;
   }
 
   .teams {
@@ -361,10 +364,33 @@ code {
 
 /* Трішки ущільнимо ряд для компактних дуелей (опціонально) */
 .match-row.duel-compact {
-  height: 48px; /* було 48px; можна залишити 48, якщо хочеш */
+  min-height: 48px;
+  height: auto;
   padding: 4px 10px;
   display: flex;
   align-items: center;
+}
+
+/* Playoffs round badge */
+.playoff-round-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background-color: #ee9a4b; /* orange */
+  color: #ffffff;
+  font-size: 10px;
+  line-height: 13px;
+  font-weight: 400;
+  padding: 0 6px;
+  border-radius: 0 0 0 3px; /* only bottom-left corner rounded */
+  z-index: 5;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* When badge present, drop streams slightly below it */
+.match-right.under-badge {
+  margin-top: 12px;
 }
 
 </style>
@@ -567,6 +593,15 @@ function createMatchElement(match) {
   wrapper.appendChild(container);
   if (match.lineups) wrapper.appendChild(lineupDiv);
 
+  // Playoffs badge (top-right). Also push streams below if present.
+  if (match.stage === "Playoffs" && match.round) {
+    const badge = document.createElement("div");
+    badge.className = "playoff-round-badge";
+    badge.textContent = match.round;
+    container.appendChild(badge);
+    rightDiv.classList.add("under-badge");
+  }
+
   return wrapper;
 }
 
@@ -667,6 +702,15 @@ function createDuelElement(match) {
   container.appendChild(rightDiv);
   wrapper.appendChild(container);
 
+  // Playoffs badge (top-right). Also push streams below if present.
+  if (match.stage === "Playoffs" && match.round) {
+    const badge = document.createElement("div");
+    badge.className = "playoff-round-badge";
+    badge.textContent = match.round;
+    container.appendChild(badge);
+    rightDiv.classList.add("under-badge");
+  }
+
   return wrapper;
 }
 
@@ -748,6 +792,15 @@ function createDuelElementCompact(match) {
 
   container.appendChild(rightDiv);
   wrapper.appendChild(container);
+
+  // Playoffs badge (top-right). Also push streams below if present.
+  if (match.stage === "Playoffs" && match.round) {
+    const badge = document.createElement("div");
+    badge.className = "playoff-round-badge";
+    badge.textContent = match.round;
+    container.appendChild(badge);
+    rightDiv.classList.add("under-badge");
+  }
 
   return wrapper;
 }
@@ -843,7 +896,7 @@ function fetchWithTimeout(resource, options = {}) {
 }
 
 function fetchAndRenderMatches() {
-  const primaryURL = "https://api.carcassonne.com.ua/matches_new";
+  const primaryURL = "https://api.carcassonne.com.ua/public/matches_new";
   const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches_new.json";
 
   fetchWithTimeout(primaryURL, { timeout: 5000 })

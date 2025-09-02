@@ -602,8 +602,8 @@ function fetchWithTimeout(resource, options = {}) {
 }
 
 async function fetchAndRenderPlayers() {
-  const primaryPlayersURL = "https://api.carcassonne.com.ua/players";
-  const primaryAchievementsURL = "https://api.carcassonne.com.ua/achievements";
+  const primaryPlayersURL = "https://api.carcassonne.com.ua/public/players";
+  const primaryAchievementsURL = "https://api.carcassonne.com.ua/public/achievements";
   const fallbackPlayersURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/masters.json";
   const fallbackAchievementsURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/achievements.json";
 
