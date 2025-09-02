@@ -8,6 +8,9 @@
     --hover-bg-color: #24598a; /* синій hover за замовчуванням */
   }
 
+  /* Smooth anchor scrolling */
+  html { scroll-behavior: smooth; }
+
   body {
     font-family: 'Montserrat', sans-serif;
   }
@@ -46,6 +49,18 @@
     font-weight: 700;
     margin-bottom: 3px;
     color: #222;
+  }
+
+  /* Stage 1 group titles styled like standings headers */
+  .stage-group-title {
+    background-color: var(--main-bg-color);
+    color: white;
+    font-weight: 600;
+    font-size: 15px;
+    padding: 6px 10px;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    margin-bottom: 6px;
   }
 
   .overview-section-title {
@@ -304,6 +319,36 @@
   .playoff-scroll-wrapper > div {
     min-width: max-content;
   }
+  /* Background under playoff brackets */
+  #playoff-bracket,
+  .playoff-bracket {
+    background-color: #f2f4f7;
+  }
+  /* Group navigation chips for Stage 1 (Groups + DE) */
+  .groups-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 6px 0 10px;
+  }
+  .group-chip {
+    display: inline-block;
+    padding: 4px 10px;
+    background-color: #f2f4f7;
+    border: 1px solid #d7dbe0;
+    border-radius: 1px;
+    color: inherit;
+    text-decoration: none;
+    font-weight: 600;
+    line-height: 18px;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+  .group-chip:hover {
+    background-color: #d7eaff; /* slightly darker light blue */
+    border-color: #9fc5f5;
+  }
+  /* Offset target position to avoid fixed header overlap when anchoring */
+  .stage-group-anchor { scroll-margin-top: 45px; }
   .round-label {
     font-weight: 600;
     font-size: 14px;
@@ -404,9 +449,9 @@
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
     //? "Asian-Cup-2025"
-    ? "Copa-America-2021"
-    //? "UCOCup-2025"
-    //? "HR-2025-OC-2"
+    //? "Copa-America-2021"
+    ? "UCOCup-2025"
+    //? "MOCB-2025"
     //? "TW-2024-CCLQ"
     //? "USCC-2025"
     : window.location.pathname.split('/').filter(Boolean).pop();
@@ -434,6 +479,15 @@
   let teams = [];
   let streams = [];
   let tournaments_list = [];
+
+  // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
+  const BRACKET_MARGIN = 15;
+  const MATCH_HEIGHT = 60;
+  const MATCH_WIDTH = 200;
+  const ROUND_TITLE_TO_MATCH_SPACING = 35;
+  const VERTICAL_SPACING = 20;
+  const HORIZONTAL_SPACING = 30;
+  let THIRD_PLACE_VERTICAL_OFFSET = 50;
 
   function loadTournamentsList() {
     return fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-list.json")
@@ -663,7 +717,7 @@
           stage1Container
         );
       } else if (stage1_format === "Single Elimination") {
-        renderPlayoffData(
+        renderSingleElimination(
           currentTournament.type === "TEAM"
             ? matches.filter(d => d.tournament_id === currentTournamentId)
             : duels.filter(d => d.tournament_id === currentTournamentId),
@@ -671,7 +725,13 @@
           currentTournament.type
         );
       } else if (stage1_format === "Double Elimination") {
-        stage1Container.textContent = "Double Elimination support coming soon.";
+        renderDoubleElimination(
+          currentTournament.type === "TEAM"
+            ? matches.filter(d => d.tournament_id === currentTournamentId)
+            : duels.filter(d => d.tournament_id === currentTournamentId),
+          stage1Container,
+          currentTournament.type
+        );
       } else {
         stage1Container.textContent = "Stage 1 info not available.";
       }
@@ -707,14 +767,71 @@
             groupSection.appendChild(groupTitle);
             groupSection.appendChild(groupBracketWrapper);
             stage1Container.appendChild(groupSection);
-            renderPlayoffData(
+            renderSingleElimination(
               duelsInGroup,
               groupBracketWrapper,
               currentTournament.type
             );
           }
         } else if (stage1_format === "Double Elimination") {
-          stage1Container.textContent = "Double Elimination support coming soon.";
+          const grouped = {};
+          (currentTournament.type === "TEAM"
+            ? matches
+            : duels
+          )
+            .filter(d => d.tournament_id === currentTournamentId && d.stage === "Groups" && d.round_order !== null && d.group)
+            .forEach(d => {
+              if (!grouped[d.group]) grouped[d.group] = [];
+              grouped[d.group].push(d);
+            });
+
+          // Navigation chips for groups (A B C ...), placed before groups
+          const groupKeys = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
+          if (groupKeys.length) {
+            const nav = document.createElement("div");
+            nav.className = "groups-nav";
+            groupKeys.forEach(g => {
+              const link = document.createElement("a");
+              link.className = "group-chip";
+              link.textContent = g;
+              // Use absolute path to current page to avoid base href issues
+              link.href = `${window.location.pathname}#group-${g}`;
+              link.addEventListener("click", (e) => {
+                e.preventDefault();
+                const target = document.getElementById(`group-${g}`);
+                if (target) {
+                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  // Update URL hash without page reload
+                  history.replaceState(null, '', `${window.location.pathname}#group-${g}`);
+                }
+              });
+              nav.appendChild(link);
+            });
+            stage1Container.appendChild(nav);
+          }
+
+          groupKeys.forEach(group => {
+            const duelsInGroup = grouped[group];
+            const section = document.createElement("div");
+            section.className = "group-section stage-group-anchor";
+            section.id = `group-${group}`;
+
+            // Static title like standings table header (no chevron, no hover)
+            const title = document.createElement("div");
+            title.className = "group-title stage-group-title";
+            title.textContent = `Group ${group}`;
+
+            // Content always visible
+            const content = document.createElement("div");
+            content.style.padding = "0 2px";
+
+            section.appendChild(title);
+            section.appendChild(content);
+            stage1Container.appendChild(section);
+
+            // Render DE bracket for this group inside content
+            renderDoubleElimination(duelsInGroup, content, currentTournament.type);
+          });
         } else {
           stage1Container.textContent = "Stage 1 info not available.";
         }
@@ -740,7 +857,7 @@
       const stage2Container = document.getElementById("tab-stage2-content");
       stage2Container.innerHTML = "";
       if (stage2_format === "Single Elimination") {
-        renderPlayoffData(
+        renderSingleElimination(
           currentTournament.type === "TEAM"
             ? matches.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs")
             : duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs"),
@@ -748,7 +865,13 @@
           currentTournament.type
         );
       } else if (stage2_format === "Double Elimination") {
-        stage2Container.textContent = "Double Elimination support coming soon.";
+        renderDoubleElimination(
+          currentTournament.type === "TEAM"
+            ? matches.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs")
+            : duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs"),
+          stage2Container,
+          currentTournament.type
+        );
       } else if (stage2_format === "Round-robin" || stage2_format === "Swiss") {
         renderStandingsData(
           standings.filter(s => s.tournament_id === currentTournamentId && s.stage === "Stage 2"),
@@ -1547,65 +1670,20 @@
     }
   }
 
-  function renderPlayoffData(playoffMatches, containerOverride, tournamentType) {
-    // --- RENDER PLAYOFF BRACKET ---
-    // Build layout and UI for playoff bracket including match positions, labels, and connectors
-    let container;
-    let bracketDiv;
-    if (containerOverride) {
-      container = containerOverride;
-      container.innerHTML = '';
-      // Add a scrollable wrapper
-      const scrollWrapper = document.createElement("div");
-      scrollWrapper.className = "playoff-scroll-wrapper";
-      // Add a wrapper for the bracket
-      bracketDiv = document.createElement("div");
-      bracketDiv.id = "playoff-bracket";
-      scrollWrapper.appendChild(bracketDiv);
-      container.appendChild(scrollWrapper);
-      container = bracketDiv;
-    } else {
-      // fallback: legacy behavior
-      container = document.getElementById("playoff-bracket");
-      container.innerHTML = '';
-    }
-    
-    const BRACKET_MARGIN = 15;
-    const MATCH_HEIGHT = 60;
-    const MATCH_WIDTH = 200;
-    const ROUND_TITLE_TO_MATCH_SPACING = 35;
-    const VERTICAL_SPACING = 20;
-    const HORIZONTAL_SPACING = 30;
-    // Allow per-tournament override; fallback to 50
-    const THIRD_PLACE_VERTICAL_OFFSET = (() => {
-      const cfg = currentTournament && currentTournament.third_place_vertical_offset;
-      // Accept numeric or numeric string, including 0
-      return (cfg !== null && cfg !== undefined && cfg !== "" && !isNaN(+cfg)) ? +cfg : 50;
-    })();
-    
-    // Group matches by numeric round_order
-    const groupedByRound = {};
-    playoffMatches.forEach(match => {
-      const roundNum = Number(match.round_order);
-      if (!groupedByRound[roundNum]) groupedByRound[roundNum] = [];
-      groupedByRound[roundNum].push(match);
-    });
-    
-    // Sort rounds numerically ascending
-    const sortedRounds = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
-    const roundIndexMap = {};
-    sortedRounds.forEach((r, i) => roundIndexMap[r] = i);
-    
+  // Calculate coordinates for playoff bracket matches (layout logic)
+  function calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, playoffMatches, currentTournamentId) {
+
     // 1. Find the round with the maximum number of matches
     const maxMatchRound = sortedRounds.reduce((maxRound, r) => {
       return (groupedByRound[r].length > groupedByRound[maxRound]?.length || !maxRound) ? r : maxRound;
     }, sortedRounds[0]);
 
+    debugger;
     // 2. Layout matches of maxMatchRound
     groupedByRound[maxMatchRound]
       .filter(m => m.knockout_stage !== "third_place")
       .forEach((m, index) => {
-        const cord_top = BRACKET_MARGIN+ ROUND_TITLE_TO_MATCH_SPACING + index * (MATCH_HEIGHT + VERTICAL_SPACING);
+        const cord_top = BRACKET_MARGIN + ROUND_TITLE_TO_MATCH_SPACING + index * (MATCH_HEIGHT + VERTICAL_SPACING);
         const cord_left = BRACKET_MARGIN + roundIndexMap[maxMatchRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
         const cord_bottom = cord_top + MATCH_HEIGHT;
         m.cord_top = cord_top;
@@ -1613,7 +1691,8 @@
         m.cord_bottom = cord_bottom;
       });
 
-    // 3. Layout rounds to the right of maxMatchRound
+    debugger;
+      // 3. Layout rounds to the right of maxMatchRound
     for (let i = sortedRounds.indexOf(maxMatchRound) + 1; i < sortedRounds.length; i++) {
       const roundNum = sortedRounds[i];
       groupedByRound[roundNum]
@@ -1637,6 +1716,7 @@
         });
     }
 
+    debugger;
     // 4. Layout rounds to the left of maxMatchRound
     for (let i = sortedRounds.indexOf(maxMatchRound) - 1; i >= 0; i--) {
       const roundNum = sortedRounds[i];
@@ -1678,26 +1758,33 @@
         });
     }
 
+    debugger;
     // 5. Add 3rd place match if exists
     const thirdPlaceMatch = playoffMatches.find(g => g.tournament_id === currentTournamentId && g.knockout_stage === "third_place");
     if (thirdPlaceMatch) {
+      debugger;
       const thirdPlaceRound = Number(thirdPlaceMatch.round_order);
       const existingMatch = groupedByRound[thirdPlaceRound]?.find(m => m.knockout_id === thirdPlaceMatch.knockout_id);
       if (existingMatch) {
+        debugger;
         let startTop = 0;
         const matchesInRound = groupedByRound[thirdPlaceRound].filter(m => m.knockout_id !== thirdPlaceMatch.knockout_id);
         if (matchesInRound.length > 0) {
           const lastMatch = matchesInRound[matchesInRound.length - 1];
+          debugger;
           startTop = lastMatch.cord_bottom + THIRD_PLACE_VERTICAL_OFFSET;
+          debugger;
         }
+        debugger;
         existingMatch.cord_top = startTop;
         existingMatch.cord_left = BRACKET_MARGIN + roundIndexMap[thirdPlaceRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
         existingMatch.cord_bottom = startTop + ROUND_TITLE_TO_MATCH_SPACING + MATCH_HEIGHT;
         existingMatch.knockout_stage = "third_place";
       }
     }
-    
-    // Render matches with absolute positioning inside #playoff-bracket
+  }
+
+  function renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, container){
     sortedRounds.forEach((roundNum, colIndex) => {
       const matches = groupedByRound[roundNum];
       matches.sort((a, b) => Number(a.game_id) - Number(b.game_id));
@@ -1712,7 +1799,7 @@
       label.style.left = `${BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING)}px`;
       label.style.top = `${BRACKET_MARGIN}px`;
       container.appendChild(label);
-
+      
       // Додаємо матчі
       matches.forEach((m) => {
         const matchBox = document.createElement("div");
@@ -1865,15 +1952,14 @@
         container.appendChild(matchBox);
       });
     });
-    
-    // --- DRAW LINES ---
-    // Build a map of knockout_id -> match for all matches
+  }
+
+  function drawPlayoffLines(groupedByRound, sortedRounds, container) {
     const matchById = {};
     Object.values(groupedByRound).flat().forEach(m => {
       matchById[m.knockout_id] = m;
     });
 
-    // Build playoffConnectors array
     const playoffConnectors = [];
     sortedRounds.forEach(roundNum => {
       groupedByRound[roundNum].forEach(match => {
@@ -1933,7 +2019,7 @@
         playoffConnectors.push(connector);
       });
     });
-    
+
     playoffConnectors.forEach(connector => {
       connector.lines.forEach(lineCoords => {
         const isHorizontal = lineCoords.y1 === lineCoords.y2;
@@ -1957,7 +2043,64 @@
         container.appendChild(lineDiv);
       });
     });
+  }
 
+  function renderSingleElimination(playoffMatches, containerOverride, tournamentType) {
+    
+    // Optionally override THIRD_PLACE_VERTICAL_OFFSET from currentTournament (ignore null/empty)
+    if (currentTournament && currentTournament.hasOwnProperty('third_place_vertical_offset')) {
+      const tpo = currentTournament.third_place_vertical_offset;
+      if (tpo !== null && tpo !== "" && tpo !== undefined) {
+        const parsed = Number(tpo);
+        if (!Number.isNaN(parsed)) {
+          THIRD_PLACE_VERTICAL_OFFSET = parsed;
+        }
+      }
+    }
+    // Build layout and UI for playoff bracket including match positions, labels, and connectors
+    let container;
+    let bracketDiv;
+    if (containerOverride) {
+      container = containerOverride;
+      container.innerHTML = '';
+      // Add a scrollable wrapper
+      const scrollWrapper = document.createElement("div");
+      scrollWrapper.className = "playoff-scroll-wrapper";
+      // Add a wrapper for the bracket
+      bracketDiv = document.createElement("div");
+      bracketDiv.id = "playoff-bracket";
+      scrollWrapper.appendChild(bracketDiv);
+      container.appendChild(scrollWrapper);
+      container = bracketDiv;
+    } else {
+      // fallback: legacy behavior
+      container = document.getElementById("playoff-bracket");
+      container.innerHTML = '';
+    }
+    
+    // Group matches by numeric round_order
+    const groupedByRound = {};
+    playoffMatches.forEach(match => {
+      const roundNum = Number(match.round_order);
+      if (!groupedByRound[roundNum]) groupedByRound[roundNum] = [];
+      groupedByRound[roundNum].push(match);
+    });
+
+    // Sort rounds numerically ascending
+    const sortedRounds = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
+    const roundIndexMap = {};
+    sortedRounds.forEach((r, i) => roundIndexMap[r] = i);
+    
+    debugger;
+    // Calculate playoff match coordinates
+    calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, playoffMatches, currentTournamentId);
+    debugger;
+    // Render matches with absolute positioning inside #playoff-bracket
+    renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, container);
+    debugger;
+    // --- DRAW LINES ---
+    drawPlayoffLines(groupedByRound, sortedRounds, container);
+    debugger;
     // Set container's fixed height based on the maximum cord_bottom plus BRACKET_MARGIN
     const allMatches = Object.values(groupedByRound).flat();
     const maxCordBottom = Math.max(...allMatches.map(m => m.cord_bottom || 0));
@@ -1987,6 +2130,123 @@
     });
   }
 
+  function renderDoubleElimination(playoffMatches, containerOverride, tournamentType) {
+    
+    // Optionally override THIRD_PLACE_VERTICAL_OFFSET from currentTournament (ignore null/empty)
+    if (currentTournament && currentTournament.hasOwnProperty('third_place_vertical_offset')) {
+      const tpo = currentTournament.third_place_vertical_offset;
+      if (tpo !== null && tpo !== "" && tpo !== undefined) {
+        const parsed = Number(tpo);
+        if (!Number.isNaN(parsed)) {
+          THIRD_PLACE_VERTICAL_OFFSET = parsed;
+        }
+      }
+    }
+    // Build layout and UI for playoff bracket including match positions, labels, and connectors
+    let container;
+    let bracketDiv;
+    if (containerOverride) {
+      container = containerOverride;
+      container.innerHTML = '';
+      // Add a scrollable wrapper
+      const scrollWrapper = document.createElement("div");
+      scrollWrapper.className = "playoff-scroll-wrapper";
+      // Add a wrapper for the bracket
+      bracketDiv = document.createElement("div");
+      bracketDiv.id = "playoff-bracket";
+      bracketDiv.style.position = "relative";
+      scrollWrapper.appendChild(bracketDiv);
+      container.appendChild(scrollWrapper);
+      container = bracketDiv;
+    } else {
+      // fallback: legacy behavior
+      container = document.getElementById("playoff-bracket");
+      container.innerHTML = '';
+      container.style.position = "relative";
+    }
+
+    // 1) Split matches by multiple_elimination_stage
+    const stageGroups = {};
+    (playoffMatches || []).forEach(m => {
+      const key = (m.multiple_elimination_stage ?? '').toString();
+      if (!stageGroups[key]) stageGroups[key] = [];
+      stageGroups[key].push(m);
+    });
+    debugger;
+    // 2) Sort groups alphabetically by stage key
+    const stageOrder = Object.keys(stageGroups).sort((a, b) => a.localeCompare(b));
+debugger;
+    // Track global sizing across all groups
+    let cumulativeTopOffset = 0;
+    let globalMaxLeft = 0;
+debugger;
+    // 3) Process each group sequentially
+    stageOrder.forEach(stageKey => {
+      const stageMatches = stageGroups[stageKey];
+      if (!stageMatches || !stageMatches.length) return;
+debugger;
+      // Group by round within this stage
+      const groupedByRound = {};
+      stageMatches.forEach(match => {
+        const roundNum = Number(match.round_order);
+        if (!groupedByRound[roundNum]) groupedByRound[roundNum] = [];
+        groupedByRound[roundNum].push(match);
+      });
+debugger;
+      const sortedRounds = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
+      const roundIndexMap = {};
+      sortedRounds.forEach((r, i) => roundIndexMap[r] = i);
+
+      // Compute coordinates for this stage
+      calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, stageMatches, currentTournamentId);
+debugger;
+      // Create a sub-container for this stage to apply vertical offset cleanly
+      const stageContainer = document.createElement("div");
+      stageContainer.style.position = "absolute";
+      stageContainer.style.left = "0px";
+      stageContainer.style.top = `${cumulativeTopOffset}px`;
+      stageContainer.style.width = "max-content";
+      container.appendChild(stageContainer);
+debugger;
+      // Render matches and lines for this stage inside the sub-container
+      renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, stageContainer);
+      drawPlayoffLines(groupedByRound, sortedRounds, stageContainer);
+debugger;
+      // Update global sizing info
+      const allStageMatches = Object.values(groupedByRound).flat();
+      const stageMaxBottom = Math.max(...allStageMatches.map(m => m.cord_bottom || 0));
+      const stageMaxLeft = Math.max(...allStageMatches.map(m => m.cord_left || 0));
+
+      globalMaxLeft = Math.max(globalMaxLeft, stageMaxLeft);
+      cumulativeTopOffset += stageMaxBottom + BRACKET_MARGIN; // space between stages
+    });
+
+    // 4) After all groups, set container dimensions
+    container.style.height = `${cumulativeTopOffset}px`;
+    container.style.width = `${globalMaxLeft + MATCH_WIDTH + BRACKET_MARGIN}px`;
+
+    // 5) Hover highlight across entire bracket container
+    const playoffContainer = container;
+    playoffContainer.querySelectorAll(".match-row-winner, .match-row-loser").forEach(row => {
+      const playerName = row.getAttribute("data-opponent-name");
+      if (playerName !== null && playerName !== "") {
+        row.addEventListener("mouseenter", () => {
+          playoffContainer.querySelectorAll(`[data-opponent-name="${playerName}"]`).forEach(el => {
+            el.classList.add("highlight-player");
+          });
+        });
+
+        row.addEventListener("mouseleave", () => {
+          playoffContainer.querySelectorAll(`[data-opponent-name="${playerName}"]`).forEach(el => {
+            el.classList.remove("highlight-player");
+          });
+        });
+      }
+    });
+  }
+
+
+
   document.addEventListener("DOMContentLoaded", () => {
     loadTournamentsList()
       .then(() => {
@@ -1994,3 +2254,4 @@
       });
   });
 </script>
+  
