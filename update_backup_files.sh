@@ -6,7 +6,7 @@ echo "=== $(date '+%Y-%m-%d %H:%M:%S') ===" >> /home/carcassonne-gg/cron_backup.
 changes_made=false
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/players -o "$temp_file"
+curl -s https://api.carcassonne.com.ua/public/players -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" masters.json
   if ! git diff --quiet masters.json; then
@@ -21,7 +21,7 @@ fi
 
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/achievements -o "$temp_file"
+curl -s https://api.carcassonne.com.ua/public/achievements -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" achievements.json
   if ! git diff --quiet achievements.json; then

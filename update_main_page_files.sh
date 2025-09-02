@@ -6,7 +6,7 @@ echo "=== $(date '+%Y-%m-%d %H:%M:%S') ===" >> /home/carcassonne-gg/cron_update_
 changes_made=false
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/news -o "$temp_file"
+curl -s https://api.carcassonne.com.ua/public/news -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" news.json
   if ! git diff --quiet news.json; then
@@ -21,7 +21,7 @@ fi
 
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/matches_new -o "$temp_file"
+curl -s https://api.carcassonne.com.ua/public/matches_new -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" matches_new.json
   if ! git diff --quiet matches_new.json; then

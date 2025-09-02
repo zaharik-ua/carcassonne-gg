@@ -10,7 +10,7 @@ changes_made=false
 
 # for tournament_id in "${tournaments[@]}"; do
 #   temp_file=$(mktemp)
-#   curl -s "https://api.carcassonne.com.ua/tournaments?tournament_id=${tournament_id}" -o "$temp_file"
+#   curl -s "https://api.carcassonne.com.ua/public/tournaments?tournament_id=${tournament_id}" -o "$temp_file"
 #   if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
 #     mv "$temp_file" "tournaments-open/${tournament_id}.json"
 #     if ! git diff --quiet "tournaments-open/${tournament_id}.json"; then
@@ -25,7 +25,7 @@ changes_made=false
 # done
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/tournaments -o "$temp_file"
+curl -s https://api.carcassonne.com.ua/public/tournaments -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" tournaments-open.json
   if ! git diff --quiet tournaments-open.json; then
@@ -39,7 +39,7 @@ else
 fi
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/tournaments_list -o "$temp_file"
+curl -s https://api.carcassonne.com.ua/public/tournaments_list -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" tournaments-list.json
   if ! git diff --quiet tournaments-list.json; then
