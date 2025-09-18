@@ -80,11 +80,7 @@
     font-weight: 600;
   }
 
-  .status-icon {
-    width: 8px;
-    height: 8px;
-    margin-left: 7px;
-  }
+  
 
   /* New styles for tournament-title */
   .tournament-title {
@@ -151,18 +147,7 @@
     });
   }
 
-  const GREEN_DOT = "https://carcassonne.gg/gallery/green-dot.png";
-  const ORANGE_DOT = "https://carcassonne.gg/gallery/orange-dot.png";
-
-  function getStatusIcon(tourneys) {
-    if (tourneys.some(t => t.status === "In progress")) {
-      return `<img src="${GREEN_DOT}" class="status-icon" alt="active">`;
-    }
-    if (tourneys.some(t => t.status === "Planned")) {
-      return `<img src="${ORANGE_DOT}" class="status-icon" alt="planned">`;
-    }
-    return "";
-  }
+  
 
   function getLogoHtml(t) {
     return t.logo_image ? `<img src="${t.logo_image}" class="tournament-logo" alt="logo">` : "";

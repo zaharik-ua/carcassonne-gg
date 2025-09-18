@@ -297,36 +297,20 @@
   // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
   const BRACKET_MARGIN = 15;
   const MATCH_HEIGHT = 60;
-  const MATCH_WIDTH = 250;
+  const MATCH_WIDTH = 270;
   const ROUND_TITLE_TO_MATCH_SPACING = 35;
   const VERTICAL_SPACING = 20;
   const HORIZONTAL_SPACING = 30;
   let THIRD_PLACE_VERTICAL_OFFSET = 140;
 
-  // Helper: fetch with timeout (default 5s)
-  function fetchWithTimeout(resource, options = {}) {
-    const { timeout = 5000 } = options;
-    return Promise.race([
-      fetch(resource, options),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Request timed out")), timeout)
-      )
-    ]);
-  }
-
-  // Fetch UA2025 data with API-first, 5s timeout, JSON fallback
+  // Fetch UA2025 data from a single JSON source
   function fetchUa2025Data() {
-    const primaryURL = "https://api.carcassonne.com.ua/public/ua2025";
-    const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/ua2025.json";
+    const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/ua2025.json";
 
-    fetchWithTimeout(primaryURL, { timeout: 5000 })
-      .then(r => {
-        if (!r.ok) throw new Error("Primary source failed");
-        return r.json();
-      })
-      .catch(err => {
-        console.warn("⚠️ Using fallback UA2025 data due to error or timeout:", err.message);
-        return fetch(fallbackURL).then(res => res.json());
+    fetch(dataURL)
+      .then(res => {
+        if (!res.ok) throw new Error("UA2025 data request failed");
+        return res.json();
       })
       .then(data => {
         players = Array.isArray(data.players) ? data.players : [];
@@ -342,7 +326,7 @@
         initAndRenderTournamentContent();
       })
       .catch(err => {
-        console.error("❌ Failed to load UA2025 data from both sources:", err);
+        console.error("❌ Failed to load UA2025 data:", err);
         document.getElementById("tournament-title").textContent = "Чемпіонат України з Каркасону 2025 — помилка завантаження даних";
       });
   }

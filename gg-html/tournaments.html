@@ -561,11 +561,11 @@
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
     //? "Asian-Cup-2025"
-    ? "CZ-2025-COC"
+    //? "CZ-2025-COC"
     //? "UCOCup-2025"
     //? "MOCB-2025"
     //? "CCCC-2025"
-    //? "ACOC-2025"
+    ? "ACOC-2025"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
 
@@ -575,12 +575,6 @@
     document.documentElement.style.setProperty('--hover-bg-color', '#c64a4b');
   }
 
-  function fetchWithTimeout(resource, ms = 5000, options = {}) {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), ms);
-    return fetch(resource, { ...options, signal: controller.signal })
-      .finally(() => clearTimeout(id));
-  }
 
   let matches = [];
   let duels = [];
@@ -1318,7 +1312,7 @@
 
     const isTeam = currentTournament && currentTournament.type === "TEAM";
     const isStage1Groups = container.id === "tab-stage1-content" && currentTournament && currentTournament.stage1_groups === "Groups";
-    const isRoundRobinGroups = isStage1Groups && currentTournament && currentTournament.stage1_format === "Round-robin";
+    const isRoundRobinGroups = currentTournament && (currentTournament.stage1_format === "Round-robin" || currentTournament.stage1_format === "Swiss");
     if (isStage1Groups && groupKeys.length) {
       const nav = document.createElement("div");
       nav.className = "groups-nav";
@@ -1354,7 +1348,7 @@
 
       const title = document.createElement("div");
       title.className = isRoundRobinGroups ? "group-title" : "group-title stage-group-title";
-      title.textContent = `Group ${group}`;
+      title.textContent = isStage1Groups ? `Group ${group}`: "";
       section.appendChild(title);
 
       // Sort logic: for TEAM, sort by MW, then DW-DL, then GW-GL; else as before

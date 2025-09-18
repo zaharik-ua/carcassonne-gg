@@ -52,30 +52,6 @@
     color: #222;
   }
 
-  /* Stage 1 group titles styled like standings headers */
-  .stage-group-title {
-    background-color: var(--main-bg-color);
-    color: white;
-    font-weight: 600;
-    font-size: 15px;
-    padding: 6px 10px;
-    border-radius: 2px;
-    box-shadow: 1.4px 1.4px 2px #b2b2b2;
-    margin-bottom: 6px;
-  }
-
-  .overview-section-title {
-    font-size: 17px;
-    font-weight: 700;
-    margin-bottom: 3px;
-    color: #222;
-  }
-
-  .overview-about-text {
-    font-size: 14px;
-    color: #333;
-  }
-
   .group-table {
     width: 100%;
     border-collapse: collapse;
@@ -106,16 +82,6 @@
 
   .group-table tr:nth-child(n+2) {
     background-color: white;
-  }
-
-  .group-table td a {
-    color: #333333;
-    text-decoration: none;
-    word-break: break-word;
-  }
-
-  .group-table td a:hover {
-    color: #0277BD;
   }
 
   /* MATCH TABLE STYLES */
@@ -149,14 +115,6 @@
   .match-table td.player-cell {
     text-align: center;
   }
-  .match-table td.player-cell a {
-    color: #333333;
-    text-decoration: none;
-  }
-  .match-table td.player-cell a:hover {
-    color: #0277BD;
-    text-decoration: none;
-  }
   
   .match-table td.score-cell {
     text-align: center;
@@ -164,97 +122,11 @@
     white-space: nowrap;
   }
 
-  .match-table .score-cell .duel-score {
-    font-weight: 600;
-  }
-
-  .match-table .score-cell .game-score {
-    font-weight: normal;
-    font-size: 13px;
-  }
-
   .match-table .score-cell .score-line {
     display: block;
     line-height: 17px;
   }
   /* End MATCH TABLE STYLES */
-
-  /* LINEUP TABLE STYLES */
-  .lineup {
-    height: 0;
-    overflow: hidden;
-    font-size: 14px;
-    transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
-    background-color: #f5f5f5;
-  }
-
-  .match-table tr.lineup-row td {
-    border: none;
-    padding: 0;
-    vertical-align: middle;
-  }
-
-  .lineup-player {
-    font-weight: 400;
-    font-size: 14px;
-    line-height: 15px;
-    text-decoration: none;
-    color: inherit;
-    padding: 0 7px;
-    vertical-align: middle;
-  }
-
-  .match-table .lineup-score {
-    font-size: 13px;
-    font-weight: 600;
-    text-align: center;
-    padding: 0 5px !important;
-  }
-
-  .lineup-player:hover {
-    color: #0277BD;
-    text-decoration: none;
-  }
-
-  .lineup-separator {
-    font-weight: 600;
-    margin: 0 3px;
-  }
-
-  .lineup__overview {
-    padding: 0 10px;
-    line-height: 18px;
-  }
-
-  @media (max-width: 600px) {
-    .lineup__overview {
-      font-size: 14px;
-      line-height: 18px;
-    }
-  }
-  /* End LINEUP TABLE STYLES */
-
-  /* Match Icon Wrapper and Icon */
-  .match-icon-wrapper {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid #ccc;
-    border-radius: 2px;
-    width: 22px;
-    height: 22px;
-    box-sizing: border-box;
-  }
-  .match-icon-wrapper i {
-    font-size: 14px;
-    color: #444;
-    width: 14px;
-    height: 14px;
-    margin: 0;
-    padding: 0;
-    position: static;
-    line-height: 1;
-  }
 
   .accordion-toggle {
     display: flex;
@@ -294,17 +166,9 @@
     padding: 0 2px;
   }
 
-  #tab-playoff-content {
-    display: block;
-    overflow-x: auto;
-    overflow-y: visible;
-    height: auto !important;
-    background-color: #f5f5f5;
-  }
   #playoff-bracket {
     display: flex;
     align-items: flex-start;
-    /* The scroll is now handled by .playoff-scroll-wrapper */
     width: 100%;
     position: relative;
     flex-wrap: nowrap;
@@ -320,36 +184,12 @@
   .playoff-scroll-wrapper > div {
     min-width: max-content;
   }
+  
   /* Background under playoff brackets */
-  #playoff-bracket,
-  .playoff-bracket {
+  #playoff-bracket {
     background-color: #f2f4f7;
   }
-  /* Group navigation chips for Stage 1 (Groups + DE) */
-  .groups-nav {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 6px 0 10px;
-  }
-  .group-chip {
-    display: inline-block;
-    padding: 4px 10px;
-    background-color: #f2f4f7;
-    border: 1px solid #d7dbe0;
-    border-radius: 1px;
-    color: inherit;
-    text-decoration: none;
-    font-weight: 600;
-    line-height: 18px;
-    transition: background-color 0.2s ease, border-color 0.2s ease;
-  }
-  .group-chip:hover {
-    background-color: #d7eaff; /* slightly darker light blue */
-    border-color: #9fc5f5;
-  }
-  /* Offset target position to avoid fixed header overlap when anchoring */
-  .stage-group-anchor { scroll-margin-top: 45px; }
+  
   .round-label {
     font-weight: 600;
     font-size: 14px;
@@ -362,7 +202,6 @@
     font-size: 15px;
     line-height: 18px;
     margin-bottom: 20px;
-    /*box-shadow: 1px 1px 2px #b2b2b2;*/
     box-sizing: border-box;
   }
   .match-box > div {
@@ -378,8 +217,8 @@
     object-fit: contain;
     margin-right: 0px;
     vertical-align: middle;
-    margin-top: 2px;
-    margin-bottom: 2px;
+    margin-top: 0;
+    margin-bottom: 0;
   }
 
   .team-logo {
@@ -389,34 +228,18 @@
     margin-right: 0px;
     border-radius: 2px;
   }
-  
-  .match-box a {
-    color: #333333;
-    text-decoration: none;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .match-box a:hover {
-    color: #0277BD;
-  }
 
   .match-row-winner {
-    /* background-color: #fff; */
     font-weight: 500;
     padding: 0 7px;  
   }
 
   .match-row-loser {
-    /* background-color: #fff; */
     padding: 0 7px; 
   }
 
   .highlight-player {
     background-color: #eeeeee !important;
-  }
-  .highlight-text {
-    font-weight: 600;
   }
 
   /* Responsive: Limit width of time cell on mobile */
@@ -650,14 +473,13 @@
     thPlayer.textContent = "Гравець";
     thPlayer.style.textAlign = "left";
     headTr.appendChild(thPlayer);
+    const thCity = document.createElement("th");
+    thCity.textContent = "Місто";
+    thCity.style.textAlign = "left";
+    headTr.appendChild(thCity);
     const thBga = document.createElement("th");
     thBga.textContent = "Нік на BGA";
     headTr.appendChild(thBga);
-    if (hasRating) {
-      const thRating = document.createElement("th");
-      thRating.textContent = "Rating";
-      headTr.appendChild(thRating);
-    }
     table.appendChild(headTr);
 
     const sorted = [...tp].sort((a, b) => {
@@ -675,37 +497,36 @@
 
     sorted.forEach(p => {
       const tr = document.createElement("tr");
+
+      // Гравець: тільки ім'я (без аватара)
       const tdPlayer = document.createElement("td");
       tdPlayer.style.textAlign = "left";
       tdPlayer.style.padding = "4px 6px";
+      tdPlayer.textContent = p.player_name || "";
+      tr.appendChild(tdPlayer);
 
-      const wrap = document.createElement("div");
-      wrap.style.display = "flex";
-      wrap.style.alignItems = "center";
-      wrap.style.gap = "7px";
-
+      // Місто: аватар + city
+      const tdCity = document.createElement("td");
+      const cityWrap = document.createElement("div");
+      cityWrap.style.display = "flex";
+      cityWrap.style.alignItems = "center";
+      cityWrap.style.gap = "7px";
       if (p.avatar) {
         const img = document.createElement("img");
         img.src = p.avatar;
         img.className = "player-logo";
-        wrap.appendChild(img);
+        cityWrap.appendChild(img);
       }
+      const citySpan = document.createElement("span");
+      citySpan.textContent = (p.city ?? "");
+      cityWrap.appendChild(citySpan);
+      tdCity.appendChild(cityWrap);
+      tr.appendChild(tdCity);
 
-      const span = document.createElement("span");
-      span.textContent = p.player_name || "";
-      wrap.appendChild(span);
-
-      tdPlayer.appendChild(wrap);
-      tr.appendChild(tdPlayer);
+      // Нік на BGA: без змін
       const tdBga = document.createElement("td");
       tdBga.textContent = p.bga_nickname ? String(p.bga_nickname) : "";
       tr.appendChild(tdBga);
-
-      if (hasRating) {
-        const tdRating = document.createElement("td");
-        tdRating.textContent = p.rating ? String(p.rating) : "";
-        tr.appendChild(tdRating);
-      }
 
       table.appendChild(tr);
     });
@@ -731,6 +552,8 @@
     wrapper.style.display = "flex";
     wrapper.style.flexWrap = "wrap";
     wrapper.style.gap = "16px";
+    // Prevent equal-height stretching between the two tables (Safari fix)
+    wrapper.style.alignItems = "flex-start";
 
     const makeTable = (rows) => {
       const table = document.createElement("table");

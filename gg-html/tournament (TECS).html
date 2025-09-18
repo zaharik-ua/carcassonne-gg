@@ -406,7 +406,7 @@
     //? "Asian-Cup-2025"
     //? "UCOCup-2024"
     ? "TECS-2025"
-    //? "HR-2025-OC-2"
+    //? "MOCB-2025"
     //? "TW-2024-CCLQ"
     //? "CZ-2025-COC"
     : window.location.pathname.split('/').filter(Boolean).pop();
@@ -416,13 +416,6 @@
   if (currentTournamentId === "Asian-Cup-2025") {
     document.documentElement.style.setProperty('--main-bg-color', '#d85c5c');
     document.documentElement.style.setProperty('--hover-bg-color', '#c64a4b');
-  }
-
-  function fetchWithTimeout(resource, ms = 5000, options = {}) {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), ms);
-    return fetch(resource, { ...options, signal: controller.signal })
-      .finally(() => clearTimeout(id));
   }
 
   let matches = [];
@@ -1565,7 +1558,7 @@
     
     const BRACKET_MARGIN = 15;
     const MATCH_HEIGHT = 60;
-    const MATCH_WIDTH = 200;
+    const MATCH_WIDTH = 250;
     const ROUND_TITLE_TO_MATCH_SPACING = 35;
     const VERTICAL_SPACING = 20;
     const HORIZONTAL_SPACING = 30;
@@ -1757,8 +1750,11 @@
           if (team1Logo) team1Info.appendChild(team1Logo);
           const team1Name = document.createElement("span");
           team1Name.textContent = m.team1;
-          team1Name.style.maxWidth = "150px";
+          team1Name.style.maxWidth = "210px";
           team1Name.style.display = "inline-block";
+          team1Name.style.whiteSpace = "nowrap";
+          team1Name.style.overflow = "hidden";
+          team1Name.style.textOverflow = "ellipsis";
           team1Info.appendChild(team1Name);
           const score1Span = document.createElement("span");
           score1Span.textContent = m.duels_won1;
@@ -1781,8 +1777,11 @@
           if (team2Logo) team2Info.appendChild(team2Logo);
           const team2Name = document.createElement("span");
           team2Name.textContent = m.team2;
-          team2Name.style.maxWidth = "150px";
+          team2Name.style.maxWidth = "210px";
           team2Name.style.display = "inline-block";
+          team2Name.style.whiteSpace = "nowrap";
+          team2Name.style.overflow = "hidden";
+          team2Name.style.textOverflow = "ellipsis";
           team2Info.appendChild(team2Name);
           const score2Span = document.createElement("span");
           score2Span.textContent = m.duels_won2;
