@@ -1,4 +1,4 @@
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
 <!-- СТИЛІ -->
@@ -324,6 +324,84 @@
   .playoff-bracket {
     background-color: #f2f4f7;
   }
+  /* Toolbar + fullscreen controls for playoff brackets */
+  .playoff-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 8px;
+  }
+  .expand-bracket-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;               /* square button */
+    height: 28px;              /* square button */
+    padding: 0;                /* no padding to keep square */
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background-color: var(--main-bg-color);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    opacity: 0.5; /* semi-transparent */
+  }
+  .expand-bracket-btn:hover {
+    background-color: var(--hover-bg-color);
+  }
+  .expand-bracket-btn i { font-size: 12px; }
+  .expand-bracket-floating {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 5;
+  }
+
+  .fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    box-sizing: border-box;
+  }
+  .fullscreen-header {
+    display: none; /* header hidden; close button floats at top-left */
+  }
+  .fullscreen-close-btn {
+    position: absolute;
+    top: 20px;                 /* moved lower */
+    left: 20px;                /* moved right */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;               /* square button */
+    height: 28px;              /* square button */
+    padding: 0;                /* keep square */
+    font-size: 14px;
+    color: #fff;
+    background-color: var(--main-bg-color);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    box-shadow: 1.4px 1.4px 2px #00000040;
+    z-index: 10001;            /* ensure on top of content */
+  }
+  .fullscreen-close-btn:hover { background-color: var(--hover-bg-color); }
+  .fullscreen-content {
+    flex: 1 1 auto;
+    overflow: auto;
+    background: #f2f4f7;
+    border-radius: 4px;
+    padding: 8px;
+  }
+  /* Hide expand button inside the fullscreen copy */
+  .fullscreen-content .expand-bracket-floating { display: none; }
   /* Group navigation chips for Stage 1 (Groups + DE) */
   .groups-nav {
     display: flex;
@@ -354,6 +432,40 @@
     font-size: 14px;
     margin-bottom: 10px;
   }
+  /* Meta chips above bracket match boxes */
+  .match-meta-wrapper {
+    position: absolute;
+    width: 200px;  /* will be overridden inline to MATCH_WIDTH */
+    text-align: left;
+    font-size: 11px;
+    line-height: 13px;
+  }
+  .match-meta-chip {
+    display: inline-block;
+    padding: 1px 4px;
+    border-radius: 1px;
+    margin-right: 2px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.05) inset;
+  }
+  .match-meta-format {
+    background-color: #d7eaff; /* default light blue */
+    color: #073654;
+    font-weight: 400;
+  }
+  /* Variant backgrounds by duel format */
+  .match-meta-format.bo1 { /* Bo1 → white */
+    background-color: #ffffff;
+    color: #333333;
+  }
+  .match-meta-format.bo3 { /* Bo3 → light blue (as before) */
+    background-color: #d7eaff;
+    color: #073654;
+  }
+  .match-meta-format.bo5 { /* Bo5 → light red */
+    background-color: #fce0e0;
+    color: #590f0f;
+  }
+
   .match-box {
     background-color: white;
     border: 1px solid #aaa;
@@ -449,11 +561,11 @@
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
     //? "Asian-Cup-2025"
-    //? "Copa-America-2021"
+    ? "CZ-2025-COC"
     //? "UCOCup-2025"
     //? "MOCB-2025"
-    //? "TW-2024-CCLQ"
-    ? "USCC-2025"
+    //? "CCCC-2025"
+    //? "ACOC-2025"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
 
@@ -484,8 +596,8 @@
   const BRACKET_MARGIN = 15;
   const MATCH_HEIGHT = 60;
   const MATCH_WIDTH = 200;
-  const ROUND_TITLE_TO_MATCH_SPACING = 35;
-  const VERTICAL_SPACING = 20;
+  const ROUND_TITLE_TO_MATCH_SPACING = 60;
+  const VERTICAL_SPACING = 25;
   const HORIZONTAL_SPACING = 30;
   let THIRD_PLACE_VERTICAL_OFFSET = 50;
 
@@ -795,14 +907,14 @@
               link.className = "group-chip";
               link.textContent = g;
               // Use absolute path to current page to avoid base href issues
-              link.href = `${window.location.pathname}#group-${g}`;
+              link.href = `${window.location.pathname}?tab=stage1#group-${g}`;
               link.addEventListener("click", (e) => {
                 e.preventDefault();
                 const target = document.getElementById(`group-${g}`);
                 if (target) {
                   target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                   // Update URL hash without page reload
-                  history.replaceState(null, '', `${window.location.pathname}#group-${g}`);
+                  history.replaceState(null, '', `${window.location.pathname}?tab=stage1#group-${g}`);
                 }
               });
               nav.appendChild(link);
@@ -1198,14 +1310,50 @@
         if (!grouped[row.group]) grouped[row.group] = [];
         grouped[row.group].push(row);
       });
-    // Determine if TEAM or not
+    // Build ordered group keys and optional chips for Stage 1 (Groups) except Round-robin
+    const groupKeys = Object.keys(grouped)
+      .filter(g => g !== undefined && g !== null && String(g).trim() !== '' && String(g) !== 'undefined' && String(g) !== 'null')
+      .map(String)
+      .sort((a, b) => a.localeCompare(b));
+
     const isTeam = currentTournament && currentTournament.type === "TEAM";
-    for (const [group, groupPlayers] of Object.entries(grouped)) {
+    const isStage1Groups = container.id === "tab-stage1-content" && currentTournament && currentTournament.stage1_groups === "Groups";
+    const isRoundRobinGroups = isStage1Groups && currentTournament && currentTournament.stage1_format === "Round-robin";
+    if (isStage1Groups && groupKeys.length) {
+      const nav = document.createElement("div");
+      nav.className = "groups-nav";
+      groupKeys.forEach(g => {
+        const link = document.createElement("a");
+        link.className = "group-chip";
+        link.textContent = g;
+        link.href = `${window.location.pathname}?tab=stage1#group-${g}`;
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const target = document.getElementById(`group-${g}`);
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            history.replaceState(null, '', `${window.location.pathname}?tab=stage1#group-${g}`);
+          }
+        });
+        nav.appendChild(link);
+      });
+      container.appendChild(nav);
+    }
+
+    const iterateKeys = groupKeys.length ? groupKeys : Object.keys(grouped);
+    for (const group of iterateKeys) {
+      const groupPlayers = grouped[group];
       const section = document.createElement("div");
-      section.className = "group-section";
+      if (isStage1Groups) {
+        // Keep plain title style for Round-robin, but still add anchors for chips
+        section.className = "group-section stage-group-anchor";
+        section.id = `group-${group}`;
+      } else {
+        section.className = "group-section";
+      }
 
       const title = document.createElement("div");
-      title.className = "group-title";
+      title.className = isRoundRobinGroups ? "group-title" : "group-title stage-group-title";
       title.textContent = `Group ${group}`;
       section.appendChild(title);
 
@@ -1677,8 +1825,8 @@
     const maxMatchRound = sortedRounds.reduce((maxRound, r) => {
       return (groupedByRound[r].length > groupedByRound[maxRound]?.length || !maxRound) ? r : maxRound;
     }, sortedRounds[0]);
-
     debugger;
+
     // 2. Layout matches of maxMatchRound
     groupedByRound[maxMatchRound]
       .filter(m => m.knockout_stage !== "third_place")
@@ -1692,27 +1840,46 @@
       });
 
     debugger;
-      // 3. Layout rounds to the right of maxMatchRound
+    // 3. Layout rounds to the right of maxMatchRound
     for (let i = sortedRounds.indexOf(maxMatchRound) + 1; i < sortedRounds.length; i++) {
       const roundNum = sortedRounds[i];
       groupedByRound[roundNum]
         .filter(m => m.knockout_stage !== "third_place")
         .forEach(m => {
+          debugger;
           const sources = sortedRounds[i - 1] ? groupedByRound[sortedRounds[i - 1]].filter(pm => pm.next_game_win === m.knockout_id) : [];
           let cord_top = 0;
+          debugger;
           if (sources.length === 2) {
             const cord_top1 = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[0].knockout_id).cord_top;
             const cord_top2 = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[1].knockout_id).cord_top;
             const center = (cord_top1 + cord_top2 + MATCH_HEIGHT) / 2;
+            debugger;
             cord_top = center - MATCH_HEIGHT / 2;
           } else if (sources.length === 1) {
+            debugger;
             cord_top = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[0].knockout_id).cord_top;
           }
+          // Якщо немає "попередників": розміщуємо під останнім матчем цього раунду
+          if (sources.length === 0) {
+            const sameRoundPlaced = groupedByRound[roundNum]
+              .filter(x => x.knockout_stage !== "third_place" && x.knockout_id !== m.knockout_id && typeof x.cord_bottom === "number");
+            if (sameRoundPlaced.length > 0) {
+              const maxBottom = Math.max(...sameRoundPlaced.map(x => x.cord_bottom));
+              cord_top = maxBottom + VERTICAL_SPACING;
+            } else {
+              // Якщо це перший матч у раунді — починаємо одразу під заголовком раунду
+              cord_top = BRACKET_MARGIN + ROUND_TITLE_TO_MATCH_SPACING;
+            }
+          }
+          
           const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+          debugger;
           const cord_bottom = cord_top + MATCH_HEIGHT;
           m.cord_top = cord_top;
           m.cord_left = cord_left;
           m.cord_bottom = cord_bottom;
+          debugger;
         });
     }
 
@@ -1758,24 +1925,18 @@
         });
     }
 
-    debugger;
     // 5. Add 3rd place match if exists
     const thirdPlaceMatch = playoffMatches.find(g => g.tournament_id === currentTournamentId && g.knockout_stage === "third_place");
     if (thirdPlaceMatch) {
-      debugger;
       const thirdPlaceRound = Number(thirdPlaceMatch.round_order);
       const existingMatch = groupedByRound[thirdPlaceRound]?.find(m => m.knockout_id === thirdPlaceMatch.knockout_id);
       if (existingMatch) {
-        debugger;
         let startTop = 0;
         const matchesInRound = groupedByRound[thirdPlaceRound].filter(m => m.knockout_id !== thirdPlaceMatch.knockout_id);
         if (matchesInRound.length > 0) {
           const lastMatch = matchesInRound[matchesInRound.length - 1];
-          debugger;
           startTop = lastMatch.cord_bottom + THIRD_PLACE_VERTICAL_OFFSET;
-          debugger;
         }
-        debugger;
         existingMatch.cord_top = startTop;
         existingMatch.cord_left = BRACKET_MARGIN + roundIndexMap[thirdPlaceRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
         existingMatch.cord_bottom = startTop + ROUND_TITLE_TO_MATCH_SPACING + MATCH_HEIGHT;
@@ -1789,16 +1950,39 @@
       const matches = groupedByRound[roundNum];
       matches.sort((a, b) => Number(a.game_id) - Number(b.game_id));
 
-      // Додаємо назву раунду (label)
+      // Додаємо назву раунду (label) і, якщо є, дати (після двокрапки)
+      const rawRound = matches.find(m => m.knockout_stage !== "third_place")?.round || `Round ${roundNum}`;
+      const [roundTitle, roundDates] = (() => {
+        const idx = rawRound.indexOf(":");
+        if (idx === -1) return [rawRound.trim(), ""];
+        return [rawRound.slice(0, idx).trim(), rawRound.slice(idx + 1).trim()];
+      })();
+
+      const baseLeft = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+
       const label = document.createElement("div");
       label.className = "round-label";
-      label.textContent = matches.find(m => m.knockout_stage !== "third_place")?.round || `Round ${roundNum}`;
+      label.textContent = roundTitle;
       label.style.position = "absolute";
       label.style.width = `${MATCH_WIDTH}px`;
       label.style.textAlign = "center";
-      label.style.left = `${BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING)}px`;
+      label.style.left = `${baseLeft}px`;
       label.style.top = `${BRACKET_MARGIN}px`;
       container.appendChild(label);
+
+      if (roundDates) {
+        const dateLabel = document.createElement("div");
+        dateLabel.className = "round-label";
+        dateLabel.textContent = roundDates;
+        dateLabel.style.position = "absolute";
+        dateLabel.style.width = `${MATCH_WIDTH}px`;
+        dateLabel.style.textAlign = "center";
+        dateLabel.style.left = `${baseLeft}px`;
+        // Place just under the title, within ROUND_TITLE_TO_MATCH_SPACING space
+        dateLabel.style.top = `${BRACKET_MARGIN + 16}px`;
+        dateLabel.style.fontWeight = "400";
+        container.appendChild(dateLabel);
+      }
       
       // Додаємо матчі
       matches.forEach((m) => {
@@ -1818,9 +2002,63 @@
           label.style.textAlign = "center";
           label.style.left = `${m.cord_left}px`;
           label.style.top = `${topOffset}px`;
-          label.textContent = m.round || "3rd place";
+          const rawThird = m.round || "3rd place";
+          const [thirdTitle, thirdDates] = (() => {
+            const idx = rawThird.indexOf(":");
+            if (idx === -1) return [rawThird.trim(), ""];
+            return [rawThird.slice(0, idx).trim(), rawThird.slice(idx + 1).trim()];
+          })();
+          label.textContent = thirdTitle;
           container.appendChild(label);
+          if (thirdDates) {
+            const dateLabel = document.createElement("div");
+            dateLabel.className = "round-label";
+            dateLabel.textContent = thirdDates;
+            dateLabel.style.position = "absolute";
+            dateLabel.style.width = `${MATCH_WIDTH}px`;
+            dateLabel.style.textAlign = "center";
+            dateLabel.style.left = `${m.cord_left}px`;
+            dateLabel.style.top = `${topOffset + 16}px`;
+            dateLabel.style.fontWeight = "400";
+            container.appendChild(dateLabel);
+          }
           topOffset += ROUND_TITLE_TO_MATCH_SPACING;
+        }
+
+        // Add meta labels above match box
+        const hasTime = m.time !== null && m.time !== undefined && String(m.time).trim() !== "";
+        const isCOC = tournamentType !== "TEAM"; // COC-type brackets use duels data
+        if (hasTime || (isCOC && m.duel_format)) {
+          const metaWrap = document.createElement("div");
+          metaWrap.className = "match-meta-wrapper";
+          metaWrap.style.left = `${m.cord_left + 2}px`;
+          metaWrap.style.top = `${Math.max(0, topOffset - 14)}px`;
+          metaWrap.style.width = `${MATCH_WIDTH}px`;
+
+          if (isCOC && m.duel_format) {
+            const fmt = document.createElement("span");
+            fmt.className = "match-meta-chip match-meta-format";
+            fmt.textContent = m.duel_format; // e.g., Bo1/Bo3/Bo5
+            const dfmt = String(m.duel_format || '').toLowerCase();
+            if (dfmt.includes('bo1')) {
+              fmt.classList.add('bo1');
+            } else if (dfmt.includes('bo3')) {
+              fmt.classList.add('bo3');
+            } else if (dfmt.includes('bo5') || dfmt.includes('b05')) {
+              fmt.classList.add('bo5');
+            }
+            metaWrap.appendChild(fmt);
+          }
+
+          if (hasTime) {
+            // Plain text time (no chip background), like earlier behavior
+            const timeText = document.createElement("span");
+            timeText.textContent = formatMatchTime(m.time);
+            if (isCOC && m.duel_format) timeText.style.marginLeft = "6px";
+            metaWrap.appendChild(timeText);
+          }
+
+          container.appendChild(metaWrap);
         }
 
         matchBox.style.top = `${topOffset}px`;
@@ -1900,7 +2138,7 @@
           }
           player1Link.textContent = m.player1;
           // Add maxWidth and display for truncation
-          player1Link.style.maxWidth = "150px";
+          player1Link.style.maxWidth = "140px";
           player1Link.style.display = "inline-block";
           const player1Info = document.createElement("div");
           player1Info.style.display = "flex";
@@ -1932,7 +2170,7 @@
           }
           player2Link.textContent = m.player2;
           // Add maxWidth and display for truncation
-          player2Link.style.maxWidth = "150px";
+          player2Link.style.maxWidth = "140px";
           player2Link.style.display = "inline-block";
           const player2Info = document.createElement("div");
           player2Info.style.display = "flex";
@@ -2072,6 +2310,13 @@
       scrollWrapper.appendChild(bracketDiv);
       container.appendChild(scrollWrapper);
       container = bracketDiv;
+      // Floating fullscreen button inside bracket
+      const expandBtn = document.createElement("button");
+      expandBtn.className = "expand-bracket-btn expand-bracket-floating";
+      expandBtn.title = "Відкрити на весь екран";
+      expandBtn.innerHTML = '<i class="fas fa-up-right-and-down-left-from-center"></i>';
+      container.appendChild(expandBtn);
+      expandBtn.addEventListener('click', () => openBracketFullscreen(scrollWrapper));
     } else {
       // fallback: legacy behavior
       container = document.getElementById("playoff-bracket");
@@ -2091,16 +2336,12 @@
     const roundIndexMap = {};
     sortedRounds.forEach((r, i) => roundIndexMap[r] = i);
     
-    debugger;
     // Calculate playoff match coordinates
     calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, playoffMatches, currentTournamentId);
-    debugger;
     // Render matches with absolute positioning inside #playoff-bracket
     renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, container);
-    debugger;
     // --- DRAW LINES ---
     drawPlayoffLines(groupedByRound, sortedRounds, container);
-    debugger;
     // Set container's fixed height based on the maximum cord_bottom plus BRACKET_MARGIN
     const allMatches = Object.values(groupedByRound).flat();
     const maxCordBottom = Math.max(...allMatches.map(m => m.cord_bottom || 0));
@@ -2158,6 +2399,13 @@
       scrollWrapper.appendChild(bracketDiv);
       container.appendChild(scrollWrapper);
       container = bracketDiv;
+      // Floating fullscreen button inside bracket
+      const expandBtn = document.createElement("button");
+      expandBtn.className = "expand-bracket-btn expand-bracket-floating";
+      expandBtn.title = "Відкрити на весь екран";
+      expandBtn.innerHTML = '<i class="fas fa-up-right-and-down-left-from-center"></i>';
+      container.appendChild(expandBtn);
+      expandBtn.addEventListener('click', () => openBracketFullscreen(scrollWrapper));
     } else {
       // fallback: legacy behavior
       container = document.getElementById("playoff-bracket");
@@ -2172,19 +2420,15 @@
       if (!stageGroups[key]) stageGroups[key] = [];
       stageGroups[key].push(m);
     });
-    debugger;
     // 2) Sort groups alphabetically by stage key
     const stageOrder = Object.keys(stageGroups).sort((a, b) => a.localeCompare(b));
-debugger;
     // Track global sizing across all groups
     let cumulativeTopOffset = 0;
     let globalMaxLeft = 0;
-debugger;
     // 3) Process each group sequentially
     stageOrder.forEach(stageKey => {
       const stageMatches = stageGroups[stageKey];
       if (!stageMatches || !stageMatches.length) return;
-debugger;
       // Group by round within this stage
       const groupedByRound = {};
       stageMatches.forEach(match => {
@@ -2192,14 +2436,12 @@ debugger;
         if (!groupedByRound[roundNum]) groupedByRound[roundNum] = [];
         groupedByRound[roundNum].push(match);
       });
-debugger;
       const sortedRounds = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
       const roundIndexMap = {};
       sortedRounds.forEach((r, i) => roundIndexMap[r] = i);
 
       // Compute coordinates for this stage
       calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, stageMatches, currentTournamentId);
-debugger;
       // Create a sub-container for this stage to apply vertical offset cleanly
       const stageContainer = document.createElement("div");
       stageContainer.style.position = "absolute";
@@ -2207,11 +2449,9 @@ debugger;
       stageContainer.style.top = `${cumulativeTopOffset}px`;
       stageContainer.style.width = "max-content";
       container.appendChild(stageContainer);
-debugger;
       // Render matches and lines for this stage inside the sub-container
       renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, stageContainer);
       drawPlayoffLines(groupedByRound, sortedRounds, stageContainer);
-debugger;
       // Update global sizing info
       const allStageMatches = Object.values(groupedByRound).flat();
       const stageMaxBottom = Math.max(...allStageMatches.map(m => m.cord_bottom || 0));
@@ -2253,5 +2493,47 @@ debugger;
         fetchTournamentsAndInit();
       });
   });
+
+  // Opens a fullscreen overlay that shows only the bracket block
+  function openBracketFullscreen(sourceWrapper) {
+    try {
+      const overlay = document.createElement('div');
+      overlay.className = 'fullscreen-overlay';
+
+      // Close button (top-left, icon only)
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'fullscreen-close-btn';
+      closeBtn.title = 'Закрити (Esc)';
+      closeBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+      overlay.appendChild(closeBtn);
+
+      const content = document.createElement('div');
+      content.className = 'fullscreen-content';
+      // Clone the scrollable wrapper with the bracket inside
+      const cloned = sourceWrapper.cloneNode(true);
+      content.appendChild(cloned);
+      overlay.appendChild(content);
+
+      document.body.appendChild(overlay);
+
+      const onClose = () => {
+        if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        document.removeEventListener('keydown', onKeyDown);
+      };
+      closeBtn.addEventListener('click', onClose);
+      overlay.addEventListener('click', (e) => {
+        // allow clicking the dark background to close (but not inner content)
+        if (e.target === overlay) onClose();
+      });
+
+      // Close on Esc
+      const onKeyDown = (e) => {
+        if (e.key === 'Escape' || e.key === 'Esc') onClose();
+      };
+      document.addEventListener('keydown', onKeyDown);
+    } catch (e) {
+      console.error('Fullscreen open failed', e);
+    }
+  }
 </script>
   

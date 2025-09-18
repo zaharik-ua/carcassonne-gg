@@ -58,6 +58,80 @@ code {
     color: #222;
     margin: 15px 0 10px 0;
     padding: 0 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* Sort toggle on Today row */
+.sort-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.sort-toggle__label {
+  color: #555;
+  font-weight: 600;
+}
+.sort-toggle__options {
+  display: inline-flex;
+  background: none;
+  border-radius: 3px;
+  padding: 2px;
+}
+.sort-toggle__option {
+  padding: 2px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  color: #555;
+  user-select: none;
+}
+.sort-toggle__option.active {
+  background: #fff;
+  color: #111;
+  box-shadow: 0 0 0 1px #ddd inset;
+}
+
+/* Rating help (star + info) on Today row */
+.rating-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  position: relative;
+}
+.rating-star {
+  font-size: 12px;
+  line-height: 1;
+  color: #DAA520; /* gold */
+}
+.rating-info-btn {
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+}
+.rating-tooltip {
+  position: absolute;
+  top: 18px;
+  right: 0;
+  z-index: 10;
+  display: none;
+  width: 300px; /* enforce width so it doesn't shrink to parent size */
+  max-width: 90vw; /* clamp on very small screens */
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: #fff;
+  color: #222;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 400;
+  white-space: normal; /* allow wrapping */
+}
+@media (max-width: 600px) {
+  .rating-tooltip { width: 90vw; }
 }
 .tournament-card {
     background: white;
@@ -92,6 +166,24 @@ code {
     font-size: 12px;
     line-height: 14px;
     font-weight: bold;
+  }
+
+  .match-rating {
+    font-size: 8px;
+    line-height: 10px;
+    margin-bottom: 2px;
+    color: #333; /* default grey for ratings 1-5 */
+  }
+
+  /* Special style for rating 6: gold stars only */
+  .match-rating--gold {
+    color: #DAA520;
+  }
+
+  .match-time-text {
+    font-size: 12px;
+    line-height: 14px;
+    color: #333; /* keep time color independent from rating color */
   }
 
   .divider-vertical {
@@ -278,11 +370,33 @@ code {
   .tournament-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     height: auto;
     background-color: white;
     font-size: 13px;
     font-weight: bold;
     padding: 6px 8px;
+  }
+
+  /* Right-side controls in tournament header (badge + chevron) */
+  .results-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Count badge for finished matches */
+  .results-count-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 9999px;
+    background-color: #2C6DA3;
+    color: #fff;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+    font-weight: 700;
   }
 
   .tournament-header a {
@@ -291,6 +405,35 @@ code {
     text-decoration: none;
     color: inherit;
     gap: 6px;
+  }
+
+  /* Time mode: thin separators between matches */
+  .time-mode-separator {
+    height: 1px;
+    background-color: #ccc;
+    margin: 0;
+  }
+
+  /* In Time mode, suppress built-in match top borders */
+  .time-mode .match-row {
+    border-top: none;
+    padding: 1px 8px 4px 8px;
+  }
+
+
+  /* Time mode: compact tournament header styles */
+  .time-mode .tournament-header {
+    padding: 6px 8px 1px 8px; 
+    font-size: 11px;  /* tournament name size */
+    color: #555;      /* tournament name color */
+  }
+  .time-mode .tournament-header a {
+    color: #555;      /* ensure link inherits the color */
+    font-size: 10px;
+  }
+  .time-mode .tournament-icon {
+    width: 14px;      /* tournament icon size */
+    height: 14px;
   }
 
   .tournament-icon {
@@ -323,6 +466,20 @@ code {
   overflow: hidden;
   transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
   background-color: #f5f5f5;
+}
+
+/* Collapsible container for finished COC results */
+.results-collapsible {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+  
+}
+
+/* Inner wrapper for finished COC results */
+.results-collapsible__inner {
+  padding: 0px 0;
+  line-height: 22px;
 }
 
 .lineup td, th {
@@ -479,12 +636,16 @@ function createMatchElement(match) {
       const utcTimestamp = Date.UTC(+year, +month - 1, +day, +hour, +minute, +second);
       const dateObj = new Date(utcTimestamp);
     
-      const dayStr = dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-      const timeStr = dateObj.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+      // Consistent 3-letter month across browsers
+      const MONTHS_3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const dd = String(dateObj.getDate()).padStart(2, "0");
+      const mon = MONTHS_3[dateObj.getMonth()];
+      const dayStr = `${dd} ${mon}`;
+      const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
     
       const timeDiv = document.createElement("div");
       timeDiv.className = "match-time";
-      timeDiv.innerHTML = `<div>${dayStr} ${timeStr}</div>`;
+      timeDiv.innerHTML = `<div class="match-time-text">${dayStr} ${timeStr}</div>`;
       container.appendChild(timeDiv);
       const divider = document.createElement("div");
       divider.className = "divider-vertical";
@@ -564,12 +725,16 @@ function createMatchElement(match) {
       const utcTimestamp = Date.UTC(+year, +month - 1, +day, +hour, +minute, +second);
       const dateObj = new Date(utcTimestamp);
     
-      const dayStr = dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-      const timeStr = dateObj.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+      // Consistent 3-letter month across browsers
+      const MONTHS_3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const dd = String(dateObj.getDate()).padStart(2, "0");
+      const mon = MONTHS_3[dateObj.getMonth()];
+      const dayStr = `${dd} ${mon}`;
+      const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
     
       const timeDiv = document.createElement("div");
       timeDiv.className = "match-time";
-      timeDiv.innerHTML = `<div>${dayStr} ${timeStr}</div>`;
+      timeDiv.innerHTML = `<div class="match-time-text">${dayStr} ${timeStr}</div>`;
       rightDiv.appendChild(timeDiv); 
   } else {
       if (match.dw1 || match.dw2 || match.gw1 || match.gw2) {
@@ -605,7 +770,8 @@ function createMatchElement(match) {
   return wrapper;
 }
 
-function createDuelElement(match) {
+function createDuelElement(match, options = {}) {
+  const { showRating = false } = options;
   // Copied from createMatchElement, but for COC (duel) type, lineups logic removed
   const wrapper = document.createElement("div");
   wrapper.className = "match-wrapper";
@@ -621,12 +787,35 @@ function createDuelElement(match) {
   const utcTimestamp = Date.UTC(+year, +month - 1, +day, +hour, +minute, +second);
   const dateObj = new Date(utcTimestamp);
 
-  const dayStr = dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-  const timeStr = dateObj.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+  // Consistent 3-letter month across browsers
+  const MONTHS_3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const dd = String(dateObj.getDate()).padStart(2, "0");
+  const mon = MONTHS_3[dateObj.getMonth()];
+  const dayStr = `${dd} ${mon}`;
+  const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
   const timeDiv = document.createElement("div");
   timeDiv.className = "match-time";
-  timeDiv.innerHTML = `<div>${dayStr} ${timeStr}</div>`;
+
+  // Optional rating stars above time for Today COC matches
+  let ratingHtml = "";
+  if (showRating) {
+    const r = match.rating;
+    const ratingNum = (r === null || r === undefined || r === "") ? null : parseInt(r, 10);
+    if (Number.isInteger(ratingNum)) {
+      if (ratingNum >= 1 && ratingNum <= 5) {
+        const filled = "★".repeat(ratingNum);
+        const empty = "☆".repeat(5 - ratingNum);
+        ratingHtml = `<div class="match-rating">${filled}${empty}</div>`;
+      } else if (ratingNum === 6) {
+        // Show as 5 filled stars, but colored gold
+        const filled = "★".repeat(5);
+        ratingHtml = `<div class="match-rating match-rating--gold">${filled}</div>`;
+      }
+    }
+  }
+
+  timeDiv.innerHTML = `${ratingHtml}<div class="match-time-text">${dayStr} ${timeStr}</div>`;
   container.appendChild(timeDiv);
   const divider = document.createElement("div");
   divider.className = "divider-vertical";
@@ -830,14 +1019,170 @@ function createTournamentHeader(tournament) {
 }
 
 
+let todaySortBy = "event"; // Single UI state controlling Today + Upcoming
+let lastData = null; // cache of last fetched data for re-rendering without refetch
+
 function renderSection(container, title, tournaments, matches) {
   if (!matches || matches.length === 0) return;
 
   const sectionTitle = document.createElement("div");
   sectionTitle.className = "section-title";
-  sectionTitle.textContent = title;
+  // Left side: title text
+  const titleSpan = document.createElement("span");
+  titleSpan.textContent = title;
+  sectionTitle.appendChild(titleSpan);
+
+  const isToday = title === "Today";
+  const isUpcoming = title === "Upcoming Matches";
+  // Right side: only Today — single toggle affects both Today and Upcoming
+  if (isToday) {
+    const toggle = document.createElement("div");
+    toggle.className = "sort-toggle";
+
+    const label = document.createElement("span");
+    label.className = "sort-toggle__label";
+    label.textContent = "Sort by:";
+
+    const options = document.createElement("div");
+    options.className = "sort-toggle__options";
+
+    const optEvent = document.createElement("div");
+    optEvent.className = "sort-toggle__option";
+    optEvent.textContent = "Event";
+
+    const optTime = document.createElement("div");
+    optTime.className = "sort-toggle__option";
+    optTime.textContent = "Time";
+
+    function updateToggleUI() {
+      if (todaySortBy === "event") {
+        optEvent.classList.add("active");
+        optTime.classList.remove("active");
+      } else {
+        optEvent.classList.remove("active");
+        optTime.classList.add("active");
+      }
+    }
+
+    optEvent.addEventListener("click", () => {
+      todaySortBy = "event";
+      updateToggleUI();
+      if (lastData) renderAllSectionsFromData(lastData);
+    });
+    optTime.addEventListener("click", () => {
+      todaySortBy = "time";
+      updateToggleUI();
+      if (lastData) renderAllSectionsFromData(lastData);
+    });
+
+    updateToggleUI();
+
+    options.appendChild(optEvent);
+    options.appendChild(optTime);
+    toggle.appendChild(label);
+    toggle.appendChild(options);
+
+    // Rating explanation: star + info icon with tooltip
+    const ratingHelp = document.createElement("div");
+    ratingHelp.className = "rating-help";
+
+    const star = document.createElement("span");
+    star.className = "rating-star";
+    star.textContent = "★"; // filled star, 12px via CSS
+
+    const info = document.createElement("i");
+    info.className = "fa-solid fa-circle-info rating-info-btn";
+
+    const tooltip = document.createElement("div");
+    tooltip.className = "rating-tooltip";
+    tooltip.innerHTML = `The match rating depends on two things:<br><br>
+1. The average Elo of both players – stronger players → higher base rating.<br><br>
+2. How close their Elo values are – if the ratings are similar, the adjustment increases the match rating slightly (because it’s expected to be a more balanced game).`;
+
+    ratingHelp.appendChild(star);
+    ratingHelp.appendChild(info);
+    ratingHelp.appendChild(tooltip);
+
+    // Toggle tooltip on icon click; close on outside click
+    info.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const visible = tooltip.style.display === "block";
+      tooltip.style.display = visible ? "none" : "block";
+    });
+    // Prevent clicks inside tooltip from closing it
+    tooltip.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+    // Close when clicking anywhere outside the tooltip/ratingHelp block
+    document.addEventListener("click", (e) => {
+      if (!ratingHelp.contains(e.target)) {
+        tooltip.style.display = "none";
+      }
+    });
+
+    toggle.appendChild(ratingHelp);
+    sectionTitle.appendChild(toggle);
+  }
   container.appendChild(sectionTitle);
 
+  // Time mode — single block, all tournaments merged and sorted by time
+  if ((isToday || isUpcoming) && todaySortBy === "time") {
+    const card = document.createElement("div");
+    card.className = "tournament-card time-mode";
+
+    // Map tournament name -> tournament object (logo/name)
+    const tMap = new Map((tournaments || []).map(t => [t.name, t]));
+
+    // Sort matches by time ascending (UTC)
+    const matchesSorted = (matches || []).slice().sort((a, b) => {
+      const [d1, t1] = (a.time || "").split(" ");
+      const [day1, mon1, yr1] = (d1 || "").split(".").map(Number);
+      const [h1, m1, s1] = (t1 || "").split(":").map(Number);
+      const ts1 = Date.UTC(yr1 || 0, (mon1 || 1) - 1, day1 || 1, h1 || 0, m1 || 0, s1 || 0);
+
+      const [d2, t2] = (b.time || "").split(" ");
+      const [day2, mon2, yr2] = (d2 || "").split(".").map(Number);
+      const [h2, m2, s2] = (t2 || "").split(":").map(Number);
+      const ts2 = Date.UTC(yr2 || 0, (mon2 || 1) - 1, day2 || 1, h2 || 0, m2 || 0, s2 || 0);
+
+      return ts1 - ts2;
+    });
+
+    matchesSorted.forEach((match, idx) => {
+      // Divider between matches (show before each, including first, to match spec ordering)
+      const sepTop = document.createElement("div");
+      sepTop.className = "time-mode-separator";
+      card.appendChild(sepTop);
+
+      // Tournament title row (logo + name) above each match
+      const tObj = tMap.get(match.tournament) || { name: match.tournament, logo: match.tournament_logo };
+      const header = createTournamentHeader(tObj);
+      card.appendChild(header);
+
+      // Match row (reuse existing creators)
+      const tType = (tObj && tObj.type) || match.tournament_type;
+      let el;
+      if (tType === "COC") {
+        // Show rating for Today and Upcoming in Time mode
+        el = createDuelElement(match, { showRating: true });
+      } else {
+        el = createMatchElement(match);
+      }
+      card.appendChild(el);
+    });
+
+    // Final bottom separator to mirror pattern (optional)
+    if ((matchesSorted || []).length > 0) {
+      const sepBottom = document.createElement("div");
+      sepBottom.className = "time-mode-separator";
+      card.appendChild(sepBottom);
+    }
+
+    container.appendChild(card);
+    return; // Skip default per-tournament rendering
+  }
+
+  // Default (Event mode and other sections): per-tournament cards
   tournaments.forEach(tournament => {
     const card = document.createElement("div");
     card.className = "tournament-card";
@@ -857,25 +1202,94 @@ function renderSection(container, title, tournaments, matches) {
           card.appendChild(el);
         });
 
-      // 2) COC (compact grid)
+      // 2) COC (compact grid) — hidden by default with toggle on header
       const cocList = filtered.filter(m => (tournament.type || m.tournament_type) === "COC");
       if (cocList.length > 0) {
+        // Create collapsible like TEAM lineups
+        const collapsible = document.createElement("div");
+        collapsible.className = "results-collapsible"; // separate styles for finished results
+
+        const collapsibleInner = document.createElement("div");
+        collapsibleInner.className = "results-collapsible__inner";
+
         const grid = document.createElement("div");
         grid.className = "lastresults-grid";
         cocList.forEach(match => {
-          const el = createDuelElementCompact(match); // без часу, без divider, 2 в ряд на десктопі
+          const el = createDuelElementCompact(match);
           grid.appendChild(el);
         });
-        card.appendChild(grid);
+        collapsibleInner.appendChild(grid);
+        collapsible.appendChild(collapsibleInner);
+
+        // Right-side controls: count badge + chevron
+        const controls = document.createElement("div");
+        controls.className = "results-controls";
+
+        const countBadge = document.createElement("div");
+        countBadge.className = "results-count-badge";
+        countBadge.textContent = String(cocList.length);
+
+        const toggleBtn = document.createElement("div");
+        toggleBtn.className = "chevron";
+        const chevronIcon = document.createElement("i");
+        chevronIcon.className = "fas fa-chevron-down";
+        chevronIcon.style.transition = "transform 0.3s ease";
+        chevronIcon.style.transform = "rotate(180deg)"; // default closed
+        chevronIcon.style.fontSize = "12px";
+        chevronIcon.style.padding = "0 4px";
+        toggleBtn.appendChild(chevronIcon);
+
+        // Ensure clicking the chevron does not navigate the link
+        toggleBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+        });
+
+        // Toggle logic mirrors TEAM lineup behavior
+        toggleBtn.addEventListener("click", () => {
+          const isOpen = collapsible.classList.contains("open");
+          if (isOpen) {
+            collapsible.style.height = collapsible.scrollHeight + "px";
+            requestAnimationFrame(() => {
+              collapsible.style.height = "0px";
+              collapsible.classList.remove("open");
+              chevronIcon.style.transform = "rotate(180deg)";
+            });
+          } else {
+            collapsible.style.height = "0px";
+            collapsible.classList.add("open");
+            chevronIcon.style.transform = "rotate(0deg)";
+            requestAnimationFrame(() => {
+              collapsible.style.height = collapsible.scrollHeight + "px";
+            });
+            collapsible.addEventListener("transitionend", function handler() {
+              if (collapsible.classList.contains("open")) {
+                collapsible.style.height = "auto";
+              }
+              collapsible.removeEventListener("transitionend", handler);
+            });
+          }
+        });
+
+        controls.appendChild(countBadge);
+        controls.appendChild(toggleBtn);
+        header.appendChild(controls);
+        card.appendChild(collapsible);
       }
     } else {
-      // Other sections: original behavior
+      // Other sections: Today / Upcoming Matches
       filtered.forEach(match => {
         const tType = tournament.type || match.tournament_type;
-        const el = (tType === "COC")
-          ? createDuelElement(match)
-          : createMatchElement(match);
-        card.appendChild(el);
+        // For Today and Upcoming + COC add rating above time
+        if (tType === "COC") {
+          const showRating = (title === "Today" || title === "Upcoming Matches");
+          const el = showRating
+            ? createDuelElement(match, { showRating: true })
+            : createDuelElement(match);
+          card.appendChild(el);
+        } else {
+          const el = createMatchElement(match);
+          card.appendChild(el);
+        }
       });
     }
 
@@ -886,7 +1300,7 @@ function renderSection(container, title, tournaments, matches) {
 const autoUpdate = new URLSearchParams(window.location.search).get("autoupdate") === "true";
 
 function fetchWithTimeout(resource, options = {}) {
-  const { timeout = 5000 } = options;
+  const { timeout = 10000 } = options;
   return Promise.race([
     fetch(resource, options),
     new Promise((_, reject) =>
@@ -895,11 +1309,11 @@ function fetchWithTimeout(resource, options = {}) {
   ]);
 }
 
-function fetchAndRenderMatches() {
+  function fetchAndRenderMatches() {
   const primaryURL = "https://api.carcassonne.com.ua/public/matches_new";
   const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches_new.json";
 
-  fetchWithTimeout(primaryURL, { timeout: 5000 })
+  fetchWithTimeout(primaryURL, { timeout: 10000 })
     .then(res => {
       if (!res.ok) throw new Error("Primary source failed");
       return res.json();
@@ -908,20 +1322,25 @@ function fetchAndRenderMatches() {
       console.warn("⚠️ Using fallback match data due to error or timeout:", err.message);
       return fetch(fallbackURL).then(res => res.json());
     })
-    .then(({ matches_today, matches_scheduled, matches_finished, tournaments_today, tournaments_scheduled, tournaments_finished }) => {
-      const container = document.getElementById("matches-container");
-      container.innerHTML = "";
-
-      renderSection(container, "Today", tournaments_today, matches_today);
-      renderSection(container, "Upcoming Matches", tournaments_scheduled, matches_scheduled);
-      renderSection(container, "Last Results", tournaments_finished, matches_finished);
+    .then((data) => {
+      lastData = data;
+      renderAllSectionsFromData(data);
     })
     .catch(err => {
       console.error("❌ Failed to load any match data:", err);
     });
-}
+  }
 
-fetchAndRenderMatches();
+  function renderAllSectionsFromData({ matches_today, matches_scheduled, matches_finished, tournaments_today, tournaments_scheduled, tournaments_finished }) {
+    const container = document.getElementById("matches-container");
+    container.innerHTML = "";
+
+    renderSection(container, "Today", tournaments_today, matches_today);
+    renderSection(container, "Upcoming Matches", tournaments_scheduled, matches_scheduled);
+    renderSection(container, "Last Results", tournaments_finished, matches_finished);
+  }
+
+  fetchAndRenderMatches();
 
 if (autoUpdate) {
   setInterval(fetchAndRenderMatches, 60000);
