@@ -6,16 +6,16 @@ echo "=== $(date '+%Y-%m-%d %H:%M:%S') ===" >> /home/carcassonne-gg/cron_update_
 changes_made=false
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/public/ua2025 -o "$temp_file"
+curl -s https://api.carcassonne.com.ua/public/wc2024 -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
-  mv "$temp_file" ua2025.json
-  if ! git diff --quiet ua2025.json; then
-    git add ua2025.json
-    echo "Updated: ua2025.json" >> /home/carcassonne-gg/cron_update_inperson.log
+  mv "$temp_file" wc2024.json
+  if ! git diff --quiet wc2024.json; then
+    git add wc2024.json
+    echo "Updated: wc2024.json" >> /home/carcassonne-gg/cron_update_inperson.log
     changes_made=true
   fi
 else
-  echo "❌ Failed to fetch or parse ua2025.json (response: $(cat "$temp_file" | head -c 200))" >> /home/carcassonne-gg/cron_update_inperson.log
+  echo "❌ Failed to fetch or parse wc2024.json (response: $(cat "$temp_file" | head -c 200))" >> /home/carcassonne-gg/cron_update_inperson.log
   rm "$temp_file"
 fi
 
