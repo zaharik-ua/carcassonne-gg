@@ -546,12 +546,24 @@ code {
 }
 
 /* When badge present, drop streams slightly below it */
-.match-right.under-badge {
-  margin-top: 12px;
-}
+  .match-right.under-badge {
+    margin-top: 12px;
+  }
+
+  /* Loading indicator */
+  .loading-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .loading-indicator img { height: 32px; width: 32px; }
 
 </style>
-
+<div id="matches-loading" class="loading-indicator">
+  <img src="https://carcassonne.gg/gallery/loading.gif" alt="Loading...">
+  
+</div>
 <div id="matches-container"></div>
 
 <script>
@@ -562,7 +574,8 @@ if (openMatchId) {
 }
 const streamsOff = new URLSearchParams(window.location.search).get("streams") === "false";
 
-function createMatchElement(match) {
+function createMatchElement(match, options = {}) {
+  const { showRating = false } = options;
   // Only for TEAM tournaments
   const wrapper = document.createElement("div");
   wrapper.className = "match-wrapper";
@@ -645,7 +658,25 @@ function createMatchElement(match) {
     
       const timeDiv = document.createElement("div");
       timeDiv.className = "match-time";
-      timeDiv.innerHTML = `<div class="match-time-text">${dayStr} ${timeStr}</div>`;
+
+      // Optional rating stars above time (like COC)
+      let ratingHtml = "";
+      if (showRating) {
+        const r = match.rating;
+        const ratingNum = (r === null || r === undefined || r === "") ? null : parseInt(r, 10);
+        if (Number.isInteger(ratingNum)) {
+          if (ratingNum >= 1 && ratingNum <= 5) {
+            const filled = "★".repeat(ratingNum);
+            const empty = "☆".repeat(5 - ratingNum);
+            ratingHtml = `<div class=\"match-rating\">${filled}${empty}</div>`;
+          } else if (ratingNum === 6) {
+            const filled = "★".repeat(5);
+            ratingHtml = `<div class=\"match-rating match-rating--gold\">${filled}</div>`;
+          }
+        }
+      }
+
+      timeDiv.innerHTML = `${ratingHtml}<div class=\"match-time-text\">${dayStr} ${timeStr}</div>`;
       container.appendChild(timeDiv);
       const divider = document.createElement("div");
       divider.className = "divider-vertical";
@@ -734,7 +765,25 @@ function createMatchElement(match) {
     
       const timeDiv = document.createElement("div");
       timeDiv.className = "match-time";
-      timeDiv.innerHTML = `<div class="match-time-text">${dayStr} ${timeStr}</div>`;
+
+      // Optional rating stars above time (like COC)
+      let ratingHtml = "";
+      if (showRating) {
+        const r = match.rating;
+        const ratingNum = (r === null || r === undefined || r === "") ? null : parseInt(r, 10);
+        if (Number.isInteger(ratingNum)) {
+          if (ratingNum >= 1 && ratingNum <= 5) {
+            const filled = "★".repeat(ratingNum);
+            const empty = "☆".repeat(5 - ratingNum);
+            ratingHtml = `<div class=\"match-rating\">${filled}${empty}</div>`;
+          } else if (ratingNum === 6) {
+            const filled = "★".repeat(5);
+            ratingHtml = `<div class=\"match-rating match-rating--gold\">${filled}</div>`;
+          }
+        }
+      }
+
+      timeDiv.innerHTML = `${ratingHtml}<div class=\"match-time-text\">${dayStr} ${timeStr}</div>`;
       rightDiv.appendChild(timeDiv); 
   } else {
       if (match.dw1 || match.dw2 || match.gw1 || match.gw2) {
@@ -758,13 +807,22 @@ function createMatchElement(match) {
   wrapper.appendChild(container);
   if (match.lineups) wrapper.appendChild(lineupDiv);
 
-  // Playoffs badge (top-right). Also push streams below if present.
-  if (match.stage === "Playoffs" && match.round) {
-    const badge = document.createElement("div");
-    badge.className = "playoff-round-badge";
-    badge.textContent = match.round;
-    container.appendChild(badge);
-    rightDiv.classList.add("under-badge");
+  // Round/Stage badge (top-right). For Playoffs use match.round; otherwise use round_badge if present.
+  {
+    let badgeText = null;
+    if (match.stage === "Stage 2" && match.round) {
+      badgeText = match.round;
+    } else if (match.stage !== "Stage 2") {
+      const rb = match.round_badge;
+      if (typeof rb === 'string' && rb.trim() !== '') badgeText = rb;
+    }
+    if (badgeText) {
+      const badge = document.createElement("div");
+      badge.className = "playoff-round-badge";
+      badge.textContent = badgeText;
+      container.appendChild(badge);
+      rightDiv.classList.add("under-badge");
+    }
   }
 
   return wrapper;
@@ -891,13 +949,22 @@ function createDuelElement(match, options = {}) {
   container.appendChild(rightDiv);
   wrapper.appendChild(container);
 
-  // Playoffs badge (top-right). Also push streams below if present.
-  if (match.stage === "Playoffs" && match.round) {
-    const badge = document.createElement("div");
-    badge.className = "playoff-round-badge";
-    badge.textContent = match.round;
-    container.appendChild(badge);
-    rightDiv.classList.add("under-badge");
+  // Round/Stage badge (top-right). For Playoffs use match.round; otherwise use round_badge if present.
+  {
+    let badgeText = null;
+    if (match.stage === "Stage 2" && match.round) {
+      badgeText = match.round;
+    } else if (match.stage !== "Stage 2") {
+      const rb = match.round_badge;
+      if (typeof rb === 'string' && rb.trim() !== '') badgeText = rb;
+    }
+    if (badgeText) {
+      const badge = document.createElement("div");
+      badge.className = "playoff-round-badge";
+      badge.textContent = badgeText;
+      container.appendChild(badge);
+      rightDiv.classList.add("under-badge");
+    }
   }
 
   return wrapper;
@@ -982,13 +1049,22 @@ function createDuelElementCompact(match) {
   container.appendChild(rightDiv);
   wrapper.appendChild(container);
 
-  // Playoffs badge (top-right). Also push streams below if present.
-  if (match.stage === "Playoffs" && match.round) {
-    const badge = document.createElement("div");
-    badge.className = "playoff-round-badge";
-    badge.textContent = match.round;
-    container.appendChild(badge);
-    rightDiv.classList.add("under-badge");
+  // Round/Stage badge (top-right). For Playoffs use match.round; otherwise use round_badge if present.
+  {
+    let badgeText = null;
+    if (match.stage === "Stage 2" && match.round) {
+      badgeText = match.round;
+    } else if (match.stage !== "Stage 2") {
+      const rb = match.round_badge;
+      if (typeof rb === 'string' && rb.trim() !== '') badgeText = rb;
+    }
+    if (badgeText) {
+      const badge = document.createElement("div");
+      badge.className = "playoff-round-badge";
+      badge.textContent = badgeText;
+      container.appendChild(badge);
+      rightDiv.classList.add("under-badge");
+    }
   }
 
   return wrapper;
@@ -1166,7 +1242,8 @@ function renderSection(container, title, tournaments, matches) {
         // Show rating for Today and Upcoming in Time mode
         el = createDuelElement(match, { showRating: true });
       } else {
-        el = createMatchElement(match);
+        // TEAM: also show rating in Time mode
+        el = createMatchElement(match, { showRating: true });
       }
       card.appendChild(el);
     });
@@ -1287,7 +1364,9 @@ function renderSection(container, title, tournaments, matches) {
             : createDuelElement(match);
           card.appendChild(el);
         } else {
-          const el = createMatchElement(match);
+          // TEAM: show rating on Today/Upcoming like COC
+          const showRating = (title === "Today" || title === "Upcoming Matches");
+          const el = createMatchElement(match, { showRating });
           card.appendChild(el);
         }
       });
@@ -1338,7 +1417,14 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
   }
 }
 
+  function setLoading(visible) {
+    const el = document.getElementById("matches-loading");
+    if (!el) return;
+    el.style.display = visible ? "flex" : "none";
+  }
+
   function fetchAndRenderMatches() {
+  setLoading(true);
   const primaryURL = "https://api.carcassonne.com.ua/public/matches_new";
   const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches_new.json";
 
@@ -1355,9 +1441,11 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
     .then((data) => {
       lastData = data;
       renderAllSectionsFromData(data);
+      setLoading(false);
     })
     .catch(err => {
       console.error("❌ Failed to load any match data:", err);
+      setLoading(false);
     });
   }
 
