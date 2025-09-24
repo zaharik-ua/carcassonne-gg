@@ -590,37 +590,20 @@
     });
   }
 
-function fetchWithTimeout(resource, options = {}) {
-  const { timeout = 5000 } = options;
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-
-  return fetch(resource, {
-    ...options,
-    signal: controller.signal
-  }).finally(() => clearTimeout(id));
-}
-
 async function fetchAndRenderPlayers() {
-  const primaryPlayersURL = "https://api.carcassonne.com.ua/public/players";
-  const primaryAchievementsURL = "https://api.carcassonne.com.ua/public/achievements";
-  const fallbackPlayersURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/masters.json";
-  const fallbackAchievementsURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/achievements.json";
-
-  let playersRes, achievementsRes;
+  // Load only from local JSON files
+  const playersURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/masters.json";
+  const achievementsURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/achievements.json";
 
   try {
-    playersRes = await fetchWithTimeout(primaryPlayersURL, { timeout: 5000 });
-    if (!playersRes.ok) throw new Error("Primary players source failed");
-    achievementsRes = await fetchWithTimeout(primaryAchievementsURL, { timeout: 5000 });
-    if (!achievementsRes.ok) throw new Error("Primary achievements source failed");
-  } catch (error) {
-    console.warn("⚠️ Using fallback data from GitHub Pages.");
-    playersRes = await fetchWithTimeout(fallbackPlayersURL, { timeout: 5000 });
-    achievementsRes = await fetchWithTimeout(fallbackAchievementsURL, { timeout: 5000 });
-  }
+    const [playersRes, achievementsRes] = await Promise.all([
+      fetch(playersURL),
+      fetch(achievementsURL)
+    ]);
+    if (!playersRes.ok || !achievementsRes.ok) {
+      throw new Error("Failed to load JSON files");
+    }
 
-  try {
     const playersData = await playersRes.json();
     const achievementsData = await achievementsRes.json();
 
@@ -632,7 +615,7 @@ async function fetchAndRenderPlayers() {
     setupAchievementTypeFilter(allAchievementTypes);
     renderFilteredPlayers();
   } catch (error) {
-    console.error("❌ Failed to parse player or achievement data:", error);
+    console.error("❌ Failed to load player or achievement data:", error);
   }
 }
 

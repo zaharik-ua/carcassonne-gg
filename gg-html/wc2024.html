@@ -63,6 +63,16 @@
   /* Players: Count label */
   .players-count { color:#ffffff; font-size:14px; font-weight:500; }
 
+  /* Players table: allow multi-line rows */
+  .players-table .data-row { height: auto; }
+
+  /* BGA nickname: break even without spaces */
+  .bga-nick {
+    white-space: normal;
+    overflow-wrap: anywhere; /* allows breaking long strings */
+    word-break: break-word;  /* fallback for broader support */
+  }
+
   .player-logo {
     height: auto;
     width: 22px;
@@ -438,7 +448,7 @@
     section.appendChild(title);
 
     const table = document.createElement("table");
-    table.className = "group-table";
+    table.className = "group-table players-table";
 
     const headTr = document.createElement("tr");
     const thPlayer = document.createElement("th");
@@ -509,7 +519,7 @@
       // Нік на BGA: без змін
       const tdBga = document.createElement("td");
       const bgaSpan = document.createElement("span");
-      bgaSpan.className = "data-normal";
+      bgaSpan.className = "data-normal bga-nick";
       bgaSpan.textContent = p.bga_nickname ? String(p.bga_nickname) : "";
       tdBga.appendChild(bgaSpan);
       tr.appendChild(tdBga);
@@ -644,7 +654,7 @@
     });
 
     let openAccordion = null;
-    roundKeys.forEach(round => {
+    roundKeys.forEach((round, idx) => {
       const section = document.createElement("div");
 
       const toggle = document.createElement("div");
@@ -714,6 +724,13 @@
       section.appendChild(toggle);
       section.appendChild(content);
       container.appendChild(section);
+
+      // Open the first round by default
+      if (idx === 0) {
+        content.style.maxHeight = content.scrollHeight + "px";
+        toggle.classList.add("open");
+        openAccordion = content;
+      }
 
       toggle.addEventListener("click", () => {
         if (openAccordion && openAccordion !== content) {

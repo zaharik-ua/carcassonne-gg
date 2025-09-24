@@ -308,9 +308,16 @@
   .players-name-wrap a { display: block; flex: 1 1 auto; min-width: 0; text-align: left; white-space: normal; word-break: break-word; }
 
   /* Rank (position) data cell */
-  .rank-cell {
-    max-width: 10px;
+  .rank-cell { width: 5%; }
+
+  /* Standings metric columns (MP, MW, ML, GW, GL, etc.) */
+  .standing-metric-col { 
+    min-width: 20px !important;
+    width: 5%; 
   }
+
+  /* Cross Table diagonal (self) cell */
+  .ct-self-cell { background-color: #eee; }
 
   /* Cross Table borders: icon header cols (from 3rd col), and result data cols */
   .group-table.crosstable tr:first-child th:nth-child(n+3) { border-left: 1px solid #bddbfa; }
@@ -626,11 +633,13 @@
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
     //? "Asian-Cup-2025"
+    //? "TECS-2025"
     //? "OCFC-2025"
     //? "UCOCup-2025"
     //? "MOCB-2025"
     //? "CCCC-2025"
-    ? "BCPL-2025-Sum"
+    //? "BCPL-2025-Sum"
+    ? "CZ-2025-COC"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
 
@@ -639,7 +648,6 @@
     document.documentElement.style.setProperty('--main-bg-color', '#d85c5c');
     document.documentElement.style.setProperty('--hover-bg-color', '#c64a4b');
   }
-
 
   let matches = [];
   let duels = [];
@@ -654,7 +662,7 @@
   // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
   const BRACKET_MARGIN = 15;
   const MATCH_HEIGHT = 60;
-  const MATCH_WIDTH = 200;
+  let MATCH_WIDTH = 200;
   const ROUND_TITLE_TO_MATCH_SPACING = 60;
   const VERTICAL_SPACING = 25;
   const HORIZONTAL_SPACING = 30;
@@ -919,7 +927,7 @@
             ? matches
             : duels
           )
-            .filter(d => d.tournament_id === currentTournamentId && d.stage === "Groups" && d.round_order !== null && d.group)
+            .filter(d => d.tournament_id === currentTournamentId && d.round_order !== null && d.group)
             .forEach(d => {
               if (!grouped[d.group]) grouped[d.group] = [];
               grouped[d.group].push(d);
@@ -950,7 +958,7 @@
             ? matches
             : duels
           )
-            .filter(d => d.tournament_id === currentTournamentId && d.stage === "Groups" && d.round_order !== null && d.group)
+            .filter(d => d.tournament_id === currentTournamentId && d.round_order !== null && d.group)
             .forEach(d => {
               if (!grouped[d.group]) grouped[d.group] = [];
               grouped[d.group].push(d);
@@ -1030,16 +1038,16 @@
       if (stage2_format === "Single Elimination") {
         renderSingleElimination(
           currentTournament.type === "TEAM"
-            ? matches.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs")
-            : duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs"),
+            ? matches.filter(d => d.tournament_id === currentTournamentId && d.stage === "Stage 2")
+            : duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Stage 2"),
           stage2Container,
           currentTournament.type
         );
       } else if (stage2_format === "Double Elimination") {
         renderDoubleElimination(
           currentTournament.type === "TEAM"
-            ? matches.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs")
-            : duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Playoffs"),
+            ? matches.filter(d => d.tournament_id === currentTournamentId && d.stage === "Stage 2")
+            : duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Stage 2"),
           stage2Container,
           currentTournament.type
         );
@@ -1360,6 +1368,12 @@
     const container = containerOverride || document.getElementById("tab-standing-content");
     container.innerHTML = '';
     const grouped = {};
+    // Determine stage filter for cross table lookups
+    const stageFilter = (container.id === "tab-stage1-content")
+      ? "Stage 1"
+      : (container.id === "tab-stage2-content")
+        ? "Stage 2"
+        : null;
     standings_list
       .filter(row => row.tournament_id === currentTournamentId && (
         (container.id === "tab-stage1-content" && (!row.stage || row.stage === "Stage 1")) ||
@@ -1510,6 +1524,7 @@
         // Build header
         const headTr = document.createElement('tr');
         const thPos = document.createElement('th');
+        thPos.className = 'rank-cell';
         thPos.textContent = '';
         const thName = document.createElement('th');
         thName.textContent = isTeam ? 'Team' : 'Player';
@@ -1520,24 +1535,28 @@
           if (isTeam) {
             ['MP','MW','ML','DW','DL','GW','GL'].forEach(lbl => {
               const th = document.createElement('th');
+              th.className = 'standing-metric-col';
               th.textContent = lbl;
               headTr.appendChild(th);
             });
           } else {
             ['MP','MW','ML','GW','GL'].forEach(lbl => {
               const th = document.createElement('th');
+              th.className = 'standing-metric-col';
               th.textContent = lbl;
               headTr.appendChild(th);
             });
           }
         } else {
-          // crosstable: avatar/logo columns
-          participants.forEach(part => {
+          // crosstable: avatar/logo columns; if no icon, show participant position number
+          participants.forEach((part, idx) => {
             const th = document.createElement('th');
             if (part.type === 'team' && part.logo) {
               th.innerHTML = `<img src="${part.logo}" class="team-logo" alt="">`;
             } else if (part.type === 'player' && part.avatar) {
               th.innerHTML = `<img src="${part.avatar}" class="player-logo" alt="">`;
+            } else {
+              th.textContent = String(idx + 1);
             }
             headTr.appendChild(th);
           });
@@ -1599,49 +1618,56 @@
           tr.appendChild(tdName);
 
           if (mode === 'standings') {
-            if (isTeam) {
-              const values = [
-                rowData.matches_played,
-                rowData.matches_won,
-                rowData.matches_lost,
-                rowData.duels_won,
-                rowData.duels_lost,
-                rowData.games_won,
-                rowData.games_lost
-              ];
-              values.forEach(val => {
-                const td = document.createElement('td');
-                td.textContent = String(val ?? '');
-                tr.appendChild(td);
-              });
-            } else {
-              const values = [
-                rowData.matches_played,
-                rowData.matches_won,
-                rowData.matches_lost,
-                rowData.games_won,
-                rowData.games_lost
-              ];
-              values.forEach(val => {
-                const td = document.createElement('td');
-                td.textContent = String(val ?? '');
-                tr.appendChild(td);
-              });
-            }
+          if (isTeam) {
+            const values = [
+              rowData.matches_played,
+              rowData.matches_won,
+              rowData.matches_lost,
+              rowData.duels_won,
+              rowData.duels_lost,
+              rowData.games_won,
+              rowData.games_lost
+            ];
+            values.forEach((val, i) => {
+              const td = document.createElement('td');
+              td.textContent = String(val ?? '');
+              // Highlight MW column (index 1 in values)
+              if (i === 1) td.style.fontWeight = '600';
+              tr.appendChild(td);
+            });
+          } else {
+            const values = [
+              rowData.matches_played,
+              rowData.matches_won,
+              rowData.matches_lost,
+              rowData.games_won,
+              rowData.games_lost
+            ];
+            values.forEach((val, i) => {
+              const td = document.createElement('td');
+              td.textContent = String(val ?? '');
+              // Highlight MW column (index 1 in values)
+              if (i === 1) td.style.fontWeight = '600';
+              tr.appendChild(td);
+            });
+          }
           } else {
             debugger;
             // crosstable: fill cells with existing results
             participants.forEach(colPart => {
               const td = document.createElement('td');
               let text = '';
-              // skip self cell
+              let isSelf = false;
+              // diagonal (self) cell should stay empty and be shaded
               if (isTeam) {
                 const teamRow = rowData.team;
                 const teamCol = colPart.name;
-                if (teamRow && teamCol && teamRow !== teamCol) {
+                if (teamRow && teamCol && teamRow === teamCol) {
+                  isSelf = true;
+                } else if (teamRow && teamCol) {
                   const candidates = (matches || []).filter(m => m.tournament_id === currentTournamentId && (
                     (m.team1 === teamRow && m.team2 === teamCol) || (m.team1 === teamCol && m.team2 === teamRow)
-                  ) && (!group || !m.group || m.group === group));
+                  ) && (!group || !m.group || m.group === group) && (!stageFilter || m.stage === stageFilter));
                   // choose the latest by time if multiple
                   const picked = candidates.sort((a,b) => {
                     const ta = Date.parse((a.time||'').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
@@ -1659,10 +1685,12 @@
               } else {
                 const pidRow = rowData.player_id;
                 const pidCol = colPart.id;
-                if (pidRow && pidCol && pidRow !== pidCol) {
+                if (pidRow && pidCol && pidRow === pidCol) {
+                  isSelf = true;
+                } else if (pidRow && pidCol) {
                   const candidates = (duels || []).filter(m => m.tournament_id === currentTournamentId && (
                     (m.player1_id === pidRow && m.player2_id === pidCol) || (m.player1_id === pidCol && m.player2_id === pidRow)
-                  ) && (!group || !m.group || m.group === group));
+                  ) && (!group || !m.group || m.group === group) && (!stageFilter || m.stage === stageFilter));
                   const picked = candidates.sort((a,b) => {
                     const ta = Date.parse((a.time||'').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
                     const tb = Date.parse((b.time||'').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
@@ -1676,6 +1704,10 @@
                     }
                   }
                 }
+              }
+              if (isSelf) {
+                td.classList.add('ct-self-cell');
+                text = '';
               }
               td.textContent = text;
               tr.appendChild(td);
@@ -1827,7 +1859,7 @@
       const table = document.createElement("table");
       table.className = "match-table";
 
-      const isGroupStage = roundMatches[0]?.stage === "Groups" || roundMatches[0]?.stage === "Group";
+      const isGroupStage = !!(currentTournament && currentTournament.stage1_groups === "Groups");
 
       roundMatches.forEach(g => {
         const row = document.createElement("tr");
@@ -2310,8 +2342,11 @@
           if (team1Logo) team1Info.appendChild(team1Logo);
           const team1Name = document.createElement("span");
           team1Name.textContent = m.team1;
-          team1Name.style.maxWidth = "150px";
+          team1Name.style.maxWidth = `${MATCH_WIDTH - 60}px`;
           team1Name.style.display = "inline-block";
+          team1Name.style.whiteSpace = "nowrap";
+          team1Name.style.overflow = "hidden";
+          team1Name.style.textOverflow = "ellipsis";
           team1Info.appendChild(team1Name);
           const score1Span = document.createElement("span");
           score1Span.textContent = m.duels_won1;
@@ -2334,8 +2369,11 @@
           if (team2Logo) team2Info.appendChild(team2Logo);
           const team2Name = document.createElement("span");
           team2Name.textContent = m.team2;
-          team2Name.style.maxWidth = "150px";
+          team2Name.style.maxWidth = `${MATCH_WIDTH - 60}px`;
           team2Name.style.display = "inline-block";
+          team2Name.style.whiteSpace = "nowrap";
+          team2Name.style.overflow = "hidden";
+          team2Name.style.textOverflow = "ellipsis";
           team2Info.appendChild(team2Name);
           const score2Span = document.createElement("span");
           score2Span.textContent = m.duels_won2;
@@ -2364,7 +2402,7 @@
           }
           player1Link.textContent = m.player1;
           // Add maxWidth and display for truncation
-          player1Link.style.maxWidth = "140px";
+          player1Link.style.maxWidth = `${MATCH_WIDTH - 60}px`;
           player1Link.style.display = "inline-block";
           const player1Info = document.createElement("div");
           player1Info.style.display = "flex";
@@ -2396,7 +2434,7 @@
           }
           player2Link.textContent = m.player2;
           // Add maxWidth and display for truncation
-          player2Link.style.maxWidth = "140px";
+          player2Link.style.maxWidth = `${MATCH_WIDTH - 60}px`;
           player2Link.style.display = "inline-block";
           const player2Info = document.createElement("div");
           player2Info.style.display = "flex";
@@ -2521,6 +2559,17 @@
         }
       }
     }
+
+    // Optionally override MATCH_WIDTH from currentTournament (ignore null/empty)
+    if (currentTournament && currentTournament.hasOwnProperty('match_width')) {
+      const mw = currentTournament.match_width;
+      if (mw !== null && mw !== "" && mw !== undefined) {
+        const parsedMw = Number(mw);
+        if (!Number.isNaN(parsedMw)) {
+          MATCH_WIDTH = parsedMw;
+        }
+      }
+    }
     // Build layout and UI for playoff bracket including match positions, labels, and connectors
     let container;
     let bracketDiv;
@@ -2606,6 +2655,17 @@
         const parsed = Number(tpo);
         if (!Number.isNaN(parsed)) {
           THIRD_PLACE_VERTICAL_OFFSET = parsed;
+        }
+      }
+    }
+
+    // Optionally override MATCH_WIDTH from currentTournament (ignore null/empty)
+    if (currentTournament && currentTournament.hasOwnProperty('match_width')) {
+      const mw = currentTournament.match_width;
+      if (mw !== null && mw !== "" && mw !== undefined) {
+        const parsedMw = Number(mw);
+        if (!Number.isNaN(parsedMw)) {
+          MATCH_WIDTH = parsedMw;
         }
       }
     }

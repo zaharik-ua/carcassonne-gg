@@ -1,5 +1,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<!-- Material Icons Round for rating stars -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Icons+Round" rel="stylesheet">
 <style>
 body {
     font-family: 'Montserrat', sans-serif;
@@ -165,19 +167,27 @@ code {
     font-size: 12px;
     line-height: 14px;
     font-weight: bold;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
 
   .match-rating {
-    font-size: 8px;
-    line-height: 10px;
+    font-size: 0; /* use icon font sizes instead */
+    line-height: 1;
     margin-bottom: 2px;
-    color: #333; /* default grey for ratings 1-5 */
+  }
+
+  /* Size stars nicely for compact rows */
+  .match-rating .material-icons-round {
+    font-size: 9.5px;
+    line-height: 8px;
+    vertical-align: middle;
+    letter-spacing: -1.5px;
   }
 
   /* Special style for rating 6: gold stars only */
-  .match-rating--gold {
-    color: #DAA520;
-  }
+  .match-rating--gold {}
 
   .match-time-text {
     font-size: 12px;
@@ -574,6 +584,35 @@ if (openMatchId) {
 }
 const streamsOff = new URLSearchParams(window.location.search).get("streams") === "false";
 
+// Build rating stars element (1-5 grey stars, 6 = 5 gold stars)
+function createRatingElement(rating) {
+  const rNum = (rating === null || rating === undefined || rating === "") ? null : parseInt(rating, 10);
+  if (!Number.isInteger(rNum)) return null;
+
+  const wrap = document.createElement("div");
+  wrap.className = "match-rating" + (rNum === 6 ? " match-rating--gold" : "");
+
+  const total = 5;
+  const filledCount = (rNum >= 1 && rNum <= 5) ? rNum : (rNum === 6 ? 5 : 0);
+  const emptyCount = total - filledCount;
+
+  for (let i = 0; i < filledCount; i++) {
+    const s = document.createElement("span");
+    s.className = "material-icons-round";
+    s.textContent = "star";
+    s.style.color = (rNum === 6) ? "#DAA520" : "#333";
+    wrap.appendChild(s);
+  }
+  for (let i = 0; i < emptyCount; i++) {
+    const s = document.createElement("span");
+    s.className = "material-icons-round";
+    s.textContent = "star";
+    s.style.color = "#bbb";
+    wrap.appendChild(s);
+  }
+  return wrap;
+}
+
 function createMatchElement(match, options = {}) {
   const { showRating = false } = options;
   // Only for TEAM tournaments
@@ -659,24 +698,15 @@ function createMatchElement(match, options = {}) {
       const timeDiv = document.createElement("div");
       timeDiv.className = "match-time";
 
-      // Optional rating stars above time (like COC)
-      let ratingHtml = "";
+      // Optional rating stars above time (create DOM to avoid nesting issues)
       if (showRating) {
-        const r = match.rating;
-        const ratingNum = (r === null || r === undefined || r === "") ? null : parseInt(r, 10);
-        if (Number.isInteger(ratingNum)) {
-          if (ratingNum >= 1 && ratingNum <= 5) {
-            const filled = "★".repeat(ratingNum);
-            const empty = "☆".repeat(5 - ratingNum);
-            ratingHtml = `<div class=\"match-rating\">${filled}${empty}</div>`;
-          } else if (ratingNum === 6) {
-            const filled = "★".repeat(5);
-            ratingHtml = `<div class=\"match-rating match-rating--gold\">${filled}</div>`;
-          }
-        }
+        const ratingEl = createRatingElement(match.rating);
+        if (ratingEl) timeDiv.appendChild(ratingEl);
       }
-
-      timeDiv.innerHTML = `${ratingHtml}<div class=\"match-time-text\">${dayStr} ${timeStr}</div>`;
+      const timeTextEl = document.createElement("div");
+      timeTextEl.className = "match-time-text";
+      timeTextEl.textContent = `${dayStr} ${timeStr}`;
+      timeDiv.appendChild(timeTextEl);
       container.appendChild(timeDiv);
       const divider = document.createElement("div");
       divider.className = "divider-vertical";
@@ -766,24 +796,15 @@ function createMatchElement(match, options = {}) {
       const timeDiv = document.createElement("div");
       timeDiv.className = "match-time";
 
-      // Optional rating stars above time (like COC)
-      let ratingHtml = "";
+      // Optional rating stars above time (create DOM to avoid nesting issues)
       if (showRating) {
-        const r = match.rating;
-        const ratingNum = (r === null || r === undefined || r === "") ? null : parseInt(r, 10);
-        if (Number.isInteger(ratingNum)) {
-          if (ratingNum >= 1 && ratingNum <= 5) {
-            const filled = "★".repeat(ratingNum);
-            const empty = "☆".repeat(5 - ratingNum);
-            ratingHtml = `<div class=\"match-rating\">${filled}${empty}</div>`;
-          } else if (ratingNum === 6) {
-            const filled = "★".repeat(5);
-            ratingHtml = `<div class=\"match-rating match-rating--gold\">${filled}</div>`;
-          }
-        }
+        const ratingEl = createRatingElement(match.rating);
+        if (ratingEl) timeDiv.appendChild(ratingEl);
       }
-
-      timeDiv.innerHTML = `${ratingHtml}<div class=\"match-time-text\">${dayStr} ${timeStr}</div>`;
+      const timeTextEl = document.createElement("div");
+      timeTextEl.className = "match-time-text";
+      timeTextEl.textContent = `${dayStr} ${timeStr}`;
+      timeDiv.appendChild(timeTextEl);
       rightDiv.appendChild(timeDiv); 
   } else {
       if (match.dw1 || match.dw2 || match.gw1 || match.gw2) {
@@ -855,25 +876,15 @@ function createDuelElement(match, options = {}) {
   const timeDiv = document.createElement("div");
   timeDiv.className = "match-time";
 
-  // Optional rating stars above time for Today COC matches
-  let ratingHtml = "";
+  // Optional rating stars above time for Today COC matches (create DOM)
   if (showRating) {
-    const r = match.rating;
-    const ratingNum = (r === null || r === undefined || r === "") ? null : parseInt(r, 10);
-    if (Number.isInteger(ratingNum)) {
-      if (ratingNum >= 1 && ratingNum <= 5) {
-        const filled = "★".repeat(ratingNum);
-        const empty = "☆".repeat(5 - ratingNum);
-        ratingHtml = `<div class="match-rating">${filled}${empty}</div>`;
-      } else if (ratingNum === 6) {
-        // Show as 5 filled stars, but colored gold
-        const filled = "★".repeat(5);
-        ratingHtml = `<div class="match-rating match-rating--gold">${filled}</div>`;
-      }
-    }
+    const ratingEl = createRatingElement(match.rating);
+    if (ratingEl) timeDiv.appendChild(ratingEl);
   }
-
-  timeDiv.innerHTML = `${ratingHtml}<div class="match-time-text">${dayStr} ${timeStr}</div>`;
+  const timeTextEl = document.createElement("div");
+  timeTextEl.className = "match-time-text";
+  timeTextEl.textContent = `${dayStr} ${timeStr}`;
+  timeDiv.appendChild(timeTextEl);
   container.appendChild(timeDiv);
   const divider = document.createElement("div");
   divider.className = "divider-vertical";
@@ -1163,8 +1174,8 @@ function renderSection(container, title, tournaments, matches) {
     ratingHelp.className = "rating-help";
 
     const star = document.createElement("span");
-    star.className = "rating-star";
-    star.textContent = "★"; // filled star, 12px via CSS
+    star.className = "material-icons-round rating-star";
+    star.textContent = "star"; // material icon
 
     const info = document.createElement("i");
     info.className = "fa-solid fa-circle-info rating-info-btn";

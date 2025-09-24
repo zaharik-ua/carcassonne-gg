@@ -284,9 +284,9 @@
   let currentTournamentId = "UA2025";
   let currentTournament = null;
 
-  // Language detection: English if URL path contains "/en/"
-  const isEn = typeof window !== 'undefined' && window.location && window.location.pathname.includes('/en/');
-  const t = (ua, en) => (isEn ? en : ua);
+  // Language: force Ukrainian (disable /en/ version)
+  const isEn = false;
+  const t = (ua, en) => ua;
 
   // Data arrays for UA2025 single source JSON
   let players = [];

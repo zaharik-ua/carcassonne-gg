@@ -81,45 +81,22 @@
 
 <!-- СКРИПТ -->
 <script>
-  function fetchWithTimeout(resource, options = {}) {
-    const { timeout = 5000 } = options;
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
-
-    return fetch(resource, {
-      ...options,
-      signal: controller.signal
-    }).finally(() => clearTimeout(id));
-  }
-
-  async function tryFetch(url) {
-    const res = await fetchWithTimeout(url, { timeout: 5000 });
-    if (!res.ok) throw new Error(`Fetch failed from ${url}`);
-    return res.json();
-  }
-
   async function fetchTop10Players() {
-    const primaryURL = "https://api.carcassonne.com.ua/public/players";
-    const backupURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/masters.json";
-
+    const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/masters.json";
     try {
-      const data = await tryFetch(primaryURL);
+      const res = await fetch(dataURL);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
       renderTop10(data.masters);
-    } catch (err1) {
-      console.warn("⚠️ Primary source failed. Trying backup...");
-      try {
-        const data = await tryFetch(backupURL);
-        renderTop10(data.masters);
-      } catch (err2) {
-        console.error("❌ Failed to load players from both sources:", err2);
-      }
+    } catch (err) {
+      console.error("❌ Failed to load players:", err);
     }
   }
 
   function renderTop10(playersData) {
     const players = playersData
-      .filter(p => p.top_elo)
-      .sort((a, b) => b.top_elo - a.top_elo)
+      .filter(p => Number.isFinite(Number(p.peak_elo_2025)))
+      .sort((a, b) => Number(b.peak_elo_2025) - Number(a.peak_elo_2025))
       .slice(0, 10);
 
     const container = document.getElementById("top10-container");
@@ -155,7 +132,7 @@
 
       const elo = document.createElement("code");
       elo.className = "top-elo-rating";
-      elo.textContent = `${player.top_elo}`;
+      elo.textContent = `${player.peak_elo_2025}`;
 
       row.appendChild(left);
       row.appendChild(elo);
