@@ -115,10 +115,16 @@
   .news-description-content {
     font-size: 12px;
     line-height: 1.5;
-    padding: 3px 0;
   }
   .news-description-content-high {
     font-size: 13px;
+  }
+  .news-description-time {
+    font-size: 11px;
+    color: #545454;
+    margin-bottom: 4px;
+    word-break: break-word;
+    padding: 7px 0 0 0;
   }
   .news-description-date {
     font-size: 11px;
@@ -261,6 +267,115 @@
     border: 1px solid #ccc;
     border-top: none;
   }
+  .news-category-selector {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    margin: 0;
+    min-width: 150px;
+    align-self: flex-start;
+  }
+  .news-category-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 1px 8px;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    font-size: 14px;
+    cursor: pointer;
+    gap: 6px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    font-family: inherit;
+  }
+  .news-category-toggle:hover,
+  .news-category-toggle:focus-visible {
+    border-color: #b5c5d3;
+    box-shadow: 0 0 0 1px rgba(17, 131, 192, 0.15);
+    outline: none;
+  }
+  .news-category-toggle.open {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .news-category-toggle.select-placeholder .news-category-label {
+    color: #808080;
+  }
+  .news-category-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    font-weight: 400;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .news-category-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    color: #555;
+  }
+  .news-category-chevron i {
+    transition: transform 0.3s ease;
+    font-size: 12px;
+  }
+  .news-category-toggle.open .news-category-chevron i {
+    transform: rotate(180deg);
+  }
+  .news-category-content {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.3s ease;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .news-category-content.open {
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 2px 2px;
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(17, 131, 192, 0.08);
+  }
+  .news-category-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 4px 8px;
+    background: #fff;
+    border-top: 1px solid #e2e2e2;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    gap: 6px;
+    border: none;
+    color: inherit;
+    font-family: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .news-category-row:first-child {
+    border-top: none;
+  }
+  .news-category-row:hover {
+    background-color: #f5f5f5;
+  }
+  .news-category-row.active {
+    background-color: #e4f0fb;
+  }
+  .news-category-empty {
+    padding: 6px 8px;
+    font-size: 12px;
+    color: #666;
+    background: #fff;
+  }
   .news-filter-option {
     font-size: 12px;
     cursor: pointer;
@@ -305,21 +420,6 @@
     border-radius: 4px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
   }
-  .news-modal-close {
-    position: absolute;
-    top: -12px;
-    right: -12px;
-    background: #fff;
-    border: none;
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    font-size: 18px;
-    line-height: 28px;
-    cursor: pointer;
-    padding: 0;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-  }
 </style>
 
 <div class="news-header">
@@ -354,18 +454,11 @@
     imageModal.className = "news-modal";
     imageModal.innerHTML = `
       <div class="news-modal-content">
-        <button class="news-modal-close" aria-label="Close preview">&times;</button>
         <img src="" alt="News preview">
       </div>
     `;
 
-    imageModal.addEventListener("click", event => {
-      if (event.target === imageModal) {
-        closeImageModal();
-      }
-    });
-
-    imageModal.querySelector(".news-modal-close").addEventListener("click", closeImageModal);
+    imageModal.addEventListener("click", closeImageModal);
 
     document.addEventListener("keydown", event => {
       if (event.key === "Escape" && imageModal.classList.contains("open")) {
@@ -404,6 +497,13 @@
   let countryLabel = null;
   let countryChevronIcon = null;
   let isCountryDropdownOpen = false;
+  let availableCategories = [];
+  let selectedCategory = null;
+  let categoryToggle = null;
+  let categoryContent = null;
+  let categoryLabel = null;
+  let categoryChevronIcon = null;
+  let isCategoryDropdownOpen = false;
 
   const normalizeImportance = (value) => {
     const normalized = String(value ?? "").trim().toLowerCase();
@@ -451,6 +551,98 @@
     const month = monthLabels[date.getMonth()] || "";
     const year = date.getFullYear();
     return month ? `${day}.${month} ${year}` : "";
+  };
+
+  const formatNewsTime = (value) => {
+    if (!value) {
+      return "";
+    }
+
+    const trimmed = String(value).trim();
+    if (!trimmed) {
+      return "";
+    }
+
+    const [datePart = "", rawTimePart = "00:00"] = trimmed.split(/\s+/);
+    if (!datePart) {
+      return "";
+    }
+
+    const separatorMatch = datePart.match(/[./-]/);
+    const separator = separatorMatch ? separatorMatch[0] : null;
+
+    const fallbackFormat = () => {
+      const timestamp = parseDateTime(trimmed);
+      if (!timestamp) {
+        return "";
+      }
+      const fallbackDate = new Date(timestamp);
+      if (Number.isNaN(fallbackDate.getTime())) {
+        return "";
+      }
+      const fallbackMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const fallbackMonthLabel = fallbackMonths[fallbackDate.getMonth()];
+      if (!fallbackMonthLabel) {
+        return "";
+      }
+      const fallbackDayLabel = String(fallbackDate.getDate()).padStart(2, "0");
+      const fallbackTimeLabel = fallbackDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+      return `${fallbackDayLabel} ${fallbackMonthLabel} ${fallbackTimeLabel}`;
+    };
+
+    if (!separator) {
+      return fallbackFormat();
+    }
+
+    const dateSegments = datePart.split(separator);
+    if (dateSegments.length !== 3) {
+      return fallbackFormat();
+    }
+
+    let daySegment;
+    let monthSegment;
+    let yearSegment;
+
+    if (separator === "-" && dateSegments[0].length === 4) {
+      [yearSegment, monthSegment, daySegment] = dateSegments;
+    } else {
+      [daySegment, monthSegment, yearSegment] = dateSegments;
+    }
+
+    if (!daySegment || !monthSegment || !yearSegment) {
+      return fallbackFormat();
+    }
+
+    const normalizedYear = yearSegment.length === 2 ? `20${yearSegment}` : yearSegment;
+    const [hourSegment = "0", minuteSegment = "0", secondSegment = "0"] = rawTimePart.split(":");
+
+    const utcTimestamp = Date.UTC(
+      Number(normalizedYear),
+      Number(monthSegment) - 1,
+      Number(daySegment),
+      Number(hourSegment),
+      Number(minuteSegment),
+      Number(secondSegment)
+    );
+
+    if (Number.isNaN(utcTimestamp)) {
+      return fallbackFormat();
+    }
+
+    const localDate = new Date(utcTimestamp);
+    if (Number.isNaN(localDate.getTime())) {
+      return fallbackFormat();
+    }
+
+    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthLabel = monthLabels[localDate.getMonth()];
+    if (!monthLabel) {
+      return fallbackFormat();
+    }
+
+    const dayLabel = String(localDate.getDate()).padStart(2, "0");
+    const timeLabel = localDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    return `${dayLabel} ${monthLabel} ${timeLabel}`;
   };
 
   const updateFilterButtonsState = () => {
@@ -626,6 +818,116 @@
     updateCountryDropdownHeight();
   };
 
+  const updateCategoryDropdownHeight = () => {
+    if (!categoryContent) {
+      return;
+    }
+    if (isCategoryDropdownOpen) {
+      categoryContent.style.maxHeight = `${categoryContent.scrollHeight}px`;
+    } else {
+      categoryContent.style.maxHeight = "0px";
+    }
+  };
+
+  const setCategoryDropdownOpen = (isOpen) => {
+    isCategoryDropdownOpen = Boolean(isOpen);
+    if (categoryToggle) {
+      categoryToggle.classList.toggle("open", isCategoryDropdownOpen);
+    }
+    if (categoryContent) {
+      categoryContent.classList.toggle("open", isCategoryDropdownOpen);
+    }
+    if (categoryChevronIcon) {
+      categoryChevronIcon.style.transform = isCategoryDropdownOpen ? "rotate(180deg)" : "rotate(0deg)";
+    }
+    updateCategoryDropdownHeight();
+  };
+
+  const updateCategoryLabel = () => {
+    if (!categoryLabel) {
+      return;
+    }
+    categoryLabel.textContent = selectedCategory || "Category: All";
+    if (categoryToggle) {
+      categoryToggle.classList.toggle("select-placeholder", !selectedCategory);
+    }
+  };
+
+  const updateCategoryRowsSelection = () => {
+    if (!categoryContent) {
+      return;
+    }
+    categoryContent.querySelectorAll(".news-category-row").forEach(row => {
+      const value = row.dataset.category || "";
+      row.classList.toggle("active", selectedCategory ? value === selectedCategory : value === "");
+    });
+  };
+
+  const createCategoryRow = (categoryName, label) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "news-category-row";
+    row.dataset.category = categoryName || "";
+
+    const span = document.createElement("span");
+    span.textContent = label;
+    row.appendChild(span);
+
+    row.addEventListener("click", () => {
+      setSelectedCategory(categoryName || null);
+      setCategoryDropdownOpen(false);
+    });
+
+    return row;
+  };
+
+  const buildCategoryRows = () => {
+    if (!categoryContent) {
+      return;
+    }
+
+    categoryContent.innerHTML = "";
+
+    if (!availableCategories.length) {
+      const empty = document.createElement("div");
+      empty.className = "news-category-empty";
+      empty.textContent = "No categories available";
+      categoryContent.appendChild(empty);
+      updateCategoryDropdownHeight();
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(createCategoryRow(null, "Category: All"));
+
+    availableCategories.forEach(category => {
+      fragment.appendChild(createCategoryRow(category, category));
+    });
+
+    categoryContent.appendChild(fragment);
+    updateCategoryRowsSelection();
+    updateCategoryDropdownHeight();
+  };
+
+  const setSelectedCategory = (categoryName) => {
+    const normalized = categoryName ? String(categoryName).trim() : "";
+    if (normalized && availableCategories.includes(normalized)) {
+      selectedCategory = normalized;
+    } else {
+      selectedCategory = null;
+    }
+    updateCategoryLabel();
+    updateCategoryRowsSelection();
+    renderNewsList();
+  };
+
+  const refreshCategorySelector = () => {
+    buildCategoryRows();
+    updateCategoryLabel();
+    updateCategoryRowsSelection();
+    updateCategoryDropdownHeight();
+  };
+
   function renderNewsList() {
     if (!newsContainer) {
       return;
@@ -652,6 +954,12 @@
       itemsToRender = itemsToRender.filter(item => {
         const itemCountries = extractCountries(item.countries);
         return itemCountries.includes(selectedCountry);
+      });
+    }
+    if (selectedCategory) {
+      itemsToRender = itemsToRender.filter(item => {
+        const categoryValue = String(item.category ?? "").trim();
+        return categoryValue === selectedCategory;
       });
     }
 
@@ -732,6 +1040,14 @@
 
         descriptionBlock = document.createElement("div");
         descriptionBlock.className = "news-description";
+        const rawTimeValue = newsItem.time != null ? String(newsItem.time).trim() : "";
+        const formattedTimeValue = rawTimeValue ? (formatNewsTime(rawTimeValue) || rawTimeValue) : "";
+        if (formattedTimeValue) {
+          const descriptionTime = document.createElement("div");
+          descriptionTime.className = "news-description-time";
+          descriptionTime.textContent = formattedTimeValue;
+          descriptionBlock.appendChild(descriptionTime);
+        }
         const descriptionContent = document.createElement("div");
         descriptionContent.className = "news-description-content";
         if (normalizedImportance === "high") {
@@ -835,10 +1151,41 @@
     countryWrapper.appendChild(countryContent);
 
     optionsWrapper.appendChild(countryWrapper);
+
+    const categoryWrapper = document.createElement("div");
+    categoryWrapper.className = "news-category-selector";
+
+    categoryToggle = document.createElement("button");
+    categoryToggle.type = "button";
+    categoryToggle.className = "news-category-toggle select-placeholder";
+
+    categoryLabel = document.createElement("div");
+    categoryLabel.className = "news-category-label";
+    categoryToggle.appendChild(categoryLabel);
+
+    const categoryChevron = document.createElement("div");
+    categoryChevron.className = "news-category-chevron";
+    categoryChevronIcon = document.createElement("i");
+    categoryChevronIcon.className = "fa fa-chevron-down";
+    categoryChevron.appendChild(categoryChevronIcon);
+    categoryToggle.appendChild(categoryChevron);
+
+    categoryToggle.addEventListener("click", () => {
+      setCategoryDropdownOpen(!isCategoryDropdownOpen);
+    });
+
+    categoryContent = document.createElement("div");
+    categoryContent.className = "news-category-content";
+
+    categoryWrapper.appendChild(categoryToggle);
+    categoryWrapper.appendChild(categoryContent);
+
+    optionsWrapper.appendChild(categoryWrapper);
     filtersPanel.appendChild(optionsWrapper);
 
     updateFilterButtonsState();
     refreshCountrySelector();
+    refreshCategorySelector();
   }
 
   let isFilterPanelOpen = false;
@@ -849,6 +1196,7 @@
         isFilterPanelOpen = false;
         filterToggleButton.setAttribute("aria-expanded", "false");
         setCountryDropdownOpen(false);
+        setCategoryDropdownOpen(false);
         filtersPanel.style.height = `${filtersPanel.scrollHeight}px`;
         requestAnimationFrame(() => {
           filtersPanel.style.height = "0px";
@@ -863,6 +1211,7 @@
         });
         requestAnimationFrame(() => {
           updateCountryDropdownHeight();
+          updateCategoryDropdownHeight();
         });
       }
     };
@@ -927,7 +1276,13 @@
           selectedCountry = null;
         }
 
+        availableCategories = Array.from(new Set(allNewsItems.map(item => String(item?.category ?? "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+        if (selectedCategory && !availableCategories.includes(selectedCategory)) {
+          selectedCategory = null;
+        }
+
         refreshCountrySelector();
+        refreshCategorySelector();
         renderNewsList();
       })
       .catch(err => {
@@ -935,7 +1290,10 @@
         countryDataMap = new Map();
         availableCountries = [];
         selectedCountry = null;
+        availableCategories = [];
+        selectedCategory = null;
         refreshCountrySelector();
+        refreshCategorySelector();
         if (newsContainer) {
           newsContainer.textContent = "❌ Failed to load news.";
         }

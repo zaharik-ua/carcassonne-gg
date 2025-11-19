@@ -432,7 +432,9 @@
 
         sortedCountries.forEach(country => {
           const tourneys = countryMap[country];
-          const latest = tourneys.find(t => t.start_date) || tourneys[0];
+          const latest = tourneys.find(t => t.start_date && t.hidden !== "Yes")
+            || tourneys.find(t => t.hidden !== "Yes")
+            || tourneys[0];
           let row;
           if (country === currentCountry) {
             row = document.createElement("div");
@@ -489,7 +491,9 @@
 
         sortedCountries.forEach(country => {
           const tourneys = countryMap[country];
-          const latest = tourneys.find(t => t.start_date) || tourneys[0];
+          const latest = tourneys.find(t => t.start_date && t.hidden !== "Yes")
+            || tourneys.find(t => t.hidden !== "Yes")
+            || tourneys[0];
           let row;
           if (country === currentCountry) {
             row = document.createElement("div");

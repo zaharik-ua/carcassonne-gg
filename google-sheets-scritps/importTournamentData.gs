@@ -23,14 +23,23 @@ function importAllTournamentData() {
 
   // Налаштування джерел: кожен об'єкт — окремий файл
   const sources = [
-    
-    // Asian Cup
+
+    // ETCOC 2025
     {
-      fileId: "1POamfnVvDgT24iQjsBTbfpQVT5oqLtpH6g5moP-Tfec",
+      fileId: "109idkP0idm7YVG1rGf57HfgJsXf2MsA18ITMBzCC8gw",
       sheets: {
         "2025 Matches": { targetSheet: "Matches", startCol: 2, endCol: 19 }, // B–S
-        "2025 Duels": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "Asian-Cup-2025" },     // C–V
-        "2025 Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 5 }, // A–E
+        "2025 Duels": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "ETCOC-2025" },     // C–V
+        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
+      }
+    },
+
+    // CCL
+    {
+      fileId: "1KMye5MRf204O5cTRWohnDLrg24dpZdGLFz3xlwsJhdA",
+      sheets: {
+        "CCL-2026Q": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "CCL-2026Q" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–K
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     },
@@ -45,13 +54,12 @@ function importAllTournamentData() {
       }
     },
 
-    // Spain TECS
+    // Ukraine
     {
-      fileId: "1KaZXBqDYzQMulvu6ueEDr7a86Z5YRY_WNnGNMPuEelI",
+      fileId: "1Jc5uG0WQer2OgDsgaLsDN7MOLPWt7VCaou1aOQVNykk",
       sheets: {
-        "TECS-2025 Matches": { targetSheet: "Matches", startCol: 2, endCol: 19 }, // B–S
-        "TECS-2025 Duels": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "TECS-2025" },     // C–V
-        "TECS-2025 Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 5 }, // A–E
+        "UCOCup-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "UCOCup-2025" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     },
@@ -60,7 +68,8 @@ function importAllTournamentData() {
     {
       fileId: "17sAfGdBHuwSTfyLtfjiYslbeFt3LGzDnDUKyBZverZM",
       sheets: {
-        "BCPL-2025-Sum": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "BCPL-2025-Sum" },     // C–V
+        "BCPL-2025-AUT": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "BCPL-2025-AUT" },     // C–V
+        "BCPL-2025-AUT-1st": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "BCPL-2025-AUT-1st" },     // C–V
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     },
@@ -70,6 +79,7 @@ function importAllTournamentData() {
       fileId: "1K6lVrUCZAXBE6rVojhO1YsQpOxSxS9EcOVLpmvfl-9Y",
       sheets: {
         "CZ-2025-COC": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "CZ-2025-COC" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     },
@@ -81,7 +91,67 @@ function importAllTournamentData() {
         "HR-2025-OC-2": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "HR-2025-OC-2" },     // C–V
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
+    },
+    
+    // Taiwan
+    {
+      fileId: "17Nk9CBfKsfR9W9UzW0R8huJ04NAlu8J6Zbrr2mVEBiM",
+      sheets: {
+        "TWCOC-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "TWCOC-2025" },     // C–V
+        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
+      }
+    },
+
+    // Hungary
+    {
+      fileId: "1GxoYMFwkpY7VV6fLMZ44BR6rRf8wOaXl3KtZ-RMmjN4",
+      sheets: {
+        "MOCB-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "MOCB-2025" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
+        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
+      }
+    },
+
+    // Chile
+    {
+      fileId: "1CUWYseWvGlolB5joejOYikparuVFh7lAqqHM_Sxm9iA",
+      sheets: {
+        "CCCC-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "CCCC-2025" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
+        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
+      }
+    },
+
+    // Germany
+    {
+      fileId: "11ppLd6Bq_kDwA2CB7DsbeK5rqeYn0BllPbIJ03wQRns",
+      sheets: {
+        "GCOC-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "GCOC-2025" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
+        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
+      }
+    },
+
+    // Thailand
+    {
+      fileId: "1EZGWpJHI3h8gEjHsc5bjhIlqK1g96s3rmcteWa97I_M",
+      sheets: {
+        "THCOC-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "THCOC-2025" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
+        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
+      }
+    },
+
+    // RCP
+    {
+      fileId: "1NUcJni9vg3yz8brSMTqIaAEnblPfj3rcqC6hWCDNUdI",
+      sheets: {
+        "RCPCL-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "RCPCL-2025" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
+        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
+      }
     }
+
   ];
 
   for (const source of sources) {
@@ -129,14 +199,35 @@ function importAllTournamentData() {
       const colCount = config.endCol - config.startCol + 1;
       let values = sheet.getRange(2, config.startCol, rowCount - 1, colCount).getDisplayValues();
 
-      // For Matches, exclude columns O–R (indexes 13–16, 0-based)
+      // For Matches: update B–N and S from source, do NOT touch O–R.
+      // Source row is relative to startCol=B:
+      // 0..12 => B..N, 13..16 => O..R (skip), 17 => S
       if (config.targetSheet === "Matches") {
-        // Keep B–M (0–11) and S (18)
-        values = values.map(row => {
-          let kept = row.slice(0, 12); // B–M: 0–12
-          if (row.length > 17) kept.push(row[17]); // S
-          return kept;
-        });
+        // Єдина маска відбору: беремо рядки тільки там, де ЗАПОВНЕНА колонка C
+        // (relative index 1 у values, бо startCol = B)
+        const keepMask = values.map(row => row[1] !== "");
+
+        const rowsBN = [];
+        const rowsS  = [];
+
+        for (let i = 0; i < values.length; i++) {
+          if (!keepMask[i]) continue;
+          const row = values[i];
+          rowsBN.push(row.slice(0, 13));          // B..N (13 cols)
+          rowsS.push([row[17] !== undefined ? row[17] : ""]); // S (1 col)
+        }
+
+        const keyBN = JSON.stringify({ sheet: config.targetSheet, startCol: 2 });   // B
+        const keyS  = JSON.stringify({ sheet: config.targetSheet, startCol: 19 });  // S
+
+        if (!dataMap[keyBN]) dataMap[keyBN] = [];
+        if (!dataMap[keyS])  dataMap[keyS]  = [];
+
+        dataMap[keyBN].push(...rowsBN);
+        dataMap[keyS].push(...rowsS);
+
+        // важливо: пропускаємо стандартну обробку, щоб не чіпати O–R
+        continue;
       }
 
       // Фільтруємо порожні рядки (навіть якщо є формули з "")
@@ -173,15 +264,27 @@ function importAllTournamentData() {
           return cell;
         })
       );
+      const orderedKeys = [];
+      const rowsByKey = new Map();
 
-      // Фільтрація дублів по колонці A
-      const seen = new Set();
-      cleanedRows = processedRows.filter(row => {
+      for (const row of processedRows) {
         const key = row[0];
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+        if (!key) continue;
+
+        const hasColumnC = row[2] !== null && row[2] !== undefined && row[2] !== "";
+        if (!rowsByKey.has(key)) {
+          rowsByKey.set(key, { row, hasColumnC });
+          orderedKeys.push(key);
+          continue;
+        }
+
+        const stored = rowsByKey.get(key);
+        if (!stored.hasColumnC && hasColumnC) {
+          rowsByKey.set(key, { row, hasColumnC });
+        }
+      }
+
+      cleanedRows = orderedKeys.map(key => rowsByKey.get(key).row);
 
     } else if (targetSheetName === "Tournament Players") {
       // Обробка: збереження нулів для всіх полів

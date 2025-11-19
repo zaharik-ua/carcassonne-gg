@@ -1,0 +1,229 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+<style>
+  .et-news-root {
+    font-family: 'Montserrat', sans-serif;
+    background-color: #ffffff;
+  }
+  .et-news-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background-color: #2C6DA3;
+    color: white;
+    font-weight: 500;
+    font-size: 13px;
+    padding: 6px 5px;
+  }
+  .et-news-header img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+  .et-news-list {
+    margin: 0;
+    padding: 0;
+  }
+  .et-news-row {
+    background: white;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border-top: 1px solid #ccc;
+    padding: 7px 5px;
+    font-size: 13px;
+    line-height: 15px;
+  }
+  .et-news-row:hover {
+    background-color: #f9f9f9;
+  }
+  .et-news-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+  .et-news-title {
+    flex-grow: 1;
+  }
+  .et-news-title a {
+    color: #146997;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .et-news-title a:hover {
+    color: #0e4f73;
+    text-decoration: none;
+  }
+  .et-news-chevron {
+    cursor: pointer;
+    font-size: 14px;
+    padding-left: 2px;
+    transition: transform 0.3s ease;
+  }
+  .et-news-description {
+    height: 0;
+    overflow: hidden;
+    transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+    background-color: #f5f5f5;
+    padding: 0 7px;
+  }
+  .et-news-description.open {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .et-news-description-content {
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 3px 0;
+  }
+  .et-news-empty {
+    padding: 10px 6px;
+    font-size: 13px;
+    color: #333;
+  }
+</style>
+
+<div id="et-news-root" class="et-news-root">
+  <div class="et-news-header">
+    <img src="https://carcassonne.gg/gallery/CCL-logo.png" alt="News" />
+    CCL 2026 News
+  </div>
+  <div class="et-news-list" id="et-news-list"></div>
+</div>
+
+<script>
+  (() => {
+    const root = document.getElementById("et-news-root");
+    if (!root) {
+      return;
+    }
+    const list = root.querySelector("#et-news-list");
+    const sourceUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/news.json";
+    const tournamentKey = "CCL-2026";
+
+    const parseDateTime = (value) => {
+      if (!value) return 0;
+      const trimmed = String(value).trim();
+      if (!trimmed) return 0;
+
+      const [datePart = "", timePart = "00:00"] = trimmed.split(/\s+/);
+      const [day, month, year] = datePart.split(/[./-]/);
+      if (!day || !month || !year) return 0;
+
+      const normalizedYear = year.length === 2 ? `20${year}` : year;
+      const normalizedDate = `${normalizedYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${timePart}`;
+      const timestamp = Date.parse(normalizedDate);
+      return Number.isNaN(timestamp) ? 0 : timestamp;
+    };
+
+    const renderNews = (items) => {
+      if (!list) {
+        return;
+      }
+      list.innerHTML = "";
+
+      const filtered = items
+        .filter(item => item && item.tournament === tournamentKey)
+        .sort((a, b) => parseDateTime(b.time) - parseDateTime(a.time))
+        .slice(0, 10);
+
+      if (!filtered.length) {
+        const empty = document.createElement("div");
+        empty.className = "et-news-empty";
+        empty.textContent = "ℹ️ No CCL 2026 news yet.";
+        list.appendChild(empty);
+        return;
+      }
+
+      filtered.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "et-news-row";
+
+        const iconUrl = item.icon && String(item.icon).trim();
+        if (iconUrl) {
+          const icon = document.createElement("img");
+          icon.className = "et-news-icon";
+          icon.src = iconUrl;
+          icon.alt = item.countries ? `${item.countries} flag` : "News icon";
+          row.appendChild(icon);
+        }
+
+        const title = document.createElement("div");
+        title.className = "et-news-title";
+        const titleText = (item.short_title || item.title || "News").trim();
+        const linkHref = item.link && String(item.link).trim();
+
+        if (linkHref) {
+          const link = document.createElement("a");
+          link.textContent = titleText;
+          link.href = linkHref;
+          link.style.fontWeight = "500";
+          if (!linkHref.includes("carcassonne.gg")) {
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+          }
+          title.appendChild(link);
+        } else {
+          const span = document.createElement("span");
+          span.textContent = titleText;
+          title.appendChild(span);
+        }
+        row.appendChild(title);
+
+        const descriptionHtml = item.description && String(item.description).trim();
+        if (descriptionHtml) {
+          const chevron = document.createElement("i");
+          chevron.className = "fa fa-chevron-down et-news-chevron";
+          row.appendChild(chevron);
+
+          const descriptionBlock = document.createElement("div");
+          descriptionBlock.className = "et-news-description";
+          descriptionBlock.innerHTML = `<div class="et-news-description-content">${descriptionHtml}</div>`;
+
+          list.appendChild(row);
+          list.appendChild(descriptionBlock);
+
+          const toggleDescription = () => {
+            const isOpen = descriptionBlock.classList.contains("open");
+            if (isOpen) {
+              descriptionBlock.style.height = `${descriptionBlock.scrollHeight}px`;
+              requestAnimationFrame(() => {
+                descriptionBlock.style.height = "0px";
+                descriptionBlock.classList.remove("open");
+                chevron.style.transform = "rotate(0deg)";
+              });
+            } else {
+              descriptionBlock.style.height = "0px";
+              descriptionBlock.classList.add("open");
+              chevron.style.transform = "rotate(180deg)";
+              requestAnimationFrame(() => {
+                descriptionBlock.style.height = `${descriptionBlock.scrollHeight}px`;
+              });
+            }
+          };
+
+          descriptionBlock.addEventListener("transitionend", event => {
+            if (event.propertyName === "height" && descriptionBlock.classList.contains("open")) {
+              descriptionBlock.style.height = "auto";
+            }
+          });
+
+          row.addEventListener("click", toggleDescription);
+        } else {
+          list.appendChild(row);
+        }
+      });
+    };
+
+    fetch(sourceUrl)
+      .then(res => res.json())
+      .then(data => renderNews(Array.isArray(data.news) ? data.news : []))
+      .catch(err => {
+        if (list) {
+          list.textContent = "❌ Failed to load CCL news.";
+        }
+        console.error(err);
+      });
+  })();
+</script>

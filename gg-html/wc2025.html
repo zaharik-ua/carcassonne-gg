@@ -52,8 +52,10 @@
     max-width: 1200px;
   }
 
-  /* Temporarily hide sections */
-  #tab-playoffs-content,
+  /* Sequential layout: ensure sections are visible */
+  #tab-playoffs-content {
+    display: block;
+  }
   #tab-swiss-content,
   #tab-matches-content {
     display: none;
@@ -93,6 +95,41 @@
     flex-wrap: wrap;
   }
 
+  .players-photo-filter {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    margin: 7px 0;
+  }
+
+  .players-photo-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 5px;
+    border-radius: 2px;
+    border: 1px solid rgba(154, 212, 255, 0.6);
+    background: transparent;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  }
+
+  .players-photo-toggle:hover,
+  .players-photo-toggle:focus-visible {
+    background-color: rgba(154, 212, 255, 0.12);
+    border-color: #9ad4ff;
+    outline: none;
+    transform: translateY(-1px);
+  }
+
+  .players-photo-toggle.active {
+    background-color: rgba(154, 212, 255, 0.18);
+    border-color: #9ad4ff;
+  }
+
   .player-info-cell {
     width: 34px;
     text-align: center;
@@ -102,38 +139,42 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 15px;
+    height: 15px;
     border-radius: 50%;
+    border: 2px solid rgba(218, 239, 255, 0.6);
     color: #ffffff;
     cursor: pointer;
     user-select: none;
     background-color: transparent;
-    transition: background-color 0.2s ease, transform 0.2s ease, color 0.2s ease;
+    transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   }
 
   .player-info-toggle:hover,
   .player-info-toggle:focus-visible {
     background-color: rgba(154, 212, 255, 0.12);
+    border-color: #9ad4ff;
     transform: scale(1.05);
     outline: none;
   }
 
   .player-info-toggle.open {
     background-color: rgba(154, 212, 255, 0.18);
+    border-color: #9ad4ff;
   }
 
-  .player-info-toggle i {
-    font-size: 14px;
+  .player-info-toggle::before {
+    content: "i";
+    font-size: 13px;
+    font-weight: 600;
     line-height: 1;
-    color: #ffffff;
+    color: currentColor;
     pointer-events: none;
-    transition: color 0.2s ease;
   }
 
-  .player-info-toggle:hover i,
-  .player-info-toggle:focus-visible i,
-  .player-info-toggle.open i {
+  .player-info-toggle:hover::before,
+  .player-info-toggle:focus-visible::before,
+  .player-info-toggle.open::before {
     color: #9ad4ff;
   }
 
@@ -145,7 +186,7 @@
     border-radius: 3px;
     background: transparent;
     padding: 2px;
-    width: 28px;
+    width: 32px;
     height: 20px;
     cursor: pointer;
     transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
@@ -165,7 +206,7 @@
   }
 
   .players-filter-flag img {
-    width: 20px;
+    width: 22px;
     height: auto;
     object-fit: contain;
     display: block;
@@ -207,6 +248,30 @@
 
   .player-details__text {
     white-space: pre-line;
+  }
+
+  .player-details__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #9ad4ff;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .player-details__value {
+    font-size: 14px;
+    line-height: 18px;
+    color: #ffffff;
+    display: block;
+    white-space: pre-line;
+  }
+
+  .player-details__metric {
+    margin-bottom: 6px;
+  }
+
+  .player-details__metric:last-child {
+    margin-bottom: 0;
   }
 
   @media (max-width: 600px) {
@@ -327,13 +392,6 @@
 
   /* Generic score cell */
   .score-cell { white-space: nowrap; color: #ffffff; }
-
-  /* Starting player legend */
-  .starting-legend { display:flex; align-items:center; gap:6px; margin:8px 0 12px; }
-  .starting-legend--compact { margin:6px 0 8px; }
-  .starting-legend__icon { width:12px; height:12px; }
-  .starting-legend__icon--pad { padding-left:20px; }
-  .starting-legend__text { color:#ffffff; }
 
   /* Playoff board label (above match box) */
   .playoff-board-label {
@@ -518,9 +576,9 @@
 <!-- HTML -->
 <div class="tab-container" id="tab-container" style="display:none;"></div>
 <div id="tab-playoffs-content" class="bounded"></div>
+<div id="tab-info-content" class="bounded"></div>
 <div id="tab-swiss-content" class="bounded"></div>
 <div id="tab-matches-content" class="bounded"></div>
-<div id="tab-info-content" class="bounded"></div>
 <div id="tab-players-content" class="bounded"></div>
 
 <!-- СКРИПТ -->
@@ -540,10 +598,6 @@
   let playoffs = [];
   let information = [];
   let playerPhotoModal = null;
-
-  // Starting player legend assets
-  const STARTING_PLAYER_ICON = "https://carcassonne.gg/gallery/yellow_mipple.png";
-  const STARTING_PLAYER_TEXT = "the starting player";
 
   // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
   const BRACKET_MARGIN = 15;
@@ -691,23 +745,16 @@
     }));
     renderSingleElimination(normalizedPlayoffs, bracketHost);
 
-    // Starting player legend (icon + text) below the bracket
-    const playoffsLegend = document.createElement("div");
-    playoffsLegend.className = "starting-legend";
-    const playoffsLegendImg = document.createElement("img");
-    playoffsLegendImg.src = STARTING_PLAYER_ICON;
-    playoffsLegendImg.alt = "A";
-    playoffsLegendImg.className = "starting-legend__icon";
-    const playoffsLegendText = document.createElement("span");
-    playoffsLegendText.textContent = STARTING_PLAYER_TEXT;
-    playoffsLegendText.className = "starting-legend__text";
-    playoffsLegend.appendChild(playoffsLegendImg);
-    playoffsLegend.appendChild(playoffsLegendText);
-    playoffsContainer.appendChild(playoffsLegend);
-    playoffsLegend.style.paddingLeft = "20px";
+    // 2) Information
+    const infoContainer = document.getElementById("tab-info-content");
+    infoContainer.innerHTML = "";
+    const infoTitle = document.createElement("div");
+    infoTitle.className = "section-title";
+    infoTitle.textContent = "Information";
+    infoContainer.appendChild(infoTitle);
+    renderInformationTable();
 
-
-    // 2) Swiss
+    // 3) Swiss
     const swissContainer = document.getElementById("tab-swiss-content");
     swissContainer.innerHTML = "";
     const swissTitle = document.createElement("div");
@@ -718,7 +765,7 @@
     swissContainer.appendChild(swissBody);
     renderStandingsData(standings, swissBody);
 
-    // 3) Rounds
+    // 4) Rounds
     const matchesContainer = document.getElementById("tab-matches-content");
     matchesContainer.innerHTML = "";
     const roundsTitle = document.createElement("div");
@@ -726,15 +773,6 @@
     roundsTitle.textContent = "Rounds";
     matchesContainer.appendChild(roundsTitle);
     renderMatchesData();
-
-    // 4) Information
-    const infoContainer = document.getElementById("tab-info-content");
-    infoContainer.innerHTML = "";
-    const infoTitle = document.createElement("div");
-    infoTitle.className = "section-title";
-    infoTitle.textContent = "Information";
-    infoContainer.appendChild(infoTitle);
-    renderInformationTable();
 
     // 5) Players
     const playersContainer = document.getElementById("tab-players-content");
@@ -899,10 +937,13 @@
 
     const playerRows = [];
     let activeFlagKey = null;
+    let showPhotoOnly = false;
     const applyPlayersFilter = () => {
-      const showAll = !activeFlagKey;
-      playerRows.forEach(({ row, detailsRow, flagKey, detailsWrap, toggleBtn }) => {
-        const shouldShow = showAll || (flagKey && flagKey === activeFlagKey);
+      const showAllFlags = !activeFlagKey;
+      playerRows.forEach(({ row, detailsRow, flagKey, detailsWrap, toggleBtn, hasPhoto }) => {
+        const matchesFlag = showAllFlags || (flagKey && flagKey === activeFlagKey);
+        const matchesPhoto = !showPhotoOnly || hasPhoto;
+        const shouldShow = matchesFlag && matchesPhoto;
         row.style.display = shouldShow ? "" : "none";
         if (detailsRow) {
           detailsRow.style.display = shouldShow ? "" : "none";
@@ -976,6 +1017,20 @@
 
       section.appendChild(filterPanel);
     }
+
+    const photoFilterWrap = document.createElement("div");
+    photoFilterWrap.className = "players-photo-filter";
+    const photoToggle = document.createElement("button");
+    photoToggle.type = "button";
+    photoToggle.className = "players-photo-toggle";
+    photoToggle.textContent = "With photo";
+    photoToggle.addEventListener("click", () => {
+      showPhotoOnly = !showPhotoOnly;
+      photoToggle.classList.toggle("active", showPhotoOnly);
+      applyPlayersFilter();
+    });
+    photoFilterWrap.appendChild(photoToggle);
+    section.appendChild(photoFilterWrap);
 
     const table = document.createElement("table");
     table.className = "group-table players-table";
@@ -1130,9 +1185,6 @@
       infoToggle.setAttribute("tabindex", "0");
       infoToggle.setAttribute("aria-expanded", "false");
       infoToggle.setAttribute("title", "Show player details");
-      const infoIcon = document.createElement("i");
-      infoIcon.className = "far fa-info-circle";
-      infoToggle.appendChild(infoIcon);
       tdInfo.appendChild(infoToggle);
       tr.appendChild(tdInfo);
 
@@ -1147,31 +1199,78 @@
       const contentWrap = document.createElement("div");
       contentWrap.className = "player-details__content";
       const photoUrl = resolvePlayerPhotoUrl(p.player_photo);
-      if (photoUrl) {
+      const hasPhoto = Boolean(photoUrl);
+      if (hasPhoto) {
+        const photoWrap = document.createElement("div");
+        photoWrap.className = "player-photo-wrapper";
+        photoWrap.setAttribute("role", "button");
+        photoWrap.setAttribute("tabindex", "0");
+
         const photoImg = document.createElement("img");
         photoImg.className = "player-details__photo";
         photoImg.src = photoUrl;
         photoImg.alt = `${p.player_name_en || p.player_name || "Player"} photo`;
-        photoImg.addEventListener("click", event => {
+
+        const zoomIcon = document.createElement("i");
+        zoomIcon.className = "player-photo-zoom fas fa-magnifying-glass-plus";
+
+        const openPhoto = (event) => {
           event.stopPropagation();
           openPlayerPhotoModal(photoUrl, photoImg.alt);
+        };
+
+        photoWrap.addEventListener("click", openPhoto);
+        photoWrap.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPhoto(event);
+          }
         });
-        contentWrap.appendChild(photoImg);
+
+        photoWrap.appendChild(photoImg);
+        photoWrap.appendChild(zoomIcon);
+        contentWrap.appendChild(photoWrap);
       }
-      const infoLines = [
-        `Current Elo: ${formatMetric(p.current_elo)}`,
-        `Average Elo: ${formatMetric(p.average_elo)}`,
-        `Peak Elo: ${formatMetric(p.max_elo)}`
+      const metaEntries = [
+        { label: "Current Elo", value: formatMetric(p.current_elo) },
+        { label: "Average Elo", value: formatMetric(p.average_elo) },
+        { label: "Peak Elo (calculated on 16.10.2025)", value: formatMetric(p.max_elo) },
+        { label: "Number of games (between 06.10.2024. and 16.10.2025)", value: formatMetric(p.number_of_games) }
       ];
+
       const extraInfoRaw = p.player_information !== null && p.player_information !== undefined
         ? String(p.player_information).trim()
         : "";
-      if (extraInfoRaw) {
-        infoLines.push(extraInfoRaw);
-      }
+
       const textBlock = document.createElement("div");
-      textBlock.className = "player-details__text data-normal";
-      textBlock.textContent = infoLines.join("\n");
+      textBlock.className = "player-details__text";
+
+      const metaBlock = document.createElement("div");
+      metaEntries.forEach(entry => {
+        const metric = document.createElement("div");
+        metric.className = "player-details__metric";
+
+        const label = document.createElement("span");
+        label.className = "player-details__label";
+        label.textContent = entry.label;
+
+        const valueLine = document.createElement("span");
+        valueLine.className = "player-details__value";
+        valueLine.textContent = entry.value;
+
+        metric.appendChild(label);
+        metric.appendChild(valueLine);
+        metaBlock.appendChild(metric);
+      });
+      textBlock.appendChild(metaBlock);
+
+      if (extraInfoRaw) {
+        const infoBlock = document.createElement("div");
+        infoBlock.className = "player-details__value";
+        infoBlock.style.marginTop = "7px";
+        infoBlock.textContent = extraInfoRaw;
+        textBlock.appendChild(infoBlock);
+      }
       contentWrap.appendChild(textBlock);
       detailsInner.appendChild(contentWrap);
       detailsWrap.appendChild(detailsInner);
@@ -1215,7 +1314,7 @@
         }
       });
 
-      playerRows.push({ row: tr, detailsRow, flagKey: normalizedFlagKey, detailsWrap, toggleBtn: infoToggle });
+      playerRows.push({ row: tr, detailsRow, flagKey: normalizedFlagKey, detailsWrap, toggleBtn: infoToggle, hasPhoto });
       table.appendChild(tr);
       table.appendChild(detailsRow);
     });
@@ -1322,19 +1421,6 @@
     // Only Swiss matches
     const container = document.getElementById("tab-matches-content");
     // keep existing heading; do not clear container
-    // Legend: who moves first (blue meeple)
-    const legend = document.createElement("div");
-    legend.className = "starting-legend starting-legend--compact";
-    const legendImg = document.createElement("img");
-    legendImg.src = STARTING_PLAYER_ICON;
-    legendImg.alt = "A";
-    legendImg.className = "starting-legend__icon";
-    const legendText = document.createElement("span");
-    legendText.textContent = STARTING_PLAYER_TEXT;
-    legendText.className = "starting-legend__text";
-    legend.appendChild(legendImg);
-    legend.appendChild(legendText);
-    container.appendChild(legend);
     const list = Array.isArray(rounds) ? rounds : [];
     const grouped = {};
     list.forEach(m => {
@@ -1391,10 +1477,6 @@
         const p2ObjFull = players.find(p => String(p.player_id) === p2Id) || {};
         const p1Avatar = p1ObjFull.avatar || p1ObjFull.flag || '';
         const p2Avatar = p2ObjFull.avatar || p2ObjFull.flag || '';
-        const starter = String(g.starter ?? '').trim().toUpperCase();
-        const starterIcon = '<img src="https://carcassonne.gg/gallery/yellow_mipple.png" alt="S" style="width:10px;height:10px;">';
-        const iconA = starter === 'A' ? starterIcon : '';
-        const iconB = starter === 'B' ? starterIcon : '';
         row.innerHTML = `
           <td class="rounds-board">${g.board ? `<span class=\"data-normal\">Board: ${g.board}</span>${String(g.board) === '1' ? ' <img src=\"https://carcassonne.gg/gallery/YouTube_full-color_icon_(2017).svg-ts1700987678.png\" alt=\"YouTube\" class=\"yt-icon\">' : ''}` : ''}</td>
           <td class="player-cell">
@@ -1646,14 +1728,6 @@
         player1Info.style.justifyContent = "flex-start";
         if (player1Logo) player1Info.appendChild(player1Logo);
         player1Info.appendChild(player1Link);
-        if (p1Name) {
-          const p1Mipple = document.createElement("img");
-          p1Mipple.src = "https://carcassonne.gg/gallery/yellow_mipple.png";
-          p1Mipple.alt = "A";
-          p1Mipple.style.width = "10px";
-          p1Mipple.style.height = "10px";
-          player1Info.appendChild(p1Mipple);
-        }
         const score1Span = document.createElement("span");
         score1Span.textContent = (m.score1 ?? '');
         score1Span.className = (wA > wB) ? "data-winner" : "data-normal";

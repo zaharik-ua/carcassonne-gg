@@ -1,0 +1,1119 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- СТИЛІ -->
+<style>
+  :root {
+    --main-bg-color: #A47864;
+    --hover-bg-color: #8F6553;
+    --accent-text-color: #fff;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Montserrat', sans-serif;
+  }
+
+  .group-section {
+    margin: 5px 0;
+  }
+
+  .stage-tables {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .stage-table-wrapper {
+    flex: 1 1 340px;
+    min-width: 280px;
+  }
+
+  .draw-details {
+    margin-top: 12px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .draw-details-title {
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .draw-details-list {
+    padding-left: 16px;
+    margin: 0;
+  }
+
+  .draw-match-row {
+    margin-top: 6px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .draw-player-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .match-reveal {
+    border: none;
+    border-radius: 4px;
+    padding: 2px 20px;
+    background-color: #d9e7f2;
+    color: #1d3c56;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    min-width: 80px;
+    text-transform: uppercase;
+  }
+
+  .match-reveal:disabled {
+    opacity: 0.8;
+    cursor: default;
+  }
+
+  .match-players {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .match-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .draw-group-block {
+    margin-top: 12px;
+    padding: 8px;
+    border: 1px solid #e0d5cf;
+    border-radius: 4px;
+    background-color: #faf6f4;
+  }
+
+  .draw-action {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 6px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    background-color: #A47864;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  .draw-action:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  .stage-selector {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0;
+    margin-bottom: 12px;
+    min-width: 140px;
+  }
+
+  .stage-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 10px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background-color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    gap: 8px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+    font-family: inherit;
+  }
+
+  .stage-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  .stage-toggle:hover:not(:disabled),
+  .stage-toggle:focus-visible:not(:disabled) {
+    border-color: #b5c5d3;
+    box-shadow: 1.4px 1.4px 2px rgba(0, 0, 0, 0.3);
+    outline: none;
+  }
+
+  .stage-toggle.open {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .stage-toggle.select-placeholder .stage-label {
+    color: #808080;
+  }
+
+  .stage-label {
+    flex: 1;
+    text-align: left;
+    font-weight: 500;
+  }
+
+  .stage-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+  }
+
+  .stage-chevron i {
+    transition: transform 0.2s ease;
+  }
+
+  .stage-toggle.open .stage-chevron i {
+    transform: rotate(180deg);
+  }
+
+  .stage-content {
+    position: relative;
+    width: 100%;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-bottom-left-radius: 3px;
+    border-bottom-right-radius: 3px;
+    background-color: #fff;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+  }
+
+  .stage-content.open {
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .stage-row {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    border-top: 1px solid #f0f0f0;
+    text-align: left;
+    background-color: #fff;
+  }
+
+  .stage-row:first-child {
+    border-top: none;
+  }
+
+  .stage-row:hover {
+    background-color: #f7f7f7;
+  }
+
+  .stage-row.active {
+    background-color: #e8eef5;
+    font-weight: 600;
+  }
+
+  .group-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 3px;
+    color: #222;
+  }
+
+  .players-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+
+  .players-count {
+    margin: 0;
+  }
+
+  .players-filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .filter-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .filter-chip-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .filter-chip {
+    border: 1px solid #8F6553;
+    background-color: #fff;
+    color: #8F6553;
+    border-radius: 2px;
+    padding: 1px 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .filter-chip.active {
+    background-color: #8F6553;
+    color: #fff;
+  }
+
+  .filter-chip:hover {
+    background-color: #7A5746;
+    color: #fff;
+  }
+
+  .group-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    overflow: hidden;
+  }
+
+  .group-table th {
+    background-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+    font-weight: 600;
+    padding: 6px;
+    font-size: 15px;
+    text-align: center;
+  }
+
+  .group-table tr:first-child th:nth-child(2) {
+    text-align: left;
+  }
+
+  .group-table th.player-col,
+  .group-table td.player-col {
+    width: auto;
+    min-width: auto;
+    white-space: normal;
+  }
+
+  .group-table th.qualified-cell,
+  .group-table td.qualified-cell {
+    width: 28%;
+    max-width: 220px;
+  }
+
+  .qualified-wrap {
+    display: block;
+    width: 100%;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 480px) {
+    .group-table th.qualified-cell,
+    .group-table td.qualified-cell {
+      display: none;
+    }
+  }
+
+  .group-table td {
+    padding: 6px;
+    font-size: 15px;
+    line-height: 17px;
+    border-top: 1px solid #ccc;
+    text-align: center;
+    background-color: #fff;
+  }
+
+  .group-table td a {
+    color: #333;
+    text-decoration: none;
+    word-break: break-word;
+  }
+
+  .group-table td a:hover {
+    color: #0277BD;
+  }
+
+  .players-name-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px 7px;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    width: 100%;
+  }
+
+  .country-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px 7px;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    width: 100%;
+  }
+
+  .players-name-wrap a {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .players-name-wrap span {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .country-flag {
+    height: auto;
+    width: 20px;
+    object-fit: cover;
+  }
+
+  .seeding-icon {
+    width: 10px;
+    height: auto;
+    margin-left: 4px;
+    display: inline-block;
+  }
+
+  .seeding-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    margin-top: 6px;
+    color: #333;
+  }
+
+  .seeding-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .country-wrap span {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    word-break: break-word;
+    white-space: pre-line;
+  }
+
+  .player-logo {
+    height: 18px;
+    width: 18px;
+    border: 0.5px solid #444;
+    object-fit: contain;
+    border-radius: 2px;
+    vertical-align: middle;
+  }
+
+  .elo-comment {
+    margin-top: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+</style>
+
+<!-- HTML -->
+<div id="tab-players-content"></div>
+
+<!-- СКРИПТ -->
+<script>
+  const currentTournamentId = "CCL-2026";
+  const STAGE_OPTIONS = ["Q1", "Q2", "Q4"];
+  const Q1_GROUPS = [
+    { letter: "A", title: "Group A", start: 1, end: 8 },
+    { letter: "B", title: "Group B", start: 9, end: 16 },
+    { letter: "C", title: "Group C", start: 17, end: 24 },
+    { letter: "D", title: "Group D", start: 25, end: 32 },
+    { letter: "E", title: "Group E", start: 33, end: 40 }
+  ];
+  let players = [];
+  let tournamentPlayers = [];
+  let tournaments = [];
+  let countries = [];
+  let stageToggleEl = null;
+  let stageContentEl = null;
+  let stageLabelEl = null;
+  let selectedStage = "";
+  let isStageDropdownOpen = false;
+  let tableWrapperEl = null;
+  let drawMatchesWrapper = null;
+  let drawActionButton = null;
+
+  function fetchTournamentsAndInit() {
+    const dataUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json";
+    fetch(dataUrl)
+      .then(r => {
+        if (!r.ok) throw new Error("Failed to fetch data");
+        return r.json();
+      })
+      .then(data => {
+        if (!data || !Array.isArray(data.tournaments)) {
+          showError("❌ Failed to load tournament data");
+          return;
+        }
+        players = data.players || [];
+        tournamentPlayers = data.tournament_players || [];
+        tournaments = data.tournaments || [];
+        countries = data.countries || [];
+        if (stageToggleEl) {
+          stageToggleEl.disabled = false;
+        }
+        if (tableWrapperEl) {
+          tableWrapperEl.textContent = "";
+        }
+      })
+      .catch(err => {
+        console.error("❌ Failed to load tournament data", err);
+        showError("❌ Failed to load tournament data");
+      });
+  }
+
+  function showError(message) {
+    const container = document.getElementById("tab-players-content");
+    if (!container) return;
+    container.textContent = message;
+  }
+
+  function setupStageSelector() {
+    const container = document.getElementById("tab-players-content");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const selectorWrapper = document.createElement("div");
+    selectorWrapper.className = "stage-selector";
+
+    stageToggleEl = document.createElement("button");
+    stageToggleEl.type = "button";
+    stageToggleEl.className = "stage-toggle select-placeholder";
+    stageToggleEl.disabled = true;
+
+    stageLabelEl = document.createElement("div");
+    stageLabelEl.className = "stage-label";
+    stageLabelEl.textContent = "CCL Stage";
+    stageToggleEl.appendChild(stageLabelEl);
+
+    const stageChevron = document.createElement("div");
+    stageChevron.className = "stage-chevron";
+    const stageChevronIcon = document.createElement("i");
+    stageChevronIcon.className = "fa fa-chevron-down";
+    stageChevron.appendChild(stageChevronIcon);
+    stageToggleEl.appendChild(stageChevron);
+
+    stageToggleEl.addEventListener("click", () => {
+      if (stageToggleEl.disabled) return;
+      toggleStageDropdown(!isStageDropdownOpen);
+    });
+
+    stageContentEl = document.createElement("div");
+    stageContentEl.className = "stage-content";
+    STAGE_OPTIONS.forEach(stage => {
+      const row = document.createElement("div");
+      row.className = "stage-row";
+      row.dataset.stage = stage;
+      row.textContent = stage;
+      row.addEventListener("click", () => {
+        selectStage(stage);
+      });
+      stageContentEl.appendChild(row);
+    });
+
+    selectorWrapper.appendChild(stageToggleEl);
+    selectorWrapper.appendChild(stageContentEl);
+
+    tableWrapperEl = document.createElement("div");
+    tableWrapperEl.id = "stage-table-wrapper";
+    tableWrapperEl.textContent = "Завантаження...";
+
+    container.appendChild(selectorWrapper);
+    container.appendChild(tableWrapperEl);
+
+    document.addEventListener("click", event => {
+      if (!selectorWrapper.contains(event.target)) {
+        toggleStageDropdown(false);
+      }
+    });
+  }
+
+  function toggleStageDropdown(shouldOpen) {
+    if (!stageToggleEl || !stageContentEl) return;
+    isStageDropdownOpen = shouldOpen;
+    stageToggleEl.classList.toggle("open", isStageDropdownOpen);
+    stageContentEl.classList.toggle("open", isStageDropdownOpen);
+  }
+
+  function selectStage(stage) {
+    selectedStage = stage;
+    if (stageLabelEl) {
+      stageLabelEl.textContent = stage ? `CCL Stage: ${stage}` : "CCL Stage";
+    }
+    if (stageToggleEl) {
+      stageToggleEl.classList.toggle("select-placeholder", !stage);
+    }
+    if (stageContentEl) {
+      stageContentEl.querySelectorAll(".stage-row").forEach(row => {
+        row.classList.toggle("active", row.dataset.stage === stage);
+      });
+    }
+    toggleStageDropdown(false);
+    renderPlayersTable(stage);
+  }
+
+  function renderPlayersTable(selectedStage) {
+    if (!tableWrapperEl) return;
+    tableWrapperEl.innerHTML = "";
+
+    if (!selectedStage) {
+      tableWrapperEl.textContent = "Будь ласка, оберіть стадію турніру.";
+      return;
+    }
+
+    const tp = (tournamentPlayers || []).filter(p =>
+      p.tournament_id === currentTournamentId && (p.stage || "").trim() === selectedStage
+    );
+
+    if (!tp.length) {
+      tableWrapperEl.textContent = "Для цієї стадії ще немає гравців.";
+      return;
+    }
+
+    const sorted = [...tp].sort((a, b) => {
+      const eloA = Number.parseFloat(a.elo);
+      const eloB = Number.parseFloat(b.elo);
+      const safeEloA = Number.isFinite(eloA) ? eloA : -Infinity;
+      const safeEloB = Number.isFinite(eloB) ? eloB : -Infinity;
+      if (safeEloA !== safeEloB) {
+        return safeEloB - safeEloA;
+      }
+      return (a.player || "").localeCompare(b.player || "", undefined, { sensitivity: "base" });
+    });
+
+    const section = document.createElement("div");
+    section.className = "group-section";
+
+    function createStageTable(titleText, entries) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "stage-table-wrapper";
+
+      const title = document.createElement("div");
+      title.className = "group-title players-count";
+      title.textContent = titleText;
+      wrapper.appendChild(title);
+
+      const table = document.createElement("table");
+      table.className = "group-table";
+
+      const headTr = document.createElement("tr");
+      ["Player", "Elo"].forEach(label => {
+        const th = document.createElement("th");
+        th.textContent = label;
+        if (label === "Player") {
+          th.style.textAlign = "left";
+          th.classList.add("player-col");
+        }
+        if (label === "Elo") {
+          th.style.textAlign = "center";
+        }
+        th.style.backgroundColor = "#A47864";
+        th.style.color = "#ffffff";
+        headTr.appendChild(th);
+      });
+      table.appendChild(headTr);
+
+      if (!entries.length) {
+        const emptyRow = document.createElement("tr");
+        const emptyCell = document.createElement("td");
+        emptyCell.colSpan = 2;
+        emptyCell.style.textAlign = "center";
+        emptyCell.style.padding = "10px";
+        emptyCell.textContent = "No players yet.";
+        emptyRow.appendChild(emptyCell);
+        table.appendChild(emptyRow);
+      } else {
+        entries.forEach(entry => {
+          const tr = document.createElement("tr");
+
+          const playerTd = document.createElement("td");
+          playerTd.style.textAlign = "left";
+          playerTd.style.padding = "4px 6px";
+          playerTd.classList.add("player-col");
+          const playerWrap = document.createElement("div");
+          playerWrap.className = "players-name-wrap";
+
+          const countryName = entry.country || "";
+          if (countryName) {
+            const countryObject = (countries || []).find(c => c.team === countryName);
+            if (countryObject && countryObject.flag) {
+              const flagImg = document.createElement("img");
+              flagImg.src = countryObject.flag;
+              flagImg.className = "country-flag";
+              flagImg.alt = countryName;
+              playerWrap.appendChild(flagImg);
+            }
+          }
+
+          if (entry.player_id || entry.player) {
+            const playerLink = document.createElement("a");
+            playerLink.href = `https://boardgamearena.com/player?id=${entry.player_id}`;
+            playerLink.target = "_blank";
+            playerLink.rel = "noopener";
+            playerLink.textContent = entry.player || "";
+            playerWrap.appendChild(playerLink);
+          } else {
+            const emptySpan = document.createElement("span");
+            emptySpan.textContent = "-";
+            playerWrap.appendChild(emptySpan);
+          }
+          playerTd.appendChild(playerWrap);
+          tr.appendChild(playerTd);
+
+          const eloTd = document.createElement("td");
+          eloTd.style.textAlign = "center";
+          if (entry.elo !== undefined && entry.elo !== null && entry.elo !== "") {
+            eloTd.textContent = entry.elo;
+          } else {
+            eloTd.textContent = "-";
+          }
+          tr.appendChild(eloTd);
+
+          table.appendChild(tr);
+        });
+      }
+
+      wrapper.appendChild(table);
+      return wrapper;
+    }
+
+    if (selectedStage === "Q4") {
+      section.appendChild(createStageTable("Top Elo players", sorted));
+    } else {
+      const seededPlayers = sorted.filter(entry => (entry.seeding || "").trim() === "Seeded");
+      const unseededPlayers = sorted.filter(entry => (entry.seeding || "").trim() === "Unseeded");
+
+      const tablesContainer = document.createElement("div");
+      tablesContainer.className = "stage-tables";
+      tablesContainer.appendChild(createStageTable("Seeded players", seededPlayers));
+      tablesContainer.appendChild(createStageTable("Uneeded players", unseededPlayers));
+      section.appendChild(tablesContainer);
+    }
+
+    const drawDetailsBlock = document.createElement("div");
+    drawDetailsBlock.className = "draw-details";
+    const detailsTitle = document.createElement("div");
+    detailsTitle.className = "draw-details-title";
+    detailsTitle.textContent = "Draw details";
+    const detailsList = document.createElement("ol");
+    detailsList.className = "draw-details-list";
+
+    const addDetail = text => {
+      const li = document.createElement("li");
+      li.textContent = text;
+      detailsList.appendChild(li);
+    };
+
+    if (selectedStage === "Q1") {
+      addDetail("Players will be split into 5 groups: A, B, C, D, E.");
+      addDetail("Each group will contain 4 seeded and 4 unseeded players.");
+      addDetail("Players from the same association will be placed in different groups.");
+      addDetail("All first matches across every group will be between seeded and unseeded players.");
+    } else if (selectedStage === "Q2") {
+      addDetail("Players will be split into 4 groups: F, G, H, I.");
+      addDetail("Each group will contain 4 seeded and up to 4 unseeded players.");
+      addDetail("Players from the same association will be placed in different groups.");
+      addDetail("All first matches across every group will be between seeded and unseeded players.");
+    } else if (selectedStage === "Q4") {
+      addDetail("The draw is completely random.");
+      addDetail("No seeding pots will be used.");
+    }
+
+    drawDetailsBlock.appendChild(detailsTitle);
+    drawDetailsBlock.appendChild(detailsList);
+    section.appendChild(drawDetailsBlock);
+
+    const actionButton = document.createElement("button");
+    actionButton.type = "button";
+    actionButton.className = "draw-action";
+    actionButton.textContent = "Start the draw";
+    const canRunDraw = selectedStage === "Q4" || selectedStage === "Q1";
+    actionButton.disabled = !canRunDraw;
+    actionButton.addEventListener("click", () => {
+      if (selectedStage === "Q4") {
+        runQ4Draw(sorted);
+      } else if (selectedStage === "Q1") {
+        runQ1Draw(sorted);
+      }
+    });
+    section.appendChild(actionButton);
+    drawActionButton = actionButton;
+
+    drawMatchesWrapper = document.createElement("div");
+    drawMatchesWrapper.className = "draw-matches-wrapper";
+    section.appendChild(drawMatchesWrapper);
+
+    tableWrapperEl.appendChild(section);
+  }
+
+  function runQ4Draw(playersList) {
+    // Need at least 8 players to form 4 matches
+    if (!Array.isArray(playersList) || playersList.length < 8) return;
+
+    // Clone and shuffle the list so we don't mutate the original order
+    const shuffled = [...playersList];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    // Take the first eight shuffled players
+    const selected = shuffled.slice(0, 8);
+
+    // Pair players sequentially to create four matches
+    const matches = [
+      [selected[0], selected[1]],
+      [selected[2], selected[3]],
+      [selected[4], selected[5]],
+      [selected[6], selected[7]],
+    ];
+
+    // Render the matches on the page and trigger CSV download
+    renderMatchGroups([{ title: "Q4 Matches", matches }]);
+    downloadMatchesCsv([{ title: "Q4 Matches", matches }], "Q4-draw-matches.csv");
+
+    // Prevent rerunning the draw once it's completed
+    if (drawActionButton) {
+      drawActionButton.disabled = true;
+    }
+  }
+
+  function runQ1Draw(playersList) {
+    // Need at least 40 players for Q1 (20 seeded + 20 unseeded)
+    if (!Array.isArray(playersList) || playersList.length < 40) return;
+
+    // Split players by seeding label
+    const seededPlayers = playersList.filter(player => (player.seeding || "").trim() === "Seeded");
+    const unseededPlayers = playersList.filter(player => (player.seeding || "").trim() === "Unseeded");
+    if (seededPlayers.length < 20 || unseededPlayers.length < 20) {
+      if (drawMatchesWrapper) {
+        drawMatchesWrapper.textContent = "Not enough players to run the draw.";
+      }
+      return;
+    }
+
+    // Track how many players come from the same association; used to spread them across groups
+    const associationCounts = new Map();
+    playersList.forEach(player => {
+      const key = getAssociationKey(player);
+      associationCounts.set(key, (associationCounts.get(key) || 0) + 1);
+    });
+    const associationUsage = new Map();
+
+    // Prepare odd/even slots for seeded and unseeded players
+    const seededNumbers = [];
+    const unseededNumbers = [];
+    for (let num = 1; num <= 40; num++) {
+      if (num % 2 === 1) {
+        seededNumbers.push(num);
+      } else {
+        unseededNumbers.push(num);
+      }
+    }
+
+    // Assign draw numbers while respecting association constraints
+    assignNumbersWithAssociations(seededPlayers, seededNumbers, associationCounts, associationUsage);
+    assignNumbersWithAssociations(unseededPlayers, unseededNumbers, associationCounts, associationUsage);
+
+    // Build a lookup from draw number to player
+    const numberToPlayer = new Map();
+    [...seededPlayers, ...unseededPlayers].forEach(player => {
+      if (typeof player.__drawNumber === "number") {
+        numberToPlayer.set(player.__drawNumber, player);
+      }
+    });
+
+    // Convert draw numbers into matches inside each group (A–E)
+    const groupData = Q1_GROUPS.map(group => {
+      const matches = [];
+      for (let num = group.start; num <= group.end; num += 2) {
+        const playerOne = numberToPlayer.get(num);
+        const playerTwo = numberToPlayer.get(num + 1);
+        matches.push([playerOne, playerTwo]);
+      }
+      return {
+        title: group.title,
+        matches
+      };
+    });
+
+    // Render the brackets and export the CSV
+    renderMatchGroups(groupData);
+    downloadMatchesCsv(groupData, "Q1-draw-matches.csv");
+
+    // Prevent another draw run after successful generation
+    if (drawActionButton) {
+      drawActionButton.disabled = true;
+    }
+  }
+
+  function assignNumbersWithAssociations(playerList, availableNumbers, associationCounts, associationGroupUsage) {
+    // Map of association → total players overall (default to empty map)
+    const counts = associationCounts || new Map();
+    // Tracks which groups already contain a player from a specific association
+    const groupUsage = associationGroupUsage || new Map();
+    // Players from associations with multiple participants go first
+    const multiAssocPlayers = shuffleArray(playerList.filter(player => (counts.get(getAssociationKey(player)) || 0) > 1));
+    // Single representatives are processed afterwards
+    const singleAssocPlayers = shuffleArray(playerList.filter(player => (counts.get(getAssociationKey(player)) || 0) <= 1));
+
+    // Work with a local copy of the remaining draw numbers
+    const available = [...availableNumbers];
+
+    const assignToPlayer = (player) => {
+      if (!available.length) return;
+      const assocKey = getAssociationKey(player);
+      const usedGroups = groupUsage.get(assocKey) || new Set();
+      // Prefer numbers from groups where this association has not appeared yet
+      const candidates = available.filter(num => !usedGroups.has(getGroupByNumber(num)));
+      const pool = candidates.length ? candidates : available;
+      const chosen = pool[Math.floor(Math.random() * pool.length)];
+      const index = available.indexOf(chosen);
+      if (index >= 0) {
+        available.splice(index, 1);
+      }
+      player.__drawNumber = chosen;
+      const updated = new Set(usedGroups);
+      const groupLetter = getGroupByNumber(chosen);
+      if (groupLetter) {
+        updated.add(groupLetter);
+        groupUsage.set(assocKey, updated);
+      }
+    };
+
+    multiAssocPlayers.forEach(assignToPlayer);
+    singleAssocPlayers.forEach(assignToPlayer);
+
+    return groupUsage;
+  }
+
+
+  function createPlayerInline(entry) {
+    const wrapper = document.createElement("span");
+    wrapper.className = "draw-player-inline";
+    const countryName = entry?.country || "";
+    if (countryName) {
+      const countryObject = (countries || []).find(c => c.team === countryName);
+      if (countryObject && countryObject.flag) {
+        const flagImg = document.createElement("img");
+        flagImg.src = countryObject.flag;
+        flagImg.className = "country-flag";
+        flagImg.alt = countryName;
+        wrapper.appendChild(flagImg);
+      }
+    }
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = entry?.player || "-";
+    wrapper.appendChild(nameSpan);
+    return wrapper;
+  }
+
+  function downloadMatchesCsv(groups, fileName) {
+    if (!Array.isArray(groups) || !groups.length) return;
+    const associationTotals = new Map();
+    const collectAssociationCounts = (player) => {
+      const key = getAssociationKey(player);
+      if (!key || key === "unknown") return;
+      associationTotals.set(key, (associationTotals.get(key) || 0) + 1);
+    };
+    groups.forEach(group => {
+      (group.matches || []).forEach(pair => {
+        if (pair && pair[0]) collectAssociationCounts(pair[0]);
+        if (pair && pair[1]) collectAssociationCounts(pair[1]);
+      });
+    });
+    const rows = [[
+      "Group",
+      "Match",
+      "Player 1",
+      "Player 1 Association",
+      "Player 1 Seeding",
+      "Player 2",
+      "Player 2 Association",
+      "Player 2 Seeding"
+    ]];
+    const formatPlayerName = (player) => (player && player.player) ? player.player : "";
+    const formatAssociation = (player) => {
+      if (!player) return "";
+      const order = ["association", "team", "club", "country"];
+      for (const key of order) {
+        const value = player[key];
+        if (value) {
+          const normalized = String(value).trim();
+          if (normalized) {
+            const assocKey = normalized.toLowerCase();
+            const total = associationTotals.get(assocKey);
+            return total && total > 1 ? `${total} - ${normalized}` : normalized;
+          }
+        }
+      }
+      return "";
+    };
+    const formatSeeding = (player) => (player && player.seeding) ? player.seeding : "";
+    groups.forEach(group => {
+      const groupLabel = group.title || "";
+      (group.matches || []).forEach((pair, index) => {
+        const playerOne = pair ? pair[0] : null;
+        const playerTwo = pair ? pair[1] : null;
+        rows.push([
+          groupLabel,
+          `Match ${index + 1}`,
+          formatPlayerName(playerOne),
+          formatAssociation(playerOne),
+          formatSeeding(playerOne),
+          formatPlayerName(playerTwo),
+          formatAssociation(playerTwo),
+          formatSeeding(playerTwo)
+        ]);
+      });
+    });
+    const csvContent = rows
+      .map(row => row.map(cell => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName || "draw-matches.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function renderMatchGroups(groups) {
+    if (!drawMatchesWrapper) return;
+    drawMatchesWrapper.innerHTML = "";
+    groups.forEach(group => {
+      const groupBlock = document.createElement("div");
+      groupBlock.className = "draw-group-block";
+      if (group.title) {
+        const groupTitle = document.createElement("div");
+        groupTitle.className = "group-title";
+        groupTitle.textContent = group.title;
+        groupBlock.appendChild(groupTitle);
+      }
+      (group.matches || []).forEach((pair, index) => {
+        groupBlock.appendChild(createMatchRevealRow(index + 1, pair));
+      });
+      drawMatchesWrapper.appendChild(groupBlock);
+    });
+  }
+
+  function createMatchRevealRow(matchNumber, pair) {
+    const matchRow = document.createElement("div");
+    matchRow.className = "draw-match-row";
+    const matchLabel = document.createElement("span");
+    matchLabel.textContent = `Match ${matchNumber}:`;
+
+    const matchContent = document.createElement("div");
+    matchContent.className = "match-content";
+
+    const revealButton = document.createElement("button");
+    revealButton.type = "button";
+    revealButton.className = "match-reveal";
+    revealButton.textContent = "Show";
+
+    const playersWrapper = document.createElement("div");
+    playersWrapper.className = "match-players";
+    playersWrapper.appendChild(createPlayerInline(pair ? pair[0] : null));
+    const vsSpan = document.createElement("span");
+    vsSpan.textContent = "vs";
+    playersWrapper.appendChild(vsSpan);
+    playersWrapper.appendChild(createPlayerInline(pair ? pair[1] : null));
+
+    revealButton.addEventListener("click", () => {
+      if (revealButton.disabled) return;
+      revealButton.disabled = true;
+      matchContent.innerHTML = "";
+      matchContent.appendChild(playersWrapper);
+    });
+
+    matchContent.appendChild(revealButton);
+    matchRow.appendChild(matchLabel);
+    matchRow.appendChild(matchContent);
+
+    return matchRow;
+  }
+
+
+  function getGroupByNumber(number) {
+    const group = Q1_GROUPS.find(range => number >= range.start && number <= range.end);
+    return group ? group.letter : null;
+  }
+
+  function getAssociationKey(player) {
+    if (!player) return "unknown";
+    const fieldOrder = ["association", "team", "club", "country"];
+    for (const field of fieldOrder) {
+      const value = player[field];
+      if (value) {
+        const normalized = String(value).trim();
+        if (normalized) {
+          return normalized.toLowerCase();
+        }
+      }
+    }
+    return "unknown";
+  }
+
+  function shuffleArray(items) {
+    const array = [...items];
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setupStageSelector();
+    fetchTournamentsAndInit();
+  });
+
+</script>

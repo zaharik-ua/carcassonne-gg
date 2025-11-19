@@ -1,10 +1,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;650;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
-  body {
-    font-family: 'Montserrat', sans-serif;
-  }
-
   .etcoc-cover {
     position: relative;
     width: min(100%, 1000px);
@@ -12,7 +8,7 @@
     overflow: hidden;
     border-radius: 2px;
     box-shadow: 1.4px 1.4px 2px #b2b2b2;
-    container-type: size;
+    container-type: inline-size;
   }
 
   .etcoc-cover__image {
@@ -28,44 +24,16 @@
     animation: etcoc-cover-drift 88s linear infinite;
   }
 
-  .etcoc-cover__content {
-    position: relative;
-    z-index: 1;
-    height: 100%;
-    padding: 5cqh 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-  }
-
   .etcoc-cover__logo {
-    height: 65cqh;
-    margin-bottom: 5cqh;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 65%;
     width: auto;
     max-width: 80%;
     object-fit: contain;
     pointer-events: none;
-  }
-
-  .etcoc-cover__cta {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 20%;
-    height: 20cqh;
-    background-color: #ffffff;
-    color: #333333;
-    text-decoration: none;
-    font-weight: 600;
-    font-size: min(1.6rem, 4cqw, 6cqh);
-    border-radius: 4px;
-    box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.25);
-  }
-
-  .etcoc-cover__cta:hover {
-    background-color: #f0f0f0;
-    box-shadow: 1px 2px 3px rgba(0, 0, 0, 0.35);
   }
 
   @keyframes etcoc-cover-drift {
@@ -90,19 +58,9 @@
 
 <div class="etcoc-cover">
   <div class="etcoc-cover__image"></div>
-  <div class="etcoc-cover__content">
-    <img
-      class="etcoc-cover__logo"
-      src="https://carcassonne.gg/gallery/ETCOC-2025-text.svg"
-      alt="ETCOC 2025"
-    />
-    <a
-      class="etcoc-cover__cta"
-      href="https://www.carcassonne.cat/etcoc2025/"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      Registration
-    </a>
-  </div>
+  <img
+    class="etcoc-cover__logo"
+    src="https://carcassonne.gg/gallery/ETCOC-2025-text.svg"
+    alt="ETCOC 2025"
+  />
 </div>

@@ -6,10 +6,12 @@
     "configurations": [
         
         {
-            "type": "chrome",
+            "name": "Debug Frontend in Chrome",
+            "type": "pwa-chrome",
             "request": "launch",
-            "name": "Open tournaments.html",
-            "file": "/Users/sergeyzakharenko/Documents/visualstudio/carcassonne-gg/gg-html/wc2024.html"
+            "url": "http://127.0.0.1:5500/",
+            "webRoot": "${workspaceFolder}"
         }
+
     ]
 }

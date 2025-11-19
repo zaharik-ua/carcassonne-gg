@@ -198,6 +198,28 @@
     object-fit: cover;
   }
 
+  .seeding-icon {
+    width: 10px;
+    height: auto;
+    margin-left: 4px;
+    display: inline-block;
+  }
+
+  .seeding-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    margin-top: 6px;
+    color: #333;
+  }
+
+  .seeding-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
   .country-wrap span {
     flex: 1 1 auto;
     min-width: 0;
@@ -214,6 +236,12 @@
     border-radius: 2px;
     vertical-align: middle;
   }
+
+  .elo-comment {
+    margin-top: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
 </style>
 
 <!-- HTML -->
@@ -227,6 +255,7 @@
   const currentTournamentId = "CCL-2026";
   let players = [];
   let tournament_players = [];
+  let tournaments = [];
   let countries = [];
   const PLAYER_STAGE_FILTERS = ["Main", "Q1", "Q2", "Q3", "Q4"];
   const playersFilterState = {
@@ -254,6 +283,7 @@
         // Збереження відповідних частин даних
         players = data.players || [];
         tournament_players = data.tournament_players || [];
+        tournaments = data.tournaments || [];
         countries = data.countries || [];
         initAndRenderTournamentContent();
       })
@@ -382,7 +412,7 @@
     table.className = "group-table";
 
     const headTr = document.createElement("tr");
-    ["Country", "Player", "Qualified by", "Stage"].forEach(label => {
+    ["Country", "Player", "Elo *", "Qualified by", "Stage"].forEach(label => {
       const th = document.createElement("th");
       th.textContent = label;
       if (label === "Player" || label === "Qualified by" || label === "Country") {
@@ -403,7 +433,7 @@
     if (!filtered.length) {
       const emptyRow = document.createElement("tr");
       const emptyCell = document.createElement("td");
-      emptyCell.colSpan = 4;
+      emptyCell.colSpan = 5;
       emptyCell.style.textAlign = "center";
       emptyCell.style.padding = "12px";
       emptyCell.textContent = "No players match filters.";
@@ -481,6 +511,26 @@
       playerTd.appendChild(playerWrap);
       tr.appendChild(playerTd);
 
+      const eloTd = document.createElement("td");
+      eloTd.style.textAlign = "center";
+      if (entry.elo !== undefined && entry.elo !== null && entry.elo !== "") {
+        const eloValue = document.createElement("span");
+        eloValue.textContent = entry.elo;
+        eloTd.appendChild(eloValue);
+
+        const seedingStatus = typeof entry.seeding === "string" ? entry.seeding.trim() : entry.seeding;
+        if (seedingStatus === "Seeded" || seedingStatus === "Unseeded") {
+          const seedingIcon = document.createElement("img");
+          seedingIcon.src = seedingStatus === "Seeded"
+            ? "https://carcassonne.gg/gallery/green-dot.png"
+            : "https://carcassonne.gg/gallery/red-dot.png";
+          seedingIcon.alt = `${seedingStatus} status icon`;
+          seedingIcon.className = "seeding-icon";
+          eloTd.appendChild(seedingIcon);
+        }
+      }
+      tr.appendChild(eloTd);
+
       const qualifiedTd = document.createElement("td");
       qualifiedTd.style.textAlign = "left";
       qualifiedTd.style.padding = "4px 6px";
@@ -526,6 +576,38 @@
 
     section.appendChild(table);
     playersContainer.appendChild(section);
+
+    const tournament = (tournaments || []).find(t => t.tournament_id === currentTournamentId);
+    const eloComment = (tournament && tournament.elo_comment) ? String(tournament.elo_comment).trim() : "";
+    if (eloComment) {
+      const commentBlock = document.createElement("div");
+      commentBlock.className = "elo-comment";
+      commentBlock.textContent = eloComment;
+      playersContainer.appendChild(commentBlock);
+    }
+
+    const legendBlock = document.createElement("div");
+    legendBlock.className = "seeding-legend";
+
+    const makeLegendItem = (iconSrc, text, altText) => {
+      const item = document.createElement("div");
+      item.className = "seeding-legend-item";
+      const icon = document.createElement("img");
+      icon.src = iconSrc;
+      icon.alt = altText;
+      icon.className = "seeding-icon";
+      icon.style.marginLeft = "0";
+      const label = document.createElement("span");
+      label.textContent = text;
+      item.appendChild(icon);
+      item.appendChild(label);
+      return item;
+    };
+
+    legendBlock.appendChild(makeLegendItem("https://carcassonne.gg/gallery/green-dot.png", "Seeded", "Seeded icon"));
+    legendBlock.appendChild(makeLegendItem("https://carcassonne.gg/gallery/red-dot.png", "Unseeded", "Unseeded icon"));
+
+    playersContainer.appendChild(legendBlock);
   }
 
   document.addEventListener("DOMContentLoaded", () => {
