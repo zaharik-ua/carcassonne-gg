@@ -1,0 +1,1432 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- СТИЛІ -->
+<style>
+  :root {
+    --main-bg-color: #A47864;
+    --hover-bg-color: #8F6553;
+    --accent-text-color: #fff;
+  }
+
+  /* Smooth anchor scrolling */
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Montserrat', sans-serif;
+  }
+
+  .group-section {
+    margin: 5px 0;
+    padding: 0 0px;
+  }
+
+  .qualification-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+    font-weight: 500;
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+    margin-bottom: 6px;
+  }
+
+  .qualification-toggle:hover,
+  .qualification-toggle:focus-visible {
+    background-color: var(--hover-bg-color);
+    outline: none;
+  }
+
+  .qualification-toggle__chevron {
+    display: flex;
+    align-items: center;
+  }
+
+  .qualification-toggle__chevron i {
+    transition: transform 0.3s ease;
+  }
+
+  .qualification-toggle.open .qualification-toggle__chevron i {
+    transform: rotate(180deg);
+  }
+
+  .qualification-content {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.3s ease;
+  }
+
+  .qualification-content__inner {
+    padding: 0 2px 8px;
+  }
+
+  
+
+  #tab-playoff-content {
+    display: block;
+    overflow-x: auto;
+    overflow-y: visible;
+    height: auto !important;
+    background-color: #f5f5f5;
+  }
+
+  #playoff-bracket {
+    display: flex;
+    align-items: flex-start;
+    /* The scroll is now handled by .playoff-scroll-wrapper */
+    width: 100%;
+    position: relative;
+    flex-wrap: nowrap;
+    flex: 1 0 auto;
+  }
+
+  .playoff-scroll-wrapper {
+    overflow-x: auto;
+    overflow-y: hidden;
+    width: 100%;
+    margin-bottom: 16px;
+  }
+  .playoff-scroll-wrapper > div {
+    min-width: max-content;
+  }
+  /* Background under playoff brackets */
+  #playoff-bracket,
+  .playoff-bracket {
+    background-color: #f2f4f7;
+  }
+  /* Toolbar + fullscreen controls for playoff brackets */
+  .playoff-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 8px;
+  }
+  .expand-bracket-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;               /* square button */
+    height: 28px;              /* square button */
+    padding: 0;                /* no padding to keep square */
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-text-color);
+    background-color: var(--main-bg-color);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    opacity: 0.5; /* semi-transparent */
+  }
+  .expand-bracket-btn:hover {
+    background-color: var(--hover-bg-color);
+  }
+  .expand-bracket-btn i { font-size: 12px; }
+  .expand-bracket-floating {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 5;
+  }
+
+  .fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    box-sizing: border-box;
+  }
+  .fullscreen-header {
+    display: none; /* header hidden; close button floats at top-left */
+  }
+  .fullscreen-close-btn {
+    position: absolute;
+    top: 20px;                 /* moved lower */
+    left: 20px;                /* moved right */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;               /* square button */
+    height: 28px;              /* square button */
+    padding: 0;                /* keep square */
+    font-size: 14px;
+    color: var(--accent-text-color);
+    background-color: var(--main-bg-color);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    box-shadow: 1.4px 1.4px 2px #00000040;
+    z-index: 10001;            /* ensure on top of content */
+  }
+  .fullscreen-close-btn:hover { background-color: var(--hover-bg-color); }
+  .fullscreen-content {
+    flex: 1 1 auto;
+    overflow: auto;
+    background: #f2f4f7;
+    border-radius: 4px;
+    padding: 8px;
+  }
+  /* Hide expand button inside the fullscreen copy */
+  .fullscreen-content .expand-bracket-floating { display: none; }
+  /* Group navigation chips for Stage 1 (Groups + DE) */
+  .groups-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 4px 0 10px;
+  }
+  .groups-nav > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .group-chip {
+    display: inline-block;
+    padding: 3px 8px;
+    background-color: #f2f4f7;
+    border: 1px solid #d7dbe0;
+    border-radius: 1px;
+    color: inherit;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 13px;
+    line-height: 14px;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+    cursor: pointer;
+  }
+  .group-chip:hover {
+    background-color: #d7eaff; /* slightly darker light blue */
+    border-color: #9fc5f5;
+  }
+  button.group-chip {
+    appearance: none;
+    background-color: #f2f4f7;
+  }
+  .stage-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 2px 0 10px;
+  }
+  .stage-filter-btn.active {
+    background-color: var(--main-bg-color);
+    border-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+  }
+  .stage-filter-search-input {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+  }
+  .stage-filter-search-input input {
+    padding: 3px 8px;
+    border: 1px solid #d7dbe0;
+    border-radius: 1px;
+    font-size: 13px;
+    font-family: 'Montserrat', sans-serif;
+    line-height: 14px;
+    min-width: 140px;
+  }
+  .stage-filter-search-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #d7dbe0;
+    border-radius: 2px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    max-height: 180px;
+    overflow-y: auto;
+    z-index: 10;
+    display: none;
+  }
+  .stage-filter-search-results ul {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+  }
+  .stage-filter-search-results li {
+    padding: 4px 10px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .stage-filter-search-results li:hover {
+    background-color: #f2f4f7;
+  }
+  .stage-filter-search {
+    margin-left: 20px;
+  }
+
+  /* Offset target position to avoid fixed header overlap when anchoring */
+  .stage-group-anchor { scroll-margin-top: 45px; }
+  .round-label {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+  /* Meta chips above bracket match boxes */
+  .match-meta-wrapper {
+    position: absolute;
+    width: 200px;  /* will be overridden inline to MATCH_WIDTH */
+    text-align: left;
+    font-size: 11px;
+    line-height: 13px;
+  }
+  .match-meta-chip {
+    display: inline-block;
+    padding: 1px 4px;
+    border-radius: 1px;
+    margin-right: 2px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.05) inset;
+  }
+  .match-meta-format {
+    background-color: #d7eaff; /* default light blue */
+    color: #073654;
+    font-weight: 400;
+  }
+  /* Variant backgrounds by duel format */
+  .match-meta-format.bo1 { /* Bo1 → white */
+    background-color: #ffffff;
+    color: #333333;
+  }
+  .match-meta-format.bo3 { /* Bo3 → light blue (as before) */
+    background-color: #d7eaff;
+    color: #073654;
+  }
+  .match-meta-format.bo5 { /* Bo5 → light red */
+    background-color: #fce0e0;
+    color: #590f0f;
+  }
+
+  .match-box {
+    background-color: white;
+    border: 1px solid #aaa;
+    border-radius: 2px;
+    font-size: 15px;
+    line-height: 18px;
+    margin-bottom: 20px;
+    /*box-shadow: 1px 1px 2px #b2b2b2;*/
+    box-sizing: border-box;
+  }
+  .match-box div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 50%;
+    gap: 6px;
+  }
+  .player-logo {
+    height: 18px;
+    width: 18px;
+    border: 0.5px solid #444;
+    object-fit: contain;
+    margin-right: 0px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-top: 2px;
+    margin-bottom: 2px;
+  }
+
+  .team-logo {
+    height: 20px;
+    width: 20px;
+    object-fit: contain;
+    margin-right: 0px;
+    border-radius: 2px;
+  }
+  
+  .match-box a {
+    color: #333333;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .match-box a:hover {
+    color: #0277BD;
+  }
+
+  .match-row-winner {
+    /* background-color: #fff; */
+    font-weight: 500;
+    padding: 0 7px;  
+  }
+
+  .match-row-loser {
+    /* background-color: #fff; */
+    padding: 0 7px; 
+  }
+
+  .highlight-player {
+    background-color: #eeeeee !important;
+  }
+  .highlight-text {
+    font-weight: 600;
+  }
+
+  </style>
+
+<!-- HTML -->
+<div id="tab-stage1-content"></div>
+
+<!-- СКРИПТ -->
+<script>
+  
+  // --- TOURNAMENT ID ---
+  // Determine currentTournamentId either from test default or from the page URL
+  const currentTournamentId = "CCL-2026Q";
+  let currentTournament = null;
+
+  // --- Dynamic tournament theme colors ---
+  function applyTournamentTheme() {
+    document.documentElement.style.setProperty('--main-bg-color', '#A47864');
+    document.documentElement.style.setProperty('--hover-bg-color', '#8F6553');
+    document.documentElement.style.setProperty('--accent-text-color', '#fff');
+  }
+
+  applyTournamentTheme();
+
+  let matches = [];
+  let duels = [];
+  let players = [];
+  let teams = [];
+  let duelPlayersForSearch = [];
+
+  // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
+  const BRACKET_MARGIN = 15;
+  const MATCH_HEIGHT = 60;
+  let MATCH_WIDTH = 200;
+  const ROUND_TITLE_TO_MATCH_SPACING = 60;
+  const VERTICAL_SPACING = 25;
+  const HORIZONTAL_SPACING = 30;
+  let THIRD_PLACE_VERTICAL_OFFSET = 50;
+
+  function rebuildDuelPlayersSearchIndex() {
+    const uniqueMap = new Map();
+    const addPlayer = (id, name) => {
+      const trimmedName = typeof name === "string" ? name.trim() : "";
+      if (!trimmedName) return;
+      const hasId = id !== undefined && id !== null && String(id).trim() !== "";
+      const key = hasId ? `id:${String(id).trim()}` : `name:${trimmedName.toLowerCase()}`;
+      if (uniqueMap.has(key)) return;
+      uniqueMap.set(key, {
+        id: hasId ? String(id).trim() : null,
+        name: trimmedName
+      });
+    };
+
+    (duels || []).forEach(duel => {
+      if (!duel || duel.tournament_id !== currentTournamentId) return;
+      addPlayer(duel.player1_id, duel.player1);
+      addPlayer(duel.player2_id, duel.player2);
+    });
+    debugger;
+
+    duelPlayersForSearch = Array.from(uniqueMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
+    debugger;
+  }
+
+  function fetchTournamentsAndInit() {
+    fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json")
+      .then(r => {
+        if (!r.ok) throw new Error("Failed to fetch data");
+        return r.json();
+      })
+      .then(data => {
+        if (!data || !data.tournaments || !Array.isArray(data.tournaments)) {
+          const stage1Container = document.getElementById("tab-stage1-content");
+          if (stage1Container) {
+            stage1Container.textContent = "❌ Failed to load tournament data";
+          }
+          return;
+        }
+
+        const allTournaments = data.tournaments;
+        currentTournament = allTournaments.find(t => t.tournament_id === currentTournamentId);
+        if (currentTournament) {
+          applyTournamentTheme();
+        }
+
+        // Збереження відповідних частин даних
+        duels = data.duels || [];
+        matches = data.matches || [];
+        players = data.players || [];
+        teams = data.teams || [];
+        rebuildDuelPlayersSearchIndex();
+        initAndRenderTournamentContent(currentTournament);
+      })
+      .catch(err => {
+        console.error("❌ Failed to load tournament data", err);
+        const stage1Container = document.getElementById("tab-stage1-content");
+        if (stage1Container) {
+          stage1Container.textContent = "❌ Failed to load tournament data";
+        }
+      });
+  }
+
+  function initAndRenderTournamentContent(currentTournament) {
+    const stage1Container = document.getElementById("tab-stage1-content");
+    if (!stage1Container) return;
+    stage1Container.style.display = "block";
+    stage1Container.innerHTML = "";
+
+    const tournamentType = currentTournament && currentTournament.type ? currentTournament.type : "";
+
+    const stage1Html = (currentTournament && typeof currentTournament.stage1_html === "string")
+      ? currentTournament.stage1_html.trim()
+      : "";
+
+    if (stage1Html) {
+      stage1Container.innerHTML = stage1Html;
+      return;
+    }
+
+    const grouped = {};
+    (tournamentType === "TEAM" ? matches : duels)
+      .filter(d => d.tournament_id === currentTournamentId && d.round_order !== null && d.group)
+      .forEach(d => {
+        if (!grouped[d.group]) grouped[d.group] = [];
+        grouped[d.group].push(d);
+      });
+
+    const groupKeys = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
+    if (!groupKeys.length) {
+      stage1Container.textContent = "Stage 1 info not available.";
+      return;
+    }
+
+    const accordionStates = new Map();
+    const groupSections = new Map();
+    const groupLinks = new Map();
+    const groupStageMap = new Map();
+    const stageButtons = new Map();
+    let accordionControls = null;
+    let activeStageFilter = null;
+
+    const resolveStageValue = (items) => {
+      if (!Array.isArray(items)) return null;
+      const found = items.find(item => {
+        if (!item || item.stage === undefined || item.stage === null) return false;
+        return String(item.stage).trim() !== "";
+      });
+      return found ? String(found.stage) : null;
+    };
+
+    const stageValues = Array.from(
+      new Set(
+        groupKeys
+          .map(group => resolveStageValue(grouped[group]))
+          .filter(stage => stage !== null)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+
+    if (stageValues.length) {
+      const stageFiltersElement = document.createElement("div");
+      stageFiltersElement.className = "stage-filters";
+      stageFiltersElement.setAttribute("role", "group");
+      stageFiltersElement.setAttribute("aria-label", "Фільтр за Stage");
+      stageValues.forEach(stageValue => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "group-chip stage-filter-btn";
+        btn.textContent = stageValue;
+        btn.setAttribute("aria-pressed", "false");
+        btn.addEventListener("click", () => {
+          activeStageFilter = activeStageFilter === stageValue ? null : stageValue;
+          applyStageFilter();
+        });
+        stageButtons.set(stageValue, btn);
+        stageFiltersElement.appendChild(btn);
+      });
+      let searchContainer = null;
+      let searchInput = null;
+      let searchResults = null;
+      const searchBtn = document.createElement("button");
+      searchBtn.type = "button";
+      searchBtn.className = "group-chip stage-filter-btn stage-filter-search";
+      searchBtn.textContent = "Search Player";
+      searchBtn.setAttribute("aria-label", "Search player");
+      searchBtn.addEventListener("click", () => {
+        if (!searchContainer) {
+          searchContainer = document.createElement("div");
+          searchContainer.className = "stage-filter-search-input";
+
+          searchInput = document.createElement("input");
+          searchInput.type = "text";
+          searchInput.placeholder = "Search player...";
+
+          searchResults = document.createElement("div");
+          searchResults.className = "stage-filter-search-results";
+          const list = document.createElement("ul");
+          searchResults.appendChild(list);
+
+          searchContainer.appendChild(searchInput);
+          searchContainer.appendChild(searchResults);
+
+          searchInput.addEventListener("input", () => {
+            const query = searchInput.value.trim().toLowerCase();
+            const listEl = searchResults.querySelector("ul");
+            listEl.innerHTML = "";
+            if (!query) {
+              searchResults.style.display = "none";
+              return;
+            }
+            const matches = duelPlayersForSearch
+              .filter(p => p && typeof p.name === "string" && p.name.toLowerCase().startsWith(query))
+              .slice(0, 20);
+            if (!matches.length) {
+              searchResults.style.display = "none";
+              return;
+            }
+            matches.forEach(player => {
+              const li = document.createElement("li");
+              li.textContent = player.name;
+              listEl.appendChild(li);
+            });
+            searchResults.style.display = "block";
+          });
+        }
+        stageFiltersElement.replaceChild(searchContainer, searchBtn);
+        searchInput.focus();
+      });
+      stageFiltersElement.appendChild(searchBtn);
+      stage1Container.appendChild(stageFiltersElement);
+    }
+
+    const applyStageFilter = () => {
+      groupSections.forEach((section, group) => {
+        const stageValue = groupStageMap.get(group);
+        const shouldShow = !activeStageFilter || stageValue === activeStageFilter;
+        section.style.display = shouldShow ? "" : "none";
+      });
+      groupLinks.forEach((link, group) => {
+        const stageValue = groupStageMap.get(group);
+        const shouldShow = !activeStageFilter || stageValue === activeStageFilter;
+        link.style.display = shouldShow ? "" : "none";
+      });
+      stageButtons.forEach((btn, stage) => {
+        const isActive = stage === activeStageFilter;
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    };
+
+    const navWrapper = document.createElement("div");
+    navWrapper.className = "groups-nav";
+    groupKeys.forEach(g => {
+      const link = document.createElement("a");
+      link.className = "group-chip";
+      link.textContent = g;
+      link.href = `#group-${g}`;
+      groupLinks.set(g, link);
+      link.addEventListener("click", (e) => {
+        e.preventDefault();
+        const groupStageValue = groupStageMap.get(g);
+        if (activeStageFilter && activeStageFilter !== groupStageValue) {
+          activeStageFilter = groupStageValue || null;
+          applyStageFilter();
+        }
+        const state = accordionStates.get(g);
+        const scrollToGroup = () => {
+          const target = document.getElementById(`group-${g}`);
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            history.replaceState(null, '', `${window.location.pathname}#group-${g}`);
+          }
+        };
+        if (state && !state.isOpen()) {
+          state.expand();
+          setTimeout(scrollToGroup, 320);
+          return;
+        }
+        scrollToGroup();
+      });
+      navWrapper.appendChild(link);
+    });
+
+    const controls = document.createElement("button");
+    controls.type = "button";
+    controls.className = "group-chip";
+    controls.textContent = "Expand All";
+    controls.dataset.state = "collapsed";
+    controls.addEventListener("click", () => {
+      const shouldExpand = controls.dataset.state !== "expanded";
+      accordionStates.forEach(state => {
+        if (shouldExpand) {
+          state.expand();
+        } else {
+          state.collapse();
+        }
+      });
+      controls.dataset.state = shouldExpand ? "expanded" : "collapsed";
+      controls.textContent = shouldExpand ? "Collapse All" : "Expand All";
+    });
+    navWrapper.appendChild(controls);
+    accordionControls = controls;
+    navWrapper.style.justifyContent = 'space-between';
+    const chipsContainer = document.createElement('div');
+    while (navWrapper.firstChild) {
+      chipsContainer.appendChild(navWrapper.firstChild);
+    }
+    navWrapper.appendChild(chipsContainer);
+    navWrapper.appendChild(controls);
+    stage1Container.appendChild(navWrapper);
+
+    const updateControlsState = () => {
+      if (!accordionControls) return;
+      const allOpened = Array.from(accordionStates.values()).every(state => state.isOpen());
+      accordionControls.dataset.state = allOpened ? "expanded" : "collapsed";
+      accordionControls.textContent = allOpened ? "Collapse All" : "Expand All";
+    };
+
+    groupKeys.forEach(group => {
+      const duelsInGroup = grouped[group];
+      const stageValue = resolveStageValue(duelsInGroup);
+      const section = document.createElement("div");
+      section.className = "group-section stage-group-anchor";
+      section.id = `group-${group}`;
+
+      const toggle = document.createElement("div");
+      toggle.className = "qualification-toggle";
+      toggle.setAttribute("role", "button");
+      toggle.setAttribute("tabindex", "0");
+      toggle.setAttribute("aria-expanded", "false");
+
+      const label = document.createElement("span");
+      label.textContent = `Group ${group}`;
+      const chevron = document.createElement("div");
+      chevron.className = "qualification-toggle__chevron";
+      chevron.innerHTML = '<i class="fas fa-chevron-down"></i>';
+      toggle.appendChild(label);
+      toggle.appendChild(chevron);
+
+      const content = document.createElement("div");
+      content.className = "qualification-content";
+      const inner = document.createElement("div");
+      inner.className = "qualification-content__inner";
+      content.appendChild(inner);
+
+      section.appendChild(toggle);
+      section.appendChild(content);
+      stage1Container.appendChild(section);
+      groupSections.set(group, section);
+      groupStageMap.set(group, stageValue);
+
+      renderDoubleElimination(duelsInGroup, inner, tournamentType);
+
+      const state = {
+        open: false,
+        expand: () => {
+          toggle.classList.add("open");
+          toggle.setAttribute("aria-expanded", "true");
+          content.style.maxHeight = `${content.scrollHeight}px`;
+          state.open = true;
+          updateControlsState();
+        },
+        collapse: () => {
+          content.style.maxHeight = `${content.scrollHeight}px`;
+          void content.offsetHeight;
+          toggle.classList.remove("open");
+          toggle.setAttribute("aria-expanded", "false");
+          content.style.maxHeight = "0px";
+          state.open = false;
+          updateControlsState();
+        },
+        isOpen: () => state.open
+      };
+      accordionStates.set(group, state);
+
+      toggle.addEventListener("click", () => {
+        if (state.isOpen()) {
+          state.collapse();
+        } else {
+          state.expand();
+        }
+      });
+
+      toggle.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          if (state.isOpen()) {
+            state.collapse();
+          } else {
+            state.expand();
+          }
+        }
+      });
+    });
+
+    applyStageFilter();
+  }
+  // Format match time to local TZ
+  function formatMatchTime(raw) {
+    if (!raw || typeof raw !== "string") return "";
+    const s = raw.trim();
+    // With time: DD.MM.YYYY HH:MM:SS
+    if (/^\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}:\d{2}$/.test(s)) {
+      const [datePart, timePart] = s.split(/\s+/);
+      const [dd, mm, yyyy] = datePart.split(".").map(Number);
+      const [HH, MM, SS] = timePart.split(":").map(Number);
+      const ts = Date.UTC(yyyy, mm - 1, dd, HH, MM, SS);
+      const d = new Date(ts);
+      const dayMon = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const hm = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+      return `${dayMon} ${hm}`; // e.g., 12 Aug 14:00
+    }
+    // Date only: DD.MM.YYYY → show as DD Mon
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(s)) {
+      const [dd, mm, yyyy] = s.split(".").map(Number);
+      // Use noon UTC to avoid TZ shifting date
+      const ts = Date.UTC(yyyy, mm - 1, dd, 12, 0, 0);
+      const d = new Date(ts);
+      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    }
+    // Fallback: return as-is
+    return s;
+  }
+  // Calculate coordinates for playoff bracket matches (layout logic)
+  function calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, playoffMatches, currentTournamentId) {
+
+    // 1. Find the round with the maximum number of matches
+    const maxMatchRound = sortedRounds.reduce((maxRound, r) => {
+      return (groupedByRound[r].length > groupedByRound[maxRound]?.length || !maxRound) ? r : maxRound;
+    }, sortedRounds[0]);
+
+    // 2. Layout matches of maxMatchRound
+    groupedByRound[maxMatchRound]
+      .filter(m => m.knockout_stage !== "third_place")
+      .forEach((m, index) => {
+        const cord_top = BRACKET_MARGIN + ROUND_TITLE_TO_MATCH_SPACING + index * (MATCH_HEIGHT + VERTICAL_SPACING);
+        const cord_left = BRACKET_MARGIN + roundIndexMap[maxMatchRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+        const cord_bottom = cord_top + MATCH_HEIGHT;
+        m.cord_top = cord_top;
+        m.cord_left = cord_left;
+        m.cord_bottom = cord_bottom;
+      });
+
+    // 3. Layout rounds to the right of maxMatchRound
+    for (let i = sortedRounds.indexOf(maxMatchRound) + 1; i < sortedRounds.length; i++) {
+      const roundNum = sortedRounds[i];
+      groupedByRound[roundNum]
+        .filter(m => m.knockout_stage !== "third_place")
+        .forEach(m => {
+          const sources = sortedRounds[i - 1] ? groupedByRound[sortedRounds[i - 1]].filter(pm => pm.next_game_win === m.knockout_id) : [];
+          let cord_top = 0;
+          if (sources.length === 2) {
+            const cord_top1 = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[0].knockout_id).cord_top;
+            const cord_top2 = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[1].knockout_id).cord_top;
+            const center = (cord_top1 + cord_top2 + MATCH_HEIGHT) / 2;
+            cord_top = center - MATCH_HEIGHT / 2;
+          } else if (sources.length === 1) {
+            cord_top = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[0].knockout_id).cord_top;
+          }
+          // Якщо немає "попередників": розміщуємо під останнім матчем цього раунду
+          if (sources.length === 0) {
+            const sameRoundPlaced = groupedByRound[roundNum]
+              .filter(x => x.knockout_stage !== "third_place" && x.knockout_id !== m.knockout_id && typeof x.cord_bottom === "number");
+            if (sameRoundPlaced.length > 0) {
+              const maxBottom = Math.max(...sameRoundPlaced.map(x => x.cord_bottom));
+              cord_top = maxBottom + VERTICAL_SPACING;
+            } else {
+              // Якщо це перший матч у раунді — починаємо одразу під заголовком раунду
+              cord_top = BRACKET_MARGIN + ROUND_TITLE_TO_MATCH_SPACING;
+            }
+          }
+          
+          const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+          const cord_bottom = cord_top + MATCH_HEIGHT;
+          m.cord_top = cord_top;
+          m.cord_left = cord_left;
+          m.cord_bottom = cord_bottom;
+        });
+    }
+
+    // 4. Layout rounds to the left of maxMatchRound
+    for (let i = sortedRounds.indexOf(maxMatchRound) - 1; i >= 0; i--) {
+      const roundNum = sortedRounds[i];
+      const nextRound = sortedRounds[i + 1];
+      groupedByRound[nextRound]
+        .filter(s => s.knockout_stage !== "third_place")
+        .forEach(s => {
+          const predecessors = groupedByRound[roundNum]?.filter(m => m.next_game_win === s.knockout_id) || [];
+          if (predecessors.length === 1) {
+            const cord_top = groupedByRound[nextRound].find(m => m.knockout_id === s.knockout_id).cord_top;
+            const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+            const cord_bottom = cord_top + MATCH_HEIGHT;
+            const match = groupedByRound[roundNum].find(m => m.knockout_id === predecessors[0].knockout_id);
+            if (match) {
+              match.cord_top = cord_top;
+              match.cord_left = cord_left;
+              match.cord_bottom = cord_bottom;
+            }
+          } else if (predecessors.length === 2) {
+            const cord_topCenter = groupedByRound[nextRound].find(m => m.knockout_id === s.knockout_id).cord_top + MATCH_HEIGHT / 2;
+            const cord_top1 = cord_topCenter - VERTICAL_SPACING / 2 - MATCH_HEIGHT;
+            const cord_top2 = cord_topCenter + VERTICAL_SPACING / 2;
+            const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+            const cord_bottom1 = cord_top1 + MATCH_HEIGHT;
+            const cord_bottom2 = cord_top2 + MATCH_HEIGHT;
+            const match1 = groupedByRound[roundNum].find(m => m.knockout_id === predecessors[0].knockout_id);
+            const match2 = groupedByRound[roundNum].find(m => m.knockout_id === predecessors[1].knockout_id);
+            if (match1) {
+              match1.cord_top = cord_top1;
+              match1.cord_left = cord_left;
+              match1.cord_bottom = cord_bottom1;
+            }
+            if (match2) {
+              match2.cord_top = cord_top2;
+              match2.cord_left = cord_left;
+              match2.cord_bottom = cord_bottom2;
+            }
+          }
+        });
+    }
+
+    // 5. Add 3rd place match if exists
+    const thirdPlaceMatch = playoffMatches.find(g => g.tournament_id === currentTournamentId && g.knockout_stage === "third_place");
+    if (thirdPlaceMatch) {
+      const thirdPlaceRound = Number(thirdPlaceMatch.round_order);
+      const existingMatch = groupedByRound[thirdPlaceRound]?.find(m => m.knockout_id === thirdPlaceMatch.knockout_id);
+      if (existingMatch) {
+        let startTop = 0;
+        const matchesInRound = groupedByRound[thirdPlaceRound].filter(m => m.knockout_id !== thirdPlaceMatch.knockout_id);
+        if (matchesInRound.length > 0) {
+          const lastMatch = matchesInRound[matchesInRound.length - 1];
+          startTop = lastMatch.cord_bottom + THIRD_PLACE_VERTICAL_OFFSET;
+        }
+        existingMatch.cord_top = startTop;
+        existingMatch.cord_left = BRACKET_MARGIN + roundIndexMap[thirdPlaceRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+        existingMatch.cord_bottom = startTop + ROUND_TITLE_TO_MATCH_SPACING + MATCH_HEIGHT;
+        existingMatch.knockout_stage = "third_place";
+      }
+    }
+  }
+
+  function renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, container){
+    sortedRounds.forEach((roundNum, colIndex) => {
+      const matches = groupedByRound[roundNum];
+      matches.sort((a, b) => Number(a.game_id) - Number(b.game_id));
+
+      // Додаємо назву раунду (label) і, якщо є, дати (після двокрапки)
+      const rawRound = matches.find(m => m.knockout_stage !== "third_place")?.round || `Round ${roundNum}`;
+      const [roundTitle, roundDates] = (() => {
+        const idx = rawRound.indexOf(":");
+        if (idx === -1) return [rawRound.trim(), ""];
+        return [rawRound.slice(0, idx).trim(), rawRound.slice(idx + 1).trim()];
+      })();
+
+      const baseLeft = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+
+      const label = document.createElement("div");
+      label.className = "round-label";
+      label.textContent = roundTitle;
+      label.style.position = "absolute";
+      label.style.width = `${MATCH_WIDTH}px`;
+      label.style.textAlign = "center";
+      label.style.left = `${baseLeft}px`;
+      label.style.top = `${BRACKET_MARGIN}px`;
+      container.appendChild(label);
+
+      if (roundDates) {
+        const dateLabel = document.createElement("div");
+        dateLabel.className = "round-label";
+        dateLabel.textContent = roundDates;
+        dateLabel.style.position = "absolute";
+        dateLabel.style.width = `${MATCH_WIDTH}px`;
+        dateLabel.style.textAlign = "center";
+        dateLabel.style.left = `${baseLeft}px`;
+        // Place just under the title, within ROUND_TITLE_TO_MATCH_SPACING space
+        dateLabel.style.top = `${BRACKET_MARGIN + 16}px`;
+        dateLabel.style.fontWeight = "400";
+        container.appendChild(dateLabel);
+      }
+      
+      // Додаємо матчі
+      matches.forEach((m) => {
+        const matchBox = document.createElement("div");
+        matchBox.className = "match-box";
+        matchBox.style.width = `${MATCH_WIDTH}px`;
+        matchBox.style.height = `${MATCH_HEIGHT}px`;
+        matchBox.style.position = "absolute";
+
+        let topOffset = m.cord_top;
+        if (m.knockout_stage === "third_place") {
+          // Назву раунду для матчу за 3-є місце додаємо окремо нижче
+          const label = document.createElement("div");
+          label.className = "round-label";
+          label.style.position = "absolute";
+          label.style.width = `${MATCH_WIDTH}px`;
+          label.style.textAlign = "center";
+          label.style.left = `${m.cord_left}px`;
+          label.style.top = `${topOffset}px`;
+          const rawThird = m.round || "3rd place";
+          const [thirdTitle, thirdDates] = (() => {
+            const idx = rawThird.indexOf(":");
+            if (idx === -1) return [rawThird.trim(), ""];
+            return [rawThird.slice(0, idx).trim(), rawThird.slice(idx + 1).trim()];
+          })();
+          label.textContent = thirdTitle;
+          container.appendChild(label);
+          if (thirdDates) {
+            const dateLabel = document.createElement("div");
+            dateLabel.className = "round-label";
+            dateLabel.textContent = thirdDates;
+            dateLabel.style.position = "absolute";
+            dateLabel.style.width = `${MATCH_WIDTH}px`;
+            dateLabel.style.textAlign = "center";
+            dateLabel.style.left = `${m.cord_left}px`;
+            dateLabel.style.top = `${topOffset + 16}px`;
+            dateLabel.style.fontWeight = "400";
+            container.appendChild(dateLabel);
+          }
+          topOffset += ROUND_TITLE_TO_MATCH_SPACING;
+        }
+
+        // Add meta labels above match box
+        const hasTime = m.time !== null && m.time !== undefined && String(m.time).trim() !== "";
+        const isCOC = tournamentType !== "TEAM"; // COC-type brackets use duels data
+        if (hasTime || (isCOC && m.duel_format)) {
+          const metaWrap = document.createElement("div");
+          metaWrap.className = "match-meta-wrapper";
+          metaWrap.style.left = `${m.cord_left + 2}px`;
+          metaWrap.style.top = `${Math.max(0, topOffset - 14)}px`;
+          metaWrap.style.width = `${MATCH_WIDTH}px`;
+
+          if (isCOC && m.duel_format) {
+            const fmt = document.createElement("span");
+            fmt.className = "match-meta-chip match-meta-format";
+            fmt.textContent = m.duel_format; // e.g., Bo1/Bo3/Bo5
+            const dfmt = String(m.duel_format || '').toLowerCase();
+            if (dfmt.includes('bo1')) {
+              fmt.classList.add('bo1');
+            } else if (dfmt.includes('bo3')) {
+              fmt.classList.add('bo3');
+            } else if (dfmt.includes('bo5') || dfmt.includes('b05')) {
+              fmt.classList.add('bo5');
+            }
+            metaWrap.appendChild(fmt);
+          }
+
+          if (hasTime) {
+            // Plain text time (no chip background), like earlier behavior
+            const timeText = document.createElement("span");
+            timeText.textContent = formatMatchTime(m.time);
+            if (isCOC && m.duel_format) timeText.style.marginLeft = "6px";
+            metaWrap.appendChild(timeText);
+          }
+
+          container.appendChild(metaWrap);
+        }
+
+        matchBox.style.top = `${topOffset}px`;
+        matchBox.style.left = `${m.cord_left}px`;
+
+        const opponent1Div = document.createElement("div");
+        const opponent2Div = document.createElement("div");
+
+        if (tournamentType === "TEAM") {
+          // додаємо плейофф матчі з командами
+          opponent1Div.className = m.duels_won1 > m.duels_won2 ? "match-row-winner" : "match-row-loser";
+          // Team 1: logo + name
+          let team1Logo = null;
+          const team1Avatar = teams.find(tm => tm.team === m.team1)?.logo;
+          if (team1Avatar) {
+            team1Logo = document.createElement("img");
+            team1Logo.src = team1Avatar;
+            team1Logo.className = "team-logo";
+          }
+          const team1Info = document.createElement("div");
+          team1Info.style.display = "flex";
+          team1Info.style.alignItems = "center";
+          if (team1Logo) team1Info.appendChild(team1Logo);
+          const team1Name = document.createElement("span");
+          team1Name.textContent = m.team1;
+          team1Name.style.maxWidth = `${MATCH_WIDTH - 60}px`;
+          team1Name.style.display = "inline-block";
+          team1Name.style.whiteSpace = "nowrap";
+          team1Name.style.overflow = "hidden";
+          team1Name.style.textOverflow = "ellipsis";
+          team1Info.appendChild(team1Name);
+          const score1Span = document.createElement("span");
+          score1Span.textContent = m.duels_won1;
+          opponent1Div.appendChild(team1Info);
+          opponent1Div.appendChild(score1Span);
+          // Add data-opponent-name attribute
+          opponent1Div.setAttribute("data-opponent-name", m.team1);
+          opponent2Div.className = m.duels_won1 < m.duels_won2 ? "match-row-winner" : "match-row-loser";
+          // Team 2: logo + name
+          let team2Logo = null;
+          const team2Avatar = teams.find(tm => tm.team === m.team2)?.logo;
+          if (team2Avatar) {
+            team2Logo = document.createElement("img");
+            team2Logo.src = team2Avatar;
+            team2Logo.className = "team-logo";
+          }
+          const team2Info = document.createElement("div");
+          team2Info.style.display = "flex";
+          team2Info.style.alignItems = "center";
+          if (team2Logo) team2Info.appendChild(team2Logo);
+          const team2Name = document.createElement("span");
+          team2Name.textContent = m.team2;
+          team2Name.style.maxWidth = `${MATCH_WIDTH - 60}px`;
+          team2Name.style.display = "inline-block";
+          team2Name.style.whiteSpace = "nowrap";
+          team2Name.style.overflow = "hidden";
+          team2Name.style.textOverflow = "ellipsis";
+          team2Info.appendChild(team2Name);
+          const score2Span = document.createElement("span");
+          score2Span.textContent = m.duels_won2;
+          opponent2Div.appendChild(team2Info);
+          opponent2Div.appendChild(score2Span);
+          // Add data-opponent-name attribute
+          opponent2Div.setAttribute("data-opponent-name", m.team2);  
+        } else {
+
+          // додаємо плейофф матчі з гравцями
+          opponent1Div.className = m.score1 > m.score2 ? "match-row-winner" : "match-row-loser";
+          // Player 1: logo + link
+          let player1Logo = null;
+          const player1Avatar = players.find(pl => pl.player_id === m.player1_id)?.avatar;
+          if (player1Avatar) {
+            player1Logo = document.createElement("img");
+            player1Logo.src = player1Avatar;
+            player1Logo.className = "player-logo";
+          }
+          const player1Link = document.createElement("a");
+          if (m.player1_id) {
+            player1Link.href = `https://boardgamearena.com/player?id=${m.player1_id}`;
+            player1Link.target = "_blank";
+          } else {
+            player1Link.removeAttribute("href");
+          }
+          player1Link.textContent = m.player1;
+          // Add maxWidth and display for truncation
+          player1Link.style.maxWidth = `${MATCH_WIDTH - 60}px`;
+          player1Link.style.display = "inline-block";
+          const player1Info = document.createElement("div");
+          player1Info.style.display = "flex";
+          player1Info.style.alignItems = "center";
+          if (player1Logo) player1Info.appendChild(player1Logo);
+          player1Info.appendChild(player1Link);
+          const score1Span = document.createElement("span");
+          score1Span.textContent = m.score1;
+          opponent1Div.appendChild(player1Info);
+          opponent1Div.appendChild(score1Span);
+          // Add data-opponent-name attribute
+          opponent1Div.setAttribute("data-opponent-name", m.player1);
+          
+          opponent2Div.className = m.score1 < m.score2 ? "match-row-winner" : "match-row-loser";
+          // Player 2: logo + link
+          let player2Logo = null;
+          const player2Avatar = players.find(pl => pl.player_id === m.player2_id)?.avatar;
+          if (player2Avatar) {
+            player2Logo = document.createElement("img");
+            player2Logo.src = player2Avatar;
+            player2Logo.className = "player-logo";
+          }
+          const player2Link = document.createElement("a");
+          if (m.player2_id) {
+            player2Link.href = `https://boardgamearena.com/player?id=${m.player2_id}`;
+            player2Link.target = "_blank";
+          } else {
+            player2Link.removeAttribute("href");
+          }
+          player2Link.textContent = m.player2;
+          // Add maxWidth and display for truncation
+          player2Link.style.maxWidth = `${MATCH_WIDTH - 60}px`;
+          player2Link.style.display = "inline-block";
+          const player2Info = document.createElement("div");
+          player2Info.style.display = "flex";
+          player2Info.style.alignItems = "center";
+          if (player2Logo) player2Info.appendChild(player2Logo);
+          player2Info.appendChild(player2Link);
+          const score2Span = document.createElement("span");
+          score2Span.textContent = m.score2;
+          opponent2Div.appendChild(player2Info);
+          opponent2Div.appendChild(score2Span);
+          // Add data-opponent-name attribute
+          opponent2Div.setAttribute("data-opponent-name", m.player2);  
+        }
+
+        matchBox.appendChild(opponent1Div);
+        matchBox.appendChild(opponent2Div);
+        container.appendChild(matchBox);
+      });
+    });
+  }
+
+  function drawPlayoffLines(groupedByRound, sortedRounds, container) {
+    const matchById = {};
+    Object.values(groupedByRound).flat().forEach(m => {
+      matchById[m.knockout_id] = m;
+    });
+
+    const playoffConnectors = [];
+    sortedRounds.forEach(roundNum => {
+      groupedByRound[roundNum].forEach(match => {
+        if (!match.next_game_win) return;
+        const from = matchById[match.knockout_id];
+        const to = matchById[match.next_game_win];
+        if (!from || !to) return;
+
+        const fromLeft = from.cord_left;
+        const fromTop = from.cord_top;
+        const toLeft = to.cord_left;
+        const toTop = to.cord_top;
+
+        const yFrom = fromTop + MATCH_HEIGHT / 2 - 1;
+        const yTo = toTop + MATCH_HEIGHT / 2 - 1;
+        const xFrom = fromLeft + MATCH_WIDTH;
+        const xTo = toLeft;
+
+        const connector = {
+          game_from: match.knockout_id,
+          game_to: match.next_game_win,
+          lines: []
+        };
+
+        if (yFrom === yTo) {
+          connector.lines.push({
+            x1: xFrom,
+            y1: yFrom,
+            x2: xTo,
+            y2: yTo
+          });
+        } else {
+          const midX = fromLeft + MATCH_WIDTH + HORIZONTAL_SPACING / 2;
+          const preX = toLeft - HORIZONTAL_SPACING / 2;
+          const adjustedY2 = fromTop > toTop ? yTo + 5 : yTo - 5;
+
+          connector.lines.push({
+            x1: xFrom,
+            y1: yFrom,
+            x2: midX + 2,
+            y2: yFrom
+          });
+          connector.lines.push({
+            x1: midX,
+            y1: yFrom,
+            x2: midX,
+            y2: adjustedY2
+          });
+          connector.lines.push({
+            x1: preX + 3,
+            y1: yTo,
+            x2: xTo,
+            y2: yTo
+          });
+        }
+
+        playoffConnectors.push(connector);
+      });
+    });
+
+    playoffConnectors.forEach(connector => {
+      connector.lines.forEach(lineCoords => {
+        const isHorizontal = lineCoords.y1 === lineCoords.y2;
+        const lineDiv = document.createElement("div");
+        lineDiv.style.position = "absolute";
+        lineDiv.style.backgroundColor = "#ccc";
+        lineDiv.style.zIndex = "0";
+
+        if (isHorizontal) {
+          lineDiv.style.left = `${lineCoords.x1}px`;
+          lineDiv.style.top = `${lineCoords.y1}px`;
+          lineDiv.style.width = `${lineCoords.x2 - lineCoords.x1}px`;
+          lineDiv.style.height = "2px";
+        } else {
+          lineDiv.style.left = `${lineCoords.x1}px`;
+          lineDiv.style.top = `${Math.min(lineCoords.y1, lineCoords.y2)}px`;
+          lineDiv.style.width = "2px";
+          lineDiv.style.height = `${Math.abs(lineCoords.y2 - lineCoords.y1)}px`;
+        }
+
+        container.appendChild(lineDiv);
+      });
+    });
+  }
+  function renderDoubleElimination(playoffMatches, containerOverride, tournamentType) {
+    
+    // Optionally override THIRD_PLACE_VERTICAL_OFFSET from currentTournament (ignore null/empty)
+    if (currentTournament && currentTournament.hasOwnProperty('third_place_vertical_offset')) {
+      const tpo = currentTournament.third_place_vertical_offset;
+      if (tpo !== null && tpo !== "" && tpo !== undefined) {
+        const parsed = Number(tpo);
+        if (!Number.isNaN(parsed)) {
+          THIRD_PLACE_VERTICAL_OFFSET = parsed;
+        }
+      }
+    }
+
+    // Optionally override MATCH_WIDTH from currentTournament (ignore null/empty)
+    if (currentTournament && currentTournament.hasOwnProperty('match_width')) {
+      const mw = currentTournament.match_width;
+      if (mw !== null && mw !== "" && mw !== undefined) {
+        const parsedMw = Number(mw);
+        if (!Number.isNaN(parsedMw)) {
+          MATCH_WIDTH = parsedMw;
+        }
+      }
+    }
+    // Build layout and UI for playoff bracket including match positions, labels, and connectors
+    let container;
+    let bracketDiv;
+    if (containerOverride) {
+      container = containerOverride;
+      container.innerHTML = '';
+      // Add a scrollable wrapper
+      const scrollWrapper = document.createElement("div");
+      scrollWrapper.className = "playoff-scroll-wrapper";
+      // Add a wrapper for the bracket
+      bracketDiv = document.createElement("div");
+      bracketDiv.id = "playoff-bracket";
+      bracketDiv.style.position = "relative";
+      scrollWrapper.appendChild(bracketDiv);
+      container.appendChild(scrollWrapper);
+      container = bracketDiv;
+      // Floating fullscreen button inside bracket
+      const expandBtn = document.createElement("button");
+      expandBtn.className = "expand-bracket-btn expand-bracket-floating";
+      expandBtn.title = "Відкрити на весь екран";
+      expandBtn.innerHTML = '<i class="fas fa-up-right-and-down-left-from-center"></i>';
+      container.appendChild(expandBtn);
+      expandBtn.addEventListener('click', () => openBracketFullscreen(scrollWrapper));
+    } else {
+      // fallback: legacy behavior
+      container = document.getElementById("playoff-bracket");
+      container.innerHTML = '';
+      container.style.position = "relative";
+    }
+
+    // 1) Split matches by multiple_elimination_stage
+    const stageGroups = {};
+    (playoffMatches || []).forEach(m => {
+      const key = (m.multiple_elimination_stage ?? '').toString();
+      if (!stageGroups[key]) stageGroups[key] = [];
+      stageGroups[key].push(m);
+    });
+    // 2) Sort groups alphabetically by stage key
+    const stageOrder = Object.keys(stageGroups).sort((a, b) => a.localeCompare(b));
+    // Track global sizing across all groups
+    let cumulativeTopOffset = 0;
+    let globalMaxLeft = 0;
+    // 3) Process each group sequentially
+    stageOrder.forEach(stageKey => {
+      const stageMatches = stageGroups[stageKey];
+      if (!stageMatches || !stageMatches.length) return;
+      // Group by round within this stage
+      const groupedByRound = {};
+      stageMatches.forEach(match => {
+        const roundNum = Number(match.round_order);
+        if (!groupedByRound[roundNum]) groupedByRound[roundNum] = [];
+        groupedByRound[roundNum].push(match);
+      });
+      const sortedRounds = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
+      const roundIndexMap = {};
+      sortedRounds.forEach((r, i) => roundIndexMap[r] = i);
+
+      // Compute coordinates for this stage
+      calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, stageMatches, currentTournamentId);
+      // Create a sub-container for this stage to apply vertical offset cleanly
+      const stageContainer = document.createElement("div");
+      stageContainer.style.position = "absolute";
+      stageContainer.style.left = "0px";
+      stageContainer.style.top = `${cumulativeTopOffset}px`;
+      stageContainer.style.width = "max-content";
+      container.appendChild(stageContainer);
+      // Render matches and lines for this stage inside the sub-container
+      renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, stageContainer);
+      drawPlayoffLines(groupedByRound, sortedRounds, stageContainer);
+      // Update global sizing info
+      const allStageMatches = Object.values(groupedByRound).flat();
+      const stageMaxBottom = Math.max(...allStageMatches.map(m => m.cord_bottom || 0));
+      const stageMaxLeft = Math.max(...allStageMatches.map(m => m.cord_left || 0));
+
+      globalMaxLeft = Math.max(globalMaxLeft, stageMaxLeft);
+      cumulativeTopOffset += stageMaxBottom + BRACKET_MARGIN; // space between stages
+    });
+
+    // 4) After all groups, set container dimensions
+    container.style.height = `${cumulativeTopOffset}px`;
+    container.style.width = `${globalMaxLeft + MATCH_WIDTH + BRACKET_MARGIN}px`;
+
+    // 5) Hover highlight across entire bracket container
+    const playoffContainer = container;
+    playoffContainer.querySelectorAll(".match-row-winner, .match-row-loser").forEach(row => {
+      const playerName = row.getAttribute("data-opponent-name");
+      if (playerName !== null && playerName !== "") {
+        row.addEventListener("mouseenter", () => {
+          playoffContainer.querySelectorAll(`[data-opponent-name="${playerName}"]`).forEach(el => {
+            el.classList.add("highlight-player");
+          });
+        });
+
+        row.addEventListener("mouseleave", () => {
+          playoffContainer.querySelectorAll(`[data-opponent-name="${playerName}"]`).forEach(el => {
+            el.classList.remove("highlight-player");
+          });
+        });
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    fetchTournamentsAndInit();
+  });
+
+  // Opens a fullscreen overlay that shows only the bracket block
+  function openBracketFullscreen(sourceWrapper) {
+    try {
+      const overlay = document.createElement('div');
+      overlay.className = 'fullscreen-overlay';
+
+      // Close button (top-left, icon only)
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'fullscreen-close-btn';
+      closeBtn.title = 'Закрити (Esc)';
+      closeBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+      overlay.appendChild(closeBtn);
+
+      const content = document.createElement('div');
+      content.className = 'fullscreen-content';
+      // Clone the scrollable wrapper with the bracket inside
+      const cloned = sourceWrapper.cloneNode(true);
+      content.appendChild(cloned);
+      overlay.appendChild(content);
+
+      document.body.appendChild(overlay);
+
+      const onClose = () => {
+        if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        document.removeEventListener('keydown', onKeyDown);
+      };
+      closeBtn.addEventListener('click', onClose);
+      overlay.addEventListener('click', (e) => {
+        // allow clicking the dark background to close (but not inner content)
+        if (e.target === overlay) onClose();
+      });
+
+      // Close on Esc
+      const onKeyDown = (e) => {
+        if (e.key === 'Escape' || e.key === 'Esc') onClose();
+      };
+      document.addEventListener('keydown', onKeyDown);
+    } catch (e) {
+      console.error('Fullscreen open failed', e);
+    }
+  }
+</script>

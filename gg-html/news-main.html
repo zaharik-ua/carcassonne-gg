@@ -1,0 +1,947 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+<style>
+  body {
+    font-family: 'Montserrat', sans-serif;
+  }
+  .news-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background-color: #2C6DA3;
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 6px 5px;
+    justify-content: space-between;
+  }
+  .news-header img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+  .news-header-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .news-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #fff;
+    padding: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: color 0.2s ease, transform 0.2s ease;
+  }
+  .news-filter-toggle:hover,
+  .news-filter-toggle:focus-visible {
+    color: #dbe7f4;
+    transform: scale(1.05);
+    outline: none;
+  }
+  .news-row {
+    background: white;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border-top: 1px solid #ccc;
+    padding: 7px 5px;
+    font-size: 13px;
+    line-height: 15px;
+  }
+  .news-row:hover {
+    background-color: #f9f9f9;
+  }
+  .news-icon {
+    height: auto;
+    object-fit: contain;
+    cursor: default;
+  }
+  .news-icon-low {
+    width: 20px;
+  }
+  .news-icon-medium {
+    width: 40px;
+  }
+  .news-icon-high {
+    width: 60px;
+    cursor: zoom-in;
+  }
+  .news-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .news-content-high .news-title {
+    font-size: 14px;
+  }
+  .news-title-high {
+    font-size: 14px;
+  }
+  .news-title {
+    flex-grow: 1;
+  }
+  .news-title a {
+    color: #146997;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .news-title a:hover {
+    color: #0e4f73;
+    text-decoration: none;
+  }
+  .news-chevron {
+    cursor: pointer;
+    font-size: 14px;
+    padding-left: 2px;
+    transition: transform 0.3s ease;
+  }
+  .news-description {
+    height: 0;
+    overflow: hidden;
+    transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+    background-color: #f5f5f5;
+    padding: 0 7px;
+  }
+  .news-description.open {
+    padding-top: 0px;
+    padding-bottom: 0px;
+  }
+  .news-description-content {
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 3px 0;
+  }
+  .news-description-content-high {
+    font-size: 13px;
+  }
+  .news-description-date {
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 4px;
+  }
+  .news-filter-panel {
+    overflow: hidden;
+    background-color: #f0f6fb;
+    border-bottom: 1px solid #c5d8e6;
+    transition: height 0.3s ease, padding 0.3s ease;
+    height: 0;
+    padding: 0 7px;
+  }
+  .news-filter-panel.open {}
+  .news-filter-options {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 7px 0;
+  }
+  .news-country-selector {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    margin: 0;
+    min-width: 150px;
+    align-self: flex-start;
+  }
+  .news-country-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 1px 8px;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    font-size: 14px;
+    cursor: pointer;
+    gap: 6px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    font-family: inherit;
+  }
+  .news-country-toggle:hover,
+  .news-country-toggle:focus-visible {
+    border-color: #b5c5d3;
+    box-shadow: 1.4px 1.4px 2px rgba(0, 0, 0, 0.3);
+    outline: none;
+  }
+  .news-country-toggle.open {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .news-country-toggle.select-placeholder .news-country-label {
+    color: #808080;
+  }
+  .news-country-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    font-weight: 400;
+    font-size: 13px;
+  }
+  .news-country-flag {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+  }
+  .news-country-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    color: #555;
+  }
+  .news-country-chevron i {
+    transition: transform 0.3s ease;
+    font-size: 12px;
+  }
+  .news-country-toggle.open .news-country-chevron i {
+    transform: rotate(180deg);
+  }
+  .news-country-content {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.3s ease;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .news-country-content.open {
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 2px 2px;
+    box-shadow: 1.4px 1.4px 2px rgba(0, 0, 0, 0.2);
+    background: #fff;
+  }
+  .news-country-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 4px 8px;
+    background: #fff;
+    border-top: 1px solid #e2e2e2;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    gap: 6px;
+    border: none;
+    color: inherit;
+    font-family: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .news-country-row:first-child {
+    border-top: none;
+  }
+  .news-country-row:hover {
+    background-color: #f5f5f5;
+  }
+  .news-country-row.active {
+    background-color: #e4f0fb;
+  }
+  .news-country-row .news-country-name {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .news-country-empty {
+    padding: 6px 8px;
+    font-size: 12px;
+    color: #666;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-top: none;
+  }
+  .news-filter-option {
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background-color: #fffde5;
+    color: #333;
+    transition: all 0.2s ease;
+    user-select: none;
+  }
+  .news-filter-option.active {
+    border-color: #0277BD;
+    background-color: #fbf092;
+  }
+  .news-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 9999;
+    padding: 20px;
+  }
+  .news-modal.open {
+    display: flex;
+  }
+  .news-modal-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .news-modal-content img {
+    width: auto;
+    height: auto;
+    max-width: calc(90vw - 40px);
+    max-height: calc(90vh - 40px);
+    border-radius: 4px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  }
+  .news-modal-close {
+    position: absolute;
+    top: -12px;
+    right: -12px;
+    background: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
+    line-height: 28px;
+    cursor: pointer;
+    padding: 0;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  }
+</style>
+
+<div class="news-header">
+  <span class="news-header-title">Carcassonne News</span>
+  <button class="news-filter-toggle" type="button" aria-label="Toggle filters" aria-expanded="false">
+    <i class="fa fa-sliders-h"></i>
+  </button>
+</div>
+<div id="news-filters" class="news-filter-panel"></div>
+<div id="news-container"></div>
+
+<script>
+  let imageModal;
+
+  const closeImageModal = () => {
+    if (!imageModal) {
+      return;
+    }
+    imageModal.classList.remove("open");
+    const img = imageModal.querySelector("img");
+    if (img) {
+      img.src = "";
+    }
+  };
+
+  const ensureImageModal = () => {
+    if (imageModal) {
+      return imageModal;
+    }
+
+    imageModal = document.createElement("div");
+    imageModal.className = "news-modal";
+    imageModal.innerHTML = `
+      <div class="news-modal-content">
+        <button class="news-modal-close" aria-label="Close preview">&times;</button>
+        <img src="" alt="News preview">
+      </div>
+    `;
+
+    imageModal.addEventListener("click", event => {
+      if (event.target === imageModal) {
+        closeImageModal();
+      }
+    });
+
+    imageModal.querySelector(".news-modal-close").addEventListener("click", closeImageModal);
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && imageModal.classList.contains("open")) {
+        closeImageModal();
+      }
+    });
+
+    document.body.appendChild(imageModal);
+    return imageModal;
+  };
+
+  const openImageModal = (src, alt) => {
+    const modal = ensureImageModal();
+    const img = modal.querySelector("img");
+    img.src = src;
+    img.alt = alt || "News preview";
+    modal.classList.add("open");
+  };
+
+  const newsContainer = document.getElementById("news-container");
+  const filtersPanel = document.getElementById("news-filters");
+  const filterToggleButton = document.querySelector(".news-filter-toggle");
+  const newsFilterDefinitions = [
+    { id: "main", label: "Main News", matcher: importance => importance === "high" },
+    { id: "important", label: "Important", matcher: importance => importance === "high" || importance === "medium" }
+  ];
+  const filterButtons = new Map();
+  let allNewsItems = [];
+  let activeNewsFilter = null;
+  let hasNewsDataLoaded = false;
+  let availableCountries = [];
+  let countryDataMap = new Map();
+  let selectedCountry = null;
+  let countryToggle = null;
+  let countryContent = null;
+  let countryLabel = null;
+  let countryChevronIcon = null;
+  let isCountryDropdownOpen = false;
+
+  const normalizeImportance = (value) => {
+    const normalized = String(value ?? "").trim().toLowerCase();
+    return normalized === "high" || normalized === "medium" || normalized === "low" ? normalized : "low";
+  };
+
+  const parseDateTime = (value) => {
+    if (!value) {
+      return 0;
+    }
+
+    const trimmed = String(value).trim();
+    if (!trimmed) {
+      return 0;
+    }
+
+    const [rawDate = "", rawTime = "00:00"] = trimmed.split(/\s+/);
+    const separatorMatch = rawDate.match(/[./-]/);
+
+    if (!separatorMatch) {
+      const fallback = new Date(trimmed);
+      return Number.isNaN(fallback.getTime()) ? 0 : fallback.getTime();
+    }
+
+    const [day, month, rawYear] = rawDate.split(separatorMatch[0]);
+    const year = rawYear && rawYear.length === 2 ? `20${rawYear}` : rawYear;
+    const normalizedTime = rawTime.includes(":") ? rawTime : `${rawTime}:00`;
+    const normalizedDate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${normalizedTime}`;
+    const parsed = new Date(normalizedDate);
+
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+  };
+
+  const formatDisplayDate = (value) => {
+    const timestamp = parseDateTime(value);
+    if (!timestamp) {
+      return "";
+    }
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = monthLabels[date.getMonth()] || "";
+    const year = date.getFullYear();
+    return month ? `${day}.${month} ${year}` : "";
+  };
+
+  const updateFilterButtonsState = () => {
+    filterButtons.forEach((btn, id) => {
+      btn.classList.toggle("active", id === activeNewsFilter);
+    });
+  };
+
+  const extractCountries = (value) => {
+    if (!value) {
+      return [];
+    }
+    return String(value)
+      .split(",")
+      .map(country => country.trim())
+      .filter(Boolean);
+  };
+  const getCountryEntry = (countryName) => {
+    if (!countryName) {
+      return null;
+    }
+    if (countryDataMap.has(countryName)) {
+      return countryDataMap.get(countryName);
+    }
+    const normalized = countryName.toLowerCase();
+    for (const [key, value] of countryDataMap.entries()) {
+      if (key.toLowerCase() === normalized) {
+        return value;
+      }
+    }
+    return null;
+  };
+
+  const getCountryFlag = (countryName) => {
+    const entry = getCountryEntry(countryName);
+    return entry && entry.flag ? entry.flag : "";
+  };
+
+  const updateCountryDropdownHeight = () => {
+    if (!countryContent) {
+      return;
+    }
+    if (isCountryDropdownOpen) {
+      countryContent.style.maxHeight = `${countryContent.scrollHeight}px`;
+    } else {
+      countryContent.style.maxHeight = "0px";
+    }
+  };
+
+  const setCountryDropdownOpen = (isOpen) => {
+    isCountryDropdownOpen = Boolean(isOpen);
+    if (countryToggle) {
+      countryToggle.classList.toggle("open", isCountryDropdownOpen);
+    }
+    if (countryContent) {
+      countryContent.classList.toggle("open", isCountryDropdownOpen);
+    }
+    if (countryChevronIcon) {
+      countryChevronIcon.style.transform = isCountryDropdownOpen ? "rotate(180deg)" : "rotate(0deg)";
+    }
+    updateCountryDropdownHeight();
+  };
+
+  const updateCountryLabel = () => {
+    if (!countryLabel) {
+      return;
+    }
+    countryLabel.innerHTML = "";
+    if (selectedCountry) {
+      const flagUrl = getCountryFlag(selectedCountry);
+      if (flagUrl) {
+        const flagImg = document.createElement("img");
+        flagImg.className = "news-country-flag";
+        flagImg.src = flagUrl;
+        flagImg.alt = `${selectedCountry} flag`;
+        countryLabel.appendChild(flagImg);
+      }
+      const label = document.createElement("span");
+      label.textContent = selectedCountry;
+      countryLabel.appendChild(label);
+    } else {
+      const label = document.createElement("span");
+      label.textContent = "Country: All";
+      countryLabel.appendChild(label);
+    }
+    if (countryToggle) {
+      countryToggle.classList.toggle("select-placeholder", !selectedCountry);
+    }
+  };
+
+  const updateCountryRowsSelection = () => {
+    if (!countryContent) {
+      return;
+    }
+    countryContent.querySelectorAll(".news-country-row").forEach(row => {
+      const value = row.dataset.country || "";
+      row.classList.toggle("active", selectedCountry ? value === selectedCountry : value === "");
+    });
+  };
+
+  const createCountryRow = (countryName, label, flagUrl) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "news-country-row";
+    row.dataset.country = countryName || "";
+
+    if (flagUrl) {
+      const flag = document.createElement("img");
+      flag.className = "news-country-flag";
+      flag.src = flagUrl;
+      flag.alt = `${label} flag`;
+      row.appendChild(flag);
+    }
+
+    const name = document.createElement("span");
+    name.className = "news-country-name";
+    name.textContent = label;
+    row.appendChild(name);
+
+    row.addEventListener("click", () => {
+      setSelectedCountry(countryName || null);
+      setCountryDropdownOpen(false);
+    });
+
+    return row;
+  };
+
+  const buildCountryRows = () => {
+    if (!countryContent) {
+      return;
+    }
+
+    countryContent.innerHTML = "";
+
+    if (!availableCountries.length) {
+      const empty = document.createElement("div");
+      empty.className = "news-country-empty";
+      empty.textContent = "No countries available";
+      countryContent.appendChild(empty);
+      updateCountryDropdownHeight();
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(createCountryRow(null, "Country: All", ""));
+
+    availableCountries.forEach(country => {
+      const flagUrl = getCountryFlag(country);
+      fragment.appendChild(createCountryRow(country, country, flagUrl));
+    });
+
+    countryContent.appendChild(fragment);
+    updateCountryRowsSelection();
+    updateCountryDropdownHeight();
+  };
+
+  const setSelectedCountry = (countryName) => {
+    const normalized = countryName ? String(countryName).trim() : "";
+    if (normalized && availableCountries.includes(normalized)) {
+      selectedCountry = normalized;
+    } else {
+      selectedCountry = null;
+    }
+    updateCountryLabel();
+    updateCountryRowsSelection();
+    renderNewsList();
+  };
+
+  const refreshCountrySelector = () => {
+    buildCountryRows();
+    updateCountryLabel();
+    updateCountryRowsSelection();
+    updateCountryDropdownHeight();
+  };
+
+  function renderNewsList() {
+    if (!newsContainer) {
+      return;
+    }
+
+    newsContainer.innerHTML = "";
+
+    if (!allNewsItems.length) {
+      if (hasNewsDataLoaded) {
+        newsContainer.textContent = "ℹ️ Наразі немає новин для відображення.";
+      }
+      return;
+    }
+
+    const activeDefinition = activeNewsFilter
+      ? newsFilterDefinitions.find(def => def.id === activeNewsFilter)
+      : null;
+
+    let itemsToRender = activeDefinition
+      ? allNewsItems.filter(item => activeDefinition.matcher(normalizeImportance(item.importance)))
+      : allNewsItems;
+
+    if (selectedCountry) {
+      itemsToRender = itemsToRender.filter(item => {
+        const itemCountries = extractCountries(item.countries);
+        return itemCountries.includes(selectedCountry);
+      });
+    }
+
+    if (!itemsToRender.length) {
+      newsContainer.textContent = "ℹ️ Наразі немає новин для відображення.";
+      return;
+    }
+
+    itemsToRender.forEach(newsItem => {
+      const row = document.createElement("div");
+      row.className = "news-row";
+
+      const normalizedImportance = normalizeImportance(newsItem.importance);
+      const displayDate = (normalizedImportance === "high" || normalizedImportance === "medium")
+        ? formatDisplayDate(newsItem.time)
+        : "";
+
+      const iconUrl = newsItem.icon || newsItem.icon1 || "";
+      if (iconUrl) {
+        const icon = document.createElement("img");
+        icon.className = "news-icon";
+        icon.src = iconUrl;
+        icon.alt = newsItem.title || newsItem.short_title || "News icon";
+        icon.classList.add(`news-icon-${normalizedImportance}`);
+        if (normalizedImportance === "high") {
+          icon.addEventListener("click", event => {
+            event.stopPropagation();
+            openImageModal(iconUrl, icon.alt);
+          });
+        }
+        row.appendChild(icon);
+      }
+
+      const contentWrapper = document.createElement("div");
+      contentWrapper.className = "news-content";
+      if (normalizedImportance === "high") {
+        contentWrapper.classList.add("news-content-high");
+      }
+
+      if (displayDate) {
+        const dateLabel = document.createElement("div");
+        dateLabel.className = "news-description-date";
+        dateLabel.textContent = displayDate;
+        contentWrapper.appendChild(dateLabel);
+      }
+
+      const title = document.createElement("div");
+      title.className = "news-title";
+      if (normalizedImportance === "high") {
+        title.classList.add("news-title-high");
+      }
+      const titleText = (newsItem.title || newsItem.short_title || "").trim() || "News";
+      const hasLink = Boolean(newsItem.link && String(newsItem.link).trim());
+
+      if (hasLink) {
+        const link = document.createElement("a");
+        link.textContent = titleText;
+        link.href = newsItem.link.trim();
+        link.style.fontWeight = "500";
+        if (!link.href.toLowerCase().includes("carcassonne.gg")) {
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+        }
+        title.appendChild(link);
+      } else {
+        const span = document.createElement("span");
+        span.textContent = titleText;
+        title.appendChild(span);
+      }
+      contentWrapper.appendChild(title);
+      row.appendChild(contentWrapper);
+
+      let descriptionBlock;
+      if (newsItem.description) {
+        const chevron = document.createElement("i");
+        chevron.className = "fa fa-chevron-down news-chevron";
+        row.appendChild(chevron);
+
+        descriptionBlock = document.createElement("div");
+        descriptionBlock.className = "news-description";
+        const descriptionContent = document.createElement("div");
+        descriptionContent.className = "news-description-content";
+        if (normalizedImportance === "high") {
+          descriptionContent.classList.add("news-description-content-high");
+        }
+        descriptionContent.innerHTML = newsItem.description;
+        descriptionBlock.appendChild(descriptionContent);
+
+        const toggleDescription = () => {
+          const isOpen = descriptionBlock.classList.contains("open");
+          if (isOpen) {
+            descriptionBlock.style.height = descriptionBlock.scrollHeight + "px";
+            requestAnimationFrame(() => {
+              descriptionBlock.style.height = "0px";
+              descriptionBlock.classList.remove("open");
+              chevron.style.transform = "rotate(0deg)";
+            });
+          } else {
+            descriptionBlock.style.height = "0px";
+            descriptionBlock.classList.add("open");
+            chevron.style.transform = "rotate(180deg)";
+            requestAnimationFrame(() => {
+              descriptionBlock.style.height = descriptionBlock.scrollHeight + "px";
+            });
+          }
+        };
+
+        descriptionBlock.addEventListener("transitionend", event => {
+          if (event.propertyName === "height" && descriptionBlock.classList.contains("open")) {
+            descriptionBlock.style.height = "auto";
+          }
+        });
+
+        chevron.addEventListener("click", event => {
+          event.stopPropagation();
+          toggleDescription();
+        });
+
+        if (!hasLink) {
+          row.addEventListener("click", toggleDescription);
+        }
+
+        newsContainer.appendChild(row);
+        newsContainer.appendChild(descriptionBlock);
+      } else {
+        newsContainer.appendChild(row);
+      }
+    });
+  }
+
+  function setupNewsFilters() {
+    if (!filtersPanel) {
+      return;
+    }
+
+    filterButtons.clear();
+    filtersPanel.innerHTML = "";
+
+    const optionsWrapper = document.createElement("div");
+    optionsWrapper.className = "news-filter-options";
+
+    newsFilterDefinitions.forEach(def => {
+      const btn = document.createElement("div");
+      btn.className = "news-filter-option";
+      btn.textContent = def.label;
+      btn.addEventListener("click", () => {
+        activeNewsFilter = activeNewsFilter === def.id ? null : def.id;
+        updateFilterButtonsState();
+        renderNewsList();
+      });
+      filterButtons.set(def.id, btn);
+      optionsWrapper.appendChild(btn);
+    });
+
+    const countryWrapper = document.createElement("div");
+    countryWrapper.className = "news-country-selector";
+
+    countryToggle = document.createElement("button");
+    countryToggle.type = "button";
+    countryToggle.className = "news-country-toggle select-placeholder";
+
+    countryLabel = document.createElement("div");
+    countryLabel.className = "news-country-label";
+    countryToggle.appendChild(countryLabel);
+
+    const chevron = document.createElement("div");
+    chevron.className = "news-country-chevron";
+    countryChevronIcon = document.createElement("i");
+    countryChevronIcon.className = "fa fa-chevron-down";
+    chevron.appendChild(countryChevronIcon);
+    countryToggle.appendChild(chevron);
+
+    countryToggle.addEventListener("click", () => {
+      setCountryDropdownOpen(!isCountryDropdownOpen);
+    });
+
+    countryContent = document.createElement("div");
+    countryContent.className = "news-country-content";
+
+    countryWrapper.appendChild(countryToggle);
+    countryWrapper.appendChild(countryContent);
+
+    optionsWrapper.appendChild(countryWrapper);
+    filtersPanel.appendChild(optionsWrapper);
+
+    updateFilterButtonsState();
+    refreshCountrySelector();
+  }
+
+  let isFilterPanelOpen = false;
+
+  if (filtersPanel && filterToggleButton) {
+    const toggleFilterPanel = () => {
+      if (isFilterPanelOpen) {
+        isFilterPanelOpen = false;
+        filterToggleButton.setAttribute("aria-expanded", "false");
+        setCountryDropdownOpen(false);
+        filtersPanel.style.height = `${filtersPanel.scrollHeight}px`;
+        requestAnimationFrame(() => {
+          filtersPanel.style.height = "0px";
+        });
+      } else {
+        isFilterPanelOpen = true;
+        filterToggleButton.setAttribute("aria-expanded", "true");
+        filtersPanel.style.height = "0px";
+        filtersPanel.classList.add("open");
+        requestAnimationFrame(() => {
+          filtersPanel.style.height = `${filtersPanel.scrollHeight}px`;
+        });
+        requestAnimationFrame(() => {
+          updateCountryDropdownHeight();
+        });
+      }
+    };
+
+    filterToggleButton.addEventListener("click", toggleFilterPanel);
+
+    filtersPanel.addEventListener("transitionend", event => {
+      if (event.propertyName !== "height") {
+        return;
+      }
+
+      if (isFilterPanelOpen) {
+        filtersPanel.style.height = "auto";
+      } else {
+        filtersPanel.classList.remove("open");
+        filtersPanel.style.height = "0px";
+      }
+    });
+  }
+
+  if (filtersPanel) {
+    setupNewsFilters();
+  }
+
+  function fetchNews() {
+    if (newsContainer) {
+      newsContainer.innerHTML = "";
+    }
+
+    fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/news.json")
+      .then(res => res.json())
+      .then(data => {
+        allNewsItems = Array.isArray(data.news) ? [...data.news] : [];
+        allNewsItems.sort((a, b) => parseDateTime(b?.time) - parseDateTime(a?.time));
+        hasNewsDataLoaded = true;
+        const newsCountriesSet = new Set(allNewsItems.flatMap(item => extractCountries(item.countries)));
+        newsCountriesSet.delete("");
+
+        const fetchedCountries = Array.isArray(data.countries) ? data.countries : [];
+        countryDataMap = new Map();
+        fetchedCountries.forEach(entry => {
+          const teamName = typeof entry.team === "string" ? entry.team.trim() : "";
+          if (!teamName || !newsCountriesSet.has(teamName)) {
+            return;
+          }
+          if (!countryDataMap.has(teamName)) {
+            countryDataMap.set(teamName, {
+              team: teamName,
+              flag: typeof entry.flag === "string" ? entry.flag.trim() : ""
+            });
+          }
+        });
+
+        availableCountries = Array.from(newsCountriesSet).filter(Boolean).sort((a, b) => a.localeCompare(b));
+        availableCountries.forEach(country => {
+          if (!countryDataMap.has(country)) {
+            countryDataMap.set(country, { team: country, flag: "" });
+          }
+        });
+
+        if (selectedCountry && !availableCountries.includes(selectedCountry)) {
+          selectedCountry = null;
+        }
+
+        refreshCountrySelector();
+        renderNewsList();
+      })
+      .catch(err => {
+        hasNewsDataLoaded = true;
+        countryDataMap = new Map();
+        availableCountries = [];
+        selectedCountry = null;
+        refreshCountrySelector();
+        if (newsContainer) {
+          newsContainer.textContent = "❌ Failed to load news.";
+        }
+        console.error(err);
+      });
+  }
+
+  fetchNews();
+</script>

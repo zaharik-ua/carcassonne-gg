@@ -1,0 +1,1865 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;650;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- СТИЛІ -->
+<style>
+  
+  /* -------------START OF MAIN STILES--------------- */
+
+  body {
+    font-family: 'Montserrat', sans-serif;
+    background-color: #0b2b4e; /* dark blue page background */
+  }
+
+  /* Smooth anchor scrolling */
+  html { scroll-behavior: smooth; }
+
+  :root {
+    --main-bg-color: #2C6DA3;   /* синій за замовчуванням */
+    --hover-bg-color: #24598a; /* синій hover за замовчуванням */
+  }
+
+  /* Generic data styles */
+  .data-normal { 
+    color: #ffffff; 
+    font-size: 16px; 
+    line-height: 18px;
+    font-weight: 400; 
+  }
+  .data-winner { 
+    color: #ffffff; 
+    font-size: 16px; 
+    line-height: 18px;
+    font-weight: 650; 
+  }
+  .data-header { 
+    color: #ffffff; 
+    font-size: 17px; 
+    line-height: 19px;
+    font-weight: 500; 
+  }
+  .data-row { 
+    background-color: transparent; 
+    height: 28px; 
+    border-bottom: 1px solid #888;
+  }
+
+  /* Unified bounded container */
+  .bounded {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 auto;
+    max-width: 1200px;
+  }
+
+  /* Temporarily hide sections */
+  #tab-playoffs-content,
+  #tab-swiss-content,
+  #tab-matches-content {
+    display: none;
+  }
+
+  /* Large section titles (Playoffs, Swiss, Rounds, Players) */
+  .section-title {
+    color: #ffffff;
+    font-size: 22px;
+    text-align: center;
+    padding: 50px 0 10px 0;
+    font-weight: 700;
+  }
+  /* Players: Count label */
+  .players-count { color:#ffffff; font-size:14px; font-weight:500; }
+
+  /* Players table: allow multi-line rows */
+  .players-table .data-row { height: auto; }
+
+  .players-table .col-elo {
+    text-align: center;
+  }
+
+  .players-filter {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 2px;
+    margin: 8px 0 10px;
+  }
+
+  .players-filter-options {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    padding: 0;
+    flex-wrap: wrap;
+  }
+
+  .player-info-cell {
+    width: 34px;
+    text-align: center;
+  }
+
+  .player-info-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    color: #ffffff;
+    cursor: pointer;
+    user-select: none;
+    background-color: transparent;
+    transition: background-color 0.2s ease, transform 0.2s ease, color 0.2s ease;
+  }
+
+  .player-info-toggle:hover,
+  .player-info-toggle:focus-visible {
+    background-color: rgba(154, 212, 255, 0.12);
+    transform: scale(1.05);
+    outline: none;
+  }
+
+  .player-info-toggle.open {
+    background-color: rgba(154, 212, 255, 0.18);
+  }
+
+  .player-info-toggle i {
+    font-size: 14px;
+    line-height: 1;
+    color: #ffffff;
+    pointer-events: none;
+    transition: color 0.2s ease;
+  }
+
+  .player-info-toggle:hover i,
+  .player-info-toggle:focus-visible i,
+  .player-info-toggle.open i {
+    color: #9ad4ff;
+  }
+
+  .players-filter-flag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    padding: 2px;
+    width: 28px;
+    height: 20px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  .players-filter-flag:hover,
+  .players-filter-flag:focus-visible {
+    border-color: #9ad4ff;
+    box-shadow: 0 0 4px rgba(154, 212, 255, 0.4);
+    outline: none;
+    transform: translateY(-1px);
+  }
+
+  .players-filter-flag.active {
+    border-color: #ffffff;
+    box-shadow: 0 0 0 1px rgba(154, 212, 255, 0.7);
+  }
+
+  .players-filter-flag img {
+    width: 20px;
+    height: auto;
+    object-fit: contain;
+    display: block;
+    border-radius: 2px;
+  }
+
+  .player-details-row td {
+    padding: 0;
+    border-bottom: 1px solid #888;
+    text-align: left;
+  }
+
+  .player-details {
+    overflow: hidden;
+    height: 0;
+    transition: height 0.3s ease;
+  }
+
+  .player-details__inner {
+    padding: 8px 12px;
+    color: #ffffff;
+    font-size: 14px;
+    line-height: 18px;
+  }
+
+  .player-details__content {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .player-details__photo {
+    max-height: 200px;
+    width: auto;
+    border-radius: 4px;
+    object-fit: cover;
+    cursor: zoom-in;
+  }
+
+  .player-details__text {
+    white-space: pre-line;
+  }
+
+  @media (max-width: 600px) {
+    .player-details__content {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .player-details__photo {
+      max-width: 100%;
+    }
+  }
+
+  .player-photo-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 9999;
+    padding: 20px;
+  }
+
+  .player-photo-modal.open {
+    display: flex;
+  }
+
+  .player-photo-modal__content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .player-photo-modal__content img {
+    width: auto;
+    height: auto;
+    max-width: calc(90vw - 40px);
+    max-height: calc(90vh - 40px);
+    border-radius: 4px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  }
+
+  @media (max-width: 768px) {
+    .players-table .col-elo {
+      display: none;
+    }
+  }
+
+  /* BGA nickname: break even without spaces */
+  .bga-nick {
+    white-space: normal;
+    overflow-wrap: anywhere; /* allows breaking long strings */
+    word-break: break-word;  /* fallback for broader support */
+  }
+
+  .bga-link {
+    color: #ffffff;
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
+
+  .bga-link:hover,
+  .bga-link:focus {
+    color: #9ad4ff;
+    text-decoration: none;
+  }
+
+  .player-logo {
+    height: auto;
+    width: 22px;
+    object-fit: contain;
+    vertical-align: middle;
+    /*border: 0.5px solid #ffffff;
+    border-radius: 1px;*/
+  }
+
+  /* YouTube icon for board labels */
+  .yt-icon {
+    height: 11px;
+    width: auto;
+    margin-left: 6px;
+    vertical-align: middle;
+    border: 0.5px solid #ccc;
+    border-radius: 3px;
+  }
+
+  /* PLAYOFFS STYLES */
+  .round-label {
+    font-weight: 600;
+    font-size: 17px;
+    color: #ffffff;
+  }
+
+  .match-box {
+    background-color: #012f61;
+    border: 1px solid #999;
+    border-radius: 2px;
+    box-sizing: border-box;
+  }
+
+  .match-box > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 50%;
+    gap: 6px;
+    padding: 0 7px;
+  }
+
+  .highlight-player {
+    background-color: #074e99 !important;
+  }
+  /* END OF PLAYOFFS STYLES */
+
+  /* Generic score cell */
+  .score-cell { white-space: nowrap; color: #ffffff; }
+
+  /* Starting player legend */
+  .starting-legend { display:flex; align-items:center; gap:6px; margin:8px 0 12px; }
+  .starting-legend--compact { margin:6px 0 8px; }
+  .starting-legend__icon { width:12px; height:12px; }
+  .starting-legend__icon--pad { padding-left:20px; }
+  .starting-legend__text { color:#ffffff; }
+
+  /* Playoff board label (above match box) */
+  .playoff-board-label {
+    color: #ffffff;
+    text-align: left;
+    font-size: 12px;
+    line-height: 12px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* Rounds board cell */
+  .rounds-board { text-align: left; }
+  .rounds-board .data-normal { font-size: 14px; line-height: 15px; }
+  
+  /* Base table styles (apply to all tables) */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  table th {
+    background-color: var(--main-bg-color);
+    padding: 6px;
+    text-align: center;
+    width: auto;
+    min-width: 40px;
+  }
+
+  table td {
+    padding: 6px;
+    text-align: center;
+  }
+
+/* -------------END OF MAIN STILES--------------- */
+
+
+  
+
+  
+
+  
+
+
+  
+
+  .accordion-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--main-bg-color);
+    color: white;
+    font-weight: 600;
+    font-size: 16px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+  }
+
+  .info-table .info-row {
+    height: auto;
+    border-bottom: none;
+    cursor: pointer;
+  }
+
+  .info-title-cell {
+    text-align: left;
+    padding-right: 8px;
+  }
+
+  .info-title-cell .data-normal {
+    display: block;
+  }
+
+  .info-toggle-cell {
+    width: 32px;
+    text-align: right;
+  }
+
+  .info-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    color: #ffffff;
+  }
+
+  .info-toggle i {
+    transition: transform 0.3s ease;
+    font-size: 12px;
+  }
+
+  .info-details-row td {
+    padding: 0;
+    border-bottom: 1px solid #888;
+    text-align: left;
+  }
+
+  .info-details {
+    overflow: hidden;
+    height: 0;
+    transition: height 0.3s ease;
+  }
+
+  .info-details__inner {
+    padding: 8px 12px;
+    color: #ffffff;
+    font-size: 14px;
+    line-height: 18px;
+    white-space: pre-line;
+  }
+
+  .accordion-toggle:hover {
+    background-color: var(--hover-bg-color);
+  }
+
+  .accordion-toggle .chevron {
+    display: flex;
+    align-items: center;
+  }
+
+  .accordion-toggle .chevron i {
+    transition: transform 0.3s ease;
+  }
+
+  .accordion-toggle.open .chevron i {
+    transform: rotate(180deg);
+  }
+
+  .accordion-content {
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    padding: 0 2px;
+  }
+
+  #playoff-bracket {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+    position: relative;
+    flex-wrap: nowrap;
+    flex: 1 0 auto;
+  }
+
+  .playoff-scroll-wrapper {
+    overflow-x: auto;
+    overflow-y: hidden;
+    width: 100%;
+    margin-bottom: 16px;
+  }
+  .playoff-scroll-wrapper > div {
+    min-width: max-content;
+  }
+  
+
+  
+
+
+  /* Responsive: Limit width of time cell on mobile */
+  @media (max-width: 768px) {
+    .rounds-board {
+      max-width: 60px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .data-header { 
+      font-size: 14px; 
+      line-height: 15px;
+    }
+  }
+
+
+</style>
+
+<!-- HTML -->
+<div class="tab-container" id="tab-container" style="display:none;"></div>
+<div id="tab-playoffs-content" class="bounded"></div>
+<div id="tab-swiss-content" class="bounded"></div>
+<div id="tab-matches-content" class="bounded"></div>
+<div id="tab-info-content" class="bounded"></div>
+<div id="tab-players-content" class="bounded"></div>
+
+<!-- СКРИПТ -->
+<script>
+  
+  // --- TOURNAMENT: WC2025 ---
+  const useTestData = false;
+  let currentTournamentId = "WC2025";
+  let currentTournament = null;
+
+  // Language: English only (no localization toggles)
+
+  // Data arrays for WC2025
+  let players = [];
+  let rounds = [];
+  let standings = [];
+  let playoffs = [];
+  let information = [];
+  let playerPhotoModal = null;
+
+  // Starting player legend assets
+  const STARTING_PLAYER_ICON = "https://carcassonne.gg/gallery/yellow_mipple.png";
+  const STARTING_PLAYER_TEXT = "the starting player";
+
+  // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
+  const BRACKET_MARGIN = 15;
+  const MATCH_HEIGHT = 70;
+  const MATCH_WIDTH = 270;
+  const ROUND_TITLE_TO_MATCH_SPACING = 55;
+  const VERTICAL_SPACING = 40;
+  const HORIZONTAL_SPACING = 50;
+  let THIRD_PLACE_VERTICAL_OFFSET = 80;
+
+  // --- Fetch helpers (with timeout, retries, and fallback) ---
+  function fetchWithTimeout(resource, options = {}) {
+    const { timeout = 10000 } = options;
+    return Promise.race([
+      fetch(resource, options),
+      new Promise((_, reject) => {
+        const err = new Error("Request timed out");
+        err.name = "TimeoutError";
+        setTimeout(() => reject(err), timeout);
+      })
+    ]);
+  }
+
+  function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+  function closePlayerPhotoModal() {
+    if (!playerPhotoModal) return;
+    playerPhotoModal.classList.remove("open");
+    const img = playerPhotoModal.querySelector("img");
+    if (img) img.src = "";
+  }
+
+  function ensurePlayerPhotoModal() {
+    if (playerPhotoModal) return playerPhotoModal;
+
+    const modal = document.createElement("div");
+    modal.className = "player-photo-modal";
+    modal.innerHTML = `
+      <div class="player-photo-modal__content">
+        <img src="" alt="Player photo">
+      </div>
+    `;
+
+    modal.addEventListener("click", closePlayerPhotoModal);
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && modal.classList.contains("open")) {
+        closePlayerPhotoModal();
+      }
+    });
+
+    document.body.appendChild(modal);
+    playerPhotoModal = modal;
+    return modal;
+  }
+
+  function openPlayerPhotoModal(src, alt) {
+    if (!src) return;
+    const modal = ensurePlayerPhotoModal();
+    const img = modal.querySelector("img");
+    if (img) {
+      img.src = src;
+      img.alt = alt || "Player photo";
+    }
+    modal.classList.add("open");
+  }
+
+  async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout = 10000 } = {}) {
+    let attempt = 0;
+    while (true) {
+      attempt += 1;
+      try {
+        const res = await fetchWithTimeout(url, { timeout });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        console.info(`✅ Data loaded from primaryURL (attempt ${attempt})`);
+        return data;
+      } catch (err) {
+        if (err && err.name === "TimeoutError") {
+          throw err;
+        }
+        if (attempt > (retries + 1)) {
+          throw err;
+        }
+        //await sleep(delayMs);
+      }
+    }
+  }
+
+  // Fetch WC2025 data (primary API with fallback JSON)
+  function fetchWc2025Data() {
+    const primaryURL = "https://api.carcassonne.com.ua/public/wc2025";
+    const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/wc2025.json";
+
+    fetchPrimaryWithRetry(primaryURL, { retries: 0, delayMs: 500, timeout: 5000 }) // update to retries: 0 and timeout: 2000
+      .catch(err => {
+        console.warn("⚠️ Primary failed, using fallback:", err && err.message ? err.message : err);
+        return fetch(fallbackURL)
+          .then(res => res.json())
+          .then(data => {
+            console.info("ℹ️ Data loaded from fallbackURL");
+            return data;
+          });
+      })
+      .then(data => {
+        players = Array.isArray(data.players) ? data.players : [];
+        rounds = Array.isArray(data.rounds) ? data.rounds : [];
+        standings = Array.isArray(data.swiss) ? data.swiss : [];
+        playoffs = Array.isArray(data.playoffs) ? data.playoffs : [];
+        information = Array.isArray(data.information) ? data.information : [];
+        // No page title element
+        initAndRenderTournamentContent();
+      })
+      .catch(err => {
+        console.error("❌ Failed to load WC2025 data:", err);
+        // No page title element
+      });
+  }
+
+  function initAndRenderTournamentContent() {
+    // --- SEQUENTIAL RENDER (no tabs) ---
+    const tabContainer = document.getElementById("tab-container");
+    if (tabContainer) tabContainer.style.display = "none";
+
+    // 1) Playoffs
+    const playoffsContainer = document.getElementById("tab-playoffs-content");
+    playoffsContainer.innerHTML = "";
+    const playoffsTitle = document.createElement("div");
+    playoffsTitle.className = "section-title";
+    playoffsTitle.textContent = "Playoffs";
+    playoffsContainer.appendChild(playoffsTitle);
+    const bracketHost = document.createElement("div");
+    playoffsContainer.appendChild(bracketHost);
+    const normalizedPlayoffs = (Array.isArray(playoffs) ? playoffs : []).map(m => ({
+      ...m,
+      player1_id: m.playerA_id,
+      player1: m.playerA_name,
+      player2_id: m.playerB_id,
+      player2: m.playerB_name,
+      score1: (m.scoreA ?? m.winA ?? null),
+      score2: (m.scoreB ?? m.winB ?? null),
+      winA: (m.winA ?? m.scoreA ?? null),
+      winB: (m.winB ?? m.scoreB ?? null),
+      round_order: Number(m.round_order ?? 0)
+    }));
+    renderSingleElimination(normalizedPlayoffs, bracketHost);
+
+    // Starting player legend (icon + text) below the bracket
+    const playoffsLegend = document.createElement("div");
+    playoffsLegend.className = "starting-legend";
+    const playoffsLegendImg = document.createElement("img");
+    playoffsLegendImg.src = STARTING_PLAYER_ICON;
+    playoffsLegendImg.alt = "A";
+    playoffsLegendImg.className = "starting-legend__icon";
+    const playoffsLegendText = document.createElement("span");
+    playoffsLegendText.textContent = STARTING_PLAYER_TEXT;
+    playoffsLegendText.className = "starting-legend__text";
+    playoffsLegend.appendChild(playoffsLegendImg);
+    playoffsLegend.appendChild(playoffsLegendText);
+    playoffsContainer.appendChild(playoffsLegend);
+    playoffsLegend.style.paddingLeft = "20px";
+
+
+    // 2) Swiss
+    const swissContainer = document.getElementById("tab-swiss-content");
+    swissContainer.innerHTML = "";
+    const swissTitle = document.createElement("div");
+    swissTitle.className = "section-title";
+    swissTitle.textContent = "Swiss";
+    swissContainer.appendChild(swissTitle);
+    const swissBody = document.createElement("div");
+    swissContainer.appendChild(swissBody);
+    renderStandingsData(standings, swissBody);
+
+    // 3) Rounds
+    const matchesContainer = document.getElementById("tab-matches-content");
+    matchesContainer.innerHTML = "";
+    const roundsTitle = document.createElement("div");
+    roundsTitle.className = "section-title";
+    roundsTitle.textContent = "Rounds";
+    matchesContainer.appendChild(roundsTitle);
+    renderMatchesData();
+
+    // 4) Information
+    const infoContainer = document.getElementById("tab-info-content");
+    infoContainer.innerHTML = "";
+    const infoTitle = document.createElement("div");
+    infoTitle.className = "section-title";
+    infoTitle.textContent = "Information";
+    infoContainer.appendChild(infoTitle);
+    renderInformationTable();
+
+    // 5) Players
+    const playersContainer = document.getElementById("tab-players-content");
+    playersContainer.innerHTML = "";
+    const playersTitle = document.createElement("div");
+    playersTitle.className = "section-title";
+    playersTitle.textContent = "Players";
+    playersContainer.appendChild(playersTitle);
+    renderPlayersTable();
+  }
+
+  function renderInformationTable() {
+    const infoContainer = document.getElementById("tab-info-content");
+    if (!infoContainer) return;
+
+    const data = Array.isArray(information) ? information : [];
+    const normalized = data
+      .map(item => {
+        const source = (item && typeof item.information === "object") ? item.information : item;
+        if (!source) return null;
+        const numberRaw = source.number ?? item.number;
+        const titleRaw = source.title ?? item.title;
+        const detailsRaw = source.details ?? item.details;
+        const details = typeof detailsRaw === "string" ? detailsRaw.trim() : (detailsRaw != null ? String(detailsRaw) : "");
+        const title = (() => {
+          const base = typeof titleRaw === "string" ? titleRaw.trim() : (titleRaw != null ? String(titleRaw) : "");
+          return base || details;
+        })();
+        const numberVal = Number(numberRaw);
+        const sortOrder = Number.isFinite(numberVal) ? numberVal : Number.MAX_SAFE_INTEGER;
+        return {
+          order: sortOrder,
+          title,
+          details
+        };
+      })
+      .filter(entry => entry && entry.details);
+
+    if (!normalized.length) return;
+
+    const sorted = normalized.sort((a, b) => a.order - b.order);
+
+    const section = document.createElement("div");
+    const table = document.createElement("table");
+    table.className = "group-table players-table info-table";
+    const tbody = document.createElement("tbody");
+
+    sorted.forEach(entry => {
+      const row = document.createElement("tr");
+      row.className = "data-row info-row";
+      row.setAttribute("role", "button");
+      row.setAttribute("tabindex", "0");
+      row.setAttribute("aria-expanded", "false");
+
+      const titleTd = document.createElement("td");
+      titleTd.className = "info-title-cell";
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "data-normal";
+      titleSpan.textContent = entry.title;
+      titleTd.appendChild(titleSpan);
+
+      const toggleTd = document.createElement("td");
+      toggleTd.className = "info-toggle-cell";
+      const toggleBtn = document.createElement("div");
+      toggleBtn.className = "info-toggle";
+      toggleBtn.setAttribute("aria-hidden", "true");
+      const chevronIcon = document.createElement("i");
+      chevronIcon.className = "fas fa-chevron-down";
+      toggleBtn.appendChild(chevronIcon);
+      toggleTd.appendChild(toggleBtn);
+
+      row.appendChild(titleTd);
+      row.appendChild(toggleTd);
+      tbody.appendChild(row);
+
+      const detailsRow = document.createElement("tr");
+      detailsRow.className = "info-details-row";
+      const detailsTd = document.createElement("td");
+      detailsTd.colSpan = 2;
+
+      const detailsWrap = document.createElement("div");
+      detailsWrap.className = "info-details";
+      const detailsInner = document.createElement("div");
+      detailsInner.className = "info-details__inner data-normal";
+      detailsInner.textContent = entry.details;
+      detailsWrap.appendChild(detailsInner);
+      detailsTd.appendChild(detailsWrap);
+      detailsRow.appendChild(detailsTd);
+      tbody.appendChild(detailsRow);
+
+      const toggleDetails = () => {
+        const isOpen = detailsWrap.classList.contains("open");
+        if (isOpen) {
+          row.setAttribute("aria-expanded", "false");
+          detailsWrap.style.height = detailsWrap.scrollHeight + "px";
+          requestAnimationFrame(() => {
+            detailsWrap.style.height = "0px";
+            detailsWrap.classList.remove("open");
+            chevronIcon.style.transform = "rotate(0deg)";
+          });
+        } else {
+          detailsWrap.style.height = "0px";
+          detailsWrap.classList.add("open");
+          chevronIcon.style.transform = "rotate(180deg)";
+          row.setAttribute("aria-expanded", "true");
+          requestAnimationFrame(() => {
+            detailsWrap.style.height = detailsWrap.scrollHeight + "px";
+          });
+          detailsWrap.addEventListener("transitionend", function handler() {
+            if (detailsWrap.classList.contains("open")) {
+              detailsWrap.style.height = "auto";
+            }
+            detailsWrap.removeEventListener("transitionend", handler);
+          });
+        }
+      };
+
+      row.addEventListener("click", () => {
+        toggleDetails();
+      });
+
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggleDetails();
+        }
+      });
+    });
+
+    table.appendChild(tbody);
+    section.appendChild(table);
+    infoContainer.appendChild(section);
+  }
+
+  function renderPlayersTable() {
+    const playersContainer = document.getElementById("tab-players-content");
+    // keep existing heading; do not clear container
+
+    const tp = Array.isArray(players) ? players : [];
+    if (!tp.length) return;
+
+    const flagMap = new Map();
+    tp.forEach(p => {
+      const rawFlag = p.flag || p.avatar || "";
+      const flagUrl = typeof rawFlag === "string" ? rawFlag.trim() : "";
+      if (!flagUrl) return;
+      const assocName = (p.association || "").trim();
+      if (!flagMap.has(flagUrl)) {
+        flagMap.set(flagUrl, { key: flagUrl, url: flagUrl, title: assocName });
+      } else if (assocName && !flagMap.get(flagUrl).title) {
+        flagMap.get(flagUrl).title = assocName;
+      }
+    });
+    const flagInfos = Array.from(flagMap.values()).sort((a, b) => {
+      const nameA = a.title || "";
+      const nameB = b.title || "";
+      if (nameA && nameB) return nameA.localeCompare(nameB, undefined, { sensitivity: "base" });
+      if (nameA) return -1;
+      if (nameB) return 1;
+      return a.url.localeCompare(b.url);
+    });
+
+    const playerRows = [];
+    let activeFlagKey = null;
+    const applyPlayersFilter = () => {
+      const showAll = !activeFlagKey;
+      playerRows.forEach(({ row, detailsRow, flagKey, detailsWrap, toggleBtn }) => {
+        const shouldShow = showAll || (flagKey && flagKey === activeFlagKey);
+        row.style.display = shouldShow ? "" : "none";
+        if (detailsRow) {
+          detailsRow.style.display = shouldShow ? "" : "none";
+        }
+        if (!shouldShow && detailsWrap && detailsWrap.classList.contains("open")) {
+          detailsWrap.style.height = "0px";
+          detailsWrap.classList.remove("open");
+          if (toggleBtn) {
+            toggleBtn.classList.remove("open");
+            toggleBtn.setAttribute("aria-expanded", "false");
+          }
+        }
+      });
+    };
+
+    const filterButtons = [];
+    const setActiveFlag = (flagKey) => {
+      activeFlagKey = flagKey;
+      filterButtons.forEach(btn => {
+        const isActive = !!activeFlagKey && btn.dataset.flagKey === activeFlagKey;
+        if (isActive) {
+          btn.classList.add("active");
+        } else {
+          btn.classList.remove("active");
+        }
+      });
+      applyPlayersFilter();
+    };
+
+    const section = document.createElement("div");
+
+    const title = document.createElement("div");
+    title.className = "players-count";
+    title.textContent = `Count: ${tp.length}`;
+    section.appendChild(title);
+
+    if (flagInfos.length) {
+      const filterPanel = document.createElement("div");
+      filterPanel.className = "players-filter";
+
+      const optionsWrapper = document.createElement("div");
+      optionsWrapper.className = "players-filter-options";
+      filterPanel.appendChild(optionsWrapper);
+
+      flagInfos.forEach(info => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "players-filter-flag";
+        btn.dataset.flagKey = info.key;
+        if (info.title) btn.title = info.title;
+
+        const img = document.createElement("img");
+        img.src = info.url;
+        img.alt = info.title || "Association flag";
+        btn.appendChild(img);
+
+        optionsWrapper.appendChild(btn);
+        filterButtons.push(btn);
+      });
+
+      filterButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const flagKey = btn.dataset.flagKey;
+          if (activeFlagKey === flagKey) {
+            setActiveFlag(null);
+          } else {
+            setActiveFlag(flagKey);
+          }
+        });
+      });
+
+      section.appendChild(filterPanel);
+    }
+
+    const table = document.createElement("table");
+    table.className = "group-table players-table";
+
+    const headTr = document.createElement("tr");
+    const thPlayer = document.createElement("th");
+    thPlayer.className = "data-header";
+    thPlayer.textContent = "Player";
+    thPlayer.style.textAlign = "left";
+    headTr.appendChild(thPlayer);
+    const thAssoc = document.createElement("th");
+    thAssoc.className = "data-header";
+    thAssoc.textContent = "Association";
+    thAssoc.style.textAlign = "left";
+    headTr.appendChild(thAssoc);
+    const thBga = document.createElement("th");
+    thBga.className = "data-header";
+    thBga.textContent = "BGA nickname";
+    thBga.style.textAlign = "left";
+    headTr.appendChild(thBga);
+    const thElo = document.createElement("th");
+    thElo.className = "data-header col-elo";
+    thElo.textContent = "Peak Elo";
+    headTr.appendChild(thElo);
+    const thInfo = document.createElement("th");
+    thInfo.className = "data-header player-info-cell";
+    thInfo.textContent = "";
+    headTr.appendChild(thInfo);
+    table.appendChild(headTr);
+
+    const sorted = [...tp].sort((a, b) => {
+      const hasRA = a.rating !== null && a.rating !== undefined && String(a.rating).trim() !== "" && !isNaN(Number(a.rating));
+      const hasRB = b.rating !== null && b.rating !== undefined && String(b.rating).trim() !== "" && !isNaN(Number(b.rating));
+      if (hasRA && hasRB) {
+        const diff = Number(b.rating) - Number(a.rating);
+        if (diff !== 0) return diff;
+        return (a.player_name || "").localeCompare(b.player_name || "", undefined, { sensitivity: "base" });
+      }
+      if (hasRA && !hasRB) return -1;
+      if (!hasRA && hasRB) return 1;
+      return (a.player_name || "").localeCompare(b.player_name || "", undefined, { sensitivity: "base" });
+    });
+
+    const formatMetric = (val) => {
+      const str = val === null || val === undefined ? "" : String(val).trim();
+      return str || "-";
+    };
+
+    const resolvePlayerPhotoUrl = (rawUrl) => {
+      if (!rawUrl) return "";
+      const s = String(rawUrl).trim();
+      if (!s) return "";
+      if (/^https:\/\/drive\.google\.com\/uc\?/.test(s)) return s;
+      const idMatch = s.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (idMatch) {
+        return `https://drive.google.com/uc?export=view&id=${idMatch[1]}`;
+      }
+      const queryIdMatch = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (queryIdMatch) {
+        return `https://drive.google.com/uc?export=view&id=${queryIdMatch[1]}`;
+      }
+      return s;
+    };
+
+    sorted.forEach(p => {
+      const tr = document.createElement("tr");
+      tr.classList.add("data-row");
+
+      const rawFlag = p.flag || p.avatar || "";
+      const normalizedFlagKey = typeof rawFlag === "string" ? rawFlag.trim() : "";
+      tr.dataset.flagKey = normalizedFlagKey;
+
+      const peakEloRaw = p.max_elo === null || p.max_elo === undefined ? "" : String(p.max_elo).trim();
+      const hasPeakElo = peakEloRaw !== "";
+
+      // Гравець: тільки ім'я (без аватара)
+      const tdPlayer = document.createElement("td");
+      tdPlayer.style.textAlign = "left";
+      tdPlayer.style.padding = "4px 6px";
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "data-normal";
+      nameSpan.textContent = (p.player_name_en || p.player_name || "");
+      tdPlayer.appendChild(nameSpan);
+      tr.appendChild(tdPlayer);
+
+      // Association: flag + association
+      const tdAssoc = document.createElement("td");
+      tdAssoc.style.textAlign = "left";
+      const assocWrap = document.createElement("div");
+      assocWrap.style.display = "flex";
+      assocWrap.style.alignItems = "center";
+      assocWrap.style.gap = "7px";
+      assocWrap.style.justifyContent = "flex-start";
+      const assocFlag = p.flag || p.avatar;
+      if (assocFlag) {
+        const img = document.createElement("img");
+        img.src = assocFlag;
+        img.className = "player-logo";
+        assocWrap.appendChild(img);
+      }
+      const assocSpan = document.createElement("span");
+      assocSpan.className = "data-normal";
+      assocSpan.textContent = (p.association ?? "");
+      assocWrap.appendChild(assocSpan);
+      tdAssoc.appendChild(assocWrap);
+      tr.appendChild(tdAssoc);
+
+      // Нік на BGA: без змін
+      const tdBga = document.createElement("td");
+      tdBga.style.textAlign = "left";
+      tdBga.style.padding = "4px 6px";
+      const bgaNick = p.bga_nickname ? String(p.bga_nickname) : "";
+      const bgaIdRaw = p.bga_id !== null && p.bga_id !== undefined ? String(p.bga_id).trim() : "";
+      if (bgaNick && hasPeakElo) {
+        if (bgaIdRaw) {
+          const link = document.createElement("a");
+          link.className = "data-normal bga-nick bga-link";
+          link.textContent = bgaNick;
+          link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(bgaIdRaw)}`;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          tdBga.appendChild(link);
+        } else {
+          const bgaSpan = document.createElement("span");
+          bgaSpan.className = "data-normal bga-nick";
+          bgaSpan.textContent = bgaNick;
+          tdBga.appendChild(bgaSpan);
+        }
+      } else {
+        const bgaSpan = document.createElement("span");
+        bgaSpan.className = "data-normal bga-nick";
+        bgaSpan.textContent = "";
+        tdBga.appendChild(bgaSpan);
+      }
+      tr.appendChild(tdBga);
+
+      const tdElo = document.createElement("td");
+      tdElo.className = "col-elo";
+      tdElo.style.textAlign = "center";
+      tdElo.style.padding = "4px 6px";
+      const eloSpan = document.createElement("span");
+      eloSpan.className = "data-normal";
+      eloSpan.textContent = hasPeakElo ? peakEloRaw : "";
+      tdElo.appendChild(eloSpan);
+      tr.appendChild(tdElo);
+
+      const tdInfo = document.createElement("td");
+      tdInfo.className = "player-info-cell";
+      const infoToggle = document.createElement("div");
+      infoToggle.className = "player-info-toggle";
+      infoToggle.setAttribute("role", "button");
+      infoToggle.setAttribute("tabindex", "0");
+      infoToggle.setAttribute("aria-expanded", "false");
+      infoToggle.setAttribute("title", "Show player details");
+      const infoIcon = document.createElement("i");
+      infoIcon.className = "far fa-info-circle";
+      infoToggle.appendChild(infoIcon);
+      tdInfo.appendChild(infoToggle);
+      tr.appendChild(tdInfo);
+
+      const detailsRow = document.createElement("tr");
+      detailsRow.className = "player-details-row";
+      const detailsTd = document.createElement("td");
+      detailsTd.colSpan = 5;
+      const detailsWrap = document.createElement("div");
+      detailsWrap.className = "player-details";
+      const detailsInner = document.createElement("div");
+      detailsInner.className = "player-details__inner";
+      const contentWrap = document.createElement("div");
+      contentWrap.className = "player-details__content";
+      const photoUrl = resolvePlayerPhotoUrl(p.player_photo);
+      if (photoUrl) {
+        const photoImg = document.createElement("img");
+        photoImg.className = "player-details__photo";
+        photoImg.src = photoUrl;
+        photoImg.alt = `${p.player_name_en || p.player_name || "Player"} photo`;
+        photoImg.addEventListener("click", event => {
+          event.stopPropagation();
+          openPlayerPhotoModal(photoUrl, photoImg.alt);
+        });
+        contentWrap.appendChild(photoImg);
+      }
+      const infoLines = [
+        `Current Elo: ${formatMetric(p.current_elo)}`,
+        `Average Elo: ${formatMetric(p.average_elo)}`,
+        `Peak Elo: ${formatMetric(p.max_elo)}`
+      ];
+      const extraInfoRaw = p.player_information !== null && p.player_information !== undefined
+        ? String(p.player_information).trim()
+        : "";
+      if (extraInfoRaw) {
+        infoLines.push(extraInfoRaw);
+      }
+      const textBlock = document.createElement("div");
+      textBlock.className = "player-details__text data-normal";
+      textBlock.textContent = infoLines.join("\n");
+      contentWrap.appendChild(textBlock);
+      detailsInner.appendChild(contentWrap);
+      detailsWrap.appendChild(detailsInner);
+      detailsTd.appendChild(detailsWrap);
+      detailsRow.appendChild(detailsTd);
+
+      const togglePlayerDetails = () => {
+        const isOpen = detailsWrap.classList.contains("open");
+        if (isOpen) {
+          const currentHeight = detailsWrap.scrollHeight;
+          detailsWrap.style.height = currentHeight + "px";
+          requestAnimationFrame(() => {
+            detailsWrap.style.height = "0px";
+            detailsWrap.classList.remove("open");
+            infoToggle.classList.remove("open");
+            infoToggle.setAttribute("aria-expanded", "false");
+          });
+        } else {
+          detailsWrap.style.height = "0px";
+          detailsWrap.classList.add("open");
+          infoToggle.classList.add("open");
+          infoToggle.setAttribute("aria-expanded", "true");
+          requestAnimationFrame(() => {
+            detailsWrap.style.height = detailsWrap.scrollHeight + "px";
+          });
+          const onTransitionEnd = function handler() {
+            if (detailsWrap.classList.contains("open")) {
+              detailsWrap.style.height = "auto";
+            }
+            detailsWrap.removeEventListener("transitionend", handler);
+          };
+          detailsWrap.addEventListener("transitionend", onTransitionEnd);
+        }
+      };
+
+      infoToggle.addEventListener("click", togglePlayerDetails);
+      infoToggle.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          togglePlayerDetails();
+        }
+      });
+
+      playerRows.push({ row: tr, detailsRow, flagKey: normalizedFlagKey, detailsWrap, toggleBtn: infoToggle });
+      table.appendChild(tr);
+      table.appendChild(detailsRow);
+    });
+
+    applyPlayersFilter();
+
+    section.appendChild(table);
+    playersContainer.appendChild(section);
+  }
+
+  function renderStandingsData(standings_list, containerOverride) {
+    // --- RENDER SWISS STANDINGS: single table ---
+    const container = containerOverride || document.getElementById("tab-standing-content");
+    container.innerHTML = '';
+
+    const data = Array.isArray(standings_list) ? standings_list : [];
+    if (!data.length) return;
+
+    const sorted = [...data].sort((a, b) => Number(a.rank) - Number(b.rank));
+
+    const wrapper = document.createElement("div");
+    // single table layout
+
+    const table = document.createElement("table");
+    table.className = "group-table";
+    table.style.minWidth = "280px";
+    table.innerHTML = `
+      <tr>
+        <th class=\"data-header\" style=\"width:10%; min-width:40px;\">#</th>
+        <th class=\"data-header\" style=\"text-align:left;\">Player</th>
+        <th class=\"data-header\">Points</th>
+        <th class=\"data-header\">W.2</th>
+        <th class=\"data-header\">W.3</th>
+        <th class=\"data-header\">Diff. VP</th>
+      </tr>
+    `;
+    sorted.forEach((row, i) => {
+      const pObj = players.find(pl => String(pl.player_id) === String(row.player_id)) || {};
+      const avatarSrc = pObj.avatar || pObj.flag;
+      const avatarHtml = avatarSrc ? `<img src=\"${avatarSrc}\" class=\"player-logo\">` : '';
+      const displayName = (pObj.player_name_en || row.player_name);
+      const cls = i < 8 ? 'data-winner' : 'data-normal';
+      const nameHtml = `<span class=\"${cls}\">${displayName}</span>`;
+      const tr = document.createElement("tr");
+      tr.classList.add("data-row");
+      tr.innerHTML = `
+        <td><span class=\"${cls}\">${row.rank ?? ''}</span></td>
+        <td style=\"text-align:left;\"><div style=\"display:flex; align-items:center; gap:7px;\">${avatarHtml}${nameHtml}</div></td>
+        <td><span class=\"${cls}\">${row.wins ?? ''}</span></td>
+        <td><span class=\"${cls}\">${row.solkoff1 ?? ''}</span></td>
+        <td><span class=\"${cls}\">${row.solkoff2 ?? ''}</span></td>
+        <td><span class=\"${cls}\">${row.vp_diff ?? ''}</span></td>
+      `;
+      table.appendChild(tr);
+    });
+
+    wrapper.appendChild(table);
+
+    container.appendChild(wrapper);
+
+    // Explanatory legend centered below the tables
+    const legend = document.createElement("div");
+    legend.style.textAlign = "center";
+    legend.style.fontSize = "13px";
+    legend.style.margin = "8px auto 0";
+    legend.style.maxWidth = "900px";
+    legend.style.color = "#ffffff";
+    legend.innerHTML = `
+      <div>W.2 – Sum of victories of all opponents the player has faced, excluding the weakest opponent.</div>
+      <div>W.3 – Buchholz score excluding both the strongest and the weakest opponent.</div>
+      <div>Diff. VP – Sum of (player’s points – opponent’s points) over all 5 games.</div>
+    `;
+    container.appendChild(legend);
+  }
+
+  // Format match time to local TZ
+  function formatMatchTime(raw) {
+    if (!raw || typeof raw !== "string") return "";
+    const s = raw.trim();
+    // With time: DD.MM.YYYY HH:MM:SS
+    if (/^\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}:\d{2}$/.test(s)) {
+      const [datePart, timePart] = s.split(/\s+/);
+      const [dd, mm, yyyy] = datePart.split(".").map(Number);
+      const [HH, MM, SS] = timePart.split(":").map(Number);
+      const ts = Date.UTC(yyyy, mm - 1, dd, HH, MM, SS);
+      const d = new Date(ts);
+      const dayMon = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const hm = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+      return `${dayMon} ${hm}`; // e.g., 12 Aug 14:00
+    }
+    // Date only: DD.MM.YYYY → show as DD Mon
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(s)) {
+      const [dd, mm, yyyy] = s.split(".").map(Number);
+      // Use noon UTC to avoid TZ shifting date
+      const ts = Date.UTC(yyyy, mm - 1, dd, 12, 0, 0);
+      const d = new Date(ts);
+      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    }
+    // Fallback: return as-is
+    return s;
+  }
+
+  function renderMatchesData() {
+    // Only Swiss matches
+    const container = document.getElementById("tab-matches-content");
+    // keep existing heading; do not clear container
+    // Legend: who moves first (blue meeple)
+    const legend = document.createElement("div");
+    legend.className = "starting-legend starting-legend--compact";
+    const legendImg = document.createElement("img");
+    legendImg.src = STARTING_PLAYER_ICON;
+    legendImg.alt = "A";
+    legendImg.className = "starting-legend__icon";
+    const legendText = document.createElement("span");
+    legendText.textContent = STARTING_PLAYER_TEXT;
+    legendText.className = "starting-legend__text";
+    legend.appendChild(legendImg);
+    legend.appendChild(legendText);
+    container.appendChild(legend);
+    const list = Array.isArray(rounds) ? rounds : [];
+    const grouped = {};
+    list.forEach(m => {
+      const key = String(m.round ?? '');
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(m);
+    });
+    const roundKeys = Object.keys(grouped).sort((a, b) => {
+      const na = Number(a), nb = Number(b);
+      if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+
+    let openAccordion = null;
+    roundKeys.forEach((round, idx) => {
+      const section = document.createElement("div");
+
+      const toggle = document.createElement("div");
+      toggle.className = "accordion-toggle";
+      const labelSpan = document.createElement("span");
+      labelSpan.textContent = `Round ${round}`;
+      labelSpan.className = "data-header";
+      const chevronDiv = document.createElement("div");
+      chevronDiv.className = "chevron";
+      chevronDiv.innerHTML = '<i class="fas fa-chevron-down"></i>';
+      toggle.appendChild(labelSpan);
+      toggle.appendChild(chevronDiv);
+
+      const content = document.createElement("div");
+      content.className = "accordion-content";
+      content.style.maxHeight = "0px";
+
+      const table = document.createElement("table");
+      table.className = "match-table";
+
+      grouped[round].forEach(g => {
+        const row = document.createElement("tr");
+        row.className = "match-row data-row";
+        const p1Id = String(g.playerA_id ?? g.player1_id ?? '');
+        const p2Id = String(g.playerB_id ?? g.player2_id ?? '');
+        const p1Obj = players.find(p => String(p.player_id) === p1Id);
+        const p2Obj = players.find(p => String(p.player_id) === p2Id);
+        const p1NameRaw = g.playerA_name ?? g.player1 ?? '';
+        const p2NameRaw = g.playerB_name ?? g.player2 ?? '';
+        const p1Name = (p1Obj?.player_name_en || p1NameRaw);
+        const p2Name = (p2Obj?.player_name_en || p2NameRaw);
+        const s1 = g.scoreA ?? g.score1 ?? '';
+        const s2 = g.scoreB ?? g.score2 ?? '';
+        const isWinnerA = Number(s1) === 1;
+        const isWinnerB = Number(s2) === 1;
+        const pt1 = g.pointsA ?? g.points1 ?? '';
+        const pt2 = g.pointsB ?? g.points2 ?? '';
+        const p1ObjFull = players.find(p => String(p.player_id) === p1Id) || {};
+        const p2ObjFull = players.find(p => String(p.player_id) === p2Id) || {};
+        const p1Avatar = p1ObjFull.avatar || p1ObjFull.flag || '';
+        const p2Avatar = p2ObjFull.avatar || p2ObjFull.flag || '';
+        const starter = String(g.starter ?? '').trim().toUpperCase();
+        const starterIcon = '<img src="https://carcassonne.gg/gallery/yellow_mipple.png" alt="S" style="width:10px;height:10px;">';
+        const iconA = starter === 'A' ? starterIcon : '';
+        const iconB = starter === 'B' ? starterIcon : '';
+        row.innerHTML = `
+          <td class="rounds-board">${g.board ? `<span class=\"data-normal\">Board: ${g.board}</span>${String(g.board) === '1' ? ' <img src=\"https://carcassonne.gg/gallery/YouTube_full-color_icon_(2017).svg-ts1700987678.png\" alt=\"YouTube\" class=\"yt-icon\">' : ''}` : ''}</td>
+          <td class="player-cell">
+            <div style="display:flex; align-items:center; justify-content:center; gap:7px;">
+              ${p1Avatar ? `<img src="${p1Avatar}" class="player-logo">` : ''}
+              <span class="${isWinnerA ? 'data-winner' : 'data-normal'}">${p1Name}</span>
+              ${iconA}
+            </div>
+          </td>
+          <td class="score-cell"><span class="${isWinnerA ? 'data-winner' : 'data-normal'}">${pt1 ?? ''}</span> - <span class="${isWinnerB ? 'data-winner' : 'data-normal'}">${pt2 ?? ''}</span></td>
+          <td class="player-cell">
+            <div style="display:flex; align-items:center; justify-content:center; gap:7px;">
+              ${p2Avatar ? `<img src="${p2Avatar}" class="player-logo">` : ''}
+              <span class="${isWinnerB ? 'data-winner' : 'data-normal'}">${p2Name}</span>
+              ${iconB}
+            </div>
+          </td>`;
+        table.appendChild(row);
+      });
+
+      content.appendChild(table);
+      section.appendChild(toggle);
+      section.appendChild(content);
+      container.appendChild(section);
+
+      // Open the first round by default
+      if (idx === 0) {
+        content.style.maxHeight = content.scrollHeight + "px";
+        toggle.classList.add("open");
+        openAccordion = content;
+      }
+
+      toggle.addEventListener("click", () => {
+        if (openAccordion && openAccordion !== content) {
+          openAccordion.style.maxHeight = "0px";
+          openAccordion.previousElementSibling.classList.remove("open");
+        }
+        const isOpen = content.style.maxHeight && content.style.maxHeight !== "0px";
+        if (isOpen) {
+          content.style.maxHeight = "0px";
+          toggle.classList.remove("open");
+          openAccordion = null;
+        } else {
+          content.style.maxHeight = content.scrollHeight + "px";
+          toggle.classList.add("open");
+          openAccordion = content;
+        }
+      });
+    });
+  }
+
+  // Calculate coordinates for playoff bracket matches (layout logic)
+  function calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, playoffMatches, currentTournamentId) {
+
+    // 1. Find the round with the maximum number of matches
+    const maxMatchRound = sortedRounds.reduce((maxRound, r) => {
+      return (groupedByRound[r].length > groupedByRound[maxRound]?.length || !maxRound) ? r : maxRound;
+    }, sortedRounds[0]);
+
+    // 2. Layout matches of maxMatchRound
+    groupedByRound[maxMatchRound]
+      .filter(m => m.knockout_stage !== "third_place")
+      .forEach((m, index) => {
+        const cord_top = BRACKET_MARGIN + ROUND_TITLE_TO_MATCH_SPACING + index * (MATCH_HEIGHT + VERTICAL_SPACING);
+        const cord_left = BRACKET_MARGIN + roundIndexMap[maxMatchRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+        const cord_bottom = cord_top + MATCH_HEIGHT;
+        m.cord_top = cord_top;
+        m.cord_left = cord_left;
+        m.cord_bottom = cord_bottom;
+      });
+
+      // 3. Layout rounds to the right of maxMatchRound
+    for (let i = sortedRounds.indexOf(maxMatchRound) + 1; i < sortedRounds.length; i++) {
+      const roundNum = sortedRounds[i];
+      groupedByRound[roundNum]
+        .filter(m => m.knockout_stage !== "third_place")
+        .forEach(m => {
+          const sources = sortedRounds[i - 1] ? groupedByRound[sortedRounds[i - 1]].filter(pm => pm.next_game_win === m.knockout_id) : [];
+          let cord_top = 0;
+          if (sources.length === 2) {
+            const cord_top1 = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[0].knockout_id).cord_top;
+            const cord_top2 = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[1].knockout_id).cord_top;
+            const center = (cord_top1 + cord_top2 + MATCH_HEIGHT) / 2;
+            cord_top = center - MATCH_HEIGHT / 2;
+          } else if (sources.length === 1) {
+            cord_top = groupedByRound[sortedRounds[i - 1]].find(pm => pm.knockout_id === sources[0].knockout_id).cord_top;
+          }
+          const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+          const cord_bottom = cord_top + MATCH_HEIGHT;
+          m.cord_top = cord_top;
+          m.cord_left = cord_left;
+          m.cord_bottom = cord_bottom;
+        });
+    }
+
+    // 4. Layout rounds to the left of maxMatchRound
+    for (let i = sortedRounds.indexOf(maxMatchRound) - 1; i >= 0; i--) {
+      const roundNum = sortedRounds[i];
+      const nextRound = sortedRounds[i + 1];
+      groupedByRound[nextRound]
+        .filter(s => s.knockout_stage !== "third_place")
+        .forEach(s => {
+          const predecessors = groupedByRound[roundNum]?.filter(m => m.next_game_win === s.knockout_id) || [];
+          if (predecessors.length === 1) {
+            const cord_top = groupedByRound[nextRound].find(m => m.knockout_id === s.knockout_id).cord_top;
+            const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+            const cord_bottom = cord_top + MATCH_HEIGHT;
+            const match = groupedByRound[roundNum].find(m => m.knockout_id === predecessors[0].knockout_id);
+            if (match) {
+              match.cord_top = cord_top;
+              match.cord_left = cord_left;
+              match.cord_bottom = cord_bottom;
+            }
+          } else if (predecessors.length === 2) {
+            const cord_topCenter = groupedByRound[nextRound].find(m => m.knockout_id === s.knockout_id).cord_top + MATCH_HEIGHT / 2;
+            const cord_top1 = cord_topCenter - VERTICAL_SPACING / 2 - MATCH_HEIGHT;
+            const cord_top2 = cord_topCenter + VERTICAL_SPACING / 2;
+            const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+            const cord_bottom1 = cord_top1 + MATCH_HEIGHT;
+            const cord_bottom2 = cord_top2 + MATCH_HEIGHT;
+            const match1 = groupedByRound[roundNum].find(m => m.knockout_id === predecessors[0].knockout_id);
+            const match2 = groupedByRound[roundNum].find(m => m.knockout_id === predecessors[1].knockout_id);
+            if (match1) {
+              match1.cord_top = cord_top1;
+              match1.cord_left = cord_left;
+              match1.cord_bottom = cord_bottom1;
+            }
+            if (match2) {
+              match2.cord_top = cord_top2;
+              match2.cord_left = cord_left;
+              match2.cord_bottom = cord_bottom2;
+            }
+          }
+        });
+    }
+
+    // 5. Add 3rd place match if exists
+    const thirdPlaceMatch = playoffMatches.find(g => g.knockout_stage === "third_place");
+    if (thirdPlaceMatch) {
+      const thirdPlaceRound = Number(thirdPlaceMatch.round_order);
+      const existingMatch = groupedByRound[thirdPlaceRound]?.find(m => m.knockout_id === thirdPlaceMatch.knockout_id);
+      if (existingMatch) {
+        let startTop = 0;
+        const matchesInRound = groupedByRound[thirdPlaceRound].filter(m => m.knockout_id !== thirdPlaceMatch.knockout_id);
+        if (matchesInRound.length > 0) {
+          const lastMatch = matchesInRound[matchesInRound.length - 1];
+          startTop = lastMatch.cord_bottom + THIRD_PLACE_VERTICAL_OFFSET;
+        }
+        existingMatch.cord_top = startTop;
+        existingMatch.cord_left = BRACKET_MARGIN + roundIndexMap[thirdPlaceRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+        existingMatch.cord_bottom = startTop + ROUND_TITLE_TO_MATCH_SPACING + MATCH_HEIGHT;
+        existingMatch.knockout_stage = "third_place";
+      }
+    }
+  }
+
+  function renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, container){
+    sortedRounds.forEach((roundNum, colIndex) => {
+      const matches = groupedByRound[roundNum];
+      matches.sort((a, b) => Number(a.game_id) - Number(b.game_id));
+
+      // Додаємо назву раунду (label)
+      const label = document.createElement("div");
+      label.className = "round-label";
+      label.textContent = (matches.find(m => m.knockout_stage !== "third_place")?.round || `Round ${roundNum}`);
+      label.style.position = "absolute";
+      label.style.width = `${MATCH_WIDTH}px`;
+      label.style.textAlign = "center";
+      label.style.left = `${BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING)}px`;
+      label.style.top = `${BRACKET_MARGIN}px`;
+      container.appendChild(label);
+      
+      // Додаємо матчі
+      matches.forEach((m) => {
+        const matchBox = document.createElement("div");
+        matchBox.className = "match-box";
+        matchBox.style.width = `${MATCH_WIDTH}px`;
+        matchBox.style.height = `${MATCH_HEIGHT}px`;
+        matchBox.style.position = "absolute";
+
+        let topOffset = m.cord_top;
+        if (m.knockout_stage === "third_place") {
+          // Назву раунду для матчу за 3-є місце додаємо окремо нижче
+          const label = document.createElement("div");
+          label.className = "round-label";
+          label.style.position = "absolute";
+          label.style.width = `${MATCH_WIDTH}px`;
+          label.style.textAlign = "center";
+          label.style.left = `${m.cord_left}px`;
+          label.style.top = `${topOffset}px`;
+          label.textContent = (m.round || "3rd place");
+          container.appendChild(label);
+          topOffset += ROUND_TITLE_TO_MATCH_SPACING;
+        }
+
+        // Add board label above match box if board is present (+ YouTube icon for board 1)
+        if (m.board) {
+          const boardLabel = document.createElement("div");
+          boardLabel.className = "playoff-board-label";
+          boardLabel.style.position = "absolute";
+          // Keep label left and ensure 3px gap above match (11px content height)
+          boardLabel.style.left = `${m.cord_left + 2}px`;
+          boardLabel.style.top = `${Math.max(0, topOffset - 16)}px`;
+          boardLabel.style.width = `${MATCH_WIDTH}px`;
+          // Text
+          const boardText = document.createElement("span");
+          boardText.textContent = `Board: ${m.board}`;
+          boardLabel.appendChild(boardText);
+          // Icon only for board 1
+          if (String(m.board) === '1') {
+            const ytIcon = document.createElement("img");
+            ytIcon.src = "https://carcassonne.gg/gallery/YouTube_full-color_icon_(2017).svg-ts1700987678.png";
+            ytIcon.alt = "YouTube";
+            ytIcon.className = "yt-icon";
+            boardLabel.appendChild(ytIcon);
+          }
+          container.appendChild(boardLabel);
+        }
+
+        matchBox.style.top = `${topOffset}px`;
+        matchBox.style.left = `${m.cord_left}px`;
+
+        const opponent1Div = document.createElement("div");
+        const opponent2Div = document.createElement("div");
+
+        // Player-vs-player playoffs (COC)
+        // Determine winner by wins when available; fall back to scores
+        const wA = Number(m.winA ?? m.score1 ?? 0);
+        const wB = Number(m.winB ?? m.score2 ?? 0);
+        opponent1Div.className = (wA > wB) ? "match-row-winner" : "match-row-loser";
+        // Player 1: logo + name
+        let player1Logo = null;
+        const p1Obj = players.find(pl => String(pl.player_id) === String(m.player1_id));
+        const player1Avatar = (p1Obj?.avatar || p1Obj?.flag);
+        if (player1Avatar) {
+          player1Logo = document.createElement("img");
+          player1Logo.src = player1Avatar;
+          player1Logo.className = "player-logo";
+        }
+        const p1Name = (p1Obj?.player_name_en || m.player1 || '').trim();
+        const player1Link = document.createElement("span");
+        player1Link.textContent = p1Name;
+        player1Link.className = (wA > wB) ? "data-winner" : "data-normal";
+        const player1Info = document.createElement("div");
+        player1Info.style.display = "flex";
+        player1Info.style.alignItems = "center";
+        player1Info.style.gap = "6px";
+        player1Info.style.flex = "1";
+        player1Info.style.justifyContent = "flex-start";
+        if (player1Logo) player1Info.appendChild(player1Logo);
+        player1Info.appendChild(player1Link);
+        if (p1Name) {
+          const p1Mipple = document.createElement("img");
+          p1Mipple.src = "https://carcassonne.gg/gallery/yellow_mipple.png";
+          p1Mipple.alt = "A";
+          p1Mipple.style.width = "10px";
+          p1Mipple.style.height = "10px";
+          player1Info.appendChild(p1Mipple);
+        }
+        const score1Span = document.createElement("span");
+        score1Span.textContent = (m.score1 ?? '');
+        score1Span.className = (wA > wB) ? "data-winner" : "data-normal";
+        opponent1Div.appendChild(player1Info);
+        opponent1Div.appendChild(score1Span);
+        if (p1Name) opponent1Div.setAttribute("data-opponent-name", p1Name);
+
+        opponent2Div.className = (wB > wA) ? "match-row-winner" : "match-row-loser";
+        let player2Logo = null;
+        const p2Obj = players.find(pl => String(pl.player_id) === String(m.player2_id));
+        const player2Avatar = (p2Obj?.avatar || p2Obj?.flag);
+        if (player2Avatar) {
+          player2Logo = document.createElement("img");
+          player2Logo.src = player2Avatar;
+          player2Logo.className = "player-logo";
+        }
+        const p2Name = (p2Obj?.player_name_en || m.player2 || '').trim();
+        const player2Link = document.createElement("span");
+        player2Link.textContent = p2Name;
+        player2Link.className = (wB > wA) ? "data-winner" : "data-normal";
+        const player2Info = document.createElement("div");
+        player2Info.style.display = "flex";
+        player2Info.style.alignItems = "center";
+        player2Info.style.gap = "6px";
+        player2Info.style.flex = "1";
+        player2Info.style.justifyContent = "flex-start";
+        if (player2Logo) player2Info.appendChild(player2Logo);
+        player2Info.appendChild(player2Link);
+        const score2Span = document.createElement("span");
+        score2Span.textContent = (m.score2 ?? '');
+        score2Span.className = (wB > wA) ? "data-winner" : "data-normal";
+        opponent2Div.appendChild(player2Info);
+        opponent2Div.appendChild(score2Span);
+        if (p2Name) opponent2Div.setAttribute("data-opponent-name", p2Name);  
+
+        matchBox.appendChild(opponent1Div);
+        matchBox.appendChild(opponent2Div);
+        container.appendChild(matchBox);
+      });
+    });
+  }
+
+  function drawPlayoffLines(groupedByRound, sortedRounds, container) {
+    const matchById = {};
+    Object.values(groupedByRound).flat().forEach(m => {
+      matchById[m.knockout_id] = m;
+    });
+
+    const playoffConnectors = [];
+    sortedRounds.forEach(roundNum => {
+      groupedByRound[roundNum].forEach(match => {
+        if (!match.next_game_win) return;
+        const from = matchById[match.knockout_id];
+        const to = matchById[match.next_game_win];
+        if (!from || !to) return;
+
+        const fromLeft = from.cord_left;
+        const fromTop = from.cord_top;
+        const toLeft = to.cord_left;
+        const toTop = to.cord_top;
+
+        const yFrom = fromTop + MATCH_HEIGHT / 2 - 1;
+        const yTo = toTop + MATCH_HEIGHT / 2 - 1;
+        const xFrom = fromLeft + MATCH_WIDTH;
+        const xTo = toLeft;
+
+        const connector = {
+          game_from: match.knockout_id,
+          game_to: match.next_game_win,
+          lines: []
+        };
+
+        if (yFrom === yTo) {
+          connector.lines.push({
+            x1: xFrom,
+            y1: yFrom,
+            x2: xTo,
+            y2: yTo
+          });
+        } else {
+          const midX = fromLeft + MATCH_WIDTH + HORIZONTAL_SPACING / 2;
+          const preX = toLeft - HORIZONTAL_SPACING / 2;
+          const adjustedY2 = fromTop > toTop ? yTo + 5 : yTo - 5;
+
+          connector.lines.push({
+            x1: xFrom,
+            y1: yFrom,
+            x2: midX + 2,
+            y2: yFrom
+          });
+          connector.lines.push({
+            x1: midX,
+            y1: yFrom,
+            x2: midX,
+            y2: adjustedY2
+          });
+          connector.lines.push({
+            x1: preX + 3,
+            y1: yTo,
+            x2: xTo,
+            y2: yTo
+          });
+        }
+
+        playoffConnectors.push(connector);
+      });
+    });
+
+    playoffConnectors.forEach(connector => {
+      connector.lines.forEach(lineCoords => {
+        const isHorizontal = lineCoords.y1 === lineCoords.y2;
+        const lineDiv = document.createElement("div");
+        lineDiv.style.position = "absolute";
+        lineDiv.style.backgroundColor = "#ccc";
+        lineDiv.style.zIndex = "0";
+
+        if (isHorizontal) {
+          lineDiv.style.left = `${lineCoords.x1}px`;
+          lineDiv.style.top = `${lineCoords.y1}px`;
+          lineDiv.style.width = `${lineCoords.x2 - lineCoords.x1}px`;
+          lineDiv.style.height = "2px";
+        } else {
+          lineDiv.style.left = `${lineCoords.x1}px`;
+          lineDiv.style.top = `${Math.min(lineCoords.y1, lineCoords.y2)}px`;
+          lineDiv.style.width = "2px";
+          lineDiv.style.height = `${Math.abs(lineCoords.y2 - lineCoords.y1)}px`;
+        }
+
+        container.appendChild(lineDiv);
+      });
+    });
+  }
+
+  function renderSingleElimination(playoffMatches, containerOverride) {
+    // Optionally override offset via global (not used here)
+    // Build layout and UI for playoff bracket including match positions, labels, and connectors
+    let container;
+    let bracketDiv;
+    if (containerOverride) {
+      container = containerOverride;
+      container.innerHTML = '';
+      // Add a scrollable wrapper (legend appended below after rendering)
+      const scrollWrapper = document.createElement("div");
+      scrollWrapper.className = "playoff-scroll-wrapper";
+      // Add a wrapper for the bracket
+      bracketDiv = document.createElement("div");
+      bracketDiv.id = "playoff-bracket";
+      scrollWrapper.appendChild(bracketDiv);
+      container.appendChild(scrollWrapper);
+      container = bracketDiv;
+    } else {
+      // fallback: legacy behavior
+      container = document.getElementById("playoff-bracket");
+      container.innerHTML = '';
+      // Legend will be appended below after rendering
+    }
+    // Group matches by numeric round_order
+    const groupedByRound = {};
+    playoffMatches.forEach(match => {
+      const roundNum = Number(match.round_order);
+      if (!groupedByRound[roundNum]) groupedByRound[roundNum] = [];
+      groupedByRound[roundNum].push(match);
+    });
+
+    // Sort rounds numerically ascending
+    const sortedRounds = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
+    const roundIndexMap = {};
+    sortedRounds.forEach((r, i) => roundIndexMap[r] = i);
+    
+    // Calculate playoff match coordinates
+    calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, playoffMatches, currentTournamentId);
+    // Render matches with absolute positioning inside #playoff-bracket
+    renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, container);
+    // --- DRAW LINES ---
+    drawPlayoffLines(groupedByRound, sortedRounds, container);
+    // Set container's fixed height based on the maximum cord_bottom plus BRACKET_MARGIN
+    const allMatches = Object.values(groupedByRound).flat();
+    const maxCordBottom = Math.max(...allMatches.map(m => m.cord_bottom || 0));
+    container.style.height = `${maxCordBottom + BRACKET_MARGIN}px`;
+    // Set container's fixed width based on the maximum cord_left plus MATCH_WIDTH + BRACKET_MARGIN
+    const maxCordLeft = Math.max(...allMatches.map(m => m.cord_left || 0));
+    container.style.width = `${maxCordLeft + MATCH_WIDTH + BRACKET_MARGIN}px`;
+
+    // --- HOVER HIGHLIGHT LOGIC ---
+    // After rendering all matches, add hover event for .match-row-winner and .match-row-loser
+    const playoffContainer = container;
+    playoffContainer.querySelectorAll(".match-row-winner, .match-row-loser").forEach(row => {
+      const playerName = row.getAttribute("data-opponent-name");
+      if (playerName !== null && playerName !== "") {
+        row.addEventListener("mouseenter", () => {
+          playoffContainer.querySelectorAll(`[data-opponent-name="${playerName}"]`).forEach(el => {
+            el.classList.add("highlight-player");
+          });
+        });
+
+        row.addEventListener("mouseleave", () => {
+          playoffContainer.querySelectorAll(`[data-opponent-name="${playerName}"]`).forEach(el => {
+            el.classList.remove("highlight-player");
+          });
+        });
+      }
+    });
+  }
+
+
+  document.addEventListener("DOMContentLoaded", () => {
+    fetchWc2025Data();
+  });
+</script>
