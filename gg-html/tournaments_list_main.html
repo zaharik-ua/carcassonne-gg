@@ -1,11 +1,10 @@
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
 <!-- СТИЛІ -->
 <style>
   body {
     font-family: 'Montserrat', sans-serif;
-    color: #333333;
   }
 
   .assosiation-title {
@@ -104,28 +103,30 @@
     overflow-wrap: anywhere;
   }
 
-  .tournament-status {
-    flex: 0 0 auto;
-    max-width: 70px;
-    font-size: 11px;
-    line-height: 12px;
-    padding: 0 6px;
-    border: 1px solid;
-    border-radius: 2px;
-    font-weight: 600;
-    white-space: nowrap;
-    margin-left: auto;
+  .tournament-section-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 3px 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #ffffff;
+    background-color: #197457;
+    border-top: none;
+    cursor: default;
+    pointer-events: none;
   }
 
-  .status-live {
-    color: #2e7d32;
-    border-color: #2e7d32;
+  .tournament-section-live {
+    background-color: #197457;
   }
 
-  .status-planned {
-    color: #ef6c00;
-    border-color: #ef6c00;
-    padding: 0 3px;
+  .tournament-section-upcoming {
+    background-color: #D18400;
+  }
+
+  .tournament-section-recent {
+    background-color: #2C6DA3;
   }
 
 </style>
@@ -147,30 +148,51 @@
     });
   }
 
-  
-
   function getLogoHtml(t) {
     return t.logo_image ? `<img src="${t.logo_image}" class="tournament-logo" alt="logo">` : "";
   }
 
-  function getStatusLabel(t) {
-    if (t.status === "In progress") {
-      return `<span class="tournament-status status-live">LIVE</span>`;
+  const MS_IN_DAY = 24 * 60 * 60 * 1000;
+
+  const parseDMYDate = (str) => {
+    if (!str) {
+      return null;
     }
-    if (t.status === "Planned") {
-      return `<span class="tournament-status status-planned">PLAN.</span>`;
+    const [day, month, year] = String(str).split("/");
+    if (!day || !month || !year) {
+      return null;
     }
-    return "";
-  }
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const compareByStartDateAsc = (a, b) => {
+    const aDate = parseDMYDate(a.start_date);
+    const bDate = parseDMYDate(b.start_date);
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+    return aDate.getTime() - bDate.getTime();
+  };
+
+  const compareByEndDateDesc = (a, b) => {
+    const aDate = parseDMYDate(a.end_date);
+    const bDate = parseDMYDate(b.end_date);
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+    return bDate.getTime() - aDate.getTime();
+  };
 
   async function fetchCOCTournaments() {
     try {
       const res = await fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-list.json");
       if (!res.ok) throw new Error("Json fetch failed");
       const data = await res.json();
+      const allowedStatuses = ["Planned", "In progress", "Done"];
       const tournaments = data.tournaments.filter(t =>
         t.type === "COC"
-        && (t.status === "Planned" || t.status === "In progress")
+        && allowedStatuses.includes(t.status)
         && String(t.hidden).toLowerCase() !== "yes"
       );
       const countriesData = data.countries || [];
@@ -240,34 +262,51 @@
         return row;
       };
 
-        const addSection = (titleText, filterFn, extraHTMLCallback, container) => {
-          const title = document.createElement("div");
-          title.className = "assosiation-title";
-          title.textContent = titleText;
-          container.appendChild(title);
+        const addSection = (titleText, filterFn, extraHTMLCallback, container, headerClass, sortFn = compareByStartDateAsc) => {
+          const sectionTournaments = tournaments
+            .filter(filterFn)
+            .sort(sortFn);
+
+          if (sectionTournaments.length === 0) {
+            return;
+          }
 
           const box = document.createElement("div");
           box.className = "tournaments";
 
-          tournaments
-            .filter(filterFn)
-            .sort((a, b) => {
-              const parseDate = (str) => {
-                const [day, month, year] = (str || "").split("/");
-                return new Date(`${year}-${month}-${day}`);
-              };
-              return parseDate(a.start_date) - parseDate(b.start_date);
-            })
-            .forEach(t => {
-              const row = createRow(t, extraHTMLCallback(t), titleText === "Upcoming");
-              box.appendChild(row);
-            });
+          const headerRow = document.createElement("div");
+          headerRow.className = "tournament-row tournament-section-row";
+          if (headerClass) {
+            headerRow.classList.add(headerClass);
+          }
+          headerRow.textContent = titleText;
+          box.appendChild(headerRow);
+
+          sectionTournaments.forEach(t => {
+            const row = createRow(t, extraHTMLCallback(t), titleText === "Upcoming");
+            box.appendChild(row);
+          });
 
           container.appendChild(box);
         };
 
-        addSection("Live", t => t.status === "In progress", () => "", container);
-        addSection("Upcoming", t => t.status === "Planned", t => `Start date: ${t.start_date || "TBD"}`, container);
+        const now = new Date();
+        const recentThresholdMs = 30 * MS_IN_DAY;
+        const isRecentFinish = (t) => {
+          if (t.status !== "Done") {
+            return false;
+          }
+          const endDate = parseDMYDate(t.end_date);
+          if (!endDate) {
+            return false;
+          }
+          const diff = now.getTime() - endDate.getTime();
+          return diff >= 0 && diff <= recentThresholdMs;
+        };
+
+        addSection("Live", t => t.status === "In progress", () => "", container, "tournament-section-live");
+        addSection("Upcoming", t => t.status === "Planned", t => `Start date: ${t.start_date || "TBD"}`, container, "tournament-section-upcoming");
+        addSection("Recent Finishes", isRecentFinish, () => "", container, "tournament-section-recent", compareByEndDateDesc);
       });
     } catch (e) {
       console.error("❌ Failed to load COC data", e);

@@ -1,0 +1,66 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;650;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  .etcoc-cover {
+    position: relative;
+    width: min(100%, 1000px);
+    aspect-ratio: 4 / 1;
+    overflow: hidden;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    container-type: inline-size;
+  }
+
+  .etcoc-cover__image {
+    position: absolute;
+    inset: 0;
+    background-image: url('https://carcassonne.gg/gallery/etcoc-cover.png');
+    background-size: cover;
+    background-position: center bottom;
+    background-repeat: no-repeat;
+    will-change: background-position, transform;
+    transform-origin: center;
+    transform: scaleY(1);
+    animation: etcoc-cover-drift 88s linear infinite;
+  }
+
+  .etcoc-cover__logo {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 65%;
+    width: auto;
+    max-width: 80%;
+    object-fit: contain;
+    pointer-events: none;
+  }
+
+  @keyframes etcoc-cover-drift {
+    0% {
+      background-position: center bottom;
+      transform: scaleY(1);
+    }
+    50% {
+      background-position: center top;
+      transform: scaleY(1);
+    }
+    50.0001% {
+      background-position: center bottom;
+      transform: scaleY(-1);
+    }
+    100% {
+      background-position: center top;
+      transform: scaleY(-1);
+    }
+  }
+</style>
+
+<div class="etcoc-cover">
+  <div class="etcoc-cover__image"></div>
+  <img
+    class="etcoc-cover__logo"
+    src="https://carcassonne.gg/gallery/ETCOC-2025-text.svg"
+    alt="ETCOC 2025"
+  />
+</div>

@@ -187,12 +187,40 @@ code {
   }
 
   /* Special style for rating 6: gold stars only */
-  .match-rating--gold {}
+  .match-rating--gold .material-icons-round {
+    color: #DAA520;
+    font-size: 10.5px;
+    letter-spacing: -2px;
+  }
 
   .match-time-text {
     font-size: 12px;
     line-height: 14px;
     color: #333; /* keep time color independent from rating color */
+  }
+
+  .match-format-badge {
+    margin-top: 2px;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-size: 10px;
+    line-height: 10px;
+    font-weight: 600;
+  }
+
+  .match-format-badge.bo1 {
+    background-color: #eee;
+    color: #333;
+  }
+
+  .match-format-badge.bo3 {
+    background-color: #d7eaff;
+    color: #073654;
+  }
+
+  .match-format-badge.bo5 {
+    background-color: #fce0e0;
+    color: #590f0f;
   }
 
   .divider-vertical {
@@ -281,6 +309,11 @@ code {
     border-radius: 2px;
     margin-top: 1px;
     margin-bottom: 1px;
+  }
+  .duel-player-avatar.duel-player-avatar--individual {
+    width: 18px;
+    height: auto;
+    border: none;
   }
 
   .duel-player-row a {
@@ -388,6 +421,88 @@ code {
     padding: 6px 8px;
   }
 
+  .tournament-header__right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  .matches-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #333;
+    padding: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: color 0.2s ease, transform 0.2s ease;
+  }
+
+  .matches-filter-toggle:hover,
+  .matches-filter-toggle:focus-visible {
+    color: #000;
+    transform: scale(1.05);
+    outline: none;
+  }
+
+  .matches-filter-panel {
+    overflow: hidden;
+    background-color: #f0f6fb;
+    border-bottom: 1px solid #c5d8e6;
+    transition: height 0.3s ease, padding 0.3s ease;
+    height: 0;
+    padding: 0 8px;
+  }
+
+  .matches-filter-panel.open {
+    border-bottom-color: #b7ccdd;
+  }
+
+  .matches-filter-options {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 7px 0;
+    flex-wrap: wrap;
+  }
+
+  .matches-filter-flag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    padding: 2px;
+    width: 28px;
+    height: 20px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  .matches-filter-flag:hover,
+  .matches-filter-flag:focus-visible {
+    border-color: #a5b7c5;
+    box-shadow: 1.2px 1.2px 2px rgba(0, 0, 0, 0.2);
+    outline: none;
+    transform: translateY(-1px);
+  }
+
+  .matches-filter-flag.active {
+    border-color: #2C6DA3;
+    box-shadow: 0 0 0 1px rgba(44, 109, 163, 0.4);
+  }
+
+  .matches-filter-flag img {
+    width: 24px;
+    height: 16px;
+    object-fit: contain;
+    display: block;
+  }
+
   /* Right-side controls in tournament header (badge + chevron) */
   .results-controls {
     display: flex;
@@ -409,7 +524,8 @@ code {
     font-weight: 700;
   }
 
-  .tournament-header a {
+  .tournament-header a,
+  .tournament-header__title {
     display: flex;
     align-items: center;
     text-decoration: none;
@@ -437,7 +553,8 @@ code {
     font-size: 11px;  /* tournament name size */
     color: #555;      /* tournament name color */
   }
-  .time-mode .tournament-header a {
+  .time-mode .tournament-header a,
+  .time-mode .tournament-header__title {
     color: #555;      /* ensure link inherits the color */
     font-size: 10px;
   }
@@ -478,7 +595,7 @@ code {
   background-color: #f5f5f5;
 }
 
-/* Collapsible container for finished COC results */
+/* Collapsible container for finished duel results */
 .results-collapsible {
   height: 0;
   overflow: hidden;
@@ -486,7 +603,7 @@ code {
   
 }
 
-/* Inner wrapper for finished COC results */
+/* Inner wrapper for finished duel results */
 .results-collapsible__inner {
   padding: 0px 0;
   line-height: 22px;
@@ -517,7 +634,7 @@ code {
   transform: rotate(180deg);
 }
 
-/* Last Results: grid for COC duels (2 per row desktop, 1 per row mobile) */
+/* Last Results: grid for duel matches (2 per row desktop, 1 per row mobile) */
 .lastresults-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -555,9 +672,37 @@ code {
   white-space: nowrap;
 }
 
+.playoff-round-badge.individual-badge {
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 0 0 0 6px;
+  letter-spacing: 0.4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.playoff-round-badge.individual-stage-q1 {
+  background-color: #8ec5ff;
+  color: #0b3555;
+}
+
+.playoff-round-badge.individual-stage-q2 {
+  background-color: #bdf4d1;
+  color: #0c4021;
+}
+
+.playoff-round-badge.individual-stage-q3 {
+  background-color: #d8c8ff;
+  color: #2f1a57;
+}
+
+.playoff-round-badge.individual-stage-q4 {
+  background-color: #ffc9ce;
+  color: #61111f;
+}
+
 /* When badge present, drop streams slightly below it */
-  .match-right.under-badge {
-    margin-top: 12px;
+.match-right.under-badge {
+  margin-top: 12px;
   }
 
   /* Loading indicator */
@@ -583,6 +728,39 @@ if (openMatchId) {
   openMatchId.split(',').forEach(id => openLineupsSet.add(id));
 }
 const streamsOff = new URLSearchParams(window.location.search).get("streams") === "false";
+const DUEL_TOURNAMENT_TYPES = new Set(["coc", "individual"]);
+const INDIVIDUAL_TOURNAMENT_TYPE = "individual";
+const INDIVIDUAL_STAGE_CLASS_MAP = {
+  Q1: "individual-stage-q1",
+  Q2: "individual-stage-q2",
+  Q3: "individual-stage-q3",
+  Q4: "individual-stage-q4"
+};
+
+function isDuelTournament(type) {
+  if (typeof type !== "string") return false;
+  return DUEL_TOURNAMENT_TYPES.has(type.trim().toLowerCase());
+}
+
+function isIndividualTournament(type) {
+  if (typeof type !== "string") return false;
+  return type.trim().toLowerCase() === INDIVIDUAL_TOURNAMENT_TYPE;
+}
+
+function getIndividualStageClass(stageValue) {
+  if (typeof stageValue !== "string") return null;
+  const key = stageValue.trim().toUpperCase();
+  return INDIVIDUAL_STAGE_CLASS_MAP[key] || null;
+}
+
+function normalizeStage2RoundName(roundName) {
+  if (typeof roundName !== 'string') return '';
+  const trimmed = roundName.trim();
+  if (!trimmed) return '';
+  const colonIndex = trimmed.indexOf(':');
+  if (colonIndex === -1) return trimmed;
+  return trimmed.slice(0, colonIndex).trim();
+}
 
 // Build rating stars element (1-5 grey stars, 6 = 5 gold stars)
 function createRatingElement(rating) {
@@ -600,7 +778,9 @@ function createRatingElement(rating) {
     const s = document.createElement("span");
     s.className = "material-icons-round";
     s.textContent = "star";
-    s.style.color = (rNum === 6) ? "#DAA520" : "#333";
+    if (rNum !== 6) {
+      s.style.color = "#333";
+    }
     wrap.appendChild(s);
   }
   for (let i = 0; i < emptyCount; i++) {
@@ -613,8 +793,51 @@ function createRatingElement(rating) {
   return wrap;
 }
 
+function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
+  if (!match || !container) return;
+  const typeValue = tournamentType || match.tournament_type;
+  const isIndividual = isIndividualTournament(typeValue);
+
+  let badgeText = null;
+  let classSuffix = "";
+
+  if (isIndividual) {
+    classSuffix = " individual-badge";
+    const stageValue = typeof match.stage === "string" ? match.stage.trim() : "";
+    if (stageValue) {
+      badgeText = stageValue;
+      const stageClass = getIndividualStageClass(stageValue);
+      if (stageClass) {
+        classSuffix += ` ${stageClass}`;
+      }
+    }
+  }
+
+  if (!badgeText) {
+    if (match.stage === "Stage 2" && match.round) {
+      const roundLabel = normalizeStage2RoundName(match.round);
+      badgeText = roundLabel || match.round;
+    } else if (match.stage !== "Stage 2") {
+      const rb = match.round_badge;
+      if (typeof rb === "string" && rb.trim() !== "") {
+        badgeText = rb;
+      }
+    }
+  }
+
+  if (!badgeText) return;
+
+  const badge = document.createElement("div");
+  badge.className = `playoff-round-badge${classSuffix}`;
+  badge.textContent = badgeText;
+  container.appendChild(badge);
+  if (rightDiv) {
+    rightDiv.classList.add("under-badge");
+  }
+}
+
 function createMatchElement(match, options = {}) {
-  const { showRating = false } = options;
+  const { showRating = false, isToday = false } = options;
   // Only for TEAM tournaments
   const wrapper = document.createElement("div");
   wrapper.className = "match-wrapper";
@@ -694,6 +917,7 @@ function createMatchElement(match, options = {}) {
       const mon = MONTHS_3[dateObj.getMonth()];
       const dayStr = `${dd} ${mon}`;
       const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+      const timeLabel = isToday ? timeStr : `${dayStr} ${timeStr}`;
     
       const timeDiv = document.createElement("div");
       timeDiv.className = "match-time";
@@ -705,7 +929,7 @@ function createMatchElement(match, options = {}) {
       }
       const timeTextEl = document.createElement("div");
       timeTextEl.className = "match-time-text";
-      timeTextEl.textContent = `${dayStr} ${timeStr}`;
+      timeTextEl.textContent = timeLabel;
       timeDiv.appendChild(timeTextEl);
       container.appendChild(timeDiv);
       const divider = document.createElement("div");
@@ -792,6 +1016,7 @@ function createMatchElement(match, options = {}) {
       const mon = MONTHS_3[dateObj.getMonth()];
       const dayStr = `${dd} ${mon}`;
       const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+      const timeLabel = isToday ? timeStr : `${dayStr} ${timeStr}`;
     
       const timeDiv = document.createElement("div");
       timeDiv.className = "match-time";
@@ -803,7 +1028,7 @@ function createMatchElement(match, options = {}) {
       }
       const timeTextEl = document.createElement("div");
       timeTextEl.className = "match-time-text";
-      timeTextEl.textContent = `${dayStr} ${timeStr}`;
+      timeTextEl.textContent = timeLabel;
       timeDiv.appendChild(timeTextEl);
       rightDiv.appendChild(timeDiv); 
   } else {
@@ -828,36 +1053,22 @@ function createMatchElement(match, options = {}) {
   wrapper.appendChild(container);
   if (match.lineups) wrapper.appendChild(lineupDiv);
 
-  // Round/Stage badge (top-right). For Playoffs use match.round; otherwise use round_badge if present.
-  {
-    let badgeText = null;
-    if (match.stage === "Stage 2" && match.round) {
-      badgeText = match.round;
-    } else if (match.stage !== "Stage 2") {
-      const rb = match.round_badge;
-      if (typeof rb === 'string' && rb.trim() !== '') badgeText = rb;
-    }
-    if (badgeText) {
-      const badge = document.createElement("div");
-      badge.className = "playoff-round-badge";
-      badge.textContent = badgeText;
-      container.appendChild(badge);
-      rightDiv.classList.add("under-badge");
-    }
-  }
+  appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
 
   return wrapper;
 }
 
 function createDuelElement(match, options = {}) {
-  const { showRating = false } = options;
-  // Copied from createMatchElement, but for COC (duel) type, lineups logic removed
+  const { showRating = false, isToday = false } = options;
+  // Copied from createMatchElement, but for duel type, lineups logic removed
   const wrapper = document.createElement("div");
   wrapper.className = "match-wrapper";
 
   const container = document.createElement("div");
   container.className = "match-row";
   container.dataset.id = match.id;
+  const tournamentType = match.tournament_type || match.type;
+  const isIndividual = isIndividualTournament(tournamentType);
 
   // Always render the default (streams on) rendering.
   const [datePart, timePart] = match.time.split(" ");
@@ -872,19 +1083,31 @@ function createDuelElement(match, options = {}) {
   const mon = MONTHS_3[dateObj.getMonth()];
   const dayStr = `${dd} ${mon}`;
   const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  const timeLabel = isToday ? timeStr : `${dayStr} ${timeStr}`;
 
   const timeDiv = document.createElement("div");
   timeDiv.className = "match-time";
 
-  // Optional rating stars above time for Today COC matches (create DOM)
+  // Optional rating stars above time for Today duel matches (create DOM)
   if (showRating) {
     const ratingEl = createRatingElement(match.rating);
     if (ratingEl) timeDiv.appendChild(ratingEl);
   }
   const timeTextEl = document.createElement("div");
   timeTextEl.className = "match-time-text";
-  timeTextEl.textContent = `${dayStr} ${timeStr}`;
+  timeTextEl.textContent = timeLabel;
   timeDiv.appendChild(timeTextEl);
+
+  if (isToday) {
+    const rawFormat = typeof match.format === "string" ? match.format.trim() : "";
+    const formatKey = rawFormat.toLowerCase();
+    if (rawFormat && ["bo1", "bo3", "bo5"].includes(formatKey)) {
+      const badge = document.createElement("div");
+      badge.className = `match-format-badge ${formatKey}`;
+      badge.textContent = rawFormat;
+      timeDiv.appendChild(badge);
+    }
+  }
   container.appendChild(timeDiv);
   const divider = document.createElement("div");
   divider.className = "divider-vertical";
@@ -904,7 +1127,7 @@ function createDuelElement(match, options = {}) {
     const flag = i === 0 ? match.flag1 : match.flag2;
     if (flag && flag.trim() !== "") {
       const avatar = document.createElement("img");
-      avatar.className = "duel-player-avatar";
+      avatar.className = "duel-player-avatar" + (isIndividual ? " duel-player-avatar--individual" : "");
       avatar.src = flag;
       avatar.alt = name || "";
       row.appendChild(avatar);
@@ -949,7 +1172,7 @@ function createDuelElement(match, options = {}) {
     });
   }
 
-  // Only show gw1/gw2 for COC
+  // Only show gw1/gw2 for duel tournaments
   if (match.gw1 || match.gw2) {
     const scoreBox = document.createElement("div");
     scoreBox.className = "score-box duel-score";
@@ -960,35 +1183,21 @@ function createDuelElement(match, options = {}) {
   container.appendChild(rightDiv);
   wrapper.appendChild(container);
 
-  // Round/Stage badge (top-right). For Playoffs use match.round; otherwise use round_badge if present.
-  {
-    let badgeText = null;
-    if (match.stage === "Stage 2" && match.round) {
-      badgeText = match.round;
-    } else if (match.stage !== "Stage 2") {
-      const rb = match.round_badge;
-      if (typeof rb === 'string' && rb.trim() !== '') badgeText = rb;
-    }
-    if (badgeText) {
-      const badge = document.createElement("div");
-      badge.className = "playoff-round-badge";
-      badge.textContent = badgeText;
-      container.appendChild(badge);
-      rightDiv.classList.add("under-badge");
-    }
-  }
+  appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
 
   return wrapper;
 }
 
 function createDuelElementCompact(match) {
-  // Compact COC duel: no time, no divider; keep players, streams, score
+  // Compact duel: no time, no divider; keep players, streams, score
   const wrapper = document.createElement("div");
   wrapper.className = "match-wrapper";
 
   const container = document.createElement("div");
   container.className = "match-row duel-compact";
   container.dataset.id = match.id;
+  const tournamentType = match.tournament_type || match.type;
+  const isIndividual = isIndividualTournament(tournamentType);
 
   // Players (from team1/team2 in JSON)
   const playersDiv = document.createElement("div");
@@ -1004,7 +1213,7 @@ function createDuelElementCompact(match) {
     const flag = i === 0 ? match.flag1 : match.flag2;
     if (flag && flag.trim() !== "") {
       const avatar = document.createElement("img");
-      avatar.className = "duel-player-avatar";
+      avatar.className = "duel-player-avatar" + (isIndividual ? " duel-player-avatar--individual" : "");
       avatar.src = flag;
       avatar.alt = name || "";
       row.appendChild(avatar);
@@ -1049,7 +1258,7 @@ function createDuelElementCompact(match) {
     });
   }
 
-  // Only show gw1/gw2 for COC
+  // Only show gw1/gw2 for duel tournaments
   if (match.gw1 || match.gw2) {
     const scoreBox = document.createElement("div");
     scoreBox.className = "score-box duel-score";
@@ -1060,23 +1269,7 @@ function createDuelElementCompact(match) {
   container.appendChild(rightDiv);
   wrapper.appendChild(container);
 
-  // Round/Stage badge (top-right). For Playoffs use match.round; otherwise use round_badge if present.
-  {
-    let badgeText = null;
-    if (match.stage === "Stage 2" && match.round) {
-      badgeText = match.round;
-    } else if (match.stage !== "Stage 2") {
-      const rb = match.round_badge;
-      if (typeof rb === 'string' && rb.trim() !== '') badgeText = rb;
-    }
-    if (badgeText) {
-      const badge = document.createElement("div");
-      badge.className = "playoff-round-badge";
-      badge.textContent = badgeText;
-      container.appendChild(badge);
-      rightDiv.classList.add("under-badge");
-    }
-  }
+  appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
 
   return wrapper;
 }
@@ -1085,10 +1278,15 @@ function createTournamentHeader(tournament) {
   const header = document.createElement("div");
   header.className = "tournament-header";
 
-  const a = document.createElement("a");
-  a.href = tournament.link;
-  a.target = "_self";
-  a.rel = "noopener noreferrer";
+  const linkValue = typeof tournament.link === "string" ? tournament.link.trim() : "";
+  const hasLink = !!linkValue;
+  const titleEl = document.createElement(hasLink ? "a" : "div");
+  titleEl.className = "tournament-header__title";
+  if (hasLink) {
+    titleEl.href = linkValue;
+    titleEl.target = "_self";
+    titleEl.rel = "noopener noreferrer";
+  }
 
   const icon = document.createElement("img");
   icon.className = "tournament-icon";
@@ -1098,16 +1296,71 @@ function createTournamentHeader(tournament) {
   const span = document.createElement("span");
   span.textContent = tournament.name;
 
-  a.appendChild(icon);
-  a.appendChild(span);
-  header.appendChild(a);
+  titleEl.appendChild(icon);
+  titleEl.appendChild(span);
+  header.appendChild(titleEl);
+
+  const right = document.createElement("div");
+  right.className = "tournament-header__right";
+  header.appendChild(right);
+  header._right = right;
 
   return header;
+}
+
+function normalizeFlagValue(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getMatchFlagKeys(match) {
+  const keys = [];
+  const flag1 = normalizeFlagValue(match.flag1);
+  const flag2 = normalizeFlagValue(match.flag2);
+  if (flag1) keys.push(flag1);
+  if (flag2) keys.push(flag2);
+  return Array.from(new Set(keys));
+}
+
+function collectFlagInfos(matches) {
+  const flagMap = new Map();
+  matches.forEach(match => {
+    [
+      { flag: match.flag1, name: match.team1 },
+      { flag: match.flag2, name: match.team2 }
+    ].forEach(({ flag, name }) => {
+      const key = normalizeFlagValue(flag);
+      if (!key) return;
+      if (!flagMap.has(key)) {
+        flagMap.set(key, { key, url: flag, names: new Set() });
+      }
+      const trimmedName = typeof name === "string" ? name.trim() : "";
+      if (trimmedName) {
+        flagMap.get(key).names.add(trimmedName);
+      }
+    });
+  });
+
+  const infos = Array.from(flagMap.values()).map(entry => {
+    const names = Array.from(entry.names).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    const title = names.length ? names.join(", ") : "";
+    const sortName = names.length ? names[0] : "";
+    return {
+      key: entry.key,
+      url: entry.url,
+      title,
+      sortName
+    };
+  });
+
+  infos.sort((a, b) => a.sortName.localeCompare(b.sortName));
+
+  return infos.map(({ sortName, ...rest }) => rest);
 }
 
 
 let todaySortBy = "event"; // Single UI state controlling Today + Upcoming
 let lastData = null; // cache of last fetched data for re-rendering without refetch
+let tournamentFilterIdCounter = 0;
 
 function renderSection(container, title, tournaments, matches) {
   if (!matches || matches.length === 0) return;
@@ -1249,12 +1502,12 @@ function renderSection(container, title, tournaments, matches) {
       // Match row (reuse existing creators)
       const tType = (tObj && tObj.type) || match.tournament_type;
       let el;
-      if (tType === "COC") {
-        // Show rating for Today and Upcoming in Time mode
-        el = createDuelElement(match, { showRating: true });
+      if (isDuelTournament(tType)) {
+        // Show rating for Today and Upcoming duel matches in Time mode
+        el = createDuelElement(match, { showRating: true, isToday });
       } else {
         // TEAM: also show rating in Time mode
-        el = createMatchElement(match, { showRating: true });
+        el = createMatchElement(match, { showRating: true, isToday });
       }
       card.appendChild(el);
     });
@@ -1279,20 +1532,153 @@ function renderSection(container, title, tournaments, matches) {
     card.appendChild(header);
 
     const filtered = matches.filter(m => m.tournament === tournament.name);
+    const headerRight = header._right || header.querySelector(".tournament-header__right");
+
+    const teamMatchesData = filtered.filter(m => (tournament.type || m.tournament_type) === "TEAM");
+    const flagInfos = collectFlagInfos(teamMatchesData);
+    const hasTeamFilter = flagInfos.length > 0 && !!headerRight;
+    const teamMatchEntries = [];
+    let activeFlagKey = null;
+
+    const registerTeamMatchElement = hasTeamFilter
+      ? (element, match) => {
+          const flagKeys = getMatchFlagKeys(match);
+          element.dataset.flagKeys = flagKeys.join("|");
+          teamMatchEntries.push({ element, flagKeys });
+        }
+      : () => {};
+
+    const applyFlagFilter = () => {
+      if (!hasTeamFilter) return;
+      const showAll = !activeFlagKey;
+      teamMatchEntries.forEach(({ element, flagKeys }) => {
+        const shouldShow = showAll || flagKeys.includes(activeFlagKey);
+        element.style.display = shouldShow ? "" : "none";
+      });
+    };
+
+    let filterPanel = null;
+    let filterButtons = [];
+
+    if (hasTeamFilter) {
+      const filterToggle = document.createElement("button");
+      filterToggle.className = "matches-filter-toggle";
+      filterToggle.type = "button";
+      filterToggle.setAttribute("aria-label", "Toggle filters");
+      filterToggle.setAttribute("aria-expanded", "false");
+
+      const filterIcon = document.createElement("i");
+      filterIcon.className = "fa fa-sliders-h";
+      filterToggle.appendChild(filterIcon);
+
+      headerRight.appendChild(filterToggle);
+
+      filterPanel = document.createElement("div");
+      filterPanel.className = "matches-filter-panel";
+      const filterPanelId = `matches-filter-${++tournamentFilterIdCounter}`;
+      filterPanel.id = filterPanelId;
+      filterToggle.setAttribute("aria-controls", filterPanelId);
+
+      const optionsWrapper = document.createElement("div");
+      optionsWrapper.className = "matches-filter-options";
+      filterPanel.appendChild(optionsWrapper);
+
+      flagInfos.forEach(info => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "matches-filter-flag";
+        btn.dataset.flagKey = info.key;
+        if (info.title) {
+          btn.title = info.title;
+        }
+
+        const img = document.createElement("img");
+        img.src = info.url;
+        img.alt = info.title || "Country flag";
+        btn.appendChild(img);
+
+        optionsWrapper.appendChild(btn);
+        filterButtons.push(btn);
+      });
+
+      card.appendChild(filterPanel);
+
+      let isFilterPanelOpen = false;
+
+      const toggleFilterPanel = () => {
+        if (isFilterPanelOpen) {
+          isFilterPanelOpen = false;
+          filterToggle.setAttribute("aria-expanded", "false");
+          filterPanel.style.height = `${filterPanel.scrollHeight}px`;
+          requestAnimationFrame(() => {
+            filterPanel.style.height = "0px";
+          });
+        } else {
+          isFilterPanelOpen = true;
+          filterToggle.setAttribute("aria-expanded", "true");
+          filterPanel.style.height = "0px";
+          filterPanel.classList.add("open");
+          requestAnimationFrame(() => {
+            filterPanel.style.height = `${filterPanel.scrollHeight}px`;
+          });
+        }
+      };
+
+      filterToggle.addEventListener("click", toggleFilterPanel);
+
+      filterPanel.addEventListener("transitionend", event => {
+        if (event.propertyName !== "height") {
+          return;
+        }
+        if (isFilterPanelOpen) {
+          filterPanel.style.height = "auto";
+        } else {
+          filterPanel.classList.remove("open");
+          filterPanel.style.height = "0px";
+        }
+      });
+
+      const setActiveFlag = (flagKey) => {
+        activeFlagKey = flagKey;
+        filterButtons.forEach(btn => {
+          const isActive = !!activeFlagKey && btn.dataset.flagKey === activeFlagKey;
+          if (isActive) {
+            btn.classList.add("active");
+          } else {
+            btn.classList.remove("active");
+          }
+        });
+        applyFlagFilter();
+      };
+
+      filterButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const flagKey = btn.dataset.flagKey;
+          if (activeFlagKey === flagKey) {
+            setActiveFlag(null);
+          } else {
+            setActiveFlag(flagKey);
+          }
+        });
+      });
+    }
 
     if (title === "Last Results") {
-      // For Last Results: COC → compact in grid; TEAM → as-is
+      // For Last Results: duel tournaments → compact grid; TEAM → as-is
       // 1) TEAM (as-is)
       filtered
-        .filter(m => (tournament.type || m.tournament_type) !== "COC")
+        .filter(m => !isDuelTournament(tournament.type || m.tournament_type))
         .forEach(match => {
           const el = createMatchElement(match); // TEAM: без змін
+          if ((tournament.type || match.tournament_type) === "TEAM") {
+            registerTeamMatchElement(el, match);
+          }
           card.appendChild(el);
         });
 
-      // 2) COC (compact grid) — hidden by default with toggle on header
-      const cocList = filtered.filter(m => (tournament.type || m.tournament_type) === "COC");
-      if (cocList.length > 0) {
+      // 2) Duel tournaments (compact grid) — hidden by default with toggle on header
+      const duelList = filtered.filter(m => isDuelTournament(tournament.type || m.tournament_type));
+      if (duelList.length > 0) {
         // Create collapsible like TEAM lineups
         const collapsible = document.createElement("div");
         collapsible.className = "results-collapsible"; // separate styles for finished results
@@ -1302,7 +1688,7 @@ function renderSection(container, title, tournaments, matches) {
 
         const grid = document.createElement("div");
         grid.className = "lastresults-grid";
-        cocList.forEach(match => {
+        duelList.forEach(match => {
           const el = createDuelElementCompact(match);
           grid.appendChild(el);
         });
@@ -1315,7 +1701,7 @@ function renderSection(container, title, tournaments, matches) {
 
         const countBadge = document.createElement("div");
         countBadge.className = "results-count-badge";
-        countBadge.textContent = String(cocList.length);
+        countBadge.textContent = String(duelList.length);
 
         const toggleBtn = document.createElement("div");
         toggleBtn.className = "chevron";
@@ -1360,24 +1746,30 @@ function renderSection(container, title, tournaments, matches) {
 
         controls.appendChild(countBadge);
         controls.appendChild(toggleBtn);
-        header.appendChild(controls);
+        const headerRightForResults = header._right || header.querySelector(".tournament-header__right");
+        if (headerRightForResults) {
+          headerRightForResults.appendChild(controls);
+        } else {
+          header.appendChild(controls);
+        }
         card.appendChild(collapsible);
       }
     } else {
       // Other sections: Today / Upcoming Matches
       filtered.forEach(match => {
         const tType = tournament.type || match.tournament_type;
-        // For Today and Upcoming + COC add rating above time
-        if (tType === "COC") {
+        // For Today and Upcoming + duel tournaments add rating above time
+        if (isDuelTournament(tType)) {
           const showRating = (title === "Today" || title === "Upcoming Matches");
-          const el = showRating
-            ? createDuelElement(match, { showRating: true })
-            : createDuelElement(match);
+          const el = createDuelElement(match, { showRating, isToday });
           card.appendChild(el);
         } else {
-          // TEAM: show rating on Today/Upcoming like COC
+          // TEAM: show rating on Today/Upcoming like duel tournaments
           const showRating = (title === "Today" || title === "Upcoming Matches");
-          const el = createMatchElement(match, { showRating });
+          const el = createMatchElement(match, { showRating, isToday });
+          if ((tournament.type || match.tournament_type) === "TEAM") {
+            registerTeamMatchElement(el, match);
+          }
           card.appendChild(el);
         }
       });
