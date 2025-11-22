@@ -465,6 +465,12 @@
     { letter: "D", title: "Group D", start: 25, end: 32 },
     { letter: "E", title: "Group E", start: 33, end: 40 }
   ];
+  const Q2_GROUPS = [
+    { letter: "F", title: "Group F", start: 1, end: 8 },
+    { letter: "G", title: "Group G", start: 9, end: 16 },
+    { letter: "H", title: "Group H", start: 17, end: 24 },
+    { letter: "I", title: "Group I", start: 25, end: 32 }
+  ];
   let players = [];
   let tournamentPlayers = [];
   let tournaments = [];
@@ -731,7 +737,7 @@
       const tablesContainer = document.createElement("div");
       tablesContainer.className = "stage-tables";
       tablesContainer.appendChild(createStageTable("Seeded players", seededPlayers));
-      tablesContainer.appendChild(createStageTable("Uneeded players", unseededPlayers));
+      tablesContainer.appendChild(createStageTable("Unseeded players", unseededPlayers));
       section.appendChild(tablesContainer);
     }
 
@@ -772,13 +778,15 @@
     actionButton.type = "button";
     actionButton.className = "draw-action";
     actionButton.textContent = "Start the draw";
-    const canRunDraw = selectedStage === "Q4" || selectedStage === "Q1";
+    const canRunDraw = selectedStage === "Q4" || selectedStage === "Q1" || selectedStage === "Q2";
     actionButton.disabled = !canRunDraw;
     actionButton.addEventListener("click", () => {
       if (selectedStage === "Q4") {
         runQ4Draw(sorted);
       } else if (selectedStage === "Q1") {
         runQ1Draw(sorted);
+      } else if (selectedStage === "Q2") {
+        runQ2Draw(sorted);
       }
     });
     section.appendChild(actionButton);
@@ -857,8 +865,8 @@
     }
 
     // Assign draw numbers while respecting association constraints
-    assignNumbersWithAssociations(seededPlayers, seededNumbers, associationCounts, associationUsage);
-    assignNumbersWithAssociations(unseededPlayers, unseededNumbers, associationCounts, associationUsage);
+    assignNumbersWithAssociations(seededPlayers, seededNumbers, associationCounts, associationUsage, Q1_GROUPS);
+    assignNumbersWithAssociations(unseededPlayers, unseededNumbers, associationCounts, associationUsage, Q1_GROUPS);
 
     // Build a lookup from draw number to player
     const numberToPlayer = new Map();
@@ -892,11 +900,94 @@
     }
   }
 
-  function assignNumbersWithAssociations(playerList, availableNumbers, associationCounts, associationGroupUsage) {
+  function runQ2Draw(playersList) {
+    // Validate that we actually have a player list before doing anything else
+    if (!Array.isArray(playersList)) return;
+
+    // Separate the field by seeding and randomize so the draw feels unpredictable
+    const seededPlayers = shuffleArray(playersList.filter(player => (player.seeding || "").trim() === "Seeded"));
+    const unseededPlayers = shuffleArray(playersList.filter(player => (player.seeding || "").trim() === "Unseeded"));
+
+    // Stop if we cannot fill the 16 seeded slots that the format requires
+    if (seededPlayers.length < 16) {
+      if (drawMatchesWrapper) {
+        drawMatchesWrapper.textContent = "Not enough seeded players to run the draw.";
+      }
+      return;
+    }
+
+    // Only 16 seeded players participate; extra ones are discarded
+    const selectedSeeded = seededPlayers.slice(0, 16);
+    // Likewise, keep up to 16 unseeded players
+    let selectedUnseeded = unseededPlayers.slice(0, 16);
+
+    // If we have fewer than 16 unseeded players, fill the remaining slots with Bye placeholders
+    const byeNeeded = 16 - selectedUnseeded.length;
+    for (let i = 1; i <= byeNeeded; i++) {
+      selectedUnseeded.push({
+        player: `Bye ${i}`,
+        seeding: "Unseeded",
+        __isBye: true,
+        __byeKey: `bye-${i}`
+      });
+    }
+
+    const associationCounts = new Map();
+    [...selectedSeeded, ...selectedUnseeded].forEach(player => {
+      const key = getAssociationKey(player);
+      associationCounts.set(key, (associationCounts.get(key) || 0) + 1);
+    });
+    const associationUsage = new Map();
+
+    const seededNumbers = [];
+    const unseededNumbers = [];
+    for (let num = 1; num <= 32; num++) {
+      if (num % 2 === 1) {
+        seededNumbers.push(num);
+      } else {
+        unseededNumbers.push(num);
+      }
+    }
+
+    assignNumbersWithAssociations(selectedSeeded, seededNumbers, associationCounts, associationUsage, Q2_GROUPS);
+    assignNumbersWithAssociations(selectedUnseeded, unseededNumbers, associationCounts, associationUsage, Q2_GROUPS);
+
+    // Map draw numbers to player objects for quick lookup when building matches
+    const numberToPlayer = new Map();
+    [...selectedSeeded, ...selectedUnseeded].forEach(player => {
+      if (typeof player.__drawNumber === "number") {
+        numberToPlayer.set(player.__drawNumber, player);
+      }
+    });
+
+    // Turn the assignments into group matches (F, G, H, I) with 4 pairings each
+    const groupData = Q2_GROUPS.map(group => {
+      const matches = [];
+      for (let num = group.start; num <= group.end; num += 2) {
+        const playerOne = numberToPlayer.get(num);
+        const playerTwo = numberToPlayer.get(num + 1);
+        matches.push([playerOne, playerTwo]);
+      }
+      return {
+        title: group.title,
+        matches
+      };
+    });
+
+    renderMatchGroups(groupData);
+    downloadMatchesCsv(groupData, "Q2-draw-matches.csv");
+    // Disable the draw action so Q2 cannot be re-run without refreshing
+    if (drawActionButton) {
+      drawActionButton.disabled = true;
+    }
+  }
+
+  function assignNumbersWithAssociations(playerList, availableNumbers, associationCounts, associationGroupUsage, groupRanges) {
     // Map of association → total players overall (default to empty map)
     const counts = associationCounts || new Map();
     // Tracks which groups already contain a player from a specific association
     const groupUsage = associationGroupUsage || new Map();
+    const groups = Array.isArray(groupRanges) && groupRanges.length ? groupRanges : Q1_GROUPS;
     // Players from associations with multiple participants go first
     const multiAssocPlayers = shuffleArray(playerList.filter(player => (counts.get(getAssociationKey(player)) || 0) > 1));
     // Single representatives are processed afterwards
@@ -910,7 +1001,7 @@
       const assocKey = getAssociationKey(player);
       const usedGroups = groupUsage.get(assocKey) || new Set();
       // Prefer numbers from groups where this association has not appeared yet
-      const candidates = available.filter(num => !usedGroups.has(getGroupByNumber(num)));
+      const candidates = available.filter(num => !usedGroups.has(getGroupByNumber(num, groups)));
       const pool = candidates.length ? candidates : available;
       const chosen = pool[Math.floor(Math.random() * pool.length)];
       const index = available.indexOf(chosen);
@@ -919,7 +1010,7 @@
       }
       player.__drawNumber = chosen;
       const updated = new Set(usedGroups);
-      const groupLetter = getGroupByNumber(chosen);
+      const groupLetter = getGroupByNumber(chosen, groups);
       if (groupLetter) {
         updated.add(groupLetter);
         groupUsage.set(assocKey, updated);
@@ -1082,13 +1173,17 @@
   }
 
 
-  function getGroupByNumber(number) {
-    const group = Q1_GROUPS.find(range => number >= range.start && number <= range.end);
+  function getGroupByNumber(number, groupsList) {
+    const list = Array.isArray(groupsList) && groupsList.length ? groupsList : Q1_GROUPS;
+    const group = list.find(range => number >= range.start && number <= range.end);
     return group ? group.letter : null;
   }
 
   function getAssociationKey(player) {
     if (!player) return "unknown";
+    if (player.__byeKey) {
+      return player.__byeKey;
+    }
     const fieldOrder = ["association", "team", "club", "country"];
     for (const field of fieldOrder) {
       const value = player[field];

@@ -365,7 +365,6 @@
   .player-logo {
     height: 18px;
     width: 18px;
-    border: 0.5px solid #444;
     object-fit: contain;
     margin-right: 0px;
     border-radius: 2px;
@@ -405,7 +404,7 @@
   }
 
   .highlight-player {
-    background-color: #f1e2e4 !important;
+    background-color: #fde7ea !important;
   }
   .highlight-text {
     font-weight: 600;
@@ -442,7 +441,11 @@
   let duels = [];
   let players = [];
   let teams = [];
+  let countries = [];
   let duelPlayersForSearch = [];
+  let tournamentPlayers = [];
+  const playerCountryInfoById = new Map();
+  const playerCountryInfoByName = new Map();
 
   // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
   const BRACKET_MARGIN = 15;
@@ -478,6 +481,78 @@
     );
   }
 
+  function rebuildPlayerCountryIndex() {
+    playerCountryInfoById.clear();
+    playerCountryInfoByName.clear();
+    if (!Array.isArray(tournamentPlayers)) return;
+
+    const countryFlagMap = new Map();
+    (countries || []).forEach(country => {
+      if (!country || !country.team) return;
+      const key = String(country.team).trim().toLowerCase();
+      if (!key) return;
+      const flag = typeof country.flag === "string" ? country.flag.trim() : "";
+      if (flag) {
+        countryFlagMap.set(key, flag);
+      }
+    });
+
+    const fallbackFields = ["team", "association", "club"];
+    tournamentPlayers.forEach(entry => {
+      if (!entry) return;
+      const rawCountry = typeof entry.country === "string" ? entry.country.trim() : "";
+      let countryName = rawCountry;
+      if (!countryName) {
+        for (const field of fallbackFields) {
+          if (entry[field]) {
+            const normalized = String(entry[field]).trim();
+            if (normalized) {
+              countryName = normalized;
+              break;
+            }
+          }
+        }
+      }
+      const countryKey = countryName ? countryName.toLowerCase() : "";
+      const fallbackFlag = typeof entry.flag === "string" ? entry.flag.trim() : "";
+      const logo = countryKey ? (countryFlagMap.get(countryKey) || fallbackFlag) : fallbackFlag;
+      const info = {
+        country: countryName,
+        flag: logo
+      };
+
+      const idStr = entry.player_id !== undefined && entry.player_id !== null ? String(entry.player_id).trim() : "";
+      if (!idStr) return;
+      const normalizedEntryTournamentId = normalizeTournamentId(entry.tournament_id);
+      const isCurrentTournament = !normalizedTournamentId || normalizedEntryTournamentId === normalizedTournamentId;
+      if (!playerCountryInfoById.has(idStr) || isCurrentTournament) {
+        playerCountryInfoById.set(idStr, info);
+      }
+      const playerName = typeof entry.player === "string" ? entry.player.trim().toLowerCase() : "";
+      if (playerName && (!playerCountryInfoByName.has(playerName) || isCurrentTournament)) {
+        playerCountryInfoByName.set(playerName, info);
+      }
+    });
+  }
+
+  function findPlayerCountryInfo(playerId, playerName) {
+    if (playerId !== undefined && playerId !== null) {
+      const idStr = String(playerId).trim();
+      if (idStr) {
+        const idInfo = playerCountryInfoById.get(idStr);
+        if (idInfo && (idInfo.flag || idInfo.country)) {
+          return idInfo;
+        }
+      }
+    }
+    const nameKey = typeof playerName === "string" ? playerName.trim().toLowerCase() : "";
+    if (nameKey) {
+      const nameInfo = playerCountryInfoByName.get(nameKey);
+      if (nameInfo) return nameInfo;
+    }
+    return null;
+  }
+
   function fetchTournamentsAndInit() {
     fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json")
       .then(r => {
@@ -504,7 +579,10 @@
         matches = data.matches || [];
         players = data.players || [];
         teams = data.teams || [];
+        countries = data.countries || [];
+        tournamentPlayers = data.tournament_players || [];
         rebuildDuelPlayersSearchIndex();
+        rebuildPlayerCountryIndex();
         initAndRenderTournamentContent(currentTournament);
       })
       .catch(err => {
@@ -1324,10 +1402,19 @@
           // Player 1: logo + link
           let player1Logo = null;
           const player1Avatar = players.find(pl => pl.player_id === m.player1_id)?.avatar;
-          if (player1Avatar) {
+          const player1CountryInfo = findPlayerCountryInfo(m.player1_id, m.player1);
+          const player1LogoSrc = (player1CountryInfo && player1CountryInfo.flag) ? player1CountryInfo.flag : player1Avatar;
+          if (player1LogoSrc) {
             player1Logo = document.createElement("img");
-            player1Logo.src = player1Avatar;
+            player1Logo.src = player1LogoSrc;
             player1Logo.className = "player-logo";
+            if (player1CountryInfo && player1CountryInfo.country) {
+              player1Logo.alt = player1CountryInfo.country;
+              player1Logo.title = player1CountryInfo.country;
+            } else if (m.player1) {
+              player1Logo.alt = m.player1;
+              player1Logo.title = m.player1;
+            }
           }
           const player1Link = document.createElement("a");
           if (m.player1_id) {
@@ -1362,10 +1449,19 @@
           // Player 2: logo + link
           let player2Logo = null;
           const player2Avatar = players.find(pl => pl.player_id === m.player2_id)?.avatar;
-          if (player2Avatar) {
+          const player2CountryInfo = findPlayerCountryInfo(m.player2_id, m.player2);
+          const player2LogoSrc = (player2CountryInfo && player2CountryInfo.flag) ? player2CountryInfo.flag : player2Avatar;
+          if (player2LogoSrc) {
             player2Logo = document.createElement("img");
-            player2Logo.src = player2Avatar;
+            player2Logo.src = player2LogoSrc;
             player2Logo.className = "player-logo";
+            if (player2CountryInfo && player2CountryInfo.country) {
+              player2Logo.alt = player2CountryInfo.country;
+              player2Logo.title = player2CountryInfo.country;
+            } else if (m.player2) {
+              player2Logo.alt = m.player2;
+              player2Logo.title = m.player2;
+            }
           }
           const player2Link = document.createElement("a");
           if (m.player2_id) {
