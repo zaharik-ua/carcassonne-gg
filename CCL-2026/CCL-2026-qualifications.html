@@ -405,7 +405,7 @@
   }
 
   .highlight-player {
-    background-color: #eeeeee !important;
+    background-color: #f1e2e4 !important;
   }
   .highlight-text {
     font-weight: 600;
@@ -570,6 +570,25 @@
     let accordionControls = null;
     let activeStageFilter = null;
     let activePlayerFilter = null;
+
+    const highlightPlayerInPlayoff = () => {
+      if (!stage1Container) return;
+      const rows = stage1Container.querySelectorAll(".match-row-winner, .match-row-loser");
+      rows.forEach(row => row.classList.remove("highlight-player"));
+      if (!activePlayerFilter) return;
+      const targetId = activePlayerFilter.id;
+      const targetNameLower = activePlayerFilter.nameLower;
+      rows.forEach(row => {
+        const rowId = row.getAttribute("data-player-id");
+        const rowName = row.getAttribute("data-opponent-name");
+        const rowNameLower = rowName ? rowName.trim().toLowerCase() : "";
+        const idMatches = Boolean(targetId && rowId && rowId === targetId);
+        const nameMatches = Boolean(targetNameLower && rowNameLower && rowNameLower === targetNameLower);
+        if (idMatches || nameMatches) {
+          row.classList.add("highlight-player");
+        }
+      });
+    };
 
     const resolveStageValue = (items) => {
       if (!Array.isArray(items)) return null;
@@ -813,6 +832,7 @@
         btn.classList.toggle("active", isActive);
         btn.setAttribute("aria-pressed", isActive ? "true" : "false");
       });
+      highlightPlayerInPlayoff();
       if (activePlayerFilter && firstVisibleGroup && scrollToFirstMatch) {
         const state = accordionStates.get(firstVisibleGroup);
         if (state && !state.isOpen()) {
@@ -1331,6 +1351,12 @@
           opponent1Div.appendChild(score1Span);
           // Add data-opponent-name attribute
           opponent1Div.setAttribute("data-opponent-name", m.player1);
+          const player1IdStr = (m.player1_id !== undefined && m.player1_id !== null)
+            ? String(m.player1_id).trim()
+            : "";
+          if (player1IdStr) {
+            opponent1Div.setAttribute("data-player-id", player1IdStr);
+          }
           
           opponent2Div.className = m.score1 < m.score2 ? "match-row-winner" : "match-row-loser";
           // Player 2: logo + link
@@ -1363,6 +1389,12 @@
           opponent2Div.appendChild(score2Span);
           // Add data-opponent-name attribute
           opponent2Div.setAttribute("data-opponent-name", m.player2);  
+          const player2IdStr = (m.player2_id !== undefined && m.player2_id !== null)
+            ? String(m.player2_id).trim()
+            : "";
+          if (player2IdStr) {
+            opponent2Div.setAttribute("data-player-id", player2IdStr);
+          }
         }
 
         matchBox.appendChild(opponent1Div);
