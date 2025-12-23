@@ -3,3 +3,4 @@ cron_update_open.log
 log_archive/
 cron_update_inperson.log
 *.log
+update_tournaments_done_files.sh
