@@ -252,17 +252,11 @@
   
   // --- TOURNAMENT ID ---
   // Determine currentTournamentId either from test default or from the page URL
-  const currentTournamentId = "CCL-2026Q";
+  const currentTournamentId = "CCL-2026";
   let players = [];
   let tournament_players = [];
   let tournaments = [];
   let countries = [];
-  const PLAYER_STAGE_FILTERS = ["Main", "Q1", "Q2", "Q3", "Q4"];
-  const playersFilterState = {
-    registeredOnly: false,
-    stages: new Set()
-  };
-
   function fetchTournamentsAndInit() {
     const dataUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json";
 
@@ -327,26 +321,10 @@
       const countryCompare = (a.country || "").localeCompare(b.country || "", undefined, { sensitivity: "base" });
       if (countryCompare !== 0) return countryCompare;
 
-      const stageCompare = (a.stage || "").localeCompare(b.stage || "", undefined, { sensitivity: "base" });
-      if (stageCompare !== 0) return stageCompare;
-
       return (a.player || "").localeCompare(b.player || "", undefined, { sensitivity: "base" });
     });
 
-    const filtered = sorted.filter(entry => {
-      if (playersFilterState.registeredOnly && !(entry.player || "").trim()) {
-        return false;
-      }
-      const hasStageFilter = playersFilterState.stages.size > 0;
-      const stageValue = (entry.stage || "").trim();
-      if (!hasStageFilter) {
-        return true;
-      }
-      if (PLAYER_STAGE_FILTERS.includes(stageValue)) {
-        return playersFilterState.stages.has(stageValue);
-      }
-      return false;
-    });
+    const filtered = sorted;
 
     const totalCount = sorted.length;
     const visibleCount = filtered.length;
@@ -364,60 +342,13 @@
       : `Players: ${visibleCount} / ${totalCount}`;
     headerRow.appendChild(title);
 
-    const filtersWrapper = document.createElement("div");
-    filtersWrapper.className = "players-filters";
-
-    const registeredGroup = document.createElement("div");
-    registeredGroup.className = "filter-group";
-    const registeredButton = document.createElement("button");
-    registeredButton.type = "button";
-    registeredButton.className = "filter-chip" + (playersFilterState.registeredOnly ? " active" : "");
-    registeredButton.textContent = "Registered";
-    registeredButton.setAttribute("aria-pressed", playersFilterState.registeredOnly ? "true" : "false");
-    registeredButton.addEventListener("click", () => {
-      playersFilterState.registeredOnly = !playersFilterState.registeredOnly;
-      renderPlayersTable();
-    });
-    registeredGroup.appendChild(registeredButton);
-    filtersWrapper.appendChild(registeredGroup);
-
-    const stageGroup = document.createElement("div");
-    stageGroup.className = "filter-group";
-    const stageLabel = document.createElement("span");
-    stageLabel.className = "filter-label";
-    stageLabel.textContent = "Stage:";
-    stageGroup.appendChild(stageLabel);
-
-    const stageButtonsWrap = document.createElement("div");
-    stageButtonsWrap.className = "filter-chip-group";
-    PLAYER_STAGE_FILTERS.forEach(stageOption => {
-      const isActive = playersFilterState.stages.has(stageOption);
-      const stageBtn = document.createElement("button");
-      stageBtn.type = "button";
-      stageBtn.className = "filter-chip" + (isActive ? " active" : "");
-      stageBtn.textContent = stageOption;
-      stageBtn.setAttribute("aria-pressed", isActive ? "true" : "false");
-      stageBtn.addEventListener("click", () => {
-        if (playersFilterState.stages.has(stageOption)) {
-          playersFilterState.stages.delete(stageOption);
-        } else {
-          playersFilterState.stages.add(stageOption);
-        }
-        renderPlayersTable();
-      });
-      stageButtonsWrap.appendChild(stageBtn);
-    });
-    stageGroup.appendChild(stageButtonsWrap);
-    filtersWrapper.appendChild(stageGroup);
-
-    headerRow.appendChild(filtersWrapper);
     section.appendChild(headerRow);
 
     const table = document.createElement("table");
     table.className = "group-table";
 
     const headTr = document.createElement("tr");
-    ["Country", "Player", "Elo *", "Qualified by", "Stage"].forEach(label => {
+    ["Country", "Player", "Elo *", "Qualified by"].forEach(label => {
       const th = document.createElement("th");
       th.textContent = label;
       if (label === "Player" || label === "Qualified by" || label === "Country") {
@@ -438,7 +369,7 @@
     if (!filtered.length) {
       const emptyRow = document.createElement("tr");
       const emptyCell = document.createElement("td");
-      emptyCell.colSpan = 5;
+      emptyCell.colSpan = 4;
       emptyCell.style.textAlign = "center";
       emptyCell.style.padding = "12px";
       emptyCell.textContent = "No players match filters.";
@@ -571,11 +502,6 @@
       }
       qualifiedTd.appendChild(qualifiedWrap);
       tr.appendChild(qualifiedTd);
-
-      const stageTd = document.createElement("td");
-      stageTd.textContent = entry.stage || "-";
-      tr.appendChild(stageTd);
-
       table.appendChild(tr);
     });
 

@@ -250,7 +250,9 @@
       const res = await fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-list.json");
       if (!res.ok) throw new Error("Json fetch failed");
       const data = await res.json();
-      const tournaments = data.tournaments.filter(t => t.type === "COC");
+      const tournaments = data.tournaments.filter(
+        t => t.type === "COC" || (t.type === "TEAM" && t.country)
+      );
       const countriesData = data.countries || [];
 
       const path = window.location.pathname.replace(/^\/+|\/+$/g, '');

@@ -29,6 +29,7 @@ function importAllTournamentData() {
       fileId: "1KMye5MRf204O5cTRWohnDLrg24dpZdGLFz3xlwsJhdA",
       sheets: {
         "CCL-2026Q": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "CCL-2026Q" },     // C–V
+        "CCL-2026": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "CCL-2026" },     // C–V
         "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–K
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
@@ -40,45 +41,6 @@ function importAllTournamentData() {
       sheets: {
         "2025 Matches": { targetSheet: "Matches", startCol: 2, endCol: 19 }, // B–S
         "2025 Duels": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "Friendly-Matches-2025" },     // C–V
-        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
-      }
-    },
-
-    // Belarus
-    {
-      fileId: "17sAfGdBHuwSTfyLtfjiYslbeFt3LGzDnDUKyBZverZM",
-      sheets: {
-        "BCPL-2025-AUT-1st": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "BCPL-2025-AUT-1st" },     // C–V
-        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
-      }
-    },
-
-    // Czechia
-    {
-      fileId: "1K6lVrUCZAXBE6rVojhO1YsQpOxSxS9EcOVLpmvfl-9Y",
-      sheets: {
-        "CZ-2025-COC": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "CZ-2025-COC" },     // C–V
-        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
-        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
-      }
-    },
-    
-    // RCP
-    {
-      fileId: "1NUcJni9vg3yz8brSMTqIaAEnblPfj3rcqC6hWCDNUdI",
-      sheets: {
-        "RCPCL-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "RCPCL-2025" },     // C–V
-        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
-        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
-      }
-    },
-
-    // Canada
-    {
-      fileId: "1Mq_jkkETRjf6ebtYDSZVfl9cOmkUFiGEtks-tYvO8k0",
-      sheets: {
-        "CCCLQ-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "CCCLQ-2025" },     // C–V
-        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     },
@@ -98,18 +60,51 @@ function importAllTournamentData() {
       fileId: "1Jc5uG0WQer2OgDsgaLsDN7MOLPWt7VCaou1aOQVNykk",
       sheets: {
         "UCOC-2026": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "UCOC-2026" },      // C–V
+        "UCDTC-2025-Matches": { targetSheet: "Matches", startCol: 2, endCol: 19 }, // B–S
+        "UCDTC-2025-Duels": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "UCDTC-2025-Duels" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     },
 
-    // OTHER
+    // Belgium
     {
-      fileId: "1C_EdvtfRkV5aawBJLoAKTpVFKh-xOLabEWzXgEV7IvI",
+      fileId: "1AGxPg5s5iPcU61E8p2EBLj5xol4fLJRd7QP2cL0wMLo",
       sheets: {
-        "OTHER": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "AR-2025-Cup" },     // C–V
+        "BCOC-2026": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "BCOC-2026" },     // C–V
+        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
+      }
+    },
+
+    // Italy
+    {
+      fileId: "1iSgoxWzamJ-QvDvsdgkb3twiJ5y-sUdOl8fMUfkKALM",
+      sheets: {
+        "ITCCL-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "ITCCL-2025" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
+        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
+      }
+    },
+
+    // Belarus
+    {
+      fileId: "17sAfGdBHuwSTfyLtfjiYslbeFt3LGzDnDUKyBZverZM",
+      sheets: {
+        "BCPL-2026-WIN-Major": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "BCPL-2026-WIN-Major" },     // C–V
+        "BCPL-2026-WIN-1st": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "BCPL-2026-WIN-1st" },     // C–V
+        "BCPL-2026-WIN-2nd": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "BCPL-2026-WIN-2nd" },     // C–V
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     }
+
+    // OTHER
+    // {
+    //   fileId: "1C_EdvtfRkV5aawBJLoAKTpVFKh-xOLabEWzXgEV7IvI",
+    //   sheets: {
+    //     "OTHER": { targetSheet: "Duels", startCol: 3, endCol: 22 },     // C–V
+    //     "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
+    //   }
+    // }
 
   ];
 
@@ -227,8 +222,8 @@ function importAllTournamentData() {
       const rowsByKey = new Map();
 
       for (const row of processedRows) {
-        const key = row[0];
-        if (!key) continue;
+        const key = row[1]; // use player id from column B as dedupe key
+        if (!key) continue; // skip rows without id
 
         const hasColumnC = row[2] !== null && row[2] !== undefined && row[2] !== "";
         if (!rowsByKey.has(key)) {

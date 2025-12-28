@@ -247,6 +247,8 @@ code {
   }
 
   .teams-stream {
+    flex-grow: 1;
+    display: flex;
     flex-direction: column;
     justify-content: center;
     font-size: calc(13px * var(--matches-scale));
@@ -862,6 +864,28 @@ code {
     color: #555;
     font-weight: 600;
   }
+  .matches-layout {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .matches-layout.matches-layout--stacked {
+    flex-direction: column;
+  }
+  .matches-main {
+    flex: 0 0 auto;
+    min-width: 320px;
+  }
+  .matches-main.matches-main--fullwidth {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .matches-settings-slot {
+    flex: 0 0 270px;
+    min-width: 250px;
+  }
   .matches-settings {
     background: #fff;
     border-radius: 4px;
@@ -980,7 +1004,12 @@ code {
   }
 
 </style>
-<div id="matches-container" class="matches-size-small" style="max-width: 500px;"></div>
+<div id="matches-layout" class="matches-layout">
+  <div class="matches-main">
+    <div id="matches-container" class="matches-size-small" style="max-width: 400px;"></div>
+  </div>
+  <div id="matches-settings-slot" class="matches-settings-slot"></div>
+</div>
 
 <script>
 let openLineupsSet = new Set();
@@ -995,25 +1024,41 @@ const INDIVIDUAL_STAGE_CLASS_MAP = {
 };
 const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const matchSelectionState = new Map();
-const matchElementRefs = new Map();
+const matchElementRefs = new Map(); // key: matchId, value: array of entry refs
 let matchSelectionMode = false;
 let settingsControls = null;
 let matchSelectionInitialized = false;
-let sizeSetting = "small";
+let sizeSetting = "medium";
 let sizeControls = null;
-let widthSetting = "500";
+let widthSetting = "400";
 let widthControls = null;
 let orientationSetting = "vertical";
 let orientationControls = null;
 const contentSettings = {
-  rating: true,
+  rating: false,
   time: true,
-  format: true,
+  format: false,
   path: true,
-  roundName: false,
+  roundName: true,
   tournament: true,
   liveIcon: true
 };
+const DEFAULT_SETTINGS = {
+  size: "medium",
+  width: "400",
+  orientation: "vertical",
+  content: {
+    rating: false,
+    time: true,
+    format: false,
+    path: true,
+    roundName: true,
+    tournament: true,
+    liveIcon: true
+  }
+};
+let selectedMatchIdsFromUrl = null;
+let initialSelectedIdsFromUrl = null;
 const LIVE_ICON_SRC_SMALL = "https://carcassonne.gg/gallery/live-small.png";
 const LIVE_ICON_SRC_DEFAULT = "https://carcassonne.gg/gallery/live_icon.png";
 
@@ -1044,6 +1089,10 @@ function normalizeRoundName(roundName) {
 
 function ensureMatchSelectionState(matchId) {
   if (!matchSelectionState.has(matchId)) {
+    if (selectedMatchIdsFromUrl) {
+      matchSelectionState.set(matchId, selectedMatchIdsFromUrl.has(matchId));
+      return;
+    }
     const defaultValue = matchSelectionInitialized ? false : true;
     matchSelectionState.set(matchId, defaultValue);
   }
@@ -1067,12 +1116,17 @@ function registerMatchSelection(match, wrapper, checkboxHost) {
   checkbox.disabled = !matchSelectionMode;
   checkbox.addEventListener("change", () => {
     matchSelectionState.set(matchId, checkbox.checked);
+    syncMatchSelectionUI(matchId);
+    updateUrlFromSettings();
   });
 
   selectionLabel.appendChild(checkbox);
   checkboxHost.appendChild(selectionLabel);
 
-  matchElementRefs.set(matchId, { wrapper, selectionEl: selectionLabel, checkbox });
+  if (!matchElementRefs.has(matchId)) {
+    matchElementRefs.set(matchId, []);
+  }
+  matchElementRefs.get(matchId).push({ wrapper, selectionEl: selectionLabel, checkbox });
 
   if (matchSelectionMode) {
     selectionLabel.style.display = "";
@@ -1084,18 +1138,20 @@ function registerMatchSelection(match, wrapper, checkboxHost) {
 }
 
 function applyMatchVisibility(matchId) {
-  const entry = matchElementRefs.get(matchId);
-  if (!entry) return;
-  if (matchSelectionMode) {
-    entry.wrapper.classList.remove("match-selection-hidden");
-    return;
-  }
-  const shouldShow = matchSelectionState.get(matchId) !== false;
-  if (!shouldShow) {
-    entry.wrapper.classList.add("match-selection-hidden");
-  } else {
-    entry.wrapper.classList.remove("match-selection-hidden");
-  }
+  const entries = matchElementRefs.get(matchId);
+  if (!entries || !entries.length) return;
+  entries.forEach(entry => {
+    if (matchSelectionMode) {
+      entry.wrapper.classList.remove("match-selection-hidden");
+      return;
+    }
+    const shouldShow = matchSelectionState.get(matchId) !== false;
+    if (!shouldShow) {
+      entry.wrapper.classList.add("match-selection-hidden");
+    } else {
+      entry.wrapper.classList.remove("match-selection-hidden");
+    }
+  });
 }
 
 function applyAllMatchVisibility() {
@@ -1104,20 +1160,35 @@ function applyAllMatchVisibility() {
 }
 
 function updateSelectionModeUI() {
-  matchElementRefs.forEach((entry, matchId) => {
-    if (!entry.selectionEl) return;
-    entry.selectionEl.style.display = matchSelectionMode ? "" : "none";
-    if (entry.checkbox) {
-      entry.checkbox.disabled = !matchSelectionMode;
-    }
-    if (matchSelectionMode) {
-      entry.wrapper.classList.remove("match-selection-hidden");
-    } else {
-      applyMatchVisibility(matchId);
-    }
+  matchElementRefs.forEach((entries, matchId) => {
+    entries.forEach(entry => {
+      if (!entry.selectionEl) return;
+      entry.selectionEl.style.display = matchSelectionMode ? "" : "none";
+      if (entry.checkbox) {
+        entry.checkbox.disabled = !matchSelectionMode;
+      }
+      if (matchSelectionMode) {
+        entry.wrapper.classList.remove("match-selection-hidden");
+      } else {
+        applyMatchVisibility(matchId);
+      }
+    });
   });
   updateTournamentCardsVisibility();
   updateSettingsButtons();
+}
+
+function syncMatchSelectionUI(matchId) {
+  const entries = matchElementRefs.get(matchId);
+  if (!entries || !entries.length) return;
+  const checked = matchSelectionState.get(matchId) !== false;
+  entries.forEach(entry => {
+    if (entry.checkbox && entry.checkbox.checked !== checked) {
+      entry.checkbox.checked = checked;
+    }
+  });
+  applyMatchVisibility(matchId);
+  updateTournamentCardsVisibility();
 }
 
 function updateTournamentCardsVisibility() {
@@ -1137,6 +1208,122 @@ function updateTournamentCardsVisibility() {
   });
 }
 
+function getCurrentMatchIds() {
+  return Array.from(matchElementRefs.keys());
+}
+
+function updateUrlFromSettings() {
+  if (typeof window === "undefined" || !window.location || !window.history) return;
+
+  const url = new URL(window.location.href);
+  const params = url.searchParams;
+
+  const setParam = (key, value, defaultValue) => {
+    if (value === defaultValue || value === undefined || value === null) {
+      params.delete(key);
+    } else {
+      params.set(key, value);
+    }
+  };
+  const setBooleanParam = (key, value, defaultValue) => {
+    if (value === defaultValue) {
+      params.delete(key);
+    } else {
+      params.set(key, value ? "1" : "0");
+    }
+  };
+
+  setParam("width", widthSetting, DEFAULT_SETTINGS.width);
+  setParam("size", sizeSetting, DEFAULT_SETTINGS.size);
+  setParam("orientation", orientationSetting, DEFAULT_SETTINGS.orientation);
+
+  setBooleanParam("rating", contentSettings.rating, DEFAULT_SETTINGS.content.rating);
+  setBooleanParam("time", contentSettings.time, DEFAULT_SETTINGS.content.time);
+  setBooleanParam("format", contentSettings.format, DEFAULT_SETTINGS.content.format);
+  setBooleanParam("path", contentSettings.path, DEFAULT_SETTINGS.content.path);
+  setBooleanParam("round", contentSettings.roundName, DEFAULT_SETTINGS.content.roundName);
+  setBooleanParam("tournament", contentSettings.tournament, DEFAULT_SETTINGS.content.tournament);
+  setBooleanParam("liveIcon", contentSettings.liveIcon, DEFAULT_SETTINGS.content.liveIcon);
+
+  const allMatchIds = getCurrentMatchIds();
+  if (allMatchIds.length) {
+    const selectedIds = allMatchIds.filter(id => matchSelectionState.get(id) !== false);
+    if (selectedIds.length === allMatchIds.length) {
+      params.delete("selected");
+    } else {
+      params.set("selected", selectedIds.join(","));
+    }
+    initialSelectedIdsFromUrl = null;
+  } else {
+    if (initialSelectedIdsFromUrl && initialSelectedIdsFromUrl.length) {
+      params.set("selected", initialSelectedIdsFromUrl.join(","));
+    } else {
+      params.delete("selected");
+    }
+  }
+
+  const newSearch = params.toString();
+  const newUrl = `${url.pathname}${newSearch ? "?" + newSearch : ""}${url.hash}`;
+  history.replaceState({}, "", newUrl);
+}
+
+function parseBooleanParam(value) {
+  if (value === null) return null;
+  const v = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(v)) return true;
+  if (["0", "false", "no", "off"].includes(v)) return false;
+  return null;
+}
+
+function loadSettingsFromUrl() {
+  if (typeof window === "undefined" || !window.location) return;
+  const url = new URL(window.location.href);
+  const params = url.searchParams;
+
+  const widthParam = params.get("width");
+  if (["300", "400", "500", "100"].includes(widthParam)) {
+    widthSetting = widthParam;
+  }
+
+  const sizeParam = params.get("size");
+  if (["small", "medium", "large"].includes(sizeParam)) {
+    sizeSetting = sizeParam;
+  }
+
+  const orientationParam = params.get("orientation");
+  if (["vertical", "horizontal"].includes(orientationParam)) {
+    orientationSetting = orientationParam;
+  }
+
+  const ratingParam = parseBooleanParam(params.get("rating"));
+  if (ratingParam !== null) contentSettings.rating = ratingParam;
+  const timeParam = parseBooleanParam(params.get("time"));
+  if (timeParam !== null) contentSettings.time = timeParam;
+  const formatParam = parseBooleanParam(params.get("format"));
+  if (formatParam !== null) contentSettings.format = formatParam;
+  const pathParam = parseBooleanParam(params.get("path"));
+  if (pathParam !== null) contentSettings.path = pathParam;
+  const roundParam = parseBooleanParam(params.get("round"));
+  if (roundParam !== null) contentSettings.roundName = roundParam;
+  const tournamentParam = parseBooleanParam(params.get("tournament"));
+  if (tournamentParam !== null) contentSettings.tournament = tournamentParam;
+  const liveIconParam = parseBooleanParam(params.get("liveIcon"));
+  if (liveIconParam !== null) contentSettings.liveIcon = liveIconParam;
+
+  const selectedParam = params.get("selected");
+  if (selectedParam) {
+    const ids = selectedParam
+      .split(",")
+      .map(v => v.trim())
+      .filter(Boolean);
+    if (ids.length) {
+      selectedMatchIdsFromUrl = new Set(ids);
+      initialSelectedIdsFromUrl = ids;
+      matchSelectionInitialized = true;
+    }
+  }
+}
+
 function updateSettingsButtons() {
   if (!settingsControls) return;
   settingsControls.selectBtn.disabled = matchSelectionMode;
@@ -1154,6 +1341,7 @@ function updateSettingsButtons() {
       btn.style.display = "none";
     }
   }
+  updateUrlFromSettings();
 }
 
 function applySizeSetting() {
@@ -1162,6 +1350,7 @@ function applySizeSetting() {
   container.classList.remove("matches-size-small", "matches-size-medium", "matches-size-large");
   container.classList.add(`matches-size-${sizeSetting}`);
   applyWidthSetting();
+  updateUrlFromSettings();
 }
 
 function updateSizeButtons() {
@@ -1177,6 +1366,8 @@ function updateSizeButtons() {
 
 function applyWidthSetting() {
   const container = document.getElementById("matches-container");
+  const layout = document.getElementById("matches-layout");
+  const main = document.querySelector(".matches-main");
   if (!container) return;
   const value = widthSetting === "100" ? "100%" : `${widthSetting}px`;
   container.style.maxWidth = value;
@@ -1184,7 +1375,14 @@ function applyWidthSetting() {
   container.classList.toggle("matches-width-400", widthSetting === "400");
   container.classList.toggle("matches-width-500", widthSetting === "500");
   container.classList.toggle("matches-width-100", widthSetting === "100");
+  if (layout) {
+    layout.classList.toggle("matches-layout--stacked", widthSetting === "100");
+  }
+  if (main) {
+    main.classList.toggle("matches-main--fullwidth", widthSetting === "100");
+  }
   updateLiveIcons();
+  updateUrlFromSettings();
 }
 
 function updateWidthButtons() {
@@ -1213,6 +1411,7 @@ function applyOrientationClass() {
   const container = document.getElementById("matches-container");
   if (!container) return;
   container.classList.toggle("match-orientation-horizontal", orientationSetting === "horizontal");
+  updateUrlFromSettings();
 }
 
 function getLiveIconSrc() {
@@ -1481,62 +1680,17 @@ function createMatchElement(match, options = {}) {
   container.dataset.id = match.id;
   wrapper.appendChild(container);
 
-  const toggleBtn = document.createElement("div");
-  toggleBtn.className = "chevron";
-
-  const chevronIcon = document.createElement("i");
-  chevronIcon.className = "fas fa-chevron-down";
-  chevronIcon.style.transition = "transform 0.3s ease";
-  chevronIcon.style.transform = "rotate(180deg)";
-  chevronIcon.style.fontSize = "12px";
-  chevronIcon.style.padding = "0 4px";
-  toggleBtn.appendChild(chevronIcon);
-
   const lineupDiv = document.createElement("div");
   lineupDiv.className = "lineup";
 
   const lineupContDiv = document.createElement("div");
-  lineupContDiv.innerHTML = match.lineups;
+  lineupContDiv.innerHTML = sanitizeLineupsHtml(match.lineups);
   lineupContDiv.className = "lineup__overview";
   lineupDiv.appendChild(lineupContDiv);
 
   if (match.lineups) {
-    const isOpen = openLineupsSet.has(match.id);
-    if (isOpen) {
-      lineupDiv.classList.add("open");
-      lineupDiv.style.height = "auto";
-      chevronIcon.style.transform = "rotate(0deg)";
-    }
-
-    toggleBtn.addEventListener("click", () => {
-      const isOpen = lineupDiv.classList.contains("open");
-
-      if (isOpen) {
-        lineupDiv.style.height = lineupDiv.scrollHeight + "px";
-        requestAnimationFrame(() => {
-          lineupDiv.style.height = "0px";
-          lineupDiv.classList.remove("open");
-          chevronIcon.style.transform = "rotate(180deg)";
-          openLineupsSet.delete(match.id);
-        });
-      } else {
-        lineupDiv.style.height = "0px";
-        lineupDiv.classList.add("open");
-        chevronIcon.style.transform = "rotate(0deg)";
-        openLineupsSet.add(match.id);
-
-        requestAnimationFrame(() => {
-          lineupDiv.style.height = lineupDiv.scrollHeight + "px";
-        });
-
-        lineupDiv.addEventListener("transitionend", function handler() {
-          if (lineupDiv.classList.contains("open")) {
-            lineupDiv.style.height = "auto";
-          }
-          lineupDiv.removeEventListener("transitionend", handler);
-        });
-      }
-    });
+    lineupDiv.classList.add("open");
+    lineupDiv.style.height = "auto";
   }
   const horizontalLayout = isHorizontalOrientation();
   if (horizontalLayout) {
@@ -1595,9 +1749,6 @@ function createMatchElement(match, options = {}) {
         extras.appendChild(streamLink);
       });
     }
-    if (match.lineups) {
-      extras.appendChild(toggleBtn);
-    }
 
     contentRow.append(teamsWrapper, extras);
     horizontalRow.appendChild(contentRow);
@@ -1610,15 +1761,13 @@ function createMatchElement(match, options = {}) {
     registerMatchSelection(match, wrapper, extras);
     return wrapper;
   }
-  
-  if (!streamsOff) {
-    const timeBlock = buildMatchTimeBlock(match, { isToday, showRating });
-    if (timeBlock) {
-      container.appendChild(timeBlock);
-      const divider = document.createElement("div");
-      divider.className = "divider-vertical";
-      container.appendChild(divider);
-    }
+
+  const timeBlock = buildMatchTimeBlock(match, { isToday, showRating });
+  if (timeBlock) {
+    container.appendChild(timeBlock);
+    const divider = document.createElement("div");
+    divider.className = "divider-vertical";
+    container.appendChild(divider);
   }
 
   const teamsDiv = document.createElement("div");
@@ -1687,27 +1836,18 @@ function createMatchElement(match, options = {}) {
     });
   }
 
-  if (streamsOff) {
-    const timeBlock = buildMatchTimeBlock(match, { isToday, showRating });
-    if (timeBlock) {
-      rightDiv.appendChild(timeBlock);
+  if (!streamsOff) {
+    if (match.dw1 || match.dw2 || match.gw1 || match.gw2) {
+      const scoreBox = document.createElement("div");
+      scoreBox.className = "score-box match-score";
+      scoreBox.innerHTML = `<div>${match.dw1}</div><div>${match.dw2}</div>`;
+      rightDiv.appendChild(scoreBox);
+
+      const scoreBoxAlt = document.createElement("div");
+      scoreBoxAlt.className = "score-box-alt";
+      scoreBoxAlt.innerHTML = `<div>(${match.gw1})</div><div>(${match.gw2})</div>`;
+      rightDiv.appendChild(scoreBoxAlt);
     }
-  } else {
-      if (match.dw1 || match.dw2 || match.gw1 || match.gw2) {
-        const scoreBox = document.createElement("div");
-        scoreBox.className = "score-box match-score";
-        scoreBox.innerHTML = `<div>${match.dw1}</div><div>${match.dw2}</div>`;
-        rightDiv.appendChild(scoreBox);
-
-        const scoreBoxAlt = document.createElement("div");
-        scoreBoxAlt.className = "score-box-alt";
-        scoreBoxAlt.innerHTML = `<div>(${match.gw1})</div><div>(${match.gw2})</div>`;
-        rightDiv.appendChild(scoreBoxAlt);
-      }
-  }
-
-  if (match.lineups) {
-    rightDiv.appendChild(toggleBtn);
   }
 
   container.appendChild(rightDiv);
@@ -2059,7 +2199,7 @@ function getMatchesTodayAndTomorrow(matchesToday, matchesScheduled) {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const startOfTomorrow = startOfToday + DAY_IN_MS;
-  const startOfDayAfterTomorrow = startOfTomorrow + DAY_IN_MS;
+  const endOfEarlyTomorrow = startOfTomorrow + (5 * 60 * 60 * 1000); // up to 05:00 inclusive
 
   const todayMatches = (() => {
     const source = matchesToday || [];
@@ -2073,7 +2213,7 @@ function getMatchesTodayAndTomorrow(matchesToday, matchesScheduled) {
 
   const tomorrowMatches = (matchesScheduled || []).filter(match => {
     const ts = getMatchTimestamp(match);
-    return ts !== null && ts >= startOfTomorrow && ts < startOfDayAfterTomorrow;
+    return ts !== null && ts >= startOfTomorrow && ts <= endOfEarlyTomorrow;
   });
 
   const combined = [...todayMatches, ...tomorrowMatches].sort((a, b) => {
@@ -2095,6 +2235,31 @@ function getMatchTournamentName(match) {
   const fallbackId = typeof match.tournament_id === "string" ? match.tournament_id.trim() : "";
   if (fallbackId) return fallbackId;
   return "Tournament";
+}
+
+function sanitizeLineupsHtml(rawHtml) {
+  if (typeof rawHtml !== "string") return "";
+  const temp = document.createElement("div");
+  temp.innerHTML = rawHtml;
+
+  const markers = [
+    "ELO rating updated on:",
+    "last 10 head-to-head results over 2 years"
+  ];
+
+  markers.forEach(marker => {
+    temp.querySelectorAll("*").forEach(node => {
+      if (typeof node.textContent === "string" && node.textContent.includes(marker)) {
+        const parent = node.parentElement;
+        node.remove();
+        if (parent && parent.childNodes.length === 0) {
+          parent.remove();
+        }
+      }
+    });
+  });
+
+  return temp.innerHTML;
 }
 
 
@@ -2307,11 +2472,9 @@ function renderSettingsSection(container) {
     const nextValue = anyUnchecked ? true : false;
     matchSelectionState.forEach((_, matchId) => {
       matchSelectionState.set(matchId, nextValue);
-      const entry = matchElementRefs.get(matchId);
-      if (entry && entry.checkbox) {
-        entry.checkbox.checked = nextValue;
-      }
+      syncMatchSelectionUI(matchId);
     });
+    updateUrlFromSettings();
     updateSettingsButtons();
   });
 
@@ -2392,8 +2555,8 @@ function renderTodayAndTomorrow(container, { matchesToday = [], matchesScheduled
 
     const headerRight = header._right || header.querySelector(".tournament-header__right");
     const teamMatches = matchesForTournament.filter(m => (tournament.type || m.tournament_type) === "TEAM");
-    const flagInfos = collectFlagInfos(teamMatches);
-    const hasTeamFilter = flagInfos.length > 0 && !!headerRight;
+    const flagInfos = [];
+    const hasTeamFilter = false;
     const teamMatchEntries = [];
     let activeFlagKey = null;
 
@@ -2621,7 +2784,11 @@ function fetchAndRenderMatches() {
 
   function renderAllSectionsFromData({ matches_today, matches_scheduled, tournaments_today, tournaments_scheduled }) {
     const container = document.getElementById("matches-container");
+    const settingsSlot = document.getElementById("matches-settings-slot");
     container.innerHTML = "";
+    if (settingsSlot) {
+      settingsSlot.innerHTML = "";
+    }
     applySizeSetting();
     applyOrientationClass();
 
@@ -2636,9 +2803,11 @@ function fetchAndRenderMatches() {
       tournamentsScheduled: tournaments_scheduled
     });
 
-    renderSettingsSection(container);
+    renderSettingsSection(settingsSlot || container);
+    updateUrlFromSettings();
   }
 
+  loadSettingsFromUrl();
   fetchAndRenderMatches();
 
 if (autoUpdate) {

@@ -728,7 +728,7 @@ if (openMatchId) {
   openMatchId.split(',').forEach(id => openLineupsSet.add(id));
 }
 const streamsOff = new URLSearchParams(window.location.search).get("streams") === "false";
-const DUEL_TOURNAMENT_TYPES = new Set(["coc", "individual"]);
+const DUEL_TOURNAMENT_TYPES = new Set(["coc", "league", "individual"]);
 const INDIVIDUAL_TOURNAMENT_TYPE = "individual";
 const INDIVIDUAL_STAGE_CLASS_MAP = {
   Q1: "individual-stage-q1",
@@ -796,14 +796,16 @@ function createRatingElement(rating) {
 function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
   if (!match || !container) return;
   const typeValue = tournamentType || match.tournament_type;
+  const stageValue = typeof match.stage === "string" ? match.stage.trim() : "";
+  const roundBadgeValue = typeof match.round_badge === "string" ? match.round_badge.trim() : "";
   const isIndividual = isIndividualTournament(typeValue);
+  const typeLower = typeof typeValue === "string" ? typeValue.trim().toLowerCase() : "";
 
   let badgeText = null;
   let classSuffix = "";
 
   if (isIndividual) {
     classSuffix = " individual-badge";
-    const stageValue = typeof match.stage === "string" ? match.stage.trim() : "";
     if (stageValue) {
       badgeText = stageValue;
       const stageClass = getIndividualStageClass(stageValue);
@@ -811,17 +813,15 @@ function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
         classSuffix += ` ${stageClass}`;
       }
     }
-  }
-
-  if (!badgeText) {
-    if (match.stage === "Stage 2" && match.round) {
+    if (roundBadgeValue) {
+      badgeText = badgeText ? `${badgeText} - ${roundBadgeValue}` : roundBadgeValue;
+    }
+  } else if (typeLower === "coc" || typeLower === "league" || typeLower === "team") {
+    if (stageValue === "Stage 2" && match.round) {
       const roundLabel = normalizeStage2RoundName(match.round);
       badgeText = roundLabel || match.round;
-    } else if (match.stage !== "Stage 2") {
-      const rb = match.round_badge;
-      if (typeof rb === "string" && rb.trim() !== "") {
-        badgeText = rb;
-      }
+    } else if (stageValue !== "Stage 2" && roundBadgeValue) {
+      badgeText = roundBadgeValue;
     }
   }
 
@@ -986,20 +986,25 @@ function createMatchElement(match, options = {}) {
     rightDiv.appendChild(liveIcon);
   }
 
-  if (!streamsOff && match.streamers && match.streams && match.streamers.length === match.streams.length) {
+  if (!streamsOff && Array.isArray(match.streamers) && match.streamers.length) {
+    const streams = Array.isArray(match.streams) ? match.streams : [];
     match.streamers.forEach((iconUrl, i) => {
-      const streamLink = document.createElement("a");
-      streamLink.href = match.streams[i];
-      streamLink.target = "_blank";
-      streamLink.rel = "noopener noreferrer";
-
+      if (!iconUrl) return;
       const streamerIcon = document.createElement("img");
       streamerIcon.className = "stream-icon";
       streamerIcon.src = iconUrl;
       streamerIcon.alt = "Stream";
-
-      streamLink.appendChild(streamerIcon);
-      rightDiv.appendChild(streamLink);
+      const streamUrl = streams[i];
+      if (typeof streamUrl === "string" && streamUrl.trim() !== "") {
+        const streamLink = document.createElement("a");
+        streamLink.href = streamUrl;
+        streamLink.target = "_blank";
+        streamLink.rel = "noopener noreferrer";
+        streamLink.appendChild(streamerIcon);
+        rightDiv.appendChild(streamLink);
+      } else {
+        rightDiv.appendChild(streamerIcon);
+      }
     });
   }
 
@@ -1155,20 +1160,25 @@ function createDuelElement(match, options = {}) {
     rightDiv.appendChild(liveIcon);
   }
 
-  if (match.streamers && match.streams && match.streamers.length === match.streams.length) {
+  if (Array.isArray(match.streamers) && match.streamers.length) {
+    const streams = Array.isArray(match.streams) ? match.streams : [];
     match.streamers.forEach((iconUrl, i) => {
-      const streamLink = document.createElement("a");
-      streamLink.href = match.streams[i];
-      streamLink.target = "_blank";
-      streamLink.rel = "noopener noreferrer";
-
+      if (!iconUrl) return;
       const streamerIcon = document.createElement("img");
       streamerIcon.className = "stream-icon";
       streamerIcon.src = iconUrl;
       streamerIcon.alt = "Stream";
-
-      streamLink.appendChild(streamerIcon);
-      rightDiv.appendChild(streamLink);
+      const streamUrl = streams[i];
+      if (typeof streamUrl === "string" && streamUrl.trim() !== "") {
+        const streamLink = document.createElement("a");
+        streamLink.href = streamUrl;
+        streamLink.target = "_blank";
+        streamLink.rel = "noopener noreferrer";
+        streamLink.appendChild(streamerIcon);
+        rightDiv.appendChild(streamLink);
+      } else {
+        rightDiv.appendChild(streamerIcon);
+      }
     });
   }
 
@@ -1241,20 +1251,25 @@ function createDuelElementCompact(match) {
     rightDiv.appendChild(liveIcon);
   }
 
-  if (match.streamers && match.streams && match.streamers.length === match.streams.length) {
+  if (Array.isArray(match.streamers) && match.streamers.length) {
+    const streams = Array.isArray(match.streams) ? match.streams : [];
     match.streamers.forEach((iconUrl, i) => {
-      const streamLink = document.createElement("a");
-      streamLink.href = match.streams[i];
-      streamLink.target = "_blank";
-      streamLink.rel = "noopener noreferrer";
-
+      if (!iconUrl) return;
       const streamerIcon = document.createElement("img");
       streamerIcon.className = "stream-icon";
       streamerIcon.src = iconUrl;
       streamerIcon.alt = "Stream";
-
-      streamLink.appendChild(streamerIcon);
-      rightDiv.appendChild(streamLink);
+      const streamUrl = streams[i];
+      if (typeof streamUrl === "string" && streamUrl.trim() !== "") {
+        const streamLink = document.createElement("a");
+        streamLink.href = streamUrl;
+        streamLink.target = "_blank";
+        streamLink.rel = "noopener noreferrer";
+        streamLink.appendChild(streamerIcon);
+        rightDiv.appendChild(streamLink);
+      } else {
+        rightDiv.appendChild(streamerIcon);
+      }
     });
   }
 

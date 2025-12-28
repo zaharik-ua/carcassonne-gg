@@ -630,6 +630,7 @@
 <div id="tab-matches-content" style="display:none;"></div>
 <div id="tab-stage1-content" style="display:none;"></div>
 <div id="tab-stage2-content" style="display:none;"></div>
+<div id="tab-leagues-wrapper"></div>
 <div id="tab-teams-content" style="display:none;"></div>
 <div id="tab-rules-content" style="display:none;"></div>
 
@@ -644,10 +645,10 @@
     //? "GCOC-2025"
     //? "OCFC-2025"
     //? "UCOCup-2025"
-    ? "MOCB-2025"
-    //? "CCCC-2025"
+    ? "UCOC-2026"
+    //? "UCDTC-2025"
     //? "UKOC-2025"
-    //? "CZ-2025-COC"
+    //? "BCPL-2026-WIN"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
 
@@ -676,15 +677,87 @@
     }
   };
 
-  function applyTournamentTheme(styleName) {
+  function resolveTheme(styleName) {
     const normalized = (styleName || '').trim().toLowerCase();
-    const theme = TOURNAMENT_THEMES[normalized] || TOURNAMENT_THEMES.blue;
+    return TOURNAMENT_THEMES[normalized] || TOURNAMENT_THEMES.blue;
+  }
+
+  function applyTournamentTheme(styleName) {
+    const theme = resolveTheme(styleName);
     document.documentElement.style.setProperty('--main-bg-color', theme.main);
     document.documentElement.style.setProperty('--hover-bg-color', theme.hover);
     document.documentElement.style.setProperty('--accent-text-color', theme.text || '#fff');
   }
 
+  function applyElementTheme(el, styleName, fallbackStyleName) {
+    if (!el) return;
+    const theme = resolveTheme(styleName || fallbackStyleName);
+    el.style.setProperty('--main-bg-color', theme.main);
+    el.style.setProperty('--hover-bg-color', theme.hover);
+    el.style.setProperty('--accent-text-color', theme.text || '#fff');
+  }
+
   applyTournamentTheme();
+
+  function getStage2Label(tournament) {
+    if (!tournament) return "Stage 2";
+    const stage2_name = (tournament.stage2_name || "").trim();
+    if (stage2_name) return stage2_name;
+    const stage2_format = tournament.stage2_format || "";
+    if (stage2_format === "Single Elimination" || stage2_format === "Double Elimination") {
+      return "Playoffs";
+    }
+    if (stage2_format === "Round-robin" || stage2_format === "Swiss") {
+      return "Final Stage";
+    }
+    return "Stage 2";
+  }
+
+  function getStage1Label(tournament) {
+    if (!tournament) return "Stage 1";
+    const tournament_format = tournament.tournament_format || "";
+    const stage1_format = tournament.stage1_format || "";
+    const stage1_groups = tournament.stage1_groups || null;
+    const stage1_name = (tournament.stage1_name || "").trim();
+    if (stage1_name) return stage1_name;
+    if (tournament_format === "1 Stage") {
+      if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
+        return "Standings";
+      }
+      if (stage1_format === "Single Elimination") {
+        return "Single Elimination Bracket";
+      }
+      if (stage1_format === "Double Elimination") {
+        return "Double Elimination Bracket";
+      }
+      return "Stage 1";
+    }
+    if (tournament_format === "2 Stages") {
+      if (stage1_groups === "Groups") {
+        return "Groups Stage";
+      }
+      if (stage1_groups === null && stage1_format === "Round-robin") {
+        return "Round-robin Stage";
+      }
+      if (stage1_groups === null && stage1_format === "Swiss") {
+        return "Swiss Stage";
+      }
+      return "Stage 1";
+    }
+    return "Stage 1";
+  }
+
+  function getLeaguesForTournament(mainId) {
+    if (!mainId) return [];
+    // Prefer full tournament objects from fetched data to keep formats/types/stages
+    if (Array.isArray(tournamentsData) && tournamentsData.length) {
+      return tournamentsData.filter(t => t.main_tournament_id === mainId);
+    }
+    if (Array.isArray(tournaments_list)) {
+      return tournaments_list.filter(t => t.main_tournament_id === mainId);
+    }
+    return [];
+  }
 
   let matches = [];
   let duels = [];
@@ -695,6 +768,8 @@
   let teams = [];
   let streams = [];
   let tournaments_list = [];
+  let tournamentsData = [];
+  let tournamentsById = {};
 
   // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
   const BRACKET_MARGIN = 15;
@@ -741,6 +816,13 @@
         }
 
         const allTournaments = data.tournaments;
+        tournamentsData = allTournaments;
+        tournamentsById = {};
+        (allTournaments || []).forEach(t => {
+          if (t && t.tournament_id) {
+            tournamentsById[t.tournament_id] = t;
+          }
+        });
         currentTournament = allTournaments.find(t => t.tournament_id === currentTournamentId);
         if (currentTournament) {
           document.getElementById("tournament-title").textContent = currentTournament.name;
@@ -775,10 +857,12 @@
 
     // --- Collect tournament structure info ---
     const tournament_format = currentTournament.tournament_format || "";
-    const stage1_format = currentTournament.stage1_format || "";
-    const stage2_format = currentTournament.stage2_format || "";
-    const stage1_groups = currentTournament.stage1_groups || null;
     const rules = currentTournament.rules || "";
+    const isLeaguesFormat = tournament_format === "Leagues";
+    const relatedLeagues = isLeaguesFormat ? getLeaguesForTournament(currentTournamentId) : [];
+    const leaguesWrapper = document.getElementById("tab-leagues-wrapper");
+    leaguesWrapper.innerHTML = "";
+    const leagueContentIds = [];
 
     // --- Build tabs in fixed order: Overview, Players (conditionally), Stage 2 (if present), Stage 1, Matches, Teams (if present), Rules (if present) ---
     const tabDefs = [];
@@ -789,48 +873,35 @@
       tabDefs.push({ id: "players", label: "Players" });
     }
 
-    // Stage 2 tab (conditionally shown if tournament_format === "2 Stages")
     let stage2Tab = null;
-    if (tournament_format === "2 Stages") {
-      let stage2Label = "";
-      if (stage2_format === "Single Elimination" || stage2_format === "Double Elimination") {
-        stage2Label = "Playoffs";
-      } else if (stage2_format === "Round-robin" || stage2_format === "Swiss") {
-        stage2Label = "Final Stage";
-      } else {
-        stage2Label = "Stage 2";
-      }
-      stage2Tab = { id: "stage2", label: stage2Label };
-      tabDefs.push(stage2Tab);
-    }
 
-    // Stage 1 tab (always shown)
-    let stage1Label = "";
-    if (tournament_format === "1 Stage") {
-      if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
-        stage1Label = "Standings";
-      } else if (stage1_format === "Single Elimination") {
-        stage1Label = "Single Elimination Bracket";
-      } else if (stage1_format === "Double Elimination") {
-        stage1Label = "Double Elimination Bracket";
-      } else {
-        stage1Label = "Stage 1";
-      }
-    } else if (tournament_format === "2 Stages") {
-      if (stage1_groups === "Groups") {
-        stage1Label = "Groups Stage";
-      } else if (stage1_groups === null && stage1_format === "Round-robin") {
-        stage1Label = "Round-robin Stage";
-      } else if (stage1_groups === null && stage1_format === "Swiss") {
-        stage1Label = "Swiss Stage";
-      } else {
-        stage1Label = "Stage 1";
-      }
+    if (isLeaguesFormat) {
+      relatedLeagues.forEach(league => {
+        const leagueTournament = tournamentsById[league.tournament_id];
+        const leagueLabel = league.league_name
+          || leagueTournament?.league_name
+          || leagueTournament?.name
+          || league.name
+          || league.tournament_id;
+        const tabId = `league-${league.tournament_id}`;
+        tabDefs.push({ id: tabId, label: leagueLabel, leagueId: league.tournament_id });
+        const contentDiv = document.createElement("div");
+        contentDiv.id = `tab-${tabId}-content`;
+        contentDiv.style.display = "none";
+        applyElementTheme(contentDiv, leagueTournament?.style || league.style, currentTournament.style);
+        leaguesWrapper.appendChild(contentDiv);
+        leagueContentIds.push(contentDiv.id);
+      });
     } else {
-      stage1Label = "Stage 1";
+      // Stage 2 tab (conditionally shown if tournament_format === "2 Stages")
+      if (tournament_format === "2 Stages") {
+        stage2Tab = { id: "stage2", label: getStage2Label(currentTournament) };
+        tabDefs.push(stage2Tab);
+      }
+
+      // Stage 1 tab (always shown)
+      tabDefs.push({ id: "stage1", label: getStage1Label(currentTournament) });
     }
-    let stage1Tab = { id: "stage1", label: stage1Label };
-    tabDefs.push(stage1Tab);
 
     // Matches tab (always shown)
     tabDefs.push({ id: "matches", label: "Matches" });
@@ -877,6 +948,10 @@
       document.getElementById("tab-teams-content").style.display = "none";
       document.getElementById("tab-rules-content").style.display = "none";
       document.getElementById("tab-players-content").style.display = "none";
+      leagueContentIds.forEach(id => {
+        const node = document.getElementById(id);
+        if (node) node.style.display = "none";
+      });
       // Show the selected
       if (tabId === "overview") {
         document.getElementById("tab-overview-content").style.display = "block";
@@ -900,6 +975,11 @@
         document.getElementById("tab-teams-content").style.display = "block";
       } else if (tabId === "rules") {
         document.getElementById("tab-rules-content").style.display = "block";
+      } else if (tabId && tabId.startsWith("league-")) {
+        const leagueContent = document.getElementById(`tab-${tabId}-content`);
+        if (leagueContent) {
+          leagueContent.style.display = "block";
+        }
       }
     }
     // Attach click listeners
@@ -916,186 +996,74 @@
     // Players
     renderPlayersTable();
     // Matches
-    renderMatchesData();
-
-    // Stage 1 content
-    const stage1Container = document.getElementById("tab-stage1-content");
-    stage1Container.innerHTML = "";
-    const stage1Html = (currentTournament && typeof currentTournament.stage1_html === "string")
-      ? currentTournament.stage1_html.trim()
-      : "";
-    if (stage1Html) {
-      // If stage1_html is provided, render it as-is
-      stage1Container.innerHTML = stage1Html;
-    } else if (tournament_format === "1 Stage") {
-      if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
-        renderStandingsData(
-          standings.filter(s => s.tournament_id === currentTournamentId),
-          stage1Container
-        );
-      } else if (stage1_format === "Single Elimination") {
-        renderSingleElimination(
-          currentTournament.type === "TEAM"
-            ? matches.filter(d => d.tournament_id === currentTournamentId)
-            : duels.filter(d => d.tournament_id === currentTournamentId),
-          stage1Container,
-          currentTournament.type
-        );
-      } else if (stage1_format === "Double Elimination") {
-        renderDoubleElimination(
-          currentTournament.type === "TEAM"
-            ? matches.filter(d => d.tournament_id === currentTournamentId)
-            : duels.filter(d => d.tournament_id === currentTournamentId),
-          stage1Container,
-          currentTournament.type
-        );
-      } else {
-        stage1Container.textContent = "Stage 1 info not available.";
-      }
-    } else if (tournament_format === "2 Stages") {
-      if (stage1_groups === "Groups") {
-        if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
-          renderStandingsData(
-            standings.filter(s => s.tournament_id === currentTournamentId && (!s.stage || s.stage === "Stage 1")),
-            stage1Container
-          );
-        } else if (stage1_format === "Single Elimination") {
-          const grouped = {};
-          (currentTournament.type === "TEAM"
-            ? matches
-            : duels
-          )
-            .filter(d => d.tournament_id === currentTournamentId && d.round_order !== null && d.group)
-            .forEach(d => {
-              if (!grouped[d.group]) grouped[d.group] = [];
-              grouped[d.group].push(d);
-            });
-          for (const [group, duelsInGroup] of Object.entries(grouped)) {
-            const groupSection = document.createElement("div");
-            groupSection.className = "group-section";
-
-            const groupTitle = document.createElement("div");
-            groupTitle.className = "group-title";
-            groupTitle.textContent = `Group ${group}`;
-
-            const groupBracketWrapper = document.createElement("div");
-            groupBracketWrapper.className = "group-bracket";
-
-            groupSection.appendChild(groupTitle);
-            groupSection.appendChild(groupBracketWrapper);
-            stage1Container.appendChild(groupSection);
-            renderSingleElimination(
-              duelsInGroup,
-              groupBracketWrapper,
-              currentTournament.type
-            );
-          }
-        } else if (stage1_format === "Double Elimination") {
-          const grouped = {};
-          (currentTournament.type === "TEAM"
-            ? matches
-            : duels
-          )
-            .filter(d => d.tournament_id === currentTournamentId && d.round_order !== null && d.group)
-            .forEach(d => {
-              if (!grouped[d.group]) grouped[d.group] = [];
-              grouped[d.group].push(d);
-            });
-
-          // Navigation chips for groups (A B C ...), placed before groups
-          const groupKeys = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
-          if (groupKeys.length) {
-            const nav = document.createElement("div");
-            nav.className = "groups-nav";
-            groupKeys.forEach(g => {
-              const link = document.createElement("a");
-              link.className = "group-chip";
-              link.textContent = g;
-              // Use absolute path to current page to avoid base href issues
-              link.href = `${window.location.pathname}?tab=stage1#group-${g}`;
-              link.addEventListener("click", (e) => {
-                e.preventDefault();
-                const target = document.getElementById(`group-${g}`);
-                if (target) {
-                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  // Update URL hash without page reload
-                  history.replaceState(null, '', `${window.location.pathname}?tab=stage1#group-${g}`);
-                }
-              });
-              nav.appendChild(link);
-            });
-            stage1Container.appendChild(nav);
-          }
-
-          groupKeys.forEach(group => {
-            const duelsInGroup = grouped[group];
-            const section = document.createElement("div");
-            section.className = "group-section stage-group-anchor";
-            section.id = `group-${group}`;
-
-            // Static title like standings table header (no chevron, no hover)
-            const title = document.createElement("div");
-            title.className = "group-title stage-group-title";
-            title.textContent = `Group ${group}`;
-
-            // Content always visible
-            const content = document.createElement("div");
-            content.style.padding = "0 2px";
-
-            section.appendChild(title);
-            section.appendChild(content);
-            stage1Container.appendChild(section);
-
-            // Render DE bracket for this group inside content
-            renderDoubleElimination(duelsInGroup, content, currentTournament.type);
-          });
+    if (isLeaguesFormat) {
+      const matchesContainer = document.getElementById("tab-matches-content");
+      matchesContainer.innerHTML = "";
+      relatedLeagues.forEach(league => {
+        const leagueTournament = tournamentsById[league.tournament_id];
+        const leagueLabel = league.league_name
+          || leagueTournament?.league_name
+          || leagueTournament?.name
+          || league.name
+          || league.tournament_id;
+        const leagueBlock = document.createElement("div");
+        applyElementTheme(leagueBlock, leagueTournament?.style || league.style, currentTournament.style);
+        matchesContainer.appendChild(leagueBlock);
+        if (leagueTournament) {
+          renderMatchesData(leagueTournament, leagueBlock, { reset: true, title: leagueLabel });
         } else {
-          stage1Container.textContent = "Stage 1 info not available.";
+          const stub = document.createElement("div");
+          stub.className = "overview-about-text";
+          stub.textContent = `${leagueLabel}: data not available yet.`;
+          leagueBlock.appendChild(stub);
         }
-      } else if (stage1_groups === null && stage1_format === "Round-robin") {
-        renderStandingsData(
-          standings.filter(s => s.tournament_id === currentTournamentId && (!s.stage || s.stage === "Stage 1")),
-          stage1Container
-        );
-      } else if (stage1_groups === null && stage1_format === "Swiss") {
-        renderStandingsData(
-          standings.filter(s => s.tournament_id === currentTournamentId && (!s.stage || s.stage === "Stage 1")),
-          stage1Container
-        );
-      } else {
-        stage1Container.textContent = "Stage 1 info not available.";
-      }
+      });
     } else {
-      stage1Container.textContent = "Stage 1 info not available.";
+      renderMatchesData();
     }
 
-    // Stage 2 content (if present)
-    if (stage2Tab) {
-      const stage2Container = document.getElementById("tab-stage2-content");
-      stage2Container.innerHTML = "";
-      if (stage2_format === "Single Elimination") {
-        renderSingleElimination(
-          currentTournament.type === "TEAM"
-            ? matches.filter(d => d.tournament_id === currentTournamentId && d.stage === "Stage 2")
-            : duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Stage 2"),
-          stage2Container,
-          currentTournament.type
-        );
-      } else if (stage2_format === "Double Elimination") {
-        renderDoubleElimination(
-          currentTournament.type === "TEAM"
-            ? matches.filter(d => d.tournament_id === currentTournamentId && d.stage === "Stage 2")
-            : duels.filter(d => d.tournament_id === currentTournamentId && d.stage === "Stage 2"),
-          stage2Container,
-          currentTournament.type
-        );
-      } else if (stage2_format === "Round-robin" || stage2_format === "Swiss") {
-        renderStandingsData(
-          standings.filter(s => s.tournament_id === currentTournamentId && s.stage === "Stage 2"),
-          stage2Container
-        );
-      } else {
-        stage2Container.textContent = "Stage 2 info not available.";
+    // Stage content
+    if (isLeaguesFormat) {
+      relatedLeagues.forEach(league => {
+        const contentId = `tab-league-${league.tournament_id}-content`;
+        const contentNode = document.getElementById(contentId);
+        const leagueTournament = tournamentsById[league.tournament_id];
+        if (!contentNode) return;
+        contentNode.innerHTML = "";
+        if (leagueTournament && leagueTournament.tournament_format === "1 Stage") {
+          renderStage1ContentForTournament(leagueTournament, contentNode, { tabId: `league-${league.tournament_id}` });
+        } else if (leagueTournament && leagueTournament.tournament_format === "2 Stages") {
+          const stage2Wrapper = document.createElement("div");
+          stage2Wrapper.className = "group-section";
+          const stage2Title = document.createElement("div");
+          stage2Title.className = "overview-section-title";
+          stage2Title.textContent = getStage2Label(leagueTournament);
+          const stage2Content = document.createElement("div");
+          stage2Wrapper.appendChild(stage2Title);
+          stage2Wrapper.appendChild(stage2Content);
+          renderStage2ContentForTournament(leagueTournament, stage2Content);
+
+          const stage1Wrapper = document.createElement("div");
+          stage1Wrapper.className = "group-section";
+          stage1Wrapper.style.marginTop = "30px";
+          const stage1Title = document.createElement("div");
+          stage1Title.className = "overview-section-title";
+          stage1Title.textContent = getStage1Label(leagueTournament);
+          const stage1Content = document.createElement("div");
+          stage1Wrapper.appendChild(stage1Title);
+          stage1Wrapper.appendChild(stage1Content);
+          renderStage1ContentForTournament(leagueTournament, stage1Content, { tabId: `league-${league.tournament_id}` });
+
+          contentNode.appendChild(stage2Wrapper);
+          contentNode.appendChild(stage1Wrapper);
+        } else {
+          contentNode.textContent = "League data not available.";
+        }
+      });
+    } else {
+      renderStage1ContentForTournament(currentTournament, document.getElementById("tab-stage1-content"), { tabId: "stage1" });
+      if (stage2Tab) {
+        renderStage2ContentForTournament(currentTournament, document.getElementById("tab-stage2-content"));
       }
     }
     
@@ -1138,7 +1106,7 @@
         headerRow.innerHTML = `
           <th colspan="2" style="text-align:left;">
             <div style="display: flex; align-items: center; gap: 8px;">
-              ${logo ? `<img src="${logo}" alt="${teamName}" style="height: 20px;">` : ""}
+              ${logo ? `<img src="${logo}" alt="${teamName}" style="height: 35px;">` : ""}
               <span>${teamName}</span>
             </div>
           </th>
@@ -1400,23 +1368,29 @@
     }
   }
 
-  function renderStandingsData(standings_list, containerOverride) {
+  function renderStandingsData(standings_list, containerOverride, tournamentContext, options = {}) {
     // --- RENDER STANDINGS ---
     // Build standings tables grouped by group, sorted and styled with logos
+    const tournament = tournamentContext || currentTournament;
+    const tournamentId = (tournament && tournament.tournament_id) || currentTournamentId;
     const container = containerOverride || document.getElementById("tab-standing-content");
     container.innerHTML = '';
     const grouped = {};
     // Determine stage filter for cross table lookups
-    const stageFilter = (container.id === "tab-stage1-content")
+    const stageFilterFromContainer = (container.id === "tab-stage1-content")
       ? "Stage 1"
       : (container.id === "tab-stage2-content")
         ? "Stage 2"
         : null;
+    const stageFilter = options.stage || stageFilterFromContainer;
+    const tabId = options.tabId || container.id || null;
     standings_list
-      .filter(row => row.tournament_id === currentTournamentId && (
-        (container.id === "tab-stage1-content" && (!row.stage || row.stage === "Stage 1")) ||
-        (container.id === "tab-stage2-content" && row.stage === "Stage 2")
-      ))
+      .filter(row => row.tournament_id === tournamentId)
+      .filter(row => {
+        if (!stageFilter) return true;
+        if (stageFilter === "Stage 1") return (!row.stage || row.stage === "Stage 1");
+        return row.stage === stageFilter;
+      })
       .forEach(row => {
         if (!grouped[row.group]) grouped[row.group] = [];
         grouped[row.group].push(row);
@@ -1427,23 +1401,24 @@
       .map(String)
       .sort((a, b) => a.localeCompare(b));
 
-    const isTeam = currentTournament && currentTournament.type === "TEAM";
-    const isStage1Groups = container.id === "tab-stage1-content" && currentTournament && currentTournament.stage1_groups === "Groups";
-    const isRoundRobinGroups = currentTournament && (currentTournament.stage1_format === "Round-robin" || currentTournament.stage1_format === "Swiss");
+    const isTeam = tournament && tournament.type === "TEAM";
+    const isStage1Groups = (!!tournament && tournament.stage1_groups === "Groups" && (stageFilter ? stageFilter === "Stage 1" : true));
+    const isRoundRobinGroups = !!tournament && (tournament.stage1_format === "Round-robin" || tournament.stage1_format === "Swiss");
     if (isStage1Groups && groupKeys.length) {
+      const navTabId = tabId || "stage1";
       const nav = document.createElement("div");
       nav.className = "groups-nav";
       groupKeys.forEach(g => {
         const link = document.createElement("a");
         link.className = "group-chip";
         link.textContent = g;
-        link.href = `${window.location.pathname}?tab=stage1#group-${g}`;
+        link.href = `${window.location.pathname}?tab=${navTabId}#group-${g}`;
         link.addEventListener('click', (e) => {
           e.preventDefault();
           const target = document.getElementById(`group-${g}`);
           if (target) {
             target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            history.replaceState(null, '', `${window.location.pathname}?tab=stage1#group-${g}`);
+            history.replaceState(null, '', `${window.location.pathname}?tab=${navTabId}#group-${g}`);
           }
         });
         nav.appendChild(link);
@@ -1463,6 +1438,48 @@
     function primaryMetricsEqual(a, b) {
       if (!a || !b) return false;
       return a.mw === b.mw && a.diff === b.diff && a.gw === b.gw;
+    }
+
+    function extractPositionValue(raw) {
+      if (raw === null || raw === undefined) return null;
+      const str = String(raw).trim();
+      if (str === "") return null;
+      const num = Number(str);
+      if (!Number.isFinite(num) || num <= 0) return null;
+      return Math.floor(num);
+    }
+
+    function applyExplicitPositions(sortedPlayers) {
+      const total = sortedPlayers.length;
+      if (!total) return sortedPlayers;
+      const result = new Array(total).fill(null);
+      const positioned = [];
+
+      sortedPlayers.forEach((player, idx) => {
+        const pos = extractPositionValue(player?.position);
+        if (pos !== null) {
+          positioned.push({ player, pos, idx });
+        }
+      });
+
+      positioned
+        .sort((a, b) => (a.pos === b.pos ? a.idx - b.idx : a.pos - b.pos))
+        .forEach(entry => {
+          const slot = entry.pos - 1;
+          if (slot >= 0 && slot < total && result[slot] === null) {
+            result[slot] = entry.player;
+          }
+        });
+
+      const placed = new Set(result.filter(Boolean));
+      const remaining = sortedPlayers.filter(p => !placed.has(p));
+      let remIdx = 0;
+      for (let i = 0; i < total; i++) {
+        if (result[i] === null) {
+          result[i] = remaining[remIdx++];
+        }
+      }
+      return result;
     }
 
     function valueHasScore(value) {
@@ -1493,7 +1510,7 @@
         });
 
         const relevantDuels = (duels || []).filter(duel => {
-          if (!duel || duel.tournament_id !== currentTournamentId) return false;
+          if (!duel || duel.tournament_id !== tournamentId) return false;
           const id1 = duel.player1_id !== undefined && duel.player1_id !== null ? String(duel.player1_id) : '';
           const id2 = duel.player2_id !== undefined && duel.player2_id !== null ? String(duel.player2_id) : '';
           if (!uniqueIds.has(id1) || !uniqueIds.has(id2)) return false;
@@ -1571,7 +1588,7 @@
     }
 
     for (const group of iterateKeys) {
-      const groupPlayers = grouped[group];
+      let groupPlayers = grouped[group];
       const section = document.createElement("div");
       if (isStage1Groups) {
         // Keep plain title style for Round-robin, but still add anchors for chips
@@ -1589,6 +1606,16 @@
       title.className = isRoundRobinGroups ? "group-title" : "group-title stage-group-title";
       title.style.marginBottom = "0px";
       title.textContent = isStage1Groups ? `Group ${group}` : "";
+      if (!title.textContent.trim()) {
+        title.className = "group-title";
+        title.style.backgroundColor = "transparent";
+        title.style.boxShadow = "none";
+        title.style.padding = "0";
+        title.style.margin = "0";
+        title.style.minWidth = "0";
+        title.style.height = "0";
+        title.style.flex = "1";
+      }
       headerRow.appendChild(title);
 
       const viewToggle = document.createElement("div");
@@ -1646,10 +1673,12 @@
           if (gdDiff !== 0) return gdDiff;
           return (+b.games_won || 0) - (+a.games_won || 0);
         });
-        if (currentTournament && currentTournament.type === "COC") {
+        if (tournament && tournament.type === "COC") {
           applyCOCHeadToHeadTiebreak(groupPlayers, group);
         }
       }
+
+      groupPlayers = applyExplicitPositions(groupPlayers);
 
       // Single table with dynamic columns depending on toggle
       const table = document.createElement("table");
@@ -1826,7 +1855,7 @@
                 if (teamRow && teamCol && teamRow === teamCol) {
                   isSelf = true;
                 } else if (teamRow && teamCol) {
-                  const candidates = (matches || []).filter(m => m.tournament_id === currentTournamentId && (
+                  const candidates = (matches || []).filter(m => m.tournament_id === tournamentId && (
                     (m.team1 === teamRow && m.team2 === teamCol) || (m.team1 === teamCol && m.team2 === teamRow)
                   ) && (!group || !m.group || m.group === group) && (!stageFilter || m.stage === stageFilter));
                   // choose the latest by time if multiple
@@ -1849,7 +1878,7 @@
                 if (pidRow && pidCol && pidRow === pidCol) {
                   isSelf = true;
                 } else if (pidRow && pidCol) {
-                  const candidates = (duels || []).filter(m => m.tournament_id === currentTournamentId && (
+                  const candidates = (duels || []).filter(m => m.tournament_id === tournamentId && (
                     (m.player1_id === pidRow && m.player2_id === pidCol) || (m.player1_id === pidCol && m.player2_id === pidRow)
                   ) && (!group || !m.group || m.group === group) && (!stageFilter || m.stage === stageFilter));
                   const picked = candidates.sort((a,b) => {
@@ -1897,17 +1926,17 @@
     }
 
     // Explanatory text under the table
-    const stage1FormatLower = (currentTournament?.stage1_format || "").toLowerCase();
-    const stage2FormatLower = (currentTournament?.stage2_format || "").toLowerCase();
+    const stage1FormatLower = (tournament?.stage1_format || "").toLowerCase();
+    const stage2FormatLower = (tournament?.stage2_format || "").toLowerCase();
     let formatLower = stage1FormatLower || stage2FormatLower;
-    if (container.id === "tab-stage1-content") {
+    if (stageFilter === "Stage 1") {
       formatLower = stage1FormatLower;
-    } else if (container.id === "tab-stage2-content") {
+    } else if (stageFilter === "Stage 2") {
       formatLower = stage2FormatLower;
     }
 
     let explanation = null;
-    if (currentTournament && currentTournament.type === "TEAM") {
+    if (tournament && tournament.type === "TEAM") {
       explanation = document.createElement("div");
       explanation.style.fontSize = "13px";
       explanation.innerHTML = `
@@ -1923,7 +1952,7 @@
         </p>
       `;
       container.appendChild(explanation);
-    } else if (currentTournament && currentTournament.type === "COC") {
+    } else if (tournament && tournament.type === "COC") {
       explanation = document.createElement("div");
       explanation.className = "standings-order-info";
       if (formatLower === "swiss") {
@@ -1952,7 +1981,7 @@
     } else {
       explanation = document.createElement("div");
       explanation.style.fontSize = "13px";
-      explanation.innerHTML = '<span class="highlight-text">MP:</span> Matches Played <span class="highlight-text">MW:</span> Matches Won <span class="highlight-text">ML:</span> Matches Lost <span class="highlight-text">GW:</span> Games Won <span class="highlight-text">GL:</span> Games Lost<br><br>The final positions in the group will be determined in the following order:<br>1. Number of MW<br>2. The difference between GW and GL<br>3. Number of GW<br>4. Tiebreakers 1-3, but applied only to confrontations between players with equal results<br>5. The difference in points scored in confrontations between players with equal results<br>6. Random draw';
+      explanation.innerHTML = 'MP: Matches Played MW: Matches Won ML: Matches Lost GW: Games Won GL: Games Lost<br><br>The final positions in the group will be determined in the following order:<br>1. Number of MW<br>2. The difference between GW and GL<br>3. Number of GW<br>4. Tiebreakers 1-3, but applied only to confrontations between players with equal results<br>5. The difference in points scored in confrontations between players with equal results<br>6. Random draw';
       container.appendChild(explanation);
     }
   }
@@ -1984,24 +2013,41 @@
     return s;
   }
 
-  function renderMatchesData() {
+  function renderMatchesData(tournamentParam, containerOverride, options = {}) {
     // --- RENDER MATCHES ---
     // Group matches by round and build collapsible sections for each round
-    const container = document.getElementById("tab-matches-content");
-    container.innerHTML = '';
+    const tournament = tournamentParam || currentTournament;
+    const container = containerOverride || document.getElementById("tab-matches-content");
+    const shouldReset = options.reset !== false;
+    if (shouldReset) {
+      container.innerHTML = '';
+    }
+    if (!tournament) {
+      container.textContent = "Matches data not available.";
+      return;
+    }
 
-    const matchesToRender = currentTournament.type === "TEAM" ? matches : duels;
+    if (options.title) {
+      const sectionTitle = document.createElement("div");
+      sectionTitle.className = "overview-section-title";
+      sectionTitle.style.marginTop = "6px";
+      sectionTitle.textContent = options.title;
+      container.appendChild(sectionTitle);
+    }
+
+    const tournamentId = tournament.tournament_id;
+    const matchesToRender = tournament.type === "TEAM" ? matches : duels;
 
     const groupedByRound = {};
     matchesToRender
-      .filter(match => match.tournament_id === currentTournamentId)
+      .filter(match => match.tournament_id === tournamentId)
       .forEach(match => {
         if (!groupedByRound[match.round]) groupedByRound[match.round] = [];
         groupedByRound[match.round].push(match);
       });
 
     // --- BEGIN: Determine which round to open by default if tournament is "In progress" ---
-    const hasOpenRound = currentTournament.status === "In progress";
+    const hasOpenRound = tournament.status === "In progress";
     let roundToOpen = null;
     if (hasOpenRound) {
       for (const round of Object.keys(groupedByRound)) {
@@ -2040,13 +2086,13 @@
       const table = document.createElement("table");
       table.className = "match-table";
 
-      const isGroupStage = !!(currentTournament && currentTournament.stage1_groups === "Groups");
+      const isGroupStage = !!(tournament && tournament.stage1_groups === "Groups");
 
       roundMatches.forEach(g => {
         const row = document.createElement("tr");
         row.className = "match-row";
 
-        if (currentTournament.type === "TEAM") {
+        if (tournament.type === "TEAM") {
           // --- TEAM LOGIC: render team name + logo ---
           // Find logos by team name (from teams array)
           const team1Logo = teams.find(t => t.team === g.team1)?.logo;
@@ -2263,6 +2309,213 @@
           openAccordion = content;
         }
       });
+    }
+  }
+
+  function renderStage1ContentForTournament(tournament, container, options = {}) {
+    if (!container) return;
+    container.innerHTML = "";
+    if (!tournament) {
+      container.textContent = "Stage 1 info not available.";
+      return;
+    }
+
+    const tabId = options.tabId || container.id || "stage1";
+    const tournament_format = tournament.tournament_format || "";
+    const stage1_format = tournament.stage1_format || "";
+    const stage1_groups = tournament.stage1_groups || null;
+    const stage1Html = (typeof tournament.stage1_html === "string") ? tournament.stage1_html.trim() : "";
+    const tournamentId = tournament.tournament_id;
+
+    if (stage1Html) {
+      container.innerHTML = stage1Html;
+      return;
+    }
+
+    if (tournament_format === "1 Stage") {
+      if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
+        renderStandingsData(
+          standings.filter(s => s.tournament_id === tournamentId),
+          container,
+          tournament,
+          { stage: "Stage 1", tabId }
+        );
+      } else if (stage1_format === "Single Elimination") {
+        renderSingleElimination(
+          tournament.type === "TEAM"
+            ? matches.filter(d => d.tournament_id === tournamentId)
+            : duels.filter(d => d.tournament_id === tournamentId),
+          container,
+          tournament.type
+        );
+      } else if (stage1_format === "Double Elimination") {
+        renderDoubleElimination(
+          tournament.type === "TEAM"
+            ? matches.filter(d => d.tournament_id === tournamentId)
+            : duels.filter(d => d.tournament_id === tournamentId),
+          container,
+          tournament.type
+        );
+      } else {
+        container.textContent = "Stage 1 info not available.";
+      }
+    } else if (tournament_format === "2 Stages") {
+      if (stage1_groups === "Groups") {
+        if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
+          renderStandingsData(
+            standings.filter(s => s.tournament_id === tournamentId && (!s.stage || s.stage === "Stage 1")),
+            container,
+            tournament,
+            { stage: "Stage 1" }
+          );
+        } else if (stage1_format === "Single Elimination") {
+          const grouped = {};
+          (tournament.type === "TEAM"
+            ? matches
+            : duels
+          )
+            .filter(d => d.tournament_id === tournamentId && d.round_order !== null && d.group)
+            .forEach(d => {
+              if (!grouped[d.group]) grouped[d.group] = [];
+              grouped[d.group].push(d);
+            });
+          for (const [group, duelsInGroup] of Object.entries(grouped)) {
+            const groupSection = document.createElement("div");
+            groupSection.className = "group-section";
+
+            const groupTitle = document.createElement("div");
+            groupTitle.className = "group-title";
+            groupTitle.textContent = `Group ${group}`;
+
+            const groupBracketWrapper = document.createElement("div");
+            groupBracketWrapper.className = "group-bracket";
+
+            groupSection.appendChild(groupTitle);
+            groupSection.appendChild(groupBracketWrapper);
+            container.appendChild(groupSection);
+            renderSingleElimination(
+              duelsInGroup,
+              groupBracketWrapper,
+              tournament.type
+            );
+          }
+        } else if (stage1_format === "Double Elimination") {
+          const grouped = {};
+          (tournament.type === "TEAM"
+            ? matches
+            : duels
+          )
+            .filter(d => d.tournament_id === tournamentId && d.round_order !== null && d.group)
+            .forEach(d => {
+              if (!grouped[d.group]) grouped[d.group] = [];
+              grouped[d.group].push(d);
+            });
+
+          const groupKeys = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
+          if (groupKeys.length) {
+            const nav = document.createElement("div");
+            nav.className = "groups-nav";
+            groupKeys.forEach(g => {
+              const link = document.createElement("a");
+              link.className = "group-chip";
+              link.textContent = g;
+              link.href = `${window.location.pathname}?tab=${tabId}#group-${g}`;
+              link.addEventListener("click", (e) => {
+                e.preventDefault();
+                const target = document.getElementById(`group-${g}`);
+                if (target) {
+                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  history.replaceState(null, '', `${window.location.pathname}?tab=${tabId}#group-${g}`);
+                }
+              });
+              nav.appendChild(link);
+            });
+            container.appendChild(nav);
+          }
+
+          groupKeys.forEach(group => {
+            const duelsInGroup = grouped[group];
+            const section = document.createElement("div");
+            section.className = "group-section stage-group-anchor";
+            section.id = `group-${group}`;
+
+            const title = document.createElement("div");
+            title.className = "group-title stage-group-title";
+            title.textContent = `Group ${group}`;
+
+            const content = document.createElement("div");
+            content.style.padding = "0 2px";
+
+            section.appendChild(title);
+            section.appendChild(content);
+            container.appendChild(section);
+
+            renderDoubleElimination(duelsInGroup, content, tournament.type);
+          });
+        } else {
+          container.textContent = "Stage 1 info not available.";
+        }
+      } else if (stage1_groups === null && stage1_format === "Round-robin") {
+        renderStandingsData(
+          standings.filter(s => s.tournament_id === tournamentId && (!s.stage || s.stage === "Stage 1")),
+          container,
+          tournament,
+          { stage: "Stage 1", tabId }
+        );
+      } else if (stage1_groups === null && stage1_format === "Swiss") {
+        renderStandingsData(
+          standings.filter(s => s.tournament_id === tournamentId && (!s.stage || s.stage === "Stage 1")),
+          container,
+          tournament,
+          { stage: "Stage 1", tabId }
+        );
+      } else if (stage1_groups === null && stage1_format === "Single Elimination") {
+        renderSingleElimination(
+          (tournament.type === "TEAM" ? matches : duels).filter(
+            d => d.tournament_id === tournamentId && d.stage === "Stage 1"
+          ),
+          container,
+          tournament.type
+        );
+      } else {
+        container.textContent = "Stage 1 info not available.";
+      }
+    } else {
+      container.textContent = "Stage 1 info not available.";
+    }
+  }
+
+  function renderStage2ContentForTournament(tournament, container) {
+    if (!tournament || !container) return;
+    container.innerHTML = "";
+    const tournamentId = tournament.tournament_id;
+    const stage2_format = tournament.stage2_format || "";
+
+    if (stage2_format === "Single Elimination") {
+      renderSingleElimination(
+        tournament.type === "TEAM"
+          ? matches.filter(d => d.tournament_id === tournamentId && d.stage === "Stage 2")
+          : duels.filter(d => d.tournament_id === tournamentId && d.stage === "Stage 2"),
+        container,
+        tournament.type
+      );
+    } else if (stage2_format === "Double Elimination") {
+      renderDoubleElimination(
+        tournament.type === "TEAM"
+          ? matches.filter(d => d.tournament_id === tournamentId && d.stage === "Stage 2")
+          : duels.filter(d => d.tournament_id === tournamentId && d.stage === "Stage 2"),
+        container,
+        tournament.type
+      );
+    } else if (stage2_format === "Round-robin" || stage2_format === "Swiss") {
+      renderStandingsData(
+        standings.filter(s => s.tournament_id === tournamentId && s.stage === "Stage 2"),
+        container,
+        tournament,
+        { stage: "Stage 2" }
+      );
+    } else {
+      container.textContent = "Stage 2 info not available.";
     }
   }
 

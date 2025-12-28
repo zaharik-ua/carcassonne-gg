@@ -297,6 +297,84 @@
     color: #000;
   }
 
+  .country-filter-toggle {
+    margin-left: 4px;
+  }
+
+  .country-filter-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #666;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 4px;
+    cursor: pointer;
+  }
+
+  .country-filter-clear:hover {
+    color: #000;
+  }
+
+  .country-filter-row {
+    border-top: 1px solid #e1e4e8;
+    margin: 4px 0 10px;
+    padding: 6px 0 0;
+    display: none;
+    width: 100%;
+  }
+
+  .country-filter-row.open {
+    display: flex;
+  }
+
+  .country-filter-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+
+  .country-flag-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 2px;
+    width: 25px;
+    height: auto;
+    cursor: pointer;
+    background: transparent;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .country-flag-btn:hover,
+  .country-flag-btn:focus-visible {
+    border-color: #c5ced8;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.12);
+    outline: none;
+  }
+
+  .country-flag-btn.active {
+    border-color: var(--main-bg-color);
+    box-shadow: 0 0 0 1px var(--main-bg-color);
+  }
+
+  .country-flag-btn img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 2px;
+  }
+
+  .country-flag-btn span {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
   @media (max-width: 768px) {
     .stage-filter-search-input input {
       font-size: 16px;
@@ -321,10 +399,22 @@
   }
   .match-meta-chip {
     display: inline-block;
-    padding: 1px 4px;
+    padding: 1px 4px 3px 4px;
     border-radius: 1px;
-    margin-right: 2px;
+    margin-right: 5px;
     box-shadow: 0 0 0 1px rgba(0,0,0,0.05) inset;
+  }
+  .match-meta-number {
+    background-color: #939393;
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 8px;
+    line-height: 10px;
+  }
+  .player-no-id {
+    color: #666;
+    font-style: italic;
+    font-size: 13px;
   }
   .match-meta-format {
     background-color: #d7eaff; /* default light blue */
@@ -612,7 +702,28 @@
     }
 
     const groupPlayerIndex = new Map();
+    const groupCountryIndex = new Map();
+    const countryKeyInfoMap = new Map();
     const grouped = {};
+    const registerCountryForGroup = (groupKey, playerId, playerName) => {
+      if (!groupKey) return;
+      const info = findPlayerCountryInfo(playerId, playerName);
+      if (!info || !info.country) return;
+      const countryName = info.country.trim();
+      if (!countryName) return;
+      const key = countryName.toLowerCase();
+      if (!groupCountryIndex.has(groupKey)) {
+        groupCountryIndex.set(groupKey, new Set());
+      }
+      groupCountryIndex.get(groupKey).add(key);
+      if (!countryKeyInfoMap.has(key)) {
+        countryKeyInfoMap.set(key, {
+          key,
+          title: countryName,
+          flag: info.flag || ""
+        });
+      }
+    };
     const registerPlayerForGroup = (groupKey, playerId, playerName) => {
       if (!groupKey) return;
       const name = typeof playerName === "string" ? playerName.trim() : "";
@@ -624,6 +735,7 @@
       const bucket = groupPlayerIndex.get(groupKey);
       if (idStr) bucket.ids.add(idStr);
       if (name) bucket.names.add(name.toLowerCase());
+      registerCountryForGroup(groupKey, playerId, playerName);
     };
     (tournamentType === "TEAM" ? matches : duels)
       .filter(d => normalizeTournamentId(d.tournament_id) === normalizedTournamentId && d.round_order !== null && d.group)
@@ -639,6 +751,9 @@
       stage1Container.textContent = "Stage 1 info not available.";
       return;
     }
+    const countryOptions = Array.from(countryKeyInfoMap.values()).sort((a, b) =>
+      a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+    );
 
     const accordionStates = new Map();
     const groupSections = new Map();
@@ -648,21 +763,35 @@
     let accordionControls = null;
     let activeStageFilter = null;
     let activePlayerFilter = null;
+    let activeCountryFilter = null;
 
     const highlightPlayerInPlayoff = () => {
       if (!stage1Container) return;
       const rows = stage1Container.querySelectorAll(".match-row-winner, .match-row-loser");
       rows.forEach(row => row.classList.remove("highlight-player"));
-      if (!activePlayerFilter) return;
-      const targetId = activePlayerFilter.id;
-      const targetNameLower = activePlayerFilter.nameLower;
+      if (!activePlayerFilter && !activeCountryFilter) return;
+      const targetId = activePlayerFilter ? activePlayerFilter.id : null;
+      const targetNameLower = activePlayerFilter ? activePlayerFilter.nameLower : "";
       rows.forEach(row => {
         const rowId = row.getAttribute("data-player-id");
         const rowName = row.getAttribute("data-opponent-name");
         const rowNameLower = rowName ? rowName.trim().toLowerCase() : "";
-        const idMatches = Boolean(targetId && rowId && rowId === targetId);
-        const nameMatches = Boolean(targetNameLower && rowNameLower && rowNameLower === targetNameLower);
-        if (idMatches || nameMatches) {
+        let shouldHighlight = false;
+        if (activePlayerFilter) {
+          const idMatches = Boolean(targetId && rowId && rowId === targetId);
+          const nameMatches = Boolean(targetNameLower && rowNameLower && rowNameLower === targetNameLower);
+          shouldHighlight = idMatches || nameMatches;
+        }
+        if (!shouldHighlight && activeCountryFilter) {
+          const countryInfo = findPlayerCountryInfo(rowId, rowName);
+          const infoKey = countryInfo && countryInfo.country
+            ? countryInfo.country.trim().toLowerCase()
+            : "";
+          if (infoKey && infoKey === activeCountryFilter) {
+            shouldHighlight = true;
+          }
+        }
+        if (shouldHighlight) {
           row.classList.add("highlight-player");
         }
       });
@@ -876,7 +1005,114 @@
       });
 
       stageFiltersElement.appendChild(searchBtn);
+
+      let countryToggleBtn = null;
+      let countryFilterRow = null;
+      const countryFlagButtons = [];
+      const setActiveCountryFilter = (countryKey) => {
+        activeCountryFilter = countryKey;
+        countryFlagButtons.forEach(btn => {
+          const isActive = !!countryKey && btn.dataset.countryKey === countryKey;
+          btn.classList.toggle("active", isActive);
+          btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+        });
+        applyStageFilter();
+      };
+
+      if (countryOptions.length) {
+        const countryRowId = `country-filter-row-${currentTournamentId}`;
+        const countryToggleWrapper = document.createElement("div");
+        countryToggleWrapper.style.display = "inline-flex";
+        countryToggleWrapper.style.alignItems = "center";
+
+        countryToggleBtn = document.createElement("button");
+        countryToggleBtn.type = "button";
+        countryToggleBtn.className = "group-chip stage-filter-btn country-filter-toggle";
+        countryToggleBtn.textContent = "Country";
+        countryToggleBtn.setAttribute("aria-expanded", "false");
+        countryToggleBtn.setAttribute("aria-controls", countryRowId);
+        countryToggleWrapper.appendChild(countryToggleBtn);
+
+        const countryClearBtn = document.createElement("button");
+        countryClearBtn.type = "button";
+        countryClearBtn.className = "country-filter-clear";
+        countryClearBtn.innerHTML = "&times;";
+        countryClearBtn.setAttribute("aria-label", "Clear country filter");
+        countryClearBtn.style.display = "none";
+        countryClearBtn.addEventListener("click", () => {
+          setActiveCountryFilter(null);
+          countryClearBtn.style.display = "none";
+        });
+        countryToggleWrapper.appendChild(countryClearBtn);
+
+        stageFiltersElement.appendChild(countryToggleWrapper);
+
+        countryFilterRow = document.createElement("div");
+        countryFilterRow.className = "country-filter-row";
+        countryFilterRow.id = countryRowId;
+        countryFilterRow.setAttribute("hidden", "true");
+
+        const flagsWrapper = document.createElement("div");
+        flagsWrapper.className = "country-filter-flags";
+        countryFilterRow.appendChild(flagsWrapper);
+
+        const toggleCountryRow = (forceOpen) => {
+          if (!countryFilterRow || !countryToggleBtn) return;
+          const shouldOpen = typeof forceOpen === "boolean"
+            ? forceOpen
+            : !countryFilterRow.classList.contains("open");
+          if (shouldOpen) {
+            countryFilterRow.classList.add("open");
+            countryFilterRow.removeAttribute("hidden");
+            countryToggleBtn.classList.add("active");
+            countryToggleBtn.setAttribute("aria-expanded", "true");
+          } else {
+            countryFilterRow.classList.remove("open");
+            countryFilterRow.setAttribute("hidden", "true");
+            countryToggleBtn.classList.remove("active");
+            countryToggleBtn.setAttribute("aria-expanded", "false");
+          }
+        };
+
+        countryToggleBtn.addEventListener("click", () => {
+          toggleCountryRow();
+        });
+
+        countryOptions.forEach(option => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "country-flag-btn";
+          btn.dataset.countryKey = option.key;
+          btn.setAttribute("aria-pressed", "false");
+          btn.title = option.title || "";
+          if (option.flag) {
+            const img = document.createElement("img");
+            img.src = option.flag;
+            img.alt = option.title || "Country flag";
+            btn.appendChild(img);
+          } else {
+            const label = document.createElement("span");
+            label.textContent = option.title ? option.title.slice(0, 3) : "N/A";
+            btn.appendChild(label);
+          }
+          btn.addEventListener("click", () => {
+            const flagKey = btn.dataset.countryKey;
+            const isSame = activeCountryFilter === flagKey;
+            setActiveCountryFilter(isSame ? null : flagKey);
+            countryClearBtn.style.display = isSame ? "none" : "inline-flex";
+            if (!isSame && !countryFilterRow.classList.contains("open")) {
+              toggleCountryRow(true);
+            }
+          });
+          countryFlagButtons.push(btn);
+          flagsWrapper.appendChild(btn);
+        });
+      }
+
       stage1Container.appendChild(stageFiltersElement);
+      if (countryFilterRow) {
+        stageFiltersElement.insertAdjacentElement("afterend", countryFilterRow);
+      }
     }
 
     const doesGroupContainActivePlayer = (groupKey) => {
@@ -888,21 +1124,36 @@
       return false;
     };
 
+    const doesGroupMatchCountry = (groupKey) => {
+      if (!activeCountryFilter) return true;
+      const bucket = groupCountryIndex.get(groupKey);
+      if (!bucket) return false;
+      return bucket.has(activeCountryFilter);
+    };
+
     const applyStageFilter = ({ scrollToFirstMatch = false } = {}) => {
       let firstVisibleGroup = null;
       groupSections.forEach((section, group) => {
         const stageValue = groupStageMap.get(group);
         const matchesStage = !activeStageFilter || stageValue === activeStageFilter;
         const matchesPlayer = doesGroupContainActivePlayer(group);
-        const shouldShow = matchesStage && matchesPlayer;
-        if (shouldShow && !firstVisibleGroup) firstVisibleGroup = group;
+        const matchesCountry = doesGroupMatchCountry(group);
+        const shouldShow = matchesStage && matchesPlayer && matchesCountry;
         section.style.display = shouldShow ? "" : "none";
+        if (shouldShow && !firstVisibleGroup) firstVisibleGroup = group;
+        if (shouldShow && activeCountryFilter) {
+          const state = accordionStates.get(group);
+          if (state) {
+            state.expand();
+          }
+        }
       });
       groupLinks.forEach((link, group) => {
         const stageValue = groupStageMap.get(group);
         const matchesStage = !activeStageFilter || stageValue === activeStageFilter;
         const matchesPlayer = doesGroupContainActivePlayer(group);
-        const shouldShow = matchesStage && matchesPlayer;
+        const matchesCountry = doesGroupMatchCountry(group);
+        const shouldShow = matchesStage && matchesPlayer && matchesCountry;
         link.style.display = shouldShow ? "" : "none";
       });
       stageButtons.forEach((btn, stage) => {
@@ -1300,12 +1551,20 @@
         // Add meta labels above match box
         const hasTime = m.time !== null && m.time !== undefined && String(m.time).trim() !== "";
         const isCOC = tournamentType !== "TEAM"; // COC-type brackets use duels data
-        if (hasTime || (isCOC && m.duel_format)) {
+        const hasKnockoutId = m.knockout_id !== null && m.knockout_id !== undefined && String(m.knockout_id).trim() !== "";
+        if (hasTime || (isCOC && m.duel_format) || hasKnockoutId) {
           const metaWrap = document.createElement("div");
           metaWrap.className = "match-meta-wrapper";
           metaWrap.style.left = `${m.cord_left + 2}px`;
           metaWrap.style.top = `${Math.max(0, topOffset - 14)}px`;
           metaWrap.style.width = `${MATCH_WIDTH}px`;
+
+          if (hasKnockoutId) {
+            const matchNumber = document.createElement("span");
+            matchNumber.className = "match-meta-chip match-meta-number";
+            matchNumber.textContent = String(m.knockout_id).trim();
+            metaWrap.appendChild(matchNumber);
+          }
 
           if (isCOC && m.duel_format) {
             const fmt = document.createElement("span");
@@ -1404,6 +1663,11 @@
           const player1Avatar = players.find(pl => pl.player_id === m.player1_id)?.avatar;
           const player1CountryInfo = findPlayerCountryInfo(m.player1_id, m.player1);
           const player1LogoSrc = (player1CountryInfo && player1CountryInfo.flag) ? player1CountryInfo.flag : player1Avatar;
+          const player1IdStr = (m.player1_id !== undefined && m.player1_id !== null)
+            ? String(m.player1_id).trim()
+            : "";
+          const player1HasId = player1IdStr !== "" && player1IdStr.toUpperCase() !== "NO ID";
+          const player1HasName = m.player1 !== null && m.player1 !== undefined && String(m.player1).trim() !== "";
           if (player1LogoSrc) {
             player1Logo = document.createElement("img");
             player1Logo.src = player1LogoSrc;
@@ -1416,12 +1680,12 @@
               player1Logo.title = m.player1;
             }
           }
-          const player1Link = document.createElement("a");
-          if (m.player1_id) {
-            player1Link.href = `https://boardgamearena.com/player?id=${m.player1_id}`;
+          const player1Link = document.createElement(player1HasId ? "a" : "span");
+          if (player1HasId) {
+            player1Link.href = `https://boardgamearena.com/player?id=${player1IdStr}`;
             player1Link.target = "_blank";
-          } else {
-            player1Link.removeAttribute("href");
+          } else if (player1HasName) {
+            player1Link.classList.add("player-no-id");
           }
           player1Link.textContent = m.player1;
           // Add maxWidth and display for truncation
@@ -1438,10 +1702,7 @@
           opponent1Div.appendChild(score1Span);
           // Add data-opponent-name attribute
           opponent1Div.setAttribute("data-opponent-name", m.player1);
-          const player1IdStr = (m.player1_id !== undefined && m.player1_id !== null)
-            ? String(m.player1_id).trim()
-            : "";
-          if (player1IdStr) {
+          if (player1HasId) {
             opponent1Div.setAttribute("data-player-id", player1IdStr);
           }
           
@@ -1451,6 +1712,11 @@
           const player2Avatar = players.find(pl => pl.player_id === m.player2_id)?.avatar;
           const player2CountryInfo = findPlayerCountryInfo(m.player2_id, m.player2);
           const player2LogoSrc = (player2CountryInfo && player2CountryInfo.flag) ? player2CountryInfo.flag : player2Avatar;
+          const player2IdStr = (m.player2_id !== undefined && m.player2_id !== null)
+            ? String(m.player2_id).trim()
+            : "";
+          const player2HasId = player2IdStr !== "" && player2IdStr.toUpperCase() !== "NO ID";
+          const player2HasName = m.player2 !== null && m.player2 !== undefined && String(m.player2).trim() !== "";
           if (player2LogoSrc) {
             player2Logo = document.createElement("img");
             player2Logo.src = player2LogoSrc;
@@ -1463,12 +1729,12 @@
               player2Logo.title = m.player2;
             }
           }
-          const player2Link = document.createElement("a");
-          if (m.player2_id) {
-            player2Link.href = `https://boardgamearena.com/player?id=${m.player2_id}`;
+          const player2Link = document.createElement(player2HasId ? "a" : "span");
+          if (player2HasId) {
+            player2Link.href = `https://boardgamearena.com/player?id=${player2IdStr}`;
             player2Link.target = "_blank";
-          } else {
-            player2Link.removeAttribute("href");
+          } else if (player2HasName) {
+            player2Link.classList.add("player-no-id");
           }
           player2Link.textContent = m.player2;
           // Add maxWidth and display for truncation
@@ -1485,10 +1751,7 @@
           opponent2Div.appendChild(score2Span);
           // Add data-opponent-name attribute
           opponent2Div.setAttribute("data-opponent-name", m.player2);  
-          const player2IdStr = (m.player2_id !== undefined && m.player2_id !== null)
-            ? String(m.player2_id).trim()
-            : "";
-          if (player2IdStr) {
+          if (player2HasId) {
             opponent2Div.setAttribute("data-player-id", player2IdStr);
           }
         }

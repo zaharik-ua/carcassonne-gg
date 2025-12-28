@@ -328,7 +328,7 @@
   .ct-self-cell { background-color: #eee; }
 
   /* Cross Table borders: icon header cols (from 3rd col), and result data cols */
-  .group-table.crosstable tr:first-child th:nth-child(n+3) { border-left: 1px solid #bddbfa; }
+  .group-table.crosstable tr th:nth-child(n+3) { border-left: 1px solid #bddbfa; }
   .group-table.crosstable td:nth-child(n+3) { border-left: 1px solid #eee; }
   /* Cross Table non-opponent cells */
   .group-table.crosstable td.ct-not-opponent { background-color: #f0f0f0; color: #999; }
@@ -341,13 +341,16 @@
   /* Simulator dropdown styled like news category */
   .sim-select {
     position: relative;
-    width: 100%;
+    display: inline-flex;
+    width: auto;
+    min-width: 40px;
   }
   .sim-select-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
+    width: auto;
+    min-width: 40px;
     padding: 0px 3px;
     background-color: #fff;
     border: 1px solid #ccc;
@@ -375,7 +378,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-align: left;
+    text-align: center;
   }
   .sim-select-chevron {
     display: flex;
@@ -395,7 +398,8 @@
     position: absolute;
     left: 0;
     bottom: calc(100% + 4px);
-    width: 100%;
+    width: auto;
+    min-width: 100%;
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.2s ease;
@@ -408,6 +412,8 @@
     background: #fff;
     box-shadow: 0 0 0 1px rgba(17, 131, 192, 0.08);
     max-height: 220px;
+    width: max-content;
+    min-width: 100%;
   }
   .sim-select-option {
     display: flex;
@@ -471,6 +477,22 @@
     color: #111;
     box-shadow: 0 0 0 1px #ddd inset;
   }
+
+  .fullview-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 9px;
+    background-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+    border: none;
+    border-radius: 2px;
+    font-weight: 500;
+    font-size: 12px;
+    cursor: pointer;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+  }
+  .fullview-btn:hover { background-color: var(--hover-bg-color); }
 
   /* (Table-specific styles for renderStandingsData were removed; kept generic styles elsewhere) */
 
@@ -1070,29 +1092,10 @@
       }
       headerRow.appendChild(title);
 
-      const viewToggle = document.createElement("div");
-      viewToggle.className = "sort-toggle";
-
-      const viewLabel = document.createElement("span");
-      viewLabel.className = "sort-toggle__label";
-      viewLabel.textContent = "Show:";
-
-      const viewOptions = document.createElement("div");
-      viewOptions.className = "sort-toggle__options";
-
-      const optStandings = document.createElement("div");
-      optStandings.className = "sort-toggle__option active";
-      optStandings.textContent = "Standings";
-
-      const optCross = document.createElement("div");
-      optCross.className = "sort-toggle__option";
-      optCross.textContent = "Cross Table";
-
-      viewOptions.appendChild(optStandings);
-      viewOptions.appendChild(optCross);
-      viewToggle.appendChild(viewLabel);
-      viewToggle.appendChild(viewOptions);
-      headerRow.appendChild(viewToggle);
+      const fullViewBtn = document.createElement("button");
+      fullViewBtn.className = "fullview-btn";
+      fullViewBtn.textContent = "Full View";
+      headerRow.appendChild(fullViewBtn);
 
       section.appendChild(headerRow);
 
@@ -1202,171 +1205,80 @@
         }
       });
 
-      function renderMode(mode) {
-        table.innerHTML = '';
-        // mark table mode for CSS
-        if (mode === 'crosstable') {
-          table.classList.add('crosstable');
+      table.innerHTML = '';
+      table.classList.remove('crosstable');
+
+      const headTr = document.createElement('tr');
+      const thPos = document.createElement('th');
+      thPos.className = 'rank-cell';
+      const thName = document.createElement('th');
+      thName.textContent = isTeam ? 'Team' : 'Player';
+      headTr.appendChild(thPos);
+      headTr.appendChild(thName);
+      const metrics = isTeam ? ['MP','MW','ML','DW','DL','GW','GL'] : ['MP','MW','ML','GW','GL'];
+      metrics.forEach(lbl => {
+        const th = document.createElement('th');
+        th.className = 'standing-metric-col';
+        th.textContent = lbl;
+        headTr.appendChild(th);
+      });
+      table.appendChild(headTr);
+
+      (groupPlayers || []).forEach((rowData, index) => {
+        const tr = document.createElement('tr');
+        const tdIdx = document.createElement('td');
+        tdIdx.className = 'rank-cell';
+        tdIdx.textContent = String(index + 1);
+        tr.appendChild(tdIdx);
+
+        const tdName = document.createElement('td');
+        tdName.className = 'players-name-cell';
+        const wrap = document.createElement('div');
+        wrap.style.display = 'flex';
+        wrap.style.alignItems = 'center';
+        wrap.style.gap = '7px';
+
+        if (isTeam) {
+          const found = teams.find(t => t.team === rowData.team);
+          if (found && found.logo) {
+            const img = document.createElement('img');
+            img.src = found.logo;
+            img.className = 'team-logo';
+            wrap.appendChild(img);
+          }
+          const span = document.createElement('span');
+          span.textContent = rowData.team || '';
+          wrap.appendChild(span);
         } else {
-          table.classList.remove('crosstable');
-        }
-
-        // Precompute opponents per participant for cross table highlighting
-        const participantOpponents = new Map();
-        function addOpponent(key, oppKey) {
-          if (!key || !oppKey || key === oppKey) return;
-          const set = participantOpponents.get(key) || new Set();
-          set.add(oppKey);
-          participantOpponents.set(key, set);
-        }
-        if (mode === 'crosstable') {
-          if (isTeam) {
-            (matches || [])
-              .filter(m => m.tournament_id === currentTournamentId)
-              .filter(m => isStageMatch(m.stage))
-              .filter(m => !group || !m.group || m.group === group)
-              .forEach(m => {
-                const t1 = m.team1;
-                const t2 = m.team2;
-                addOpponent(t1, t2);
-                addOpponent(t2, t1);
-              });
-          } else {
-            (duels || [])
-              .filter(m => m.tournament_id === currentTournamentId)
-              .filter(m => isStageMatch(m.stage))
-              .filter(m => !group || !m.group || m.group === group)
-              .forEach(m => {
-                const p1 = String(m.player1_id || '');
-                const p2 = String(m.player2_id || '');
-                addOpponent(p1, p2);
-                addOpponent(p2, p1);
-              });
+          const flagSrc = getFlagByPlayerId(rowData.player_id);
+          if (flagSrc) {
+            const img = document.createElement('img');
+            img.src = flagSrc;
+            img.className = 'player-logo';
+            wrap.appendChild(img);
+          }
+          const a = document.createElement('a');
+          a.href = `https://boardgamearena.com/player?id=${rowData.player_id}`;
+          a.target = '_blank';
+          a.textContent = rowData.player || '';
+          wrap.appendChild(a);
+          const icon = (rowData && typeof rowData.standing_icon === 'string') ? rowData.standing_icon.trim() : '';
+          if (icon) {
+            const rightIcon = document.createElement('img');
+            rightIcon.src = icon;
+            rightIcon.alt = '';
+            rightIcon.style.width = '16px';
+            rightIcon.style.height = 'auto';
+            rightIcon.style.marginLeft = '3px';
+            rightIcon.style.objectFit = 'contain';
+            wrap.appendChild(rightIcon);
           }
         }
-        // Build header
-        const headTr = document.createElement('tr');
-        const thPos = document.createElement('th');
-        thPos.className = 'rank-cell';
-        thPos.style.position = 'relative';
-        const expandBtn = document.createElement('button');
-        expandBtn.className = 'expand-bracket-btn';
-        expandBtn.title = 'Fullscreen';
-        expandBtn.innerHTML = '<i class="fas fa-up-right-and-down-left-from-center"></i>';
-        expandBtn.style.opacity = '1';
-        expandBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openTableFullscreen({
-            sourceTable: table,
-            participants,
-            groupPlayers,
-            isTeam,
-            group,
-            stageFilter,
-            standingsColumns: isTeam
-              ? ['MP','MW','ML','DW','DL','GW','GL','OMW','OGD','OGW']
-              : ['MP','MW','ML','GW','GL','OMW','OGD','OGW']
-          });
-        });
-        thPos.appendChild(expandBtn);
-        const thName = document.createElement('th');
-        thName.textContent = isTeam ? 'Team' : 'Player';
-        headTr.appendChild(thPos);
-        headTr.appendChild(thName);
+        tdName.appendChild(wrap);
+        tr.appendChild(tdName);
 
-        if (mode === 'standings') {
-          if (isTeam) {
-            ['MP','MW','ML','DW','DL','GW','GL'].forEach(lbl => {
-              const th = document.createElement('th');
-              th.className = 'standing-metric-col';
-              th.textContent = lbl;
-              headTr.appendChild(th);
-            });
-          } else {
-            ['MP','MW','ML','GW','GL'].forEach(lbl => {
-              const th = document.createElement('th');
-              th.className = 'standing-metric-col';
-              th.textContent = lbl;
-              headTr.appendChild(th);
-            });
-          }
-        } else {
-          // crosstable: flag/logo columns; if no icon, show participant position number
-          participants.forEach((part, idx) => {
-            const th = document.createElement('th');
-            if (part.type === 'team' && part.logo) {
-              th.innerHTML = `<img src="${part.logo}" class="team-logo" alt="">`;
-            } else if (part.type === 'player' && part.flag) {
-              th.innerHTML = `<img src="${part.flag}" class="player-logo" alt="">`;
-            } else {
-              th.textContent = String(idx + 1);
-            }
-            headTr.appendChild(th);
-          });
-        }
-        table.appendChild(headTr);
-
-        // Rows
-        (groupPlayers || []).forEach((rowData, index) => {
-          // Duplicate header after 15th player (before 16th) for cross table view
-          if (mode === 'crosstable' && index === 15) {
-            table.appendChild(headTr.cloneNode(true));
-          }
-          const tr = document.createElement('tr');
-          const tdIdx = document.createElement('td');
-          tdIdx.className = 'rank-cell';
-          tdIdx.textContent = String(index + 1);
-          tr.appendChild(tdIdx);
-
-          const tdName = document.createElement('td');
-          tdName.className = 'players-name-cell';
-          const wrap = document.createElement('div');
-          wrap.style.display = 'flex';
-          wrap.style.alignItems = 'center';
-          wrap.style.gap = '7px';
-
-          if (isTeam) {
-            const found = teams.find(t => t.team === rowData.team);
-            if (found && found.logo) {
-              const img = document.createElement('img');
-              img.src = found.logo;
-              img.className = 'team-logo';
-              wrap.appendChild(img);
-            }
-            const span = document.createElement('span');
-            span.textContent = rowData.team || '';
-            wrap.appendChild(span);
-          } else {
-            const flagSrc = getFlagByPlayerId(rowData.player_id);
-            if (flagSrc) {
-              const img = document.createElement('img');
-              img.src = flagSrc;
-              img.className = 'player-logo';
-              wrap.appendChild(img);
-            }
-            const a = document.createElement('a');
-            a.href = `https://boardgamearena.com/player?id=${rowData.player_id}`;
-            a.target = '_blank';
-            a.textContent = rowData.player || '';
-            wrap.appendChild(a);
-            const icon = (rowData && typeof rowData.standing_icon === 'string') ? rowData.standing_icon.trim() : '';
-            if (icon) {
-              const rightIcon = document.createElement('img');
-              rightIcon.src = icon;
-              rightIcon.alt = '';
-              rightIcon.style.width = '16px';
-              rightIcon.style.height = 'auto';
-              rightIcon.style.marginLeft = '3px';
-              rightIcon.style.objectFit = 'contain';
-              wrap.appendChild(rightIcon);
-            }
-          }
-          tdName.appendChild(wrap);
-          tr.appendChild(tdName);
-
-          if (mode === 'standings') {
-          if (isTeam) {
-            const values = [
+        const values = isTeam
+          ? [
               rowData.matches_played,
               rowData.matches_won,
               rowData.matches_lost,
@@ -1374,117 +1286,38 @@
               rowData.duels_lost,
               rowData.games_won,
               rowData.games_lost
-            ];
-            values.forEach((val, i) => {
-              const td = document.createElement('td');
-              td.textContent = String(val ?? '');
-              // Highlight MW column (index 1 in values)
-              if (i === 1) td.style.fontWeight = '600';
-              tr.appendChild(td);
-            });
-          } else {
-            const values = [
+            ]
+          : [
               rowData.matches_played,
               rowData.matches_won,
               rowData.matches_lost,
               rowData.games_won,
               rowData.games_lost
             ];
-            values.forEach((val, i) => {
-              const td = document.createElement('td');
-              td.textContent = String(val ?? '');
-              // Highlight MW column (index 1 in values)
-              if (i === 1) td.style.fontWeight = '600';
-              tr.appendChild(td);
-            });
-          }
-          } else {
-            debugger;
-            // crosstable: fill cells with existing results
-            participants.forEach(colPart => {
-              const td = document.createElement('td');
-              let text = '';
-              let isSelf = false;
-              const rowKey = isTeam ? rowData.team : String(rowData.player_id);
-              const colKey = colPart.type === 'team' ? colPart.name : String(colPart.id);
-              const isOpponent = participantOpponents.get(rowKey)?.has(colKey) || false;
-              // diagonal (self) cell should stay empty and be shaded
-              if (isTeam) {
-                const teamRow = rowData.team;
-                const teamCol = colPart.name;
-                if (teamRow && teamCol && teamRow === teamCol) {
-                  isSelf = true;
-                } else if (teamRow && teamCol) {
-                  const candidates = (matches || []).filter(m => m.tournament_id === currentTournamentId && (
-                    (m.team1 === teamRow && m.team2 === teamCol) || (m.team1 === teamCol && m.team2 === teamRow)
-                  ) && (!group || !m.group || m.group === group) && isStageMatch(m.stage));
-                  // choose the latest by time if multiple
-                  const picked = candidates.sort((a,b) => {
-                    const ta = Date.parse((a.time||'').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
-                    const tb = Date.parse((b.time||'').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
-                    return ta - tb;
-                  }).pop();
-                  if (picked && picked.duels_won1 !== null && picked.duels_won2 !== null && picked.duels_won1 !== '' && picked.duels_won2 !== '') {
-                    if (picked.team1 === teamRow && picked.team2 === teamCol) {
-                      text = `${picked.duels_won1} - ${picked.duels_won2}`;
-                    } else if (picked.team1 === teamCol && picked.team2 === teamRow) {
-                      text = `${picked.duels_won2} - ${picked.duels_won1}`;
-                    }
-                  }
-                }
-              } else {
-                const pidRow = rowData.player_id;
-                const pidCol = colPart.id;
-                if (pidRow && pidCol && pidRow === pidCol) {
-                  isSelf = true;
-                } else if (pidRow && pidCol) {
-                  const candidates = (duels || []).filter(m => m.tournament_id === currentTournamentId && (
-                    (m.player1_id === pidRow && m.player2_id === pidCol) || (m.player1_id === pidCol && m.player2_id === pidRow)
-                  ) && (!group || !m.group || m.group === group) && isStageMatch(m.stage));
-                  const picked = candidates.sort((a,b) => {
-                    const ta = Date.parse((a.time||'').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
-                    const tb = Date.parse((b.time||'').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
-                    return ta - tb;
-                  }).pop();
-                  if (picked && picked.score1 !== null && picked.score2 !== null && picked.score1 !== '' && picked.score2 !== '') {
-                    if (picked.player1_id === pidRow && picked.player2_id === pidCol) {
-                      text = `${picked.score1}-${picked.score2}`;
-                    } else if (picked.player1_id === pidCol && picked.player2_id === pidRow) {
-                      text = `${picked.score2}-${picked.score1}`;
-                    }
-                  }
-                }
-              }
-              if (isSelf) {
-                td.classList.add('ct-self-cell');
-                text = '';
-              }
-              if (!isSelf && !isOpponent) {
-                td.classList.add('ct-not-opponent');
-              }
-              td.textContent = text;
-              tr.appendChild(td);
-            });
-          }
-
-          table.appendChild(tr);
+        values.forEach((val, i) => {
+          const td = document.createElement('td');
+          td.textContent = String(val ?? '');
+          if (i === 1) td.style.fontWeight = '600';
+          tr.appendChild(td);
         });
-      }
 
-      // initial render default to Standings
-      renderMode('standings');
+        table.appendChild(tr);
+      });
 
-      // Toggle logic matching matches_new style
-      optStandings.addEventListener('click', () => {
-        optStandings.classList.add('active');
-        optCross.classList.remove('active');
-        renderMode('standings');
+      fullViewBtn.addEventListener('click', () => {
+        openTableFullscreen({
+          sourceTable: table,
+          participants,
+          groupPlayers,
+          isTeam,
+          group,
+          stageFilter,
+          standingsColumns: isTeam
+            ? ['MP','MW','ML','DW','DL','GW','GL','OMW','OGD','OGW']
+            : ['MP','MW','ML','GW','GL','OMW','OGD','OGW']
+        });
       });
-      optCross.addEventListener('click', () => {
-        optStandings.classList.remove('active');
-        optCross.classList.add('active');
-        renderMode('crosstable');
-      });
+
       container.appendChild(section);
     }
 
@@ -2100,6 +1933,8 @@
       const derivedStats = buildDerivedStats(applySim);
       const old = content.querySelector('table.sim-table');
       if (old) old.remove();
+      const oldInfo = content.querySelector('.fullscreen-standings-info');
+      if (oldInfo) oldInfo.remove();
 
       eligibleCells = [];
       pairCells = new Map();
@@ -2130,9 +1965,7 @@
         });
         colParticipants.forEach((p, idx) => {
           const th = document.createElement('th');
-          if (p.type === 'team' && p.logo) th.innerHTML = `<img src="${p.logo}" class="team-logo" alt="">`;
-          else if (p.type === 'player' && p.flag) th.innerHTML = `<img src="${p.flag}" class="player-logo" alt="">`;
-          else th.textContent = String(idx + 1);
+          th.textContent = String(idx + 1);
           tr.appendChild(th);
         });
         return tr;
@@ -2284,6 +2117,11 @@
       });
 
       content.appendChild(tbl);
+
+      const info = document.createElement('div');
+      info.className = 'standings-order-info fullscreen-standings-info';
+      info.innerHTML = 'MP: Matches Played MW: Matches Won ML: Matches Lost GW: Games Won GL: Games Lost<br><br>The final positions in the group will be determined in the following order:<br>1. MW (Matches Won) – number of matches won<br>2. GD (Games Difference) – difference between Games Won (GW) and Games Lost (GL)<br>3. GW (Games Won) – number of games won<br>4. OMW (Opponents’ Matches Won) – total number of matches won by all opponents in the league stage<br>5. OGD (Opponents’ Games Difference) – combined difference between GW and GL of all opponents in the league stage<br>6. OGW (Opponents’ Games Won) – total number of games won by all opponents in the league stage<br>7. Player coefficient';
+      content.appendChild(info);
     }
 
     function startSimulator() {
