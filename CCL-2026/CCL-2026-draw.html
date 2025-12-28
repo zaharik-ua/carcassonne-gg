@@ -12,19 +12,18 @@
   body { font-family: 'Montserrat', sans-serif; }
 
   .group-section { margin: 5px 0; }
+
   .stage-tables {
     display: flex;
     gap: 16px;
     flex-wrap: wrap;
     align-items: flex-start;
   }
+
   .stage-table-wrapper {
     flex: 1 1 340px;
     min-width: 280px;
   }
-  .draw-details { margin-top: 12px; font-size: 14px; line-height: 1.5; }
-  .draw-details-title { font-weight: 600; margin-bottom: 6px; }
-  .draw-details-list { padding-left: 16px; margin: 0; }
 
   .draw-group-block {
     margin-top: 12px;
@@ -32,53 +31,6 @@
     border: 1px solid #e0d5cf;
     border-radius: 4px;
     background-color: #faf6f4;
-  }
-
-  .draw-match-row {
-    margin-top: 6px;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .draw-player-inline {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .match-reveal {
-    border: none;
-    border-radius: 4px;
-    padding: 2px 20px;
-    background-color: #d9e7f2;
-    color: #1d3c56;
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    min-width: 80px;
-    text-transform: uppercase;
-  }
-
-  .match-reveal:disabled {
-    opacity: 0.8;
-    cursor: default;
-  }
-
-  .match-players {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .match-content {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
   }
 
   .draw-action {
@@ -93,19 +45,29 @@
     border-radius: 2px;
     cursor: pointer;
   }
-
   .draw-action:hover { background-color: var(--hover-bg-color); }
-
-  .draw-action:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
-  }
+  .draw-action:disabled { opacity: 0.7; cursor: not-allowed; }
 
   .group-title {
     font-size: 14px;
     font-weight: 700;
     margin-bottom: 3px;
     color: #222;
+  }
+
+  .small-muted {
+    font-size: 12px;
+    color: #555;
+    font-weight: 500;
+  }
+
+  .league-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
   }
 
   .group-table {
@@ -133,6 +95,7 @@
     border-top: 1px solid #ccc;
     text-align: center;
     background-color: #fff;
+    vertical-align: top;
   }
 
   .group-table td a {
@@ -141,6 +104,14 @@
     word-break: break-word;
   }
   .group-table td a:hover { color: #0277BD; }
+
+  .group-table th.player-col,
+  .group-table td.player-col {
+    text-align: left;
+    width: auto;
+    min-width: auto;
+    white-space: normal;
+  }
 
   .players-name-wrap {
     display: flex;
@@ -158,6 +129,12 @@
     object-fit: cover;
   }
 
+  .draw-player-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
   .pot-badge {
     display: inline-block;
     font-size: 11px;
@@ -167,21 +144,54 @@
     background: #eee;
     color: #333;
     border: 1px solid #ddd;
+    line-height: 16px;
   }
 
-  .league-title {
+  .match-reveal {
+    border: none;
+    border-radius: 4px;
+    padding: 2px 14px;
+    background-color: #d9e7f2;
+    color: #1d3c56;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    min-width: 70px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .match-reveal:disabled {
+    opacity: 0.8;
+    cursor: default;
+  }
+
+  /* Accordion (under player name) */
+  .opp-accordion {
+    margin-top: 6px;
+    border-top: 1px dashed #d2c4bd;
+    padding-top: 6px;
+    font-size: 13px;
+    line-height: 1.35;
+    display: none;
+  }
+  .opp-accordion.open { display: block; }
+
+  .opp-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    gap: 6px;
     flex-wrap: wrap;
-    margin-bottom: 6px;
+    margin-top: 4px;
   }
+  .opp-row:first-child { margin-top: 0; }
 
-  .small-muted {
-    font-size: 12px;
-    color: #555;
-    font-weight: 500;
+  .table-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
   }
 </style>
 
@@ -191,20 +201,16 @@
   const CURRENT_TOURNAMENT_ID = "CCL-2026";
   const DATA_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json";
 
-  const LEAGUES = ["Space", "Earth"];
   const POTS_COUNT = 5;
   const TOTAL_PLAYERS = 60;
-  const POT_SIZE = TOTAL_PLAYERS / POTS_COUNT; // 12
-  const LEAGUE_PLAYERS = TOTAL_PLAYERS / 2; // 30
-  const LEAGUE_POT_SIZE = POT_SIZE / 2; // 6
+  const POT_SIZE = TOTAL_PLAYERS / POTS_COUNT;     // 12
+  const LEAGUE_POT_SIZE = POT_SIZE / 2;            // 6
 
   let countries = [];
   let tournamentPlayers = [];
   let containerEl = null;
 
-  let drawButtonEl = null;
-  let resultWrapperEl = null;
-
+  // ---------- utils ----------
   function showError(message) {
     if (!containerEl) return;
     containerEl.textContent = message;
@@ -232,6 +238,329 @@
     return `name:${String(p.player || "").trim().toLowerCase()}`;
   }
 
+  // association = country
+  function getAssociationKey(player) {
+    const raw = (player && player.country) ? String(player.country).trim() : "";
+    if (raw) return raw.toLowerCase();
+    return `unknown:${getPlayerKey(player)}`;
+  }
+
+  function countAssociations(list) {
+    const m = new Map();
+    (list || []).forEach(p => {
+      const k = getAssociationKey(p);
+      m.set(k, (m.get(k) || 0) + 1);
+    });
+    return m;
+  }
+
+  function pickRandomSubset(arr, k) {
+    const a = shuffleArray(arr);
+    return new Set(a.slice(0, k));
+  }
+
+  function computeSpaceQuotas(playersTop60) {
+    const totals = countAssociations(playersTop60);
+    const oddCountries = [];
+    let base = 0;
+
+    totals.forEach((n, c) => {
+      const f = Math.floor(n / 2);
+      base += f;
+      if (n % 2 === 1) oddCountries.push(c);
+    });
+
+    // space must be exactly 30
+    const needExtras = 30 - base;
+    const extraToSpace = pickRandomSubset(oddCountries, needExtras);
+
+    const spaceQuota = new Map();
+    totals.forEach((n, c) => {
+      const f = Math.floor(n / 2);
+      spaceQuota.set(c, f + (extraToSpace.has(c) ? 1 : 0));
+    });
+
+    return { totals, spaceQuota };
+  }
+
+  function potIsPairableNoSameAssoc(players6) {
+    const m = countAssociations(players6);
+    for (const [, cnt] of m.entries()) {
+      if (cnt > 3) return false; // otherwise impossible to pair 6 without same-assoc
+    }
+    return true;
+  }
+
+  function splitIntoPots(sortedTop60) {
+    const pots = [];
+    for (let i = 0; i < POTS_COUNT; i++) {
+      pots.push(sortedTop60.slice(i * POT_SIZE, (i + 1) * POT_SIZE));
+    }
+    return pots;
+  }
+
+  // ---------- league assignment (quotas + pot feasibility) ----------
+  function assignLeaguesWithQuotas(pots, spaceQuota) {
+    const P = pots.length;
+    const neededPerPot = LEAGUE_POT_SIZE; // 6
+
+    // remaining counts by assoc from potIdx..end (pruning)
+    const remainingFromIdx = Array(P + 1).fill(null).map(() => new Map());
+    remainingFromIdx[P] = new Map();
+    for (let i = P - 1; i >= 0; i--) {
+      const m = new Map(remainingFromIdx[i + 1]);
+      const add = countAssociations(pots[i]);
+      add.forEach((cnt, key) => m.set(key, (m.get(key) || 0) + cnt));
+      remainingFromIdx[i] = m;
+    }
+
+    const remainingQuota = new Map(spaceQuota);
+    const spacePots = Array.from({ length: P }, () => []);
+    const earthPots = Array.from({ length: P }, () => []);
+
+    function canStillFillQuotas(fromPotIdx) {
+      const avail = remainingFromIdx[fromPotIdx] || new Map();
+      for (const [key, q] of remainingQuota.entries()) {
+        if (q < 0) return false;
+        const a = avail.get(key) || 0;
+        if (q > a) return false;
+      }
+      return true;
+    }
+
+    function recursePot(potIdx) {
+      if (potIdx === P) {
+        for (const [, q] of remainingQuota.entries()) {
+          if (q !== 0) return false;
+        }
+        return true;
+      }
+
+      const pot = shuffleArray(pots[potIdx]); // 12
+      const n = pot.length;
+
+      const chosenIdx = [];
+      const chosenAssocCounts = new Map();
+
+      function backtrackChoose(i, picked) {
+        if (picked > neededPerPot) return false;
+        if (picked + (n - i) < neededPerPot) return false;
+
+        if (picked === neededPerPot) {
+          const chosenMask = new Array(n).fill(false);
+          chosenIdx.forEach(ix => chosenMask[ix] = true);
+
+          const spaceSet = [];
+          const earthSet = [];
+          for (let z = 0; z < n; z++) {
+            if (chosenMask[z]) spaceSet.push(pot[z]);
+            else earthSet.push(pot[z]);
+          }
+
+          if (!potIsPairableNoSameAssoc(spaceSet)) return false;
+          if (!potIsPairableNoSameAssoc(earthSet)) return false;
+
+          const touched = [];
+          for (const p of spaceSet) {
+            const k = getAssociationKey(p);
+            const q = (remainingQuota.get(k) || 0) - 1;
+            remainingQuota.set(k, q);
+            touched.push(k);
+            if (q < 0) {
+              for (const kk of touched) remainingQuota.set(kk, (remainingQuota.get(kk) || 0) + 1);
+              return false;
+            }
+          }
+
+          if (!canStillFillQuotas(potIdx + 1)) {
+            for (const kk of touched) remainingQuota.set(kk, (remainingQuota.get(kk) || 0) + 1);
+            return false;
+          }
+
+          spacePots[potIdx] = spaceSet;
+          earthPots[potIdx] = earthSet;
+
+          if (recursePot(potIdx + 1)) return true;
+
+          for (const kk of touched) remainingQuota.set(kk, (remainingQuota.get(kk) || 0) + 1);
+          return false;
+        }
+
+        if (i === n) return false;
+
+        // take i into SPACE if quota allows and local <= 3
+        {
+          const p = pot[i];
+          const k = getAssociationKey(p);
+          const q = remainingQuota.get(k);
+          if (q !== undefined && q > 0) {
+            const localCnt = (chosenAssocCounts.get(k) || 0) + 1;
+            if (localCnt <= 3) {
+              chosenIdx.push(i);
+              chosenAssocCounts.set(k, localCnt);
+              if (backtrackChoose(i + 1, picked + 1)) return true;
+              chosenIdx.pop();
+              chosenAssocCounts.set(k, localCnt - 1);
+              if (chosenAssocCounts.get(k) === 0) chosenAssocCounts.delete(k);
+            }
+          }
+        }
+
+        // skip i
+        return backtrackChoose(i + 1, picked);
+      }
+
+      return backtrackChoose(0, 0);
+    }
+
+    if (!canStillFillQuotas(0)) return null;
+    const ok = recursePot(0);
+    if (!ok) return null;
+
+    return { spacePots, earthPots };
+  }
+
+  // ---------- matching (no same country) ----------
+  function pairWithinPotNoSameAssoc(players6) {
+    const arr = [...players6];
+    const used = new Array(arr.length).fill(false);
+    const pairs = [];
+
+    function dfs() {
+      let i = 0;
+      while (i < arr.length && used[i]) i++;
+      if (i === arr.length) return true;
+
+      used[i] = true;
+      for (let j = i + 1; j < arr.length; j++) {
+        if (used[j]) continue;
+        if (getAssociationKey(arr[i]) === getAssociationKey(arr[j])) continue;
+        used[j] = true;
+        pairs.push([arr[i], arr[j]]);
+        if (dfs()) return true;
+        pairs.pop();
+        used[j] = false;
+      }
+      used[i] = false;
+      return false;
+    }
+
+    return dfs() ? pairs : null;
+  }
+
+  function matchPotsNoSameAssoc(A6, B6) {
+    const A = [...A6];
+    const B = [...B6];
+
+    const allowed = A.map(a => B.map((b, idx) => ({ b, idx }))
+      .filter(x => getAssociationKey(a) !== getAssociationKey(x.b))
+      .map(x => x.idx)
+    );
+
+    const order = A.map((_, i) => i).sort((i, j) => allowed[i].length - allowed[j].length);
+    const usedB = new Array(B.length).fill(false);
+    const matchIdx = new Array(A.length).fill(-1);
+
+    function dfs(pos) {
+      if (pos === order.length) return true;
+      const ai = order[pos];
+      const candidates = shuffleArray(allowed[ai]);
+      for (const bi of candidates) {
+        if (usedB[bi]) continue;
+        usedB[bi] = true;
+        matchIdx[ai] = bi;
+        if (dfs(pos + 1)) return true;
+        matchIdx[ai] = -1;
+        usedB[bi] = false;
+      }
+      return false;
+    }
+
+    if (!dfs(0)) return null;
+    return A.map((a, i) => [a, B[matchIdx[i]]]);
+  }
+
+  function buildLeagueMatchesNoSameAssoc(leaguePots) {
+    const matches = [];
+    const opponentsMap = new Map(); // playerKey -> Map(potNumber -> opponentObj)
+
+    const setOpp = (player, potNumber, opponent) => {
+      const key = getPlayerKey(player);
+      if (!opponentsMap.has(key)) opponentsMap.set(key, new Map());
+      opponentsMap.get(key).set(potNumber, opponent);
+    };
+
+    // intra pot (own pot opponent)
+    for (let i = 0; i < leaguePots.length; i++) {
+      const pairs = pairWithinPotNoSameAssoc(leaguePots[i]);
+      if (!pairs) return null;
+      pairs.forEach(([p1, p2]) => {
+        matches.push({ potA: i + 1, potB: i + 1, p1, p2, kind: "intra" });
+        setOpp(p1, i + 1, p2);
+        setOpp(p2, i + 1, p1);
+      });
+    }
+
+    // cross pot (perfect matching between each pot pair)
+    for (let i = 0; i < leaguePots.length; i++) {
+      for (let j = i + 1; j < leaguePots.length; j++) {
+        const pairs = matchPotsNoSameAssoc(leaguePots[i], leaguePots[j]);
+        if (!pairs) return null;
+        pairs.forEach(([p1, p2]) => {
+          matches.push({ potA: i + 1, potB: j + 1, p1, p2, kind: "cross" });
+          setOpp(p1, j + 1, p2);
+          setOpp(p2, i + 1, p1);
+        });
+      }
+    }
+
+    return { matches, opponentsMap };
+  }
+
+  function generateMainStageDrawWithConstraints(sortedTop60, { maxAttempts = 800 } = {}) {
+    const pots = splitIntoPots(sortedTop60);
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const { spaceQuota } = computeSpaceQuotas(sortedTop60);
+
+      const leaguesAssignment = assignLeaguesWithQuotas(pots, spaceQuota);
+      if (!leaguesAssignment) continue;
+
+      const leagues = {
+        Space: leaguesAssignment.spacePots,
+        Earth: leaguesAssignment.earthPots
+      };
+
+      const spaceRes = buildLeagueMatchesNoSameAssoc(leagues.Space);
+      if (!spaceRes) continue;
+
+      const earthRes = buildLeagueMatchesNoSameAssoc(leagues.Earth);
+      if (!earthRes) continue;
+
+      const schedules = [];
+      ["Space", "Earth"].forEach(leagueName => {
+        const oppMap = leagueName === "Space" ? spaceRes.opponentsMap : earthRes.opponentsMap;
+        for (let potNumber = 1; potNumber <= POTS_COUNT; potNumber++) {
+          leagues[leagueName][potNumber - 1].forEach(player => {
+            const pm = oppMap.get(getPlayerKey(player)) || new Map();
+            const opponents = [];
+            for (let pn = 1; pn <= POTS_COUNT; pn++) opponents.push(pm.get(pn) || null);
+            schedules.push({ league: leagueName, pot: potNumber, player, opponents });
+          });
+        }
+      });
+
+      const allMatches = [];
+      spaceRes.matches.forEach(m => allMatches.push({ league: "Space", ...m }));
+      earthRes.matches.forEach(m => allMatches.push({ league: "Earth", ...m }));
+
+      return { pots, leagues, schedules, matches: allMatches };
+    }
+
+    throw new Error("Draw failed: could not satisfy constraints.");
+  }
+
+  // ---------- UI rendering ----------
   function createPlayerInline(entry, { withLink = true } = {}) {
     const wrapper = document.createElement("span");
     wrapper.className = "draw-player-inline";
@@ -260,50 +589,45 @@
       span.textContent = entry?.player || "-";
       wrapper.appendChild(span);
     }
+
     return wrapper;
   }
 
-  function createPotTable(titleText, entries, { showIndex = false } = {}) {
+  function createInitialPotTable(potNumber, entries) {
     const wrapper = document.createElement("div");
     wrapper.className = "stage-table-wrapper";
 
     const title = document.createElement("div");
     title.className = "group-title";
-    title.textContent = titleText;
+    title.textContent = `Pot ${potNumber}`;
     wrapper.appendChild(title);
 
     const table = document.createElement("table");
     table.className = "group-table";
 
     const headTr = document.createElement("tr");
-    const headers = showIndex ? ["#", "Player", "Elo"] : ["Player", "Elo"];
-    headers.forEach((label, idx) => {
+    ["Player", "Elo"].forEach((label, idx) => {
       const th = document.createElement("th");
       th.textContent = label;
-      if (label === "Player") th.style.textAlign = "left";
+      if (idx === 0) th.classList.add("player-col");
       headTr.appendChild(th);
     });
     table.appendChild(headTr);
 
-    entries.forEach((p, idx) => {
+    const sorted = [...entries].sort((a, b) => safeElo(b.elo) - safeElo(a.elo));
+    sorted.forEach(player => {
       const tr = document.createElement("tr");
 
-      if (showIndex) {
-        const tdIdx = document.createElement("td");
-        tdIdx.textContent = String(idx + 1);
-        tr.appendChild(tdIdx);
-      }
-
       const tdPlayer = document.createElement("td");
-      tdPlayer.style.textAlign = "left";
+      tdPlayer.className = "player-col";
       const wrap = document.createElement("div");
       wrap.className = "players-name-wrap";
-      wrap.appendChild(createPlayerInline(p, { withLink: true }));
+      wrap.appendChild(createPlayerInline(player, { withLink: true }));
       tdPlayer.appendChild(wrap);
       tr.appendChild(tdPlayer);
 
       const tdElo = document.createElement("td");
-      tdElo.textContent = (p.elo !== undefined && p.elo !== null && p.elo !== "") ? p.elo : "-";
+      tdElo.textContent = (player.elo !== undefined && player.elo !== null && player.elo !== "") ? player.elo : "-";
       tr.appendChild(tdElo);
 
       table.appendChild(tr);
@@ -313,135 +637,127 @@
     return wrapper;
   }
 
-  function splitIntoPots(sortedTop60) {
-    const pots = [];
-    for (let i = 0; i < POTS_COUNT; i++) {
-      pots.push(sortedTop60.slice(i * POT_SIZE, (i + 1) * POT_SIZE));
+  function createOppAccordion(opponents) {
+    const acc = document.createElement("div");
+    acc.className = "opp-accordion";
+
+    for (let pn = 1; pn <= POTS_COUNT; pn++) {
+      const opp = opponents[pn - 1];
+      const row = document.createElement("div");
+      row.className = "opp-row";
+
+      const badge = document.createElement("span");
+      badge.className = "pot-badge";
+      badge.textContent = `P${pn}`;
+      row.appendChild(badge);
+
+      row.appendChild(createPlayerInline(opp, { withLink: true }));
+      acc.appendChild(row);
     }
-    return pots;
+    return acc;
   }
 
-  function setOpponent(mapByPlayer, player, potNumber, opponent) {
-    const key = getPlayerKey(player);
-    if (!mapByPlayer.has(key)) mapByPlayer.set(key, new Map());
-    const potMap = mapByPlayer.get(key);
-    potMap.set(potNumber, opponent);
-  }
+  function createLeaguePotTable(potNumber, playersInPot, scheduleByPlayerKey) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "stage-table-wrapper";
 
-  function runMainStageDraw(sortedTop60) {
-    const pots = splitIntoPots(sortedTop60); // 5 x 12
+    const title = document.createElement("div");
+    title.className = "group-title";
+    title.textContent = `Pot ${potNumber}`;
+    wrapper.appendChild(title);
 
-    // Randomly split each pot into halves: Space/Earth
-    const leagues = {
-      Space: Array.from({ length: POTS_COUNT }, () => []),
-      Earth: Array.from({ length: POTS_COUNT }, () => []),
-    };
+    const table = document.createElement("table");
+    table.className = "group-table";
 
-    for (let potIdx = 0; potIdx < POTS_COUNT; potIdx++) {
-      const shuffled = shuffleArray(pots[potIdx]);
-      leagues.Space[potIdx] = shuffled.slice(0, LEAGUE_POT_SIZE);
-      leagues.Earth[potIdx] = shuffled.slice(LEAGUE_POT_SIZE, POT_SIZE);
-    }
+    const headTr = document.createElement("tr");
+    ["Player", "Elo", ""].forEach((label, idx) => {
+      const th = document.createElement("th");
+      th.textContent = label;
+      if (idx === 0) th.classList.add("player-col");
+      headTr.appendChild(th);
+    });
+    table.appendChild(headTr);
 
-    // Build matches and per-player opponents
-    const allMatches = []; // {league, potA, potB, p1, p2}
-    const schedules = [];  // {league, pot, player, opponents[1..5]}
-    const opponentsMapByLeague = {
-      Space: new Map(),
-      Earth: new Map()
-    };
+    const sortedPlayers = [...playersInPot].sort((a, b) => safeElo(b.elo) - safeElo(a.elo));
 
-    LEAGUES.forEach(leagueName => {
-      const leaguePots = leagues[leagueName]; // 5 x 6
-      const oppMap = opponentsMapByLeague[leagueName];
+    sortedPlayers.forEach(player => {
+      const tr = document.createElement("tr");
 
-      // 1) within-pot pairings (each player gets opponent from own pot)
-      for (let i = 0; i < POTS_COUNT; i++) {
-        const arr = shuffleArray(leaguePots[i]);
-        for (let k = 0; k < arr.length; k += 2) {
-          const p1 = arr[k];
-          const p2 = arr[k + 1];
-          allMatches.push({ league: leagueName, potA: i + 1, potB: i + 1, p1, p2, kind: "intra" });
-          setOpponent(oppMap, p1, i + 1, p2);
-          setOpponent(oppMap, p2, i + 1, p1);
-        }
-      }
+      const tdPlayer = document.createElement("td");
+      tdPlayer.className = "player-col";
 
-      // 2) cross-pot perfect matchings (each player gets 1 opponent from each other pot)
-      for (let i = 0; i < POTS_COUNT; i++) {
-        for (let j = i + 1; j < POTS_COUNT; j++) {
-          const a = shuffleArray(leaguePots[i]);
-          const b = shuffleArray(leaguePots[j]);
-          for (let k = 0; k < LEAGUE_POT_SIZE; k++) {
-            const p1 = a[k];
-            const p2 = b[k];
-            allMatches.push({ league: leagueName, potA: i + 1, potB: j + 1, p1, p2, kind: "cross" });
-            setOpponent(oppMap, p1, j + 1, p2);
-            setOpponent(oppMap, p2, i + 1, p1);
-          }
-        }
-      }
+      const wrap = document.createElement("div");
+      wrap.className = "players-name-wrap";
+      wrap.appendChild(createPlayerInline(player, { withLink: true }));
+      tdPlayer.appendChild(wrap);
 
-      // Build schedule rows (1 row per player)
-      for (let potNumber = 1; potNumber <= POTS_COUNT; potNumber++) {
-        leaguePots[potNumber - 1].forEach(player => {
-          const pm = oppMap.get(getPlayerKey(player)) || new Map();
-          const opponents = [];
-          for (let pn = 1; pn <= POTS_COUNT; pn++) {
-            opponents.push(pm.get(pn) || null);
-          }
-          schedules.push({ league: leagueName, pot: potNumber, player, opponents });
-        });
-      }
+      const schedule = scheduleByPlayerKey.get(getPlayerKey(player));
+      const opponents = schedule ? schedule.opponents : Array(POTS_COUNT).fill(null);
+      const accordion = createOppAccordion(opponents);
+      tdPlayer.appendChild(accordion);
+
+      tr.appendChild(tdPlayer);
+
+      const tdElo = document.createElement("td");
+      tdElo.textContent = (player.elo !== undefined && player.elo !== null && player.elo !== "") ? player.elo : "-";
+      tr.appendChild(tdElo);
+
+      const tdBtn = document.createElement("td");
+      const actions = document.createElement("div");
+      actions.className = "table-actions";
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "match-reveal";
+      btn.textContent = "Show";
+
+      btn.addEventListener("click", () => {
+        const isOpen = accordion.classList.toggle("open");
+        btn.textContent = isOpen ? "Hide" : "Show";
+      });
+
+      actions.appendChild(btn);
+      tdBtn.appendChild(actions);
+      tr.appendChild(tdBtn);
+
+      table.appendChild(tr);
     });
 
-    return { pots, leagues, schedules, matches: allMatches };
+    wrapper.appendChild(table);
+    return wrapper;
   }
 
-  function renderInitial(sortedTop60) {
+  function renderInitial(top60) {
     containerEl.innerHTML = "";
 
     const section = document.createElement("div");
     section.className = "group-section";
 
+    const header = document.createElement("div");
+    header.className = "league-title";
+
     const title = document.createElement("div");
     title.className = "group-title";
-    title.textContent = "CCL 2026 Main Stage — Draw (Top 60 by Elo)";
-    section.appendChild(title);
+    title.textContent = "CCL 2026 Main Stage — Draw";
+    header.appendChild(title);
 
-    const details = document.createElement("div");
-    details.className = "draw-details";
-    const dt = document.createElement("div");
-    dt.className = "draw-details-title";
-    dt.textContent = "Draw details";
-    const ol = document.createElement("ol");
-    ol.className = "draw-details-list";
+    const meta = document.createElement("div");
+    meta.className = "small-muted";
+    meta.textContent = `Top ${top60.length} by Elo`;
+    header.appendChild(meta);
 
-    [
-      "We take Top 60 players by Elo.",
-      "Players are split into 5 Elo pots (12 players each).",
-      "Each pot is randomly split into two leagues: Space and Earth (6+6).",
-      "Inside each league, every player gets 5 opponents: exactly 1 from each pot (including their own).",
-      "CSV is downloaded automatically after the draw."
-    ].forEach(t => {
-      const li = document.createElement("li");
-      li.textContent = t;
-      ol.appendChild(li);
-    });
+    section.appendChild(header);
 
-    details.appendChild(dt);
-    details.appendChild(ol);
-    section.appendChild(details);
-
-    const pots = splitIntoPots(sortedTop60);
+    // show initial pots BEFORE draw
+    const pots = splitIntoPots(top60);
     const potsWrap = document.createElement("div");
     potsWrap.className = "stage-tables";
-    for (let i = 0; i < POTS_COUNT; i++) {
-      potsWrap.appendChild(createPotTable(`Pot ${i + 1}`, pots[i], { showIndex: false }));
+    for (let potNumber = 1; potNumber <= POTS_COUNT; potNumber++) {
+      potsWrap.appendChild(createInitialPotTable(potNumber, pots[potNumber - 1]));
     }
     section.appendChild(potsWrap);
 
-    drawButtonEl = document.createElement("button");
+    const drawButtonEl = document.createElement("button");
     drawButtonEl.type = "button";
     drawButtonEl.className = "draw-action";
     drawButtonEl.textContent = "Start the draw";
@@ -451,67 +767,18 @@
       if (drawButtonEl.disabled) return;
       drawButtonEl.disabled = true;
 
-      const result = runMainStageDraw(sortedTop60);
-      renderResult(result);
-      downloadMainStageCsv(result.schedules, "CCL-2026-main-stage-draw.csv");
+      try {
+        const result = generateMainStageDrawWithConstraints(top60, { maxAttempts: 800 });
+        renderAfterDraw(result); // replaces initial pots (as requested)
+        downloadMainStageCsv(result.schedules, "CCL-2026-main-stage-draw.csv");
+      } catch (e) {
+        console.error(e);
+        showError("❌ Draw failed. Please refresh and try again.");
+      }
     });
 
     section.appendChild(drawButtonEl);
-
-    resultWrapperEl = document.createElement("div");
-    section.appendChild(resultWrapperEl);
-
     containerEl.appendChild(section);
-  }
-
-  function createOpponentsRevealRow(player, potNumber, opponents) {
-    const row = document.createElement("div");
-    row.className = "draw-match-row";
-
-    const left = document.createElement("div");
-    left.className = "draw-player-inline";
-    const potBadge = document.createElement("span");
-    potBadge.className = "pot-badge";
-    potBadge.textContent = `P${potNumber}`;
-    left.appendChild(potBadge);
-    left.appendChild(createPlayerInline(player, { withLink: true }));
-
-    const content = document.createElement("div");
-    content.className = "match-content";
-
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "match-reveal";
-    btn.textContent = "Show";
-
-    const oppWrap = document.createElement("div");
-    oppWrap.className = "match-players";
-
-    btn.addEventListener("click", () => {
-      if (btn.disabled) return;
-      btn.disabled = true;
-      content.innerHTML = "";
-
-      for (let pn = 1; pn <= POTS_COUNT; pn++) {
-        const opp = opponents[pn - 1];
-        const chip = document.createElement("span");
-        chip.className = "draw-player-inline";
-        const badge = document.createElement("span");
-        badge.className = "pot-badge";
-        badge.textContent = `P${pn}`;
-        chip.appendChild(badge);
-        chip.appendChild(createPlayerInline(opp, { withLink: true }));
-        oppWrap.appendChild(chip);
-      }
-
-      content.appendChild(oppWrap);
-    });
-
-    content.appendChild(btn);
-
-    row.appendChild(left);
-    row.appendChild(content);
-    return row;
   }
 
   function renderLeagueBlock(leagueName, leaguePots, schedules) {
@@ -528,54 +795,61 @@
 
     const meta = document.createElement("div");
     meta.className = "small-muted";
-    meta.textContent = `${LEAGUE_PLAYERS} players`;
+    meta.textContent = `${leaguePots.reduce((s, p) => s + p.length, 0)} players`;
     header.appendChild(meta);
 
     block.appendChild(header);
 
-    // Pot tables
-    const potsWrap = document.createElement("div");
-    potsWrap.className = "stage-tables";
-    for (let i = 0; i < POTS_COUNT; i++) {
-      potsWrap.appendChild(createPotTable(`Pot ${i + 1} (${leagueName})`, leaguePots[i], { showIndex: false }));
-    }
-    block.appendChild(potsWrap);
-
-    // Opponents
-    const oppTitle = document.createElement("div");
-    oppTitle.className = "group-title";
-    oppTitle.style.marginTop = "6px";
-    oppTitle.textContent = "Opponents (click Show)";
-    block.appendChild(oppTitle);
-
-    // Order rows by pot then Elo desc
-    const sorted = [...schedules]
-      .filter(r => r.league === leagueName)
-      .sort((a, b) => {
-        if (a.pot !== b.pot) return a.pot - b.pot;
-        return safeElo(b.player?.elo) - safeElo(a.player?.elo);
-      });
-
-    sorted.forEach(row => {
-      block.appendChild(createOpponentsRevealRow(row.player, row.pot, row.opponents));
+    const scheduleByPlayerKey = new Map();
+    schedules.filter(s => s.league === leagueName).forEach(s => {
+      scheduleByPlayerKey.set(getPlayerKey(s.player), s);
     });
 
+    const tablesWrap = document.createElement("div");
+    tablesWrap.className = "stage-tables";
+
+    for (let potNumber = 1; potNumber <= POTS_COUNT; potNumber++) {
+      tablesWrap.appendChild(
+        createLeaguePotTable(
+          potNumber,
+          leaguePots[potNumber - 1],
+          scheduleByPlayerKey
+        )
+      );
+    }
+
+    block.appendChild(tablesWrap);
     return block;
   }
 
-  function renderResult({ leagues, schedules }) {
-    if (!resultWrapperEl) return;
-    resultWrapperEl.innerHTML = "";
+  function renderAfterDraw(result) {
+    containerEl.innerHTML = "";
 
-    const wrap = document.createElement("div");
-    wrap.className = "stage-tables";
+    const section = document.createElement("div");
+    section.className = "group-section";
 
-    wrap.appendChild(renderLeagueBlock("Space", leagues.Space, schedules));
-    wrap.appendChild(renderLeagueBlock("Earth", leagues.Earth, schedules));
+    const header = document.createElement("div");
+    header.className = "league-title";
 
-    resultWrapperEl.appendChild(wrap);
+    const title = document.createElement("div");
+    title.className = "group-title";
+    title.textContent = "CCL 2026 Main Stage — Results";
+    header.appendChild(title);
+
+    const meta = document.createElement("div");
+    meta.className = "small-muted";
+    meta.textContent = "Use SHOW to reveal 5 opponents";
+    header.appendChild(meta);
+
+    section.appendChild(header);
+
+    section.appendChild(renderLeagueBlock("Space", result.leagues.Space, result.schedules));
+    section.appendChild(renderLeagueBlock("Earth", result.leagues.Earth, result.schedules));
+
+    containerEl.appendChild(section);
   }
 
+  // ---------- CSV ----------
   function downloadMainStageCsv(schedules, fileName) {
     if (!Array.isArray(schedules) || !schedules.length) return;
 
@@ -584,23 +858,20 @@
       "Pot",
       "Player",
       "Player ID",
+      "Country",
       "Elo",
-      "Opp(P1)",
-      "Opp(P1) ID",
-      "Opp(P2)",
-      "Opp(P2) ID",
-      "Opp(P3)",
-      "Opp(P3) ID",
-      "Opp(P4)",
-      "Opp(P4) ID",
-      "Opp(P5)",
-      "Opp(P5) ID"
+      "Opp(P1)", "Opp(P1) ID", "Opp(P1) Country",
+      "Opp(P2)", "Opp(P2) ID", "Opp(P2) Country",
+      "Opp(P3)", "Opp(P3) ID", "Opp(P3) Country",
+      "Opp(P4)", "Opp(P4) ID", "Opp(P4) Country",
+      "Opp(P5)", "Opp(P5) ID", "Opp(P5) Country"
     ];
 
     const rows = [header];
 
     const pName = (p) => (p && p.player) ? p.player : "";
     const pId = (p) => (p && p.player_id !== undefined && p.player_id !== null) ? String(p.player_id) : "";
+    const pCountry = (p) => (p && p.country) ? String(p.country) : "";
     const pElo = (p) => (p && p.elo !== undefined && p.elo !== null) ? String(p.elo) : "";
 
     schedules.forEach(r => {
@@ -610,12 +881,14 @@
         `Pot ${r.pot}`,
         pName(r.player),
         pId(r.player),
+        pCountry(r.player),
         pElo(r.player),
-        pName(opp[0]), pId(opp[0]),
-        pName(opp[1]), pId(opp[1]),
-        pName(opp[2]), pId(opp[2]),
-        pName(opp[3]), pId(opp[3]),
-        pName(opp[4]), pId(opp[4])
+
+        pName(opp[0]), pId(opp[0]), pCountry(opp[0]),
+        pName(opp[1]), pId(opp[1]), pCountry(opp[1]),
+        pName(opp[2]), pId(opp[2]), pCountry(opp[2]),
+        pName(opp[3]), pId(opp[3]), pCountry(opp[3]),
+        pName(opp[4]), pId(opp[4]), pCountry(opp[4]),
       ]);
     });
 
@@ -634,6 +907,7 @@
     URL.revokeObjectURL(url);
   }
 
+  // ---------- data load ----------
   function fetchDataAndInit() {
     fetch(DATA_URL)
       .then(r => {
@@ -643,7 +917,6 @@
       .then(data => {
         countries = data.countries || [];
 
-        // be tolerant to key name variations
         const tp = data.tournament_players || data.tournamentPlayers || data.tournament_players_open || [];
         tournamentPlayers = Array.isArray(tp) ? tp : [];
 
@@ -657,9 +930,8 @@
         });
 
         const top60 = sorted.slice(0, TOTAL_PLAYERS);
-
         if (top60.length < TOTAL_PLAYERS) {
-          showError(`❌ Not enough players for Main Stage draw. Need ${TOTAL_PLAYERS}, got ${top60.length}.`);
+          showError(`❌ Not enough players. Need ${TOTAL_PLAYERS}, got ${top60.length}.`);
           return;
         }
 
