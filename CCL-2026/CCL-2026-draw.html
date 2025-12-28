@@ -1,0 +1,680 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+  :root {
+    --main-bg-color: #A47864;
+    --hover-bg-color: #8F6553;
+    --accent-text-color: #fff;
+  }
+
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Montserrat', sans-serif; }
+
+  .group-section { margin: 5px 0; }
+  .stage-tables {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .stage-table-wrapper {
+    flex: 1 1 340px;
+    min-width: 280px;
+  }
+  .draw-details { margin-top: 12px; font-size: 14px; line-height: 1.5; }
+  .draw-details-title { font-weight: 600; margin-bottom: 6px; }
+  .draw-details-list { padding-left: 16px; margin: 0; }
+
+  .draw-group-block {
+    margin-top: 12px;
+    padding: 8px;
+    border: 1px solid #e0d5cf;
+    border-radius: 4px;
+    background-color: #faf6f4;
+  }
+
+  .draw-match-row {
+    margin-top: 6px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .draw-player-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .match-reveal {
+    border: none;
+    border-radius: 4px;
+    padding: 2px 20px;
+    background-color: #d9e7f2;
+    color: #1d3c56;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    min-width: 80px;
+    text-transform: uppercase;
+  }
+
+  .match-reveal:disabled {
+    opacity: 0.8;
+    cursor: default;
+  }
+
+  .match-players {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .match-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .draw-action {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 6px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    background-color: #A47864;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  .draw-action:hover { background-color: var(--hover-bg-color); }
+
+  .draw-action:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  .group-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 3px;
+    color: #222;
+  }
+
+  .group-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    overflow: hidden;
+  }
+
+  .group-table th {
+    background-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+    font-weight: 600;
+    padding: 6px;
+    font-size: 15px;
+    text-align: center;
+  }
+
+  .group-table td {
+    padding: 6px;
+    font-size: 15px;
+    line-height: 17px;
+    border-top: 1px solid #ccc;
+    text-align: center;
+    background-color: #fff;
+  }
+
+  .group-table td a {
+    color: #333;
+    text-decoration: none;
+    word-break: break-word;
+  }
+  .group-table td a:hover { color: #0277BD; }
+
+  .players-name-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px 7px;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    width: 100%;
+  }
+
+  .country-flag {
+    height: auto;
+    width: 20px;
+    object-fit: cover;
+  }
+
+  .pot-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: #eee;
+    color: #333;
+    border: 1px solid #ddd;
+  }
+
+  .league-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+
+  .small-muted {
+    font-size: 12px;
+    color: #555;
+    font-weight: 500;
+  }
+</style>
+
+<div id="tab-players-content"></div>
+
+<script>
+  const CURRENT_TOURNAMENT_ID = "CCL-2026";
+  const DATA_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json";
+
+  const LEAGUES = ["Space", "Earth"];
+  const POTS_COUNT = 5;
+  const TOTAL_PLAYERS = 60;
+  const POT_SIZE = TOTAL_PLAYERS / POTS_COUNT; // 12
+  const LEAGUE_PLAYERS = TOTAL_PLAYERS / 2; // 30
+  const LEAGUE_POT_SIZE = POT_SIZE / 2; // 6
+
+  let countries = [];
+  let tournamentPlayers = [];
+  let containerEl = null;
+
+  let drawButtonEl = null;
+  let resultWrapperEl = null;
+
+  function showError(message) {
+    if (!containerEl) return;
+    containerEl.textContent = message;
+  }
+
+  function shuffleArray(items) {
+    const array = [...items];
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  function safeElo(v) {
+    const n = Number.parseFloat(v);
+    return Number.isFinite(n) ? n : -Infinity;
+  }
+
+  function getPlayerKey(p) {
+    if (!p) return "unknown";
+    if (p.player_id !== undefined && p.player_id !== null && String(p.player_id).trim() !== "") {
+      return `id:${String(p.player_id).trim()}`;
+    }
+    return `name:${String(p.player || "").trim().toLowerCase()}`;
+  }
+
+  function createPlayerInline(entry, { withLink = true } = {}) {
+    const wrapper = document.createElement("span");
+    wrapper.className = "draw-player-inline";
+
+    const countryName = entry?.country || "";
+    if (countryName) {
+      const countryObject = (countries || []).find(c => c.team === countryName);
+      if (countryObject && countryObject.flag) {
+        const flagImg = document.createElement("img");
+        flagImg.src = countryObject.flag;
+        flagImg.className = "country-flag";
+        flagImg.alt = countryName;
+        wrapper.appendChild(flagImg);
+      }
+    }
+
+    if (withLink && entry?.player_id) {
+      const a = document.createElement("a");
+      a.href = `https://boardgamearena.com/player?id=${entry.player_id}`;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = entry?.player || "-";
+      wrapper.appendChild(a);
+    } else {
+      const span = document.createElement("span");
+      span.textContent = entry?.player || "-";
+      wrapper.appendChild(span);
+    }
+    return wrapper;
+  }
+
+  function createPotTable(titleText, entries, { showIndex = false } = {}) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "stage-table-wrapper";
+
+    const title = document.createElement("div");
+    title.className = "group-title";
+    title.textContent = titleText;
+    wrapper.appendChild(title);
+
+    const table = document.createElement("table");
+    table.className = "group-table";
+
+    const headTr = document.createElement("tr");
+    const headers = showIndex ? ["#", "Player", "Elo"] : ["Player", "Elo"];
+    headers.forEach((label, idx) => {
+      const th = document.createElement("th");
+      th.textContent = label;
+      if (label === "Player") th.style.textAlign = "left";
+      headTr.appendChild(th);
+    });
+    table.appendChild(headTr);
+
+    entries.forEach((p, idx) => {
+      const tr = document.createElement("tr");
+
+      if (showIndex) {
+        const tdIdx = document.createElement("td");
+        tdIdx.textContent = String(idx + 1);
+        tr.appendChild(tdIdx);
+      }
+
+      const tdPlayer = document.createElement("td");
+      tdPlayer.style.textAlign = "left";
+      const wrap = document.createElement("div");
+      wrap.className = "players-name-wrap";
+      wrap.appendChild(createPlayerInline(p, { withLink: true }));
+      tdPlayer.appendChild(wrap);
+      tr.appendChild(tdPlayer);
+
+      const tdElo = document.createElement("td");
+      tdElo.textContent = (p.elo !== undefined && p.elo !== null && p.elo !== "") ? p.elo : "-";
+      tr.appendChild(tdElo);
+
+      table.appendChild(tr);
+    });
+
+    wrapper.appendChild(table);
+    return wrapper;
+  }
+
+  function splitIntoPots(sortedTop60) {
+    const pots = [];
+    for (let i = 0; i < POTS_COUNT; i++) {
+      pots.push(sortedTop60.slice(i * POT_SIZE, (i + 1) * POT_SIZE));
+    }
+    return pots;
+  }
+
+  function setOpponent(mapByPlayer, player, potNumber, opponent) {
+    const key = getPlayerKey(player);
+    if (!mapByPlayer.has(key)) mapByPlayer.set(key, new Map());
+    const potMap = mapByPlayer.get(key);
+    potMap.set(potNumber, opponent);
+  }
+
+  function runMainStageDraw(sortedTop60) {
+    const pots = splitIntoPots(sortedTop60); // 5 x 12
+
+    // Randomly split each pot into halves: Space/Earth
+    const leagues = {
+      Space: Array.from({ length: POTS_COUNT }, () => []),
+      Earth: Array.from({ length: POTS_COUNT }, () => []),
+    };
+
+    for (let potIdx = 0; potIdx < POTS_COUNT; potIdx++) {
+      const shuffled = shuffleArray(pots[potIdx]);
+      leagues.Space[potIdx] = shuffled.slice(0, LEAGUE_POT_SIZE);
+      leagues.Earth[potIdx] = shuffled.slice(LEAGUE_POT_SIZE, POT_SIZE);
+    }
+
+    // Build matches and per-player opponents
+    const allMatches = []; // {league, potA, potB, p1, p2}
+    const schedules = [];  // {league, pot, player, opponents[1..5]}
+    const opponentsMapByLeague = {
+      Space: new Map(),
+      Earth: new Map()
+    };
+
+    LEAGUES.forEach(leagueName => {
+      const leaguePots = leagues[leagueName]; // 5 x 6
+      const oppMap = opponentsMapByLeague[leagueName];
+
+      // 1) within-pot pairings (each player gets opponent from own pot)
+      for (let i = 0; i < POTS_COUNT; i++) {
+        const arr = shuffleArray(leaguePots[i]);
+        for (let k = 0; k < arr.length; k += 2) {
+          const p1 = arr[k];
+          const p2 = arr[k + 1];
+          allMatches.push({ league: leagueName, potA: i + 1, potB: i + 1, p1, p2, kind: "intra" });
+          setOpponent(oppMap, p1, i + 1, p2);
+          setOpponent(oppMap, p2, i + 1, p1);
+        }
+      }
+
+      // 2) cross-pot perfect matchings (each player gets 1 opponent from each other pot)
+      for (let i = 0; i < POTS_COUNT; i++) {
+        for (let j = i + 1; j < POTS_COUNT; j++) {
+          const a = shuffleArray(leaguePots[i]);
+          const b = shuffleArray(leaguePots[j]);
+          for (let k = 0; k < LEAGUE_POT_SIZE; k++) {
+            const p1 = a[k];
+            const p2 = b[k];
+            allMatches.push({ league: leagueName, potA: i + 1, potB: j + 1, p1, p2, kind: "cross" });
+            setOpponent(oppMap, p1, j + 1, p2);
+            setOpponent(oppMap, p2, i + 1, p1);
+          }
+        }
+      }
+
+      // Build schedule rows (1 row per player)
+      for (let potNumber = 1; potNumber <= POTS_COUNT; potNumber++) {
+        leaguePots[potNumber - 1].forEach(player => {
+          const pm = oppMap.get(getPlayerKey(player)) || new Map();
+          const opponents = [];
+          for (let pn = 1; pn <= POTS_COUNT; pn++) {
+            opponents.push(pm.get(pn) || null);
+          }
+          schedules.push({ league: leagueName, pot: potNumber, player, opponents });
+        });
+      }
+    });
+
+    return { pots, leagues, schedules, matches: allMatches };
+  }
+
+  function renderInitial(sortedTop60) {
+    containerEl.innerHTML = "";
+
+    const section = document.createElement("div");
+    section.className = "group-section";
+
+    const title = document.createElement("div");
+    title.className = "group-title";
+    title.textContent = "CCL 2026 Main Stage — Draw (Top 60 by Elo)";
+    section.appendChild(title);
+
+    const details = document.createElement("div");
+    details.className = "draw-details";
+    const dt = document.createElement("div");
+    dt.className = "draw-details-title";
+    dt.textContent = "Draw details";
+    const ol = document.createElement("ol");
+    ol.className = "draw-details-list";
+
+    [
+      "We take Top 60 players by Elo.",
+      "Players are split into 5 Elo pots (12 players each).",
+      "Each pot is randomly split into two leagues: Space and Earth (6+6).",
+      "Inside each league, every player gets 5 opponents: exactly 1 from each pot (including their own).",
+      "CSV is downloaded automatically after the draw."
+    ].forEach(t => {
+      const li = document.createElement("li");
+      li.textContent = t;
+      ol.appendChild(li);
+    });
+
+    details.appendChild(dt);
+    details.appendChild(ol);
+    section.appendChild(details);
+
+    const pots = splitIntoPots(sortedTop60);
+    const potsWrap = document.createElement("div");
+    potsWrap.className = "stage-tables";
+    for (let i = 0; i < POTS_COUNT; i++) {
+      potsWrap.appendChild(createPotTable(`Pot ${i + 1}`, pots[i], { showIndex: false }));
+    }
+    section.appendChild(potsWrap);
+
+    drawButtonEl = document.createElement("button");
+    drawButtonEl.type = "button";
+    drawButtonEl.className = "draw-action";
+    drawButtonEl.textContent = "Start the draw";
+    drawButtonEl.disabled = false;
+
+    drawButtonEl.addEventListener("click", () => {
+      if (drawButtonEl.disabled) return;
+      drawButtonEl.disabled = true;
+
+      const result = runMainStageDraw(sortedTop60);
+      renderResult(result);
+      downloadMainStageCsv(result.schedules, "CCL-2026-main-stage-draw.csv");
+    });
+
+    section.appendChild(drawButtonEl);
+
+    resultWrapperEl = document.createElement("div");
+    section.appendChild(resultWrapperEl);
+
+    containerEl.appendChild(section);
+  }
+
+  function createOpponentsRevealRow(player, potNumber, opponents) {
+    const row = document.createElement("div");
+    row.className = "draw-match-row";
+
+    const left = document.createElement("div");
+    left.className = "draw-player-inline";
+    const potBadge = document.createElement("span");
+    potBadge.className = "pot-badge";
+    potBadge.textContent = `P${potNumber}`;
+    left.appendChild(potBadge);
+    left.appendChild(createPlayerInline(player, { withLink: true }));
+
+    const content = document.createElement("div");
+    content.className = "match-content";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "match-reveal";
+    btn.textContent = "Show";
+
+    const oppWrap = document.createElement("div");
+    oppWrap.className = "match-players";
+
+    btn.addEventListener("click", () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      content.innerHTML = "";
+
+      for (let pn = 1; pn <= POTS_COUNT; pn++) {
+        const opp = opponents[pn - 1];
+        const chip = document.createElement("span");
+        chip.className = "draw-player-inline";
+        const badge = document.createElement("span");
+        badge.className = "pot-badge";
+        badge.textContent = `P${pn}`;
+        chip.appendChild(badge);
+        chip.appendChild(createPlayerInline(opp, { withLink: true }));
+        oppWrap.appendChild(chip);
+      }
+
+      content.appendChild(oppWrap);
+    });
+
+    content.appendChild(btn);
+
+    row.appendChild(left);
+    row.appendChild(content);
+    return row;
+  }
+
+  function renderLeagueBlock(leagueName, leaguePots, schedules) {
+    const block = document.createElement("div");
+    block.className = "draw-group-block";
+
+    const header = document.createElement("div");
+    header.className = "league-title";
+
+    const t = document.createElement("div");
+    t.className = "group-title";
+    t.textContent = `${leagueName} League`;
+    header.appendChild(t);
+
+    const meta = document.createElement("div");
+    meta.className = "small-muted";
+    meta.textContent = `${LEAGUE_PLAYERS} players`;
+    header.appendChild(meta);
+
+    block.appendChild(header);
+
+    // Pot tables
+    const potsWrap = document.createElement("div");
+    potsWrap.className = "stage-tables";
+    for (let i = 0; i < POTS_COUNT; i++) {
+      potsWrap.appendChild(createPotTable(`Pot ${i + 1} (${leagueName})`, leaguePots[i], { showIndex: false }));
+    }
+    block.appendChild(potsWrap);
+
+    // Opponents
+    const oppTitle = document.createElement("div");
+    oppTitle.className = "group-title";
+    oppTitle.style.marginTop = "6px";
+    oppTitle.textContent = "Opponents (click Show)";
+    block.appendChild(oppTitle);
+
+    // Order rows by pot then Elo desc
+    const sorted = [...schedules]
+      .filter(r => r.league === leagueName)
+      .sort((a, b) => {
+        if (a.pot !== b.pot) return a.pot - b.pot;
+        return safeElo(b.player?.elo) - safeElo(a.player?.elo);
+      });
+
+    sorted.forEach(row => {
+      block.appendChild(createOpponentsRevealRow(row.player, row.pot, row.opponents));
+    });
+
+    return block;
+  }
+
+  function renderResult({ leagues, schedules }) {
+    if (!resultWrapperEl) return;
+    resultWrapperEl.innerHTML = "";
+
+    const wrap = document.createElement("div");
+    wrap.className = "stage-tables";
+
+    wrap.appendChild(renderLeagueBlock("Space", leagues.Space, schedules));
+    wrap.appendChild(renderLeagueBlock("Earth", leagues.Earth, schedules));
+
+    resultWrapperEl.appendChild(wrap);
+  }
+
+  function downloadMainStageCsv(schedules, fileName) {
+    if (!Array.isArray(schedules) || !schedules.length) return;
+
+    const header = [
+      "League",
+      "Pot",
+      "Player",
+      "Player ID",
+      "Elo",
+      "Opp(P1)",
+      "Opp(P1) ID",
+      "Opp(P2)",
+      "Opp(P2) ID",
+      "Opp(P3)",
+      "Opp(P3) ID",
+      "Opp(P4)",
+      "Opp(P4) ID",
+      "Opp(P5)",
+      "Opp(P5) ID"
+    ];
+
+    const rows = [header];
+
+    const pName = (p) => (p && p.player) ? p.player : "";
+    const pId = (p) => (p && p.player_id !== undefined && p.player_id !== null) ? String(p.player_id) : "";
+    const pElo = (p) => (p && p.elo !== undefined && p.elo !== null) ? String(p.elo) : "";
+
+    schedules.forEach(r => {
+      const opp = r.opponents || [];
+      rows.push([
+        r.league || "",
+        `Pot ${r.pot}`,
+        pName(r.player),
+        pId(r.player),
+        pElo(r.player),
+        pName(opp[0]), pId(opp[0]),
+        pName(opp[1]), pId(opp[1]),
+        pName(opp[2]), pId(opp[2]),
+        pName(opp[3]), pId(opp[3]),
+        pName(opp[4]), pId(opp[4])
+      ]);
+    });
+
+    const csvContent = rows
+      .map(row => row.map(cell => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName || "CCL-2026-main-stage-draw.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function fetchDataAndInit() {
+    fetch(DATA_URL)
+      .then(r => {
+        if (!r.ok) throw new Error("Failed to fetch data");
+        return r.json();
+      })
+      .then(data => {
+        countries = data.countries || [];
+
+        // be tolerant to key name variations
+        const tp = data.tournament_players || data.tournamentPlayers || data.tournament_players_open || [];
+        tournamentPlayers = Array.isArray(tp) ? tp : [];
+
+        const filtered = tournamentPlayers.filter(el => el && el.tournament_id === CURRENT_TOURNAMENT_ID);
+
+        const sorted = [...filtered].sort((a, b) => {
+          const ea = safeElo(a.elo);
+          const eb = safeElo(b.elo);
+          if (ea !== eb) return eb - ea;
+          return String(a.player || "").localeCompare(String(b.player || ""), undefined, { sensitivity: "base" });
+        });
+
+        const top60 = sorted.slice(0, TOTAL_PLAYERS);
+
+        if (top60.length < TOTAL_PLAYERS) {
+          showError(`❌ Not enough players for Main Stage draw. Need ${TOTAL_PLAYERS}, got ${top60.length}.`);
+          return;
+        }
+
+        renderInitial(top60);
+      })
+      .catch(err => {
+        console.error(err);
+        showError("❌ Failed to load tournament data");
+      });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    containerEl = document.getElementById("tab-players-content");
+    if (!containerEl) return;
+    containerEl.textContent = "Завантаження...";
+    fetchDataAndInit();
+  });
+</script>
