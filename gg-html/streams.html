@@ -1,0 +1,2647 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<!-- Material Icons Round for rating stars -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Icons+Round" rel="stylesheet">
+<style>
+body {
+    font-family: 'Montserrat', sans-serif;
+}
+code {
+    color: #444444;
+    font-size: 11px;
+    background-color: transparent;
+}
+@media (max-width: 600px) {
+    code {
+        color: #444444;
+        font-size: 9px;
+        background-color: transparent;
+    } 
+}
+.history-score {
+  display: inline-block;
+  min-width: 50px;
+}
+
+.elo-rating{
+    color: #fff;
+    font-weight: bold;
+    border-radius: 2px;
+    height: 14px;
+    padding: 1px 5px;
+}
+.gamerank_apprentice,.gamerank_beginner {
+    background-color: #74bed1;
+}
+
+.gamerank_average {
+    background-color: #84b8de;
+}
+
+.gamerank_good {
+    background-color: #94acd6;
+}
+
+.gamerank_strong {
+    background-color: #9ba5d0;
+}
+
+.gamerank_expert {
+    background-color: #a99bc9;
+}
+
+.gamerank_master {
+    background-color: #b593c4;
+}
+.section-title {
+    font-size: 20px;
+    font-style: normal;
+    font-weight: 700;
+    color: #222;
+    margin: 15px 0 10px 0;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* Sort toggle on Today row */
+.sort-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.sort-toggle__label {
+  color: #555;
+  font-weight: 600;
+}
+.sort-toggle__options {
+  display: inline-flex;
+  background: none;
+  border-radius: 3px;
+  padding: 2px;
+}
+.sort-toggle__option {
+  padding: 2px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  color: #555;
+  user-select: none;
+}
+.sort-toggle__option.active {
+  background: #fff;
+  color: #111;
+  box-shadow: 0 0 0 1px #ddd inset;
+}
+
+/* Rating help (star + info) on Today row */
+.rating-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+.rating-star {
+  font-size: 12px;
+  line-height: 1;
+  color: #DAA520; /* gold */
+}
+.rating-info-btn {
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+}
+.rating-tooltip {
+  position: absolute;
+  top: 18px;
+  right: 0;
+  z-index: 10;
+  display: none;
+  width: 300px; /* enforce width so it doesn't shrink to parent size */
+  max-width: 90vw; /* clamp on very small screens */
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: #fff;
+  color: #222;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 400;
+  white-space: normal; /* allow wrapping */
+}
+@media (max-width: 600px) {
+  .rating-tooltip { width: 90vw; }
+}
+.tournament-card {
+    background: white;
+    border-radius: 4px;
+    box-shadow: 1.4142px 1.4142px 2px 0 #b2b2b2;
+    margin-bottom: 20px;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/*.tournament-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 2px 4px 8px rgba(0, 0, 0, 0.1);
+}*/
+
+  .match-row {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    height: auto;
+    background-color: white;
+    border-top: 1px solid #ccc;
+    padding: 4px 8px;
+    box-sizing: border-box;
+    position: relative; /* allows top-right badge */
+  }
+
+  .match-time {
+    width: calc(46px * var(--matches-scale));
+    min-width: calc(46px * var(--matches-scale));
+    text-align: center;
+    font-size: 12px;
+    line-height: 14px;
+    font-weight: bold;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+.match-time.match-time--rating-only,
+.match-time.match-time--single {
+  width: calc(28px * var(--matches-scale));
+  min-width: calc(28px * var(--matches-scale));
+}
+
+  .match-rating {
+    font-size: 0; /* use icon font sizes instead */
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+
+  /* Size stars nicely for compact rows */
+  .match-rating .material-icons-round {
+    font-size: calc(9.5px * var(--matches-scale));
+    line-height: calc(8px * var(--matches-scale));
+    vertical-align: middle;
+    letter-spacing: -1.5px;
+  }
+
+  /* Special style for rating 6: gold stars only */
+  .match-rating--gold .material-icons-round {
+    color: #DAA520;
+    font-size: calc(10.5px * var(--matches-scale));
+    letter-spacing: -2px;
+  }
+
+  .match-time-text {
+    font-size: calc(12px * var(--matches-scale));
+    line-height: calc(14px * var(--matches-scale));
+    color: #333; /* keep time color independent from rating color */
+  }
+
+  .match-format-badge {
+    margin-top: 2px;
+    padding: calc(2px * var(--matches-scale)) calc(4px * var(--matches-scale));
+    border-radius: 2px;
+    font-size: calc(10px * var(--matches-scale));
+    line-height: calc(10px * var(--matches-scale));
+    font-weight: 600;
+  }
+
+  .match-format-badge.bo1 {
+    background-color: #eee;
+    color: #333;
+  }
+
+  .match-format-badge.bo3 {
+    background-color: #d7eaff;
+    color: #073654;
+  }
+
+  .match-format-badge.bo5 {
+    background-color: #fce0e0;
+    color: #590f0f;
+  }
+
+  .divider-vertical {
+    width: 2px;
+    background-color: #dfdfdf;
+    margin: 0 6px;
+    align-self: stretch; /* stretch full row height even when row is auto-height */
+    border-radius: 1px;
+  }
+
+  .teams {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    font-size: calc(13px * var(--matches-scale));
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .teams-stream {
+    flex-direction: column;
+    justify-content: center;
+    font-size: calc(13px * var(--matches-scale));
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .team-row {
+    display: flex;
+    align-items: center;
+    font-size: calc(16px * var(--matches-scale));
+    gap: 6px;
+  }
+
+  .team-row span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .team-flag {
+    width: calc(20px * var(--matches-scale));
+    height: calc(20px * var(--matches-scale));
+    object-fit: contain;
+  }
+
+  .duel-players {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    font-size: calc(13px * var(--matches-scale));
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .players-stream {
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .duel-player-row {
+    display: flex;
+    align-items: center;
+    font-size: calc(16px * var(--matches-scale));
+    gap: 6px;
+  }
+
+  .duel-player-row span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .duel-player-avatar {
+    height: calc(16px * var(--matches-scale));
+    width: calc(16px * var(--matches-scale));
+    object-fit: contain;
+    border: 0.5px solid #444;
+    border-radius: 2px;
+    margin-top: 1px;
+    margin-bottom: 1px;
+  }
+  .duel-player-avatar.duel-player-avatar--individual {
+    width: calc(18px * var(--matches-scale));
+    height: auto;
+    border: none;
+  }
+
+  .duel-player-row a {
+    color: inherit;
+    text-decoration: none;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .duel-player-row a:hover {
+    color: #0277BD;
+    text-decoration: none;
+  }
+
+  .match-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .match-horizontal-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+  }
+  .match-horizontal__content {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 12px;
+    width: 100%;
+  }
+  .matches-width-300 .match-horizontal__content {
+    column-gap: 8px;
+  }
+.match-horizontal__teams {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.matches-width-300 .match-horizontal__teams {
+  gap: 8px;
+}
+  .match-horizontal__team {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: calc(16px * var(--matches-scale));
+    min-width: 0;
+  }
+  .match-horizontal__team span,
+  .match-horizontal__team a {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+    color: inherit;
+    text-decoration: none;
+  }
+  .match-horizontal__team img {
+    width: calc(20px * var(--matches-scale));
+    height: calc(20px * var(--matches-scale));
+    object-fit: contain;
+  }
+  .match-horizontal__team--right {
+    flex-direction: row-reverse;
+    text-align: right;
+  }
+  .match-horizontal__score {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: calc(18px * var(--matches-scale));
+    font-weight: bold;
+    min-width: 40px;
+    justify-content: center;
+  }
+  .match-horizontal__score--text {
+    font-size: calc(18px * var(--matches-scale));
+    min-width: auto;
+  }
+  .match-horizontal__score--separator {
+    min-width: auto;
+    font-weight: 400;
+  }
+  .match-horizontal__extras {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .matches-width-300 .match-horizontal__extras {
+    gap: 2px;
+  }
+  #matches-container.match-orientation-horizontal .match-horizontal__team span,
+  #matches-container.match-orientation-horizontal .match-horizontal__team a {
+    white-space: normal;
+    text-overflow: clip;
+    max-width: none;
+  }
+
+  .live-icon {
+    width: calc(30px * var(--matches-scale));
+    height: auto;
+  }
+  .matches-width-300 .live-icon {
+    width: 14px;
+  }
+
+  .score-box.match-score {
+    width: calc(13px * var(--matches-scale));
+    text-align: center;
+    font-weight: bold;
+    font-size: calc(18px * var(--matches-scale));
+    line-height: calc(20px * var(--matches-scale));
+  }
+
+  .score-box.duel-score {
+    width: calc(13px * var(--matches-scale));
+    text-align: center;
+    font-weight: bold;
+    font-size: calc(16px * var(--matches-scale));
+    line-height: calc(20px * var(--matches-scale));
+    margin-right: calc(7px * var(--matches-scale));
+  }
+
+  .score-box-stream {
+    margin: 0 4px 0 12px;
+    width: calc(13px * var(--matches-scale));
+    text-align: center;
+    font-weight: bold;
+    font-size: calc(18px * var(--matches-scale));
+    line-height: calc(20px * var(--matches-scale));
+  }
+  
+@media (min-width: 601px) {
+  .score-box.match-score {
+    margin-left: calc(15px * var(--matches-scale));
+  }
+  .score-box.duel-score {
+    margin-left: calc(15px * var(--matches-scale));
+  }
+}
+.matches-width-300 .score-box.match-score,
+.matches-width-300 .score-box.duel-score {
+  margin-left: calc(6px * var(--matches-scale));
+}
+
+  .score-box-alt {
+    width: calc(20px * var(--matches-scale));
+    text-align: center;
+    font-size: calc(14px * var(--matches-scale));
+    line-height: calc(20px * var(--matches-scale));
+  }
+  .score-box-alt-stream {
+    flex-grow: 1;
+    display: flex;
+    width: calc(20px * var(--matches-scale));
+    text-align: center;
+    font-size: calc(14px * var(--matches-scale));
+    line-height: calc(20px * var(--matches-scale));
+  }
+
+  .stream-icon {
+    width: 22px;
+    border-radius: 3px;
+    border: 0.5px solid #444;
+    height: auto;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+  }
+
+  .stream-icon:hover {
+    opacity: 1;
+  }
+
+  .stream-score-spacer {
+    width: 30px;
+  }
+
+  @media (max-width: 600px) {
+    .stream-score-spacer {
+      width: 0;
+    }
+  }
+
+  .tournament-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: auto;
+    background-color: white;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 6px 8px;
+  }
+
+  .tournament-header__right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  .matches-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #333;
+    padding: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: color 0.2s ease, transform 0.2s ease;
+  }
+
+  .matches-filter-toggle:hover,
+  .matches-filter-toggle:focus-visible {
+    color: #000;
+    transform: scale(1.05);
+    outline: none;
+  }
+
+  .matches-filter-panel {
+    overflow: hidden;
+    background-color: #f0f6fb;
+    border-bottom: 1px solid #c5d8e6;
+    transition: height 0.3s ease, padding 0.3s ease;
+    height: 0;
+    padding: 0 8px;
+  }
+
+  .matches-filter-panel.open {
+    border-bottom-color: #b7ccdd;
+  }
+
+  .matches-filter-options {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 7px 0;
+    flex-wrap: wrap;
+  }
+
+  .matches-filter-flag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    padding: 2px;
+    width: 28px;
+    height: 20px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  .matches-filter-flag:hover,
+  .matches-filter-flag:focus-visible {
+    border-color: #a5b7c5;
+    box-shadow: 1.2px 1.2px 2px rgba(0, 0, 0, 0.2);
+    outline: none;
+    transform: translateY(-1px);
+  }
+
+  .matches-filter-flag.active {
+    border-color: #2C6DA3;
+    box-shadow: 0 0 0 1px rgba(44, 109, 163, 0.4);
+  }
+
+  .matches-filter-flag img {
+    width: 24px;
+    height: 16px;
+    object-fit: contain;
+    display: block;
+  }
+
+  /* Right-side controls in tournament header (badge + chevron) */
+  .results-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Count badge for finished matches */
+  .results-count-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 9999px;
+    background-color: #2C6DA3;
+    color: #fff;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .tournament-header a,
+  .tournament-header__title {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: inherit;
+    gap: 6px;
+  }
+
+  /* Time mode: thin separators between matches */
+  .time-mode-separator {
+    height: 1px;
+    background-color: #ccc;
+    margin: 0;
+  }
+
+  /* In Time mode, suppress built-in match top borders */
+  .time-mode .match-row {
+    border-top: none;
+    padding: 1px 8px 4px 8px;
+  }
+
+
+  /* Time mode: compact tournament header styles */
+  .time-mode .tournament-header {
+    padding: 6px 8px 1px 8px; 
+    font-size: calc(11px * var(--matches-scale));
+    color: #555;      /* tournament name color */
+  }
+  .time-mode .tournament-header a,
+  .time-mode .tournament-header__title {
+    color: #555;      /* ensure link inherits the color */
+    font-size: calc(10px * var(--matches-scale));
+  }
+  .time-mode .tournament-icon {
+    width: calc(14px * var(--matches-scale));
+    height: calc(14px * var(--matches-scale));
+  }
+
+  .tournament-icon {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+  }
+.tournament-header__title span {
+  font-size: 14px;
+  line-height: 1.1;
+}
+  .matches-size-medium .tournament-icon {
+    width: 44px;
+    height: 44px;
+  }
+  .matches-size-large .tournament-icon {
+    width: 55px;
+    height: 55px;
+  }
+  .matches-size-medium .tournament-header__title span {
+    font-size: 16px;
+    line-height: 1.05;
+  }
+.matches-size-large .tournament-header__title span {
+  font-size: 17px;
+  line-height: 1.05;
+}
+
+#matches-container.matches-width-300 .tournament-header__title span {
+  line-height: 1.1;
+}
+#matches-container.matches-width-500 .tournament-header__title span {
+  line-height: 1.32;
+}
+#matches-container.matches-width-100 .tournament-header__title span {
+  line-height: 1.43;
+}
+
+  .lineup__overview {
+      padding: 10px 0;
+      line-height: calc(22px * var(--matches-scale));
+      font-size: calc(14px * var(--matches-scale));
+  }
+  
+  @media (max-width: 600px) {
+      .lineup__overview {
+        font-size: calc(13px * var(--matches-scale));
+        line-height: calc(18px * var(--matches-scale));
+      }
+    }
+    
+  @media (max-width: 600px) {
+  .lineup td a {
+    word-break: break-word;
+    white-space: normal;
+    }
+  }
+  
+.lineup {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+  background-color: #f5f5f5;
+}
+
+/* Collapsible container for finished duel results */
+.results-collapsible {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+  
+}
+
+/* Inner wrapper for finished duel results */
+.results-collapsible__inner {
+  padding: 0px 0;
+  line-height: 22px;
+}
+
+.lineup td, th {
+    padding: 0px 2px;
+}
+
+.lineup a {
+  color: #333333;
+  text-decoration: none;
+}
+
+.lineup a:hover {
+  color: #146997;
+}
+
+.lineup a:active {
+  color: #333333;
+}
+
+.chevron {
+  cursor: pointer;
+  font-size: 16px;
+  user-select: none;
+  transition: transform 0.3s ease;
+  transform: rotate(180deg);
+}
+
+/* Last Results: grid for duel matches (2 per row desktop, 1 per row mobile) */
+.lastresults-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 600px) {
+  .lastresults-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Трішки ущільнимо ряд для компактних дуелей (опціонально) */
+.match-row.duel-compact {
+  min-height: 48px;
+  height: auto;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+}
+
+/* Playoffs round badge */
+.playoff-round-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background-color: #ee9a4b; /* orange */
+  color: #ffffff;
+  font-size: calc(10px * var(--matches-scale));
+  line-height: calc(13px * var(--matches-scale));
+  font-weight: 400;
+  padding: 0 calc(6px * var(--matches-scale));
+  border-radius: 0 0 0 3px; /* only bottom-left corner rounded */
+  z-index: 5;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.playoff-round-badge.individual-badge {
+  font-weight: 600;
+  padding: calc(1px * var(--matches-scale)) calc(6px * var(--matches-scale));
+  border-radius: 0 0 0 6px;
+  letter-spacing: 0.4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.playoff-round-badge.individual-stage-q1 {
+  background-color: #8ec5ff;
+  color: #0b3555;
+}
+
+.playoff-round-badge.individual-stage-q2 {
+  background-color: #bdf4d1;
+  color: #0c4021;
+}
+
+.playoff-round-badge.individual-stage-q3 {
+  background-color: #d8c8ff;
+  color: #2f1a57;
+}
+
+.playoff-round-badge.individual-stage-q4 {
+  background-color: #ffc9ce;
+  color: #61111f;
+}
+
+/* When badge present, drop streams slightly below it */
+.match-right.under-badge {
+  margin-top: 12px;
+  }
+
+  /* Loading indicator */
+.loading-indicator {
+  display: none;
+}
+:root {
+  --matches-scale: 1;
+}
+
+.matches-size-medium {
+  --matches-scale: 1.15;
+}
+
+.matches-size-large {
+  --matches-scale: 1.3;
+}
+  .matches-width-300 .match-row {
+  padding: 22px 12px 8px 12px;
+}
+
+.matches-empty {
+    padding: 24px 12px;
+    text-align: center;
+    font-size: 14px;
+    color: #555;
+    font-weight: 600;
+  }
+  .matches-settings {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 1px 1px 3px rgba(0,0,0,0.08);
+    padding: 10px 14px;
+    margin: 0 0 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .matches-settings__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #222;
+  }
+  .matches-settings__content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+  }
+  .matches-settings__content-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #555;
+  }
+  .content-toggle-group {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 12px;
+  }
+  .content-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #222;
+  }
+  .content-toggle input {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+  }
+  .tournament-header--hidden {
+    display: none !important;
+  }
+  .matches-settings__size {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .size-toggle-group {
+    display: inline-flex;
+    gap: 6px;
+  }
+  .size-btn {
+    border: 1px solid #d0d0d0;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    background: #fff;
+    color: #333;
+    transition: all 0.2s ease;
+  }
+  .size-btn--active {
+    background: #333;
+    color: #fff;
+    border-color: #333;
+  }
+  .matches-settings__controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: stretch;
+    width: 100%;
+  }
+  .matches-settings__controls > * {
+    flex: 1 1 220px;
+    min-width: 200px;
+  }
+  .settings-btn {
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    background-color: #4D83F4;
+    color: #fff;
+  }
+  .settings-btn[disabled] {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .settings-btn--secondary {
+    background-color: #3c3c3c;
+  }
+  .match-selection-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px;
+  }
+  .match-selection-control input {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+  }
+  .match-wrapper.match-selection-hidden {
+    display: none !important;
+  }
+
+</style>
+<div id="matches-container" class="matches-size-small" style="max-width: 500px;"></div>
+
+<script>
+let openLineupsSet = new Set();
+const streamsOff = true; // streams disabled permanently
+const DUEL_TOURNAMENT_TYPES = new Set(["coc", "individual"]);
+const INDIVIDUAL_TOURNAMENT_TYPE = "individual";
+const INDIVIDUAL_STAGE_CLASS_MAP = {
+  Q1: "individual-stage-q1",
+  Q2: "individual-stage-q2",
+  Q3: "individual-stage-q3",
+  Q4: "individual-stage-q4"
+};
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const matchSelectionState = new Map();
+const matchElementRefs = new Map();
+let matchSelectionMode = false;
+let settingsControls = null;
+let matchSelectionInitialized = false;
+let sizeSetting = "small";
+let sizeControls = null;
+let widthSetting = "500";
+let widthControls = null;
+let orientationSetting = "vertical";
+let orientationControls = null;
+const contentSettings = {
+  rating: true,
+  time: true,
+  format: true,
+  path: true,
+  roundName: false,
+  tournament: true,
+  liveIcon: true
+};
+const LIVE_ICON_SRC_SMALL = "https://carcassonne.gg/gallery/live-small.png";
+const LIVE_ICON_SRC_DEFAULT = "https://carcassonne.gg/gallery/live_icon.png";
+
+function isDuelTournament(type) {
+  if (typeof type !== "string") return false;
+  return DUEL_TOURNAMENT_TYPES.has(type.trim().toLowerCase());
+}
+
+function isIndividualTournament(type) {
+  if (typeof type !== "string") return false;
+  return type.trim().toLowerCase() === INDIVIDUAL_TOURNAMENT_TYPE;
+}
+
+function getIndividualStageClass(stageValue) {
+  if (typeof stageValue !== "string") return null;
+  const key = stageValue.trim().toUpperCase();
+  return INDIVIDUAL_STAGE_CLASS_MAP[key] || null;
+}
+
+function normalizeRoundName(roundName) {
+  if (typeof roundName !== 'string') return '';
+  const trimmed = roundName.trim();
+  if (!trimmed) return '';
+  const colonIndex = trimmed.indexOf(':');
+  if (colonIndex === -1) return trimmed;
+  return trimmed.slice(0, colonIndex).trim();
+}
+
+function ensureMatchSelectionState(matchId) {
+  if (!matchSelectionState.has(matchId)) {
+    const defaultValue = matchSelectionInitialized ? false : true;
+    matchSelectionState.set(matchId, defaultValue);
+  }
+}
+
+function resetMatchElementRefs() {
+  matchElementRefs.clear();
+}
+
+function registerMatchSelection(match, wrapper, checkboxHost) {
+  if (!match || !match.id || !wrapper || !checkboxHost) return;
+  const matchId = match.id;
+  ensureMatchSelectionState(matchId);
+
+  const selectionLabel = document.createElement("label");
+  selectionLabel.className = "match-selection-control";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = matchSelectionState.get(matchId) !== false;
+  checkbox.disabled = !matchSelectionMode;
+  checkbox.addEventListener("change", () => {
+    matchSelectionState.set(matchId, checkbox.checked);
+  });
+
+  selectionLabel.appendChild(checkbox);
+  checkboxHost.appendChild(selectionLabel);
+
+  matchElementRefs.set(matchId, { wrapper, selectionEl: selectionLabel, checkbox });
+
+  if (matchSelectionMode) {
+    selectionLabel.style.display = "";
+    wrapper.classList.remove("match-selection-hidden");
+  } else {
+    selectionLabel.style.display = "none";
+    applyMatchVisibility(matchId);
+  }
+}
+
+function applyMatchVisibility(matchId) {
+  const entry = matchElementRefs.get(matchId);
+  if (!entry) return;
+  if (matchSelectionMode) {
+    entry.wrapper.classList.remove("match-selection-hidden");
+    return;
+  }
+  const shouldShow = matchSelectionState.get(matchId) !== false;
+  if (!shouldShow) {
+    entry.wrapper.classList.add("match-selection-hidden");
+  } else {
+    entry.wrapper.classList.remove("match-selection-hidden");
+  }
+}
+
+function applyAllMatchVisibility() {
+  matchElementRefs.forEach((_, matchId) => applyMatchVisibility(matchId));
+  updateTournamentCardsVisibility();
+}
+
+function updateSelectionModeUI() {
+  matchElementRefs.forEach((entry, matchId) => {
+    if (!entry.selectionEl) return;
+    entry.selectionEl.style.display = matchSelectionMode ? "" : "none";
+    if (entry.checkbox) {
+      entry.checkbox.disabled = !matchSelectionMode;
+    }
+    if (matchSelectionMode) {
+      entry.wrapper.classList.remove("match-selection-hidden");
+    } else {
+      applyMatchVisibility(matchId);
+    }
+  });
+  updateTournamentCardsVisibility();
+  updateSettingsButtons();
+}
+
+function updateTournamentCardsVisibility() {
+  const cards = document.querySelectorAll(".tournament-card");
+  if (!cards.length) return;
+
+  if (matchSelectionMode) {
+    cards.forEach(card => {
+      card.style.display = "";
+    });
+    return;
+  }
+
+  cards.forEach(card => {
+    const hasVisibleMatch = card.querySelector(".match-wrapper:not(.match-selection-hidden)");
+    card.style.display = hasVisibleMatch ? "" : "none";
+  });
+}
+
+function updateSettingsButtons() {
+  if (!settingsControls) return;
+  settingsControls.selectBtn.disabled = matchSelectionMode;
+  settingsControls.doneBtn.style.display = matchSelectionMode ? "inline-flex" : "none";
+  settingsControls.doneBtn.disabled = !matchSelectionMode;
+  if (settingsControls.toggleAllBtn) {
+    const btn = settingsControls.toggleAllBtn;
+    if (matchSelectionMode) {
+      const anyUnchecked = Array.from(matchSelectionState.values()).some(value => value === false);
+      btn.textContent = anyUnchecked ? "Select All" : "Deselect All";
+      btn.disabled = false;
+      btn.style.display = "inline-flex";
+    } else {
+      btn.disabled = true;
+      btn.style.display = "none";
+    }
+  }
+}
+
+function applySizeSetting() {
+  const container = document.getElementById("matches-container");
+  if (!container) return;
+  container.classList.remove("matches-size-small", "matches-size-medium", "matches-size-large");
+  container.classList.add(`matches-size-${sizeSetting}`);
+  applyWidthSetting();
+}
+
+function updateSizeButtons() {
+  if (!sizeControls) return;
+  sizeControls.buttons.forEach(btn => {
+    if (btn.key === sizeSetting) {
+      btn.element.classList.add("size-btn--active");
+    } else {
+      btn.element.classList.remove("size-btn--active");
+    }
+  });
+}
+
+function applyWidthSetting() {
+  const container = document.getElementById("matches-container");
+  if (!container) return;
+  const value = widthSetting === "100" ? "100%" : `${widthSetting}px`;
+  container.style.maxWidth = value;
+  container.classList.toggle("matches-width-300", widthSetting === "300");
+  container.classList.toggle("matches-width-400", widthSetting === "400");
+  container.classList.toggle("matches-width-500", widthSetting === "500");
+  container.classList.toggle("matches-width-100", widthSetting === "100");
+  updateLiveIcons();
+}
+
+function updateWidthButtons() {
+  if (!widthControls) return;
+  widthControls.buttons.forEach(btn => {
+    if (btn.key === widthSetting) {
+      btn.element.classList.add("size-btn--active");
+    } else {
+      btn.element.classList.remove("size-btn--active");
+    }
+  });
+}
+
+function updateOrientationButtons() {
+  if (!orientationControls) return;
+  orientationControls.buttons.forEach(btn => {
+    if (btn.key === orientationSetting) {
+      btn.element.classList.add("size-btn--active");
+    } else {
+      btn.element.classList.remove("size-btn--active");
+    }
+  });
+}
+
+function applyOrientationClass() {
+  const container = document.getElementById("matches-container");
+  if (!container) return;
+  container.classList.toggle("match-orientation-horizontal", orientationSetting === "horizontal");
+}
+
+function getLiveIconSrc() {
+  return widthSetting === "300" ? LIVE_ICON_SRC_SMALL : LIVE_ICON_SRC_DEFAULT;
+}
+
+function updateLiveIcons() {
+  document.querySelectorAll(".live-icon").forEach(icon => {
+    if (icon && icon.tagName === "IMG") {
+      icon.src = getLiveIconSrc();
+    }
+  });
+}
+
+// Build rating stars element (1-5 grey stars, 6 = 5 gold stars)
+function createRatingElement(rating) {
+  const rNum = (rating === null || rating === undefined || rating === "") ? null : parseInt(rating, 10);
+  if (!Number.isInteger(rNum)) return null;
+
+  const wrap = document.createElement("div");
+  wrap.className = "match-rating" + (rNum === 6 ? " match-rating--gold" : "");
+
+  const total = 5;
+  const filledCount = (rNum >= 1 && rNum <= 5) ? rNum : (rNum === 6 ? 5 : 0);
+  const emptyCount = total - filledCount;
+
+  for (let i = 0; i < filledCount; i++) {
+    const s = document.createElement("span");
+    s.className = "material-icons-round";
+    s.textContent = "star";
+    if (rNum !== 6) {
+      s.style.color = "#333";
+    }
+    wrap.appendChild(s);
+  }
+  for (let i = 0; i < emptyCount; i++) {
+    const s = document.createElement("span");
+    s.className = "material-icons-round";
+    s.textContent = "star";
+    s.style.color = "#bbb";
+    wrap.appendChild(s);
+  }
+  return wrap;
+}
+
+function getMatchTimeLabel(match, isToday) {
+  if (!match || typeof match.time !== "string") return null;
+  const [datePart, timePart] = match.time.split(" ");
+  if (!datePart || !timePart) return null;
+  const [day, month, year] = datePart.split(".").map(v => parseInt(v, 10));
+  const [hour, minute, second] = timePart.split(":").map(v => parseInt(v, 10));
+  if (
+    Number.isNaN(day) ||
+    Number.isNaN(month) ||
+    Number.isNaN(year) ||
+    Number.isNaN(hour) ||
+    Number.isNaN(minute) ||
+    Number.isNaN(second)
+  ) {
+    return null;
+  }
+  const utcTimestamp = Date.UTC(year, month - 1, day, hour, minute, second);
+  const dateObj = new Date(utcTimestamp);
+  const dd = String(dateObj.getDate()).padStart(2, "0");
+  const mon = MONTHS_SHORT[dateObj.getMonth()];
+  const dayStr = `${dd} ${mon}`;
+  const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return isToday ? timeStr : `${dayStr} ${timeStr}`;
+}
+
+function isHorizontalOrientation() {
+  return orientationSetting === "horizontal";
+}
+
+function countActiveContent({ showRating = false, includeFormat = false } = {}) {
+  let count = 0;
+  if (showRating && contentSettings.rating) count += 1;
+  if (contentSettings.time) count += 1;
+  if (includeFormat && contentSettings.format) count += 1;
+  return count;
+}
+
+function formatScorePair(primary1, primary2, fallback1, fallback2) {
+  const normalize = value => (value !== undefined && value !== null && `${value}`.trim() !== "") ? `${value}` : null;
+  const s1 = normalize(primary1) || normalize(fallback1);
+  const s2 = normalize(primary2) || normalize(fallback2);
+  if (s1 === null && s2 === null) {
+    return null;
+  }
+  return [s1 ?? "-", s2 ?? "-"];
+}
+
+function createHorizontalTeamBlock({ name, flag, align = "left", url = null }) {
+  const block = document.createElement("div");
+  block.className = `match-horizontal__team match-horizontal__team--${align}`;
+  if (flag && flag.trim() !== "") {
+    const img = document.createElement("img");
+    img.src = flag;
+    img.alt = name || "";
+    block.appendChild(img);
+  }
+  const textEl = url ? document.createElement("a") : document.createElement("span");
+  if (url) {
+    textEl.href = url;
+    textEl.target = "_blank";
+    textEl.rel = "noopener noreferrer";
+  }
+  textEl.textContent = name || "";
+  block.appendChild(textEl);
+  return block;
+}
+
+function createHorizontalScoreBlock(score1, score2) {
+  const block = document.createElement("div");
+  block.className = "match-horizontal__score";
+  if (score1 || score2) {
+    const left = document.createElement("span");
+    left.textContent = score1 || "";
+    const sep = document.createElement("span");
+    sep.textContent = "-";
+    const right = document.createElement("span");
+    right.textContent = score2 || "";
+    block.append(left, sep, right);
+  } else {
+    block.style.minWidth = "0";
+  }
+  return block;
+}
+
+function buildMatchTimeBlock(match, { isToday = false, showRating = false, includeFormat = false } = {}) {
+  const allowRating = showRating && contentSettings.rating;
+  const allowTime = contentSettings.time;
+  const allowFormat = includeFormat && contentSettings.format;
+  if (!allowRating && !allowTime && !allowFormat) return null;
+
+  const timeDiv = document.createElement("div");
+  timeDiv.className = "match-time";
+  const ratingOnly = allowRating && !allowTime && !allowFormat;
+  if (ratingOnly) {
+    timeDiv.classList.add("match-time--rating-only");
+  }
+  const activeParts =
+    (allowRating ? 1 : 0) +
+    (allowTime ? 1 : 0) +
+    (allowFormat ? 1 : 0);
+  if (activeParts === 1) {
+    timeDiv.classList.add("match-time--single");
+  }
+
+  if (allowRating) {
+    const ratingEl = createRatingElement(match.rating);
+    if (ratingEl) {
+      if (ratingOnly && ratingEl.children.length > 3) {
+        const firstRow = document.createElement("div");
+        firstRow.className = "match-rating";
+        const secondRow = document.createElement("div");
+        secondRow.className = "match-rating";
+        Array.from(ratingEl.children).forEach((child, index) => {
+          if (index < 3) {
+            firstRow.appendChild(child.cloneNode(true));
+          } else {
+            secondRow.appendChild(child.cloneNode(true));
+          }
+        });
+        timeDiv.appendChild(firstRow);
+        if (secondRow.childNodes.length) {
+          timeDiv.appendChild(secondRow);
+        }
+      } else {
+        timeDiv.appendChild(ratingEl);
+      }
+    }
+  }
+
+  if (allowTime) {
+    const label = getMatchTimeLabel(match, isToday);
+    if (label) {
+      const timeTextEl = document.createElement("div");
+      timeTextEl.className = "match-time-text";
+      timeTextEl.textContent = label;
+      timeDiv.appendChild(timeTextEl);
+    }
+  }
+
+  if (allowFormat) {
+    const rawFormat = typeof match.format === "string" ? match.format.trim() : "";
+    const formatKey = rawFormat.toLowerCase();
+    if (rawFormat && ["bo1", "bo3", "bo5"].includes(formatKey)) {
+      const badge = document.createElement("div");
+      badge.className = `match-format-badge ${formatKey}`;
+      badge.textContent = rawFormat;
+      timeDiv.appendChild(badge);
+    }
+  }
+
+  return timeDiv.childNodes.length ? timeDiv : null;
+}
+
+function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
+  if (!match || !container) return;
+  const showPath = !!contentSettings.path;
+  const showRoundName = !!contentSettings.roundName;
+  if (!showPath && !showRoundName) return;
+
+  const typeValue = tournamentType || match.tournament_type;
+  const isIndividual = isIndividualTournament(typeValue);
+  const stageValue = typeof match.stage === "string" ? match.stage.trim() : "";
+
+  let badgeText = null;
+  let classSuffix = "";
+
+  if (isIndividual) {
+    classSuffix = " individual-badge";
+    if (stageValue) {
+      badgeText = stageValue;
+      const stageClass = getIndividualStageClass(stageValue);
+      if (stageClass) {
+        classSuffix += ` ${stageClass}`;
+      }
+    }
+  }
+
+  if (!badgeText && showPath) {
+    if (stageValue === "Stage 2" && match.round) {
+      const roundLabel = normalizeRoundName(match.round);
+      badgeText = roundLabel || match.round;
+    } else if (stageValue !== "Stage 2") {
+      const rb = match.round_badge;
+      if (typeof rb === "string" && rb.trim() !== "") {
+        badgeText = rb.trim();
+      }
+    }
+  }
+
+  let roundText = null;
+  if (showRoundName) {
+    const roundLabel = normalizeRoundName(match.round);
+    if (roundLabel) {
+      roundText = roundLabel;
+    }
+  }
+
+  const parts = [];
+  if (badgeText && showPath) parts.push(badgeText);
+  if (roundText && !parts.includes(roundText)) parts.push(roundText);
+  const finalText = parts.join(parts.length > 1 ? " - " : "");
+  if (!finalText) return;
+
+  const badge = document.createElement("div");
+  badge.className = `playoff-round-badge${classSuffix}`;
+  badge.textContent = finalText;
+  container.appendChild(badge);
+  if (rightDiv) {
+    rightDiv.classList.add("under-badge");
+  }
+}
+
+function createMatchElement(match, options = {}) {
+  const { showRating = false, isToday = false } = options;
+  // Only for TEAM tournaments
+  const wrapper = document.createElement("div");
+  wrapper.className = "match-wrapper";
+
+  const container = document.createElement("div");
+  container.className = "match-row";
+  container.dataset.id = match.id;
+  wrapper.appendChild(container);
+
+  const toggleBtn = document.createElement("div");
+  toggleBtn.className = "chevron";
+
+  const chevronIcon = document.createElement("i");
+  chevronIcon.className = "fas fa-chevron-down";
+  chevronIcon.style.transition = "transform 0.3s ease";
+  chevronIcon.style.transform = "rotate(180deg)";
+  chevronIcon.style.fontSize = "12px";
+  chevronIcon.style.padding = "0 4px";
+  toggleBtn.appendChild(chevronIcon);
+
+  const lineupDiv = document.createElement("div");
+  lineupDiv.className = "lineup";
+
+  const lineupContDiv = document.createElement("div");
+  lineupContDiv.innerHTML = match.lineups;
+  lineupContDiv.className = "lineup__overview";
+  lineupDiv.appendChild(lineupContDiv);
+
+  if (match.lineups) {
+    const isOpen = openLineupsSet.has(match.id);
+    if (isOpen) {
+      lineupDiv.classList.add("open");
+      lineupDiv.style.height = "auto";
+      chevronIcon.style.transform = "rotate(0deg)";
+    }
+
+    toggleBtn.addEventListener("click", () => {
+      const isOpen = lineupDiv.classList.contains("open");
+
+      if (isOpen) {
+        lineupDiv.style.height = lineupDiv.scrollHeight + "px";
+        requestAnimationFrame(() => {
+          lineupDiv.style.height = "0px";
+          lineupDiv.classList.remove("open");
+          chevronIcon.style.transform = "rotate(180deg)";
+          openLineupsSet.delete(match.id);
+        });
+      } else {
+        lineupDiv.style.height = "0px";
+        lineupDiv.classList.add("open");
+        chevronIcon.style.transform = "rotate(0deg)";
+        openLineupsSet.add(match.id);
+
+        requestAnimationFrame(() => {
+          lineupDiv.style.height = lineupDiv.scrollHeight + "px";
+        });
+
+        lineupDiv.addEventListener("transitionend", function handler() {
+          if (lineupDiv.classList.contains("open")) {
+            lineupDiv.style.height = "auto";
+          }
+          lineupDiv.removeEventListener("transitionend", handler);
+        });
+      }
+    });
+  }
+  const horizontalLayout = isHorizontalOrientation();
+  if (horizontalLayout) {
+    const timeBlock = buildMatchTimeBlock(match, { isToday, showRating });
+    const horizontalRow = document.createElement("div");
+    horizontalRow.className = "match-horizontal-row";
+    if (timeBlock) {
+      horizontalRow.appendChild(timeBlock);
+      const divider = document.createElement("div");
+      divider.className = "divider-vertical";
+      horizontalRow.appendChild(divider);
+    }
+
+    const contentRow = document.createElement("div");
+    contentRow.className = "match-horizontal__content";
+    const teamsWrapper = document.createElement("div");
+    teamsWrapper.className = "match-horizontal__teams";
+
+    const leftTeam = createHorizontalTeamBlock({ name: match.team1, flag: match.flag1, align: "left" });
+    const scorePair = formatScorePair(match.dw1, match.dw2, match.gw1, match.gw2);
+    let scoreBlock = null;
+    if (scorePair) {
+      scoreBlock = createHorizontalScoreBlock(scorePair[0], scorePair[1]);
+    } else {
+      scoreBlock = document.createElement("div");
+      scoreBlock.className = "match-horizontal__score match-horizontal__score--separator";
+      scoreBlock.textContent = "-";
+    }
+    const rightTeam = createHorizontalTeamBlock({ name: match.team2, flag: match.flag2, align: "right" });
+
+    teamsWrapper.append(leftTeam, scoreBlock, rightTeam);
+    contentRow.appendChild(teamsWrapper);
+    const extras = document.createElement("div");
+    extras.className = "match-horizontal__extras";
+
+    if (contentSettings.liveIcon && match.status === "IN PROGRESS") {
+      const liveIcon = document.createElement("img");
+      liveIcon.className = "live-icon";
+      liveIcon.src = getLiveIconSrc();
+      liveIcon.alt = "LIVE";
+      extras.appendChild(liveIcon);
+    }
+    if (!streamsOff && match.streamers && match.streams && match.streamers.length === match.streams.length) {
+      match.streamers.forEach((iconUrl, i) => {
+        const streamLink = document.createElement("a");
+        streamLink.href = match.streams[i];
+        streamLink.target = "_blank";
+        streamLink.rel = "noopener noreferrer";
+
+        const streamerIcon = document.createElement("img");
+        streamerIcon.className = "stream-icon";
+        streamerIcon.src = iconUrl;
+        streamerIcon.alt = "Stream";
+
+        streamLink.appendChild(streamerIcon);
+        extras.appendChild(streamLink);
+      });
+    }
+    if (match.lineups) {
+      extras.appendChild(toggleBtn);
+    }
+
+    contentRow.append(teamsWrapper, extras);
+    horizontalRow.appendChild(contentRow);
+    container.appendChild(horizontalRow);
+
+    appendRoundBadge({ match, container, rightDiv: null, tournamentType: match.tournament_type });
+    if (match.lineups) {
+      wrapper.appendChild(lineupDiv);
+    }
+    registerMatchSelection(match, wrapper, extras);
+    return wrapper;
+  }
+  
+  if (!streamsOff) {
+    const timeBlock = buildMatchTimeBlock(match, { isToday, showRating });
+    if (timeBlock) {
+      container.appendChild(timeBlock);
+      const divider = document.createElement("div");
+      divider.className = "divider-vertical";
+      container.appendChild(divider);
+    }
+  }
+
+  const teamsDiv = document.createElement("div");
+  teamsDiv.className = streamsOff ? "teams-stream" : "teams";
+
+  ["team1", "team2"].forEach((teamKey, i) => {
+    const row = document.createElement("div");
+    row.className = "team-row";
+
+    const flagSrc = i === 0 ? match.flag1 : match.flag2;
+    if (flagSrc && flagSrc.trim() !== "") {
+      const flag = document.createElement("img");
+      flag.className = "team-flag";
+      flag.src = flagSrc;
+      flag.alt = match[teamKey] || "";
+      row.appendChild(flag);
+    }
+
+    const span = document.createElement("span");
+    span.textContent = match[teamKey];
+
+    row.appendChild(span);
+    teamsDiv.appendChild(row);
+  });
+  container.appendChild(teamsDiv);
+  
+  if(streamsOff) {
+    if (match.dw1 || match.dw2 || match.gw1 || match.gw2) {
+        const scoreBox = document.createElement("div");
+        scoreBox.className = "score-box-stream";
+        scoreBox.innerHTML = `<div>${match.dw1}</div><div>${match.dw2}</div>`;
+        container.appendChild(scoreBox);
+    
+        const scoreBoxAlt = document.createElement("div");
+        scoreBoxAlt.className = "score-box-alt-stream";
+        scoreBoxAlt.innerHTML = `<div>(${match.gw1})</div><div>(${match.gw2})</div>`;
+        container.appendChild(scoreBoxAlt);
+    } 
+  }
+
+  const rightDiv = document.createElement("div");
+  rightDiv.className = "match-right";
+
+  if (contentSettings.liveIcon && match.status === "IN PROGRESS") {
+    const liveIcon = document.createElement("img");
+    liveIcon.className = "live-icon";
+    liveIcon.src = getLiveIconSrc();
+    liveIcon.alt = "LIVE";
+    rightDiv.appendChild(liveIcon);
+  }
+
+  if (!streamsOff && match.streamers && match.streams && match.streamers.length === match.streams.length) {
+    match.streamers.forEach((iconUrl, i) => {
+      const streamLink = document.createElement("a");
+      streamLink.href = match.streams[i];
+      streamLink.target = "_blank";
+      streamLink.rel = "noopener noreferrer";
+
+      const streamerIcon = document.createElement("img");
+      streamerIcon.className = "stream-icon";
+      streamerIcon.src = iconUrl;
+      streamerIcon.alt = "Stream";
+
+      streamLink.appendChild(streamerIcon);
+      rightDiv.appendChild(streamLink);
+    });
+  }
+
+  if (streamsOff) {
+    const timeBlock = buildMatchTimeBlock(match, { isToday, showRating });
+    if (timeBlock) {
+      rightDiv.appendChild(timeBlock);
+    }
+  } else {
+      if (match.dw1 || match.dw2 || match.gw1 || match.gw2) {
+        const scoreBox = document.createElement("div");
+        scoreBox.className = "score-box match-score";
+        scoreBox.innerHTML = `<div>${match.dw1}</div><div>${match.dw2}</div>`;
+        rightDiv.appendChild(scoreBox);
+
+        const scoreBoxAlt = document.createElement("div");
+        scoreBoxAlt.className = "score-box-alt";
+        scoreBoxAlt.innerHTML = `<div>(${match.gw1})</div><div>(${match.gw2})</div>`;
+        rightDiv.appendChild(scoreBoxAlt);
+      }
+  }
+
+  if (match.lineups) {
+    rightDiv.appendChild(toggleBtn);
+  }
+
+  container.appendChild(rightDiv);
+  if (match.lineups) wrapper.appendChild(lineupDiv);
+
+  appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
+  registerMatchSelection(match, wrapper, rightDiv);
+
+  return wrapper;
+}
+
+function createDuelElement(match, options = {}) {
+  const { showRating = false, isToday = false } = options;
+  // Copied from createMatchElement, but for duel type, lineups logic removed
+  const wrapper = document.createElement("div");
+  wrapper.className = "match-wrapper";
+
+  const container = document.createElement("div");
+  container.className = "match-row";
+  container.dataset.id = match.id;
+  const tournamentType = match.tournament_type || match.type;
+  const isIndividual = isIndividualTournament(tournamentType);
+  wrapper.appendChild(container);
+
+  const horizontalLayout = isHorizontalOrientation();
+  if (horizontalLayout) {
+    const timeDiv = buildMatchTimeBlock(match, { isToday, showRating, includeFormat: true });
+    const horizontalRow = document.createElement("div");
+    horizontalRow.className = "match-horizontal-row";
+    if (timeDiv) {
+      horizontalRow.appendChild(timeDiv);
+      const divider = document.createElement("div");
+      divider.className = "divider-vertical";
+      horizontalRow.appendChild(divider);
+    }
+
+    const contentRow = document.createElement("div");
+    contentRow.className = "match-horizontal__content";
+    const teamsWrapper = document.createElement("div");
+    teamsWrapper.className = "match-horizontal__teams";
+
+    const leftPlayer = createHorizontalTeamBlock({
+      name: match.team1,
+      flag: match.flag1,
+      align: "left",
+      url: `https://boardgamearena.com/player?id=${match.opponent1_id}`
+    });
+    const scorePair = formatScorePair(match.gw1, match.gw2, null, null);
+    let scoreBlock = null;
+    if (scorePair) {
+      scoreBlock = createHorizontalScoreBlock(scorePair[0], scorePair[1]);
+    } else {
+      scoreBlock = document.createElement("div");
+      scoreBlock.className = "match-horizontal__score match-horizontal__score--separator";
+      scoreBlock.textContent = "-";
+    }
+    const rightPlayer = createHorizontalTeamBlock({
+      name: match.team2,
+      flag: match.flag2,
+      align: "right",
+      url: `https://boardgamearena.com/player?id=${match.opponent2_id}`
+    });
+
+    const extras = document.createElement("div");
+    extras.className = "match-horizontal__extras";
+    if (contentSettings.liveIcon && match.status === "IN PROGRESS") {
+      const liveIcon = document.createElement("img");
+      liveIcon.className = "live-icon";
+      liveIcon.src = getLiveIconSrc();
+      liveIcon.alt = "LIVE";
+      extras.appendChild(liveIcon);
+    }
+
+    teamsWrapper.append(leftPlayer, scoreBlock, rightPlayer);
+    contentRow.append(teamsWrapper, extras);
+    horizontalRow.appendChild(contentRow);
+    container.appendChild(horizontalRow);
+
+    appendRoundBadge({ match, container, rightDiv: null, tournamentType: match.tournament_type });
+    registerMatchSelection(match, wrapper, extras);
+    return wrapper;
+  }
+
+  const timeDiv = buildMatchTimeBlock(match, { isToday, showRating, includeFormat: true });
+  if (timeDiv) {
+    container.appendChild(timeDiv);
+    const divider = document.createElement("div");
+    divider.className = "divider-vertical";
+    container.appendChild(divider);
+  }
+
+  // Players (always from team1/team2 in JSON)
+  const playersDiv = document.createElement("div");
+  playersDiv.className = "duel-players";
+
+  const names = [match.team1, match.team2];
+  const ids = [match.opponent1_id, match.opponent2_id];
+
+  names.forEach((name, i) => {
+    const row = document.createElement("div");
+    row.className = "duel-player-row";
+
+    const flag = i === 0 ? match.flag1 : match.flag2;
+    if (flag && flag.trim() !== "") {
+      const avatar = document.createElement("img");
+      avatar.className = "duel-player-avatar" + (isIndividual ? " duel-player-avatar--individual" : "");
+      avatar.src = flag;
+      avatar.alt = name || "";
+      row.appendChild(avatar);
+    }
+
+    const link = document.createElement("a");
+    link.href = `https://boardgamearena.com/player?id=${ids[i]}`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = name || "";
+
+    row.appendChild(link);
+    playersDiv.appendChild(row);
+  });
+  container.appendChild(playersDiv);
+
+  const rightDiv = document.createElement("div");
+  rightDiv.className = "match-right";
+
+  if (contentSettings.liveIcon && match.status === "IN PROGRESS") {
+    const liveIcon = document.createElement("img");
+    liveIcon.className = "live-icon";
+    liveIcon.src = getLiveIconSrc();
+    liveIcon.alt = "LIVE";
+    rightDiv.appendChild(liveIcon);
+  }
+
+  // Only show gw1/gw2 for duel tournaments
+  if (match.gw1 || match.gw2) {
+    const scoreBox = document.createElement("div");
+    scoreBox.className = "score-box duel-score";
+    scoreBox.innerHTML = `<div>${match.gw1}</div><div>${match.gw2}</div>`;
+    rightDiv.appendChild(scoreBox);
+  }
+
+  container.appendChild(rightDiv);
+
+  appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
+  registerMatchSelection(match, wrapper, rightDiv);
+
+  return wrapper;
+}
+
+function createDuelElementCompact(match) {
+  // Compact duel: no time, no divider; keep players, streams, score
+  const wrapper = document.createElement("div");
+  wrapper.className = "match-wrapper";
+
+  const container = document.createElement("div");
+  container.className = "match-row duel-compact";
+  container.dataset.id = match.id;
+  const tournamentType = match.tournament_type || match.type;
+  const isIndividual = isIndividualTournament(tournamentType);
+
+  // Players (from team1/team2 in JSON)
+  const playersDiv = document.createElement("div");
+  playersDiv.className = "duel-players";
+
+  const names = [match.team1, match.team2];
+  const ids = [match.opponent1_id, match.opponent2_id];
+
+  names.forEach((name, i) => {
+    const row = document.createElement("div");
+    row.className = "duel-player-row";
+
+    const flag = i === 0 ? match.flag1 : match.flag2;
+    if (flag && flag.trim() !== "") {
+      const avatar = document.createElement("img");
+      avatar.className = "duel-player-avatar" + (isIndividual ? " duel-player-avatar--individual" : "");
+      avatar.src = flag;
+      avatar.alt = name || "";
+      row.appendChild(avatar);
+    }
+
+    const link = document.createElement("a");
+    link.href = `https://boardgamearena.com/player?id=${ids[i]}`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = name || "";
+
+    row.appendChild(link);
+    playersDiv.appendChild(row);
+  });
+  container.appendChild(playersDiv);
+
+  const rightDiv = document.createElement("div");
+  rightDiv.className = "match-right";
+
+  if (contentSettings.liveIcon && match.status === "IN PROGRESS") {
+    const liveIcon = document.createElement("img");
+    liveIcon.className = "live-icon";
+    liveIcon.src = getLiveIconSrc();
+    liveIcon.alt = "LIVE";
+    rightDiv.appendChild(liveIcon);
+  }
+
+  // Stream links hidden per requirements
+
+  // Only show gw1/gw2 for duel tournaments
+  if (match.gw1 || match.gw2) {
+    const scoreBox = document.createElement("div");
+    scoreBox.className = "score-box duel-score";
+    scoreBox.innerHTML = `<div>${match.gw1}</div><div>${match.gw2}</div>`;
+    rightDiv.appendChild(scoreBox);
+  }
+
+  container.appendChild(rightDiv);
+  wrapper.appendChild(container);
+
+  appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
+
+  return wrapper;
+}
+
+function createTournamentHeader(tournament) {
+  const header = document.createElement("div");
+  header.className = "tournament-header";
+
+  const linkValue = typeof tournament.link === "string" ? tournament.link.trim() : "";
+  const hasLink = !!linkValue;
+  const titleEl = document.createElement(hasLink ? "a" : "div");
+  titleEl.className = "tournament-header__title";
+  if (hasLink) {
+    titleEl.href = linkValue;
+    titleEl.target = "_self";
+    titleEl.rel = "noopener noreferrer";
+  }
+
+  const icon = document.createElement("img");
+  icon.className = "tournament-icon";
+  icon.src = tournament.logo;
+  icon.alt = tournament.name;
+
+  const span = document.createElement("span");
+  span.textContent = tournament.name;
+
+  titleEl.appendChild(icon);
+  titleEl.appendChild(span);
+  header.appendChild(titleEl);
+
+  const right = document.createElement("div");
+  right.className = "tournament-header__right";
+  header.appendChild(right);
+  header._right = right;
+
+  if (!contentSettings.tournament) {
+    header.classList.add("tournament-header--hidden");
+  }
+
+  return header;
+}
+
+function normalizeFlagValue(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getMatchFlagKeys(match) {
+  const keys = [];
+  const flag1 = normalizeFlagValue(match.flag1);
+  const flag2 = normalizeFlagValue(match.flag2);
+  if (flag1) keys.push(flag1);
+  if (flag2) keys.push(flag2);
+  return Array.from(new Set(keys));
+}
+
+function collectFlagInfos(matches) {
+  const flagMap = new Map();
+  matches.forEach(match => {
+    [
+      { flag: match.flag1, name: match.team1 },
+      { flag: match.flag2, name: match.team2 }
+    ].forEach(({ flag, name }) => {
+      const key = normalizeFlagValue(flag);
+      if (!key) return;
+      if (!flagMap.has(key)) {
+        flagMap.set(key, { key, url: flag, names: new Set() });
+      }
+      const trimmedName = typeof name === "string" ? name.trim() : "";
+      if (trimmedName) {
+        flagMap.get(key).names.add(trimmedName);
+      }
+    });
+  });
+
+  const infos = Array.from(flagMap.values()).map(entry => {
+    const names = Array.from(entry.names).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    const title = names.length ? names.join(", ") : "";
+    const sortName = names.length ? names[0] : "";
+    return {
+      key: entry.key,
+      url: entry.url,
+      title,
+      sortName
+    };
+  });
+
+  infos.sort((a, b) => a.sortName.localeCompare(b.sortName));
+
+  return infos.map(({ sortName, ...rest }) => rest);
+}
+
+const matchTimestampCache = new WeakMap();
+function getMatchTimestamp(match) {
+  if (!match || typeof match !== "object") return null;
+  if (matchTimestampCache.has(match)) {
+    return matchTimestampCache.get(match);
+  }
+
+  const timeValue = typeof match.time === "string" ? match.time.trim() : "";
+  if (!timeValue) {
+    matchTimestampCache.set(match, null);
+    return null;
+  }
+
+  const [datePart, timePart] = timeValue.split(" ");
+  if (!datePart || !timePart) {
+    matchTimestampCache.set(match, null);
+    return null;
+  }
+
+  const [day, month, year] = datePart.split(".").map(num => parseInt(num, 10));
+  const [hour, minute, second] = timePart.split(":").map(num => parseInt(num, 10));
+  if (
+    Number.isNaN(day) ||
+    Number.isNaN(month) ||
+    Number.isNaN(year) ||
+    Number.isNaN(hour) ||
+    Number.isNaN(minute) ||
+    Number.isNaN(second)
+  ) {
+    matchTimestampCache.set(match, null);
+    return null;
+  }
+
+  const ts = Date.UTC(year, month - 1, day, hour, minute, second);
+  matchTimestampCache.set(match, ts);
+  return ts;
+}
+
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+function getMatchesTodayAndTomorrow(matchesToday, matchesScheduled) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfTomorrow = startOfToday + DAY_IN_MS;
+  const startOfDayAfterTomorrow = startOfTomorrow + DAY_IN_MS;
+
+  const todayMatches = (() => {
+    const source = matchesToday || [];
+    if (!source.length) return [];
+    const filtered = source.filter(match => {
+      const ts = getMatchTimestamp(match);
+      return ts !== null && ts >= startOfToday && ts < startOfTomorrow;
+    });
+    return filtered.length ? filtered : source.slice();
+  })();
+
+  const tomorrowMatches = (matchesScheduled || []).filter(match => {
+    const ts = getMatchTimestamp(match);
+    return ts !== null && ts >= startOfTomorrow && ts < startOfDayAfterTomorrow;
+  });
+
+  const combined = [...todayMatches, ...tomorrowMatches].sort((a, b) => {
+    const tsA = getMatchTimestamp(a) || 0;
+    const tsB = getMatchTimestamp(b) || 0;
+    return tsA - tsB;
+  });
+
+  return {
+    matches: combined,
+    startOfTomorrow
+  };
+}
+
+function getMatchTournamentName(match) {
+  if (!match || typeof match !== "object") return "Tournament";
+  const name = typeof match.tournament === "string" ? match.tournament.trim() : "";
+  if (name) return name;
+  const fallbackId = typeof match.tournament_id === "string" ? match.tournament_id.trim() : "";
+  if (fallbackId) return fallbackId;
+  return "Tournament";
+}
+
+
+let lastData = null; // cache of last fetched data for re-rendering without refetch
+let tournamentFilterIdCounter = 0;
+
+function renderSettingsSection(container) {
+  const wrap = document.createElement("div");
+  wrap.className = "matches-settings";
+
+  const title = document.createElement("div");
+  title.className = "matches-settings__title";
+  title.textContent = "Settings";
+
+  const actions = document.createElement("div");
+  actions.className = "matches-settings__actions";
+  actions.style.display = "flex";
+  actions.style.alignItems = "center";
+  actions.style.gap = "8px";
+
+  const selectBtn = document.createElement("button");
+  selectBtn.type = "button";
+  selectBtn.className = "settings-btn";
+  selectBtn.textContent = "Select matches";
+
+  const doneBtn = document.createElement("button");
+  doneBtn.type = "button";
+  doneBtn.className = "settings-btn settings-btn--secondary";
+  doneBtn.textContent = "Done";
+
+  const toggleAllBtn = document.createElement("button");
+  toggleAllBtn.type = "button";
+  toggleAllBtn.className = "settings-btn settings-btn--secondary";
+  toggleAllBtn.textContent = "Deselect All";
+  toggleAllBtn.disabled = true;
+  toggleAllBtn.style.display = "none";
+
+  actions.appendChild(selectBtn);
+  actions.appendChild(toggleAllBtn);
+  actions.appendChild(doneBtn);
+
+  const contentSection = document.createElement("div");
+  contentSection.className = "matches-settings__content";
+
+  const contentTitle = document.createElement("div");
+  contentTitle.className = "matches-settings__content-title";
+  contentTitle.textContent = "Content";
+  contentSection.appendChild(contentTitle);
+
+  const contentGroup = document.createElement("div");
+  contentGroup.className = "content-toggle-group";
+  contentSection.appendChild(contentGroup);
+
+  [
+    { key: "rating", label: "Rating" },
+    { key: "time", label: "Time" },
+    { key: "format", label: "Format" },
+    { key: "path", label: "Path" },
+    { key: "roundName", label: "Round" },
+    { key: "tournament", label: "Tournament" },
+    { key: "liveIcon", label: "Live icon" }
+  ].forEach(({ key, label }) => {
+    const optionLabel = document.createElement("label");
+    optionLabel.className = "content-toggle";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !!contentSettings[key];
+    checkbox.addEventListener("change", () => {
+      contentSettings[key] = checkbox.checked;
+      if (lastData) {
+        renderAllSectionsFromData(lastData);
+      }
+    });
+
+    const span = document.createElement("span");
+    span.textContent = label;
+
+    optionLabel.appendChild(checkbox);
+    optionLabel.appendChild(span);
+    contentGroup.appendChild(optionLabel);
+  });
+
+  wrap.appendChild(title);
+
+  const sizeSection = document.createElement("div");
+  sizeSection.className = "matches-settings__size";
+  const sizeTitle = document.createElement("div");
+  sizeTitle.className = "matches-settings__content-title";
+  sizeTitle.textContent = "Size";
+  sizeSection.appendChild(sizeTitle);
+
+  const sizeGroup = document.createElement("div");
+  sizeGroup.className = "size-toggle-group";
+  sizeSection.appendChild(sizeGroup);
+
+  const sizeButtons = [];
+  [
+    { key: "small", label: "Small" },
+    { key: "medium", label: "Medium" },
+    { key: "large", label: "Large" }
+  ].forEach(({ key, label }) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "size-btn";
+    btn.textContent = label;
+    btn.addEventListener("click", () => {
+      if (sizeSetting === key) return;
+      sizeSetting = key;
+      applySizeSetting();
+      updateSizeButtons();
+    });
+    sizeGroup.appendChild(btn);
+    sizeButtons.push({ key, element: btn });
+  });
+  const widthSection = document.createElement("div");
+  widthSection.className = "matches-settings__size";
+  const widthTitle = document.createElement("div");
+  widthTitle.className = "matches-settings__content-title";
+  widthTitle.textContent = "Width";
+  widthSection.appendChild(widthTitle);
+
+  const widthGroup = document.createElement("div");
+  widthGroup.className = "size-toggle-group";
+  widthSection.appendChild(widthGroup);
+
+  const widthButtons = [];
+  [
+    { key: "300", label: "300" },
+    { key: "400", label: "400" },
+    { key: "500", label: "500" },
+    { key: "100", label: "100%" }
+  ].forEach(({ key, label }) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "size-btn";
+    btn.textContent = label;
+    btn.addEventListener("click", () => {
+      if (widthSetting === key) return;
+      widthSetting = key;
+      applyWidthSetting();
+      updateWidthButtons();
+    });
+    widthGroup.appendChild(btn);
+    widthButtons.push({ key, element: btn });
+  });
+
+  const orientationSection = document.createElement("div");
+  orientationSection.className = "matches-settings__size";
+  const orientationTitle = document.createElement("div");
+  orientationTitle.className = "matches-settings__content-title";
+  orientationTitle.textContent = "Orientation";
+  orientationSection.appendChild(orientationTitle);
+
+  const orientationGroup = document.createElement("div");
+  orientationGroup.className = "size-toggle-group";
+  orientationSection.appendChild(orientationGroup);
+
+  const orientationButtons = [];
+  [
+    { key: "vertical", label: "Vertical" },
+    { key: "horizontal", label: "Horizontal" }
+  ].forEach(({ key, label }) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "size-btn";
+    btn.textContent = label;
+    btn.addEventListener("click", () => {
+      if (orientationSetting === key) return;
+      orientationSetting = key;
+      updateOrientationButtons();
+      if (lastData) {
+        renderAllSectionsFromData(lastData);
+      }
+    });
+    orientationGroup.appendChild(btn);
+    orientationButtons.push({ key, element: btn });
+  });
+
+  const controlsRow = document.createElement("div");
+  controlsRow.className = "matches-settings__controls";
+
+  controlsRow.appendChild(actions);
+  controlsRow.appendChild(contentSection);
+  controlsRow.appendChild(sizeSection);
+  controlsRow.appendChild(widthSection);
+  controlsRow.appendChild(orientationSection);
+
+  wrap.appendChild(controlsRow);
+
+  selectBtn.addEventListener("click", () => {
+    if (matchSelectionMode) return;
+    matchSelectionMode = true;
+    updateSelectionModeUI();
+    updateSettingsButtons();
+  });
+
+  doneBtn.addEventListener("click", () => {
+    if (!matchSelectionMode) return;
+    matchSelectionMode = false;
+    matchSelectionInitialized = true;
+    updateSelectionModeUI();
+    updateSettingsButtons();
+    applyAllMatchVisibility();
+  });
+
+  toggleAllBtn.addEventListener("click", () => {
+    if (!matchSelectionMode) return;
+    const anyUnchecked = Array.from(matchSelectionState.values()).some(value => value === false);
+    const nextValue = anyUnchecked ? true : false;
+    matchSelectionState.forEach((_, matchId) => {
+      matchSelectionState.set(matchId, nextValue);
+      const entry = matchElementRefs.get(matchId);
+      if (entry && entry.checkbox) {
+        entry.checkbox.checked = nextValue;
+      }
+    });
+    updateSettingsButtons();
+  });
+
+  settingsControls = { selectBtn, doneBtn, toggleAllBtn };
+  updateSettingsButtons();
+  sizeControls = { buttons: sizeButtons };
+  updateSizeButtons();
+  widthControls = { buttons: widthButtons };
+  updateWidthButtons();
+  orientationControls = { buttons: orientationButtons };
+  updateOrientationButtons();
+
+  container.appendChild(wrap);
+}
+
+function renderTodayAndTomorrow(container, { matchesToday = [], matchesScheduled = [], tournamentsToday = [], tournamentsScheduled = [] }) {
+  resetMatchElementRefs();
+  const { matches: matchesToDisplay, startOfTomorrow } = getMatchesTodayAndTomorrow(matchesToday, matchesScheduled);
+
+  if (matchesToDisplay.length === 0) {
+    const emptyState = document.createElement("div");
+    emptyState.className = "matches-empty";
+    emptyState.textContent = "No matches scheduled for today or tomorrow.";
+    container.appendChild(emptyState);
+    return;
+  }
+
+  const tournamentMap = new Map();
+  const orderedTournaments = [];
+  const registerTournament = (source = {}) => {
+    const nameValue = typeof source.name === "string" ? source.name.trim() : "";
+    if (!nameValue || tournamentMap.has(nameValue)) return;
+    const normalized = {
+      name: nameValue,
+      logo: source.logo || source.tournament_logo || "",
+      link: source.link || source.tournament_link || "",
+      type: source.type || source.tournament_type || ""
+    };
+    tournamentMap.set(nameValue, normalized);
+    orderedTournaments.push(normalized);
+  };
+
+  (tournamentsToday || []).forEach(registerTournament);
+  (tournamentsScheduled || []).forEach(registerTournament);
+
+  const matchesByTournament = new Map();
+  matchesToDisplay.forEach(match => {
+    const tournamentName = getMatchTournamentName(match);
+    registerTournament({
+      name: tournamentName,
+      logo: match.tournament_logo,
+      link: match.tournament_link,
+      type: match.tournament_type || match.type
+    });
+    if (!matchesByTournament.has(tournamentName)) {
+      matchesByTournament.set(tournamentName, []);
+    }
+    matchesByTournament.get(tournamentName).push(match);
+  });
+
+  let renderedAny = false;
+
+  orderedTournaments.forEach(tournament => {
+    const matchesForTournament = (matchesByTournament.get(tournament.name) || []).slice().sort((a, b) => {
+      const tsA = getMatchTimestamp(a) || 0;
+      const tsB = getMatchTimestamp(b) || 0;
+      return tsA - tsB;
+    });
+    if (!matchesForTournament.length) {
+      return;
+    }
+    renderedAny = true;
+
+    const card = document.createElement("div");
+    card.className = "tournament-card";
+    const header = createTournamentHeader(tournament);
+    card.appendChild(header);
+
+    const headerRight = header._right || header.querySelector(".tournament-header__right");
+    const teamMatches = matchesForTournament.filter(m => (tournament.type || m.tournament_type) === "TEAM");
+    const flagInfos = collectFlagInfos(teamMatches);
+    const hasTeamFilter = flagInfos.length > 0 && !!headerRight;
+    const teamMatchEntries = [];
+    let activeFlagKey = null;
+
+    const registerTeamMatchElement = hasTeamFilter
+      ? (element, match) => {
+          const flagKeys = getMatchFlagKeys(match);
+          element.dataset.flagKeys = flagKeys.join("|");
+          teamMatchEntries.push({ element, flagKeys });
+        }
+      : () => {};
+
+    const applyFlagFilter = () => {
+      if (!hasTeamFilter) return;
+      const showAll = !activeFlagKey;
+      teamMatchEntries.forEach(({ element, flagKeys }) => {
+        const shouldShow = showAll || flagKeys.includes(activeFlagKey);
+        element.style.display = shouldShow ? "" : "none";
+      });
+    };
+
+    let filterPanel = null;
+    let filterButtons = [];
+
+    if (hasTeamFilter) {
+      const filterToggle = document.createElement("button");
+      filterToggle.className = "matches-filter-toggle";
+      filterToggle.type = "button";
+      filterToggle.setAttribute("aria-label", "Toggle filters");
+      filterToggle.setAttribute("aria-expanded", "false");
+
+      const filterIcon = document.createElement("i");
+      filterIcon.className = "fa fa-sliders-h";
+      filterToggle.appendChild(filterIcon);
+
+      headerRight.appendChild(filterToggle);
+
+      filterPanel = document.createElement("div");
+      filterPanel.className = "matches-filter-panel";
+      const filterPanelId = `matches-filter-${++tournamentFilterIdCounter}`;
+      filterPanel.id = filterPanelId;
+      filterToggle.setAttribute("aria-controls", filterPanelId);
+
+      const optionsWrapper = document.createElement("div");
+      optionsWrapper.className = "matches-filter-options";
+      filterPanel.appendChild(optionsWrapper);
+
+      flagInfos.forEach(info => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "matches-filter-flag";
+        btn.dataset.flagKey = info.key;
+        if (info.title) {
+          btn.title = info.title;
+        }
+
+        const img = document.createElement("img");
+        img.src = info.url;
+        img.alt = info.title || "Country flag";
+        btn.appendChild(img);
+
+        optionsWrapper.appendChild(btn);
+        filterButtons.push(btn);
+      });
+
+      card.appendChild(filterPanel);
+
+      let isFilterPanelOpen = false;
+
+      const toggleFilterPanel = () => {
+        if (isFilterPanelOpen) {
+          isFilterPanelOpen = false;
+          filterToggle.setAttribute("aria-expanded", "false");
+          filterPanel.style.height = `${filterPanel.scrollHeight}px`;
+          requestAnimationFrame(() => {
+            filterPanel.style.height = "0px";
+          });
+        } else {
+          isFilterPanelOpen = true;
+          filterToggle.setAttribute("aria-expanded", "true");
+          filterPanel.style.height = "0px";
+          filterPanel.classList.add("open");
+          requestAnimationFrame(() => {
+            filterPanel.style.height = `${filterPanel.scrollHeight}px`;
+          });
+        }
+      };
+
+      filterToggle.addEventListener("click", toggleFilterPanel);
+
+      filterPanel.addEventListener("transitionend", event => {
+        if (event.propertyName !== "height") {
+          return;
+        }
+        if (isFilterPanelOpen) {
+          filterPanel.style.height = "auto";
+        } else {
+          filterPanel.classList.remove("open");
+          filterPanel.style.height = "0px";
+        }
+      });
+
+      const setActiveFlag = (flagKey) => {
+        activeFlagKey = flagKey;
+        filterButtons.forEach(btn => {
+          const isActive = !!activeFlagKey && btn.dataset.flagKey === activeFlagKey;
+          if (isActive) {
+            btn.classList.add("active");
+          } else {
+            btn.classList.remove("active");
+          }
+        });
+        applyFlagFilter();
+      };
+
+      filterButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const flagKey = btn.dataset.flagKey;
+          if (activeFlagKey === flagKey) {
+            setActiveFlag(null);
+          } else {
+            setActiveFlag(flagKey);
+          }
+        });
+      });
+    }
+
+    matchesForTournament.forEach(match => {
+      const tournamentType = tournament.type || match.tournament_type;
+      const matchTimestamp = getMatchTimestamp(match) || 0;
+      const isTodayMatch = matchTimestamp < startOfTomorrow;
+      const showRating = true;
+
+      if (isDuelTournament(tournamentType)) {
+        const duelElement = createDuelElement(match, { showRating, isToday: isTodayMatch });
+        card.appendChild(duelElement);
+      } else {
+        const teamElement = createMatchElement(match, { showRating, isToday: isTodayMatch });
+        if ((tournament.type || match.tournament_type) === "TEAM") {
+          registerTeamMatchElement(teamElement, match);
+        }
+        card.appendChild(teamElement);
+      }
+    });
+
+    container.appendChild(card);
+  });
+
+  if (!renderedAny) {
+    const emptyState = document.createElement("div");
+    emptyState.className = "matches-empty";
+    emptyState.textContent = "No matches scheduled for today or tomorrow.";
+    container.appendChild(emptyState);
+  }
+
+  if (matchSelectionMode) {
+    updateSelectionModeUI();
+  } else {
+    applyAllMatchVisibility();
+  }
+}
+
+const autoUpdate = true;
+
+function fetchWithTimeout(resource, options = {}) {
+  const { timeout = 10000 } = options;
+  return Promise.race([
+    fetch(resource, options),
+    new Promise((_, reject) => {
+      const err = new Error("Request timed out");
+      err.name = "TimeoutError";
+      setTimeout(() => reject(err), timeout);
+    })
+  ]);
+}
+
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout = 10000 } = {}) {
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    try {
+      const res = await fetchWithTimeout(url, { timeout });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      console.info(`✅ Data loaded from primaryURL (attempt ${attempt})`);
+      return data;
+    } catch (err) {
+      // If timed out, immediately bubble up to trigger fallback
+      if (err && err.name === "TimeoutError") {
+        throw err;
+      }
+      // Retry only for non-timeout errors, up to retries
+      if (attempt > (retries + 1)) {
+        throw err;
+      }
+      await sleep(delayMs);
+      // continue loop
+    }
+  }
+}
+
+function fetchAndRenderMatches() {
+  const primaryURL = "https://api.carcassonne.com.ua/public/matches_new";
+  const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches_new.json";
+
+  fetchPrimaryWithRetry(primaryURL, { retries: 2, delayMs: 500, timeout: 10000 })
+    .catch(err => {
+      console.warn("⚠️ Primary failed, using fallback:", err && err.message ? err.message : err);
+      return fetch(fallbackURL)
+        .then(res => res.json())
+        .then(data => {
+          console.info("ℹ️ Data loaded from fallbackURL");
+          return data;
+        });
+    })
+    .then((data) => {
+      lastData = data;
+      renderAllSectionsFromData(data);
+    })
+    .catch(err => {
+      console.error("❌ Failed to load any match data:", err);
+    });
+}
+
+  function renderAllSectionsFromData({ matches_today, matches_scheduled, tournaments_today, tournaments_scheduled }) {
+    const container = document.getElementById("matches-container");
+    container.innerHTML = "";
+    applySizeSetting();
+    applyOrientationClass();
+
+    const listWrapper = document.createElement("div");
+    listWrapper.className = "matches-list";
+    container.appendChild(listWrapper);
+
+    renderTodayAndTomorrow(listWrapper, {
+      matchesToday: matches_today,
+      matchesScheduled: matches_scheduled,
+      tournamentsToday: tournaments_today,
+      tournamentsScheduled: tournaments_scheduled
+    });
+
+    renderSettingsSection(container);
+  }
+
+  fetchAndRenderMatches();
+
+if (autoUpdate) {
+  setInterval(fetchAndRenderMatches, 60000);
+}
+</script>

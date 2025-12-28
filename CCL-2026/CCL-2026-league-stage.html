@@ -1,0 +1,2325 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- СТИЛІ -->
+<style>
+  :root {
+    --main-bg-color: #2C6DA3;   /* синій за замовчуванням */
+    --hover-bg-color: #24598a; /* синій hover за замовчуванням */
+    --accent-text-color: #fff;  /* текст/іконки на фоні головного кольору */
+  }
+
+  /* Smooth anchor scrolling */
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Montserrat', sans-serif;
+  }
+  .tab-container {
+    display: flex;
+    gap: 0px;
+    padding: 10px 0px;
+    flex-wrap: wrap;
+  }
+
+  .tab {
+    padding: 6px 12px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #333333;
+    background-color: transparent;
+    border-radius: 0px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .tab.active,
+  .tab:hover { 
+    background-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+  }
+
+  .group-section {
+    margin: 5px 0;
+    padding: 0 0px;
+  }
+
+  .group-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 3px;
+    color: #222;
+  }
+
+  /* Stage 1 group titles styled like standings headers */
+  .stage-group-title {
+    background-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+    font-weight: 600;
+    font-size: 15px;
+    padding: 6px 10px;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    margin-bottom: 6px;
+  }
+
+  .overview-section-title {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 3px;
+    color: #222;
+  }
+
+  .overview-about-text {
+    font-size: 14px;
+    color: #333;
+  }
+
+  .group-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    overflow: hidden;
+  }
+
+  .group-table th {
+    background-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+    font-weight: 600;
+    padding: 6px;
+    font-size: 15px;
+    text-align: center;
+    width: auto;
+    min-width: 40px;
+  }
+
+  /* Left-align the Players/Teams header (second column) */
+  .group-table tr:first-child th:nth-child(2) {
+    text-align: left;
+  }
+
+  .group-table td {
+    padding: 6px;
+    font-size: 15px;
+    line-height: 17px;
+    border-top: 1px solid #ccc;
+    text-align: center;
+  }
+
+  .group-table tr:nth-child(n+2) {
+    background-color: white;
+  }
+
+  .group-table td a {
+    color: #333333;
+    text-decoration: none;
+    word-break: break-word;
+  }
+
+  .group-table td a:hover {
+    color: #0277BD;
+  }
+
+  /* MATCH TABLE STYLES */
+  .match-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 5px;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    overflow: hidden;
+  }
+
+  .match-table tr.match-row {
+    background-color: white;
+    border-top: 1px solid #ccc;
+  }
+
+  .match-table td {
+    font-size: 15px;
+    line-height: 17px;
+    padding: 4px 0px;
+  }
+
+  .match-table td.date-cell {
+    font-size: 13px;
+    text-align: left;
+    line-height: 13px;
+    padding: 4px 4px 4px 6px;
+  }
+
+  .match-table td.player-cell {
+    text-align: center;
+  }
+  .match-table td.player-cell a {
+    color: #333333;
+    text-decoration: none;
+  }
+  .match-table td.player-cell a:hover {
+    color: #0277BD;
+    text-decoration: none;
+  }
+
+  .standings-order-info {
+    font-size: 13px;
+    line-height: 1.4;
+    color: #333;
+    margin: 8px 0 14px;
+  }
+  
+  .match-table td.score-cell {
+    text-align: center;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .match-table .score-cell .duel-score {
+    font-weight: 600;
+  }
+
+  .match-table .score-cell .game-score {
+    font-weight: normal;
+    font-size: 13px;
+  }
+
+  .match-table .score-cell .score-line {
+    display: block;
+    line-height: 17px;
+  }
+  /* End MATCH TABLE STYLES */
+
+  /* LINEUP TABLE STYLES */
+  .lineup {
+    height: 0;
+    overflow: hidden;
+    font-size: 14px;
+    transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+    background-color: #f5f5f5;
+  }
+
+  .match-table tr.lineup-row td {
+    border: none;
+    padding: 0;
+    vertical-align: middle;
+  }
+
+  .lineup-player {
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 15px;
+    text-decoration: none;
+    color: inherit;
+    padding: 0 7px;
+    vertical-align: middle;
+  }
+
+  .match-table .lineup-score {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    padding: 0 5px !important;
+  }
+
+  .lineup-player:hover {
+    color: #0277BD;
+    text-decoration: none;
+  }
+
+  .lineup-separator {
+    font-weight: 600;
+    margin: 0 3px;
+  }
+
+  .lineup__overview {
+    padding: 0 10px;
+    line-height: 18px;
+  }
+
+  @media (max-width: 600px) {
+    .lineup__overview {
+      font-size: 14px;
+      line-height: 18px;
+    }
+  }
+  /* End LINEUP TABLE STYLES */
+
+  /* Match Icon Wrapper and Icon */
+  .match-icon-wrapper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    width: 22px;
+    height: 22px;
+    box-sizing: border-box;
+  }
+  .match-icon-wrapper i {
+    font-size: 14px;
+    color: #444;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    padding: 0;
+    position: static;
+    line-height: 1;
+  }
+
+  .accordion-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+    font-weight: 400;
+    font-size: 15px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+  }
+
+  .accordion-toggle:hover {
+    background-color: var(--hover-bg-color);
+  }
+
+  .accordion-toggle .chevron {
+    display: flex;
+    align-items: center;
+  }
+
+  .accordion-toggle .chevron i {
+    transition: transform 0.3s ease;
+  }
+
+  .accordion-toggle.open .chevron i {
+    transform: rotate(180deg);
+  }
+
+  .accordion-content {
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    padding: 0 2px;
+  }
+
+  /* Players/Teams data cell in standings/crosstable tables */
+  .players-name-cell {
+    min-width: 150px;
+    text-align: left !important;
+    vertical-align: middle;
+  }
+  .players-name-wrap { display: flex; align-items: center; gap: 7px; justify-content: flex-start; width: 100%; }
+  .players-name-wrap a { display: block; flex: 1 1 auto; min-width: 0; text-align: left; white-space: normal; word-break: break-word; }
+
+  /* Rank (position) data cell */
+  .rank-cell { width: 5%; }
+
+  /* Standings metric columns (MP, MW, ML, GW, GL, etc.) */
+  .standing-metric-col { 
+    min-width: 20px !important;
+    width: 5%; 
+  }
+
+  /* Cross Table diagonal (self) cell */
+  .ct-self-cell { background-color: #eee; }
+
+  /* Cross Table borders: icon header cols (from 3rd col), and result data cols */
+  .group-table.crosstable tr:first-child th:nth-child(n+3) { border-left: 1px solid #bddbfa; }
+  .group-table.crosstable td:nth-child(n+3) { border-left: 1px solid #eee; }
+  /* Cross Table non-opponent cells */
+  .group-table.crosstable td.ct-not-opponent { background-color: #f0f0f0; color: #999; }
+  /* Simulator pending inputs */
+  .group-table.crosstable td.sim-pending {
+    background-color: #ffeaea;
+    border: 1.3px solid #0f3a5a;
+    box-sizing: border-box;
+  }
+  /* Simulator dropdown styled like news category */
+  .sim-select {
+    position: relative;
+    width: 100%;
+  }
+  .sim-select-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0px 3px;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    gap: 2px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    font-family: inherit;
+  }
+  .sim-select-btn:hover,
+  .sim-select-btn:focus-visible {
+    border-color: #b5c5d3;
+    box-shadow: 0 0 0 1px rgba(17, 131, 192, 0.08);
+    outline: none;
+  }
+  .sim-select-btn.open {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .sim-select-label {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+  }
+  .sim-select-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0;
+    color: #555;
+  }
+  .sim-select-chevron i {
+    transition: transform 0.3s ease;
+    font-size: 12px;
+  }
+  .sim-select-btn.open .sim-select-chevron i {
+    transform: rotate(180deg);
+  }
+  .sim-select-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 4px);
+    width: 100%;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+    box-sizing: border-box;
+    z-index: 30;
+  }
+  .sim-select-menu.open {
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(17, 131, 192, 0.08);
+    max-height: 220px;
+  }
+  .sim-select-option {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 4px 8px;
+    background: #fff;
+    border-top: 1px solid #e2e2e2;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    gap: 6px;
+    border: none;
+    color: inherit;
+    font-family: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+    white-space: nowrap;
+  }
+  .sim-select-option:first-child { border-top: none; }
+  .sim-select-option:hover { background-color: #f5f5f5; }
+  .sim-select-option.active { background-color: #e4f0fb; }
+  .sim-pending .sim-select-btn { background-color: #ffeaea; border-color: transparent; box-shadow: none; }
+  .sim-select-menu.drop-down { bottom: auto; top: calc(100% + 4px); }
+
+  /* Header row above tables (title on left, view toggle on right) */
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  /* Switch style aligned with matches_new.html */
+  .sort-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .sort-toggle__label {
+    color: #555;
+    font-weight: 600;
+  }
+  .sort-toggle__options {
+    display: inline-flex;
+    background: none;
+    border-radius: 3px;
+    padding: 2px;
+  }
+  .sort-toggle__option {
+    padding: 2px 8px;
+    border-radius: 2px;
+    cursor: pointer;
+    color: #555;
+    user-select: none;
+  }
+  .sort-toggle__option.active {
+    background: #fff;
+    color: #111;
+    box-shadow: 0 0 0 1px #ddd inset;
+  }
+
+  /* (Table-specific styles for renderStandingsData were removed; kept generic styles elsewhere) */
+
+  .expand-bracket-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-text-color);
+    background-color: var(--main-bg-color);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    box-shadow: none;
+    opacity: 0.5;
+  }
+
+  /* Simulator toolbar in fullscreen tables */
+  .sim-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .sim-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-text-color);
+    background-color: var(--main-bg-color);
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+  }
+  .sim-btn:hover {
+    background-color: var(--hover-bg-color);
+  }
+  .sim-btn-calc {
+    background-color: #197457;
+    color: #fff;
+  }
+  .sim-btn-calc:hover {
+    background-color: #145c44;
+  }
+  .sim-btn-close {
+    background-color: #9b393b;
+    color: #fff;
+  }
+  .sim-btn-close:hover {
+    background-color: #892c2e;
+  }
+  .expand-bracket-btn:hover {
+    background-color: var(--hover-bg-color);
+  }
+  .expand-bracket-btn i { font-size: 12px; }
+
+  .fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    box-sizing: border-box;
+  }
+  .fullscreen-header {
+    display: none; /* header hidden; close button floats at top-left */
+  }
+  .fullscreen-close-btn {
+    position: absolute;
+    top: 20px;                 /* moved lower */
+    left: 20px;                /* moved right */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;               /* square button */
+    height: 28px;              /* square button */
+    padding: 0;                /* keep square */
+    font-size: 14px;
+    color: var(--accent-text-color);
+    background-color: var(--main-bg-color);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    box-shadow: 1.4px 1.4px 2px #00000040;
+    z-index: 10001;            /* ensure on top of content */
+  }
+  .fullscreen-close-btn:hover { background-color: var(--hover-bg-color); }
+  .fullscreen-content {
+    flex: 1 1 auto;
+    overflow: auto;
+    background: #f2f4f7;
+    border-radius: 4px;
+    padding: 8px;
+  }
+  /* Group navigation chips for Stage 1 (Groups + DE) */
+  .groups-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 6px 0 10px;
+  }
+  .group-chip {
+    display: inline-block;
+    padding: 4px 10px;
+    background-color: #f2f4f7;
+    border: 1px solid #d7dbe0;
+    border-radius: 1px;
+    color: inherit;
+    text-decoration: none;
+    font-weight: 600;
+    line-height: 18px;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+  .group-chip:hover {
+    background-color: #d7eaff; /* slightly darker light blue */
+    border-color: #9fc5f5;
+  }
+  /* Offset target position to avoid fixed header overlap when anchoring */
+  .stage-group-anchor { scroll-margin-top: 45px; }
+  .round-label {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+  /* Meta chips above bracket match boxes */
+  .match-meta-wrapper {
+    position: absolute;
+    width: 200px;  /* will be overridden inline to MATCH_WIDTH */
+    text-align: left;
+    font-size: 11px;
+    line-height: 13px;
+  }
+  .match-meta-chip {
+    display: inline-block;
+    padding: 1px 4px;
+    border-radius: 1px;
+    margin-right: 2px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.05) inset;
+  }
+  .match-meta-format {
+    background-color: #d7eaff; /* default light blue */
+    color: #073654;
+    font-weight: 400;
+  }
+  /* Variant backgrounds by duel format */
+  .match-meta-format.bo1 { /* Bo1 → white */
+    background-color: #ffffff;
+    color: #333333;
+  }
+  .match-meta-format.bo3 { /* Bo3 → light blue (as before) */
+    background-color: #d7eaff;
+    color: #073654;
+  }
+  .match-meta-format.bo5 { /* Bo5 → light red */
+    background-color: #fce0e0;
+    color: #590f0f;
+  }
+
+  .match-box {
+    background-color: white;
+    border: 1px solid #aaa;
+    border-radius: 2px;
+    font-size: 15px;
+    line-height: 18px;
+    margin-bottom: 20px;
+    /*box-shadow: 1px 1px 2px #b2b2b2;*/
+    box-sizing: border-box;
+  }
+  .match-box div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 50%;
+    gap: 6px;
+  }
+  .player-logo {
+    height: auto;
+    width: 20px;
+    border: none;
+    object-fit: contain;
+    margin-right: 0px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-top: 2px;
+    margin-bottom: 2px;
+  }
+
+  .team-logo {
+    height: 20px;
+    width: 20px;
+    object-fit: contain;
+    margin-right: 0px;
+    border-radius: 2px;
+  }
+  
+  .match-box a {
+    color: #333333;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .match-box a:hover {
+    color: #0277BD;
+  }
+
+  .match-row-winner {
+    /* background-color: #fff; */
+    font-weight: 500;
+    padding: 0 7px;  
+  }
+
+  .match-row-loser {
+    /* background-color: #fff; */
+    padding: 0 7px; 
+  }
+
+  .highlight-player {
+    background-color: #eeeeee !important;
+  }
+  .highlight-text {
+    font-weight: 600;
+  }
+
+  /* Responsive: Limit width of time cell on mobile */
+  @media (max-width: 768px) {
+    .match-table td.date-cell {
+      max-width: 60px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+</style>
+
+<!-- HTML -->
+<div id="tournament-title" style="font-size:18px; font-weight:700; line-height:20px; padding:0 0 10px;"></div>
+<div class="tab-container" id="tab-container"></div>
+<div id="tab-earth-content" style="display:none;"></div>
+<div id="tab-space-content" style="display:none;"></div>
+<div id="tab-matches-content" style="display:none;"></div>
+
+<!-- СКРИПТ -->
+<script>
+  
+  // --- TOURNAMENT CONFIG FOR THIS PAGE ---
+  const CURRENT_TOURNAMENT_ID = "CCL-2026";
+  const STAGE_FILTER = "Stage 1";
+  const LEAGUE_TABS = ["EARTH", "SPACE"];
+  let currentTournamentId = CURRENT_TOURNAMENT_ID;
+  let currentTournament = null;
+
+  // --- Dynamic tournament theme colors ---
+  const TOURNAMENT_THEMES = {
+    blue: {
+      main: '#2C6DA3',
+      hover: '#24598a'
+    },
+    red: {
+      main: '#d85c5c',
+      hover: '#c64a4b'
+    },
+    green: {
+      main: '#197457',
+      hover: '#145c44'
+    },
+    deepnavy: {
+      main: '#0f3a5a',
+      hover: '#072840'
+    },
+    gold: {
+      main: 'Gold',
+      hover: '#E6C200',
+      text: '#333'
+    }
+  };
+
+  function applyTournamentTheme(styleName) {
+    const normalized = (styleName || '').trim().toLowerCase();
+    const theme = TOURNAMENT_THEMES[normalized] || TOURNAMENT_THEMES.blue;
+    document.documentElement.style.setProperty('--main-bg-color', theme.main);
+    document.documentElement.style.setProperty('--hover-bg-color', theme.hover);
+    document.documentElement.style.setProperty('--accent-text-color', theme.text || '#fff');
+  }
+
+  applyTournamentTheme();
+
+  let matches = [];
+  let duels = [];
+  let standings = [];
+  let players = [];
+  let tournament_players = [];
+  let countries = [];
+  let teams = [];
+  let streams = [];
+  let openAccordion = null;
+
+  function getFlagByPlayerId(playerId) {
+    const entry = tournament_players.find(tp => String(tp.player_id) === String(playerId));
+    const countryCode = entry && entry.country ? String(entry.country) : null;
+    if (!countryCode) return "";
+    const found = countries.find(c => String(c.team) === countryCode || String(c.iso) === countryCode);
+    return found && found.flag ? found.flag : "";
+  }
+
+  function fetchTournamentsAndInit() {
+    const dataUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json";
+
+    fetch(dataUrl)
+      .then(r => {
+        if (!r.ok) throw new Error("Failed to fetch data");
+        return r.json();
+      })
+      .then(data => {
+        if (!data || !data.tournaments || !Array.isArray(data.tournaments)) {
+          const fallbackContainer = document.getElementById("tab-earth-content") || document.getElementById("tab-stage1-content");
+          if (fallbackContainer) {
+            fallbackContainer.textContent = "❌ Failed to load tournament data";
+          }
+          return;
+        }
+
+        const allTournaments = data.tournaments;
+        currentTournament = allTournaments.find(t => t.tournament_id === currentTournamentId);
+        if (currentTournament) {
+          document.getElementById("tournament-title").textContent = currentTournament.name;
+          applyTournamentTheme(currentTournament.style);
+        }
+        currentTournament = currentTournament || {};
+
+        // Збереження відповідних частин даних
+        duels = data.duels || [];
+        standings = data.standings || [];
+        matches = data.matches || [];
+        players = data.players || [];
+        tournament_players = data.tournament_players || [];
+        countries = data.countries || [];
+        teams = data.teams || [];
+        streams = data.streams || [];
+        initAndRenderTournamentContent(currentTournament);
+      });
+  }
+
+  function initAndRenderTournamentContent(currentTournament) {
+    // --- INIT TOURNAMENT CONTENT FOR CCL-2026 STAGE 1 ---
+    const tabContainer = document.getElementById("tab-container");
+    tabContainer.innerHTML = ""; // clear previous tabs
+
+    const tabDefs = LEAGUE_TABS.map(league => ({
+      id: league.toLowerCase(),
+      label: league
+    }));
+    tabDefs.push({ id: "matches", label: "Matches" });
+
+    // --- Render tabs ---
+    tabDefs.forEach((tab, idx) => {
+      const tabEl = document.createElement("div");
+      tabEl.className = "tab" + (idx === 0 ? " active" : "");
+      tabEl.dataset.tab = tab.id;
+      tabEl.textContent = tab.label;
+      tabContainer.appendChild(tabEl);
+    });
+
+    const leagueContainers = LEAGUE_TABS.reduce((acc, league) => {
+      acc[league.toLowerCase()] = document.getElementById(`tab-${league.toLowerCase()}-content`);
+      return acc;
+    }, {});
+    const matchesContainer = document.getElementById("tab-matches-content");
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const requestedTab = urlParams.get("tab");
+    const defaultTabId = tabDefs.find(t => t.id === requestedTab) ? requestedTab : tabDefs[0].id;
+
+    function showTab(tabId) {
+      tabContainer.querySelectorAll(".tab").forEach(tabEl => {
+        tabEl.classList.toggle("active", tabEl.dataset.tab === tabId);
+      });
+
+      Object.values(leagueContainers).forEach(el => {
+        if (el) el.style.display = "none";
+      });
+      if (matchesContainer) matchesContainer.style.display = "none";
+
+      if (leagueContainers[tabId]) {
+        leagueContainers[tabId].style.display = "block";
+      } else if (tabId === "matches" && matchesContainer) {
+        matchesContainer.style.display = "block";
+        document.querySelectorAll(".accordion-toggle[data-should-open='true']").forEach(toggle => {
+          const content = toggle.nextElementSibling;
+          toggle.classList.add("open");
+          content.style.maxHeight = content.scrollHeight + "px";
+          toggle.removeAttribute("data-should-open");
+          content.removeAttribute("data-should-open");
+          openAccordion = content;
+        });
+      }
+    }
+
+    tabContainer.querySelectorAll(".tab").forEach(tabEl => {
+      tabEl.addEventListener("click", () => {
+        showTab(tabEl.dataset.tab);
+      });
+    });
+
+    LEAGUE_TABS.forEach(league => {
+      const container = leagueContainers[league.toLowerCase()];
+      if (!container) return;
+      container.innerHTML = "";
+      renderStandingsData(
+        standings.filter(s => s.tournament_id === currentTournamentId),
+        container,
+        { stage: STAGE_FILTER, allowedGroups: [league], customGroupTitles: { [league]: "" } }
+      );
+    });
+
+    renderMatchesData();
+    showTab(defaultTabId);
+  }
+
+  function renderStandingsData(standings_list, containerOverride, options = {}) {
+    const { stage: stageOverride = null, allowedGroups = null, customGroupTitles = {} } = options;
+    const normalizedAllowedGroups = Array.isArray(allowedGroups)
+      ? allowedGroups.map(g => String(g).toUpperCase())
+      : null;
+    // --- RENDER STANDINGS ---
+    // Build standings tables grouped by group, sorted and styled with logos
+    const container = containerOverride || document.getElementById("tab-standing-content");
+    container.innerHTML = '';
+    const grouped = {};
+    // Determine stage filter for cross table lookups
+    const stageFilter = stageOverride
+      ? stageOverride
+      : (container.id === "tab-stage1-content")
+        ? "Stage 1"
+        : (container.id === "tab-stage2-content")
+          ? "Stage 2"
+          : null;
+
+    const isStageMatch = (value) => {
+      if (!stageFilter) return true;
+      if (stageFilter === "Stage 1") {
+        return !value || value === stageFilter;
+      }
+      return value === stageFilter;
+    };
+
+    standings_list
+      .filter(row => row.tournament_id === currentTournamentId)
+      .filter(row => isStageMatch(row.stage))
+      .filter(row => !normalizedAllowedGroups || normalizedAllowedGroups.includes(String(row.group).toUpperCase()))
+      .forEach(row => {
+        if (!grouped[row.group]) grouped[row.group] = [];
+        grouped[row.group].push(row);
+      });
+    // Build ordered group keys and optional chips for Stage 1 (Groups) except Round-robin
+    const groupKeys = Object.keys(grouped)
+      .filter(g => g !== undefined && g !== null && String(g).trim() !== '' && String(g) !== 'undefined' && String(g) !== 'null')
+      .map(String)
+      .sort((a, b) => a.localeCompare(b));
+
+    const isTeam = currentTournament && currentTournament.type === "TEAM";
+    const isStage1Groups = container.id === "tab-stage1-content" && currentTournament && currentTournament.stage1_groups === "Groups";
+    const isRoundRobinGroups = currentTournament && (currentTournament.stage1_format === "Round-robin" || currentTournament.stage1_format === "Swiss");
+    if (isStage1Groups && groupKeys.length) {
+      const nav = document.createElement("div");
+      nav.className = "groups-nav";
+      groupKeys.forEach(g => {
+        const link = document.createElement("a");
+        link.className = "group-chip";
+        link.textContent = g;
+        link.href = `${window.location.pathname}?tab=stage1#group-${g}`;
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const target = document.getElementById(`group-${g}`);
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            history.replaceState(null, '', `${window.location.pathname}?tab=stage1#group-${g}`);
+          }
+        });
+        nav.appendChild(link);
+      });
+      container.appendChild(nav);
+    }
+
+    const iterateKeys = groupKeys.length ? groupKeys : Object.keys(grouped);
+    function parsePrimaryMetrics(row) {
+      return {
+        mw: Number(row && row.matches_won) || 0,
+        diff: (Number(row && row.games_won) || 0) - (Number(row && row.games_lost) || 0),
+        gw: Number(row && row.games_won) || 0
+      };
+    }
+
+    function primaryMetricsEqual(a, b) {
+      if (!a || !b) return false;
+      return a.mw === b.mw && a.diff === b.diff && a.gw === b.gw;
+    }
+
+    function extractPositionValue(raw) {
+      if (raw === null || raw === undefined) return null;
+      const str = String(raw).trim();
+      if (str === "") return null;
+      const num = Number(str);
+      if (!Number.isFinite(num) || num <= 0) return null;
+      return Math.floor(num);
+    }
+
+    function applyExplicitPositions(sortedPlayers) {
+      const total = sortedPlayers.length;
+      if (!total) return sortedPlayers;
+      const result = new Array(total).fill(null);
+      const positioned = [];
+
+      sortedPlayers.forEach((player, idx) => {
+        const pos = extractPositionValue(player?.position);
+        if (pos !== null) {
+          positioned.push({ player, pos, idx });
+        }
+      });
+
+      positioned
+        .sort((a, b) => (a.pos === b.pos ? a.idx - b.idx : a.pos - b.pos))
+        .forEach(entry => {
+          const slot = entry.pos - 1;
+          if (slot >= 0 && slot < total && result[slot] === null) {
+            result[slot] = entry.player;
+          }
+        });
+
+      const placed = new Set(result.filter(Boolean));
+      const remaining = sortedPlayers.filter(p => !placed.has(p));
+      let remIdx = 0;
+      for (let i = 0; i < total; i++) {
+        if (result[i] === null) {
+          result[i] = remaining[remIdx++];
+        }
+      }
+      return result;
+    }
+
+    function valueHasScore(value) {
+      return !(value === null || value === undefined || String(value).trim() === '');
+    }
+
+    for (const group of iterateKeys) {
+      let groupPlayers = grouped[group];
+      const section = document.createElement("div");
+      if (isStage1Groups) {
+        // Keep plain title style for Round-robin, but still add anchors for chips
+        section.className = "group-section stage-group-anchor";
+        section.id = `group-${group}`;
+      } else {
+        section.className = "group-section";
+      }
+
+      // Header row: title (if any) on left, view toggle on right
+      const headerRow = document.createElement("div");
+      headerRow.className = "section-header";
+
+      const title = document.createElement("div");
+      const normalizedGroupKey = group !== undefined && group !== null ? String(group) : "";
+      const hasCustom = customGroupTitles && Object.prototype.hasOwnProperty.call(customGroupTitles, normalizedGroupKey);
+      const hasCustomUpper = customGroupTitles && Object.prototype.hasOwnProperty.call(customGroupTitles, normalizedGroupKey.toUpperCase());
+      const resolvedCustom = hasCustom
+        ? customGroupTitles[normalizedGroupKey]
+        : hasCustomUpper
+          ? customGroupTitles[normalizedGroupKey.toUpperCase()]
+          : undefined;
+      const titleText =
+        resolvedCustom !== undefined
+          ? resolvedCustom
+          : (isStage1Groups ? `Group ${group}` : (group ? String(group) : ""));
+      const hasTitle = !!(titleText && titleText.trim());
+      title.className = hasTitle
+        ? (isRoundRobinGroups ? "group-title" : "group-title stage-group-title")
+        : "group-title";
+      title.style.marginBottom = "0px";
+      title.textContent = titleText || "";
+      if (!hasTitle) {
+        title.className = "group-title";
+        title.style.backgroundColor = "transparent";
+        title.style.boxShadow = "none";
+        title.style.padding = "0";
+        title.style.margin = "0";
+        title.style.minWidth = "0";
+        title.style.height = "0";
+        title.style.flex = "1";
+      }
+      headerRow.appendChild(title);
+
+      const viewToggle = document.createElement("div");
+      viewToggle.className = "sort-toggle";
+
+      const viewLabel = document.createElement("span");
+      viewLabel.className = "sort-toggle__label";
+      viewLabel.textContent = "Show:";
+
+      const viewOptions = document.createElement("div");
+      viewOptions.className = "sort-toggle__options";
+
+      const optStandings = document.createElement("div");
+      optStandings.className = "sort-toggle__option active";
+      optStandings.textContent = "Standings";
+
+      const optCross = document.createElement("div");
+      optCross.className = "sort-toggle__option";
+      optCross.textContent = "Cross Table";
+
+      viewOptions.appendChild(optStandings);
+      viewOptions.appendChild(optCross);
+      viewToggle.appendChild(viewLabel);
+      viewToggle.appendChild(viewOptions);
+      headerRow.appendChild(viewToggle);
+
+      section.appendChild(headerRow);
+
+      // Precompute opponent-based metrics for players (OMW/OGD/OGW)
+      const statsById = new Map();
+      if (!isTeam) {
+        groupPlayers.forEach(p => {
+          if (p && p.player_id !== undefined && p.player_id !== null) {
+            statsById.set(String(p.player_id), p);
+          }
+        });
+        const opponentsMap = new Map();
+        const addOpp = (a, b) => {
+          if (!a || !b || a === b) return;
+          const set = opponentsMap.get(a) || new Set();
+          set.add(b);
+          opponentsMap.set(a, set);
+        };
+        (duels || [])
+          .filter(m => m.tournament_id === currentTournamentId)
+          .filter(m => isStageMatch(m.stage))
+          .filter(m => !group || !m.group || m.group === group)
+          .forEach(m => {
+            const p1 = String(m.player1_id || '');
+            const p2 = String(m.player2_id || '');
+            if (statsById.has(p1) && statsById.has(p2)) {
+              addOpp(p1, p2);
+              addOpp(p2, p1);
+            }
+          });
+        groupPlayers.forEach(p => {
+          const key = String(p.player_id || '');
+          const opps = opponentsMap.get(key) || new Set();
+          let omw = 0, ogd = 0, ogw = 0;
+          opps.forEach(okey => {
+            const o = statsById.get(okey);
+            if (!o) return;
+            const mw = Number(o.matches_won) || 0;
+            const gw = Number(o.games_won) || 0;
+            const gl = Number(o.games_lost) || 0;
+            omw += mw;
+            ogd += (gw - gl);
+            ogw += gw;
+          });
+          p._omw = omw;
+          p._ogd = ogd;
+          p._ogw = ogw;
+        });
+      }
+
+      // Sort logic: TEAM stays as before; PLAYERS use MW, GD, GW, OMW, OGD, OGW (desc)
+      if (isTeam) {
+        groupPlayers.sort((a, b) => {
+          const mwDiff = (+b.matches_won || 0) - (+a.matches_won || 0);
+          if (mwDiff !== 0) return mwDiff;
+          const duelDiffA = (+a.duels_won || 0) - (+a.duels_lost || 0);
+          const duelDiffB = (+b.duels_won || 0) - (+b.duels_lost || 0);
+          const ddDiff = duelDiffB - duelDiffA;
+          if (ddDiff !== 0) return ddDiff;
+          const gameDiffA = ((+a.games_won || 0) - (+a.games_lost || 0));
+          const gameDiffB = ((+b.games_won || 0) - (+b.games_lost || 0));
+          const gdDiff = gameDiffB - gameDiffA;
+          if (gdDiff !== 0) return gdDiff;
+          return (+b.games_won || 0) - (+a.games_won || 0);
+        });
+      } else {
+        groupPlayers.sort((a, b) => {
+          const mwDiff = (+b.matches_won || 0) - (+a.matches_won || 0);
+          if (mwDiff !== 0) return mwDiff;
+          const gameDiffA = ((+a.games_won || 0) - (+a.games_lost || 0));
+          const gameDiffB = ((+b.games_won || 0) - (+b.games_lost || 0));
+          const gdDiff = gameDiffB - gameDiffA;
+          if (gdDiff !== 0) return gdDiff;
+          const gwDiff = (+b.games_won || 0) - (+a.games_won || 0);
+          if (gwDiff !== 0) return gwDiff;
+          const omwDiff = (+b._omw || 0) - (+a._omw || 0);
+          if (omwDiff !== 0) return omwDiff;
+          const ogdDiff = (+b._ogd || 0) - (+a._ogd || 0);
+          if (ogdDiff !== 0) return ogdDiff;
+          return (+b._ogw || 0) - (+a._ogw || 0);
+        });
+      }
+
+      groupPlayers = applyExplicitPositions(groupPlayers);
+
+      // Single table with dynamic columns depending on toggle
+      const table = document.createElement("table");
+      table.className = "group-table";
+      section.appendChild(table);
+
+      // Participants list in current (sorted) order (for Cross Table headers/columns)
+      const participants = (groupPlayers || []).map(p => {
+        if (isTeam) {
+          const tm = teams.find(t => t.team === p.team);
+          return { key: p.team, name: p.team, logo: tm && tm.logo ? tm.logo : null, type: 'team' };
+        } else {
+          const pl = players.find(pl => pl.player_id === p.player_id);
+          const flag = getFlagByPlayerId(p.player_id);
+          return {
+            key: String(p.player_id),
+            name: p.player,
+            flag: flag || null,
+            id: p.player_id,
+            standing_icon: (p && typeof p.standing_icon === 'string' && p.standing_icon.trim() !== '') ? p.standing_icon.trim() : null,
+            type: 'player'
+          };
+        }
+      });
+
+      function renderMode(mode) {
+        table.innerHTML = '';
+        // mark table mode for CSS
+        if (mode === 'crosstable') {
+          table.classList.add('crosstable');
+        } else {
+          table.classList.remove('crosstable');
+        }
+
+        // Precompute opponents per participant for cross table highlighting
+        const participantOpponents = new Map();
+        function addOpponent(key, oppKey) {
+          if (!key || !oppKey || key === oppKey) return;
+          const set = participantOpponents.get(key) || new Set();
+          set.add(oppKey);
+          participantOpponents.set(key, set);
+        }
+        if (mode === 'crosstable') {
+          if (isTeam) {
+            (matches || [])
+              .filter(m => m.tournament_id === currentTournamentId)
+              .filter(m => isStageMatch(m.stage))
+              .filter(m => !group || !m.group || m.group === group)
+              .forEach(m => {
+                const t1 = m.team1;
+                const t2 = m.team2;
+                addOpponent(t1, t2);
+                addOpponent(t2, t1);
+              });
+          } else {
+            (duels || [])
+              .filter(m => m.tournament_id === currentTournamentId)
+              .filter(m => isStageMatch(m.stage))
+              .filter(m => !group || !m.group || m.group === group)
+              .forEach(m => {
+                const p1 = String(m.player1_id || '');
+                const p2 = String(m.player2_id || '');
+                addOpponent(p1, p2);
+                addOpponent(p2, p1);
+              });
+          }
+        }
+        // Build header
+        const headTr = document.createElement('tr');
+        const thPos = document.createElement('th');
+        thPos.className = 'rank-cell';
+        thPos.style.position = 'relative';
+        const expandBtn = document.createElement('button');
+        expandBtn.className = 'expand-bracket-btn';
+        expandBtn.title = 'Fullscreen';
+        expandBtn.innerHTML = '<i class="fas fa-up-right-and-down-left-from-center"></i>';
+        expandBtn.style.opacity = '1';
+        expandBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openTableFullscreen({
+            sourceTable: table,
+            participants,
+            groupPlayers,
+            isTeam,
+            group,
+            stageFilter,
+            standingsColumns: isTeam
+              ? ['MP','MW','ML','DW','DL','GW','GL','OMW','OGD','OGW']
+              : ['MP','MW','ML','GW','GL','OMW','OGD','OGW']
+          });
+        });
+        thPos.appendChild(expandBtn);
+        const thName = document.createElement('th');
+        thName.textContent = isTeam ? 'Team' : 'Player';
+        headTr.appendChild(thPos);
+        headTr.appendChild(thName);
+
+        if (mode === 'standings') {
+          if (isTeam) {
+            ['MP','MW','ML','DW','DL','GW','GL'].forEach(lbl => {
+              const th = document.createElement('th');
+              th.className = 'standing-metric-col';
+              th.textContent = lbl;
+              headTr.appendChild(th);
+            });
+          } else {
+            ['MP','MW','ML','GW','GL'].forEach(lbl => {
+              const th = document.createElement('th');
+              th.className = 'standing-metric-col';
+              th.textContent = lbl;
+              headTr.appendChild(th);
+            });
+          }
+        } else {
+          // crosstable: flag/logo columns; if no icon, show participant position number
+          participants.forEach((part, idx) => {
+            const th = document.createElement('th');
+            if (part.type === 'team' && part.logo) {
+              th.innerHTML = `<img src="${part.logo}" class="team-logo" alt="">`;
+            } else if (part.type === 'player' && part.flag) {
+              th.innerHTML = `<img src="${part.flag}" class="player-logo" alt="">`;
+            } else {
+              th.textContent = String(idx + 1);
+            }
+            headTr.appendChild(th);
+          });
+        }
+        table.appendChild(headTr);
+
+        // Rows
+        (groupPlayers || []).forEach((rowData, index) => {
+          // Duplicate header after 15th player (before 16th) for cross table view
+          if (mode === 'crosstable' && index === 15) {
+            table.appendChild(headTr.cloneNode(true));
+          }
+          const tr = document.createElement('tr');
+          const tdIdx = document.createElement('td');
+          tdIdx.className = 'rank-cell';
+          tdIdx.textContent = String(index + 1);
+          tr.appendChild(tdIdx);
+
+          const tdName = document.createElement('td');
+          tdName.className = 'players-name-cell';
+          const wrap = document.createElement('div');
+          wrap.style.display = 'flex';
+          wrap.style.alignItems = 'center';
+          wrap.style.gap = '7px';
+
+          if (isTeam) {
+            const found = teams.find(t => t.team === rowData.team);
+            if (found && found.logo) {
+              const img = document.createElement('img');
+              img.src = found.logo;
+              img.className = 'team-logo';
+              wrap.appendChild(img);
+            }
+            const span = document.createElement('span');
+            span.textContent = rowData.team || '';
+            wrap.appendChild(span);
+          } else {
+            const flagSrc = getFlagByPlayerId(rowData.player_id);
+            if (flagSrc) {
+              const img = document.createElement('img');
+              img.src = flagSrc;
+              img.className = 'player-logo';
+              wrap.appendChild(img);
+            }
+            const a = document.createElement('a');
+            a.href = `https://boardgamearena.com/player?id=${rowData.player_id}`;
+            a.target = '_blank';
+            a.textContent = rowData.player || '';
+            wrap.appendChild(a);
+            const icon = (rowData && typeof rowData.standing_icon === 'string') ? rowData.standing_icon.trim() : '';
+            if (icon) {
+              const rightIcon = document.createElement('img');
+              rightIcon.src = icon;
+              rightIcon.alt = '';
+              rightIcon.style.width = '16px';
+              rightIcon.style.height = 'auto';
+              rightIcon.style.marginLeft = '3px';
+              rightIcon.style.objectFit = 'contain';
+              wrap.appendChild(rightIcon);
+            }
+          }
+          tdName.appendChild(wrap);
+          tr.appendChild(tdName);
+
+          if (mode === 'standings') {
+          if (isTeam) {
+            const values = [
+              rowData.matches_played,
+              rowData.matches_won,
+              rowData.matches_lost,
+              rowData.duels_won,
+              rowData.duels_lost,
+              rowData.games_won,
+              rowData.games_lost
+            ];
+            values.forEach((val, i) => {
+              const td = document.createElement('td');
+              td.textContent = String(val ?? '');
+              // Highlight MW column (index 1 in values)
+              if (i === 1) td.style.fontWeight = '600';
+              tr.appendChild(td);
+            });
+          } else {
+            const values = [
+              rowData.matches_played,
+              rowData.matches_won,
+              rowData.matches_lost,
+              rowData.games_won,
+              rowData.games_lost
+            ];
+            values.forEach((val, i) => {
+              const td = document.createElement('td');
+              td.textContent = String(val ?? '');
+              // Highlight MW column (index 1 in values)
+              if (i === 1) td.style.fontWeight = '600';
+              tr.appendChild(td);
+            });
+          }
+          } else {
+            debugger;
+            // crosstable: fill cells with existing results
+            participants.forEach(colPart => {
+              const td = document.createElement('td');
+              let text = '';
+              let isSelf = false;
+              const rowKey = isTeam ? rowData.team : String(rowData.player_id);
+              const colKey = colPart.type === 'team' ? colPart.name : String(colPart.id);
+              const isOpponent = participantOpponents.get(rowKey)?.has(colKey) || false;
+              // diagonal (self) cell should stay empty and be shaded
+              if (isTeam) {
+                const teamRow = rowData.team;
+                const teamCol = colPart.name;
+                if (teamRow && teamCol && teamRow === teamCol) {
+                  isSelf = true;
+                } else if (teamRow && teamCol) {
+                  const candidates = (matches || []).filter(m => m.tournament_id === currentTournamentId && (
+                    (m.team1 === teamRow && m.team2 === teamCol) || (m.team1 === teamCol && m.team2 === teamRow)
+                  ) && (!group || !m.group || m.group === group) && isStageMatch(m.stage));
+                  // choose the latest by time if multiple
+                  const picked = candidates.sort((a,b) => {
+                    const ta = Date.parse((a.time||'').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+                    const tb = Date.parse((b.time||'').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+                    return ta - tb;
+                  }).pop();
+                  if (picked && picked.duels_won1 !== null && picked.duels_won2 !== null && picked.duels_won1 !== '' && picked.duels_won2 !== '') {
+                    if (picked.team1 === teamRow && picked.team2 === teamCol) {
+                      text = `${picked.duels_won1} - ${picked.duels_won2}`;
+                    } else if (picked.team1 === teamCol && picked.team2 === teamRow) {
+                      text = `${picked.duels_won2} - ${picked.duels_won1}`;
+                    }
+                  }
+                }
+              } else {
+                const pidRow = rowData.player_id;
+                const pidCol = colPart.id;
+                if (pidRow && pidCol && pidRow === pidCol) {
+                  isSelf = true;
+                } else if (pidRow && pidCol) {
+                  const candidates = (duels || []).filter(m => m.tournament_id === currentTournamentId && (
+                    (m.player1_id === pidRow && m.player2_id === pidCol) || (m.player1_id === pidCol && m.player2_id === pidRow)
+                  ) && (!group || !m.group || m.group === group) && isStageMatch(m.stage));
+                  const picked = candidates.sort((a,b) => {
+                    const ta = Date.parse((a.time||'').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+                    const tb = Date.parse((b.time||'').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+                    return ta - tb;
+                  }).pop();
+                  if (picked && picked.score1 !== null && picked.score2 !== null && picked.score1 !== '' && picked.score2 !== '') {
+                    if (picked.player1_id === pidRow && picked.player2_id === pidCol) {
+                      text = `${picked.score1}-${picked.score2}`;
+                    } else if (picked.player1_id === pidCol && picked.player2_id === pidRow) {
+                      text = `${picked.score2}-${picked.score1}`;
+                    }
+                  }
+                }
+              }
+              if (isSelf) {
+                td.classList.add('ct-self-cell');
+                text = '';
+              }
+              if (!isSelf && !isOpponent) {
+                td.classList.add('ct-not-opponent');
+              }
+              td.textContent = text;
+              tr.appendChild(td);
+            });
+          }
+
+          table.appendChild(tr);
+        });
+      }
+
+      // initial render default to Standings
+      renderMode('standings');
+
+      // Toggle logic matching matches_new style
+      optStandings.addEventListener('click', () => {
+        optStandings.classList.add('active');
+        optCross.classList.remove('active');
+        renderMode('standings');
+      });
+      optCross.addEventListener('click', () => {
+        optStandings.classList.remove('active');
+        optCross.classList.add('active');
+        renderMode('crosstable');
+      });
+      container.appendChild(section);
+    }
+
+    // Explanatory text under the table
+    const stage1FormatLower = (currentTournament?.stage1_format || "").toLowerCase();
+    const stage2FormatLower = (currentTournament?.stage2_format || "").toLowerCase();
+    let formatLower = stage1FormatLower || stage2FormatLower;
+    if (container.id === "tab-stage1-content") {
+      formatLower = stage1FormatLower;
+    } else if (container.id === "tab-stage2-content") {
+      formatLower = stage2FormatLower;
+    }
+
+    const explanation = document.createElement("div");
+    explanation.className = "standings-order-info";
+    explanation.innerHTML = `<br>MP: Matches Played MW: Matches Won ML: Matches Lost GW: Games Won GL: Games Lost<br><br>The final positions in the group will be determined in the following order:<br>1. MW (Matches Won) – number of matches won<br>2. GD (Games Difference) – difference between Games Won (GW) and Games Lost (GL)<br>3. GW (Games Won) – number of games won<br>4. OMW (Opponents’ Matches Won) – total number of matches won by all opponents in the league stage<br>5. OGD (Opponents’ Games Difference) – combined difference between GW and GL of all opponents in the league stage<br>6. OGW (Opponents’ Games Won) – total number of games won by all opponents in the league stage<br>7. Player coefficient`;
+    container.appendChild(explanation);
+  }
+
+  // Format match time to local TZ
+  function formatMatchTime(raw) {
+    if (!raw || typeof raw !== "string") return "";
+    const s = raw.trim();
+    // With time: DD.MM.YYYY HH:MM:SS
+    if (/^\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}:\d{2}$/.test(s)) {
+      const [datePart, timePart] = s.split(/\s+/);
+      const [dd, mm, yyyy] = datePart.split(".").map(Number);
+      const [HH, MM, SS] = timePart.split(":").map(Number);
+      const ts = Date.UTC(yyyy, mm - 1, dd, HH, MM, SS);
+      const d = new Date(ts);
+      const dayMon = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const hm = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+      return `${dayMon} ${hm}`; // e.g., 12 Aug 14:00
+    }
+    // Date only: DD.MM.YYYY → show as DD Mon
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(s)) {
+      const [dd, mm, yyyy] = s.split(".").map(Number);
+      // Use noon UTC to avoid TZ shifting date
+      const ts = Date.UTC(yyyy, mm - 1, dd, 12, 0, 0);
+      const d = new Date(ts);
+      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    }
+    // Fallback: return as-is
+    return s;
+  }
+
+  function renderMatchesData() {
+    // --- RENDER MATCHES ---
+    // Group matches by round and build collapsible sections for each round
+    const container = document.getElementById("tab-matches-content");
+    container.innerHTML = '';
+
+    const matchesToRender = currentTournament.type === "TEAM" ? matches : duels;
+
+    const filteredMatches = matchesToRender
+      .filter(match => match.tournament_id === currentTournamentId)
+      .filter(match => {
+        if (!STAGE_FILTER) return true;
+        if (STAGE_FILTER === "Stage 1") return !match.stage || match.stage === STAGE_FILTER;
+        return match.stage === STAGE_FILTER;
+      });
+
+    const groupedByRound = {};
+    filteredMatches.forEach(match => {
+      if (!groupedByRound[match.round]) groupedByRound[match.round] = [];
+      groupedByRound[match.round].push(match);
+    });
+
+    // --- BEGIN: Determine which round to open by default if tournament is "In progress" ---
+    const hasOpenRound = currentTournament.status === "In progress";
+    let roundToOpen = null;
+    if (hasOpenRound) {
+      for (const round of Object.keys(groupedByRound)) {
+        const roundMatches = groupedByRound[round];
+        if (roundMatches.some(m => m.status !== "DONE")) {
+          roundToOpen = round;
+          break;
+        }
+      }
+    }
+    // --- END: Determine open round ---
+
+    openAccordion = null;
+
+    for (const [round, roundMatches] of Object.entries(groupedByRound)) {
+      const section = document.createElement("div");
+      section.className = "group-section";
+
+      const toggle = document.createElement("div");
+      toggle.className = "accordion-toggle";
+      toggle.innerHTML = '';
+      const labelSpan = document.createElement("span");
+      labelSpan.textContent = round;
+
+      const chevronDiv = document.createElement("div");
+      chevronDiv.className = "chevron";
+      chevronDiv.innerHTML = '<i class="fas fa-chevron-down"></i>';
+
+      toggle.appendChild(labelSpan);
+      toggle.appendChild(chevronDiv);
+
+      const content = document.createElement("div");
+      content.className = "accordion-content";
+      content.style.maxHeight = "0px";
+
+      const table = document.createElement("table");
+      table.className = "match-table";
+
+      const isGroupStage = !!(currentTournament && currentTournament.stage1_groups === "Groups");
+
+      roundMatches.forEach(g => {
+        const row = document.createElement("tr");
+        row.className = "match-row";
+
+        if (currentTournament.type === "TEAM") {
+          // --- TEAM LOGIC: render team name + logo ---
+          // Find logos by team name (from teams array)
+          const team1Logo = teams.find(t => t.team === g.team1)?.logo;
+          const team2Logo = teams.find(t => t.team === g.team2)?.logo;
+
+          const team1Content = team1Logo
+            ? `<img src="${team1Logo}" alt="${g.team1}" style="height: 20px; vertical-align: middle; margin-right: 7px;">${g.team1}`
+            : g.team1;
+          const team2Content = team2Logo
+            ? `${g.team2}<img src="${team2Logo}" alt="${g.team2}" style="height: 20px; vertical-align: middle; margin-left: 7px;">`
+            : g.team2;
+
+          const team1Cell = `<td class="player-cell" style="text-align:center;">
+            <div style="display:flex; align-items:center; justify-content:center;">
+              ${team1Content || ''}
+            </div>
+          </td>`;
+          const team2Cell = `<td class="player-cell" style="text-align:center;">
+            <div style="display:flex; align-items:center; justify-content:center;">
+              ${team2Content || ''}
+            </div>
+          </td>`;
+
+          // Score cell logic
+          let scoreCellHtml = '';
+          if (
+            g.duels_won1 === "" || g.duels_won2 === "" ||
+            g.games_won1 === "" || g.games_won2 === ""
+          ) {
+            scoreCellHtml = `<td class="score-cell">vs</td>`;
+          } else {
+            scoreCellHtml = `<td class="score-cell">
+              <span class="duel-score score-line">${g.duels_won1} - ${g.duels_won2}</span>
+              <span class="game-score score-line">(${g.games_won1} - ${g.games_won2})</span>
+            </td>`;
+          }
+
+          row.innerHTML = `
+            <td class="date-cell">${formatMatchTime(g.time)}</td>
+            ${g.group ? `<td>${g.group}</td>` : ""}
+            ${team1Cell}
+            ${scoreCellHtml}
+            ${team2Cell}
+          `;
+
+          // --- APPEND DUELS ICON CELL (ALWAYS APPEND CELL TO MAINTAIN ALIGNMENT) ---
+          const iconCell = document.createElement("td");
+          iconCell.style.textAlign = "right";
+          iconCell.style.paddingRight = "8px";
+
+          let lineupDiv = null;
+          if (
+            g.match_id &&
+            duels.some(d => d.match_id === g.match_id)
+          ) {
+            const icon = document.createElement("i");
+            icon.className = "fas fa-list";
+            const iconWrapper = document.createElement("div");
+            iconWrapper.className = "match-icon-wrapper";
+            iconWrapper.style.backgroundColor = g.status === "DONE" ? "#d2f4d2" : "#f9db9e";
+            iconWrapper.appendChild(icon);
+            iconCell.appendChild(iconWrapper);
+
+            // --- BEGIN: Insert lineup dropdown ---
+            lineupDiv = document.createElement("div");
+            lineupDiv.className = "lineup";
+
+            // Render lineup as a table, each duel as a row
+            const lineupTable = document.createElement("table");
+            const relevantDuels = duels.filter(d => d.match_id === g.match_id);
+            relevantDuels.forEach(duel => {
+              const player1Avatar = getFlagByPlayerId(duel.player1_id);
+              const player2Avatar = getFlagByPlayerId(duel.player2_id);
+
+              // --- player1: icon cell then name cell (icon | name) ---
+              const player1IconCell = document.createElement("td");
+              player1IconCell.innerHTML = player1Avatar ? `<img src="${player1Avatar}" class="player-logo" style="margin-left:10px;">` : "";
+
+              const player1NameCell = document.createElement("td");
+              player1NameCell.style.textAlign = "left";
+              player1NameCell.innerHTML = `<a href="https://boardgamearena.com/player?id=${duel.player1_id}" target="_blank" class="lineup-player">${duel.player1}</a>`;
+
+              // --- center cell: score or vs ---
+              const centerCell = document.createElement("td");
+              centerCell.className = "lineup-score";
+              if (duel.score1 !== "" && duel.score2 !== "" && duel.score1 !== null && duel.score2 !== null) {
+                centerCell.textContent = `${duel.score1} - ${duel.score2}`;
+              } else {
+                centerCell.textContent = "vs";
+              }
+
+              // --- player2: name cell then icon cell (name | icon) ---
+              const player2NameCell = document.createElement("td");
+              player2NameCell.style.textAlign = "right";
+              player2NameCell.innerHTML = `<a href="https://boardgamearena.com/player?id=${duel.player2_id}" target="_blank" class="lineup-player">${duel.player2}</a>`;
+
+              const player2IconCell = document.createElement("td");
+              player2IconCell.innerHTML = player2Avatar ? `<img src="${player2Avatar}" class="player-logo">` : "";
+
+              // Build row: icon1 | name1 | center | name2 | icon2
+              const tr = document.createElement("tr");
+              tr.appendChild(player1IconCell);
+              tr.appendChild(player1NameCell);
+              tr.appendChild(centerCell);
+              tr.appendChild(player2NameCell);
+              tr.appendChild(player2IconCell);
+              lineupTable.appendChild(tr);
+            });
+            lineupDiv.appendChild(lineupTable);
+            // --- END: Insert lineup dropdown ---
+          }
+          // Append the cell in all cases to maintain row alignment
+          row.appendChild(iconCell);
+          table.appendChild(row);
+          if (lineupDiv) {
+            const lineupRow = document.createElement("tr");
+            lineupRow.className = "lineup-row";
+            const lineupCell = document.createElement("td");
+            lineupCell.className = "lineup-cell";
+            lineupCell.colSpan = row.children.length; // на всю ширину
+            lineupCell.appendChild(lineupDiv);
+            lineupRow.appendChild(lineupCell);
+            table.appendChild(lineupRow);
+          }
+          // --- BEGIN: Add toggle functionality for lineupDiv when iconCell is clicked ---
+          if (lineupDiv && iconCell) {
+            iconCell.style.cursor = "pointer";
+            iconCell.addEventListener("click", () => {
+              // Use offsetHeight to determine expanded state for first click
+              const isExpanded = lineupDiv.offsetHeight > 0;
+              if (isExpanded) {
+                lineupDiv.style.height = "0px";
+                lineupDiv.style.opacity = "0";
+                lineupDiv.style.padding = "0";
+              } else {
+                lineupDiv.style.height = (lineupDiv.scrollHeight + 20) + "px"; // include 10px top + 10px bottom padding
+                lineupDiv.style.opacity = "1";
+                lineupDiv.style.padding = "10px 0";
+              }
+              // Update accordion-content maxHeight after transition
+              const accordionContent = iconCell.closest(".accordion-content");
+              if (accordionContent) {
+                setTimeout(() => {
+                  accordionContent.style.maxHeight = accordionContent.scrollHeight + "px";
+                }, 310); // match transition duration
+              }
+            });
+          }
+          // --- END: Add toggle functionality ---
+          return; // to avoid re-appending row later
+        } else {
+          // --- PLAYER LOGIC: render player name + avatar + link ---
+          const player1Logo = getFlagByPlayerId(g.player1_id) || '';
+          const player2Logo = getFlagByPlayerId(g.player2_id) || '';
+          const player1Cell = `<td class="player-cell">
+            <div style="display:flex; align-items:center; justify-content:center; gap:7px;">
+              ${player1Logo ? `<img src="${player1Logo}" class="player-logo">` : ""}
+              <a href="https://boardgamearena.com/player?id=${g.player1_id}" target="_blank">${g.player1}</a>
+            </div>
+          </td>`;
+          const player2Cell = `<td class="player-cell">
+            <div style="display:flex; align-items:center; justify-content:center; gap:7px;">
+              <a href="https://boardgamearena.com/player?id=${g.player2_id}" target="_blank">${g.player2}</a>
+              ${player2Logo ? `<img src="${player2Logo}" class="player-logo">` : ""}
+            </div>
+          </td>`;
+          row.innerHTML = `
+            <td class="date-cell">${formatMatchTime(g.time)}</td>
+            ${isGroupStage ? `<td>${g.group}</td>` : ""}
+            ${player1Cell}
+            <td class="score-cell">${g.score1} - ${g.score2}</td>
+            ${player2Cell}
+          `;
+        }
+
+        table.appendChild(row);
+      });
+
+      content.appendChild(table);
+      section.appendChild(toggle);
+      section.appendChild(content);
+      container.appendChild(section);
+
+      // --- BEGIN: Open the first unfinished round if tournament is "In progress" ---
+      if (hasOpenRound && round === roundToOpen) {
+        toggle.dataset.shouldOpen = "true";
+        content.dataset.shouldOpen = "true";
+      }
+      // --- END: Open the first unfinished round ---
+
+      toggle.addEventListener("click", () => {
+        // Close all other open toggles
+        document.querySelectorAll(".accordion-toggle.open").forEach(openToggle => {
+          if (openToggle !== toggle) {
+            openToggle.classList.remove("open");
+            const openContent = openToggle.nextElementSibling;
+            if (openContent) openContent.style.maxHeight = "0px";
+          }
+        });
+        const isOpen = toggle.classList.contains("open");
+
+        if (openAccordion && openAccordion !== content) {
+          openAccordion.style.maxHeight = "0px";
+          openAccordion.previousElementSibling.classList.remove("open");
+        }
+
+        if (isOpen) {
+          content.style.maxHeight = "0px";
+          toggle.classList.remove("open");
+          openAccordion = null;
+        } else {
+          content.style.maxHeight = content.scrollHeight + "px";
+          toggle.classList.add("open");
+          openAccordion = content;
+        }
+      });
+    }
+  }
+
+
+  document.addEventListener("DOMContentLoaded", () => {
+    fetchTournamentsAndInit();
+  });
+
+  // Opens fullscreen view for standings/crosstable tables
+  function openTableFullscreen(config) {
+    const {
+      sourceTable,
+      participants = [],
+      groupPlayers = [],
+      isTeam = false,
+      group = null,
+      stageFilter = null,
+      standingsColumns = []
+    } = config || {};
+
+    const isStageMatchLocal = (val) => {
+      if (!stageFilter) return true;
+      if (stageFilter === "Stage 1") return !val || val === stageFilter;
+      return val === stageFilter;
+    };
+
+    // Fallback: if no data, just show clone of the table
+    if (!participants.length || !groupPlayers.length) {
+      const overlay = document.createElement('div');
+      overlay.className = 'fullscreen-overlay';
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'fullscreen-close-btn';
+      closeBtn.title = 'Закрити (Esc)';
+      closeBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+      overlay.appendChild(closeBtn);
+      const content = document.createElement('div');
+      content.className = 'fullscreen-content';
+      const clone = sourceTable ? sourceTable.cloneNode(true) : document.createElement('div');
+      clone.querySelectorAll('.expand-bracket-btn').forEach(btn => btn.remove());
+      content.appendChild(clone);
+      overlay.appendChild(content);
+      document.body.appendChild(overlay);
+      const onClose = () => overlay.parentNode && overlay.parentNode.removeChild(overlay);
+      closeBtn.addEventListener('click', onClose);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) onClose(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' || e.key === 'Esc') onClose(); }, { once: true });
+      return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'fullscreen-overlay';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'fullscreen-close-btn';
+    closeBtn.title = 'Закрити (Esc)';
+    closeBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+    overlay.appendChild(closeBtn);
+    const content = document.createElement('div');
+    content.className = 'fullscreen-content';
+    overlay.appendChild(content);
+    content.addEventListener('click', (e) => {
+      if (!e.target.closest('.sim-select')) {
+        closeAllSimMenus(null);
+      }
+    });
+
+    // Toolbar
+    const toolbar = document.createElement('div');
+    toolbar.className = 'sim-toolbar';
+    toolbar.style.justifyContent = 'flex-end';
+    const simBtn = document.createElement('button');
+    simBtn.className = 'sim-btn';
+    simBtn.textContent = 'Simulator';
+    const calcBtn = document.createElement('button');
+    calcBtn.className = 'sim-btn sim-btn-calc';
+    calcBtn.textContent = 'Calculate';
+    calcBtn.style.display = 'none';
+    const closeSimBtn = document.createElement('button');
+    closeSimBtn.className = 'sim-btn sim-btn-close';
+    closeSimBtn.textContent = 'Close Simulator';
+    closeSimBtn.style.display = 'none';
+    toolbar.appendChild(simBtn);
+    toolbar.appendChild(calcBtn);
+    toolbar.appendChild(closeSimBtn);
+    content.appendChild(toolbar);
+
+    const pairKey = (a, b) => [String(a), String(b)].sort().join('|');
+    const dropdownOptions = ['', '2-1', '2-0', '0-2', '1-2'];
+    const simState = new Map(); // key -> {a,b,s1,s2}
+    let pairCells = new Map();
+    let eligibleCells = [];
+    let openSimMenus = new Set();
+
+    // Opponent map
+    const participantOpponents = new Map();
+    const addOpp = (a, b) => {
+      if (!a || !b || a === b) return;
+      const set = participantOpponents.get(a) || new Set();
+      set.add(b);
+      participantOpponents.set(a, set);
+    };
+    if (isTeam) {
+      (matches || [])
+        .filter(m => m.tournament_id === currentTournamentId)
+        .filter(m => isStageMatchLocal(m.stage || null))
+        .filter(m => !group || !m.group || m.group === group)
+        .forEach(m => { addOpp(m.team1, m.team2); addOpp(m.team2, m.team1); });
+    } else {
+      (duels || [])
+        .filter(m => m.tournament_id === currentTournamentId)
+        .filter(m => isStageMatchLocal(m.stage || null))
+        .filter(m => !group || !m.group || m.group === group)
+        .forEach(m => {
+          const p1 = String(m.player1_id || '');
+          const p2 = String(m.player2_id || '');
+          addOpp(p1, p2); addOpp(p2, p1);
+        });
+    }
+
+    function findBaseScore(rowKey, colKey, rowData) {
+      if (rowKey === colKey) return '';
+      if (isTeam) {
+        const candidates = (matches || []).filter(m =>
+          m.tournament_id === currentTournamentId &&
+          (!group || !m.group || m.group === group) &&
+          isStageMatchLocal(m.stage || null) &&
+          (
+            (m.team1 === rowKey && m.team2 === colKey) ||
+            (m.team1 === colKey && m.team2 === rowKey)
+          )
+        );
+        const picked = candidates.sort((a, b) => {
+          const ta = Date.parse((a.time || '').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+          const tb = Date.parse((b.time || '').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+          return ta - tb;
+        }).pop();
+        if (picked && picked.duels_won1 !== null && picked.duels_won2 !== null && picked.duels_won1 !== '' && picked.duels_won2 !== '') {
+          if (picked.team1 === rowKey && picked.team2 === colKey) return `${picked.duels_won1}-${picked.duels_won2}`;
+          if (picked.team1 === colKey && picked.team2 === rowKey) return `${picked.duels_won2}-${picked.duels_won1}`;
+        }
+        return '';
+      }
+      const pidRow = rowData.player_id;
+      const candidates = (duels || []).filter(m =>
+        m.tournament_id === currentTournamentId &&
+        (!group || !m.group || m.group === group) &&
+        isStageMatchLocal(m.stage || null) &&
+        (
+          (m.player1_id === pidRow && m.player2_id === colKey) ||
+          (m.player1_id === colKey && m.player2_id === pidRow)
+        )
+      );
+      const picked = candidates.sort((a, b) => {
+        const ta = Date.parse((a.time || '').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+        const tb = Date.parse((b.time || '').replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+        return ta - tb;
+      }).pop();
+      if (picked && picked.score1 !== null && picked.score2 !== null && picked.score1 !== '' && picked.score2 !== '') {
+        if (picked.player1_id === pidRow && picked.player2_id === colKey) return `${picked.score1}-${picked.score2}`;
+        if (picked.player1_id === colKey && picked.player2_id === pidRow) return `${picked.score2}-${picked.score1}`;
+      }
+      return '';
+    }
+
+    function buildDerivedStats(applySim) {
+      const statsMap = new Map();
+      groupPlayers.forEach(p => {
+        const key = isTeam ? p.team : String(p.player_id);
+        statsMap.set(key, {
+          mp: Number(p.matches_played) || 0,
+          mw: Number(p.matches_won) || 0,
+          ml: Number(p.matches_lost) || 0,
+          gw: Number(p.games_won) || 0,
+          gl: Number(p.games_lost) || 0,
+          dw: Number(p.duels_won) || 0,
+          dl: Number(p.duels_lost) || 0
+        });
+      });
+
+      if (applySim) {
+        simState.forEach(res => {
+          if (!res) return;
+          const { a, b, s1, s2 } = res;
+          const stA = statsMap.get(a);
+          const stB = statsMap.get(b);
+          if (!stA || !stB) return;
+          stA.mp += 1; stB.mp += 1;
+          if (s1 > s2) { stA.mw += 1; stB.ml += 1; }
+          else if (s2 > s1) { stB.mw += 1; stA.ml += 1; }
+          stA.gw += s1; stA.gl += s2;
+          stB.gw += s2; stB.gl += s1;
+        });
+      }
+
+      const derived = new Map();
+      statsMap.forEach((st, key) => derived.set(key, { ...st, omw: 0, ogd: 0, ogw: 0 }));
+      derived.forEach((st, key) => {
+        const opps = participantOpponents.get(key) || new Set();
+        opps.forEach(okey => {
+          const o = derived.get(okey);
+          if (!o) return;
+          st.omw += o.mw;
+          st.ogd += (o.gw - o.gl);
+          st.ogw += o.gw;
+        });
+      });
+      return derived;
+    }
+
+    function sortPlayersByStats(derivedStats) {
+      return [...groupPlayers].sort((a, b) => {
+        const aStat = derivedStats.get(isTeam ? a.team : String(a.player_id)) || {};
+        const bStat = derivedStats.get(isTeam ? b.team : String(b.player_id)) || {};
+        const mwDiff = (bStat.mw || 0) - (aStat.mw || 0);
+        if (mwDiff !== 0) return mwDiff;
+        const gdDiff = ((bStat.gw || 0) - (bStat.gl || 0)) - ((aStat.gw || 0) - (aStat.gl || 0));
+        if (gdDiff !== 0) return gdDiff;
+        const gwDiff = (bStat.gw || 0) - (aStat.gw || 0);
+        if (gwDiff !== 0) return gwDiff;
+        const omwDiff = (bStat.omw || 0) - (aStat.omw || 0);
+        if (omwDiff !== 0) return omwDiff;
+        const ogdDiff = (bStat.ogd || 0) - (aStat.ogd || 0);
+        if (ogdDiff !== 0) return ogdDiff;
+        return (bStat.ogw || 0) - (aStat.ogw || 0);
+      });
+    }
+
+    function closeAllSimMenus(except) {
+      openSimMenus.forEach(menu => {
+        if (menu === except) return;
+        const btn = menu.parentElement?.querySelector('.sim-select-btn');
+        if (btn) btn.classList.remove('open');
+        menu.classList.remove('open');
+        menu.style.maxHeight = '0px';
+      });
+      if (!except) openSimMenus.clear();
+      else openSimMenus = new Set([except]);
+    }
+
+    function setDropdownValue(td, val) {
+      td.dataset.simValue = val || '';
+      const label = td.querySelector('.sim-select-label');
+      if (label) label.textContent = val || ' ';
+      if (val) td.classList.add('sim-pending');
+      else td.classList.remove('sim-pending');
+    }
+
+    function updateSimStateFromSelect(td, selectedValue) {
+      const key = td.dataset.pairKey;
+      const [a, b] = key.split('|');
+      const val = selectedValue;
+      if (!val) {
+        simState.delete(key);
+        (pairCells.get(key) || []).forEach(other => {
+          if (other === td) return;
+          setDropdownValue(other, '');
+        });
+        td.classList.remove('sim-pending');
+        return;
+      }
+      const [x1, x2] = val.split('-').map(v => Number(v) || 0);
+      const rKey = td.dataset.rowKey;
+      let s1 = x1;
+      let s2 = x2;
+      if (rKey === b) { s1 = x2; s2 = x1; }
+      simState.set(key, { a, b, s1, s2 });
+      td.classList.add('sim-pending');
+      (pairCells.get(key) || []).forEach(other => {
+        if (other === td) return;
+        if (other.dataset.rowKey === a && other.dataset.colKey === b) setDropdownValue(other, `${s1}-${s2}`);
+        else setDropdownValue(other, `${s2}-${s1}`);
+      });
+    }
+
+    function syncSimStateFromAllSelects() {
+      eligibleCells.forEach(td => {
+        const val = td.dataset.simValue || '';
+        updateSimStateFromSelect(td, val);
+      });
+    }
+
+    function renderTable(applySim, withSimulator) {
+      const derivedStats = buildDerivedStats(applySim);
+      const old = content.querySelector('table.sim-table');
+      if (old) old.remove();
+
+      eligibleCells = [];
+      pairCells = new Map();
+
+      const sortedPlayers = sortPlayersByStats(derivedStats);
+      const colParticipants = sortedPlayers.map(p => {
+        if (isTeam) {
+          const tm = teams.find(t => t.team === p.team);
+          return { key: p.team, name: p.team, logo: tm?.logo || null, type: 'team', id: p.team };
+        }
+        const flag = getFlagByPlayerId(p.player_id);
+        return { key: String(p.player_id), name: p.player, flag: flag || null, type: 'player', id: p.player_id };
+      });
+
+      const buildHeader = () => {
+        const tr = document.createElement('tr');
+        const thRank = document.createElement('th');
+        thRank.className = 'rank-cell';
+        const thName = document.createElement('th');
+        thName.textContent = isTeam ? 'Team' : 'Player';
+        tr.appendChild(thRank);
+        tr.appendChild(thName);
+        standingsColumns.forEach(lbl => {
+          const th = document.createElement('th');
+          th.className = 'standing-metric-col';
+          th.textContent = lbl;
+          tr.appendChild(th);
+        });
+        colParticipants.forEach((p, idx) => {
+          const th = document.createElement('th');
+          if (p.type === 'team' && p.logo) th.innerHTML = `<img src="${p.logo}" class="team-logo" alt="">`;
+          else if (p.type === 'player' && p.flag) th.innerHTML = `<img src="${p.flag}" class="player-logo" alt="">`;
+          else th.textContent = String(idx + 1);
+          tr.appendChild(th);
+        });
+        return tr;
+      };
+
+      const tbl = document.createElement('table');
+      tbl.className = 'group-table crosstable sim-table';
+      const headerRow = buildHeader();
+      tbl.appendChild(headerRow);
+
+      const totalRows = sortedPlayers.length;
+      sortedPlayers.forEach((rowData, idx) => {
+        if (idx === 15) tbl.appendChild(buildHeader());
+        const tr = document.createElement('tr');
+        const rowKey = isTeam ? rowData.team : String(rowData.player_id);
+        tr.dataset.rowKey = rowKey;
+
+        const tdRank = document.createElement('td');
+        tdRank.className = 'rank-cell';
+        tdRank.textContent = String(idx + 1);
+        tr.appendChild(tdRank);
+
+        const tdName = document.createElement('td');
+        tdName.className = 'players-name-cell';
+        const wrap = document.createElement('div');
+        wrap.style.display = 'flex';
+        wrap.style.alignItems = 'center';
+        wrap.style.gap = '7px';
+        if (isTeam) {
+          const tm = teams.find(t => t.team === rowData.team);
+          if (tm?.logo) {
+            const img = document.createElement('img');
+            img.src = tm.logo;
+            img.className = 'team-logo';
+            wrap.appendChild(img);
+          }
+          const span = document.createElement('span');
+          span.textContent = rowData.team || '';
+          wrap.appendChild(span);
+        } else {
+          const flagSrc = getFlagByPlayerId(rowData.player_id);
+          if (flagSrc) {
+            const img = document.createElement('img');
+            img.src = flagSrc;
+            img.className = 'player-logo';
+            wrap.appendChild(img);
+          }
+          const a = document.createElement('a');
+          a.href = `https://boardgamearena.com/player?id=${rowData.player_id}`;
+          a.target = '_blank';
+          a.textContent = rowData.player || '';
+          wrap.appendChild(a);
+        }
+        tdName.appendChild(wrap);
+        tr.appendChild(tdName);
+
+        const st = derivedStats.get(rowKey) || {};
+        const mapVal = { MP: 'mp', MW: 'mw', ML: 'ml', DW: 'dw', DL: 'dl', GW: 'gw', GL: 'gl', OMW: 'omw', OGD: 'ogd', OGW: 'ogw' };
+        standingsColumns.forEach(lbl => {
+          const td = document.createElement('td');
+          td.textContent = String(st[mapVal[lbl]] ?? '');
+          tr.appendChild(td);
+        });
+
+        colParticipants.forEach(colPart => {
+          const td = document.createElement('td');
+          td.dataset.rowKey = rowKey;
+          td.dataset.colKey = colPart.key;
+          td.dataset.pairKey = pairKey(rowKey, colPart.key);
+          if (rowKey === colPart.key) {
+            td.classList.add('ct-self-cell');
+            tr.appendChild(td);
+            return;
+          }
+          const isOpp = participantOpponents.get(rowKey)?.has(colPart.key);
+          if (!isOpp) td.classList.add('ct-not-opponent');
+
+          const baseScore = findBaseScore(rowKey, colPart.key, rowData);
+          if (withSimulator && isOpp && baseScore === '') {
+            const current = simState.get(td.dataset.pairKey);
+            let val = '';
+            if (current) {
+              if (current.a === rowKey && current.b === colPart.key) val = `${current.s1}-${current.s2}`;
+              else val = `${current.s2}-${current.s1}`;
+            }
+            const wrapper = document.createElement('div');
+            wrapper.className = 'sim-select';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'sim-select-btn';
+            const label = document.createElement('div');
+            label.className = 'sim-select-label';
+            label.textContent = val || '—';
+            const chevron = document.createElement('div');
+            chevron.className = 'sim-select-chevron';
+            chevron.innerHTML = '<i class="fa fa-chevron-down"></i>';
+            btn.appendChild(label);
+            btn.appendChild(chevron);
+            const menu = document.createElement('div');
+            menu.className = 'sim-select-menu';
+            if (idx < totalRows - 5) {
+              menu.classList.add('drop-down');
+            }
+            dropdownOptions.forEach(opt => {
+              const optEl = document.createElement('div');
+              optEl.className = 'sim-select-option';
+              optEl.dataset.value = opt;
+              optEl.textContent = opt || '—';
+              if (opt === val) optEl.classList.add('active');
+              optEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeAllSimMenus(null);
+                setDropdownValue(td, opt);
+                updateSimStateFromSelect(td, opt);
+                menu.querySelectorAll('.sim-select-option').forEach(o => {
+                  o.classList.toggle('active', o.dataset.value === opt);
+                });
+                menu.classList.remove('open');
+                menu.style.maxHeight = '0px';
+                btn.classList.remove('open');
+              });
+              menu.appendChild(optEl);
+            });
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const isOpen = menu.classList.contains('open');
+              closeAllSimMenus(null);
+              if (!isOpen) {
+                menu.classList.add('open');
+                menu.style.maxHeight = `${menu.scrollHeight}px`;
+                btn.classList.add('open');
+                openSimMenus.add(menu);
+              }
+            });
+            wrapper.appendChild(btn);
+            wrapper.appendChild(menu);
+            td.appendChild(wrapper);
+            setDropdownValue(td, val);
+            eligibleCells.push(td);
+            if (!pairCells.has(td.dataset.pairKey)) pairCells.set(td.dataset.pairKey, []);
+            pairCells.get(td.dataset.pairKey).push(td);
+          } else {
+            td.textContent = baseScore;
+          }
+          tr.appendChild(td);
+        });
+
+        tbl.appendChild(tr);
+      });
+
+      content.appendChild(tbl);
+    }
+
+    function startSimulator() {
+      renderTable(false, true);
+      simBtn.style.display = 'none';
+      calcBtn.style.display = 'inline-flex';
+      closeSimBtn.style.display = 'inline-flex';
+    }
+
+    function applySimulation() {
+      syncSimStateFromAllSelects();
+      renderTable(true, true);
+    }
+
+    function closeSimulator() {
+      simState.clear();
+      renderTable(false, false);
+      simBtn.style.display = 'inline-flex';
+      calcBtn.style.display = 'none';
+      closeSimBtn.style.display = 'none';
+    }
+
+    // Initial render (base)
+    renderTable(false, false);
+    simBtn.addEventListener('click', () => startSimulator());
+    calcBtn.addEventListener('click', () => applySimulation());
+    closeSimBtn.addEventListener('click', () => closeSimulator());
+
+    document.body.appendChild(overlay);
+    const onClose = () => {
+      if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+    closeBtn.addEventListener('click', onClose);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) onClose(); });
+    const onKeyDown = (e) => { if (e.key === 'Escape' || e.key === 'Esc') onClose(); };
+    document.addEventListener('keydown', onKeyDown);
+  }
+</script>
