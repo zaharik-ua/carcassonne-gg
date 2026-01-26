@@ -138,9 +138,15 @@ code {
     background: white;
     border-radius: 4px;
     box-shadow: 1.4142px 1.4142px 2px 0 #b2b2b2;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     overflow: hidden;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    width: 100%;
+}
+
+#matches-container {
+    width: 100%;
+    max-width: 100%;
 }
 
 /*.tournament-card:hover {
@@ -730,6 +736,24 @@ if (openMatchId) {
 const streamsOff = new URLSearchParams(window.location.search).get("streams") === "false";
 const DUEL_TOURNAMENT_TYPES = new Set(["coc", "league", "individual"]);
 const INDIVIDUAL_TOURNAMENT_TYPE = "individual";
+const ALLOWED_TOURNAMENT_IDS = new Set([
+  "UCOC-2026-SL",
+  "UCOC-2026-ML",
+  "UCOC-2026-1ST",
+  "UCOC-2026-2ND"
+]);
+const TOURNAMENT_NAME_OVERRIDES = {
+  "UCOC-2026-SL": "Суперліга",
+  "UCOC-2026-ML": "Вища ліга",
+  "UCOC-2026-1ST": "Перша ліга",
+  "UCOC-2026-2ND": "Друга ліга"
+};
+const UCOC_TOURNAMENT_TABS = {
+  "UCOC-2026-SL": "league1",
+  "UCOC-2026-ML": "league2",
+  "UCOC-2026-1ST": "league3",
+  "UCOC-2026-2ND": "league4"
+};
 const INDIVIDUAL_STAGE_CLASS_MAP = {
   Q1: "individual-stage-q1",
   Q2: "individual-stage-q2",
@@ -760,6 +784,74 @@ function normalizeStage2RoundName(roundName) {
   const colonIndex = trimmed.indexOf(':');
   if (colonIndex === -1) return trimmed;
   return trimmed.slice(0, colonIndex).trim();
+}
+
+function filterMatchesByAllowedTournaments(matches) {
+  return (matches || []).filter(match => {
+    const idRaw = typeof match.tournament_id === "string"
+      ? match.tournament_id
+      : (typeof match.tournamentId === "string" ? match.tournamentId : "");
+    const id = idRaw.trim();
+    return id && ALLOWED_TOURNAMENT_IDS.has(id);
+  });
+}
+
+function filterTournamentsByMatches(tournaments, matches) {
+  const idByName = new Map();
+  (matches || []).forEach(match => {
+    const name = typeof match.tournament === "string" ? match.tournament.trim() : "";
+    const id = typeof match.tournament_id === "string" ? match.tournament_id.trim() : "";
+    if (name && id && !idByName.has(name)) {
+      idByName.set(name, id);
+    }
+  });
+  const names = new Set(
+    (matches || [])
+      .map(m => (typeof m.tournament === "string" ? m.tournament.trim() : ""))
+      .filter(Boolean)
+  );
+  return (tournaments || [])
+    .filter(t => {
+      const name = typeof t.name === "string" ? t.name.trim() : "";
+      return name && names.has(name);
+    })
+    .map(t => {
+      const name = typeof t.name === "string" ? t.name.trim() : "";
+      const id = idByName.get(name);
+      const override = id ? TOURNAMENT_NAME_OVERRIDES[id] : "";
+      const overrideLink = id ? getTournamentLinkOverride(id) : "";
+      return {
+        ...t,
+        tournament_id: id || t.tournament_id,
+        displayName: override || name,
+        link: overrideLink || t.link
+      };
+    });
+}
+
+function getTournamentDisplayName(tournament) {
+  if (!tournament) return "";
+  if (typeof tournament.displayName === "string" && tournament.displayName.trim()) {
+    return tournament.displayName.trim();
+  }
+  const id = typeof tournament.tournament_id === "string" ? tournament.tournament_id.trim() : "";
+  if (id && TOURNAMENT_NAME_OVERRIDES[id]) return TOURNAMENT_NAME_OVERRIDES[id];
+  return typeof tournament.name === "string" ? tournament.name.trim() : "";
+}
+
+function isEnglishSite() {
+  const path = (window.location && window.location.pathname) ? window.location.pathname.toLowerCase() : "";
+  return path.split("/").includes("en");
+}
+
+function getTournamentLinkOverride(tournamentId) {
+  if (typeof tournamentId !== "string") return "";
+  const tab = UCOC_TOURNAMENT_TABS[tournamentId.trim()];
+  if (!tab) return "";
+  const base = isEnglishSite()
+    ? "https://carcassonne.com.ua/en/UCOC-2026/?tab="
+    : "https://carcassonne.com.ua/UCOC-2026/?tab=";
+  return `${base}${tab}`;
 }
 
 // Build rating stars element (1-5 grey stars, 6 = 5 gold stars)
@@ -898,7 +990,7 @@ function createMatchElement(match, options = {}) {
       const dateObj = new Date(utcTimestamp);
     
       // Consistent 3-letter month across browsers
-      const MONTHS_3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const MONTHS_3 = ["січ","лют","бер","кві","тра","чер","лип","сер","вер","жов","лис","гру"];
       const dd = String(dateObj.getDate()).padStart(2, "0");
       const mon = MONTHS_3[dateObj.getMonth()];
       const dayStr = `${dd} ${mon}`;
@@ -1002,7 +1094,7 @@ function createMatchElement(match, options = {}) {
       const dateObj = new Date(utcTimestamp);
     
       // Consistent 3-letter month across browsers
-      const MONTHS_3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const MONTHS_3 = ["січ","лют","бер","кві","тра","чер","лип","сер","вер","жов","лис","гру"];
       const dd = String(dateObj.getDate()).padStart(2, "0");
       const mon = MONTHS_3[dateObj.getMonth()];
       const dayStr = `${dd} ${mon}`;
@@ -1069,7 +1161,7 @@ function createDuelElement(match, options = {}) {
   const dateObj = new Date(utcTimestamp);
 
   // Consistent 3-letter month across browsers
-  const MONTHS_3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const MONTHS_3 = ["січ","лют","бер","кві","тра","чер","лип","сер","вер","жов","лис","гру"];
   const dd = String(dateObj.getDate()).padStart(2, "0");
   const mon = MONTHS_3[dateObj.getMonth()];
   const dayStr = `${dd} ${mon}`;
@@ -1280,6 +1372,7 @@ function createTournamentHeader(tournament) {
   header.className = "tournament-header";
 
   const linkValue = typeof tournament.link === "string" ? tournament.link.trim() : "";
+  const displayName = getTournamentDisplayName(tournament);
   const hasLink = !!linkValue;
   const titleEl = document.createElement(hasLink ? "a" : "div");
   titleEl.className = "tournament-header__title";
@@ -1292,10 +1385,10 @@ function createTournamentHeader(tournament) {
   const icon = document.createElement("img");
   icon.className = "tournament-icon";
   icon.src = tournament.logo;
-  icon.alt = tournament.name;
+  icon.alt = displayName || tournament.name || "";
 
   const span = document.createElement("span");
-  span.textContent = tournament.name;
+  span.textContent = displayName;
 
   titleEl.appendChild(icon);
   titleEl.appendChild(span);
@@ -1359,15 +1452,12 @@ function collectFlagInfos(matches) {
 }
 
 
-let todaySortBy = "event"; // Single UI state controlling Today + Upcoming
+let todaySortBy = "time"; // Single UI state controlling Today + Upcoming
 let lastData = null; // cache of last fetched data for re-rendering without refetch
 let tournamentFilterIdCounter = 0;
 
 function isMatchHidden(match) {
-  if (!match) return false;
-  if (match.hide === true) return true;
-  const raw = typeof match.hide === "string" ? match.hide.trim().toLowerCase() : "";
-  return raw === "yes";
+  return false;
 }
 
 function renderSection(container, title, tournaments, matches) {
@@ -1381,8 +1471,8 @@ function renderSection(container, title, tournaments, matches) {
   titleSpan.textContent = title;
   sectionTitle.appendChild(titleSpan);
 
-  const isToday = title === "Today";
-  const isUpcoming = title === "Upcoming Matches";
+  const isToday = title === "Сьогодні";
+  const isUpcoming = title === "Заплановані матчі";
   // Right side: only Today — single toggle affects both Today and Upcoming
   if (isToday) {
     const toggle = document.createElement("div");
@@ -1390,18 +1480,18 @@ function renderSection(container, title, tournaments, matches) {
 
     const label = document.createElement("span");
     label.className = "sort-toggle__label";
-    label.textContent = "Sort by:";
+    label.textContent = "Сортувати:";
 
     const options = document.createElement("div");
     options.className = "sort-toggle__options";
 
     const optEvent = document.createElement("div");
     optEvent.className = "sort-toggle__option";
-    optEvent.textContent = "Event";
+    optEvent.textContent = "Подія";
 
     const optTime = document.createElement("div");
     optTime.className = "sort-toggle__option";
-    optTime.textContent = "Time";
+    optTime.textContent = "Час";
 
     function updateToggleUI() {
       if (todaySortBy === "event") {
@@ -1504,7 +1594,12 @@ function renderSection(container, title, tournaments, matches) {
       card.appendChild(sepTop);
 
       // Tournament title row (logo + name) above each match
-      const tObj = tMap.get(match.tournament) || { name: match.tournament, logo: match.tournament_logo };
+    const tObj = tMap.get(match.tournament) || {
+      name: match.tournament,
+      logo: match.tournament_logo,
+      tournament_id: match.tournament_id,
+      link: getTournamentLinkOverride(match.tournament_id)
+    };
       const header = createTournamentHeader(tObj);
       card.appendChild(header);
 
@@ -1673,7 +1768,7 @@ function renderSection(container, title, tournaments, matches) {
       });
     }
 
-    if (title === "Last Results") {
+    if (title === "Останні результати") {
       // For Last Results: duel tournaments → compact grid; TEAM → as-is
       // 1) TEAM (as-is)
       filtered
@@ -1770,12 +1865,12 @@ function renderSection(container, title, tournaments, matches) {
         const tType = tournament.type || match.tournament_type;
         // For Today and Upcoming + duel tournaments add rating above time
         if (isDuelTournament(tType)) {
-          const showRating = (title === "Today" || title === "Upcoming Matches");
+          const showRating = (title === "Сьогодні" || title === "Заплановані матчі");
           const el = createDuelElement(match, { showRating, isToday });
           card.appendChild(el);
         } else {
           // TEAM: show rating on Today/Upcoming like duel tournaments
-          const showRating = (title === "Today" || title === "Upcoming Matches");
+          const showRating = (title === "Сьогодні" || title === "Заплановані матчі");
           const el = createMatchElement(match, { showRating, isToday });
           if ((tournament.type || match.tournament_type) === "TEAM") {
             registerTeamMatchElement(el, match);
@@ -1866,9 +1961,17 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
     const container = document.getElementById("matches-container");
     container.innerHTML = "";
 
-    renderSection(container, "Today", tournaments_today, matches_today);
-    renderSection(container, "Upcoming Matches", tournaments_scheduled, matches_scheduled);
-    renderSection(container, "Last Results", tournaments_finished, matches_finished);
+    const todayMatches = filterMatchesByAllowedTournaments(matches_today);
+    const scheduledMatches = filterMatchesByAllowedTournaments(matches_scheduled);
+    const finishedMatches = filterMatchesByAllowedTournaments(matches_finished);
+
+    const todayTournaments = filterTournamentsByMatches(tournaments_today, todayMatches);
+    const scheduledTournaments = filterTournamentsByMatches(tournaments_scheduled, scheduledMatches);
+    const finishedTournaments = filterTournamentsByMatches(tournaments_finished, finishedMatches);
+
+    renderSection(container, "Сьогодні", todayTournaments, todayMatches);
+    renderSection(container, "Заплановані матчі", scheduledTournaments, scheduledMatches);
+    renderSection(container, "Останні результати", finishedTournaments, finishedMatches);
   }
 
   fetchAndRenderMatches();

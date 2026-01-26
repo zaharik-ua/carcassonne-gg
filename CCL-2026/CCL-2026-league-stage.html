@@ -119,6 +119,33 @@
     word-break: break-word;
   }
 
+  .live-duel-score {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 5px;
+    margin-left: 4px;
+    background-color: #1b9b5f;
+    color: #fff;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.1;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .live-duel-score--draw {
+    background-color: #1f6feb;
+  }
+  .live-duel-score--lose {
+    background-color: #d64541;
+  }
+
+  .live-duel-label {
+    font-weight: 500;
+    text-transform: lowercase;
+  }
+
   .group-table td a:hover {
     color: #0277BD;
   }
@@ -228,6 +255,91 @@
     text-decoration: none;
   }
 
+  /* Player match list (click-to-toggle) */
+  .player-row {
+    cursor: pointer;
+  }
+  .group-table tr.player-row:hover {
+    background-color: #e6f2ff;
+  }
+  .group-table tr.player-row:hover td {
+    background-color: #e6f2ff;
+  }
+  .sim-table tr.player-row:hover {
+    background-color: #e6f2ff;
+  }
+  .sim-table tr.player-row:hover td {
+    background-color: #e6f2ff;
+  }
+  .player-matches {
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+    padding: 0;
+    transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+    background-color: #f5f5f5;
+  }
+  .player-matches-row td {
+    padding: 0;
+    border: none;
+  }
+  .player-matches-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 10px 18px 14px; /* remove left indent, add more bottom space */
+    font-size: 14px;
+  }
+  .player-matches-entry {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .player-matches-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .player-matches-flag {
+    width: 14px;
+    height: auto;
+    object-fit: contain;
+  }
+  .player-matches-score {
+    min-width: 44px;
+    text-align: center;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .leagues-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+  @media (max-width: 768px) {
+    .leagues-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  /* League color accents */
+  .league-earth .group-table th,
+  .league-earth .fullview-btn {
+    background-color: #145A32;
+    color: #fff;
+  }
+  .league-earth .fullview-btn:hover {
+    background-color: #1f6129;
+  }
+  .league-space .group-table th,
+  .league-space .fullview-btn {
+    background-color: #0f3a5a;
+    color: #fff;
+  }
+  .league-space .fullview-btn:hover {
+    background-color: #072840;
+  }
+
   .lineup-separator {
     font-weight: 600;
     margin: 0 3px;
@@ -316,7 +428,10 @@
   .players-name-wrap a { display: block; flex: 1 1 auto; min-width: 0; text-align: left; white-space: normal; word-break: break-word; }
 
   /* Rank (position) data cell */
-  .rank-cell { width: 5%; }
+  .rank-cell { 
+    min-width: 20px !important;
+    width: 5%;  
+  }
 
   /* Standings metric columns (MP, MW, ML, GW, GL, etc.) */
   .standing-metric-col { 
@@ -597,6 +712,9 @@
     border-radius: 4px;
     padding: 8px;
   }
+  .fullscreen-content .players-name-cell {
+    min-width: 190px;
+  }
   /* Group navigation chips for Stage 1 (Groups + DE) */
   .groups-nav {
     display: flex;
@@ -738,8 +856,9 @@
 </style>
 
 <!-- HTML -->
-<div id="tournament-title" style="font-size:18px; font-weight:700; line-height:20px; padding:0 0 10px;"></div>
+<div id="tournament-title" style="display:none;"></div>
 <div class="tab-container" id="tab-container"></div>
+<div id="tab-leagues-content" style="display:none;"></div>
 <div id="tab-earth-content" style="display:none;"></div>
 <div id="tab-space-content" style="display:none;"></div>
 <div id="tab-matches-content" style="display:none;"></div>
@@ -807,6 +926,74 @@
     return found && found.flag ? found.flag : "";
   }
 
+  function buildPlayerMatchesBlock({ playerId, stageFilter = null }) {
+    const pid = String(playerId || '');
+    const matchesForPlayer = (duels || [])
+      .filter(d => d && d.tournament_id === currentTournamentId)
+      .filter(d => {
+        if (!stageFilter) return true;
+        if (stageFilter === "Stage 1") return !d.stage || d.stage === stageFilter;
+        return d.stage === stageFilter;
+      })
+      .filter(d => String(d.player1_id) === pid || String(d.player2_id) === pid);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'player-matches';
+
+    const list = document.createElement('div');
+    list.className = 'player-matches-list';
+
+    if (!matchesForPlayer.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No matches yet.';
+      list.appendChild(empty);
+    } else {
+      matchesForPlayer.forEach(duel => {
+        const row = document.createElement('div');
+        row.className = 'player-matches-entry';
+
+        const flag1Src = getFlagByPlayerId(duel.player1_id);
+        const flag2Src = getFlagByPlayerId(duel.player2_id);
+
+        const left = document.createElement('span');
+        left.className = 'player-matches-name';
+        if (flag1Src) {
+          const img = document.createElement('img');
+          img.src = flag1Src;
+          img.className = 'player-matches-flag';
+          img.alt = '';
+          left.appendChild(img);
+        }
+        left.appendChild(document.createTextNode(duel.player1 || ''));
+
+        const score = document.createElement('span');
+        score.className = 'player-matches-score';
+        const s1 = (duel.score1 !== null && duel.score1 !== undefined && String(duel.score1).trim() !== '') ? duel.score1 : null;
+        const s2 = (duel.score2 !== null && duel.score2 !== undefined && String(duel.score2).trim() !== '') ? duel.score2 : null;
+        score.textContent = (s1 !== null && s2 !== null) ? `${s1} - ${s2}` : '-';
+
+        const right = document.createElement('span');
+        right.className = 'player-matches-name';
+        right.appendChild(document.createTextNode(duel.player2 || ''));
+        if (flag2Src) {
+          const img = document.createElement('img');
+          img.src = flag2Src;
+          img.className = 'player-matches-flag';
+          img.alt = '';
+          right.appendChild(img);
+        }
+
+        row.appendChild(left);
+        row.appendChild(score);
+        row.appendChild(right);
+        list.appendChild(row);
+      });
+    }
+
+    wrapper.appendChild(list);
+    return wrapper;
+  }
+
   function fetchTournamentsAndInit() {
     const dataUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json";
 
@@ -827,7 +1014,7 @@
         const allTournaments = data.tournaments;
         currentTournament = allTournaments.find(t => t.tournament_id === currentTournamentId);
         if (currentTournament) {
-          document.getElementById("tournament-title").textContent = currentTournament.name;
+          // Title hidden on this page; keep theme only
           applyTournamentTheme(currentTournament.style);
         }
         currentTournament = currentTournament || {};
@@ -847,14 +1034,20 @@
 
   function initAndRenderTournamentContent(currentTournament) {
     // --- INIT TOURNAMENT CONTENT FOR CCL-2026 STAGE 1 ---
+    const isMobile = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
     const tabContainer = document.getElementById("tab-container");
     tabContainer.innerHTML = ""; // clear previous tabs
 
-    const tabDefs = LEAGUE_TABS.map(league => ({
-      id: league.toLowerCase(),
-      label: league
-    }));
-    tabDefs.push({ id: "matches", label: "Matches" });
+    const tabDefs = isMobile
+      ? [
+          { id: "earth", label: "EARTH" },
+          { id: "space", label: "SPACE" },
+          { id: "matches", label: "Matches" }
+        ]
+      : [
+          { id: "leagues", label: "Leagues" },
+          { id: "matches", label: "Matches" }
+        ];
 
     // --- Render tabs ---
     tabDefs.forEach((tab, idx) => {
@@ -865,6 +1058,7 @@
       tabContainer.appendChild(tabEl);
     });
 
+    const leaguesContent = document.getElementById("tab-leagues-content");
     const leagueContainers = LEAGUE_TABS.reduce((acc, league) => {
       acc[league.toLowerCase()] = document.getElementById(`tab-${league.toLowerCase()}-content`);
       return acc;
@@ -880,12 +1074,14 @@
         tabEl.classList.toggle("active", tabEl.dataset.tab === tabId);
       });
 
-      Object.values(leagueContainers).forEach(el => {
-        if (el) el.style.display = "none";
-      });
+      leaguesContent.style.display = "none";
+      Object.values(leagueContainers).forEach(el => { if (el) el.style.display = "none"; });
       if (matchesContainer) matchesContainer.style.display = "none";
 
-      if (leagueContainers[tabId]) {
+      if (!isMobile && tabId === "leagues") {
+        leaguesContent.style.display = "block";
+        Object.values(leagueContainers).forEach(el => { if (el) el.style.display = "block"; });
+      } else if (isMobile && leagueContainers[tabId]) {
         leagueContainers[tabId].style.display = "block";
       } else if (tabId === "matches" && matchesContainer) {
         matchesContainer.style.display = "block";
@@ -906,23 +1102,49 @@
       });
     });
 
+    // Render league tables
     LEAGUE_TABS.forEach(league => {
-      const container = leagueContainers[league.toLowerCase()];
-      if (!container) return;
-      container.innerHTML = "";
-      renderStandingsData(
-        standings.filter(s => s.tournament_id === currentTournamentId),
-        container,
-        { stage: STAGE_FILTER, allowedGroups: [league], customGroupTitles: { [league]: "" } }
-      );
-    });
+        const container = leagueContainers[league.toLowerCase()];
+        if (!container) return;
+        container.innerHTML = "";
+        container.style.display = "none";
+        container.classList.remove('league-earth', 'league-space');
+        container.classList.add(`league-${league.toLowerCase()}`);
+        renderStandingsData(
+          standings.filter(s => s.tournament_id === currentTournamentId),
+          container,
+          { stage: STAGE_FILTER, allowedGroups: [league], customGroupTitles: isMobile ? { [league]: "" } : { [league]: league }, leagueName: league, showExplanation: isMobile }
+        );
+      });
+
+    // Desktop grid view
+    if (!isMobile && leaguesContent) {
+      leaguesContent.innerHTML = "";
+      const grid = document.createElement("div");
+      grid.className = "leagues-grid";
+      LEAGUE_TABS.forEach(league => {
+        const container = leagueContainers[league.toLowerCase()];
+        if (container) grid.appendChild(container);
+      });
+      leaguesContent.appendChild(grid);
+      const explanation = document.createElement("div");
+      explanation.className = "standings-order-info";
+      explanation.innerHTML = `<br>MP: Matches Played MW: Matches Won ML: Matches Lost GW: Games Won GL: Games Lost<br><br>The final positions in the group will be determined in the following order:<br>1. MW (Matches Won) – number of matches won<br>2. GD (Games Difference) – difference between Games Won (GW) and Games Lost (GL)<br>3. GW (Games Won) – number of games won<br>4. OMW (Opponents’ Matches Won) – total number of matches won by all opponents in the league stage<br>5. OGD (Opponents’ Games Difference) – combined difference between GW and GL of all opponents in the league stage<br>6. OGW (Opponents’ Games Won) – total number of games won by all opponents in the league stage<br>7. Player coefficient`;
+      leaguesContent.appendChild(explanation);
+    }
 
     renderMatchesData();
     showTab(defaultTabId);
   }
 
   function renderStandingsData(standings_list, containerOverride, options = {}) {
-    const { stage: stageOverride = null, allowedGroups = null, customGroupTitles = {} } = options;
+    const {
+      stage: stageOverride = null,
+      allowedGroups = null,
+      customGroupTitles = {},
+      leagueName = null,
+      showExplanation = true
+    } = options;
     const normalizedAllowedGroups = Array.isArray(allowedGroups)
       ? allowedGroups.map(g => String(g).toUpperCase())
       : null;
@@ -1046,6 +1268,58 @@
       return !(value === null || value === undefined || String(value).trim() === '');
     }
 
+    function parseScoreValue(value) {
+      if (!valueHasScore(value)) return null;
+      const num = Number(value);
+      return Number.isFinite(num) ? num : null;
+    }
+
+    function findLiveDuelScoreForPlayer(playerId, groupKey) {
+      const pid = (playerId === null || playerId === undefined) ? null : String(playerId);
+      if (!pid) return null;
+
+      const normalizeGroupKey = (g) => (g === undefined || g === null) ? '' : String(g).trim();
+      const targetGroup = normalizeGroupKey(groupKey);
+
+      const parseTime = (t) => {
+        if (!t) return 0;
+        const ts = Date.parse(String(t).replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4'));
+        return Number.isFinite(ts) ? ts : 0;
+      };
+
+      const candidates = (duels || []).filter(duel => {
+        if (!duel || duel.tournament_id !== currentTournamentId) return false;
+        if (!isStageMatch(duel.stage || null)) return false;
+        if (duel.status !== "IN PROGRESS") return false;
+        if (targetGroup && normalizeGroupKey(duel.group) && normalizeGroupKey(duel.group) !== targetGroup) return false;
+        return String(duel.player1_id) === pid || String(duel.player2_id) === pid;
+      });
+
+      if (!candidates.length) return null;
+
+      let latest = null;
+      let latestTs = -Infinity;
+      candidates.forEach(duel => {
+        const ts = parseTime(duel.time || '') || 0;
+        if (ts >= latestTs) {
+          latest = duel;
+          latestTs = ts;
+        }
+      });
+
+      const liveDuel = latest || candidates[0];
+      const score1 = parseScoreValue(liveDuel.score1);
+      const score2 = parseScoreValue(liveDuel.score2);
+
+      if (score1 === null || score2 === null) return null;
+
+      const playerIsFirst = String(liveDuel.player1_id) === pid;
+      return {
+        self: playerIsFirst ? score1 : score2,
+        opp: playerIsFirst ? score2 : score1
+      };
+    }
+
     for (const group of iterateKeys) {
       let groupPlayers = grouped[group];
       const section = document.createElement("div");
@@ -1073,14 +1347,26 @@
       const titleText =
         resolvedCustom !== undefined
           ? resolvedCustom
-          : (isStage1Groups ? `Group ${group}` : (group ? String(group) : ""));
+          : (leagueName ? leagueName : (isStage1Groups ? `Group ${group}` : (group ? String(group) : "")));
       const hasTitle = !!(titleText && titleText.trim());
-      title.className = hasTitle
-        ? (isRoundRobinGroups ? "group-title" : "group-title stage-group-title")
-        : "group-title";
-      title.style.marginBottom = "0px";
+      // For leagueName, keep plain title without colored background
+      if (leagueName) {
+        title.className = "group-title";
+        title.style.backgroundColor = "transparent";
+        title.style.boxShadow = "none";
+        title.style.padding = "0";
+        title.style.margin = "0 0 4px 0";
+        title.style.minWidth = "0";
+        title.style.height = "auto";
+        title.style.flex = "1";
+      } else {
+        title.className = hasTitle
+          ? (isRoundRobinGroups ? "group-title" : "group-title stage-group-title")
+          : "group-title";
+        title.style.marginBottom = "0px";
+      }
       title.textContent = titleText || "";
-      if (!hasTitle) {
+      if (!hasTitle && !leagueName) {
         title.className = "group-title";
         title.style.backgroundColor = "transparent";
         title.style.boxShadow = "none";
@@ -1226,6 +1512,9 @@
 
       (groupPlayers || []).forEach((rowData, index) => {
         const tr = document.createElement('tr');
+        if (!isTeam) {
+          tr.classList.add('player-row');
+        }
         const tdIdx = document.createElement('td');
         tdIdx.className = 'rank-cell';
         tdIdx.textContent = String(index + 1);
@@ -1273,6 +1562,16 @@
             rightIcon.style.objectFit = 'contain';
             wrap.appendChild(rightIcon);
           }
+          const liveScore = findLiveDuelScoreForPlayer(rowData.player_id, group);
+          if (liveScore) {
+            const badge = document.createElement('span');
+            const scoreState =
+              liveScore.self > liveScore.opp ? 'win' :
+              liveScore.self < liveScore.opp ? 'lose' : 'draw';
+            badge.className = `live-duel-score live-duel-score--${scoreState}`;
+            badge.textContent = `${liveScore.self}-${liveScore.opp}`;
+            wrap.appendChild(badge);
+          }
         }
         tdName.appendChild(wrap);
         tr.appendChild(tdName);
@@ -1302,6 +1601,45 @@
         });
 
         table.appendChild(tr);
+
+        // Player match list row (click-to-toggle)
+        if (!isTeam) {
+          const matchesRow = document.createElement('tr');
+          matchesRow.className = 'player-matches-row';
+          const matchesCell = document.createElement('td');
+          matchesCell.colSpan = metrics.length + 2;
+          const matchesBlock = buildPlayerMatchesBlock({ playerId: rowData.player_id, stageFilter });
+          matchesCell.appendChild(matchesBlock);
+          matchesRow.appendChild(matchesCell);
+
+          tr.addEventListener('click', (e) => {
+            // Ignore simulator dropdown clicks (none here) or links if needed
+            if (e.target.closest('a')) return;
+            const isOpen = matchesBlock.classList.contains('open');
+            if (isOpen) {
+              matchesBlock.style.height = `${matchesBlock.scrollHeight}px`;
+              requestAnimationFrame(() => {
+                matchesBlock.style.height = '0px';
+                matchesBlock.style.opacity = '0';
+                matchesBlock.style.padding = '0';
+                matchesBlock.classList.remove('open');
+              });
+            } else {
+              matchesBlock.style.height = '0px';
+              matchesBlock.style.opacity = '1';
+              matchesBlock.style.padding = matchesBlock.dataset.padding || matchesBlock.style.padding || '8px 0';
+              matchesBlock.classList.add('open');
+              requestAnimationFrame(() => {
+                matchesBlock.style.height = `${matchesBlock.scrollHeight}px`;
+              });
+            }
+          });
+
+          // Set default padding when opening
+          matchesBlock.dataset.padding = '8px 0';
+
+          table.appendChild(matchesRow);
+        }
       });
 
       fullViewBtn.addEventListener('click', () => {
@@ -1331,10 +1669,12 @@
       formatLower = stage2FormatLower;
     }
 
-    const explanation = document.createElement("div");
-    explanation.className = "standings-order-info";
-    explanation.innerHTML = `<br>MP: Matches Played MW: Matches Won ML: Matches Lost GW: Games Won GL: Games Lost<br><br>The final positions in the group will be determined in the following order:<br>1. MW (Matches Won) – number of matches won<br>2. GD (Games Difference) – difference between Games Won (GW) and Games Lost (GL)<br>3. GW (Games Won) – number of games won<br>4. OMW (Opponents’ Matches Won) – total number of matches won by all opponents in the league stage<br>5. OGD (Opponents’ Games Difference) – combined difference between GW and GL of all opponents in the league stage<br>6. OGW (Opponents’ Games Won) – total number of games won by all opponents in the league stage<br>7. Player coefficient`;
-    container.appendChild(explanation);
+    if (showExplanation) {
+      const explanation = document.createElement("div");
+      explanation.className = "standings-order-info";
+      explanation.innerHTML = `<br>MP: Matches Played MW: Matches Won ML: Matches Lost GW: Games Won GL: Games Lost<br><br>The final positions in the group will be determined in the following order:<br>1. MW (Matches Won) – number of matches won<br>2. GD (Games Difference) – difference between Games Won (GW) and Games Lost (GL)<br>3. GW (Games Won) – number of games won<br>4. OMW (Opponents’ Matches Won) – total number of matches won by all opponents in the league stage<br>5. OGD (Opponents’ Games Difference) – combined difference between GW and GL of all opponents in the league stage<br>6. OGW (Opponents’ Games Won) – total number of games won by all opponents in the league stage<br>7. Player coefficient`;
+      container.appendChild(explanation);
+    }
   }
 
   // Format match time to local TZ
@@ -1982,6 +2322,9 @@
         const tr = document.createElement('tr');
         const rowKey = isTeam ? rowData.team : String(rowData.player_id);
         tr.dataset.rowKey = rowKey;
+        if (!isTeam) {
+          tr.classList.add('player-row');
+        }
 
         const tdRank = document.createElement('td');
         tdRank.className = 'rank-cell';
@@ -2114,6 +2457,41 @@
         });
 
         tbl.appendChild(tr);
+
+        if (!isTeam) {
+          const matchesRow = document.createElement('tr');
+          matchesRow.className = 'player-matches-row';
+          const matchesCell = document.createElement('td');
+          matchesCell.colSpan = 2 + standingsColumns.length + colParticipants.length;
+          const matchesBlock = buildPlayerMatchesBlock({ playerId: rowData.player_id, stageFilter });
+          matchesCell.appendChild(matchesBlock);
+          matchesRow.appendChild(matchesCell);
+
+          tr.addEventListener('click', (e) => {
+            if (e.target.closest('.sim-select') || e.target.closest('a')) return;
+            const isOpen = matchesBlock.classList.contains('open');
+            if (isOpen) {
+              matchesBlock.style.height = `${matchesBlock.scrollHeight}px`;
+              requestAnimationFrame(() => {
+                matchesBlock.style.height = '0px';
+                matchesBlock.style.opacity = '0';
+                matchesBlock.style.padding = '0';
+                matchesBlock.classList.remove('open');
+              });
+            } else {
+              matchesBlock.style.height = '0px';
+              matchesBlock.style.opacity = '1';
+              matchesBlock.style.padding = matchesBlock.dataset.padding || matchesBlock.style.padding || '8px 0';
+              matchesBlock.classList.add('open');
+              requestAnimationFrame(() => {
+                matchesBlock.style.height = `${matchesBlock.scrollHeight}px`;
+              });
+            }
+          });
+          matchesBlock.dataset.padding = '8px 0';
+
+          tbl.appendChild(matchesRow);
+        }
       });
 
       content.appendChild(tbl);

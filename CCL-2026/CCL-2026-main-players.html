@@ -112,29 +112,51 @@
     text-align: left;
   }
 
+  /* Desktop/tablet default widths */
+  .group-table th.country-col,
+  .group-table td.country-col {
+    min-width: 200px;
+  }
+
   .group-table th.player-col,
   .group-table td.player-col {
-    width: 1%;
-    min-width: 160px;
-    white-space: nowrap;
+    min-width: 200px;
+  }
+
+  .group-table th.elo-col,
+  .group-table td.elo-col {
+    min-width: 60px;
   }
 
   .group-table th.qualified-cell,
   .group-table td.qualified-cell {
-    width: 28%;
+    width: 30%;
     max-width: 220px;
+    overflow: hidden;
   }
 
   .qualified-wrap {
     display: block;
     width: 100%;
-    max-width: 220px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   @media (max-width: 480px) {
+    /* Auto widths on mobile */
+    .group-table th.country-col,
+    .group-table td.country-col,
+    .group-table th.player-col,
+    .group-table td.player-col {
+      min-width: 0;
+    }
+
+    .group-table th.elo-col,
+    .group-table td.elo-col {
+      min-width: 60px;
+    }
+
     .group-table th.qualified-cell,
     .group-table td.qualified-cell {
       display: none;
@@ -199,7 +221,7 @@
   }
 
   .seeding-icon {
-    width: 10px;
+    width: 12px;
     height: auto;
     margin-left: 4px;
     display: inline-block;
@@ -257,6 +279,13 @@
   let tournament_players = [];
   let tournaments = [];
   let countries = [];
+  const SEEDING_ICON_MAP = {
+    "Pot 1": "https://carcassonne.gg/gallery/Pot1.svg",
+    "Pot 2": "https://carcassonne.gg/gallery/Pot2.svg",
+    "Pot 3": "https://carcassonne.gg/gallery/Pot3.svg",
+    "Pot 4": "https://carcassonne.gg/gallery/Pot4.svg",
+    "Pot 5": "https://carcassonne.gg/gallery/Pot5.svg"
+  };
   function fetchTournamentsAndInit() {
     const dataUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json";
 
@@ -357,6 +386,12 @@
       if (label === "Player") {
         th.classList.add("player-col");
       }
+      if (label === "Elo *") {
+        th.classList.add("elo-col");
+      }
+      if (label === "Country") {
+        th.classList.add("country-col");
+      }
       if (label === "Qualified by") {
         th.classList.add("qualified-cell");
       }
@@ -414,13 +449,14 @@
           countrySpan.textContent = countryName;
           countryWrap.appendChild(countrySpan);
         } else {
-          countryWrap.textContent = "-";
-        }
-        countryTd.appendChild(countryWrap);
-        const rowspan = countryCounts[countryKey] || 1;
-        countryTd.rowSpan = rowspan;
-        tr.appendChild(countryTd);
+        countryWrap.textContent = "-";
       }
+      countryTd.appendChild(countryWrap);
+      countryTd.classList.add("country-col");
+      const rowspan = countryCounts[countryKey] || 1;
+      countryTd.rowSpan = rowspan;
+      tr.appendChild(countryTd);
+    }
 
       const playerTd = document.createElement("td");
       playerTd.style.textAlign = "left";
@@ -449,18 +485,19 @@
 
       const eloTd = document.createElement("td");
       eloTd.style.textAlign = "center";
+      eloTd.classList.add("elo-col");
       if (entry.elo !== undefined && entry.elo !== null && entry.elo !== "") {
         const eloValue = document.createElement("span");
         eloValue.textContent = entry.elo;
         eloTd.appendChild(eloValue);
 
-        const seedingStatus = typeof entry.seeding === "string" ? entry.seeding.trim() : entry.seeding;
-        if (seedingStatus === "Seeded" || seedingStatus === "Unseeded") {
+        const seedingStatusRaw = typeof entry.seeding === "string" ? entry.seeding.trim() : "";
+        const seedingIconSrc = SEEDING_ICON_MAP[seedingStatusRaw];
+        if (seedingIconSrc) {
           const seedingIcon = document.createElement("img");
-          seedingIcon.src = seedingStatus === "Seeded"
-            ? "https://carcassonne.gg/gallery/green-dot.png"
-            : "https://carcassonne.gg/gallery/red-dot.png";
-          seedingIcon.alt = `${seedingStatus} status icon`;
+          seedingIcon.src = seedingIconSrc;
+          seedingIcon.alt = `${seedingStatusRaw} icon`;
+          seedingIcon.title = seedingStatusRaw;
           seedingIcon.className = "seeding-icon";
           eloTd.appendChild(seedingIcon);
         }
@@ -535,8 +572,15 @@
       return item;
     };
 
-    legendBlock.appendChild(makeLegendItem("https://carcassonne.gg/gallery/green-dot.png", "Seeded", "Seeded icon"));
-    legendBlock.appendChild(makeLegendItem("https://carcassonne.gg/gallery/red-dot.png", "Unseeded", "Unseeded icon"));
+    [
+      { src: "https://carcassonne.gg/gallery/1.svg", label: "Pot 1" },
+      { src: "https://carcassonne.gg/gallery/2.svg", label: "Pot 2" },
+      { src: "https://carcassonne.gg/gallery/3.svg", label: "Pot 3" },
+      { src: "https://carcassonne.gg/gallery/4.svg", label: "Pot 4" },
+      { src: "https://carcassonne.gg/gallery/5.svg", label: "Pot 5" }
+    ].forEach(item => {
+      legendBlock.appendChild(makeLegendItem(item.src, item.label, `${item.label} icon`));
+    });
 
     playersContainer.appendChild(legendBlock);
   }

@@ -644,7 +644,7 @@
   }
 
   function fetchTournamentsAndInit() {
-    fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json")
+    fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-done/CCL-2026Q.json")
       .then(r => {
         if (!r.ok) throw new Error("Failed to fetch data");
         return r.json();

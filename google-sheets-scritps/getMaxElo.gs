@@ -1,5 +1,18 @@
-// from 1.Jan by default
- const START_DATE = 1735689600;
+// from Jan 1
+const START_DATE = 1735682400;
+
+// to Jul 1
+const END_DATE = 1751317200;
+
+// from Jul 1
+// const START_DATE = 1751317200;
+
+// const END_DATE   = null;
+
+
+
+// to 17.Nov
+//const END_DATE = 1763337600;
 
 // from 1.07 by default
 //const START_DATE = 1751317200;
@@ -7,13 +20,14 @@
 // 3y ago by default
 // const START_DATE = 1640995200;
 
+// custom
+// const START_DATE = 1735686000;
+// const END_DATE   = 1744405200;
+
+//const END_DATE   = 1751317200;
 
 
-// to 17.Nov
-const END_DATE = 1763337600;
-//const END_DATE   = null;
-
-const MAX_ELO_BATCH_RANGE = 'O3:O65';
+const MAX_ELO_BATCH_RANGE = 'T33:T47';
 const MAX_ELO_RESULT_OFFSET = 1; // P
 const MAX_ELO_DETAILS_OFFSET = 2; // Q
 const MAX_ELO_STATE_KEY = 'MAX_ELO_BATCH_STATE';
@@ -29,7 +43,7 @@ const MAX_ELO_RETRY_DELAY_MAX_MS = 10000;
  * @return {number} Значення elo_after - 1300
  * @customfunction
  */
-function GET_ELO_MAX(id=96757109) {
+function GET_ELO_MAX(id=95199738) {
   const result = fetchMaxEloData_(id);
   Logger.log(String(Math.trunc(result.maxElo)));
   return result.maxElo;
@@ -196,6 +210,9 @@ function fetchMaxEloData_(id) {
 }
 
 function scheduleNextMaxEloRun_(delayMs) {
+  // Ensure only one time-based trigger exists for this handler to avoid hitting trigger limits.
+  deleteTriggersByFunction_(MAX_ELO_TRIGGER_HANDLER);
+
   ScriptApp.newTrigger(MAX_ELO_TRIGGER_HANDLER)
       .timeBased()
       .after(Math.max(delayMs, 1000))

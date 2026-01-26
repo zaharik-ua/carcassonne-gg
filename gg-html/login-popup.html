@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login Popup</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #222;
+      --muted: #666;
+      --border: #d8d8d8;
+      --shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
+      --btn: #1f5d99;
+      --btn-hover: #174775;
+      --btn-text: #fff;
+      --google: #fff;
+      --google-border: #dadce0;
+      --google-text: #3c4043;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Montserrat", sans-serif;
+      color: var(--text);
+      background: transparent;
+    }
+
+    .auth-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .auth-button {
+      appearance: none;
+      border: 0;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      border-radius: 3px;
+      cursor: pointer;
+      background: var(--btn);
+      color: var(--btn-text);
+      transition: background 0.15s ease;
+    }
+
+    .auth-button:hover { background: var(--btn-hover); }
+
+    .auth-toggle {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .auth-dropdown {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.2s ease;
+    }
+
+    .auth-row {
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg);
+      box-shadow: var(--shadow);
+    }
+
+    .auth-toggle:checked ~ .auth-dropdown {
+      max-height: 120px;
+    }
+
+    .google-btn {
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--google);
+      border: 1px solid var(--google-border);
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--google-text);
+      cursor: pointer;
+      transition: box-shadow 0.15s ease;
+    }
+
+    .google-btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+
+    .google-icon {
+      width: 18px;
+      height: 18px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-wrap">
+    <input type="checkbox" id="authToggle" class="auth-toggle" />
+    <div class="auth-bar">
+      <label class="auth-button" for="authToggle">Sign in</label>
+    </div>
+    <div class="auth-dropdown">
+      <div class="auth-row">
+        <a class="google-btn" href="/auth/google">
+          <img class="google-icon" alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />
+          Авторизуватись через Google
+        </a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

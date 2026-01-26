@@ -1,0 +1,432 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+  :root {
+    --main-bg-color: #A47864;
+    --hover-bg-color: #8F6553;
+    --accent-text-color: #fff;
+  }
+
+  body {
+    font-family: 'Montserrat', sans-serif;
+    background-color: #f6f1ee;
+    margin: 0;
+    padding: 12px;
+  }
+
+  .page-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #2b1a11;
+    margin: 0 0 10px;
+  }
+
+  .players-wrapper {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .players-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #faf6f4;
+    border: 1px solid #e0d5cf;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+  }
+
+  .players-table th,
+  .players-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #e0d5cf;
+    vertical-align: top;
+    text-align: left;
+    font-size: 14px;
+    color: #2b1a11;
+  }
+
+  .players-table th {
+    background-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+    font-weight: 700;
+  }
+
+  .players-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .player-flag {
+    width: 28px;
+    height: 20px;
+    object-fit: cover;
+    border: 0.5px solid #555;
+    border-radius: 2px;
+    display: inline-block;
+  }
+
+  .points-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .achievements-list {
+    margin: 0;
+    padding-left: 18px;
+    color: #333;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .achievements-list li {
+    margin-bottom: 2px;
+  }
+
+  .achievements-mobile {
+    display: none;
+    margin-top: 6px;
+  }
+
+  .bga-cell {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .mobile-list {
+    display: none;
+  }
+
+  .mobile-player {
+    background-color: #faf6f4;
+    border: 1px solid #e0d5cf;
+    border-radius: 4px;
+    padding: 10px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+  }
+
+  .mobile-topline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 14px;
+    color: #2b1a11;
+    font-weight: 600;
+  }
+
+  .mobile-number {
+    font-weight: 700;
+    min-width: 18px;
+  }
+
+  .mobile-bga {
+    font-size: 15px;
+    font-weight: 600;
+    flex: 1 1 auto;
+  }
+
+  .mobile-name {
+    margin-top: 2px;
+    font-size: 14px;
+    color: #333;
+  }
+
+  .mobile-achievements {
+    margin: 6px 0 0;
+  }
+
+  @media (max-width: 640px) {
+    .players-table {
+      display: none;
+    }
+
+    .mobile-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+  }
+</style>
+
+<div class="page-title">Golden Meeple 2025 — Top 10</div>
+<div id="players-list" class="players-wrapper"></div>
+
+<script>
+  const players = [
+    {
+      number: 1,
+      flag: "https://carcassonne.gg/gallery/latvia.png",
+      bga: "Alexey_LV",
+      name: "Aleksejs Peguševs",
+      points: 169,
+      achievements: [
+        "CCL 2025 champion",
+        "MSO Grand Prix 2025 champion",
+        "4th place at World Championship 2025",
+        "Peak Elo leader in 2025 — 894"
+      ]
+    },
+    {
+      number: 2,
+      flag: "https://carcassonne.gg/gallery/finland.png",
+      bga: "Nallerheim",
+      name: "Otto Ikonen",
+      points: 97,
+      achievements: [
+        "WTCOC and ETCOC — 9 duels won out of 10",
+        "Three-time Arena winner on BGA, once 4th place",
+        "6th Peak Elo in 2025 — 850"
+      ]
+    },
+    {
+      number: 3,
+      flag: "https://carcassonne.gg/gallery/japan.png",
+      bga: "Kithara",
+      name: "Satoshi Kitamura",
+      points: 72,
+      achievements: [
+        "WTCOC and Asian Cup champion — 7 duels won out of 9",
+        "Winner of King of Carcassonne Tournament of Champions",
+        "4th place in Arena on BGA",
+        "7th Peak Elo in 2025 — 847"
+      ]
+    },
+    {
+      number: 4,
+      flag: "https://carcassonne.gg/gallery/china.png",
+      bga: "qazxswedc",
+      name: "Qin Xiangyu",
+      points: 55,
+      achievements: [
+        "World Champion 2025",
+        "10th place at WTCOC — 4 duels won out of 5"
+      ]
+    },
+    {
+      number: 5,
+      flag: "https://carcassonne.gg/gallery/ukraine.png",
+      bga: "adrear",
+      name: "Kyrylo Manakhov",
+      points: 30,
+      achievements: [
+        "Bronze medals at WTCOC and ETCOC — 9 duels won out of 12",
+        "Quarter-final at World Championship 2025",
+        "4× top10 Arena on BGA, twice runner-up",
+        "10th Peak Elo in 2025 — 817"
+      ]
+    },
+    {
+      number: 6,
+      flag: "https://carcassonne.gg/gallery/japan.png",
+      bga: "RabbitRain",
+      name: "-",
+      points: 24,
+      achievements: [
+        "CCL 2025 quarter-final",
+        "2nd Peak Elo in 2025 — 886"
+      ]
+    },
+    {
+      number: 7,
+      flag: "https://carcassonne.gg/gallery/poland.png",
+      bga: "mtuu",
+      name: "Mateusz Pozlewicz",
+      points: 24,
+      achievements: [
+        "CCL 2025 Playoffs Round 1",
+        "Silver medal at ETCOC and 4th place at WTCOC",
+        "Winner of King of Carcassonne Cup",
+        "3rd Peak Elo in 2025 — 864"
+      ]
+    },
+    {
+      number: 8,
+      flag: "https://carcassonne.gg/gallery/japan.png",
+      bga: "should",
+      name: "-",
+      points: 24,
+      achievements: [
+        "WTCOC and Asian Cup champion — 8 duels won out of 9",
+        "Three-time top20 in Arena on BGA"
+      ]
+    },
+    {
+      number: 9,
+      flag: "https://carcassonne.gg/gallery/rcp.png",
+      bga: "Someone_you_know",
+      name: "Vladimir Kovalev",
+      points: 21,
+      achievements: [
+        "Silver medalist of CCL 2025",
+        "WTCOC — 5 duels won out of 6"
+      ]
+    },
+    {
+      number: 10,
+      flag: "https://carcassonne.gg/gallery/uruguay.png",
+      bga: "The Alchimist",
+      name: "Horacio Mastandrea",
+      points: 16,
+      achievements: [
+        "Vice-champion World Championship 2025"
+      ]
+    }
+  ];
+
+  function renderPlayers() {
+    const list = document.getElementById("players-list");
+    if (!list) return;
+    list.innerHTML = "";
+
+    const table = document.createElement("table");
+    table.className = "players-table";
+
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    ["#", "Flag", "BGA", "Player", "Points", "Achievements"].forEach(text => {
+      const th = document.createElement("th");
+      th.textContent = text;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    players.forEach(player => {
+      const row = document.createElement("tr");
+
+      const numberCell = document.createElement("td");
+      numberCell.textContent = player.number;
+      row.appendChild(numberCell);
+
+      const flagCell = document.createElement("td");
+      const flagImg = document.createElement("img");
+      flagImg.src = player.flag;
+      flagImg.alt = "Flag";
+      flagImg.className = "player-flag";
+      flagCell.appendChild(flagImg);
+      row.appendChild(flagCell);
+
+      const bgaCell = document.createElement("td");
+      bgaCell.className = "bga-cell";
+      bgaCell.textContent = player.bga;
+      row.appendChild(bgaCell);
+
+      const nameCell = document.createElement("td");
+      const nameMain = document.createElement("div");
+      nameMain.textContent = player.name;
+      nameCell.appendChild(nameMain);
+
+      const achievementsMobile = document.createElement("div");
+      achievementsMobile.className = "achievements-mobile";
+      const listMobile = document.createElement("ul");
+      listMobile.className = "achievements-list";
+      (player.achievements || []).forEach(item => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        listMobile.appendChild(li);
+      });
+      achievementsMobile.appendChild(listMobile);
+      nameCell.appendChild(achievementsMobile);
+      row.appendChild(nameCell);
+
+      const pointsCell = document.createElement("td");
+      const pointsPill = document.createElement("span");
+      pointsPill.className = "points-pill";
+      const starIcon = document.createElement("i");
+      starIcon.className = "fa-solid fa-star";
+      pointsPill.appendChild(starIcon);
+      const pointsText = document.createElement("span");
+      pointsText.textContent = `${player.points} pts`;
+      pointsPill.appendChild(pointsText);
+      pointsCell.appendChild(pointsPill);
+      row.appendChild(pointsCell);
+
+      const achievementsCell = document.createElement("td");
+      const listEl = document.createElement("ul");
+      listEl.className = "achievements-list";
+      (player.achievements || []).forEach(item => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        listEl.appendChild(li);
+      });
+      achievementsCell.appendChild(listEl);
+      row.appendChild(achievementsCell);
+
+      tbody.appendChild(row);
+    });
+
+    table.appendChild(tbody);
+    list.appendChild(table);
+
+    const mobileList = document.createElement("div");
+    mobileList.className = "mobile-list";
+
+    players.forEach(player => {
+      const card = document.createElement("div");
+      card.className = "mobile-player";
+
+      const topLine = document.createElement("div");
+      topLine.className = "mobile-topline";
+      const numberSpan = document.createElement("span");
+      numberSpan.className = "mobile-number";
+      numberSpan.textContent = player.number;
+      topLine.appendChild(numberSpan);
+
+      const flagImg = document.createElement("img");
+      flagImg.src = player.flag;
+      flagImg.alt = "Flag";
+      flagImg.className = "player-flag";
+      topLine.appendChild(flagImg);
+
+      const bgaSpan = document.createElement("span");
+      bgaSpan.className = "mobile-bga";
+      bgaSpan.textContent = player.bga;
+      topLine.appendChild(bgaSpan);
+
+      const pointsPill = document.createElement("span");
+      pointsPill.className = "points-pill";
+      const starIcon = document.createElement("i");
+      starIcon.className = "fa-solid fa-star";
+      pointsPill.appendChild(starIcon);
+      const pointsText = document.createElement("span");
+      pointsText.textContent = `${player.points} pts`;
+      pointsPill.appendChild(pointsText);
+      topLine.appendChild(pointsPill);
+
+      card.appendChild(topLine);
+
+      const nameDiv = document.createElement("div");
+      nameDiv.className = "mobile-name";
+      nameDiv.textContent = player.name;
+      card.appendChild(nameDiv);
+
+      const achievementsWrap = document.createElement("div");
+      achievementsWrap.className = "mobile-achievements";
+      const listEl = document.createElement("ul");
+      listEl.className = "achievements-list";
+      (player.achievements || []).forEach(item => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        listEl.appendChild(li);
+      });
+      achievementsWrap.appendChild(listEl);
+      card.appendChild(achievementsWrap);
+
+      mobileList.appendChild(card);
+    });
+
+    list.appendChild(mobileList);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    renderPlayers();
+  });
+</script>

@@ -1617,24 +1617,12 @@ function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
   if (!showPath && !showRoundName) return;
 
   const typeValue = tournamentType || match.tournament_type;
-  const isIndividual = isIndividualTournament(typeValue);
+  const typeLower = typeof typeValue === "string" ? typeValue.trim().toLowerCase() : "";
   const stageValue = typeof match.stage === "string" ? match.stage.trim() : "";
 
   let badgeText = null;
-  let classSuffix = "";
 
-  if (isIndividual) {
-    classSuffix = " individual-badge";
-    if (stageValue) {
-      badgeText = stageValue;
-      const stageClass = getIndividualStageClass(stageValue);
-      if (stageClass) {
-        classSuffix += ` ${stageClass}`;
-      }
-    }
-  }
-
-  if (!badgeText && showPath) {
+  if (showPath && (typeLower === "coc" || typeLower === "league" || typeLower === "team" || typeLower === "individual")) {
     if (stageValue === "Stage 2" && match.round) {
       const roundLabel = normalizeRoundName(match.round);
       badgeText = roundLabel || match.round;
@@ -1661,7 +1649,7 @@ function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
   if (!finalText) return;
 
   const badge = document.createElement("div");
-  badge.className = `playoff-round-badge${classSuffix}`;
+  badge.className = "playoff-round-badge";
   badge.textContent = finalText;
   container.appendChild(badge);
   if (rightDiv) {
