@@ -19,6 +19,20 @@ else
   rm "$temp_file"
 fi
 
+temp_file=$(mktemp)
+curl -s https://api.carcassonne.com.ua/public/list_of_players -o "$temp_file"
+if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
+  mv "$temp_file" list_of_players.json
+  if ! git diff --quiet list_of_players.json; then
+    git add list_of_players.json
+    echo "Updated: list_of_players.json" >> /home/carcassonne-gg/cron_update_official.log
+    changes_made=true
+  fi
+else
+  echo "❌ Failed to fetch or parse list_of_players.json (response: $(cat "$temp_file" | head -c 200))" >> /home/carcassonne-gg/cron_update_official.log
+  rm "$temp_file"
+fi
+
 if [ "$changes_made" = true ]; then
   git commit -m "Update json-files from server"
 
