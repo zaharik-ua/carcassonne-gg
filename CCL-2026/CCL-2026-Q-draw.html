@@ -996,12 +996,37 @@
     // Work with a local copy of the remaining draw numbers
     const available = [...availableNumbers];
 
-    const assignToPlayer = (player) => {
+    const assignToPlayer = (player, isSingleAssoc) => {
       if (!available.length) return;
       const assocKey = getAssociationKey(player);
       const usedGroups = groupUsage.get(assocKey) || new Set();
       // Prefer numbers from groups where this association has not appeared yet
       const candidates = available.filter(num => !usedGroups.has(getGroupByNumber(num, groups)));
+
+      // If a player is single-association, we specifically pick the least used group first to spread out the byes.
+      if (isSingleAssoc && candidates.length) {
+        const groupCountMap = new Map();
+        candidates.forEach(num => {
+          const groupLetter = getGroupByNumber(num, groups);
+          groupCountMap.set(groupLetter, (groupCountMap.get(groupLetter) || 0) + 1);
+        });
+        let minCount = Infinity;
+        groupCountMap.forEach(count => {
+          minCount = Math.min(minCount, count);
+        });
+        const leastUsedGroups = new Set();
+        groupCountMap.forEach((count, groupLetter) => {
+          if (count === minCount) {
+            leastUsedGroups.add(groupLetter);
+          }
+        });
+        const filteredCandidates = candidates.filter(num => leastUsedGroups.has(getGroupByNumber(num, groups)));
+        if (filteredCandidates.length) {
+          candidates.length = 0;
+          Array.prototype.push.apply(candidates, filteredCandidates);
+        }
+      }
+
       const pool = candidates.length ? candidates : available;
       const chosen = pool[Math.floor(Math.random() * pool.length)];
       const index = available.indexOf(chosen);
@@ -1017,8 +1042,8 @@
       }
     };
 
-    multiAssocPlayers.forEach(assignToPlayer);
-    singleAssocPlayers.forEach(assignToPlayer);
+    multiAssocPlayers.forEach(assignToPlayer, false);
+    singleAssocPlayers.forEach(assignToPlayer, true);
 
     return groupUsage;
   }
