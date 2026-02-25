@@ -1,0 +1,66 @@
+=IF(ISNUMBER(O2),
+  IF(AND(MOD(O2,1)<>0, O2>NOW()), "PLANNED",
+    IF(AND(R2="ø", S2="ø"), "DONE",
+      IF(OR(R2="", S2=""), "",
+      IF(
+        NOT(ISNUMBER(O2)),
+        IF(AC2="", "",
+          IF(OR(R2=AC2, S2=AC2), "DONE",
+            IF(OR(R2>AC2, S2>AC2), "ERROR",
+              IF(AND(R2<AC2, S2<AC2), "ERROR", "")
+            )
+          )
+        ),
+        IF(MOD(O2,1)=0,
+          IF(AC2="", "",
+            IF(OR(R2=AC2, S2=AC2), "DONE",
+              IF(OR(R2>AC2, S2>AC2), "ERROR",
+                IF(AND(R2<AC2, S2<AC2), "ERROR", "")
+              )
+            )
+          ),
+          IF(OR(NOW()<O2, AC2=""), "",
+            IF(AND(NOW()<Y2, R2<AC2, S2<AC2), "IN PROGRESS",
+              IF(OR(R2=AC2, S2=AC2), "DONE",
+                IF(OR(R2>AC2, S2>AC2), "ERROR",
+                  IF(AND(R2<AC2, S2<AC2), "ERROR", "")
+                )
+              )
+            )
+          )
+        )
+      ))
+    )
+  ),
+  IF(AND(R2="ø", S2="ø"), "DONE",
+    IF(OR(R2="", S2=""), "",
+    IF(
+      NOT(ISNUMBER(O2)),
+      IF(AC2="", "",
+        IF(OR(R2=AC2, S2=AC2), "DONE",
+          IF(OR(R2>AC2, S2>AC2), "ERROR",
+            IF(AND(R2<AC2, S2<AC2), "ERROR", "")
+          )
+        )
+      ),
+      IF(MOD(O2,1)=0,
+        IF(AC2="", "",
+          IF(OR(R2=AC2, S2=AC2), "DONE",
+            IF(OR(R2>AC2, S2>AC2), "ERROR",
+              IF(AND(R2<AC2, S2<AC2), "ERROR", "")
+            )
+          )
+        ),
+        IF(OR(NOW()<O2, AC2=""), "",
+          IF(AND(NOW()<Y2, R2<AC2, S2<AC2), "IN PROGRESS",
+            IF(OR(R2=AC2, S2=AC2), "DONE",
+              IF(OR(R2>AC2, S2>AC2), "ERROR",
+                IF(AND(R2<AC2, S2<AC2), "ERROR", "")
+              )
+            )
+          )
+        )
+      )
+    ))
+  )
+)

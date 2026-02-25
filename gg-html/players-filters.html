@@ -1,0 +1,894 @@
+<!-- FILTERS: Players -->
+<style>
+  .pf-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 6px 8px 10px;
+  }
+  .pf-country-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .pf-achievement-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .pf-matches-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .pf-matches-toggle .pf-title-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .pf-matches-toggle .pf-label {
+    display: block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pf-matches-toggle .pf-selected-label {
+    color: #333;
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 1.1;
+    text-align: left;
+  }
+  .pf-matches-toggle .pf-clear {
+    color: #d32f2f;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    margin-left: 3px;
+  }
+  .pf-matches-toggle.active {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.3);
+  }
+  .pf-matches-row {
+    display: none;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .pf-matches-row.open {
+    display: flex;
+  }
+  .pf-matches-btn {
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background-color: #fffde5;
+    color: #333;
+    transition: all 0.2s ease;
+  }
+  .pf-matches-btn.active {
+    border-color: #0277BD;
+    background-color: #fbf092;
+  }
+  .pf-achievement-toggle .pf-title-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+  }
+  .pf-achievement-toggle .pf-selected-label {
+    color: #333;
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 1.1;
+    text-align: left;
+  }
+  .pf-achievement-toggle .pf-clear {
+    color: #d32f2f;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    margin-left: 2px;
+  }
+  .pf-achievement-toggle.active {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.3);
+  }
+  .pf-achievement-row {
+    display: none;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .pf-achievement-row.open {
+    display: flex;
+  }
+  .pf-ach-btn {
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background-color: #fffde5;
+    color: #333;
+    transition: all 0.2s ease;
+  }
+  .pf-ach-btn.active {
+    border-color: #0277BD;
+    background-color: #fbf092;
+  }
+  .pf-country-toggle .pf-selected-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pf-country-toggle .pf-selected-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .pf-country-toggle .pf-selected-flag img {
+    width: 18px;
+    height: auto;
+    object-fit: contain;
+  }
+  .pf-country-toggle .pf-clear {
+    color: #d32f2f;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .pf-country-toggle.active {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.3);
+  }
+  .pf-country-row {
+    display: none;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+  .pf-country-row.open {
+    display: flex;
+  }
+  .pf-flag-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .pf-flag-btn.active {
+    border-color: #0277BD;
+  }
+  .pf-flag-btn img {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+  }
+  .pf-search-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .pf-search-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+    width: 100%;
+  }
+  .pf-search-input {
+    font-size: 13px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .pf-search-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    max-height: 220px;
+    overflow: auto;
+    z-index: 10;
+    display: none;
+  }
+  .pf-search-results ul {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+  }
+  .pf-search-results li {
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .pf-search-results li:hover {
+    background: #f0f6ff;
+  }
+  .pf-search-results li.no-results {
+    color: #888;
+    cursor: default;
+  }
+  .pf-search-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #d32f2f;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 0;
+  }
+  .pf-toggle-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+  }
+  .pf-toggle-line.active {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.3);
+  }
+  .pf-toggle-label {
+    font-size: 13px;
+    color: #333;
+    font-weight: 400;
+  }
+  .pf-toggle-line.active .pf-toggle-label {
+    font-weight: 700;
+  }
+  .pf-clear-filters-btn {
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 6px;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    height: 20px;
+    line-height: 16px;
+    transition: all 0.2s ease;
+    width: fit-content;
+  }
+  .pf-clear-filters-btn:hover {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.4);
+  }
+</style>
+
+<div class="pf-filters">
+  <div class="pf-search-host" id="pf-search-host">
+    <button class="pf-search-btn" id="pf-search-btn" type="button">Search Player</button>
+  </div>
+  <button class="pf-country-toggle" id="pf-country-toggle" type="button">
+    <span class="pf-label">Country</span>
+    <span class="pf-selected-wrap" id="pf-selected-wrap" style="display:none;">
+      <span class="pf-selected-flag" id="pf-selected-flag"></span>
+      <span class="pf-clear" id="pf-clear">✕</span>
+    </span>
+  </button>
+  <div class="pf-country-row" id="pf-country-row"></div>
+  <button class="pf-matches-toggle" id="pf-matches-toggle" type="button">
+    <span class="pf-title-wrap">
+      <span class="pf-label">Number of Matches</span>
+      <span class="pf-selected-label" id="pf-matches-selected-label" style="display:none;"></span>
+    </span>
+    <span class="pf-clear" id="pf-matches-clear" style="display:none;">✕</span>
+  </button>
+  <div class="pf-matches-row" id="pf-matches-row"></div>
+  <button class="pf-achievement-toggle" id="pf-achievement-toggle" type="button">
+    <span class="pf-title-wrap">
+      <span class="pf-label">Achievements</span>
+      <span class="pf-selected-label" id="pf-achievement-selected-label" style="display:none;"></span>
+    </span>
+    <span class="pf-clear" id="pf-achievement-clear" style="display:none;">✕</span>
+  </button>
+  <div class="pf-achievement-row" id="pf-achievement-row"></div>
+  <div class="pf-toggle-line" id="pf-masters-toggle" role="button" tabindex="0" aria-pressed="false">
+    <span class="pf-toggle-label">BGA Masters</span>
+  </div>
+  <div class="pf-toggle-line" id="pf-captains-toggle" role="button" tabindex="0" aria-pressed="false">
+    <span class="pf-toggle-label">Captains</span>
+  </div>
+  <button class="pf-clear-filters-btn" id="pf-clear-filters-btn" type="button">Clear filters</button>
+</div>
+
+<script>
+  const pfDataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
+  const pfToggleBtn = document.getElementById("pf-country-toggle");
+  const pfRow = document.getElementById("pf-country-row");
+  const pfAchievementToggleBtn = document.getElementById("pf-achievement-toggle");
+  const pfAchievementRow = document.getElementById("pf-achievement-row");
+  const pfAchievementSelectedLabel = document.getElementById("pf-achievement-selected-label");
+  const pfAchievementClear = document.getElementById("pf-achievement-clear");
+  const pfMatchesToggleBtn = document.getElementById("pf-matches-toggle");
+  const pfMatchesRow = document.getElementById("pf-matches-row");
+  const pfMatchesSelectedLabel = document.getElementById("pf-matches-selected-label");
+  const pfMatchesClear = document.getElementById("pf-matches-clear");
+  const pfClearFiltersBtn = document.getElementById("pf-clear-filters-btn");
+  const pfSelectedWrap = document.getElementById("pf-selected-wrap");
+  const pfSelectedFlag = document.getElementById("pf-selected-flag");
+  const pfClear = document.getElementById("pf-clear");
+  const pfSearchHost = document.getElementById("pf-search-host");
+  const pfSearchBtn = document.getElementById("pf-search-btn");
+  const pfMastersToggle = document.getElementById("pf-masters-toggle");
+  const pfCaptainsToggle = document.getElementById("pf-captains-toggle");
+  let pfOptions = [];
+  let pfAchievementTypes = [];
+  const pfMatchesOptions = [10, 20, 30, 40, 50];
+  let pfPlayers = [];
+  let pfSearchWrap = null;
+  let pfSearchInput = null;
+  let pfSearchResults = null;
+  let pfSearchClear = null;
+
+  const pfNormalizeKey = (v) => String(v || "").trim().toUpperCase();
+  const pfIsActiveStatus = (status) => String(status || "").trim().toLowerCase() === "active";
+
+  function pfGetActiveAssociation() {
+    const params = new URLSearchParams(window.location.search);
+    return pfNormalizeKey(params.get("association") || "");
+  }
+
+  function pfSetActiveAssociation(key) {
+    const params = new URLSearchParams(window.location.search);
+    if (key) params.set("association", key);
+    else params.delete("association");
+    const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", newUrl);
+    window.dispatchEvent(new Event("association-filter-change"));
+  }
+
+  function pfGetActivePlayer() {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("player") || "").trim();
+  }
+
+  function pfSetActivePlayer(name) {
+    const params = new URLSearchParams(window.location.search);
+    if (name) params.set("player", name);
+    else params.delete("player");
+    const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", newUrl);
+    window.dispatchEvent(new Event("player-filter-change"));
+  }
+
+  function pfGetMastersOnly() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("masters") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  function pfGetAchievementType() {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("achievement_type") || "").trim();
+  }
+
+  function pfSetAchievementType(type) {
+    const params = new URLSearchParams(window.location.search);
+    if (type) params.set("achievement_type", type);
+    else params.delete("achievement_type");
+    const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", newUrl);
+    window.dispatchEvent(new Event("achievement-filter-change"));
+  }
+
+  function pfGetMatchesMin() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("matches_min") || "").trim();
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+  }
+
+  function pfSetMatchesMin(value) {
+    const params = new URLSearchParams(window.location.search);
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) params.set("matches_min", String(Math.trunc(n)));
+    else params.delete("matches_min");
+    const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", newUrl);
+    window.dispatchEvent(new Event("matches-filter-change"));
+  }
+
+  function pfSetMastersOnly(enabled) {
+    const params = new URLSearchParams(window.location.search);
+    if (enabled) params.set("masters", "1");
+    else params.delete("masters");
+    const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", newUrl);
+    window.dispatchEvent(new Event("masters-filter-change"));
+  }
+
+  function pfUpdateMastersToggle() {
+    if (!pfMastersToggle) return;
+    const enabled = pfGetMastersOnly();
+    pfMastersToggle.classList.toggle("active", enabled);
+    pfMastersToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
+  }
+
+  function pfGetCaptainsOnly() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("captains") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  function pfSetCaptainsOnly(enabled) {
+    const params = new URLSearchParams(window.location.search);
+    if (enabled) params.set("captains", "1");
+    else params.delete("captains");
+    const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", newUrl);
+    window.dispatchEvent(new Event("captains-filter-change"));
+  }
+
+  function pfUpdateCaptainsToggle() {
+    if (!pfCaptainsToggle) return;
+    const enabled = pfGetCaptainsOnly();
+    pfCaptainsToggle.classList.toggle("active", enabled);
+    pfCaptainsToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
+  }
+
+  function pfUpdateToggle() {
+    const active = pfGetActiveAssociation();
+    const opt = pfOptions.find(o => o.key === active);
+    if (opt) {
+      pfSelectedFlag.innerHTML = "";
+      const img = document.createElement("img");
+      img.src = opt.flag;
+      img.alt = opt.title || "Country flag";
+      img.title = opt.title || "";
+      pfSelectedFlag.appendChild(img);
+      pfSelectedWrap.style.display = "inline-flex";
+    } else {
+      pfSelectedWrap.style.display = "none";
+      pfSelectedFlag.innerHTML = "";
+    }
+  }
+
+  function pfUpdateAchievementToggle() {
+    const active = pfGetAchievementType();
+    const hasActive = Boolean(active);
+    if (pfAchievementSelectedLabel) {
+      pfAchievementSelectedLabel.textContent = active || "";
+      pfAchievementSelectedLabel.style.display = hasActive ? "inline" : "none";
+    }
+    if (pfAchievementClear) {
+      pfAchievementClear.style.display = hasActive ? "inline-flex" : "none";
+    }
+    if (pfAchievementRow) {
+      pfAchievementRow.querySelectorAll(".pf-ach-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.achievementType === active);
+      });
+    }
+  }
+
+  function pfUpdateMatchesToggle() {
+    const active = pfGetMatchesMin();
+    const hasActive = active > 0;
+    if (pfMatchesSelectedLabel) {
+      pfMatchesSelectedLabel.textContent = hasActive ? `${active}+` : "";
+      pfMatchesSelectedLabel.style.display = hasActive ? "inline" : "none";
+    }
+    if (pfMatchesClear) {
+      pfMatchesClear.style.display = hasActive ? "inline-flex" : "none";
+    }
+    if (pfMatchesRow) {
+      pfMatchesRow.querySelectorAll(".pf-matches-btn").forEach(btn => {
+        btn.classList.toggle("active", Number(btn.dataset.matchesMin) === active);
+      });
+    }
+  }
+
+  function pfToggleRow(forceOpen) {
+    const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !pfRow.classList.contains("open");
+    pfRow.classList.toggle("open", shouldOpen);
+    pfToggleBtn.classList.toggle("active", shouldOpen);
+  }
+
+  function pfToggleAchievementRow(forceOpen) {
+    if (!pfAchievementRow || !pfAchievementToggleBtn) return;
+    const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !pfAchievementRow.classList.contains("open");
+    pfAchievementRow.classList.toggle("open", shouldOpen);
+    pfAchievementToggleBtn.classList.toggle("active", shouldOpen);
+  }
+  function pfToggleMatchesRow(forceOpen) {
+    if (!pfMatchesRow || !pfMatchesToggleBtn) return;
+    const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !pfMatchesRow.classList.contains("open");
+    pfMatchesRow.classList.toggle("open", shouldOpen);
+    pfMatchesToggleBtn.classList.toggle("active", shouldOpen);
+  }
+
+  pfToggleBtn.addEventListener("click", () => pfToggleRow());
+  pfClear.addEventListener("click", (e) => {
+    e.stopPropagation();
+    pfRow.querySelectorAll(".pf-flag-btn").forEach(b => b.classList.remove("active"));
+    pfSetActiveAssociation("");
+    pfUpdateToggle();
+  });
+  if (pfAchievementToggleBtn) {
+    pfAchievementToggleBtn.addEventListener("click", () => pfToggleAchievementRow());
+  }
+  if (pfAchievementClear) {
+    pfAchievementClear.addEventListener("click", (e) => {
+      e.stopPropagation();
+      pfSetAchievementType("");
+      pfUpdateAchievementToggle();
+    });
+  }
+  if (pfMatchesToggleBtn) {
+    pfMatchesToggleBtn.addEventListener("click", () => pfToggleMatchesRow());
+  }
+  if (pfMatchesClear) {
+    pfMatchesClear.addEventListener("click", (e) => {
+      e.stopPropagation();
+      pfSetMatchesMin(0);
+      pfUpdateMatchesToggle();
+    });
+  }
+
+  if (pfMastersToggle) {
+    pfMastersToggle.addEventListener("click", () => {
+      const next = !pfGetMastersOnly();
+      pfSetMastersOnly(next);
+      pfUpdateMastersToggle();
+    });
+    pfMastersToggle.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        const next = !pfGetMastersOnly();
+        pfSetMastersOnly(next);
+        pfUpdateMastersToggle();
+      }
+    });
+  }
+
+  if (pfCaptainsToggle) {
+    pfCaptainsToggle.addEventListener("click", () => {
+      const next = !pfGetCaptainsOnly();
+      pfSetCaptainsOnly(next);
+      pfUpdateCaptainsToggle();
+    });
+    pfCaptainsToggle.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        const next = !pfGetCaptainsOnly();
+        pfSetCaptainsOnly(next);
+        pfUpdateCaptainsToggle();
+      }
+    });
+  }
+  if (pfClearFiltersBtn) {
+    pfClearFiltersBtn.addEventListener("click", () => {
+      pfSetActiveAssociation("");
+      pfSetAchievementType("");
+      pfSetActivePlayer("");
+      pfSetMastersOnly(false);
+      pfSetCaptainsOnly(false);
+      pfSetMatchesMin(0);
+      pfUpdateToggle();
+      pfUpdateAchievementToggle();
+      pfUpdateMastersToggle();
+      pfUpdateCaptainsToggle();
+      pfUpdateMatchesToggle();
+      pfRow.querySelectorAll(".pf-flag-btn").forEach(b => b.classList.remove("active"));
+      if (pfAchievementRow) pfAchievementRow.querySelectorAll(".pf-ach-btn").forEach(b => b.classList.remove("active"));
+      if (pfMatchesRow) pfMatchesRow.querySelectorAll(".pf-matches-btn").forEach(b => b.classList.remove("active"));
+      pfClearPlayerFilter();
+    });
+  }
+
+  const pfClearPlayerFilter = () => {
+    if (pfSearchInput) {
+      pfSearchInput.value = "";
+      pfSearchInput.readOnly = false;
+      pfSearchInput.removeAttribute("aria-readonly");
+      pfSearchInput.placeholder = "Search player...";
+    }
+    if (pfSearchResults) {
+      const listEl = pfSearchResults.querySelector("ul");
+      if (listEl) listEl.innerHTML = "";
+      pfSearchResults.style.display = "none";
+    }
+    pfSetActivePlayer("");
+    if (pfSearchWrap && pfSearchHost.contains(pfSearchWrap)) {
+      pfSearchHost.replaceChild(pfSearchBtn, pfSearchWrap);
+    } else if (!pfSearchHost.contains(pfSearchBtn)) {
+      pfSearchHost.appendChild(pfSearchBtn);
+    }
+  };
+
+  const pfActivatePlayerFilter = (name) => {
+    if (!name) return;
+    pfSetActivePlayer(name);
+    if (pfSearchInput) {
+      pfSearchInput.value = name;
+      pfSearchInput.readOnly = true;
+      pfSearchInput.setAttribute("aria-readonly", "true");
+      pfSearchInput.blur();
+    }
+    if (pfSearchResults) {
+      const listEl = pfSearchResults.querySelector("ul");
+      if (listEl) listEl.innerHTML = "";
+      pfSearchResults.style.display = "none";
+    }
+  };
+
+  pfSearchBtn.addEventListener("click", () => {
+    if (!pfSearchWrap) {
+      pfSearchWrap = document.createElement("div");
+      pfSearchWrap.className = "pf-search-wrap";
+
+      pfSearchInput = document.createElement("input");
+      pfSearchInput.className = "pf-search-input";
+      pfSearchInput.type = "text";
+      pfSearchInput.placeholder = "Search player...";
+
+      pfSearchResults = document.createElement("div");
+      pfSearchResults.className = "pf-search-results";
+      const list = document.createElement("ul");
+      pfSearchResults.appendChild(list);
+
+      pfSearchClear = document.createElement("button");
+      pfSearchClear.type = "button";
+      pfSearchClear.className = "pf-search-clear";
+      pfSearchClear.setAttribute("aria-label", "Clear player filter");
+      pfSearchClear.textContent = "✕";
+      pfSearchClear.addEventListener("click", (e) => {
+        e.stopPropagation();
+        pfClearPlayerFilter();
+        pfSearchBtn.focus();
+      });
+
+      pfSearchWrap.appendChild(pfSearchInput);
+      pfSearchWrap.appendChild(pfSearchResults);
+      pfSearchWrap.appendChild(pfSearchClear);
+
+      pfSearchInput.addEventListener("input", () => {
+        if (pfSearchInput.readOnly) return;
+        const query = pfSearchInput.value.trim().toLowerCase();
+        const listEl = pfSearchResults.querySelector("ul");
+        listEl.innerHTML = "";
+        if (!query) {
+          pfSearchResults.style.display = "none";
+          return;
+        }
+        const matches = pfPlayers
+          .filter(p => p && p.toLowerCase().startsWith(query))
+          .slice(0, 20);
+        if (!matches.length) {
+          const li = document.createElement("li");
+          li.className = "no-results";
+          li.textContent = "No players found";
+          listEl.appendChild(li);
+          pfSearchResults.style.display = "block";
+          return;
+        }
+        matches.forEach(name => {
+          const li = document.createElement("li");
+          li.textContent = name;
+          li.addEventListener("click", () => pfActivatePlayerFilter(name));
+          listEl.appendChild(li);
+        });
+        pfSearchResults.style.display = "block";
+      });
+
+      pfSearchInput.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          pfClearPlayerFilter();
+          pfSearchBtn.focus();
+        }
+      });
+    }
+
+    if (pfSearchWrap && pfSearchHost.contains(pfSearchBtn)) {
+      pfSearchHost.replaceChild(pfSearchWrap, pfSearchBtn);
+    } else if (pfSearchWrap && !pfSearchHost.contains(pfSearchWrap)) {
+      pfSearchHost.appendChild(pfSearchWrap);
+    }
+    if (pfSearchInput) {
+      pfSearchInput.value = "";
+      pfSearchInput.readOnly = false;
+      pfSearchInput.removeAttribute("aria-readonly");
+      pfSearchInput.placeholder = "Search player...";
+      pfSearchInput.focus();
+    }
+  });
+
+  async function pfInitFilters() {
+    try {
+      const res = await fetch(pfDataURL);
+      if (!res.ok) throw new Error("Failed to load JSON files");
+      const data = await res.json();
+      const pfCountries = data.countries || [];
+      const pfProfiles = data.gg_profiles || [];
+      const pfAchievements = data.achievements || [];
+
+      pfOptions = pfCountries
+        .map(c => {
+          const key = pfNormalizeKey(c.team || c.iso);
+          return {
+            key,
+            flag: c.flag || "",
+            title: c.team || c.iso || ""
+          };
+        })
+        .filter(c => c.key && c.flag);
+
+      pfPlayers = pfProfiles
+        .filter(p => pfIsActiveStatus(p && p.status))
+        .map(p => String(p.bga_nickname || p.bga_name || "").trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+
+      pfAchievementTypes = [...new Set(
+        pfAchievements
+          .map(a => String(a.type || "").trim())
+          .filter(Boolean)
+      )].sort((a, b) => a.localeCompare(b));
+
+      const active = pfGetActiveAssociation();
+      pfRow.innerHTML = "";
+
+      pfOptions.forEach(opt => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "pf-flag-btn";
+        btn.dataset.association = opt.key;
+        if (opt.key === active) btn.classList.add("active");
+
+        const img = document.createElement("img");
+        img.src = opt.flag;
+        img.alt = opt.title || "Country flag";
+        img.title = opt.title || "";
+        btn.appendChild(img);
+
+        btn.addEventListener("click", () => {
+          const current = pfGetActiveAssociation();
+          const next = current === opt.key ? "" : opt.key;
+          pfRow.querySelectorAll(".pf-flag-btn").forEach(b => b.classList.remove("active"));
+          if (next) btn.classList.add("active");
+          pfSetActiveAssociation(next);
+          pfToggleRow(true);
+          pfUpdateToggle();
+        });
+
+        pfRow.appendChild(btn);
+      });
+      const activeAchievement = pfGetAchievementType();
+      if (pfAchievementRow) pfAchievementRow.innerHTML = "";
+      pfAchievementTypes.forEach(type => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "pf-ach-btn";
+        btn.dataset.achievementType = type;
+        btn.textContent = type;
+        if (type === activeAchievement) btn.classList.add("active");
+        btn.addEventListener("click", () => {
+          const current = pfGetAchievementType();
+          const next = current === type ? "" : type;
+          pfSetAchievementType(next);
+          pfUpdateAchievementToggle();
+          pfToggleAchievementRow(true);
+        });
+        if (pfAchievementRow) pfAchievementRow.appendChild(btn);
+      });
+      const activeMatches = pfGetMatchesMin();
+      if (pfMatchesRow) pfMatchesRow.innerHTML = "";
+      pfMatchesOptions.forEach(min => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "pf-matches-btn";
+        btn.dataset.matchesMin = String(min);
+        btn.textContent = `${min}+`;
+        if (min === activeMatches) btn.classList.add("active");
+        btn.addEventListener("click", () => {
+          const current = pfGetMatchesMin();
+          const next = current === min ? 0 : min;
+          pfSetMatchesMin(next);
+          pfUpdateMatchesToggle();
+          pfToggleMatchesRow(true);
+        });
+        if (pfMatchesRow) pfMatchesRow.appendChild(btn);
+      });
+      pfUpdateToggle();
+      pfUpdateAchievementToggle();
+      pfUpdateMastersToggle();
+      pfUpdateCaptainsToggle();
+      pfUpdateMatchesToggle();
+      const activePlayer = pfGetActivePlayer();
+      if (activePlayer) {
+        if (pfPlayers.includes(activePlayer)) {
+          pfActivatePlayerFilter(activePlayer);
+        } else {
+          pfSetActivePlayer("");
+        }
+      }
+    } catch (error) {
+      console.error("❌ Failed to load filters:", error);
+    }
+  }
+
+  const initFiltersSafe = () => pfInitFilters();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initFiltersSafe);
+  } else {
+    initFiltersSafe();
+  }
+  window.addEventListener("popstate", () => {
+    pfUpdateToggle();
+    pfUpdateAchievementToggle();
+    pfUpdateMastersToggle();
+    pfUpdateCaptainsToggle();
+    pfUpdateMatchesToggle();
+  });
+</script>

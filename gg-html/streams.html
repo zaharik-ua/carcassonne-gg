@@ -2181,6 +2181,13 @@ function getMatchTimestamp(match) {
   return ts;
 }
 
+function isMatchHidden(match) {
+  if (!match) return false;
+  if (match.hide === true) return true;
+  const raw = typeof match.hide === "string" ? match.hide.trim().toLowerCase() : "";
+  return raw === "yes";
+}
+
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 function getMatchesTodayAndTomorrow(matchesToday, matchesScheduled) {
@@ -2480,7 +2487,8 @@ function renderSettingsSection(container) {
 
 function renderTodayAndTomorrow(container, { matchesToday = [], matchesScheduled = [], tournamentsToday = [], tournamentsScheduled = [] }) {
   resetMatchElementRefs();
-  const { matches: matchesToDisplay, startOfTomorrow } = getMatchesTodayAndTomorrow(matchesToday, matchesScheduled);
+  const { matches: rawMatchesToDisplay, startOfTomorrow } = getMatchesTodayAndTomorrow(matchesToday, matchesScheduled);
+  const matchesToDisplay = rawMatchesToDisplay.filter(match => !isMatchHidden(match));
 
   if (matchesToDisplay.length === 0) {
     const emptyState = document.createElement("div");
