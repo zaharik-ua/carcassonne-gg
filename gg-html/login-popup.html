@@ -28,13 +28,20 @@
       background: transparent;
     }
 
+    .auth-wrap {
+      position: relative;
+      display: inline-block;
+    }
+
     .auth-bar {
       display: inline-flex;
       align-items: center;
       gap: 8px;
+      max-width: min(320px, 90vw);
     }
 
-    .auth-button {
+    .auth-button,
+    .logout-button {
       appearance: none;
       border: 0;
       padding: 8px 12px;
@@ -49,7 +56,8 @@
       transition: background 0.15s ease;
     }
 
-    .auth-button:hover { background: var(--btn-hover); }
+    .auth-button:hover,
+    .logout-button:hover { background: var(--btn-hover); }
 
     .auth-toggle {
       position: absolute;
@@ -70,6 +78,7 @@
       border-radius: 4px;
       background: var(--bg);
       box-shadow: var(--shadow);
+      min-width: 240px;
     }
 
     .auth-toggle:checked ~ .auth-dropdown {
@@ -91,6 +100,7 @@
       color: var(--google-text);
       cursor: pointer;
       transition: box-shadow 0.15s ease;
+      text-decoration: none;
     }
 
     .google-btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
@@ -100,22 +110,150 @@
       height: 18px;
       display: inline-block;
     }
+
+    .auth-user {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #fff;
+      max-width: 220px;
+    }
+
+    .auth-user--visible {
+      display: inline-flex;
+    }
+
+    .auth-user-picture {
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      object-fit: cover;
+      border: 1px solid var(--border);
+    }
+
+    .auth-user-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .hidden {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
   <div class="auth-wrap">
     <input type="checkbox" id="authToggle" class="auth-toggle" />
     <div class="auth-bar">
-      <label class="auth-button" for="authToggle">Sign in</label>
+      <label id="signInLabel" class="auth-button" for="authToggle">Sign in</label>
+      <div id="authUser" class="auth-user">
+        <img id="authUserPicture" class="auth-user-picture" alt="User" />
+        <span id="authUserName" class="auth-user-name"></span>
+      </div>
+      <button id="logoutButton" class="logout-button hidden" type="button">Log out</button>
     </div>
     <div class="auth-dropdown">
       <div class="auth-row">
-        <a class="google-btn" href="/auth/google">
+        <a id="googleAuthLink" class="google-btn" href="/auth/google">
           <img class="google-icon" alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />
           Авторизуватись через Google
         </a>
       </div>
     </div>
   </div>
+
+  <script>
+    const AUTH_BASE = window.AUTH_BASE_URL || window.location.origin;
+
+    const signInLabel = document.getElementById("signInLabel");
+    const googleAuthLink = document.getElementById("googleAuthLink");
+    const authToggle = document.getElementById("authToggle");
+    const authUser = document.getElementById("authUser");
+    const authUserPicture = document.getElementById("authUserPicture");
+    const authUserName = document.getElementById("authUserName");
+    const logoutButton = document.getElementById("logoutButton");
+
+    function setLoggedOutUI() {
+      signInLabel.classList.remove("hidden");
+      authUser.classList.remove("auth-user--visible");
+      logoutButton.classList.add("hidden");
+    }
+
+    function setLoggedInUI(user) {
+      signInLabel.classList.add("hidden");
+      authUser.classList.add("auth-user--visible");
+      logoutButton.classList.remove("hidden");
+      authUserName.textContent = user.name || user.email || "User";
+      authUserPicture.src = user.picture || "https://www.gravatar.com/avatar/?d=mp";
+      authUserPicture.alt = user.name || "User";
+    }
+
+    async function fetchSession() {
+      try {
+        const response = await fetch(`${AUTH_BASE}/auth/me`, {
+          method: "GET",
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          setLoggedOutUI();
+          return;
+        }
+
+        const data = await response.json();
+        if (data.authenticated && data.user) {
+          setLoggedInUI(data.user);
+        } else {
+          setLoggedOutUI();
+        }
+      } catch (error) {
+        setLoggedOutUI();
+      }
+    }
+
+    googleAuthLink.addEventListener("click", (event) => {
+      event.preventDefault();
+      const popup = window.open(
+        `${AUTH_BASE}/auth/google`,
+        "googleAuth",
+        "width=520,height=640,left=100,top=100"
+      );
+
+      if (!popup) {
+        window.location.href = `${AUTH_BASE}/auth/google`;
+        return;
+      }
+
+      authToggle.checked = false;
+    });
+
+    logoutButton.addEventListener("click", async () => {
+      try {
+        await fetch(`${AUTH_BASE}/auth/logout`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        });
+      } finally {
+        setLoggedOutUI();
+      }
+    });
+
+    window.addEventListener("message", (event) => {
+      if (event.origin !== new URL(AUTH_BASE).origin) return;
+      if (event.data && event.data.type === "google-auth-success") {
+        fetchSession();
+      }
+    });
+
+    fetchSession();
+  </script>
 </body>
 </html>

@@ -1,0 +1,1771 @@
+<!-- ШРИФТ + ІКОНКИ -->
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- СТИЛІ -->
+<style>
+  body {
+    font-family: 'Montserrat', sans-serif;
+  }
+
+  .section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #222;
+    margin: 0 0 6px 0;
+    padding: 0 8px;
+    display: flex;
+    justify-content: flex-start;
+  }
+  .back-link {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1a73b7;
+    text-decoration: none;
+  }
+  .matches-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #222;
+    margin: 0 8px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .matches-title-count {
+    font-size: 12px;
+    font-weight: 500;
+    color: #666;
+    white-space: nowrap;
+  }
+  .back-link:hover {
+    color: #165e93;
+    text-decoration: underline;
+  }
+
+  .player-card {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    padding: 10px 12px;
+    margin: 0 8px 12px;
+  }
+
+  .player-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: space-between;
+  }
+
+  .player-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: #f2f2f2;
+  }
+
+  .player-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .player-rating {
+    font-size: 15px;
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
+  }
+  .player-rating-label {
+    font-size: 11px;
+    font-weight: 400;
+    color: #888;
+    text-align: right;
+  }
+  .player-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .player-meta .nick {
+    font-size: 18px;
+    font-weight: 600;
+    color: #222;
+  }
+
+  .player-meta .real-name {
+    font-size: 14px;
+    color: #444;
+  }
+
+  .player-association {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+    color: #333;
+    margin-top: 4px;
+    width: 100%;
+  }
+
+  .player-association-country {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .player-association-country img {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+  }
+  .player-team-captain {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 4px;
+    font-size: 12px;
+    color: #444;
+    white-space: nowrap;
+  }
+  .player-team-captain img {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+  }
+  .player-stats {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #ececec;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .player-stats-main {
+    display: grid;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .player-bga-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #1a73b7;
+    text-decoration: none;
+    line-height: 1.2;
+  }
+  .player-bga-link:hover {
+    color: #165e93;
+    text-decoration: underline;
+  }
+  .player-bga-link img {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+  }
+  .player-master-badge {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    gap: 2px;
+    line-height: 1.1;
+    color: #333;
+    cursor: help;
+  }
+  .player-master-badge img {
+    width: 30px;
+    height: auto;
+    object-fit: contain;
+  }
+  .player-master-badge span {
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    white-space: pre-line;
+  }
+  .player-stats-line {
+    font-size: 14px;
+    color: #444;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .player-stats-line.compact {
+    font-size: 12px;
+  }
+  .player-stats-line.matches-summary {
+    font-size: 13px;
+  }
+  .player-stats-label {
+    color: #444;
+  }
+  .player-stats-value {
+    font-weight: 600;
+  }
+  .player-stats-value.match-time {
+    font-weight: 500;
+  }
+  .player-stats-extreme-value {
+    font-weight: 500;
+  }
+  .player-stats-extreme-date {
+    font-weight: 400;
+  }
+  .player-stats-value.total { color: #1565c0; }
+  .player-stats-value.wins { color: #2e7d32; }
+  .player-stats-value.losses { color: #c62828; }
+
+  .player-matches {
+    background-color: #f5f5f5;
+    padding: 8px 10px 12px 14px;
+    margin: 0 8px 12px;
+    border-radius: 4px;
+  }
+
+  .player-matches-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+  }
+  .player-matches-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .player-matches-controls-filters {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .player-matches-controls-pagination {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  @media (min-width: 641px) {
+    .player-matches-controls-filters,
+    .player-matches-controls-pagination {
+      display: contents;
+    }
+
+    .player-matches-controls .pmc-per-page { order: 1; }
+    .player-matches-controls .pmc-tournament { order: 2; }
+    .player-matches-controls .pmc-opponent { order: 3; }
+    .player-matches-controls .pmc-pagination { order: 4; }
+  }
+  .player-matches-pagesize {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 400;
+    color: #555;
+  }
+  .player-pagesize-select {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    min-width: 58px;
+  }
+  .player-pagesize-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 24px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    font-size: 12px;
+    line-height: 1;
+    padding: 4px 7px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    cursor: pointer;
+  }
+  .player-pagesize-btn:hover,
+  .player-pagesize-btn:focus-visible {
+    border-color: #9ea7b3;
+  }
+  .player-pagesize-btn.open {
+    border-color: #9ea7b3;
+  }
+  .player-pagesize-label {
+    font-weight: 600;
+    color: #2f3947;
+    white-space: nowrap;
+  }
+  .player-pagesize-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #6f7785;
+    font-size: 10px;
+  }
+  .player-pagesize-chevron i {
+    transition: transform 0.18s ease;
+  }
+  .player-pagesize-btn.open .player-pagesize-chevron i {
+    transform: rotate(180deg);
+  }
+  .player-pagesize-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 4px);
+    min-width: 100%;
+    width: max-content;
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+    z-index: 20;
+  }
+  .player-pagesize-menu.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  .player-pagesize-menu.drop-down {
+    bottom: auto;
+    top: calc(100% + 4px);
+  }
+  .player-pagesize-option {
+    all: unset;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    border-top: 1px solid #edf1f6;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #2f3947;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .player-pagesize-option-flag {
+    width: 14px;
+    height: 10px;
+    border-radius: 2px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .player-pagesize-option:first-child {
+    border-top: none;
+  }
+  .player-pagesize-option:hover {
+    background: #f5f5f5;
+  }
+  .player-pagesize-option.active {
+    background: #e4f0fb;
+  }
+  .player-matches-pagination {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .player-matches-pagebtn {
+    font: inherit;
+    font-size: 12px;
+    color: #333;
+    background: #fff;
+    border: 1px solid #cfcfcf;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+  .player-matches-pagebtn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .player-matches-pageinfo {
+    font-size: 12px;
+    color: #555;
+    min-width: 72px;
+    text-align: center;
+  }
+
+  .player-matches-entry {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .player-matches-entry.match-row {
+    cursor: pointer;
+    padding: 2px 0;
+  }
+  .player-matches-entry.match-row:hover {
+    background: #fff;
+  }
+
+  .player-matches-line2 {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .player-matches-date {
+    min-width: 45px;
+    color: #666;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .player-matches-tournament-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .player-matches-tournament-logo {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+  }
+  .detail-logo {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  .player-matches-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .player-matches-flag {
+    width: 14px;
+    height: auto;
+    object-fit: contain;
+  }
+
+  .player-matches-score {
+    min-width: 34px;
+    text-align: center;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .player-match-details {
+    display: none;
+    padding: 6px 0 6px 18px;
+    font-size: 13px;
+    color: #444;
+    background: #fff;
+    border-radius: 4px;
+  }
+  .player-match-details.open {
+    display: block;
+  }
+  .player-match-details .detail-line {
+    margin: 2px 0;
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 6px;
+  }
+  .player-match-details .detail-label {
+    color: #666;
+    text-align: left;
+  }
+  .player-match-details .detail-player {
+    font-weight: 500;
+  }
+  .player-matches-rating-delta {
+    min-width: 40px;
+    text-align: right;
+    font-weight: 400;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .player-matches-rating-delta.pos { color: #2e7d32; }
+  .player-matches-rating-delta.neg { color: #c62828; }
+
+  @media (max-width: 640px) {
+    .player-matches-controls {
+      width: 100%;
+      align-items: stretch;
+      justify-content: flex-start;
+      gap: 8px;
+    }
+
+    .player-matches-controls-pagination {
+      width: 100%;
+      justify-content: space-between;
+      order: 1;
+    }
+
+    .player-matches-controls-filters {
+      width: 100%;
+      order: 2;
+      justify-content: flex-start;
+    }
+
+    .player-pagesize-select,
+    .player-pagesize-btn {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .player-pagesize-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .player-matches-entry.match-row {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      column-gap: 4px;
+      row-gap: 1px;
+    }
+
+    .player-matches-date {
+      min-width: 0;
+      font-size: 11px;
+      line-height: 1.1;
+    }
+
+    .player-matches-line2 {
+      width: auto;
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .player-matches-name {
+      gap: 4px;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .player-matches-score {
+      min-width: 0;
+    }
+
+    .player-matches-rating-delta {
+      min-width: 0;
+      margin-left: 10px;
+      font-size: 11px;
+      line-height: 1.1;
+    }
+  }
+</style>
+
+<div class="section-title">
+  <a class="back-link" href="https://carcassonne.gg/players/">Back to all players</a>
+</div>
+<div id="player-container"></div>
+
+<script>
+(function() {
+  let duels = [];
+  let matches = [];
+  let bgaPlayersById = new Map();
+  let ggProfilesById = new Map();
+  let countriesByKey = new Map();
+  let tournamentsById = new Map();
+
+  function getPlayerIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("id") || "").trim();
+  }
+
+  function getTournamentMeta(tournamentId) {
+    const tid = String(tournamentId || "");
+    const t = tournamentsById.get(tid);
+    if (!t) return { name: tid, fullName: tid, logo: "" };
+    const fullName = t.name || t.tournament_name || tid;
+    const name = t.short_title || t.short_name || fullName || tid;
+    const logo = t.logo_image || t.logo || t.tournament_logo || "";
+    return { name, fullName, logo };
+  }
+
+  function isActivePlayerStatus(status) {
+    return String(status || "").trim().toLowerCase() === "active";
+  }
+
+  function formatMatchDate(raw) {
+    const d = parseDateFromRaw(raw);
+    if (!d) return String(raw || "").trim();
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  }
+
+  function firstDefined() {
+    for (let i = 0; i < arguments.length; i += 1) {
+      const v = arguments[i];
+      if (v !== null && v !== undefined && String(v).trim() !== "") return v;
+    }
+    return "";
+  }
+
+  function parseDuelTimestamp(duel) {
+    const raw = firstDefined(duel.time_start_utc, duel.timestamp);
+    const d = parseDateFromRaw(raw);
+    return d ? d.getTime() : 0;
+  }
+
+  function parseDateFromRaw(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return null;
+    const dmy = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (dmy) {
+      const dd = Number(dmy[1]);
+      const mm = Number(dmy[2]);
+      const yyyy = Number(dmy[3]);
+      const hasTime = dmy[4] != null;
+      const hh = hasTime ? Number(dmy[4]) : 12;
+      const mi = hasTime ? Number(dmy[5]) : 0;
+      const ss = hasTime ? Number(dmy[6] || 0) : 0;
+      return new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi, ss));
+    }
+    const ts = Date.parse(s);
+    if (!Number.isFinite(ts)) return null;
+    return new Date(ts);
+  }
+
+  function formatDateDdMonYyyy(raw) {
+    const d = parseDateFromRaw(raw);
+    if (!d) return String(raw || "").trim();
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  function formatDetailTime(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+
+    const dmy = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (dmy) {
+      const dd = String(Number(dmy[1])).padStart(2, "0");
+      const mm = Number(dmy[2]);
+      const yyyy = Number(dmy[3]);
+      const hh = dmy[4] != null ? Number(dmy[4]) : 0;
+      const mi = dmy[5] != null ? Number(dmy[5]) : 0;
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const monthLabel = months[Math.max(0, Math.min(11, mm - 1))] || "";
+      const dateLabel = `${dd} ${monthLabel} ${yyyy}`.trim();
+      if (hh === 0 && mi === 0) return dateLabel;
+      return `${dateLabel}, ${String(hh).padStart(2, "0")}:${String(mi).padStart(2, "0")} utc`;
+    }
+
+    const d = parseDateFromRaw(s);
+    if (!d) return s;
+    const dateLabel = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    const hh = d.getUTCHours();
+    const mi = d.getUTCMinutes();
+    if (hh === 0 && mi === 0) return dateLabel;
+    return `${dateLabel}, ${String(hh).padStart(2, "0")}:${String(mi).padStart(2, "0")} utc`;
+  }
+
+  function getPlayerEloExtremes(playerId) {
+    const pid = String(playerId || "");
+    let peak = null;
+    let low = null;
+
+    (duels || []).forEach(duel => {
+      const p1Id = String(firstDefined(duel.player1_id, duel.playerAid) || "");
+      const p2Id = String(firstDefined(duel.player2_id, duel.playerBid) || "");
+      if (p1Id !== pid && p2Id !== pid) return;
+
+      const isP1 = p1Id === pid;
+      const beforeRaw = isP1
+        ? firstDefined(duel.player1_elo_before, duel.eloA_before)
+        : firstDefined(duel.player2_elo_before, duel.eloB_before);
+      const afterRaw = isP1
+        ? firstDefined(duel.player1_elo_after, duel.eloA_after)
+        : firstDefined(duel.player2_elo_after, duel.eloB_after);
+      const dateRaw = firstDefined(duel.time_start_utc, duel.timestamp);
+
+      [beforeRaw, afterRaw].forEach(rawValue => {
+        const value = Number(rawValue);
+        if (!Number.isFinite(value)) return;
+        if (!peak || value > peak.value) peak = { value, dateRaw };
+        if (!low || value < low.value) low = { value, dateRaw };
+      });
+    });
+
+    return { peak, low };
+  }
+
+  function getBadgeByPlayerId(playerId) {
+    const pid = String(playerId || "");
+    const profile = ggProfilesById.get(pid);
+    const assoc = profile ? String(profile.assosiation || profile.association || "") : "";
+    if (assoc) {
+      const country = countriesByKey.get(assoc);
+      if (country && country.flag) return { url: country.flag, alt: "flag" };
+    }
+    const bga = bgaPlayersById.get(pid);
+    if (bga && bga.avatar) return { url: bga.avatar, alt: "avatar" };
+    return { url: "", alt: "" };
+  }
+
+  function getPlayerCountryMeta(playerId) {
+    const pid = String(playerId || "");
+    const profile = ggProfilesById.get(pid);
+    if (!profile) return null;
+    const assoc = String(profile.assosiation || profile.association || "").trim();
+    if (!assoc) return null;
+    const country = countriesByKey.get(assoc);
+    if (!country) return null;
+    const key = String(country.iso || country.team || assoc).trim();
+    if (!key) return null;
+    return {
+      key,
+      name: String(country.team || country.iso || key).trim(),
+      flag: String(country.flag || "").trim()
+    };
+  }
+
+  function getOpponentCountryMeta(duel, playerId) {
+    const pid = String(playerId || "");
+    const p1Id = String(firstDefined(duel.player1_id, duel.playerAid) || "");
+    const p2Id = String(firstDefined(duel.player2_id, duel.playerBid) || "");
+    const opponentId = p1Id === pid ? p2Id : p1Id;
+    return getPlayerCountryMeta(opponentId);
+  }
+
+  function getOfficialMatchesCount(playerId) {
+    const pid = String(playerId || "");
+    return (duels || []).filter(duel => {
+      if (!duel) return false;
+      const p1Id = String(firstDefined(duel.player1_id, duel.playerAid) || "");
+      const p2Id = String(firstDefined(duel.player2_id, duel.playerBid) || "");
+      return p1Id === pid || p2Id === pid;
+    }).length;
+  }
+
+  function buildMatchesList(playerId, countEl) {
+    const pid = String(playerId || "");
+    const matchesForPlayer = (duels || [])
+      .filter(d => {
+        if (!d) return false;
+        const p1Id = String(firstDefined(d.player1_id, d.playerAid) || "");
+        const p2Id = String(firstDefined(d.player2_id, d.playerBid) || "");
+        return p1Id === pid || p2Id === pid;
+      })
+      .sort((a, b) => parseDuelTimestamp(b) - parseDuelTimestamp(a));
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "player-matches";
+    const controls = document.createElement("div");
+    controls.className = "player-matches-controls";
+    const filtersControls = document.createElement("div");
+    filtersControls.className = "player-matches-controls-filters";
+    const paginationControls = document.createElement("div");
+    paginationControls.className = "player-matches-controls-pagination";
+
+    const pageSizeWrap = document.createElement("label");
+    pageSizeWrap.className = "player-matches-pagesize";
+    pageSizeWrap.classList.add("pmc-per-page");
+    pageSizeWrap.appendChild(document.createTextNode("Per page:"));
+    const pageSizePicker = document.createElement("div");
+    pageSizePicker.className = "player-pagesize-select";
+    const pageSizeBtn = document.createElement("button");
+    pageSizeBtn.type = "button";
+    pageSizeBtn.className = "player-pagesize-btn";
+    const pageSizeBtnLabel = document.createElement("span");
+    pageSizeBtnLabel.className = "player-pagesize-label";
+    pageSizeBtnLabel.textContent = "15";
+    const pageSizeChevron = document.createElement("span");
+    pageSizeChevron.className = "player-pagesize-chevron";
+    pageSizeChevron.innerHTML = '<i class="fa fa-chevron-down"></i>';
+    pageSizeBtn.appendChild(pageSizeBtnLabel);
+    pageSizeBtn.appendChild(pageSizeChevron);
+    const pageSizeMenu = document.createElement("div");
+    pageSizeMenu.className = "player-pagesize-menu drop-down";
+    const pageSizeOptions = [
+      { value: "15", text: "15" },
+      { value: "30", text: "30" },
+      { value: "all", text: "All" }
+    ];
+    pageSizeOptions.forEach(opt => {
+      const optBtn = document.createElement("button");
+      optBtn.type = "button";
+      optBtn.className = "player-pagesize-option";
+      optBtn.dataset.value = opt.value;
+      optBtn.textContent = opt.text;
+      if (opt.value === "15") optBtn.classList.add("active");
+      pageSizeMenu.appendChild(optBtn);
+    });
+    pageSizePicker.appendChild(pageSizeBtn);
+    pageSizePicker.appendChild(pageSizeMenu);
+    pageSizeWrap.appendChild(pageSizePicker);
+
+    const tournamentWrap = document.createElement("label");
+    tournamentWrap.className = "player-matches-pagesize";
+    tournamentWrap.classList.add("pmc-tournament");
+    tournamentWrap.appendChild(document.createTextNode("Tournament:"));
+    const tournamentPicker = document.createElement("div");
+    tournamentPicker.className = "player-pagesize-select";
+    const tournamentBtn = document.createElement("button");
+    tournamentBtn.type = "button";
+    tournamentBtn.className = "player-pagesize-btn";
+    const tournamentBtnLabel = document.createElement("span");
+    tournamentBtnLabel.className = "player-pagesize-label";
+    tournamentBtnLabel.textContent = "All";
+    const tournamentChevron = document.createElement("span");
+    tournamentChevron.className = "player-pagesize-chevron";
+    tournamentChevron.innerHTML = '<i class="fa fa-chevron-down"></i>';
+    tournamentBtn.appendChild(tournamentBtnLabel);
+    tournamentBtn.appendChild(tournamentChevron);
+    const tournamentMenu = document.createElement("div");
+    tournamentMenu.className = "player-pagesize-menu drop-down";
+    const tournamentOptions = [{ value: "all", text: "All" }];
+    const seenTournaments = new Set();
+    matchesForPlayer.forEach(duel => {
+      const tId = String(firstDefined(duel.tournament_id, duel.tournamentId) || "").trim();
+      if (!tId || seenTournaments.has(tId)) return;
+      seenTournaments.add(tId);
+      const tInfo = getTournamentMeta(tId);
+      tournamentOptions.push({ value: tId, text: tInfo.name || tId });
+    });
+    tournamentOptions.forEach(opt => {
+      const optBtn = document.createElement("button");
+      optBtn.type = "button";
+      optBtn.className = "player-pagesize-option";
+      optBtn.dataset.value = opt.value;
+      optBtn.textContent = opt.text;
+      if (opt.value === "all") optBtn.classList.add("active");
+      tournamentMenu.appendChild(optBtn);
+    });
+    tournamentPicker.appendChild(tournamentBtn);
+    tournamentPicker.appendChild(tournamentMenu);
+    tournamentWrap.appendChild(tournamentPicker);
+
+    const opponentWrap = document.createElement("label");
+    opponentWrap.className = "player-matches-pagesize";
+    opponentWrap.classList.add("pmc-opponent");
+    opponentWrap.appendChild(document.createTextNode("Opponent:"));
+    const opponentPicker = document.createElement("div");
+    opponentPicker.className = "player-pagesize-select";
+    const opponentBtn = document.createElement("button");
+    opponentBtn.type = "button";
+    opponentBtn.className = "player-pagesize-btn";
+    const opponentBtnLabel = document.createElement("span");
+    opponentBtnLabel.className = "player-pagesize-label";
+    opponentBtnLabel.textContent = "All";
+    const opponentChevron = document.createElement("span");
+    opponentChevron.className = "player-pagesize-chevron";
+    opponentChevron.innerHTML = '<i class="fa fa-chevron-down"></i>';
+    opponentBtn.appendChild(opponentBtnLabel);
+    opponentBtn.appendChild(opponentChevron);
+    const opponentMenu = document.createElement("div");
+    opponentMenu.className = "player-pagesize-menu drop-down";
+    const opponentOptions = [{ value: "all", text: "All", flag: "" }];
+    const seenOpponentCountries = new Set();
+    matchesForPlayer.forEach(duel => {
+      const oppCountry = getOpponentCountryMeta(duel, pid);
+      if (!oppCountry || !oppCountry.key || seenOpponentCountries.has(oppCountry.key)) return;
+      seenOpponentCountries.add(oppCountry.key);
+      opponentOptions.push({
+        value: oppCountry.key,
+        text: oppCountry.name || oppCountry.key,
+        flag: oppCountry.flag || ""
+      });
+    });
+    opponentOptions
+      .slice(1)
+      .sort((a, b) => a.text.localeCompare(b.text))
+      .forEach((opt, idx) => { opponentOptions[idx + 1] = opt; });
+    opponentOptions.forEach(opt => {
+      const optBtn = document.createElement("button");
+      optBtn.type = "button";
+      optBtn.className = "player-pagesize-option";
+      optBtn.dataset.value = opt.value;
+      if (opt.flag) {
+        const flag = document.createElement("img");
+        flag.className = "player-pagesize-option-flag";
+        flag.src = opt.flag;
+        flag.alt = opt.text || "";
+        optBtn.appendChild(flag);
+      }
+      optBtn.appendChild(document.createTextNode(opt.text));
+      if (opt.value === "all") optBtn.classList.add("active");
+      opponentMenu.appendChild(optBtn);
+    });
+    opponentPicker.appendChild(opponentBtn);
+    opponentPicker.appendChild(opponentMenu);
+    opponentWrap.appendChild(opponentPicker);
+
+    const pagination = document.createElement("div");
+    pagination.className = "player-matches-pagination";
+    pagination.classList.add("pmc-pagination");
+    const prevBtn = document.createElement("button");
+    prevBtn.className = "player-matches-pagebtn";
+    prevBtn.type = "button";
+    prevBtn.textContent = "Prev";
+    const pageInfo = document.createElement("span");
+    pageInfo.className = "player-matches-pageinfo";
+    const nextBtn = document.createElement("button");
+    nextBtn.className = "player-matches-pagebtn";
+    nextBtn.type = "button";
+    nextBtn.textContent = "Next";
+    pagination.appendChild(prevBtn);
+    pagination.appendChild(pageInfo);
+    pagination.appendChild(nextBtn);
+
+    paginationControls.appendChild(pageSizeWrap);
+    paginationControls.appendChild(pagination);
+    filtersControls.appendChild(tournamentWrap);
+    filtersControls.appendChild(opponentWrap);
+    controls.appendChild(paginationControls);
+    controls.appendChild(filtersControls);
+    wrapper.appendChild(controls);
+
+    const list = document.createElement("div");
+    list.className = "player-matches-list";
+    wrapper.appendChild(list);
+
+    let pageSize = 15;
+    let currentPage = 1;
+    let selectedTournament = "all";
+    let selectedOpponent = "all";
+
+    function closePageSizeMenu() {
+      pageSizeMenu.classList.remove("open");
+      pageSizeMenu.style.maxHeight = "0px";
+      pageSizeBtn.classList.remove("open");
+    }
+
+    function setPageSize(newSize, labelText) {
+      pageSize = newSize;
+      currentPage = 1;
+      pageSizeBtnLabel.textContent = labelText;
+      pageSizeMenu.querySelectorAll(".player-pagesize-option").forEach(el => {
+        el.classList.toggle("active", el.dataset.value === String(newSize));
+      });
+      renderPage();
+    }
+
+    function closeTournamentMenu() {
+      tournamentMenu.classList.remove("open");
+      tournamentMenu.style.maxHeight = "0px";
+      tournamentBtn.classList.remove("open");
+    }
+
+    function setTournament(tournamentId, labelText) {
+      selectedTournament = tournamentId;
+      currentPage = 1;
+      tournamentBtnLabel.textContent = labelText;
+      tournamentMenu.querySelectorAll(".player-pagesize-option").forEach(el => {
+        el.classList.toggle("active", el.dataset.value === selectedTournament);
+      });
+      renderPage();
+    }
+
+    function closeOpponentMenu() {
+      opponentMenu.classList.remove("open");
+      opponentMenu.style.maxHeight = "0px";
+      opponentBtn.classList.remove("open");
+    }
+
+    function setOpponent(opponentCountryKey, labelText) {
+      selectedOpponent = opponentCountryKey;
+      currentPage = 1;
+      opponentBtnLabel.textContent = labelText;
+      opponentMenu.querySelectorAll(".player-pagesize-option").forEach(el => {
+        el.classList.toggle("active", el.dataset.value === selectedOpponent);
+      });
+      renderPage();
+    }
+
+    function getFilteredDuels() {
+      return matchesForPlayer.filter(duel => {
+        const byTournament = selectedTournament === "all" || String(firstDefined(duel.tournament_id, duel.tournamentId) || "").trim() === selectedTournament;
+        if (!byTournament) return false;
+        if (selectedOpponent === "all") return true;
+        const oppCountry = getOpponentCountryMeta(duel, pid);
+        return !!oppCountry && oppCountry.key === selectedOpponent;
+      });
+    }
+
+    function renderPage() {
+      list.innerHTML = "";
+      const filteredDuels = getFilteredDuels();
+      const total = filteredDuels.length;
+      if (countEl) countEl.textContent = `Count: ${total}`;
+      const totalPages = pageSize === "all" ? 1 : Math.max(1, Math.ceil(total / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      if (!total) {
+        const empty = document.createElement("div");
+        empty.textContent = "No matches yet.";
+        list.appendChild(empty);
+      } else {
+        const start = pageSize === "all" ? 0 : (currentPage - 1) * pageSize;
+        const end = pageSize === "all" ? total : (start + pageSize);
+        const pageDuels = filteredDuels.slice(start, end);
+
+      let lastTournamentId = null;
+      pageDuels.forEach(duel => {
+        const p1Id = firstDefined(duel.player1_id, duel.playerAid);
+        const p2Id = firstDefined(duel.player2_id, duel.playerBid);
+        const p1Name = firstDefined(duel.player1, duel.playerAname, "Player 1");
+        const p2Name = firstDefined(duel.player2, duel.playerBname, "Player 2");
+        const s1 = firstDefined(duel.games_won1, duel.gwA);
+        const s2 = firstDefined(duel.games_won2, duel.gwB);
+        const tId = String(firstDefined(duel.tournament_id, duel.tournamentId) || "");
+        const matchDate = firstDefined(duel.time_start_utc, duel.timestamp);
+        const duelMatchId = firstDefined(duel.match_id, duel.matchId);
+        const tInfo = getTournamentMeta(tId);
+        if (tId && tId !== lastTournamentId) {
+          const tRow = document.createElement("div");
+          tRow.className = "player-matches-entry";
+          const tWrap = document.createElement("span");
+          tWrap.className = "player-matches-tournament-header";
+          if (tInfo.logo) {
+            const tLogo = document.createElement("img");
+            tLogo.src = tInfo.logo;
+            tLogo.className = "player-matches-tournament-logo";
+            tLogo.alt = "";
+            tWrap.appendChild(tLogo);
+          }
+          tWrap.appendChild(document.createTextNode(tInfo.name || ""));
+          tRow.appendChild(tWrap);
+          list.appendChild(tRow);
+          lastTournamentId = tId;
+        }
+
+        const row = document.createElement("div");
+        row.className = "player-matches-entry match-row";
+
+        const date = document.createElement("span");
+        date.className = "player-matches-date";
+        date.textContent = formatMatchDate(matchDate);
+
+        const badge1 = getBadgeByPlayerId(p1Id);
+        const badge2 = getBadgeByPlayerId(p2Id);
+
+        const line2 = document.createElement("div");
+        line2.className = "player-matches-line2";
+
+        const left = document.createElement("span");
+        left.className = "player-matches-name";
+        if (badge1.url) {
+          const img = document.createElement("img");
+          img.src = badge1.url;
+          img.className = "player-matches-flag";
+          img.alt = badge1.alt || "";
+          left.appendChild(img);
+        }
+        left.appendChild(document.createTextNode(p1Name));
+
+        const score = document.createElement("span");
+        score.className = "player-matches-score";
+        score.textContent = (String(s1).trim() !== "" && String(s2).trim() !== "") ? `${s1} - ${s2}` : "-";
+
+        const right = document.createElement("span");
+        right.className = "player-matches-name";
+        right.appendChild(document.createTextNode(p2Name));
+        if (badge2.url) {
+          const img = document.createElement("img");
+          img.src = badge2.url;
+          img.className = "player-matches-flag";
+          img.alt = badge2.alt || "";
+          right.appendChild(img);
+        }
+
+        let deltaEl = null;
+        const isP1 = String(p1Id || "") === pid;
+        if (isP1) {
+          const before = firstDefined(duel.player1_elo_before, duel.eloA_before);
+          const after = firstDefined(duel.player1_elo_after, duel.eloA_after);
+          if (before !== null && before !== "" && after !== null && after !== "") {
+            const diff = Number(after) - Number(before);
+            if (Number.isFinite(diff)) {
+              const roundedDiff = Math.round(diff);
+              deltaEl = document.createElement("span");
+              deltaEl.className = "player-matches-rating-delta";
+              if (roundedDiff > 0) deltaEl.classList.add("pos");
+              if (roundedDiff < 0) deltaEl.classList.add("neg");
+              deltaEl.textContent = roundedDiff > 0 ? `+${roundedDiff}` : `${roundedDiff}`;
+            }
+          }
+        } else {
+          const before = firstDefined(duel.player2_elo_before, duel.eloB_before);
+          const after = firstDefined(duel.player2_elo_after, duel.eloB_after);
+          if (before !== null && before !== "" && after !== null && after !== "") {
+            const diff = Number(after) - Number(before);
+            if (Number.isFinite(diff)) {
+              const roundedDiff = Math.round(diff);
+              deltaEl = document.createElement("span");
+              deltaEl.className = "player-matches-rating-delta";
+              if (roundedDiff > 0) deltaEl.classList.add("pos");
+              if (roundedDiff < 0) deltaEl.classList.add("neg");
+              deltaEl.textContent = roundedDiff > 0 ? `+${roundedDiff}` : `${roundedDiff}`;
+            }
+          }
+        }
+
+        row.appendChild(date);
+        line2.appendChild(left);
+        line2.appendChild(score);
+        line2.appendChild(right);
+        if (deltaEl) line2.appendChild(deltaEl);
+        row.appendChild(line2);
+        list.appendChild(row);
+
+        const details = document.createElement("div");
+        details.className = "player-match-details";
+        if (tInfo && (tInfo.fullName || tInfo.name)) {
+          const tLine = document.createElement("div");
+          tLine.className = "detail-line";
+          const tLabel = document.createElement("span");
+          tLabel.className = "detail-label";
+          tLabel.textContent = "Tournament:";
+          const tValue = document.createElement("span");
+          if (tInfo.logo) {
+            const tLogo = document.createElement("img");
+            tLogo.src = tInfo.logo;
+            tLogo.alt = "";
+            tLogo.className = "detail-logo";
+            tValue.appendChild(tLogo);
+          }
+          tValue.appendChild(document.createTextNode(tInfo.fullName || tInfo.name));
+          tLine.appendChild(tLabel);
+          tLine.appendChild(tValue);
+          details.appendChild(tLine);
+        }
+
+        if (duelMatchId) {
+          const match = (matches || []).find(m => {
+            const mId = firstDefined(m.match_id, m.matchId);
+            return String(mId || "") === String(duelMatchId);
+          });
+          const roundText = match && match.round ? match.round : (duel.round || "");
+          if (roundText) {
+            const roundLine = document.createElement("div");
+            roundLine.className = "detail-line";
+            const roundLabel = document.createElement("span");
+            roundLabel.className = "detail-label";
+            roundLabel.textContent = "Round:";
+            const roundValue = document.createElement("span");
+            roundValue.textContent = roundText;
+            roundLine.appendChild(roundLabel);
+            roundLine.appendChild(roundValue);
+            details.appendChild(roundLine);
+          }
+          if (match) {
+            const dw1 = match.duels_won1 ?? "";
+            const dw2 = match.duels_won2 ?? "";
+            const gw1 = match.games_won1 ?? "";
+            const gw2 = match.games_won2 ?? "";
+            const team1 = match.team1 || "";
+            const team2 = match.team2 || "";
+            const matchLine = document.createElement("div");
+            matchLine.className = "detail-line";
+            const matchLabel = document.createElement("span");
+            matchLabel.className = "detail-label";
+            matchLabel.textContent = "Match:";
+            const matchValue = document.createElement("span");
+            if (match.team1_id) {
+              const t1 = countriesByKey.get(String(match.team1_id));
+              if (t1 && t1.flag) {
+                const img1 = document.createElement("img");
+                img1.src = t1.flag;
+                img1.alt = match.team1 || "";
+                img1.className = "detail-logo";
+                matchValue.appendChild(img1);
+              }
+            }
+            matchValue.appendChild(document.createTextNode(`${team1} ${dw1}-${dw2} (${gw1}-${gw2}) `));
+            matchValue.appendChild(document.createTextNode(`${team2}`));
+            if (match.team2_id) {
+              const t2 = countriesByKey.get(String(match.team2_id));
+              if (t2 && t2.flag) {
+                const img2 = document.createElement("img");
+                img2.src = t2.flag;
+                img2.alt = match.team2 || "";
+                img2.className = "detail-logo";
+                img2.style.marginLeft = "6px";
+                img2.style.marginRight = "0";
+                matchValue.appendChild(img2);
+              }
+            }
+            matchLine.appendChild(matchLabel);
+            matchLine.appendChild(matchValue);
+            details.appendChild(matchLine);
+          }
+        } else if (duel.round) {
+          const roundLine = document.createElement("div");
+          roundLine.className = "detail-line";
+          const roundLabel = document.createElement("span");
+          roundLabel.className = "detail-label";
+          roundLabel.textContent = "Round:";
+          const roundValue = document.createElement("span");
+          roundValue.textContent = duel.round;
+          roundLine.appendChild(roundLabel);
+          roundLine.appendChild(roundValue);
+          details.appendChild(roundLine);
+        }
+
+        const timeRaw = firstDefined(duel.time_start_utc, duel.timestamp);
+        const timeText = formatDetailTime(timeRaw);
+        if (timeText) {
+          const timeLine = document.createElement("div");
+          timeLine.className = "detail-line";
+          const timeLabel = document.createElement("span");
+          timeLabel.className = "detail-label";
+          timeLabel.textContent = "Time:";
+          const timeValue = document.createElement("span");
+          timeValue.textContent = timeText;
+          timeLine.appendChild(timeLabel);
+          timeLine.appendChild(timeValue);
+          details.appendChild(timeLine);
+        }
+
+        if (duel.status) {
+          const statusLine = document.createElement("div");
+          statusLine.className = "detail-line";
+          const statusLabel = document.createElement("span");
+          statusLabel.className = "detail-label";
+          statusLabel.textContent = "Status:";
+          const statusValue = document.createElement("span");
+          statusValue.textContent = duel.status;
+          statusLine.appendChild(statusLabel);
+          statusLine.appendChild(statusValue);
+          details.appendChild(statusLine);
+        }
+
+        const isSelfP1 = String(p1Id || "") === pid;
+        const selfName = isSelfP1 ? p1Name : p2Name;
+        const oppName = isSelfP1 ? p2Name : p1Name;
+        const selfBefore = isSelfP1
+          ? firstDefined(duel.player1_elo_before, duel.eloA_before)
+          : firstDefined(duel.player2_elo_before, duel.eloB_before);
+        const selfAfter = isSelfP1
+          ? firstDefined(duel.player1_elo_after, duel.eloA_after)
+          : firstDefined(duel.player2_elo_after, duel.eloB_after);
+        const oppBeforeVal = isSelfP1
+          ? firstDefined(duel.player2_elo_before, duel.eloB_before)
+          : firstDefined(duel.player1_elo_before, duel.eloA_before);
+        const oppAfterVal = isSelfP1
+          ? firstDefined(duel.player2_elo_after, duel.eloB_after)
+          : firstDefined(duel.player1_elo_after, duel.eloA_after);
+
+        const selfHeader = document.createElement("div");
+        selfHeader.className = "detail-line";
+        const selfLabel = document.createElement("span");
+        selfLabel.className = "detail-player";
+        selfLabel.textContent = selfName;
+        const selfSpacer = document.createElement("span");
+        selfSpacer.textContent = "";
+        selfHeader.appendChild(selfLabel);
+        selfHeader.appendChild(selfSpacer);
+        details.appendChild(selfHeader);
+
+        const selfBeforeLine = document.createElement("div");
+        selfBeforeLine.className = "detail-line";
+        const selfBeforeLabel = document.createElement("span");
+        selfBeforeLabel.className = "detail-label";
+        selfBeforeLabel.textContent = "Elo Before:";
+        const selfBeforeValue = document.createElement("span");
+        selfBeforeValue.textContent = selfBefore ?? "";
+        selfBeforeLine.appendChild(selfBeforeLabel);
+        selfBeforeLine.appendChild(selfBeforeValue);
+        details.appendChild(selfBeforeLine);
+
+        const selfAfterLine = document.createElement("div");
+        selfAfterLine.className = "detail-line";
+        const selfAfterLabel = document.createElement("span");
+        selfAfterLabel.className = "detail-label";
+        selfAfterLabel.textContent = "Elo After:";
+        const selfAfterValue = document.createElement("span");
+        selfAfterValue.textContent = selfAfter ?? "";
+        selfAfterLine.appendChild(selfAfterLabel);
+        selfAfterLine.appendChild(selfAfterValue);
+        details.appendChild(selfAfterLine);
+
+        const oppHeader = document.createElement("div");
+        oppHeader.className = "detail-line";
+        const oppLabel = document.createElement("span");
+        oppLabel.className = "detail-player";
+        oppLabel.textContent = oppName;
+        const oppSpacer = document.createElement("span");
+        oppSpacer.textContent = "";
+        oppHeader.appendChild(oppLabel);
+        oppHeader.appendChild(oppSpacer);
+        details.appendChild(oppHeader);
+
+        const oppBeforeLine = document.createElement("div");
+        oppBeforeLine.className = "detail-line";
+        const oppBeforeLabel = document.createElement("span");
+        oppBeforeLabel.className = "detail-label";
+        oppBeforeLabel.textContent = "Elo Before:";
+        const oppBeforeValue = document.createElement("span");
+        oppBeforeValue.textContent = oppBeforeVal ?? "";
+        oppBeforeLine.appendChild(oppBeforeLabel);
+        oppBeforeLine.appendChild(oppBeforeValue);
+        details.appendChild(oppBeforeLine);
+
+        const oppAfterLine = document.createElement("div");
+        oppAfterLine.className = "detail-line";
+        const oppAfterLabel = document.createElement("span");
+        oppAfterLabel.className = "detail-label";
+        oppAfterLabel.textContent = "Elo After:";
+        const oppAfterValue = document.createElement("span");
+        oppAfterValue.textContent = oppAfterVal ?? "";
+        oppAfterLine.appendChild(oppAfterLabel);
+        oppAfterLine.appendChild(oppAfterValue);
+        details.appendChild(oppAfterLine);
+        list.appendChild(details);
+
+        row.addEventListener("click", () => {
+          details.classList.toggle("open");
+        });
+      });
+    }
+
+      pageInfo.textContent = `Page ${total ? currentPage : 1} of ${total ? totalPages : 1}`;
+      const pagingOff = pageSize === "all" || total <= pageSize || !total;
+      prevBtn.disabled = pagingOff || currentPage <= 1;
+      nextBtn.disabled = pagingOff || currentPage >= totalPages;
+    }
+
+    pageSizeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = pageSizeMenu.classList.contains("open");
+      closePageSizeMenu();
+      closeTournamentMenu();
+      closeOpponentMenu();
+      if (!isOpen) {
+        pageSizeMenu.classList.add("open");
+        pageSizeMenu.style.maxHeight = `${pageSizeMenu.scrollHeight}px`;
+        pageSizeBtn.classList.add("open");
+      }
+    });
+
+    pageSizeMenu.querySelectorAll(".player-pagesize-option").forEach(optBtn => {
+      optBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const value = optBtn.dataset.value || "15";
+        const newSize = value === "all" ? "all" : Number(value) || 15;
+        setPageSize(newSize, optBtn.textContent || String(newSize));
+        closePageSizeMenu();
+      });
+    });
+
+    tournamentBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = tournamentMenu.classList.contains("open");
+      closeTournamentMenu();
+      closePageSizeMenu();
+      closeOpponentMenu();
+      if (!isOpen) {
+        tournamentMenu.classList.add("open");
+        tournamentMenu.style.maxHeight = `${tournamentMenu.scrollHeight}px`;
+        tournamentBtn.classList.add("open");
+      }
+    });
+
+    tournamentMenu.querySelectorAll(".player-pagesize-option").forEach(optBtn => {
+      optBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const value = optBtn.dataset.value || "all";
+        setTournament(value, optBtn.textContent || "All");
+        closeTournamentMenu();
+      });
+    });
+
+    opponentBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = opponentMenu.classList.contains("open");
+      closeOpponentMenu();
+      closePageSizeMenu();
+      closeTournamentMenu();
+      if (!isOpen) {
+        opponentMenu.classList.add("open");
+        opponentMenu.style.maxHeight = `${opponentMenu.scrollHeight}px`;
+        opponentBtn.classList.add("open");
+      }
+    });
+
+    opponentMenu.querySelectorAll(".player-pagesize-option").forEach(optBtn => {
+      optBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const value = optBtn.dataset.value || "all";
+        const label = optBtn.textContent || "All";
+        setOpponent(value, label);
+        closeOpponentMenu();
+      });
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!pageSizeWrap.contains(e.target)) closePageSizeMenu();
+      if (!tournamentWrap.contains(e.target)) closeTournamentMenu();
+      if (!opponentWrap.contains(e.target)) closeOpponentMenu();
+    });
+
+    prevBtn.addEventListener("click", () => {
+      if (currentPage > 1) {
+        currentPage -= 1;
+        renderPage();
+      }
+    });
+
+    nextBtn.addEventListener("click", () => {
+      const filteredCount = getFilteredDuels().length;
+      const totalPages = pageSize === "all" ? 1 : Math.max(1, Math.ceil(filteredCount / pageSize));
+      if (currentPage < totalPages) {
+        currentPage += 1;
+        renderPage();
+      }
+    });
+
+    renderPage();
+    return wrapper;
+  }
+
+  async function initPlayerCard() {
+    const playerId = getPlayerIdFromUrl();
+    const container = document.getElementById("player-container");
+    if (!playerId) {
+      container.textContent = "Player id is missing in URL.";
+      return;
+    }
+
+    const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/official_matches.json";
+    const res = await fetch(dataURL);
+    if (!res.ok) {
+      container.textContent = "Failed to load data.";
+      return;
+    }
+    const data = await res.json();
+
+    const bgaPlayers = data.bga_players || [];
+    const ggProfiles = data.gg_profiles || [];
+    const countries = data.countries || [];
+    duels = data.duels || [];
+    matches = data.matches || [];
+    const tournaments = data.tournaments || data.tournaments_list || [];
+
+    bgaPlayersById = new Map(bgaPlayers.map(p => [String(p.player_id), p]));
+    ggProfilesById = new Map();
+    ggProfiles
+      .forEach(p => {
+      [p.profile_id, p.id, p.player_id, p.bga_player_id].forEach(key => {
+        const k = String(key || "").trim();
+        if (k) ggProfilesById.set(k, p);
+      });
+    });
+    countriesByKey = new Map();
+    countries.forEach(c => {
+      if (c.iso) countriesByKey.set(String(c.iso), c);
+      if (c.team) countriesByKey.set(String(c.team), c);
+    });
+    tournamentsById = new Map();
+    (tournaments || []).forEach(t => {
+      const key1 = String(firstDefined(t.tournament_id, t.tournamentId) || "").trim();
+      const key2 = String(firstDefined(t.id) || "").trim();
+      if (key1) tournamentsById.set(key1, t);
+      if (key2) tournamentsById.set(key2, t);
+    });
+
+    const profile = ggProfilesById.get(String(playerId));
+    if (!profile) {
+      container.textContent = "Player not found.";
+      return;
+    }
+    const bga = bgaPlayersById.get(String(playerId)) || {};
+
+    const assocKey = profile ? String(profile.assosiation || profile.association || "") : "";
+    const assoc = assocKey ? countriesByKey.get(assocKey) : null;
+    const isTeamCaptain = profile && String(profile.team_captain || "").trim() === "Captain";
+    const avatar = bga.avatar || "";
+    const nick = profile ? String(profile.bga_nickname || profile.bga_name || profile.nickname || "") : "";
+    const realName = profile && profile.name ? String(profile.name) : "";
+    const rating = profile && profile.gg_elo ? String(profile.gg_elo) : "";
+
+    const card = document.createElement("div");
+    card.className = "player-card";
+
+    const header = document.createElement("div");
+    header.className = "player-header";
+
+    const leftWrap = document.createElement("div");
+    leftWrap.className = "player-left";
+
+    if (avatar) {
+      const img = document.createElement("img");
+      img.className = "player-avatar";
+      img.src = avatar;
+      img.alt = "";
+      leftWrap.appendChild(img);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "player-meta";
+
+    const nickEl = document.createElement("div");
+    nickEl.className = "nick";
+    nickEl.textContent = nick || String(playerId);
+    meta.appendChild(nickEl);
+
+    if (realName) {
+      const nameEl = document.createElement("div");
+      nameEl.className = "real-name";
+      nameEl.textContent = realName;
+      meta.appendChild(nameEl);
+    }
+
+    if ((assoc && assoc.flag) || isTeamCaptain) {
+      const assocEl = document.createElement("div");
+      assocEl.className = "player-association";
+
+      if (assoc && assoc.flag) {
+        const countryEl = document.createElement("div");
+        countryEl.className = "player-association-country";
+        const flag = document.createElement("img");
+        flag.src = assoc.flag;
+        flag.alt = assoc.team || assoc.iso || "";
+        countryEl.appendChild(flag);
+        countryEl.appendChild(document.createTextNode(assoc.team || assoc.iso || ""));
+        assocEl.appendChild(countryEl);
+      }
+
+      if (isTeamCaptain) {
+        const captainEl = document.createElement("div");
+        captainEl.className = "player-team-captain";
+        const captainIcon = document.createElement("img");
+        captainIcon.src = "https://carcassonne.gg/gallery/captain.png";
+        captainIcon.alt = "Captain";
+        captainEl.appendChild(captainIcon);
+        captainEl.appendChild(document.createTextNode("Team Captain"));
+        assocEl.appendChild(captainEl);
+      }
+
+      meta.appendChild(assocEl);
+    }
+
+    leftWrap.appendChild(meta);
+    header.appendChild(leftWrap);
+
+    if (rating) {
+      const ratingWrap = document.createElement("div");
+      ratingWrap.style.display = "flex";
+      ratingWrap.style.flexDirection = "column";
+      ratingWrap.style.alignItems = "flex-end";
+
+      const ratingLabel = document.createElement("div");
+      ratingLabel.className = "player-rating-label";
+      ratingLabel.textContent = "GG Elo";
+
+      const ratingEl = document.createElement("div");
+      ratingEl.className = "player-rating";
+      ratingEl.textContent = rating;
+
+      ratingWrap.appendChild(ratingLabel);
+      ratingWrap.appendChild(ratingEl);
+      header.appendChild(ratingWrap);
+    }
+    card.appendChild(header);
+
+    if (profile) {
+      const statsWrap = document.createElement("div");
+      statsWrap.className = "player-stats";
+
+      const statsMain = document.createElement("div");
+      statsMain.className = "player-stats-main";
+
+      const bgaProfileId = String(profile.id ?? profile.profile_id ?? bga.player_id ?? playerId);
+      const bgaLink = document.createElement("a");
+      bgaLink.className = "player-bga-link";
+      bgaLink.href = `https://boardgamearena.com/player?id=${encodeURIComponent(bgaProfileId)}`;
+      bgaLink.target = "_blank";
+      bgaLink.rel = "noopener noreferrer";
+
+      const bgaLogo = document.createElement("img");
+      bgaLogo.src = "https://carcassonne.gg/gallery/bga-logo.png";
+      bgaLogo.alt = "BGA";
+      bgaLink.appendChild(bgaLogo);
+      bgaLink.appendChild(document.createTextNode("BGA profile"));
+      statsMain.appendChild(bgaLink);
+      statsWrap.appendChild(statsMain);
+
+      const masterTitle = String(profile.master_title || "").trim().toLowerCase();
+      if (masterTitle === "master") {
+        const masterBadge = document.createElement("div");
+        masterBadge.className = "player-master-badge";
+        const masterDate = String(profile.master_title_date || "").trim();
+        masterBadge.title = masterDate ? `Master title date: ${masterDate}` : "Master title date: not specified";
+
+        const masterLogo = document.createElement("img");
+        masterLogo.src = "https://carcassonne.gg/gallery/master-title-logo.png";
+        masterLogo.alt = "Master";
+        masterBadge.appendChild(masterLogo);
+
+        const masterText = document.createElement("span");
+        masterText.textContent = "BGA\nMaster";
+        masterBadge.appendChild(masterText);
+
+        statsWrap.appendChild(masterBadge);
+      }
+
+      const statsLine = document.createElement("div");
+      statsLine.className = "player-stats-line compact matches-summary";
+      statsLine.appendChild(document.createTextNode("Matches:"));
+
+      const totalLabel = document.createElement("span");
+      totalLabel.className = "player-stats-label";
+      totalLabel.textContent = "Total";
+      const totalValue = document.createElement("span");
+      totalValue.className = "player-stats-value total";
+      totalValue.textContent = String(profile.matches ?? "-");
+
+      const winsLabel = document.createElement("span");
+      winsLabel.className = "player-stats-label";
+      winsLabel.textContent = "Won";
+      const winsValue = document.createElement("span");
+      winsValue.className = "player-stats-value wins";
+      winsValue.textContent = String(profile.wins ?? "-");
+
+      const lossesLabel = document.createElement("span");
+      lossesLabel.className = "player-stats-label";
+      lossesLabel.textContent = "Lost";
+      const lossesValue = document.createElement("span");
+      lossesValue.className = "player-stats-value losses";
+      lossesValue.textContent = String(profile.losses ?? "-");
+
+      statsLine.appendChild(totalLabel);
+      statsLine.appendChild(totalValue);
+      statsLine.appendChild(winsLabel);
+      statsLine.appendChild(winsValue);
+      statsLine.appendChild(lossesLabel);
+      statsLine.appendChild(lossesValue);
+      statsMain.appendChild(statsLine);
+
+      const firstMatchLine = document.createElement("div");
+      firstMatchLine.className = "player-stats-line compact";
+      const firstMatchLabel = document.createElement("span");
+      firstMatchLabel.className = "player-stats-label";
+      firstMatchLabel.textContent = "First Match Date:";
+      const firstMatchValue = document.createElement("span");
+      firstMatchValue.className = "player-stats-value match-time";
+      {
+        const raw = String(profile.first_match_time || "").trim();
+        const formatted = raw ? formatDateDdMonYyyy(raw) : "";
+        firstMatchValue.textContent = formatted || "-";
+      }
+      firstMatchLine.appendChild(firstMatchLabel);
+      firstMatchLine.appendChild(firstMatchValue);
+      statsMain.appendChild(firstMatchLine);
+
+      const lastMatchLine = document.createElement("div");
+      lastMatchLine.className = "player-stats-line compact";
+      const lastMatchLabel = document.createElement("span");
+      lastMatchLabel.className = "player-stats-label";
+      lastMatchLabel.textContent = "Last Match Date:";
+      const lastMatchValue = document.createElement("span");
+      lastMatchValue.className = "player-stats-value match-time";
+      {
+        const raw = String(profile.last_match_time || "").trim();
+        const formatted = raw ? formatDateDdMonYyyy(raw) : "";
+        lastMatchValue.textContent = formatted || "-";
+      }
+      lastMatchLine.appendChild(lastMatchLabel);
+      lastMatchLine.appendChild(lastMatchValue);
+      statsMain.appendChild(lastMatchLine);
+
+      const eloExtremes = getPlayerEloExtremes(playerId);
+
+      if (eloExtremes.peak) {
+        const peakLine = document.createElement("div");
+        peakLine.className = "player-stats-line compact";
+        const peakLabel = document.createElement("span");
+        peakLabel.className = "player-stats-label";
+        peakLabel.textContent = "Peak Elo:";
+        const peakValue = document.createElement("span");
+        peakValue.className = "player-stats-extreme-value";
+        peakValue.textContent = Number(eloExtremes.peak.value).toFixed(2);
+        const peakDate = document.createElement("span");
+        peakDate.className = "player-stats-extreme-date";
+        peakDate.textContent = `(${formatDateDdMonYyyy(eloExtremes.peak.dateRaw)})`;
+        peakLine.appendChild(peakLabel);
+        peakLine.appendChild(peakValue);
+        peakLine.appendChild(peakDate);
+        statsMain.appendChild(peakLine);
+      }
+
+      if (eloExtremes.low) {
+        const lowLine = document.createElement("div");
+        lowLine.className = "player-stats-line compact";
+        const lowLabel = document.createElement("span");
+        lowLabel.className = "player-stats-label";
+        lowLabel.textContent = "Lowest Elo:";
+        const lowValue = document.createElement("span");
+        lowValue.className = "player-stats-extreme-value";
+        lowValue.textContent = Number(eloExtremes.low.value).toFixed(2);
+        const lowDate = document.createElement("span");
+        lowDate.className = "player-stats-extreme-date";
+        lowDate.textContent = `(${formatDateDdMonYyyy(eloExtremes.low.dateRaw)})`;
+        lowLine.appendChild(lowLabel);
+        lowLine.appendChild(lowValue);
+        lowLine.appendChild(lowDate);
+        statsMain.appendChild(lowLine);
+      }
+
+      card.appendChild(statsWrap);
+    }
+
+    container.appendChild(card);
+
+    const matchesTitle = document.createElement("div");
+    matchesTitle.className = "matches-title";
+    const matchesTitleText = document.createElement("span");
+    matchesTitleText.textContent = "Official Matches";
+    const matchesTitleCount = document.createElement("span");
+    matchesTitleCount.className = "matches-title-count";
+    matchesTitleCount.textContent = `Count: ${getOfficialMatchesCount(playerId)}`;
+    matchesTitle.appendChild(matchesTitleText);
+    matchesTitle.appendChild(matchesTitleCount);
+    container.appendChild(matchesTitle);
+
+    const matchesBlock = buildMatchesList(playerId, matchesTitleCount);
+    container.appendChild(matchesBlock);
+  }
+
+  const initSafe = () => initPlayerCard();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initSafe);
+  } else {
+    initSafe();
+  }
+})();
+</script>

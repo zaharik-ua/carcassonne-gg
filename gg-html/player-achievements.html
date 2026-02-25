@@ -1,0 +1,194 @@
+<!-- ШРИФТ + ІКОНКИ -->
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- СТИЛІ -->
+<style>
+  body {
+    font-family: 'Montserrat', sans-serif;
+  }
+
+  .achievements-card {
+    padding: 6px 8px;
+    margin: 0 8px 12px;
+  }
+
+  .achievements-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #222;
+    margin: 0 0 8px 0;
+  }
+
+  .achievements-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .achievement-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .achievement-logo {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .achievement-content {
+    min-width: 0;
+  }
+
+  .achievement-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: #222;
+    line-height: 1.2;
+  }
+
+  .achievement-date {
+    margin-top: 2px;
+    font-size: 11px;
+    font-weight: 400;
+    color: #7a7a7a;
+    line-height: 1.2;
+  }
+
+  .achievement-empty {
+    font-size: 14px;
+    color: #555;
+  }
+</style>
+
+<div class="achievements-card" id="player-achievements-card">
+  <div class="achievements-title">Official Achievements</div>
+  <div class="achievements-list" id="player-achievements-list"></div>
+</div>
+
+<script>
+(function() {
+  const dataUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
+
+  function getPlayerIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("id") || "").trim();
+  }
+
+  function getAchievementKey(item) {
+    return String(item?.achievement || item?.title || "").trim();
+  }
+
+  function createAchievementElement(item) {
+    const row = document.createElement("div");
+    row.className = "achievement-row";
+
+    if (item.logo_url) {
+      const logo = document.createElement("img");
+      logo.className = "achievement-logo";
+      logo.src = item.logo_url;
+      logo.alt = item.title || "achievement";
+      row.appendChild(logo);
+    }
+
+    const content = document.createElement("div");
+    content.className = "achievement-content";
+
+    const title = document.createElement("div");
+    title.className = "achievement-title";
+    title.textContent = item.title || "";
+    content.appendChild(title);
+
+    const rawDate = String(item.date || "").trim();
+    if (rawDate) {
+      const date = document.createElement("div");
+      date.className = "achievement-date";
+      date.textContent = rawDate;
+      content.appendChild(date);
+    }
+
+    row.appendChild(content);
+    return row;
+  }
+
+  function renderEmpty(listEl) {
+    listEl.innerHTML = "";
+    const empty = document.createElement("div");
+    empty.className = "achievement-empty";
+    empty.textContent = "No official achievements";
+    listEl.appendChild(empty);
+  }
+
+  async function init() {
+    const listEl = document.getElementById("player-achievements-list");
+    const playerId = getPlayerIdFromUrl();
+    if (!listEl || !playerId) {
+      if (listEl) renderEmpty(listEl);
+      return;
+    }
+
+    try {
+      const res = await fetch(dataUrl);
+      if (!res.ok) throw new Error("Failed to load players data");
+      const data = await res.json();
+
+      const ggProfiles = Array.isArray(data.gg_profiles) ? data.gg_profiles : [];
+      const allAchievements = Array.isArray(data.achievements) ? data.achievements : [];
+
+      const player = ggProfiles.find(p => String(p?.id || "").trim() === playerId);
+      const playerAchievementNames = Array.isArray(player?.achievements) ? player.achievements : [];
+
+      if (!player || playerAchievementNames.length === 0) {
+        renderEmpty(listEl);
+        return;
+      }
+
+      const achievementMap = new Map();
+      allAchievements.forEach(item => {
+        const key = getAchievementKey(item);
+        if (key) achievementMap.set(key, item);
+      });
+
+      const resolved = playerAchievementNames
+        .map(name => {
+          const key = String(name || "").trim();
+          const info = achievementMap.get(key);
+          if (info) {
+            return {
+              title: String(info.title || key).trim(),
+              logo_url: String(info.logo_url || "").trim(),
+              date: info.date
+            };
+          }
+          return {
+            title: key,
+            logo_url: "",
+            date: null
+          };
+        })
+        .filter(item => item.title);
+
+      if (resolved.length === 0) {
+        renderEmpty(listEl);
+        return;
+      }
+
+      listEl.innerHTML = "";
+      resolved.forEach(item => {
+        listEl.appendChild(createAchievementElement(item));
+      });
+    } catch (error) {
+      console.error("Failed to load achievements:", error);
+      renderEmpty(listEl);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>

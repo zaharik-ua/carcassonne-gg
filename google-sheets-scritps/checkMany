@@ -1,0 +1,59 @@
+function checkMany(sheet, payloads, rowIndexes, stat = false) {
+  const apiUrl = `${URL_BASE}/get-games-batch`;
+
+  const res = UrlFetchApp.fetch(apiUrl, {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: `Bearer ${TOKEN}` },
+    payload: JSON.stringify(payloads),
+    muteHttpExceptions: true
+  });
+  console.log(res)
+
+  let results;
+  try {
+    results = JSON.parse(res.getContentText());
+  } catch (err) {
+    Logger.log("❌ Parsing response failed");
+    Logger.log("Response text: " + res.getContentText());
+    Logger.log("Error: " + err.message);
+    return;
+  }
+
+  console.log(results, 'results');
+
+
+  if (!Array.isArray(results.results)) {
+    Logger.log("❌ Unexpected response format");
+    return;
+  }
+
+  results.results.forEach((result, i) => {
+    const rowIndex = rowIndexes[i];
+    console.log(result, 'result');
+    const wins0 = result.wins0
+    const wins1 = result.wins1
+    sheet.getRange(rowIndex, stat ? 32 : 18).setValue(wins0); //set player 1: History or Games Won
+    sheet.getRange(rowIndex, stat ? 33 : 19).setValue(wins1); //set player 2: History or Games Won
+    try {
+      if (result.status === "success") {
+        const tables = result.tables;
+
+        let flags = result.flags || "";
+
+        if (!stat) {
+          sheet.getRange(rowIndex, 26).setValue(flags); //set flags
+          const maxLinks = 4;
+          for (let j = 0; j < Math.min(tables.length, maxLinks); j++) {
+            sheet.getRange(rowIndex, 36 + j).setValue(tables[j].url); //set games url
+          }
+        }
+        sheet.getRange(rowIndex, 28).setValue(""); //set error
+      } else {
+        sheet.getRange(rowIndex, 28).setValue("API error"); //set error
+      }
+    } catch (err) {
+      sheet.getRange(rowIndex, 28).setValue("Script error: " + err.message); //set error
+    }
+  });
+}

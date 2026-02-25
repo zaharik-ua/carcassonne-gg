@@ -1,4 +1,10 @@
 function importAllTournamentData() {
+  // Logic overview:
+  // 1) Push scores from main Duels (R,S) to tournament files:
+  //    - sync == ""  -> normal sync of valid scores
+  //    - sync == "to fix" -> force sync to clear 0-0 in tournament files
+  //    - never overwrite if tournament row has manual flag in sync column
+  // 2) Pull data from all tournament files into main sheets (Duels/Players/Tournament Players/Matches).
   const targetSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
 
   // Step 1: Push R+S from main table to country sheets
@@ -13,9 +19,14 @@ function importAllTournamentData() {
     const tournamentId = row[2]; // C
     const score1 = row[17];     // R
     const score2 = row[18];     // S
-    const existing = row[21];   // V
+    const sync = row[21];   // V
 
-    if (duelId && score1 !== "" && score2 !== "" && existing === "") {
+    if (duelId && score1 !== "" && score2 !== "" && sync === "") {
+      if (!updatesByTournament[tournamentId]) updatesByTournament[tournamentId] = [];
+      updatesByTournament[tournamentId].push({ duelId, score1, score2 });
+    }
+
+    if (sync === "to fix") {
       if (!updatesByTournament[tournamentId]) updatesByTournament[tournamentId] = [];
       updatesByTournament[tournamentId].push({ duelId, score1, score2 });
     }
@@ -28,8 +39,19 @@ function importAllTournamentData() {
     {
       fileId: "1KMye5MRf204O5cTRWohnDLrg24dpZdGLFz3xlwsJhdA",
       sheets: {
-        "CCL-2026Q": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "CCL-2026Q" },     // C–V
         "CCL-2026": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "CCL-2026" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–K
+        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
+      }
+    },
+
+    // Ukraine
+    {
+      fileId: "1Jc5uG0WQer2OgDsgaLsDN7MOLPWt7VCaou1aOQVNykk",
+      sheets: {
+        "UCOC-2026-SL": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "UCOC-2026-SL" },      // C–V
+        "UCOC-2026-ML": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "UCOC-2026-ML" },      // C–V
+        "UCOC-2026-1ST": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "UCOC-2026-1ST" },      // C–V
         "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–K
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
@@ -44,44 +66,14 @@ function importAllTournamentData() {
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     },
-
-    // China
-    {
-      fileId: "16csmJ_sPfYyegKZcLRbxdCmY4zWKUDNdUVe6TtBA1e0",
-      sheets: {
-        "CCOC-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "CCOC-2025" },     // C–V
-        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
-        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
-      }
-    },
     
-    // Ukraine
-    {
-      fileId: "1Jc5uG0WQer2OgDsgaLsDN7MOLPWt7VCaou1aOQVNykk",
-      sheets: {
-        "UCOC-2026": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "UCOC-2026" },      // C–V
-        "UCDTC-2025-Matches": { targetSheet: "Matches", startCol: 2, endCol: 19 }, // B–S
-        "UCDTC-2025-Duels": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "UCDTC-2025-Duels" },     // C–V
-        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
-        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
-      }
-    },
-
     // Belgium
     {
       fileId: "1AGxPg5s5iPcU61E8p2EBLj5xol4fLJRd7QP2cL0wMLo",
       sheets: {
         "BCOC-2026": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "BCOC-2026" },     // C–V
-        "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
-      }
-    },
-
-    // Italy
-    {
-      fileId: "1iSgoxWzamJ-QvDvsdgkb3twiJ5y-sUdOl8fMUfkKALM",
-      sheets: {
-        "ITCCL-2025": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "ITCCL-2025" },     // C–V
-        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–G
+        "BCL-2026S-ML": { targetSheet: "Duels", startCol: 3, endCol: 22, tournamentId: "BCL-2026S-ML" },     // C–V
+        "Tournament Players": { targetSheet: "Tournament Players", startCol: 1, endCol: 11 }, // A–K
         "Players": { targetSheet: "Players", startCol: 1, endCol: 3 }        // A–C
       }
     },

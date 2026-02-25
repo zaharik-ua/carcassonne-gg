@@ -4,12 +4,13 @@ function updateStreamDropdown() {
   const streamsSheet = ss.getSheetByName("Streams");
   const duelsSheet = ss.getSheetByName("Duels");
   const now = new Date();
+  const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
 
   // --- MATCHES => Column C in Streams ---
   const matchesData = matchesSheet.getRange("A2:M" + matchesSheet.getLastRow()).getValues();
   const upcomingMatches = matchesData.filter(row => {
     const date = new Date(row[12]);
-    return date > now;
+    return date > now || date >= sixHoursAgo;
   });
   const matchTitles = upcomingMatches.map(row => row[0]);
 
@@ -54,7 +55,7 @@ function updateStreamDropdown() {
 
       return !matchId &&            
              date instanceof Date &&
-             date > now &&
+             (date > now || date >= sixHoursAgo) &&
              (date.getHours() + date.getMinutes() + date.getSeconds()) > 0;
     })
     .map(row => row[0]); // column A

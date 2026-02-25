@@ -124,6 +124,32 @@
     word-break: break-word;
   }
 
+  .live-duel-score {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 5px;
+    margin-left: 4px;
+    background-color: #1b9b5f;
+    color: #fff;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.1;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .live-duel-score--draw {
+    background-color: #1f6feb;
+  }
+  .live-duel-score--lose {
+    background-color: #d64541;
+  }
+  .live-duel-label {
+    font-weight: 500;
+    text-transform: lowercase;
+  }
+
   .group-table td a:hover {
     color: #0277BD;
   }
@@ -354,7 +380,51 @@
 
   /* Rank (position) data cell */
   .rank-cell { width: 5%; }
-
+  .group-table td.rank-cell,
+  .sim-table td.rank-cell {
+    font-size: 14px;
+  }
+  .rank-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 4px;
+    background-color: #e6e6e6;
+    color: #222;
+  }
+  .rank-badge--green { background-color: #85eebd; color: #0b3a2a; }
+  .rank-badge--blue { background-color: #a3ccf9; color: #0b2f55; }
+  .rank-badge--red { background-color: #f6b3b3; color: #5b1111; }
+  .rank-badge--orange { background-color: #ffd29a; color: #7a3c00; }
+  .rank-badge--gold { background-color: #c9a227; color: #fff; font-weight: 500; }
+  .rank-badge--silver { background-color: #8e949b; color: #fff; font-weight: 500; }
+  .rank-badge--bronze { background-color: #9b5b33; color: #fff; font-weight: 500; }
+  .rank-legend {
+    margin: 4px 0 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .rank-legend-item {
+    font-size: 13px;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .rank-legend-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    line-height: 1;
+  }
   /* Standings metric columns (MP, MW, ML, GW, GL, etc.) */
   .standing-metric-col { 
     min-width: 20px !important;
@@ -369,6 +439,16 @@
   .group-table.crosstable td:nth-child(n+3) { border-left: 1px solid #eee; }
   .group-table.crosstable td.ct-not-opponent { background-color: #f0f0f0; color: #999; }
   .group-table.crosstable td.sim-pending {
+    background-color: #ffeaea;
+    border: 1.3px solid #0f3a5a;
+    box-sizing: border-box;
+  }
+  .group-table.crosstable td.sim-win {
+    background-color: #e7f6e7;
+    border: 1.3px solid #0f3a5a;
+    box-sizing: border-box;
+  }
+  .group-table.crosstable td.sim-loss {
     background-color: #ffeaea;
     border: 1.3px solid #0f3a5a;
     box-sizing: border-box;
@@ -536,6 +616,8 @@
   .sim-select-option:hover { background-color: #f5f5f5; }
   .sim-select-option.active { background-color: #e4f0fb; }
   .sim-pending .sim-select-btn { background-color: #ffeaea; border-color: transparent; box-shadow: none; }
+  .sim-win .sim-select-btn { background-color: #e7f6e7; border-color: transparent; box-shadow: none; }
+  .sim-loss .sim-select-btn { background-color: #ffeaea; border-color: transparent; box-shadow: none; }
   .sim-select-menu.drop-down { bottom: auto; top: calc(100% + 4px); }
 
   /* Header row above tables (title on left, view toggle on right) */
@@ -957,6 +1039,87 @@
   }
 
   applyTournamentTheme();
+
+  function parseRankColorsField(rankColorsValue) {
+    if (!rankColorsValue) return null;
+    if (typeof rankColorsValue === 'object') return rankColorsValue;
+    if (typeof rankColorsValue !== 'string') return null;
+    const raw = rankColorsValue.trim();
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      // fall through
+    }
+    // Minimal YAML-like support (e.g. "stages: {Stage 1: {rankColors: {1: orange}}}")
+    try {
+      let jsonish = raw;
+      if (!jsonish.startsWith('{') && !jsonish.startsWith('[')) {
+        jsonish = `{${jsonish}}`;
+      }
+      jsonish = jsonish.replace(/([{,]\s*)([A-Za-z0-9 _-]+)\s*:/g, (m, p1, p2) => {
+        return `${p1}"${String(p2).trim()}":`;
+      });
+      jsonish = jsonish.replace(/:\s*([A-Za-z_][A-Za-z0-9 _-]*)/g, (m, p1) => {
+        const v = String(p1).trim();
+        if (v === 'true' || v === 'false' || v === 'null') return `: ${v}`;
+        return `: "${v}"`;
+      });
+      return JSON.parse(jsonish);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function normalizeRankColor(colorValue) {
+    if (!colorValue) return null;
+    const normalized = String(colorValue).trim().toLowerCase();
+    const allowed = new Set(['green', 'blue', 'red', 'orange', 'gold', 'silver', 'bronze']);
+    return allowed.has(normalized) ? normalized : null;
+  }
+
+  function getRankColorForStage(tournament, stageFilter, rankValue) {
+    const parsed = parseRankColorsField(tournament && tournament.rankColors);
+    if (!parsed) return null;
+    const stages = (parsed && parsed.stages && typeof parsed.stages === 'object') ? parsed.stages : parsed;
+    if (!stages || typeof stages !== 'object') return null;
+    const stageKey = stageFilter || 'Stage 1';
+    const stageEntry = stages[stageKey] || stages[String(stageKey)];
+    const rankColors = stageEntry && typeof stageEntry === 'object' ? (stageEntry.rankColors || stageEntry.rankcolors) : null;
+    if (!rankColors || typeof rankColors !== 'object') return null;
+    const raw = rankColors[String(rankValue)];
+    return normalizeRankColor(raw);
+  }
+
+  function getRankColorLegendForStage(tournament, stageFilter) {
+    const parsed = parseRankColorsField(tournament && tournament.rankColors);
+    if (!parsed) return null;
+    const stages = (parsed && parsed.stages && typeof parsed.stages === 'object') ? parsed.stages : parsed;
+    if (!stages || typeof stages !== 'object') return null;
+    const stageKey = stageFilter || 'Stage 1';
+    const stageEntry = stages[stageKey] || stages[String(stageKey)];
+    if (!stageEntry || typeof stageEntry !== 'object') return null;
+    const rawLegend = stageEntry.rankColorLegend || stageEntry.rankcolorlegend;
+    if (!rawLegend || typeof rawLegend !== 'object') return null;
+
+    const normalizedLegend = {};
+    Object.entries(rawLegend).forEach(([rawColor, rawText]) => {
+      const color = normalizeRankColor(rawColor);
+      const text = String(rawText || '').trim();
+      if (!color || !text) return;
+      normalizedLegend[color] = text;
+    });
+    return Object.keys(normalizedLegend).length ? normalizedLegend : null;
+  }
+
+  function createRankBadge(rankValue, tournament, stageFilter) {
+    const color = getRankColorForStage(tournament, stageFilter, rankValue);
+    if (!color) return null;
+    const badge = document.createElement('span');
+    badge.className = `rank-badge rank-badge--${color}`;
+    badge.textContent = String(rankValue);
+    return badge;
+  }
 
   function getFlagByPlayerId(playerId) {
     const entry = (tournament_players || []).find(tp => String(tp.player_id) === String(playerId));
@@ -1428,12 +1591,6 @@
           const stage2Title = document.createElement("div");
           stage2Title.className = "overview-section-title";
           stage2Title.textContent = getStage2Label(leagueTournament);
-          const stage2Toggle = document.createElement("div");
-          stage2Toggle.className = "chevron";
-          const stage2Icon = document.createElement("i");
-          stage2Icon.className = "fas fa-chevron-down";
-          stage2Toggle.appendChild(stage2Icon);
-          stage2Header.appendChild(stage2Toggle);
           stage2Header.appendChild(stage2Title);
 
           const stage2Collapsible = document.createElement("div");
@@ -1451,6 +1608,12 @@
 
           const shouldCollapseStage2 = hasIncompleteStage1Matches(leagueTournament);
           if (shouldCollapseStage2) {
+            const stage2Toggle = document.createElement("div");
+            stage2Toggle.className = "chevron";
+            const stage2Icon = document.createElement("i");
+            stage2Icon.className = "fas fa-chevron-down";
+            stage2Toggle.appendChild(stage2Icon);
+            stage2Header.prepend(stage2Toggle);
             stage2Collapsible.style.height = "0px";
           } else {
             stage2Collapsible.classList.add("open");
@@ -1483,9 +1646,11 @@
             }
           };
 
-          stage2Header.addEventListener("click", () => {
-            toggleStage2();
-          });
+          if (shouldCollapseStage2) {
+            stage2Header.addEventListener("click", () => {
+              toggleStage2();
+            });
+          }
 
           const stage1Wrapper = document.createElement("div");
           stage1Wrapper.className = "group-section";
@@ -1828,6 +1993,19 @@
         : null;
     const stageFilter = options.stage || stageFilterFromContainer;
     const tabId = options.tabId || container.id || null;
+
+    const normalizeStageValue = (value) => {
+      if (value === null || value === undefined) return '';
+      return String(value).trim().toLowerCase();
+    };
+
+    const isStageMatch = (value) => {
+      if (!stageFilter) return true;
+      const normalizedFilter = normalizeStageValue(stageFilter);
+      const normalizedValue = normalizeStageValue(value);
+      if (normalizedFilter === 'stage 1') return !normalizedValue || normalizedValue === normalizedFilter;
+      return normalizedValue === normalizedFilter;
+    };
     standings_list
       .filter(row => row.tournament_id === tournamentId)
       .filter(row => {
@@ -1846,6 +2024,12 @@
       .sort((a, b) => a.localeCompare(b));
 
     const isTeam = tournament && tournament.type === "TEAM";
+    const isCOCStyleLeague = !isTeam && (
+      (tournament && tournament.type === "COC") ||
+      (tournament && tournament.type === "League") ||
+      (tournament && tournament.tournament_format === "Leagues") ||
+      (tournament && tournament.main_tournament_id && tournamentsById[tournament.main_tournament_id]?.tournament_format === "Leagues")
+    );
     const isStage1Groups = (!!tournament && tournament.stage1_groups === "Groups" && (stageFilter ? stageFilter === "Stage 1" : true));
     const isRoundRobinGroups = !!tournament && (tournament.stage1_format === "Round-robin" || tournament.stage1_format === "Swiss");
     if (isStage1Groups && groupKeys.length) {
@@ -1928,6 +2112,64 @@
 
     function valueHasScore(value) {
       return !(value === null || value === undefined || String(value).trim() === '');
+    }
+
+    function parseScoreValue(value) {
+      if (!valueHasScore(value)) return null;
+      const num = Number(value);
+      return Number.isFinite(num) ? num : null;
+    }
+
+    function isInProgressStatus(statusValue) {
+      if (!statusValue) return false;
+      const normalized = String(statusValue).trim().toLowerCase();
+      return normalized === 'in progress' || normalized === 'in_progress' || normalized === 'live' || normalized === 'ongoing';
+    }
+
+    function findLiveDuelScoreForPlayer(playerId, groupKey) {
+      const pid = (playerId === null || playerId === undefined) ? null : String(playerId);
+      if (!pid) return null;
+
+      const normalizeGroupKey = (g) => (g === undefined || g === null) ? '' : String(g).trim();
+      const targetGroup = normalizeGroupKey(groupKey);
+
+      const parseTime = (t) => {
+        if (!t) return 0;
+        const ts = Date.parse(String(t).replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4'));
+        return Number.isFinite(ts) ? ts : 0;
+      };
+
+      const candidates = (duels || []).filter(duel => {
+        if (!duel || duel.tournament_id !== tournamentId) return false;
+        if (!isStageMatch(duel.stage || null)) return false;
+        if (!isInProgressStatus(duel.status)) return false;
+        if (targetGroup && normalizeGroupKey(duel.group) && normalizeGroupKey(duel.group) !== targetGroup) return false;
+        return String(duel.player1_id) === pid || String(duel.player2_id) === pid;
+      });
+
+      if (!candidates.length) return null;
+
+      let latest = null;
+      let latestTs = -Infinity;
+      candidates.forEach(duel => {
+        const ts = parseTime(duel.time || '') || 0;
+        if (ts >= latestTs) {
+          latest = duel;
+          latestTs = ts;
+        }
+      });
+
+      const liveDuel = latest || candidates[0];
+      const score1 = parseScoreValue(liveDuel.score1);
+      const score2 = parseScoreValue(liveDuel.score2);
+
+      if (score1 === null || score2 === null) return null;
+
+      const playerIsFirst = String(liveDuel.player1_id) === pid;
+      return {
+        self: playerIsFirst ? score1 : score2,
+        opp: playerIsFirst ? score2 : score1
+      };
     }
 
     function applyCOCHeadToHeadTiebreak(playersInGroup, groupKey) {
@@ -2099,7 +2341,7 @@
           if (gdDiff !== 0) return gdDiff;
           return (+b.games_won || 0) - (+a.games_won || 0);
         });
-        if (tournament && tournament.type === "COC") {
+        if (isCOCStyleLeague) {
           applyCOCHeadToHeadTiebreak(groupPlayers, group);
         }
       }
@@ -2155,7 +2397,13 @@
           const tr = document.createElement('tr');
           const tdIdx = document.createElement('td');
           tdIdx.className = 'rank-cell';
-          tdIdx.textContent = String(index + 1);
+          const rankValue = index + 1;
+          const badge = createRankBadge(rankValue, tournament, stageFilter);
+          if (badge) {
+            tdIdx.appendChild(badge);
+          } else {
+            tdIdx.textContent = String(rankValue);
+          }
           tr.appendChild(tdIdx);
 
           const tdName = document.createElement('td');
@@ -2199,6 +2447,16 @@
               rightIcon.style.marginLeft = '3px';
               rightIcon.style.objectFit = 'contain';
               wrap.appendChild(rightIcon);
+            }
+            const liveScore = findLiveDuelScoreForPlayer(rowData.player_id, group);
+            if (liveScore) {
+              const badge = document.createElement('span');
+              const scoreState =
+                liveScore.self > liveScore.opp ? 'win' :
+                liveScore.self < liveScore.opp ? 'lose' : 'draw';
+              badge.className = `live-duel-score live-duel-score--${scoreState}`;
+              badge.textContent = `${liveScore.self}-${liveScore.opp}`;
+              wrap.appendChild(badge);
             }
           }
           tdName.appendChild(wrap);
@@ -2313,6 +2571,26 @@
       formatLower = stage1FormatLower;
     } else if (stageFilter === "Stage 2") {
       formatLower = stage2FormatLower;
+    }
+
+    const rankLegend = getRankColorLegendForStage(tournament, stageFilter);
+    if (rankLegend) {
+      const legendWrap = document.createElement("div");
+      legendWrap.className = "rank-legend";
+      const colorOrder = ['gold', 'silver', 'bronze', 'green', 'blue', 'orange', 'red'];
+      const keys = Object.keys(rankLegend).sort((a, b) => colorOrder.indexOf(a) - colorOrder.indexOf(b));
+      keys.forEach(color => {
+        const item = document.createElement("div");
+        item.className = "rank-legend-item";
+        const icon = document.createElement("span");
+        icon.className = `rank-legend-icon rank-badge--${color}`;
+        const text = document.createElement("span");
+        text.textContent = `${rankLegend[color]}`;
+        item.appendChild(icon);
+        item.appendChild(text);
+        legendWrap.appendChild(item);
+      });
+      container.appendChild(legendWrap);
     }
 
     let explanation = null;
@@ -3698,8 +3976,11 @@
         });
     }
 
-    function findBaseScore(rowKey, colKey, rowData) {
-      if (rowKey === colKey) return '';
+    const normalizeStatus = (val) => String(val || '').trim().toUpperCase().replace(/_/g, ' ');
+    const isInProgressStatus = (val) => normalizeStatus(val) === 'IN PROGRESS';
+
+    function findMatchMeta(rowKey, colKey, rowData) {
+      if (rowKey === colKey) return { score: '', isInProgress: false };
       if (isTeam) {
         const candidates = (matches || []).filter(m =>
           m.tournament_id === tableTournamentId &&
@@ -3715,11 +3996,13 @@
           const tb = Date.parse((b.time || '').replace(/(\\d{2})\\.(\\d{2})\\.(\\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
           return ta - tb;
         }).pop();
-        if (picked && picked.duels_won1 !== null && picked.duels_won2 !== null && picked.duels_won1 !== '' && picked.duels_won2 !== '') {
-          if (picked.team1 === rowKey && picked.team2 === colKey) return `${picked.duels_won1}-${picked.duels_won2}`;
-          if (picked.team1 === colKey && picked.team2 === rowKey) return `${picked.duels_won2}-${picked.duels_won1}`;
+        if (!picked) return { score: '', isInProgress: false };
+        let score = '';
+        if (picked.duels_won1 !== null && picked.duels_won2 !== null && picked.duels_won1 !== '' && picked.duels_won2 !== '') {
+          if (picked.team1 === rowKey && picked.team2 === colKey) score = `${picked.duels_won1}-${picked.duels_won2}`;
+          if (picked.team1 === colKey && picked.team2 === rowKey) score = `${picked.duels_won2}-${picked.duels_won1}`;
         }
-        return '';
+        return { score, isInProgress: isInProgressStatus(picked.status) };
       }
       const pidRow = rowData.player_id;
       const candidates = (duels || []).filter(m =>
@@ -3736,11 +4019,57 @@
         const tb = Date.parse((b.time || '').replace(/(\\d{2})\\.(\\d{2})\\.(\\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
         return ta - tb;
       }).pop();
-      if (picked && picked.score1 !== null && picked.score2 !== null && picked.score1 !== '' && picked.score2 !== '') {
-        if (picked.player1_id === pidRow && picked.player2_id === colKey) return `${picked.score1}-${picked.score2}`;
-        if (picked.player1_id === colKey && picked.player2_id === pidRow) return `${picked.score2}-${picked.score1}`;
+      if (!picked) return { score: '', isInProgress: false };
+      let score = '';
+      if (picked.score1 !== null && picked.score2 !== null && picked.score1 !== '' && picked.score2 !== '') {
+        if (picked.player1_id === pidRow && picked.player2_id === colKey) score = `${picked.score1}-${picked.score2}`;
+        if (picked.player1_id === colKey && picked.player2_id === pidRow) score = `${picked.score2}-${picked.score1}`;
       }
-      return '';
+      return { score, isInProgress: isInProgressStatus(picked.status) };
+    }
+
+    function getInProgressScoreForPair(a, b) {
+      if (!a || !b || a === b) return null;
+      if (isTeam) {
+        const candidates = (matches || []).filter(m =>
+          m.tournament_id === tableTournamentId &&
+          (!group || !m.group || m.group === group) &&
+          isStageMatchLocal(m.stage || null) &&
+          (
+            (m.team1 === a && m.team2 === b) ||
+            (m.team1 === b && m.team2 === a)
+          )
+        );
+        const picked = candidates.sort((x, y) => {
+          const ta = Date.parse((x.time || '').replace(/(\\d{2})\\.(\\d{2})\\.(\\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+          const tb = Date.parse((y.time || '').replace(/(\\d{2})\\.(\\d{2})\\.(\\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+          return ta - tb;
+        }).pop();
+        if (!picked || !isInProgressStatus(picked.status)) return null;
+        if (picked.duels_won1 === null || picked.duels_won2 === null || picked.duels_won1 === '' || picked.duels_won2 === '') return null;
+        if (picked.team1 === a && picked.team2 === b) return { s1: Number(picked.duels_won1) || 0, s2: Number(picked.duels_won2) || 0 };
+        if (picked.team1 === b && picked.team2 === a) return { s1: Number(picked.duels_won2) || 0, s2: Number(picked.duels_won1) || 0 };
+        return null;
+      }
+      const candidates = (duels || []).filter(m =>
+        m.tournament_id === tableTournamentId &&
+        (!group || !m.group || m.group === group) &&
+        isStageMatchLocal(m.stage || null) &&
+        (
+          (String(m.player1_id) === String(a) && String(m.player2_id) === String(b)) ||
+          (String(m.player1_id) === String(b) && String(m.player2_id) === String(a))
+        )
+      );
+      const picked = candidates.sort((x, y) => {
+        const ta = Date.parse((x.time || '').replace(/(\\d{2})\\.(\\d{2})\\.(\\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+        const tb = Date.parse((y.time || '').replace(/(\\d{2})\\.(\\d{2})\\.(\\d{4}) (.*)/, '$2/$1/$3 $4')) || 0;
+        return ta - tb;
+      }).pop();
+      if (!picked || !isInProgressStatus(picked.status)) return null;
+      if (picked.score1 === null || picked.score2 === null || picked.score1 === '' || picked.score2 === '') return null;
+      if (String(picked.player1_id) === String(a) && String(picked.player2_id) === String(b)) return { s1: Number(picked.score1) || 0, s2: Number(picked.score2) || 0 };
+      if (String(picked.player1_id) === String(b) && String(picked.player2_id) === String(a)) return { s1: Number(picked.score2) || 0, s2: Number(picked.score1) || 0 };
+      return null;
     }
 
     function buildDerivedStats(applySim) {
@@ -3768,12 +4097,23 @@
           stA.mp += 1; stB.mp += 1;
           if (s1 > s2) { stA.mw += 1; stB.ml += 1; }
           else if (s2 > s1) { stB.mw += 1; stA.ml += 1; }
+          const base = getInProgressScoreForPair(a, b);
           if (isTeam) {
-            stA.dw += s1; stA.dl += s2;
-            stB.dw += s2; stB.dl += s1;
+            if (base) {
+              stA.dw += (s1 - base.s1); stA.dl += (s2 - base.s2);
+              stB.dw += (s2 - base.s2); stB.dl += (s1 - base.s1);
+            } else {
+              stA.dw += s1; stA.dl += s2;
+              stB.dw += s2; stB.dl += s1;
+            }
           } else {
-            stA.gw += s1; stA.gl += s2;
-            stB.gw += s2; stB.gl += s1;
+            if (base) {
+              stA.gw += (s1 - base.s1); stA.gl += (s2 - base.s2);
+              stB.gw += (s2 - base.s2); stB.gl += (s1 - base.s1);
+            } else {
+              stA.gw += s1; stA.gl += s2;
+              stB.gw += s2; stB.gl += s1;
+            }
           }
         });
       }
@@ -3793,8 +4133,104 @@
       return derived;
     }
 
-    function sortPlayersByStats(derivedStats) {
-      return [...groupPlayers].sort((a, b) => {
+    const isCOCStyleLeague = !isTeam && (
+      (contextTournament && contextTournament.type === "COC") ||
+      (contextTournament && contextTournament.type === "League") ||
+      (contextTournament && contextTournament.tournament_format === "Leagues") ||
+      (contextTournament && contextTournament.main_tournament_id && tournamentsById[contextTournament.main_tournament_id]?.tournament_format === "Leagues")
+    );
+
+    function applyCOCHeadToHeadForSortedPlayers(sortedPlayers, derivedStats) {
+      if (!isCOCStyleLeague || !Array.isArray(sortedPlayers) || sortedPlayers.length < 2) return sortedPlayers;
+
+      const getPlayerKey = (player) => String(player && player.player_id ? player.player_id : '');
+      const getPrimaryMetrics = (player) => {
+        const key = getPlayerKey(player);
+        const stat = derivedStats.get(key) || {};
+        const mw = Number(stat.mw) || 0;
+        const gw = Number(stat.gw) || 0;
+        const gl = Number(stat.gl) || 0;
+        return { mw, diff: gw - gl, gw };
+      };
+      const equalPrimaryMetrics = (a, b) => a.mw === b.mw && a.diff === b.diff && a.gw === b.gw;
+      const hasScore = (v) => !(v === null || v === undefined || String(v).trim() === '');
+
+      const result = [...sortedPlayers];
+      let i = 0;
+      while (i < result.length) {
+        const baseMetrics = getPrimaryMetrics(result[i]);
+        let j = i + 1;
+        while (j < result.length && equalPrimaryMetrics(baseMetrics, getPrimaryMetrics(result[j]))) j++;
+
+        if (j - i > 1) {
+          const tiedPlayers = result.slice(i, j);
+          const tiedIds = tiedPlayers.map(getPlayerKey).filter(Boolean);
+          const tiedIdSet = new Set(tiedIds);
+
+          if (tiedIdSet.size > 1) {
+            const duelStats = new Map();
+            tiedIds.forEach(id => duelStats.set(id, { mw: 0, gw: 0, gl: 0 }));
+            let hasResults = false;
+
+            (duels || []).forEach(duel => {
+              if (!duel || duel.tournament_id !== tableTournamentId) return;
+              if (!isStageMatchLocal(duel.stage || null)) return;
+              if (group && duel.group && duel.group !== group) return;
+
+              const id1 = String(duel.player1_id || '');
+              const id2 = String(duel.player2_id || '');
+              if (!tiedIdSet.has(id1) || !tiedIdSet.has(id2)) return;
+              if (!hasScore(duel.score1) || !hasScore(duel.score2)) return;
+
+              const score1 = Number(duel.score1);
+              const score2 = Number(duel.score2);
+              if (!Number.isFinite(score1) || !Number.isFinite(score2)) return;
+
+              const s1 = duelStats.get(id1);
+              const s2 = duelStats.get(id2);
+              if (!s1 || !s2) return;
+
+              s1.gw += score1;
+              s1.gl += score2;
+              s2.gw += score2;
+              s2.gl += score1;
+              if (score1 > score2) s1.mw += 1;
+              else if (score2 > score1) s2.mw += 1;
+
+              hasResults = true;
+            });
+
+            if (hasResults) {
+              const originalOrder = new Map();
+              tiedPlayers.forEach((p, idx) => originalOrder.set(getPlayerKey(p), idx));
+
+              const resolved = [...tiedPlayers].sort((a, b) => {
+                const idA = getPlayerKey(a);
+                const idB = getPlayerKey(b);
+                const aStat = duelStats.get(idA) || { mw: 0, gw: 0, gl: 0 };
+                const bStat = duelStats.get(idB) || { mw: 0, gw: 0, gl: 0 };
+
+                const mwDiff = bStat.mw - aStat.mw;
+                if (mwDiff !== 0) return mwDiff;
+                const gdDiff = (bStat.gw - bStat.gl) - (aStat.gw - aStat.gl);
+                if (gdDiff !== 0) return gdDiff;
+                const gwDiff = bStat.gw - aStat.gw;
+                if (gwDiff !== 0) return gwDiff;
+                return (originalOrder.get(idA) || 0) - (originalOrder.get(idB) || 0);
+              });
+
+              for (let k = 0; k < resolved.length; k++) result[i + k] = resolved[k];
+            }
+          }
+        }
+        i = j;
+      }
+
+      return result;
+    }
+
+    function sortPlayersByStats(derivedStats, applySim = false) {
+      const sorted = [...groupPlayers].sort((a, b) => {
         const keyA = isTeam ? a.team : String(a.player_id);
         const keyB = isTeam ? b.team : String(b.player_id);
         const aStat = derivedStats.get(keyA) || {};
@@ -3818,6 +4254,10 @@
         if (ogdDiff !== 0) return ogdDiff;
         return (bStat.ogw || 0) - (aStat.ogw || 0);
       });
+      if (isCOCStyleLeague && !applySim) {
+        return applyCOCHeadToHeadForSortedPlayers(sorted, derivedStats);
+      }
+      return sorted;
     }
 
     function closeAllSimMenus(except) {
@@ -3838,6 +4278,19 @@
       if (label) label.textContent = val || ' ';
       if (val) td.classList.add('sim-pending');
       else td.classList.remove('sim-pending');
+      applySimResultClass(td, val);
+    }
+
+    function applySimResultClass(td, val) {
+      td.classList.remove('sim-win', 'sim-loss');
+      if (!val) return;
+      const parts = String(val).split('-');
+      if (parts.length !== 2) return;
+      const s1 = Number(parts[0]);
+      const s2 = Number(parts[1]);
+      if (!Number.isFinite(s1) || !Number.isFinite(s2)) return;
+      if (s1 === s2) return;
+      td.classList.add(s1 > s2 ? 'sim-win' : 'sim-loss');
     }
 
     function updateSimStateFromSelect(td, selectedValue) {
@@ -3882,7 +4335,7 @@
       eligibleCells = [];
       pairCells = new Map();
 
-      const sortedPlayers = sortPlayersByStats(derivedStats);
+      const sortedPlayers = sortPlayersByStats(derivedStats, applySim);
       const colParticipants = sortedPlayers.map(p => {
         if (isTeam) {
           const tm = teams.find(t => t.team === p.team);
@@ -3927,7 +4380,13 @@
 
         const tdRank = document.createElement('td');
         tdRank.className = 'rank-cell';
-        tdRank.textContent = String(idx + 1);
+        const rankValue = idx + 1;
+        const badge = createRankBadge(rankValue, contextTournament, stageFilter);
+        if (badge) {
+          tdRank.appendChild(badge);
+        } else {
+          tdRank.textContent = String(rankValue);
+        }
         tr.appendChild(tdRank);
 
         const tdName = document.createElement('td');
@@ -3985,13 +4444,17 @@
           const isOpp = participantOpponents.get(rowKey)?.has(colPart.key);
           if (!isOpp) td.classList.add('ct-not-opponent');
 
-          const baseScore = findBaseScore(rowKey, colPart.key, rowData);
-          if (withSimulator && isOpp && baseScore === '') {
+          const matchMeta = findMatchMeta(rowKey, colPart.key, rowData);
+          const baseScore = matchMeta.score;
+          const isInProgress = matchMeta.isInProgress;
+          if (withSimulator && isOpp && (baseScore === '' || isInProgress)) {
             const current = simState.get(td.dataset.pairKey);
             let val = '';
             if (current) {
               if (current.a === rowKey && current.b === colPart.key) val = `${current.s1}-${current.s2}`;
               else val = `${current.s2}-${current.s1}`;
+            } else if (isInProgress && baseScore) {
+              val = baseScore;
             }
             const wrapper = document.createElement('div');
             wrapper.className = 'sim-select';

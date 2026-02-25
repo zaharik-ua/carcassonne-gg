@@ -1,0 +1,449 @@
+<!-- ШРИФТ + ІКОНКИ -->
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- СТИЛІ -->
+<style>
+  body {
+    font-family: 'Montserrat', sans-serif;
+  }
+
+  .section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #222;
+    margin: 0 0 6px 0;
+    padding: 0 8px;
+  }
+  .players-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .players-count {
+    font-size: 14px;
+    color: #555;
+    font-weight: 600;
+    padding: 0 8px;
+    white-space: nowrap;
+  }
+
+  .tournament-card {
+    background: white;
+    border-radius: 4px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .player-flag {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+
+  .player-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+  }
+
+  .player-nick {
+    font-size: 15px;
+  }
+
+
+  .player-name {
+    font-size: 14px;
+    color: #555;
+  }
+
+  .elo-rating {
+    color: #333;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  .player-date {
+    font-size: 14px;
+  }
+
+  /* Masters table */
+  .masters-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .masters-table thead th {
+    text-align: left;
+    font-size: 15px;
+    line-height: 17px;
+    font-weight: 600;
+    padding: 8px;
+    border-bottom: 1px solid #ccc;
+    background: #fafafa;
+    white-space: normal;
+    word-break: break-word;
+  }
+  .masters-table thead th.col-elo {
+    text-align: center;
+    /* Ensure these columns also wrap and break words */
+    white-space: nowrap;
+    word-break: normal;
+  }
+  .masters-table thead th.col-rank,
+  .masters-table tbody td.col-rank {
+    width: 34px;
+    text-align: right;
+    white-space: nowrap;
+    color: #666;
+  }
+  .masters-table tbody td {
+    padding: 6px 8px;
+    border-top: 1px solid #ccc;
+    vertical-align: middle;
+    background: #fff;
+  }
+  .masters-table tbody tr.player-row:hover {
+    background-color: #e6f2ff;
+  }
+  .masters-table tbody tr.player-row:hover td {
+    background-color: #e6f2ff;
+  }
+  .masters-table tbody tr.player-row {
+    cursor: pointer;
+  }
+  .masters-table .col-player {
+    width: 100%;
+  }
+  .masters-table .col-elo {
+    white-space: nowrap;
+    text-align: center;
+  }
+  .player-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .player-cell .player-text { line-height: 1.1; }
+  .player-cell .player-nick { font-size: 16px; font-weight: normal; color: #333; }
+  .player-cell .player-name { font-size: 14px; color: #555; }
+  .player-cell .player-achievements img { height: 20px; margin-left: 4px; }
+</style>
+
+<div class="players-header">
+  <div class="section-title">Players</div>
+  <div class="players-count" id="players-count">Count: 0</div>
+</div>
+<div id="players-container"></div>
+
+<script>
+(function() {
+  let allPlayers = [];
+  let countriesByKey = new Map();
+  let achievementMap = new Map();
+  let activeAssociationFilter = null;
+
+  function normalizeKey(value) {
+    return String(value || "").trim().toUpperCase();
+  }
+
+  function readAssociationFilterFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("association") || "";
+    return normalizeKey(raw);
+  }
+
+  function readPlayerFilterFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("player") || "").trim();
+  }
+
+  function readMastersFilterFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("masters") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  function readCaptainsFilterFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("captains") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  function readAchievementTypeFilterFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("achievement_type") || "").trim();
+  }
+  function readMatchesMinFilterFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("matches_min") || "").trim();
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+  }
+
+  function isActivePlayerStatus(status) {
+    return String(status || "").trim().toLowerCase() === "active";
+  }
+
+  function createPlayerElement(player, index) {
+    const tr = document.createElement("tr");
+
+    const tdRank = document.createElement("td");
+    tdRank.className = "col-rank";
+    tdRank.textContent = String(player.rank ?? (index + 1));
+    tr.appendChild(tdRank);
+
+    const tdPlayer = document.createElement("td");
+    tdPlayer.className = "col-player";
+
+    const playerCell = document.createElement("div");
+    playerCell.className = "player-cell";
+
+    if (player.flag && String(player.flag).trim() !== "") {
+      const flag = document.createElement("img");
+      flag.className = "player-flag";
+      flag.src = player.flag;
+      flag.alt = "flag";
+      playerCell.appendChild(flag);
+    }
+
+    const textContainer = document.createElement("div");
+    textContainer.className = "player-text";
+
+    const nick = document.createElement("div");
+    nick.className = "player-nick";
+    nick.textContent = player.player || "";
+
+    const name = document.createElement("div");
+    name.className = "player-name";
+    name.textContent = player.name || "";
+
+    textContainer.appendChild(nick);
+    if (player.name) textContainer.appendChild(name);
+    playerCell.appendChild(textContainer);
+
+    if (player.achievements && player.achievements.length > 0) {
+      const achievementsDiv = document.createElement("div");
+      achievementsDiv.className = "player-achievements";
+      player.achievements.forEach(achievementName => {
+        const info = achievementMap.get(achievementName);
+        if (info && info.logo_url) {
+          const img = document.createElement("img");
+          img.src = info.logo_url;
+          img.alt = achievementName;
+          img.title = achievementName;
+          achievementsDiv.appendChild(img);
+        }
+      });
+      if (achievementsDiv.childElementCount > 0) {
+        playerCell.appendChild(achievementsDiv);
+      }
+    }
+
+    tdPlayer.appendChild(playerCell);
+    tr.appendChild(tdPlayer);
+
+    const tdElo = document.createElement("td");
+    tdElo.className = "col-elo";
+    {
+      const rawElo = (player.gg_elo ?? "").toString().trim();
+      const val = Number(rawElo);
+      if (rawElo !== "" && Number.isFinite(val)) {
+        const span = document.createElement("span");
+        span.classList.add("elo-rating");
+        span.textContent = String(Math.trunc(val));
+        tdElo.appendChild(span);
+      } else if (rawElo) {
+        const span = document.createElement("span");
+        span.textContent = rawElo;
+        tdElo.appendChild(span);
+      } else {
+        tdElo.textContent = "";
+      }
+    }
+    tr.appendChild(tdElo);
+
+    if (player.profile) {
+      tr.dataset.profile = player.profile;
+    }
+
+    return tr;
+  }
+
+  function renderPlayersSection(container, players) {
+    if (!players || players.length === 0) return;
+    const card = document.createElement("div");
+    card.className = "tournament-card";
+
+    const table = document.createElement("table");
+    table.className = "masters-table";
+
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+
+    const thPlayer = document.createElement("th");
+    thPlayer.textContent = "Player";
+    hr.appendChild(thPlayer);
+
+    const thRank = document.createElement("th");
+    thRank.className = "col-rank";
+    thRank.textContent = "#";
+    hr.insertBefore(thRank, thPlayer);
+
+    const thTopElo = document.createElement("th");
+    thTopElo.className = "col-elo";
+    thTopElo.textContent = "GG Elo";
+    hr.appendChild(thTopElo);
+
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    players.forEach((player, index) => {
+      const tr = createPlayerElement(player, index);
+      tr.classList.add("player-row");
+      tbody.appendChild(tr);
+
+      tr.addEventListener("click", (e) => {
+        if (e.target.closest("a")) return;
+        if (tr.dataset.profile) window.location.href = tr.dataset.profile;
+      });
+    });
+    table.appendChild(tbody);
+
+    card.appendChild(table);
+    container.appendChild(card);
+  }
+
+  function renderFilteredPlayers() {
+    let filtered = [...allPlayers];
+    activeAssociationFilter = readAssociationFilterFromUrl();
+    const activePlayerFilter = readPlayerFilterFromUrl();
+    const mastersOnly = readMastersFilterFromUrl();
+    const captainsOnly = readCaptainsFilterFromUrl();
+    const achievementType = readAchievementTypeFilterFromUrl();
+    const matchesMin = readMatchesMinFilterFromUrl();
+
+    if (activeAssociationFilter) {
+      filtered = filtered.filter(p => normalizeKey(p.association) === activeAssociationFilter);
+    }
+    if (activePlayerFilter) {
+      const target = activePlayerFilter.toLowerCase();
+      filtered = filtered.filter(p => String(p.player || "").toLowerCase() === target);
+    }
+    if (mastersOnly) {
+      filtered = filtered.filter(p => String(p.master_title || "").trim() !== "");
+    }
+    if (captainsOnly) {
+      filtered = filtered.filter(p => String(p.team_captain || "").trim() === "Captain");
+    }
+    if (achievementType) {
+      filtered = filtered.filter(p =>
+        Array.isArray(p.achievements) && p.achievements.some(a => {
+          const info = achievementMap.get(a);
+          return info && info.type === achievementType;
+        })
+      );
+    }
+    if (matchesMin > 0) {
+      filtered = filtered.filter(p => {
+        const val = Number(String(p.matches ?? "").trim());
+        return Number.isFinite(val) && val >= matchesMin;
+      });
+    }
+
+    filtered.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
+
+    const container = document.getElementById("players-container");
+    const countEl = document.getElementById("players-count");
+    if (countEl) countEl.textContent = `Count: ${filtered.length}`;
+    container.innerHTML = "";
+    renderPlayersSection(container, filtered);
+  }
+
+  async function fetchAndRenderPlayers() {
+    const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
+
+    try {
+      const playersRes = await fetch(dataURL);
+      if (!playersRes.ok) throw new Error("Failed to load JSON file");
+
+      const data = await playersRes.json();
+      const ggProfiles = data.gg_profiles || [];
+      const countries = data.countries || [];
+      const achievements = data.achievements || [];
+
+      achievementMap = new Map();
+      achievements.forEach(a => {
+        const key = String(a.achievement || a.title || "").trim();
+        if (key) achievementMap.set(key, a);
+      });
+
+      countriesByKey = new Map();
+      countries.forEach(c => {
+        if (c.iso) countriesByKey.set(normalizeKey(c.iso), c);
+        if (c.team) countriesByKey.set(normalizeKey(c.team), c);
+      });
+
+      allPlayers = ggProfiles
+        .filter(p => isActivePlayerStatus(p.status))
+        .map(p => {
+        const profileId = String(p.id ?? p.profile_id ?? "");
+        const assocKey = normalizeKey(p.assosiation || p.association || "");
+        const country = assocKey ? countriesByKey.get(assocKey) : null;
+        return {
+          id: profileId,
+          player: p.bga_nickname || p.bga_name || "",
+          name: p.name || "",
+          gg_elo: p.gg_elo || "",
+          achievements: Array.isArray(p.achievements) ? p.achievements : [],
+          master_title: p.master_title || "",
+          team_captain: p.team_captain || "",
+          matches: p.matches || "",
+          association: assocKey,
+          flag: country?.flag || "",
+          profile: profileId ? `https://carcassonne.gg/player/?id=${encodeURIComponent(profileId)}` : ""
+        };
+      });
+
+      const fullSorted = [...allPlayers].sort((a, b) => {
+        const aRaw = (a.gg_elo ?? "").toString().trim();
+        const bRaw = (b.gg_elo ?? "").toString().trim();
+        const aNum = Number(aRaw);
+        const bNum = Number(bRaw);
+        const aIsNum = Number.isFinite(aNum);
+        const bIsNum = Number.isFinite(bNum);
+
+        if (aIsNum && bIsNum) return bNum - aNum;
+        if (aIsNum) return -1;
+        if (bIsNum) return 1;
+        return a.player.localeCompare(b.player);
+      });
+      const rankById = new Map(fullSorted.map((p, idx) => [String(p.id), idx + 1]));
+      allPlayers = allPlayers.map(p => ({ ...p, rank: rankById.get(String(p.id)) }));
+
+      renderFilteredPlayers();
+    } catch (error) {
+      console.error("Failed to load player data:", error);
+    }
+  }
+
+  const initPlayers = () => fetchAndRenderPlayers();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initPlayers);
+  } else {
+    initPlayers();
+  }
+  window.addEventListener("popstate", () => renderFilteredPlayers());
+  window.addEventListener("association-filter-change", () => renderFilteredPlayers());
+  window.addEventListener("achievement-filter-change", () => renderFilteredPlayers());
+  window.addEventListener("player-filter-change", () => renderFilteredPlayers());
+  window.addEventListener("masters-filter-change", () => renderFilteredPlayers());
+  window.addEventListener("captains-filter-change", () => renderFilteredPlayers());
+  window.addEventListener("matches-filter-change", () => renderFilteredPlayers());
+})();
+</script>
