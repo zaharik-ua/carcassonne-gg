@@ -66,10 +66,30 @@ db.serialize(() => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL UNIQUE COLLATE NOCASE,
       player_id TEXT NOT NULL,
+      admin INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  db.all("PRAGMA table_info(user_player_links)", (pragmaErr, columns) => {
+    if (pragmaErr) {
+      console.error("Failed to inspect user_player_links schema", pragmaErr);
+      return;
+    }
+
+    const hasAdminColumn = columns.some((col) => col.name === "admin");
+    if (!hasAdminColumn) {
+      db.run(
+        "ALTER TABLE user_player_links ADD COLUMN admin INTEGER NOT NULL DEFAULT 0",
+        (alterErr) => {
+          if (alterErr) {
+            console.error("Failed to add admin column to user_player_links", alterErr);
+          }
+        }
+      );
+    }
+  });
 });
 
 passport.serializeUser((user, done) => {
@@ -85,7 +105,8 @@ passport.deserializeUser((id, done) => {
         u.email,
         u.name,
         u.picture,
-        upl.player_id
+        upl.player_id,
+        COALESCE(upl.admin, 0) AS admin
       FROM users u
       LEFT JOIN user_player_links upl ON lower(u.email) = lower(upl.email)
       WHERE u.id = ?
@@ -220,10 +241,11 @@ app.get("/auth/me", (req, res) => {
     return res.status(401).json({ authenticated: false });
   }
 
-  const { id, google_id, email, name, picture, player_id } = req.user;
+  const { id, google_id, email, name, picture, player_id, admin } = req.user;
   const myProfileUrl = player_id
     ? `${SITE_BASE_URL}/player/?id=${encodeURIComponent(player_id)}`
-    : null;
+    : `${SITE_BASE_URL}/player/?id=noprofile`;
+  const isAdmin = Number(admin) === 1;
 
   return res.json({
     authenticated: true,
@@ -234,7 +256,9 @@ app.get("/auth/me", (req, res) => {
       name,
       picture,
       playerId: player_id || null,
+      isAdmin,
       myProfileUrl,
+      adminPanelUrl: isAdmin ? `${SITE_BASE_URL}/admin` : null,
     },
   });
 });

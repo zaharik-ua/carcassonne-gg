@@ -208,7 +208,8 @@
         </button>
 
         <div id="userMenu" class="user-menu hidden" role="menu">
-          <a id="profileLink" class="user-menu-item" href="./profile.html" role="menuitem">My profile</a>
+          <a id="adminLink" class="user-menu-item hidden" href="https://carcassonne.gg/admin" role="menuitem">Admin panel</a>
+          <a id="profileLink" class="user-menu-item" href="https://carcassonne.gg/player/?id=noprofile" role="menuitem">My profile</a>
           <button id="logoutButton" class="user-menu-item" type="button" role="menuitem">Log out</button>
         </div>
       </div>
@@ -235,6 +236,7 @@
     const authUserTrigger = document.getElementById("authUserTrigger");
     const authUserPicture = document.getElementById("authUserPicture");
     const authUserName = document.getElementById("authUserName");
+    const adminLink = document.getElementById("adminLink");
     const profileLink = document.getElementById("profileLink");
     const userMenu = document.getElementById("userMenu");
     const logoutButton = document.getElementById("logoutButton");
@@ -253,7 +255,9 @@
       signInLabel.classList.remove("hidden");
       signInDropdown.classList.remove("hidden");
       authUser.classList.remove("auth-user--visible");
-      profileLink.href = "./profile.html";
+      profileLink.href = "https://carcassonne.gg/player/?id=noprofile";
+      adminLink.classList.add("hidden");
+      adminLink.href = "https://carcassonne.gg/admin";
       closeUserMenu();
       authToggle.checked = false;
     }
@@ -265,7 +269,14 @@
       authUserName.textContent = user.name || user.email || "User";
       authUserPicture.src = user.picture || "https://www.gravatar.com/avatar/?d=mp";
       authUserPicture.alt = user.name || "User";
-      profileLink.href = user.myProfileUrl || "./profile.html";
+      profileLink.href = user.myProfileUrl || "https://carcassonne.gg/player/?id=noprofile";
+      if (user.isAdmin) {
+        adminLink.classList.remove("hidden");
+        adminLink.href = user.adminPanelUrl || "https://carcassonne.gg/admin";
+      } else {
+        adminLink.classList.add("hidden");
+        adminLink.href = "https://carcassonne.gg/admin";
+      }
       authToggle.checked = false;
       closeUserMenu();
     }
