@@ -208,7 +208,7 @@
         </button>
 
         <div id="userMenu" class="user-menu hidden" role="menu">
-          <a id="profileLink" class="user-menu-item" href="./profile.html" role="menuitem">Профіль</a>
+          <a id="profileLink" class="user-menu-item" href="./profile.html" role="menuitem">My profile</a>
           <button id="logoutButton" class="user-menu-item" type="button" role="menuitem">Log out</button>
         </div>
       </div>
@@ -225,7 +225,7 @@
   </div>
 
   <script>
-    const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.com.ua";
+    const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
 
     const signInLabel = document.getElementById("signInLabel");
     const signInDropdown = document.getElementById("signInDropdown");
@@ -235,6 +235,7 @@
     const authUserTrigger = document.getElementById("authUserTrigger");
     const authUserPicture = document.getElementById("authUserPicture");
     const authUserName = document.getElementById("authUserName");
+    const profileLink = document.getElementById("profileLink");
     const userMenu = document.getElementById("userMenu");
     const logoutButton = document.getElementById("logoutButton");
 
@@ -252,6 +253,7 @@
       signInLabel.classList.remove("hidden");
       signInDropdown.classList.remove("hidden");
       authUser.classList.remove("auth-user--visible");
+      profileLink.href = "./profile.html";
       closeUserMenu();
       authToggle.checked = false;
     }
@@ -263,6 +265,7 @@
       authUserName.textContent = user.name || user.email || "User";
       authUserPicture.src = user.picture || "https://www.gravatar.com/avatar/?d=mp";
       authUserPicture.alt = user.name || "User";
+      profileLink.href = user.myProfileUrl || "./profile.html";
       authToggle.checked = false;
       closeUserMenu();
     }

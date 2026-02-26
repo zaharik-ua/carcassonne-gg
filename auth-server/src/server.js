@@ -32,6 +32,7 @@ const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGIN || "http://localhost:8080"
 const PRIMARY_FRONTEND_ORIGIN = FRONTEND_ORIGINS[0];
 const DB_PATH = process.env.DB_PATH || "./data/auth.sqlite";
 const isProd = process.env.NODE_ENV === "production";
+const SITE_BASE_URL = process.env.SITE_BASE_URL || "https://carcassonne.gg";
 const cookieSameSite = process.env.COOKIE_SAME_SITE || (isProd ? "none" : "lax");
 const cookieSecure = process.env.COOKIE_SECURE
   ? process.env.COOKIE_SECURE === "true"
@@ -59,6 +60,16 @@ db.serialize(() => {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_player_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      player_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 });
 
 passport.serializeUser((user, done) => {
@@ -67,7 +78,18 @@ passport.serializeUser((user, done) => {
 
 passport.deserializeUser((id, done) => {
   db.get(
-    "SELECT id, google_id, email, name, picture FROM users WHERE id = ?",
+    `
+      SELECT
+        u.id,
+        u.google_id,
+        u.email,
+        u.name,
+        u.picture,
+        upl.player_id
+      FROM users u
+      LEFT JOIN user_player_links upl ON lower(u.email) = lower(upl.email)
+      WHERE u.id = ?
+    `,
     [id],
     (err, row) => {
       if (err) return done(err);
@@ -198,10 +220,22 @@ app.get("/auth/me", (req, res) => {
     return res.status(401).json({ authenticated: false });
   }
 
-  const { id, google_id, email, name, picture } = req.user;
+  const { id, google_id, email, name, picture, player_id } = req.user;
+  const myProfileUrl = player_id
+    ? `${SITE_BASE_URL}/player/?id=${encodeURIComponent(player_id)}`
+    : null;
+
   return res.json({
     authenticated: true,
-    user: { id, googleId: google_id, email, name, picture },
+    user: {
+      id,
+      googleId: google_id,
+      email,
+      name,
+      picture,
+      playerId: player_id || null,
+      myProfileUrl,
+    },
   });
 });
 

@@ -983,13 +983,11 @@
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
     //? "Asian-Cup-2025"
-    //? "GCOC-2025"
+    ? "CCOQ-2026"
     //? "OCFC-2025"
     //? "BCL-2026S"
-    ? "UCOC-2026"
+    //? "UCOC-2026"
     //? "UCDTC-2025"
-    //? "UKOC-2025"
-    //? "BCPL-2026-WIN"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
 
