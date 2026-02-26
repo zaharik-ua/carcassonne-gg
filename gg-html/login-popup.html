@@ -37,11 +37,10 @@
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      max-width: min(320px, 90vw);
+      max-width: min(360px, 92vw);
     }
 
-    .auth-button,
-    .logout-button {
+    .auth-button {
       appearance: none;
       border: 0;
       padding: 8px 12px;
@@ -56,8 +55,7 @@
       transition: background 0.15s ease;
     }
 
-    .auth-button:hover,
-    .logout-button:hover { background: var(--btn-hover); }
+    .auth-button:hover { background: var(--btn-hover); }
 
     .auth-toggle {
       position: absolute;
@@ -112,18 +110,28 @@
     }
 
     .auth-user {
+      position: relative;
       display: none;
+    }
+
+    .auth-user--visible {
+      display: inline-block;
+    }
+
+    .auth-user-trigger {
+      display: inline-flex;
       align-items: center;
       gap: 8px;
       padding: 4px 8px;
       border-radius: 999px;
       border: 1px solid var(--border);
       background: #fff;
-      max-width: 220px;
+      cursor: pointer;
+      max-width: 260px;
     }
 
-    .auth-user--visible {
-      display: inline-flex;
+    .auth-user-trigger:hover {
+      border-color: #bdbdbd;
     }
 
     .auth-user-picture {
@@ -141,6 +149,43 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      max-width: 160px;
+    }
+
+    .auth-user-caret {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .user-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 8px);
+      min-width: 170px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      z-index: 1000;
+    }
+
+    .user-menu-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      background: #fff;
+      border: 0;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .user-menu-item:hover {
+      background: #f5f7fa;
     }
 
     .hidden {
@@ -151,15 +196,25 @@
 <body>
   <div class="auth-wrap">
     <input type="checkbox" id="authToggle" class="auth-toggle" />
+
     <div class="auth-bar">
       <label id="signInLabel" class="auth-button" for="authToggle">Sign in</label>
+
       <div id="authUser" class="auth-user">
-        <img id="authUserPicture" class="auth-user-picture" alt="User" />
-        <span id="authUserName" class="auth-user-name"></span>
+        <button id="authUserTrigger" class="auth-user-trigger" type="button" aria-expanded="false" aria-controls="userMenu">
+          <img id="authUserPicture" class="auth-user-picture" alt="User" />
+          <span id="authUserName" class="auth-user-name"></span>
+          <span class="auth-user-caret">▼</span>
+        </button>
+
+        <div id="userMenu" class="user-menu hidden" role="menu">
+          <a id="profileLink" class="user-menu-item" href="./profile.html" role="menuitem">Профіль</a>
+          <button id="logoutButton" class="user-menu-item" type="button" role="menuitem">Log out</button>
+        </div>
       </div>
-      <button id="logoutButton" class="logout-button hidden" type="button">Log out</button>
     </div>
-    <div class="auth-dropdown">
+
+    <div id="signInDropdown" class="auth-dropdown">
       <div class="auth-row">
         <a id="googleAuthLink" class="google-btn" href="/auth/google">
           <img class="google-icon" alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />
@@ -170,29 +225,46 @@
   </div>
 
   <script>
-    const AUTH_BASE = window.AUTH_BASE_URL || window.location.origin;
+    const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.com.ua";
 
     const signInLabel = document.getElementById("signInLabel");
+    const signInDropdown = document.getElementById("signInDropdown");
     const googleAuthLink = document.getElementById("googleAuthLink");
     const authToggle = document.getElementById("authToggle");
     const authUser = document.getElementById("authUser");
+    const authUserTrigger = document.getElementById("authUserTrigger");
     const authUserPicture = document.getElementById("authUserPicture");
     const authUserName = document.getElementById("authUserName");
+    const userMenu = document.getElementById("userMenu");
     const logoutButton = document.getElementById("logoutButton");
+
+    function closeUserMenu() {
+      userMenu.classList.add("hidden");
+      authUserTrigger.setAttribute("aria-expanded", "false");
+    }
+
+    function openUserMenu() {
+      userMenu.classList.remove("hidden");
+      authUserTrigger.setAttribute("aria-expanded", "true");
+    }
 
     function setLoggedOutUI() {
       signInLabel.classList.remove("hidden");
+      signInDropdown.classList.remove("hidden");
       authUser.classList.remove("auth-user--visible");
-      logoutButton.classList.add("hidden");
+      closeUserMenu();
+      authToggle.checked = false;
     }
 
     function setLoggedInUI(user) {
       signInLabel.classList.add("hidden");
+      signInDropdown.classList.add("hidden");
       authUser.classList.add("auth-user--visible");
-      logoutButton.classList.remove("hidden");
       authUserName.textContent = user.name || user.email || "User";
       authUserPicture.src = user.picture || "https://www.gravatar.com/avatar/?d=mp";
       authUserPicture.alt = user.name || "User";
+      authToggle.checked = false;
+      closeUserMenu();
     }
 
     async function fetchSession() {
@@ -234,6 +306,14 @@
       authToggle.checked = false;
     });
 
+    authUserTrigger.addEventListener("click", () => {
+      if (userMenu.classList.contains("hidden")) {
+        openUserMenu();
+      } else {
+        closeUserMenu();
+      }
+    });
+
     logoutButton.addEventListener("click", async () => {
       try {
         await fetch(`${AUTH_BASE}/auth/logout`, {
@@ -243,6 +323,18 @@
         });
       } finally {
         setLoggedOutUI();
+      }
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!authUser.contains(event.target)) {
+        closeUserMenu();
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        closeUserMenu();
       }
     });
 

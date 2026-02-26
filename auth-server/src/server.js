@@ -25,9 +25,21 @@ for (const envName of requiredEnv) {
 }
 
 const PORT = Number(process.env.PORT || 3100);
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:8080";
+const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGIN || "http://localhost:8080")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const PRIMARY_FRONTEND_ORIGIN = FRONTEND_ORIGINS[0];
 const DB_PATH = process.env.DB_PATH || "./data/auth.sqlite";
 const isProd = process.env.NODE_ENV === "production";
+const cookieSameSite = process.env.COOKIE_SAME_SITE || (isProd ? "none" : "lax");
+const cookieSecure = process.env.COOKIE_SECURE
+  ? process.env.COOKIE_SECURE === "true"
+  : isProd;
+
+if (cookieSameSite === "none" && !cookieSecure) {
+  throw new Error("COOKIE_SAME_SITE=none requires COOKIE_SECURE=true");
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -113,7 +125,12 @@ app.set("trust proxy", 1);
 app.use(express.json());
 app.use(
   cors({
-    origin: FRONTEND_ORIGIN,
+    origin: (origin, callback) => {
+      if (!origin || FRONTEND_ORIGINS.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true,
   })
 );
@@ -126,8 +143,8 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: isProd,
-      sameSite: "lax",
+      secure: cookieSecure,
+      sameSite: cookieSameSite,
       maxAge: 1000 * 60 * 60 * 24 * 30,
     },
   })
@@ -161,10 +178,10 @@ app.get(
 <body>
 <script>
   if (window.opener) {
-    window.opener.postMessage({ type: "google-auth-success" }, "${FRONTEND_ORIGIN}");
+    window.opener.postMessage({ type: "google-auth-success" }, "*");
     window.close();
   } else {
-    window.location.href = "${FRONTEND_ORIGIN}";
+    window.location.href = "${PRIMARY_FRONTEND_ORIGIN}";
   }
 </script>
 </body>
