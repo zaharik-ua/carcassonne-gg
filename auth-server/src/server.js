@@ -263,6 +263,25 @@ app.get("/auth/me", (req, res) => {
   });
 });
 
+app.get("/auth/can-edit-player/:playerId", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ authenticated: false, canEdit: false });
+  }
+
+  const requestedPlayerId = String(req.params.playerId || "").trim();
+  const linkedPlayerId = String(req.user.player_id || "").trim();
+  const isAdmin = Number(req.user.admin) === 1;
+  const canEdit = Boolean(requestedPlayerId) && (isAdmin || requestedPlayerId === linkedPlayerId);
+
+  return res.json({
+    authenticated: true,
+    canEdit,
+    isAdmin,
+    requestedPlayerId,
+    linkedPlayerId: linkedPlayerId || null,
+  });
+});
+
 app.post("/auth/logout", (req, res, next) => {
   req.logout((logoutErr) => {
     if (logoutErr) return next(logoutErr);
