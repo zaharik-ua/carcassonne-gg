@@ -48,6 +48,36 @@ const dbFullPath = path.resolve(__dirname, "..", DB_PATH);
 
 const db = new sqlite3.Database(dbFullPath);
 
+function addColumnIfMissing(columns, tableName, columnName, sqlDefinition) {
+  if (columns.some((col) => col.name === columnName)) return;
+
+  db.run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${sqlDefinition}`, (alterErr) => {
+    if (alterErr) {
+      console.error(`Failed to add ${columnName} column to ${tableName}`, alterErr);
+    }
+  });
+}
+
+function ensureProfilesSchema() {
+  db.all("PRAGMA table_info(profiles)", (pragmaErr, columns) => {
+    if (pragmaErr) {
+      console.error("Failed to inspect profiles schema", pragmaErr);
+      return;
+    }
+
+    addColumnIfMissing(columns, "profiles", "player_id", "TEXT");
+    addColumnIfMissing(columns, "profiles", "admin", "INTEGER NOT NULL DEFAULT 0");
+    addColumnIfMissing(columns, "profiles", "bga_nickname", "TEXT");
+    addColumnIfMissing(columns, "profiles", "name", "TEXT");
+    addColumnIfMissing(columns, "profiles", "association", "TEXT");
+    addColumnIfMissing(columns, "profiles", "master_title", "INTEGER NOT NULL DEFAULT 0");
+    addColumnIfMissing(columns, "profiles", "master_title_date", "TEXT");
+    addColumnIfMissing(columns, "profiles", "team_captain", "INTEGER NOT NULL DEFAULT 0");
+    addColumnIfMissing(columns, "profiles", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    addColumnIfMissing(columns, "profiles", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+  });
+}
+
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -61,35 +91,57 @@ db.serialize(() => {
     )
   `);
 
-  db.run(`
-    CREATE TABLE IF NOT EXISTS user_player_links (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-      player_id TEXT NOT NULL,
-      admin INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
+  db.get(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'profiles'",
+    (profilesCheckErr, profilesTable) => {
+      if (profilesCheckErr) {
+        console.error("Failed to check profiles table", profilesCheckErr);
+        return;
+      }
 
-  db.all("PRAGMA table_info(user_player_links)", (pragmaErr, columns) => {
-    if (pragmaErr) {
-      console.error("Failed to inspect user_player_links schema", pragmaErr);
-      return;
-    }
-
-    const hasAdminColumn = columns.some((col) => col.name === "admin");
-    if (!hasAdminColumn) {
-      db.run(
-        "ALTER TABLE user_player_links ADD COLUMN admin INTEGER NOT NULL DEFAULT 0",
-        (alterErr) => {
-          if (alterErr) {
-            console.error("Failed to add admin column to user_player_links", alterErr);
+      db.get(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'user_player_links'",
+        (linksCheckErr, legacyTable) => {
+          if (linksCheckErr) {
+            console.error("Failed to check user_player_links table", linksCheckErr);
+            return;
           }
+
+          const shouldRenameLegacyTable = !profilesTable && legacyTable;
+
+          if (shouldRenameLegacyTable) {
+            db.run("ALTER TABLE user_player_links RENAME TO profiles", (renameErr) => {
+              if (renameErr) {
+                console.error("Failed to rename user_player_links to profiles", renameErr);
+                return;
+              }
+              ensureProfilesSchema();
+            });
+            return;
+          }
+
+          db.run(`
+            CREATE TABLE IF NOT EXISTS profiles (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+              bga_nickname TEXT,
+              name TEXT,
+              association TEXT,
+              master_title INTEGER NOT NULL DEFAULT 0,
+              master_title_date TEXT,
+              team_captain INTEGER NOT NULL DEFAULT 0,
+              player_id TEXT,
+              admin INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+
+          ensureProfilesSchema();
         }
       );
     }
-  });
+  );
 });
 
 passport.serializeUser((user, done) => {
@@ -105,10 +157,10 @@ passport.deserializeUser((id, done) => {
         u.email,
         u.name,
         u.picture,
-        upl.player_id,
-        COALESCE(upl.admin, 0) AS admin
+        p.player_id,
+        COALESCE(p.admin, 0) AS admin
       FROM users u
-      LEFT JOIN user_player_links upl ON lower(u.email) = lower(upl.email)
+      LEFT JOIN profiles p ON lower(u.email) = lower(p.email)
       WHERE u.id = ?
     `,
     [id],

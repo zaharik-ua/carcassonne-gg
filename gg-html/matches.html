@@ -573,6 +573,49 @@ code {
       padding: 10px 0;
       line-height: 22px;
   }
+
+  .event-row {
+    min-height: 40px;
+  }
+
+  .event-row .match-time {
+    width: 46px;
+    min-width: 46px;
+  }
+
+  .event-content {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .event-logo {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .event-title-link,
+  .event-title-text {
+    color: #222;
+    font-size: 14px;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .event-title-link {
+    text-decoration: none;
+  }
+
+  .event-title-link:hover {
+    color: #0277BD;
+    text-decoration: none;
+  }
   
   @media (max-width: 600px) {
       .lineup__overview {
@@ -1370,9 +1413,89 @@ function isMatchHidden(match) {
   return raw === "yes";
 }
 
-function renderSection(container, title, tournaments, matches) {
+function parseUtcTimestamp(timeValue) {
+  const [datePart, timePart] = (timeValue || "").split(" ");
+  const [day, month, year] = (datePart || "").split(".").map(Number);
+  const [hour, minute, second] = (timePart || "").split(":").map(Number);
+  return Date.UTC(year || 0, (month || 1) - 1, day || 1, hour || 0, minute || 0, second || 0);
+}
+
+function buildEventDateTimeLabel(timeValue) {
+  const dateObj = new Date(parseUtcTimestamp(timeValue));
+  const MONTHS_3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const dd = String(dateObj.getDate()).padStart(2, "0");
+  const mon = MONTHS_3[dateObj.getMonth()];
+  const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${dd} ${mon} ${timeStr}`;
+}
+
+function createEventElement(eventItem) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "match-wrapper";
+
+  const row = document.createElement("div");
+  row.className = "match-row event-row";
+
+  const timeDiv = document.createElement("div");
+  timeDiv.className = "match-time";
+  const timeTextEl = document.createElement("div");
+  timeTextEl.className = "match-time-text";
+  timeTextEl.textContent = buildEventDateTimeLabel(eventItem.time);
+  timeDiv.appendChild(timeTextEl);
+  row.appendChild(timeDiv);
+
+  const divider = document.createElement("div");
+  divider.className = "divider-vertical";
+  row.appendChild(divider);
+
+  const content = document.createElement("div");
+  content.className = "event-content";
+
+  if (eventItem.tournament_logo) {
+    const logo = document.createElement("img");
+    logo.className = "event-logo";
+    logo.src = eventItem.tournament_logo;
+    logo.alt = eventItem.tournament || "Event";
+    content.appendChild(logo);
+  }
+
+  const titleText = typeof eventItem.tournament === "string" ? eventItem.tournament : "";
+  const linkValue = typeof eventItem.tournament_link === "string" ? eventItem.tournament_link.trim() : "";
+  if (linkValue) {
+    const link = document.createElement("a");
+    link.className = "event-title-link";
+    link.href = linkValue;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = titleText;
+    content.appendChild(link);
+  } else {
+    const title = document.createElement("div");
+    title.className = "event-title-text";
+    title.textContent = titleText;
+    content.appendChild(title);
+  }
+
+  row.appendChild(content);
+  wrapper.appendChild(row);
+  return wrapper;
+}
+
+function renderEventsCard(container, events) {
+  if (!Array.isArray(events) || events.length === 0) return;
+  const sortedEvents = events.slice().sort((a, b) => parseUtcTimestamp(a.time) - parseUtcTimestamp(b.time));
+  const card = document.createElement("div");
+  card.className = "tournament-card";
+  sortedEvents.forEach(eventItem => {
+    card.appendChild(createEventElement(eventItem));
+  });
+  container.appendChild(card);
+}
+
+function renderSection(container, title, tournaments, matches, events) {
   const visibleMatches = (matches || []).filter(match => !isMatchHidden(match));
-  if (visibleMatches.length === 0) return;
+  const visibleEvents = Array.isArray(events) ? events : [];
+  if (visibleMatches.length === 0 && visibleEvents.length === 0) return;
 
   const sectionTitle = document.createElement("div");
   sectionTitle.className = "section-title";
@@ -1473,6 +1596,7 @@ function renderSection(container, title, tournaments, matches) {
     sectionTitle.appendChild(toggle);
   }
   container.appendChild(sectionTitle);
+  renderEventsCard(container, visibleEvents);
 
   // Time mode — single block, all tournaments merged and sorted by time
   if ((isToday || isUpcoming) && todaySortBy === "time") {
@@ -1483,19 +1607,7 @@ function renderSection(container, title, tournaments, matches) {
     const tMap = new Map((tournaments || []).map(t => [t.name, t]));
 
     // Sort matches by time ascending (UTC)
-    const matchesSorted = visibleMatches.slice().sort((a, b) => {
-      const [d1, t1] = (a.time || "").split(" ");
-      const [day1, mon1, yr1] = (d1 || "").split(".").map(Number);
-      const [h1, m1, s1] = (t1 || "").split(":").map(Number);
-      const ts1 = Date.UTC(yr1 || 0, (mon1 || 1) - 1, day1 || 1, h1 || 0, m1 || 0, s1 || 0);
-
-      const [d2, t2] = (b.time || "").split(" ");
-      const [day2, mon2, yr2] = (d2 || "").split(".").map(Number);
-      const [h2, m2, s2] = (t2 || "").split(":").map(Number);
-      const ts2 = Date.UTC(yr2 || 0, (mon2 || 1) - 1, day2 || 1, h2 || 0, m2 || 0, s2 || 0);
-
-      return ts1 - ts2;
-    });
+    const matchesSorted = visibleMatches.slice().sort((a, b) => parseUtcTimestamp(a.time) - parseUtcTimestamp(b.time));
 
     matchesSorted.forEach((match, idx) => {
       // Divider between matches (show before each, including first, to match spec ordering)
@@ -1528,12 +1640,14 @@ function renderSection(container, title, tournaments, matches) {
       card.appendChild(sepBottom);
     }
 
-    container.appendChild(card);
+    if (matchesSorted.length > 0) {
+      container.appendChild(card);
+    }
     return; // Skip default per-tournament rendering
   }
 
   // Default (Event mode and other sections): per-tournament cards
-  tournaments.forEach(tournament => {
+  (tournaments || []).forEach(tournament => {
     const filtered = visibleMatches.filter(m => m.tournament === tournament.name);
     if (filtered.length === 0) return;
 
@@ -1674,28 +1788,25 @@ function renderSection(container, title, tournaments, matches) {
     }
 
     if (title === "Last Results") {
-      // For Last Results: duel tournaments → compact grid; TEAM → as-is
-      // 1) TEAM (as-is)
-      filtered
-        .filter(m => !isDuelTournament(tournament.type || m.tournament_type))
-        .forEach(match => {
-          const el = createMatchElement(match); // TEAM: без змін
-          if ((tournament.type || match.tournament_type) === "TEAM") {
-            registerTeamMatchElement(el, match);
-          }
-          card.appendChild(el);
-        });
-
-      // 2) Duel tournaments (compact grid) — hidden by default with toggle on header
+      // For Last Results: all tournament types are collapsed by default.
+      const teamList = filtered.filter(m => !isDuelTournament(tournament.type || m.tournament_type));
       const duelList = filtered.filter(m => isDuelTournament(tournament.type || m.tournament_type));
+
+      const collapsible = document.createElement("div");
+      collapsible.className = "results-collapsible";
+
+      const collapsibleInner = document.createElement("div");
+      collapsibleInner.className = "results-collapsible__inner";
+
+      teamList.forEach(match => {
+        const el = createMatchElement(match);
+        if ((tournament.type || match.tournament_type) === "TEAM") {
+          registerTeamMatchElement(el, match);
+        }
+        collapsibleInner.appendChild(el);
+      });
+
       if (duelList.length > 0) {
-        // Create collapsible like TEAM lineups
-        const collapsible = document.createElement("div");
-        collapsible.className = "results-collapsible"; // separate styles for finished results
-
-        const collapsibleInner = document.createElement("div");
-        collapsibleInner.className = "results-collapsible__inner";
-
         const grid = document.createElement("div");
         grid.className = "lastresults-grid";
         duelList.forEach(match => {
@@ -1703,15 +1814,20 @@ function renderSection(container, title, tournaments, matches) {
           grid.appendChild(el);
         });
         collapsibleInner.appendChild(grid);
+      }
+
+      const totalResultsCount = teamList.length + duelList.length;
+      if (totalResultsCount > 0) {
         collapsible.appendChild(collapsibleInner);
 
-        // Right-side controls: count badge + chevron
+        // Right-side controls: count badge + chevron.
+        // If TEAM filter button exists in header, it stays left of these controls.
         const controls = document.createElement("div");
         controls.className = "results-controls";
 
         const countBadge = document.createElement("div");
         countBadge.className = "results-count-badge";
-        countBadge.textContent = String(duelList.length);
+        countBadge.textContent = String(totalResultsCount);
 
         const toggleBtn = document.createElement("div");
         toggleBtn.className = "chevron";
@@ -1723,12 +1839,10 @@ function renderSection(container, title, tournaments, matches) {
         chevronIcon.style.padding = "0 4px";
         toggleBtn.appendChild(chevronIcon);
 
-        // Ensure clicking the chevron does not navigate the link
         toggleBtn.addEventListener("click", (e) => {
           e.stopPropagation();
         });
 
-        // Toggle logic mirrors TEAM lineup behavior
         toggleBtn.addEventListener("click", () => {
           const isOpen = collapsible.classList.contains("open");
           if (isOpen) {
@@ -1787,6 +1901,7 @@ function renderSection(container, title, tournaments, matches) {
 
     container.appendChild(card);
   });
+
 }
 
 const autoUpdate = new URLSearchParams(window.location.search).get("autoupdate") === "true";
@@ -1838,8 +1953,8 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
 
   function fetchAndRenderMatches() {
   setLoading(true);
-  const primaryURL = "https://api.carcassonne.com.ua/public/matches_new";
-  const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches_new.json";
+  const primaryURL = "https://api.carcassonne.com.ua/public/matches";
+  const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches.json";
 
   fetchPrimaryWithRetry(primaryURL, { retries: 2, delayMs: 500, timeout: 10000 })
     .catch(err => {
@@ -1862,12 +1977,12 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
     });
   }
 
-  function renderAllSectionsFromData({ matches_today, matches_scheduled, matches_finished, tournaments_today, tournaments_scheduled, tournaments_finished }) {
+  function renderAllSectionsFromData({ matches_today, matches_scheduled, matches_finished, tournaments_today, tournaments_scheduled, tournaments_finished, events_today, events_scheduled }) {
     const container = document.getElementById("matches-container");
     container.innerHTML = "";
 
-    renderSection(container, "Today", tournaments_today, matches_today);
-    renderSection(container, "Upcoming Matches", tournaments_scheduled, matches_scheduled);
+    renderSection(container, "Today", tournaments_today, matches_today, events_today);
+    renderSection(container, "Upcoming Matches", tournaments_scheduled, matches_scheduled, events_scheduled);
     renderSection(container, "Last Results", tournaments_finished, matches_finished);
   }
 

@@ -1,0 +1,235 @@
+<!-- ШРИФТ + ІКОНКИ -->
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- СТИЛІ -->
+<style>
+  .top10-widget {
+    font-family: 'Montserrat', sans-serif;
+    color: #333333;
+  }
+
+  .top10-widget .header-row {
+    background-color: #2C6DA3;
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .top10-widget .header-row a {
+    color: white;
+    text-decoration: none;
+  }
+
+  .top10-widget .top-players {
+    background: white;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .top10-widget .player-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background-color: white;
+    border-top: 1px solid #ccc;
+    box-sizing: border-box;
+  }
+
+  .top10-widget .player-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .top10-widget .player-flag {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+
+  .top10-widget .player-nick {
+    min-width: 0;
+  }
+
+  .top10-widget .player-nick a {
+    font-size: 15px;
+    font-weight: normal;
+    text-decoration: none;
+    color: #333333;
+    transition: color 0.2s ease;
+    display: block;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .top10-widget .player-nick a:hover {
+    color: #0277BD;
+  }
+
+  .top10-widget .gg-elo-rating {
+    color: #333;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  .top10-widget .last-updated {
+    font-size: 12px;
+    font-weight: 400;
+    color: #E6F2FA;
+  }
+
+  .top10-widget[data-view="mobile"] .player-row {
+    padding: 8px 6px;
+  }
+
+  .top10-widget[data-view="mobile"] .player-flag {
+    width: 18px;
+    height: 18px;
+  }
+
+  .top10-widget[data-view="mobile"] .player-nick a {
+    font-size: 14px;
+    line-height: 1.15;
+  }
+
+  .top10-widget[data-view="mobile"] .gg-elo-rating {
+    font-size: 13px;
+  }
+
+  .top10-widget[data-view="desktop"] .player-row {
+    padding: 6px 8px;
+  }
+</style>
+
+<!-- HTML-КОНТЕЙНЕР -->
+<div class="top10-widget" data-view="desktop"></div>
+
+<!-- СКРИПТ -->
+<script>
+  (function() {
+    const scriptEl = document.currentScript;
+    const container = scriptEl && scriptEl.previousElementSibling && scriptEl.previousElementSibling.classList.contains("top10-widget")
+      ? scriptEl.previousElementSibling
+      : null;
+
+    if (!container) return;
+
+    function normalizeKey(value) {
+      return String(value || "").trim().toUpperCase();
+    }
+
+    function isActivePlayerStatus(status) {
+      return String(status || "").trim().toLowerCase() === "active";
+    }
+
+    async function getPlayersData() {
+      const cacheKey = "__carcassonneGgPlayersDataPromise";
+      if (!window[cacheKey]) {
+        const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
+        window[cacheKey] = fetch(dataURL).then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.json();
+        });
+      }
+      return window[cacheKey];
+    }
+
+    function renderTop10(data) {
+      const ggProfiles = Array.isArray(data.gg_profiles) ? data.gg_profiles : [];
+      const countries = Array.isArray(data.countries) ? data.countries : [];
+
+      const countriesByKey = new Map();
+      countries.forEach(c => {
+        if (c.iso) countriesByKey.set(normalizeKey(c.iso), c);
+        if (c.team) countriesByKey.set(normalizeKey(c.team), c);
+      });
+
+      const players = ggProfiles
+        .filter(p => isActivePlayerStatus(p.status))
+        .map(p => {
+          const profileId = String(p.id ?? p.profile_id ?? "").trim();
+          const assocKey = normalizeKey(p.assosiation || p.association || "");
+          const country = assocKey ? countriesByKey.get(assocKey) : null;
+          return {
+            id: profileId,
+            player: p.bga_nickname || p.bga_name || "",
+            gg_elo: p.gg_elo || "",
+            flag: country?.flag || ""
+          };
+        })
+        .filter(p => Number.isFinite(Number(String(p.gg_elo).trim())))
+        .sort((a, b) => Number(b.gg_elo) - Number(a.gg_elo))
+        .slice(0, 10);
+
+      container.innerHTML = "";
+      const card = document.createElement("div");
+      card.className = "top-players";
+
+      players.forEach(player => {
+        const row = document.createElement("div");
+        row.className = "player-row";
+
+        const left = document.createElement("div");
+        left.className = "player-left";
+
+        const flag = document.createElement("img");
+        flag.className = "player-flag";
+        flag.src = player.flag;
+        flag.alt = "flag";
+
+        const nick = document.createElement("div");
+        nick.className = "player-nick";
+        const link = document.createElement("a");
+        link.href = player.id ? `https://carcassonne.gg/player/?id=${encodeURIComponent(player.id)}` : "#";
+        link.target = "_self";
+        link.textContent = player.player;
+        nick.appendChild(link);
+
+        left.appendChild(flag);
+        left.appendChild(nick);
+
+        const elo = document.createElement("span");
+        elo.className = "gg-elo-rating";
+        elo.textContent = `${Math.trunc(Number(player.gg_elo))}`;
+
+        row.appendChild(left);
+        row.appendChild(elo);
+        card.appendChild(row);
+      });
+
+      const header = document.createElement("div");
+      header.className = "header-row";
+      header.innerHTML = '<a href="https://carcassonne.gg/players/" target="_self">See all players</a><div class="last-updated">Last updated: 28th of Feb</div>';
+      card.appendChild(header);
+
+      container.appendChild(card);
+    }
+
+    async function init() {
+      try {
+        const data = await getPlayersData();
+        renderTop10(data);
+      } catch (err) {
+        console.error("❌ Failed to load players:", err);
+      }
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init, { once: true });
+    } else {
+      init();
+    }
+  })();
+</script>
