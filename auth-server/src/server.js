@@ -71,7 +71,7 @@ function ensureProfilesSchema() {
     addColumnIfMissing(columns, "profiles", "name", "TEXT");
     addColumnIfMissing(columns, "profiles", "association", "TEXT");
     addColumnIfMissing(columns, "profiles", "master_title", "INTEGER NOT NULL DEFAULT 0");
-    addColumnIfMissing(columns, "profiles", "master_title_date", "TEXT");
+    addColumnIfMissing(columns, "profiles", "master_title_date", "DATE");
     addColumnIfMissing(columns, "profiles", "team_captain", "INTEGER NOT NULL DEFAULT 0");
     addColumnIfMissing(columns, "profiles", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
     addColumnIfMissing(columns, "profiles", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
@@ -128,7 +128,7 @@ db.serialize(() => {
               name TEXT,
               association TEXT,
               master_title INTEGER NOT NULL DEFAULT 0,
-              master_title_date TEXT,
+              master_title_date DATE,
               team_captain INTEGER NOT NULL DEFAULT 0,
               player_id TEXT,
               admin INTEGER NOT NULL DEFAULT 0,
@@ -158,7 +158,12 @@ passport.deserializeUser((id, done) => {
         u.name,
         u.picture,
         p.player_id,
-        COALESCE(p.admin, 0) AS admin
+        COALESCE(p.admin, 0) AS admin,
+        p.bga_nickname,
+        p.association,
+        COALESCE(p.master_title, 0) AS master_title,
+        p.master_title_date,
+        COALESCE(p.team_captain, 0) AS team_captain
       FROM users u
       LEFT JOIN profiles p ON lower(u.email) = lower(p.email)
       WHERE u.id = ?
@@ -199,12 +204,27 @@ passport.use(
         (insertErr) => {
           if (insertErr) return done(insertErr);
 
-          db.get(
-            "SELECT id, google_id, email, name, picture FROM users WHERE google_id = ?",
-            [googleId],
-            (selectErr, row) => {
-              if (selectErr) return done(selectErr);
-              return done(null, row);
+          db.run(
+            `
+              INSERT INTO profiles (email, name)
+              VALUES (?, ?)
+              ON CONFLICT(email)
+              DO UPDATE SET
+                name = COALESCE(profiles.name, excluded.name),
+                updated_at = CURRENT_TIMESTAMP
+            `,
+            [email, name],
+            (profileUpsertErr) => {
+              if (profileUpsertErr) return done(profileUpsertErr);
+
+              db.get(
+                "SELECT id, google_id, email, name, picture FROM users WHERE google_id = ?",
+                [googleId],
+                (selectErr, row) => {
+                  if (selectErr) return done(selectErr);
+                  return done(null, row);
+                }
+              );
             }
           );
         }
@@ -293,7 +313,20 @@ app.get("/auth/me", (req, res) => {
     return res.status(401).json({ authenticated: false });
   }
 
-  const { id, google_id, email, name, picture, player_id, admin } = req.user;
+  const {
+    id,
+    google_id,
+    email,
+    name,
+    picture,
+    player_id,
+    admin,
+    bga_nickname,
+    association,
+    master_title,
+    master_title_date,
+    team_captain,
+  } = req.user;
   const myProfileUrl = player_id
     ? `${SITE_BASE_URL}/player/?id=${encodeURIComponent(player_id)}`
     : `${SITE_BASE_URL}/player/?id=noprofile`;
@@ -311,6 +344,15 @@ app.get("/auth/me", (req, res) => {
       isAdmin,
       myProfileUrl,
       adminPanelUrl: isAdmin ? `${SITE_BASE_URL}/admin` : null,
+      profile: {
+        bgaNickname: bga_nickname || null,
+        name: name || null,
+        association: association || null,
+        email: email || null,
+        masterTitle: Number(master_title) === 1,
+        masterTitleDate: master_title_date || null,
+        teamCaptain: Number(team_captain) === 1,
+      },
     },
   });
 });
