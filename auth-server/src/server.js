@@ -157,15 +157,56 @@ passport.deserializeUser((id, done) => {
         u.email,
         u.name,
         u.picture,
-        p.player_id,
-        COALESCE(p.admin, 0) AS admin,
-        p.bga_nickname,
-        p.association,
-        COALESCE(p.master_title, 0) AS master_title,
-        p.master_title_date,
-        COALESCE(p.team_captain, 0) AS team_captain
+        (
+          SELECT p.player_id
+          FROM profiles p
+          WHERE lower(p.email) = lower(u.email)
+          ORDER BY p.updated_at DESC, p.player_id ASC
+          LIMIT 1
+        ) AS player_id,
+        COALESCE((
+          SELECT p.admin
+          FROM profiles p
+          WHERE lower(p.email) = lower(u.email)
+          ORDER BY p.updated_at DESC, p.player_id ASC
+          LIMIT 1
+        ), 0) AS admin,
+        (
+          SELECT p.bga_nickname
+          FROM profiles p
+          WHERE lower(p.email) = lower(u.email)
+          ORDER BY p.updated_at DESC, p.player_id ASC
+          LIMIT 1
+        ) AS bga_nickname,
+        (
+          SELECT p.association
+          FROM profiles p
+          WHERE lower(p.email) = lower(u.email)
+          ORDER BY p.updated_at DESC, p.player_id ASC
+          LIMIT 1
+        ) AS association,
+        COALESCE((
+          SELECT p.master_title
+          FROM profiles p
+          WHERE lower(p.email) = lower(u.email)
+          ORDER BY p.updated_at DESC, p.player_id ASC
+          LIMIT 1
+        ), 0) AS master_title,
+        (
+          SELECT p.master_title_date
+          FROM profiles p
+          WHERE lower(p.email) = lower(u.email)
+          ORDER BY p.updated_at DESC, p.player_id ASC
+          LIMIT 1
+        ) AS master_title_date,
+        COALESCE((
+          SELECT p.team_captain
+          FROM profiles p
+          WHERE lower(p.email) = lower(u.email)
+          ORDER BY p.updated_at DESC, p.player_id ASC
+          LIMIT 1
+        ), 0) AS team_captain
       FROM users u
-      LEFT JOIN profiles p ON lower(u.email) = lower(p.email)
       WHERE u.id = ?
     `,
     [id],
@@ -204,27 +245,12 @@ passport.use(
         (insertErr) => {
           if (insertErr) return done(insertErr);
 
-          db.run(
-            `
-              INSERT INTO profiles (email, name)
-              VALUES (?, ?)
-              ON CONFLICT(email)
-              DO UPDATE SET
-                name = COALESCE(profiles.name, excluded.name),
-                updated_at = CURRENT_TIMESTAMP
-            `,
-            [email, name],
-            (profileUpsertErr) => {
-              if (profileUpsertErr) return done(profileUpsertErr);
-
-              db.get(
-                "SELECT id, google_id, email, name, picture FROM users WHERE google_id = ?",
-                [googleId],
-                (selectErr, row) => {
-                  if (selectErr) return done(selectErr);
-                  return done(null, row);
-                }
-              );
+          db.get(
+            "SELECT id, google_id, email, name, picture FROM users WHERE google_id = ?",
+            [googleId],
+            (selectErr, row) => {
+              if (selectErr) return done(selectErr);
+              return done(null, row);
             }
           );
         }
