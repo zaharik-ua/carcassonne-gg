@@ -2756,8 +2756,8 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
 }
 
 function fetchAndRenderMatches() {
-  const primaryURL = "https://api.carcassonne.com.ua/public/matches_new";
-  const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches_new.json";
+  const primaryURL = "https://api.carcassonne.com.ua/public/matches";
+  const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches.json";
 
   fetchPrimaryWithRetry(primaryURL, { retries: 2, delayMs: 500, timeout: 10000 })
     .catch(err => {
