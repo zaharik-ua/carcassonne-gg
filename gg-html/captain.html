@@ -176,7 +176,7 @@
 
   .cp-edit-row {
     display: grid;
-    gap: 2px;
+    gap: 1px;
   }
 
   .cp-edit-row label {
@@ -509,6 +509,16 @@
     return new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi, 0)).toISOString();
   }
 
+  function buildMatchIdFromUtcAndTeams(timeUtc, team1Id, team2Id) {
+    const iso = String(timeUtc || "").trim();
+    const t1 = normalizeCode(team1Id);
+    const t2 = normalizeCode(team2Id);
+    if (!iso || !t1 || !t2) return "";
+    const datePart = iso.slice(0, 10).replaceAll("-", "");
+    if (!/^\d{8}$/.test(datePart)) return "";
+    return `${datePart}${t1}${t2}`;
+  }
+
   function parseNullableInt(value) {
     const raw = String(value ?? "").trim();
     if (!raw) return null;
@@ -703,7 +713,7 @@
           label: String(opt?.label || opt?.value || "").trim(),
           logo: String(opt?.logo || "").trim(),
         }))
-        .filter((opt) => opt.value);
+        .filter((opt) => cfg.allowEmpty ? true : !!opt.value);
 
       let value = String(initialValue || "").trim();
       if (!normalizedOptions.some((opt) => opt.value === value) && normalizedOptions[0]) {
@@ -827,7 +837,7 @@
     }));
     const team2Options = [{ value: "", label: "Select team", logo: "" }].concat(teamOptions);
     const team1Input = createDropdown(readMatchTeam1(source), teamOptions, { showLogo: true });
-    const team2Input = createDropdown(readMatchTeam2(source), team2Options, { showLogo: true });
+    const team2Input = createDropdown(readMatchTeam2(source), team2Options, { showLogo: true, allowEmpty: true });
     const lockedTeamField = String(editContext?.lockedTeamField || "").trim();
     if (lockedTeamField === "team_1") {
       team1Input.setDisabled(true);
@@ -866,16 +876,7 @@
     duelsInput.step = "1";
     duelsInput.min = "1";
     duelsInput.value = String(source?.number_of_duels ?? 5);
-    addRow("Number of Duels", duelsInput);
-
-    const statusInput = createDropdown(
-      String(source?.status || "").trim() || "Planned",
-      [
-        { value: "Planned", label: "Planned" },
-        { value: "Done", label: "Done" },
-      ]
-    );
-    addRow("Status", statusInput.root);
+    const duelsRow = addRow("Number of Duels", duelsInput);
 
     const dw1Input = document.createElement("input");
     dw1Input.type = "number";
@@ -901,6 +902,15 @@
     gw2Input.value = String(source?.gw2 ?? "");
     addRow("Games won 2", gw2Input);
 
+    const statusInput = createDropdown(
+      String(source?.status || "").trim() || "Planned",
+      [
+        { value: "Planned", label: "Planned" },
+        { value: "Done", label: "Done" },
+      ]
+    );
+    addRow("Status", statusInput.root);
+
     const errorEl = document.createElement("div");
     errorEl.className = "cp-edit-error cp-hidden";
     form.appendChild(errorEl);
@@ -908,6 +918,7 @@
     const syncDeadlineVisibility = () => {
       const isOpen = String(lineupTypeInput.getValue() || "").trim() === "Open";
       lineupDeadlineRow.classList.toggle("cp-hidden", isOpen);
+      duelsRow.classList.toggle("cp-hidden", isOpen);
       if (isOpen) lineupDeadlineInput.value = "";
     };
     lineupTypeInput.setOnChange(syncDeadlineVisibility);
@@ -970,6 +981,7 @@
       }
 
       const payload = {
+        id: buildMatchIdFromUtcAndTeams(timeUtc, team1Input.getValue(), team2Input.getValue()),
         tournament_id: String(source?.tournament_id || DEFAULT_TOURNAMENT_ID),
         team_1: normalizeCode(team1Input.getValue()),
         team_2: normalizeCode(team2Input.getValue()),

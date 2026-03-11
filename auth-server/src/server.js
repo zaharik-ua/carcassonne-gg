@@ -693,7 +693,7 @@ app.post("/matches", (req, res) => {
   }
 
   const idFromPayload = normalizeText(payload.id);
-  const generatedId = `${timeUtc.slice(0, 16).replaceAll("-", "").replaceAll(":", "").replace("T", "")}${team1}${team2}`;
+  const generatedId = `${timeUtc.slice(0, 10).replaceAll("-", "")}${team1}${team2}`;
   const matchId = idFromPayload || generatedId;
 
   return db.run(
@@ -873,6 +873,13 @@ app.patch("/matches/:id", (req, res) => {
         return res.status(400).json({ ok: false, message: "status must be Planned or Done" });
       }
 
+      const idFromPayload = normalizeText(payload.id);
+      const generatedId = `${timeUtc.slice(0, 10).replaceAll("-", "")}${team1}${team2}`;
+      const nextMatchId = idFromPayload || generatedId;
+      if (!nextMatchId) {
+        return res.status(400).json({ ok: false, message: "id is required" });
+      }
+
       const dw1 = parseIntOrNull(payload.dw1);
       const dw2 = parseIntOrNull(payload.dw2);
       const gw1 = parseIntOrNull(payload.gw1);
@@ -886,6 +893,7 @@ app.patch("/matches/:id", (req, res) => {
         `
           UPDATE matches
           SET
+            id = ?,
             team_1 = ?,
             team_2 = ?,
             time_utc = ?,
@@ -900,6 +908,7 @@ app.patch("/matches/:id", (req, res) => {
           WHERE id = ?
         `,
         [
+          nextMatchId,
           team1,
           team2,
           timeUtc,
@@ -915,6 +924,9 @@ app.patch("/matches/:id", (req, res) => {
         ],
         function onUpdate(updateErr) {
           if (updateErr) {
+            if (String(updateErr.message || "").includes("UNIQUE")) {
+              return res.status(409).json({ ok: false, message: "Match id already exists" });
+            }
             return res.status(500).json({ ok: false, message: "Failed to update match" });
           }
           if (!this || this.changes === 0) {
@@ -941,7 +953,7 @@ app.patch("/matches/:id", (req, res) => {
               WHERE id = ?
               LIMIT 1
             `,
-            [matchId],
+            [nextMatchId],
             (selectErr, row) => {
               if (selectErr) {
                 return res.status(500).json({ ok: false, message: "Failed to load updated match" });
