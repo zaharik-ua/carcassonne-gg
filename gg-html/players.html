@@ -142,6 +142,9 @@
 
 <script>
 (function() {
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
+
   let allPlayers = [];
   let countriesByKey = new Map();
   let achievementMap = new Map();
@@ -187,6 +190,30 @@
 
   function isActivePlayerStatus(status) {
     return String(status || "").trim().toLowerCase() === "active";
+  }
+
+  function toBool(value) {
+    if (typeof value === "number") return value === 1;
+    const raw = String(value || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on" || raw === "master" || raw === "captain";
+  }
+
+  async function fetchProfilesMap() {
+    try {
+      const response = await fetch(PROFILES_PUBLIC_URL);
+      if (!response.ok) return new Map();
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.profiles) ? payload.profiles : [];
+      const map = new Map();
+      rows.forEach((row) => {
+        const key = String(row?.player_id || "").trim();
+        if (!key) return;
+        map.set(key, row);
+      });
+      return map;
+    } catch (_error) {
+      return new Map();
+    }
   }
 
   function createPlayerElement(player, index) {
@@ -336,10 +363,10 @@
       filtered = filtered.filter(p => String(p.player || "").toLowerCase() === target);
     }
     if (mastersOnly) {
-      filtered = filtered.filter(p => String(p.master_title || "").trim() !== "");
+      filtered = filtered.filter(p => toBool(p.master_title));
     }
     if (captainsOnly) {
-      filtered = filtered.filter(p => String(p.team_captain || "").trim() === "Captain");
+      filtered = filtered.filter(p => toBool(p.team_captain));
     }
     if (achievementType) {
       filtered = filtered.filter(p =>
@@ -369,7 +396,10 @@
     const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
 
     try {
-      const playersRes = await fetch(dataURL);
+      const [playersRes, profilesMap] = await Promise.all([
+        fetch(dataURL),
+        fetchProfilesMap(),
+      ]);
       if (!playersRes.ok) throw new Error("Failed to load JSON file");
 
       const data = await playersRes.json();
@@ -393,16 +423,19 @@
         .filter(p => isActivePlayerStatus(p.status))
         .map(p => {
         const profileId = String(p.id ?? p.profile_id ?? "");
-        const assocKey = normalizeKey(p.assosiation || p.association || "");
+        const dbProfile = profilesMap.get(profileId) || null;
+        const assocKey = normalizeKey(
+          dbProfile?.association || p.assosiation || p.association || ""
+        );
         const country = assocKey ? countriesByKey.get(assocKey) : null;
         return {
           id: profileId,
           player: p.bga_nickname || p.bga_name || "",
-          name: p.name || "",
+          name: dbProfile?.name || p.name || "",
           gg_elo: p.gg_elo || "",
           achievements: Array.isArray(p.achievements) ? p.achievements : [],
-          master_title: p.master_title || "",
-          team_captain: p.team_captain || "",
+          master_title: dbProfile ? Number(dbProfile.master_title) : p.master_title || "",
+          team_captain: dbProfile ? Number(dbProfile.team_captain) : p.team_captain || "",
           matches: p.matches || "",
           association: assocKey,
           flag: country?.flag || "",

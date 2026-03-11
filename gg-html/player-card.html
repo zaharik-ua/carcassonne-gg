@@ -613,6 +613,7 @@
 <script>
 (function() {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const EDIT_BASE_URL = "https://carcassonne.gg/admin?player_id=";
 
   let duels = [];
@@ -621,6 +622,30 @@
   let ggProfilesById = new Map();
   let countriesByKey = new Map();
   let tournamentsById = new Map();
+
+  function toBool(value) {
+    if (typeof value === "number") return value === 1;
+    const raw = String(value || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on" || raw === "master" || raw === "captain";
+  }
+
+  async function fetchProfilesMap() {
+    try {
+      const response = await fetch(PROFILES_PUBLIC_URL);
+      if (!response.ok) return new Map();
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.profiles) ? payload.profiles : [];
+      const map = new Map();
+      rows.forEach((row) => {
+        const key = String(row?.player_id || "").trim();
+        if (!key) return;
+        map.set(key, row);
+      });
+      return map;
+    } catch (_error) {
+      return new Map();
+    }
+  }
 
   function getPlayerIdFromUrl() {
     const params = new URLSearchParams(window.location.search);
@@ -1507,7 +1532,10 @@
 
     const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/official_matches.json";
     applyEditAccess(playerId);
-    const res = await fetch(dataURL);
+    const [res, profilesMap] = await Promise.all([
+      fetch(dataURL),
+      fetchProfilesMap(),
+    ]);
     if (!res.ok) {
       container.textContent = "Failed to load data.";
       return;
@@ -1525,9 +1553,24 @@
     ggProfilesById = new Map();
     ggProfiles
       .forEach(p => {
+      const mergedProfile = { ...p };
       [p.profile_id, p.id, p.player_id, p.bga_player_id].forEach(key => {
         const k = String(key || "").trim();
-        if (k) ggProfilesById.set(k, p);
+        if (!k) return;
+        const dbProfile = profilesMap.get(k);
+        if (!dbProfile) return;
+
+        mergedProfile.name = dbProfile.name || mergedProfile.name || "";
+        mergedProfile.association = dbProfile.association || mergedProfile.association || mergedProfile.assosiation || "";
+        mergedProfile.assosiation = mergedProfile.association;
+        mergedProfile.master_title = Number(dbProfile.master_title) === 1 ? "Master" : "";
+        mergedProfile.master_title_date = dbProfile.master_title_date || mergedProfile.master_title_date || "";
+        mergedProfile.team_captain = Number(dbProfile.team_captain) === 1 ? "Captain" : "";
+      });
+
+      [p.profile_id, p.id, p.player_id, p.bga_player_id].forEach(key => {
+        const k = String(key || "").trim();
+        if (k) ggProfilesById.set(k, mergedProfile);
       });
     });
     countriesByKey = new Map();
@@ -1552,7 +1595,7 @@
 
     const assocKey = profile ? String(profile.assosiation || profile.association || "") : "";
     const assoc = assocKey ? countriesByKey.get(assocKey) : null;
-    const isTeamCaptain = profile && String(profile.team_captain || "").trim() === "Captain";
+    const isTeamCaptain = profile && toBool(profile.team_captain);
     const avatar = bga.avatar || "";
     const nick = profile ? String(profile.bga_nickname || profile.bga_name || profile.nickname || "") : "";
     const realName = profile && profile.name ? String(profile.name) : "";
@@ -1664,8 +1707,7 @@
       statsMain.appendChild(bgaLink);
       statsWrap.appendChild(statsMain);
 
-      const masterTitle = String(profile.master_title || "").trim().toLowerCase();
-      if (masterTitle === "master") {
+      if (toBool(profile.master_title)) {
         const masterBadge = document.createElement("div");
         masterBadge.className = "player-master-badge";
         const masterDate = String(profile.master_title_date || "").trim();

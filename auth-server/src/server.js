@@ -334,6 +334,26 @@ app.get("/auth/failure", (_req, res) => {
   res.status(401).json({ ok: false, message: "Google auth failed" });
 });
 
+app.get("/profiles/public", (_req, res, next) => {
+  db.all(
+    `
+      SELECT
+        player_id,
+        name,
+        association,
+        COALESCE(master_title, 0) AS master_title,
+        master_title_date,
+        COALESCE(team_captain, 0) AS team_captain
+      FROM profiles
+      WHERE trim(COALESCE(player_id, '')) <> ''
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, profiles: rows || [] });
+    }
+  );
+});
+
 app.get("/auth/me", (req, res) => {
   if (!req.user) {
     return res.status(401).json({ authenticated: false });
