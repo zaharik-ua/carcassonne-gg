@@ -334,22 +334,31 @@
   }
 
   .cp-btn {
-    border: 0;
+    border: 1px solid #c8ced8;
     border-radius: 4px;
-    padding: 8px 12px;
-    font-size: 13px;
+    padding: 4px 8px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
+    line-height: 1;
   }
 
   .cp-btn-primary {
     background: #1a73b7;
     color: #fff;
+    border-color: #1a73b7;
   }
 
   .cp-btn-secondary {
     background: #eef2f6;
     color: #333;
+  }
+
+  .cp-btn-danger {
+    background: #fff3f3;
+    border-color: #e6b4b4;
+    color: #a12a2a;
+    margin-left: auto;
   }
 
   .cp-edit-error {
@@ -380,11 +389,12 @@
   <div class="captain-head">
     <div class="captain-title">Captain Panel</div>
     <div>
-      <button id="captainAddButton" class="cp-edit-btn" type="button">Add</button>
+      <button id="captainAddButton" class="cp-edit-btn" type="button">Create</button>
       <span id="captainCount" class="captain-sub"></span>
     </div>
   </div>
   <div id="captainContent" class="captain-alert">Loading...</div>
+  <div id="captainHint" class="captain-sub"></div>
 </div>
 
 <script>
@@ -398,6 +408,7 @@
   const contentEl = document.getElementById("captainContent");
   const countEl = document.getElementById("captainCount");
   const addButtonEl = document.getElementById("captainAddButton");
+  const hintEl = document.getElementById("captainHint");
 
   function normalizeCode(value) {
     return String(value || "").trim().toUpperCase();
@@ -531,124 +542,169 @@
     contentEl.className = "captain-alert";
     contentEl.textContent = "Please sign in to view your team matches.";
     countEl.textContent = "";
+    hintEl.textContent = "";
   }
 
   function renderNoMatchesMessage(associationCode) {
     contentEl.className = "captain-alert";
     contentEl.textContent = `No matches found for association ${associationCode}.`;
-    countEl.textContent = "Count: 0";
+    countEl.textContent = "";
+    hintEl.textContent = "";
+  }
+
+  function parseMatchTimeUtc(match) {
+    return Date.parse(String(match?.time_utc || match?.time || "")) || 0;
+  }
+
+  function isFinishedMatch(match) {
+    return String(match?.status || "").trim().toLowerCase() === "done";
+  }
+
+  function renderSectionTitle(text) {
+    const title = document.createElement("div");
+    title.textContent = text;
+    title.style.padding = "6px 8px";
+    title.style.fontSize = "12px";
+    title.style.fontWeight = "700";
+    title.style.color = "#555";
+    title.style.background = "#f6f7f9";
+    title.style.borderTop = "1px solid #e0e0e0";
+    return title;
+  }
+
+  function createMatchRow(match, teamsById) {
+    const team1Id = readMatchTeam1(match);
+    const team2Id = readMatchTeam2(match);
+    const team1 = teamsById.get(team1Id) || null;
+    const team2 = teamsById.get(team2Id) || null;
+    const team1Name = team1?.name || team1Id || "-";
+    const team2Name = team2?.name || team2Id || "-";
+    const timeLabel = formatMatchTime(match?.time_utc ?? match?.time);
+    const dw1 = String(match?.dw1 ?? match?.duels_won1 ?? "").trim();
+    const dw2 = String(match?.dw2 ?? match?.duels_won2 ?? "").trim();
+    const gw1 = String(match?.gw1 ?? match?.games_won1 ?? "").trim();
+    const gw2 = String(match?.gw2 ?? match?.games_won2 ?? "").trim();
+    const hasScore = dw1 !== "" || dw2 !== "" || gw1 !== "" || gw2 !== "";
+
+    const row = document.createElement("div");
+    row.className = "cp-match-row";
+
+    const timeWrap = document.createElement("div");
+    timeWrap.className = "cp-match-time";
+    const timeText = document.createElement("div");
+    timeText.className = "cp-match-time-text";
+    timeText.textContent = timeLabel;
+    timeWrap.appendChild(timeText);
+    row.appendChild(timeWrap);
+
+    const divider = document.createElement("div");
+    divider.className = "cp-divider-vertical";
+    row.appendChild(divider);
+
+    const teamsWrap = document.createElement("div");
+    teamsWrap.className = "cp-teams";
+
+    const team1Row = document.createElement("div");
+    team1Row.className = "cp-team-row";
+    if (team1?.logo) {
+      const img1 = document.createElement("img");
+      img1.className = "cp-team-flag";
+      img1.src = team1.logo;
+      img1.alt = "";
+      team1Row.appendChild(img1);
+    }
+    const team1NameEl = document.createElement("span");
+    team1NameEl.textContent = team1Name;
+    team1Row.appendChild(team1NameEl);
+    teamsWrap.appendChild(team1Row);
+
+    const team2Row = document.createElement("div");
+    team2Row.className = "cp-team-row";
+    if (team2?.logo) {
+      const img2 = document.createElement("img");
+      img2.className = "cp-team-flag";
+      img2.src = team2.logo;
+      img2.alt = "";
+      team2Row.appendChild(img2);
+    }
+    const team2NameEl = document.createElement("span");
+    team2NameEl.textContent = team2Name;
+    team2Row.appendChild(team2NameEl);
+    teamsWrap.appendChild(team2Row);
+
+    row.appendChild(teamsWrap);
+
+    const right = document.createElement("div");
+    right.className = "cp-match-right";
+
+    if (hasScore) {
+      const mainScoreEl = document.createElement("div");
+      mainScoreEl.className = "cp-score-box cp-match-score";
+      const mainTop = document.createElement("div");
+      mainTop.textContent = dw1;
+      const mainBottom = document.createElement("div");
+      mainBottom.textContent = dw2;
+      mainScoreEl.appendChild(mainTop);
+      mainScoreEl.appendChild(mainBottom);
+
+      const altScoreEl = document.createElement("div");
+      altScoreEl.className = "cp-score-box-alt";
+      const altTop = document.createElement("div");
+      altTop.textContent = gw1 === "" ? "" : `(${gw1})`;
+      const altBottom = document.createElement("div");
+      altBottom.textContent = gw2 === "" ? "" : `(${gw2})`;
+      altScoreEl.appendChild(altTop);
+      altScoreEl.appendChild(altBottom);
+
+      right.appendChild(mainScoreEl);
+      right.appendChild(altScoreEl);
+    }
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "cp-edit-btn";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", () => {
+      window.location.href = buildCaptainUrl({ edit: true, matchId: String(match?.id || "") });
+    });
+    right.appendChild(editBtn);
+
+    row.appendChild(right);
+    return row;
   }
 
   function renderMatches(matches, teamsById) {
-    countEl.textContent = `Count: ${matches.length}`;
+    countEl.textContent = "";
     contentEl.className = "captain-list";
     contentEl.innerHTML = "";
 
-    matches.forEach((match) => {
-      const team1Id = readMatchTeam1(match);
-      const team2Id = readMatchTeam2(match);
-      const team1 = teamsById.get(team1Id) || null;
-      const team2 = teamsById.get(team2Id) || null;
-      const team1Name = team1?.name || team1Id || "-";
-      const team2Name = team2?.name || team2Id || "-";
-      const timeLabel = formatMatchTime(match?.time_utc ?? match?.time);
-      const dw1 = String(match?.dw1 ?? match?.duels_won1 ?? "").trim();
-      const dw2 = String(match?.dw2 ?? match?.duels_won2 ?? "").trim();
-      const gw1 = String(match?.gw1 ?? match?.games_won1 ?? "").trim();
-      const gw2 = String(match?.gw2 ?? match?.games_won2 ?? "").trim();
-      const hasScore = dw1 !== "" || dw2 !== "" || gw1 !== "" || gw2 !== "";
+    const ongoing = matches
+      .filter((match) => !isFinishedMatch(match))
+      .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
 
-      const row = document.createElement("div");
-      row.className = "cp-match-row";
+    const finished = matches
+      .filter((match) => isFinishedMatch(match))
+      .sort((a, b) => parseMatchTimeUtc(b) - parseMatchTimeUtc(a));
 
-      const timeWrap = document.createElement("div");
-      timeWrap.className = "cp-match-time";
-      const timeText = document.createElement("div");
-      timeText.className = "cp-match-time-text";
-      timeText.textContent = timeLabel;
-      timeWrap.appendChild(timeText);
-      row.appendChild(timeWrap);
-
-      const divider = document.createElement("div");
-      divider.className = "cp-divider-vertical";
-      row.appendChild(divider);
-
-      const teamsWrap = document.createElement("div");
-      teamsWrap.className = "cp-teams";
-
-      const team1Row = document.createElement("div");
-      team1Row.className = "cp-team-row";
-      if (team1?.logo) {
-        const img1 = document.createElement("img");
-        img1.className = "cp-team-flag";
-        img1.src = team1.logo;
-        img1.alt = "";
-        team1Row.appendChild(img1);
-      }
-      const team1NameEl = document.createElement("span");
-      team1NameEl.textContent = team1Name;
-      team1Row.appendChild(team1NameEl);
-      teamsWrap.appendChild(team1Row);
-
-      const team2Row = document.createElement("div");
-      team2Row.className = "cp-team-row";
-      if (team2?.logo) {
-        const img2 = document.createElement("img");
-        img2.className = "cp-team-flag";
-        img2.src = team2.logo;
-        img2.alt = "";
-        team2Row.appendChild(img2);
-      }
-      const team2NameEl = document.createElement("span");
-      team2NameEl.textContent = team2Name;
-      team2Row.appendChild(team2NameEl);
-      teamsWrap.appendChild(team2Row);
-
-      row.appendChild(teamsWrap);
-
-      const right = document.createElement("div");
-      right.className = "cp-match-right";
-
-      if (hasScore) {
-        const mainScoreEl = document.createElement("div");
-        mainScoreEl.className = "cp-score-box cp-match-score";
-        const mainTop = document.createElement("div");
-        mainTop.textContent = dw1;
-        const mainBottom = document.createElement("div");
-        mainBottom.textContent = dw2;
-        mainScoreEl.appendChild(mainTop);
-        mainScoreEl.appendChild(mainBottom);
-
-        const altScoreEl = document.createElement("div");
-        altScoreEl.className = "cp-score-box-alt";
-        const altTop = document.createElement("div");
-        altTop.textContent = gw1 === "" ? "" : `(${gw1})`;
-        const altBottom = document.createElement("div");
-        altBottom.textContent = gw2 === "" ? "" : `(${gw2})`;
-        altScoreEl.appendChild(altTop);
-        altScoreEl.appendChild(altBottom);
-
-        right.appendChild(mainScoreEl);
-        right.appendChild(altScoreEl);
-      }
-
-      const editBtn = document.createElement("button");
-      editBtn.type = "button";
-      editBtn.className = "cp-edit-btn";
-      editBtn.textContent = "Edit";
-      editBtn.addEventListener("click", () => {
-        window.location.href = buildCaptainUrl({ edit: true, matchId: String(match?.id || "") });
-      });
-      right.appendChild(editBtn);
-
-      row.appendChild(right);
-
-      contentEl.appendChild(row);
-    });
+    if (ongoing.length > 0) {
+      contentEl.appendChild(renderSectionTitle("Ongoing"));
+      ongoing.forEach((match) => contentEl.appendChild(createMatchRow(match, teamsById)));
+    }
+    if (ongoing.length > 0 && finished.length > 0) {
+      const spacer = document.createElement("div");
+      spacer.style.height = "20px";
+      spacer.style.background = "#fff";
+      contentEl.appendChild(spacer);
+    }
+    if (finished.length > 0) {
+      contentEl.appendChild(renderSectionTitle("Finished"));
+      finished.forEach((match) => contentEl.appendChild(createMatchRow(match, teamsById)));
+    }
   }
 
   function renderMatchEditForm(match, teamsById, editContext, formMode) {
     const isCreateMode = formMode === "create";
+    hintEl.textContent = "";
     countEl.textContent = isCreateMode
       ? "Creating a new match"
       : `Editing: ${String(match?.id || "")}`;
@@ -692,6 +748,14 @@
     cancelBtn.textContent = "Cancel";
     topActions.appendChild(saveBtn);
     topActions.appendChild(cancelBtn);
+    let deleteBtn = null;
+    if (!isCreateMode) {
+      deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "cp-btn cp-btn-danger";
+      deleteBtn.textContent = "Delete";
+      topActions.appendChild(deleteBtn);
+    }
     form.appendChild(topActions);
 
     const addRow = (labelText, control) => {
@@ -942,12 +1006,39 @@
 
     const setSaving = (isSaving) => {
       saveBtn.disabled = isSaving;
+      cancelBtn.disabled = isSaving;
+      if (deleteBtn) deleteBtn.disabled = isSaving;
       saveBtn.textContent = isSaving ? "Saving..." : "Save";
     };
 
     cancelBtn.addEventListener("click", () => {
       window.location.href = buildCaptainUrl({ edit: false, create: false, matchId: null });
     });
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", async () => {
+        const ok = window.confirm(`Delete match ${String(match?.id || "")}?`);
+        if (!ok) return;
+        setError("");
+        setSaving(true);
+        try {
+          const response = await fetch(`${MATCHES_URL}/${encodeURIComponent(String(match?.id || ""))}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result?.ok) {
+            setError(result?.message || "Failed to delete match.");
+            return;
+          }
+          window.location.href = buildCaptainUrl({ edit: false, create: false, matchId: null });
+        } catch (_error) {
+          setError("Failed to delete match.");
+        } finally {
+          setSaving(false);
+        }
+      });
+    }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1112,6 +1203,11 @@
       addButtonEl.onclick = () => {
         window.location.href = buildCaptainUrl({ create: true, edit: false, matchId: null });
       };
+      if (isCreateMode || isEditMode) {
+        addButtonEl.classList.add("cp-hidden");
+      } else {
+        addButtonEl.classList.remove("cp-hidden");
+      }
 
       if (isCreateMode) {
         if (!captainAssociationCode) {
@@ -1127,7 +1223,7 @@
           "create"
         );
         if (isTestMode) {
-          countEl.textContent += " (test mode)";
+          hintEl.textContent = "test mode: all matches";
         }
         return;
       }
@@ -1154,21 +1250,24 @@
         }
         renderMatchEditForm(matchToEdit, teamsById, { lockedTeamField }, "edit");
         if (isTestMode) {
-          countEl.textContent += " (test mode)";
+          hintEl.textContent = "test mode: all matches";
         }
         return;
       }
 
       renderMatches(filtered, teamsById);
       if (isTestMode) {
-        countEl.textContent += " (test mode: all matches)";
+        hintEl.textContent = "test mode: all matches";
       } else if (associationOverride) {
-        countEl.textContent += ` (association override: ${associationOverride})`;
+        hintEl.textContent = `association override: ${associationOverride}`;
+      } else {
+        hintEl.textContent = "";
       }
     } catch (_error) {
       contentEl.className = "captain-alert";
       contentEl.textContent = "Failed to load data.";
       countEl.textContent = "";
+      hintEl.textContent = "";
     }
   }
 

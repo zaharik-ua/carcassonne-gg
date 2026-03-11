@@ -83,6 +83,17 @@ function ensureProfilesSchema() {
   });
 }
 
+function ensureMatchesSchema() {
+  db.all("PRAGMA table_info(matches)", (pragmaErr, columns) => {
+    if (pragmaErr) {
+      console.error("Failed to inspect matches schema", pragmaErr);
+      return;
+    }
+    if (!Array.isArray(columns) || columns.length === 0) return;
+    addColumnIfMissing(columns, "matches", "deleted_at", "TEXT");
+  });
+}
+
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -157,6 +168,8 @@ db.serialize(() => {
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
           `);
+
+          ensureMatchesSchema();
         }
       );
     }
@@ -601,6 +614,7 @@ app.get("/matches", (_req, res, next) => {
         gw1,
         gw2
       FROM matches
+      WHERE deleted_at IS NULL
       ORDER BY time_utc DESC, id ASC
     `,
     (err, rows) => {
@@ -816,6 +830,7 @@ app.patch("/matches/:id", (req, res) => {
         team_2
       FROM matches
       WHERE id = ?
+        AND deleted_at IS NULL
       LIMIT 1
     `,
     [matchId],
@@ -906,6 +921,7 @@ app.patch("/matches/:id", (req, res) => {
             gw1 = ?,
             gw2 = ?
           WHERE id = ?
+            AND deleted_at IS NULL
         `,
         [
           nextMatchId,
@@ -961,6 +977,72 @@ app.patch("/matches/:id", (req, res) => {
               return res.json({ ok: true, match: row || null });
             }
           );
+        }
+      );
+    }
+  );
+});
+
+app.delete("/matches/:id", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const matchId = String(req.params.id || "").trim();
+  if (!matchId) {
+    return res.status(400).json({ ok: false, message: "Match id is required" });
+  }
+
+  const isAdmin = Number(req.user.admin) === 1;
+  const isTeamCaptain = Number(req.user.team_captain) === 1;
+  const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  if (!isAdmin && !isTeamCaptain) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
+
+  return db.get(
+    `
+      SELECT id, team_1, team_2
+      FROM matches
+      WHERE id = ?
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
+    [matchId],
+    (findErr, row) => {
+      if (findErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load match" });
+      }
+      if (!row) {
+        return res.status(404).json({ ok: false, message: "Match not found" });
+      }
+
+      const team1 = String(row.team_1 || "").trim().toUpperCase();
+      const team2 = String(row.team_2 || "").trim().toUpperCase();
+      const captainCanDelete = !isAdmin
+        && isTeamCaptain
+        && userAssociation
+        && (team1 === userAssociation || team2 === userAssociation);
+      if (!isAdmin && !captainCanDelete) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+
+      return db.run(
+        `
+          UPDATE matches
+          SET deleted_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+            AND deleted_at IS NULL
+        `,
+        [matchId],
+        function onDelete(deleteErr) {
+          if (deleteErr) {
+            return res.status(500).json({ ok: false, message: "Failed to delete match" });
+          }
+          if (!this || this.changes === 0) {
+            return res.status(404).json({ ok: false, message: "Match not found" });
+          }
+          return res.json({ ok: true });
         }
       );
     }
