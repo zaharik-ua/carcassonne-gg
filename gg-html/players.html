@@ -424,18 +424,17 @@
         .map(p => {
         const profileId = String(p.id ?? p.profile_id ?? "");
         const dbProfile = profilesMap.get(profileId) || null;
-        const assocKey = normalizeKey(
-          dbProfile?.association || p.assosiation || p.association || ""
-        );
+        const assocRaw = String(dbProfile?.association || "");
+        const assocKey = normalizeKey(assocRaw);
         const country = assocKey ? countriesByKey.get(assocKey) : null;
         return {
           id: profileId,
           player: p.bga_nickname || p.bga_name || "",
-          name: dbProfile?.name || p.name || "",
+          name: String(dbProfile?.name || ""),
           gg_elo: p.gg_elo || "",
           achievements: Array.isArray(p.achievements) ? p.achievements : [],
-          master_title: dbProfile ? Number(dbProfile.master_title) : p.master_title || "",
-          team_captain: dbProfile ? Number(dbProfile.team_captain) : p.team_captain || "",
+          master_title: Number(dbProfile?.master_title || 0),
+          team_captain: Number(dbProfile?.team_captain || 0),
           matches: p.matches || "",
           association: assocKey,
           flag: country?.flag || "",

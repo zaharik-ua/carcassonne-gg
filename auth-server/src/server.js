@@ -341,6 +341,7 @@ app.get("/profiles/public", (_req, res, next) => {
         player_id,
         name,
         association,
+        email,
         COALESCE(master_title, 0) AS master_title,
         master_title_date,
         COALESCE(team_captain, 0) AS team_captain

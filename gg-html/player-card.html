@@ -1550,23 +1550,28 @@
     ggProfiles
       .forEach(p => {
       const mergedProfile = { ...p };
-      [p.profile_id, p.id, p.player_id, p.bga_player_id].forEach(key => {
-        const k = String(key || "").trim();
-        if (!k) return;
-        const dbProfile = profilesMap.get(k);
-        if (!dbProfile) return;
+      const possibleKeys = [p.profile_id, p.id, p.player_id, p.bga_player_id]
+        .map(key => String(key || "").trim())
+        .filter(Boolean);
+      let dbProfile = null;
+      for (let i = 0; i < possibleKeys.length; i += 1) {
+        const row = profilesMap.get(possibleKeys[i]);
+        if (row) {
+          dbProfile = row;
+          break;
+        }
+      }
 
-        mergedProfile.name = dbProfile.name || mergedProfile.name || "";
-        mergedProfile.association = dbProfile.association || mergedProfile.association || mergedProfile.assosiation || "";
-        mergedProfile.assosiation = mergedProfile.association;
-        mergedProfile.master_title = Number(dbProfile.master_title) === 1 ? "Master" : "";
-        mergedProfile.master_title_date = dbProfile.master_title_date || mergedProfile.master_title_date || "";
-        mergedProfile.team_captain = Number(dbProfile.team_captain) === 1 ? "Captain" : "";
-      });
+      mergedProfile.name = String(dbProfile?.name || "");
+      mergedProfile.email = String(dbProfile?.email || "");
+      mergedProfile.association = String(dbProfile?.association || "");
+      mergedProfile.assosiation = mergedProfile.association;
+      mergedProfile.master_title = Number(dbProfile?.master_title || 0) === 1 ? "Master" : "";
+      mergedProfile.master_title_date = String(dbProfile?.master_title_date || "");
+      mergedProfile.team_captain = Number(dbProfile?.team_captain || 0) === 1 ? "Captain" : "";
 
-      [p.profile_id, p.id, p.player_id, p.bga_player_id].forEach(key => {
-        const k = String(key || "").trim();
-        if (k) ggProfilesById.set(k, mergedProfile);
+      possibleKeys.forEach((k) => {
+        ggProfilesById.set(k, mergedProfile);
       });
     });
     countriesByKey = new Map();
