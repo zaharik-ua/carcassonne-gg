@@ -430,7 +430,23 @@
 
   function formatMatchTime(raw) {
     if (raw === null || raw === undefined) return "";
-    return String(raw).trim();
+    const value = String(raw).trim();
+    const m = value.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!m) return value;
+    const day = Number(m[1]);
+    const month = Number(m[2]);
+    const hour = m[4].padStart(2, "0");
+    const minute = m[5];
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    if (month < 1 || month > 12) return value;
+    return `${day} ${monthNames[month - 1]} ${hour}:${minute}`;
+  }
+
+  function isBronzeMatch(match) {
+    const roundRaw = String(match?.round || "").trim();
+    if (!roundRaw) return false;
+    const roundTitle = roundRaw.split(":")[0].trim().toLowerCase();
+    return roundTitle === "bronze match";
   }
 
   // Calculate coordinates for playoff bracket matches (layout logic)
@@ -443,7 +459,7 @@
 
     // 2. Layout matches of maxMatchRound
     groupedByRound[maxMatchRound]
-      .filter(m => m.knockout_stage !== "third_place")
+      .filter(m => !isBronzeMatch(m))
       .forEach((m, index) => {
         const cord_top = BRACKET_MARGIN + ROUND_TITLE_TO_MATCH_SPACING + index * (MATCH_HEIGHT + VERTICAL_SPACING);
         const cord_left = BRACKET_MARGIN + roundIndexMap[maxMatchRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
@@ -457,7 +473,7 @@
     for (let i = sortedRounds.indexOf(maxMatchRound) + 1; i < sortedRounds.length; i++) {
       const roundNum = sortedRounds[i];
       groupedByRound[roundNum]
-        .filter(m => m.knockout_stage !== "third_place")
+        .filter(m => !isBronzeMatch(m))
         .forEach(m => {
           const sources = sortedRounds[i - 1] ? groupedByRound[sortedRounds[i - 1]].filter(pm => pm.next_game_win === m.knockout_id) : [];
           let cord_top = 0;
@@ -472,7 +488,7 @@
           // Якщо немає "попередників": розміщуємо під останнім матчем цього раунду
           if (sources.length === 0) {
             const sameRoundPlaced = groupedByRound[roundNum]
-              .filter(x => x.knockout_stage !== "third_place" && x.knockout_id !== m.knockout_id && typeof x.cord_bottom === "number");
+              .filter(x => !isBronzeMatch(x) && x.knockout_id !== m.knockout_id && typeof x.cord_bottom === "number");
             if (sameRoundPlaced.length > 0) {
               const maxBottom = Math.max(...sameRoundPlaced.map(x => x.cord_bottom));
               cord_top = maxBottom + VERTICAL_SPACING;
@@ -495,7 +511,7 @@
       const roundNum = sortedRounds[i];
       const nextRound = sortedRounds[i + 1];
       groupedByRound[nextRound]
-        .filter(s => s.knockout_stage !== "third_place")
+        .filter(s => !isBronzeMatch(s))
         .forEach(s => {
           const predecessors = groupedByRound[roundNum]?.filter(m => m.next_game_win === s.knockout_id) || [];
           if (predecessors.length === 1) {
@@ -532,7 +548,7 @@
     }
 
     // 5. Add 3rd place match if exists
-    const thirdPlaceMatch = playoffMatches.find(g => g.tournament_id === currentTournamentId && g.knockout_stage === "third_place");
+    const thirdPlaceMatch = playoffMatches.find(g => g.tournament_id === currentTournamentId && isBronzeMatch(g));
     if (thirdPlaceMatch) {
       const thirdPlaceRound = Number(thirdPlaceMatch.round_order);
       const existingMatch = groupedByRound[thirdPlaceRound]?.find(m => m.knockout_id === thirdPlaceMatch.knockout_id);
@@ -546,7 +562,6 @@
         existingMatch.cord_top = startTop;
         existingMatch.cord_left = BRACKET_MARGIN + roundIndexMap[thirdPlaceRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
         existingMatch.cord_bottom = startTop + ROUND_TITLE_TO_MATCH_SPACING + MATCH_HEIGHT;
-        existingMatch.knockout_stage = "third_place";
       }
     }
   }
@@ -557,7 +572,7 @@
       matches.sort((a, b) => Number(a.game_id) - Number(b.game_id));
 
       // Додаємо назву раунду (label) і, якщо є, дати (після двокрапки)
-      const rawRound = matches.find(m => m.knockout_stage !== "third_place")?.round || `Round ${roundNum}`;
+      const rawRound = matches.find(m => !isBronzeMatch(m))?.round || `Round ${roundNum}`;
       const [roundTitle, roundDates] = (() => {
         const idx = rawRound.indexOf(":");
         if (idx === -1) return [rawRound.trim(), ""];
@@ -586,7 +601,7 @@
         matchBox.style.position = "absolute";
 
         let topOffset = m.cord_top;
-        if (m.knockout_stage === "third_place") {
+        if (isBronzeMatch(m)) {
           // Назву раунду для матчу за 3-є місце додаємо окремо нижче
           const label = document.createElement("div");
           label.className = "round-label";
@@ -609,9 +624,10 @@
         // Add meta labels above match box
         const hasTime = m.time !== null && m.time !== undefined && String(m.time).trim() !== "";
         const isCOC = tournamentType !== "TEAM"; // COC-type brackets use duels data
-        const placementRaw = (m && m.knockout_stage !== undefined) ? m.knockout_stage : "";
+        // Short match label (displayed before format/time) now comes from `group`.
+        const placementRaw = (m && m.group !== undefined) ? m.group : "";
         const placementText = String(placementRaw).trim();
-        const hasPlacementBadge = !!placementText && placementText.toLowerCase() !== "third_place";
+        const hasPlacementBadge = !!placementText;
         if (hasTime || hasPlacementBadge || (isCOC && m.duel_format)) {
           const metaWrap = document.createElement("div");
           metaWrap.className = "match-meta-wrapper";
