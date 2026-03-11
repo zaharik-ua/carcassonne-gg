@@ -56,6 +56,67 @@
     color: #165e93;
     text-decoration: underline;
   }
+  .edit-form {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    padding: 12px;
+    margin: 0 8px 12px;
+    display: grid;
+    gap: 10px;
+  }
+  .edit-form-row {
+    display: grid;
+    gap: 4px;
+  }
+  .edit-form-row label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+  }
+  .edit-form-row input[type="text"],
+  .edit-form-row input[type="email"],
+  .edit-form-row input[type="date"] {
+    width: 100%;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 14px;
+  }
+  .edit-form-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #333;
+  }
+  .edit-form-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .edit-btn {
+    border: 0;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .edit-btn-primary {
+    background: #1a73b7;
+    color: #fff;
+  }
+  .edit-btn-secondary {
+    background: #eef2f6;
+    color: #333;
+  }
+  .edit-error {
+    color: #c62828;
+    font-size: 12px;
+    font-weight: 600;
+  }
 
   .player-card {
     background: #fff;
@@ -602,7 +663,7 @@
 
 <div class="section-title">
   <a class="back-link" href="https://carcassonne.gg/players/">Back to all players</a>
-  <a id="playerEditLink" class="edit-link hidden" href="https://carcassonne.gg/admin" target="_blank" rel="noopener noreferrer">Edit</a>
+  <a id="playerEditLink" class="edit-link hidden" href="#">Edit</a>
 </div>
 <div id="player-container"></div>
 
@@ -610,7 +671,6 @@
 (function() {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
-  const EDIT_BASE_URL = "https://carcassonne.gg/admin?player_id=";
 
   let duels = [];
   let matches = [];
@@ -648,27 +708,51 @@
     return String(params.get("id") || "").trim();
   }
 
-  async function applyEditAccess(playerId) {
-    const editLink = document.getElementById("playerEditLink");
-    if (!editLink || !playerId) return;
+  function isEditModeFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("edit") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
 
-    editLink.classList.add("hidden");
+  function buildPlayerPageUrl(playerId, editMode) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("id", playerId);
+    if (editMode) {
+      url.searchParams.set("edit", "1");
+    } else {
+      url.searchParams.delete("edit");
+    }
+    return url.toString();
+  }
 
+  async function fetchEditAccess(playerId) {
+    if (!playerId) return { authenticated: false, canEdit: false, isAdmin: false };
     try {
       const response = await fetch(`${AUTH_BASE}/auth/can-edit-player/${encodeURIComponent(playerId)}`, {
         method: "GET",
         credentials: "include"
       });
-
-      if (!response.ok) return;
+      if (!response.ok) return { authenticated: false, canEdit: false, isAdmin: false };
       const data = await response.json();
-      if (!data || !data.canEdit) return;
-
-      editLink.href = `${EDIT_BASE_URL}${encodeURIComponent(playerId)}`;
-      editLink.classList.remove("hidden");
-    } catch (error) {
-      // Hide edit link on auth/API errors.
+      return {
+        authenticated: !!data?.authenticated,
+        canEdit: !!data?.canEdit,
+        isAdmin: !!data?.isAdmin,
+      };
+    } catch (_error) {
+      return { authenticated: false, canEdit: false, isAdmin: false };
     }
+  }
+
+  function applyEditAccess(playerId, access, editMode) {
+    const editLink = document.getElementById("playerEditLink");
+    if (!editLink || !playerId) return;
+
+    editLink.classList.add("hidden");
+    if (!access?.canEdit) return;
+    editLink.textContent = editMode ? "Cancel edit" : "Edit";
+    editLink.href = buildPlayerPageUrl(playerId, !editMode);
+    editLink.classList.remove("hidden");
   }
 
   function getTournamentMeta(tournamentId) {
@@ -1518,8 +1602,180 @@
     return wrapper;
   }
 
+  function renderEditForm(container, playerId, dbProfile, editAccess) {
+    const form = document.createElement("form");
+    form.className = "edit-form";
+    form.noValidate = true;
+
+    const isAdmin = !!editAccess?.isAdmin;
+    const initial = {
+      email: String(dbProfile?.email || ""),
+      association: String(dbProfile?.association || ""),
+      team_captain: Number(dbProfile?.team_captain || 0) === 1,
+      name: String(dbProfile?.name || ""),
+      master_title: Number(dbProfile?.master_title || 0) === 1,
+      master_title_date: String(dbProfile?.master_title_date || ""),
+    };
+
+    const addTextField = (labelText, name, value, type) => {
+      const row = document.createElement("div");
+      row.className = "edit-form-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      label.setAttribute("for", name);
+      const input = document.createElement("input");
+      input.type = type || "text";
+      input.id = name;
+      input.name = name;
+      input.value = value;
+      row.appendChild(label);
+      row.appendChild(input);
+      form.appendChild(row);
+      return input;
+    };
+
+    const addCheckboxField = (labelText, name, checked) => {
+      const row = document.createElement("div");
+      row.className = "edit-form-row";
+      const label = document.createElement("label");
+      label.className = "edit-form-checkbox";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.id = name;
+      input.name = name;
+      input.checked = !!checked;
+      const text = document.createElement("span");
+      text.textContent = labelText;
+      label.appendChild(input);
+      label.appendChild(text);
+      row.appendChild(label);
+      form.appendChild(row);
+      return input;
+    };
+
+    let emailInput = null;
+    let associationInput = null;
+    let captainInput = null;
+
+    if (isAdmin) {
+      emailInput = addTextField("Login Email", "email", initial.email, "email");
+      associationInput = addTextField("Assosiation", "association", initial.association, "text");
+      captainInput = addCheckboxField("Captain", "team_captain", initial.team_captain);
+    }
+
+    const nameInput = addTextField("Full name", "name", initial.name, "text");
+    const masterInput = addCheckboxField("Master", "master_title", initial.master_title);
+
+    const masterDateRow = document.createElement("div");
+    masterDateRow.className = "edit-form-row";
+    const masterDateLabel = document.createElement("label");
+    masterDateLabel.textContent = "Master title date";
+    masterDateLabel.setAttribute("for", "master_title_date");
+    const masterDateInput = document.createElement("input");
+    masterDateInput.type = "date";
+    masterDateInput.id = "master_title_date";
+    masterDateInput.name = "master_title_date";
+    masterDateInput.value = initial.master_title_date;
+    masterDateRow.appendChild(masterDateLabel);
+    masterDateRow.appendChild(masterDateInput);
+    form.appendChild(masterDateRow);
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "edit-error hidden";
+    form.appendChild(errorEl);
+
+    const actions = document.createElement("div");
+    actions.className = "edit-form-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "edit-btn edit-btn-primary";
+    saveBtn.textContent = "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "edit-btn edit-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    const syncMasterDateVisibility = () => {
+      const isMaster = masterInput.checked;
+      masterDateRow.classList.toggle("hidden", !isMaster);
+      masterDateInput.required = isMaster;
+      if (!isMaster) masterDateInput.value = "";
+    };
+    masterInput.addEventListener("change", syncMasterDateVisibility);
+    syncMasterDateVisibility();
+
+    const setError = (message) => {
+      if (!message) {
+        errorEl.textContent = "";
+        errorEl.classList.add("hidden");
+        return;
+      }
+      errorEl.textContent = message;
+      errorEl.classList.remove("hidden");
+    };
+
+    cancelBtn.addEventListener("click", () => {
+      window.location.href = buildPlayerPageUrl(playerId, false);
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setError("");
+
+      if (isAdmin && !String(associationInput?.value || "").trim()) {
+        setError("Assosiation is required.");
+        return;
+      }
+      if (masterInput.checked && !String(masterDateInput.value || "").trim()) {
+        setError("Master title date is required when Master is enabled.");
+        return;
+      }
+
+      const payload = {
+        name: String(nameInput.value || "").trim(),
+        master_title: masterInput.checked,
+        master_title_date: masterInput.checked ? masterDateInput.value : null,
+      };
+
+      if (isAdmin) {
+        payload.email = String(emailInput?.value || "").trim();
+        payload.association = String(associationInput?.value || "").trim();
+        payload.team_captain = !!captainInput?.checked;
+      }
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving...";
+      try {
+        const response = await fetch(`${AUTH_BASE}/profiles/${encodeURIComponent(playerId)}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok) {
+          setError(result?.message || "Failed to save profile.");
+          return;
+        }
+        window.location.href = buildPlayerPageUrl(playerId, false);
+      } catch (_error) {
+        setError("Failed to save profile.");
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save";
+      }
+    });
+
+    container.innerHTML = "";
+    container.appendChild(form);
+  }
+
   async function initPlayerCard() {
     const playerId = getPlayerIdFromUrl();
+    const editMode = isEditModeFromUrl();
     const container = document.getElementById("player-container");
     if (!playerId) {
       container.textContent = "Player id is missing in URL.";
@@ -1527,11 +1783,12 @@
     }
 
     const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/official_matches.json";
-    applyEditAccess(playerId);
-    const [res, profilesMap] = await Promise.all([
+    const [res, profilesMap, editAccess] = await Promise.all([
       fetch(dataURL),
       fetchProfilesMap(),
+      fetchEditAccess(playerId),
     ]);
+    applyEditAccess(playerId, editAccess, editMode);
     if (!res.ok) {
       container.textContent = "Failed to load data.";
       return;
@@ -1592,6 +1849,17 @@
       container.textContent = "Player not found.";
       return;
     }
+    const dbProfileForPlayer = profilesMap.get(String(playerId)) || { player_id: String(playerId) };
+
+    if (editMode) {
+      if (!editAccess?.canEdit) {
+        container.textContent = "You do not have permission to edit this profile.";
+        return;
+      }
+      renderEditForm(container, playerId, dbProfileForPlayer, editAccess);
+      return;
+    }
+
     const bga = bgaPlayersById.get(String(playerId)) || {};
 
     const assocKey = profile ? String(profile.assosiation || profile.association || "") : "";

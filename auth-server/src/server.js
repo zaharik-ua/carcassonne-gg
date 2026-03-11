@@ -481,6 +481,165 @@ app.get("/auth/can-edit-player/:playerId", (req, res) => {
   });
 });
 
+app.patch("/profiles/:playerId", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const requestedPlayerId = String(req.params.playerId || "").trim();
+  if (!requestedPlayerId) {
+    return res.status(400).json({ ok: false, message: "playerId is required" });
+  }
+
+  const linkedPlayerId = String(req.user.player_id || "").trim();
+  const isAdmin = Number(req.user.admin) === 1;
+  const isTeamCaptain = Number(req.user.team_captain) === 1;
+  const userAssociation = String(req.user.association || "").trim().toLowerCase();
+
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+
+  const normalizeText = (value) => {
+    const v = String(value ?? "").trim();
+    return v === "" ? null : v;
+  };
+
+  const normalizeBool = (value) => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value === 1;
+    const raw = String(value ?? "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  };
+
+  const profilePatch = {
+    name: normalizeText(payload.name),
+    master_title: normalizeBool(payload.master_title) ? 1 : 0,
+    master_title_date: normalizeText(payload.master_title_date),
+    email: normalizeText(payload.email),
+    association: normalizeText(payload.association),
+    team_captain: normalizeBool(payload.team_captain) ? 1 : 0,
+  };
+
+  if (profilePatch.master_title === 1 && !profilePatch.master_title_date) {
+    return res.status(400).json({
+      ok: false,
+      message: "master_title_date is required when master_title is enabled",
+    });
+  }
+
+  if (profilePatch.master_title === 0) {
+    profilePatch.master_title_date = null;
+  }
+
+  if (isAdmin && !profilePatch.association) {
+    return res.status(400).json({ ok: false, message: "association cannot be empty" });
+  }
+
+  const ownerCanEdit = requestedPlayerId === linkedPlayerId;
+  const decideAndUpdate = (captainCanEdit) => {
+    const canEdit = isAdmin || ownerCanEdit || captainCanEdit;
+    if (!canEdit) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+
+    const allowedPatch = isAdmin
+      ? profilePatch
+      : {
+          name: profilePatch.name,
+          master_title: profilePatch.master_title,
+          master_title_date: profilePatch.master_title_date,
+        };
+
+    const sql = isAdmin
+      ? `
+          UPDATE profiles
+          SET
+            name = ?,
+            master_title = ?,
+            master_title_date = ?,
+            email = ?,
+            association = ?,
+            team_captain = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE player_id = ?
+        `
+      : `
+          UPDATE profiles
+          SET
+            name = ?,
+            master_title = ?,
+            master_title_date = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE player_id = ?
+        `;
+
+    const params = isAdmin
+      ? [
+          allowedPatch.name,
+          allowedPatch.master_title,
+          allowedPatch.master_title_date,
+          allowedPatch.email,
+          allowedPatch.association,
+          allowedPatch.team_captain,
+          requestedPlayerId,
+        ]
+      : [
+          allowedPatch.name,
+          allowedPatch.master_title,
+          allowedPatch.master_title_date,
+          requestedPlayerId,
+        ];
+
+    return db.run(sql, params, function onUpdate(updateErr) {
+      if (updateErr) {
+        return res.status(500).json({ ok: false, message: "Failed to update profile" });
+      }
+      if (!this || this.changes === 0) {
+        return res.status(404).json({ ok: false, message: "Profile not found" });
+      }
+
+      return db.get(
+        `
+          SELECT
+            player_id,
+            name,
+            association,
+            email,
+            COALESCE(master_title, 0) AS master_title,
+            master_title_date,
+            COALESCE(team_captain, 0) AS team_captain
+          FROM profiles
+          WHERE player_id = ?
+          LIMIT 1
+        `,
+        [requestedPlayerId],
+        (selectErr, row) => {
+          if (selectErr) {
+            return res.status(500).json({ ok: false, message: "Failed to load updated profile" });
+          }
+          return res.json({ ok: true, profile: row || null });
+        }
+      );
+    });
+  };
+
+  if (isTeamCaptain && userAssociation && !isAdmin && !ownerCanEdit) {
+    return db.get(
+      "SELECT association FROM profiles WHERE player_id = ? LIMIT 1",
+      [requestedPlayerId],
+      (targetErr, targetRow) => {
+        if (targetErr) {
+          return res.status(500).json({ ok: false, message: "Failed to validate access" });
+        }
+        const targetAssociation = String(targetRow?.association || "").trim().toLowerCase();
+        const captainCanEdit = targetAssociation !== "" && targetAssociation === userAssociation;
+        return decideAndUpdate(captainCanEdit);
+      }
+    );
+  }
+
+  return decideAndUpdate(false);
+});
+
 app.post("/auth/logout", (req, res, next) => {
   req.logout((logoutErr) => {
     if (logoutErr) return next(logoutErr);
