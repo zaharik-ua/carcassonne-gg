@@ -543,11 +543,18 @@ app.patch("/profiles/:playerId", (req, res) => {
 
     const allowedPatch = isAdmin
       ? profilePatch
-      : {
-          name: profilePatch.name,
-          master_title: profilePatch.master_title,
-          master_title_date: profilePatch.master_title_date,
-        };
+      : captainCanEdit
+        ? {
+            name: profilePatch.name,
+            master_title: profilePatch.master_title,
+            master_title_date: profilePatch.master_title_date,
+            email: profilePatch.email,
+          }
+        : {
+            name: profilePatch.name,
+            master_title: profilePatch.master_title,
+            master_title_date: profilePatch.master_title_date,
+          };
 
     const sql = isAdmin
       ? `
@@ -559,6 +566,17 @@ app.patch("/profiles/:playerId", (req, res) => {
             email = ?,
             association = ?,
             team_captain = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE player_id = ?
+        `
+      : captainCanEdit
+        ? `
+          UPDATE profiles
+          SET
+            name = ?,
+            master_title = ?,
+            master_title_date = ?,
+            email = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE player_id = ?
         `
@@ -580,6 +598,14 @@ app.patch("/profiles/:playerId", (req, res) => {
           allowedPatch.email,
           allowedPatch.association,
           allowedPatch.team_captain,
+          requestedPlayerId,
+        ]
+      : captainCanEdit
+        ? [
+          allowedPatch.name,
+          allowedPatch.master_title,
+          allowedPatch.master_title_date,
+          allowedPatch.email,
           requestedPlayerId,
         ]
       : [
@@ -622,7 +648,10 @@ app.patch("/profiles/:playerId", (req, res) => {
     });
   };
 
-  if (isTeamCaptain && userAssociation && !isAdmin && !ownerCanEdit) {
+  if (isTeamCaptain && userAssociation && !isAdmin) {
+    if (ownerCanEdit) {
+      return decideAndUpdate(true);
+    }
     return db.get(
       "SELECT association FROM profiles WHERE player_id = ? LIMIT 1",
       [requestedPlayerId],

@@ -117,6 +117,14 @@
     font-size: 12px;
     font-weight: 600;
   }
+  .noprofile-warning {
+    font-size: 16px;
+    font-weight: 600;
+    color: #b23a48;
+  }
+  .noprofile-gap {
+    margin-top: 10px;
+  }
 
   .player-card {
     background: #fff;
@@ -726,21 +734,22 @@
   }
 
   async function fetchEditAccess(playerId) {
-    if (!playerId) return { authenticated: false, canEdit: false, isAdmin: false };
+    if (!playerId) return { authenticated: false, canEdit: false, isAdmin: false, isTeamCaptain: false };
     try {
       const response = await fetch(`${AUTH_BASE}/auth/can-edit-player/${encodeURIComponent(playerId)}`, {
         method: "GET",
         credentials: "include"
       });
-      if (!response.ok) return { authenticated: false, canEdit: false, isAdmin: false };
+      if (!response.ok) return { authenticated: false, canEdit: false, isAdmin: false, isTeamCaptain: false };
       const data = await response.json();
       return {
         authenticated: !!data?.authenticated,
         canEdit: !!data?.canEdit,
         isAdmin: !!data?.isAdmin,
+        isTeamCaptain: !!data?.isTeamCaptain,
       };
     } catch (_error) {
-      return { authenticated: false, canEdit: false, isAdmin: false };
+      return { authenticated: false, canEdit: false, isAdmin: false, isTeamCaptain: false };
     }
   }
 
@@ -1608,6 +1617,7 @@
     form.noValidate = true;
 
     const isAdmin = !!editAccess?.isAdmin;
+    const canEditEmail = !!editAccess?.isAdmin || !!editAccess?.isTeamCaptain;
     const initial = {
       email: String(dbProfile?.email || ""),
       association: String(dbProfile?.association || ""),
@@ -1657,8 +1667,11 @@
     let associationInput = null;
     let captainInput = null;
 
-    if (isAdmin) {
+    if (canEditEmail) {
       emailInput = addTextField("Login Email", "email", initial.email, "email");
+    }
+
+    if (isAdmin) {
       associationInput = addTextField("Assosiation", "association", initial.association, "text");
       captainInput = addCheckboxField("Captain", "team_captain", initial.team_captain);
     }
@@ -1740,8 +1753,10 @@
         master_title_date: masterInput.checked ? masterDateInput.value : null,
       };
 
-      if (isAdmin) {
+      if (canEditEmail) {
         payload.email = String(emailInput?.value || "").trim();
+      }
+      if (isAdmin) {
         payload.association = String(associationInput?.value || "").trim();
         payload.team_captain = !!captainInput?.checked;
       }
@@ -1779,6 +1794,56 @@
     const container = document.getElementById("player-container");
     if (!playerId) {
       container.textContent = "Player id is missing in URL.";
+      return;
+    }
+    if (playerId === "noprofile") {
+      const infoCard = document.createElement("div");
+      infoCard.className = "player-card";
+
+      const list = document.createElement("div");
+      list.className = "player-stats-line noprofile-warning";
+      list.textContent = "The email address you used to log in to GG is not linked to a BGA account.";
+      infoCard.appendChild(list);
+
+      const gap1 = document.createElement("div");
+      gap1.className = "noprofile-gap";
+      infoCard.appendChild(gap1);
+
+      const intro = document.createElement("div");
+      intro.className = "player-stats-line";
+      intro.textContent = "To link your BGA profile with your GG account:";
+      infoCard.appendChild(intro);
+
+      const gapIntroToStep1 = document.createElement("div");
+      gapIntroToStep1.className = "noprofile-gap";
+      infoCard.appendChild(gapIntroToStep1);
+
+      const step1 = document.createElement("div");
+      step1.className = "player-stats-line compact";
+      step1.textContent = "1. Send the email address you used to log in to GG to your association captain.";
+      infoCard.appendChild(step1);
+
+      const step1Hint = document.createElement("div");
+      step1Hint.className = "player-stats-line compact";
+      step1Hint.innerHTML = 'Find your captain here: <a href="https://carcassonne.gg/players/?captains=1" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/players/?captains=1</a>';
+      infoCard.appendChild(step1Hint);
+
+      const step1Hint2 = document.createElement("div");
+      step1Hint2.className = "player-stats-line compact";
+      step1Hint2.textContent = "If no captain is listed for your association, contact us at carcassonne.gg@gmail.com.";
+      infoCard.appendChild(step1Hint2);
+
+      const gapStep1ToStep2 = document.createElement("div");
+      gapStep1ToStep2.className = "noprofile-gap";
+      infoCard.appendChild(gapStep1ToStep2);
+
+      const step2 = document.createElement("div");
+      step2.className = "player-stats-line compact";
+      step2.textContent = "2. Access is granted manually. After that, you will get access to manage your profile on GG.";
+      infoCard.appendChild(step2);
+
+      container.innerHTML = "";
+      container.appendChild(infoCard);
       return;
     }
 
