@@ -47,6 +47,69 @@ const __dirname = path.dirname(__filename);
 const dbFullPath = path.resolve(__dirname, "..", DB_PATH);
 
 const db = new sqlite3.Database(dbFullPath);
+const DEFAULT_ASSOCIATIONS = [
+  "Argentina",
+  "Australia",
+  "Austria",
+  "Belgium",
+  "Brazil",
+  "Bulgaria",
+  "Canada",
+  "Catalonia",
+  "Chile",
+  "China",
+  "Colombia",
+  "Costa Rica",
+  "Croatia",
+  "Cuba",
+  "Czech Republic",
+  "Denmark",
+  "Egypt",
+  "Estonia",
+  "Finland",
+  "France",
+  "Germany",
+  "Greece",
+  "Guatemala",
+  "Hong Kong",
+  "Hungary",
+  "Iceland",
+  "India",
+  "Indonesia",
+  "Israel",
+  "Italy",
+  "Japan",
+  "Kazakhstan",
+  "Latvia",
+  "Lithuania",
+  "Luxembourg",
+  "Malaysia",
+  "Mexico",
+  "Moldova",
+  "Netherlands",
+  "Norway",
+  "Peru",
+  "Poland",
+  "Portugal",
+  "RCP",
+  "Romania",
+  "Serbia",
+  "Singapore",
+  "Slovakia",
+  "South Korea",
+  "Spain",
+  "Sweden",
+  "Switzerland",
+  "Taiwan",
+  "Thailand",
+  "Turkey",
+  "Tutejšyja",
+  "Ukraine",
+  "United Kingdom",
+  "United States",
+  "Uruguay",
+  "Vietnam",
+];
 
 function addColumnIfMissing(columns, tableName, columnName, sqlDefinition) {
   if (columns.some((col) => col.name === columnName)) return;
@@ -138,6 +201,36 @@ db.serialize(() => {
           `);
 
           ensureProfilesSchema();
+
+          db.run(`
+            CREATE TABLE IF NOT EXISTS associations (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+
+          db.get("SELECT COUNT(1) AS total FROM associations", (countErr, row) => {
+            if (countErr) {
+              console.error("Failed to inspect associations table", countErr);
+              return;
+            }
+            const total = Number(row?.total || 0);
+            if (total > 0) return;
+
+            const insertStmt = db.prepare(
+              "INSERT OR IGNORE INTO associations (name, created_at, updated_at) VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            );
+            DEFAULT_ASSOCIATIONS.forEach((name) => {
+              insertStmt.run([name]);
+            });
+            insertStmt.finalize((insertErr) => {
+              if (insertErr) {
+                console.error("Failed to seed associations", insertErr);
+              }
+            });
+          });
         }
       );
     }
@@ -294,6 +387,16 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+function requireAdmin(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+  if (Number(req.user.admin) !== 1) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
+  return next();
+}
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -351,6 +454,119 @@ app.get("/profiles/public", (_req, res, next) => {
     (err, rows) => {
       if (err) return next(err);
       return res.json({ ok: true, profiles: rows || [] });
+    }
+  );
+});
+
+app.get("/associations", (_req, res, next) => {
+  db.all(
+    `
+      SELECT id, name
+      FROM associations
+      WHERE trim(COALESCE(name, '')) <> ''
+      ORDER BY name COLLATE NOCASE ASC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, associations: rows || [] });
+    }
+  );
+});
+
+app.post("/associations", requireAdmin, (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  if (!name) {
+    return res.status(400).json({ ok: false, message: "name is required" });
+  }
+
+  return db.run(
+    `
+      INSERT INTO associations (name, created_at, updated_at)
+      VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `,
+    [name],
+    function onInsert(err) {
+      if (err) {
+        if (String(err.message || "").includes("UNIQUE")) {
+          return res.status(409).json({ ok: false, message: "Association already exists" });
+        }
+        return res.status(500).json({ ok: false, message: "Failed to create association" });
+      }
+
+      return db.get(
+        "SELECT id, name FROM associations WHERE id = ? LIMIT 1",
+        [this.lastID],
+        (selectErr, row) => {
+          if (selectErr) {
+            return res.status(500).json({ ok: false, message: "Failed to load association" });
+          }
+          return res.json({ ok: true, association: row || null });
+        }
+      );
+    }
+  );
+});
+
+app.patch("/associations/:id", requireAdmin, (req, res) => {
+  const associationId = Number(req.params.id);
+  if (!Number.isInteger(associationId) || associationId <= 0) {
+    return res.status(400).json({ ok: false, message: "Invalid association id" });
+  }
+
+  const name = String(req.body?.name || "").trim();
+  if (!name) {
+    return res.status(400).json({ ok: false, message: "name is required" });
+  }
+
+  return db.run(
+    `
+      UPDATE associations
+      SET name = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [name, associationId],
+    function onUpdate(err) {
+      if (err) {
+        if (String(err.message || "").includes("UNIQUE")) {
+          return res.status(409).json({ ok: false, message: "Association already exists" });
+        }
+        return res.status(500).json({ ok: false, message: "Failed to update association" });
+      }
+      if (!this || this.changes === 0) {
+        return res.status(404).json({ ok: false, message: "Association not found" });
+      }
+
+      return db.get(
+        "SELECT id, name FROM associations WHERE id = ? LIMIT 1",
+        [associationId],
+        (selectErr, row) => {
+          if (selectErr) {
+            return res.status(500).json({ ok: false, message: "Failed to load association" });
+          }
+          return res.json({ ok: true, association: row || null });
+        }
+      );
+    }
+  );
+});
+
+app.delete("/associations/:id", requireAdmin, (req, res) => {
+  const associationId = Number(req.params.id);
+  if (!Number.isInteger(associationId) || associationId <= 0) {
+    return res.status(400).json({ ok: false, message: "Invalid association id" });
+  }
+
+  return db.run(
+    "DELETE FROM associations WHERE id = ?",
+    [associationId],
+    function onDelete(err) {
+      if (err) {
+        return res.status(500).json({ ok: false, message: "Failed to delete association" });
+      }
+      if (!this || this.changes === 0) {
+        return res.status(404).json({ ok: false, message: "Association not found" });
+      }
+      return res.json({ ok: true });
     }
   );
 });

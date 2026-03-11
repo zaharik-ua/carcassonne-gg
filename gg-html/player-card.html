@@ -76,13 +76,17 @@
   }
   .edit-form-row input[type="text"],
   .edit-form-row input[type="email"],
-  .edit-form-row input[type="date"] {
+  .edit-form-row input[type="date"],
+  .edit-form-row select {
     width: 100%;
     border: 1px solid #c8ced8;
     border-radius: 4px;
     padding: 8px 10px;
     font: inherit;
     font-size: 14px;
+  }
+  .edit-form-row input[readonly] {
+    background: #f3f4f6;
   }
   .edit-form-checkbox {
     display: inline-flex;
@@ -679,6 +683,7 @@
 (function() {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
+  const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
 
   let duels = [];
   let matches = [];
@@ -686,6 +691,7 @@
   let ggProfilesById = new Map();
   let countriesByKey = new Map();
   let tournamentsById = new Map();
+  let associations = [];
 
   function toBool(value) {
     if (typeof value === "number") return value === 1;
@@ -708,6 +714,20 @@
       return map;
     } catch (_error) {
       return new Map();
+    }
+  }
+
+  async function fetchAssociations() {
+    try {
+      const response = await fetch(ASSOCIATIONS_URL);
+      if (!response.ok) return [];
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.associations) ? payload.associations : [];
+      return rows
+        .map((row) => String(row?.name || "").trim())
+        .filter(Boolean);
+    } catch (_error) {
+      return [];
     }
   }
 
@@ -747,6 +767,7 @@
         canEdit: !!data?.canEdit,
         isAdmin: !!data?.isAdmin,
         isTeamCaptain: !!data?.isTeamCaptain,
+        linkedPlayerId: String(data?.linkedPlayerId || "").trim(),
       };
     } catch (_error) {
       return { authenticated: false, canEdit: false, isAdmin: false, isTeamCaptain: false };
@@ -1617,7 +1638,11 @@
     form.noValidate = true;
 
     const isAdmin = !!editAccess?.isAdmin;
+    const isTeamCaptain = !!editAccess?.isTeamCaptain;
     const canEditEmail = !!editAccess?.isAdmin || !!editAccess?.isTeamCaptain;
+    const linkedPlayerId = String(editAccess?.linkedPlayerId || "").trim();
+    const isOwnProfile = linkedPlayerId !== "" && linkedPlayerId === String(playerId || "").trim();
+    const lockOwnEmailField = canEditEmail && (isAdmin || isTeamCaptain) && isOwnProfile;
     const initial = {
       email: String(dbProfile?.email || ""),
       association: String(dbProfile?.association || ""),
@@ -1642,6 +1667,31 @@
       row.appendChild(input);
       form.appendChild(row);
       return input;
+    };
+
+    const addSelectField = (labelText, name, value, options) => {
+      const row = document.createElement("div");
+      row.className = "edit-form-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      label.setAttribute("for", name);
+      const select = document.createElement("select");
+      select.id = name;
+      select.name = name;
+
+      const normalizedOptions = Array.isArray(options) ? options : [];
+      normalizedOptions.forEach((optValue) => {
+        const option = document.createElement("option");
+        option.value = optValue;
+        option.textContent = optValue;
+        if (String(optValue) === String(value || "")) option.selected = true;
+        select.appendChild(option);
+      });
+
+      row.appendChild(label);
+      row.appendChild(select);
+      form.appendChild(row);
+      return select;
     };
 
     const addCheckboxField = (labelText, name, checked) => {
@@ -1669,10 +1719,27 @@
 
     if (canEditEmail) {
       emailInput = addTextField("Login Email", "email", initial.email, "email");
+      if (lockOwnEmailField) {
+        emailInput.readOnly = true;
+        emailInput.title = "You cannot change Login Email for your own profile.";
+      }
     }
 
     if (isAdmin) {
-      associationInput = addTextField("Assosiation", "association", initial.association, "text");
+      const optionsMap = new Map();
+      (associations || []).forEach((name) => {
+        const key = String(name || "").trim().toLowerCase();
+        if (!key) return;
+        if (!optionsMap.has(key)) optionsMap.set(key, String(name || "").trim());
+      });
+      const currentAssociation = String(initial.association || "").trim();
+      if (currentAssociation) {
+        const key = currentAssociation.toLowerCase();
+        if (!optionsMap.has(key)) optionsMap.set(key, currentAssociation);
+      }
+      const associationOptions = Array.from(optionsMap.values())
+        .sort((a, b) => a.localeCompare(b));
+      associationInput = addSelectField("Assosiation", "association", initial.association, associationOptions);
       captainInput = addCheckboxField("Captain", "team_captain", initial.team_captain);
     }
 
@@ -1848,11 +1915,13 @@
     }
 
     const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/official_matches.json";
-    const [res, profilesMap, editAccess] = await Promise.all([
+    const [res, profilesMap, editAccess, associationsList] = await Promise.all([
       fetch(dataURL),
       fetchProfilesMap(),
       fetchEditAccess(playerId),
+      fetchAssociations(),
     ]);
+    associations = Array.isArray(associationsList) ? associationsList : [];
     applyEditAccess(playerId, editAccess, editMode);
     if (!res.ok) {
       container.textContent = "Failed to load data.";

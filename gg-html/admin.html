@@ -1,0 +1,414 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --line: #dbe1ea;
+    --primary: #1a73b7;
+    --danger: #c62828;
+    --ok: #1f7a3f;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Montserrat', sans-serif;
+  }
+
+  .admin-wrap {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 16px 10px 24px;
+  }
+
+  .admin-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 0 4px;
+  }
+
+  .admin-top h1 {
+    font-size: 22px;
+    margin: 0;
+  }
+
+  .admin-back {
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .admin-back:hover {
+    text-decoration: underline;
+  }
+
+  .admin-note {
+    margin: 0 4px 12px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .admin-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 2px rgba(18, 31, 53, 0.06);
+  }
+
+  .admin-card h2 {
+    margin: 0 0 4px;
+    font-size: 18px;
+  }
+
+  .admin-card .sub {
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .admin-add {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .admin-input {
+    min-width: 260px;
+    flex: 1 1 280px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .btn {
+    border: 0;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: #fff;
+  }
+
+  .btn-danger {
+    background: #f4d9d9;
+    color: #7e1b1b;
+  }
+
+  .btn-light {
+    background: #eef2f6;
+    color: #374151;
+  }
+
+  .assoc-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .assoc-item {
+    border: 1px solid #e4e9f1;
+    background: #fbfcfe;
+    border-radius: 4px;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .assoc-name {
+    flex: 1 1 260px;
+    min-width: 220px;
+    border: 1px solid #d2d8e3;
+    border-radius: 4px;
+    padding: 7px 9px;
+    font: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+    background: #fff;
+  }
+
+  .assoc-name[readonly] {
+    border-color: transparent;
+    background: transparent;
+    padding-left: 0;
+  }
+
+  .assoc-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .admin-status {
+    font-size: 13px;
+    margin-top: 8px;
+  }
+
+  .admin-status.error { color: var(--danger); }
+  .admin-status.ok { color: var(--ok); }
+
+  .hidden { display: none !important; }
+</style>
+
+<div class="admin-wrap">
+  <div class="admin-top">
+    <h1>Admin</h1>
+    <a class="admin-back" href="https://carcassonne.gg/players/">Back to players</a>
+  </div>
+
+  <p class="admin-note">This page is available only for logged-in admin users.</p>
+
+  <div id="adminAccessCard" class="admin-card">
+    <h2>Access Check</h2>
+    <p id="adminAccessText" class="sub">Checking access...</p>
+  </div>
+
+  <div id="adminContent" class="hidden">
+    <div class="admin-card">
+      <h2>Dictionaries</h2>
+      <p class="sub">More reference directories will be added here.</p>
+    </div>
+
+    <div class="admin-card">
+      <h2>Associations</h2>
+      <p id="assocSub" class="sub">Manage associations list.</p>
+
+      <div class="admin-add">
+        <input id="assocNewName" class="admin-input" type="text" placeholder="New association name" />
+        <button id="assocAddBtn" class="btn btn-primary" type="button">Add</button>
+      </div>
+
+      <div id="assocList" class="assoc-list"></div>
+      <div id="assocStatus" class="admin-status hidden"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const ME_URL = `${AUTH_BASE}/auth/me`;
+  const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
+
+  const accessCard = document.getElementById("adminAccessCard");
+  const accessText = document.getElementById("adminAccessText");
+  const content = document.getElementById("adminContent");
+
+  const assocSub = document.getElementById("assocSub");
+  const assocList = document.getElementById("assocList");
+  const assocStatus = document.getElementById("assocStatus");
+  const assocNewName = document.getElementById("assocNewName");
+  const assocAddBtn = document.getElementById("assocAddBtn");
+
+  function setStatus(message, isError) {
+    if (!message) {
+      assocStatus.textContent = "";
+      assocStatus.className = "admin-status hidden";
+      return;
+    }
+    assocStatus.textContent = message;
+    assocStatus.className = `admin-status ${isError ? "error" : "ok"}`;
+  }
+
+  async function apiJson(url, options) {
+    const response = await fetch(url, {
+      credentials: "include",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options && options.headers ? options.headers : {})
+      }
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.ok === false) {
+      throw new Error(data?.message || "Request failed");
+    }
+    return data;
+  }
+
+  function createAssocRow(item) {
+    const row = document.createElement("div");
+    row.className = "assoc-item";
+
+    const input = document.createElement("input");
+    input.className = "assoc-name";
+    input.type = "text";
+    input.value = String(item?.name || "");
+    input.readOnly = true;
+
+    const actions = document.createElement("div");
+    actions.className = "assoc-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn btn-light";
+    editBtn.textContent = "Edit";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn btn-primary hidden";
+    saveBtn.textContent = "Save";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn btn-light hidden";
+    cancelBtn.textContent = "Cancel";
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-danger";
+    deleteBtn.textContent = "Delete";
+
+    let originalName = input.value;
+
+    const setEditMode = (active) => {
+      input.readOnly = !active;
+      editBtn.classList.toggle("hidden", active);
+      saveBtn.classList.toggle("hidden", !active);
+      cancelBtn.classList.toggle("hidden", !active);
+      if (active) {
+        input.focus();
+        input.select();
+      }
+    };
+
+    editBtn.addEventListener("click", () => {
+      originalName = input.value;
+      setEditMode(true);
+    });
+
+    cancelBtn.addEventListener("click", () => {
+      input.value = originalName;
+      setEditMode(false);
+      setStatus("", false);
+    });
+
+    saveBtn.addEventListener("click", async () => {
+      const nextName = String(input.value || "").trim();
+      if (!nextName) {
+        setStatus("Association name cannot be empty.", true);
+        return;
+      }
+      try {
+        await apiJson(`${ASSOCIATIONS_URL}/${encodeURIComponent(item.id)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name: nextName })
+        });
+        originalName = nextName;
+        input.value = nextName;
+        setEditMode(false);
+        setStatus("Association updated.", false);
+        await loadAssociations();
+      } catch (error) {
+        setStatus(error?.message || "Failed to update association.", true);
+      }
+    });
+
+    deleteBtn.addEventListener("click", async () => {
+      const name = String(input.value || "").trim();
+      if (!window.confirm(`Delete association \"${name}\"?`)) return;
+      try {
+        await apiJson(`${ASSOCIATIONS_URL}/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+        setStatus("Association deleted.", false);
+        await loadAssociations();
+      } catch (error) {
+        setStatus(error?.message || "Failed to delete association.", true);
+      }
+    });
+
+    actions.appendChild(editBtn);
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    actions.appendChild(deleteBtn);
+
+    row.appendChild(input);
+    row.appendChild(actions);
+    return row;
+  }
+
+  async function loadAssociations() {
+    const data = await apiJson(ASSOCIATIONS_URL, { method: "GET" });
+    const rows = Array.isArray(data?.associations) ? data.associations : [];
+    assocSub.textContent = `Manage associations list. Total: ${rows.length}`;
+    assocList.innerHTML = "";
+    rows.forEach((item) => {
+      assocList.appendChild(createAssocRow(item));
+    });
+  }
+
+  assocAddBtn.addEventListener("click", async () => {
+    const name = String(assocNewName.value || "").trim();
+    if (!name) {
+      setStatus("Association name cannot be empty.", true);
+      return;
+    }
+    assocAddBtn.disabled = true;
+    try {
+      await apiJson(ASSOCIATIONS_URL, {
+        method: "POST",
+        body: JSON.stringify({ name })
+      });
+      assocNewName.value = "";
+      setStatus("Association added.", false);
+      await loadAssociations();
+    } catch (error) {
+      setStatus(error?.message || "Failed to add association.", true);
+    } finally {
+      assocAddBtn.disabled = false;
+    }
+  });
+
+  assocNewName.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      assocAddBtn.click();
+    }
+  });
+
+  async function init() {
+    try {
+      const meResponse = await fetch(ME_URL, { credentials: "include" });
+      const meData = await meResponse.json().catch(() => ({}));
+
+      if (!meResponse.ok || !meData?.authenticated) {
+        accessText.textContent = "Please sign in first.";
+        return;
+      }
+
+      if (!meData?.user?.isAdmin) {
+        accessText.textContent = "Access denied. Admin role required.";
+        return;
+      }
+
+      accessCard.classList.add("hidden");
+      content.classList.remove("hidden");
+      await loadAssociations();
+    } catch (_error) {
+      accessText.textContent = "Failed to verify access.";
+    }
+  }
+
+  init();
+})();
+</script>
