@@ -1,0 +1,812 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --text: #222;
+    --muted: #666;
+    --border: #e0e0e0;
+    --bg: #f6f7f9;
+    --card: #fff;
+    --primary: #1a73b7;
+  }
+
+  body {
+    margin: 0;
+    font-family: "Montserrat", sans-serif;
+    color: var(--text);
+    background: transparent;
+  }
+
+  .captain-wrap {
+    display: grid;
+    gap: 10px;
+    margin: 0 8px 12px;
+  }
+
+  .captain-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .captain-title {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .captain-sub {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .captain-alert {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .captain-list {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .cp-match-row {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    border-top: 1px solid #ccc;
+    padding: 4px 8px;
+    box-sizing: border-box;
+  }
+
+  .cp-match-row:first-child {
+    border-top: none;
+  }
+
+  .cp-match-time {
+    width: 46px;
+    min-width: 46px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .cp-match-time-text {
+    font-size: 12px;
+    line-height: 14px;
+    color: #333;
+    font-weight: 600;
+  }
+
+  .cp-divider-vertical {
+    width: 2px;
+    background-color: #dfdfdf;
+    margin: 0 6px;
+    align-self: stretch;
+    border-radius: 1px;
+  }
+
+  .cp-teams {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .cp-team-row {
+    display: flex;
+    align-items: center;
+    font-size: 16px;
+    gap: 6px;
+  }
+
+  .cp-team-row span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .cp-team-flag {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+
+  .cp-match-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .cp-score-box.cp-match-score {
+    width: 20px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 16px;
+    line-height: 1.1;
+    display: grid;
+    gap: 2px;
+  }
+
+  .cp-score-box-alt {
+    width: 34px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.1;
+    color: var(--muted);
+    display: grid;
+    gap: 2px;
+  }
+
+  .cp-edit-btn {
+    border: 1px solid #c8ced8;
+    background: #fff;
+    color: #2f3947;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .cp-edit-btn:hover {
+    border-color: #9ea7b3;
+  }
+
+  .cp-edit-form {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .cp-edit-row {
+    display: grid;
+    gap: 4px;
+  }
+
+  .cp-edit-row label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .cp-edit-row input,
+  .cp-edit-row select {
+    width: 100%;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .cp-edit-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cp-btn {
+    border: 0;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .cp-btn-primary {
+    background: #1a73b7;
+    color: #fff;
+  }
+
+  .cp-btn-secondary {
+    background: #eef2f6;
+    color: #333;
+  }
+
+  .cp-edit-error {
+    color: #c62828;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .cp-hidden {
+    display: none !important;
+  }
+
+  @media (max-width: 600px) {
+    .cp-team-row {
+      font-size: 14px;
+    }
+  }
+</style>
+
+<div class="captain-wrap">
+  <div class="captain-head">
+    <div class="captain-title">Captain Panel</div>
+    <div id="captainCount" class="captain-sub"></div>
+  </div>
+  <div id="captainContent" class="captain-alert">Loading...</div>
+</div>
+
+<script>
+(function () {
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const ME_URL = `${AUTH_BASE}/auth/me`;
+  const MATCHES_URL = `${AUTH_BASE}/matches`;
+  const TEAMS_URL = `${AUTH_BASE}/teams`;
+
+  const contentEl = document.getElementById("captainContent");
+  const countEl = document.getElementById("captainCount");
+
+  function normalizeCode(value) {
+    return String(value || "").trim().toUpperCase();
+  }
+
+  function readMatchTeam1(match) {
+    return normalizeCode(match?.team_1 ?? match?.team1_id ?? match?.team1);
+  }
+
+  function readMatchTeam2(match) {
+    return normalizeCode(match?.team_2 ?? match?.team2_id ?? match?.team2);
+  }
+
+  function formatMatchTime(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "-";
+    const d = new Date(raw);
+    if (!Number.isFinite(d.getTime())) return raw;
+    const now = new Date();
+    const isToday =
+      d.getUTCFullYear() === now.getUTCFullYear() &&
+      d.getUTCMonth() === now.getUTCMonth() &&
+      d.getUTCDate() === now.getUTCDate();
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    const mon = d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" });
+    const hh = String(d.getUTCHours()).padStart(2, "0");
+    const mm = String(d.getUTCMinutes()).padStart(2, "0");
+    return isToday ? `${hh}:${mm}` : `${dd} ${mon} ${hh}:${mm}`;
+  }
+
+  function esc(value) {
+    return String(value || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function isTestModeEnabled() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("captain_test") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  function getAssociationOverrideFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return normalizeCode(params.get("association") || "");
+  }
+
+  function isEditModeEnabled() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("edit") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  function getMatchIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("match_id") || "").trim();
+  }
+
+  function buildCaptainUrl(options = {}) {
+    const url = new URL(window.location.href);
+    if (options.edit === true) url.searchParams.set("edit", "1");
+    if (options.edit === false) url.searchParams.delete("edit");
+    if (typeof options.matchId === "string" && options.matchId.trim()) {
+      url.searchParams.set("match_id", options.matchId.trim());
+    } else if (options.matchId === null) {
+      url.searchParams.delete("match_id");
+    }
+    return url.toString();
+  }
+
+  function toDatetimeLocalFromUtc(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    const d = new Date(s);
+    if (!Number.isFinite(d.getTime())) return "";
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    const hh = String(d.getUTCHours()).padStart(2, "0");
+    const mi = String(d.getUTCMinutes()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  }
+
+  function toUtcIsoFromDatetimeLocal(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return null;
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    const yyyy = Number(m[1]);
+    const mm = Number(m[2]);
+    const dd = Number(m[3]);
+    const hh = Number(m[4]);
+    const mi = Number(m[5]);
+    return new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi, 0)).toISOString();
+  }
+
+  function parseNullableInt(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    return Math.trunc(n);
+  }
+
+  function renderAccessMessage() {
+    contentEl.className = "captain-alert";
+    contentEl.textContent = "Please sign in to view your team matches.";
+    countEl.textContent = "";
+  }
+
+  function renderNoMatchesMessage(associationCode) {
+    contentEl.className = "captain-alert";
+    contentEl.textContent = `No matches found for association ${associationCode}.`;
+    countEl.textContent = "Count: 0";
+  }
+
+  function renderMatches(matches, teamsById) {
+    countEl.textContent = `Count: ${matches.length}`;
+    contentEl.className = "captain-list";
+    contentEl.innerHTML = "";
+
+    matches.forEach((match) => {
+      const team1Id = readMatchTeam1(match);
+      const team2Id = readMatchTeam2(match);
+      const team1 = teamsById.get(team1Id) || null;
+      const team2 = teamsById.get(team2Id) || null;
+      const team1Name = team1?.name || team1Id || "-";
+      const team2Name = team2?.name || team2Id || "-";
+      const timeLabel = formatMatchTime(match?.time_utc ?? match?.time);
+      const dw1 = String(match?.dw1 ?? match?.duels_won1 ?? "").trim();
+      const dw2 = String(match?.dw2 ?? match?.duels_won2 ?? "").trim();
+      const gw1 = String(match?.gw1 ?? match?.games_won1 ?? "").trim();
+      const gw2 = String(match?.gw2 ?? match?.games_won2 ?? "").trim();
+      const hasScore = dw1 !== "" || dw2 !== "" || gw1 !== "" || gw2 !== "";
+
+      const row = document.createElement("div");
+      row.className = "cp-match-row";
+
+      const timeWrap = document.createElement("div");
+      timeWrap.className = "cp-match-time";
+      const timeText = document.createElement("div");
+      timeText.className = "cp-match-time-text";
+      timeText.textContent = timeLabel;
+      timeWrap.appendChild(timeText);
+      row.appendChild(timeWrap);
+
+      const divider = document.createElement("div");
+      divider.className = "cp-divider-vertical";
+      row.appendChild(divider);
+
+      const teamsWrap = document.createElement("div");
+      teamsWrap.className = "cp-teams";
+
+      const team1Row = document.createElement("div");
+      team1Row.className = "cp-team-row";
+      if (team1?.logo) {
+        const img1 = document.createElement("img");
+        img1.className = "cp-team-flag";
+        img1.src = team1.logo;
+        img1.alt = "";
+        team1Row.appendChild(img1);
+      }
+      const team1NameEl = document.createElement("span");
+      team1NameEl.textContent = team1Name;
+      team1Row.appendChild(team1NameEl);
+      teamsWrap.appendChild(team1Row);
+
+      const team2Row = document.createElement("div");
+      team2Row.className = "cp-team-row";
+      if (team2?.logo) {
+        const img2 = document.createElement("img");
+        img2.className = "cp-team-flag";
+        img2.src = team2.logo;
+        img2.alt = "";
+        team2Row.appendChild(img2);
+      }
+      const team2NameEl = document.createElement("span");
+      team2NameEl.textContent = team2Name;
+      team2Row.appendChild(team2NameEl);
+      teamsWrap.appendChild(team2Row);
+
+      row.appendChild(teamsWrap);
+
+      const right = document.createElement("div");
+      right.className = "cp-match-right";
+
+      if (hasScore) {
+        const mainScoreEl = document.createElement("div");
+        mainScoreEl.className = "cp-score-box cp-match-score";
+        const mainTop = document.createElement("div");
+        mainTop.textContent = dw1;
+        const mainBottom = document.createElement("div");
+        mainBottom.textContent = dw2;
+        mainScoreEl.appendChild(mainTop);
+        mainScoreEl.appendChild(mainBottom);
+
+        const altScoreEl = document.createElement("div");
+        altScoreEl.className = "cp-score-box-alt";
+        const altTop = document.createElement("div");
+        altTop.textContent = gw1 === "" ? "" : `(${gw1})`;
+        const altBottom = document.createElement("div");
+        altBottom.textContent = gw2 === "" ? "" : `(${gw2})`;
+        altScoreEl.appendChild(altTop);
+        altScoreEl.appendChild(altBottom);
+
+        right.appendChild(mainScoreEl);
+        right.appendChild(altScoreEl);
+      }
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "cp-edit-btn";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => {
+        window.location.href = buildCaptainUrl({ edit: true, matchId: String(match?.id || "") });
+      });
+      right.appendChild(editBtn);
+
+      row.appendChild(right);
+
+      contentEl.appendChild(row);
+    });
+  }
+
+  function renderMatchEditForm(match, teamsById) {
+    countEl.textContent = `Editing: ${String(match?.id || "")}`;
+    contentEl.className = "cp-edit-form";
+    contentEl.innerHTML = "";
+
+    const teams = Array.from(teamsById.values())
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+    form.noValidate = true;
+
+    const addRow = (labelText, control) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      row.appendChild(label);
+      row.appendChild(control);
+      form.appendChild(row);
+      return row;
+    };
+
+    const makeSelect = (value, options) => {
+      const select = document.createElement("select");
+      options.forEach((opt) => {
+        const el = document.createElement("option");
+        el.value = opt.value;
+        el.textContent = opt.label;
+        if (String(opt.value) === String(value || "")) el.selected = true;
+        select.appendChild(el);
+      });
+      return select;
+    };
+
+    const teamOptions = teams.map((team) => ({ value: team.id, label: team.name }));
+    const team1Input = makeSelect(readMatchTeam1(match), teamOptions);
+    const team2Input = makeSelect(readMatchTeam2(match), teamOptions);
+    addRow("Team 1", team1Input);
+    addRow("Team 2", team2Input);
+
+    const timeInput = document.createElement("input");
+    timeInput.type = "datetime-local";
+    timeInput.value = toDatetimeLocalFromUtc(match?.time_utc ?? match?.time);
+    addRow("Time, UTC", timeInput);
+
+    const lineupTypeInput = makeSelect(
+      String(match?.lineup_type || "").trim() || "Open",
+      [
+        { value: "Open", label: "Open" },
+        { value: "Closed", label: "Closed" },
+      ]
+    );
+    addRow("Lineup Type", lineupTypeInput);
+
+    const lineupDeadlineInput = document.createElement("input");
+    lineupDeadlineInput.type = "datetime-local";
+    lineupDeadlineInput.value = toDatetimeLocalFromUtc(
+      match?.lineup_deadline_utc ?? match?.lineup_deadline
+    );
+    const lineupDeadlineRow = addRow("Lineup Deadline, UTC", lineupDeadlineInput);
+
+    const duelsInput = document.createElement("input");
+    duelsInput.type = "number";
+    duelsInput.step = "1";
+    duelsInput.min = "1";
+    duelsInput.value = String(match?.number_of_duels ?? "");
+    addRow("Number of Duels", duelsInput);
+
+    const statusInput = makeSelect(
+      String(match?.status || "").trim() || "Planned",
+      [
+        { value: "Planned", label: "Planned" },
+        { value: "Done", label: "Done" },
+      ]
+    );
+    addRow("Status", statusInput);
+
+    const dw1Input = document.createElement("input");
+    dw1Input.type = "number";
+    dw1Input.step = "1";
+    dw1Input.value = String(match?.dw1 ?? "");
+    addRow("Duels won 1", dw1Input);
+
+    const dw2Input = document.createElement("input");
+    dw2Input.type = "number";
+    dw2Input.step = "1";
+    dw2Input.value = String(match?.dw2 ?? "");
+    addRow("Duels won 2", dw2Input);
+
+    const gw1Input = document.createElement("input");
+    gw1Input.type = "number";
+    gw1Input.step = "1";
+    gw1Input.value = String(match?.gw1 ?? "");
+    addRow("Games won 1", gw1Input);
+
+    const gw2Input = document.createElement("input");
+    gw2Input.type = "number";
+    gw2Input.step = "1";
+    gw2Input.value = String(match?.gw2 ?? "");
+    addRow("Games won 2", gw2Input);
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "cp-edit-error cp-hidden";
+    form.appendChild(errorEl);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    const syncDeadlineVisibility = () => {
+      const isOpen = String(lineupTypeInput.value || "").trim() === "Open";
+      lineupDeadlineRow.classList.toggle("cp-hidden", isOpen);
+      if (isOpen) lineupDeadlineInput.value = "";
+    };
+    lineupTypeInput.addEventListener("change", syncDeadlineVisibility);
+    syncDeadlineVisibility();
+
+    const setError = (msg) => {
+      if (!msg) {
+        errorEl.textContent = "";
+        errorEl.classList.add("cp-hidden");
+        return;
+      }
+      errorEl.textContent = msg;
+      errorEl.classList.remove("cp-hidden");
+    };
+
+    cancelBtn.addEventListener("click", () => {
+      window.location.href = buildCaptainUrl({ edit: false, matchId: null });
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setError("");
+
+      if (!team1Input.value || !team2Input.value) {
+        setError("Team 1 and Team 2 are required.");
+        return;
+      }
+      if (team1Input.value === team2Input.value) {
+        setError("Team 1 and Team 2 must be different.");
+        return;
+      }
+      const timeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
+      if (!timeUtc) {
+        setError("Time, UTC is required.");
+        return;
+      }
+      const lineupType = String(lineupTypeInput.value || "").trim();
+      const lineupDeadlineUtc = lineupType === "Open"
+        ? null
+        : toUtcIsoFromDatetimeLocal(lineupDeadlineInput.value);
+      if (lineupType === "Closed" && !lineupDeadlineUtc) {
+        setError("Lineup Deadline, UTC is required for Closed lineup.");
+        return;
+      }
+      const duels = parseNullableInt(duelsInput.value);
+      if (!Number.isInteger(duels) || duels <= 0) {
+        setError("Number of Duels must be a positive integer.");
+        return;
+      }
+
+      const payload = {
+        team_1: normalizeCode(team1Input.value),
+        team_2: normalizeCode(team2Input.value),
+        time_utc: timeUtc,
+        lineup_type: lineupType,
+        lineup_deadline_utc: lineupDeadlineUtc,
+        number_of_duels: duels,
+        status: String(statusInput.value || "").trim() || "Planned",
+        dw1: parseNullableInt(dw1Input.value),
+        dw2: parseNullableInt(dw2Input.value),
+        gw1: parseNullableInt(gw1Input.value),
+        gw2: parseNullableInt(gw2Input.value),
+      };
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving...";
+      try {
+        const response = await fetch(`${MATCHES_URL}/${encodeURIComponent(String(match?.id || ""))}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok) {
+          setError(result?.message || "Failed to save match.");
+          return;
+        }
+        window.location.href = buildCaptainUrl({ edit: false, matchId: null });
+      } catch (_error) {
+        setError("Failed to save match.");
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save";
+      }
+    });
+
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.appendChild(form);
+  }
+
+  async function initCaptainPage() {
+    try {
+      const isTestMode = true;
+      const isEditMode = isEditModeEnabled();
+      const editMatchId = getMatchIdFromUrl();
+      const associationOverride = getAssociationOverrideFromUrl();
+      let associationCode = associationOverride;
+
+      if (!isTestMode && !associationOverride) {
+        const meRes = await fetch(ME_URL, { method: "GET", credentials: "include" });
+        if (!meRes.ok) {
+          renderAccessMessage();
+          return;
+        }
+
+        const meData = await meRes.json();
+        if (!meData?.authenticated || !meData?.user) {
+          renderAccessMessage();
+          return;
+        }
+
+        const user = meData.user;
+        associationCode = normalizeCode(
+          user?.profile?.association ?? user?.association ?? ""
+        );
+        if (!associationCode) {
+          renderAccessMessage();
+          return;
+        }
+      }
+
+      const [matchesRes, teamsRes] = await Promise.all([
+        fetch(MATCHES_URL, { method: "GET" }),
+        fetch(TEAMS_URL, { method: "GET" }),
+      ]);
+
+      if (!matchesRes.ok) {
+        contentEl.className = "captain-alert";
+        contentEl.textContent = "Failed to load matches.";
+        countEl.textContent = "";
+        return;
+      }
+
+      const matchesData = await matchesRes.json();
+      const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
+
+      const teamsById = new Map();
+      if (teamsRes.ok) {
+        const teamsData = await teamsRes.json();
+        const teams = Array.isArray(teamsData?.teams) ? teamsData.teams : [];
+        teams.forEach((team) => {
+          const key = normalizeCode(team?.id);
+          if (!key) return;
+          teamsById.set(key, {
+            id: key,
+            name: String(team?.name || key).trim(),
+            logo: String(team?.logo || "").trim(),
+          });
+        });
+      }
+
+      const filtered = matches
+        .filter((match) => {
+          if (isTestMode) return true;
+          const team1 = readMatchTeam1(match);
+          const team2 = readMatchTeam2(match);
+          return team1 === associationCode || team2 === associationCode;
+        })
+        .sort((a, b) => {
+          const ta = Date.parse(String(a?.time_utc || a?.time || "")) || 0;
+          const tb = Date.parse(String(b?.time_utc || b?.time || "")) || 0;
+          return tb - ta;
+        });
+
+      if (!filtered.length) {
+        renderNoMatchesMessage(isTestMode ? "TEST MODE" : associationCode);
+        return;
+      }
+
+      if (isEditMode && editMatchId) {
+        const matchToEdit = filtered.find((m) => String(m?.id || "") === editMatchId);
+        if (!matchToEdit) {
+          contentEl.className = "captain-alert";
+          contentEl.textContent = `Match not found: ${editMatchId}`;
+          countEl.textContent = "";
+          return;
+        }
+        renderMatchEditForm(matchToEdit, teamsById);
+        if (isTestMode) {
+          countEl.textContent += " (test mode)";
+        }
+        return;
+      }
+
+      renderMatches(filtered, teamsById);
+      if (isTestMode) {
+        countEl.textContent += " (test mode: all matches)";
+      } else if (associationOverride) {
+        countEl.textContent += ` (association override: ${associationOverride})`;
+      }
+    } catch (_error) {
+      contentEl.className = "captain-alert";
+      contentEl.textContent = "Failed to load data.";
+      countEl.textContent = "";
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initCaptainPage);
+  } else {
+    initCaptainPage();
+  }
+})();
+</script>

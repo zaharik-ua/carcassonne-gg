@@ -364,6 +364,8 @@
 
 <script>
   const pfDataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
+  const pfAuthBase = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const pfAssociationsURL = `${pfAuthBase}/associations`;
   const pfToggleBtn = document.getElementById("pf-country-toggle");
   const pfRow = document.getElementById("pf-country-row");
   const pfAchievementToggleBtn = document.getElementById("pf-achievement-toggle");
@@ -386,6 +388,7 @@
   let pfAchievementTypes = [];
   const pfMatchesOptions = [10, 20, 30, 40, 50];
   let pfPlayers = [];
+  let pfAssociationNamesById = new Map();
   let pfSearchWrap = null;
   let pfSearchInput = null;
   let pfSearchResults = null;
@@ -393,6 +396,23 @@
 
   const pfNormalizeKey = (v) => String(v || "").trim().toUpperCase();
   const pfIsActiveStatus = (status) => String(status || "").trim().toLowerCase() === "active";
+
+  async function pfFetchAssociations() {
+    try {
+      const response = await fetch(pfAssociationsURL);
+      if (!response.ok) return [];
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.associations) ? payload.associations : [];
+      return rows
+        .map((row) => ({
+          id: pfNormalizeKey(row?.id || ""),
+          name: String(row?.name || "").trim(),
+        }))
+        .filter((row) => row.id && row.name);
+    } catch (_error) {
+      return [];
+    }
+  }
 
   function pfGetActiveAssociation() {
     const params = new URLSearchParams(window.location.search);
@@ -766,20 +786,29 @@
 
   async function pfInitFilters() {
     try {
-      const res = await fetch(pfDataURL);
+      const [res, associationsList] = await Promise.all([
+        fetch(pfDataURL),
+        pfFetchAssociations(),
+      ]);
       if (!res.ok) throw new Error("Failed to load JSON files");
       const data = await res.json();
       const pfCountries = data.countries || [];
       const pfProfiles = data.gg_profiles || [];
       const pfAchievements = data.achievements || [];
+      pfAssociationNamesById = new Map(
+        (Array.isArray(associationsList) ? associationsList : [])
+          .map((row) => [pfNormalizeKey(row?.id || ""), String(row?.name || "").trim()])
+          .filter(([id, name]) => id && name)
+      );
 
       pfOptions = pfCountries
         .map(c => {
-          const key = pfNormalizeKey(c.team || c.iso);
+          const key = pfNormalizeKey(c.iso || c.team);
+          const titleFromMap = pfAssociationNamesById.get(key);
           return {
             key,
             flag: c.flag || "",
-            title: c.team || c.iso || ""
+            title: titleFromMap || c.team || c.iso || key
           };
         })
         .filter(c => c.key && c.flag);

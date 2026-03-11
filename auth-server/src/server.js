@@ -610,6 +610,191 @@ app.get("/matches", (_req, res, next) => {
   );
 });
 
+app.patch("/matches/:id", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const matchId = String(req.params.id || "").trim();
+  if (!matchId) {
+    return res.status(400).json({ ok: false, message: "Match id is required" });
+  }
+
+  const isAdmin = Number(req.user.admin) === 1;
+  const isTeamCaptain = Number(req.user.team_captain) === 1;
+  const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  if (!isAdmin && !isTeamCaptain) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
+
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const normalizeCode = (value) => String(value || "").trim().toUpperCase();
+  const normalizeText = (value) => {
+    const v = String(value ?? "").trim();
+    return v === "" ? null : v;
+  };
+  const parseIntOrNull = (value) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    return Math.trunc(n);
+  };
+  const parseUtcIsoOrNull = (value) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+    const ts = Date.parse(raw);
+    if (!Number.isFinite(ts)) return null;
+    return new Date(ts).toISOString();
+  };
+
+  return db.get(
+    `
+      SELECT
+        id,
+        team_1,
+        team_2
+      FROM matches
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [matchId],
+    (findErr, existingRow) => {
+      if (findErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load match" });
+      }
+      if (!existingRow) {
+        return res.status(404).json({ ok: false, message: "Match not found" });
+      }
+
+      const existingTeam1 = normalizeCode(existingRow.team_1);
+      const existingTeam2 = normalizeCode(existingRow.team_2);
+      const captainCanEdit = !isAdmin
+        && isTeamCaptain
+        && userAssociation
+        && (existingTeam1 === userAssociation || existingTeam2 === userAssociation);
+      if (!isAdmin && !captainCanEdit) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+
+      const team1 = normalizeCode(payload.team_1);
+      const team2 = normalizeCode(payload.team_2);
+      if (!team1 || !team2) {
+        return res.status(400).json({ ok: false, message: "team_1 and team_2 are required" });
+      }
+      if (team1 === team2) {
+        return res.status(400).json({ ok: false, message: "team_1 and team_2 must be different" });
+      }
+
+      const timeUtc = parseUtcIsoOrNull(payload.time_utc);
+      if (!timeUtc) {
+        return res.status(400).json({ ok: false, message: "time_utc is required and must be valid UTC date-time" });
+      }
+
+      const lineupType = String(payload.lineup_type || "").trim();
+      if (lineupType !== "Open" && lineupType !== "Closed") {
+        return res.status(400).json({ ok: false, message: "lineup_type must be Open or Closed" });
+      }
+
+      const lineupDeadlineUtc = lineupType === "Open"
+        ? null
+        : parseUtcIsoOrNull(payload.lineup_deadline_utc);
+      if (lineupType === "Closed" && !lineupDeadlineUtc) {
+        return res.status(400).json({ ok: false, message: "lineup_deadline_utc is required for Closed lineup" });
+      }
+
+      const numberOfDuels = parseIntOrNull(payload.number_of_duels);
+      if (!Number.isInteger(numberOfDuels) || numberOfDuels <= 0) {
+        return res.status(400).json({ ok: false, message: "number_of_duels must be a positive integer" });
+      }
+
+      const status = normalizeText(payload.status);
+      if (status !== "Planned" && status !== "Done") {
+        return res.status(400).json({ ok: false, message: "status must be Planned or Done" });
+      }
+
+      const dw1 = parseIntOrNull(payload.dw1);
+      const dw2 = parseIntOrNull(payload.dw2);
+      const gw1 = parseIntOrNull(payload.gw1);
+      const gw2 = parseIntOrNull(payload.gw2);
+      const nonNegative = [dw1, dw2, gw1, gw2].every((v) => v === null || v >= 0);
+      if (!nonNegative) {
+        return res.status(400).json({ ok: false, message: "dw1/dw2/gw1/gw2 must be empty or non-negative integers" });
+      }
+
+      return db.run(
+        `
+          UPDATE matches
+          SET
+            team_1 = ?,
+            team_2 = ?,
+            time_utc = ?,
+            lineup_type = ?,
+            lineup_deadline_utc = ?,
+            number_of_duels = ?,
+            status = ?,
+            dw1 = ?,
+            dw2 = ?,
+            gw1 = ?,
+            gw2 = ?
+          WHERE id = ?
+        `,
+        [
+          team1,
+          team2,
+          timeUtc,
+          lineupType,
+          lineupDeadlineUtc,
+          numberOfDuels,
+          status,
+          dw1,
+          dw2,
+          gw1,
+          gw2,
+          matchId,
+        ],
+        function onUpdate(updateErr) {
+          if (updateErr) {
+            return res.status(500).json({ ok: false, message: "Failed to update match" });
+          }
+          if (!this || this.changes === 0) {
+            return res.status(404).json({ ok: false, message: "Match not found" });
+          }
+
+          return db.get(
+            `
+              SELECT
+                id,
+                tournament_id,
+                time_utc,
+                lineup_type,
+                lineup_deadline_utc,
+                number_of_duels,
+                team_1,
+                team_2,
+                status,
+                dw1,
+                dw2,
+                gw1,
+                gw2
+              FROM matches
+              WHERE id = ?
+              LIMIT 1
+            `,
+            [matchId],
+            (selectErr, row) => {
+              if (selectErr) {
+                return res.status(500).json({ ok: false, message: "Failed to load updated match" });
+              }
+              return res.json({ ok: true, match: row || null });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
 app.get("/auth/me", (req, res) => {
   if (!req.user) {
     return res.status(401).json({ authenticated: false });

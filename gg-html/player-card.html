@@ -730,6 +730,11 @@
   let countriesByKey = new Map();
   let tournamentsById = new Map();
   let associations = [];
+  let associationNamesById = new Map();
+
+  function normalizeAssocKey(value) {
+    return String(value || "").trim().toUpperCase();
+  }
 
   function toBool(value) {
     if (typeof value === "number") return value === 1;
@@ -762,11 +767,29 @@
       const payload = await response.json();
       const rows = Array.isArray(payload?.associations) ? payload.associations : [];
       return rows
-        .map((row) => String(row?.name || "").trim())
-        .filter(Boolean);
+        .map((row) => ({
+          id: String(row?.id || "").trim(),
+          name: String(row?.name || "").trim(),
+        }))
+        .filter((row) => row.id && row.name);
     } catch (_error) {
       return [];
     }
+  }
+
+  function resolveAssociationMeta(assocRaw) {
+    const assoc = String(assocRaw || "").trim();
+    if (!assoc) return null;
+    const assocUpper = normalizeAssocKey(assoc);
+    const assocName = associationNamesById.get(assoc) || associationNamesById.get(assocUpper) || "";
+    const country =
+      countriesByKey.get(assoc) ||
+      countriesByKey.get(assocUpper) ||
+      (assocName ? countriesByKey.get(assocName) : null);
+    const key = String(country?.iso || assocUpper || assoc).trim();
+    const name = String(assocName || country?.team || country?.iso || assoc).trim();
+    const flag = String(country?.flag || "").trim();
+    return { key, name, flag };
   }
 
   async function fetchProfileContacts(playerId) {
@@ -958,10 +981,9 @@
   function getBadgeByPlayerId(playerId) {
     const pid = String(playerId || "");
     const profile = ggProfilesById.get(pid);
-    const assoc = profile ? String(profile.assosiation || profile.association || "") : "";
-    if (assoc) {
-      const country = countriesByKey.get(assoc);
-      if (country && country.flag) return { url: country.flag, alt: "flag" };
+    const assocMeta = resolveAssociationMeta(profile ? String(profile.assosiation || profile.association || "") : "");
+    if (assocMeta && assocMeta.flag) {
+      return { url: assocMeta.flag, alt: assocMeta.name || "flag" };
     }
     const bga = bgaPlayersById.get(pid);
     if (bga && bga.avatar) return { url: bga.avatar, alt: "avatar" };
@@ -974,15 +996,7 @@
     if (!profile) return null;
     const assoc = String(profile.assosiation || profile.association || "").trim();
     if (!assoc) return null;
-    const country = countriesByKey.get(assoc);
-    if (!country) return null;
-    const key = String(country.iso || country.team || assoc).trim();
-    if (!key) return null;
-    return {
-      key,
-      name: String(country.team || country.iso || key).trim(),
-      flag: String(country.flag || "").trim()
-    };
+    return resolveAssociationMeta(assoc);
   }
 
   function getOpponentCountryMeta(duel, playerId) {
@@ -1739,10 +1753,17 @@
       select.name = name;
 
       const normalizedOptions = Array.isArray(options) ? options : [];
-      normalizedOptions.forEach((optValue) => {
+      normalizedOptions.forEach((opt) => {
+        const optValue = typeof opt === "object" && opt !== null
+          ? String(opt.value || "").trim()
+          : String(opt || "").trim();
+        const optLabel = typeof opt === "object" && opt !== null
+          ? String(opt.label || optValue).trim()
+          : optValue;
+        if (!optValue) return;
         const option = document.createElement("option");
         option.value = optValue;
-        option.textContent = optValue;
+        option.textContent = optLabel;
         if (String(optValue) === String(value || "")) option.selected = true;
         select.appendChild(option);
       });
@@ -1816,18 +1837,23 @@
 
     if (isAdmin) {
       const optionsMap = new Map();
-      (associations || []).forEach((name) => {
-        const key = String(name || "").trim().toLowerCase();
-        if (!key) return;
-        if (!optionsMap.has(key)) optionsMap.set(key, String(name || "").trim());
+      (associations || []).forEach((row) => {
+        const id = String(row?.id || "").trim();
+        const name = String(row?.name || "").trim();
+        if (!id || !name) return;
+        if (!optionsMap.has(id)) optionsMap.set(id, { value: id, label: name });
       });
       const currentAssociation = String(initial.association || "").trim();
       if (currentAssociation) {
-        const key = currentAssociation.toLowerCase();
-        if (!optionsMap.has(key)) optionsMap.set(key, currentAssociation);
+        if (!optionsMap.has(currentAssociation)) {
+          const currentLabel = associationNamesById.get(currentAssociation)
+            || associationNamesById.get(normalizeAssocKey(currentAssociation))
+            || currentAssociation;
+          optionsMap.set(currentAssociation, { value: currentAssociation, label: currentLabel });
+        }
       }
       const associationOptions = Array.from(optionsMap.values())
-        .sort((a, b) => a.localeCompare(b));
+        .sort((a, b) => String(a.label || "").localeCompare(String(b.label || "")));
       associationInput = addSelectField("Assosiation", "association", initial.association, associationOptions);
       captainInput = addCheckboxField("Captain", "team_captain", initial.team_captain);
     }
@@ -2022,6 +2048,14 @@
       fetchProfileContacts(playerId),
     ]);
     associations = Array.isArray(associationsList) ? associationsList : [];
+    associationNamesById = new Map();
+    associations.forEach((row) => {
+      const id = String(row?.id || "").trim();
+      const name = String(row?.name || "").trim();
+      if (!id || !name) return;
+      associationNamesById.set(id, name);
+      associationNamesById.set(normalizeAssocKey(id), name);
+    });
     applyEditAccess(playerId, editAccess, editMode);
     if (!res.ok) {
       container.textContent = "Failed to load data.";
@@ -2100,7 +2134,7 @@
     const bga = bgaPlayersById.get(String(playerId)) || {};
 
     const assocKey = profile ? String(profile.assosiation || profile.association || "") : "";
-    const assoc = assocKey ? countriesByKey.get(assocKey) : null;
+    const assoc = resolveAssociationMeta(assocKey);
     const isTeamCaptain = profile && toBool(profile.team_captain);
     const avatar = bga.avatar || "";
     const nick = profile ? String(profile.bga_nickname || profile.bga_name || profile.nickname || "") : "";
@@ -2139,18 +2173,20 @@
       meta.appendChild(nameEl);
     }
 
-    if ((assoc && assoc.flag) || isTeamCaptain) {
+    if (assoc || isTeamCaptain) {
       const assocEl = document.createElement("div");
       assocEl.className = "player-association";
 
-      if (assoc && assoc.flag) {
+      if (assoc) {
         const countryEl = document.createElement("div");
         countryEl.className = "player-association-country";
-        const flag = document.createElement("img");
-        flag.src = assoc.flag;
-        flag.alt = assoc.team || assoc.iso || "";
-        countryEl.appendChild(flag);
-        countryEl.appendChild(document.createTextNode(assoc.team || assoc.iso || ""));
+        if (assoc.flag) {
+          const flag = document.createElement("img");
+          flag.src = assoc.flag;
+          flag.alt = assoc.name || "";
+          countryEl.appendChild(flag);
+        }
+        countryEl.appendChild(document.createTextNode(assoc.name || assocKey));
         assocEl.appendChild(countryEl);
       }
 
