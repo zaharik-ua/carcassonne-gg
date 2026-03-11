@@ -546,6 +546,70 @@ app.delete("/associations/:id", requireAdmin, (req, res) => {
   );
 });
 
+app.get("/tournaments", (_req, res, next) => {
+  db.all(
+    `
+      SELECT
+        id,
+        name,
+        short_title,
+        logo,
+        link
+      FROM tournaments
+      ORDER BY id COLLATE NOCASE ASC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, tournaments: rows || [] });
+    }
+  );
+});
+
+app.get("/teams", (_req, res, next) => {
+  db.all(
+    `
+      SELECT
+        id,
+        name,
+        logo,
+        type
+      FROM teams
+      ORDER BY name COLLATE NOCASE ASC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, teams: rows || [] });
+    }
+  );
+});
+
+app.get("/matches", (_req, res, next) => {
+  db.all(
+    `
+      SELECT
+        id,
+        tournament_id,
+        time_utc,
+        lineup_type,
+        lineup_deadline_utc,
+        number_of_duels,
+        team_1,
+        team_2,
+        status,
+        dw1,
+        dw2,
+        gw1,
+        gw2
+      FROM matches
+      ORDER BY time_utc DESC, id ASC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, matches: rows || [] });
+    }
+  );
+});
+
 app.get("/auth/me", (req, res) => {
   if (!req.user) {
     return res.status(401).json({ authenticated: false });

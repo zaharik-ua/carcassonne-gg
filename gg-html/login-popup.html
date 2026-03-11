@@ -209,6 +209,7 @@
 
         <div id="userMenu" class="user-menu hidden" role="menu">
           <a id="adminLink" class="user-menu-item hidden" href="https://carcassonne.gg/admin" role="menuitem">Admin panel</a>
+          <a id="manageTeamLink" class="user-menu-item hidden" href="https://carcassonne.gg/captain/" role="menuitem">Manage Team</a>
           <a id="profileLink" class="user-menu-item" href="https://carcassonne.gg/player/?id=noprofile" role="menuitem">My profile</a>
           <button id="logoutButton" class="user-menu-item" type="button" role="menuitem">Log out</button>
         </div>
@@ -227,6 +228,7 @@
 
   <script>
     const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+    const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
 
     const signInLabel = document.getElementById("signInLabel");
     const signInDropdown = document.getElementById("signInDropdown");
@@ -237,9 +239,41 @@
     const authUserPicture = document.getElementById("authUserPicture");
     const authUserName = document.getElementById("authUserName");
     const adminLink = document.getElementById("adminLink");
+    const manageTeamLink = document.getElementById("manageTeamLink");
     const profileLink = document.getElementById("profileLink");
     const userMenu = document.getElementById("userMenu");
     const logoutButton = document.getElementById("logoutButton");
+
+    function toBool(value) {
+      if (typeof value === "boolean") return value;
+      if (typeof value === "number") return value === 1;
+      const raw = String(value || "").trim().toLowerCase();
+      return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+    }
+
+    function getFirstName(name) {
+      const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+      return parts[0] || "";
+    }
+
+    async function isCaptainByLoginEmail(email) {
+      const normalizedEmail = String(email || "").trim().toLowerCase();
+      if (!normalizedEmail) return false;
+      try {
+        const response = await fetch(PROFILES_PUBLIC_URL, { method: "GET" });
+        if (!response.ok) return false;
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.profiles) ? payload.profiles : [];
+        const profileRow = rows.find((row) => {
+          const rowEmail = String(row?.email || "").trim().toLowerCase();
+          return rowEmail !== "" && rowEmail === normalizedEmail;
+        });
+        if (!profileRow) return false;
+        return toBool(profileRow.captain ?? profileRow.team_captain);
+      } catch (_error) {
+        return false;
+      }
+    }
 
     function closeUserMenu() {
       userMenu.classList.add("hidden");
@@ -258,15 +292,28 @@
       profileLink.href = "https://carcassonne.gg/player/?id=noprofile";
       adminLink.classList.add("hidden");
       adminLink.href = "https://carcassonne.gg/admin";
+      manageTeamLink.classList.add("hidden");
+      manageTeamLink.href = "https://carcassonne.gg/captain/";
       closeUserMenu();
       authToggle.checked = false;
+    }
+
+    async function applyCaptainMenuAccess(user) {
+      const isTeamCaptain = await isCaptainByLoginEmail(user?.email);
+      if (isTeamCaptain) {
+        manageTeamLink.classList.remove("hidden");
+        manageTeamLink.href = "https://carcassonne.gg/captain/";
+      } else {
+        manageTeamLink.classList.add("hidden");
+        manageTeamLink.href = "https://carcassonne.gg/captain/";
+      }
     }
 
     function setLoggedInUI(user) {
       signInLabel.classList.add("hidden");
       signInDropdown.classList.add("hidden");
       authUser.classList.add("auth-user--visible");
-      authUserName.textContent = user.name || user.email || "User";
+      authUserName.textContent = getFirstName(user.name) || user.email || "User";
       authUserPicture.src = user.picture || "https://www.gravatar.com/avatar/?d=mp";
       authUserPicture.alt = user.name || "User";
       profileLink.href = user.myProfileUrl || "https://carcassonne.gg/player/?id=noprofile";
@@ -277,6 +324,9 @@
         adminLink.classList.add("hidden");
         adminLink.href = "https://carcassonne.gg/admin";
       }
+      manageTeamLink.classList.add("hidden");
+      manageTeamLink.href = "https://carcassonne.gg/captain/";
+      applyCaptainMenuAccess(user);
       authToggle.checked = false;
       closeUserMenu();
     }
