@@ -47,69 +47,6 @@ const __dirname = path.dirname(__filename);
 const dbFullPath = path.resolve(__dirname, "..", DB_PATH);
 
 const db = new sqlite3.Database(dbFullPath);
-const DEFAULT_ASSOCIATIONS = [
-  "Argentina",
-  "Australia",
-  "Austria",
-  "Belgium",
-  "Brazil",
-  "Bulgaria",
-  "Canada",
-  "Catalonia",
-  "Chile",
-  "China",
-  "Colombia",
-  "Costa Rica",
-  "Croatia",
-  "Cuba",
-  "Czech Republic",
-  "Denmark",
-  "Egypt",
-  "Estonia",
-  "Finland",
-  "France",
-  "Germany",
-  "Greece",
-  "Guatemala",
-  "Hong Kong",
-  "Hungary",
-  "Iceland",
-  "India",
-  "Indonesia",
-  "Israel",
-  "Italy",
-  "Japan",
-  "Kazakhstan",
-  "Latvia",
-  "Lithuania",
-  "Luxembourg",
-  "Malaysia",
-  "Mexico",
-  "Moldova",
-  "Netherlands",
-  "Norway",
-  "Peru",
-  "Poland",
-  "Portugal",
-  "RCP",
-  "Romania",
-  "Serbia",
-  "Singapore",
-  "Slovakia",
-  "South Korea",
-  "Spain",
-  "Sweden",
-  "Switzerland",
-  "Taiwan",
-  "Thailand",
-  "Turkey",
-  "Tutejšyja",
-  "Ukraine",
-  "United Kingdom",
-  "United States",
-  "Uruguay",
-  "Vietnam",
-];
 
 function addColumnIfMissing(columns, tableName, columnName, sqlDefinition) {
   if (columns.some((col) => col.name === columnName)) return;
@@ -136,6 +73,11 @@ function ensureProfilesSchema() {
     addColumnIfMissing(columns, "profiles", "master_title", "INTEGER NOT NULL DEFAULT 0");
     addColumnIfMissing(columns, "profiles", "master_title_date", "DATE");
     addColumnIfMissing(columns, "profiles", "team_captain", "INTEGER NOT NULL DEFAULT 0");
+    addColumnIfMissing(columns, "profiles", "telegram", "TEXT");
+    addColumnIfMissing(columns, "profiles", "whatsapp", "TEXT");
+    addColumnIfMissing(columns, "profiles", "discord", "TEXT");
+    addColumnIfMissing(columns, "profiles", "instagram", "TEXT");
+    addColumnIfMissing(columns, "profiles", "contact_email", "TEXT");
     addColumnIfMissing(columns, "profiles", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
     addColumnIfMissing(columns, "profiles", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
   });
@@ -193,6 +135,11 @@ db.serialize(() => {
               master_title INTEGER NOT NULL DEFAULT 0,
               master_title_date DATE,
               team_captain INTEGER NOT NULL DEFAULT 0,
+              telegram TEXT,
+              whatsapp TEXT,
+              discord TEXT,
+              instagram TEXT,
+              contact_email TEXT,
               player_id TEXT,
               admin INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -210,27 +157,6 @@ db.serialize(() => {
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
           `);
-
-          db.get("SELECT COUNT(1) AS total FROM associations", (countErr, row) => {
-            if (countErr) {
-              console.error("Failed to inspect associations table", countErr);
-              return;
-            }
-            const total = Number(row?.total || 0);
-            if (total > 0) return;
-
-            const insertStmt = db.prepare(
-              "INSERT OR IGNORE INTO associations (name, created_at, updated_at) VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-            );
-            DEFAULT_ASSOCIATIONS.forEach((name) => {
-              insertStmt.run([name]);
-            });
-            insertStmt.finalize((insertErr) => {
-              if (insertErr) {
-                console.error("Failed to seed associations", insertErr);
-              }
-            });
-          });
         }
       );
     }
@@ -454,6 +380,55 @@ app.get("/profiles/public", (_req, res, next) => {
     (err, rows) => {
       if (err) return next(err);
       return res.json({ ok: true, profiles: rows || [] });
+    }
+  );
+});
+
+app.get("/profiles/contacts/:playerId", (req, res) => {
+  const requestedPlayerId = String(req.params.playerId || "").trim();
+  if (!requestedPlayerId) {
+    return res.status(400).json({ ok: false, message: "playerId is required" });
+  }
+
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const linkedPlayerId = String(req.user.player_id || "").trim();
+  if (!linkedPlayerId) {
+    return res.status(403).json({ ok: false, message: "BGA profile is not linked" });
+  }
+
+  return db.get(
+    `
+      SELECT
+        telegram,
+        whatsapp,
+        discord,
+        instagram,
+        contact_email
+      FROM profiles
+      WHERE player_id = ?
+      LIMIT 1
+    `,
+    [requestedPlayerId],
+    (err, row) => {
+      if (err) {
+        return res.status(500).json({ ok: false, message: "Failed to load contacts" });
+      }
+      if (!row) {
+        return res.status(404).json({ ok: false, message: "Profile not found" });
+      }
+      return res.json({
+        ok: true,
+        contacts: {
+          telegram: row.telegram || null,
+          whatsapp: row.whatsapp || null,
+          discord: row.discord || null,
+          instagram: row.instagram || null,
+          contact_email: row.contact_email || null,
+        },
+      });
     }
   );
 });
@@ -733,6 +708,11 @@ app.patch("/profiles/:playerId", (req, res) => {
     email: normalizeText(payload.email),
     association: normalizeText(payload.association),
     team_captain: normalizeBool(payload.team_captain) ? 1 : 0,
+    telegram: normalizeText(payload.telegram),
+    whatsapp: normalizeText(payload.whatsapp),
+    discord: normalizeText(payload.discord),
+    instagram: normalizeText(payload.instagram),
+    contact_email: normalizeText(payload.contact_email),
   };
 
   if (profilePatch.master_title === 1 && !profilePatch.master_title_date) {
@@ -765,11 +745,21 @@ app.patch("/profiles/:playerId", (req, res) => {
             master_title: profilePatch.master_title,
             master_title_date: profilePatch.master_title_date,
             email: profilePatch.email,
+            telegram: profilePatch.telegram,
+            whatsapp: profilePatch.whatsapp,
+            discord: profilePatch.discord,
+            instagram: profilePatch.instagram,
+            contact_email: profilePatch.contact_email,
           }
         : {
             name: profilePatch.name,
             master_title: profilePatch.master_title,
             master_title_date: profilePatch.master_title_date,
+            telegram: profilePatch.telegram,
+            whatsapp: profilePatch.whatsapp,
+            discord: profilePatch.discord,
+            instagram: profilePatch.instagram,
+            contact_email: profilePatch.contact_email,
           };
 
     const sql = isAdmin
@@ -782,6 +772,11 @@ app.patch("/profiles/:playerId", (req, res) => {
             email = ?,
             association = ?,
             team_captain = ?,
+            telegram = ?,
+            whatsapp = ?,
+            discord = ?,
+            instagram = ?,
+            contact_email = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE player_id = ?
         `
@@ -793,6 +788,11 @@ app.patch("/profiles/:playerId", (req, res) => {
             master_title = ?,
             master_title_date = ?,
             email = ?,
+            telegram = ?,
+            whatsapp = ?,
+            discord = ?,
+            instagram = ?,
+            contact_email = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE player_id = ?
         `
@@ -802,6 +802,11 @@ app.patch("/profiles/:playerId", (req, res) => {
             name = ?,
             master_title = ?,
             master_title_date = ?,
+            telegram = ?,
+            whatsapp = ?,
+            discord = ?,
+            instagram = ?,
+            contact_email = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE player_id = ?
         `;
@@ -814,6 +819,11 @@ app.patch("/profiles/:playerId", (req, res) => {
           allowedPatch.email,
           allowedPatch.association,
           allowedPatch.team_captain,
+          allowedPatch.telegram,
+          allowedPatch.whatsapp,
+          allowedPatch.discord,
+          allowedPatch.instagram,
+          allowedPatch.contact_email,
           requestedPlayerId,
         ]
       : captainCanEdit
@@ -822,12 +832,22 @@ app.patch("/profiles/:playerId", (req, res) => {
           allowedPatch.master_title,
           allowedPatch.master_title_date,
           allowedPatch.email,
+          allowedPatch.telegram,
+          allowedPatch.whatsapp,
+          allowedPatch.discord,
+          allowedPatch.instagram,
+          allowedPatch.contact_email,
           requestedPlayerId,
         ]
       : [
           allowedPatch.name,
           allowedPatch.master_title,
           allowedPatch.master_title_date,
+          allowedPatch.telegram,
+          allowedPatch.whatsapp,
+          allowedPatch.discord,
+          allowedPatch.instagram,
+          allowedPatch.contact_email,
           requestedPlayerId,
         ];
 
@@ -848,7 +868,12 @@ app.patch("/profiles/:playerId", (req, res) => {
             email,
             COALESCE(master_title, 0) AS master_title,
             master_title_date,
-            COALESCE(team_captain, 0) AS team_captain
+            COALESCE(team_captain, 0) AS team_captain,
+            telegram,
+            whatsapp,
+            discord,
+            instagram,
+            contact_email
           FROM profiles
           WHERE player_id = ?
           LIMIT 1

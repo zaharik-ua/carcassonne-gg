@@ -28,8 +28,7 @@
   .admin-top {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    justify-content: flex-start;
     margin-bottom: 10px;
     padding: 0 4px;
   }
@@ -37,17 +36,6 @@
   .admin-top h1 {
     font-size: 22px;
     margin: 0;
-  }
-
-  .admin-back {
-    color: var(--primary);
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-  }
-
-  .admin-back:hover {
-    text-decoration: underline;
   }
 
   .admin-note {
@@ -174,7 +162,6 @@
 <div class="admin-wrap">
   <div class="admin-top">
     <h1>Admin</h1>
-    <a class="admin-back" href="https://carcassonne.gg/players/">Back to players</a>
   </div>
 
   <p class="admin-note">This page is available only for logged-in admin users.</p>

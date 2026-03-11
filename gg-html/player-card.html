@@ -223,6 +223,36 @@
     height: 14px;
     object-fit: contain;
   }
+  .player-contacts {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #ececec;
+    display: grid;
+    gap: 6px;
+  }
+  .player-contact-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: #333;
+    min-width: 0;
+  }
+  .player-contact-row img {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .player-contact-row a {
+    color: #1a73b7;
+    text-decoration: none;
+    word-break: break-word;
+  }
+  .player-contact-row a:hover {
+    color: #165e93;
+    text-decoration: underline;
+  }
   .player-stats {
     margin-top: 10px;
     padding-top: 8px;
@@ -684,6 +714,14 @@
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
+  const PROFILE_CONTACTS_URL = `${AUTH_BASE}/profiles/contacts`;
+  const CONTACT_ICONS = {
+    telegram: "https://carcassonne.gg/gallery/telegram.png",
+    whatsapp: "https://carcassonne.gg/gallery/whatsapp.png",
+    discord: "https://carcassonne.gg/gallery/discord.png",
+    instagram: "https://carcassonne.gg/gallery/instagram.png",
+    contact_email: "https://carcassonne.gg/gallery/mail.png",
+  };
 
   let duels = [];
   let matches = [];
@@ -728,6 +766,22 @@
         .filter(Boolean);
     } catch (_error) {
       return [];
+    }
+  }
+
+  async function fetchProfileContacts(playerId) {
+    const pid = String(playerId || "").trim();
+    if (!pid) return null;
+    try {
+      const response = await fetch(`${PROFILE_CONTACTS_URL}/${encodeURIComponent(pid)}`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!response.ok) return null;
+      const payload = await response.json();
+      return payload?.contacts && typeof payload.contacts === "object" ? payload.contacts : null;
+    } catch (_error) {
+      return null;
     }
   }
 
@@ -1650,6 +1704,11 @@
       name: String(dbProfile?.name || ""),
       master_title: Number(dbProfile?.master_title || 0) === 1,
       master_title_date: String(dbProfile?.master_title_date || ""),
+      telegram: String(dbProfile?.telegram || ""),
+      whatsapp: String(dbProfile?.whatsapp || ""),
+      discord: String(dbProfile?.discord || ""),
+      instagram: String(dbProfile?.instagram || ""),
+      contact_email: String(dbProfile?.contact_email || ""),
     };
 
     const addTextField = (labelText, name, value, type) => {
@@ -1713,6 +1772,36 @@
       return input;
     };
 
+    const addContactField = (labelText, name, value, iconUrl, type) => {
+      const row = document.createElement("div");
+      row.className = "edit-form-row";
+      const label = document.createElement("label");
+      label.setAttribute("for", name);
+      if (iconUrl) {
+        const icon = document.createElement("img");
+        icon.src = iconUrl;
+        icon.alt = "";
+        icon.style.width = "14px";
+        icon.style.height = "14px";
+        icon.style.objectFit = "contain";
+        icon.style.verticalAlign = "middle";
+        icon.style.marginRight = "6px";
+        label.appendChild(icon);
+      }
+      label.appendChild(document.createTextNode(labelText));
+
+      const input = document.createElement("input");
+      input.type = type || "text";
+      input.id = name;
+      input.name = name;
+      input.value = value;
+
+      row.appendChild(label);
+      row.appendChild(input);
+      form.appendChild(row);
+      return input;
+    };
+
     let emailInput = null;
     let associationInput = null;
     let captainInput = null;
@@ -1744,6 +1833,11 @@
     }
 
     const nameInput = addTextField("Full name", "name", initial.name, "text");
+    const telegramInput = addContactField("Telegram", "telegram", initial.telegram, CONTACT_ICONS.telegram, "text");
+    const whatsappInput = addContactField("WhatsApp", "whatsapp", initial.whatsapp, CONTACT_ICONS.whatsapp, "text");
+    const discordInput = addContactField("Discord", "discord", initial.discord, CONTACT_ICONS.discord, "text");
+    const instagramInput = addContactField("Instagram", "instagram", initial.instagram, CONTACT_ICONS.instagram, "text");
+    const contactEmailInput = addContactField("Contact Email", "contact_email", initial.contact_email, CONTACT_ICONS.contact_email, "email");
     const masterInput = addCheckboxField("Master", "master_title", initial.master_title);
 
     const masterDateRow = document.createElement("div");
@@ -1818,6 +1912,11 @@
         name: String(nameInput.value || "").trim(),
         master_title: masterInput.checked,
         master_title_date: masterInput.checked ? masterDateInput.value : null,
+        telegram: String(telegramInput.value || "").trim(),
+        whatsapp: String(whatsappInput.value || "").trim(),
+        discord: String(discordInput.value || "").trim(),
+        instagram: String(instagramInput.value || "").trim(),
+        contact_email: String(contactEmailInput.value || "").trim(),
       };
 
       if (canEditEmail) {
@@ -1915,11 +2014,12 @@
     }
 
     const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/official_matches.json";
-    const [res, profilesMap, editAccess, associationsList] = await Promise.all([
+    const [res, profilesMap, editAccess, associationsList, profileContacts] = await Promise.all([
       fetch(dataURL),
       fetchProfilesMap(),
       fetchEditAccess(playerId),
       fetchAssociations(),
+      fetchProfileContacts(playerId),
     ]);
     associations = Array.isArray(associationsList) ? associationsList : [];
     applyEditAccess(playerId, editAccess, editMode);
@@ -1983,7 +2083,10 @@
       container.textContent = "Player not found.";
       return;
     }
-    const dbProfileForPlayer = profilesMap.get(String(playerId)) || { player_id: String(playerId) };
+    const dbProfileForPlayer = {
+      ...(profilesMap.get(String(playerId)) || { player_id: String(playerId) }),
+      ...(profileContacts && typeof profileContacts === "object" ? profileContacts : {}),
+    };
 
     if (editMode) {
       if (!editAccess?.canEdit) {
@@ -2087,6 +2190,40 @@
       header.appendChild(ratingWrap);
     }
     card.appendChild(header);
+
+    const contactItems = [
+      { key: "telegram", value: String(dbProfileForPlayer?.telegram || "").trim(), icon: CONTACT_ICONS.telegram },
+      { key: "whatsapp", value: String(dbProfileForPlayer?.whatsapp || "").trim(), icon: CONTACT_ICONS.whatsapp },
+      { key: "discord", value: String(dbProfileForPlayer?.discord || "").trim(), icon: CONTACT_ICONS.discord },
+      { key: "instagram", value: String(dbProfileForPlayer?.instagram || "").trim(), icon: CONTACT_ICONS.instagram },
+      { key: "contact_email", value: String(dbProfileForPlayer?.contact_email || "").trim(), icon: CONTACT_ICONS.contact_email },
+    ].filter((item) => item.value);
+
+    if (contactItems.length > 0) {
+      const contactsWrap = document.createElement("div");
+      contactsWrap.className = "player-contacts";
+      contactItems.forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "player-contact-row";
+
+        const icon = document.createElement("img");
+        icon.src = item.icon;
+        icon.alt = "";
+        row.appendChild(icon);
+
+        if (item.key === "contact_email") {
+          const link = document.createElement("a");
+          link.href = `mailto:${item.value}`;
+          link.textContent = item.value;
+          row.appendChild(link);
+        } else {
+          row.appendChild(document.createTextNode(item.value));
+        }
+
+        contactsWrap.appendChild(row);
+      });
+      card.appendChild(contactsWrap);
+    }
 
     if (profile) {
       const statsWrap = document.createElement("div");
