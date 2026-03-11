@@ -411,12 +411,70 @@ app.get("/auth/can-edit-player/:playerId", (req, res) => {
   const requestedPlayerId = String(req.params.playerId || "").trim();
   const linkedPlayerId = String(req.user.player_id || "").trim();
   const isAdmin = Number(req.user.admin) === 1;
-  const canEdit = Boolean(requestedPlayerId) && (isAdmin || requestedPlayerId === linkedPlayerId);
+  const isTeamCaptain = Number(req.user.team_captain) === 1;
+  const userAssociation = String(req.user.association || "").trim().toLowerCase();
+
+  if (!requestedPlayerId) {
+    return res.json({
+      authenticated: true,
+      canEdit: false,
+      isAdmin,
+      isTeamCaptain,
+      requestedPlayerId,
+      linkedPlayerId: linkedPlayerId || null,
+    });
+  }
+
+  // Rule 1: admin can edit any profile.
+  if (isAdmin) {
+    return res.json({
+      authenticated: true,
+      canEdit: true,
+      isAdmin,
+      isTeamCaptain,
+      requestedPlayerId,
+      linkedPlayerId: linkedPlayerId || null,
+    });
+  }
+
+  // Rule 2: owner can edit own profile.
+  if (requestedPlayerId === linkedPlayerId) {
+    return res.json({
+      authenticated: true,
+      canEdit: true,
+      isAdmin,
+      isTeamCaptain,
+      requestedPlayerId,
+      linkedPlayerId: linkedPlayerId || null,
+    });
+  }
+
+  // Rule 3: team captain can edit profiles with the same association.
+  if (isTeamCaptain && userAssociation) {
+    return db.get(
+      "SELECT association FROM profiles WHERE player_id = ? LIMIT 1",
+      [requestedPlayerId],
+      (targetErr, targetRow) => {
+        if (targetErr) return res.status(500).json({ authenticated: true, canEdit: false });
+        const targetAssociation = String(targetRow?.association || "").trim().toLowerCase();
+        const canEdit = targetAssociation !== "" && targetAssociation === userAssociation;
+        return res.json({
+          authenticated: true,
+          canEdit,
+          isAdmin,
+          isTeamCaptain,
+          requestedPlayerId,
+          linkedPlayerId: linkedPlayerId || null,
+        });
+      }
+    );
+  }
 
   return res.json({
     authenticated: true,
-    canEdit,
+    canEdit: false,
     isAdmin,
+    isTeamCaptain,
     requestedPlayerId,
     linkedPlayerId: linkedPlayerId || null,
   });
