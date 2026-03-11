@@ -610,6 +610,166 @@ app.get("/matches", (_req, res, next) => {
   );
 });
 
+app.post("/matches", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const isAdmin = Number(req.user.admin) === 1;
+  const isTeamCaptain = Number(req.user.team_captain) === 1;
+  const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  if (!isAdmin && !isTeamCaptain) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
+
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const normalizeCode = (value) => String(value || "").trim().toUpperCase();
+  const normalizeText = (value) => {
+    const v = String(value ?? "").trim();
+    return v === "" ? null : v;
+  };
+  const parseIntOrNull = (value) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    return Math.trunc(n);
+  };
+  const parseUtcIsoOrNull = (value) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+    const ts = Date.parse(raw);
+    if (!Number.isFinite(ts)) return null;
+    return new Date(ts).toISOString();
+  };
+
+  const tournamentId = normalizeText(payload.tournament_id) || "Friendly-Matches";
+  const team1 = normalizeCode(payload.team_1);
+  const team2 = normalizeCode(payload.team_2);
+  if (!team1 || !team2) {
+    return res.status(400).json({ ok: false, message: "team_1 and team_2 are required" });
+  }
+  if (team1 === team2) {
+    return res.status(400).json({ ok: false, message: "team_1 and team_2 must be different" });
+  }
+  if (!isAdmin && isTeamCaptain && (!userAssociation || team1 !== userAssociation)) {
+    return res.status(403).json({ ok: false, message: "Captain can create matches only for own team as team_1" });
+  }
+
+  const timeUtc = parseUtcIsoOrNull(payload.time_utc);
+  if (!timeUtc) {
+    return res.status(400).json({ ok: false, message: "time_utc is required and must be valid UTC date-time" });
+  }
+
+  const lineupType = String(payload.lineup_type || "").trim() || "Open";
+  if (lineupType !== "Open" && lineupType !== "Closed") {
+    return res.status(400).json({ ok: false, message: "lineup_type must be Open or Closed" });
+  }
+
+  const lineupDeadlineUtc = lineupType === "Open"
+    ? null
+    : parseUtcIsoOrNull(payload.lineup_deadline_utc);
+  if (lineupType === "Closed" && !lineupDeadlineUtc) {
+    return res.status(400).json({ ok: false, message: "lineup_deadline_utc is required for Closed lineup" });
+  }
+
+  const numberOfDuels = parseIntOrNull(payload.number_of_duels);
+  if (!Number.isInteger(numberOfDuels) || numberOfDuels <= 0) {
+    return res.status(400).json({ ok: false, message: "number_of_duels must be a positive integer" });
+  }
+
+  const status = normalizeText(payload.status) || "Planned";
+  if (status !== "Planned" && status !== "Done") {
+    return res.status(400).json({ ok: false, message: "status must be Planned or Done" });
+  }
+
+  const dw1 = parseIntOrNull(payload.dw1);
+  const dw2 = parseIntOrNull(payload.dw2);
+  const gw1 = parseIntOrNull(payload.gw1);
+  const gw2 = parseIntOrNull(payload.gw2);
+  const nonNegative = [dw1, dw2, gw1, gw2].every((v) => v === null || v >= 0);
+  if (!nonNegative) {
+    return res.status(400).json({ ok: false, message: "dw1/dw2/gw1/gw2 must be empty or non-negative integers" });
+  }
+
+  const idFromPayload = normalizeText(payload.id);
+  const generatedId = `${timeUtc.slice(0, 16).replaceAll("-", "").replaceAll(":", "").replace("T", "")}${team1}${team2}`;
+  const matchId = idFromPayload || generatedId;
+
+  return db.run(
+    `
+      INSERT INTO matches (
+        id,
+        tournament_id,
+        time_utc,
+        lineup_type,
+        lineup_deadline_utc,
+        number_of_duels,
+        team_1,
+        team_2,
+        status,
+        dw1,
+        dw2,
+        gw1,
+        gw2
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      matchId,
+      tournamentId,
+      timeUtc,
+      lineupType,
+      lineupDeadlineUtc,
+      numberOfDuels,
+      team1,
+      team2,
+      status,
+      dw1,
+      dw2,
+      gw1,
+      gw2,
+    ],
+    function onInsert(insertErr) {
+      if (insertErr) {
+        if (String(insertErr.message || "").includes("UNIQUE")) {
+          return res.status(409).json({ ok: false, message: "Match id already exists" });
+        }
+        return res.status(500).json({ ok: false, message: "Failed to create match" });
+      }
+
+      return db.get(
+        `
+          SELECT
+            id,
+            tournament_id,
+            time_utc,
+            lineup_type,
+            lineup_deadline_utc,
+            number_of_duels,
+            team_1,
+            team_2,
+            status,
+            dw1,
+            dw2,
+            gw1,
+            gw2
+          FROM matches
+          WHERE id = ?
+          LIMIT 1
+        `,
+        [matchId],
+        (selectErr, row) => {
+          if (selectErr) {
+            return res.status(500).json({ ok: false, message: "Failed to load created match" });
+          }
+          return res.status(201).json({ ok: true, match: row || null });
+        }
+      );
+    }
+  );
+});
+
 app.patch("/matches/:id", (req, res) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
