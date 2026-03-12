@@ -365,6 +365,7 @@
 <script>
   const pfDataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
   const pfAuthBase = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const pfProfilesPublicURL = `${pfAuthBase}/profiles/public`;
   const pfAssociationsURL = `${pfAuthBase}/associations`;
   const pfToggleBtn = document.getElementById("pf-country-toggle");
   const pfRow = document.getElementById("pf-country-row");
@@ -409,6 +410,17 @@
           name: String(row?.name || "").trim(),
         }))
         .filter((row) => row.id && row.name);
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  async function pfFetchProfiles() {
+    try {
+      const response = await fetch(pfProfilesPublicURL);
+      if (!response.ok) return [];
+      const payload = await response.json();
+      return Array.isArray(payload?.profiles) ? payload.profiles : [];
     } catch (_error) {
       return [];
     }
@@ -786,14 +798,14 @@
 
   async function pfInitFilters() {
     try {
-      const [res, associationsList] = await Promise.all([
+      const [res, associationsList, dbProfiles] = await Promise.all([
         fetch(pfDataURL),
         pfFetchAssociations(),
+        pfFetchProfiles(),
       ]);
       if (!res.ok) throw new Error("Failed to load JSON files");
       const data = await res.json();
       const pfCountries = data.countries || [];
-      const pfProfiles = data.gg_profiles || [];
       const pfAchievements = data.achievements || [];
       pfAssociationNamesById = new Map(
         (Array.isArray(associationsList) ? associationsList : [])
@@ -813,10 +825,11 @@
         })
         .filter(c => c.key && c.flag);
 
-      pfPlayers = pfProfiles
+      pfPlayers = dbProfiles
         .filter(p => pfIsActiveStatus(p && p.status))
-        .map(p => String(p.bga_nickname || p.bga_name || "").trim())
+        .map(p => String(p?.bga_nickname || "").trim())
         .filter(Boolean)
+        .filter((name, index, arr) => arr.indexOf(name) === index)
         .sort((a, b) => a.localeCompare(b));
 
       pfAchievementTypes = [...new Set(

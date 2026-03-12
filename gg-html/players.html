@@ -404,6 +404,11 @@
 
       const data = await playersRes.json();
       const ggProfiles = data.gg_profiles || [];
+      const ggById = new Map(
+        ggProfiles
+          .map((p) => [String(p?.id ?? p?.profile_id ?? "").trim(), p])
+          .filter(([id]) => Boolean(id))
+      );
       const countries = data.countries || [];
       const achievements = data.achievements || [];
 
@@ -419,23 +424,23 @@
         if (c.team) countriesByKey.set(normalizeKey(c.team), c);
       });
 
-      allPlayers = ggProfiles
-        .filter(p => isActivePlayerStatus(p.status))
-        .map(p => {
-        const profileId = String(p.id ?? p.profile_id ?? "");
-        const dbProfile = profilesMap.get(profileId) || null;
+      allPlayers = [...profilesMap.values()]
+        .filter((dbProfile) => isActivePlayerStatus(dbProfile?.status))
+        .map((dbProfile) => {
+        const profileId = String(dbProfile?.player_id || "").trim();
+        const jsonProfile = ggById.get(profileId) || {};
         const assocRaw = String(dbProfile?.association || "");
         const assocKey = normalizeKey(assocRaw);
         const country = assocKey ? countriesByKey.get(assocKey) : null;
         return {
           id: profileId,
-          player: p.bga_nickname || p.bga_name || "",
+          player: String(dbProfile?.bga_nickname || jsonProfile?.bga_nickname || jsonProfile?.bga_name || "").trim(),
           name: String(dbProfile?.name || ""),
-          gg_elo: p.gg_elo || "",
-          achievements: Array.isArray(p.achievements) ? p.achievements : [],
+          gg_elo: jsonProfile?.gg_elo || "",
+          achievements: Array.isArray(jsonProfile?.achievements) ? jsonProfile.achievements : [],
           master_title: Number(dbProfile?.master_title || 0),
           team_captain: Number(dbProfile?.team_captain || 0),
-          matches: p.matches || "",
+          matches: jsonProfile?.matches || "",
           association: assocKey,
           flag: country?.flag || "",
           profile: profileId ? `https://carcassonne.gg/player/?id=${encodeURIComponent(profileId)}` : ""

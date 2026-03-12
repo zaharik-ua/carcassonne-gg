@@ -547,6 +547,7 @@ app.get("/profiles/public", (_req, res, next) => {
         bga_nickname,
         name,
         association,
+        COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
         email,
         COALESCE(master_title, 0) AS master_title,
         master_title_date,
