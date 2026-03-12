@@ -132,6 +132,7 @@ function ensureProfilesSchema() {
     addColumnIfMissing(columns, "profiles", "bga_nickname", "TEXT");
     addColumnIfMissing(columns, "profiles", "name", "TEXT");
     addColumnIfMissing(columns, "profiles", "association", "TEXT");
+    addColumnIfMissing(columns, "profiles", "status", "TEXT NOT NULL DEFAULT 'Active'");
     addColumnIfMissing(columns, "profiles", "master_title", "INTEGER NOT NULL DEFAULT 0");
     addColumnIfMissing(columns, "profiles", "master_title_date", "DATE");
     addColumnIfMissing(columns, "profiles", "team_captain", "INTEGER NOT NULL DEFAULT 0");
@@ -145,6 +146,14 @@ function ensureProfilesSchema() {
     addColumnIfMissing(columns, "profiles", "deleted_by", "TEXT");
     addColumnIfMissing(columns, "profiles", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
     addColumnIfMissing(columns, "profiles", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    db.run(
+      "UPDATE profiles SET status = 'Active' WHERE status IS NULL OR trim(status) = ''",
+      (backfillErr) => {
+        if (backfillErr) {
+          console.error("Failed to backfill profiles.status", backfillErr);
+        }
+      }
+    );
   });
 }
 
@@ -294,6 +303,7 @@ db.serialize(() => {
               bga_nickname TEXT,
               name TEXT,
               association TEXT,
+              status TEXT NOT NULL DEFAULT 'Active',
               master_title INTEGER NOT NULL DEFAULT 0,
               master_title_date DATE,
               team_captain INTEGER NOT NULL DEFAULT 0,

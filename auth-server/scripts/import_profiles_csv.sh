@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   bga_nickname TEXT,
   name TEXT,
   association TEXT,
+  status TEXT NOT NULL DEFAULT 'Active',
   master_title INTEGER NOT NULL DEFAULT 0,
   master_title_date DATE,
   team_captain INTEGER NOT NULL DEFAULT 0,
@@ -66,6 +67,7 @@ INSERT INTO profiles (
   master_title,
   master_title_date,
   team_captain,
+  status,
   admin,
   updated_at
 )
@@ -83,6 +85,7 @@ SELECT
          substr(trim("Master Title Date"), 1, 2)
   END AS master_title_date,
   CASE WHEN lower(trim("Team Captain")) = 'captain' THEN 1 ELSE 0 END AS team_captain,
+  'Active' AS status,
   0 AS admin,
   CURRENT_TIMESTAMP
 FROM profiles_import
@@ -95,6 +98,7 @@ ON CONFLICT(player_id) DO UPDATE SET
   master_title = excluded.master_title,
   master_title_date = excluded.master_title_date,
   team_captain = excluded.team_captain,
+  status = excluded.status,
   updated_at = CURRENT_TIMESTAMP;
 
 DROP TABLE profiles_import;
@@ -104,4 +108,4 @@ SQL
 
 echo "Import done. First 20 rows:"
 sqlite3 -header -column "$DB_PATH" \
-"SELECT id, player_id, bga_nickname, name, association, email, master_title, master_title_date, team_captain FROM profiles ORDER BY id LIMIT 20;"
+"SELECT id, player_id, bga_nickname, name, association, status, email, master_title, master_title_date, team_captain FROM profiles ORDER BY id LIMIT 20;"
