@@ -539,6 +539,22 @@
     return Math.trunc(n);
   }
 
+  function formatTeamLocalTime(teamTimezone, timeUtc) {
+    const tz = String(teamTimezone || "").trim();
+    const ts = Date.parse(String(timeUtc || "").trim());
+    if (!tz || !Number.isFinite(ts)) return "--:--";
+    try {
+      return new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz,
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(new Date(ts));
+    } catch (_error) {
+      return "--:--";
+    }
+  }
+
   function computeLineupDeadlineUtc(timeUtc, deadlineHours) {
     const ts = Date.parse(String(timeUtc || "").trim());
     const h = Number(deadlineHours);
@@ -950,20 +966,56 @@
     timeInput.value = toDatetimeLocalFromUtc(source?.time_utc ?? source?.time);
     addRow("Time, UTC", timeInput);
 
+    const localTimeBox = document.createElement("div");
+    localTimeBox.style.fontSize = "11px";
+    localTimeBox.style.color = "#666";
+    localTimeBox.style.display = "inline-flex";
+    localTimeBox.style.alignItems = "center";
+    localTimeBox.style.gap = "14px";
+    localTimeBox.style.gridColumn = "1 / -1";
+    localTimeBox.style.marginTop = "-2px";
+
+    const localTimeLine1 = document.createElement("div");
+    localTimeLine1.style.display = "inline-flex";
+    localTimeLine1.style.alignItems = "center";
+    localTimeLine1.style.gap = "6px";
+    const localTimeFlag1 = document.createElement("img");
+    localTimeFlag1.className = "cp-dd-flag";
+    const localTimeText1 = document.createElement("span");
+    localTimeLine1.appendChild(localTimeFlag1);
+    localTimeLine1.appendChild(localTimeText1);
+
+    const localTimeLine2 = document.createElement("div");
+    localTimeLine2.style.display = "inline-flex";
+    localTimeLine2.style.alignItems = "center";
+    localTimeLine2.style.gap = "6px";
+    const localTimeFlag2 = document.createElement("img");
+    localTimeFlag2.className = "cp-dd-flag";
+    const localTimeText2 = document.createElement("span");
+    localTimeLine2.appendChild(localTimeFlag2);
+    localTimeLine2.appendChild(localTimeText2);
+
+    localTimeBox.appendChild(localTimeLine1);
+    localTimeBox.appendChild(localTimeLine2);
+
+    const lineupTypeInitialRaw = String(source?.lineup_type || "").trim() || "Open";
+    const lineupTypeInitial = lineupTypeInitialRaw === "Closed" ? "Secret" : lineupTypeInitialRaw;
     const lineupTypeInput = createDropdown(
-      String(source?.lineup_type || "").trim() || "Open",
+      lineupTypeInitial,
       [
         { value: "Open", label: "Open" },
-        { value: "Closed", label: "Closed" },
+        { value: "Secret", label: "Secret" },
       ]
     );
     addRow("Lineup Type", lineupTypeInput.root);
+
+    form.appendChild(localTimeBox);
 
     const deadlineHoursInput = createDropdown(
       `${inferDeadlineHours(source)}h`,
       DEADLINE_HOURS_OPTIONS.map((h) => ({ value: `${h}h`, label: `${h}h` }))
     );
-    const deadlineHoursRow = addRow("To Deadline", deadlineHoursInput.root);
+    const deadlineHoursRow = addRow("To Lineup Deadline", deadlineHoursInput.root);
 
     const duelsInput = document.createElement("input");
     duelsInput.type = "number";
@@ -1022,6 +1074,29 @@
     };
     lineupTypeInput.setOnChange(syncDeadlineVisibility);
     syncDeadlineVisibility();
+
+    const refreshLocalTimes = () => {
+      const team1Code = team1Input.getValue();
+      const team2Code = team2Input.getValue();
+      const team1Meta = teamsById.get(normalizeCode(team1Code)) || null;
+      const team2Meta = teamsById.get(normalizeCode(team2Code)) || null;
+      const timeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
+
+      localTimeFlag1.style.visibility = team1Meta?.logo ? "visible" : "hidden";
+      localTimeFlag1.src = team1Meta?.logo || "";
+      localTimeFlag1.alt = "";
+      localTimeText1.textContent = `Local time: ${formatTeamLocalTime(team1Meta?.timezone, timeUtc)}`;
+
+      localTimeFlag2.style.visibility = team2Meta?.logo ? "visible" : "hidden";
+      localTimeFlag2.src = team2Meta?.logo || "";
+      localTimeFlag2.alt = "";
+      localTimeText2.textContent = `Local time: ${formatTeamLocalTime(team2Meta?.timezone, timeUtc)}`;
+    };
+    team1Input.setOnChange(refreshLocalTimes);
+    team2Input.setOnChange(refreshLocalTimes);
+    timeInput.addEventListener("input", refreshLocalTimes);
+    timeInput.addEventListener("change", refreshLocalTimes);
+    refreshLocalTimes();
 
     document.addEventListener("click", (event) => {
       if (!form.contains(event.target)) {
@@ -1097,14 +1172,14 @@
       const deadlineHours = deadlineHoursRaw.endsWith("h")
         ? Number(deadlineHoursRaw.slice(0, -1))
         : Number(deadlineHoursRaw);
-      if (lineupType === "Closed" && !DEADLINE_HOURS_OPTIONS.includes(deadlineHours)) {
-        setError("To Deadline is required for Closed lineup.");
+      if (lineupType === "Secret" && !DEADLINE_HOURS_OPTIONS.includes(deadlineHours)) {
+        setError("To Lineup Deadline is required for Secret lineup.");
         return;
       }
       const lineupDeadlineUtc = lineupType === "Open"
         ? null
         : computeLineupDeadlineUtc(timeUtc, deadlineHours);
-      if (lineupType === "Closed" && !lineupDeadlineUtc) {
+      if (lineupType === "Secret" && !lineupDeadlineUtc) {
         setError("Failed to calculate Lineup Deadline, UTC.");
         return;
       }
@@ -1226,6 +1301,7 @@
             id: key,
             name: String(team?.name || key).trim(),
             logo: String(team?.logo || "").trim(),
+            timezone: String(team?.timezone || "").trim(),
           });
         });
       }

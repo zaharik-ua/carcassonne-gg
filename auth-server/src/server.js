@@ -47,6 +47,68 @@ const __dirname = path.dirname(__filename);
 const dbFullPath = path.resolve(__dirname, "..", DB_PATH);
 
 const db = new sqlite3.Database(dbFullPath);
+const DEFAULT_TEAM_TIMEZONES = {
+  ARG: "America/Argentina/Buenos_Aires",
+  AUS: "Australia/Sydney",
+  AUT: "Europe/Vienna",
+  BEL: "Europe/Brussels",
+  BRA: "America/Sao_Paulo",
+  BGR: "Europe/Sofia",
+  CAN: "America/Toronto",
+  CAT: "Europe/Madrid",
+  CHL: "America/Santiago",
+  CHN: "Asia/Shanghai",
+  COL: "America/Bogota",
+  CRI: "America/Costa_Rica",
+  CUB: "America/Havana",
+  CZE: "Europe/Prague",
+  DEU: "Europe/Berlin",
+  DNK: "Europe/Copenhagen",
+  EGY: "Africa/Cairo",
+  ESP: "Europe/Madrid",
+  EST: "Europe/Tallinn",
+  FIN: "Europe/Helsinki",
+  FRA: "Europe/Paris",
+  GBR: "Europe/London",
+  GRC: "Europe/Athens",
+  GTM: "America/Guatemala",
+  HKG: "Asia/Hong_Kong",
+  HRV: "Europe/Zagreb",
+  HUN: "Europe/Budapest",
+  IDN: "Asia/Jakarta",
+  IND: "Asia/Kolkata",
+  ISL: "Atlantic/Reykjavik",
+  ISR: "Asia/Jerusalem",
+  ITA: "Europe/Rome",
+  JPN: "Asia/Tokyo",
+  KAZ: "Asia/Almaty",
+  KOR: "Asia/Seoul",
+  LTU: "Europe/Vilnius",
+  LUX: "Europe/Luxembourg",
+  LVA: "Europe/Riga",
+  MDA: "Europe/Chisinau",
+  MEX: "America/Mexico_City",
+  MYS: "Asia/Kuala_Lumpur",
+  NLD: "Europe/Amsterdam",
+  NOR: "Europe/Oslo",
+  PER: "America/Lima",
+  POL: "Europe/Warsaw",
+  PRT: "Europe/Lisbon",
+  RCP: "Europe/Moscow",
+  ROU: "Europe/Bucharest",
+  SGP: "Asia/Singapore",
+  SRB: "Europe/Belgrade",
+  SVK: "Europe/Bratislava",
+  SWE: "Europe/Stockholm",
+  THA: "Asia/Bangkok",
+  TUR: "Europe/Istanbul",
+  TUT: "Europe/Minsk",
+  TWN: "Asia/Taipei",
+  UKR: "Europe/Kyiv",
+  URY: "America/Montevideo",
+  USA: "America/New_York",
+  VNM: "Asia/Ho_Chi_Minh",
+};
 
 function addColumnIfMissing(columns, tableName, columnName, sqlDefinition) {
   if (columns.some((col) => col.name === columnName)) return;
@@ -92,6 +154,48 @@ function ensureMatchesSchema() {
     if (!Array.isArray(columns) || columns.length === 0) return;
     addColumnIfMissing(columns, "matches", "lineup_deadline_h", "INTEGER");
     addColumnIfMissing(columns, "matches", "deleted_at", "TEXT");
+  });
+}
+
+function seedTeamTimezones() {
+  const entries = Object.entries(DEFAULT_TEAM_TIMEZONES);
+  if (!entries.length) return;
+  const stmt = db.prepare(`
+    UPDATE teams
+    SET timezone = ?
+    WHERE upper(id) = ?
+      AND (timezone IS NULL OR trim(timezone) = '')
+  `);
+  entries.forEach(([teamId, timezone]) => {
+    stmt.run([timezone, teamId], (err) => {
+      if (err) {
+        console.error(`Failed to backfill timezone for team ${teamId}`, err);
+      }
+    });
+  });
+  stmt.finalize();
+}
+
+function ensureTeamsSchema() {
+  db.all("PRAGMA table_info(teams)", (pragmaErr, columns) => {
+    if (pragmaErr) {
+      console.error("Failed to inspect teams schema", pragmaErr);
+      return;
+    }
+    if (!Array.isArray(columns) || columns.length === 0) return;
+    const hasTimezone = columns.some((col) => col.name === "timezone");
+    if (hasTimezone) {
+      seedTeamTimezones();
+      return;
+    }
+    db.run("ALTER TABLE teams ADD COLUMN timezone TEXT", (alterErr) => {
+      if (alterErr) {
+        console.error("Failed to add timezone column to teams", alterErr);
+        return;
+      }
+      // Keep historical values from frontend map as defaults in DB.
+      seedTeamTimezones();
+    });
   });
 }
 
@@ -171,6 +275,7 @@ db.serialize(() => {
           `);
 
           ensureMatchesSchema();
+          ensureTeamsSchema();
         }
       );
     }
@@ -586,7 +691,8 @@ app.get("/teams", (_req, res, next) => {
         id,
         name,
         logo,
-        type
+        type,
+        timezone
       FROM teams
       ORDER BY name COLLATE NOCASE ASC
     `,
@@ -683,9 +789,10 @@ app.post("/matches", (req, res) => {
     return res.status(400).json({ ok: false, message: "time_utc is required and must be valid UTC date-time" });
   }
 
-  const lineupType = String(payload.lineup_type || "").trim() || "Open";
-  if (lineupType !== "Open" && lineupType !== "Closed") {
-    return res.status(400).json({ ok: false, message: "lineup_type must be Open or Closed" });
+  const lineupTypeRaw = String(payload.lineup_type || "").trim() || "Open";
+  const lineupType = lineupTypeRaw === "Closed" ? "Secret" : lineupTypeRaw;
+  if (lineupType !== "Open" && lineupType !== "Secret") {
+    return res.status(400).json({ ok: false, message: "lineup_type must be Open or Secret" });
   }
 
   const lineupDeadlineHoursRaw = parseIntOrNull(payload.lineup_deadline_h);
@@ -693,13 +800,13 @@ app.post("/matches", (req, res) => {
   const lineupDeadlineHours = lineupType === "Open"
     ? null
     : (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24);
-  if (lineupType === "Closed" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
-    return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Closed lineup" });
+  if (lineupType === "Secret" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
+    return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Secret lineup" });
   }
   const lineupDeadlineUtc = lineupType === "Open"
     ? null
     : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
-  if (lineupType === "Closed" && !lineupDeadlineUtc) {
+  if (lineupType === "Secret" && !lineupDeadlineUtc) {
     return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
   }
 
@@ -891,9 +998,10 @@ app.patch("/matches/:id", (req, res) => {
         return res.status(400).json({ ok: false, message: "time_utc is required and must be valid UTC date-time" });
       }
 
-      const lineupType = String(payload.lineup_type || "").trim();
-      if (lineupType !== "Open" && lineupType !== "Closed") {
-        return res.status(400).json({ ok: false, message: "lineup_type must be Open or Closed" });
+      const lineupTypeRaw = String(payload.lineup_type || "").trim();
+      const lineupType = lineupTypeRaw === "Closed" ? "Secret" : lineupTypeRaw;
+      if (lineupType !== "Open" && lineupType !== "Secret") {
+        return res.status(400).json({ ok: false, message: "lineup_type must be Open or Secret" });
       }
 
       const lineupDeadlineHoursRaw = parseIntOrNull(payload.lineup_deadline_h);
@@ -901,13 +1009,13 @@ app.patch("/matches/:id", (req, res) => {
       const lineupDeadlineHours = lineupType === "Open"
         ? null
         : (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24);
-      if (lineupType === "Closed" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
-        return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Closed lineup" });
+      if (lineupType === "Secret" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
+        return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Secret lineup" });
       }
       const lineupDeadlineUtc = lineupType === "Open"
         ? null
         : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
-      if (lineupType === "Closed" && !lineupDeadlineUtc) {
+      if (lineupType === "Secret" && !lineupDeadlineUtc) {
         return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
       }
 
