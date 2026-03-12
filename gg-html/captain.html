@@ -400,6 +400,9 @@
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const MATCHES_URL = `${AUTH_BASE}/matches`;
   const TEAMS_URL = `${AUTH_BASE}/teams`;
+  const LINEUPS_URL = `${AUTH_BASE}/lineups`;
+  const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
+  const PROFILES_URL = `${AUTH_BASE}/profiles`;
   const DEFAULT_TOURNAMENT_ID = "Friendly-Matches";
   const DEADLINE_HOURS_OPTIONS = [6, 12, 24, 48];
 
@@ -530,6 +533,23 @@
     const datePart = iso.slice(0, 10).replaceAll("-", "");
     if (!/^\d{8}$/.test(datePart)) return "";
     return `${datePart}${t1}${t2}`;
+  }
+
+  function buildLineupIdFromMatch(timeUtc, player1Id, player2Id) {
+    const iso = String(timeUtc || "").trim();
+    const p1 = String(player1Id || "").trim();
+    const p2 = String(player2Id || "").trim();
+    if (!iso || !p1 || !p2) return "";
+    const datePart = iso.slice(0, 10).replaceAll("-", "");
+    if (!/^\d{8}$/.test(datePart)) return "";
+    return `${datePart}-${p1}-${p2}`;
+  }
+
+  function playerLabel(profile) {
+    const nick = String(profile?.bga_nickname || "").trim();
+    const name = String(profile?.name || "").trim();
+    const pid = String(profile?.player_id || "").trim();
+    return nick || name || pid || "-";
   }
 
   function parseNullableInt(value) {
@@ -750,6 +770,8 @@
 
   function renderMatchEditForm(match, teamsById, editContext, formMode) {
     const isCreateMode = formMode === "create";
+    const allProfiles = Array.isArray(editContext?.profiles) ? editContext.profiles : [];
+    const initialLineups = Array.isArray(editContext?.lineups) ? editContext.lineups : [];
     hintEl.textContent = "";
     countEl.textContent = isCreateMode
       ? "Creating a new match"
@@ -1058,6 +1080,360 @@
     );
     addRow("Status", statusInput.root);
 
+    const lineupsToggleWrap = document.createElement("div");
+    lineupsToggleWrap.style.gridColumn = "1 / -1";
+    const createLineupsBtn = document.createElement("button");
+    createLineupsBtn.type = "button";
+    createLineupsBtn.className = "cp-btn cp-btn-secondary";
+    createLineupsBtn.textContent = "Create Lineups";
+    lineupsToggleWrap.appendChild(createLineupsBtn);
+    form.appendChild(lineupsToggleWrap);
+
+    const lineupsWrap = document.createElement("div");
+    lineupsWrap.style.gridColumn = "1 / -1";
+    lineupsWrap.style.display = "none";
+    lineupsWrap.style.border = "1px solid #e0e0e0";
+    lineupsWrap.style.borderRadius = "6px";
+    lineupsWrap.style.padding = "10px";
+    lineupsWrap.style.background = "#fff";
+    lineupsWrap.style.marginTop = "4px";
+    form.appendChild(lineupsWrap);
+
+    const lineupsHeader = document.createElement("div");
+    lineupsHeader.style.display = "grid";
+    lineupsHeader.style.gridTemplateColumns = "60px 1fr 1fr";
+    lineupsHeader.style.gap = "8px";
+    lineupsHeader.style.alignItems = "center";
+    lineupsHeader.style.marginBottom = "8px";
+    lineupsWrap.appendChild(lineupsHeader);
+
+    const lineupTitle1 = document.createElement("div");
+    lineupTitle1.textContent = "Duel";
+    lineupTitle1.style.fontSize = "12px";
+    lineupTitle1.style.fontWeight = "600";
+    lineupsHeader.appendChild(lineupTitle1);
+
+    const lineupTitleTeam1 = document.createElement("div");
+    lineupTitleTeam1.style.fontSize = "12px";
+    lineupTitleTeam1.style.fontWeight = "600";
+    lineupTitleTeam1.style.display = "inline-flex";
+    lineupTitleTeam1.style.alignItems = "center";
+    lineupTitleTeam1.style.gap = "6px";
+    lineupsHeader.appendChild(lineupTitleTeam1);
+
+    const lineupTitleTeam2 = document.createElement("div");
+    lineupTitleTeam2.style.fontSize = "12px";
+    lineupTitleTeam2.style.fontWeight = "600";
+    lineupTitleTeam2.style.display = "inline-flex";
+    lineupTitleTeam2.style.alignItems = "center";
+    lineupTitleTeam2.style.gap = "6px";
+    lineupsHeader.appendChild(lineupTitleTeam2);
+
+    const lineupsRows = document.createElement("div");
+    lineupsRows.style.display = "grid";
+    lineupsRows.style.gap = "8px";
+    lineupsWrap.appendChild(lineupsRows);
+
+    const lineupsOpenActions = document.createElement("div");
+    lineupsOpenActions.style.display = "inline-flex";
+    lineupsOpenActions.style.alignItems = "center";
+    lineupsOpenActions.style.gap = "8px";
+    lineupsOpenActions.style.marginTop = "8px";
+    const addLineupRowBtn = document.createElement("button");
+    addLineupRowBtn.type = "button";
+    addLineupRowBtn.className = "cp-btn cp-btn-secondary";
+    addLineupRowBtn.textContent = "Add Duel";
+    lineupsOpenActions.appendChild(addLineupRowBtn);
+    lineupsWrap.appendChild(lineupsOpenActions);
+
+    let lineupsEnabled = initialLineups.length > 0;
+    let lineupsState = initialLineups.map((l) => ({
+      player1Id: String(l?.player_1_id || "").trim(),
+      player2Id: String(l?.player_2_id || "").trim(),
+    }));
+    if (!lineupsState.length && isCreateMode) lineupsState = [];
+
+    const getPlayersForTeam = (teamId) => {
+      const association = normalizeCode(teamId);
+      return allProfiles
+        .filter((p) => normalizeCode(p?.association) === association)
+        .sort((a, b) => playerLabel(a).localeCompare(playerLabel(b)));
+    };
+
+    const createAddPlayerInline = (associationCode, onCreated, onCancel) => {
+      const wrap = document.createElement("div");
+      wrap.style.marginTop = "6px";
+      wrap.style.padding = "8px";
+      wrap.style.border = "1px solid #e0e0e0";
+      wrap.style.borderRadius = "4px";
+      wrap.style.display = "grid";
+      wrap.style.gap = "6px";
+
+      const bgaIdInput = document.createElement("input");
+      bgaIdInput.type = "text";
+      bgaIdInput.placeholder = "BGA ID";
+      bgaIdInput.style.height = "30px";
+      bgaIdInput.style.border = "1px solid #c8ced8";
+      bgaIdInput.style.borderRadius = "4px";
+      bgaIdInput.style.padding = "4px 8px";
+      wrap.appendChild(bgaIdInput);
+
+      const bgaNicknameInput = document.createElement("input");
+      bgaNicknameInput.type = "text";
+      bgaNicknameInput.placeholder = "BGA nickname";
+      bgaNicknameInput.style.height = "30px";
+      bgaNicknameInput.style.border = "1px solid #c8ced8";
+      bgaNicknameInput.style.borderRadius = "4px";
+      bgaNicknameInput.style.padding = "4px 8px";
+      wrap.appendChild(bgaNicknameInput);
+
+      const associationInput = document.createElement("input");
+      associationInput.type = "text";
+      associationInput.value = associationCode;
+      associationInput.readOnly = true;
+      associationInput.style.height = "30px";
+      associationInput.style.border = "1px solid #c8ced8";
+      associationInput.style.borderRadius = "4px";
+      associationInput.style.padding = "4px 8px";
+      associationInput.style.background = "#f3f4f6";
+      wrap.appendChild(associationInput);
+
+      const err = document.createElement("div");
+      err.className = "cp-edit-error cp-hidden";
+      wrap.appendChild(err);
+
+      const actions = document.createElement("div");
+      actions.style.display = "inline-flex";
+      actions.style.gap = "8px";
+      const createBtn = document.createElement("button");
+      createBtn.type = "button";
+      createBtn.className = "cp-btn cp-btn-primary";
+      createBtn.textContent = "Create";
+      const cancelBtnInline = document.createElement("button");
+      cancelBtnInline.type = "button";
+      cancelBtnInline.className = "cp-btn cp-btn-secondary";
+      cancelBtnInline.textContent = "Cancel";
+      actions.appendChild(createBtn);
+      actions.appendChild(cancelBtnInline);
+      wrap.appendChild(actions);
+
+      const setInlineError = (msg) => {
+        if (!msg) {
+          err.textContent = "";
+          err.classList.add("cp-hidden");
+          return;
+        }
+        err.textContent = msg;
+        err.classList.remove("cp-hidden");
+      };
+
+      cancelBtnInline.addEventListener("click", () => {
+        onCancel();
+      });
+
+      createBtn.addEventListener("click", async () => {
+        setInlineError("");
+        const pid = String(bgaIdInput.value || "").trim();
+        const nick = String(bgaNicknameInput.value || "").trim();
+        if (!/^\d{6,9}$/.test(pid)) {
+          setInlineError("BGA ID must be 6-9 digits.");
+          return;
+        }
+        if (!nick) {
+          setInlineError("BGA nickname is required.");
+          return;
+        }
+        createBtn.disabled = true;
+        createBtn.textContent = "Creating...";
+        try {
+          const resp = await fetch(PROFILES_URL, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              player_id: pid,
+              bga_nickname: nick,
+              association: associationCode,
+            }),
+          });
+          const result = await resp.json().catch(() => ({}));
+          if (!resp.ok || !result?.ok) {
+            setInlineError(result?.message || "Failed to create profile.");
+            return;
+          }
+          const profile = result?.profile || {
+            player_id: pid,
+            bga_nickname: nick,
+            name: nick,
+            association: associationCode,
+          };
+          allProfiles.push(profile);
+          onCreated(profile);
+        } catch (_error) {
+          setInlineError("Failed to create profile.");
+        } finally {
+          createBtn.disabled = false;
+          createBtn.textContent = "Create";
+        }
+      });
+
+      return wrap;
+    };
+
+    const syncLineupsHeader = () => {
+      lineupTitleTeam1.innerHTML = "";
+      lineupTitleTeam2.innerHTML = "";
+      const team1Meta = teamsById.get(normalizeCode(team1Input.getValue())) || null;
+      const team2Meta = teamsById.get(normalizeCode(team2Input.getValue())) || null;
+      if (team1Meta?.logo) {
+        const img = document.createElement("img");
+        img.className = "cp-dd-flag";
+        img.src = team1Meta.logo;
+        img.alt = "";
+        lineupTitleTeam1.appendChild(img);
+      }
+      const t1 = document.createElement("span");
+      t1.textContent = team1Meta?.name || "Team 1";
+      lineupTitleTeam1.appendChild(t1);
+      if (team2Meta?.logo) {
+        const img = document.createElement("img");
+        img.className = "cp-dd-flag";
+        img.src = team2Meta.logo;
+        img.alt = "";
+        lineupTitleTeam2.appendChild(img);
+      }
+      const t2 = document.createElement("span");
+      t2.textContent = team2Meta?.name || "Team 2";
+      lineupTitleTeam2.appendChild(t2);
+    };
+
+    const isSecretLineupType = () => String(lineupTypeInput.getValue() || "").trim() === "Secret";
+    const requiredDuelRows = () => {
+      const duels = parseNullableInt(duelsInput.value);
+      return Number.isInteger(duels) && duels > 0 ? duels : 1;
+    };
+
+    const renderLineupsRows = () => {
+      lineupsRows.innerHTML = "";
+      syncLineupsHeader();
+      lineupsWrap.style.display = lineupsEnabled ? "" : "none";
+      if (!lineupsEnabled) return;
+
+      const team1Code = normalizeCode(team1Input.getValue());
+      const team2Code = normalizeCode(team2Input.getValue());
+      const canChangeCount = !isSecretLineupType();
+      lineupsOpenActions.style.display = canChangeCount ? "" : "none";
+
+      lineupsState.forEach((entry, index) => {
+        const row = document.createElement("div");
+        row.style.display = "grid";
+        row.style.gridTemplateColumns = canChangeCount ? "60px 1fr 1fr 34px" : "60px 1fr 1fr";
+        row.style.gap = "8px";
+        row.style.alignItems = "start";
+
+        const duelNo = document.createElement("div");
+        duelNo.style.height = "30px";
+        duelNo.style.display = "inline-flex";
+        duelNo.style.alignItems = "center";
+        duelNo.style.fontSize = "13px";
+        duelNo.style.fontWeight = "600";
+        duelNo.textContent = `${index + 1}:`;
+        row.appendChild(duelNo);
+
+        const createPlayerCell = (teamCodeForCell, currentValue, onSelect) => {
+          const cell = document.createElement("div");
+          const optionPlayers = getPlayersForTeam(teamCodeForCell).map((p) => ({
+            value: String(p.player_id || "").trim(),
+            label: `${playerLabel(p)} (${String(p.player_id || "").trim()})`,
+          }));
+          const options = [{ value: "", label: "Select player" }]
+            .concat(optionPlayers)
+            .concat([{ value: "__add_new__", label: "Add new player" }]);
+          const dd = createDropdown(currentValue || "", options, { allowEmpty: true });
+          const inlineArea = document.createElement("div");
+          cell.appendChild(dd.root);
+          cell.appendChild(inlineArea);
+          dd.setOnChange((nextValue) => {
+            if (nextValue === "__add_new__") {
+              dd.setValue("", false);
+              const inline = createAddPlayerInline(teamCodeForCell, (profile) => {
+                inlineArea.innerHTML = "";
+                onSelect(String(profile?.player_id || "").trim());
+                renderLineupsRows();
+              }, () => {
+                inlineArea.innerHTML = "";
+              });
+              inlineArea.innerHTML = "";
+              inlineArea.appendChild(inline);
+              return;
+            }
+            inlineArea.innerHTML = "";
+            onSelect(nextValue);
+          });
+          return cell;
+        };
+
+        const p1Cell = createPlayerCell(team1Code, entry.player1Id, (v) => {
+          lineupsState[index].player1Id = String(v || "").trim();
+        });
+        const p2Cell = createPlayerCell(team2Code, entry.player2Id, (v) => {
+          lineupsState[index].player2Id = String(v || "").trim();
+        });
+        row.appendChild(p1Cell);
+        row.appendChild(p2Cell);
+
+        if (canChangeCount) {
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "cp-btn cp-btn-secondary";
+          removeBtn.textContent = "×";
+          removeBtn.style.padding = "4px";
+          removeBtn.style.minWidth = "30px";
+          removeBtn.addEventListener("click", () => {
+            if (lineupsState.length <= 1) return;
+            lineupsState.splice(index, 1);
+            renderLineupsRows();
+          });
+          row.appendChild(removeBtn);
+        }
+
+        lineupsRows.appendChild(row);
+      });
+    };
+
+    const syncLineupsByRules = () => {
+      if (!lineupsEnabled) return;
+      if (isSecretLineupType()) {
+        const needed = requiredDuelRows();
+        while (lineupsState.length < needed) lineupsState.push({ player1Id: "", player2Id: "" });
+        if (lineupsState.length > needed) lineupsState = lineupsState.slice(0, needed);
+      } else if (lineupsState.length < 1) {
+        lineupsState = [{ player1Id: "", player2Id: "" }];
+      }
+      renderLineupsRows();
+    };
+
+    createLineupsBtn.addEventListener("click", () => {
+      lineupsEnabled = true;
+      if (!lineupsState.length) {
+        if (isSecretLineupType()) {
+          const n = requiredDuelRows();
+          lineupsState = Array.from({ length: n }, () => ({ player1Id: "", player2Id: "" }));
+        } else {
+          lineupsState = Array.from({ length: 5 }, () => ({ player1Id: "", player2Id: "" }));
+        }
+      }
+      syncLineupsByRules();
+    });
+
+    addLineupRowBtn.addEventListener("click", () => {
+      if (isSecretLineupType()) return;
+      lineupsState.push({ player1Id: "", player2Id: "" });
+      renderLineupsRows();
+    });
+
+    if (lineupsEnabled) syncLineupsByRules();
+
     const errorEl = document.createElement("div");
     errorEl.className = "cp-edit-error cp-hidden";
     form.appendChild(errorEl);
@@ -1072,6 +1448,7 @@
         deadlineHoursInput.setValue("24h", true);
       }
       previousLineupType = currentLineupType;
+      syncLineupsByRules();
     };
     lineupTypeInput.setOnChange(syncDeadlineVisibility);
     syncDeadlineVisibility();
@@ -1093,10 +1470,18 @@
       localTimeFlag2.alt = "";
       localTimeText2.textContent = `Local time: ${formatTeamLocalTime(team2Meta?.timezone, timeUtc)}`;
     };
-    team1Input.setOnChange(refreshLocalTimes);
-    team2Input.setOnChange(refreshLocalTimes);
+    team1Input.setOnChange(() => {
+      refreshLocalTimes();
+      syncLineupsByRules();
+    });
+    team2Input.setOnChange(() => {
+      refreshLocalTimes();
+      syncLineupsByRules();
+    });
     timeInput.addEventListener("input", refreshLocalTimes);
     timeInput.addEventListener("change", refreshLocalTimes);
+    duelsInput.addEventListener("input", syncLineupsByRules);
+    duelsInput.addEventListener("change", syncLineupsByRules);
     refreshLocalTimes();
 
     document.addEventListener("click", (event) => {
@@ -1207,6 +1592,20 @@
         gw2: parseNullableInt(gw2Input.value),
       };
 
+      if (lineupsEnabled) {
+        if (!lineupsState.length) {
+          setError("At least one lineup row is required.");
+          return;
+        }
+        const invalidRowIndex = lineupsState.findIndex((row) => {
+          return !String(row?.player1Id || "").trim() || !String(row?.player2Id || "").trim();
+        });
+        if (invalidRowIndex >= 0) {
+          setError(`Select players for duel ${invalidRowIndex + 1}.`);
+          return;
+        }
+      }
+
       setSaving(true);
       try {
         const url = isCreateMode
@@ -1224,6 +1623,42 @@
           setError(result?.message || "Failed to save match.");
           return;
         }
+
+        if (lineupsEnabled) {
+          const matchIdForLineups = String(payload.id || match?.id || "").trim();
+          const lineupRowsPayload = lineupsState.map((row) => ({
+            id: buildLineupIdFromMatch(timeUtc, row.player1Id, row.player2Id),
+            tournament_id: DEFAULT_TOURNAMENT_ID,
+            match_id: matchIdForLineups,
+            duel_format: "Bo3",
+            time_utc: timeUtc,
+            custom_time: 0,
+            player_1_id: String(row.player1Id || "").trim(),
+            player_2_id: String(row.player2Id || "").trim(),
+            dw1: null,
+            dw2: null,
+            status: "Planned",
+          }));
+          if (lineupRowsPayload.some((r) => !r.id)) {
+            setError("Failed to generate lineup IDs.");
+            return;
+          }
+          const lineupsResp = await fetch(`${LINEUPS_URL}/bulk-upsert`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              match_id: matchIdForLineups,
+              lineups: lineupRowsPayload,
+            }),
+          });
+          const lineupsResult = await lineupsResp.json().catch(() => ({}));
+          if (!lineupsResp.ok || !lineupsResult?.ok) {
+            setError(lineupsResult?.message || "Failed to save lineups.");
+            return;
+          }
+        }
+
         window.location.href = buildCaptainUrl({ edit: false, create: false, matchId: null });
       } catch (_error) {
         setError("Failed to save match.");
@@ -1276,9 +1711,10 @@
         associationCode = captainAssociationCode;
       }
 
-      const [matchesRes, teamsRes] = await Promise.all([
+      const [matchesRes, teamsRes, profilesRes] = await Promise.all([
         fetch(MATCHES_URL, { method: "GET" }),
         fetch(TEAMS_URL, { method: "GET" }),
+        fetch(PROFILES_PUBLIC_URL, { method: "GET" }),
       ]);
 
       if (!matchesRes.ok) {
@@ -1303,6 +1739,22 @@
             name: String(team?.name || key).trim(),
             logo: String(team?.logo || "").trim(),
             timezone: String(team?.timezone || "").trim(),
+          });
+        });
+      }
+
+      const allProfiles = [];
+      if (profilesRes.ok) {
+        const profilesData = await profilesRes.json().catch(() => ({}));
+        const profiles = Array.isArray(profilesData?.profiles) ? profilesData.profiles : [];
+        profiles.forEach((profile) => {
+          const playerId = String(profile?.player_id || "").trim();
+          if (!playerId) return;
+          allProfiles.push({
+            player_id: playerId,
+            bga_nickname: String(profile?.bga_nickname || "").trim(),
+            name: String(profile?.name || "").trim(),
+            association: normalizeCode(profile?.association),
           });
         });
       }
@@ -1340,7 +1792,7 @@
         renderMatchEditForm(
           null,
           teamsById,
-          { lockedTeamField: "team_1", team1Default: captainAssociationCode },
+          { lockedTeamField: "team_1", team1Default: captainAssociationCode, profiles: allProfiles, lineups: [] },
           "create"
         );
         if (isTestMode) {
@@ -1369,7 +1821,20 @@
           if (matchTeam1 === captainAssociationCode) lockedTeamField = "team_1";
           if (matchTeam2 === captainAssociationCode) lockedTeamField = "team_2";
         }
-        renderMatchEditForm(matchToEdit, teamsById, { lockedTeamField }, "edit");
+        let existingLineups = [];
+        try {
+          const lineupsRes = await fetch(`${LINEUPS_URL}?match_id=${encodeURIComponent(String(matchToEdit?.id || ""))}`, {
+            method: "GET",
+            credentials: "include",
+          });
+          if (lineupsRes.ok) {
+            const lineupsData = await lineupsRes.json().catch(() => ({}));
+            existingLineups = Array.isArray(lineupsData?.lineups) ? lineupsData.lineups : [];
+          }
+        } catch (_error) {
+          existingLineups = [];
+        }
+        renderMatchEditForm(matchToEdit, teamsById, { lockedTeamField, profiles: allProfiles, lineups: existingLineups }, "edit");
         if (isTestMode) {
           hintEl.textContent = "test mode: all matches";
         }

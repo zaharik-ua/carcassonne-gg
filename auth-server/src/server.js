@@ -512,6 +512,7 @@ app.get("/profiles/public", (_req, res, next) => {
     `
       SELECT
         player_id,
+        bga_nickname,
         name,
         association,
         email,
@@ -524,6 +525,103 @@ app.get("/profiles/public", (_req, res, next) => {
     (err, rows) => {
       if (err) return next(err);
       return res.json({ ok: true, profiles: rows || [] });
+    }
+  );
+});
+
+app.post("/profiles", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const isAdmin = Number(req.user.admin) === 1;
+  const isTeamCaptain = Number(req.user.team_captain) === 1;
+  const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+
+  const playerId = String(payload.player_id || "").trim();
+  const bgaNickname = String(payload.bga_nickname || "").trim();
+  const association = String(payload.association || "").trim().toUpperCase();
+  const name = String(payload.name || bgaNickname || "").trim() || null;
+
+  if (!/^\d{6,9}$/.test(playerId)) {
+    return res.status(400).json({ ok: false, message: "player_id must be 6-9 digits" });
+  }
+  if (!bgaNickname) {
+    return res.status(400).json({ ok: false, message: "bga_nickname is required" });
+  }
+  if (!association) {
+    return res.status(400).json({ ok: false, message: "association is required" });
+  }
+  if (!isAdmin) {
+    if (!isTeamCaptain || !userAssociation) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+    if (association !== userAssociation) {
+      return res.status(403).json({ ok: false, message: "Captain can create profiles only in own association" });
+    }
+  }
+
+  return db.get(
+    `
+      SELECT player_id, bga_nickname
+      FROM profiles
+      WHERE player_id = ? OR lower(COALESCE(bga_nickname, '')) = lower(?)
+      LIMIT 1
+    `,
+    [playerId, bgaNickname],
+    (dupErr, dupRow) => {
+      if (dupErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate profile uniqueness" });
+      }
+      if (dupRow) {
+        return res.status(409).json({ ok: false, message: "Profile with this player_id or bga_nickname already exists" });
+      }
+
+      return db.run(
+        `
+          INSERT INTO profiles (
+            player_id,
+            bga_nickname,
+            name,
+            association,
+            team_captain,
+            admin,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        [playerId, bgaNickname, name, association],
+        function onInsert(insertErr) {
+          if (insertErr) {
+            return res.status(500).json({ ok: false, message: "Failed to create profile" });
+          }
+          return db.get(
+            `
+              SELECT
+                player_id,
+                bga_nickname,
+                name,
+                association,
+                email,
+                COALESCE(master_title, 0) AS master_title,
+                master_title_date,
+                COALESCE(team_captain, 0) AS team_captain
+              FROM profiles
+              WHERE player_id = ?
+              LIMIT 1
+            `,
+            [playerId],
+            (selectErr, row) => {
+              if (selectErr) {
+                return res.status(500).json({ ok: false, message: "Failed to load created profile" });
+              }
+              return res.status(201).json({ ok: true, profile: row || null });
+            }
+          );
+        }
+      );
     }
   );
 });
@@ -724,6 +822,183 @@ app.get("/teams", (_req, res, next) => {
     (err, rows) => {
       if (err) return next(err);
       return res.json({ ok: true, teams: rows || [] });
+    }
+  );
+});
+
+app.get("/lineups", (req, res, next) => {
+  const matchId = String(req.query.match_id || "").trim();
+  if (!matchId) {
+    return res.status(400).json({ ok: false, message: "match_id is required" });
+  }
+
+  db.all(
+    `
+      SELECT
+        id,
+        tournament_id,
+        match_id,
+        duel_format,
+        time_utc,
+        custom_time,
+        player_1_id,
+        player_2_id,
+        dw1,
+        dw2,
+        status
+      FROM lineups
+      WHERE match_id = ?
+      ORDER BY id ASC
+    `,
+    [matchId],
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, lineups: rows || [] });
+    }
+  );
+});
+
+app.post("/lineups/bulk-upsert", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const matchId = String(payload.match_id || "").trim();
+  const lineups = Array.isArray(payload.lineups) ? payload.lineups : [];
+  if (!matchId) {
+    return res.status(400).json({ ok: false, message: "match_id is required" });
+  }
+
+  const isAdmin = Number(req.user.admin) === 1;
+  const isTeamCaptain = Number(req.user.team_captain) === 1;
+  const userAssociation = String(req.user.association || "").trim().toUpperCase();
+
+  const toIntOrNull = (v) => {
+    if (v === null || v === undefined || String(v).trim() === "") return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return Math.trunc(n);
+  };
+  const normalizeText = (v) => {
+    const s = String(v ?? "").trim();
+    return s === "" ? null : s;
+  };
+
+  return db.get(
+    "SELECT team_1, team_2 FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1",
+    [matchId],
+    (matchErr, matchRow) => {
+      if (matchErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate match" });
+      }
+      if (!matchRow) {
+        return res.status(404).json({ ok: false, message: "Match not found" });
+      }
+      const team1 = String(matchRow.team_1 || "").trim().toUpperCase();
+      const team2 = String(matchRow.team_2 || "").trim().toUpperCase();
+      const canEdit = isAdmin || (isTeamCaptain && userAssociation && (userAssociation === team1 || userAssociation === team2));
+      if (!canEdit) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+
+      const sanitized = [];
+      for (const item of lineups) {
+        const id = String(item?.id || "").trim();
+        const player1 = String(item?.player_1_id || "").trim();
+        const player2 = String(item?.player_2_id || "").trim();
+        if (!id || !player1 || !player2) {
+          return res.status(400).json({ ok: false, message: "Each lineup requires id, player_1_id, player_2_id" });
+        }
+        sanitized.push({
+          id,
+          tournament_id: normalizeText(item?.tournament_id),
+          match_id: matchId,
+          duel_format: normalizeText(item?.duel_format),
+          time_utc: normalizeText(item?.time_utc),
+          custom_time: toIntOrNull(item?.custom_time),
+          player_1_id: player1,
+          player_2_id: player2,
+          dw1: toIntOrNull(item?.dw1),
+          dw2: toIntOrNull(item?.dw2),
+          status: normalizeText(item?.status),
+        });
+      }
+
+      return db.serialize(() => {
+        db.run("BEGIN IMMEDIATE TRANSACTION");
+        db.run("DELETE FROM lineups WHERE match_id = ?", [matchId], (deleteErr) => {
+          if (deleteErr) {
+            db.run("ROLLBACK");
+            return res.status(500).json({ ok: false, message: "Failed to clear old lineups" });
+          }
+          if (!sanitized.length) {
+            return db.run("COMMIT", (commitErr) => {
+              if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
+              return res.json({ ok: true, lineups: [] });
+            });
+          }
+
+          const stmt = db.prepare(`
+            INSERT INTO lineups (
+              id,
+              tournament_id,
+              match_id,
+              duel_format,
+              time_utc,
+              custom_time,
+              player_1_id,
+              player_2_id,
+              dw1,
+              dw2,
+              status,
+              created_at,
+              updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `);
+
+          let failed = false;
+          let pending = sanitized.length;
+          sanitized.forEach((item) => {
+            stmt.run(
+              [
+                item.id,
+                item.tournament_id,
+                item.match_id,
+                item.duel_format,
+                item.time_utc,
+                item.custom_time,
+                item.player_1_id,
+                item.player_2_id,
+                item.dw1,
+                item.dw2,
+                item.status,
+              ],
+              (insertErr) => {
+                if (failed) return;
+                if (insertErr) {
+                  failed = true;
+                  stmt.finalize(() => {
+                    db.run("ROLLBACK");
+                    return res.status(500).json({ ok: false, message: "Failed to insert lineups" });
+                  });
+                  return;
+                }
+                pending -= 1;
+                if (pending === 0) {
+                  stmt.finalize(() => {
+                    db.run("COMMIT", (commitErr) => {
+                      if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
+                      return res.json({ ok: true, lineups: sanitized });
+                    });
+                  });
+                }
+              }
+            );
+          });
+        });
+      });
     }
   );
 });
