@@ -967,18 +967,18 @@ app.post("/lineups/bulk-upsert", (req, res) => {
           `,
           [actorPlayerId, actorPlayerId, matchId],
           (deleteErr) => {
-          if (deleteErr) {
-            db.run("ROLLBACK");
-            return res.status(500).json({ ok: false, message: "Failed to clear old lineups" });
-          }
-          if (!sanitized.length) {
-            return db.run("COMMIT", (commitErr) => {
-              if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
-              return res.json({ ok: true, lineups: [] });
-            });
-          }
+            if (deleteErr) {
+              db.run("ROLLBACK");
+              return res.status(500).json({ ok: false, message: "Failed to clear old lineups" });
+            }
+            if (!sanitized.length) {
+              return db.run("COMMIT", (commitErr) => {
+                if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
+                return res.json({ ok: true, lineups: [] });
+              });
+            }
 
-          const stmt = db.prepare(`
+            const stmt = db.prepare(`
             INSERT INTO lineups (
               id,
               tournament_id,
@@ -1016,47 +1016,48 @@ app.post("/lineups/bulk-upsert", (req, res) => {
               updated_at = CURRENT_TIMESTAMP
           `);
 
-          let failed = false;
-          let pending = sanitized.length;
-          sanitized.forEach((item) => {
-            stmt.run(
-              [
-                item.id,
-                item.tournament_id,
-                item.match_id,
-                item.duel_format,
-                item.time_utc,
-                item.custom_time,
-                item.player_1_id,
-                item.player_2_id,
-                item.dw1,
-                item.dw2,
-                item.status,
-                actorPlayerId,
-                actorPlayerId,
-              ],
-              (insertErr) => {
-                if (failed) return;
-                if (insertErr) {
-                  failed = true;
-                  stmt.finalize(() => {
-                    db.run("ROLLBACK");
-                    return res.status(500).json({ ok: false, message: "Failed to insert lineups" });
-                  });
-                  return;
-                }
-                pending -= 1;
-                if (pending === 0) {
-                  stmt.finalize(() => {
-                    db.run("COMMIT", (commitErr) => {
-                      if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
-                      return res.json({ ok: true, lineups: sanitized });
+            let failed = false;
+            let pending = sanitized.length;
+            sanitized.forEach((item) => {
+              stmt.run(
+                [
+                  item.id,
+                  item.tournament_id,
+                  item.match_id,
+                  item.duel_format,
+                  item.time_utc,
+                  item.custom_time,
+                  item.player_1_id,
+                  item.player_2_id,
+                  item.dw1,
+                  item.dw2,
+                  item.status,
+                  actorPlayerId,
+                  actorPlayerId,
+                ],
+                (insertErr) => {
+                  if (failed) return;
+                  if (insertErr) {
+                    failed = true;
+                    stmt.finalize(() => {
+                      db.run("ROLLBACK");
+                      return res.status(500).json({ ok: false, message: "Failed to insert lineups" });
                     });
-                  });
+                    return;
+                  }
+                  pending -= 1;
+                  if (pending === 0) {
+                    stmt.finalize(() => {
+                      db.run("COMMIT", (commitErr) => {
+                        if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
+                        return res.json({ ok: true, lineups: sanitized });
+                      });
+                    });
+                  }
                 }
-              }
-            );
-          });
+              );
+            });
+          }
         );
       });
     }
