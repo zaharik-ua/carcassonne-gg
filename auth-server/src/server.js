@@ -542,7 +542,7 @@ app.post("/profiles", (req, res) => {
   const playerId = String(payload.player_id || "").trim();
   const bgaNickname = String(payload.bga_nickname || "").trim();
   const association = String(payload.association || "").trim().toUpperCase();
-  const name = String(payload.name || bgaNickname || "").trim() || null;
+  const name = String(payload.name || "").trim() || null;
 
   if (!/^\d{6,9}$/.test(playerId)) {
     return res.status(400).json({ ok: false, message: "player_id must be 6-9 digits" });

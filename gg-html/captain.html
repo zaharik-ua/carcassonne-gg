@@ -1,4 +1,5 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
 <style>
   :root {
@@ -296,6 +297,23 @@
     transform: translateY(0);
   }
 
+  .cp-dd-search {
+    padding: 6px 8px;
+    border-bottom: 1px solid #edf1f6;
+    background: #fff;
+  }
+
+  .cp-dd-search input {
+    width: 100%;
+    height: 28px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 13px;
+    box-sizing: border-box;
+  }
+
   .cp-dd-option {
     all: unset;
     box-sizing: border-box;
@@ -367,6 +385,44 @@
 
   .cp-hidden {
     display: none !important;
+  }
+
+  .lineup {
+    height: 0;
+    overflow: hidden;
+    transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+    background-color: #f5f5f5;
+  }
+
+  .lineup__overview {
+    padding: 10px 0 10px 12px;
+    line-height: 22px;
+    font-family: "Montserrat", sans-serif;
+  }
+
+  .lineup a {
+    color: #333333;
+    text-decoration: none;
+  }
+
+  .lineup a:hover {
+    color: #146997;
+  }
+
+  .lineup a:active {
+    color: #333333;
+  }
+
+  .chevron {
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-right: 6px;
   }
 
   @media (max-width: 600px) {
@@ -609,6 +665,31 @@
     hintEl.textContent = "";
   }
 
+  async function loadLineupsByMatchIds(matches) {
+    const ids = (Array.isArray(matches) ? matches : [])
+      .map((m) => String(m?.id || "").trim())
+      .filter(Boolean);
+    const uniqueIds = Array.from(new Set(ids));
+    const map = new Map();
+    await Promise.all(uniqueIds.map(async (matchId) => {
+      try {
+        const res = await fetch(`${LINEUPS_URL}?match_id=${encodeURIComponent(matchId)}`, {
+          method: "GET",
+          credentials: "include",
+        });
+        if (!res.ok) {
+          map.set(matchId, []);
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        map.set(matchId, Array.isArray(data?.lineups) ? data.lineups : []);
+      } catch (_error) {
+        map.set(matchId, []);
+      }
+    }));
+    return map;
+  }
+
   function parseMatchTimeUtc(match) {
     return Date.parse(String(match?.time_utc || match?.time || "")) || 0;
   }
@@ -628,7 +709,7 @@
     return title;
   }
 
-  function renderSectionBlock(titleText, sectionMatches, teamsById) {
+  function renderSectionBlock(titleText, sectionMatches, teamsById, lineupsByMatch, profilesById) {
     const sectionWrap = document.createElement("div");
     sectionWrap.style.display = "grid";
     sectionWrap.style.gap = "6px";
@@ -638,13 +719,15 @@
 
     const list = document.createElement("div");
     list.className = "captain-list";
-    sectionMatches.forEach((match) => list.appendChild(createMatchRow(match, teamsById)));
+    sectionMatches.forEach((match) => {
+      list.appendChild(createMatchRow(match, teamsById, lineupsByMatch, profilesById));
+    });
     sectionWrap.appendChild(list);
 
     return sectionWrap;
   }
 
-  function createMatchRow(match, teamsById) {
+  function createMatchRow(match, teamsById, lineupsByMatch, profilesById) {
     const team1Id = readMatchTeam1(match);
     const team2Id = readMatchTeam2(match);
     const team1 = teamsById.get(team1Id) || null;
@@ -658,6 +741,7 @@
     const gw2 = String(match?.gw2 ?? match?.games_won2 ?? "").trim();
     const hasScore = dw1 !== "" || dw2 !== "" || gw1 !== "" || gw2 !== "";
 
+    const matchWrap = document.createDocumentFragment();
     const row = document.createElement("div");
     row.className = "cp-match-row";
 
@@ -732,6 +816,82 @@
       right.appendChild(altScoreEl);
     }
 
+    const matchLineups = Array.isArray(lineupsByMatch?.get(String(match?.id || "").trim()))
+      ? lineupsByMatch.get(String(match?.id || "").trim())
+      : [];
+    if (matchLineups.length > 0) {
+      const toggleBtn = document.createElement("div");
+      toggleBtn.className = "chevron";
+      const chevronIcon = document.createElement("i");
+      chevronIcon.className = "fas fa-chevron-down";
+      chevronIcon.style.transition = "transform 0.3s ease";
+      chevronIcon.style.transform = "rotate(0deg)";
+      chevronIcon.style.fontSize = "12px";
+      chevronIcon.style.padding = "0 4px";
+      toggleBtn.appendChild(chevronIcon);
+      right.appendChild(toggleBtn);
+
+      const lineupPanel = document.createElement("div");
+      lineupPanel.className = "lineup";
+
+      const lineupBody = document.createElement("div");
+      lineupBody.className = "lineup__overview";
+      matchLineups.forEach((lineup) => {
+        const p1 = String(lineup?.player_1_id || "").trim();
+        const p2 = String(lineup?.player_2_id || "").trim();
+        const rowEl = document.createElement("div");
+
+        const p1Link = document.createElement("a");
+        p1Link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(p1)}`;
+        p1Link.target = "_blank";
+        p1Link.rel = "noopener noreferrer";
+        p1Link.textContent = playerLabel(profilesById?.get(p1) || { player_id: p1 });
+
+        const sep = document.createElement("span");
+        sep.textContent = " - ";
+
+        const p2Link = document.createElement("a");
+        p2Link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(p2)}`;
+        p2Link.target = "_blank";
+        p2Link.rel = "noopener noreferrer";
+        p2Link.textContent = playerLabel(profilesById?.get(p2) || { player_id: p2 });
+
+        rowEl.appendChild(p1Link);
+        rowEl.appendChild(sep);
+        rowEl.appendChild(p2Link);
+        lineupBody.appendChild(rowEl);
+      });
+      lineupPanel.appendChild(lineupBody);
+
+      toggleBtn.addEventListener("click", () => {
+        const isOpen = lineupPanel.classList.contains("open");
+        if (isOpen) {
+          lineupPanel.style.height = `${lineupPanel.scrollHeight}px`;
+          requestAnimationFrame(() => {
+            lineupPanel.style.height = "0px";
+            lineupPanel.classList.remove("open");
+            chevronIcon.style.transform = "rotate(0deg)";
+          });
+        } else {
+          lineupPanel.style.height = "0px";
+          lineupPanel.classList.add("open");
+          chevronIcon.style.transform = "rotate(180deg)";
+          requestAnimationFrame(() => {
+            lineupPanel.style.height = `${lineupPanel.scrollHeight}px`;
+          });
+          lineupPanel.addEventListener("transitionend", function handler() {
+            if (lineupPanel.classList.contains("open")) {
+              lineupPanel.style.height = "auto";
+            }
+            lineupPanel.removeEventListener("transitionend", handler);
+          });
+        }
+      });
+
+      matchWrap.appendChild(row);
+      matchWrap.appendChild(lineupPanel);
+    }
+
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "cp-edit-btn";
@@ -742,10 +902,13 @@
     right.appendChild(editBtn);
 
     row.appendChild(right);
-    return row;
+    if (matchLineups.length === 0) {
+      matchWrap.appendChild(row);
+    }
+    return matchWrap;
   }
 
-  function renderMatches(matches, teamsById) {
+  function renderMatches(matches, teamsById, lineupsByMatch, profilesById) {
     countEl.textContent = "";
     contentEl.className = "";
     contentEl.innerHTML = "";
@@ -761,10 +924,10 @@
       .sort((a, b) => parseMatchTimeUtc(b) - parseMatchTimeUtc(a));
 
     if (ongoing.length > 0) {
-      contentEl.appendChild(renderSectionBlock("Ongoing", ongoing, teamsById));
+      contentEl.appendChild(renderSectionBlock("Ongoing", ongoing, teamsById, lineupsByMatch, profilesById));
     }
     if (finished.length > 0) {
-      contentEl.appendChild(renderSectionBlock("Finished", finished, teamsById));
+      contentEl.appendChild(renderSectionBlock("Finished", finished, teamsById, lineupsByMatch, profilesById));
     }
   }
 
@@ -869,6 +1032,19 @@
 
       const menu = document.createElement("div");
       menu.className = "cp-dd-menu";
+      const isSearchable = !!cfg.searchable;
+      let filterQuery = "";
+      let searchInput = null;
+
+      if (isSearchable) {
+        const searchWrap = document.createElement("div");
+        searchWrap.className = "cp-dd-search";
+        searchInput = document.createElement("input");
+        searchInput.type = "text";
+        searchInput.placeholder = "Type to filter...";
+        searchWrap.appendChild(searchInput);
+        menu.appendChild(searchWrap);
+      }
 
       const findOption = (v) => normalizedOptions.find((opt) => opt.value === String(v || "").trim()) || null;
       const renderButtonContent = () => {
@@ -886,34 +1062,8 @@
         text.textContent = selected.label || selected.value;
         btnContent.appendChild(text);
       };
-      const close = () => {
-        menu.classList.remove("open");
-        menu.style.maxHeight = "0px";
-        btn.classList.remove("open");
-      };
-      const open = () => {
-        if (btn.disabled) return;
-        menu.classList.add("open");
-        menu.style.maxHeight = `${menu.scrollHeight}px`;
-        btn.classList.add("open");
-      };
-      const setDisabled = (isDisabled) => {
-        btn.disabled = !!isDisabled;
-        btn.classList.toggle("disabled", !!isDisabled);
-        if (isDisabled) close();
-      };
-      const setValue = (newValue, trigger) => {
-        const next = findOption(newValue);
-        if (!next) return;
-        value = next.value;
-        menu.querySelectorAll(".cp-dd-option").forEach((optEl) => {
-          optEl.classList.toggle("active", String(optEl.dataset.value) === value);
-        });
-        renderButtonContent();
-        if (trigger && typeof cfg.onChange === "function") cfg.onChange(value);
-      };
 
-      normalizedOptions.forEach((opt) => {
+      const createOptionButton = (opt) => {
         const optionBtn = document.createElement("button");
         optionBtn.type = "button";
         optionBtn.className = "cp-dd-option";
@@ -932,8 +1082,70 @@
           setValue(opt.value, true);
           close();
         });
-        menu.appendChild(optionBtn);
-      });
+        return optionBtn;
+      };
+
+      const renderMenuOptions = () => {
+        menu.querySelectorAll(".cp-dd-option").forEach((node) => node.remove());
+        const query = String(filterQuery || "").trim().toLowerCase();
+        const visibleOptions = normalizedOptions.filter((opt) => {
+          if (opt.value === "__add_new__") return true;
+          if (!query) return true;
+          const hay = `${opt.label || ""} ${opt.value || ""}`.toLowerCase();
+          return hay.includes(query);
+        });
+        visibleOptions.forEach((opt) => {
+          menu.appendChild(createOptionButton(opt));
+        });
+      };
+
+      const close = () => {
+        menu.classList.remove("open");
+        menu.style.maxHeight = "0px";
+        btn.classList.remove("open");
+      };
+      const open = () => {
+        if (btn.disabled) return;
+        if (isSearchable && searchInput) {
+          filterQuery = "";
+          searchInput.value = "";
+          renderMenuOptions();
+        }
+        menu.classList.add("open");
+        menu.style.maxHeight = `${menu.scrollHeight}px`;
+        btn.classList.add("open");
+        if (isSearchable && searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      };
+      const setDisabled = (isDisabled) => {
+        btn.disabled = !!isDisabled;
+        btn.classList.toggle("disabled", !!isDisabled);
+        if (isDisabled) close();
+      };
+      const setValue = (newValue, trigger) => {
+        const next = findOption(newValue);
+        if (!next) return;
+        value = next.value;
+        menu.querySelectorAll(".cp-dd-option").forEach((optEl) => {
+          optEl.classList.toggle("active", String(optEl.dataset.value) === value);
+        });
+        renderButtonContent();
+        if (trigger && typeof cfg.onChange === "function") cfg.onChange(value);
+      };
+
+      renderMenuOptions();
+
+      if (isSearchable && searchInput) {
+        searchInput.addEventListener("click", (event) => event.stopPropagation());
+        searchInput.addEventListener("keydown", (event) => event.stopPropagation());
+        searchInput.addEventListener("input", () => {
+          filterQuery = String(searchInput.value || "");
+          renderMenuOptions();
+          menu.style.maxHeight = `${menu.scrollHeight}px`;
+        });
+      }
 
       btn.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -1101,14 +1313,14 @@
 
     const lineupsHeader = document.createElement("div");
     lineupsHeader.style.display = "grid";
-    lineupsHeader.style.gridTemplateColumns = "60px 1fr 1fr";
+    lineupsHeader.style.gridTemplateColumns = "20px 1fr 1fr";
     lineupsHeader.style.gap = "8px";
     lineupsHeader.style.alignItems = "center";
     lineupsHeader.style.marginBottom = "8px";
     lineupsWrap.appendChild(lineupsHeader);
 
     const lineupTitle1 = document.createElement("div");
-    lineupTitle1.textContent = "Duel";
+    lineupTitle1.textContent = "";
     lineupTitle1.style.fontSize = "12px";
     lineupTitle1.style.fontWeight = "600";
     lineupsHeader.appendChild(lineupTitle1);
@@ -1322,12 +1534,13 @@
       const team1Code = normalizeCode(team1Input.getValue());
       const team2Code = normalizeCode(team2Input.getValue());
       const canChangeCount = !isSecretLineupType();
+      lineupsHeader.style.gridTemplateColumns = canChangeCount ? "20px 1fr 1fr 26px" : "20px 1fr 1fr";
       lineupsOpenActions.style.display = canChangeCount ? "" : "none";
 
       lineupsState.forEach((entry, index) => {
         const row = document.createElement("div");
         row.style.display = "grid";
-        row.style.gridTemplateColumns = canChangeCount ? "60px 1fr 1fr 34px" : "60px 1fr 1fr";
+        row.style.gridTemplateColumns = canChangeCount ? "20px 1fr 1fr 26px" : "20px 1fr 1fr";
         row.style.gap = "8px";
         row.style.alignItems = "start";
 
@@ -1344,18 +1557,28 @@
           const cell = document.createElement("div");
           const optionPlayers = getPlayersForTeam(teamCodeForCell).map((p) => ({
             value: String(p.player_id || "").trim(),
-            label: `${playerLabel(p)} (${String(p.player_id || "").trim()})`,
+            label: `${playerLabel(p)}`,
           }));
           const options = [{ value: "", label: "Select player" }]
             .concat(optionPlayers)
             .concat([{ value: "__add_new__", label: "Add new player" }]);
-          const dd = createDropdown(currentValue || "", options, { allowEmpty: true });
+          const dd = createDropdown(currentValue || "", options, { allowEmpty: true, searchable: true });
+          const ddBtn = dd.root.querySelector(".cp-dd-btn");
+          const syncSelectedHighlight = () => {
+            if (!ddBtn) return;
+            const selectedValue = String(dd.getValue() || "").trim();
+            const hasSelectedPlayer = selectedValue !== "" && selectedValue !== "__add_new__";
+            ddBtn.style.background = hasSelectedPlayer ? "#f4fbf4" : "#fff";
+            ddBtn.style.borderColor = hasSelectedPlayer ? "#d7ebd7" : "#c8ced8";
+          };
+          syncSelectedHighlight();
           const inlineArea = document.createElement("div");
           cell.appendChild(dd.root);
           cell.appendChild(inlineArea);
           dd.setOnChange((nextValue) => {
             if (nextValue === "__add_new__") {
               dd.setValue("", false);
+              syncSelectedHighlight();
               const inline = createAddPlayerInline(teamCodeForCell, (profile) => {
                 inlineArea.innerHTML = "";
                 onSelect(String(profile?.player_id || "").trim());
@@ -1369,6 +1592,7 @@
             }
             inlineArea.innerHTML = "";
             onSelect(nextValue);
+            syncSelectedHighlight();
           });
           return cell;
         };
@@ -1387,8 +1611,12 @@
           removeBtn.type = "button";
           removeBtn.className = "cp-btn cp-btn-secondary";
           removeBtn.textContent = "×";
-          removeBtn.style.padding = "4px";
-          removeBtn.style.minWidth = "30px";
+          removeBtn.style.width = "22px";
+          removeBtn.style.height = "22px";
+          removeBtn.style.padding = "0";
+          removeBtn.style.minWidth = "22px";
+          removeBtn.style.lineHeight = "1";
+          removeBtn.style.alignSelf = "center";
           removeBtn.addEventListener("click", () => {
             if (lineupsState.length <= 1) return;
             lineupsState.splice(index, 1);
@@ -1744,18 +1972,21 @@
       }
 
       const allProfiles = [];
+      const profilesById = new Map();
       if (profilesRes.ok) {
         const profilesData = await profilesRes.json().catch(() => ({}));
         const profiles = Array.isArray(profilesData?.profiles) ? profilesData.profiles : [];
         profiles.forEach((profile) => {
           const playerId = String(profile?.player_id || "").trim();
           if (!playerId) return;
-          allProfiles.push({
+          const profileObj = {
             player_id: playerId,
             bga_nickname: String(profile?.bga_nickname || "").trim(),
             name: String(profile?.name || "").trim(),
             association: normalizeCode(profile?.association),
-          });
+          };
+          allProfiles.push(profileObj);
+          profilesById.set(playerId, profileObj);
         });
       }
 
@@ -1841,7 +2072,8 @@
         return;
       }
 
-      renderMatches(filtered, teamsById);
+      const lineupsByMatch = await loadLineupsByMatchIds(filtered);
+      renderMatches(filtered, teamsById, lineupsByMatch, profilesById);
       if (isTestMode) {
         hintEl.textContent = "test mode: all matches";
       } else if (associationOverride) {
