@@ -341,6 +341,12 @@
     background: #e4f0fb;
   }
 
+  .cp-dd-option.disabled {
+    color: #9aa3af;
+    cursor: not-allowed;
+    background: #fff;
+  }
+
   .cp-edit-actions {
     display: inline-flex;
     align-items: center;
@@ -1008,6 +1014,7 @@
           value: String(opt?.value || "").trim(),
           label: String(opt?.label || opt?.value || "").trim(),
           logo: String(opt?.logo || "").trim(),
+          disabled: !!opt?.disabled,
         }))
         .filter((opt) => cfg.allowEmpty ? true : !!opt.value);
 
@@ -1068,6 +1075,7 @@
         optionBtn.type = "button";
         optionBtn.className = "cp-dd-option";
         optionBtn.dataset.value = opt.value;
+        if (opt.disabled) optionBtn.classList.add("disabled");
         if (cfg.showLogo && opt.logo) {
           const img = document.createElement("img");
           img.className = "cp-dd-flag";
@@ -1079,6 +1087,7 @@
         if (opt.value === value) optionBtn.classList.add("active");
         optionBtn.addEventListener("click", (event) => {
           event.stopPropagation();
+          if (opt.disabled) return;
           setValue(opt.value, true);
           close();
         });
@@ -1182,8 +1191,8 @@
       logo: team.logo,
     }));
     const team2Options = [{ value: "", label: "Select team", logo: "" }].concat(teamOptions);
-    const team1Input = createDropdown(readMatchTeam1(source), teamOptions, { showLogo: true });
-    const team2Input = createDropdown(readMatchTeam2(source), team2Options, { showLogo: true, allowEmpty: true });
+    const team1Input = createDropdown(readMatchTeam1(source), teamOptions, { showLogo: true, searchable: true });
+    const team2Input = createDropdown(readMatchTeam2(source), team2Options, { showLogo: true, allowEmpty: true, searchable: true });
     const lockedTeamField = String(editContext?.lockedTeamField || "").trim();
     if (lockedTeamField === "team_1") {
       team1Input.setDisabled(true);
@@ -1239,7 +1248,7 @@
       lineupTypeInitial,
       [
         { value: "Open", label: "Open" },
-        { value: "Secret", label: "Secret" },
+        { value: "Secret", label: "Secret (will be available later)", disabled: true },
       ]
     );
     addRow("Lineup Type", lineupTypeInput.root);

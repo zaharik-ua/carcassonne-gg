@@ -140,6 +140,9 @@ function ensureProfilesSchema() {
     addColumnIfMissing(columns, "profiles", "discord", "TEXT");
     addColumnIfMissing(columns, "profiles", "instagram", "TEXT");
     addColumnIfMissing(columns, "profiles", "contact_email", "TEXT");
+    addColumnIfMissing(columns, "profiles", "created_by", "TEXT");
+    addColumnIfMissing(columns, "profiles", "updated_by", "TEXT");
+    addColumnIfMissing(columns, "profiles", "deleted_by", "TEXT");
     addColumnIfMissing(columns, "profiles", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
     addColumnIfMissing(columns, "profiles", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
   });
@@ -154,6 +157,9 @@ function ensureMatchesSchema() {
     if (!Array.isArray(columns) || columns.length === 0) return;
     addColumnIfMissing(columns, "matches", "lineup_deadline_h", "INTEGER");
     addColumnIfMissing(columns, "matches", "deleted_at", "TEXT");
+    addColumnIfMissing(columns, "matches", "created_by", "TEXT");
+    addColumnIfMissing(columns, "matches", "updated_by", "TEXT");
+    addColumnIfMissing(columns, "matches", "deleted_by", "TEXT");
   });
 }
 
@@ -171,13 +177,29 @@ function ensureLineupsSchema() {
       dw1 INTEGER,
       dw2 INTEGER,
       status TEXT,
+      created_by TEXT,
+      updated_by TEXT,
+      deleted_by TEXT,
+      deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `, (createErr) => {
     if (createErr) {
       console.error("Failed to ensure lineups schema", createErr);
+      return;
     }
+    db.all("PRAGMA table_info(lineups)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect lineups schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "lineups", "created_by", "TEXT");
+      addColumnIfMissing(columns, "lineups", "updated_by", "TEXT");
+      addColumnIfMissing(columns, "lineups", "deleted_by", "TEXT");
+      addColumnIfMissing(columns, "lineups", "deleted_at", "TEXT");
+    });
   });
 }
 
@@ -537,6 +559,7 @@ app.post("/profiles", (req, res) => {
   const isAdmin = Number(req.user.admin) === 1;
   const isTeamCaptain = Number(req.user.team_captain) === 1;
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  const actorPlayerId = String(req.user.player_id || "").trim() || null;
   const payload = req.body && typeof req.body === "object" ? req.body : {};
 
   const playerId = String(payload.player_id || "").trim();
@@ -587,12 +610,14 @@ app.post("/profiles", (req, res) => {
             association,
             team_captain,
             admin,
+            created_by,
+            updated_by,
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, 0, 0, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
-        [playerId, bgaNickname, name, association],
+        [playerId, bgaNickname, name, association, actorPlayerId, actorPlayerId],
         function onInsert(insertErr) {
           if (insertErr) {
             return res.status(500).json({ ok: false, message: "Failed to create profile" });
@@ -848,6 +873,7 @@ app.get("/lineups", (req, res, next) => {
         status
       FROM lineups
       WHERE match_id = ?
+        AND deleted_at IS NULL
       ORDER BY id ASC
     `,
     [matchId],
@@ -873,6 +899,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
   const isAdmin = Number(req.user.admin) === 1;
   const isTeamCaptain = Number(req.user.team_captain) === 1;
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  const actorPlayerId = String(req.user.player_id || "").trim() || null;
 
   const toIntOrNull = (v) => {
     if (v === null || v === undefined || String(v).trim() === "") return null;
@@ -927,7 +954,19 @@ app.post("/lineups/bulk-upsert", (req, res) => {
 
       return db.serialize(() => {
         db.run("BEGIN IMMEDIATE TRANSACTION");
-        db.run("DELETE FROM lineups WHERE match_id = ?", [matchId], (deleteErr) => {
+        db.run(
+          `
+            UPDATE lineups
+            SET
+              deleted_at = CURRENT_TIMESTAMP,
+              deleted_by = ?,
+              updated_by = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE match_id = ?
+              AND deleted_at IS NULL
+          `,
+          [actorPlayerId, actorPlayerId, matchId],
+          (deleteErr) => {
           if (deleteErr) {
             db.run("ROLLBACK");
             return res.status(500).json({ ok: false, message: "Failed to clear old lineups" });
@@ -952,10 +991,29 @@ app.post("/lineups/bulk-upsert", (req, res) => {
               dw1,
               dw2,
               status,
+              created_by,
+              updated_by,
+              deleted_by,
+              deleted_at,
               created_at,
               updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+              tournament_id = excluded.tournament_id,
+              match_id = excluded.match_id,
+              duel_format = excluded.duel_format,
+              time_utc = excluded.time_utc,
+              custom_time = excluded.custom_time,
+              player_1_id = excluded.player_1_id,
+              player_2_id = excluded.player_2_id,
+              dw1 = excluded.dw1,
+              dw2 = excluded.dw2,
+              status = excluded.status,
+              updated_by = excluded.updated_by,
+              deleted_by = NULL,
+              deleted_at = NULL,
+              updated_at = CURRENT_TIMESTAMP
           `);
 
           let failed = false;
@@ -974,6 +1032,8 @@ app.post("/lineups/bulk-upsert", (req, res) => {
                 item.dw1,
                 item.dw2,
                 item.status,
+                actorPlayerId,
+                actorPlayerId,
               ],
               (insertErr) => {
                 if (failed) return;
@@ -997,7 +1057,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
               }
             );
           });
-        });
+        );
       });
     }
   );
@@ -1040,6 +1100,7 @@ app.post("/matches", (req, res) => {
   const isAdmin = Number(req.user.admin) === 1;
   const isTeamCaptain = Number(req.user.team_captain) === 1;
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  const actorPlayerId = String(req.user.player_id || "").trim() || null;
   if (!isAdmin && !isTeamCaptain) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
   }
@@ -1149,9 +1210,11 @@ app.post("/matches", (req, res) => {
         dw1,
         dw2,
         gw1,
-        gw2
+        gw2,
+        created_by,
+        updated_by
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       matchId,
@@ -1168,6 +1231,8 @@ app.post("/matches", (req, res) => {
       dw2,
       gw1,
       gw2,
+      actorPlayerId,
+      actorPlayerId,
     ],
     function onInsert(insertErr) {
       if (insertErr) {
@@ -1223,6 +1288,7 @@ app.patch("/matches/:id", (req, res) => {
   const isAdmin = Number(req.user.admin) === 1;
   const isTeamCaptain = Number(req.user.team_captain) === 1;
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  const actorPlayerId = String(req.user.player_id || "").trim() || null;
   if (!isAdmin && !isTeamCaptain) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
   }
@@ -1361,7 +1427,8 @@ app.patch("/matches/:id", (req, res) => {
             dw1 = ?,
             dw2 = ?,
             gw1 = ?,
-            gw2 = ?
+            gw2 = ?,
+            updated_by = ?
           WHERE id = ?
             AND deleted_at IS NULL
         `,
@@ -1379,6 +1446,7 @@ app.patch("/matches/:id", (req, res) => {
           dw2,
           gw1,
           gw2,
+          actorPlayerId,
           matchId,
         ],
         function onUpdate(updateErr) {
@@ -1440,6 +1508,7 @@ app.delete("/matches/:id", (req, res) => {
   const isAdmin = Number(req.user.admin) === 1;
   const isTeamCaptain = Number(req.user.team_captain) === 1;
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  const actorPlayerId = String(req.user.player_id || "").trim() || null;
   if (!isAdmin && !isTeamCaptain) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
   }
@@ -1474,11 +1543,15 @@ app.delete("/matches/:id", (req, res) => {
       return db.run(
         `
           UPDATE matches
-          SET deleted_at = CURRENT_TIMESTAMP
+          SET
+            deleted_at = CURRENT_TIMESTAMP,
+            deleted_by = ?,
+            updated_by = ?,
+            updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
             AND deleted_at IS NULL
         `,
-        [matchId],
+        [actorPlayerId, actorPlayerId, matchId],
         function onDelete(deleteErr) {
           if (deleteErr) {
             return res.status(500).json({ ok: false, message: "Failed to delete match" });
@@ -1630,6 +1703,7 @@ app.patch("/profiles/:playerId", (req, res) => {
   }
 
   const linkedPlayerId = String(req.user.player_id || "").trim();
+  const actorPlayerId = linkedPlayerId || null;
   const isAdmin = Number(req.user.admin) === 1;
   const isTeamCaptain = Number(req.user.team_captain) === 1;
   const userAssociation = String(req.user.association || "").trim().toLowerCase();
@@ -1724,6 +1798,7 @@ app.patch("/profiles/:playerId", (req, res) => {
             discord = ?,
             instagram = ?,
             contact_email = ?,
+            updated_by = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE player_id = ?
         `
@@ -1740,6 +1815,7 @@ app.patch("/profiles/:playerId", (req, res) => {
             discord = ?,
             instagram = ?,
             contact_email = ?,
+            updated_by = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE player_id = ?
         `
@@ -1754,6 +1830,7 @@ app.patch("/profiles/:playerId", (req, res) => {
             discord = ?,
             instagram = ?,
             contact_email = ?,
+            updated_by = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE player_id = ?
         `;
@@ -1771,6 +1848,7 @@ app.patch("/profiles/:playerId", (req, res) => {
           allowedPatch.discord,
           allowedPatch.instagram,
           allowedPatch.contact_email,
+          actorPlayerId,
           requestedPlayerId,
         ]
       : captainCanEdit
@@ -1784,6 +1862,7 @@ app.patch("/profiles/:playerId", (req, res) => {
           allowedPatch.discord,
           allowedPatch.instagram,
           allowedPatch.contact_email,
+          actorPlayerId,
           requestedPlayerId,
         ]
       : [
@@ -1795,6 +1874,7 @@ app.patch("/profiles/:playerId", (req, res) => {
           allowedPatch.discord,
           allowedPatch.instagram,
           allowedPatch.contact_email,
+          actorPlayerId,
           requestedPlayerId,
         ];
 
