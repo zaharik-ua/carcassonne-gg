@@ -750,7 +750,7 @@
       const rows = Array.isArray(payload?.profiles) ? payload.profiles : [];
       const map = new Map();
       rows.forEach((row) => {
-        const key = String(row?.player_id || "").trim();
+        const key = String(row?.id ?? row?.player_id ?? "").trim();
         if (!key) return;
         map.set(key, row);
       });
@@ -2085,7 +2085,7 @@
     });
 
     [...profilesMap.values()].forEach((dbProfile) => {
-      const profileId = String(dbProfile?.player_id || "").trim();
+      const profileId = String(dbProfile?.id ?? dbProfile?.player_id ?? "").trim();
       if (!profileId) return;
       const jsonProfile = jsonProfilesById.get(profileId) || {};
       const mergedProfile = {
@@ -2125,9 +2125,9 @@
       return;
     }
     const profile = ggProfilesById.get(String(playerId)) || {
+      id: String(playerId),
       player_id: String(playerId),
       profile_id: String(playerId),
-      id: String(playerId),
       bga_nickname: String(dbProfile?.bga_nickname || ""),
       name: String(dbProfile?.name || ""),
       association: String(dbProfile?.association || ""),
@@ -2138,7 +2138,7 @@
       team_captain: Number(dbProfile?.team_captain || 0),
     };
     const dbProfileForPlayer = {
-      ...(dbProfile || { player_id: String(playerId) }),
+      ...(dbProfile || { id: String(playerId) }),
       ...(profileContacts && typeof profileContacts === "object" ? profileContacts : {}),
     };
 

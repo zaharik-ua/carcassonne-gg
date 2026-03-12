@@ -206,7 +206,7 @@
       const rows = Array.isArray(payload?.profiles) ? payload.profiles : [];
       const map = new Map();
       rows.forEach((row) => {
-        const key = String(row?.player_id || "").trim();
+        const key = String(row?.id ?? row?.player_id ?? "").trim();
         if (!key) return;
         map.set(key, row);
       });
@@ -427,7 +427,7 @@
       allPlayers = [...profilesMap.values()]
         .filter((dbProfile) => isActivePlayerStatus(dbProfile?.status))
         .map((dbProfile) => {
-        const profileId = String(dbProfile?.player_id || "").trim();
+        const profileId = String(dbProfile?.id ?? dbProfile?.player_id ?? "").trim();
         const jsonProfile = ggById.get(profileId) || {};
         const assocRaw = String(dbProfile?.association || "");
         const assocKey = normalizeKey(assocRaw);

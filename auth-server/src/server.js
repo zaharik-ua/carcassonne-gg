@@ -127,33 +127,91 @@ function ensureProfilesSchema() {
       return;
     }
 
-    addColumnIfMissing(columns, "profiles", "player_id", "TEXT");
-    addColumnIfMissing(columns, "profiles", "admin", "INTEGER NOT NULL DEFAULT 0");
-    addColumnIfMissing(columns, "profiles", "bga_nickname", "TEXT");
-    addColumnIfMissing(columns, "profiles", "name", "TEXT");
-    addColumnIfMissing(columns, "profiles", "association", "TEXT");
-    addColumnIfMissing(columns, "profiles", "status", "TEXT NOT NULL DEFAULT 'Active'");
-    addColumnIfMissing(columns, "profiles", "master_title", "INTEGER NOT NULL DEFAULT 0");
-    addColumnIfMissing(columns, "profiles", "master_title_date", "DATE");
-    addColumnIfMissing(columns, "profiles", "team_captain", "INTEGER NOT NULL DEFAULT 0");
-    addColumnIfMissing(columns, "profiles", "telegram", "TEXT");
-    addColumnIfMissing(columns, "profiles", "whatsapp", "TEXT");
-    addColumnIfMissing(columns, "profiles", "discord", "TEXT");
-    addColumnIfMissing(columns, "profiles", "instagram", "TEXT");
-    addColumnIfMissing(columns, "profiles", "contact_email", "TEXT");
-    addColumnIfMissing(columns, "profiles", "created_by", "TEXT");
-    addColumnIfMissing(columns, "profiles", "updated_by", "TEXT");
-    addColumnIfMissing(columns, "profiles", "deleted_by", "TEXT");
-    addColumnIfMissing(columns, "profiles", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-    addColumnIfMissing(columns, "profiles", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-    db.run(
-      "UPDATE profiles SET status = 'Active' WHERE status IS NULL OR trim(status) = ''",
-      (backfillErr) => {
-        if (backfillErr) {
-          console.error("Failed to backfill profiles.status", backfillErr);
+    const addOrBackfillProfilesColumns = (currentColumns) => {
+      addColumnIfMissing(currentColumns, "profiles", "id", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "admin", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(currentColumns, "profiles", "bga_nickname", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "name", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "association", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "status", "TEXT NOT NULL DEFAULT 'Active'");
+      addColumnIfMissing(currentColumns, "profiles", "master_title", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(currentColumns, "profiles", "master_title_date", "DATE");
+      addColumnIfMissing(currentColumns, "profiles", "team_captain", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(currentColumns, "profiles", "telegram", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "whatsapp", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "discord", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "instagram", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "contact_email", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "created_by", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "updated_by", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "deleted_by", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(currentColumns, "profiles", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      db.run(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_id ON profiles(id)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure unique index for profiles.id", indexErr);
+          }
         }
-      }
-    );
+      );
+      db.run(
+        "UPDATE profiles SET status = 'Active' WHERE status IS NULL OR trim(status) = ''",
+        (backfillErr) => {
+          if (backfillErr) {
+            console.error("Failed to backfill profiles.status", backfillErr);
+          }
+        }
+      );
+    };
+
+    const hasLegacyPlayerId = columns.some((col) => col.name === "player_id");
+    const hasIdColumn = columns.some((col) => col.name === "id");
+    const hasProfileRowId = columns.some((col) => col.name === "profile_row_id");
+    const idColumn = columns.find((col) => col.name === "id");
+    const idIsPrimaryKey = Number(idColumn?.pk || 0) === 1;
+
+    if (!hasLegacyPlayerId) {
+      addOrBackfillProfilesColumns(columns);
+      return;
+    }
+
+    const renameLegacyPlayerId = () => {
+      db.run("ALTER TABLE profiles RENAME COLUMN player_id TO id", (renamePlayerIdErr) => {
+        if (renamePlayerIdErr) {
+          console.error("Failed to rename profiles.player_id to profiles.id", renamePlayerIdErr);
+          addOrBackfillProfilesColumns(columns);
+          return;
+        }
+        db.all("PRAGMA table_info(profiles)", (refreshErr, refreshedColumns) => {
+          if (refreshErr) {
+            console.error("Failed to refresh profiles schema after rename", refreshErr);
+            return;
+          }
+          addOrBackfillProfilesColumns(refreshedColumns || []);
+        });
+      });
+    };
+
+    if (hasIdColumn && idIsPrimaryKey && !hasProfileRowId) {
+      db.run("ALTER TABLE profiles RENAME COLUMN id TO profile_row_id", (renamePkErr) => {
+        if (renamePkErr) {
+          console.error("Failed to rename legacy profiles.id PK to profile_row_id", renamePkErr);
+          addOrBackfillProfilesColumns(columns);
+          return;
+        }
+        renameLegacyPlayerId();
+      });
+      return;
+    }
+
+    if (!hasIdColumn) {
+      renameLegacyPlayerId();
+      return;
+    }
+
+    console.error("profiles table already has id column, cannot auto-rename player_id -> id safely");
+    addOrBackfillProfilesColumns(columns);
   });
 }
 
@@ -298,7 +356,7 @@ db.serialize(() => {
 
           db.run(`
             CREATE TABLE IF NOT EXISTS profiles (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              profile_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
               email TEXT NOT NULL UNIQUE COLLATE NOCASE,
               bga_nickname TEXT,
               name TEXT,
@@ -312,7 +370,7 @@ db.serialize(() => {
               discord TEXT,
               instagram TEXT,
               contact_email TEXT,
-              player_id TEXT,
+              id TEXT,
               admin INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -353,52 +411,52 @@ passport.deserializeUser((id, done) => {
         u.name,
         u.picture,
         (
-          SELECT p.player_id
+          SELECT p.id
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
-          ORDER BY p.updated_at DESC, p.player_id ASC
+          ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ) AS player_id,
         COALESCE((
           SELECT p.admin
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
-          ORDER BY p.updated_at DESC, p.player_id ASC
+          ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ), 0) AS admin,
         (
           SELECT p.bga_nickname
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
-          ORDER BY p.updated_at DESC, p.player_id ASC
+          ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ) AS bga_nickname,
         (
           SELECT p.association
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
-          ORDER BY p.updated_at DESC, p.player_id ASC
+          ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ) AS association,
         COALESCE((
           SELECT p.master_title
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
-          ORDER BY p.updated_at DESC, p.player_id ASC
+          ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ), 0) AS master_title,
         (
           SELECT p.master_title_date
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
-          ORDER BY p.updated_at DESC, p.player_id ASC
+          ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ) AS master_title_date,
         COALESCE((
           SELECT p.team_captain
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
-          ORDER BY p.updated_at DESC, p.player_id ASC
+          ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ), 0) AS team_captain
       FROM users u
@@ -543,7 +601,7 @@ app.get("/profiles/public", (_req, res, next) => {
   db.all(
     `
       SELECT
-        player_id,
+        id,
         bga_nickname,
         name,
         association,
@@ -553,7 +611,7 @@ app.get("/profiles/public", (_req, res, next) => {
         master_title_date,
         COALESCE(team_captain, 0) AS team_captain
       FROM profiles
-      WHERE trim(COALESCE(player_id, '')) <> ''
+      WHERE trim(COALESCE(id, '')) <> ''
     `,
     (err, rows) => {
       if (err) return next(err);
@@ -573,13 +631,13 @@ app.post("/profiles", (req, res) => {
   const actorPlayerId = String(req.user.player_id || "").trim() || null;
   const payload = req.body && typeof req.body === "object" ? req.body : {};
 
-  const playerId = String(payload.player_id || "").trim();
+  const playerId = String(payload.id ?? payload.player_id ?? "").trim();
   const bgaNickname = String(payload.bga_nickname || "").trim();
   const association = String(payload.association || "").trim().toUpperCase();
   const name = String(payload.name || "").trim() || null;
 
   if (!/^\d{6,9}$/.test(playerId)) {
-    return res.status(400).json({ ok: false, message: "player_id must be 6-9 digits" });
+    return res.status(400).json({ ok: false, message: "id must be 6-9 digits" });
   }
   if (!bgaNickname) {
     return res.status(400).json({ ok: false, message: "bga_nickname is required" });
@@ -598,9 +656,9 @@ app.post("/profiles", (req, res) => {
 
   return db.get(
     `
-      SELECT player_id, bga_nickname
+      SELECT id, bga_nickname
       FROM profiles
-      WHERE player_id = ? OR lower(COALESCE(bga_nickname, '')) = lower(?)
+      WHERE id = ? OR lower(COALESCE(bga_nickname, '')) = lower(?)
       LIMIT 1
     `,
     [playerId, bgaNickname],
@@ -609,13 +667,13 @@ app.post("/profiles", (req, res) => {
         return res.status(500).json({ ok: false, message: "Failed to validate profile uniqueness" });
       }
       if (dupRow) {
-        return res.status(409).json({ ok: false, message: "Profile with this player_id or bga_nickname already exists" });
+        return res.status(409).json({ ok: false, message: "Profile with this id or bga_nickname already exists" });
       }
 
       return db.run(
         `
           INSERT INTO profiles (
-            player_id,
+            id,
             bga_nickname,
             name,
             association,
@@ -636,7 +694,7 @@ app.post("/profiles", (req, res) => {
           return db.get(
             `
               SELECT
-                player_id,
+                id,
                 bga_nickname,
                 name,
                 association,
@@ -645,7 +703,7 @@ app.post("/profiles", (req, res) => {
                 master_title_date,
                 COALESCE(team_captain, 0) AS team_captain
               FROM profiles
-              WHERE player_id = ?
+              WHERE id = ?
               LIMIT 1
             `,
             [playerId],
@@ -686,7 +744,7 @@ app.get("/profiles/contacts/:playerId", (req, res) => {
         instagram,
         contact_email
       FROM profiles
-      WHERE player_id = ?
+      WHERE id = ?
       LIMIT 1
     `,
     [requestedPlayerId],
@@ -1676,7 +1734,7 @@ app.get("/auth/can-edit-player/:playerId", (req, res) => {
   // Rule 3: team captain can edit profiles with the same association.
   if (isTeamCaptain && userAssociation) {
     return db.get(
-      "SELECT association FROM profiles WHERE player_id = ? LIMIT 1",
+      "SELECT association FROM profiles WHERE id = ? LIMIT 1",
       [requestedPlayerId],
       (targetErr, targetRow) => {
         if (targetErr) return res.status(500).json({ authenticated: true, canEdit: false });
@@ -1812,7 +1870,7 @@ app.patch("/profiles/:playerId", (req, res) => {
             contact_email = ?,
             updated_by = ?,
             updated_at = CURRENT_TIMESTAMP
-          WHERE player_id = ?
+          WHERE id = ?
         `
       : captainCanEdit
         ? `
@@ -1829,7 +1887,7 @@ app.patch("/profiles/:playerId", (req, res) => {
             contact_email = ?,
             updated_by = ?,
             updated_at = CURRENT_TIMESTAMP
-          WHERE player_id = ?
+          WHERE id = ?
         `
       : `
           UPDATE profiles
@@ -1844,7 +1902,7 @@ app.patch("/profiles/:playerId", (req, res) => {
             contact_email = ?,
             updated_by = ?,
             updated_at = CURRENT_TIMESTAMP
-          WHERE player_id = ?
+          WHERE id = ?
         `;
 
     const params = isAdmin
@@ -1901,7 +1959,7 @@ app.patch("/profiles/:playerId", (req, res) => {
       return db.get(
         `
           SELECT
-            player_id,
+            id,
             name,
             association,
             email,
@@ -1914,7 +1972,7 @@ app.patch("/profiles/:playerId", (req, res) => {
             instagram,
             contact_email
           FROM profiles
-          WHERE player_id = ?
+          WHERE id = ?
           LIMIT 1
         `,
         [requestedPlayerId],
@@ -1933,7 +1991,7 @@ app.patch("/profiles/:playerId", (req, res) => {
       return decideAndUpdate(true);
     }
     return db.get(
-      "SELECT association FROM profiles WHERE player_id = ? LIMIT 1",
+      "SELECT association FROM profiles WHERE id = ? LIMIT 1",
       [requestedPlayerId],
       (targetErr, targetRow) => {
         if (targetErr) {

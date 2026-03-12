@@ -18,7 +18,7 @@ sqlite3 "$DB_PATH" <<SQL
 PRAGMA foreign_keys = OFF;
 
 CREATE TABLE IF NOT EXISTS profiles (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  profile_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT UNIQUE COLLATE NOCASE,
   bga_nickname TEXT,
   name TEXT,
@@ -27,13 +27,13 @@ CREATE TABLE IF NOT EXISTS profiles (
   master_title INTEGER NOT NULL DEFAULT 0,
   master_title_date DATE,
   team_captain INTEGER NOT NULL DEFAULT 0,
-  player_id TEXT,
+  id TEXT,
   admin INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_player_id ON profiles(player_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_id ON profiles(id);
 DROP TABLE IF EXISTS profiles_import;
 CREATE TABLE profiles_import (
   "ID" TEXT,
@@ -59,7 +59,7 @@ BEGIN IMMEDIATE;
 DELETE FROM profiles;
 
 INSERT INTO profiles (
-  player_id,
+  id,
   bga_nickname,
   name,
   association,
@@ -72,7 +72,7 @@ INSERT INTO profiles (
   updated_at
 )
 SELECT
-  NULLIF(trim("ID"), '') AS player_id,
+  NULLIF(trim("ID"), '') AS id,
   NULLIF(trim("BGA nickname"), '') AS bga_nickname,
   NULLIF(trim("Name"), '') AS name,
   NULLIF(trim("Association"), '') AS association,
@@ -90,7 +90,7 @@ SELECT
   CURRENT_TIMESTAMP
 FROM profiles_import
 WHERE trim("ID") <> ''
-ON CONFLICT(player_id) DO UPDATE SET
+ON CONFLICT(id) DO UPDATE SET
   bga_nickname = excluded.bga_nickname,
   name = excluded.name,
   association = excluded.association,
@@ -108,4 +108,4 @@ SQL
 
 echo "Import done. First 20 rows:"
 sqlite3 -header -column "$DB_PATH" \
-"SELECT id, player_id, bga_nickname, name, association, status, email, master_title, master_title_date, team_captain FROM profiles ORDER BY id LIMIT 20;"
+"SELECT profile_row_id, id, bga_nickname, name, association, status, email, master_title, master_title_date, team_captain FROM profiles ORDER BY profile_row_id LIMIT 20;"

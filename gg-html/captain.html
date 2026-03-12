@@ -610,7 +610,7 @@
   function playerLabel(profile) {
     const nick = String(profile?.bga_nickname || "").trim();
     const name = String(profile?.name || "").trim();
-    const pid = String(profile?.player_id || "").trim();
+    const pid = String(profile?.id ?? profile?.player_id ?? "").trim();
     return nick || name || pid || "-";
   }
 
@@ -851,7 +851,7 @@
         p1Link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(p1)}`;
         p1Link.target = "_blank";
         p1Link.rel = "noopener noreferrer";
-        p1Link.textContent = playerLabel(profilesById?.get(p1) || { player_id: p1 });
+        p1Link.textContent = playerLabel(profilesById?.get(p1) || { id: p1 });
 
         const sep = document.createElement("span");
         sep.textContent = " - ";
@@ -860,7 +860,7 @@
         p2Link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(p2)}`;
         p2Link.target = "_blank";
         p2Link.rel = "noopener noreferrer";
-        p2Link.textContent = playerLabel(profilesById?.get(p2) || { player_id: p2 });
+        p2Link.textContent = playerLabel(profilesById?.get(p2) || { id: p2 });
 
         rowEl.appendChild(p1Link);
         rowEl.appendChild(sep);
@@ -1472,7 +1472,7 @@
             credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              player_id: pid,
+              id: pid,
               bga_nickname: nick,
               association: associationCode,
             }),
@@ -1483,7 +1483,7 @@
             return;
           }
           const profile = result?.profile || {
-            player_id: pid,
+            id: pid,
             bga_nickname: nick,
             name: nick,
             association: associationCode,
@@ -1565,7 +1565,7 @@
         const createPlayerCell = (teamCodeForCell, currentValue, onSelect) => {
           const cell = document.createElement("div");
           const optionPlayers = getPlayersForTeam(teamCodeForCell).map((p) => ({
-            value: String(p.player_id || "").trim(),
+            value: String(p.id ?? p.player_id ?? "").trim(),
             label: `${playerLabel(p)}`,
           }));
           const options = [{ value: "", label: "Select player" }]
@@ -1590,7 +1590,7 @@
               syncSelectedHighlight();
               const inline = createAddPlayerInline(teamCodeForCell, (profile) => {
                 inlineArea.innerHTML = "";
-                onSelect(String(profile?.player_id || "").trim());
+                onSelect(String(profile?.id ?? profile?.player_id ?? "").trim());
                 renderLineupsRows();
               }, () => {
                 inlineArea.innerHTML = "";
@@ -1986,10 +1986,10 @@
         const profilesData = await profilesRes.json().catch(() => ({}));
         const profiles = Array.isArray(profilesData?.profiles) ? profilesData.profiles : [];
         profiles.forEach((profile) => {
-          const playerId = String(profile?.player_id || "").trim();
+          const playerId = String(profile?.id ?? profile?.player_id ?? "").trim();
           if (!playerId) return;
           const profileObj = {
-            player_id: playerId,
+            id: playerId,
             bga_nickname: String(profile?.bga_nickname || "").trim(),
             name: String(profile?.name || "").trim(),
             association: normalizeCode(profile?.association),

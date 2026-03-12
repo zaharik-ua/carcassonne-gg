@@ -174,7 +174,7 @@
       const players = dbProfiles
         .filter((dbProfile) => isActivePlayerStatus(dbProfile?.status || "Active"))
         .map((dbProfile) => {
-          const profileId = String(dbProfile?.player_id || "").trim();
+          const profileId = String(dbProfile?.id ?? dbProfile?.player_id ?? "").trim();
           const jsonProfile = ggById.get(profileId) || {};
           const assocKey = normalizeKey(dbProfile?.association || jsonProfile?.assosiation || jsonProfile?.association || "");
           const country = assocKey ? countriesByKey.get(assocKey) : null;

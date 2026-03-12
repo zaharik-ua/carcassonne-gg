@@ -117,7 +117,7 @@ async function getLineupsExportData() {
         COALESCE((
           SELECT COALESCE(p.bga_nickname, p.name, '')
           FROM profiles p
-          WHERE trim(p.player_id) = trim(l.player_1_id)
+          WHERE trim(p.id) = trim(l.player_1_id)
           ORDER BY p.updated_at DESC, p.id DESC
           LIMIT 1
         ), '') AS player_1_name,
@@ -125,7 +125,7 @@ async function getLineupsExportData() {
         COALESCE((
           SELECT COALESCE(p.bga_nickname, p.name, '')
           FROM profiles p
-          WHERE trim(p.player_id) = trim(l.player_2_id)
+          WHERE trim(p.id) = trim(l.player_2_id)
           ORDER BY p.updated_at DESC, p.id DESC
           LIMIT 1
         ), '') AS player_2_name

@@ -22,7 +22,7 @@ fi
 sqlite3 "$DB_PATH" <<'SQL'
 DROP TABLE IF EXISTS profiles_status_import;
 CREATE TABLE profiles_status_import (
-  player_id TEXT,
+  id TEXT,
   status TEXT
 );
 SQL
@@ -39,7 +39,7 @@ UPDATE profiles
 SET status = COALESCE((
   SELECT NULLIF(trim(psi.status), '')
   FROM profiles_status_import psi
-  WHERE trim(psi.player_id) = trim(profiles.player_id)
+  WHERE trim(psi.id) = trim(profiles.id)
   LIMIT 1
 ), 'Active');
 
@@ -50,4 +50,4 @@ SQL
 
 echo "Status import done. First 20 rows:"
 sqlite3 -header -column "$DB_PATH" \
-"SELECT id, player_id, bga_nickname, status FROM profiles ORDER BY id LIMIT 20;"
+"SELECT profile_row_id, id, bga_nickname, status FROM profiles ORDER BY profile_row_id LIMIT 20;"
