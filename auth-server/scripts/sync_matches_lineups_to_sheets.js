@@ -41,24 +41,113 @@ function allAsync(sql, params = []) {
   });
 }
 
-async function getColumns(tableName) {
-  const columns = await allAsync(`PRAGMA table_info(${tableName})`);
-  return columns.map((c) => String(c.name).trim()).filter(Boolean);
+function formatUtcForSheet(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const ts = Date.parse(raw);
+  if (!Number.isFinite(ts)) return raw;
+  const dt = new Date(ts);
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = String(dt.getUTCFullYear());
+  const hh = String(dt.getUTCHours()).padStart(2, "0");
+  const mi = String(dt.getUTCMinutes()).padStart(2, "0");
+  const ss = String(dt.getUTCSeconds()).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`;
 }
 
-async function getTableData(tableName, orderBy) {
-  const columns = await getColumns(tableName);
-  if (!columns.length) {
-    return { columns: [], rows: [] };
-  }
+async function getMatchesExportData() {
+  const columns = [
+    "id",
+    "tournament_id",
+    "time_utc",
+    "team_1",
+    "team_2",
+  ];
 
-  const selectColumns = columns.map((c) => `"${c}"`).join(", ");
-  const hasDeletedAt = columns.includes("deleted_at");
-  const whereClause = hasDeletedAt ? "WHERE deleted_at IS NULL" : "";
   const rows = await allAsync(
-    `SELECT ${selectColumns} FROM ${tableName} ${whereClause} ORDER BY ${orderBy}`
+    `
+      SELECT
+        m.id AS id,
+        m.tournament_id AS tournament_id,
+        m.time_utc AS time_utc,
+        COALESCE(t1.name, m.team_1, '') AS team_1,
+        COALESCE(t2.name, m.team_2, '') AS team_2
+      FROM matches m
+      LEFT JOIN teams t1 ON upper(trim(t1.id)) = upper(trim(m.team_1))
+      LEFT JOIN teams t2 ON upper(trim(t2.id)) = upper(trim(m.team_2))
+      WHERE m.deleted_at IS NULL
+      ORDER BY m.time_utc DESC, m.id ASC
+    `
   );
-  return { columns, rows };
+
+  const mappedRows = rows.map((row) => ({
+    id: row.id,
+    tournament_id: row.tournament_id,
+    time_utc: formatUtcForSheet(row.time_utc),
+    team_1: row.team_1,
+    team_2: row.team_2,
+  }));
+
+  return { columns, rows: mappedRows };
+}
+
+async function getLineupsExportData() {
+  const columns = [
+    "id",
+    "tournament_id",
+    "match_id",
+    "duel_format",
+    "time_utc",
+    "player_1_id",
+    "player_1_name",
+    "player_2_id",
+    "player_2_name",
+  ];
+
+  const rows = await allAsync(
+    `
+      SELECT
+        l.id AS id,
+        l.tournament_id AS tournament_id,
+        l.match_id AS match_id,
+        l.duel_format AS duel_format,
+        l.time_utc AS time_utc,
+        l.player_1_id AS player_1_id,
+        COALESCE((
+          SELECT COALESCE(p.bga_nickname, p.name, '')
+          FROM profiles p
+          WHERE trim(p.player_id) = trim(l.player_1_id)
+          ORDER BY p.updated_at DESC, p.id DESC
+          LIMIT 1
+        ), '') AS player_1_name,
+        l.player_2_id AS player_2_id,
+        COALESCE((
+          SELECT COALESCE(p.bga_nickname, p.name, '')
+          FROM profiles p
+          WHERE trim(p.player_id) = trim(l.player_2_id)
+          ORDER BY p.updated_at DESC, p.id DESC
+          LIMIT 1
+        ), '') AS player_2_name
+      FROM lineups l
+      WHERE l.deleted_at IS NULL
+      ORDER BY l.match_id ASC, l.id ASC
+    `
+  );
+
+  const mappedRows = rows.map((row) => ({
+    id: row.id,
+    tournament_id: row.tournament_id,
+    match_id: row.match_id,
+    duel_format: row.duel_format,
+    time_utc: formatUtcForSheet(row.time_utc),
+    player_1_id: row.player_1_id,
+    player_1_name: row.player_1_name,
+    player_2_id: row.player_2_id,
+    player_2_name: row.player_2_name,
+  }));
+
+  return { columns, rows: mappedRows };
 }
 
 function toSheetValues(columns, rows) {
@@ -120,8 +209,8 @@ async function main() {
     const sheets = google.sheets({ version: "v4", auth });
 
     const [matchesData, lineupsData] = await Promise.all([
-      getTableData("matches", "time_utc DESC, id ASC"),
-      getTableData("lineups", "match_id ASC, id ASC"),
+      getMatchesExportData(),
+      getLineupsExportData(),
     ]);
 
     const matchesValues = toSheetValues(matchesData.columns, matchesData.rows);
