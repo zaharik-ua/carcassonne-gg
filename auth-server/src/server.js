@@ -157,6 +157,30 @@ function ensureMatchesSchema() {
   });
 }
 
+function ensureLineupsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS lineups (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT,
+      match_id TEXT,
+      duel_format TEXT,
+      time_utc TEXT,
+      custom_time TEXT,
+      player_1_id TEXT,
+      player_2_id TEXT,
+      dw1 INTEGER,
+      dw2 INTEGER,
+      status TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure lineups schema", createErr);
+    }
+  });
+}
+
 function seedTeamTimezones() {
   const entries = Object.entries(DEFAULT_TEAM_TIMEZONES);
   if (!entries.length) return;
@@ -275,6 +299,7 @@ db.serialize(() => {
           `);
 
           ensureMatchesSchema();
+          ensureLineupsSchema();
           ensureTeamsSchema();
         }
       );

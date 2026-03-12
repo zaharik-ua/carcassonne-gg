@@ -426,17 +426,18 @@
     const d = new Date(raw);
     if (!Number.isFinite(d.getTime())) return raw;
     const now = new Date();
+    const MONTHS_3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const isToday =
-      d.getUTCFullYear() === now.getUTCFullYear() &&
-      d.getUTCMonth() === now.getUTCMonth() &&
-      d.getUTCDate() === now.getUTCDate();
-    const dd = String(d.getUTCDate()).padStart(2, "0");
-    const mon = d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" });
-    const hh = String(d.getUTCHours()).padStart(2, "0");
-    const mm = String(d.getUTCMinutes()).padStart(2, "0");
-    const isPrevYear = d.getUTCFullYear() < now.getUTCFullYear();
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mon = MONTHS_3[d.getMonth()];
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    const isPrevYear = d.getFullYear() < now.getFullYear();
     if (isToday) return `${hh}:${mm}`;
-    if (isPrevYear) return `${dd} ${mon}\n${d.getUTCFullYear()}\n${hh}:${mm}`;
+    if (isPrevYear) return `${dd} ${mon}\n${d.getFullYear()}\n${hh}:${mm}`;
     return `${dd} ${mon} ${hh}:${mm}`;
   }
 
