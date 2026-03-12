@@ -47,13 +47,14 @@ function formatUtcForSheet(value) {
   const ts = Date.parse(raw);
   if (!Number.isFinite(ts)) return raw;
   const dt = new Date(ts);
-  const dd = String(dt.getUTCDate()).padStart(2, "0");
-  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
   const yyyy = String(dt.getUTCFullYear());
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
   const hh = String(dt.getUTCHours()).padStart(2, "0");
   const mi = String(dt.getUTCMinutes()).padStart(2, "0");
   const ss = String(dt.getUTCSeconds()).padStart(2, "0");
-  return `${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`;
+  // Google Sheets reliably parses this as date-time with USER_ENTERED mode.
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
 }
 
 async function getMatchesExportData() {
@@ -194,7 +195,7 @@ async function writeSheet(sheets, spreadsheetId, sheetName, values) {
   await sheets.spreadsheets.values.update({
     spreadsheetId,
     range: `${sheetName}!A1`,
-    valueInputOption: "RAW",
+    valueInputOption: "USER_ENTERED",
     requestBody: { values },
   });
 }
