@@ -120,6 +120,8 @@
 <script>
   (function() {
     const scriptEl = document.currentScript;
+    const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+    const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
     const container = scriptEl && scriptEl.previousElementSibling && scriptEl.previousElementSibling.classList.contains("top10-widget")
       ? scriptEl.previousElementSibling
       : null;
@@ -135,20 +137,33 @@
     }
 
     async function getPlayersData() {
-      const cacheKey = "__carcassonneGgPlayersDataPromise";
+      const cacheKey = "__carcassonneGgTop10DataPromise";
       if (!window[cacheKey]) {
         const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
-        window[cacheKey] = fetch(dataURL).then(res => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
+        window[cacheKey] = Promise.all([
+          fetch(dataURL),
+          fetch(PROFILES_PUBLIC_URL),
+        ]).then(async ([playersRes, profilesRes]) => {
+          if (!playersRes.ok) throw new Error(`HTTP ${playersRes.status}`);
+          const data = await playersRes.json();
+          const profilesPayload = profilesRes.ok ? await profilesRes.json() : {};
+          const dbProfiles = Array.isArray(profilesPayload?.profiles) ? profilesPayload.profiles : [];
+          return { data, dbProfiles };
         });
       }
       return window[cacheKey];
     }
 
-    function renderTop10(data) {
+    function renderTop10(payload) {
+      const data = payload?.data || {};
+      const dbProfiles = Array.isArray(payload?.dbProfiles) ? payload.dbProfiles : [];
       const ggProfiles = Array.isArray(data.gg_profiles) ? data.gg_profiles : [];
       const countries = Array.isArray(data.countries) ? data.countries : [];
+      const ggById = new Map(
+        ggProfiles
+          .map((p) => [String(p?.id ?? p?.profile_id ?? "").trim(), p])
+          .filter(([id]) => Boolean(id))
+      );
 
       const countriesByKey = new Map();
       countries.forEach(c => {
@@ -156,19 +171,21 @@
         if (c.team) countriesByKey.set(normalizeKey(c.team), c);
       });
 
-      const players = ggProfiles
-        .filter(p => isActivePlayerStatus(p.status))
-        .map(p => {
-          const profileId = String(p.id ?? p.profile_id ?? "").trim();
-          const assocKey = normalizeKey(p.assosiation || p.association || "");
+      const players = dbProfiles
+        .filter((dbProfile) => isActivePlayerStatus(dbProfile?.status || "Active"))
+        .map((dbProfile) => {
+          const profileId = String(dbProfile?.player_id || "").trim();
+          const jsonProfile = ggById.get(profileId) || {};
+          const assocKey = normalizeKey(dbProfile?.association || jsonProfile?.assosiation || jsonProfile?.association || "");
           const country = assocKey ? countriesByKey.get(assocKey) : null;
           return {
             id: profileId,
-            player: p.bga_nickname || p.bga_name || "",
-            gg_elo: p.gg_elo || "",
+            player: String(dbProfile?.bga_nickname || jsonProfile?.bga_nickname || jsonProfile?.bga_name || "").trim(),
+            gg_elo: jsonProfile?.gg_elo || "",
             flag: country?.flag || ""
           };
         })
+        .filter((p) => Boolean(p.player))
         .filter(p => Number.isFinite(Number(String(p.gg_elo).trim())))
         .sort((a, b) => Number(b.gg_elo) - Number(a.gg_elo))
         .slice(0, 10);

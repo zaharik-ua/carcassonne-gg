@@ -89,3 +89,48 @@ location /health {
 3. Заповнити `.env` на сервері.
 4. Запустити `auth-server` як systemd/pm2 сервіс.
 5. Налаштувати HTTPS (обов'язково для прод cookie `secure`).
+
+## 8) Регулярний sync `matches` + `lineups` у Google Sheets
+
+У проєкті є скрипт:
+
+```bash
+npm run sync:google-sheets
+```
+
+Він:
+- читає `matches` та `lineups` з SQLite (`DB_PATH`);
+- бере лише записи, де `deleted_at IS NULL` (як і API);
+- перезаписує 2 листи в Google Spreadsheet.
+
+### ENV для sync
+
+Додайте в `.env`:
+
+- `GOOGLE_SHEETS_SPREADSHEET_ID` - ID таблиці Google Sheets
+- `GOOGLE_SHEETS_MATCHES_SHEET` - назва листа для матчів (за замовчуванням `matches`)
+- `GOOGLE_SHEETS_LINEUPS_SHEET` - назва листа для лайнапів (за замовчуванням `lineups`)
+- `GOOGLE_SERVICE_ACCOUNT_EMAIL` - email service account
+- `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` - private key service account (з `\n`)
+
+### Права доступу в Google Sheets
+
+1. Створіть Service Account у Google Cloud.
+2. Увімкніть Google Sheets API.
+3. Поділіться вашим Google Sheet з `GOOGLE_SERVICE_ACCOUNT_EMAIL` (Editor).
+
+### Запуск по розкладу (cron)
+
+Приклад: кожні 10 хвилин.
+
+```cron
+*/10 * * * * cd /path/to/carcassonne-gg/auth-server && /usr/bin/env npm run sync:google-sheets >> /var/log/carcassonne-sync.log 2>&1
+```
+
+Перевірити вручну:
+
+```bash
+cd auth-server
+npm install
+npm run sync:google-sheets
+```

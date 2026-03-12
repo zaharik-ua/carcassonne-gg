@@ -2072,32 +2072,39 @@
 
     bgaPlayersById = new Map(bgaPlayers.map(p => [String(p.player_id), p]));
     ggProfilesById = new Map();
-    ggProfiles
-      .forEach(p => {
-      const mergedProfile = { ...p };
+
+    const jsonProfilesById = new Map();
+    ggProfiles.forEach((p) => {
       const possibleKeys = [p.profile_id, p.id, p.player_id, p.bga_player_id]
-        .map(key => String(key || "").trim())
+        .map((key) => String(key || "").trim())
         .filter(Boolean);
-      let dbProfile = null;
-      for (let i = 0; i < possibleKeys.length; i += 1) {
-        const row = profilesMap.get(possibleKeys[i]);
-        if (row) {
-          dbProfile = row;
-          break;
-        }
-      }
-
-      mergedProfile.name = String(dbProfile?.name || "");
-      mergedProfile.email = String(dbProfile?.email || "");
-      mergedProfile.association = String(dbProfile?.association || "");
-      mergedProfile.assosiation = mergedProfile.association;
-      mergedProfile.master_title = Number(dbProfile?.master_title || 0) === 1 ? "Master" : "";
-      mergedProfile.master_title_date = String(dbProfile?.master_title_date || "");
-      mergedProfile.team_captain = Number(dbProfile?.team_captain || 0) === 1 ? "Captain" : "";
-
       possibleKeys.forEach((k) => {
-        ggProfilesById.set(k, mergedProfile);
+        jsonProfilesById.set(k, p);
+        ggProfilesById.set(k, p);
       });
+    });
+
+    [...profilesMap.values()].forEach((dbProfile) => {
+      const profileId = String(dbProfile?.player_id || "").trim();
+      if (!profileId) return;
+      const jsonProfile = jsonProfilesById.get(profileId) || {};
+      const mergedProfile = {
+        ...jsonProfile,
+        id: String(jsonProfile?.id ?? jsonProfile?.profile_id ?? profileId),
+        player_id: profileId,
+        profile_id: profileId,
+        bga_nickname: String(dbProfile?.bga_nickname || jsonProfile?.bga_nickname || jsonProfile?.bga_name || jsonProfile?.nickname || "").trim(),
+        name: String(dbProfile?.name || ""),
+        email: String(dbProfile?.email || ""),
+        association: String(dbProfile?.association || jsonProfile?.association || jsonProfile?.assosiation || ""),
+        status: String(dbProfile?.status || jsonProfile?.status || ""),
+        master_title: Number(dbProfile?.master_title || 0),
+        master_title_date: String(dbProfile?.master_title_date || ""),
+        team_captain: Number(dbProfile?.team_captain || 0),
+      };
+      mergedProfile.assosiation = mergedProfile.association;
+
+      ggProfilesById.set(profileId, mergedProfile);
     });
     countriesByKey = new Map();
     countries.forEach(c => {
@@ -2112,13 +2119,26 @@
       if (key2) tournamentsById.set(key2, t);
     });
 
-    const profile = ggProfilesById.get(String(playerId));
-    if (!profile) {
+    const dbProfile = profilesMap.get(String(playerId)) || null;
+    if (!dbProfile) {
       container.textContent = "Player not found.";
       return;
     }
+    const profile = ggProfilesById.get(String(playerId)) || {
+      player_id: String(playerId),
+      profile_id: String(playerId),
+      id: String(playerId),
+      bga_nickname: String(dbProfile?.bga_nickname || ""),
+      name: String(dbProfile?.name || ""),
+      association: String(dbProfile?.association || ""),
+      assosiation: String(dbProfile?.association || ""),
+      status: String(dbProfile?.status || ""),
+      master_title: Number(dbProfile?.master_title || 0),
+      master_title_date: String(dbProfile?.master_title_date || ""),
+      team_captain: Number(dbProfile?.team_captain || 0),
+    };
     const dbProfileForPlayer = {
-      ...(profilesMap.get(String(playerId)) || { player_id: String(playerId) }),
+      ...(dbProfile || { player_id: String(playerId) }),
       ...(profileContacts && typeof profileContacts === "object" ? profileContacts : {}),
     };
 
