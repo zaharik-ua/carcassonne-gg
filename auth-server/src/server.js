@@ -90,6 +90,7 @@ function ensureMatchesSchema() {
       return;
     }
     if (!Array.isArray(columns) || columns.length === 0) return;
+    addColumnIfMissing(columns, "matches", "lineup_deadline_h", "INTEGER");
     addColumnIfMissing(columns, "matches", "deleted_at", "TEXT");
   });
 }
@@ -604,6 +605,7 @@ app.get("/matches", (_req, res, next) => {
         tournament_id,
         time_utc,
         lineup_type,
+        lineup_deadline_h,
         lineup_deadline_utc,
         number_of_duels,
         team_1,
@@ -656,6 +658,12 @@ app.post("/matches", (req, res) => {
     if (!Number.isFinite(ts)) return null;
     return new Date(ts).toISOString();
   };
+  const computeDeadlineUtc = (timeIso, hours) => {
+    const ts = Date.parse(String(timeIso || "").trim());
+    const h = Number(hours);
+    if (!Number.isFinite(ts) || !Number.isFinite(h) || h <= 0) return null;
+    return new Date(ts - h * 60 * 60 * 1000).toISOString();
+  };
 
   const tournamentId = normalizeText(payload.tournament_id) || "Friendly-Matches";
   const team1 = normalizeCode(payload.team_1);
@@ -680,11 +688,19 @@ app.post("/matches", (req, res) => {
     return res.status(400).json({ ok: false, message: "lineup_type must be Open or Closed" });
   }
 
+  const lineupDeadlineHoursRaw = parseIntOrNull(payload.lineup_deadline_h);
+  const allowedDeadlineHours = new Set([6, 12, 24, 48]);
+  const lineupDeadlineHours = lineupType === "Open"
+    ? null
+    : (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24);
+  if (lineupType === "Closed" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
+    return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Closed lineup" });
+  }
   const lineupDeadlineUtc = lineupType === "Open"
     ? null
-    : parseUtcIsoOrNull(payload.lineup_deadline_utc);
+    : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
   if (lineupType === "Closed" && !lineupDeadlineUtc) {
-    return res.status(400).json({ ok: false, message: "lineup_deadline_utc is required for Closed lineup" });
+    return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
   }
 
   const numberOfDuels = parseIntOrNull(payload.number_of_duels);
@@ -717,6 +733,7 @@ app.post("/matches", (req, res) => {
         tournament_id,
         time_utc,
         lineup_type,
+        lineup_deadline_h,
         lineup_deadline_utc,
         number_of_duels,
         team_1,
@@ -727,13 +744,14 @@ app.post("/matches", (req, res) => {
         gw1,
         gw2
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       matchId,
       tournamentId,
       timeUtc,
       lineupType,
+      lineupDeadlineHours,
       lineupDeadlineUtc,
       numberOfDuels,
       team1,
@@ -759,6 +777,7 @@ app.post("/matches", (req, res) => {
             tournament_id,
             time_utc,
             lineup_type,
+            lineup_deadline_h,
             lineup_deadline_utc,
             number_of_duels,
             team_1,
@@ -821,6 +840,12 @@ app.patch("/matches/:id", (req, res) => {
     if (!Number.isFinite(ts)) return null;
     return new Date(ts).toISOString();
   };
+  const computeDeadlineUtc = (timeIso, hours) => {
+    const ts = Date.parse(String(timeIso || "").trim());
+    const h = Number(hours);
+    if (!Number.isFinite(ts) || !Number.isFinite(h) || h <= 0) return null;
+    return new Date(ts - h * 60 * 60 * 1000).toISOString();
+  };
 
   return db.get(
     `
@@ -871,11 +896,19 @@ app.patch("/matches/:id", (req, res) => {
         return res.status(400).json({ ok: false, message: "lineup_type must be Open or Closed" });
       }
 
+      const lineupDeadlineHoursRaw = parseIntOrNull(payload.lineup_deadline_h);
+      const allowedDeadlineHours = new Set([6, 12, 24, 48]);
+      const lineupDeadlineHours = lineupType === "Open"
+        ? null
+        : (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24);
+      if (lineupType === "Closed" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
+        return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Closed lineup" });
+      }
       const lineupDeadlineUtc = lineupType === "Open"
         ? null
-        : parseUtcIsoOrNull(payload.lineup_deadline_utc);
+        : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
       if (lineupType === "Closed" && !lineupDeadlineUtc) {
-        return res.status(400).json({ ok: false, message: "lineup_deadline_utc is required for Closed lineup" });
+        return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
       }
 
       const numberOfDuels = parseIntOrNull(payload.number_of_duels);
@@ -913,6 +946,7 @@ app.patch("/matches/:id", (req, res) => {
             team_2 = ?,
             time_utc = ?,
             lineup_type = ?,
+            lineup_deadline_h = ?,
             lineup_deadline_utc = ?,
             number_of_duels = ?,
             status = ?,
@@ -929,6 +963,7 @@ app.patch("/matches/:id", (req, res) => {
           team2,
           timeUtc,
           lineupType,
+          lineupDeadlineHours,
           lineupDeadlineUtc,
           numberOfDuels,
           status,
@@ -956,6 +991,7 @@ app.patch("/matches/:id", (req, res) => {
                 tournament_id,
                 time_utc,
                 lineup_type,
+                lineup_deadline_h,
                 lineup_deadline_utc,
                 number_of_duels,
                 team_1,

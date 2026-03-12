@@ -11,10 +11,7 @@
   }
 
   body {
-    margin: 0;
     font-family: "Montserrat", sans-serif;
-    color: var(--text);
-    background: transparent;
   }
 
   .captain-wrap {
@@ -404,6 +401,7 @@
   const MATCHES_URL = `${AUTH_BASE}/matches`;
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const DEFAULT_TOURNAMENT_ID = "Friendly-Matches";
+  const DEADLINE_HOURS_OPTIONS = [6, 12, 24, 48];
 
   const contentEl = document.getElementById("captainContent");
   const countEl = document.getElementById("captainCount");
@@ -436,7 +434,10 @@
     const mon = d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" });
     const hh = String(d.getUTCHours()).padStart(2, "0");
     const mm = String(d.getUTCMinutes()).padStart(2, "0");
-    return isToday ? `${hh}:${mm}` : `${dd} ${mon} ${hh}:${mm}`;
+    const isPrevYear = d.getUTCFullYear() < now.getUTCFullYear();
+    if (isToday) return `${hh}:${mm}`;
+    if (isPrevYear) return `${dd} ${mon}\n${d.getUTCFullYear()}\n${hh}:${mm}`;
+    return `${dd} ${mon} ${hh}:${mm}`;
   }
 
   function esc(value) {
@@ -538,6 +539,25 @@
     return Math.trunc(n);
   }
 
+  function computeLineupDeadlineUtc(timeUtc, deadlineHours) {
+    const ts = Date.parse(String(timeUtc || "").trim());
+    const h = Number(deadlineHours);
+    if (!Number.isFinite(ts) || !Number.isFinite(h) || h <= 0) return null;
+    return new Date(ts - h * 60 * 60 * 1000).toISOString();
+  }
+
+  function inferDeadlineHours(source) {
+    const fromColumn = Number(source?.lineup_deadline_h);
+    if (DEADLINE_HOURS_OPTIONS.includes(fromColumn)) return fromColumn;
+    const timeTs = Date.parse(String(source?.time_utc || source?.time || "").trim());
+    const deadlineTs = Date.parse(String(source?.lineup_deadline_utc || source?.lineup_deadline || "").trim());
+    if (Number.isFinite(timeTs) && Number.isFinite(deadlineTs) && deadlineTs < timeTs) {
+      const diffHours = Math.round((timeTs - deadlineTs) / (60 * 60 * 1000));
+      if (DEADLINE_HOURS_OPTIONS.includes(diffHours)) return diffHours;
+    }
+    return 24;
+  }
+
   function renderAccessMessage() {
     contentEl.className = "captain-alert";
     contentEl.textContent = "Please sign in to view your team matches.";
@@ -563,13 +583,28 @@
   function renderSectionTitle(text) {
     const title = document.createElement("div");
     title.textContent = text;
-    title.style.padding = "6px 8px";
-    title.style.fontSize = "12px";
-    title.style.fontWeight = "700";
-    title.style.color = "#555";
-    title.style.background = "#f6f7f9";
-    title.style.borderTop = "1px solid #e0e0e0";
+    title.style.padding = "0 2px 0";
+    title.style.fontSize = "14px";
+    title.style.fontWeight = "600";
+    title.style.color = "#222";
+    title.style.background = "transparent";
     return title;
+  }
+
+  function renderSectionBlock(titleText, sectionMatches, teamsById) {
+    const sectionWrap = document.createElement("div");
+    sectionWrap.style.display = "grid";
+    sectionWrap.style.gap = "6px";
+
+    const title = renderSectionTitle(titleText);
+    sectionWrap.appendChild(title);
+
+    const list = document.createElement("div");
+    list.className = "captain-list";
+    sectionMatches.forEach((match) => list.appendChild(createMatchRow(match, teamsById)));
+    sectionWrap.appendChild(list);
+
+    return sectionWrap;
   }
 
   function createMatchRow(match, teamsById) {
@@ -593,7 +628,7 @@
     timeWrap.className = "cp-match-time";
     const timeText = document.createElement("div");
     timeText.className = "cp-match-time-text";
-    timeText.textContent = timeLabel;
+    timeText.innerHTML = esc(timeLabel).replaceAll("\n", "<br>");
     timeWrap.appendChild(timeText);
     row.appendChild(timeWrap);
 
@@ -675,8 +710,10 @@
 
   function renderMatches(matches, teamsById) {
     countEl.textContent = "";
-    contentEl.className = "captain-list";
+    contentEl.className = "";
     contentEl.innerHTML = "";
+    contentEl.style.display = "grid";
+    contentEl.style.gap = "20px";
 
     const ongoing = matches
       .filter((match) => !isFinishedMatch(match))
@@ -687,18 +724,10 @@
       .sort((a, b) => parseMatchTimeUtc(b) - parseMatchTimeUtc(a));
 
     if (ongoing.length > 0) {
-      contentEl.appendChild(renderSectionTitle("Ongoing"));
-      ongoing.forEach((match) => contentEl.appendChild(createMatchRow(match, teamsById)));
-    }
-    if (ongoing.length > 0 && finished.length > 0) {
-      const spacer = document.createElement("div");
-      spacer.style.height = "20px";
-      spacer.style.background = "#fff";
-      contentEl.appendChild(spacer);
+      contentEl.appendChild(renderSectionBlock("Ongoing", ongoing, teamsById));
     }
     if (finished.length > 0) {
-      contentEl.appendChild(renderSectionTitle("Finished"));
-      finished.forEach((match) => contentEl.appendChild(createMatchRow(match, teamsById)));
+      contentEl.appendChild(renderSectionBlock("Finished", finished, teamsById));
     }
   }
 
@@ -719,6 +748,7 @@
           team_2: "",
           time_utc: "",
           lineup_type: "Open",
+          lineup_deadline_h: 24,
           lineup_deadline_utc: null,
           number_of_duels: 5,
           status: "Planned",
@@ -883,6 +913,7 @@
         close,
         getValue: () => value,
         setDisabled,
+        setValue: (nextValue, trigger) => setValue(nextValue, !!trigger),
         setOnChange: (handler) => {
           cfg.onChange = typeof handler === "function" ? handler : null;
         },
@@ -928,12 +959,11 @@
     );
     addRow("Lineup Type", lineupTypeInput.root);
 
-    const lineupDeadlineInput = document.createElement("input");
-    lineupDeadlineInput.type = "datetime-local";
-    lineupDeadlineInput.value = toDatetimeLocalFromUtc(
-      source?.lineup_deadline_utc ?? source?.lineup_deadline
+    const deadlineHoursInput = createDropdown(
+      `${inferDeadlineHours(source)}h`,
+      DEADLINE_HOURS_OPTIONS.map((h) => ({ value: `${h}h`, label: `${h}h` }))
     );
-    const lineupDeadlineRow = addRow("Lineup Deadline, UTC", lineupDeadlineInput);
+    const deadlineHoursRow = addRow("To Deadline", deadlineHoursInput.root);
 
     const duelsInput = document.createElement("input");
     duelsInput.type = "number";
@@ -979,11 +1009,16 @@
     errorEl.className = "cp-edit-error cp-hidden";
     form.appendChild(errorEl);
 
+    let previousLineupType = String(lineupTypeInput.getValue() || "").trim();
     const syncDeadlineVisibility = () => {
-      const isOpen = String(lineupTypeInput.getValue() || "").trim() === "Open";
-      lineupDeadlineRow.classList.toggle("cp-hidden", isOpen);
+      const currentLineupType = String(lineupTypeInput.getValue() || "").trim();
+      const isOpen = currentLineupType === "Open";
+      deadlineHoursRow.classList.toggle("cp-hidden", isOpen);
       duelsRow.classList.toggle("cp-hidden", isOpen);
-      if (isOpen) lineupDeadlineInput.value = "";
+      if (!isOpen && previousLineupType === "Open") {
+        deadlineHoursInput.setValue("24h", true);
+      }
+      previousLineupType = currentLineupType;
     };
     lineupTypeInput.setOnChange(syncDeadlineVisibility);
     syncDeadlineVisibility();
@@ -1058,11 +1093,19 @@
         return;
       }
       const lineupType = String(lineupTypeInput.getValue() || "").trim();
+      const deadlineHoursRaw = String(deadlineHoursInput.getValue() || "").trim();
+      const deadlineHours = deadlineHoursRaw.endsWith("h")
+        ? Number(deadlineHoursRaw.slice(0, -1))
+        : Number(deadlineHoursRaw);
+      if (lineupType === "Closed" && !DEADLINE_HOURS_OPTIONS.includes(deadlineHours)) {
+        setError("To Deadline is required for Closed lineup.");
+        return;
+      }
       const lineupDeadlineUtc = lineupType === "Open"
         ? null
-        : toUtcIsoFromDatetimeLocal(lineupDeadlineInput.value);
+        : computeLineupDeadlineUtc(timeUtc, deadlineHours);
       if (lineupType === "Closed" && !lineupDeadlineUtc) {
-        setError("Lineup Deadline, UTC is required for Closed lineup.");
+        setError("Failed to calculate Lineup Deadline, UTC.");
         return;
       }
       const duels = parseNullableInt(duelsInput.value);
@@ -1078,6 +1121,7 @@
         team_2: normalizeCode(team2Input.getValue()),
         time_utc: timeUtc,
         lineup_type: lineupType,
+        lineup_deadline_h: lineupType === "Open" ? null : deadlineHours,
         lineup_deadline_utc: lineupDeadlineUtc,
         number_of_duels: duels,
         status: String(statusInput.getValue() || "").trim() || "Planned",
