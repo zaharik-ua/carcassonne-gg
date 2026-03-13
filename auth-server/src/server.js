@@ -642,6 +642,7 @@ app.post("/profiles", (req, res) => {
   const payload = req.body && typeof req.body === "object" ? req.body : {};
   const hasAssociationInPayload = Object.prototype.hasOwnProperty.call(payload, "association");
   const hasTeamCaptainInPayload = Object.prototype.hasOwnProperty.call(payload, "team_captain");
+  const hasTeamCaptainInPayload = Object.prototype.hasOwnProperty.call(payload, "team_captain");
   const hasNameInPayload = Object.prototype.hasOwnProperty.call(payload, "name");
 
   const playerId = String(payload.id ?? payload.player_id ?? "").trim();
