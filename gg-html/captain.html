@@ -585,6 +585,7 @@
   const countEl = document.getElementById("captainCount");
   const addButtonEl = document.getElementById("captainAddButton");
   const hintEl = document.getElementById("captainHint");
+  const titleEl = document.querySelector(".captain-title");
 
   function normalizeCode(value) {
     return String(value || "").trim().toUpperCase();
@@ -815,6 +816,12 @@
     contentEl.textContent = `No players found for association ${associationCode}.`;
     countEl.textContent = "";
     hintEl.textContent = "";
+  }
+
+  function setPageHeading(text) {
+    const title = String(text || "").trim() || "Captain Panel";
+    document.title = title;
+    if (titleEl) titleEl.textContent = title;
   }
 
   async function loadLineupsByMatchIds(matches) {
@@ -1152,18 +1159,18 @@
       ggLogo.title = "Login Email added";
       ggWrap.appendChild(ggLogo);
       row.appendChild(ggWrap);
+      appendDivider();
     }
 
     if (hasContacts) {
-      appendDivider();
       const contactsWrap = document.createElement("div");
       contactsWrap.className = "cp-player-icons cp-player-icons--contacts";
       appendPlayerIcons(contactsWrap, profile, ["telegram", "whatsapp", "discord", "instagram", "contact_email"]);
       row.appendChild(contactsWrap);
+      appendDivider();
     }
 
     if (statusIconUrl) {
-      appendDivider();
       const statusWrap = document.createElement("div");
       statusWrap.className = "cp-player-icons cp-player-icons--single cp-player-icons--status";
       const statusIcon = document.createElement("img");
@@ -1214,6 +1221,7 @@
     const isOwnProfile = currentUserPlayerId && currentUserPlayerId === playerId;
     const createdByPlayerId = String(profile?.created_by || "").trim();
     const canDeletePlayer = !!currentUserPlayerId && !!createdByPlayerId && currentUserPlayerId === createdByPlayerId;
+    setPageHeading(String(profile?.bga_nickname || playerId || "Captain Panel"));
     countEl.textContent = playerId ? `Editing: ${playerId}` : "Editing player";
     hintEl.textContent = "";
     contentEl.className = "";
@@ -1446,10 +1454,6 @@
       ])
     );
 
-    const associationInput = addTextField("Association", "association", profile?.association, "text");
-    associationInput.readOnly = true;
-    associationInput.title = "Association is managed separately and cannot be changed here.";
-
     const emailInput = addTextField("Login Email", "email", profile?.email, "email");
     if (isOwnProfile) {
       emailInput.readOnly = true;
@@ -1461,7 +1465,7 @@
     const discordInput = addContactField("Discord", "discord", profile?.discord, CONTACT_ICONS.discord, "text");
     const instagramInput = addContactField("Instagram", "instagram", profile?.instagram, CONTACT_ICONS.instagram, "text");
     const contactEmailInput = addContactField("Contact Email", "contact_email", profile?.contact_email, CONTACT_ICONS.contact_email, "email");
-    const masterInput = addCheckboxField("Master", "master_title", isTruthyFlag(profile?.master_title));
+    const masterInput = addCheckboxField("BGA Master", "master_title", isTruthyFlag(profile?.master_title));
 
     const masterDateRow = document.createElement("div");
     masterDateRow.className = "cp-edit-row";
@@ -1654,7 +1658,6 @@
 
       const payload = {
         status: String(statusInput.getValue() || "").trim() || "Active",
-        association: String(associationInput.value || "").trim(),
         email: String(emailInput.value || "").trim(),
         name: String(nameInput.value || "").trim(),
         telegram: String(telegramInput.value || "").trim(),
@@ -1703,6 +1706,7 @@
   }
 
   function renderFriendlyFindPlaceholder() {
+    setPageHeading("Find an Opponent for a Friendly Match");
     contentEl.className = "captain-alert";
     contentEl.textContent = "Friendly find view is not implemented yet.";
     countEl.textContent = "";
@@ -1715,6 +1719,7 @@
       allProfiles.map((profile) => [String(profile?.id ?? profile?.player_id ?? "").trim(), profile])
     );
     const initialLineups = Array.isArray(editContext?.lineups) ? editContext.lineups : [];
+    setPageHeading(formMode === "edit" ? "Match editing" : "Team Friendly Matches");
     hintEl.textContent = "";
     countEl.textContent = isCreateMode
       ? "Creating a new match"
@@ -2772,6 +2777,7 @@
 
   async function initCaptainPage() {
     try {
+      setPageHeading("Captain Panel");
       const isTestMode = isTestModeEnabled();
       const activeView = getViewFromUrl();
       const isEditMode = isEditModeEnabled();
@@ -2945,6 +2951,7 @@
       }
 
       if (activeView === CAPTAIN_VIEWS.FRIENDLIES && !filtered.length) {
+        setPageHeading("Team Friendly Matches");
         renderNoMatchesMessage(isTestMode ? "TEST MODE" : associationCode);
         return;
       }
@@ -2985,12 +2992,17 @@
       }
 
       if (activeView === CAPTAIN_VIEWS.FRIENDLIES) {
+        setPageHeading("Team Friendly Matches");
         const lineupsByMatch = await loadLineupsByMatchIds(filtered);
         renderMatches(filtered, teamsById, lineupsByMatch, profilesById);
       } else if (activeView === CAPTAIN_VIEWS.PLAYERS) {
         const playersAssociationCode = isTestMode
           ? "UKR"
           : normalizeCode(associationCode || captainAssociationCode);
+        const playersAssociationName = String(
+          teamsById.get(playersAssociationCode)?.name || playersAssociationCode || "Players"
+        ).trim();
+        setPageHeading(`Players: ${playersAssociationName}`);
         const players = allProfiles
           .filter((profile) => {
             if (playersAssociationCode) {

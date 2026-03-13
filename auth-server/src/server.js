@@ -1874,6 +1874,7 @@ app.patch("/profiles/:playerId", (req, res) => {
   const userAssociation = String(req.user.association || "").trim().toLowerCase();
 
   const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const hasAssociationInPayload = Object.prototype.hasOwnProperty.call(payload, "association");
 
   const normalizeText = (value) => {
     const v = String(value ?? "").trim();
