@@ -10,18 +10,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Validate deploy settings
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST != '' && secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          test -n "$DEPLOY_HOST" || (echo "DEPLOY_HOST is empty" && exit 1)
-          test -n "$DEPLOY_USER" || (echo "DEPLOY_USER is empty" && exit 1)
-          test -n "$DEPLOY_PORT" || (echo "DEPLOY_PORT is empty" && exit 1)
-          test -n "$DEPLOY_SSH_KEY" || (echo "DEPLOY_SSH_KEY is empty" && exit 1)
-
       - name: Deploy to production server
         uses: appleboy/ssh-action@v1.2.0
         with:
