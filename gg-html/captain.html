@@ -585,8 +585,8 @@
     const hh = Number(m[4]);
     const mi = Number(m[5]);
     return new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi, 0)).toISOString();
-  }
-
+  } 
+ 
   function buildMatchIdFromUtcAndTeams(timeUtc, team1Id, team2Id) {
     const iso = String(timeUtc || "").trim();
     const t1 = normalizeCode(team1Id);
