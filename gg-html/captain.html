@@ -83,7 +83,7 @@
   }
 
   .cp-divider-vertical {
-    width: 2px;
+    width: 1px;
     background-color: #dfdfdf;
     margin: 0 6px;
     align-self: stretch;
@@ -112,6 +112,77 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+  }
+
+  .cp-player-main {
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .cp-player-nick {
+    font-size: 16px;
+    line-height: 1.1;
+    color: #222;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cp-player-name {
+    font-size: 13px;
+    line-height: 1.1;
+    color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cp-player-icons {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .cp-player-icons.cp-player-icons--single {
+    justify-content: center;
+    min-width: 20px;
+  }
+
+  .cp-player-icons img {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    display: block;
+    flex-shrink: 0;
+  }
+
+  .cp-player-icons.cp-player-icons--contacts {
+    gap: 7px;
+  }
+
+  .cp-player-icons.cp-player-icons--contacts img {
+    width: 16px;
+    height: auto;
+  }
+
+  .cp-player-icons.cp-player-icons--status img {
+    width: 14px;
+    height: 14px;
+  }
+
+  .cp-edit-placeholder {
+    grid-column: 1 / -1;
+    font-size: 14px;
+    color: #555;
+    background: #f6f7f9;
+    border: 1px dashed #c8ced8;
+    border-radius: 6px;
+    padding: 12px;
   }
 
   .cp-team-flag {
@@ -200,6 +271,26 @@
     background: #f3f4f6;
     color: #444;
     cursor: not-allowed;
+  }
+
+  .cp-edit-row.cp-edit-row-checkbox {
+    align-items: center;
+  }
+
+  .cp-edit-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    cursor: pointer;
+  }
+
+  .cp-edit-checkbox input {
+    width: auto;
+    height: auto;
+    margin: 0;
   }
 
   .cp-dd {
@@ -470,8 +561,25 @@
   const LINEUPS_URL = `${AUTH_BASE}/lineups`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const PROFILES_URL = `${AUTH_BASE}/profiles`;
+  const PROFILE_CONTACTS_URL = `${AUTH_BASE}/profiles/contacts`;
   const DEFAULT_TOURNAMENT_ID = "Friendly-Matches";
   const DEADLINE_HOURS_OPTIONS = [6, 12, 24, 48];
+  const CAPTAIN_VIEWS = {
+    FRIENDLIES: "friendlies",
+    PLAYERS: "players",
+    FRIENDLY_FIND: "friendly-find",
+  };
+  const CONTACT_ICONS = {
+    telegram: "https://carcassonne.gg/gallery/telegram.png",
+    whatsapp: "https://carcassonne.gg/gallery/whatsapp.png",
+    discord: "https://carcassonne.gg/gallery/discord.png",
+    instagram: "https://carcassonne.gg/gallery/instagram.png",
+    contact_email: "https://carcassonne.gg/gallery/mail.png",
+  };
+  const GG_LOGO_URL = "https://carcassonne.gg/gallery/GG-logo.svg";
+  const MASTER_TITLE_LOGO_URL = "https://carcassonne.gg/gallery/master-title-logo.png";
+  const ACTIVE_STATUS_LOGO_URL = "https://carcassonne.gg/gallery/active.png";
+  const INACTIVE_STATUS_LOGO_URL = "https://carcassonne.gg/gallery/inactive.png";
 
   const contentEl = document.getElementById("captainContent");
   const countEl = document.getElementById("captainCount");
@@ -521,9 +629,8 @@
   }
 
   function isTestModeEnabled() {
-    const params = new URLSearchParams(window.location.search);
-    const raw = String(params.get("captain_test") || "").trim().toLowerCase();
-    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+    const host = String(window.location.hostname || "").trim().toLowerCase();
+    return host !== "carcassonne.gg" && host !== "www.carcassonne.gg";
   }
 
   function getAssociationOverrideFromUrl() {
@@ -543,25 +650,49 @@
     return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
   }
 
+  function getViewFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("view") || "").trim().toLowerCase();
+    if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
+    if (raw === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
+    return CAPTAIN_VIEWS.FRIENDLIES;
+  }
+
   function getMatchIdFromUrl() {
     const params = new URLSearchParams(window.location.search);
     return String(params.get("match_id") || "").trim();
   }
 
+  function getPlayerIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("player_id") || "").trim();
+  }
+
   function buildCaptainUrl(options = {}) {
     const url = new URL(window.location.href);
+    if (typeof options.view === "string" && options.view.trim()) {
+      url.searchParams.set("view", options.view.trim());
+    } else if (options.view === null) {
+      url.searchParams.delete("view");
+    }
     if (options.edit === true) url.searchParams.set("edit", "1");
     if (options.edit === false) url.searchParams.delete("edit");
     if (options.create === true) {
       url.searchParams.set("create", "1");
       url.searchParams.delete("edit");
       url.searchParams.delete("match_id");
+      url.searchParams.delete("player_id");
     }
     if (options.create === false) url.searchParams.delete("create");
     if (typeof options.matchId === "string" && options.matchId.trim()) {
       url.searchParams.set("match_id", options.matchId.trim());
     } else if (options.matchId === null) {
       url.searchParams.delete("match_id");
+    }
+    if (typeof options.playerId === "string" && options.playerId.trim()) {
+      url.searchParams.set("player_id", options.playerId.trim());
+    } else if (options.playerId === null) {
+      url.searchParams.delete("player_id");
     }
     return url.toString();
   }
@@ -604,12 +735,15 @@
 
   function buildLineupIdFromMatch(timeUtc, player1Id, player2Id) {
     const iso = String(timeUtc || "").trim();
-    const p1 = String(player1Id || "").trim();
-    const p2 = String(player2Id || "").trim();
-    if (!iso || !p1 || !p2) return "";
-    const datePart = iso.slice(0, 10).replaceAll("-", "");
-    if (!/^\d{8}$/.test(datePart)) return "";
-    return `${datePart}-${p1}-${p2}`;
+    const datePart = iso.slice(0, 10).replaceAll("-", "") || "lineup";
+    if (window.crypto?.getRandomValues) {
+      const bytes = new Uint8Array(6);
+      window.crypto.getRandomValues(bytes);
+      const randomPart = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+      return `${datePart}-${randomPart}`;
+    }
+    const fallbackPart = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    return `${datePart}-${fallbackPart}`;
   }
 
   function playerLabel(profile) {
@@ -676,6 +810,13 @@
     hintEl.textContent = "";
   }
 
+  function renderNoPlayersMessage(associationCode) {
+    contentEl.className = "captain-alert";
+    contentEl.textContent = `No players found for association ${associationCode}.`;
+    countEl.textContent = "";
+    hintEl.textContent = "";
+  }
+
   async function loadLineupsByMatchIds(matches) {
     const ids = (Array.isArray(matches) ? matches : [])
       .map((m) => String(m?.id || "").trim())
@@ -696,6 +837,32 @@
         map.set(matchId, Array.isArray(data?.lineups) ? data.lineups : []);
       } catch (_error) {
         map.set(matchId, []);
+      }
+    }));
+    return map;
+  }
+
+  async function loadProfileContactsByIds(playerIds) {
+    const ids = Array.from(new Set(
+      (Array.isArray(playerIds) ? playerIds : [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    ));
+    const map = new Map();
+    await Promise.all(ids.map(async (playerId) => {
+      try {
+        const res = await fetch(`${PROFILE_CONTACTS_URL}/${encodeURIComponent(playerId)}`, {
+          method: "GET",
+          credentials: "include",
+        });
+        if (!res.ok) {
+          map.set(playerId, {});
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        map.set(playerId, data?.contacts && typeof data.contacts === "object" ? data.contacts : {});
+      } catch (_error) {
+        map.set(playerId, {});
       }
     }));
     return map;
@@ -880,7 +1047,13 @@
     editBtn.className = "cp-edit-btn";
     editBtn.textContent = "Edit";
     editBtn.addEventListener("click", () => {
-      window.location.href = buildCaptainUrl({ edit: true, matchId: String(match?.id || "") });
+      window.location.href = buildCaptainUrl({
+        view: CAPTAIN_VIEWS.FRIENDLIES,
+        edit: true,
+        create: false,
+        matchId: String(match?.id || ""),
+        playerId: null,
+      });
     });
     right.appendChild(editBtn);
 
@@ -912,6 +1085,622 @@
     if (finished.length > 0) {
       contentEl.appendChild(renderSectionBlock("Finished", finished, teamsById, lineupsByMatch, profilesById));
     }
+  }
+
+  function isTruthyFlag(value) {
+    if (typeof value === "number") return value === 1;
+    if (typeof value === "boolean") return value;
+    const raw = String(value || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  function appendPlayerIcons(container, profile, keys) {
+    (Array.isArray(keys) ? keys : []).forEach((key) => {
+      const value = String(profile?.[key] || "").trim();
+      const iconUrl = CONTACT_ICONS[key];
+      if (!value || !iconUrl) return;
+      const img = document.createElement("img");
+      img.src = iconUrl;
+      img.alt = "";
+      container.appendChild(img);
+    });
+  }
+
+  function createPlayerRow(profile) {
+    const row = document.createElement("div");
+    row.className = "cp-match-row";
+
+    const appendDivider = () => {
+      const divider = document.createElement("div");
+      divider.className = "cp-divider-vertical";
+      row.appendChild(divider);
+    };
+
+    const main = document.createElement("div");
+    main.className = "cp-player-main";
+
+    const nick = document.createElement("div");
+    nick.className = "cp-player-nick";
+    nick.textContent = String(profile?.bga_nickname || profile?.id || "-").trim() || "-";
+    main.appendChild(nick);
+
+    const name = String(profile?.name || "").trim();
+    if (name) {
+      const nameEl = document.createElement("div");
+      nameEl.className = "cp-player-name";
+      nameEl.textContent = name;
+      main.appendChild(nameEl);
+    }
+    row.appendChild(main);
+
+    const hasEmail = !!String(profile?.email || "").trim();
+    const hasContacts = ["telegram", "whatsapp", "discord", "instagram", "contact_email"]
+      .some((key) => !!String(profile?.[key] || "").trim());
+    const statusRaw = String(profile?.status || "").trim().toLowerCase();
+    const statusIconUrl = statusRaw === "active"
+      ? ACTIVE_STATUS_LOGO_URL
+      : statusRaw === "inactive"
+        ? INACTIVE_STATUS_LOGO_URL
+        : "";
+
+    if (hasEmail) {
+      const ggWrap = document.createElement("div");
+      ggWrap.className = "cp-player-icons cp-player-icons--single";
+      const ggLogo = document.createElement("img");
+      ggLogo.src = GG_LOGO_URL;
+      ggLogo.alt = "";
+      ggLogo.title = "Login Email added";
+      ggWrap.appendChild(ggLogo);
+      row.appendChild(ggWrap);
+    }
+
+    if (hasContacts) {
+      appendDivider();
+      const contactsWrap = document.createElement("div");
+      contactsWrap.className = "cp-player-icons cp-player-icons--contacts";
+      appendPlayerIcons(contactsWrap, profile, ["telegram", "whatsapp", "discord", "instagram", "contact_email"]);
+      row.appendChild(contactsWrap);
+    }
+
+    if (statusIconUrl) {
+      appendDivider();
+      const statusWrap = document.createElement("div");
+      statusWrap.className = "cp-player-icons cp-player-icons--single cp-player-icons--status";
+      const statusIcon = document.createElement("img");
+      statusIcon.src = statusIconUrl;
+      statusIcon.alt = "";
+      statusIcon.title = statusRaw === "active" ? "Active" : "Inactive";
+      statusWrap.appendChild(statusIcon);
+      row.appendChild(statusWrap);
+    }
+
+    const right = document.createElement("div");
+    right.className = "cp-match-right";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "cp-edit-btn";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", () => {
+      window.location.href = buildCaptainUrl({
+        view: CAPTAIN_VIEWS.PLAYERS,
+        edit: true,
+        create: false,
+        matchId: null,
+        playerId: String(profile?.id || ""),
+      });
+    });
+    right.appendChild(editBtn);
+
+    row.appendChild(right);
+    return row;
+  }
+
+  function renderPlayers(players) {
+    countEl.textContent = `${players.length} players`;
+    contentEl.className = "captain-list";
+    contentEl.innerHTML = "";
+    contentEl.style.display = "";
+    contentEl.style.gap = "";
+
+    players.forEach((profile) => {
+      contentEl.appendChild(createPlayerRow(profile));
+    });
+  }
+
+  function renderPlayerEditForm(profile, editContext = {}) {
+    const playerId = String(profile?.id || "").trim();
+    const currentUserPlayerId = String(editContext?.currentUserPlayerId || "").trim();
+    const isOwnProfile = currentUserPlayerId && currentUserPlayerId === playerId;
+    const createdByPlayerId = String(profile?.created_by || "").trim();
+    const canDeletePlayer = !!currentUserPlayerId && !!createdByPlayerId && currentUserPlayerId === createdByPlayerId;
+    countEl.textContent = playerId ? `Editing: ${playerId}` : "Editing player";
+    hintEl.textContent = "";
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.style.display = "";
+    contentEl.style.gap = "";
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+    form.noValidate = true;
+    form.style.width = "100%";
+    form.style.boxSizing = "border-box";
+
+    const topActions = document.createElement("div");
+    topActions.className = "cp-edit-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    topActions.appendChild(saveBtn);
+    topActions.appendChild(cancelBtn);
+    let deleteBtn = null;
+    if (canDeletePlayer) {
+      deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "cp-btn cp-btn-danger";
+      deleteBtn.textContent = "Delete";
+      topActions.appendChild(deleteBtn);
+    }
+    form.appendChild(topActions);
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "cp-edit-error cp-hidden";
+    form.appendChild(errorEl);
+
+    const dropdowns = [];
+
+    const createDropdown = (initialValue, options, cfg = {}) => {
+      const normalizedOptions = (Array.isArray(options) ? options : [])
+        .map((opt) => ({
+          value: String(opt?.value || "").trim(),
+          label: String(opt?.label || opt?.value || "").trim(),
+          disabled: !!opt?.disabled,
+        }))
+        .filter((opt) => cfg.allowEmpty ? true : !!opt.value);
+
+      let value = String(initialValue || "").trim();
+      if (!normalizedOptions.some((opt) => opt.value === value) && normalizedOptions[0]) {
+        value = normalizedOptions[0].value;
+      }
+
+      const root = document.createElement("div");
+      root.className = "cp-dd";
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cp-dd-btn";
+      const btnContent = document.createElement("span");
+      btnContent.className = "cp-dd-btn-content";
+      const chevron = document.createElement("span");
+      chevron.className = "cp-dd-chevron";
+      chevron.textContent = "▾";
+      btn.appendChild(btnContent);
+      btn.appendChild(chevron);
+
+      const menu = document.createElement("div");
+      menu.className = "cp-dd-menu";
+
+      const findOption = (v) => normalizedOptions.find((opt) => opt.value === String(v || "").trim()) || null;
+
+      const renderButtonContent = () => {
+        btnContent.innerHTML = "";
+        const selected = findOption(value);
+        if (!selected) return;
+        const text = document.createElement("span");
+        text.textContent = selected.label || selected.value;
+        btnContent.appendChild(text);
+      };
+
+      const close = () => {
+        menu.classList.remove("open");
+        menu.style.maxHeight = "0px";
+        btn.classList.remove("open");
+      };
+
+      const open = () => {
+        if (btn.disabled) return;
+        menu.classList.add("open");
+        menu.style.maxHeight = `${menu.scrollHeight}px`;
+        btn.classList.add("open");
+      };
+
+      const setValue = (newValue, trigger) => {
+        const next = findOption(newValue);
+        if (!next) return;
+        value = next.value;
+        menu.querySelectorAll(".cp-dd-option").forEach((optEl) => {
+          optEl.classList.toggle("active", String(optEl.dataset.value) === value);
+        });
+        renderButtonContent();
+        if (trigger && typeof cfg.onChange === "function") cfg.onChange(value);
+      };
+
+      normalizedOptions.forEach((opt) => {
+        const optionBtn = document.createElement("button");
+        optionBtn.type = "button";
+        optionBtn.className = "cp-dd-option";
+        optionBtn.dataset.value = opt.value;
+        if (opt.disabled) optionBtn.classList.add("disabled");
+        optionBtn.appendChild(document.createTextNode(opt.label || opt.value));
+        if (opt.value === value) optionBtn.classList.add("active");
+        optionBtn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (opt.disabled) return;
+          setValue(opt.value, true);
+          close();
+        });
+        menu.appendChild(optionBtn);
+      });
+
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const isOpen = menu.classList.contains("open");
+        dropdowns.forEach((dd) => dd.close());
+        if (!isOpen) open();
+      });
+
+      renderButtonContent();
+      root.appendChild(btn);
+      root.appendChild(menu);
+
+      const api = {
+        root,
+        close,
+        getValue: () => value,
+        setOnChange: (handler) => {
+          cfg.onChange = typeof handler === "function" ? handler : null;
+        },
+      };
+      dropdowns.push(api);
+      return api;
+    };
+
+    const addTextField = (labelText, name, value, type = "text") => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      label.setAttribute("for", name);
+      const input = document.createElement("input");
+      input.type = type;
+      input.id = name;
+      input.name = name;
+      input.value = String(value || "");
+      row.appendChild(label);
+      row.appendChild(input);
+      form.appendChild(row);
+      return input;
+    };
+
+    const addDropdownField = (labelText, dropdown) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      row.appendChild(label);
+      row.appendChild(dropdown.root);
+      form.appendChild(row);
+      return dropdown;
+    };
+
+    const addContactField = (labelText, name, value, iconUrl, type = "text") => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.setAttribute("for", name);
+      if (iconUrl) {
+        const icon = document.createElement("img");
+        icon.src = iconUrl;
+        icon.alt = "";
+        icon.style.width = "14px";
+        icon.style.height = "14px";
+        icon.style.objectFit = "contain";
+        icon.style.verticalAlign = "middle";
+        icon.style.marginRight = "6px";
+        label.appendChild(icon);
+      }
+      label.appendChild(document.createTextNode(labelText));
+
+      const input = document.createElement("input");
+      input.type = type;
+      input.id = name;
+      input.name = name;
+      input.value = String(value || "");
+
+      row.appendChild(label);
+      row.appendChild(input);
+      form.appendChild(row);
+      return input;
+    };
+
+    const addCheckboxField = (labelText, name, checked) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row cp-edit-row-checkbox";
+      const label = document.createElement("label");
+      label.className = "cp-edit-checkbox";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.id = name;
+      input.name = name;
+      input.checked = !!checked;
+      const text = document.createElement("span");
+      text.textContent = labelText;
+      label.appendChild(input);
+      label.appendChild(text);
+      row.appendChild(label);
+      form.appendChild(row);
+      return input;
+    };
+
+    const statusInput = addDropdownField(
+      "Status",
+      createDropdown(String(profile?.status || "").trim() || "Active", [
+        { value: "Active", label: "Active" },
+        { value: "Inactive", label: "Inactive" },
+      ])
+    );
+
+    const emailInput = addTextField("Login Email", "email", profile?.email, "email");
+    if (isOwnProfile) {
+      emailInput.readOnly = true;
+      emailInput.title = "You cannot change Login Email for your own profile.";
+    }
+    const nameInput = addTextField("Full name", "name", profile?.name, "text");
+    const telegramInput = addContactField("Telegram", "telegram", profile?.telegram, CONTACT_ICONS.telegram, "text");
+    const whatsappInput = addContactField("WhatsApp", "whatsapp", profile?.whatsapp, CONTACT_ICONS.whatsapp, "text");
+    const discordInput = addContactField("Discord", "discord", profile?.discord, CONTACT_ICONS.discord, "text");
+    const instagramInput = addContactField("Instagram", "instagram", profile?.instagram, CONTACT_ICONS.instagram, "text");
+    const contactEmailInput = addContactField("Contact Email", "contact_email", profile?.contact_email, CONTACT_ICONS.contact_email, "email");
+    const masterInput = addCheckboxField("Master", "master_title", isTruthyFlag(profile?.master_title));
+
+    const masterDateRow = document.createElement("div");
+    masterDateRow.className = "cp-edit-row";
+    const masterDateLabel = document.createElement("label");
+    masterDateLabel.textContent = "Master title date";
+    masterDateLabel.setAttribute("for", "master_title_date");
+    const masterDateInput = document.createElement("input");
+    masterDateInput.type = "date";
+    masterDateInput.id = "master_title_date";
+    masterDateInput.name = "master_title_date";
+    masterDateInput.value = String(profile?.master_title_date || "");
+    masterDateRow.appendChild(masterDateLabel);
+    masterDateRow.appendChild(masterDateInput);
+    form.appendChild(masterDateRow);
+
+    const setError = (message) => {
+      if (!message) {
+        errorEl.textContent = "";
+        errorEl.classList.add("cp-hidden");
+        return;
+      }
+      errorEl.textContent = message;
+      errorEl.classList.remove("cp-hidden");
+    };
+
+    const setSaving = (isSaving) => {
+      saveBtn.disabled = isSaving;
+      cancelBtn.disabled = isSaving;
+      if (deleteBtn) deleteBtn.disabled = isSaving;
+      saveBtn.textContent = isSaving ? "Saving..." : "Save";
+    };
+
+    const showDeleteConfirmDialog = () => {
+      const overlay = document.createElement("div");
+      overlay.style.position = "fixed";
+      overlay.style.inset = "0";
+      overlay.style.background = "rgba(24, 31, 41, 0.42)";
+      overlay.style.display = "flex";
+      overlay.style.alignItems = "center";
+      overlay.style.justifyContent = "center";
+      overlay.style.padding = "16px";
+      overlay.style.zIndex = "1000";
+
+      const dialog = document.createElement("div");
+      dialog.style.width = "100%";
+      dialog.style.maxWidth = "420px";
+      dialog.style.background = "#fff";
+      dialog.style.border = "1px solid #d8dee8";
+      dialog.style.borderRadius = "8px";
+      dialog.style.boxShadow = "0 16px 36px rgba(15, 28, 48, 0.22)";
+      dialog.style.padding = "16px";
+      dialog.style.display = "grid";
+      dialog.style.gap = "12px";
+
+      const title = document.createElement("div");
+      title.textContent = "Delete player?";
+      title.style.fontSize = "16px";
+      title.style.fontWeight = "700";
+      title.style.color = "#222";
+
+      const text = document.createElement("div");
+      text.textContent = "This action will remove the player profile. This cannot be undone.";
+      text.style.fontSize = "14px";
+      text.style.lineHeight = "1.4";
+      text.style.color = "#4b5563";
+
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.justifyContent = "flex-end";
+      actions.style.gap = "8px";
+
+      const cancelModalBtn = document.createElement("button");
+      cancelModalBtn.type = "button";
+      cancelModalBtn.className = "cp-btn cp-btn-secondary";
+      cancelModalBtn.textContent = "Cancel";
+
+      const confirmDeleteBtn = document.createElement("button");
+      confirmDeleteBtn.type = "button";
+      confirmDeleteBtn.className = "cp-btn cp-btn-danger";
+      confirmDeleteBtn.textContent = "Delete";
+      confirmDeleteBtn.style.marginLeft = "0";
+
+      const closeModal = () => {
+        overlay.remove();
+      };
+
+      cancelModalBtn.addEventListener("click", closeModal);
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) closeModal();
+      });
+      confirmDeleteBtn.addEventListener("click", async () => {
+        setError("");
+        confirmDeleteBtn.disabled = true;
+        cancelModalBtn.disabled = true;
+        confirmDeleteBtn.textContent = "Deleting...";
+        try {
+          const response = await fetch(`${PROFILES_URL}/${encodeURIComponent(playerId)}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result?.ok) {
+            setError(result?.message || "Failed to delete profile.");
+            confirmDeleteBtn.disabled = false;
+            cancelModalBtn.disabled = false;
+            confirmDeleteBtn.textContent = "Delete";
+            return;
+          }
+          closeModal();
+          window.location.href = buildCaptainUrl({
+            view: CAPTAIN_VIEWS.PLAYERS,
+            edit: false,
+            create: false,
+            matchId: null,
+            playerId: null,
+          });
+        } catch (_error) {
+          setError("Failed to delete profile.");
+          confirmDeleteBtn.disabled = false;
+          cancelModalBtn.disabled = false;
+          confirmDeleteBtn.textContent = "Delete";
+        }
+      });
+
+      actions.appendChild(cancelModalBtn);
+      actions.appendChild(confirmDeleteBtn);
+      dialog.appendChild(title);
+      dialog.appendChild(text);
+      dialog.appendChild(actions);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+    };
+
+    const syncMasterDateVisibility = () => {
+      const isMaster = !!masterInput.checked;
+      masterDateRow.classList.toggle("cp-hidden", !isMaster);
+      masterDateInput.required = isMaster;
+      if (!isMaster) masterDateInput.value = "";
+    };
+    masterInput.addEventListener("change", syncMasterDateVisibility);
+    syncMasterDateVisibility();
+
+    cancelBtn.addEventListener("click", () => {
+      window.location.href = buildCaptainUrl({
+        view: CAPTAIN_VIEWS.PLAYERS,
+        edit: false,
+        create: false,
+        matchId: null,
+        playerId: null,
+      });
+    });
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", async () => {
+        setError("");
+        deleteBtn.disabled = true;
+        deleteBtn.textContent = "Checking...";
+        try {
+          const response = await fetch(`${PROFILES_URL}/${encodeURIComponent(playerId)}/delete-check`, {
+            method: "GET",
+            credentials: "include",
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result?.ok) {
+            setError(result?.message || "Failed to validate profile deletion.");
+            return;
+          }
+          if (result?.can_delete === false) {
+            setError(result?.message || "This player is already assigned to one or more match lineups and cannot be deleted.");
+            return;
+          }
+          showDeleteConfirmDialog();
+        } catch (_error) {
+          setError("Failed to validate profile deletion.");
+        } finally {
+          deleteBtn.disabled = false;
+          deleteBtn.textContent = "Delete";
+        }
+      });
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setError("");
+
+      if (masterInput.checked && !String(masterDateInput.value || "").trim()) {
+        setError("Master title date is required when Master is enabled.");
+        return;
+      }
+
+      const payload = {
+        status: String(statusInput.getValue() || "").trim() || "Active",
+        email: String(emailInput.value || "").trim(),
+        name: String(nameInput.value || "").trim(),
+        telegram: String(telegramInput.value || "").trim(),
+        whatsapp: String(whatsappInput.value || "").trim(),
+        discord: String(discordInput.value || "").trim(),
+        instagram: String(instagramInput.value || "").trim(),
+        contact_email: String(contactEmailInput.value || "").trim(),
+        master_title: !!masterInput.checked,
+        master_title_date: masterInput.checked ? String(masterDateInput.value || "").trim() : null,
+      };
+
+      setSaving(true);
+      try {
+        const response = await fetch(`${PROFILES_URL}/${encodeURIComponent(playerId)}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok) {
+          setError(result?.message || "Failed to save profile.");
+          return;
+        }
+        window.location.href = buildCaptainUrl({
+          view: CAPTAIN_VIEWS.PLAYERS,
+          edit: false,
+          create: false,
+          matchId: null,
+          playerId: null,
+        });
+      } catch (_error) {
+        setError("Failed to save profile.");
+      } finally {
+        setSaving(false);
+      }
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!form.contains(event.target)) {
+        dropdowns.forEach((dd) => dd.close());
+      }
+    });
+
+    contentEl.appendChild(form);
+  }
+
+  function renderFriendlyFindPlaceholder() {
+    contentEl.className = "captain-alert";
+    contentEl.textContent = "Friendly find view is not implemented yet.";
+    countEl.textContent = "";
   }
 
   function renderMatchEditForm(match, teamsById, editContext, formMode) {
@@ -975,6 +1764,10 @@
       topActions.appendChild(deleteBtn);
     }
     form.appendChild(topActions);
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "cp-edit-error cp-hidden";
+    form.appendChild(errorEl);
 
     const addRow = (labelText, control) => {
       const row = document.createElement("div");
@@ -1670,10 +2463,6 @@
       syncLineupsToggleButton();
     }
 
-    const errorEl = document.createElement("div");
-    errorEl.className = "cp-edit-error cp-hidden";
-    form.appendChild(errorEl);
-
     let previousLineupType = String(lineupTypeInput.getValue() || "").trim();
     const syncDeadlineVisibility = () => {
       const currentLineupType = String(lineupTypeInput.getValue() || "").trim();
@@ -1759,7 +2548,13 @@
     };
 
     cancelBtn.addEventListener("click", () => {
-      window.location.href = buildCaptainUrl({ edit: false, create: false, matchId: null });
+      window.location.href = buildCaptainUrl({
+        view: CAPTAIN_VIEWS.FRIENDLIES,
+        edit: false,
+        create: false,
+        matchId: null,
+        playerId: null,
+      });
     });
 
     if (deleteBtn) {
@@ -1778,7 +2573,13 @@
             setError(result?.message || "Failed to delete match.");
             return;
           }
-          window.location.href = buildCaptainUrl({ edit: false, create: false, matchId: null });
+          window.location.href = buildCaptainUrl({
+            view: CAPTAIN_VIEWS.FRIENDLIES,
+            edit: false,
+            create: false,
+            matchId: null,
+            playerId: null,
+          });
         } catch (_error) {
           setError("Failed to delete match.");
         } finally {
@@ -1945,7 +2746,13 @@
           }
         }
 
-        window.location.href = buildCaptainUrl({ edit: false, create: false, matchId: null });
+        window.location.href = buildCaptainUrl({
+          view: CAPTAIN_VIEWS.FRIENDLIES,
+          edit: false,
+          create: false,
+          matchId: null,
+          playerId: null,
+        });
       } catch (_error) {
         setError("Failed to save match.");
       } finally {
@@ -1960,14 +2767,17 @@
 
   async function initCaptainPage() {
     try {
-      const isTestMode = true;
+      const isTestMode = isTestModeEnabled();
+      const activeView = getViewFromUrl();
       const isEditMode = isEditModeEnabled();
       const isCreateMode = isCreateModeEnabled();
       const editMatchId = getMatchIdFromUrl();
+      const editPlayerId = getPlayerIdFromUrl();
       const associationOverride = getAssociationOverrideFromUrl();
       let associationCode = associationOverride;
       let captainAssociationCode = "";
       let isCaptainUser = false;
+      let currentUserPlayerId = "";
 
       try {
         const meRes = await fetch(ME_URL, { method: "GET", credentials: "include" });
@@ -1982,6 +2792,12 @@
             meUser?.team_captain ??
             (meUser?.profile?.teamCaptain === true ? 1 : 0)
           ) === 1;
+          currentUserPlayerId = String(
+            meUser?.profile?.id ??
+            meUser?.player_id ??
+            meUser?.playerId ??
+            ""
+          ).trim();
           captainAssociationCode = meAssociation;
           isCaptainUser = meIsCaptain;
         }
@@ -2042,6 +2858,16 @@
             bga_nickname: String(profile?.bga_nickname || "").trim(),
             name: String(profile?.name || "").trim(),
             association: normalizeCode(profile?.association),
+            status: String(profile?.status || "").trim(),
+            created_by: String(profile?.created_by || "").trim(),
+            email: String(profile?.email || "").trim(),
+            master_title: profile?.master_title,
+            master_title_date: String(profile?.master_title_date || "").trim(),
+            telegram: String(profile?.telegram || "").trim(),
+            whatsapp: String(profile?.whatsapp || "").trim(),
+            discord: String(profile?.discord || "").trim(),
+            instagram: String(profile?.instagram || "").trim(),
+            contact_email: String(profile?.contact_email || "").trim(),
           };
           allProfiles.push(profileObj);
           profilesById.set(playerId, profileObj);
@@ -2061,17 +2887,40 @@
           return tb - ta;
         });
 
-      addButtonEl.classList.remove("cp-hidden");
-      addButtonEl.onclick = () => {
-        window.location.href = buildCaptainUrl({ create: true, edit: false, matchId: null });
-      };
-      if (isCreateMode || isEditMode) {
+      if (activeView === CAPTAIN_VIEWS.PLAYERS) {
         addButtonEl.classList.add("cp-hidden");
-      } else {
+      } else if (activeView === CAPTAIN_VIEWS.FRIENDLIES) {
         addButtonEl.classList.remove("cp-hidden");
+        addButtonEl.textContent = "Create";
+        addButtonEl.onclick = () => {
+          window.location.href = buildCaptainUrl({
+            view: CAPTAIN_VIEWS.FRIENDLIES,
+            create: true,
+            edit: false,
+            matchId: null,
+            playerId: null,
+          });
+        };
+        if (isCreateMode || isEditMode) {
+          addButtonEl.classList.add("cp-hidden");
+        }
+      } else {
+        addButtonEl.classList.add("cp-hidden");
       }
 
-      if (isCreateMode) {
+      if (activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
+        renderFriendlyFindPlaceholder();
+        if (isTestMode) {
+          hintEl.textContent = "test mode: all matches";
+        } else if (associationOverride) {
+          hintEl.textContent = `association override: ${associationOverride}`;
+        } else {
+          hintEl.textContent = "";
+        }
+        return;
+      }
+
+      if (activeView === CAPTAIN_VIEWS.FRIENDLIES && isCreateMode) {
         if (!captainAssociationCode) {
           contentEl.className = "captain-alert";
           contentEl.textContent = "Cannot detect your team association for creating a match.";
@@ -2090,12 +2939,12 @@
         return;
       }
 
-      if (!filtered.length) {
+      if (activeView === CAPTAIN_VIEWS.FRIENDLIES && !filtered.length) {
         renderNoMatchesMessage(isTestMode ? "TEST MODE" : associationCode);
         return;
       }
 
-      if (isEditMode && editMatchId) {
+      if (activeView === CAPTAIN_VIEWS.FRIENDLIES && isEditMode && editMatchId) {
         const matchToEdit = filtered.find((m) => String(m?.id || "") === editMatchId);
         if (!matchToEdit) {
           contentEl.className = "captain-alert";
@@ -2130,8 +2979,47 @@
         return;
       }
 
-      const lineupsByMatch = await loadLineupsByMatchIds(filtered);
-      renderMatches(filtered, teamsById, lineupsByMatch, profilesById);
+      if (activeView === CAPTAIN_VIEWS.FRIENDLIES) {
+        const lineupsByMatch = await loadLineupsByMatchIds(filtered);
+        renderMatches(filtered, teamsById, lineupsByMatch, profilesById);
+      } else if (activeView === CAPTAIN_VIEWS.PLAYERS) {
+        const playersAssociationCode = isTestMode
+          ? "UKR"
+          : normalizeCode(associationCode || captainAssociationCode);
+        const players = allProfiles
+          .filter((profile) => {
+            if (playersAssociationCode) {
+              return normalizeCode(profile?.association) === playersAssociationCode;
+            }
+            return isTestMode;
+          })
+          .sort((a, b) => String(a?.bga_nickname || "").localeCompare(String(b?.bga_nickname || "")));
+
+        if (!players.length) {
+          renderNoPlayersMessage(playersAssociationCode || (isTestMode ? "TEST MODE" : associationCode));
+          return;
+        }
+
+        const contactsByPlayerId = await loadProfileContactsByIds(players.map((player) => player?.id));
+        const playersWithContacts = players.map((player) => ({
+          ...player,
+          ...(contactsByPlayerId.get(String(player?.id || "").trim()) || {}),
+        }));
+
+        if (isEditMode && editPlayerId) {
+          const playerToEdit = playersWithContacts.find((p) => String(p?.id || "") === editPlayerId);
+          if (!playerToEdit) {
+            contentEl.className = "captain-alert";
+            contentEl.textContent = `Player not found: ${editPlayerId}`;
+            countEl.textContent = "";
+            return;
+          }
+          renderPlayerEditForm(playerToEdit, { currentUserPlayerId });
+        } else {
+          renderPlayers(playersWithContacts);
+        }
+      }
+
       if (isTestMode) {
         hintEl.textContent = "test mode: all matches";
       } else if (associationOverride) {

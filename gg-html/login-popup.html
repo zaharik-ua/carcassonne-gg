@@ -30,14 +30,16 @@
 
     .auth-wrap {
       position: relative;
-      display: inline-block;
+      display: block;
+      width: 100%;
     }
 
     .auth-bar {
-      display: inline-flex;
+      display: flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 8px;
-      max-width: min(360px, 92vw);
+      width: 100%;
     }
 
     .auth-button {
@@ -73,7 +75,7 @@
       margin-top: 8px;
       padding: 8px;
       border: 1px solid var(--border);
-      border-radius: 4px;
+      border-radius: 6px;
       background: var(--bg);
       box-shadow: var(--shadow);
       min-width: 240px;
@@ -123,7 +125,7 @@
       align-items: center;
       gap: 8px;
       padding: 4px 8px;
-      border-radius: 999px;
+      border-radius: 4px;
       border: 1px solid var(--border);
       background: #fff;
       cursor: pointer;

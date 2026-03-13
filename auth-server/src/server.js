@@ -145,6 +145,7 @@ function ensureProfilesSchema() {
       addColumnIfMissing(currentColumns, "profiles", "created_by", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "updated_by", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "deleted_by", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "deleted_at", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(currentColumns, "profiles", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       db.run(
@@ -607,11 +608,13 @@ app.get("/profiles/public", (_req, res, next) => {
         association,
         COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
         email,
+        created_by,
         COALESCE(master_title, 0) AS master_title,
         master_title_date,
         COALESCE(team_captain, 0) AS team_captain
       FROM profiles
       WHERE trim(COALESCE(id, '')) <> ''
+        AND deleted_at IS NULL
     `,
     (err, rows) => {
       if (err) return next(err);
@@ -656,7 +659,7 @@ app.post("/profiles", (req, res) => {
 
   return db.get(
     `
-      SELECT id, bga_nickname
+      SELECT id, bga_nickname, deleted_at
       FROM profiles
       WHERE id = ? OR lower(COALESCE(bga_nickname, '')) = lower(?)
       LIMIT 1
@@ -667,7 +670,62 @@ app.post("/profiles", (req, res) => {
         return res.status(500).json({ ok: false, message: "Failed to validate profile uniqueness" });
       }
       if (dupRow) {
-        return res.status(409).json({ ok: false, message: "Profile with this id or bga_nickname already exists" });
+        const deletedAt = String(dupRow.deleted_at || "").trim();
+        if (!deletedAt) {
+          return res.status(409).json({ ok: false, message: "Profile with this id or bga_nickname already exists" });
+        }
+
+        return db.run(
+          `
+            UPDATE profiles
+            SET
+              id = ?,
+              bga_nickname = ?,
+              name = ?,
+              association = ?,
+              status = 'Active',
+              deleted_at = NULL,
+              deleted_by = NULL,
+              updated_by = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `,
+          [playerId, bgaNickname, name, association, actorPlayerId, String(dupRow.id || "").trim()],
+          function onRestore(restoreErr) {
+            if (restoreErr) {
+              return res.status(500).json({ ok: false, message: "Failed to restore profile" });
+            }
+            if (!this || this.changes === 0) {
+              return res.status(404).json({ ok: false, message: "Profile not found" });
+            }
+            return db.get(
+              `
+                SELECT
+                  id,
+                  bga_nickname,
+                  name,
+                  association,
+                  COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
+                  email,
+                  COALESCE(master_title, 0) AS master_title,
+                  master_title_date,
+                  COALESCE(team_captain, 0) AS team_captain,
+                  created_by
+                FROM profiles
+                WHERE id = ?
+                  AND deleted_at IS NULL
+                LIMIT 1
+              `,
+              [playerId],
+              (selectErr, row) => {
+                if (selectErr) {
+                  return res.status(500).json({ ok: false, message: "Failed to load restored profile" });
+                }
+                return res.status(200).json({ ok: true, restored: true, profile: row || null });
+              }
+            );
+          }
+        );
       }
 
       return db.run(
@@ -698,12 +756,15 @@ app.post("/profiles", (req, res) => {
                 bga_nickname,
                 name,
                 association,
+                COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
                 email,
                 COALESCE(master_title, 0) AS master_title,
                 master_title_date,
-                COALESCE(team_captain, 0) AS team_captain
+                COALESCE(team_captain, 0) AS team_captain,
+                created_by
               FROM profiles
               WHERE id = ?
+                AND deleted_at IS NULL
               LIMIT 1
             `,
             [playerId],
@@ -745,6 +806,7 @@ app.get("/profiles/contacts/:playerId", (req, res) => {
         contact_email
       FROM profiles
       WHERE id = ?
+        AND deleted_at IS NULL
       LIMIT 1
     `,
     [requestedPlayerId],
@@ -1826,6 +1888,7 @@ app.patch("/profiles/:playerId", (req, res) => {
 
   const profilePatch = {
     name: normalizeText(payload.name),
+    status: normalizeText(payload.status) || "Active",
     master_title: normalizeBool(payload.master_title) ? 1 : 0,
     master_title_date: normalizeText(payload.master_title_date),
     email: normalizeText(payload.email),
@@ -1849,6 +1912,10 @@ app.patch("/profiles/:playerId", (req, res) => {
     profilePatch.master_title_date = null;
   }
 
+  if (profilePatch.status !== "Active" && profilePatch.status !== "Inactive") {
+    return res.status(400).json({ ok: false, message: "status must be Active or Inactive" });
+  }
+
   if (isAdmin && !profilePatch.association) {
     return res.status(400).json({ ok: false, message: "association cannot be empty" });
   }
@@ -1865,6 +1932,7 @@ app.patch("/profiles/:playerId", (req, res) => {
       : captainCanEdit
         ? {
             name: profilePatch.name,
+            status: profilePatch.status,
             master_title: profilePatch.master_title,
             master_title_date: profilePatch.master_title_date,
             email: profilePatch.email,
@@ -1876,6 +1944,7 @@ app.patch("/profiles/:playerId", (req, res) => {
           }
         : {
             name: profilePatch.name,
+            status: profilePatch.status,
             master_title: profilePatch.master_title,
             master_title_date: profilePatch.master_title_date,
             telegram: profilePatch.telegram,
@@ -1890,6 +1959,7 @@ app.patch("/profiles/:playerId", (req, res) => {
           UPDATE profiles
           SET
             name = ?,
+            status = ?,
             master_title = ?,
             master_title_date = ?,
             email = ?,
@@ -1903,12 +1973,14 @@ app.patch("/profiles/:playerId", (req, res) => {
             updated_by = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
+            AND deleted_at IS NULL
         `
       : captainCanEdit
         ? `
           UPDATE profiles
           SET
             name = ?,
+            status = ?,
             master_title = ?,
             master_title_date = ?,
             email = ?,
@@ -1920,11 +1992,13 @@ app.patch("/profiles/:playerId", (req, res) => {
             updated_by = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
+            AND deleted_at IS NULL
         `
       : `
           UPDATE profiles
           SET
             name = ?,
+            status = ?,
             master_title = ?,
             master_title_date = ?,
             telegram = ?,
@@ -1935,11 +2009,13 @@ app.patch("/profiles/:playerId", (req, res) => {
             updated_by = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
+            AND deleted_at IS NULL
         `;
 
     const params = isAdmin
       ? [
           allowedPatch.name,
+          allowedPatch.status,
           allowedPatch.master_title,
           allowedPatch.master_title_date,
           allowedPatch.email,
@@ -1956,6 +2032,7 @@ app.patch("/profiles/:playerId", (req, res) => {
       : captainCanEdit
         ? [
           allowedPatch.name,
+          allowedPatch.status,
           allowedPatch.master_title,
           allowedPatch.master_title_date,
           allowedPatch.email,
@@ -1969,6 +2046,7 @@ app.patch("/profiles/:playerId", (req, res) => {
         ]
       : [
           allowedPatch.name,
+          allowedPatch.status,
           allowedPatch.master_title,
           allowedPatch.master_title_date,
           allowedPatch.telegram,
@@ -1994,6 +2072,7 @@ app.patch("/profiles/:playerId", (req, res) => {
             id,
             name,
             association,
+            COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
             email,
             COALESCE(master_title, 0) AS master_title,
             master_title_date,
@@ -2005,6 +2084,7 @@ app.patch("/profiles/:playerId", (req, res) => {
             contact_email
           FROM profiles
           WHERE id = ?
+            AND deleted_at IS NULL
           LIMIT 1
         `,
         [requestedPlayerId],
@@ -2023,7 +2103,7 @@ app.patch("/profiles/:playerId", (req, res) => {
       return decideAndUpdate(true);
     }
     return db.get(
-      "SELECT association FROM profiles WHERE id = ? LIMIT 1",
+      "SELECT association FROM profiles WHERE id = ? AND deleted_at IS NULL LIMIT 1",
       [requestedPlayerId],
       (targetErr, targetRow) => {
         if (targetErr) {
@@ -2037,6 +2117,151 @@ app.patch("/profiles/:playerId", (req, res) => {
   }
 
   return decideAndUpdate(false);
+});
+
+app.get("/profiles/:playerId/delete-check", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const requestedPlayerId = String(req.params.playerId || "").trim();
+  if (!requestedPlayerId) {
+    return res.status(400).json({ ok: false, message: "playerId is required" });
+  }
+
+  const actorPlayerId = String(req.user.player_id || "").trim() || null;
+  const isAdmin = Number(req.user.admin) === 1;
+
+  return db.get(
+    `
+      SELECT id, created_by
+      FROM profiles
+      WHERE id = ?
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
+    [requestedPlayerId],
+    (profileErr, profileRow) => {
+      if (profileErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load profile" });
+      }
+      if (!profileRow) {
+        return res.status(404).json({ ok: false, message: "Profile not found" });
+      }
+
+      const createdBy = String(profileRow.created_by || "").trim();
+      if (!isAdmin && (!actorPlayerId || createdBy !== actorPlayerId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+
+      return db.get(
+        `
+          SELECT id
+          FROM lineups
+          WHERE deleted_at IS NULL
+            AND (player_1_id = ? OR player_2_id = ?)
+          LIMIT 1
+        `,
+        [requestedPlayerId, requestedPlayerId],
+        (lineupErr, lineupRow) => {
+          if (lineupErr) {
+            return res.status(500).json({ ok: false, message: "Failed to validate lineups" });
+          }
+          if (lineupRow) {
+            return res.json({
+              ok: true,
+              can_delete: false,
+              message: "This player is already assigned to one or more match lineups and cannot be deleted.",
+            });
+          }
+          return res.json({ ok: true, can_delete: true });
+        }
+      );
+    }
+  );
+});
+
+app.delete("/profiles/:playerId", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const requestedPlayerId = String(req.params.playerId || "").trim();
+  if (!requestedPlayerId) {
+    return res.status(400).json({ ok: false, message: "playerId is required" });
+  }
+
+  const actorPlayerId = String(req.user.player_id || "").trim() || null;
+  const isAdmin = Number(req.user.admin) === 1;
+
+  return db.get(
+    `
+      SELECT id, created_by
+      FROM profiles
+      WHERE id = ?
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
+    [requestedPlayerId],
+    (profileErr, profileRow) => {
+      if (profileErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load profile" });
+      }
+      if (!profileRow) {
+        return res.status(404).json({ ok: false, message: "Profile not found" });
+      }
+
+      const createdBy = String(profileRow.created_by || "").trim();
+      if (!isAdmin && (!actorPlayerId || createdBy !== actorPlayerId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+
+      return db.get(
+        `
+          SELECT id
+          FROM lineups
+          WHERE deleted_at IS NULL
+            AND (player_1_id = ? OR player_2_id = ?)
+          LIMIT 1
+        `,
+        [requestedPlayerId, requestedPlayerId],
+        (lineupErr, lineupRow) => {
+          if (lineupErr) {
+            return res.status(500).json({ ok: false, message: "Failed to validate lineups" });
+          }
+          if (lineupRow) {
+            return res.status(409).json({
+              ok: false,
+              message: "This player is already assigned to one or more match lineups and cannot be deleted.",
+            });
+          }
+
+          return db.run(
+            `
+              UPDATE profiles
+              SET
+                deleted_at = CURRENT_TIMESTAMP,
+                deleted_by = ?,
+                updated_by = ?,
+                updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+                AND deleted_at IS NULL
+            `,
+            [actorPlayerId, actorPlayerId, requestedPlayerId],
+            function onDelete(deleteErr) {
+              if (deleteErr) {
+                return res.status(500).json({ ok: false, message: "Failed to delete profile" });
+              }
+              if (!this || this.changes === 0) {
+                return res.status(404).json({ ok: false, message: "Profile not found" });
+              }
+              return res.json({ ok: true });
+            }
+          );
+        }
+      );
+    }
+  );
 });
 
 app.post("/auth/logout", (req, res, next) => {
