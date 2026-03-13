@@ -2069,7 +2069,7 @@ app.patch("/profiles/:playerId", (req, res) => {
           requestedPlayerId,
         ];
 
-    return db.run(sql, params, function onUpdate(updateErr) {
+    const runUpdate = () => db.run(sql, params, function onUpdate(updateErr) {
       if (updateErr) {
         return res.status(500).json({ ok: false, message: "Failed to update profile" });
       }
@@ -2107,6 +2107,32 @@ app.patch("/profiles/:playerId", (req, res) => {
         }
       );
     });
+
+    const nextEmail = typeof allowedPatch.email === "string" ? String(allowedPatch.email || "").trim() : null;
+    if (!nextEmail) {
+      return runUpdate();
+    }
+
+    return db.get(
+      `
+        SELECT id
+        FROM profiles
+        WHERE lower(COALESCE(email, '')) = lower(?)
+          AND id <> ?
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [nextEmail, requestedPlayerId],
+      (dupEmailErr, dupEmailRow) => {
+        if (dupEmailErr) {
+          return res.status(500).json({ ok: false, message: "Failed to validate email uniqueness" });
+        }
+        if (dupEmailRow) {
+          return res.status(409).json({ ok: false, message: "Login Email is already used by another profile" });
+        }
+        return runUpdate();
+      }
+    );
   };
 
   if (isTeamCaptain && userAssociation && !isAdmin) {
