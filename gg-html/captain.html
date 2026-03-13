@@ -389,6 +389,11 @@
     grid-column: 1 / -1;
   }
 
+  .cp-edit-error-list {
+    margin: 0;
+    padding-left: 18px;
+  }
+
   .cp-hidden {
     display: none !important;
   }
@@ -741,11 +746,6 @@
     const team1Name = team1?.name || team1Id || "-";
     const team2Name = team2?.name || team2Id || "-";
     const timeLabel = formatMatchTime(match?.time_utc ?? match?.time);
-    const dw1 = String(match?.dw1 ?? match?.duels_won1 ?? "").trim();
-    const dw2 = String(match?.dw2 ?? match?.duels_won2 ?? "").trim();
-    const gw1 = String(match?.gw1 ?? match?.games_won1 ?? "").trim();
-    const gw2 = String(match?.gw2 ?? match?.games_won2 ?? "").trim();
-    const hasScore = dw1 !== "" || dw2 !== "" || gw1 !== "" || gw2 !== "";
 
     const matchWrap = document.createDocumentFragment();
     const row = document.createElement("div");
@@ -798,29 +798,6 @@
 
     const right = document.createElement("div");
     right.className = "cp-match-right";
-
-    if (hasScore) {
-      const mainScoreEl = document.createElement("div");
-      mainScoreEl.className = "cp-score-box cp-match-score";
-      const mainTop = document.createElement("div");
-      mainTop.textContent = dw1;
-      const mainBottom = document.createElement("div");
-      mainBottom.textContent = dw2;
-      mainScoreEl.appendChild(mainTop);
-      mainScoreEl.appendChild(mainBottom);
-
-      const altScoreEl = document.createElement("div");
-      altScoreEl.className = "cp-score-box-alt";
-      const altTop = document.createElement("div");
-      altTop.textContent = gw1 === "" ? "" : `(${gw1})`;
-      const altBottom = document.createElement("div");
-      altBottom.textContent = gw2 === "" ? "" : `(${gw2})`;
-      altScoreEl.appendChild(altTop);
-      altScoreEl.appendChild(altBottom);
-
-      right.appendChild(mainScoreEl);
-      right.appendChild(altScoreEl);
-    }
 
     const matchLineups = Array.isArray(lineupsByMatch?.get(String(match?.id || "").trim()))
       ? lineupsByMatch.get(String(match?.id || "").trim())
@@ -940,6 +917,9 @@
   function renderMatchEditForm(match, teamsById, editContext, formMode) {
     const isCreateMode = formMode === "create";
     const allProfiles = Array.isArray(editContext?.profiles) ? editContext.profiles : [];
+    const profilesMap = new Map(
+      allProfiles.map((profile) => [String(profile?.id ?? profile?.player_id ?? "").trim(), profile])
+    );
     const initialLineups = Array.isArray(editContext?.lineups) ? editContext.lineups : [];
     hintEl.textContent = "";
     countEl.textContent = isCreateMode
@@ -1272,25 +1252,21 @@
     dw1Input.type = "number";
     dw1Input.step = "1";
     dw1Input.value = String(source?.dw1 ?? "");
-    addRow("Duels won 1", dw1Input);
 
     const dw2Input = document.createElement("input");
     dw2Input.type = "number";
     dw2Input.step = "1";
     dw2Input.value = String(source?.dw2 ?? "");
-    addRow("Duels won 2", dw2Input);
 
     const gw1Input = document.createElement("input");
     gw1Input.type = "number";
     gw1Input.step = "1";
     gw1Input.value = String(source?.gw1 ?? "");
-    addRow("Games won 1", gw1Input);
 
     const gw2Input = document.createElement("input");
     gw2Input.type = "number";
     gw2Input.step = "1";
     gw2Input.value = String(source?.gw2 ?? "");
-    addRow("Games won 2", gw2Input);
 
     const statusInput = createDropdown(
       String(source?.status || "").trim() || "Planned",
@@ -1299,7 +1275,6 @@
         { value: "Done", label: "Done" },
       ]
     );
-    addRow("Status", statusInput.root);
 
     const lineupsToggleWrap = document.createElement("div");
     lineupsToggleWrap.style.gridColumn = "1 / -1";
@@ -1368,11 +1343,31 @@
     lineupsWrap.appendChild(lineupsOpenActions);
 
     let lineupsEnabled = initialLineups.length > 0;
+    const hadInitialLineups = initialLineups.length > 0;
     let lineupsState = initialLineups.map((l) => ({
+      id: String(l?.id || buildLineupIdFromMatch(source?.time_utc ?? source?.time, l?.player_1_id, l?.player_2_id)).trim(),
       player1Id: String(l?.player_1_id || "").trim(),
       player2Id: String(l?.player_2_id || "").trim(),
     }));
     if (!lineupsState.length && isCreateMode) lineupsState = [];
+
+    const createEmptyLineupEntry = () => ({
+      id: buildLineupIdFromMatch(source?.time_utc ?? source?.time, "", ""),
+      player1Id: "",
+      player2Id: "",
+    });
+
+    const createDefaultLineupsState = () => {
+      if (isSecretLineupType()) {
+        const n = requiredDuelRows();
+        return Array.from({ length: n }, () => createEmptyLineupEntry());
+      }
+      return Array.from({ length: 5 }, () => createEmptyLineupEntry());
+    };
+
+    const syncLineupsToggleButton = () => {
+      createLineupsBtn.textContent = lineupsEnabled ? "Delete Lineups" : "Create Lineups";
+    };
 
     const getPlayersForTeam = (teamId) => {
       const association = normalizeCode(teamId);
@@ -1537,6 +1532,7 @@
     const renderLineupsRows = () => {
       lineupsRows.innerHTML = "";
       syncLineupsHeader();
+      syncLineupsToggleButton();
       lineupsWrap.style.display = lineupsEnabled ? "" : "none";
       if (!lineupsEnabled) return;
 
@@ -1642,34 +1638,37 @@
       if (!lineupsEnabled) return;
       if (isSecretLineupType()) {
         const needed = requiredDuelRows();
-        while (lineupsState.length < needed) lineupsState.push({ player1Id: "", player2Id: "" });
+        while (lineupsState.length < needed) lineupsState.push(createEmptyLineupEntry());
         if (lineupsState.length > needed) lineupsState = lineupsState.slice(0, needed);
       } else if (lineupsState.length < 1) {
-        lineupsState = [{ player1Id: "", player2Id: "" }];
+        lineupsState = [createEmptyLineupEntry()];
       }
       renderLineupsRows();
     };
 
     createLineupsBtn.addEventListener("click", () => {
-      lineupsEnabled = true;
-      if (!lineupsState.length) {
-        if (isSecretLineupType()) {
-          const n = requiredDuelRows();
-          lineupsState = Array.from({ length: n }, () => ({ player1Id: "", player2Id: "" }));
-        } else {
-          lineupsState = Array.from({ length: 5 }, () => ({ player1Id: "", player2Id: "" }));
-        }
+      if (lineupsEnabled) {
+        lineupsEnabled = false;
+        lineupsState = [];
+        renderLineupsRows();
+        return;
       }
+      lineupsEnabled = true;
+      if (!lineupsState.length) lineupsState = createDefaultLineupsState();
       syncLineupsByRules();
     });
 
     addLineupRowBtn.addEventListener("click", () => {
       if (isSecretLineupType()) return;
-      lineupsState.push({ player1Id: "", player2Id: "" });
+      lineupsState.push(createEmptyLineupEntry());
       renderLineupsRows();
     });
 
-    if (lineupsEnabled) syncLineupsByRules();
+    if (lineupsEnabled) {
+      syncLineupsByRules();
+    } else {
+      syncLineupsToggleButton();
+    }
 
     const errorEl = document.createElement("div");
     errorEl.className = "cp-edit-error cp-hidden";
@@ -1728,12 +1727,27 @@
     });
 
     const setError = (msg) => {
-      if (!msg) {
+      const messages = Array.isArray(msg)
+        ? msg.map((item) => String(item || "").trim()).filter(Boolean)
+        : [String(msg || "").trim()].filter(Boolean);
+      if (!messages.length) {
         errorEl.textContent = "";
         errorEl.classList.add("cp-hidden");
         return;
       }
-      errorEl.textContent = msg;
+      errorEl.innerHTML = "";
+      if (messages.length === 1) {
+        errorEl.textContent = messages[0];
+      } else {
+        const list = document.createElement("ul");
+        list.className = "cp-edit-error-list";
+        messages.forEach((message) => {
+          const item = document.createElement("li");
+          item.textContent = message;
+          list.appendChild(item);
+        });
+        errorEl.appendChild(list);
+      }
       errorEl.classList.remove("cp-hidden");
     };
 
@@ -1776,19 +1790,17 @@
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       setError("");
+      const validationErrors = [];
 
       if (!team1Input.getValue() || !team2Input.getValue()) {
-        setError("Team 1 and Team 2 are required.");
-        return;
+        validationErrors.push("Team 1 and Team 2 are required.");
       }
       if (team1Input.getValue() === team2Input.getValue()) {
-        setError("Team 1 and Team 2 must be different.");
-        return;
+        validationErrors.push("Team 1 and Team 2 must be different.");
       }
       const timeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
       if (!timeUtc) {
-        setError("Time, UTC is required.");
-        return;
+        validationErrors.push("Time, UTC is required.");
       }
       const lineupType = String(lineupTypeInput.getValue() || "").trim();
       const deadlineHoursRaw = String(deadlineHoursInput.getValue() || "").trim();
@@ -1796,20 +1808,17 @@
         ? Number(deadlineHoursRaw.slice(0, -1))
         : Number(deadlineHoursRaw);
       if (lineupType === "Secret" && !DEADLINE_HOURS_OPTIONS.includes(deadlineHours)) {
-        setError("To Lineup Deadline is required for Secret lineup.");
-        return;
+        validationErrors.push("To Lineup Deadline is required for Secret lineup.");
       }
       const lineupDeadlineUtc = lineupType === "Open"
         ? null
         : computeLineupDeadlineUtc(timeUtc, deadlineHours);
       if (lineupType === "Secret" && !lineupDeadlineUtc) {
-        setError("Failed to calculate Lineup Deadline, UTC.");
-        return;
+        validationErrors.push("Failed to calculate Lineup Deadline, UTC.");
       }
       const duels = parseNullableInt(duelsInput.value);
       if (!Number.isInteger(duels) || duels <= 0) {
-        setError("Number of Duels must be a positive integer.");
-        return;
+        validationErrors.push("Number of Duels must be a positive integer.");
       }
 
       const payload = {
@@ -1831,16 +1840,40 @@
 
       if (lineupsEnabled) {
         if (!lineupsState.length) {
-          setError("At least one lineup row is required.");
-          return;
+          validationErrors.push("At least one lineup row is required.");
         }
         const invalidRowIndex = lineupsState.findIndex((row) => {
-          return !String(row?.player1Id || "").trim() || !String(row?.player2Id || "").trim();
+          const hasPlayer1 = !!String(row?.player1Id || "").trim();
+          const hasPlayer2 = !!String(row?.player2Id || "").trim();
+          return !hasPlayer1 && !hasPlayer2;
         });
         if (invalidRowIndex >= 0) {
-          setError(`Select players for duel ${invalidRowIndex + 1}.`);
-          return;
+          validationErrors.push(`Select at least one player for duel ${invalidRowIndex + 1}.`);
         }
+        const seenPlayers = new Map();
+        let duplicatePlayerId = "";
+        for (const row of lineupsState) {
+          const rowPlayers = [
+            String(row?.player1Id || "").trim(),
+            String(row?.player2Id || "").trim(),
+          ];
+          const duplicateInRow = rowPlayers.find((playerId) => seenPlayers.has(playerId));
+          if (duplicateInRow) {
+            duplicatePlayerId = duplicateInRow;
+            break;
+          }
+          rowPlayers.forEach((playerId) => {
+            if (playerId) seenPlayers.set(playerId, true);
+          });
+        }
+        if (duplicatePlayerId) {
+          const duplicateProfile = profilesMap.get(duplicatePlayerId) || { id: duplicatePlayerId };
+          validationErrors.push(`Player ${playerLabel(duplicateProfile)} cannot be added more than once.`);
+        }
+      }
+      if (validationErrors.length) {
+        setError(validationErrors);
+        return;
       }
 
       setSaving(true);
@@ -1864,7 +1897,7 @@
         if (lineupsEnabled) {
           const matchIdForLineups = String(payload.id || match?.id || "").trim();
           const lineupRowsPayload = lineupsState.map((row) => ({
-            id: buildLineupIdFromMatch(timeUtc, row.player1Id, row.player2Id),
+            id: String(row.id || buildLineupIdFromMatch(timeUtc, row.player1Id, row.player2Id)).trim(),
             tournament_id: DEFAULT_TOURNAMENT_ID,
             match_id: matchIdForLineups,
             duel_format: "Bo3",
@@ -1892,6 +1925,22 @@
           const lineupsResult = await lineupsResp.json().catch(() => ({}));
           if (!lineupsResp.ok || !lineupsResult?.ok) {
             setError(lineupsResult?.message || "Failed to save lineups.");
+            return;
+          }
+        } else if (hadInitialLineups && !isCreateMode) {
+          const matchIdForLineups = String(payload.id || match?.id || "").trim();
+          const lineupsResp = await fetch(`${LINEUPS_URL}/bulk-upsert`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              match_id: matchIdForLineups,
+              lineups: [],
+            }),
+          });
+          const lineupsResult = await lineupsResp.json().catch(() => ({}));
+          if (!lineupsResp.ok || !lineupsResult?.ok) {
+            setError(lineupsResult?.message || "Failed to delete lineups.");
             return;
           }
         }

@@ -1001,10 +1001,10 @@ app.post("/lineups/bulk-upsert", (req, res) => {
       const sanitized = [];
       for (const item of lineups) {
         const id = String(item?.id || "").trim();
-        const player1 = String(item?.player_1_id || "").trim();
-        const player2 = String(item?.player_2_id || "").trim();
-        if (!id || !player1 || !player2) {
-          return res.status(400).json({ ok: false, message: "Each lineup requires id, player_1_id, player_2_id" });
+        const player1 = normalizeText(item?.player_1_id);
+        const player2 = normalizeText(item?.player_2_id);
+        if (!id || (!player1 && !player2)) {
+          return res.status(400).json({ ok: false, message: "Each lineup requires id and at least one player" });
         }
         sanitized.push({
           id,
