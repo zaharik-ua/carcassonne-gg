@@ -542,7 +542,7 @@
 
 <div class="captain-wrap">
   <div class="captain-head">
-    <div class="captain-title">Captain Panel</div>
+    <div class="captain-title"></div>
     <div>
       <button id="captainAddButton" class="cp-edit-btn" type="button">Create</button>
       <span id="captainCount" class="captain-sub"></span>
@@ -820,8 +820,30 @@
 
   function setPageHeading(text) {
     const title = String(text || "").trim() || "Captain Panel";
-    document.title = title;
     if (titleEl) titleEl.textContent = title;
+  }
+
+  function getImmediatePageHeading() {
+    const activeView = getViewFromUrl();
+    const isEditMode = isEditModeEnabled();
+    const isCreateMode = isCreateModeEnabled();
+    const playerId = getPlayerIdFromUrl();
+    const cachedPlayerNick = String(window.sessionStorage?.getItem("captainEditPlayerNick") || "").trim();
+
+    if (activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
+      return "Find an Opponent for a Friendly Match";
+    }
+    if (activeView === CAPTAIN_VIEWS.FRIENDLIES) {
+      if (isEditMode) return "Match editing";
+      return "Team Friendly Matches";
+    }
+    if (activeView === CAPTAIN_VIEWS.PLAYERS) {
+      if (isEditMode && cachedPlayerNick) return cachedPlayerNick;
+      if (isEditMode && playerId) return playerId;
+      if (isCreateMode) return "Players";
+      return "Players";
+    }
+    return "Team Friendly Matches";
   }
 
   async function loadLineupsByMatchIds(matches) {
@@ -1141,6 +1163,7 @@
     row.appendChild(main);
 
     const hasEmail = !!String(profile?.email || "").trim();
+    const hasMasterTitle = isTruthyFlag(profile?.master_title);
     const hasContacts = ["telegram", "whatsapp", "discord", "instagram", "contact_email"]
       .some((key) => !!String(profile?.[key] || "").trim());
     const statusRaw = String(profile?.status || "").trim().toLowerCase();
@@ -1159,6 +1182,18 @@
       ggLogo.title = "Login Email added";
       ggWrap.appendChild(ggLogo);
       row.appendChild(ggWrap);
+      appendDivider();
+    }
+
+    if (hasMasterTitle) {
+      const masterWrap = document.createElement("div");
+      masterWrap.className = "cp-player-icons cp-player-icons--single";
+      const masterLogo = document.createElement("img");
+      masterLogo.src = MASTER_TITLE_LOGO_URL;
+      masterLogo.alt = "";
+      masterLogo.title = "BGA Master";
+      masterWrap.appendChild(masterLogo);
+      row.appendChild(masterWrap);
       appendDivider();
     }
 
@@ -1189,6 +1224,14 @@
     editBtn.className = "cp-edit-btn";
     editBtn.textContent = "Edit";
     editBtn.addEventListener("click", () => {
+      try {
+        window.sessionStorage?.setItem(
+          "captainEditPlayerNick",
+          String(profile?.bga_nickname || profile?.id || "").trim()
+        );
+      } catch (_error) {
+        // ignore storage errors
+      }
       window.location.href = buildCaptainUrl({
         view: CAPTAIN_VIEWS.PLAYERS,
         edit: true,
@@ -2777,7 +2820,7 @@
 
   async function initCaptainPage() {
     try {
-      setPageHeading("Captain Panel");
+      setPageHeading(getImmediatePageHeading());
       const isTestMode = isTestModeEnabled();
       const activeView = getViewFromUrl();
       const isEditMode = isEditModeEnabled();
@@ -3002,7 +3045,6 @@
         const playersAssociationName = String(
           teamsById.get(playersAssociationCode)?.name || playersAssociationCode || "Players"
         ).trim();
-        setPageHeading(`Players: ${playersAssociationName}`);
         const players = allProfiles
           .filter((profile) => {
             if (playersAssociationCode) {
@@ -3031,8 +3073,10 @@
             countEl.textContent = "";
             return;
           }
+          setPageHeading(String(playerToEdit?.bga_nickname || playerToEdit?.id || editPlayerId));
           renderPlayerEditForm(playerToEdit, { currentUserPlayerId });
         } else {
+          setPageHeading(`Players: ${playersAssociationName}`);
           renderPlayers(playersWithContacts);
         }
       }

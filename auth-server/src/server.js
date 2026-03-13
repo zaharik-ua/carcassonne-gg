@@ -634,6 +634,7 @@ app.post("/profiles", (req, res) => {
   const actorPlayerId = String(req.user.player_id || "").trim() || null;
   const payload = req.body && typeof req.body === "object" ? req.body : {};
   const hasAssociationInPayload = Object.prototype.hasOwnProperty.call(payload, "association");
+  const hasNameInPayload = Object.prototype.hasOwnProperty.call(payload, "name");
 
   const playerId = String(payload.id ?? payload.player_id ?? "").trim();
   const bgaNickname = String(payload.bga_nickname || "").trim();
@@ -682,7 +683,7 @@ app.post("/profiles", (req, res) => {
             SET
               id = ?,
               bga_nickname = ?,
-              name = ?,
+              name = CASE WHEN ? THEN ? ELSE name END,
               association = ?,
               status = 'Active',
               deleted_at = NULL,
@@ -691,7 +692,7 @@ app.post("/profiles", (req, res) => {
               updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
           `,
-          [playerId, bgaNickname, name, association, actorPlayerId, String(dupRow.id || "").trim()],
+          [playerId, bgaNickname, hasNameInPayload ? 1 : 0, name, association, actorPlayerId, String(dupRow.id || "").trim()],
           function onRestore(restoreErr) {
             if (restoreErr) {
               return res.status(500).json({ ok: false, message: "Failed to restore profile" });
