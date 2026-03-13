@@ -1,0 +1,81 @@
+<style>
+  .captain-sections-wrap {
+    display: grid;
+    gap: 8px;
+    margin: 6px 0 10px;
+  }
+
+  .captain-sections-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid #d6dbe3;
+    border-radius: 6px;
+    background: #fff;
+    color: #2f3947;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+
+  .captain-sections-row:hover {
+    border-color: #aeb7c4;
+  }
+
+  .captain-sections-row img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .captain-sections-row span {
+    min-width: 0;
+  }
+</style>
+
+<div class="captain-sections-wrap" data-captain-sections>
+  <button class="captain-sections-row" type="button" data-view="friendlies">
+    <img src="https://carcassonne.gg/gallery/friendly-matches.png" alt="">
+    <span>Friendly Matches</span>
+  </button>
+
+  <button class="captain-sections-row" type="button" data-view="players">
+    <img src="https://carcassonne.gg/gallery/active.png" alt="">
+    <span>Players</span>
+  </button>
+
+  <button class="captain-sections-row" type="button" data-view="friendly-find">
+    <img src="https://carcassonne.gg/gallery/calendar.png" alt="">
+    <span>Friendly Find</span>
+  </button>
+</div>
+
+<script>
+(function () {
+  function buildUrlWithView(view) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", String(view || "").trim());
+    url.searchParams.delete("edit");
+    url.searchParams.delete("create");
+    url.searchParams.delete("match_id");
+    url.searchParams.delete("player_id");
+    return url.toString();
+  }
+
+  const root = document.querySelector("[data-captain-sections]");
+  if (!root) return;
+
+  root.querySelectorAll(".captain-sections-row[data-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const view = String(button.dataset.view || "").trim();
+      if (!view) return;
+      window.location.href = buildUrlWithView(view);
+    });
+  });
+})();
+</script>

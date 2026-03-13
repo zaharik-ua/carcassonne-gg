@@ -1446,6 +1446,10 @@
       ])
     );
 
+    const associationInput = addTextField("Association", "association", profile?.association, "text");
+    associationInput.readOnly = true;
+    associationInput.title = "Association is managed separately and cannot be changed here.";
+
     const emailInput = addTextField("Login Email", "email", profile?.email, "email");
     if (isOwnProfile) {
       emailInput.readOnly = true;
@@ -1650,6 +1654,7 @@
 
       const payload = {
         status: String(statusInput.getValue() || "").trim() || "Active",
+        association: String(associationInput.value || "").trim(),
         email: String(emailInput.value || "").trim(),
         name: String(nameInput.value || "").trim(),
         telegram: String(telegramInput.value || "").trim(),

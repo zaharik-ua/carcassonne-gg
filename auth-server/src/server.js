@@ -633,6 +633,7 @@ app.post("/profiles", (req, res) => {
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
   const actorPlayerId = String(req.user.player_id || "").trim() || null;
   const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const hasAssociationInPayload = Object.prototype.hasOwnProperty.call(payload, "association");
 
   const playerId = String(payload.id ?? payload.player_id ?? "").trim();
   const bgaNickname = String(payload.bga_nickname || "").trim();
@@ -1916,7 +1917,7 @@ app.patch("/profiles/:playerId", (req, res) => {
     return res.status(400).json({ ok: false, message: "status must be Active or Inactive" });
   }
 
-  if (isAdmin && !profilePatch.association) {
+  if (isAdmin && hasAssociationInPayload && !profilePatch.association) {
     return res.status(400).json({ ok: false, message: "association cannot be empty" });
   }
 
@@ -1963,7 +1964,7 @@ app.patch("/profiles/:playerId", (req, res) => {
             master_title = ?,
             master_title_date = ?,
             email = ?,
-            association = ?,
+            association = COALESCE(?, association),
             team_captain = ?,
             telegram = ?,
             whatsapp = ?,
