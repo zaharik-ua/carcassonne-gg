@@ -415,6 +415,7 @@ passport.deserializeUser((id, done) => {
           SELECT p.id
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
+            AND p.deleted_at IS NULL
           ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ) AS player_id,
@@ -422,6 +423,7 @@ passport.deserializeUser((id, done) => {
           SELECT p.admin
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
+            AND p.deleted_at IS NULL
           ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ), 0) AS admin,
@@ -429,6 +431,7 @@ passport.deserializeUser((id, done) => {
           SELECT p.bga_nickname
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
+            AND p.deleted_at IS NULL
           ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ) AS bga_nickname,
@@ -436,6 +439,7 @@ passport.deserializeUser((id, done) => {
           SELECT p.association
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
+            AND p.deleted_at IS NULL
           ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ) AS association,
@@ -443,6 +447,7 @@ passport.deserializeUser((id, done) => {
           SELECT p.master_title
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
+            AND p.deleted_at IS NULL
           ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ), 0) AS master_title,
@@ -450,6 +455,7 @@ passport.deserializeUser((id, done) => {
           SELECT p.master_title_date
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
+            AND p.deleted_at IS NULL
           ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ) AS master_title_date,
@@ -457,6 +463,7 @@ passport.deserializeUser((id, done) => {
           SELECT p.team_captain
           FROM profiles p
           WHERE lower(p.email) = lower(u.email)
+            AND p.deleted_at IS NULL
           ORDER BY p.updated_at DESC, p.id ASC
           LIMIT 1
         ), 0) AS team_captain
