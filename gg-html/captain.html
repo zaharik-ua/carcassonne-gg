@@ -273,6 +273,11 @@
     cursor: not-allowed;
   }
 
+  .cp-edit-row input.cp-readonly-input {
+    background: #f3f4f6;
+    color: #444;
+  }
+
   .cp-edit-row.cp-edit-row-checkbox {
     align-items: center;
   }
@@ -544,8 +549,8 @@
   <div class="captain-head">
     <div class="captain-title"></div>
     <div>
-      <button id="captainAddButton" class="cp-edit-btn" type="button">Create</button>
       <span id="captainCount" class="captain-sub"></span>
+      <button id="captainAddButton" class="cp-edit-btn" type="button">Create</button>
     </div>
   </div>
   <div id="captainContent" class="captain-alert">Loading...</div>
@@ -1256,6 +1261,390 @@
     players.forEach((profile) => {
       contentEl.appendChild(createPlayerRow(profile));
     });
+  }
+
+  function renderPlayerCreateForm(createContext = {}) {
+    const associationCode = normalizeCode(createContext?.associationCode || "");
+    setPageHeading("Create player");
+    countEl.textContent = "Creating player";
+    hintEl.textContent = "";
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.style.display = "";
+    contentEl.style.gap = "";
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+    form.noValidate = true;
+    form.style.width = "100%";
+    form.style.boxSizing = "border-box";
+
+    const topActions = document.createElement("div");
+    topActions.className = "cp-edit-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    topActions.appendChild(saveBtn);
+    topActions.appendChild(cancelBtn);
+    form.appendChild(topActions);
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "cp-edit-error cp-hidden";
+    form.appendChild(errorEl);
+
+    const dropdowns = [];
+
+    const createDropdown = (initialValue, options, cfg = {}) => {
+      const normalizedOptions = (Array.isArray(options) ? options : [])
+        .map((opt) => ({
+          value: String(opt?.value || "").trim(),
+          label: String(opt?.label || opt?.value || "").trim(),
+          disabled: !!opt?.disabled,
+        }))
+        .filter((opt) => cfg.allowEmpty ? true : !!opt.value);
+
+      let value = String(initialValue || "").trim();
+      if (!normalizedOptions.some((opt) => opt.value === value) && normalizedOptions[0]) {
+        value = normalizedOptions[0].value;
+      }
+
+      const root = document.createElement("div");
+      root.className = "cp-dd";
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cp-dd-btn";
+      const btnContent = document.createElement("span");
+      btnContent.className = "cp-dd-btn-content";
+      const chevron = document.createElement("span");
+      chevron.className = "cp-dd-chevron";
+      chevron.textContent = "▾";
+      btn.appendChild(btnContent);
+      btn.appendChild(chevron);
+
+      const menu = document.createElement("div");
+      menu.className = "cp-dd-menu";
+
+      const findOption = (v) => normalizedOptions.find((opt) => opt.value === String(v || "").trim()) || null;
+
+      const renderButtonContent = () => {
+        btnContent.innerHTML = "";
+        const selected = findOption(value);
+        if (!selected) return;
+        const text = document.createElement("span");
+        text.textContent = selected.label || selected.value;
+        btnContent.appendChild(text);
+      };
+
+      const close = () => {
+        menu.classList.remove("open");
+        menu.style.maxHeight = "0px";
+        btn.classList.remove("open");
+      };
+
+      const open = () => {
+        if (btn.disabled) return;
+        menu.classList.add("open");
+        menu.style.maxHeight = `${menu.scrollHeight}px`;
+        btn.classList.add("open");
+      };
+
+      const setValue = (newValue, trigger) => {
+        const next = findOption(newValue);
+        if (!next) return;
+        value = next.value;
+        menu.querySelectorAll(".cp-dd-option").forEach((optEl) => {
+          optEl.classList.toggle("active", String(optEl.dataset.value) === value);
+        });
+        renderButtonContent();
+        if (trigger && typeof cfg.onChange === "function") cfg.onChange(value);
+      };
+
+      normalizedOptions.forEach((opt) => {
+        const optionBtn = document.createElement("button");
+        optionBtn.type = "button";
+        optionBtn.className = "cp-dd-option";
+        optionBtn.dataset.value = opt.value;
+        if (opt.disabled) optionBtn.classList.add("disabled");
+        optionBtn.appendChild(document.createTextNode(opt.label || opt.value));
+        if (opt.value === value) optionBtn.classList.add("active");
+        optionBtn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (opt.disabled) return;
+          setValue(opt.value, true);
+          close();
+        });
+        menu.appendChild(optionBtn);
+      });
+
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const isOpen = menu.classList.contains("open");
+        dropdowns.forEach((dd) => dd.close());
+        if (!isOpen) open();
+      });
+
+      renderButtonContent();
+      root.appendChild(btn);
+      root.appendChild(menu);
+
+      const api = {
+        root,
+        close,
+        getValue: () => value,
+      };
+      dropdowns.push(api);
+      return api;
+    };
+
+    const addTextField = (labelText, name, value, type = "text", options = {}) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      label.setAttribute("for", name);
+      const input = document.createElement("input");
+      input.type = type;
+      input.id = name;
+      input.name = name;
+      input.value = String(value || "");
+      if (options.readOnly) {
+        input.readOnly = true;
+        input.classList.add("cp-readonly-input");
+      }
+      row.appendChild(label);
+      row.appendChild(input);
+      form.appendChild(row);
+      return input;
+    };
+
+    const addDropdownField = (labelText, dropdown) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      row.appendChild(label);
+      row.appendChild(dropdown.root);
+      form.appendChild(row);
+      return dropdown;
+    };
+
+    const addContactField = (labelText, name, value, iconUrl, type = "text") => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.setAttribute("for", name);
+      if (iconUrl) {
+        const icon = document.createElement("img");
+        icon.src = iconUrl;
+        icon.alt = "";
+        icon.style.width = "14px";
+        icon.style.height = "14px";
+        icon.style.objectFit = "contain";
+        icon.style.verticalAlign = "middle";
+        icon.style.marginRight = "6px";
+        label.appendChild(icon);
+      }
+      label.appendChild(document.createTextNode(labelText));
+
+      const input = document.createElement("input");
+      input.type = type;
+      input.id = name;
+      input.name = name;
+      input.value = String(value || "");
+
+      row.appendChild(label);
+      row.appendChild(input);
+      form.appendChild(row);
+      return input;
+    };
+
+    const addCheckboxField = (labelText, name, checked) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row cp-edit-row-checkbox";
+      const label = document.createElement("label");
+      label.className = "cp-edit-checkbox";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.id = name;
+      input.name = name;
+      input.checked = !!checked;
+      const text = document.createElement("span");
+      text.textContent = labelText;
+      label.appendChild(input);
+      label.appendChild(text);
+      row.appendChild(label);
+      form.appendChild(row);
+      return input;
+    };
+
+    const bgaIdInput = addTextField("BGA ID", "create_player_id", "", "text");
+    const bgaNicknameInput = addTextField("BGA nickname", "create_bga_nickname", "", "text");
+    const associationInput = addTextField("Association", "create_association", associationCode, "text", { readOnly: true });
+    associationInput.style.background = "#f3f4f6";
+    associationInput.style.color = "#444";
+    const statusInput = addDropdownField(
+      "Status",
+      createDropdown("Active", [
+        { value: "Active", label: "Active" },
+        { value: "Inactive", label: "Inactive" },
+      ])
+    );
+    const emailInput = addTextField("Login Email", "create_email", "", "email");
+    const nameInput = addTextField("Full name", "create_name", "", "text");
+    const telegramInput = addContactField("Telegram", "create_telegram", "", CONTACT_ICONS.telegram, "text");
+    const whatsappInput = addContactField("WhatsApp", "create_whatsapp", "", CONTACT_ICONS.whatsapp, "text");
+    const discordInput = addContactField("Discord", "create_discord", "", CONTACT_ICONS.discord, "text");
+    const instagramInput = addContactField("Instagram", "create_instagram", "", CONTACT_ICONS.instagram, "text");
+    const contactEmailInput = addContactField("Contact Email", "create_contact_email", "", CONTACT_ICONS.contact_email, "email");
+    const masterInput = addCheckboxField("BGA Master", "create_master_title", false);
+
+    const masterDateRow = document.createElement("div");
+    masterDateRow.className = "cp-edit-row";
+    const masterDateLabel = document.createElement("label");
+    masterDateLabel.textContent = "Master title date";
+    masterDateLabel.setAttribute("for", "create_master_title_date");
+    const masterDateInput = document.createElement("input");
+    masterDateInput.type = "date";
+    masterDateInput.id = "create_master_title_date";
+    masterDateInput.name = "create_master_title_date";
+    masterDateRow.appendChild(masterDateLabel);
+    masterDateRow.appendChild(masterDateInput);
+    form.appendChild(masterDateRow);
+
+    const setError = (message) => {
+      if (!message) {
+        errorEl.textContent = "";
+        errorEl.classList.add("cp-hidden");
+        return;
+      }
+      errorEl.textContent = message;
+      errorEl.classList.remove("cp-hidden");
+    };
+
+    const setSaving = (isSaving) => {
+      saveBtn.disabled = isSaving;
+      cancelBtn.disabled = isSaving;
+      saveBtn.textContent = isSaving ? "Saving..." : "Save";
+    };
+
+    const syncMasterDateVisibility = () => {
+      const isMaster = !!masterInput.checked;
+      masterDateRow.classList.toggle("cp-hidden", !isMaster);
+      masterDateInput.required = isMaster;
+      if (!isMaster) masterDateInput.value = "";
+    };
+    masterInput.addEventListener("change", syncMasterDateVisibility);
+    syncMasterDateVisibility();
+
+    cancelBtn.addEventListener("click", () => {
+      window.location.href = buildCaptainUrl({
+        view: CAPTAIN_VIEWS.PLAYERS,
+        create: false,
+        edit: false,
+        matchId: null,
+        playerId: null,
+      });
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!form.contains(event.target)) {
+        dropdowns.forEach((dd) => dd.close());
+      }
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setError("");
+
+      const playerId = String(bgaIdInput.value || "").trim();
+      const bgaNickname = String(bgaNicknameInput.value || "").trim();
+      const association = String(associationInput.value || "").trim().toUpperCase();
+      const isMaster = !!masterInput.checked;
+
+      if (!/^\d{6,9}$/.test(playerId)) {
+        setError("BGA ID must be 6-9 digits.");
+        return;
+      }
+      if (!bgaNickname) {
+        setError("BGA nickname is required.");
+        return;
+      }
+      if (!association) {
+        setError("Association is required.");
+        return;
+      }
+      if (isMaster && !String(masterDateInput.value || "").trim()) {
+        setError("Master title date is required when Master is enabled.");
+        return;
+      }
+
+      const createPayload = {
+        id: playerId,
+        bga_nickname: bgaNickname,
+        association,
+        name: String(nameInput.value || "").trim(),
+      };
+
+      const patchPayload = {
+        status: String(statusInput.getValue() || "").trim() || "Active",
+        email: String(emailInput.value || "").trim(),
+        name: String(nameInput.value || "").trim(),
+        telegram: String(telegramInput.value || "").trim(),
+        whatsapp: String(whatsappInput.value || "").trim(),
+        discord: String(discordInput.value || "").trim(),
+        instagram: String(instagramInput.value || "").trim(),
+        contact_email: String(contactEmailInput.value || "").trim(),
+        master_title: isMaster,
+        master_title_date: isMaster ? String(masterDateInput.value || "").trim() : null,
+      };
+
+      setSaving(true);
+      try {
+        const createResp = await fetch(PROFILES_URL, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createPayload),
+        });
+        const createResult = await createResp.json().catch(() => ({}));
+        if (!createResp.ok || !createResult?.ok) {
+          setError(createResult?.message || "Failed to create profile.");
+          return;
+        }
+
+        const patchResp = await fetch(`${PROFILES_URL}/${encodeURIComponent(playerId)}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patchPayload),
+        });
+        const patchResult = await patchResp.json().catch(() => ({}));
+        if (!patchResp.ok || !patchResult?.ok) {
+          setError(patchResult?.message || "Profile was created, but failed to save additional fields.");
+          return;
+        }
+
+        window.location.href = buildCaptainUrl({
+          view: CAPTAIN_VIEWS.PLAYERS,
+          create: false,
+          edit: false,
+          matchId: null,
+          playerId: null,
+        });
+      } catch (_error) {
+        setError("Failed to create profile.");
+      } finally {
+        setSaving(false);
+      }
+    });
+
+    contentEl.appendChild(form);
   }
 
   function renderPlayerEditForm(profile, editContext = {}) {
@@ -2942,7 +3331,20 @@
         });
 
       if (activeView === CAPTAIN_VIEWS.PLAYERS) {
-        addButtonEl.classList.add("cp-hidden");
+        addButtonEl.classList.remove("cp-hidden");
+        addButtonEl.textContent = "Create";
+        addButtonEl.onclick = () => {
+          window.location.href = buildCaptainUrl({
+            view: CAPTAIN_VIEWS.PLAYERS,
+            create: true,
+            edit: false,
+            matchId: null,
+            playerId: null,
+          });
+        };
+        if (isCreateMode || isEditMode) {
+          addButtonEl.classList.add("cp-hidden");
+        }
       } else if (activeView === CAPTAIN_VIEWS.FRIENDLIES) {
         addButtonEl.classList.remove("cp-hidden");
         addButtonEl.textContent = "Create";
@@ -3065,7 +3467,9 @@
           ...(contactsByPlayerId.get(String(player?.id || "").trim()) || {}),
         }));
 
-        if (isEditMode && editPlayerId) {
+        if (isCreateMode) {
+          renderPlayerCreateForm({ associationCode: playersAssociationCode });
+        } else if (isEditMode && editPlayerId) {
           const playerToEdit = playersWithContacts.find((p) => String(p?.id || "") === editPlayerId);
           if (!playerToEdit) {
             contentEl.className = "captain-alert";
