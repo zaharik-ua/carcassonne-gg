@@ -641,6 +641,7 @@ app.post("/profiles", (req, res) => {
   const actorPlayerId = String(req.user.player_id || "").trim() || null;
   const payload = req.body && typeof req.body === "object" ? req.body : {};
   const hasAssociationInPayload = Object.prototype.hasOwnProperty.call(payload, "association");
+  const hasTeamCaptainInPayload = Object.prototype.hasOwnProperty.call(payload, "team_captain");
   const hasNameInPayload = Object.prototype.hasOwnProperty.call(payload, "name");
 
   const playerId = String(payload.id ?? payload.player_id ?? "").trim();
@@ -1903,7 +1904,7 @@ app.patch("/profiles/:playerId", (req, res) => {
     master_title_date: normalizeText(payload.master_title_date),
     email: normalizeText(payload.email),
     association: normalizeText(payload.association),
-    team_captain: normalizeBool(payload.team_captain) ? 1 : 0,
+    team_captain: hasTeamCaptainInPayload ? (normalizeBool(payload.team_captain) ? 1 : 0) : null,
     telegram: normalizeText(payload.telegram),
     whatsapp: normalizeText(payload.whatsapp),
     discord: normalizeText(payload.discord),
@@ -1974,7 +1975,7 @@ app.patch("/profiles/:playerId", (req, res) => {
             master_title_date = ?,
             email = ?,
             association = COALESCE(?, association),
-            team_captain = ?,
+            team_captain = COALESCE(?, team_captain),
             telegram = ?,
             whatsapp = ?,
             discord = ?,
