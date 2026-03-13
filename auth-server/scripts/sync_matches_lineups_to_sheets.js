@@ -32,6 +32,36 @@ if (!SERVICE_ACCOUNT_PRIVATE_KEY) {
 
 const db = new sqlite3.Database(dbFullPath);
 
+function ts() {
+  return new Date().toISOString();
+}
+
+function logInfo(message, details = null) {
+  if (details && typeof details === "object") {
+    console.log(`[${ts()}] INFO ${message} ${JSON.stringify(details)}`);
+    return;
+  }
+  console.log(`[${ts()}] INFO ${message}`);
+}
+
+function logError(message, details = null) {
+  if (details && typeof details === "object") {
+    console.error(`[${ts()}] ERROR ${message} ${JSON.stringify(details)}`);
+    return;
+  }
+  console.error(`[${ts()}] ERROR ${message}`);
+}
+
+function getErrorMeta(err) {
+  const status = Number(err?.status || err?.response?.status || 0) || null;
+  const code = err?.code ?? null;
+  const message = String(err?.message || "Unknown error");
+  const apiMessage = err?.response?.data?.error?.message
+    ? String(err.response.data.error.message)
+    : null;
+  return { code, status, message, apiMessage };
+}
+
 function allAsync(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
@@ -201,6 +231,14 @@ async function writeSheet(sheets, spreadsheetId, sheetName, values) {
 }
 
 async function main() {
+  const startedAtMs = Date.now();
+  logInfo("Sync started", {
+    spreadsheetId: SPREADSHEET_ID,
+    matchesSheet: MATCHES_SHEET,
+    lineupsSheet: LINEUPS_SHEET,
+    dbPath: dbFullPath,
+  });
+
   try {
     const auth = new google.auth.JWT({
       email: SERVICE_ACCOUNT_EMAIL,
@@ -213,22 +251,37 @@ async function main() {
       getMatchesExportData(),
       getLineupsExportData(),
     ]);
+    logInfo("Export data prepared", {
+      matchesRows: matchesData.rows.length,
+      lineupsRows: lineupsData.rows.length,
+    });
 
     const matchesValues = toSheetValues(matchesData.columns, matchesData.rows);
     const lineupsValues = toSheetValues(lineupsData.columns, lineupsData.rows);
 
     await writeSheet(sheets, SPREADSHEET_ID, MATCHES_SHEET, matchesValues);
+    logInfo("Matches sheet updated", {
+      sheet: MATCHES_SHEET,
+      rowsWritten: matchesValues.length - 1,
+    });
     await writeSheet(sheets, SPREADSHEET_ID, LINEUPS_SHEET, lineupsValues);
+    logInfo("Lineups sheet updated", {
+      sheet: LINEUPS_SHEET,
+      rowsWritten: lineupsValues.length - 1,
+    });
 
-    console.log(
-      `Synced: matches=${matchesData.rows.length}, lineups=${lineupsData.rows.length}, spreadsheet=${SPREADSHEET_ID}`
-    );
+    const durationMs = Date.now() - startedAtMs;
+    logInfo("Sync completed", {
+      matchesRows: matchesData.rows.length,
+      lineupsRows: lineupsData.rows.length,
+      durationMs,
+    });
   } finally {
     db.close();
   }
 }
 
 main().catch((err) => {
-  console.error("Google Sheets sync failed", err);
+  logError("Sync failed", getErrorMeta(err));
   process.exitCode = 1;
 });
