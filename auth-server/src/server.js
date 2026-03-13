@@ -1610,28 +1610,60 @@ app.delete("/matches/:id", (req, res) => {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
 
-      return db.run(
-        `
-          UPDATE matches
-          SET
-            deleted_at = CURRENT_TIMESTAMP,
-            deleted_by = ?,
-            updated_by = ?,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-            AND deleted_at IS NULL
-        `,
-        [actorPlayerId, actorPlayerId, matchId],
-        function onDelete(deleteErr) {
-          if (deleteErr) {
-            return res.status(500).json({ ok: false, message: "Failed to delete match" });
+      return db.serialize(() => {
+        db.run("BEGIN IMMEDIATE TRANSACTION");
+        db.run(
+          `
+            UPDATE matches
+            SET
+              deleted_at = CURRENT_TIMESTAMP,
+              deleted_by = ?,
+              updated_by = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND deleted_at IS NULL
+          `,
+          [actorPlayerId, actorPlayerId, matchId],
+          function onDeleteMatch(deleteErr) {
+            if (deleteErr) {
+              db.run("ROLLBACK");
+              return res.status(500).json({ ok: false, message: "Failed to delete match" });
+            }
+            if (!this || this.changes === 0) {
+              db.run("ROLLBACK");
+              return res.status(404).json({ ok: false, message: "Match not found" });
+            }
+
+            return db.run(
+              `
+                UPDATE lineups
+                SET
+                  deleted_at = CURRENT_TIMESTAMP,
+                  deleted_by = ?,
+                  updated_by = ?,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE match_id = ?
+                  AND deleted_at IS NULL
+              `,
+              [actorPlayerId, actorPlayerId, matchId],
+              (deleteLineupsErr) => {
+                if (deleteLineupsErr) {
+                  db.run("ROLLBACK");
+                  return res.status(500).json({ ok: false, message: "Failed to delete match lineups" });
+                }
+
+                return db.run("COMMIT", (commitErr) => {
+                  if (commitErr) {
+                    db.run("ROLLBACK");
+                    return res.status(500).json({ ok: false, message: "Failed to delete match" });
+                  }
+                  return res.json({ ok: true });
+                });
+              }
+            );
           }
-          if (!this || this.changes === 0) {
-            return res.status(404).json({ ok: false, message: "Match not found" });
-          }
-          return res.json({ ok: true });
-        }
-      );
+        );
+      });
     }
   );
 });
