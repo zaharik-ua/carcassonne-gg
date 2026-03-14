@@ -1488,6 +1488,14 @@
     cancelBtn.textContent = "Cancel";
     topActions.appendChild(saveBtn);
     topActions.appendChild(cancelBtn);
+    let deleteBtn = null;
+    if (!isCreateMode) {
+      deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "cp-btn cp-btn-danger";
+      deleteBtn.textContent = "Delete";
+      topActions.appendChild(deleteBtn);
+    }
     form.appendChild(topActions);
 
     const errorEl = document.createElement("div");
@@ -2378,7 +2386,7 @@
     return parts.sub ? `${parts.main} ${parts.sub}` : parts.main;
   }
 
-  function createFriendlyFindRow(entry, teamsById) {
+  function createFriendlyFindRow(entry, teamsById, options = {}) {
     const row = document.createElement("div");
     row.className = "cp-match-row cp-friendly-row";
 
@@ -2453,14 +2461,10 @@
     const timeMain = document.createElement("div");
     timeMain.className = "cp-friendly-time-main";
     timeMain.textContent = String(entry?.time_1 || "19:00");
-    const timeDash = document.createElement("div");
-    timeDash.className = "cp-friendly-time-sub";
-    timeDash.textContent = "-";
     const timeSub = document.createElement("div");
     timeSub.className = "cp-friendly-time-main";
     timeSub.textContent = String(entry?.time_2 || "22:00");
     timeBox.appendChild(timeMain);
-    timeBox.appendChild(timeDash);
     timeBox.appendChild(timeSub);
     row.appendChild(timeBox);
 
@@ -2478,10 +2482,31 @@
     playersBox.appendChild(playersValue);
     row.appendChild(playersBox);
 
+    if (options.canEdit) {
+      addDivider();
+      const right = document.createElement("div");
+      right.className = "cp-match-right";
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "cp-edit-btn";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => {
+        window.location.href = buildCaptainUrl({
+          view: CAPTAIN_VIEWS.FRIENDLY_FIND,
+          edit: true,
+          create: false,
+          matchId: String(entry?.id || ""),
+          playerId: null,
+        });
+      });
+      right.appendChild(editBtn);
+      row.appendChild(right);
+    }
+
     return row;
   }
 
-  function renderFriendlyFindSection(titleText, entries, teamsById, emptyText) {
+  function renderFriendlyFindSection(titleText, entries, teamsById, emptyText, options = {}) {
     const sectionWrap = document.createElement("div");
     sectionWrap.style.display = "grid";
     sectionWrap.style.gap = "6px";
@@ -2498,7 +2523,7 @@
     const list = document.createElement("div");
     list.className = "captain-list";
     entries.forEach((entry) => {
-      list.appendChild(createFriendlyFindRow(entry, teamsById));
+      list.appendChild(createFriendlyFindRow(entry, teamsById, options));
     });
     sectionWrap.appendChild(list);
     return sectionWrap;
@@ -2517,19 +2542,23 @@
 
     countEl.textContent = `${ownRequests.length + opponentRequests.length} requests`;
     contentEl.appendChild(
-      renderFriendlyFindSection("My Match Requests", ownRequests, teamsById, "No match requests yet.")
+      renderFriendlyFindSection("My Match Requests", ownRequests, teamsById, "No match requests yet.", { canEdit: true })
     );
     contentEl.appendChild(
       renderFriendlyFindSection("Available Opponents", opponentRequests, teamsById, "No available opponents yet.")
     );
   }
 
-  function renderFriendlyFindCreateForm(teamsById, createContext) {
-    const associationCode = normalizeCode(createContext?.associationCode);
+  function renderFriendlyFindEditForm(teamsById, formContext = {}, formMode = "create") {
+    const isCreateMode = formMode === "create";
+    const associationCode = normalizeCode(formContext?.associationCode);
     const teamMeta = teamsById.get(associationCode) || null;
+    const source = formContext?.request && typeof formContext.request === "object" ? formContext.request : {};
     setPageHeading("Find an Opponent for a Friendly Match");
     hintEl.textContent = "";
-    countEl.textContent = "Creating a new match request";
+    countEl.textContent = isCreateMode
+      ? "Creating a new match request"
+      : `Editing request: ${String(source?.id || "")}`;
     contentEl.className = "cp-edit-form";
     contentEl.innerHTML = "";
 
@@ -2549,6 +2578,14 @@
     cancelBtn.textContent = "Cancel";
     topActions.appendChild(saveBtn);
     topActions.appendChild(cancelBtn);
+    let deleteBtn = null;
+    if (!isCreateMode) {
+      deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "cp-btn cp-btn-danger";
+      deleteBtn.textContent = "Delete";
+      topActions.appendChild(deleteBtn);
+    }
     form.appendChild(topActions);
 
     const errorEl = document.createElement("div");
@@ -2605,6 +2642,30 @@
     teamField.appendChild(teamText);
     addRow("Team", teamField);
 
+    const playersInput = document.createElement("input");
+    playersInput.type = "text";
+    playersInput.value = String(source?.number_of_players || "5-7");
+    addRow("Players Available", playersInput);
+
+    const createHourSelect = (initialValue) => {
+      const select = document.createElement("select");
+      for (let hour = 0; hour <= 23; hour += 1) {
+        const value = `${String(hour).padStart(2, "0")}:00`;
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        if (value === initialValue) option.selected = true;
+        select.appendChild(option);
+      }
+      return select;
+    };
+
+    const time1Input = createHourSelect(String(source?.time_1 || "19:00"));
+    addRow("Earliest Start, UTC", time1Input);
+
+    const time2Input = createHourSelect(String(source?.time_2 || "22:00"));
+    addRow("Latest Start, UTC", time2Input);
+
     const datesWrap = document.createElement("div");
     datesWrap.className = "cp-calendar";
     const datesSelectedEl = document.createElement("div");
@@ -2612,7 +2673,7 @@
     const datesHelpEl = document.createElement("div");
     datesHelpEl.className = "cp-calendar-help";
     datesHelpEl.textContent = "Select from 1 to 5 dates.";
-    let selectedDates = [];
+    let selectedDates = parseFriendlyFindDates(source?.dates);
     let calendarMonth = (() => {
       const now = new Date();
       return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -2726,36 +2787,112 @@
     renderSelectedDates();
     renderCalendar();
 
-    const createHourSelect = (initialValue) => {
-      const select = document.createElement("select");
-      for (let hour = 0; hour <= 23; hour += 1) {
-        const value = `${String(hour).padStart(2, "0")}:00`;
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = value;
-        if (value === initialValue) option.selected = true;
-        select.appendChild(option);
-      }
-      return select;
-    };
-
-    const time1Input = createHourSelect("19:00");
-    addRow("Earliest Start, UTC", time1Input);
-
-    const time2Input = createHourSelect("22:00");
-    addRow("Latest Start, UTC", time2Input);
-
-    const playersInput = document.createElement("input");
-    playersInput.type = "number";
-    playersInput.step = "1";
-    playersInput.min = "1";
-    playersInput.value = "5";
-    addRow("Players Available", playersInput);
-
     const setSaving = (isSaving) => {
       saveBtn.disabled = isSaving;
       cancelBtn.disabled = isSaving;
+      if (deleteBtn) deleteBtn.disabled = isSaving;
       saveBtn.textContent = isSaving ? "Saving..." : "Save";
+    };
+
+    const showDeleteConfirmDialog = () => {
+      const overlay = document.createElement("div");
+      overlay.style.position = "fixed";
+      overlay.style.inset = "0";
+      overlay.style.background = "rgba(24, 31, 41, 0.42)";
+      overlay.style.display = "flex";
+      overlay.style.alignItems = "center";
+      overlay.style.justifyContent = "center";
+      overlay.style.padding = "16px";
+      overlay.style.zIndex = "1000";
+
+      const dialog = document.createElement("div");
+      dialog.style.width = "100%";
+      dialog.style.maxWidth = "420px";
+      dialog.style.background = "#fff";
+      dialog.style.border = "1px solid #d8dee8";
+      dialog.style.borderRadius = "8px";
+      dialog.style.boxShadow = "0 16px 36px rgba(15, 28, 48, 0.22)";
+      dialog.style.padding = "16px";
+      dialog.style.display = "grid";
+      dialog.style.gap = "12px";
+
+      const title = document.createElement("div");
+      title.textContent = "Delete match request?";
+      title.style.fontSize = "16px";
+      title.style.fontWeight = "700";
+      title.style.color = "#222";
+
+      const text = document.createElement("div");
+      text.textContent = "This action will remove the match request. This cannot be undone.";
+      text.style.fontSize = "14px";
+      text.style.lineHeight = "1.4";
+      text.style.color = "#4b5563";
+
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.justifyContent = "flex-end";
+      actions.style.gap = "8px";
+
+      const cancelModalBtn = document.createElement("button");
+      cancelModalBtn.type = "button";
+      cancelModalBtn.className = "cp-btn cp-btn-secondary";
+      cancelModalBtn.textContent = "Cancel";
+
+      const confirmDeleteBtn = document.createElement("button");
+      confirmDeleteBtn.type = "button";
+      confirmDeleteBtn.className = "cp-btn cp-btn-danger";
+      confirmDeleteBtn.textContent = "Delete";
+      confirmDeleteBtn.style.marginLeft = "0";
+
+      const closeModal = () => {
+        overlay.remove();
+      };
+
+      cancelModalBtn.addEventListener("click", closeModal);
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) closeModal();
+      });
+      confirmDeleteBtn.addEventListener("click", async () => {
+        setError("");
+        confirmDeleteBtn.disabled = true;
+        cancelModalBtn.disabled = true;
+        confirmDeleteBtn.textContent = "Deleting...";
+        try {
+          const response = await fetch(`${FRIENDLY_FIND_URL}/${encodeURIComponent(String(source?.id || ""))}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result?.ok) {
+            setError(result?.message || "Failed to delete match request.");
+            confirmDeleteBtn.disabled = false;
+            cancelModalBtn.disabled = false;
+            confirmDeleteBtn.textContent = "Delete";
+            return;
+          }
+          closeModal();
+          window.location.href = buildCaptainUrl({
+            view: CAPTAIN_VIEWS.FRIENDLY_FIND,
+            edit: false,
+            create: false,
+            matchId: null,
+            playerId: null,
+          });
+        } catch (_error) {
+          setError("Failed to delete match request.");
+          confirmDeleteBtn.disabled = false;
+          cancelModalBtn.disabled = false;
+          confirmDeleteBtn.textContent = "Delete";
+        }
+      });
+
+      actions.appendChild(cancelModalBtn);
+      actions.appendChild(confirmDeleteBtn);
+      dialog.appendChild(title);
+      dialog.appendChild(text);
+      dialog.appendChild(actions);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
     };
 
     cancelBtn.addEventListener("click", () => {
@@ -2768,6 +2905,13 @@
       });
     });
 
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", () => {
+        setError("");
+        showDeleteConfirmDialog();
+      });
+    }
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       setError("");
@@ -2778,9 +2922,9 @@
       if (String(time1Input.value || "") > String(time2Input.value || "")) {
         validationErrors.push("Earliest Start must be earlier than or equal to Latest Start.");
       }
-      const playersCount = parseNullableInt(playersInput.value);
-      if (!Number.isInteger(playersCount) || playersCount <= 0) {
-        validationErrors.push("Players Available must be a positive integer.");
+      const playersAvailable = String(playersInput.value || "").trim();
+      if (!playersAvailable) {
+        validationErrors.push("Players Available is required.");
       }
       if (validationErrors.length) {
         setError(validationErrors);
@@ -2789,8 +2933,11 @@
 
       setSaving(true);
       try {
-        const response = await fetch(FRIENDLY_FIND_URL, {
-          method: "POST",
+        const url = isCreateMode
+          ? FRIENDLY_FIND_URL
+          : `${FRIENDLY_FIND_URL}/${encodeURIComponent(String(source?.id || ""))}`;
+        const response = await fetch(url, {
+          method: isCreateMode ? "POST" : "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -2798,7 +2945,7 @@
             dates: selectedDates,
             time_1: String(time1Input.value || "19:00"),
             time_2: String(time2Input.value || "22:00"),
-            number_of_players: playersCount,
+            number_of_players: playersAvailable,
           }),
         });
         const result = await response.json().catch(() => ({}));
@@ -3937,12 +4084,15 @@
         associationCode = captainAssociationCode;
       }
 
-      const [matchesRes, teamsRes, profilesRes, friendlyFindRes] = await Promise.all([
+      const dataRequests = [
         fetch(MATCHES_URL, { method: "GET" }),
         fetch(TEAMS_URL, { method: "GET" }),
         fetch(PROFILES_PUBLIC_URL, { method: "GET" }),
-        fetch(FRIENDLY_FIND_URL, { method: "GET", credentials: "include" }),
-      ]);
+      ];
+      if (activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
+        dataRequests.push(fetch(FRIENDLY_FIND_URL, { method: "GET", credentials: "include" }));
+      }
+      const [matchesRes, teamsRes, profilesRes, friendlyFindRes] = await Promise.all(dataRequests);
 
       if (!matchesRes.ok) {
         contentEl.className = "captain-alert";
@@ -3953,7 +4103,7 @@
 
       const matchesData = await matchesRes.json();
       const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
-      const friendlyFindData = friendlyFindRes.ok
+      const friendlyFindData = friendlyFindRes?.ok
         ? await friendlyFindRes.json().catch(() => ({}))
         : {};
       const friendlyFindRequests = Array.isArray(friendlyFindData?.requests) ? friendlyFindData.requests : [];
@@ -4067,14 +4217,27 @@
 
       if (activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
         const friendlyFindAssociationCode = normalizeCode(associationCode || captainAssociationCode);
-        if (isCreateMode) {
+        if (isCreateMode || isEditMode) {
           if (!friendlyFindAssociationCode) {
             contentEl.className = "captain-alert";
             contentEl.textContent = "Cannot detect your team association for creating a match request.";
             countEl.textContent = "";
             return;
           }
-          renderFriendlyFindCreateForm(teamsById, { associationCode: friendlyFindAssociationCode });
+          const requestToEdit = isEditMode
+            ? friendlyFindRequests.find((entry) => String(entry?.id || "") === editMatchId)
+            : null;
+          if (isEditMode && !requestToEdit) {
+            contentEl.className = "captain-alert";
+            contentEl.textContent = `Friendly find request not found: ${editMatchId}`;
+            countEl.textContent = "";
+            return;
+          }
+          renderFriendlyFindEditForm(
+            teamsById,
+            { associationCode: friendlyFindAssociationCode, request: requestToEdit },
+            isEditMode ? "edit" : "create"
+          );
         } else {
           renderFriendlyFindList(friendlyFindRequests, teamsById, friendlyFindAssociationCode);
         }

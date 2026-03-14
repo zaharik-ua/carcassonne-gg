@@ -1790,6 +1790,31 @@ app.get("/friendly-find", (_req, res, next) => {
   );
 });
 
+function parseFriendlyFindPayload(payload) {
+  const team = String(payload?.team || "").trim().toUpperCase();
+  const time1 = String(payload?.time_1 || "").trim();
+  const time2 = String(payload?.time_2 || "").trim();
+  const playersAvailable = String(payload?.number_of_players || "").trim();
+  const rawDates = Array.isArray(payload?.dates) ? payload.dates : [];
+
+  const normalizeDate = (value) => {
+    const raw = String(value || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "";
+    const ts = Date.parse(`${raw}T00:00:00Z`);
+    if (!Number.isFinite(ts)) return "";
+    return raw;
+  };
+  const normalizedDates = Array.from(new Set(rawDates.map(normalizeDate).filter(Boolean))).sort();
+
+  return {
+    team,
+    time1,
+    time2,
+    playersAvailable,
+    normalizedDates,
+  };
+}
+
 app.post("/friendly-find", (req, res) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
@@ -1803,11 +1828,13 @@ app.post("/friendly-find", (req, res) => {
   }
 
   const payload = req.body && typeof req.body === "object" ? req.body : {};
-  const team = String(payload.team || "").trim().toUpperCase();
-  const time1 = String(payload.time_1 || "").trim();
-  const time2 = String(payload.time_2 || "").trim();
-  const numberOfPlayers = Number(payload.number_of_players);
-  const rawDates = Array.isArray(payload.dates) ? payload.dates : [];
+  const {
+    team,
+    time1,
+    time2,
+    playersAvailable,
+    normalizedDates,
+  } = parseFriendlyFindPayload(payload);
 
   if (!team) {
     return res.status(400).json({ ok: false, message: "team is required" });
@@ -1816,14 +1843,6 @@ app.post("/friendly-find", (req, res) => {
     return res.status(403).json({ ok: false, message: "Captain can create requests only for own team" });
   }
 
-  const normalizeDate = (value) => {
-    const raw = String(value || "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "";
-    const ts = Date.parse(`${raw}T00:00:00Z`);
-    if (!Number.isFinite(ts)) return "";
-    return raw;
-  };
-  const normalizedDates = Array.from(new Set(rawDates.map(normalizeDate).filter(Boolean))).sort();
   if (normalizedDates.length < 1 || normalizedDates.length > 5) {
     return res.status(400).json({ ok: false, message: "dates must contain from 1 to 5 valid dates" });
   }
@@ -1836,8 +1855,8 @@ app.post("/friendly-find", (req, res) => {
     return res.status(400).json({ ok: false, message: "time_1 must be earlier than or equal to time_2" });
   }
 
-  if (!Number.isInteger(numberOfPlayers) || numberOfPlayers <= 0) {
-    return res.status(400).json({ ok: false, message: "number_of_players must be a positive integer" });
+  if (!playersAvailable) {
+    return res.status(400).json({ ok: false, message: "number_of_players is required" });
   }
 
   return db.run(
@@ -1851,7 +1870,7 @@ app.post("/friendly-find", (req, res) => {
       )
       VALUES (?, ?, ?, ?, ?)
     `,
-    [team, JSON.stringify(normalizedDates), time1, time2, numberOfPlayers],
+    [team, JSON.stringify(normalizedDates), time1, time2, playersAvailable],
     function onInsert(insertErr) {
       if (insertErr) {
         return res.status(500).json({ ok: false, message: "Failed to create friendly find request" });
@@ -1876,6 +1895,178 @@ app.post("/friendly-find", (req, res) => {
             return res.status(500).json({ ok: false, message: "Failed to load created friendly find request" });
           }
           return res.status(201).json({ ok: true, request: row || null });
+        }
+      );
+    }
+  );
+});
+
+app.patch("/friendly-find/:id", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const requestId = Number(req.params.id);
+  if (!Number.isInteger(requestId) || requestId <= 0) {
+    return res.status(400).json({ ok: false, message: "Invalid request id" });
+  }
+
+  const isAdmin = Number(req.user.admin) === 1;
+  const isTeamCaptain = Number(req.user.team_captain) === 1;
+  const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  if (!isAdmin && !isTeamCaptain) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
+
+  return db.get(
+    `
+      SELECT id, team
+      FROM friendly_find
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [requestId],
+    (findErr, existingRow) => {
+      if (findErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load friendly find request" });
+      }
+      if (!existingRow) {
+        return res.status(404).json({ ok: false, message: "Friendly find request not found" });
+      }
+
+      const existingTeam = String(existingRow.team || "").trim().toUpperCase();
+      if (!isAdmin && (!userAssociation || existingTeam !== userAssociation)) {
+        return res.status(403).json({ ok: false, message: "Captain can edit requests only for own team" });
+      }
+
+      const payload = req.body && typeof req.body === "object" ? req.body : {};
+      const {
+        team,
+        time1,
+        time2,
+        playersAvailable,
+        normalizedDates,
+      } = parseFriendlyFindPayload(payload);
+
+      if (!team) {
+        return res.status(400).json({ ok: false, message: "team is required" });
+      }
+      if (!isAdmin && (!userAssociation || team !== userAssociation)) {
+        return res.status(403).json({ ok: false, message: "Captain can edit requests only for own team" });
+      }
+      if (normalizedDates.length < 1 || normalizedDates.length > 5) {
+        return res.status(400).json({ ok: false, message: "dates must contain from 1 to 5 valid dates" });
+      }
+
+      const isValidHour = (value) => /^([01]?\d|2[0-3]):00$/.test(String(value || "").trim());
+      if (!isValidHour(time1) || !isValidHour(time2)) {
+        return res.status(400).json({ ok: false, message: "time_1 and time_2 must be in HH:00 format" });
+      }
+      if (time1 > time2) {
+        return res.status(400).json({ ok: false, message: "time_1 must be earlier than or equal to time_2" });
+      }
+      if (!playersAvailable) {
+        return res.status(400).json({ ok: false, message: "number_of_players is required" });
+      }
+
+      return db.run(
+        `
+          UPDATE friendly_find
+          SET
+            team = ?,
+            dates = ?,
+            time_1 = ?,
+            time_2 = ?,
+            number_of_players = ?
+          WHERE id = ?
+        `,
+        [team, JSON.stringify(normalizedDates), time1, time2, playersAvailable, requestId],
+        function onUpdate(updateErr) {
+          if (updateErr) {
+            return res.status(500).json({ ok: false, message: "Failed to update friendly find request" });
+          }
+          if (!this || this.changes === 0) {
+            return res.status(404).json({ ok: false, message: "Friendly find request not found" });
+          }
+          return db.get(
+            `
+              SELECT
+                id,
+                team,
+                dates,
+                time_1,
+                time_2,
+                number_of_players
+              FROM friendly_find
+              WHERE id = ?
+              LIMIT 1
+            `,
+            [requestId],
+            (selectErr, row) => {
+              if (selectErr) {
+                return res.status(500).json({ ok: false, message: "Failed to load updated friendly find request" });
+              }
+              return res.json({ ok: true, request: row || null });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+app.delete("/friendly-find/:id", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const requestId = Number(req.params.id);
+  if (!Number.isInteger(requestId) || requestId <= 0) {
+    return res.status(400).json({ ok: false, message: "Invalid request id" });
+  }
+
+  const isAdmin = Number(req.user.admin) === 1;
+  const isTeamCaptain = Number(req.user.team_captain) === 1;
+  const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  if (!isAdmin && !isTeamCaptain) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
+
+  return db.get(
+    `
+      SELECT id, team
+      FROM friendly_find
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [requestId],
+    (findErr, existingRow) => {
+      if (findErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load friendly find request" });
+      }
+      if (!existingRow) {
+        return res.status(404).json({ ok: false, message: "Friendly find request not found" });
+      }
+
+      const existingTeam = String(existingRow.team || "").trim().toUpperCase();
+      if (!isAdmin && (!userAssociation || existingTeam !== userAssociation)) {
+        return res.status(403).json({ ok: false, message: "Captain can delete requests only for own team" });
+      }
+
+      return db.run(
+        `
+          DELETE FROM friendly_find
+          WHERE id = ?
+        `,
+        [requestId],
+        function onDelete(deleteErr) {
+          if (deleteErr) {
+            return res.status(500).json({ ok: false, message: "Failed to delete friendly find request" });
+          }
+          if (!this || this.changes === 0) {
+            return res.status(404).json({ ok: false, message: "Friendly find request not found" });
+          }
+          return res.json({ ok: true });
         }
       );
     }
