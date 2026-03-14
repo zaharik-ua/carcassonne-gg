@@ -494,6 +494,195 @@
     display: none !important;
   }
 
+  .cp-friendly-row {
+    gap: 6px;
+  }
+
+  .cp-friendly-team {
+    min-width: 0;
+    max-width: 190px;
+    flex: 0 1 190px;
+  }
+
+  .cp-friendly-dates {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow-x: auto;
+  }
+
+  .cp-friendly-date {
+    width: 50px;
+    min-width: 50px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .cp-friendly-date-main {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.1;
+    color: #333;
+  }
+
+  .cp-friendly-date-sub {
+    font-size: 11px;
+    line-height: 1.1;
+    color: #666;
+  }
+
+  .cp-friendly-time,
+  .cp-friendly-players {
+    width: 64px;
+    min-width: 64px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .cp-friendly-time-main,
+  .cp-friendly-players-main {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.1;
+    color: #333;
+  }
+
+  .cp-friendly-time-sub,
+  .cp-friendly-players-sub {
+    font-size: 11px;
+    line-height: 1.1;
+    color: #666;
+  }
+
+  .cp-friendly-empty {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 14px;
+    color: #666;
+  }
+
+  .cp-static-field {
+    width: 100%;
+    min-height: 30px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #f3f4f6;
+    color: #444;
+    font-size: 14px;
+  }
+
+  .cp-calendar {
+    border: 1px solid #c8ced8;
+    border-radius: 6px;
+    background: #fff;
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .cp-calendar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cp-calendar-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #333;
+  }
+
+  .cp-calendar-nav {
+    border: 1px solid #c8ced8;
+    background: #fff;
+    border-radius: 4px;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  .cp-calendar-weekdays,
+  .cp-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .cp-calendar-weekday {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #777;
+  }
+
+  .cp-calendar-day {
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    border-radius: 4px;
+    min-height: 34px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    cursor: pointer;
+  }
+
+  .cp-calendar-day:hover {
+    border-color: #9ea7b3;
+  }
+
+  .cp-calendar-day.selected {
+    background: #e4f0fb;
+    border-color: #7eb0d8;
+    color: #184e77;
+  }
+
+  .cp-calendar-day.disabled {
+    color: #b8c0c8;
+    background: #f6f7f9;
+    cursor: default;
+  }
+
+  .cp-calendar-selected {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .cp-calendar-chip {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #d7e3ee;
+    background: #f4f8fb;
+    color: #345;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .cp-calendar-help {
+    font-size: 11px;
+    color: #666;
+  }
+
   .lineup {
     height: 0;
     overflow: hidden;
@@ -564,6 +753,7 @@
   const MATCHES_URL = `${AUTH_BASE}/matches`;
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const LINEUPS_URL = `${AUTH_BASE}/lineups`;
+  const FRIENDLY_FIND_URL = `${AUTH_BASE}/friendly-find`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const PROFILES_URL = `${AUTH_BASE}/profiles`;
   const PROFILE_CONTACTS_URL = `${AUTH_BASE}/profiles/contacts`;
@@ -906,8 +1096,15 @@
     return Date.parse(String(match?.time_utc || match?.time || "")) || 0;
   }
 
-  function isFinishedMatch(match) {
-    return String(match?.status || "").trim().toLowerCase() === "done";
+  function getStartOfTodayLocal() {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  }
+
+  function isPastMatch(match) {
+    const matchTime = parseMatchTimeUtc(match);
+    if (!matchTime) return false;
+    return matchTime < getStartOfTodayLocal();
   }
 
   function renderSectionTitle(text) {
@@ -1106,11 +1303,11 @@
     contentEl.style.gap = "20px";
 
     const ongoing = matches
-      .filter((match) => !isFinishedMatch(match))
+      .filter((match) => !isPastMatch(match))
       .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
 
     const finished = matches
-      .filter((match) => isFinishedMatch(match))
+      .filter((match) => isPastMatch(match))
       .sort((a, b) => parseMatchTimeUtc(b) - parseMatchTimeUtc(a));
 
     if (ongoing.length > 0) {
@@ -2137,11 +2334,495 @@
     contentEl.appendChild(form);
   }
 
-  function renderFriendlyFindPlaceholder() {
+  function parseFriendlyFindDates(raw) {
+    if (Array.isArray(raw)) {
+      return raw
+        .map((item) => String(item || "").trim())
+        .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item))
+        .sort();
+    }
+    const text = String(raw || "").trim();
+    if (!text) return [];
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) return parseFriendlyFindDates(parsed);
+    } catch (_error) {
+      // fallback below
+    }
+    return text
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item))
+      .sort();
+  }
+
+  function formatFriendlyFindDateParts(raw) {
+    const text = String(raw || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      return { main: text || "-", sub: "" };
+    }
+    const date = new Date(`${text}T00:00:00Z`);
+    if (!Number.isFinite(date.getTime())) {
+      return { main: text, sub: "" };
+    }
+    const MONTHS_3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const WEEKDAYS_3 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    return {
+      main: `${date.getUTCDate()} ${MONTHS_3[date.getUTCMonth()]}`,
+      sub: WEEKDAYS_3[date.getUTCDay()],
+    };
+  }
+
+  function formatFriendlyFindDateChip(raw) {
+    const parts = formatFriendlyFindDateParts(raw);
+    return parts.sub ? `${parts.main} ${parts.sub}` : parts.main;
+  }
+
+  function createFriendlyFindRow(entry, teamsById) {
+    const row = document.createElement("div");
+    row.className = "cp-match-row cp-friendly-row";
+
+    const teamCode = normalizeCode(entry?.team);
+    const teamMeta = teamsById.get(teamCode) || null;
+
+    const teamWrap = document.createElement("div");
+    teamWrap.className = "cp-teams cp-friendly-team";
+    const teamRow = document.createElement("div");
+    teamRow.className = "cp-team-row";
+    if (teamMeta?.logo) {
+      const flag = document.createElement("img");
+      flag.className = "cp-team-flag";
+      flag.src = teamMeta.logo;
+      flag.alt = "";
+      teamRow.appendChild(flag);
+    }
+    const teamText = document.createElement("span");
+    teamText.textContent = teamMeta?.name || teamCode || "-";
+    teamRow.appendChild(teamText);
+    teamWrap.appendChild(teamRow);
+    row.appendChild(teamWrap);
+
+    const dates = parseFriendlyFindDates(entry?.dates);
+    const addDivider = () => {
+      const divider = document.createElement("div");
+      divider.className = "cp-divider-vertical";
+      row.appendChild(divider);
+    };
+
+    addDivider();
+
+    const datesWrap = document.createElement("div");
+    datesWrap.className = "cp-friendly-dates";
+    if (dates.length) {
+      dates.forEach((dateValue, index) => {
+        const dateBox = document.createElement("div");
+        dateBox.className = "cp-friendly-date";
+
+        const main = document.createElement("div");
+        main.className = "cp-friendly-date-main";
+        const sub = document.createElement("div");
+        sub.className = "cp-friendly-date-sub";
+        const parts = formatFriendlyFindDateParts(dateValue);
+        main.textContent = parts.main;
+        sub.textContent = parts.sub;
+        dateBox.appendChild(main);
+        dateBox.appendChild(sub);
+        datesWrap.appendChild(dateBox);
+
+        if (index < dates.length - 1) {
+          const innerDivider = document.createElement("div");
+          innerDivider.className = "cp-divider-vertical";
+          datesWrap.appendChild(innerDivider);
+        }
+      });
+    } else {
+      const empty = document.createElement("div");
+      empty.className = "cp-friendly-date";
+      const main = document.createElement("div");
+      main.className = "cp-friendly-date-main";
+      main.textContent = "-";
+      empty.appendChild(main);
+      datesWrap.appendChild(empty);
+    }
+    row.appendChild(datesWrap);
+
+    addDivider();
+
+    const timeBox = document.createElement("div");
+    timeBox.className = "cp-friendly-time";
+    const timeMain = document.createElement("div");
+    timeMain.className = "cp-friendly-time-main";
+    timeMain.textContent = String(entry?.time_1 || "19:00");
+    const timeDash = document.createElement("div");
+    timeDash.className = "cp-friendly-time-sub";
+    timeDash.textContent = "-";
+    const timeSub = document.createElement("div");
+    timeSub.className = "cp-friendly-time-main";
+    timeSub.textContent = String(entry?.time_2 || "22:00");
+    timeBox.appendChild(timeMain);
+    timeBox.appendChild(timeDash);
+    timeBox.appendChild(timeSub);
+    row.appendChild(timeBox);
+
+    addDivider();
+
+    const playersBox = document.createElement("div");
+    playersBox.className = "cp-friendly-players";
+    const playersLabel = document.createElement("div");
+    playersLabel.className = "cp-friendly-players-sub";
+    playersLabel.textContent = "Players:";
+    const playersValue = document.createElement("div");
+    playersValue.className = "cp-friendly-players-main";
+    playersValue.textContent = String(entry?.number_of_players ?? "-");
+    playersBox.appendChild(playersLabel);
+    playersBox.appendChild(playersValue);
+    row.appendChild(playersBox);
+
+    return row;
+  }
+
+  function renderFriendlyFindSection(titleText, entries, teamsById, emptyText) {
+    const sectionWrap = document.createElement("div");
+    sectionWrap.style.display = "grid";
+    sectionWrap.style.gap = "6px";
+    sectionWrap.appendChild(renderSectionTitle(titleText));
+
+    if (!Array.isArray(entries) || !entries.length) {
+      const empty = document.createElement("div");
+      empty.className = "cp-friendly-empty";
+      empty.textContent = emptyText;
+      sectionWrap.appendChild(empty);
+      return sectionWrap;
+    }
+
+    const list = document.createElement("div");
+    list.className = "captain-list";
+    entries.forEach((entry) => {
+      list.appendChild(createFriendlyFindRow(entry, teamsById));
+    });
+    sectionWrap.appendChild(list);
+    return sectionWrap;
+  }
+
+  function renderFriendlyFindList(requests, teamsById, associationCode) {
     setPageHeading("Find an Opponent for a Friendly Match");
-    contentEl.className = "captain-alert";
-    contentEl.textContent = "Friendly find view is not implemented yet.";
-    countEl.textContent = "";
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.style.display = "grid";
+    contentEl.style.gap = "20px";
+
+    const ownAssociationCode = normalizeCode(associationCode);
+    const ownRequests = (Array.isArray(requests) ? requests : []).filter((entry) => normalizeCode(entry?.team) === ownAssociationCode);
+    const opponentRequests = (Array.isArray(requests) ? requests : []).filter((entry) => normalizeCode(entry?.team) !== ownAssociationCode);
+
+    countEl.textContent = `${ownRequests.length + opponentRequests.length} requests`;
+    contentEl.appendChild(
+      renderFriendlyFindSection("My Match Requests", ownRequests, teamsById, "No match requests yet.")
+    );
+    contentEl.appendChild(
+      renderFriendlyFindSection("Available Opponents", opponentRequests, teamsById, "No available opponents yet.")
+    );
+  }
+
+  function renderFriendlyFindCreateForm(teamsById, createContext) {
+    const associationCode = normalizeCode(createContext?.associationCode);
+    const teamMeta = teamsById.get(associationCode) || null;
+    setPageHeading("Find an Opponent for a Friendly Match");
+    hintEl.textContent = "";
+    countEl.textContent = "Creating a new match request";
+    contentEl.className = "cp-edit-form";
+    contentEl.innerHTML = "";
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+    form.noValidate = true;
+
+    const topActions = document.createElement("div");
+    topActions.className = "cp-edit-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    topActions.appendChild(saveBtn);
+    topActions.appendChild(cancelBtn);
+    form.appendChild(topActions);
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "cp-edit-error cp-hidden";
+    form.appendChild(errorEl);
+
+    const addRow = (labelText, control) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      row.appendChild(label);
+      row.appendChild(control);
+      form.appendChild(row);
+      return row;
+    };
+
+    const setError = (msg) => {
+      const messages = Array.isArray(msg)
+        ? msg.map((item) => String(item || "").trim()).filter(Boolean)
+        : [String(msg || "").trim()].filter(Boolean);
+      if (!messages.length) {
+        errorEl.textContent = "";
+        errorEl.classList.add("cp-hidden");
+        return;
+      }
+      errorEl.innerHTML = "";
+      if (messages.length === 1) {
+        errorEl.textContent = messages[0];
+      } else {
+        const list = document.createElement("ul");
+        list.className = "cp-edit-error-list";
+        messages.forEach((message) => {
+          const item = document.createElement("li");
+          item.textContent = message;
+          list.appendChild(item);
+        });
+        errorEl.appendChild(list);
+      }
+      errorEl.classList.remove("cp-hidden");
+    };
+
+    const teamField = document.createElement("div");
+    teamField.className = "cp-static-field";
+    if (teamMeta?.logo) {
+      const flag = document.createElement("img");
+      flag.className = "cp-dd-flag";
+      flag.src = teamMeta.logo;
+      flag.alt = "";
+      teamField.appendChild(flag);
+    }
+    const teamText = document.createElement("span");
+    teamText.textContent = teamMeta?.name || associationCode || "-";
+    teamField.appendChild(teamText);
+    addRow("Team", teamField);
+
+    const datesWrap = document.createElement("div");
+    datesWrap.className = "cp-calendar";
+    const datesSelectedEl = document.createElement("div");
+    datesSelectedEl.className = "cp-calendar-selected";
+    const datesHelpEl = document.createElement("div");
+    datesHelpEl.className = "cp-calendar-help";
+    datesHelpEl.textContent = "Select from 1 to 5 dates.";
+    let selectedDates = [];
+    let calendarMonth = (() => {
+      const now = new Date();
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    })();
+
+    const calendarHead = document.createElement("div");
+    calendarHead.className = "cp-calendar-head";
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "cp-calendar-nav";
+    prevBtn.textContent = "‹";
+    const title = document.createElement("div");
+    title.className = "cp-calendar-title";
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "cp-calendar-nav";
+    nextBtn.textContent = "›";
+    calendarHead.appendChild(prevBtn);
+    calendarHead.appendChild(title);
+    calendarHead.appendChild(nextBtn);
+    datesWrap.appendChild(calendarHead);
+
+    const weekdays = document.createElement("div");
+    weekdays.className = "cp-calendar-weekdays";
+    ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((day) => {
+      const el = document.createElement("div");
+      el.className = "cp-calendar-weekday";
+      el.textContent = day;
+      weekdays.appendChild(el);
+    });
+    datesWrap.appendChild(weekdays);
+
+    const grid = document.createElement("div");
+    grid.className = "cp-calendar-grid";
+    datesWrap.appendChild(grid);
+    datesWrap.appendChild(datesSelectedEl);
+    datesWrap.appendChild(datesHelpEl);
+    addRow("Dates", datesWrap);
+
+    const renderSelectedDates = () => {
+      datesSelectedEl.innerHTML = "";
+      if (!selectedDates.length) {
+        const chip = document.createElement("div");
+        chip.className = "cp-calendar-chip";
+        chip.textContent = "No dates selected";
+        datesSelectedEl.appendChild(chip);
+        return;
+      }
+      selectedDates.forEach((dateValue) => {
+        const chip = document.createElement("div");
+        chip.className = "cp-calendar-chip";
+        chip.textContent = formatFriendlyFindDateChip(dateValue);
+        datesSelectedEl.appendChild(chip);
+      });
+    };
+
+    const renderCalendar = () => {
+      const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      title.textContent = `${MONTHS[calendarMonth.getUTCMonth()]} ${calendarMonth.getUTCFullYear()}`;
+      grid.innerHTML = "";
+
+      const year = calendarMonth.getUTCFullYear();
+      const month = calendarMonth.getUTCMonth();
+      const firstDay = new Date(Date.UTC(year, month, 1));
+      const lastDay = new Date(Date.UTC(year, month + 1, 0));
+      const offset = (firstDay.getUTCDay() + 6) % 7;
+      const totalDays = lastDay.getUTCDate();
+      const cells = Math.ceil((offset + totalDays) / 7) * 7;
+
+      for (let index = 0; index < cells; index += 1) {
+        const dayNumber = index - offset + 1;
+        const cellBtn = document.createElement("button");
+        cellBtn.type = "button";
+        cellBtn.className = "cp-calendar-day";
+        if (dayNumber < 1 || dayNumber > totalDays) {
+          cellBtn.classList.add("disabled");
+          cellBtn.disabled = true;
+          cellBtn.textContent = "";
+          grid.appendChild(cellBtn);
+          continue;
+        }
+        const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
+        cellBtn.textContent = String(dayNumber);
+        cellBtn.classList.toggle("selected", selectedDates.includes(iso));
+        cellBtn.addEventListener("click", () => {
+          const exists = selectedDates.includes(iso);
+          if (exists) {
+            selectedDates = selectedDates.filter((item) => item !== iso);
+          } else {
+            if (selectedDates.length >= 5) return;
+            selectedDates = selectedDates.concat(iso).sort();
+          }
+          renderSelectedDates();
+          renderCalendar();
+        });
+        grid.appendChild(cellBtn);
+      }
+      datesHelpEl.textContent = selectedDates.length >= 5
+        ? "Maximum 5 dates selected."
+        : "Select from 1 to 5 dates.";
+    };
+
+    prevBtn.addEventListener("click", () => {
+      calendarMonth = new Date(Date.UTC(calendarMonth.getUTCFullYear(), calendarMonth.getUTCMonth() - 1, 1));
+      renderCalendar();
+    });
+    nextBtn.addEventListener("click", () => {
+      calendarMonth = new Date(Date.UTC(calendarMonth.getUTCFullYear(), calendarMonth.getUTCMonth() + 1, 1));
+      renderCalendar();
+    });
+    renderSelectedDates();
+    renderCalendar();
+
+    const createHourSelect = (initialValue) => {
+      const select = document.createElement("select");
+      for (let hour = 0; hour <= 23; hour += 1) {
+        const value = `${String(hour).padStart(2, "0")}:00`;
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        if (value === initialValue) option.selected = true;
+        select.appendChild(option);
+      }
+      return select;
+    };
+
+    const time1Input = createHourSelect("19:00");
+    addRow("Earliest Start, UTC", time1Input);
+
+    const time2Input = createHourSelect("22:00");
+    addRow("Latest Start, UTC", time2Input);
+
+    const playersInput = document.createElement("input");
+    playersInput.type = "number";
+    playersInput.step = "1";
+    playersInput.min = "1";
+    playersInput.value = "5";
+    addRow("Players Available", playersInput);
+
+    const setSaving = (isSaving) => {
+      saveBtn.disabled = isSaving;
+      cancelBtn.disabled = isSaving;
+      saveBtn.textContent = isSaving ? "Saving..." : "Save";
+    };
+
+    cancelBtn.addEventListener("click", () => {
+      window.location.href = buildCaptainUrl({
+        view: CAPTAIN_VIEWS.FRIENDLY_FIND,
+        create: false,
+        edit: false,
+        matchId: null,
+        playerId: null,
+      });
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setError("");
+      const validationErrors = [];
+      if (!associationCode) validationErrors.push("Team is required.");
+      if (selectedDates.length < 1) validationErrors.push("Select at least one date.");
+      if (selectedDates.length > 5) validationErrors.push("Select no more than 5 dates.");
+      if (String(time1Input.value || "") > String(time2Input.value || "")) {
+        validationErrors.push("Earliest Start must be earlier than or equal to Latest Start.");
+      }
+      const playersCount = parseNullableInt(playersInput.value);
+      if (!Number.isInteger(playersCount) || playersCount <= 0) {
+        validationErrors.push("Players Available must be a positive integer.");
+      }
+      if (validationErrors.length) {
+        setError(validationErrors);
+        return;
+      }
+
+      setSaving(true);
+      try {
+        const response = await fetch(FRIENDLY_FIND_URL, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            team: associationCode,
+            dates: selectedDates,
+            time_1: String(time1Input.value || "19:00"),
+            time_2: String(time2Input.value || "22:00"),
+            number_of_players: playersCount,
+          }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok) {
+          setError(result?.message || "Failed to save match request.");
+          return;
+        }
+        window.location.href = buildCaptainUrl({
+          view: CAPTAIN_VIEWS.FRIENDLY_FIND,
+          create: false,
+          edit: false,
+          matchId: null,
+          playerId: null,
+        });
+      } catch (_error) {
+        setError("Failed to save match request.");
+      } finally {
+        setSaving(false);
+      }
+    });
+
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.appendChild(form);
   }
 
   function renderMatchEditForm(match, teamsById, editContext, formMode) {
@@ -3256,10 +3937,11 @@
         associationCode = captainAssociationCode;
       }
 
-      const [matchesRes, teamsRes, profilesRes] = await Promise.all([
+      const [matchesRes, teamsRes, profilesRes, friendlyFindRes] = await Promise.all([
         fetch(MATCHES_URL, { method: "GET" }),
         fetch(TEAMS_URL, { method: "GET" }),
         fetch(PROFILES_PUBLIC_URL, { method: "GET" }),
+        fetch(FRIENDLY_FIND_URL, { method: "GET", credentials: "include" }),
       ]);
 
       if (!matchesRes.ok) {
@@ -3271,6 +3953,10 @@
 
       const matchesData = await matchesRes.json();
       const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
+      const friendlyFindData = friendlyFindRes.ok
+        ? await friendlyFindRes.json().catch(() => ({}))
+        : {};
+      const friendlyFindRequests = Array.isArray(friendlyFindData?.requests) ? friendlyFindData.requests : [];
 
       const teamsById = new Map();
       if (teamsRes.ok) {
@@ -3360,12 +4046,38 @@
         if (isCreateMode || isEditMode) {
           addButtonEl.classList.add("cp-hidden");
         }
+      } else if (activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
+        addButtonEl.classList.remove("cp-hidden");
+        addButtonEl.textContent = "Create";
+        addButtonEl.onclick = () => {
+          window.location.href = buildCaptainUrl({
+            view: CAPTAIN_VIEWS.FRIENDLY_FIND,
+            create: true,
+            edit: false,
+            matchId: null,
+            playerId: null,
+          });
+        };
+        if (isCreateMode || isEditMode) {
+          addButtonEl.classList.add("cp-hidden");
+        }
       } else {
         addButtonEl.classList.add("cp-hidden");
       }
 
       if (activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
-        renderFriendlyFindPlaceholder();
+        const friendlyFindAssociationCode = normalizeCode(associationCode || captainAssociationCode);
+        if (isCreateMode) {
+          if (!friendlyFindAssociationCode) {
+            contentEl.className = "captain-alert";
+            contentEl.textContent = "Cannot detect your team association for creating a match request.";
+            countEl.textContent = "";
+            return;
+          }
+          renderFriendlyFindCreateForm(teamsById, { associationCode: friendlyFindAssociationCode });
+        } else {
+          renderFriendlyFindList(friendlyFindRequests, teamsById, friendlyFindAssociationCode);
+        }
         if (isTestMode) {
           hintEl.textContent = "test mode: all matches";
         } else if (associationOverride) {

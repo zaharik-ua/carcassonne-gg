@@ -313,6 +313,36 @@ function ensureTeamsSchema() {
   });
 }
 
+function ensureFriendlyFindSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS friendly_find (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team TEXT,
+      dates TEXT,
+      time_1 TEXT,
+      time_2 TEXT,
+      number_of_players INTEGER
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure friendly_find schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(friendly_find)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect friendly_find schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "friendly_find", "team", "TEXT");
+      addColumnIfMissing(columns, "friendly_find", "dates", "TEXT");
+      addColumnIfMissing(columns, "friendly_find", "time_1", "TEXT");
+      addColumnIfMissing(columns, "friendly_find", "time_2", "TEXT");
+      addColumnIfMissing(columns, "friendly_find", "number_of_players", "INTEGER");
+    });
+  });
+}
+
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -392,6 +422,7 @@ db.serialize(() => {
           ensureMatchesSchema();
           ensureLineupsSchema();
           ensureTeamsSchema();
+          ensureFriendlyFindSchema();
         }
       );
     }
@@ -1735,6 +1766,118 @@ app.delete("/matches/:id", (req, res) => {
           }
         );
       });
+    }
+  );
+});
+
+app.get("/friendly-find", (_req, res, next) => {
+  db.all(
+    `
+      SELECT
+        id,
+        team,
+        dates,
+        time_1,
+        time_2,
+        number_of_players
+      FROM friendly_find
+      ORDER BY id DESC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, requests: rows || [] });
+    }
+  );
+});
+
+app.post("/friendly-find", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const isAdmin = Number(req.user.admin) === 1;
+  const isTeamCaptain = Number(req.user.team_captain) === 1;
+  const userAssociation = String(req.user.association || "").trim().toUpperCase();
+  if (!isAdmin && !isTeamCaptain) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
+
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const team = String(payload.team || "").trim().toUpperCase();
+  const time1 = String(payload.time_1 || "").trim();
+  const time2 = String(payload.time_2 || "").trim();
+  const numberOfPlayers = Number(payload.number_of_players);
+  const rawDates = Array.isArray(payload.dates) ? payload.dates : [];
+
+  if (!team) {
+    return res.status(400).json({ ok: false, message: "team is required" });
+  }
+  if (!isAdmin && (!userAssociation || team !== userAssociation)) {
+    return res.status(403).json({ ok: false, message: "Captain can create requests only for own team" });
+  }
+
+  const normalizeDate = (value) => {
+    const raw = String(value || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "";
+    const ts = Date.parse(`${raw}T00:00:00Z`);
+    if (!Number.isFinite(ts)) return "";
+    return raw;
+  };
+  const normalizedDates = Array.from(new Set(rawDates.map(normalizeDate).filter(Boolean))).sort();
+  if (normalizedDates.length < 1 || normalizedDates.length > 5) {
+    return res.status(400).json({ ok: false, message: "dates must contain from 1 to 5 valid dates" });
+  }
+
+  const isValidHour = (value) => /^([01]?\d|2[0-3]):00$/.test(String(value || "").trim());
+  if (!isValidHour(time1) || !isValidHour(time2)) {
+    return res.status(400).json({ ok: false, message: "time_1 and time_2 must be in HH:00 format" });
+  }
+  if (time1 > time2) {
+    return res.status(400).json({ ok: false, message: "time_1 must be earlier than or equal to time_2" });
+  }
+
+  if (!Number.isInteger(numberOfPlayers) || numberOfPlayers <= 0) {
+    return res.status(400).json({ ok: false, message: "number_of_players must be a positive integer" });
+  }
+
+  return db.run(
+    `
+      INSERT INTO friendly_find (
+        team,
+        dates,
+        time_1,
+        time_2,
+        number_of_players
+      )
+      VALUES (?, ?, ?, ?, ?)
+    `,
+    [team, JSON.stringify(normalizedDates), time1, time2, numberOfPlayers],
+    function onInsert(insertErr) {
+      if (insertErr) {
+        return res.status(500).json({ ok: false, message: "Failed to create friendly find request" });
+      }
+
+      return db.get(
+        `
+          SELECT
+            id,
+            team,
+            dates,
+            time_1,
+            time_2,
+            number_of_players
+          FROM friendly_find
+          WHERE id = ?
+          LIMIT 1
+        `,
+        [this.lastID],
+        (selectErr, row) => {
+          if (selectErr) {
+            return res.status(500).json({ ok: false, message: "Failed to load created friendly find request" });
+          }
+          return res.status(201).json({ ok: true, request: row || null });
+        }
+      );
     }
   );
 });

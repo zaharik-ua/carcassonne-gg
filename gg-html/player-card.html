@@ -851,6 +851,17 @@
     }
   }
 
+  function getEffectiveEditAccess(playerId, access) {
+    const linkedPlayerId = String(access?.linkedPlayerId || "").trim();
+    const isOwnProfile = linkedPlayerId !== "" && linkedPlayerId === String(playerId || "").trim();
+    const isAdmin = !!access?.isAdmin;
+    return {
+      ...access,
+      isOwnProfile,
+      canEdit: isAdmin || isOwnProfile,
+    };
+  }
+
   function applyEditAccess(playerId, access, editMode) {
     const editLink = document.getElementById("playerEditLink");
     if (!editLink || !playerId) return;
@@ -1705,12 +1716,26 @@
     form.className = "edit-form";
     form.noValidate = true;
 
+    const actions = document.createElement("div");
+    actions.className = "edit-form-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "edit-btn edit-btn-primary";
+    saveBtn.textContent = "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "edit-btn edit-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "edit-error hidden";
+    form.appendChild(errorEl);
+
     const isAdmin = !!editAccess?.isAdmin;
-    const isTeamCaptain = !!editAccess?.isTeamCaptain;
-    const canEditEmail = !!editAccess?.isAdmin || !!editAccess?.isTeamCaptain;
-    const linkedPlayerId = String(editAccess?.linkedPlayerId || "").trim();
-    const isOwnProfile = linkedPlayerId !== "" && linkedPlayerId === String(playerId || "").trim();
-    const lockOwnEmailField = canEditEmail && (isAdmin || isTeamCaptain) && isOwnProfile;
+    const canEditEmail = isAdmin;
     const initial = {
       email: String(dbProfile?.email || ""),
       association: String(dbProfile?.association || ""),
@@ -1829,10 +1854,6 @@
 
     if (canEditEmail) {
       emailInput = addTextField("Login Email", "email", initial.email, "email");
-      if (lockOwnEmailField) {
-        emailInput.readOnly = true;
-        emailInput.title = "You cannot change Login Email for your own profile.";
-      }
     }
 
     if (isAdmin) {
@@ -1864,48 +1885,39 @@
     const discordInput = addContactField("Discord", "discord", initial.discord, CONTACT_ICONS.discord, "text");
     const instagramInput = addContactField("Instagram", "instagram", initial.instagram, CONTACT_ICONS.instagram, "text");
     const contactEmailInput = addContactField("Contact Email", "contact_email", initial.contact_email, CONTACT_ICONS.contact_email, "email");
-    const masterInput = addCheckboxField("Master", "master_title", initial.master_title);
+    let masterInput = null;
+    let masterDateRow = null;
+    let masterDateInput = null;
 
-    const masterDateRow = document.createElement("div");
-    masterDateRow.className = "edit-form-row";
-    const masterDateLabel = document.createElement("label");
-    masterDateLabel.textContent = "Master title date";
-    masterDateLabel.setAttribute("for", "master_title_date");
-    const masterDateInput = document.createElement("input");
-    masterDateInput.type = "date";
-    masterDateInput.id = "master_title_date";
-    masterDateInput.name = "master_title_date";
-    masterDateInput.value = initial.master_title_date;
-    masterDateRow.appendChild(masterDateLabel);
-    masterDateRow.appendChild(masterDateInput);
-    form.appendChild(masterDateRow);
+    if (isAdmin) {
+      masterInput = addCheckboxField("Master", "master_title", initial.master_title);
 
-    const errorEl = document.createElement("div");
-    errorEl.className = "edit-error hidden";
-    form.appendChild(errorEl);
-
-    const actions = document.createElement("div");
-    actions.className = "edit-form-actions";
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "submit";
-    saveBtn.className = "edit-btn edit-btn-primary";
-    saveBtn.textContent = "Save";
-    const cancelBtn = document.createElement("button");
-    cancelBtn.type = "button";
-    cancelBtn.className = "edit-btn edit-btn-secondary";
-    cancelBtn.textContent = "Cancel";
-    actions.appendChild(saveBtn);
-    actions.appendChild(cancelBtn);
-    form.appendChild(actions);
+      masterDateRow = document.createElement("div");
+      masterDateRow.className = "edit-form-row";
+      const masterDateLabel = document.createElement("label");
+      masterDateLabel.textContent = "Master title date";
+      masterDateLabel.setAttribute("for", "master_title_date");
+      masterDateInput = document.createElement("input");
+      masterDateInput.type = "date";
+      masterDateInput.id = "master_title_date";
+      masterDateInput.name = "master_title_date";
+      masterDateInput.value = initial.master_title_date;
+      masterDateRow.appendChild(masterDateLabel);
+      masterDateRow.appendChild(masterDateInput);
+      form.appendChild(masterDateRow);
+    }
 
     const syncMasterDateVisibility = () => {
+      if (!masterInput || !masterDateRow || !masterDateInput) return;
       const isMaster = masterInput.checked;
       masterDateRow.classList.toggle("hidden", !isMaster);
       masterDateInput.required = isMaster;
       if (!isMaster) masterDateInput.value = "";
     };
-    masterInput.addEventListener("change", syncMasterDateVisibility);
-    syncMasterDateVisibility();
+    if (masterInput) {
+      masterInput.addEventListener("change", syncMasterDateVisibility);
+      syncMasterDateVisibility();
+    }
 
     const setError = (message) => {
       if (!message) {
@@ -1929,15 +1941,18 @@
         setError("Assosiation is required.");
         return;
       }
-      if (masterInput.checked && !String(masterDateInput.value || "").trim()) {
+      if (isAdmin && masterInput?.checked && !String(masterDateInput?.value || "").trim()) {
         setError("Master title date is required when Master is enabled.");
         return;
       }
 
       const payload = {
+        email: String(initial.email || "").trim(),
+        association: String(initial.association || "").trim(),
+        team_captain: !!initial.team_captain,
+        master_title: !!initial.master_title,
+        master_title_date: initial.master_title ? String(initial.master_title_date || "").trim() || null : null,
         name: String(nameInput.value || "").trim(),
-        master_title: masterInput.checked,
-        master_title_date: masterInput.checked ? masterDateInput.value : null,
         telegram: String(telegramInput.value || "").trim(),
         whatsapp: String(whatsappInput.value || "").trim(),
         discord: String(discordInput.value || "").trim(),
@@ -1951,6 +1966,8 @@
       if (isAdmin) {
         payload.association = String(associationInput?.value || "").trim();
         payload.team_captain = !!captainInput?.checked;
+        payload.master_title = !!masterInput?.checked;
+        payload.master_title_date = masterInput?.checked ? masterDateInput?.value || null : null;
       }
 
       saveBtn.disabled = true;
@@ -2047,6 +2064,7 @@
       fetchAssociations(),
       fetchProfileContacts(playerId),
     ]);
+    const effectiveEditAccess = getEffectiveEditAccess(playerId, editAccess);
     associations = Array.isArray(associationsList) ? associationsList : [];
     associationNamesById = new Map();
     associations.forEach((row) => {
@@ -2056,7 +2074,7 @@
       associationNamesById.set(id, name);
       associationNamesById.set(normalizeAssocKey(id), name);
     });
-    applyEditAccess(playerId, editAccess, editMode);
+    applyEditAccess(playerId, effectiveEditAccess, editMode);
     if (!res.ok) {
       container.textContent = "Failed to load data.";
       return;
@@ -2143,11 +2161,11 @@
     };
 
     if (editMode) {
-      if (!editAccess?.canEdit) {
+      if (!effectiveEditAccess?.canEdit) {
         container.textContent = "You do not have permission to edit this profile.";
         return;
       }
-      renderEditForm(container, playerId, dbProfileForPlayer, editAccess);
+      renderEditForm(container, playerId, dbProfileForPlayer, effectiveEditAccess);
       return;
     }
 

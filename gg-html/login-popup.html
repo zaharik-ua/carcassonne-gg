@@ -1,40 +1,31 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Login Popup</title>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #ffffff;
-      --text: #222;
-      --muted: #666;
-      --border: #d8d8d8;
-      --shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
-      --btn: #1f5d99;
-      --btn-hover: #174775;
-      --btn-text: #fff;
-      --google: #fff;
-      --google-border: #dadce0;
-      --google-text: #3c4043;
-    }
-
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Montserrat", sans-serif;
-      color: var(--text);
-      background: transparent;
-    }
-
-    .auth-wrap {
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+    .lp-auth {
+      --lp-auth-bg: #ffffff;
+      --lp-auth-text: #222;
+      --lp-auth-muted: #666;
+      --lp-auth-border: #d8d8d8;
+      --lp-auth-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
+      --lp-auth-btn: #1f5d99;
+      --lp-auth-btn-hover: #174775;
+      --lp-auth-btn-text: #fff;
+      --lp-auth-google: #fff;
+      --lp-auth-google-border: #dadce0;
+      --lp-auth-google-text: #3c4043;
       position: relative;
       display: block;
       width: 100%;
+      font-family: "Montserrat", sans-serif;
+      color: var(--lp-auth-text);
+      background: transparent;
     }
 
-    .auth-bar {
+    .lp-auth,
+    .lp-auth * {
+      box-sizing: border-box;
+    }
+
+    .lp-auth__bar {
       display: flex;
       align-items: center;
       justify-content: flex-end;
@@ -42,7 +33,7 @@
       width: 100%;
     }
 
-    .auth-button {
+    .lp-auth__button {
       appearance: none;
       border: 0;
       padding: 8px 12px;
@@ -52,176 +43,175 @@
       letter-spacing: 0.4px;
       border-radius: 3px;
       cursor: pointer;
-      background: var(--btn);
-      color: var(--btn-text);
+      background: var(--lp-auth-btn);
+      color: var(--lp-auth-btn-text);
       transition: background 0.15s ease;
     }
 
-    .auth-button:hover { background: var(--btn-hover); }
+    .lp-auth__button:hover { background: var(--lp-auth-btn-hover); }
 
-    .auth-toggle {
+    .lp-auth__toggle {
       position: absolute;
       opacity: 0;
       pointer-events: none;
     }
 
-    .auth-dropdown {
+    .lp-auth__dropdown {
       max-height: 0;
       overflow: hidden;
       transition: max-height 0.2s ease;
     }
 
-    .auth-row {
+    .lp-auth__row {
       margin-top: 8px;
       padding: 8px;
-      border: 1px solid var(--border);
+      border: 1px solid var(--lp-auth-border);
       border-radius: 6px;
-      background: var(--bg);
-      box-shadow: var(--shadow);
+      background: var(--lp-auth-bg);
+      box-shadow: var(--lp-auth-shadow);
       min-width: 240px;
     }
 
-    .auth-toggle:checked ~ .auth-dropdown {
+    .lp-auth__toggle:checked ~ .lp-auth__dropdown {
       max-height: 120px;
     }
 
-    .google-btn {
+    .lp-auth__google-btn {
       width: 100%;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 10px;
       padding: 10px 12px;
-      background: var(--google);
-      border: 1px solid var(--google-border);
+      background: var(--lp-auth-google);
+      border: 1px solid var(--lp-auth-google-border);
       border-radius: 4px;
       font-weight: 600;
       font-size: 13px;
-      color: var(--google-text);
+      color: var(--lp-auth-google-text);
       cursor: pointer;
       transition: box-shadow 0.15s ease;
       text-decoration: none;
     }
 
-    .google-btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+    .lp-auth__google-btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
 
-    .google-icon {
+    .lp-auth__google-icon {
       width: 18px;
       height: 18px;
       display: inline-block;
     }
 
-    .auth-user {
+    .lp-auth__user {
       position: relative;
       display: none;
     }
 
-    .auth-user--visible {
+    .lp-auth__user--visible {
       display: inline-block;
     }
 
-    .auth-user-trigger {
+    .lp-auth__user-trigger {
       display: inline-flex;
       align-items: center;
       gap: 8px;
       padding: 4px 8px;
       border-radius: 4px;
-      border: 1px solid var(--border);
+      border: 1px solid var(--lp-auth-border);
       background: #fff;
       cursor: pointer;
       max-width: 260px;
     }
 
-    .auth-user-trigger:hover {
+    .lp-auth__user-trigger:hover {
       border-color: #bdbdbd;
     }
 
-    .auth-user-picture {
+    .lp-auth__user-picture {
       width: 24px;
       height: 24px;
       border-radius: 999px;
       object-fit: cover;
-      border: 1px solid var(--border);
+      border: 1px solid var(--lp-auth-border);
     }
 
-    .auth-user-name {
+    .lp-auth__user-name {
       font-size: 12px;
       font-weight: 600;
-      color: var(--text);
+      color: var(--lp-auth-text);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       max-width: 160px;
     }
 
-    .auth-user-caret {
+    .lp-auth__user-caret {
       font-size: 10px;
-      color: var(--muted);
+      color: var(--lp-auth-muted);
     }
 
-    .user-menu {
+    .lp-auth__menu {
       position: absolute;
       right: 0;
       top: calc(100% + 8px);
       min-width: 170px;
-      border: 1px solid var(--border);
+      border: 1px solid var(--lp-auth-border);
       border-radius: 6px;
       background: #fff;
-      box-shadow: var(--shadow);
+      box-shadow: var(--lp-auth-shadow);
       overflow: hidden;
       z-index: 1000;
     }
 
-    .user-menu-item {
+    .lp-auth__menu-item {
       display: block;
       width: 100%;
       text-align: left;
       padding: 10px 12px;
       font-size: 13px;
       font-weight: 600;
-      color: var(--text);
+      color: var(--lp-auth-text);
       background: #fff;
       border: 0;
       text-decoration: none;
       cursor: pointer;
     }
 
-    .user-menu-item:hover {
+    .lp-auth__menu-item:hover {
       background: #f5f7fa;
     }
 
-    .hidden {
+    .lp-auth__hidden {
       display: none !important;
     }
   </style>
-</head>
-<body>
-  <div class="auth-wrap">
-    <input type="checkbox" id="authToggle" class="auth-toggle" />
 
-    <div class="auth-bar">
-      <label id="signInLabel" class="auth-button" for="authToggle">Sign in</label>
+  <div class="lp-auth">
+    <input type="checkbox" id="lpAuthToggle" class="lp-auth__toggle" />
 
-      <div id="authUser" class="auth-user">
-        <button id="authUserTrigger" class="auth-user-trigger" type="button" aria-expanded="false" aria-controls="userMenu">
-          <img id="authUserPicture" class="auth-user-picture" alt="User" />
-          <span id="authUserName" class="auth-user-name"></span>
-          <span class="auth-user-caret">▼</span>
+    <div class="lp-auth__bar">
+      <label id="lpAuthSignInLabel" class="lp-auth__button" for="lpAuthToggle">Sign in</label>
+
+      <div id="lpAuthUser" class="lp-auth__user">
+        <button id="lpAuthUserTrigger" class="lp-auth__user-trigger" type="button" aria-expanded="false" aria-controls="lpAuthUserMenu">
+          <img id="lpAuthUserPicture" class="lp-auth__user-picture" alt="User" />
+          <span id="lpAuthUserName" class="lp-auth__user-name"></span>
+          <span class="lp-auth__user-caret">▼</span>
         </button>
 
-        <div id="userMenu" class="user-menu hidden" role="menu">
-          <a id="adminLink" class="user-menu-item hidden" href="https://carcassonne.gg/admin" role="menuitem">Admin panel</a>
-          <a id="manageTeamLink" class="user-menu-item hidden" href="https://carcassonne.gg/captain/" role="menuitem">Manage Team</a>
-          <a id="profileLink" class="user-menu-item" href="https://carcassonne.gg/player/?id=noprofile" role="menuitem">My profile</a>
-          <button id="logoutButton" class="user-menu-item" type="button" role="menuitem">Log out</button>
+        <div id="lpAuthUserMenu" class="lp-auth__menu lp-auth__hidden" role="menu">
+          <a id="lpAuthAdminLink" class="lp-auth__menu-item lp-auth__hidden" href="https://carcassonne.gg/admin" role="menuitem">Admin panel</a>
+          <a id="lpAuthManageTeamLink" class="lp-auth__menu-item lp-auth__hidden" href="https://carcassonne.gg/captain/" role="menuitem">Manage Team</a>
+          <a id="lpAuthProfileLink" class="lp-auth__menu-item" href="https://carcassonne.gg/player/?id=noprofile" role="menuitem">My profile</a>
+          <button id="lpAuthLogoutButton" class="lp-auth__menu-item" type="button" role="menuitem">Log out</button>
         </div>
       </div>
     </div>
 
-    <div id="signInDropdown" class="auth-dropdown">
-      <div class="auth-row">
-        <a id="googleAuthLink" class="google-btn" href="/auth/google">
-          <img class="google-icon" alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />
+    <div id="lpAuthSignInDropdown" class="lp-auth__dropdown">
+      <div class="lp-auth__row">
+        <a id="lpAuthGoogleAuthLink" class="lp-auth__google-btn" href="/auth/google">
+          <img class="lp-auth__google-icon" alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />
           Sign in with Google
         </a>
       </div>
@@ -232,19 +222,19 @@
     const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
     const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
 
-    const signInLabel = document.getElementById("signInLabel");
-    const signInDropdown = document.getElementById("signInDropdown");
-    const googleAuthLink = document.getElementById("googleAuthLink");
-    const authToggle = document.getElementById("authToggle");
-    const authUser = document.getElementById("authUser");
-    const authUserTrigger = document.getElementById("authUserTrigger");
-    const authUserPicture = document.getElementById("authUserPicture");
-    const authUserName = document.getElementById("authUserName");
-    const adminLink = document.getElementById("adminLink");
-    const manageTeamLink = document.getElementById("manageTeamLink");
-    const profileLink = document.getElementById("profileLink");
-    const userMenu = document.getElementById("userMenu");
-    const logoutButton = document.getElementById("logoutButton");
+    const signInLabel = document.getElementById("lpAuthSignInLabel");
+    const signInDropdown = document.getElementById("lpAuthSignInDropdown");
+    const googleAuthLink = document.getElementById("lpAuthGoogleAuthLink");
+    const authToggle = document.getElementById("lpAuthToggle");
+    const authUser = document.getElementById("lpAuthUser");
+    const authUserTrigger = document.getElementById("lpAuthUserTrigger");
+    const authUserPicture = document.getElementById("lpAuthUserPicture");
+    const authUserName = document.getElementById("lpAuthUserName");
+    const adminLink = document.getElementById("lpAuthAdminLink");
+    const manageTeamLink = document.getElementById("lpAuthManageTeamLink");
+    const profileLink = document.getElementById("lpAuthProfileLink");
+    const userMenu = document.getElementById("lpAuthUserMenu");
+    const logoutButton = document.getElementById("lpAuthLogoutButton");
 
     function toBool(value) {
       if (typeof value === "boolean") return value;
@@ -278,23 +268,23 @@
     }
 
     function closeUserMenu() {
-      userMenu.classList.add("hidden");
+      userMenu.classList.add("lp-auth__hidden");
       authUserTrigger.setAttribute("aria-expanded", "false");
     }
 
     function openUserMenu() {
-      userMenu.classList.remove("hidden");
+      userMenu.classList.remove("lp-auth__hidden");
       authUserTrigger.setAttribute("aria-expanded", "true");
     }
 
     function setLoggedOutUI() {
-      signInLabel.classList.remove("hidden");
-      signInDropdown.classList.remove("hidden");
-      authUser.classList.remove("auth-user--visible");
+      signInLabel.classList.remove("lp-auth__hidden");
+      signInDropdown.classList.remove("lp-auth__hidden");
+      authUser.classList.remove("lp-auth__user--visible");
       profileLink.href = "https://carcassonne.gg/player/?id=noprofile";
-      adminLink.classList.add("hidden");
+      adminLink.classList.add("lp-auth__hidden");
       adminLink.href = "https://carcassonne.gg/admin";
-      manageTeamLink.classList.add("hidden");
+      manageTeamLink.classList.add("lp-auth__hidden");
       manageTeamLink.href = "https://carcassonne.gg/captain/";
       closeUserMenu();
       authToggle.checked = false;
@@ -303,30 +293,30 @@
     async function applyCaptainMenuAccess(user) {
       const isTeamCaptain = await isCaptainByLoginEmail(user?.email);
       if (isTeamCaptain) {
-        manageTeamLink.classList.remove("hidden");
+        manageTeamLink.classList.remove("lp-auth__hidden");
         manageTeamLink.href = "https://carcassonne.gg/captain/";
       } else {
-        manageTeamLink.classList.add("hidden");
+        manageTeamLink.classList.add("lp-auth__hidden");
         manageTeamLink.href = "https://carcassonne.gg/captain/";
       }
     }
 
     function setLoggedInUI(user) {
-      signInLabel.classList.add("hidden");
-      signInDropdown.classList.add("hidden");
-      authUser.classList.add("auth-user--visible");
+      signInLabel.classList.add("lp-auth__hidden");
+      signInDropdown.classList.add("lp-auth__hidden");
+      authUser.classList.add("lp-auth__user--visible");
       authUserName.textContent = getFirstName(user.name) || user.email || "User";
       authUserPicture.src = user.picture || "https://www.gravatar.com/avatar/?d=mp";
       authUserPicture.alt = user.name || "User";
       profileLink.href = user.myProfileUrl || "https://carcassonne.gg/player/?id=noprofile";
       if (user.isAdmin) {
-        adminLink.classList.remove("hidden");
+        adminLink.classList.remove("lp-auth__hidden");
         adminLink.href = user.adminPanelUrl || "https://carcassonne.gg/admin";
       } else {
-        adminLink.classList.add("hidden");
+        adminLink.classList.add("lp-auth__hidden");
         adminLink.href = "https://carcassonne.gg/admin";
       }
-      manageTeamLink.classList.add("hidden");
+      manageTeamLink.classList.add("lp-auth__hidden");
       manageTeamLink.href = "https://carcassonne.gg/captain/";
       applyCaptainMenuAccess(user);
       authToggle.checked = false;
@@ -373,7 +363,7 @@
     });
 
     authUserTrigger.addEventListener("click", () => {
-      if (userMenu.classList.contains("hidden")) {
+      if (userMenu.classList.contains("lp-auth__hidden")) {
         openUserMenu();
       } else {
         closeUserMenu();
@@ -413,5 +403,3 @@
 
     fetchSession();
   </script>
-</body>
-</html>
