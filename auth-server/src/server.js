@@ -237,6 +237,7 @@ function ensureLineupsSchema() {
       id TEXT PRIMARY KEY,
       tournament_id TEXT,
       match_id TEXT,
+      duel_number INTEGER,
       duel_format TEXT,
       time_utc TEXT,
       custom_time TEXT,
@@ -263,6 +264,7 @@ function ensureLineupsSchema() {
         return;
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "lineups", "duel_number", "INTEGER");
       addColumnIfMissing(columns, "lineups", "created_by", "TEXT");
       addColumnIfMissing(columns, "lineups", "updated_by", "TEXT");
       addColumnIfMissing(columns, "lineups", "deleted_by", "TEXT");
@@ -1034,6 +1036,7 @@ app.get("/lineups", (req, res, next) => {
         id,
         tournament_id,
         match_id,
+        duel_number,
         duel_format,
         time_utc,
         custom_time,
@@ -1045,7 +1048,10 @@ app.get("/lineups", (req, res, next) => {
       FROM lineups
       WHERE match_id = ?
         AND deleted_at IS NULL
-      ORDER BY id ASC
+      ORDER BY
+        CASE WHEN duel_number IS NULL THEN 1 ELSE 0 END ASC,
+        duel_number ASC,
+        id ASC
     `,
     [matchId],
     (err, rows) => {
@@ -1101,10 +1107,15 @@ app.post("/lineups/bulk-upsert", (req, res) => {
       }
 
       const sanitized = [];
-      for (const item of lineups) {
+      for (let index = 0; index < lineups.length; index += 1) {
+        const item = lineups[index];
         const id = String(item?.id || "").trim();
         const player1 = normalizeText(item?.player_1_id);
         const player2 = normalizeText(item?.player_2_id);
+        const duelNumberRaw = toIntOrNull(item?.duel_number);
+        const duelNumber = Number.isInteger(duelNumberRaw) && duelNumberRaw > 0
+          ? duelNumberRaw
+          : index + 1;
         if (!id || (!player1 && !player2)) {
           return res.status(400).json({ ok: false, message: "Each lineup requires id and at least one player" });
         }
@@ -1112,6 +1123,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
           id,
           tournament_id: normalizeText(item?.tournament_id),
           match_id: matchId,
+          duel_number: duelNumber,
           duel_format: normalizeText(item?.duel_format),
           time_utc: normalizeText(item?.time_utc),
           custom_time: toIntOrNull(item?.custom_time),
@@ -1154,6 +1166,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
               id,
               tournament_id,
               match_id,
+              duel_number,
               duel_format,
               time_utc,
               custom_time,
@@ -1169,10 +1182,11 @@ app.post("/lineups/bulk-upsert", (req, res) => {
               created_at,
               updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET
               tournament_id = excluded.tournament_id,
               match_id = excluded.match_id,
+              duel_number = excluded.duel_number,
               duel_format = excluded.duel_format,
               time_utc = excluded.time_utc,
               custom_time = excluded.custom_time,
@@ -1195,6 +1209,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
                   item.id,
                   item.tournament_id,
                   item.match_id,
+                  item.duel_number,
                   item.duel_format,
                   item.time_utc,
                   item.custom_time,

@@ -1,8 +1,11 @@
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
 <style>
   .captain-sections-wrap {
     display: grid;
     gap: 8px;
     margin: 6px 0 10px;
+    width: 200px;
   }
 
   .captain-sections-row {
@@ -36,6 +39,149 @@
   .captain-sections-row span {
     min-width: 0;
   }
+
+  .captain-sections-mobile {
+    display: none;
+    margin: 6px 0 10px;
+  }
+
+  .captain-sections-dd {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .captain-sections-dd-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    font-size: 14px;
+    padding: 6px 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .captain-sections-dd-btn:hover,
+  .captain-sections-dd-btn:focus-visible,
+  .captain-sections-dd-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .captain-sections-dd-btn-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .captain-sections-dd-leading {
+    width: 18px;
+    color: #6f7785;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .captain-sections-dd-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .captain-sections-dd-text {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .captain-sections-dd-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #6f7785;
+    font-size: 12px;
+    transition: transform 0.3s ease;
+    flex-shrink: 0;
+  }
+
+  .captain-sections-dd-btn.open .captain-sections-dd-chevron {
+    transform: rotate(180deg);
+  }
+
+  .captain-sections-dd-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    width: 100%;
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+    z-index: 20;
+  }
+
+  .captain-sections-dd-menu.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .captain-sections-dd-option {
+    all: unset;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border-top: 1px solid #edf1f6;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #2f3947;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+
+  .captain-sections-dd-option:first-child {
+    border-top: none;
+  }
+
+  .captain-sections-dd-option:hover {
+    background: #f5f5f5;
+  }
+
+  .captain-sections-dd-option.active {
+    background: #e4f0fb;
+  }
+
+  @media (max-width: 600px) {
+    .captain-sections-wrap {
+      display: none;
+    }
+
+    .captain-sections-mobile {
+      display: block;
+    }
+  }
 </style>
 
 <div class="captain-sections-wrap" data-captain-sections>
@@ -55,8 +201,28 @@
   </button>
 </div>
 
+<div class="captain-sections-mobile" data-captain-sections-mobile></div>
+
 <script>
 (function () {
+  const SECTION_ITEMS = [
+    {
+      view: "friendlies",
+      label: "Friendly Matches",
+      icon: "https://carcassonne.gg/gallery/friendly-matches.png",
+    },
+    {
+      view: "players",
+      label: "Players",
+      icon: "https://carcassonne.gg/gallery/active.png",
+    },
+    {
+      view: "friendly-find",
+      label: "Friendly Find",
+      icon: "https://carcassonne.gg/gallery/calendar.png",
+    },
+  ];
+
   function buildUrlWithView(view) {
     const url = new URL(window.location.href);
     url.searchParams.set("view", String(view || "").trim());
@@ -67,15 +233,126 @@
     return url.toString();
   }
 
-  const root = document.querySelector("[data-captain-sections]");
-  if (!root) return;
+  function getCurrentView() {
+    const url = new URL(window.location.href);
+    const view = String(url.searchParams.get("view") || "").trim().toLowerCase();
+    return SECTION_ITEMS.some((item) => item.view === view) ? view : "friendlies";
+  }
 
-  root.querySelectorAll(".captain-sections-row[data-view]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const view = String(button.dataset.view || "").trim();
-      if (!view) return;
-      window.location.href = buildUrlWithView(view);
+  const root = document.querySelector("[data-captain-sections]");
+  const mobileRoot = document.querySelector("[data-captain-sections-mobile]");
+
+  if (root) {
+    root.querySelectorAll(".captain-sections-row[data-view]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const view = String(button.dataset.view || "").trim();
+        if (!view) return;
+        window.location.href = buildUrlWithView(view);
+      });
     });
+  }
+
+  if (!mobileRoot) return;
+
+  const currentView = getCurrentView();
+  let selected = SECTION_ITEMS.find((item) => item.view === currentView) || SECTION_ITEMS[0];
+
+  const dd = document.createElement("div");
+  dd.className = "captain-sections-dd";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "captain-sections-dd-btn";
+
+  const btnContent = document.createElement("span");
+  btnContent.className = "captain-sections-dd-btn-content";
+
+  const leading = document.createElement("span");
+  leading.className = "captain-sections-dd-leading";
+  leading.innerHTML = '<i class="fa-solid fa-bars-staggered"></i>';
+
+  const selectedIcon = document.createElement("img");
+  selectedIcon.className = "captain-sections-dd-icon";
+  selectedIcon.alt = "";
+
+  const selectedText = document.createElement("span");
+  selectedText.className = "captain-sections-dd-text";
+
+  const chevron = document.createElement("span");
+  chevron.className = "captain-sections-dd-chevron";
+  chevron.innerHTML = '<i class="fas fa-chevron-down"></i>';
+
+  btnContent.appendChild(leading);
+  btnContent.appendChild(selectedIcon);
+  btnContent.appendChild(selectedText);
+  btn.appendChild(btnContent);
+  btn.appendChild(chevron);
+
+  const menu = document.createElement("div");
+  menu.className = "captain-sections-dd-menu";
+
+  const renderSelected = () => {
+    selectedIcon.src = selected.icon;
+    selectedText.textContent = selected.label;
+  };
+
+  const closeMenu = () => {
+    menu.classList.remove("open");
+    menu.style.maxHeight = "0px";
+    btn.classList.remove("open");
+  };
+
+  const openMenu = () => {
+    menu.classList.add("open");
+    menu.style.maxHeight = `${menu.scrollHeight}px`;
+    btn.classList.add("open");
+  };
+
+  SECTION_ITEMS.forEach((item) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "captain-sections-dd-option";
+    option.dataset.view = item.view;
+    if (item.view === selected.view) option.classList.add("active");
+
+    const icon = document.createElement("img");
+    icon.className = "captain-sections-dd-icon";
+    icon.src = item.icon;
+    icon.alt = "";
+
+    const text = document.createElement("span");
+    text.className = "captain-sections-dd-text";
+    text.textContent = item.label;
+
+    option.appendChild(icon);
+    option.appendChild(text);
+    option.addEventListener("click", () => {
+      const nextView = String(item.view || "").trim();
+      if (!nextView || nextView === selected.view) {
+        closeMenu();
+        return;
+      }
+      window.location.href = buildUrlWithView(nextView);
+    });
+    menu.appendChild(option);
   });
+
+  btn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (menu.classList.contains("open")) {
+      closeMenu();
+    } else {
+      openMenu();
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!dd.contains(event.target)) closeMenu();
+  });
+
+  renderSelected();
+  dd.appendChild(btn);
+  dd.appendChild(menu);
+  mobileRoot.appendChild(dd);
 })();
 </script>

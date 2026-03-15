@@ -28,6 +28,17 @@
     gap: 10px;
   }
 
+  .captain-filters {
+    display: grid;
+    gap: 6px;
+  }
+
+  .captain-filter-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+  }
+
   .captain-title {
     font-size: 20px;
     font-weight: 700;
@@ -266,6 +277,50 @@
     box-sizing: border-box;
   }
 
+  .cp-edit-row input[type="date"] {
+    appearance: none;
+    -webkit-appearance: none;
+    min-width: 0;
+    text-align: left;
+    line-height: normal;
+    background: #fff;
+  }
+
+  .cp-edit-row input[type="datetime-local"] {
+    appearance: none;
+    -webkit-appearance: none;
+    min-width: 0;
+    text-align: left;
+    line-height: normal;
+    background: #fff;
+  }
+
+  .cp-edit-row input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+  }
+
+  .cp-edit-row input[type="datetime-local"]::-webkit-date-and-time-value {
+    text-align: left;
+  }
+
+  .cp-edit-row input[type="date"]::-webkit-datetime-edit {
+    padding: 0;
+  }
+
+  .cp-edit-row input[type="datetime-local"]::-webkit-datetime-edit {
+    padding: 0;
+  }
+
+  .cp-edit-row input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 1;
+    cursor: pointer;
+  }
+
+  .cp-edit-row input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    opacity: 1;
+    cursor: pointer;
+  }
+
   .cp-edit-row input:disabled,
   .cp-edit-row select:disabled {
     background: #f3f4f6;
@@ -345,6 +400,13 @@
     text-overflow: ellipsis;
   }
 
+  .cp-dd-btn-content span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .cp-dd-flag {
     width: 14px;
     height: 10px;
@@ -385,6 +447,11 @@
     transform: translateY(4px);
     transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
     z-index: 20;
+  }
+
+  .cp-dd-menu.cp-dd-menu--right {
+    left: auto;
+    right: 0;
   }
 
   .cp-dd-menu.open {
@@ -490,12 +557,37 @@
     padding-left: 18px;
   }
 
+  .cp-lineup-order {
+    color: #4b5563;
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 24px;
+    display: inline-flex;
+  }
+
+  .cp-lineup-move {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cp-lineup-move-btn {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    padding: 0;
+    line-height: 1;
+  }
+
   .cp-hidden {
     display: none !important;
   }
 
   .cp-friendly-row {
     gap: 6px;
+    padding: 4px 10px;
   }
 
   .cp-friendly-team {
@@ -514,13 +606,17 @@
   }
 
   .cp-friendly-date {
-    width: 50px;
-    min-width: 50px;
+    width: 44px;
+    min-width: 44px;
     text-align: center;
     display: flex;
     flex-direction: column;
     justify-content: center;
     gap: 2px;
+  }
+
+  .cp-friendly-date-divider {
+    margin: 0 3px;
   }
 
   .cp-friendly-date-main {
@@ -538,13 +634,54 @@
 
   .cp-friendly-time,
   .cp-friendly-players {
-    width: 64px;
-    min-width: 64px;
+    width: 38px;
+    min-width: 38px;
     text-align: center;
     display: flex;
     flex-direction: column;
     justify-content: center;
     gap: 2px;
+  }
+
+  .cp-friendly-local-time {
+    font-size: 11px;
+    color: #666;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 18px;
+  }
+
+  .cp-friendly-edit {
+    margin-left: 4px;
+  }
+
+  .cp-friendly-edit .cp-edit-btn {
+    margin-left: 0;
+    padding: 4px 6px;
+  }
+
+  .cp-friendly-captains {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+  }
+
+  .cp-friendly-captain-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    text-decoration: none;
+  }
+
+  .cp-friendly-captain-link img {
+    width: 22px;
+    height: auto;
+    object-fit: contain;
+    display: block;
   }
 
   .cp-friendly-time-main,
@@ -725,6 +862,65 @@
     .cp-team-row {
       font-size: 14px;
     }
+
+    .cp-edit-row input:not([type="checkbox"]),
+    .cp-edit-row select,
+    .cp-dd-btn,
+    .cp-dd-search input {
+      font-size: 16px;
+    }
+
+    .cp-edit-row input[type="date"] {
+      max-width: 100%;
+      padding-right: 36px;
+      font-size: 16px;
+      background: #fff;
+      color: #2f3947;
+      -webkit-text-fill-color: #2f3947;
+      opacity: 1;
+    }
+
+    .cp-edit-row input[type="datetime-local"] {
+      max-width: 100%;
+      padding-right: 36px;
+      font-size: 16px;
+      background: #fff;
+      color: #2f3947;
+      -webkit-text-fill-color: #2f3947;
+      opacity: 1;
+    }
+    .cp-friendly-team {
+      max-width: 28px;
+      flex: 0 0 28px;
+    }
+
+    .cp-friendly-team .cp-team-row {
+      justify-content: center;
+      gap: 0;
+    }
+
+    .cp-friendly-team .cp-team-row span {
+      display: none;
+    }
+
+    .cp-friendly-date {
+      gap: 0;
+    }
+
+    .cp-friendly-dates {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      overflow-x: visible;
+    }
+
+    .cp-friendly-date-divider {
+      display: none;
+    }
+
+    .cp-friendly-date-sub {
+      display: none;
+    }
   }
 
   @media (min-width: 600px) {
@@ -742,6 +938,7 @@
       <button id="captainAddButton" class="cp-edit-btn" type="button">Create</button>
     </div>
   </div>
+  <div id="captainFilters" class="captain-filters cp-hidden"></div>
   <div id="captainContent" class="captain-alert">Loading...</div>
   <div id="captainHint" class="captain-sub"></div>
 </div>
@@ -775,10 +972,12 @@
   const MASTER_TITLE_LOGO_URL = "https://carcassonne.gg/gallery/master-title-logo.png";
   const ACTIVE_STATUS_LOGO_URL = "https://carcassonne.gg/gallery/active.png";
   const INACTIVE_STATUS_LOGO_URL = "https://carcassonne.gg/gallery/inactive.png";
+  const CAPTAIN_PROFILE_ICON_URL = "https://carcassonne.gg/gallery/captain-profile.png";
 
   const contentEl = document.getElementById("captainContent");
   const countEl = document.getElementById("captainCount");
   const addButtonEl = document.getElementById("captainAddButton");
+  const filtersEl = document.getElementById("captainFilters");
   const hintEl = document.getElementById("captainHint");
   const titleEl = document.querySelector(".captain-title");
 
@@ -799,18 +998,13 @@
     if (!raw) return "-";
     const d = new Date(raw);
     if (!Number.isFinite(d.getTime())) return raw;
-    const now = new Date();
     const MONTHS_3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const isToday =
-      d.getFullYear() === now.getFullYear() &&
-      d.getMonth() === now.getMonth() &&
-      d.getDate() === now.getDate();
     const dd = String(d.getDate()).padStart(2, "0");
     const mon = MONTHS_3[d.getMonth()];
     const hh = String(d.getHours()).padStart(2, "0");
     const mm = String(d.getMinutes()).padStart(2, "0");
+    const now = new Date();
     const isPrevYear = d.getFullYear() < now.getFullYear();
-    if (isToday) return `${hh}:${mm}`;
     if (isPrevYear) return `${dd} ${mon}\n${d.getFullYear()}\n${hh}:${mm}`;
     return `${dd} ${mon} ${hh}:${mm}`;
   }
@@ -866,6 +1060,13 @@
 
   function buildCaptainUrl(options = {}) {
     const url = new URL(window.location.href);
+    if (typeof options.association === "string") {
+      const value = normalizeCode(options.association);
+      if (value) url.searchParams.set("association", value);
+      else url.searchParams.delete("association");
+    } else if (options.association === null) {
+      url.searchParams.delete("association");
+    }
     if (typeof options.view === "string" && options.view.trim()) {
       url.searchParams.set("view", options.view.trim());
     } else if (options.view === null) {
@@ -891,6 +1092,173 @@
       url.searchParams.delete("player_id");
     }
     return url.toString();
+  }
+
+  function clearFilters() {
+    if (!filtersEl) return;
+    filtersEl.innerHTML = "";
+    filtersEl.classList.add("cp-hidden");
+  }
+
+  function renderAdminPlayersAssociationFilter(teamsById, selectedAssociationCode) {
+    if (!filtersEl) return;
+    const teams = Array.from(teamsById.values())
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
+    if (!teams.length) {
+      clearFilters();
+      return;
+    }
+
+    let value = normalizeCode(selectedAssociationCode);
+    if (!teams.some((team) => team.id === value)) {
+      value = normalizeCode(teams[0]?.id);
+    }
+
+    filtersEl.innerHTML = "";
+    filtersEl.classList.remove("cp-hidden");
+
+    const label = document.createElement("div");
+    label.className = "captain-filter-label";
+    label.textContent = "Association";
+    filtersEl.appendChild(label);
+
+    const root = document.createElement("div");
+    root.className = "cp-dd";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cp-dd-btn";
+    const btnContent = document.createElement("span");
+    btnContent.className = "cp-dd-btn-content";
+    const chevron = document.createElement("span");
+    chevron.className = "cp-dd-chevron";
+    chevron.textContent = "▾";
+    btn.appendChild(btnContent);
+    btn.appendChild(chevron);
+
+    const menu = document.createElement("div");
+    menu.className = "cp-dd-menu";
+
+    const searchWrap = document.createElement("div");
+    searchWrap.className = "cp-dd-search";
+    const searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Type to filter...";
+    searchWrap.appendChild(searchInput);
+    menu.appendChild(searchWrap);
+
+    const findTeam = (teamId) => teams.find((team) => team.id === normalizeCode(teamId)) || null;
+    let filterQuery = "";
+
+    const renderButtonContent = () => {
+      btnContent.innerHTML = "";
+      const selected = findTeam(value);
+      if (!selected) return;
+      if (selected.logo) {
+        const img = document.createElement("img");
+        img.className = "cp-dd-flag";
+        img.src = selected.logo;
+        img.alt = "";
+        btnContent.appendChild(img);
+      }
+      const text = document.createElement("span");
+      text.textContent = selected.name || selected.id;
+      btnContent.appendChild(text);
+    };
+
+    const close = () => {
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      btn.classList.remove("open");
+    };
+
+    const open = () => {
+      filterQuery = "";
+      searchInput.value = "";
+      renderMenuOptions();
+      menu.classList.add("open");
+      menu.style.maxHeight = `${menu.scrollHeight}px`;
+      btn.classList.add("open");
+      searchInput.focus();
+      searchInput.select();
+    };
+
+    const setValue = (nextValue) => {
+      const next = findTeam(nextValue);
+      if (!next || next.id === value) return;
+      value = next.id;
+      window.location.href = buildCaptainUrl({
+        view: CAPTAIN_VIEWS.PLAYERS,
+        create: false,
+        edit: false,
+        matchId: null,
+        playerId: null,
+        association: value,
+      });
+    };
+
+    const createOptionButton = (team) => {
+      const optionBtn = document.createElement("button");
+      optionBtn.type = "button";
+      optionBtn.className = "cp-dd-option";
+      optionBtn.dataset.value = team.id;
+      if (team.logo) {
+        const img = document.createElement("img");
+        img.className = "cp-dd-flag";
+        img.src = team.logo;
+        img.alt = "";
+        optionBtn.appendChild(img);
+      }
+      optionBtn.appendChild(document.createTextNode(team.name || team.id));
+      optionBtn.classList.toggle("active", team.id === value);
+      optionBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        close();
+        setValue(team.id);
+      });
+      return optionBtn;
+    };
+
+    const renderMenuOptions = () => {
+      menu.querySelectorAll(".cp-dd-option").forEach((node) => node.remove());
+      const query = String(filterQuery || "").trim().toLowerCase();
+      teams
+        .filter((team) => {
+          if (!query) return true;
+          const haystack = `${team.name || ""} ${team.id || ""}`.toLowerCase();
+          return haystack.includes(query);
+        })
+        .forEach((team) => {
+          menu.appendChild(createOptionButton(team));
+        });
+    };
+
+    searchInput.addEventListener("click", (event) => event.stopPropagation());
+    searchInput.addEventListener("keydown", (event) => event.stopPropagation());
+    searchInput.addEventListener("input", () => {
+      filterQuery = String(searchInput.value || "");
+      renderMenuOptions();
+      menu.style.maxHeight = `${menu.scrollHeight}px`;
+    });
+
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menu.classList.contains("open")) {
+        close();
+      } else {
+        open();
+      }
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!root.contains(event.target)) close();
+    });
+
+    renderButtonContent();
+    renderMenuOptions();
+    root.appendChild(btn);
+    root.appendChild(menu);
+    filtersEl.appendChild(root);
   }
 
   function toDatetimeLocalFromUtc(raw) {
@@ -955,6 +1323,24 @@
     const n = Number(raw);
     if (!Number.isFinite(n)) return null;
     return Math.trunc(n);
+  }
+
+  function readLineupDuelNumber(lineup) {
+    const value = parseNullableInt(
+      lineup?.duel_number ?? lineup?.duel_no ?? lineup?.duel_order ?? lineup?.order_no
+    );
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+
+  function sortLineups(lineups) {
+    return (Array.isArray(lineups) ? lineups.slice() : []).sort((a, b) => {
+      const duelA = readLineupDuelNumber(a);
+      const duelB = readLineupDuelNumber(b);
+      if (duelA !== null && duelB !== null && duelA !== duelB) return duelA - duelB;
+      if (duelA !== null) return -1;
+      if (duelB !== null) return 1;
+      return String(a?.id || "").localeCompare(String(b?.id || ""));
+    });
   }
 
   function formatTeamLocalTime(teamTimezone, timeUtc) {
@@ -1197,9 +1583,11 @@
     const right = document.createElement("div");
     right.className = "cp-match-right";
 
-    const matchLineups = Array.isArray(lineupsByMatch?.get(String(match?.id || "").trim()))
-      ? lineupsByMatch.get(String(match?.id || "").trim())
-      : [];
+    const matchLineups = sortLineups(
+      Array.isArray(lineupsByMatch?.get(String(match?.id || "").trim()))
+        ? lineupsByMatch.get(String(match?.id || "").trim())
+        : []
+    );
     if (matchLineups.length > 0) {
       const toggleBtn = document.createElement("div");
       toggleBtn.className = "chevron";
@@ -1217,10 +1605,16 @@
 
       const lineupBody = document.createElement("div");
       lineupBody.className = "lineup__overview";
-      matchLineups.forEach((lineup) => {
+      matchLineups.forEach((lineup, index) => {
         const p1 = String(lineup?.player_1_id || "").trim();
         const p2 = String(lineup?.player_2_id || "").trim();
         const rowEl = document.createElement("div");
+        const duelNumber = readLineupDuelNumber(lineup) ?? index + 1;
+
+        const orderEl = document.createElement("span");
+        orderEl.className = "cp-lineup-order";
+        orderEl.textContent = `${duelNumber}.`;
+        rowEl.appendChild(orderEl);
 
         const p1Link = document.createElement("a");
         p1Link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(p1)}`;
@@ -1462,6 +1856,7 @@
 
   function renderPlayerCreateForm(createContext = {}) {
     const associationCode = normalizeCode(createContext?.associationCode || "");
+    const canEditAssociation = !!createContext?.canEditAssociation;
     setPageHeading("Create player");
     countEl.textContent = "Creating player";
     hintEl.textContent = "";
@@ -1488,14 +1883,6 @@
     cancelBtn.textContent = "Cancel";
     topActions.appendChild(saveBtn);
     topActions.appendChild(cancelBtn);
-    let deleteBtn = null;
-    if (!isCreateMode) {
-      deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "cp-btn cp-btn-danger";
-      deleteBtn.textContent = "Delete";
-      topActions.appendChild(deleteBtn);
-    }
     form.appendChild(topActions);
 
     const errorEl = document.createElement("div");
@@ -1690,9 +2077,17 @@
 
     const bgaIdInput = addTextField("BGA ID", "create_player_id", "", "text");
     const bgaNicknameInput = addTextField("BGA nickname", "create_bga_nickname", "", "text");
-    const associationInput = addTextField("Association", "create_association", associationCode, "text", { readOnly: true });
-    associationInput.style.background = "#f3f4f6";
-    associationInput.style.color = "#444";
+    const associationInput = addTextField(
+      "Association",
+      "create_association",
+      associationCode,
+      "text",
+      { readOnly: !canEditAssociation }
+    );
+    if (!canEditAssociation) {
+      associationInput.style.background = "#f3f4f6";
+      associationInput.style.color = "#444";
+    }
     const statusInput = addDropdownField(
       "Status",
       createDropdown("Active", [
@@ -2386,6 +2781,28 @@
     return parts.sub ? `${parts.main} ${parts.sub}` : parts.main;
   }
 
+  function getFriendlyFindFirstDate(entry) {
+    const dates = parseFriendlyFindDates(entry?.dates);
+    return dates[0] || "";
+  }
+
+  function formatFriendlyFindLocalTime(timeValue, dateValue) {
+    const timeText = String(timeValue || "").trim();
+    const dateText = String(dateValue || "").trim();
+    if (!/^\d{2}:\d{2}$/.test(timeText) || !/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return "";
+    const utcDate = new Date(`${dateText}T${timeText}:00Z`);
+    if (!Number.isFinite(utcDate.getTime())) return "";
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(utcDate);
+    } catch (_error) {
+      return "";
+    }
+  }
+
   function createFriendlyFindRow(entry, teamsById, options = {}) {
     const row = document.createElement("div");
     row.className = "cp-match-row cp-friendly-row";
@@ -2411,6 +2828,7 @@
     row.appendChild(teamWrap);
 
     const dates = parseFriendlyFindDates(entry?.dates);
+    const localTimeDate = dates[0] || "";
     const addDivider = () => {
       const divider = document.createElement("div");
       divider.className = "cp-divider-vertical";
@@ -2439,7 +2857,7 @@
 
         if (index < dates.length - 1) {
           const innerDivider = document.createElement("div");
-          innerDivider.className = "cp-divider-vertical";
+          innerDivider.className = "cp-divider-vertical cp-friendly-date-divider";
           datesWrap.appendChild(innerDivider);
         }
       });
@@ -2460,10 +2878,12 @@
     timeBox.className = "cp-friendly-time";
     const timeMain = document.createElement("div");
     timeMain.className = "cp-friendly-time-main";
-    timeMain.textContent = String(entry?.time_1 || "19:00");
+    timeMain.textContent = formatFriendlyFindLocalTime(entry?.time_1 || "19:00", localTimeDate)
+      || String(entry?.time_1 || "19:00");
     const timeSub = document.createElement("div");
     timeSub.className = "cp-friendly-time-main";
-    timeSub.textContent = String(entry?.time_2 || "22:00");
+    timeSub.textContent = formatFriendlyFindLocalTime(entry?.time_2 || "22:00", localTimeDate)
+      || String(entry?.time_2 || "22:00");
     timeBox.appendChild(timeMain);
     timeBox.appendChild(timeSub);
     row.appendChild(timeBox);
@@ -2474,7 +2894,7 @@
     playersBox.className = "cp-friendly-players";
     const playersLabel = document.createElement("div");
     playersLabel.className = "cp-friendly-players-sub";
-    playersLabel.textContent = "Players:";
+    playersLabel.textContent = "Players";
     const playersValue = document.createElement("div");
     playersValue.className = "cp-friendly-players-main";
     playersValue.textContent = String(entry?.number_of_players ?? "-");
@@ -2483,9 +2903,8 @@
     row.appendChild(playersBox);
 
     if (options.canEdit) {
-      addDivider();
       const right = document.createElement("div");
-      right.className = "cp-match-right";
+      right.className = "cp-match-right cp-friendly-edit";
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "cp-edit-btn";
@@ -2501,6 +2920,33 @@
       });
       right.appendChild(editBtn);
       row.appendChild(right);
+    } else if (options.showCaptains) {
+      const captains = Array.isArray(options.captainsByTeam?.get(teamCode))
+        ? options.captainsByTeam.get(teamCode)
+        : [];
+      if (captains.length) {
+        const right = document.createElement("div");
+        right.className = "cp-match-right cp-friendly-captains";
+        captains.forEach((captain) => {
+          const captainId = String(captain?.id ?? captain?.player_id ?? "").trim();
+          if (!captainId) return;
+          const link = document.createElement("a");
+          link.className = "cp-friendly-captain-link";
+          link.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(captainId)}`;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.title = `Team captain: ${playerLabel(captain)}`;
+
+          const icon = document.createElement("img");
+          icon.src = CAPTAIN_PROFILE_ICON_URL;
+          icon.alt = "";
+          link.appendChild(icon);
+          right.appendChild(link);
+        });
+        if (right.childElementCount > 0) {
+          row.appendChild(right);
+        }
+      }
     }
 
     return row;
@@ -2529,7 +2975,7 @@
     return sectionWrap;
   }
 
-  function renderFriendlyFindList(requests, teamsById, associationCode) {
+  function renderFriendlyFindList(requests, teamsById, associationCode, captainsByTeam) {
     setPageHeading("Find an Opponent for a Friendly Match");
     contentEl.className = "";
     contentEl.innerHTML = "";
@@ -2537,15 +2983,30 @@
     contentEl.style.gap = "20px";
 
     const ownAssociationCode = normalizeCode(associationCode);
-    const ownRequests = (Array.isArray(requests) ? requests : []).filter((entry) => normalizeCode(entry?.team) === ownAssociationCode);
-    const opponentRequests = (Array.isArray(requests) ? requests : []).filter((entry) => normalizeCode(entry?.team) !== ownAssociationCode);
+    const sortByFirstDateAsc = (a, b) => {
+      const dateA = getFriendlyFindFirstDate(a);
+      const dateB = getFriendlyFindFirstDate(b);
+      if (dateA && dateB && dateA !== dateB) return dateA.localeCompare(dateB);
+      if (dateA && !dateB) return -1;
+      if (!dateA && dateB) return 1;
+      return String(a?.id || "").localeCompare(String(b?.id || ""));
+    };
+    const ownRequests = (Array.isArray(requests) ? requests : [])
+      .filter((entry) => normalizeCode(entry?.team) === ownAssociationCode)
+      .sort(sortByFirstDateAsc);
+    const opponentRequests = (Array.isArray(requests) ? requests : [])
+      .filter((entry) => normalizeCode(entry?.team) !== ownAssociationCode)
+      .sort(sortByFirstDateAsc);
 
-    countEl.textContent = `${ownRequests.length + opponentRequests.length} requests`;
+    countEl.textContent = "";
     contentEl.appendChild(
       renderFriendlyFindSection("My Match Requests", ownRequests, teamsById, "No match requests yet.", { canEdit: true })
     );
     contentEl.appendChild(
-      renderFriendlyFindSection("Available Opponents", opponentRequests, teamsById, "No available opponents yet.")
+      renderFriendlyFindSection("Available Opponents", opponentRequests, teamsById, "No available opponents yet.", {
+        showCaptains: true,
+        captainsByTeam,
+      })
     );
   }
 
@@ -2661,10 +3122,34 @@
     };
 
     const time1Input = createHourSelect(String(source?.time_1 || "19:00"));
-    addRow("Earliest Start, UTC", time1Input);
+    const time1Row = addRow("Earliest Start, UTC", time1Input);
+    const localTime1 = document.createElement("div");
+    localTime1.className = "cp-friendly-local-time";
+    localTime1.style.marginTop = "2px";
+    const localTimeFlag1 = document.createElement("img");
+    localTimeFlag1.className = "cp-dd-flag";
+    localTimeFlag1.src = teamMeta?.logo || "";
+    localTimeFlag1.alt = "";
+    localTimeFlag1.style.visibility = teamMeta?.logo ? "visible" : "hidden";
+    const localTimeText1 = document.createElement("span");
+    localTime1.appendChild(localTimeFlag1);
+    localTime1.appendChild(localTimeText1);
+    time1Row.appendChild(localTime1);
 
     const time2Input = createHourSelect(String(source?.time_2 || "22:00"));
-    addRow("Latest Start, UTC", time2Input);
+    const time2Row = addRow("Latest Start, UTC", time2Input);
+    const localTime2 = document.createElement("div");
+    localTime2.className = "cp-friendly-local-time";
+    localTime2.style.marginTop = "2px";
+    const localTimeFlag2 = document.createElement("img");
+    localTimeFlag2.className = "cp-dd-flag";
+    localTimeFlag2.src = teamMeta?.logo || "";
+    localTimeFlag2.alt = "";
+    localTimeFlag2.style.visibility = teamMeta?.logo ? "visible" : "hidden";
+    const localTimeText2 = document.createElement("span");
+    localTime2.appendChild(localTimeFlag2);
+    localTime2.appendChild(localTimeText2);
+    time2Row.appendChild(localTime2);
 
     const datesWrap = document.createElement("div");
     datesWrap.className = "cp-calendar";
@@ -2730,6 +3215,17 @@
       });
     };
 
+    const syncFriendlyFindLocalTimes = () => {
+      const referenceDate = selectedDates[0] || "";
+      const earliestLocal = formatFriendlyFindLocalTime(time1Input.value, referenceDate);
+      const latestLocal = formatFriendlyFindLocalTime(time2Input.value, referenceDate);
+      const hasLocalTimes = !!referenceDate && !!earliestLocal && !!latestLocal;
+      localTime1.classList.toggle("cp-hidden", !hasLocalTimes);
+      localTime2.classList.toggle("cp-hidden", !hasLocalTimes);
+      localTimeText1.textContent = hasLocalTimes ? `Local time: ${earliestLocal}` : "";
+      localTimeText2.textContent = hasLocalTimes ? `Local time: ${latestLocal}` : "";
+    };
+
     const renderCalendar = () => {
       const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
       title.textContent = `${MONTHS[calendarMonth.getUTCMonth()]} ${calendarMonth.getUTCFullYear()}`;
@@ -2767,6 +3263,7 @@
             selectedDates = selectedDates.concat(iso).sort();
           }
           renderSelectedDates();
+          syncFriendlyFindLocalTimes();
           renderCalendar();
         });
         grid.appendChild(cellBtn);
@@ -2785,6 +3282,7 @@
       renderCalendar();
     });
     renderSelectedDates();
+    syncFriendlyFindLocalTimes();
     renderCalendar();
 
     const setSaving = (isSaving) => {
@@ -2912,6 +3410,11 @@
       });
     }
 
+    time1Input.addEventListener("input", syncFriendlyFindLocalTimes);
+    time1Input.addEventListener("change", syncFriendlyFindLocalTimes);
+    time2Input.addEventListener("input", syncFriendlyFindLocalTimes);
+    time2Input.addEventListener("change", syncFriendlyFindLocalTimes);
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       setError("");
@@ -2925,6 +3428,8 @@
       const playersAvailable = String(playersInput.value || "").trim();
       if (!playersAvailable) {
         validationErrors.push("Players Available is required.");
+      } else if (playersAvailable.length > 10) {
+        validationErrors.push("Players Available must be at most 10 characters.");
       }
       if (validationErrors.length) {
         setError(validationErrors);
@@ -3082,6 +3587,9 @@
 
       const menu = document.createElement("div");
       menu.className = "cp-dd-menu";
+      if (cfg.alignMenuRight) {
+        menu.classList.add("cp-dd-menu--right");
+      }
       const isSearchable = !!cfg.searchable;
       let filterQuery = "";
       let searchInput = null;
@@ -3405,10 +3913,12 @@
     lineupsOpenActions.appendChild(addLineupRowBtn);
     lineupsWrap.appendChild(lineupsOpenActions);
 
-    let lineupsEnabled = initialLineups.length > 0;
-    const hadInitialLineups = initialLineups.length > 0;
-    let lineupsState = initialLineups.map((l) => ({
+    const sortedInitialLineups = sortLineups(initialLineups);
+    let lineupsEnabled = sortedInitialLineups.length > 0;
+    const hadInitialLineups = sortedInitialLineups.length > 0;
+    let lineupsState = sortedInitialLineups.map((l, index) => ({
       id: String(l?.id || buildLineupIdFromMatch(source?.time_utc ?? source?.time, l?.player_1_id, l?.player_2_id)).trim(),
+      duelNumber: readLineupDuelNumber(l) ?? index + 1,
       player1Id: String(l?.player_1_id || "").trim(),
       player2Id: String(l?.player_2_id || "").trim(),
     }));
@@ -3416,6 +3926,7 @@
 
     const createEmptyLineupEntry = () => ({
       id: buildLineupIdFromMatch(source?.time_utc ?? source?.time, "", ""),
+      duelNumber: null,
       player1Id: "",
       player2Id: "",
     });
@@ -3592,6 +4103,24 @@
       return Number.isInteger(duels) && duels > 0 ? duels : 1;
     };
 
+    const reindexLineupsState = () => {
+      lineupsState = lineupsState.map((entry, index) => ({
+        ...entry,
+        duelNumber: index + 1,
+      }));
+    };
+
+    const moveLineupRow = (fromIndex, toIndex) => {
+      if (toIndex < 0 || toIndex >= lineupsState.length || fromIndex === toIndex) return;
+      const nextState = lineupsState.slice();
+      const [moved] = nextState.splice(fromIndex, 1);
+      if (!moved) return;
+      nextState.splice(toIndex, 0, moved);
+      lineupsState = nextState;
+      reindexLineupsState();
+      renderLineupsRows();
+    };
+
     const renderLineupsRows = () => {
       lineupsRows.innerHTML = "";
       syncLineupsHeader();
@@ -3602,17 +4131,24 @@
       const team1Code = normalizeCode(team1Input.getValue());
       const team2Code = normalizeCode(team2Input.getValue());
       const canChangeCount = !isSecretLineupType();
-      lineupsHeader.style.gridTemplateColumns = canChangeCount ? "20px 1fr 1fr 26px" : "20px 1fr 1fr";
+      const canReorder = lineupsState.length > 1;
+      lineupsHeader.style.gridTemplateColumns = canChangeCount
+        ? "32px minmax(0, 1fr) minmax(0, 1fr) 30px 26px"
+        : "32px minmax(0, 1fr) minmax(0, 1fr) 30px";
       lineupsOpenActions.style.display = canChangeCount ? "" : "none";
+      reindexLineupsState();
 
       lineupsState.forEach((entry, index) => {
         const row = document.createElement("div");
         row.style.display = "grid";
-        row.style.gridTemplateColumns = canChangeCount ? "20px 1fr 1fr 26px" : "20px 1fr 1fr";
+        row.style.gridTemplateColumns = canChangeCount
+          ? "32px minmax(0, 1fr) minmax(0, 1fr) 30px 26px"
+          : "32px minmax(0, 1fr) minmax(0, 1fr) 30px";
         row.style.gap = "8px";
         row.style.alignItems = "start";
 
         const duelNo = document.createElement("div");
+        duelNo.className = "cp-lineup-order";
         duelNo.style.height = "30px";
         duelNo.style.display = "inline-flex";
         duelNo.style.alignItems = "center";
@@ -3621,16 +4157,22 @@
         duelNo.textContent = `${index + 1}:`;
         row.appendChild(duelNo);
 
-        const createPlayerCell = (teamCodeForCell, currentValue, onSelect) => {
+        const createPlayerCell = (teamCodeForCell, currentValue, onSelect, cellConfig = {}) => {
           const cell = document.createElement("div");
           const optionPlayers = getPlayersForTeam(teamCodeForCell).map((p) => ({
             value: String(p.id ?? p.player_id ?? "").trim(),
             label: `${playerLabel(p)}`,
           }));
-          const options = [{ value: "", label: "Select player" }]
+          const playerOptions = [{ value: "", label: "Select player" }]
             .concat(optionPlayers)
             .concat([{ value: "__add_new__", label: "Add new player" }]);
-          const dd = createDropdown(currentValue || "", options, { allowEmpty: true, searchable: true });
+          const dd = createDropdown(currentValue || "", playerOptions, {
+            allowEmpty: true,
+            searchable: true,
+            alignMenuRight: !!cellConfig.alignMenuRight,
+          });
+          cell.style.minWidth = "0";
+          dd.root.style.minWidth = "0";
           const ddBtn = dd.root.querySelector(".cp-dd-btn");
           const syncSelectedHighlight = () => {
             if (!ddBtn) return;
@@ -3670,9 +4212,34 @@
         });
         const p2Cell = createPlayerCell(team2Code, entry.player2Id, (v) => {
           lineupsState[index].player2Id = String(v || "").trim();
-        });
+        }, { alignMenuRight: true });
         row.appendChild(p1Cell);
         row.appendChild(p2Cell);
+
+        const moveControls = document.createElement("div");
+        moveControls.className = "cp-lineup-move";
+
+        const moveUpBtn = document.createElement("button");
+        moveUpBtn.type = "button";
+        moveUpBtn.className = "cp-btn cp-btn-secondary cp-lineup-move-btn";
+        moveUpBtn.textContent = "↑";
+        moveUpBtn.disabled = !canReorder || index === 0;
+        moveUpBtn.addEventListener("click", () => {
+          moveLineupRow(index, index - 1);
+        });
+
+        const moveDownBtn = document.createElement("button");
+        moveDownBtn.type = "button";
+        moveDownBtn.className = "cp-btn cp-btn-secondary cp-lineup-move-btn";
+        moveDownBtn.textContent = "↓";
+        moveDownBtn.disabled = !canReorder || index === lineupsState.length - 1;
+        moveDownBtn.addEventListener("click", () => {
+          moveLineupRow(index, index + 1);
+        });
+
+        moveControls.appendChild(moveUpBtn);
+        moveControls.appendChild(moveDownBtn);
+        row.appendChild(moveControls);
 
         if (canChangeCount) {
           const removeBtn = document.createElement("button");
@@ -3688,6 +4255,7 @@
           removeBtn.addEventListener("click", () => {
             if (lineupsState.length <= 1) return;
             lineupsState.splice(index, 1);
+            reindexLineupsState();
             renderLineupsRows();
           });
           row.appendChild(removeBtn);
@@ -3706,6 +4274,7 @@
       } else if (lineupsState.length < 1) {
         lineupsState = [createEmptyLineupEntry()];
       }
+      reindexLineupsState();
       renderLineupsRows();
     };
 
@@ -3724,6 +4293,7 @@
     addLineupRowBtn.addEventListener("click", () => {
       if (isSecretLineupType()) return;
       lineupsState.push(createEmptyLineupEntry());
+      reindexLineupsState();
       renderLineupsRows();
     });
 
@@ -3967,10 +4537,12 @@
 
         if (lineupsEnabled) {
           const matchIdForLineups = String(payload.id || match?.id || "").trim();
-          const lineupRowsPayload = lineupsState.map((row) => ({
+          reindexLineupsState();
+          const lineupRowsPayload = lineupsState.map((row, index) => ({
             id: String(row.id || buildLineupIdFromMatch(timeUtc, row.player1Id, row.player2Id)).trim(),
             tournament_id: DEFAULT_TOURNAMENT_ID,
             match_id: matchIdForLineups,
+            duel_number: index + 1,
             duel_format: "Bo3",
             time_utc: timeUtc,
             custom_time: 0,
@@ -4037,6 +4609,7 @@
 
   async function initCaptainPage() {
     try {
+      clearFilters();
       setPageHeading(getImmediatePageHeading());
       const isTestMode = isTestModeEnabled();
       const activeView = getViewFromUrl();
@@ -4048,6 +4621,7 @@
       let associationCode = associationOverride;
       let captainAssociationCode = "";
       let isCaptainUser = false;
+      let isAdminUser = false;
       let currentUserPlayerId = "";
 
       try {
@@ -4058,6 +4632,7 @@
           const meAssociation = normalizeCode(
             meUser?.profile?.association ?? meUser?.association ?? ""
           );
+          isAdminUser = meUser?.isAdmin === true;
           const meIsCaptain = Number(
             meUser?.profile?.team_captain ??
             meUser?.team_captain ??
@@ -4077,11 +4652,11 @@
       }
 
       if (!isTestMode && !associationOverride) {
-        if (!isCaptainUser || !captainAssociationCode) {
+        if (!isAdminUser && (!isCaptainUser || !captainAssociationCode)) {
           renderAccessMessage();
           return;
         }
-        associationCode = captainAssociationCode;
+        associationCode = isAdminUser ? associationCode : captainAssociationCode;
       }
 
       const dataRequests = [
@@ -4137,6 +4712,7 @@
             bga_nickname: String(profile?.bga_nickname || "").trim(),
             name: String(profile?.name || "").trim(),
             association: normalizeCode(profile?.association),
+            team_captain: profile?.team_captain,
             status: String(profile?.status || "").trim(),
             created_by: String(profile?.created_by || "").trim(),
             email: String(profile?.email || "").trim(),
@@ -4156,6 +4732,7 @@
       const filtered = matches
         .filter((match) => {
           if (isTestMode) return true;
+          if (isAdminUser) return true;
           const team1 = readMatchTeam1(match);
           const team2 = readMatchTeam2(match);
           return team1 === associationCode || team2 === associationCode;
@@ -4217,6 +4794,15 @@
 
       if (activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
         const friendlyFindAssociationCode = normalizeCode(associationCode || captainAssociationCode);
+        const captainsByTeam = new Map();
+        allProfiles.forEach((profile) => {
+          const teamCode = normalizeCode(profile?.association);
+          if (!teamCode || !isTruthyFlag(profile?.team_captain)) return;
+          const current = Array.isArray(captainsByTeam.get(teamCode)) ? captainsByTeam.get(teamCode) : [];
+          current.push(profile);
+          current.sort((a, b) => playerLabel(a).localeCompare(playerLabel(b)));
+          captainsByTeam.set(teamCode, current);
+        });
         if (isCreateMode || isEditMode) {
           if (!friendlyFindAssociationCode) {
             contentEl.className = "captain-alert";
@@ -4239,7 +4825,7 @@
             isEditMode ? "edit" : "create"
           );
         } else {
-          renderFriendlyFindList(friendlyFindRequests, teamsById, friendlyFindAssociationCode);
+          renderFriendlyFindList(friendlyFindRequests, teamsById, friendlyFindAssociationCode, captainsByTeam);
         }
         if (isTestMode) {
           hintEl.textContent = "test mode: all matches";
@@ -4252,7 +4838,7 @@
       }
 
       if (activeView === CAPTAIN_VIEWS.FRIENDLIES && isCreateMode) {
-        if (!captainAssociationCode) {
+        if (!captainAssociationCode && !isAdminUser) {
           contentEl.className = "captain-alert";
           contentEl.textContent = "Cannot detect your team association for creating a match.";
           countEl.textContent = "";
@@ -4261,7 +4847,12 @@
         renderMatchEditForm(
           null,
           teamsById,
-          { lockedTeamField: "team_1", team1Default: captainAssociationCode, profiles: allProfiles, lineups: [] },
+          {
+            lockedTeamField: isAdminUser ? "" : "team_1",
+            team1Default: captainAssociationCode,
+            profiles: allProfiles,
+            lineups: [],
+          },
           "create"
         );
         if (isTestMode) {
@@ -4287,7 +4878,7 @@
         const matchTeam1 = readMatchTeam1(matchToEdit);
         const matchTeam2 = readMatchTeam2(matchToEdit);
         let lockedTeamField = "";
-        if (isCaptainUser && captainAssociationCode) {
+        if (!isAdminUser && isCaptainUser && captainAssociationCode) {
           if (matchTeam1 === captainAssociationCode) lockedTeamField = "team_1";
           if (matchTeam2 === captainAssociationCode) lockedTeamField = "team_2";
         }
@@ -4316,12 +4907,20 @@
         const lineupsByMatch = await loadLineupsByMatchIds(filtered);
         renderMatches(filtered, teamsById, lineupsByMatch, profilesById);
       } else if (activeView === CAPTAIN_VIEWS.PLAYERS) {
+        const defaultAdminAssociationCode = normalizeCode(
+          associationOverride || captainAssociationCode || Array.from(teamsById.keys())[0] || ""
+        );
         const playersAssociationCode = isTestMode
           ? "UKR"
-          : normalizeCode(associationCode || captainAssociationCode);
+          : isAdminUser
+            ? defaultAdminAssociationCode
+            : normalizeCode(associationCode || captainAssociationCode);
         const playersAssociationName = String(
           teamsById.get(playersAssociationCode)?.name || playersAssociationCode || "Players"
         ).trim();
+        if (isAdminUser && !isCreateMode && !isEditMode) {
+          renderAdminPlayersAssociationFilter(teamsById, playersAssociationCode);
+        }
         const players = allProfiles
           .filter((profile) => {
             if (playersAssociationCode) {
@@ -4343,7 +4942,10 @@
         }));
 
         if (isCreateMode) {
-          renderPlayerCreateForm({ associationCode: playersAssociationCode });
+          renderPlayerCreateForm({
+            associationCode: playersAssociationCode,
+            canEditAssociation: isAdminUser,
+          });
         } else if (isEditMode && editPlayerId) {
           const playerToEdit = playersWithContacts.find((p) => String(p?.id || "") === editPlayerId);
           if (!playerToEdit) {
