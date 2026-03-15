@@ -134,6 +134,72 @@ function updatePlayersElo() {
   }
 }
 
+function updatePlayersEloEmpty() {
+  const sheetName = 'Players';
+  const startRow = 2;
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) {
+    Logger.log('❌ Players sheet not found.');
+    return;
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < startRow) {
+    Logger.log('ℹ️ No players to update.');
+    sheet.getRange('K2').setValue(Utilities.formatDate(new Date(), 'UTC', 'dd.MM.yyyy HH:mm:ss'));
+    return;
+  }
+
+  const totalRows = lastRow - startRow + 1;
+  const rows = sheet.getRange(startRow, 9, totalRows, 2).getValues();
+  const updatedData = rows.map(function(row) {
+    return [row[1]];
+  });
+  const backgroundColors = rows.map(function() {
+    return ['#ffffff'];
+  });
+
+  rows.forEach(function(row, index) {
+    const id = row[0];
+    const existingElo = row[1];
+    const absRow = startRow + index;
+
+    if (!id || existingElo !== '' && existingElo !== null) {
+      return;
+    }
+
+    let elo = '';
+
+    try {
+      const url = 'https://uk.boardgamearena.com/playerstat?id=' + id + '&game=1';
+      const response = UrlFetchApp.fetch(url, {muteHttpExceptions: true});
+      const content = response.getContentText();
+
+      const startMarker = "class='gamerank_value' >";
+      const startIndex = content.indexOf(startMarker);
+
+      if (startIndex !== -1) {
+        const start = startIndex + startMarker.length;
+        const end = content.indexOf('</span>', start);
+        elo = content.substring(start, end).trim();
+      } else {
+        elo = 'Not found';
+      }
+    } catch (e) {
+      Logger.log('💥 Fetch failed for row ' + absRow + ' (id=' + id + '): ' + e.message);
+      elo = 'Error';
+    }
+
+    updatedData[index] = [elo];
+  });
+
+  const eloRange = sheet.getRange(startRow, 10, totalRows, 1);
+  eloRange.setValues(updatedData);
+  eloRange.setBackgrounds(backgroundColors);
+  Logger.log('✅ Empty Players ELO updated.');
+}
+
 function finalizeUpdatePlayersElo_(sheet, props, stateKey, triggerId) {
   if (triggerId) {
     removeUpdatePlayersEloTrigger_(triggerId);

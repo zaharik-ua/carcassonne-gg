@@ -1381,57 +1381,122 @@ app.post("/matches", (req, res) => {
   const generatedId = `${timeUtc.slice(0, 10).replaceAll("-", "")}${team1}${team2}`;
   const matchId = idFromPayload || generatedId;
 
-  return db.run(
+  return db.get(
     `
-      INSERT INTO matches (
-        id,
-        tournament_id,
-        time_utc,
-        lineup_type,
-        lineup_deadline_h,
-        lineup_deadline_utc,
-        number_of_duels,
-        team_1,
-        team_2,
-        status,
-        dw1,
-        dw2,
-        gw1,
-        gw2,
-        created_by,
-        updated_by
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      SELECT id, deleted_at
+      FROM matches
+      WHERE id = ?
+      LIMIT 1
     `,
-    [
-      matchId,
-      tournamentId,
-      timeUtc,
-      lineupType,
-      lineupDeadlineHours,
-      lineupDeadlineUtc,
-      numberOfDuels,
-      team1,
-      team2,
-      status,
-      dw1,
-      dw2,
-      gw1,
-      gw2,
-      actorPlayerId,
-      actorPlayerId,
-    ],
-    function onInsert(insertErr) {
-      if (insertErr) {
-        if (String(insertErr.message || "").includes("UNIQUE")) {
-          return res.status(409).json({ ok: false, message: "Match id already exists" });
-        }
-        return res.status(500).json({ ok: false, message: "Failed to create match" });
+    [matchId],
+    (dupErr, dupRow) => {
+      if (dupErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate match uniqueness" });
       }
 
-      return db.get(
+      if (dupRow) {
+        const deletedAt = String(dupRow.deleted_at || "").trim();
+        if (!deletedAt) {
+          return res.status(409).json({ ok: false, message: "Match id already exists" });
+        }
+
+        return db.serialize(() => {
+          db.run("BEGIN IMMEDIATE TRANSACTION");
+          db.run(
+            `
+              UPDATE matches
+              SET
+                tournament_id = ?,
+                time_utc = ?,
+                lineup_type = ?,
+                lineup_deadline_h = ?,
+                lineup_deadline_utc = ?,
+                number_of_duels = ?,
+                team_1 = ?,
+                team_2 = ?,
+                status = ?,
+                dw1 = ?,
+                dw2 = ?,
+                gw1 = ?,
+                gw2 = ?,
+                deleted_at = NULL,
+                deleted_by = NULL,
+                updated_by = ?,
+                updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `,
+            [
+              tournamentId,
+              timeUtc,
+              lineupType,
+              lineupDeadlineHours,
+              lineupDeadlineUtc,
+              numberOfDuels,
+              team1,
+              team2,
+              status,
+              dw1,
+              dw2,
+              gw1,
+              gw2,
+              actorPlayerId,
+              matchId,
+            ],
+            function onRestoreMatch(restoreErr) {
+              if (restoreErr) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ ok: false, message: "Failed to restore match" });
+              }
+              if (!this || this.changes === 0) {
+                db.run("ROLLBACK");
+                return res.status(404).json({ ok: false, message: "Match not found" });
+              }
+
+              return db.run("COMMIT", (commitErr) => {
+                if (commitErr) {
+                  db.run("ROLLBACK");
+                  return res.status(500).json({ ok: false, message: "Failed to restore match" });
+                }
+
+                return db.get(
+                  `
+                    SELECT
+                      id,
+                      tournament_id,
+                      time_utc,
+                      lineup_type,
+                      lineup_deadline_h,
+                      lineup_deadline_utc,
+                      number_of_duels,
+                      team_1,
+                      team_2,
+                      status,
+                      dw1,
+                      dw2,
+                      gw1,
+                      gw2
+                    FROM matches
+                    WHERE id = ?
+                      AND deleted_at IS NULL
+                    LIMIT 1
+                  `,
+                  [matchId],
+                  (selectErr, row) => {
+                    if (selectErr) {
+                      return res.status(500).json({ ok: false, message: "Failed to load restored match" });
+                    }
+                    return res.status(200).json({ ok: true, restored: true, match: row || null });
+                  }
+                );
+              });
+            }
+          );
+        });
+      }
+
+      return db.run(
         `
-          SELECT
+          INSERT INTO matches (
             id,
             tournament_id,
             time_utc,
@@ -1445,17 +1510,67 @@ app.post("/matches", (req, res) => {
             dw1,
             dw2,
             gw1,
-            gw2
-          FROM matches
-          WHERE id = ?
-          LIMIT 1
+            gw2,
+            created_by,
+            updated_by
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [matchId],
-        (selectErr, row) => {
-          if (selectErr) {
-            return res.status(500).json({ ok: false, message: "Failed to load created match" });
+        [
+          matchId,
+          tournamentId,
+          timeUtc,
+          lineupType,
+          lineupDeadlineHours,
+          lineupDeadlineUtc,
+          numberOfDuels,
+          team1,
+          team2,
+          status,
+          dw1,
+          dw2,
+          gw1,
+          gw2,
+          actorPlayerId,
+          actorPlayerId,
+        ],
+        function onInsert(insertErr) {
+          if (insertErr) {
+            if (String(insertErr.message || "").includes("UNIQUE")) {
+              return res.status(409).json({ ok: false, message: "Match id already exists" });
+            }
+            return res.status(500).json({ ok: false, message: "Failed to create match" });
           }
-          return res.status(201).json({ ok: true, match: row || null });
+
+          return db.get(
+            `
+              SELECT
+                id,
+                tournament_id,
+                time_utc,
+                lineup_type,
+                lineup_deadline_h,
+                lineup_deadline_utc,
+                number_of_duels,
+                team_1,
+                team_2,
+                status,
+                dw1,
+                dw2,
+                gw1,
+                gw2
+              FROM matches
+              WHERE id = ?
+              LIMIT 1
+            `,
+            [matchId],
+            (selectErr, row) => {
+              if (selectErr) {
+                return res.status(500).json({ ok: false, message: "Failed to load created match" });
+              }
+              return res.status(201).json({ ok: true, match: row || null });
+            }
+          );
         }
       );
     }

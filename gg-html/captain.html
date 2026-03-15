@@ -458,6 +458,8 @@
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .cp-dd-search {
@@ -561,24 +563,63 @@
     color: #4b5563;
     font-size: 12px;
     font-weight: 600;
-    min-width: 24px;
+    min-width: 14px;
     display: inline-flex;
   }
 
-  .cp-lineup-move {
+  .cp-lineup-drag {
     display: inline-flex;
-    flex-direction: column;
-    gap: 4px;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    gap: 4px;
+    width: 24px;
+    min-width: 24px;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
-  .cp-lineup-move-btn {
-    width: 22px;
-    height: 22px;
-    min-width: 22px;
-    padding: 0;
+  .cp-lineup-drag:active {
+    cursor: grabbing;
+  }
+
+  .cp-lineup-drag i {
+    font-size: 10px;
     line-height: 1;
+    color: #aeb5be;
+    flex-shrink: 0;
+  }
+
+  .cp-lineup-drag .cp-lineup-order {
+    min-width: 0;
+  }
+
+  .cp-lineup-row-dragging {
+    opacity: 0.55;
+  }
+
+  .cp-lineup-row-drop-before,
+  .cp-lineup-row-drop-after {
+    position: relative;
+  }
+
+  .cp-lineup-row-drop-before::before,
+  .cp-lineup-row-drop-after::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #7aa7c7;
+    border-radius: 999px;
+  }
+
+  .cp-lineup-row-drop-before::before {
+    top: -5px;
+  }
+
+  .cp-lineup-row-drop-after::after {
+    bottom: -5px;
   }
 
   .cp-hidden {
@@ -859,6 +900,16 @@
   }
 
   @media (max-width: 600px) {
+    .cp-match-edit-form {
+      padding-left: 5px;
+      padding-right: 5px;
+    }
+
+    .cp-lineups-wrap {
+      padding-left: 5px !important;
+      padding-right: 5px !important;
+    }
+
     .cp-team-row {
       font-size: 14px;
     }
@@ -1867,6 +1918,7 @@
 
     const form = document.createElement("form");
     form.className = "cp-edit-form";
+    form.classList.add("cp-match-edit-form");
     form.noValidate = true;
     form.style.width = "100%";
     form.style.boxSizing = "border-box";
@@ -3557,6 +3609,7 @@
 
     const dropdowns = [];
     const createDropdown = (initialValue, options, cfg = {}) => {
+      const maxMenuHeight = Number.isFinite(Number(cfg.maxMenuHeight)) ? Number(cfg.maxMenuHeight) : 300;
       const normalizedOptions = (Array.isArray(options) ? options : [])
         .map((opt) => ({
           value: String(opt?.value || "").trim(),
@@ -3672,9 +3725,9 @@
           renderMenuOptions();
         }
         menu.classList.add("open");
-        menu.style.maxHeight = `${menu.scrollHeight}px`;
+        menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
         btn.classList.add("open");
-        if (isSearchable && searchInput) {
+        if (isSearchable && searchInput && cfg.autoFocusSearch !== false) {
           searchInput.focus();
           searchInput.select();
         }
@@ -3703,7 +3756,7 @@
         searchInput.addEventListener("input", () => {
           filterQuery = String(searchInput.value || "");
           renderMenuOptions();
-          menu.style.maxHeight = `${menu.scrollHeight}px`;
+          menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
         });
       }
 
@@ -3857,6 +3910,7 @@
     form.appendChild(lineupsToggleWrap);
 
     const lineupsWrap = document.createElement("div");
+    lineupsWrap.className = "cp-lineups-wrap";
     lineupsWrap.style.gridColumn = "1 / -1";
     lineupsWrap.style.display = "none";
     lineupsWrap.style.border = "1px solid #e0e0e0";
@@ -3868,7 +3922,7 @@
 
     const lineupsHeader = document.createElement("div");
     lineupsHeader.style.display = "grid";
-    lineupsHeader.style.gridTemplateColumns = "20px 1fr 1fr";
+    lineupsHeader.style.gridTemplateColumns = "24px 1fr 1fr";
     lineupsHeader.style.gap = "8px";
     lineupsHeader.style.alignItems = "center";
     lineupsHeader.style.marginBottom = "8px";
@@ -4111,14 +4165,25 @@
     };
 
     const moveLineupRow = (fromIndex, toIndex) => {
-      if (toIndex < 0 || toIndex >= lineupsState.length || fromIndex === toIndex) return;
+      if (toIndex < 0 || toIndex > lineupsState.length || fromIndex === toIndex) return;
       const nextState = lineupsState.slice();
       const [moved] = nextState.splice(fromIndex, 1);
       if (!moved) return;
-      nextState.splice(toIndex, 0, moved);
+      const normalizedIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+      if (normalizedIndex === fromIndex) return;
+      nextState.splice(normalizedIndex, 0, moved);
       lineupsState = nextState;
       reindexLineupsState();
       renderLineupsRows();
+    };
+
+    let draggedLineupIndex = null;
+    let draggedLineupDropIndex = null;
+
+    const clearLineupDropMarkers = () => {
+      lineupsRows.querySelectorAll(".cp-lineup-row-drop-before, .cp-lineup-row-drop-after").forEach((node) => {
+        node.classList.remove("cp-lineup-row-drop-before", "cp-lineup-row-drop-after");
+      });
     };
 
     const renderLineupsRows = () => {
@@ -4131,23 +4196,54 @@
       const team1Code = normalizeCode(team1Input.getValue());
       const team2Code = normalizeCode(team2Input.getValue());
       const canChangeCount = !isSecretLineupType();
-      const canReorder = lineupsState.length > 1;
       lineupsHeader.style.gridTemplateColumns = canChangeCount
-        ? "32px minmax(0, 1fr) minmax(0, 1fr) 30px 26px"
-        : "32px minmax(0, 1fr) minmax(0, 1fr) 30px";
+        ? "24px minmax(0, 1fr) minmax(0, 1fr) 26px"
+        : "24px minmax(0, 1fr) minmax(0, 1fr)";
       lineupsOpenActions.style.display = canChangeCount ? "" : "none";
       reindexLineupsState();
 
       lineupsState.forEach((entry, index) => {
         const row = document.createElement("div");
+        row.dataset.index = String(index);
         row.style.display = "grid";
         row.style.gridTemplateColumns = canChangeCount
-          ? "32px minmax(0, 1fr) minmax(0, 1fr) 30px 26px"
-          : "32px minmax(0, 1fr) minmax(0, 1fr) 30px";
+          ? "24px minmax(0, 1fr) minmax(0, 1fr) 26px"
+          : "24px minmax(0, 1fr) minmax(0, 1fr)";
         row.style.gap = "8px";
-        row.style.alignItems = "start";
+        row.style.alignItems = "center";
 
-        const duelNo = document.createElement("div");
+        row.addEventListener("dragover", (event) => {
+          if (draggedLineupIndex === null || draggedLineupIndex === index) return;
+          event.preventDefault();
+          const rect = row.getBoundingClientRect();
+          const placeAfter = event.clientY >= rect.top + rect.height / 2;
+          clearLineupDropMarkers();
+          row.classList.add(placeAfter ? "cp-lineup-row-drop-after" : "cp-lineup-row-drop-before");
+          draggedLineupDropIndex = index + (placeAfter ? 1 : 0);
+        });
+        row.addEventListener("dragleave", () => {
+          row.classList.remove("cp-lineup-row-drop-before", "cp-lineup-row-drop-after");
+        });
+        row.addEventListener("drop", (event) => {
+          if (draggedLineupIndex === null) return;
+          event.preventDefault();
+          clearLineupDropMarkers();
+          if (draggedLineupDropIndex !== null) {
+            moveLineupRow(draggedLineupIndex, draggedLineupDropIndex);
+          }
+          draggedLineupIndex = null;
+          draggedLineupDropIndex = null;
+        });
+
+        const dragHandle = document.createElement("div");
+        dragHandle.className = "cp-lineup-drag";
+        dragHandle.draggable = lineupsState.length > 1;
+        dragHandle.title = lineupsState.length > 1 ? "Drag to reorder duel" : "";
+        dragHandle.style.alignSelf = "center";
+        const dragIcon = document.createElement("i");
+        dragIcon.className = "fa-solid fa-grip-vertical";
+        dragHandle.appendChild(dragIcon);
+        const duelNo = document.createElement("span");
         duelNo.className = "cp-lineup-order";
         duelNo.style.height = "30px";
         duelNo.style.display = "inline-flex";
@@ -4155,7 +4251,26 @@
         duelNo.style.fontSize = "13px";
         duelNo.style.fontWeight = "600";
         duelNo.textContent = `${index + 1}:`;
-        row.appendChild(duelNo);
+        dragHandle.appendChild(duelNo);
+        dragHandle.addEventListener("dragstart", (event) => {
+          if (lineupsState.length <= 1) {
+            event.preventDefault();
+            return;
+          }
+          draggedLineupIndex = index;
+          row.classList.add("cp-lineup-row-dragging");
+          if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", String(index));
+          }
+        });
+        dragHandle.addEventListener("dragend", () => {
+          draggedLineupIndex = null;
+          draggedLineupDropIndex = null;
+          row.classList.remove("cp-lineup-row-dragging");
+          clearLineupDropMarkers();
+        });
+        row.appendChild(dragHandle);
 
         const createPlayerCell = (teamCodeForCell, currentValue, onSelect, cellConfig = {}) => {
           const cell = document.createElement("div");
@@ -4170,6 +4285,8 @@
             allowEmpty: true,
             searchable: true,
             alignMenuRight: !!cellConfig.alignMenuRight,
+            autoFocusSearch: false,
+            maxMenuHeight: 300,
           });
           cell.style.minWidth = "0";
           dd.root.style.minWidth = "0";
@@ -4178,8 +4295,8 @@
             if (!ddBtn) return;
             const selectedValue = String(dd.getValue() || "").trim();
             const hasSelectedPlayer = selectedValue !== "" && selectedValue !== "__add_new__";
-            ddBtn.style.background = hasSelectedPlayer ? "#f4fbf4" : "#fff";
-            ddBtn.style.borderColor = hasSelectedPlayer ? "#d7ebd7" : "#c8ced8";
+            ddBtn.style.fontWeight = "400";
+            ddBtn.style.color = hasSelectedPlayer ? "#2f3947" : "#999";
           };
           syncSelectedHighlight();
           const inlineArea = document.createElement("div");
@@ -4215,31 +4332,6 @@
         }, { alignMenuRight: true });
         row.appendChild(p1Cell);
         row.appendChild(p2Cell);
-
-        const moveControls = document.createElement("div");
-        moveControls.className = "cp-lineup-move";
-
-        const moveUpBtn = document.createElement("button");
-        moveUpBtn.type = "button";
-        moveUpBtn.className = "cp-btn cp-btn-secondary cp-lineup-move-btn";
-        moveUpBtn.textContent = "↑";
-        moveUpBtn.disabled = !canReorder || index === 0;
-        moveUpBtn.addEventListener("click", () => {
-          moveLineupRow(index, index - 1);
-        });
-
-        const moveDownBtn = document.createElement("button");
-        moveDownBtn.type = "button";
-        moveDownBtn.className = "cp-btn cp-btn-secondary cp-lineup-move-btn";
-        moveDownBtn.textContent = "↓";
-        moveDownBtn.disabled = !canReorder || index === lineupsState.length - 1;
-        moveDownBtn.addEventListener("click", () => {
-          moveLineupRow(index, index + 1);
-        });
-
-        moveControls.appendChild(moveUpBtn);
-        moveControls.appendChild(moveDownBtn);
-        row.appendChild(moveControls);
 
         if (canChangeCount) {
           const removeBtn = document.createElement("button");
