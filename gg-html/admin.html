@@ -8,6 +8,7 @@
     --muted: #6b7280;
     --line: #dbe1ea;
     --primary: #1a73b7;
+    --primary-soft: #e7f1f9;
     --danger: #c62828;
     --ok: #1f7a3f;
   }
@@ -16,147 +17,289 @@
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: 'Montserrat', sans-serif;
+    font-family: "Montserrat", sans-serif;
   }
 
   .admin-wrap {
     max-width: 940px;
     margin: 0 auto;
     padding: 16px 10px 24px;
-  }
-
-  .admin-top {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    margin-bottom: 10px;
-    padding: 0 4px;
+    display: grid;
+    gap: 12px;
   }
 
   .admin-top h1 {
-    font-size: 22px;
     margin: 0;
+    font-size: 22px;
   }
 
   .admin-note {
-    margin: 0 4px 12px;
+    margin: 0;
     color: var(--muted);
     font-size: 13px;
   }
 
-  .admin-card {
+  .admin-card,
+  .cp-edit-form,
+  .captain-list {
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 6px;
-    padding: 12px;
-    margin-bottom: 12px;
     box-shadow: 0 1px 2px rgba(18, 31, 53, 0.06);
   }
 
-  .admin-card h2 {
-    margin: 0 0 4px;
-    font-size: 18px;
+  .admin-card {
+    padding: 12px;
   }
 
-  .admin-card .sub {
-    margin: 0 0 10px;
+  .admin-card h2,
+  .admin-card h3 {
+    margin: 0 0 4px;
+  }
+
+  .sub {
+    margin: 0;
     font-size: 12px;
     color: var(--muted);
   }
 
-  .admin-add {
+  .hidden {
+    display: none !important;
+  }
+
+  .admin-sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 10px;
+  }
+
+  .admin-section-tile {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    padding: 14px;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    display: grid;
+    gap: 4px;
+  }
+
+  .admin-section-tile.active {
+    border-color: #8fb7d8;
+    background: var(--primary-soft);
+  }
+
+  .admin-section-name {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .admin-section-hint {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .admin-section-head {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
     margin-bottom: 10px;
   }
 
-  .admin-input {
-    min-width: 260px;
-    flex: 1 1 280px;
-    border: 1px solid #c8ced8;
-    border-radius: 4px;
-    padding: 8px 10px;
-    font: inherit;
-    font-size: 14px;
-    box-sizing: border-box;
-  }
-
-  .btn {
-    border: 0;
-    border-radius: 4px;
-    padding: 8px 12px;
-    font: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .btn-primary {
-    background: var(--primary);
-    color: #fff;
-  }
-
-  .btn-danger {
-    background: #f4d9d9;
-    color: #7e1b1b;
-  }
-
-  .btn-light {
-    background: #eef2f6;
-    color: #374151;
-  }
-
-  .assoc-list {
-    display: grid;
-    gap: 8px;
-  }
-
-  .assoc-item {
-    border: 1px solid #e4e9f1;
-    background: #fbfcfe;
-    border-radius: 4px;
-    padding: 8px;
-    display: flex;
+  .admin-section-actions {
+    display: inline-flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
   }
 
-  .assoc-name {
-    flex: 1 1 260px;
-    min-width: 220px;
-    border: 1px solid #d2d8e3;
+  .captain-list {
+    overflow: hidden;
+  }
+
+  .cp-match-row {
+    display: flex;
+    align-items: center;
+    min-height: 56px;
+    border-top: 1px solid #d9e0ea;
+    padding: 6px 8px;
+    box-sizing: border-box;
+    gap: 8px;
+  }
+
+  .cp-match-row:first-child {
+    border-top: none;
+  }
+
+  .cp-teams {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .cp-team-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 15px;
+  }
+
+  .cp-team-row span,
+  .cp-player-nick,
+  .cp-player-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cp-player-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .cp-player-nick {
+    font-size: 15px;
+    line-height: 1.15;
+  }
+
+  .cp-player-name {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .cp-edit-btn,
+  .cp-btn {
+    border: 1px solid #c8ced8;
     border-radius: 4px;
-    padding: 7px 9px;
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+    background: #fff;
+    color: #2f3947;
+  }
+
+  .cp-btn-primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+  }
+
+  .cp-btn-secondary {
+    background: #eef2f6;
+  }
+
+  .cp-edit-form {
+    padding: 12px;
+    display: grid;
+    gap: 8px 12px;
+  }
+
+  .cp-edit-row {
+    display: grid;
+    gap: 2px;
+  }
+
+  .cp-edit-row label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .cp-edit-row input,
+  .cp-edit-row select {
+    width: 100%;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    height: 32px;
+    padding: 5px 8px;
     font: inherit;
     font-size: 14px;
     box-sizing: border-box;
     background: #fff;
   }
 
-  .assoc-name[readonly] {
-    border-color: transparent;
-    background: transparent;
-    padding-left: 0;
+  .cp-edit-row input.cp-readonly-input,
+  .cp-edit-row input[readonly],
+  .cp-edit-row select[disabled] {
+    background: #f3f4f6;
+    color: #444;
   }
 
-  .assoc-actions {
+  .cp-edit-actions {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .admin-status {
     font-size: 13px;
-    margin-top: 8px;
+    min-height: 18px;
   }
 
-  .admin-status.error { color: var(--danger); }
-  .admin-status.ok { color: var(--ok); }
+  .admin-status.error {
+    color: var(--danger);
+  }
 
-  .hidden { display: none !important; }
+  .admin-status.ok {
+    color: var(--ok);
+  }
+
+  .admin-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #eef2f6;
+  }
+
+  .admin-avatar.admin-avatar-round {
+    border-radius: 50%;
+  }
+
+  .admin-avatar-placeholder {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: #e8edf4;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .admin-empty {
+    padding: 16px 12px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  @media (max-width: 640px) {
+    .admin-section-head {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .cp-match-row {
+      align-items: flex-start;
+    }
+  }
 </style>
 
 <div class="admin-wrap">
@@ -173,21 +316,25 @@
 
   <div id="adminContent" class="hidden">
     <div class="admin-card">
-      <h2>Dictionaries</h2>
-      <p class="sub">More reference directories will be added here.</p>
+      <h2>Sections</h2>
+      <p class="sub">Open a dedicated admin section. The current section is stored in the URL.</p>
+      <div id="adminSections" class="admin-sections"></div>
     </div>
 
-    <div class="admin-card">
-      <h2>Associations</h2>
-      <p id="assocSub" class="sub">Manage associations list.</p>
-
-      <div class="admin-add">
-        <input id="assocNewName" class="admin-input" type="text" placeholder="New association name" />
-        <button id="assocAddBtn" class="btn btn-primary" type="button">Add</button>
+    <div id="adminSectionCard" class="admin-card hidden">
+      <div class="admin-section-head">
+        <div>
+          <h2 id="sectionTitle">Section</h2>
+          <p id="sectionSub" class="sub"></p>
+        </div>
+        <div class="admin-section-actions">
+          <button id="sectionCreateBtn" class="cp-btn cp-btn-primary hidden" type="button">Create</button>
+        </div>
       </div>
 
-      <div id="assocList" class="assoc-list"></div>
-      <div id="assocStatus" class="admin-status hidden"></div>
+      <div id="sectionStatus" class="admin-status"></div>
+      <div id="sectionList" class="captain-list"></div>
+      <div id="sectionForm" class="hidden"></div>
     </div>
   </div>
 </div>
@@ -197,181 +344,587 @@
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
+  const TEAMS_URL = `${AUTH_BASE}/teams`;
+  const USERS_URL = `${AUTH_BASE}/users`;
+
+  const SECTION_CONFIG = {
+    associations: {
+      key: "associations",
+      title: "Associations",
+      hint: "Flags, names and unique ids",
+      buttonLabel: "Edit",
+      createLabel: "Create",
+      load: () => apiJson(ASSOCIATIONS_URL, { method: "GET" }).then((data) => data.associations || []),
+    },
+    teams: {
+      key: "teams",
+      title: "Teams",
+      hint: "National and club teams",
+      buttonLabel: "Edit",
+      createLabel: "Create",
+      load: () => apiJson(TEAMS_URL, { method: "GET" }).then((data) => data.teams || []),
+    },
+    users: {
+      key: "users",
+      title: "Users",
+      hint: "Google-authenticated accounts",
+      buttonLabel: "View",
+      createLabel: "",
+      load: () => apiJson(USERS_URL, { method: "GET" }).then((data) => data.users || []),
+    },
+  };
+
+  const state = {
+    accessChecked: false,
+    activeSection: "",
+    associations: [],
+    teams: [],
+    users: [],
+  };
 
   const accessCard = document.getElementById("adminAccessCard");
   const accessText = document.getElementById("adminAccessText");
   const content = document.getElementById("adminContent");
-
-  const assocSub = document.getElementById("assocSub");
-  const assocList = document.getElementById("assocList");
-  const assocStatus = document.getElementById("assocStatus");
-  const assocNewName = document.getElementById("assocNewName");
-  const assocAddBtn = document.getElementById("assocAddBtn");
+  const sectionsEl = document.getElementById("adminSections");
+  const sectionCard = document.getElementById("adminSectionCard");
+  const sectionTitle = document.getElementById("sectionTitle");
+  const sectionSub = document.getElementById("sectionSub");
+  const sectionCreateBtn = document.getElementById("sectionCreateBtn");
+  const sectionStatus = document.getElementById("sectionStatus");
+  const sectionList = document.getElementById("sectionList");
+  const sectionForm = document.getElementById("sectionForm");
 
   function setStatus(message, isError) {
-    if (!message) {
-      assocStatus.textContent = "";
-      assocStatus.className = "admin-status hidden";
-      return;
-    }
-    assocStatus.textContent = message;
-    assocStatus.className = `admin-status ${isError ? "error" : "ok"}`;
+    sectionStatus.textContent = message || "";
+    sectionStatus.className = message
+      ? `admin-status ${isError ? "error" : "ok"}`
+      : "admin-status";
   }
 
-  async function apiJson(url, options) {
-    const response = await fetch(url, {
+  function apiJson(url, options) {
+    return fetch(url, {
       credentials: "include",
       ...options,
       headers: {
         "Content-Type": "application/json",
-        ...(options && options.headers ? options.headers : {})
+        ...(options && options.headers ? options.headers : {}),
+      },
+    }).then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.ok === false) {
+        throw new Error(data?.message || "Request failed");
       }
+      return data;
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || data?.ok === false) {
-      throw new Error(data?.message || "Request failed");
-    }
-    return data;
   }
 
-  function createAssocRow(item) {
+  function getCurrentSection() {
+    const params = new URLSearchParams(window.location.search);
+    const section = String(params.get("section") || "").trim().toLowerCase();
+    return SECTION_CONFIG[section] ? section : "";
+  }
+
+  function setSection(section) {
+    const params = new URLSearchParams(window.location.search);
+    if (section) params.set("section", section);
+    else params.delete("section");
+    const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash || ""}`;
+    window.history.pushState({}, "", nextUrl);
+    renderFromUrl();
+  }
+
+  function createPlaceholder(text, isRound) {
+    const placeholder = document.createElement("span");
+    placeholder.className = "admin-avatar-placeholder";
+    if (isRound) placeholder.style.borderRadius = "50%";
+    placeholder.textContent = String(text || "?").slice(0, 1).toUpperCase();
+    return placeholder;
+  }
+
+  function createAvatar(src, alt, isRound) {
+    const safeSrc = String(src || "").trim();
+    if (!safeSrc) return createPlaceholder(alt, isRound);
+    const img = document.createElement("img");
+    img.className = `admin-avatar${isRound ? " admin-avatar-round" : ""}`;
+    img.src = safeSrc;
+    img.alt = alt || "";
+    img.referrerPolicy = "no-referrer";
+    img.addEventListener("error", () => {
+      img.replaceWith(createPlaceholder(alt, isRound));
+    }, { once: true });
+    return img;
+  }
+
+  function createListRow({ imageSrc, imageAlt, imageRound, title, subtitle, buttonLabel, onClick }) {
     const row = document.createElement("div");
-    row.className = "assoc-item";
+    row.className = "cp-match-row";
 
-    const input = document.createElement("input");
-    input.className = "assoc-name";
-    input.type = "text";
-    input.value = String(item?.name || "");
-    input.readOnly = true;
+    const main = document.createElement("div");
+    main.className = "cp-teams";
 
-    const actions = document.createElement("div");
-    actions.className = "assoc-actions";
+    const titleRow = document.createElement("div");
+    titleRow.className = "cp-team-row";
+    titleRow.appendChild(createAvatar(imageSrc, imageAlt || title, imageRound));
 
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "btn btn-light";
-    editBtn.textContent = "Edit";
+    const titleSpan = document.createElement("span");
+    titleSpan.textContent = title || "";
+    titleRow.appendChild(titleSpan);
 
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.className = "btn btn-primary hidden";
-    saveBtn.textContent = "Save";
+    main.appendChild(titleRow);
 
-    const cancelBtn = document.createElement("button");
-    cancelBtn.type = "button";
-    cancelBtn.className = "btn btn-light hidden";
-    cancelBtn.textContent = "Cancel";
+    if (subtitle) {
+      const sub = document.createElement("div");
+      sub.className = "cp-player-name";
+      sub.textContent = subtitle;
+      main.appendChild(sub);
+    }
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "btn btn-danger";
-    deleteBtn.textContent = "Delete";
+    const actionBtn = document.createElement("button");
+    actionBtn.type = "button";
+    actionBtn.className = "cp-edit-btn";
+    actionBtn.textContent = buttonLabel;
+    actionBtn.addEventListener("click", onClick);
 
-    let originalName = input.value;
-
-    const setEditMode = (active) => {
-      input.readOnly = !active;
-      editBtn.classList.toggle("hidden", active);
-      saveBtn.classList.toggle("hidden", !active);
-      cancelBtn.classList.toggle("hidden", !active);
-      if (active) {
-        input.focus();
-        input.select();
-      }
-    };
-
-    editBtn.addEventListener("click", () => {
-      originalName = input.value;
-      setEditMode(true);
-    });
-
-    cancelBtn.addEventListener("click", () => {
-      input.value = originalName;
-      setEditMode(false);
-      setStatus("", false);
-    });
-
-    saveBtn.addEventListener("click", async () => {
-      const nextName = String(input.value || "").trim();
-      if (!nextName) {
-        setStatus("Association name cannot be empty.", true);
-        return;
-      }
-      try {
-        await apiJson(`${ASSOCIATIONS_URL}/${encodeURIComponent(item.id)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ name: nextName })
-        });
-        originalName = nextName;
-        input.value = nextName;
-        setEditMode(false);
-        setStatus("Association updated.", false);
-        await loadAssociations();
-      } catch (error) {
-        setStatus(error?.message || "Failed to update association.", true);
-      }
-    });
-
-    deleteBtn.addEventListener("click", async () => {
-      const name = String(input.value || "").trim();
-      if (!window.confirm(`Delete association \"${name}\"?`)) return;
-      try {
-        await apiJson(`${ASSOCIATIONS_URL}/${encodeURIComponent(item.id)}`, { method: "DELETE" });
-        setStatus("Association deleted.", false);
-        await loadAssociations();
-      } catch (error) {
-        setStatus(error?.message || "Failed to delete association.", true);
-      }
-    });
-
-    actions.appendChild(editBtn);
-    actions.appendChild(saveBtn);
-    actions.appendChild(cancelBtn);
-    actions.appendChild(deleteBtn);
-
-    row.appendChild(input);
-    row.appendChild(actions);
+    row.appendChild(main);
+    row.appendChild(actionBtn);
     return row;
   }
 
-  async function loadAssociations() {
-    const data = await apiJson(ASSOCIATIONS_URL, { method: "GET" });
-    const rows = Array.isArray(data?.associations) ? data.associations : [];
-    assocSub.textContent = `Manage associations list. Total: ${rows.length}`;
-    assocList.innerHTML = "";
-    rows.forEach((item) => {
-      assocList.appendChild(createAssocRow(item));
+  function createTextRow(labelText, value, options) {
+    const row = document.createElement("div");
+    row.className = "cp-edit-row";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = value == null ? "" : String(value);
+    if (options && options.readOnly) {
+      input.readOnly = true;
+      input.className = "cp-readonly-input";
+    }
+    row.appendChild(label);
+    row.appendChild(input);
+    return { row, input };
+  }
+
+  function createSelectRow(labelText, value, values, disabled) {
+    const row = document.createElement("div");
+    row.className = "cp-edit-row";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const select = document.createElement("select");
+    values.forEach((entry) => {
+      const option = document.createElement("option");
+      option.value = entry;
+      option.textContent = entry;
+      if (entry === value) option.selected = true;
+      select.appendChild(option);
+    });
+    if (disabled) select.disabled = true;
+    row.appendChild(label);
+    row.appendChild(select);
+    return { row, select };
+  }
+
+  function normalizeEntityId(value) {
+    return String(value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  }
+
+  function normalizeName(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function formatDate(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return raw;
+    return date.toLocaleString();
+  }
+
+  function renderSectionTiles() {
+    sectionsEl.innerHTML = "";
+    Object.values(SECTION_CONFIG).forEach((section) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `admin-section-tile${state.activeSection === section.key ? " active" : ""}`;
+      btn.innerHTML = `<span class="admin-section-name">${section.title}</span><span class="admin-section-hint">${section.hint}</span>`;
+      btn.addEventListener("click", () => setSection(section.key));
+      sectionsEl.appendChild(btn);
     });
   }
 
-  assocAddBtn.addEventListener("click", async () => {
-    const name = String(assocNewName.value || "").trim();
-    if (!name) {
-      setStatus("Association name cannot be empty.", true);
+  function renderListEmpty(text) {
+    sectionList.innerHTML = "";
+    const empty = document.createElement("div");
+    empty.className = "admin-empty";
+    empty.textContent = text;
+    sectionList.appendChild(empty);
+  }
+
+  function openAssociationForm(mode, item) {
+    sectionForm.classList.remove("hidden");
+    sectionForm.innerHTML = "";
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+
+    const idField = createTextRow("id", item?.id || "", { readOnly: mode === "edit" });
+    const nameField = createTextRow("name", item?.name || "");
+    const flagField = createTextRow("flag", item?.flag || "");
+    form.appendChild(idField.row);
+    form.appendChild(nameField.row);
+    form.appendChild(flagField.row);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = mode === "create" ? "Create" : "Save";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => {
+      sectionForm.classList.add("hidden");
+      sectionForm.innerHTML = "";
+      setStatus("", false);
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = {
+        id: normalizeEntityId(idField.input.value),
+        name: String(nameField.input.value || "").trim(),
+        flag: String(flagField.input.value || "").trim(),
+      };
+      if (!payload.id) {
+        setStatus("Association id is required.", true);
+        return;
+      }
+      if (!payload.name) {
+        setStatus("Association name is required.", true);
+        return;
+      }
+
+      const duplicate = state.associations.find((entry) => (
+        (normalizeEntityId(entry.id) === payload.id || normalizeName(entry.name) === normalizeName(payload.name))
+        && normalizeEntityId(entry.id) !== normalizeEntityId(item?.id)
+      ));
+      if (duplicate) {
+        setStatus("Association id or name already exists.", true);
+        return;
+      }
+
+      try {
+        if (mode === "create") {
+          await apiJson(ASSOCIATIONS_URL, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Association created.", false);
+        } else {
+          await apiJson(`${ASSOCIATIONS_URL}/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Association updated.", false);
+        }
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+        await loadSectionData("associations");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to save association.", true);
+      }
+    });
+
+    sectionForm.appendChild(form);
+  }
+
+  function openTeamForm(mode, item) {
+    sectionForm.classList.remove("hidden");
+    sectionForm.innerHTML = "";
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+
+    const idField = createTextRow("id", item?.id || "", { readOnly: mode === "edit" });
+    const nameField = createTextRow("name", item?.name || "");
+    const flagField = createTextRow("flag", item?.flag || item?.logo || "");
+    const typeField = createSelectRow("type", item?.type || "National", ["National", "Club"], false);
+    const timezoneField = createTextRow("timezone", item?.timezone || "");
+
+    form.appendChild(idField.row);
+    form.appendChild(nameField.row);
+    form.appendChild(flagField.row);
+    form.appendChild(typeField.row);
+    form.appendChild(timezoneField.row);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = mode === "create" ? "Create" : "Save";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => {
+      sectionForm.classList.add("hidden");
+      sectionForm.innerHTML = "";
+      setStatus("", false);
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = {
+        id: normalizeEntityId(idField.input.value),
+        name: String(nameField.input.value || "").trim(),
+        flag: String(flagField.input.value || "").trim(),
+        type: String(typeField.select.value || "National"),
+        timezone: String(timezoneField.input.value || "").trim(),
+      };
+      if (!payload.id) {
+        setStatus("Team id is required.", true);
+        return;
+      }
+      if (!payload.name) {
+        setStatus("Team name is required.", true);
+        return;
+      }
+
+      const duplicate = state.teams.find((entry) => (
+        (normalizeEntityId(entry.id) === payload.id || normalizeName(entry.name) === normalizeName(payload.name))
+        && normalizeEntityId(entry.id) !== normalizeEntityId(item?.id)
+      ));
+      if (duplicate) {
+        setStatus("Team id or name already exists.", true);
+        return;
+      }
+
+      try {
+        if (mode === "create") {
+          await apiJson(TEAMS_URL, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Team created.", false);
+        } else {
+          await apiJson(`${TEAMS_URL}/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Team updated.", false);
+        }
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+        await loadSectionData("teams");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to save team.", true);
+      }
+    });
+
+    sectionForm.appendChild(form);
+  }
+
+  function openUserView(item) {
+    sectionForm.classList.remove("hidden");
+    sectionForm.innerHTML = "";
+
+    const view = document.createElement("div");
+    view.className = "cp-edit-form";
+
+    const userRow = document.createElement("div");
+    userRow.className = "cp-match-row";
+    const main = document.createElement("div");
+    main.className = "cp-player-main";
+    const titleRow = document.createElement("div");
+    titleRow.className = "cp-team-row";
+    titleRow.appendChild(createAvatar(item.picture, item.name || item.email || "User", true));
+    const title = document.createElement("span");
+    title.textContent = item.name || item.email || `User #${item.id}`;
+    titleRow.appendChild(title);
+    main.appendChild(titleRow);
+    userRow.appendChild(main);
+    view.appendChild(userRow);
+
+    const emailField = createTextRow("Email", item.email || "", { readOnly: true });
+    const createdAtField = createTextRow("Created at", formatDate(item.created_at), { readOnly: true });
+    const lastLoginField = createTextRow("Last login", formatDate(item.last_login), { readOnly: true });
+    const typeField = createSelectRow("type", item.type || "", ["", "National", "Club"], true);
+    const timezoneField = createTextRow("timezone", item.timezone || "", { readOnly: true });
+
+    view.appendChild(emailField.row);
+    view.appendChild(createdAtField.row);
+    view.appendChild(lastLoginField.row);
+    view.appendChild(typeField.row);
+    view.appendChild(timezoneField.row);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "cp-btn cp-btn-secondary";
+    closeBtn.textContent = "Close";
+    closeBtn.addEventListener("click", () => {
+      sectionForm.classList.add("hidden");
+      sectionForm.innerHTML = "";
+    });
+    actions.appendChild(closeBtn);
+    view.appendChild(actions);
+
+    sectionForm.appendChild(view);
+  }
+
+  function renderAssociations() {
+    sectionTitle.textContent = "Associations";
+    sectionSub.textContent = `Manage associations list. Total: ${state.associations.length}`;
+    sectionCreateBtn.textContent = "Create";
+    sectionCreateBtn.classList.remove("hidden");
+    sectionCreateBtn.onclick = () => openAssociationForm("create", null);
+
+    if (!state.associations.length) {
+      renderListEmpty("No associations yet.");
       return;
     }
-    assocAddBtn.disabled = true;
-    try {
-      await apiJson(ASSOCIATIONS_URL, {
-        method: "POST",
-        body: JSON.stringify({ name })
-      });
-      assocNewName.value = "";
-      setStatus("Association added.", false);
-      await loadAssociations();
-    } catch (error) {
-      setStatus(error?.message || "Failed to add association.", true);
-    } finally {
-      assocAddBtn.disabled = false;
-    }
-  });
 
-  assocNewName.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      assocAddBtn.click();
+    sectionList.innerHTML = "";
+    state.associations.forEach((item) => {
+      sectionList.appendChild(createListRow({
+        imageSrc: item.flag,
+        imageAlt: item.name,
+        imageRound: false,
+        title: item.name || item.id,
+        subtitle: item.id || "",
+        buttonLabel: "Edit",
+        onClick: () => openAssociationForm("edit", item),
+      }));
+    });
+  }
+
+  function renderTeams() {
+    sectionTitle.textContent = "Teams";
+    sectionSub.textContent = `Manage teams list. Total: ${state.teams.length}`;
+    sectionCreateBtn.textContent = "Create";
+    sectionCreateBtn.classList.remove("hidden");
+    sectionCreateBtn.onclick = () => openTeamForm("create", null);
+
+    if (!state.teams.length) {
+      renderListEmpty("No teams yet.");
+      return;
     }
-  });
+
+    sectionList.innerHTML = "";
+    state.teams.forEach((item) => {
+      const subtitleParts = [];
+      if (item.id) subtitleParts.push(item.id);
+      if (item.type) subtitleParts.push(item.type);
+      if (item.timezone) subtitleParts.push(item.timezone);
+      sectionList.appendChild(createListRow({
+        imageSrc: item.flag || item.logo,
+        imageAlt: item.name,
+        imageRound: false,
+        title: item.name || item.id,
+        subtitle: subtitleParts.join(" • "),
+        buttonLabel: "Edit",
+        onClick: () => openTeamForm("edit", item),
+      }));
+    });
+  }
+
+  function renderUsers() {
+    sectionTitle.textContent = "Users";
+    sectionSub.textContent = `View authenticated users. Total: ${state.users.length}`;
+    sectionCreateBtn.classList.add("hidden");
+    sectionCreateBtn.onclick = null;
+
+    if (!state.users.length) {
+      renderListEmpty("No users yet.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    state.users.forEach((item) => {
+      const subtitleParts = [];
+      if (item.email) subtitleParts.push(item.email);
+      if (item.last_login) subtitleParts.push(`Last login: ${formatDate(item.last_login)}`);
+      sectionList.appendChild(createListRow({
+        imageSrc: item.picture,
+        imageAlt: item.name || item.email,
+        imageRound: true,
+        title: item.name || item.email || `User #${item.id}`,
+        subtitle: subtitleParts.join(" • "),
+        buttonLabel: "View",
+        onClick: () => openUserView(item),
+      }));
+    });
+  }
+
+  async function loadSectionData(section) {
+    if (!SECTION_CONFIG[section]) return;
+    const items = await SECTION_CONFIG[section].load();
+    state[section] = Array.isArray(items) ? items : [];
+  }
+
+  async function renderSection() {
+    renderSectionTiles();
+    sectionForm.classList.add("hidden");
+    sectionForm.innerHTML = "";
+
+    if (!state.activeSection) {
+      sectionCard.classList.add("hidden");
+      return;
+    }
+
+    sectionCard.classList.remove("hidden");
+    if (state.activeSection === "associations") renderAssociations();
+    if (state.activeSection === "teams") renderTeams();
+    if (state.activeSection === "users") renderUsers();
+  }
+
+  async function renderFromUrl() {
+    const section = getCurrentSection();
+    state.activeSection = section;
+    renderSectionTiles();
+    if (!section) {
+      sectionCard.classList.add("hidden");
+      return;
+    }
+    setStatus("", false);
+    sectionCard.classList.remove("hidden");
+    sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
+    sectionForm.classList.add("hidden");
+    sectionForm.innerHTML = "";
+    try {
+      await loadSectionData(section);
+      renderSection();
+    } catch (error) {
+      sectionTitle.textContent = SECTION_CONFIG[section].title;
+      sectionSub.textContent = "";
+      setStatus(error?.message || "Failed to load section.", true);
+      renderListEmpty("Failed to load records.");
+    }
+  }
 
   async function init() {
     try {
@@ -390,11 +943,18 @@
 
       accessCard.classList.add("hidden");
       content.classList.remove("hidden");
-      await loadAssociations();
+      renderSectionTiles();
+      await renderFromUrl();
+      state.accessChecked = true;
     } catch (_error) {
       accessText.textContent = "Failed to verify access.";
     }
   }
+
+  window.addEventListener("popstate", () => {
+    if (!state.accessChecked) return;
+    renderFromUrl();
+  });
 
   init();
 })();

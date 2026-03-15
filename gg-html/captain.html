@@ -2838,14 +2838,16 @@
     return dates[0] || "";
   }
 
-  function formatFriendlyFindLocalTime(timeValue, dateValue) {
+  function formatFriendlyFindLocalTime(teamTimezone, timeValue, dateValue) {
+    const tz = String(teamTimezone || "").trim();
     const timeText = String(timeValue || "").trim();
     const dateText = String(dateValue || "").trim();
-    if (!/^\d{2}:\d{2}$/.test(timeText) || !/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return "";
+    if (!tz || !/^\d{2}:\d{2}$/.test(timeText) || !/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return "";
     const utcDate = new Date(`${dateText}T${timeText}:00Z`);
     if (!Number.isFinite(utcDate.getTime())) return "";
     try {
-      return new Intl.DateTimeFormat(undefined, {
+      return new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz,
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
@@ -2930,11 +2932,11 @@
     timeBox.className = "cp-friendly-time";
     const timeMain = document.createElement("div");
     timeMain.className = "cp-friendly-time-main";
-    timeMain.textContent = formatFriendlyFindLocalTime(entry?.time_1 || "19:00", localTimeDate)
+    timeMain.textContent = formatFriendlyFindLocalTime(teamMeta?.timezone, entry?.time_1 || "19:00", localTimeDate)
       || String(entry?.time_1 || "19:00");
     const timeSub = document.createElement("div");
     timeSub.className = "cp-friendly-time-main";
-    timeSub.textContent = formatFriendlyFindLocalTime(entry?.time_2 || "22:00", localTimeDate)
+    timeSub.textContent = formatFriendlyFindLocalTime(teamMeta?.timezone, entry?.time_2 || "22:00", localTimeDate)
       || String(entry?.time_2 || "22:00");
     timeBox.appendChild(timeMain);
     timeBox.appendChild(timeSub);
@@ -3269,8 +3271,8 @@
 
     const syncFriendlyFindLocalTimes = () => {
       const referenceDate = selectedDates[0] || "";
-      const earliestLocal = formatFriendlyFindLocalTime(time1Input.value, referenceDate);
-      const latestLocal = formatFriendlyFindLocalTime(time2Input.value, referenceDate);
+      const earliestLocal = formatFriendlyFindLocalTime(teamMeta?.timezone, time1Input.value, referenceDate);
+      const latestLocal = formatFriendlyFindLocalTime(teamMeta?.timezone, time2Input.value, referenceDate);
       const hasLocalTimes = !!referenceDate && !!earliestLocal && !!latestLocal;
       localTime1.classList.toggle("cp-hidden", !hasLocalTimes);
       localTime2.classList.toggle("cp-hidden", !hasLocalTimes);

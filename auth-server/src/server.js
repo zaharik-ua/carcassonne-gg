@@ -120,6 +120,121 @@ function addColumnIfMissing(columns, tableName, columnName, sqlDefinition) {
   });
 }
 
+function normalizeEntityId(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function buildAssociationCode(name, usedCodes, fallbackIndex) {
+  const base = normalizeEntityId(name) || `ASSOCIATION_${fallbackIndex}`;
+  let candidate = base;
+  let suffix = 2;
+  while (usedCodes.has(candidate)) {
+    candidate = `${base}_${suffix}`;
+    suffix += 1;
+  }
+  usedCodes.add(candidate);
+  return candidate;
+}
+
+function ensureUsersSchema() {
+  db.all("PRAGMA table_info(users)", (pragmaErr, columns) => {
+    if (pragmaErr) {
+      console.error("Failed to inspect users schema", pragmaErr);
+      return;
+    }
+    if (!Array.isArray(columns) || columns.length === 0) return;
+    addColumnIfMissing(columns, "users", "email", "TEXT");
+    addColumnIfMissing(columns, "users", "name", "TEXT");
+    addColumnIfMissing(columns, "users", "picture", "TEXT");
+    addColumnIfMissing(columns, "users", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    addColumnIfMissing(columns, "users", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    addColumnIfMissing(columns, "users", "last_login", "TEXT");
+  });
+}
+
+function ensureAssociationsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS associations (
+      association_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE COLLATE NOCASE,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      flag TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure associations schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(associations)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect associations schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "associations", "code", "TEXT");
+      addColumnIfMissing(columns, "associations", "flag", "TEXT");
+      addColumnIfMissing(columns, "associations", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "associations", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      db.run(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_associations_code ON associations(code COLLATE NOCASE)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure unique index for associations.code", indexErr);
+          }
+        }
+      );
+      db.run(
+        `
+          UPDATE associations
+          SET flag = NULLIF(trim(flag), '')
+          WHERE flag IS NOT NULL
+        `,
+        (normalizeErr) => {
+          if (normalizeErr) {
+            console.error("Failed to normalize associations.flag", normalizeErr);
+          }
+        }
+      );
+      db.all(
+        `
+          SELECT rowid AS row_id, code, name
+          FROM associations
+          ORDER BY rowid ASC
+        `,
+        (rowsErr, rows) => {
+          if (rowsErr) {
+            console.error("Failed to backfill association codes", rowsErr);
+            return;
+          }
+          const usedCodes = new Set();
+          (rows || []).forEach((row) => {
+            const existingCode = normalizeEntityId(row?.code);
+            if (existingCode) usedCodes.add(existingCode);
+          });
+          const rowsToBackfill = (rows || []).filter((row) => !normalizeEntityId(row?.code));
+          if (!rowsToBackfill.length) return;
+          const stmt = db.prepare("UPDATE associations SET code = ?, updated_at = CURRENT_TIMESTAMP WHERE rowid = ?");
+          rowsToBackfill.forEach((row, index) => {
+            const code = buildAssociationCode(row?.name, usedCodes, index + 1);
+            stmt.run([code, row.row_id], (updateErr) => {
+              if (updateErr) {
+                console.error(`Failed to backfill association code for row ${row.row_id}`, updateErr);
+              }
+            });
+          });
+          stmt.finalize();
+        }
+      );
+    });
+  });
+}
+
 function ensureProfilesSchema() {
   db.all("PRAGMA table_info(profiles)", (pragmaErr, columns) => {
     if (pragmaErr) {
@@ -293,23 +408,48 @@ function seedTeamTimezones() {
 }
 
 function ensureTeamsSchema() {
-  db.all("PRAGMA table_info(teams)", (pragmaErr, columns) => {
-    if (pragmaErr) {
-      console.error("Failed to inspect teams schema", pragmaErr);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      logo TEXT,
+      flag TEXT,
+      type TEXT,
+      timezone TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure teams schema", createErr);
       return;
     }
-    if (!Array.isArray(columns) || columns.length === 0) return;
-    const hasTimezone = columns.some((col) => col.name === "timezone");
-    if (hasTimezone) {
-      seedTeamTimezones();
-      return;
-    }
-    db.run("ALTER TABLE teams ADD COLUMN timezone TEXT", (alterErr) => {
-      if (alterErr) {
-        console.error("Failed to add timezone column to teams", alterErr);
+    db.all("PRAGMA table_info(teams)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect teams schema", pragmaErr);
         return;
       }
-      // Keep historical values from frontend map as defaults in DB.
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "teams", "name", "TEXT");
+      addColumnIfMissing(columns, "teams", "logo", "TEXT");
+      addColumnIfMissing(columns, "teams", "flag", "TEXT");
+      addColumnIfMissing(columns, "teams", "type", "TEXT");
+      addColumnIfMissing(columns, "teams", "timezone", "TEXT");
+      addColumnIfMissing(columns, "teams", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "teams", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      db.run(
+        `
+          UPDATE teams
+          SET flag = logo
+          WHERE (flag IS NULL OR trim(flag) = '')
+            AND trim(COALESCE(logo, '')) <> ''
+        `,
+        (backfillErr) => {
+          if (backfillErr) {
+            console.error("Failed to backfill teams.flag from teams.logo", backfillErr);
+          }
+        }
+      );
       seedTeamTimezones();
     });
   });
@@ -353,10 +493,12 @@ db.serialize(() => {
       email TEXT,
       name TEXT,
       picture TEXT,
+      last_login TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  ensureUsersSchema();
 
   db.get(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'profiles'",
@@ -412,15 +554,7 @@ db.serialize(() => {
 
           ensureProfilesSchema();
 
-          db.run(`
-            CREATE TABLE IF NOT EXISTS associations (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              name TEXT NOT NULL UNIQUE COLLATE NOCASE,
-              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-          `);
-
+          ensureAssociationsSchema();
           ensureMatchesSchema();
           ensureLineupsSchema();
           ensureTeamsSchema();
@@ -526,13 +660,14 @@ passport.use(
 
       db.run(
         `
-          INSERT INTO users (google_id, email, name, picture)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO users (google_id, email, name, picture, last_login)
+          VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
           ON CONFLICT(google_id)
           DO UPDATE SET
             email = excluded.email,
             name = excluded.name,
             picture = excluded.picture,
+            last_login = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
         `,
         [googleId, email, name, picture],
@@ -540,7 +675,7 @@ passport.use(
           if (insertErr) return done(insertErr);
 
           db.get(
-            "SELECT id, google_id, email, name, picture FROM users WHERE google_id = ?",
+            "SELECT id, google_id, email, name, picture, last_login FROM users WHERE google_id = ?",
             [googleId],
             (selectErr, row) => {
               if (selectErr) return done(selectErr);
@@ -587,6 +722,28 @@ app.use(
 
 app.use(passport.initialize());
 app.use(passport.session());
+app.use((req, _res, next) => {
+  const userId = Number(req.user?.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    next();
+    return;
+  }
+  db.run(
+    `
+      UPDATE users
+      SET
+        last_login = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+        AND (
+          last_login IS NULL
+          OR datetime(last_login) < datetime('now', '-5 minutes')
+        )
+    `,
+    [userId],
+    () => next()
+  );
+});
 
 function requireAdmin(req, res, next) {
   if (!req.user) {
@@ -876,7 +1033,12 @@ app.get("/profiles/contacts/:playerId", (req, res) => {
 app.get("/associations", (_req, res, next) => {
   db.all(
     `
-      SELECT id, name
+      SELECT
+        COALESCE(NULLIF(trim(code), ''), printf('ASSOCIATION_%s', rowid)) AS id,
+        name,
+        flag,
+        created_at,
+        updated_at
       FROM associations
       WHERE trim(COALESCE(name, '')) <> ''
       ORDER BY name COLLATE NOCASE ASC
@@ -889,33 +1051,67 @@ app.get("/associations", (_req, res, next) => {
 });
 
 app.post("/associations", requireAdmin, (req, res) => {
+  const id = normalizeEntityId(req.body?.id);
   const name = String(req.body?.name || "").trim();
+  const flag = String(req.body?.flag || "").trim() || null;
+  if (!id) {
+    return res.status(400).json({ ok: false, message: "id is required" });
+  }
   if (!name) {
     return res.status(400).json({ ok: false, message: "name is required" });
   }
 
-  return db.run(
+  return db.get(
     `
-      INSERT INTO associations (name, created_at, updated_at)
-      VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      SELECT rowid
+      FROM associations
+      WHERE upper(trim(COALESCE(code, ''))) = upper(?)
+         OR lower(trim(COALESCE(name, ''))) = lower(?)
+      LIMIT 1
     `,
-    [name],
-    function onInsert(err) {
-      if (err) {
-        if (String(err.message || "").includes("UNIQUE")) {
-          return res.status(409).json({ ok: false, message: "Association already exists" });
-        }
-        return res.status(500).json({ ok: false, message: "Failed to create association" });
+    [id, name],
+    (dupErr, dupRow) => {
+      if (dupErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate association uniqueness" });
+      }
+      if (dupRow) {
+        return res.status(409).json({ ok: false, message: "Association with this id or name already exists" });
       }
 
-      return db.get(
-        "SELECT id, name FROM associations WHERE id = ? LIMIT 1",
-        [this.lastID],
-        (selectErr, row) => {
-          if (selectErr) {
-            return res.status(500).json({ ok: false, message: "Failed to load association" });
+      return db.run(
+        `
+          INSERT INTO associations (code, name, flag, created_at, updated_at)
+          VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        [id, name, flag],
+        function onInsert(err) {
+          if (err) {
+            if (String(err.message || "").includes("UNIQUE")) {
+              return res.status(409).json({ ok: false, message: "Association with this id or name already exists" });
+            }
+            return res.status(500).json({ ok: false, message: "Failed to create association" });
           }
-          return res.json({ ok: true, association: row || null });
+
+          return db.get(
+            `
+              SELECT
+                COALESCE(NULLIF(trim(code), ''), printf('ASSOCIATION_%s', rowid)) AS id,
+                name,
+                flag,
+                created_at,
+                updated_at
+              FROM associations
+              WHERE rowid = ?
+              LIMIT 1
+            `,
+            [this.lastID],
+            (selectErr, row) => {
+              if (selectErr) {
+                return res.status(500).json({ ok: false, message: "Failed to load association" });
+              }
+              return res.json({ ok: true, association: row || null });
+            }
+          );
         }
       );
     }
@@ -923,42 +1119,101 @@ app.post("/associations", requireAdmin, (req, res) => {
 });
 
 app.patch("/associations/:id", requireAdmin, (req, res) => {
-  const associationId = Number(req.params.id);
-  if (!Number.isInteger(associationId) || associationId <= 0) {
+  const associationId = normalizeEntityId(req.params.id);
+  const payloadId = normalizeEntityId(req.body?.id);
+  const name = String(req.body?.name || "").trim();
+  const flag = String(req.body?.flag || "").trim() || null;
+  if (!associationId) {
     return res.status(400).json({ ok: false, message: "Invalid association id" });
   }
-
-  const name = String(req.body?.name || "").trim();
+  if (payloadId && payloadId !== associationId) {
+    return res.status(400).json({ ok: false, message: "Association id cannot be changed" });
+  }
   if (!name) {
     return res.status(400).json({ ok: false, message: "name is required" });
   }
 
-  return db.run(
+  return db.get(
     `
-      UPDATE associations
-      SET name = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
+      SELECT rowid
+      FROM associations
+      WHERE upper(trim(COALESCE(code, ''))) = upper(?)
+         OR CAST(rowid AS TEXT) = ?
+      LIMIT 1
     `,
-    [name, associationId],
-    function onUpdate(err) {
-      if (err) {
-        if (String(err.message || "").includes("UNIQUE")) {
-          return res.status(409).json({ ok: false, message: "Association already exists" });
-        }
-        return res.status(500).json({ ok: false, message: "Failed to update association" });
+    [associationId, req.params.id],
+    (rowErr, currentRow) => {
+      if (rowErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load association" });
       }
-      if (!this || this.changes === 0) {
+      if (!currentRow) {
         return res.status(404).json({ ok: false, message: "Association not found" });
       }
 
       return db.get(
-        "SELECT id, name FROM associations WHERE id = ? LIMIT 1",
-        [associationId],
-        (selectErr, row) => {
-          if (selectErr) {
-            return res.status(500).json({ ok: false, message: "Failed to load association" });
+        `
+          SELECT rowid
+          FROM associations
+          WHERE (
+            upper(trim(COALESCE(code, ''))) = upper(?)
+            OR lower(trim(COALESCE(name, ''))) = lower(?)
+          )
+            AND rowid <> ?
+          LIMIT 1
+        `,
+        [associationId, name, currentRow.rowid],
+        (dupErr, dupRow) => {
+          if (dupErr) {
+            return res.status(500).json({ ok: false, message: "Failed to validate association uniqueness" });
           }
-          return res.json({ ok: true, association: row || null });
+          if (dupRow) {
+            return res.status(409).json({ ok: false, message: "Association with this id or name already exists" });
+          }
+
+          return db.run(
+            `
+              UPDATE associations
+              SET
+                code = ?,
+                name = ?,
+                flag = ?,
+                updated_at = CURRENT_TIMESTAMP
+              WHERE rowid = ?
+            `,
+            [associationId, name, flag, currentRow.rowid],
+            function onUpdate(err) {
+              if (err) {
+                if (String(err.message || "").includes("UNIQUE")) {
+                  return res.status(409).json({ ok: false, message: "Association with this id or name already exists" });
+                }
+                return res.status(500).json({ ok: false, message: "Failed to update association" });
+              }
+              if (!this || this.changes === 0) {
+                return res.status(404).json({ ok: false, message: "Association not found" });
+              }
+
+              return db.get(
+                `
+                  SELECT
+                    COALESCE(NULLIF(trim(code), ''), printf('ASSOCIATION_%s', rowid)) AS id,
+                    name,
+                    flag,
+                    created_at,
+                    updated_at
+                  FROM associations
+                  WHERE rowid = ?
+                  LIMIT 1
+                `,
+                [currentRow.rowid],
+                (selectErr, row) => {
+                  if (selectErr) {
+                    return res.status(500).json({ ok: false, message: "Failed to load association" });
+                  }
+                  return res.json({ ok: true, association: row || null });
+                }
+              );
+            }
+          );
         }
       );
     }
@@ -966,14 +1221,18 @@ app.patch("/associations/:id", requireAdmin, (req, res) => {
 });
 
 app.delete("/associations/:id", requireAdmin, (req, res) => {
-  const associationId = Number(req.params.id);
-  if (!Number.isInteger(associationId) || associationId <= 0) {
+  const associationId = normalizeEntityId(req.params.id);
+  if (!associationId) {
     return res.status(400).json({ ok: false, message: "Invalid association id" });
   }
 
   return db.run(
-    "DELETE FROM associations WHERE id = ?",
-    [associationId],
+    `
+      DELETE FROM associations
+      WHERE upper(trim(COALESCE(code, ''))) = upper(?)
+         OR CAST(rowid AS TEXT) = ?
+    `,
+    [associationId, req.params.id],
     function onDelete(err) {
       if (err) {
         return res.status(500).json({ ok: false, message: "Failed to delete association" });
@@ -1011,7 +1270,8 @@ app.get("/teams", (_req, res, next) => {
       SELECT
         id,
         name,
-        logo,
+        COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS logo,
+        COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS flag,
         type,
         timezone
       FROM teams
@@ -1020,6 +1280,228 @@ app.get("/teams", (_req, res, next) => {
     (err, rows) => {
       if (err) return next(err);
       return res.json({ ok: true, teams: rows || [] });
+    }
+  );
+});
+
+app.post("/teams", requireAdmin, (req, res) => {
+  const id = normalizeEntityId(req.body?.id);
+  const name = String(req.body?.name || "").trim();
+  const flag = String(req.body?.flag || "").trim() || null;
+  const type = String(req.body?.type || "").trim() || "National";
+  const timezone = String(req.body?.timezone || "").trim() || null;
+  const allowedTypes = new Set(["National", "Club"]);
+
+  if (!id) {
+    return res.status(400).json({ ok: false, message: "id is required" });
+  }
+  if (!name) {
+    return res.status(400).json({ ok: false, message: "name is required" });
+  }
+  if (!allowedTypes.has(type)) {
+    return res.status(400).json({ ok: false, message: "type must be National or Club" });
+  }
+
+  return db.get(
+    `
+      SELECT id
+      FROM teams
+      WHERE upper(trim(COALESCE(id, ''))) = upper(?)
+         OR lower(trim(COALESCE(name, ''))) = lower(?)
+      LIMIT 1
+    `,
+    [id, name],
+    (dupErr, dupRow) => {
+      if (dupErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate team uniqueness" });
+      }
+      if (dupRow) {
+        return res.status(409).json({ ok: false, message: "Team with this id or name already exists" });
+      }
+
+      return db.run(
+        `
+          INSERT INTO teams (id, name, logo, flag, type, timezone, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        [id, name, flag, flag, type, timezone],
+        (insertErr) => {
+          if (insertErr) {
+            if (String(insertErr.message || "").includes("UNIQUE")) {
+              return res.status(409).json({ ok: false, message: "Team with this id or name already exists" });
+            }
+            return res.status(500).json({ ok: false, message: "Failed to create team" });
+          }
+
+          return db.get(
+            `
+              SELECT
+                id,
+                name,
+                COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS logo,
+                COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS flag,
+                type,
+                timezone
+              FROM teams
+              WHERE upper(trim(id)) = upper(?)
+              LIMIT 1
+            `,
+            [id],
+            (selectErr, row) => {
+              if (selectErr) {
+                return res.status(500).json({ ok: false, message: "Failed to load team" });
+              }
+              return res.json({ ok: true, team: row || null });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+app.patch("/teams/:id", requireAdmin, (req, res) => {
+  const teamId = normalizeEntityId(req.params.id);
+  const payloadId = normalizeEntityId(req.body?.id);
+  const name = String(req.body?.name || "").trim();
+  const flag = String(req.body?.flag || "").trim() || null;
+  const type = String(req.body?.type || "").trim() || "National";
+  const timezone = String(req.body?.timezone || "").trim() || null;
+  const allowedTypes = new Set(["National", "Club"]);
+
+  if (!teamId) {
+    return res.status(400).json({ ok: false, message: "Invalid team id" });
+  }
+  if (payloadId && payloadId !== teamId) {
+    return res.status(400).json({ ok: false, message: "Team id cannot be changed" });
+  }
+  if (!name) {
+    return res.status(400).json({ ok: false, message: "name is required" });
+  }
+  if (!allowedTypes.has(type)) {
+    return res.status(400).json({ ok: false, message: "type must be National or Club" });
+  }
+
+  return db.get(
+    "SELECT id FROM teams WHERE upper(trim(id)) = upper(?) LIMIT 1",
+    [teamId],
+    (rowErr, currentRow) => {
+      if (rowErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load team" });
+      }
+      if (!currentRow) {
+        return res.status(404).json({ ok: false, message: "Team not found" });
+      }
+
+      return db.get(
+        `
+          SELECT id
+          FROM teams
+          WHERE (
+            upper(trim(COALESCE(id, ''))) = upper(?)
+            OR lower(trim(COALESCE(name, ''))) = lower(?)
+          )
+            AND upper(trim(id)) <> upper(?)
+          LIMIT 1
+        `,
+        [teamId, name, teamId],
+        (dupErr, dupRow) => {
+          if (dupErr) {
+            return res.status(500).json({ ok: false, message: "Failed to validate team uniqueness" });
+          }
+          if (dupRow) {
+            return res.status(409).json({ ok: false, message: "Team with this id or name already exists" });
+          }
+
+          return db.run(
+            `
+              UPDATE teams
+              SET
+                id = ?,
+                name = ?,
+                logo = ?,
+                flag = ?,
+                type = ?,
+                timezone = ?,
+                updated_at = CURRENT_TIMESTAMP
+              WHERE upper(trim(id)) = upper(?)
+            `,
+            [teamId, name, flag, flag, type, timezone, teamId],
+            function onUpdate(err) {
+              if (err) {
+                if (String(err.message || "").includes("UNIQUE")) {
+                  return res.status(409).json({ ok: false, message: "Team with this id or name already exists" });
+                }
+                return res.status(500).json({ ok: false, message: "Failed to update team" });
+              }
+              if (!this || this.changes === 0) {
+                return res.status(404).json({ ok: false, message: "Team not found" });
+              }
+
+              return db.get(
+                `
+                  SELECT
+                    id,
+                    name,
+                    COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS logo,
+                    COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS flag,
+                    type,
+                    timezone
+                  FROM teams
+                  WHERE upper(trim(id)) = upper(?)
+                  LIMIT 1
+                `,
+                [teamId],
+                (selectErr, row) => {
+                  if (selectErr) {
+                    return res.status(500).json({ ok: false, message: "Failed to load team" });
+                  }
+                  return res.json({ ok: true, team: row || null });
+                }
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+app.get("/users", requireAdmin, (_req, res, next) => {
+  db.all(
+    `
+      SELECT
+        u.id,
+        u.google_id,
+        u.email,
+        u.name,
+        u.picture,
+        u.created_at,
+        u.last_login,
+        (
+          SELECT t.type
+          FROM profiles p
+          LEFT JOIN teams t ON upper(trim(t.id)) = upper(trim(p.association))
+          WHERE lower(trim(COALESCE(p.email, ''))) = lower(trim(COALESCE(u.email, '')))
+            AND p.deleted_at IS NULL
+          ORDER BY p.updated_at DESC, p.id ASC
+          LIMIT 1
+        ) AS type,
+        (
+          SELECT t.timezone
+          FROM profiles p
+          LEFT JOIN teams t ON upper(trim(t.id)) = upper(trim(p.association))
+          WHERE lower(trim(COALESCE(p.email, ''))) = lower(trim(COALESCE(u.email, '')))
+            AND p.deleted_at IS NULL
+          ORDER BY p.updated_at DESC, p.id ASC
+          LIMIT 1
+        ) AS timezone
+      FROM users u
+      ORDER BY COALESCE(NULLIF(trim(u.name), ''), trim(u.email), printf('user-%s', u.id)) COLLATE NOCASE ASC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, users: rows || [] });
     }
   );
 });
