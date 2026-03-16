@@ -308,6 +308,19 @@
     margin-top: 8px;
   }
 
+  .admin-code-block {
+    margin: 0;
+    padding: 10px;
+    border: 1px solid #d9e0ea;
+    border-radius: 4px;
+    background: #f8fafc;
+    color: #1e293b;
+    font: 12px/1.45 Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+  }
+
   @media (max-width: 640px) {
     .admin-section-head {
       flex-direction: column;
@@ -361,6 +374,7 @@
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const USERS_URL = `${AUTH_BASE}/users`;
+  const AUDIT_TRAIL_URL = `${AUTH_BASE}/audit-trail`;
 
   const SECTION_CONFIG = {
     associations: {
@@ -384,6 +398,13 @@
       createLabel: "",
       load: () => apiJson(USERS_URL, { method: "GET" }).then((data) => data.users || []),
     },
+    auditTrail: {
+      key: "auditTrail",
+      title: "Audit Trail",
+      buttonLabel: "View",
+      createLabel: "",
+      load: () => apiJson(AUDIT_TRAIL_URL, { method: "GET" }).then((data) => data.records || []),
+    },
   };
 
   const state = {
@@ -392,6 +413,7 @@
     associations: [],
     teams: [],
     users: [],
+    auditTrail: [],
   };
 
   const accessCard = document.getElementById("adminAccessCard");
@@ -568,6 +590,19 @@
     return { row, select };
   }
 
+  function createCodeRow(labelText, value) {
+    const row = document.createElement("div");
+    row.className = "cp-edit-row";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const pre = document.createElement("pre");
+    pre.className = "admin-code-block";
+    pre.textContent = value == null || value === "" ? "{}" : String(value);
+    row.appendChild(label);
+    row.appendChild(pre);
+    return { row, pre };
+  }
+
   function normalizeEntityId(value) {
     return String(value || "")
       .trim()
@@ -586,6 +621,15 @@
     const date = new Date(raw);
     if (Number.isNaN(date.getTime())) return raw;
     return date.toLocaleString();
+  }
+
+  function formatAuditJson(value) {
+    if (value == null) return "{}";
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch (_error) {
+      return String(value);
+    }
   }
 
   function renderSectionTiles() {
@@ -850,6 +894,45 @@
     if (anchorRow) mountDetailForm(view, anchorRow, { toggleSameRow: true });
   }
 
+  function openAuditView(item, anchorRow) {
+    const view = document.createElement("div");
+    view.className = "cp-edit-form";
+
+    const actorField = createTextRow("Actor", item.actor_bga_nickname || item.actor_email || "", { readOnly: true });
+    const dateField = createTextRow("Date", formatDate(item.created_at), { readOnly: true });
+    const eventField = createTextRow("Event", item.event_type || "", { readOnly: true });
+    const entityField = createTextRow("Entity", item.entity_type || "", { readOnly: true });
+    const actionField = createTextRow("Action", item.action || "", { readOnly: true });
+    const recordField = createTextRow("Record id", item.record_id || "", { readOnly: true });
+    const changesField = createCodeRow("Changes", formatAuditJson(item.changes));
+    const metadataField = createCodeRow("Metadata", formatAuditJson(item.metadata));
+
+    view.appendChild(actorField.row);
+    view.appendChild(dateField.row);
+    view.appendChild(eventField.row);
+    view.appendChild(entityField.row);
+    view.appendChild(actionField.row);
+    view.appendChild(recordField.row);
+    view.appendChild(changesField.row);
+    view.appendChild(metadataField.row);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "cp-btn cp-btn-secondary";
+    closeBtn.textContent = "Close";
+    closeBtn.addEventListener("click", () => {
+      closeInlineForm();
+    });
+    actions.appendChild(closeBtn);
+    view.appendChild(actions);
+
+    sectionForm.classList.add("hidden");
+    sectionForm.innerHTML = "";
+    if (anchorRow) mountDetailForm(view, anchorRow, { toggleSameRow: true });
+  }
+
   function renderAssociations() {
     sectionTitle.textContent = "Associations";
     sectionCreateBtn.textContent = "Create";
@@ -927,6 +1010,36 @@
     });
   }
 
+  function renderAuditTrail() {
+    sectionTitle.textContent = "Audit Trail";
+    sectionCreateBtn.classList.add("hidden");
+    sectionCreateBtn.onclick = null;
+
+    if (!state.auditTrail.length) {
+      renderListEmpty("No audit trail records yet.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    state.auditTrail.forEach((item) => {
+      const subtitleParts = [];
+      if (item.actor_bga_nickname) subtitleParts.push(`By: ${item.actor_bga_nickname}`);
+      else if (item.actor_email) subtitleParts.push(`By: ${item.actor_email}`);
+      if (item.record_id) subtitleParts.push(`Record: ${item.record_id}`);
+      if (item.created_at) subtitleParts.push(formatDate(item.created_at));
+
+      sectionList.appendChild(createListRow({
+        imageSrc: "",
+        imageAlt: item.entity_type || item.event_type,
+        imageRound: false,
+        title: item.event_type || `${item.entity_type || "Audit"} ${item.action || ""}`.trim(),
+        subtitle: subtitleParts.join(" • "),
+        buttonLabel: "View",
+        onClick: (row) => openAuditView(item, row),
+      }));
+    });
+  }
+
   async function loadSectionData(section) {
     if (!SECTION_CONFIG[section]) return;
     const items = await SECTION_CONFIG[section].load();
@@ -948,6 +1061,7 @@
     if (state.activeSection === "associations") renderAssociations();
     if (state.activeSection === "teams") renderTeams();
     if (state.activeSection === "users") renderUsers();
+    if (state.activeSection === "auditTrail") renderAuditTrail();
   }
 
   async function init() {

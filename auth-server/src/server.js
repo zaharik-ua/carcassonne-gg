@@ -109,6 +109,60 @@ const DEFAULT_TEAM_TIMEZONES = {
   USA: "America/New_York",
   VNM: "Asia/Ho_Chi_Minh",
 };
+const PROFILE_AUDIT_FIELDS = [
+  "id",
+  "bga_nickname",
+  "name",
+  "association",
+  "status",
+  "email",
+  "master_title",
+  "master_title_date",
+  "team_captain",
+  "telegram",
+  "whatsapp",
+  "discord",
+  "instagram",
+  "contact_email",
+];
+const MATCH_AUDIT_FIELDS = [
+  "id",
+  "tournament_id",
+  "time_utc",
+  "lineup_type",
+  "lineup_deadline_h",
+  "lineup_deadline_utc",
+  "number_of_duels",
+  "team_1",
+  "team_2",
+  "status",
+  "dw1",
+  "dw2",
+  "gw1",
+  "gw2",
+];
+const FRIENDLY_FIND_AUDIT_FIELDS = [
+  "id",
+  "team",
+  "dates",
+  "time_1",
+  "time_2",
+  "number_of_players",
+];
+const LINEUP_AUDIT_FIELDS = [
+  "id",
+  "tournament_id",
+  "match_id",
+  "duel_number",
+  "duel_format",
+  "time_utc",
+  "custom_time",
+  "player_1_id",
+  "player_2_id",
+  "dw1",
+  "dw2",
+  "status",
+];
 
 function addColumnIfMissing(columns, tableName, columnName, sqlDefinition) {
   if (columns.some((col) => col.name === columnName)) return;
@@ -145,12 +199,18 @@ function normalizeNullableText(value) {
   return normalized || null;
 }
 
-function syncUserBgaIdFromEmail(userId, email, done) {
+function syncUserBgaIdFromEmail(userId, email, options, done) {
+  const callback = typeof done === "function"
+    ? done
+    : typeof options === "function"
+      ? options
+      : () => {};
+  const config = options && typeof options === "object" ? options : {};
   const normalizedEmail = normalizeNullableText(email);
   const normalizedUserId = Number(userId);
 
   if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0 || !normalizedEmail) {
-    done(null, null);
+    callback(null, null);
     return;
   }
 
@@ -167,13 +227,13 @@ function syncUserBgaIdFromEmail(userId, email, done) {
     [normalizedEmail],
     (selectErr, profileRow) => {
       if (selectErr) {
-        done(selectErr);
+        callback(selectErr);
         return;
       }
 
       const profileId = normalizeNullableText(profileRow?.id);
       if (!profileId) {
-        done(null, null);
+        callback(null, null);
         return;
       }
 
@@ -189,40 +249,68 @@ function syncUserBgaIdFromEmail(userId, email, done) {
         [profileId, normalizedUserId],
         (clearErr) => {
           if (clearErr) {
-            done(clearErr);
+            callback(clearErr);
             return;
           }
 
-          db.run(
-            `
-              UPDATE users
-              SET
-                bga_id = ?,
-                updated_at = CURRENT_TIMESTAMP
-              WHERE id = ?
-                AND trim(COALESCE(bga_id, '')) = ''
-            `,
-            [profileId, normalizedUserId],
-            (updateErr) => {
-              if (updateErr) {
-                done(updateErr);
-                return;
-              }
-              done(null, profileId);
+          loadAuditUserProfileInfo(normalizedUserId, (loadErr, currentUserRow) => {
+            if (loadErr) {
+              callback(loadErr);
+              return;
             }
-          );
+
+            const oldBgaId = normalizeNullableText(currentUserRow?.bga_id);
+            if (oldBgaId) {
+              callback(null, profileId);
+              return;
+            }
+
+            db.run(
+              `
+                UPDATE users
+                SET
+                  bga_id = ?,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND trim(COALESCE(bga_id, '')) = ''
+              `,
+              [profileId, normalizedUserId],
+              (updateErr) => {
+                if (updateErr) {
+                  callback(updateErr);
+                  return;
+                }
+
+                return logUserBgaLinkAudit(
+                  {
+                    actor: config.actor || getAuditActor(currentUserRow),
+                    userId: normalizedUserId,
+                    oldBgaId,
+                    source: config.source || "login",
+                  },
+                  () => callback(null, profileId)
+                );
+              }
+            );
+          });
         }
       );
     }
   );
 }
 
-function syncUsersBgaIdForProfile(profileId, email, done) {
+function syncUsersBgaIdForProfile(profileId, email, options, done) {
+  const callback = typeof done === "function"
+    ? done
+    : typeof options === "function"
+      ? options
+      : () => {};
+  const config = options && typeof options === "object" ? options : {};
   const normalizedProfileId = normalizeNullableText(profileId);
   const normalizedEmail = normalizeNullableText(email);
 
   if (!normalizedProfileId) {
-    done(null, null);
+    callback(null, null);
     return;
   }
 
@@ -251,13 +339,14 @@ function syncUsersBgaIdForProfile(profileId, email, done) {
   };
 
   if (!normalizedEmail) {
-    clearExistingBindings(null, (clearErr) => done(clearErr || null, null));
+    clearExistingBindings(null, (clearErr) => callback(clearErr || null, null));
     return;
   }
 
   db.get(
     `
       SELECT u.id
+        ,u.bga_id
       FROM users u
       WHERE lower(COALESCE(u.email, '')) = lower(?)
       ORDER BY datetime(COALESCE(u.last_login, u.updated_at, u.created_at)) DESC, u.id ASC
@@ -266,19 +355,20 @@ function syncUsersBgaIdForProfile(profileId, email, done) {
     [normalizedEmail],
     (selectErr, userRow) => {
       if (selectErr) {
-        done(selectErr);
+        callback(selectErr);
         return;
       }
 
       const targetUserId = Number(userRow?.id);
+      const oldBgaId = normalizeNullableText(userRow?.bga_id);
       if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
-        clearExistingBindings(null, (clearErr) => done(clearErr || null, null));
+        clearExistingBindings(null, (clearErr) => callback(clearErr || null, null));
         return;
       }
 
       clearExistingBindings(targetUserId, (clearErr) => {
         if (clearErr) {
-          done(clearErr);
+          callback(clearErr);
           return;
         }
 
@@ -291,7 +381,22 @@ function syncUsersBgaIdForProfile(profileId, email, done) {
             WHERE id = ?
           `,
           [normalizedProfileId, targetUserId],
-          (updateErr) => done(updateErr || null, targetUserId)
+          (updateErr) => {
+            if (updateErr) {
+              callback(updateErr);
+              return;
+            }
+
+            return logUserBgaLinkAudit(
+              {
+                actor: config.actor || null,
+                userId: targetUserId,
+                oldBgaId,
+                source: config.source || "profile_email_change",
+              },
+              () => callback(null, targetUserId)
+            );
+          }
         );
       });
     }
@@ -664,6 +769,219 @@ function ensureFriendlyFindSchema() {
   });
 }
 
+function ensureAuditTrailSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS audit_trail (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      action TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      actor_user_id INTEGER,
+      actor_bga_id TEXT,
+      actor_bga_nickname TEXT,
+      actor_email TEXT,
+      changes TEXT,
+      metadata TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure audit_trail schema", createErr);
+      return;
+    }
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_audit_trail_created_at ON audit_trail(created_at DESC, id DESC)",
+      (indexErr) => {
+        if (indexErr) {
+          console.error("Failed to ensure audit trail created_at index", indexErr);
+        }
+      }
+    );
+  });
+}
+
+function safeStringifyJson(value) {
+  if (value === undefined) return null;
+  try {
+    return JSON.stringify(value);
+  } catch (_error) {
+    return JSON.stringify({ error: "Failed to serialize value" });
+  }
+}
+
+function parseJsonOrNull(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (_error) {
+    return raw;
+  }
+}
+
+function normalizeAuditValue(value) {
+  if (value === undefined) return null;
+  if (value === null) return null;
+  if (Array.isArray(value)) return value.map((entry) => normalizeAuditValue(entry));
+  if (value && typeof value === "object") {
+    const result = {};
+    Object.keys(value).sort().forEach((key) => {
+      result[key] = normalizeAuditValue(value[key]);
+    });
+    return result;
+  }
+  return value;
+}
+
+function auditValuesEqual(left, right) {
+  return JSON.stringify(normalizeAuditValue(left)) === JSON.stringify(normalizeAuditValue(right));
+}
+
+function buildAuditChanges(before, after, fields) {
+  const result = {};
+  const keys = Array.isArray(fields) && fields.length
+    ? fields
+    : Array.from(new Set([
+      ...Object.keys(before || {}),
+      ...Object.keys(after || {}),
+    ]));
+
+  keys.forEach((key) => {
+    const previousValue = before ? before[key] : null;
+    const nextValue = after ? after[key] : null;
+    if (!auditValuesEqual(previousValue, nextValue)) {
+      result[key] = {
+        old: previousValue ?? null,
+        new: nextValue ?? null,
+      };
+    }
+  });
+
+  return result;
+}
+
+function buildAuditCreationChanges(after, fields) {
+  return buildAuditChanges(null, after || {}, fields);
+}
+
+function buildAuditDeletionChanges(before, fields) {
+  return buildAuditChanges(before || {}, null, fields);
+}
+
+function getAuditActor(user) {
+  return {
+    actor_user_id: Number.isInteger(Number(user?.id)) ? Number(user.id) : null,
+    actor_bga_id: normalizeNullableText(user?.player_id ?? user?.bga_id),
+    actor_bga_nickname: normalizeNullableText(user?.bga_nickname),
+    actor_email: normalizeNullableText(user?.email),
+  };
+}
+
+function logAuditEvent(entry, done = () => {}) {
+  const actor = entry && typeof entry === "object" ? entry : {};
+  db.run(
+    `
+      INSERT INTO audit_trail (
+        event_type,
+        entity_type,
+        action,
+        record_id,
+        actor_user_id,
+        actor_bga_id,
+        actor_bga_nickname,
+        actor_email,
+        changes,
+        metadata
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      normalizeNullableText(actor.event_type) || "unknown",
+      normalizeNullableText(actor.entity_type) || "unknown",
+      normalizeNullableText(actor.action) || "unknown",
+      String(actor.record_id ?? ""),
+      Number.isInteger(Number(actor.actor_user_id)) ? Number(actor.actor_user_id) : null,
+      normalizeNullableText(actor.actor_bga_id),
+      normalizeNullableText(actor.actor_bga_nickname),
+      normalizeNullableText(actor.actor_email),
+      safeStringifyJson(actor.changes ?? null),
+      safeStringifyJson(actor.metadata ?? null),
+    ],
+    (err) => {
+      if (err) {
+        console.error("Failed to write audit trail entry", err);
+      }
+      done(err || null);
+    }
+  );
+}
+
+function loadAuditUserProfileInfo(userId, done) {
+  const normalizedUserId = Number(userId);
+  if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+    done(null, null);
+    return;
+  }
+
+  db.get(
+    `
+      SELECT
+        u.id,
+        u.google_id,
+        u.email,
+        u.name,
+        u.bga_id,
+        p.bga_nickname
+      FROM users u
+      LEFT JOIN profiles p
+        ON p.id = u.bga_id
+       AND p.deleted_at IS NULL
+      WHERE u.id = ?
+      LIMIT 1
+    `,
+    [normalizedUserId],
+    (err, row) => done(err || null, row || null)
+  );
+}
+
+function logUserBgaLinkAudit({ actor, userId, oldBgaId, source }, done = () => {}) {
+  loadAuditUserProfileInfo(userId, (loadErr, userRow) => {
+    if (loadErr || !userRow || !normalizeNullableText(userRow.bga_id)) {
+      done(loadErr || null);
+      return;
+    }
+
+    const changes = buildAuditChanges(
+      { bga_id: oldBgaId || null },
+      { bga_id: userRow.bga_id, bga_nickname: userRow.bga_nickname || null },
+      ["bga_id", "bga_nickname"]
+    );
+
+    if (!Object.keys(changes).length) {
+      done(null);
+      return;
+    }
+
+    logAuditEvent(
+      {
+        ...(actor || {}),
+        event_type: "user.bga_linked",
+        entity_type: "user",
+        action: "link",
+        record_id: String(userRow.id),
+        changes,
+        metadata: {
+          source: source || "unknown",
+          google_id: userRow.google_id || null,
+          user_email: userRow.email || null,
+        },
+      },
+      done
+    );
+  });
+}
+
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -739,6 +1057,7 @@ db.serialize(() => {
           ensureLineupsSchema();
           ensureTeamsSchema();
           ensureFriendlyFindSchema();
+          ensureAuditTrailSchema();
         }
       );
     }
@@ -796,37 +1115,81 @@ passport.use(
       const name = profile.displayName || null;
       const picture = profile.photos?.[0]?.value || null;
 
-      db.run(
-        `
-          INSERT INTO users (google_id, email, name, picture, last_login)
-          VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-          ON CONFLICT(google_id)
-          DO UPDATE SET
-            email = excluded.email,
-            name = excluded.name,
-            picture = excluded.picture,
-            last_login = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
-        `,
-        [googleId, email, name, picture],
-        (insertErr) => {
-          if (insertErr) return done(insertErr);
+      db.get(
+        "SELECT id, bga_id FROM users WHERE google_id = ? LIMIT 1",
+        [googleId],
+        (lookupErr, existingUserRow) => {
+          if (lookupErr) return done(lookupErr);
 
-          db.get(
-            "SELECT id, google_id, email, name, picture, bga_id, last_login FROM users WHERE google_id = ?",
-            [googleId],
-            (selectErr, row) => {
-              if (selectErr) return done(selectErr);
-              if (!row) return done(null, false);
+          db.run(
+            `
+              INSERT INTO users (google_id, email, name, picture, last_login)
+              VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+              ON CONFLICT(google_id)
+              DO UPDATE SET
+                email = excluded.email,
+                name = excluded.name,
+                picture = excluded.picture,
+                last_login = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            `,
+            [googleId, email, name, picture],
+            (insertErr) => {
+              if (insertErr) return done(insertErr);
 
-              if (normalizeNullableText(row.bga_id)) {
-                return done(null, row);
-              }
+              db.get(
+                "SELECT id, google_id, email, name, picture, bga_id, last_login FROM users WHERE google_id = ?",
+                [googleId],
+                (selectErr, row) => {
+                  if (selectErr) return done(selectErr);
+                  if (!row) return done(null, false);
 
-              return syncUserBgaIdFromEmail(row.id, email, (syncErr) => {
-                if (syncErr) return done(syncErr);
-                return done(null, row);
-              });
+                  const finishWithPotentialLink = (callback) => {
+                    if (normalizeNullableText(row.bga_id)) {
+                      return loadAuditUserProfileInfo(row.id, (_loadErr, enrichedRow) => {
+                        callback(enrichedRow || row);
+                      });
+                    }
+
+                    return syncUserBgaIdFromEmail(
+                      row.id,
+                      email,
+                      {
+                        actor: getAuditActor(row),
+                        source: "login",
+                      },
+                      (syncErr) => {
+                        if (syncErr) return done(syncErr);
+                        return loadAuditUserProfileInfo(row.id, (_loadErr, enrichedRow) => {
+                          callback(enrichedRow || row);
+                        });
+                      }
+                    );
+                  };
+
+                  if (existingUserRow) {
+                    return finishWithPotentialLink(() => done(null, row));
+                  }
+
+                  return finishWithPotentialLink((auditUserRow) => {
+                    return logAuditEvent(
+                      {
+                        ...getAuditActor(auditUserRow),
+                        event_type: "user.created",
+                        entity_type: "user",
+                        action: "create",
+                        record_id: String(row.id),
+                        metadata: {
+                          google_id: row.google_id || null,
+                          email: row.email || null,
+                          name: row.name || null,
+                        },
+                      },
+                      () => done(null, row)
+                    );
+                  });
+                }
+              );
             }
           );
         }
@@ -1067,7 +1430,18 @@ app.post("/profiles", (req, res) => {
                 if (selectErr) {
                   return res.status(500).json({ ok: false, message: "Failed to load restored profile" });
                 }
-                return res.status(200).json({ ok: true, restored: true, profile: row || null });
+                return logAuditEvent(
+                  {
+                    ...getAuditActor(req.user),
+                    event_type: "profile.created",
+                    entity_type: "profile",
+                    action: "create",
+                    record_id: playerId,
+                    changes: buildAuditCreationChanges(row || {}, PROFILE_AUDIT_FIELDS),
+                    metadata: { restored: true },
+                  },
+                  () => res.status(200).json({ ok: true, restored: true, profile: row || null })
+                );
               }
             );
           }
@@ -1118,7 +1492,17 @@ app.post("/profiles", (req, res) => {
               if (selectErr) {
                 return res.status(500).json({ ok: false, message: "Failed to load created profile" });
               }
-              return res.status(201).json({ ok: true, profile: row || null });
+              return logAuditEvent(
+                {
+                  ...getAuditActor(req.user),
+                  event_type: "profile.created",
+                  entity_type: "profile",
+                  action: "create",
+                  record_id: playerId,
+                  changes: buildAuditCreationChanges(row || {}, PROFILE_AUDIT_FIELDS),
+                },
+                () => res.status(201).json({ ok: true, profile: row || null })
+              );
             }
           );
         }
@@ -1640,6 +2024,39 @@ app.get("/users", requireAdmin, (_req, res, next) => {
   );
 });
 
+app.get("/audit-trail", requireAdmin, (_req, res, next) => {
+  db.all(
+    `
+      SELECT
+        id,
+        event_type,
+        entity_type,
+        action,
+        record_id,
+        actor_user_id,
+        actor_bga_id,
+        actor_bga_nickname,
+        actor_email,
+        changes,
+        metadata,
+        created_at
+      FROM audit_trail
+      ORDER BY datetime(created_at) DESC, id DESC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({
+        ok: true,
+        records: (rows || []).map((row) => ({
+          ...row,
+          changes: parseJsonOrNull(row?.changes),
+          metadata: parseJsonOrNull(row?.metadata),
+        })),
+      });
+    }
+  );
+});
+
 app.get("/lineups", (req, res, next) => {
   const matchId = String(req.query.match_id || "").trim();
   if (!matchId) {
@@ -1751,117 +2168,184 @@ app.post("/lineups/bulk-upsert", (req, res) => {
         });
       }
 
-      return db.serialize(() => {
-        db.run("BEGIN IMMEDIATE TRANSACTION");
-        db.run(
-          `
-            UPDATE lineups
-            SET
-              deleted_at = CURRENT_TIMESTAMP,
-              deleted_by = ?,
-              updated_by = ?,
-              updated_at = CURRENT_TIMESTAMP
-            WHERE match_id = ?
-              AND deleted_at IS NULL
-          `,
-          [actorPlayerId, actorPlayerId, matchId],
-          (deleteErr) => {
-            if (deleteErr) {
-              db.run("ROLLBACK");
-              return res.status(500).json({ ok: false, message: "Failed to clear old lineups" });
-            }
-            if (!sanitized.length) {
-              return db.run("COMMIT", (commitErr) => {
-                if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
-                return res.json({ ok: true, lineups: [] });
-              });
-            }
-
-            const stmt = db.prepare(`
-            INSERT INTO lineups (
-              id,
-              tournament_id,
-              match_id,
-              duel_number,
-              duel_format,
-              time_utc,
-              custom_time,
-              player_1_id,
-              player_2_id,
-              dw1,
-              dw2,
-              status,
-              created_by,
-              updated_by,
-              deleted_by,
-              deleted_at,
-              created_at,
-              updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ON CONFLICT(id) DO UPDATE SET
-              tournament_id = excluded.tournament_id,
-              match_id = excluded.match_id,
-              duel_number = excluded.duel_number,
-              duel_format = excluded.duel_format,
-              time_utc = excluded.time_utc,
-              custom_time = excluded.custom_time,
-              player_1_id = excluded.player_1_id,
-              player_2_id = excluded.player_2_id,
-              dw1 = excluded.dw1,
-              dw2 = excluded.dw2,
-              status = excluded.status,
-              updated_by = excluded.updated_by,
-              deleted_by = NULL,
-              deleted_at = NULL,
-              updated_at = CURRENT_TIMESTAMP
-          `);
-
-            let failed = false;
-            let pending = sanitized.length;
-            sanitized.forEach((item) => {
-              stmt.run(
-                [
-                  item.id,
-                  item.tournament_id,
-                  item.match_id,
-                  item.duel_number,
-                  item.duel_format,
-                  item.time_utc,
-                  item.custom_time,
-                  item.player_1_id,
-                  item.player_2_id,
-                  item.dw1,
-                  item.dw2,
-                  item.status,
-                  actorPlayerId,
-                  actorPlayerId,
-                ],
-                (insertErr) => {
-                  if (failed) return;
-                  if (insertErr) {
-                    failed = true;
-                    stmt.finalize(() => {
-                      db.run("ROLLBACK");
-                      return res.status(500).json({ ok: false, message: "Failed to insert lineups" });
-                    });
-                    return;
-                  }
-                  pending -= 1;
-                  if (pending === 0) {
-                    stmt.finalize(() => {
-                      db.run("COMMIT", (commitErr) => {
-                        if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
-                        return res.json({ ok: true, lineups: sanitized });
-                      });
-                    });
-                  }
-                }
-              );
-            });
+      return db.all(
+        `
+          SELECT
+            id,
+            tournament_id,
+            match_id,
+            duel_number,
+            duel_format,
+            time_utc,
+            custom_time,
+            player_1_id,
+            player_2_id,
+            dw1,
+            dw2,
+            status
+          FROM lineups
+          WHERE match_id = ?
+            AND deleted_at IS NULL
+          ORDER BY
+            CASE WHEN duel_number IS NULL THEN 1 ELSE 0 END ASC,
+            duel_number ASC,
+            id ASC
+        `,
+        [matchId],
+        (beforeErr, previousLineups) => {
+          if (beforeErr) {
+            return res.status(500).json({ ok: false, message: "Failed to load existing lineups" });
           }
-        );
-      });
+
+          return db.serialize(() => {
+            db.run("BEGIN IMMEDIATE TRANSACTION");
+            db.run(
+              `
+                UPDATE lineups
+                SET
+                  deleted_at = CURRENT_TIMESTAMP,
+                  deleted_by = ?,
+                  updated_by = ?,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE match_id = ?
+                  AND deleted_at IS NULL
+              `,
+              [actorPlayerId, actorPlayerId, matchId],
+              (deleteErr) => {
+                if (deleteErr) {
+                  db.run("ROLLBACK");
+                  return res.status(500).json({ ok: false, message: "Failed to clear old lineups" });
+                }
+                if (!sanitized.length) {
+                  return db.run("COMMIT", (commitErr) => {
+                    if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
+
+                    const action = previousLineups.length ? "delete" : "update";
+                    const eventType = previousLineups.length ? "lineups.deleted_all" : "lineups.updated";
+                    const changes = previousLineups.length
+                      ? buildAuditDeletionChanges({ lineups: previousLineups || [] }, ["lineups"])
+                      : buildAuditChanges({ lineups: previousLineups || [] }, { lineups: [] }, ["lineups"]);
+
+                    return logAuditEvent(
+                      {
+                        ...getAuditActor(req.user),
+                        event_type: eventType,
+                        entity_type: "lineups",
+                        action,
+                        record_id: matchId,
+                        changes,
+                        metadata: { match_id: matchId, lineups_count: 0 },
+                      },
+                      () => res.json({ ok: true, lineups: [] })
+                    );
+                  });
+                }
+
+                const stmt = db.prepare(`
+                INSERT INTO lineups (
+                  id,
+                  tournament_id,
+                  match_id,
+                  duel_number,
+                  duel_format,
+                  time_utc,
+                  custom_time,
+                  player_1_id,
+                  player_2_id,
+                  dw1,
+                  dw2,
+                  status,
+                  created_by,
+                  updated_by,
+                  deleted_by,
+                  deleted_at,
+                  created_at,
+                  updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT(id) DO UPDATE SET
+                  tournament_id = excluded.tournament_id,
+                  match_id = excluded.match_id,
+                  duel_number = excluded.duel_number,
+                  duel_format = excluded.duel_format,
+                  time_utc = excluded.time_utc,
+                  custom_time = excluded.custom_time,
+                  player_1_id = excluded.player_1_id,
+                  player_2_id = excluded.player_2_id,
+                  dw1 = excluded.dw1,
+                  dw2 = excluded.dw2,
+                  status = excluded.status,
+                  updated_by = excluded.updated_by,
+                  deleted_by = NULL,
+                  deleted_at = NULL,
+                  updated_at = CURRENT_TIMESTAMP
+              `);
+
+                let failed = false;
+                let pending = sanitized.length;
+                sanitized.forEach((item) => {
+                  stmt.run(
+                    [
+                      item.id,
+                      item.tournament_id,
+                      item.match_id,
+                      item.duel_number,
+                      item.duel_format,
+                      item.time_utc,
+                      item.custom_time,
+                      item.player_1_id,
+                      item.player_2_id,
+                      item.dw1,
+                      item.dw2,
+                      item.status,
+                      actorPlayerId,
+                      actorPlayerId,
+                    ],
+                    (insertErr) => {
+                      if (failed) return;
+                      if (insertErr) {
+                        failed = true;
+                        stmt.finalize(() => {
+                          db.run("ROLLBACK");
+                          return res.status(500).json({ ok: false, message: "Failed to insert lineups" });
+                        });
+                        return;
+                      }
+                      pending -= 1;
+                      if (pending === 0) {
+                        stmt.finalize(() => {
+                          db.run("COMMIT", (commitErr) => {
+                            if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
+
+                            const action = previousLineups.length ? "update" : "create";
+                            const eventType = previousLineups.length ? "lineups.updated" : "lineups.created";
+                            const changes = previousLineups.length
+                              ? buildAuditChanges({ lineups: previousLineups || [] }, { lineups: sanitized || [] }, ["lineups"])
+                              : buildAuditCreationChanges({ lineups: sanitized || [] }, ["lineups"]);
+
+                            return logAuditEvent(
+                              {
+                                ...getAuditActor(req.user),
+                                event_type: eventType,
+                                entity_type: "lineups",
+                                action,
+                                record_id: matchId,
+                                changes,
+                                metadata: { match_id: matchId, lineups_count: sanitized.length },
+                              },
+                              () => res.json({ ok: true, lineups: sanitized })
+                            );
+                          });
+                        });
+                      }
+                    }
+                  );
+                });
+              }
+            );
+          });
+        }
+      );
     }
   );
 });
@@ -2101,7 +2585,18 @@ app.post("/matches", (req, res) => {
                     if (selectErr) {
                       return res.status(500).json({ ok: false, message: "Failed to load restored match" });
                     }
-                    return res.status(200).json({ ok: true, restored: true, match: row || null });
+                    return logAuditEvent(
+                      {
+                        ...getAuditActor(req.user),
+                        event_type: "match.created",
+                        entity_type: "match",
+                        action: "create",
+                        record_id: matchId,
+                        changes: buildAuditCreationChanges(row || {}, MATCH_AUDIT_FIELDS),
+                        metadata: { restored: true },
+                      },
+                      () => res.status(200).json({ ok: true, restored: true, match: row || null })
+                    );
                   }
                 );
               });
@@ -2184,7 +2679,17 @@ app.post("/matches", (req, res) => {
               if (selectErr) {
                 return res.status(500).json({ ok: false, message: "Failed to load created match" });
               }
-              return res.status(201).json({ ok: true, match: row || null });
+              return logAuditEvent(
+                {
+                  ...getAuditActor(req.user),
+                  event_type: "match.created",
+                  entity_type: "match",
+                  action: "create",
+                  record_id: matchId,
+                  changes: buildAuditCreationChanges(row || {}, MATCH_AUDIT_FIELDS),
+                },
+                () => res.status(201).json({ ok: true, match: row || null })
+              );
             }
           );
         }
@@ -2242,8 +2747,19 @@ app.patch("/matches/:id", (req, res) => {
     `
       SELECT
         id,
+        tournament_id,
+        time_utc,
+        lineup_type,
+        lineup_deadline_h,
+        lineup_deadline_utc,
+        number_of_duels,
         team_1,
-        team_2
+        team_2,
+        status,
+        dw1,
+        dw2,
+        gw1,
+        gw2
       FROM matches
       WHERE id = ?
         AND deleted_at IS NULL
@@ -2404,7 +2920,18 @@ app.patch("/matches/:id", (req, res) => {
               if (selectErr) {
                 return res.status(500).json({ ok: false, message: "Failed to load updated match" });
               }
-              return res.json({ ok: true, match: row || null });
+              return logAuditEvent(
+                {
+                  ...getAuditActor(req.user),
+                  event_type: "match.updated",
+                  entity_type: "match",
+                  action: "update",
+                  record_id: nextMatchId,
+                  changes: buildAuditChanges(existingRow || {}, row || {}, MATCH_AUDIT_FIELDS),
+                  metadata: { previous_record_id: matchId !== nextMatchId ? matchId : null },
+                },
+                () => res.json({ ok: true, match: row || null })
+              );
             }
           );
         }
@@ -2433,7 +2960,21 @@ app.delete("/matches/:id", (req, res) => {
 
   return db.get(
     `
-      SELECT id, team_1, team_2
+      SELECT
+        id,
+        tournament_id,
+        time_utc,
+        lineup_type,
+        lineup_deadline_h,
+        lineup_deadline_utc,
+        number_of_duels,
+        team_1,
+        team_2,
+        status,
+        dw1,
+        dw2,
+        gw1,
+        gw2
       FROM matches
       WHERE id = ?
         AND deleted_at IS NULL
@@ -2458,60 +2999,119 @@ app.delete("/matches/:id", (req, res) => {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
 
-      return db.serialize(() => {
-        db.run("BEGIN IMMEDIATE TRANSACTION");
-        db.run(
-          `
-            UPDATE matches
-            SET
-              deleted_at = CURRENT_TIMESTAMP,
-              deleted_by = ?,
-              updated_by = ?,
-              updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-              AND deleted_at IS NULL
-          `,
-          [actorPlayerId, actorPlayerId, matchId],
-          function onDeleteMatch(deleteErr) {
-            if (deleteErr) {
-              db.run("ROLLBACK");
-              return res.status(500).json({ ok: false, message: "Failed to delete match" });
-            }
-            if (!this || this.changes === 0) {
-              db.run("ROLLBACK");
-              return res.status(404).json({ ok: false, message: "Match not found" });
-            }
+      return db.all(
+        `
+          SELECT
+            id,
+            tournament_id,
+            match_id,
+            duel_number,
+            duel_format,
+            time_utc,
+            custom_time,
+            player_1_id,
+            player_2_id,
+            dw1,
+            dw2,
+            status
+          FROM lineups
+          WHERE match_id = ?
+            AND deleted_at IS NULL
+          ORDER BY
+            CASE WHEN duel_number IS NULL THEN 1 ELSE 0 END ASC,
+            duel_number ASC,
+            id ASC
+        `,
+        [matchId],
+        (lineupsErr, activeLineups) => {
+          if (lineupsErr) {
+            return res.status(500).json({ ok: false, message: "Failed to load match lineups" });
+          }
 
-            return db.run(
+          return db.serialize(() => {
+            db.run("BEGIN IMMEDIATE TRANSACTION");
+            db.run(
               `
-                UPDATE lineups
+                UPDATE matches
                 SET
                   deleted_at = CURRENT_TIMESTAMP,
                   deleted_by = ?,
                   updated_by = ?,
                   updated_at = CURRENT_TIMESTAMP
-                WHERE match_id = ?
+                WHERE id = ?
                   AND deleted_at IS NULL
               `,
               [actorPlayerId, actorPlayerId, matchId],
-              (deleteLineupsErr) => {
-                if (deleteLineupsErr) {
+              function onDeleteMatch(deleteErr) {
+                if (deleteErr) {
                   db.run("ROLLBACK");
-                  return res.status(500).json({ ok: false, message: "Failed to delete match lineups" });
+                  return res.status(500).json({ ok: false, message: "Failed to delete match" });
+                }
+                if (!this || this.changes === 0) {
+                  db.run("ROLLBACK");
+                  return res.status(404).json({ ok: false, message: "Match not found" });
                 }
 
-                return db.run("COMMIT", (commitErr) => {
-                  if (commitErr) {
-                    db.run("ROLLBACK");
-                    return res.status(500).json({ ok: false, message: "Failed to delete match" });
+                return db.run(
+                  `
+                    UPDATE lineups
+                    SET
+                      deleted_at = CURRENT_TIMESTAMP,
+                      deleted_by = ?,
+                      updated_by = ?,
+                      updated_at = CURRENT_TIMESTAMP
+                    WHERE match_id = ?
+                      AND deleted_at IS NULL
+                  `,
+                  [actorPlayerId, actorPlayerId, matchId],
+                  (deleteLineupsErr) => {
+                    if (deleteLineupsErr) {
+                      db.run("ROLLBACK");
+                      return res.status(500).json({ ok: false, message: "Failed to delete match lineups" });
+                    }
+
+                    return db.run("COMMIT", (commitErr) => {
+                      if (commitErr) {
+                        db.run("ROLLBACK");
+                        return res.status(500).json({ ok: false, message: "Failed to delete match" });
+                      }
+
+                      return logAuditEvent(
+                        {
+                          ...getAuditActor(req.user),
+                          event_type: "match.deleted",
+                          entity_type: "match",
+                          action: "delete",
+                          record_id: matchId,
+                          changes: buildAuditDeletionChanges(row || {}, MATCH_AUDIT_FIELDS),
+                        },
+                        () => {
+                          if (!activeLineups.length) {
+                            return res.json({ ok: true });
+                          }
+
+                          return logAuditEvent(
+                            {
+                              ...getAuditActor(req.user),
+                              event_type: "lineups.deleted_all",
+                              entity_type: "lineups",
+                              action: "delete",
+                              record_id: matchId,
+                              changes: buildAuditDeletionChanges({ lineups: activeLineups || [] }, ["lineups"]),
+                              metadata: { match_id: matchId, lineups_count: activeLineups.length },
+                            },
+                            () => res.json({ ok: true })
+                          );
+                        }
+                      );
+                    });
                   }
-                  return res.json({ ok: true });
-                });
+                );
               }
             );
-          }
-        );
-      });
+          });
+        }
+      );
     }
   );
 });
@@ -2640,7 +3240,17 @@ app.post("/friendly-find", (req, res) => {
           if (selectErr) {
             return res.status(500).json({ ok: false, message: "Failed to load created friendly find request" });
           }
-          return res.status(201).json({ ok: true, request: row || null });
+          return logAuditEvent(
+            {
+              ...getAuditActor(req.user),
+              event_type: "friendly_find.created",
+              entity_type: "friendly_find",
+              action: "create",
+              record_id: String(this.lastID),
+              changes: buildAuditCreationChanges(row || {}, FRIENDLY_FIND_AUDIT_FIELDS),
+            },
+            () => res.status(201).json({ ok: true, request: row || null })
+          );
         }
       );
     }
@@ -2666,7 +3276,13 @@ app.patch("/friendly-find/:id", (req, res) => {
 
   return db.get(
     `
-      SELECT id, team
+      SELECT
+        id,
+        team,
+        dates,
+        time_1,
+        time_2,
+        number_of_players
       FROM friendly_find
       WHERE id = ?
       LIMIT 1
@@ -2752,7 +3368,17 @@ app.patch("/friendly-find/:id", (req, res) => {
               if (selectErr) {
                 return res.status(500).json({ ok: false, message: "Failed to load updated friendly find request" });
               }
-              return res.json({ ok: true, request: row || null });
+              return logAuditEvent(
+                {
+                  ...getAuditActor(req.user),
+                  event_type: "friendly_find.updated",
+                  entity_type: "friendly_find",
+                  action: "update",
+                  record_id: String(requestId),
+                  changes: buildAuditChanges(existingRow || {}, row || {}, FRIENDLY_FIND_AUDIT_FIELDS),
+                },
+                () => res.json({ ok: true, request: row || null })
+              );
             }
           );
         }
@@ -2780,7 +3406,13 @@ app.delete("/friendly-find/:id", (req, res) => {
 
   return db.get(
     `
-      SELECT id, team
+      SELECT
+        id,
+        team,
+        dates,
+        time_1,
+        time_2,
+        number_of_players
       FROM friendly_find
       WHERE id = ?
       LIMIT 1
@@ -2812,7 +3444,17 @@ app.delete("/friendly-find/:id", (req, res) => {
           if (!this || this.changes === 0) {
             return res.status(404).json({ ok: false, message: "Friendly find request not found" });
           }
-          return res.json({ ok: true });
+          return logAuditEvent(
+            {
+              ...getAuditActor(req.user),
+              event_type: "friendly_find.deleted",
+              entity_type: "friendly_find",
+              action: "delete",
+              record_id: String(requestId),
+              changes: buildAuditDeletionChanges(existingRow || {}, FRIENDLY_FIND_AUDIT_FIELDS),
+            },
+            () => res.json({ ok: true })
+          );
         }
       );
     }
@@ -3153,49 +3795,101 @@ app.patch("/profiles/:playerId", (req, res) => {
           requestedPlayerId,
         ];
 
-    const runUpdate = () => db.run(sql, params, function onUpdate(updateErr) {
-      if (updateErr) {
-        return res.status(500).json({ ok: false, message: "Failed to update profile" });
-      }
-      if (!this || this.changes === 0) {
-        return res.status(404).json({ ok: false, message: "Profile not found" });
-      }
-
-      return db.get(
-        `
-          SELECT
-            id,
-            name,
-            association,
-            COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
-            email,
-            COALESCE(master_title, 0) AS master_title,
-            master_title_date,
-            COALESCE(team_captain, 0) AS team_captain,
-            telegram,
-            whatsapp,
-            discord,
-            instagram,
-            contact_email
-          FROM profiles
-          WHERE id = ?
-            AND deleted_at IS NULL
-          LIMIT 1
-        `,
-        [requestedPlayerId],
-        (selectErr, row) => {
-          if (selectErr) {
-            return res.status(500).json({ ok: false, message: "Failed to load updated profile" });
-          }
-          return syncUsersBgaIdForProfile(requestedPlayerId, row?.email, (syncErr) => {
-            if (syncErr) {
-              return res.status(500).json({ ok: false, message: "Profile updated, but failed to sync linked user" });
-            }
-            return res.json({ ok: true, profile: row || null });
-          });
+    const runUpdate = () => db.get(
+      `
+        SELECT
+          id,
+          bga_nickname,
+          name,
+          association,
+          COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
+          email,
+          COALESCE(master_title, 0) AS master_title,
+          master_title_date,
+          COALESCE(team_captain, 0) AS team_captain,
+          telegram,
+          whatsapp,
+          discord,
+          instagram,
+          contact_email
+        FROM profiles
+        WHERE id = ?
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [requestedPlayerId],
+      (beforeErr, beforeRow) => {
+        if (beforeErr) {
+          return res.status(500).json({ ok: false, message: "Failed to load profile before update" });
         }
-      );
-    });
+        if (!beforeRow) {
+          return res.status(404).json({ ok: false, message: "Profile not found" });
+        }
+
+        return db.run(sql, params, function onUpdate(updateErr) {
+          if (updateErr) {
+            return res.status(500).json({ ok: false, message: "Failed to update profile" });
+          }
+          if (!this || this.changes === 0) {
+            return res.status(404).json({ ok: false, message: "Profile not found" });
+          }
+
+          return db.get(
+            `
+              SELECT
+                id,
+                bga_nickname,
+                name,
+                association,
+                COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
+                email,
+                COALESCE(master_title, 0) AS master_title,
+                master_title_date,
+                COALESCE(team_captain, 0) AS team_captain,
+                telegram,
+                whatsapp,
+                discord,
+                instagram,
+                contact_email
+              FROM profiles
+              WHERE id = ?
+                AND deleted_at IS NULL
+              LIMIT 1
+            `,
+            [requestedPlayerId],
+            (selectErr, row) => {
+              if (selectErr) {
+                return res.status(500).json({ ok: false, message: "Failed to load updated profile" });
+              }
+              return syncUsersBgaIdForProfile(
+                requestedPlayerId,
+                row?.email,
+                {
+                  actor: getAuditActor(req.user),
+                  source: "profile_email_change",
+                },
+                (syncErr) => {
+                  if (syncErr) {
+                    return res.status(500).json({ ok: false, message: "Profile updated, but failed to sync linked user" });
+                  }
+                  return logAuditEvent(
+                    {
+                      ...getAuditActor(req.user),
+                      event_type: "profile.updated",
+                      entity_type: "profile",
+                      action: "update",
+                      record_id: requestedPlayerId,
+                      changes: buildAuditChanges(beforeRow || {}, row || {}, PROFILE_AUDIT_FIELDS),
+                    },
+                    () => res.json({ ok: true, profile: row || null })
+                  );
+                }
+              );
+            }
+          );
+        });
+      }
+    );
 
     const nextEmail = typeof allowedPatch.email === "string" ? String(allowedPatch.email || "").trim() : null;
     if (!nextEmail) {
@@ -3260,7 +3954,22 @@ app.get("/profiles/:playerId/delete-check", (req, res) => {
 
   return db.get(
     `
-      SELECT id, created_by
+      SELECT
+        id,
+        created_by,
+        bga_nickname,
+        name,
+        association,
+        COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
+        email,
+        COALESCE(master_title, 0) AS master_title,
+        master_title_date,
+        COALESCE(team_captain, 0) AS team_captain,
+        telegram,
+        whatsapp,
+        discord,
+        instagram,
+        contact_email
       FROM profiles
       WHERE id = ?
         AND deleted_at IS NULL
@@ -3381,7 +4090,17 @@ app.delete("/profiles/:playerId", (req, res) => {
               if (!this || this.changes === 0) {
                 return res.status(404).json({ ok: false, message: "Profile not found" });
               }
-              return res.json({ ok: true });
+              return logAuditEvent(
+                {
+                  ...getAuditActor(req.user),
+                  event_type: "profile.deleted",
+                  entity_type: "profile",
+                  action: "delete",
+                  record_id: requestedPlayerId,
+                  changes: buildAuditDeletionChanges(profileRow || {}, PROFILE_AUDIT_FIELDS),
+                },
+                () => res.json({ ok: true })
+              );
             }
           );
         }
