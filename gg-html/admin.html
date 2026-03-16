@@ -101,6 +101,10 @@
     color: var(--muted);
   }
 
+  .admin-section-tile .admin-section-hint {
+    display: none;
+  }
+
   .admin-section-head {
     display: flex;
     align-items: baseline;
@@ -290,6 +294,16 @@
     color: var(--muted);
   }
 
+  .admin-inline-form {
+    padding: 0 8px 8px;
+    border-top: 1px solid #d9e0ea;
+    background: #fff;
+  }
+
+  .admin-inline-form .cp-edit-form {
+    margin-top: 8px;
+  }
+
   @media (max-width: 640px) {
     .admin-section-head {
       flex-direction: column;
@@ -317,7 +331,6 @@
   <div id="adminContent" class="hidden">
     <div class="admin-card">
       <h2>Sections</h2>
-      <p class="sub">Open a dedicated admin section. The current section is stored in the URL.</p>
       <div id="adminSections" class="admin-sections"></div>
     </div>
 
@@ -325,7 +338,6 @@
       <div class="admin-section-head">
         <div>
           <h2 id="sectionTitle">Section</h2>
-          <p id="sectionSub" class="sub"></p>
         </div>
         <div class="admin-section-actions">
           <button id="sectionCreateBtn" class="cp-btn cp-btn-primary hidden" type="button">Create</button>
@@ -351,7 +363,6 @@
     associations: {
       key: "associations",
       title: "Associations",
-      hint: "Flags, names and unique ids",
       buttonLabel: "Edit",
       createLabel: "Create",
       load: () => apiJson(ASSOCIATIONS_URL, { method: "GET" }).then((data) => data.associations || []),
@@ -359,7 +370,6 @@
     teams: {
       key: "teams",
       title: "Teams",
-      hint: "National and club teams",
       buttonLabel: "Edit",
       createLabel: "Create",
       load: () => apiJson(TEAMS_URL, { method: "GET" }).then((data) => data.teams || []),
@@ -367,7 +377,6 @@
     users: {
       key: "users",
       title: "Users",
-      hint: "Google-authenticated accounts",
       buttonLabel: "View",
       createLabel: "",
       load: () => apiJson(USERS_URL, { method: "GET" }).then((data) => data.users || []),
@@ -388,7 +397,6 @@
   const sectionsEl = document.getElementById("adminSections");
   const sectionCard = document.getElementById("adminSectionCard");
   const sectionTitle = document.getElementById("sectionTitle");
-  const sectionSub = document.getElementById("sectionSub");
   const sectionCreateBtn = document.getElementById("sectionCreateBtn");
   const sectionStatus = document.getElementById("sectionStatus");
   const sectionList = document.getElementById("sectionList");
@@ -418,19 +426,29 @@
     });
   }
 
-  function getCurrentSection() {
-    const params = new URLSearchParams(window.location.search);
-    const section = String(params.get("section") || "").trim().toLowerCase();
-    return SECTION_CONFIG[section] ? section : "";
-  }
+  async function setSection(section) {
+    state.activeSection = SECTION_CONFIG[section] ? section : "";
+    renderSectionTiles();
+    closeInlineForm();
+    sectionForm.classList.add("hidden");
+    sectionForm.innerHTML = "";
+    setStatus("", false);
 
-  function setSection(section) {
-    const params = new URLSearchParams(window.location.search);
-    if (section) params.set("section", section);
-    else params.delete("section");
-    const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash || ""}`;
-    window.history.pushState({}, "", nextUrl);
-    renderFromUrl();
+    if (!state.activeSection) {
+      sectionCard.classList.add("hidden");
+      return;
+    }
+
+    sectionCard.classList.remove("hidden");
+    sectionTitle.textContent = SECTION_CONFIG[state.activeSection].title;
+    sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
+    try {
+      await loadSectionData(state.activeSection);
+      await renderSection();
+    } catch (error) {
+      setStatus(error?.message || "Failed to load section.", true);
+      renderListEmpty("Failed to load records.");
+    }
   }
 
   function createPlaceholder(text, isRound) {
@@ -453,6 +471,19 @@
       img.replaceWith(createPlaceholder(alt, isRound));
     }, { once: true });
     return img;
+  }
+
+  function closeInlineForm() {
+    const inline = sectionList.querySelector(".admin-inline-form");
+    if (inline) inline.remove();
+  }
+
+  function mountDetailForm(formEl, anchorRow) {
+    closeInlineForm();
+    const wrap = document.createElement("div");
+    wrap.className = "admin-inline-form";
+    wrap.appendChild(formEl);
+    anchorRow.insertAdjacentElement("afterend", wrap);
   }
 
   function createListRow({ imageSrc, imageAlt, imageRound, title, subtitle, buttonLabel, onClick }) {
@@ -483,7 +514,7 @@
     actionBtn.type = "button";
     actionBtn.className = "cp-edit-btn";
     actionBtn.textContent = buttonLabel;
-    actionBtn.addEventListener("click", onClick);
+    actionBtn.addEventListener("click", () => onClick(row));
 
     row.appendChild(main);
     row.appendChild(actionBtn);
@@ -552,8 +583,10 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = `admin-section-tile${state.activeSection === section.key ? " active" : ""}`;
-      btn.innerHTML = `<span class="admin-section-name">${section.title}</span><span class="admin-section-hint">${section.hint}</span>`;
-      btn.addEventListener("click", () => setSection(section.key));
+      btn.innerHTML = `<span class="admin-section-name">${section.title}</span>`;
+      btn.addEventListener("click", () => {
+        setSection(section.key);
+      });
       sectionsEl.appendChild(btn);
     });
   }
@@ -566,10 +599,7 @@
     sectionList.appendChild(empty);
   }
 
-  function openAssociationForm(mode, item) {
-    sectionForm.classList.remove("hidden");
-    sectionForm.innerHTML = "";
-
+  function openAssociationForm(mode, item, anchorRow) {
     const form = document.createElement("form");
     form.className = "cp-edit-form";
 
@@ -593,8 +623,12 @@
     cancelBtn.className = "cp-btn cp-btn-secondary";
     cancelBtn.textContent = "Cancel";
     cancelBtn.addEventListener("click", () => {
-      sectionForm.classList.add("hidden");
-      sectionForm.innerHTML = "";
+      if (mode === "create") {
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+      } else {
+        closeInlineForm();
+      }
       setStatus("", false);
     });
 
@@ -641,8 +675,12 @@
           });
           setStatus("Association updated.", false);
         }
-        sectionForm.classList.add("hidden");
-        sectionForm.innerHTML = "";
+        if (mode === "create") {
+          sectionForm.classList.add("hidden");
+          sectionForm.innerHTML = "";
+        } else {
+          closeInlineForm();
+        }
         await loadSectionData("associations");
         renderSection();
       } catch (error) {
@@ -650,13 +688,17 @@
       }
     });
 
-    sectionForm.appendChild(form);
+    if (mode === "create") {
+      closeInlineForm();
+      sectionForm.classList.remove("hidden");
+      sectionForm.innerHTML = "";
+      sectionForm.appendChild(form);
+    } else if (anchorRow) {
+      mountDetailForm(form, anchorRow);
+    }
   }
 
-  function openTeamForm(mode, item) {
-    sectionForm.classList.remove("hidden");
-    sectionForm.innerHTML = "";
-
+  function openTeamForm(mode, item, anchorRow) {
     const form = document.createElement("form");
     form.className = "cp-edit-form";
 
@@ -685,8 +727,12 @@
     cancelBtn.className = "cp-btn cp-btn-secondary";
     cancelBtn.textContent = "Cancel";
     cancelBtn.addEventListener("click", () => {
-      sectionForm.classList.add("hidden");
-      sectionForm.innerHTML = "";
+      if (mode === "create") {
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+      } else {
+        closeInlineForm();
+      }
       setStatus("", false);
     });
 
@@ -735,8 +781,12 @@
           });
           setStatus("Team updated.", false);
         }
-        sectionForm.classList.add("hidden");
-        sectionForm.innerHTML = "";
+        if (mode === "create") {
+          sectionForm.classList.add("hidden");
+          sectionForm.innerHTML = "";
+        } else {
+          closeInlineForm();
+        }
         await loadSectionData("teams");
         renderSection();
       } catch (error) {
@@ -744,13 +794,17 @@
       }
     });
 
-    sectionForm.appendChild(form);
+    if (mode === "create") {
+      closeInlineForm();
+      sectionForm.classList.remove("hidden");
+      sectionForm.innerHTML = "";
+      sectionForm.appendChild(form);
+    } else if (anchorRow) {
+      mountDetailForm(form, anchorRow);
+    }
   }
 
-  function openUserView(item) {
-    sectionForm.classList.remove("hidden");
-    sectionForm.innerHTML = "";
-
+  function openUserView(item, anchorRow) {
     const view = document.createElement("div");
     view.className = "cp-edit-form";
 
@@ -787,21 +841,21 @@
     closeBtn.className = "cp-btn cp-btn-secondary";
     closeBtn.textContent = "Close";
     closeBtn.addEventListener("click", () => {
-      sectionForm.classList.add("hidden");
-      sectionForm.innerHTML = "";
+      closeInlineForm();
     });
     actions.appendChild(closeBtn);
     view.appendChild(actions);
 
-    sectionForm.appendChild(view);
+    sectionForm.classList.add("hidden");
+    sectionForm.innerHTML = "";
+    if (anchorRow) mountDetailForm(view, anchorRow);
   }
 
   function renderAssociations() {
     sectionTitle.textContent = "Associations";
-    sectionSub.textContent = `Manage associations list. Total: ${state.associations.length}`;
     sectionCreateBtn.textContent = "Create";
     sectionCreateBtn.classList.remove("hidden");
-    sectionCreateBtn.onclick = () => openAssociationForm("create", null);
+    sectionCreateBtn.onclick = () => openAssociationForm("create", null, null);
 
     if (!state.associations.length) {
       renderListEmpty("No associations yet.");
@@ -817,17 +871,16 @@
         title: item.name || item.id,
         subtitle: item.id || "",
         buttonLabel: "Edit",
-        onClick: () => openAssociationForm("edit", item),
+        onClick: (row) => openAssociationForm("edit", item, row),
       }));
     });
   }
 
   function renderTeams() {
     sectionTitle.textContent = "Teams";
-    sectionSub.textContent = `Manage teams list. Total: ${state.teams.length}`;
     sectionCreateBtn.textContent = "Create";
     sectionCreateBtn.classList.remove("hidden");
-    sectionCreateBtn.onclick = () => openTeamForm("create", null);
+    sectionCreateBtn.onclick = () => openTeamForm("create", null, null);
 
     if (!state.teams.length) {
       renderListEmpty("No teams yet.");
@@ -847,14 +900,13 @@
         title: item.name || item.id,
         subtitle: subtitleParts.join(" • "),
         buttonLabel: "Edit",
-        onClick: () => openTeamForm("edit", item),
+        onClick: (row) => openTeamForm("edit", item, row),
       }));
     });
   }
 
   function renderUsers() {
     sectionTitle.textContent = "Users";
-    sectionSub.textContent = `View authenticated users. Total: ${state.users.length}`;
     sectionCreateBtn.classList.add("hidden");
     sectionCreateBtn.onclick = null;
 
@@ -875,7 +927,7 @@
         title: item.name || item.email || `User #${item.id}`,
         subtitle: subtitleParts.join(" • "),
         buttonLabel: "View",
-        onClick: () => openUserView(item),
+        onClick: (row) => openUserView(item, row),
       }));
     });
   }
@@ -888,6 +940,7 @@
 
   async function renderSection() {
     renderSectionTiles();
+    closeInlineForm();
     sectionForm.classList.add("hidden");
     sectionForm.innerHTML = "";
 
@@ -900,30 +953,6 @@
     if (state.activeSection === "associations") renderAssociations();
     if (state.activeSection === "teams") renderTeams();
     if (state.activeSection === "users") renderUsers();
-  }
-
-  async function renderFromUrl() {
-    const section = getCurrentSection();
-    state.activeSection = section;
-    renderSectionTiles();
-    if (!section) {
-      sectionCard.classList.add("hidden");
-      return;
-    }
-    setStatus("", false);
-    sectionCard.classList.remove("hidden");
-    sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
-    sectionForm.classList.add("hidden");
-    sectionForm.innerHTML = "";
-    try {
-      await loadSectionData(section);
-      renderSection();
-    } catch (error) {
-      sectionTitle.textContent = SECTION_CONFIG[section].title;
-      sectionSub.textContent = "";
-      setStatus(error?.message || "Failed to load section.", true);
-      renderListEmpty("Failed to load records.");
-    }
   }
 
   async function init() {
@@ -944,17 +973,12 @@
       accessCard.classList.add("hidden");
       content.classList.remove("hidden");
       renderSectionTiles();
-      await renderFromUrl();
+      await renderSection();
       state.accessChecked = true;
     } catch (_error) {
       accessText.textContent = "Failed to verify access.";
     }
   }
-
-  window.addEventListener("popstate", () => {
-    if (!state.accessChecked) return;
-    renderFromUrl();
-  });
 
   init();
 })();

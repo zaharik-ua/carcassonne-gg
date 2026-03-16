@@ -1477,25 +1477,7 @@ app.get("/users", requireAdmin, (_req, res, next) => {
         u.name,
         u.picture,
         u.created_at,
-        u.last_login,
-        (
-          SELECT t.type
-          FROM profiles p
-          LEFT JOIN teams t ON upper(trim(t.id)) = upper(trim(p.association))
-          WHERE lower(trim(COALESCE(p.email, ''))) = lower(trim(COALESCE(u.email, '')))
-            AND p.deleted_at IS NULL
-          ORDER BY p.updated_at DESC, p.id ASC
-          LIMIT 1
-        ) AS type,
-        (
-          SELECT t.timezone
-          FROM profiles p
-          LEFT JOIN teams t ON upper(trim(t.id)) = upper(trim(p.association))
-          WHERE lower(trim(COALESCE(p.email, ''))) = lower(trim(COALESCE(u.email, '')))
-            AND p.deleted_at IS NULL
-          ORDER BY p.updated_at DESC, p.id ASC
-          LIMIT 1
-        ) AS timezone
+        u.last_login
       FROM users u
       ORDER BY COALESCE(NULLIF(trim(u.name), ''), trim(u.email), printf('user-%s', u.id)) COLLATE NOCASE ASC
     `,
