@@ -127,9 +127,9 @@
   .cp-match-row {
     display: flex;
     align-items: center;
-    min-height: 56px;
+    min-height: 42px;
     border-top: 1px solid #d9e0ea;
-    padding: 6px 8px;
+    padding: 3px 8px;
     box-sizing: border-box;
     gap: 8px;
   }
@@ -304,6 +304,10 @@
     margin-top: 8px;
   }
 
+  .admin-create-form {
+    margin-top: 8px;
+  }
+
   @media (max-width: 640px) {
     .admin-section-head {
       flex-direction: column;
@@ -330,7 +334,6 @@
 
   <div id="adminContent" class="hidden">
     <div class="admin-card">
-      <h2>Sections</h2>
       <div id="adminSections" class="admin-sections"></div>
     </div>
 
@@ -344,9 +347,9 @@
         </div>
       </div>
 
+      <div id="sectionForm" class="hidden"></div>
       <div id="sectionStatus" class="admin-status"></div>
       <div id="sectionList" class="captain-list"></div>
-      <div id="sectionForm" class="hidden"></div>
     </div>
   </div>
 </div>
@@ -478,12 +481,20 @@
     if (inline) inline.remove();
   }
 
-  function mountDetailForm(formEl, anchorRow) {
+  function mountDetailForm(formEl, anchorRow, options) {
+    const toggleSameRow = !!(options && options.toggleSameRow);
+    const nextRow = anchorRow ? anchorRow.nextElementSibling : null;
+    if (toggleSameRow && nextRow && nextRow.classList.contains("admin-inline-form")) {
+      nextRow.remove();
+      return false;
+    }
+
     closeInlineForm();
     const wrap = document.createElement("div");
     wrap.className = "admin-inline-form";
     wrap.appendChild(formEl);
     anchorRow.insertAdjacentElement("afterend", wrap);
+    return true;
   }
 
   function createListRow({ imageSrc, imageAlt, imageRound, title, subtitle, buttonLabel, onClick }) {
@@ -599,6 +610,14 @@
     sectionList.appendChild(empty);
   }
 
+  function showCreateForm(formEl) {
+    closeInlineForm();
+    sectionForm.classList.remove("hidden");
+    sectionForm.innerHTML = "";
+    formEl.classList.add("admin-create-form");
+    sectionForm.appendChild(formEl);
+  }
+
   function openAssociationForm(mode, item, anchorRow) {
     const form = document.createElement("form");
     form.className = "cp-edit-form";
@@ -690,9 +709,7 @@
 
     if (mode === "create") {
       closeInlineForm();
-      sectionForm.classList.remove("hidden");
-      sectionForm.innerHTML = "";
-      sectionForm.appendChild(form);
+      showCreateForm(form);
     } else if (anchorRow) {
       mountDetailForm(form, anchorRow);
     }
@@ -796,9 +813,7 @@
 
     if (mode === "create") {
       closeInlineForm();
-      sectionForm.classList.remove("hidden");
-      sectionForm.innerHTML = "";
-      sectionForm.appendChild(form);
+      showCreateForm(form);
     } else if (anchorRow) {
       mountDetailForm(form, anchorRow);
     }
@@ -808,31 +823,15 @@
     const view = document.createElement("div");
     view.className = "cp-edit-form";
 
-    const userRow = document.createElement("div");
-    userRow.className = "cp-match-row";
-    const main = document.createElement("div");
-    main.className = "cp-player-main";
-    const titleRow = document.createElement("div");
-    titleRow.className = "cp-team-row";
-    titleRow.appendChild(createAvatar(item.picture, item.name || item.email || "User", true));
-    const title = document.createElement("span");
-    title.textContent = item.name || item.email || `User #${item.id}`;
-    titleRow.appendChild(title);
-    main.appendChild(titleRow);
-    userRow.appendChild(main);
-    view.appendChild(userRow);
-
+    const bgaIdField = createTextRow("BGA id", item.bga_id || "", { readOnly: true });
     const emailField = createTextRow("Email", item.email || "", { readOnly: true });
     const createdAtField = createTextRow("Created at", formatDate(item.created_at), { readOnly: true });
     const lastLoginField = createTextRow("Last login", formatDate(item.last_login), { readOnly: true });
-    const typeField = createSelectRow("type", item.type || "", ["", "National", "Club"], true);
-    const timezoneField = createTextRow("timezone", item.timezone || "", { readOnly: true });
 
+    view.appendChild(bgaIdField.row);
     view.appendChild(emailField.row);
     view.appendChild(createdAtField.row);
     view.appendChild(lastLoginField.row);
-    view.appendChild(typeField.row);
-    view.appendChild(timezoneField.row);
 
     const actions = document.createElement("div");
     actions.className = "cp-edit-actions";
@@ -848,7 +847,7 @@
 
     sectionForm.classList.add("hidden");
     sectionForm.innerHTML = "";
-    if (anchorRow) mountDetailForm(view, anchorRow);
+    if (anchorRow) mountDetailForm(view, anchorRow, { toggleSameRow: true });
   }
 
   function renderAssociations() {
@@ -869,7 +868,7 @@
         imageAlt: item.name,
         imageRound: false,
         title: item.name || item.id,
-        subtitle: item.id || "",
+        subtitle: "",
         buttonLabel: "Edit",
         onClick: (row) => openAssociationForm("edit", item, row),
       }));
@@ -889,16 +888,12 @@
 
     sectionList.innerHTML = "";
     state.teams.forEach((item) => {
-      const subtitleParts = [];
-      if (item.id) subtitleParts.push(item.id);
-      if (item.type) subtitleParts.push(item.type);
-      if (item.timezone) subtitleParts.push(item.timezone);
       sectionList.appendChild(createListRow({
         imageSrc: item.flag || item.logo,
         imageAlt: item.name,
         imageRound: false,
         title: item.name || item.id,
-        subtitle: subtitleParts.join(" • "),
+        subtitle: "",
         buttonLabel: "Edit",
         onClick: (row) => openTeamForm("edit", item, row),
       }));
@@ -919,6 +914,7 @@
     state.users.forEach((item) => {
       const subtitleParts = [];
       if (item.email) subtitleParts.push(item.email);
+      if (item.bga_id) subtitleParts.push(`BGA ID: ${item.bga_id}`);
       if (item.last_login) subtitleParts.push(`Last login: ${formatDate(item.last_login)}`);
       sectionList.appendChild(createListRow({
         imageSrc: item.picture,

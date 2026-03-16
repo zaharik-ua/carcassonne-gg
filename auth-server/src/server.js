@@ -140,6 +140,164 @@ function buildAssociationCode(name, usedCodes, fallbackIndex) {
   return candidate;
 }
 
+function normalizeNullableText(value) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
+
+function syncUserBgaIdFromEmail(userId, email, done) {
+  const normalizedEmail = normalizeNullableText(email);
+  const normalizedUserId = Number(userId);
+
+  if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0 || !normalizedEmail) {
+    done(null, null);
+    return;
+  }
+
+  db.get(
+    `
+      SELECT p.id
+      FROM profiles p
+      WHERE lower(COALESCE(p.email, '')) = lower(?)
+        AND trim(COALESCE(p.id, '')) <> ''
+        AND p.deleted_at IS NULL
+      ORDER BY p.updated_at DESC, p.id ASC
+      LIMIT 1
+    `,
+    [normalizedEmail],
+    (selectErr, profileRow) => {
+      if (selectErr) {
+        done(selectErr);
+        return;
+      }
+
+      const profileId = normalizeNullableText(profileRow?.id);
+      if (!profileId) {
+        done(null, null);
+        return;
+      }
+
+      db.run(
+        `
+          UPDATE users
+          SET
+            bga_id = NULL,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE bga_id = ?
+            AND id <> ?
+        `,
+        [profileId, normalizedUserId],
+        (clearErr) => {
+          if (clearErr) {
+            done(clearErr);
+            return;
+          }
+
+          db.run(
+            `
+              UPDATE users
+              SET
+                bga_id = ?,
+                updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+                AND trim(COALESCE(bga_id, '')) = ''
+            `,
+            [profileId, normalizedUserId],
+            (updateErr) => {
+              if (updateErr) {
+                done(updateErr);
+                return;
+              }
+              done(null, profileId);
+            }
+          );
+        }
+      );
+    }
+  );
+}
+
+function syncUsersBgaIdForProfile(profileId, email, done) {
+  const normalizedProfileId = normalizeNullableText(profileId);
+  const normalizedEmail = normalizeNullableText(email);
+
+  if (!normalizedProfileId) {
+    done(null, null);
+    return;
+  }
+
+  const clearExistingBindings = (targetUserId, callback) => {
+    const params = targetUserId
+      ? [normalizedProfileId, Number(targetUserId)]
+      : [normalizedProfileId];
+    const sql = targetUserId
+      ? `
+          UPDATE users
+          SET
+            bga_id = NULL,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE bga_id = ?
+            AND id <> ?
+        `
+      : `
+          UPDATE users
+          SET
+            bga_id = NULL,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE bga_id = ?
+        `;
+
+    db.run(sql, params, callback);
+  };
+
+  if (!normalizedEmail) {
+    clearExistingBindings(null, (clearErr) => done(clearErr || null, null));
+    return;
+  }
+
+  db.get(
+    `
+      SELECT u.id
+      FROM users u
+      WHERE lower(COALESCE(u.email, '')) = lower(?)
+      ORDER BY datetime(COALESCE(u.last_login, u.updated_at, u.created_at)) DESC, u.id ASC
+      LIMIT 1
+    `,
+    [normalizedEmail],
+    (selectErr, userRow) => {
+      if (selectErr) {
+        done(selectErr);
+        return;
+      }
+
+      const targetUserId = Number(userRow?.id);
+      if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
+        clearExistingBindings(null, (clearErr) => done(clearErr || null, null));
+        return;
+      }
+
+      clearExistingBindings(targetUserId, (clearErr) => {
+        if (clearErr) {
+          done(clearErr);
+          return;
+        }
+
+        db.run(
+          `
+            UPDATE users
+            SET
+              bga_id = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `,
+          [normalizedProfileId, targetUserId],
+          (updateErr) => done(updateErr || null, targetUserId)
+        );
+      });
+    }
+  );
+}
+
 function ensureUsersSchema() {
   db.all("PRAGMA table_info(users)", (pragmaErr, columns) => {
     if (pragmaErr) {
@@ -150,9 +308,30 @@ function ensureUsersSchema() {
     addColumnIfMissing(columns, "users", "email", "TEXT");
     addColumnIfMissing(columns, "users", "name", "TEXT");
     addColumnIfMissing(columns, "users", "picture", "TEXT");
+    addColumnIfMissing(columns, "users", "bga_id", "TEXT");
     addColumnIfMissing(columns, "users", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
     addColumnIfMissing(columns, "users", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
     addColumnIfMissing(columns, "users", "last_login", "TEXT");
+    db.run(
+      "UPDATE users SET bga_id = NULL WHERE trim(COALESCE(bga_id, '')) = ''",
+      (normalizeErr) => {
+        if (normalizeErr) {
+          console.error("Failed to normalize users.bga_id", normalizeErr);
+        }
+      }
+    );
+    db.run(
+      `
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_bga_id
+        ON users(bga_id)
+        WHERE bga_id IS NOT NULL AND trim(bga_id) <> ''
+      `,
+      (indexErr) => {
+        if (indexErr) {
+          console.error("Failed to ensure unique index for users.bga_id", indexErr);
+        }
+      }
+    );
   });
 }
 
@@ -493,6 +672,7 @@ db.serialize(() => {
       email TEXT,
       name TEXT,
       picture TEXT,
+      bga_id TEXT,
       last_login TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -578,63 +758,21 @@ passport.deserializeUser((id, done) => {
         u.email,
         u.name,
         u.picture,
-        (
-          SELECT p.id
-          FROM profiles p
-          WHERE lower(p.email) = lower(u.email)
-            AND p.deleted_at IS NULL
-          ORDER BY p.updated_at DESC, p.id ASC
-          LIMIT 1
-        ) AS player_id,
-        COALESCE((
-          SELECT p.admin
-          FROM profiles p
-          WHERE lower(p.email) = lower(u.email)
-            AND p.deleted_at IS NULL
-          ORDER BY p.updated_at DESC, p.id ASC
-          LIMIT 1
-        ), 0) AS admin,
-        (
-          SELECT p.bga_nickname
-          FROM profiles p
-          WHERE lower(p.email) = lower(u.email)
-            AND p.deleted_at IS NULL
-          ORDER BY p.updated_at DESC, p.id ASC
-          LIMIT 1
-        ) AS bga_nickname,
-        (
-          SELECT p.association
-          FROM profiles p
-          WHERE lower(p.email) = lower(u.email)
-            AND p.deleted_at IS NULL
-          ORDER BY p.updated_at DESC, p.id ASC
-          LIMIT 1
-        ) AS association,
-        COALESCE((
-          SELECT p.master_title
-          FROM profiles p
-          WHERE lower(p.email) = lower(u.email)
-            AND p.deleted_at IS NULL
-          ORDER BY p.updated_at DESC, p.id ASC
-          LIMIT 1
-        ), 0) AS master_title,
-        (
-          SELECT p.master_title_date
-          FROM profiles p
-          WHERE lower(p.email) = lower(u.email)
-            AND p.deleted_at IS NULL
-          ORDER BY p.updated_at DESC, p.id ASC
-          LIMIT 1
-        ) AS master_title_date,
-        COALESCE((
-          SELECT p.team_captain
-          FROM profiles p
-          WHERE lower(p.email) = lower(u.email)
-            AND p.deleted_at IS NULL
-          ORDER BY p.updated_at DESC, p.id ASC
-          LIMIT 1
-        ), 0) AS team_captain
+        u.last_login,
+        u.bga_id,
+        p.id AS player_id,
+        COALESCE(p.admin, 0) AS admin,
+        p.bga_nickname,
+        p.association,
+        COALESCE(p.master_title, 0) AS master_title,
+        p.master_title_date,
+        COALESCE(p.team_captain, 0) AS team_captain,
+        p.name AS profile_name,
+        p.email AS profile_email
       FROM users u
+      LEFT JOIN profiles p
+        ON p.id = u.bga_id
+       AND p.deleted_at IS NULL
       WHERE u.id = ?
     `,
     [id],
@@ -675,11 +813,20 @@ passport.use(
           if (insertErr) return done(insertErr);
 
           db.get(
-            "SELECT id, google_id, email, name, picture, last_login FROM users WHERE google_id = ?",
+            "SELECT id, google_id, email, name, picture, bga_id, last_login FROM users WHERE google_id = ?",
             [googleId],
             (selectErr, row) => {
               if (selectErr) return done(selectErr);
-              return done(null, row);
+              if (!row) return done(null, false);
+
+              if (normalizeNullableText(row.bga_id)) {
+                return done(null, row);
+              }
+
+              return syncUserBgaIdFromEmail(row.id, email, (syncErr) => {
+                if (syncErr) return done(syncErr);
+                return done(null, row);
+              });
             }
           );
         }
@@ -1476,6 +1623,7 @@ app.get("/users", requireAdmin, (_req, res, next) => {
         u.email,
         u.name,
         u.picture,
+        u.bga_id,
         u.created_at,
         u.last_login
       FROM users u
@@ -2679,8 +2827,11 @@ app.get("/auth/me", (req, res) => {
     name,
     picture,
     player_id,
+    bga_id,
     admin,
     bga_nickname,
+    profile_name,
+    profile_email,
     association,
     master_title,
     master_title_date,
@@ -2699,15 +2850,16 @@ app.get("/auth/me", (req, res) => {
       email,
       name,
       picture,
+      bgaId: bga_id || null,
       playerId: player_id || null,
       isAdmin,
       myProfileUrl,
       adminPanelUrl: isAdmin ? `${SITE_BASE_URL}/admin` : null,
       profile: {
         bgaNickname: bga_nickname || null,
-        name: name || null,
+        name: profile_name || null,
         association: association || null,
-        email: email || null,
+        email: profile_email || null,
         masterTitle: Number(master_title) === 1,
         masterTitleDate: master_title_date || null,
         teamCaptain: Number(team_captain) === 1,
@@ -3031,7 +3183,12 @@ app.patch("/profiles/:playerId", (req, res) => {
           if (selectErr) {
             return res.status(500).json({ ok: false, message: "Failed to load updated profile" });
           }
-          return res.json({ ok: true, profile: row || null });
+          return syncUsersBgaIdForProfile(requestedPlayerId, row?.email, (syncErr) => {
+            if (syncErr) {
+              return res.status(500).json({ ok: false, message: "Profile updated, but failed to sync linked user" });
+            }
+            return res.json({ ok: true, profile: row || null });
+          });
         }
       );
     });
