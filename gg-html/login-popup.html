@@ -220,7 +220,6 @@
 
   <script>
     const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
-    const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
 
     const signInLabel = document.getElementById("lpAuthSignInLabel");
     const signInDropdown = document.getElementById("lpAuthSignInDropdown");
@@ -248,25 +247,6 @@
       return parts[0] || "";
     }
 
-    async function isCaptainByLoginEmail(email) {
-      const normalizedEmail = String(email || "").trim().toLowerCase();
-      if (!normalizedEmail) return false;
-      try {
-        const response = await fetch(PROFILES_PUBLIC_URL, { method: "GET" });
-        if (!response.ok) return false;
-        const payload = await response.json();
-        const rows = Array.isArray(payload?.profiles) ? payload.profiles : [];
-        const profileRow = rows.find((row) => {
-          const rowEmail = String(row?.email || "").trim().toLowerCase();
-          return rowEmail !== "" && rowEmail === normalizedEmail;
-        });
-        if (!profileRow) return false;
-        return toBool(profileRow.captain ?? profileRow.team_captain);
-      } catch (_error) {
-        return false;
-      }
-    }
-
     function closeUserMenu() {
       userMenu.classList.add("lp-auth__hidden");
       authUserTrigger.setAttribute("aria-expanded", "false");
@@ -290,8 +270,8 @@
       authToggle.checked = false;
     }
 
-    async function applyCaptainMenuAccess(user) {
-      const isTeamCaptain = await isCaptainByLoginEmail(user?.email);
+    function applyCaptainMenuAccess(user) {
+      const isTeamCaptain = toBool(user?.profile?.teamCaptain ?? user?.teamCaptain);
       if (isTeamCaptain) {
         manageTeamLink.classList.remove("lp-auth__hidden");
         manageTeamLink.href = "https://carcassonne.gg/captain/";

@@ -913,8 +913,7 @@
     sectionList.innerHTML = "";
     state.users.forEach((item) => {
       const subtitleParts = [];
-      if (item.email) subtitleParts.push(item.email);
-      if (item.bga_id) subtitleParts.push(`BGA ID: ${item.bga_id}`);
+      if (item.bga_nickname) subtitleParts.push(`BGA: ${item.bga_nickname}`);
       if (item.last_login) subtitleParts.push(`Last login: ${formatDate(item.last_login)}`);
       sectionList.appendChild(createListRow({
         imageSrc: item.picture,

@@ -1624,9 +1624,13 @@ app.get("/users", requireAdmin, (_req, res, next) => {
         u.name,
         u.picture,
         u.bga_id,
+        p.bga_nickname,
         u.created_at,
         u.last_login
       FROM users u
+      LEFT JOIN profiles p
+        ON p.id = u.bga_id
+       AND p.deleted_at IS NULL
       ORDER BY COALESCE(NULLIF(trim(u.name), ''), trim(u.email), printf('user-%s', u.id)) COLLATE NOCASE ASC
     `,
     (err, rows) => {
