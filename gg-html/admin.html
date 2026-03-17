@@ -180,6 +180,18 @@
     color: var(--muted);
   }
 
+  .audit-trail-subtitle {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .users-subtitle {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   .cp-edit-btn,
   .cp-btn {
     border: 1px solid #c8ced8;
@@ -300,6 +312,34 @@
     background: #fff;
   }
 
+  .admin-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 2px 0;
+    flex-wrap: wrap;
+  }
+
+  .admin-pagination-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .admin-pagination select {
+    min-width: 72px;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #fff;
+    color: var(--text);
+    font: inherit;
+  }
+
   .admin-inline-form .cp-edit-form {
     margin-top: 8px;
   }
@@ -321,6 +361,19 @@
     overflow-x: auto;
   }
 
+  .admin-inline-value {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--text);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .admin-inline-value-label {
+    font-weight: 700;
+  }
+
   @media (max-width: 640px) {
     .admin-section-head {
       flex-direction: column;
@@ -329,6 +382,14 @@
 
     .cp-match-row {
       align-items: flex-start;
+    }
+
+    .audit-trail-subtitle {
+      line-height: 1.35;
+    }
+
+    .users-subtitle {
+      line-height: 1.35;
     }
   }
 </style>
@@ -396,14 +457,42 @@
       title: "Users",
       buttonLabel: "View",
       createLabel: "",
-      load: () => apiJson(USERS_URL, { method: "GET" }).then((data) => data.users || []),
+      load: () => {
+        const pageSize = Number(state.usersPageSize) || 10;
+        const page = Number(state.usersPage) || 1;
+        const params = new URLSearchParams({
+          limit: String(pageSize),
+          page: String(page),
+        });
+        return apiJson(`${USERS_URL}?${params.toString()}`, { method: "GET" }).then((data) => {
+          state.usersPage = Number(data?.pagination?.page) || 1;
+          state.usersPageSize = Number(data?.pagination?.page_size) || pageSize;
+          state.usersTotal = Number(data?.pagination?.total) || 0;
+          state.usersTotalPages = Number(data?.pagination?.total_pages) || 1;
+          return data.users || [];
+        });
+      },
     },
     auditTrail: {
       key: "auditTrail",
       title: "Audit Trail",
       buttonLabel: "View",
       createLabel: "",
-      load: () => apiJson(AUDIT_TRAIL_URL, { method: "GET" }).then((data) => data.records || []),
+      load: () => {
+        const pageSize = Number(state.auditTrailPageSize) || 10;
+        const page = Number(state.auditTrailPage) || 1;
+        const params = new URLSearchParams({
+          limit: String(pageSize),
+          page: String(page),
+        });
+        return apiJson(`${AUDIT_TRAIL_URL}?${params.toString()}`, { method: "GET" }).then((data) => {
+          state.auditTrailPage = Number(data?.pagination?.page) || 1;
+          state.auditTrailPageSize = Number(data?.pagination?.page_size) || pageSize;
+          state.auditTrailTotal = Number(data?.pagination?.total) || 0;
+          state.auditTrailTotalPages = Number(data?.pagination?.total_pages) || 1;
+          return data.records || [];
+        });
+      },
     },
   };
 
@@ -413,7 +502,15 @@
     associations: [],
     teams: [],
     users: [],
+    usersPage: 1,
+    usersPageSize: 10,
+    usersTotal: 0,
+    usersTotalPages: 1,
     auditTrail: [],
+    auditTrailPage: 1,
+    auditTrailPageSize: 10,
+    auditTrailTotal: 0,
+    auditTrailTotalPages: 1,
   };
 
   const accessCard = document.getElementById("adminAccessCard");
@@ -519,7 +616,7 @@
     return true;
   }
 
-  function createListRow({ imageSrc, imageAlt, imageRound, title, subtitle, buttonLabel, onClick }) {
+  function createListRow({ imageSrc, imageAlt, imageRound, title, subtitle, subtitleClassName, buttonLabel, onClick }) {
     const row = document.createElement("div");
     row.className = "cp-match-row";
 
@@ -539,6 +636,7 @@
     if (subtitle) {
       const sub = document.createElement("div");
       sub.className = "cp-player-name";
+      if (subtitleClassName) sub.classList.add(subtitleClassName);
       sub.textContent = subtitle;
       main.appendChild(sub);
     }
@@ -603,6 +701,20 @@
     return { row, pre };
   }
 
+  function createInlineValueRow(labelText, value) {
+    const row = document.createElement("div");
+    row.className = "cp-edit-row";
+    const text = document.createElement("p");
+    text.className = "admin-inline-value";
+    const label = document.createElement("span");
+    label.className = "admin-inline-value-label";
+    label.textContent = `${labelText}: `;
+    text.appendChild(label);
+    text.appendChild(document.createTextNode(value == null || value === "" ? "-" : String(value)));
+    row.appendChild(text);
+    return { row, text };
+  }
+
   function normalizeEntityId(value) {
     return String(value || "")
       .trim()
@@ -621,6 +733,18 @@
     const date = new Date(raw);
     if (Number.isNaN(date.getTime())) return raw;
     return date.toLocaleString();
+  }
+
+  function formatAuditTrailDate(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return raw;
+    const day = date.getDate();
+    const month = date.toLocaleString("en-US", { month: "short" });
+    const hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${day} ${month} ${hours}:${minutes}`;
   }
 
   function formatAuditJson(value) {
@@ -652,6 +776,202 @@
     empty.className = "admin-empty";
     empty.textContent = text;
     sectionList.appendChild(empty);
+  }
+
+  function createAuditPagination() {
+    const total = Number(state.auditTrailTotal) || 0;
+    const totalPages = Math.max(1, Number(state.auditTrailTotalPages) || 1);
+    const currentPage = Math.min(Math.max(1, Number(state.auditTrailPage) || 1), totalPages);
+    const pageSize = Number(state.auditTrailPageSize) || 10;
+    const from = total === 0 ? 0 : ((currentPage - 1) * pageSize) + 1;
+    const to = total === 0 ? 0 : Math.min(currentPage * pageSize, total);
+
+    const wrap = document.createElement("div");
+    wrap.className = "admin-pagination";
+
+    const left = document.createElement("div");
+    left.className = "admin-pagination-group";
+
+    const perPageLabel = document.createElement("span");
+    perPageLabel.textContent = "Per page";
+    const perPageSelect = document.createElement("select");
+    [10, 20, 50].forEach((size) => {
+      const option = document.createElement("option");
+      option.value = String(size);
+      option.textContent = String(size);
+      if (size === pageSize) option.selected = true;
+      perPageSelect.appendChild(option);
+    });
+    perPageSelect.addEventListener("change", async () => {
+      state.auditTrailPageSize = Number(perPageSelect.value) || 10;
+      state.auditTrailPage = 1;
+      closeInlineForm();
+      sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
+      try {
+        await loadSectionData("auditTrail");
+        renderAuditTrail();
+      } catch (error) {
+        setStatus(error?.message || "Failed to load audit trail.", true);
+        renderListEmpty("Failed to load records.");
+      }
+    });
+
+    const range = document.createElement("span");
+    range.textContent = `${from}-${to} of ${total}`;
+
+    left.appendChild(perPageLabel);
+    left.appendChild(perPageSelect);
+    left.appendChild(range);
+
+    const right = document.createElement("div");
+    right.className = "admin-pagination-group";
+
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "cp-btn cp-btn-secondary";
+    prevBtn.textContent = "Previous";
+    prevBtn.disabled = currentPage <= 1;
+    prevBtn.addEventListener("click", async () => {
+      if (currentPage <= 1) return;
+      state.auditTrailPage = currentPage - 1;
+      closeInlineForm();
+      sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
+      try {
+        await loadSectionData("auditTrail");
+        renderAuditTrail();
+      } catch (error) {
+        setStatus(error?.message || "Failed to load audit trail.", true);
+        renderListEmpty("Failed to load records.");
+      }
+    });
+
+    const pageInfo = document.createElement("span");
+    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "cp-btn cp-btn-secondary";
+    nextBtn.textContent = "Next";
+    nextBtn.disabled = currentPage >= totalPages || total === 0;
+    nextBtn.addEventListener("click", async () => {
+      if (currentPage >= totalPages) return;
+      state.auditTrailPage = currentPage + 1;
+      closeInlineForm();
+      sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
+      try {
+        await loadSectionData("auditTrail");
+        renderAuditTrail();
+      } catch (error) {
+        setStatus(error?.message || "Failed to load audit trail.", true);
+        renderListEmpty("Failed to load records.");
+      }
+    });
+
+    right.appendChild(prevBtn);
+    right.appendChild(pageInfo);
+    right.appendChild(nextBtn);
+
+    wrap.appendChild(left);
+    wrap.appendChild(right);
+    return wrap;
+  }
+
+  function createUsersPagination() {
+    const total = Number(state.usersTotal) || 0;
+    const totalPages = Math.max(1, Number(state.usersTotalPages) || 1);
+    const currentPage = Math.min(Math.max(1, Number(state.usersPage) || 1), totalPages);
+    const pageSize = Number(state.usersPageSize) || 10;
+    const from = total === 0 ? 0 : ((currentPage - 1) * pageSize) + 1;
+    const to = total === 0 ? 0 : Math.min(currentPage * pageSize, total);
+
+    const wrap = document.createElement("div");
+    wrap.className = "admin-pagination";
+
+    const left = document.createElement("div");
+    left.className = "admin-pagination-group";
+
+    const perPageLabel = document.createElement("span");
+    perPageLabel.textContent = "Per page";
+    const perPageSelect = document.createElement("select");
+    [10, 20, 50].forEach((size) => {
+      const option = document.createElement("option");
+      option.value = String(size);
+      option.textContent = String(size);
+      if (size === pageSize) option.selected = true;
+      perPageSelect.appendChild(option);
+    });
+    perPageSelect.addEventListener("change", async () => {
+      state.usersPageSize = Number(perPageSelect.value) || 10;
+      state.usersPage = 1;
+      closeInlineForm();
+      sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
+      try {
+        await loadSectionData("users");
+        renderUsers();
+      } catch (error) {
+        setStatus(error?.message || "Failed to load users.", true);
+        renderListEmpty("Failed to load records.");
+      }
+    });
+
+    const range = document.createElement("span");
+    range.textContent = `${from}-${to} of ${total}`;
+
+    left.appendChild(perPageLabel);
+    left.appendChild(perPageSelect);
+    left.appendChild(range);
+
+    const right = document.createElement("div");
+    right.className = "admin-pagination-group";
+
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "cp-btn cp-btn-secondary";
+    prevBtn.textContent = "Previous";
+    prevBtn.disabled = currentPage <= 1;
+    prevBtn.addEventListener("click", async () => {
+      if (currentPage <= 1) return;
+      state.usersPage = currentPage - 1;
+      closeInlineForm();
+      sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
+      try {
+        await loadSectionData("users");
+        renderUsers();
+      } catch (error) {
+        setStatus(error?.message || "Failed to load users.", true);
+        renderListEmpty("Failed to load records.");
+      }
+    });
+
+    const pageInfo = document.createElement("span");
+    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "cp-btn cp-btn-secondary";
+    nextBtn.textContent = "Next";
+    nextBtn.disabled = currentPage >= totalPages || total === 0;
+    nextBtn.addEventListener("click", async () => {
+      if (currentPage >= totalPages) return;
+      state.usersPage = currentPage + 1;
+      closeInlineForm();
+      sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
+      try {
+        await loadSectionData("users");
+        renderUsers();
+      } catch (error) {
+        setStatus(error?.message || "Failed to load users.", true);
+        renderListEmpty("Failed to load records.");
+      }
+    });
+
+    right.appendChild(prevBtn);
+    right.appendChild(pageInfo);
+    right.appendChild(nextBtn);
+
+    wrap.appendChild(left);
+    wrap.appendChild(right);
+    return wrap;
   }
 
   function showCreateForm(formEl) {
@@ -867,10 +1187,10 @@
     const view = document.createElement("div");
     view.className = "cp-edit-form";
 
-    const bgaIdField = createTextRow("BGA id", item.bga_id || "", { readOnly: true });
-    const emailField = createTextRow("Email", item.email || "", { readOnly: true });
-    const createdAtField = createTextRow("Created at", formatDate(item.created_at), { readOnly: true });
-    const lastLoginField = createTextRow("Last login", formatDate(item.last_login), { readOnly: true });
+    const bgaIdField = createInlineValueRow("BGA id", item.bga_id || "");
+    const emailField = createInlineValueRow("Email", item.email || "");
+    const createdAtField = createInlineValueRow("Created at", formatDate(item.created_at));
+    const lastLoginField = createInlineValueRow("Last login", formatDate(item.last_login));
 
     view.appendChild(bgaIdField.row);
     view.appendChild(emailField.row);
@@ -898,12 +1218,12 @@
     const view = document.createElement("div");
     view.className = "cp-edit-form";
 
-    const actorField = createTextRow("Actor", item.actor_bga_nickname || item.actor_email || "", { readOnly: true });
-    const dateField = createTextRow("Date", formatDate(item.created_at), { readOnly: true });
-    const eventField = createTextRow("Event", item.event_type || "", { readOnly: true });
-    const entityField = createTextRow("Entity", item.entity_type || "", { readOnly: true });
-    const actionField = createTextRow("Action", item.action || "", { readOnly: true });
-    const recordField = createTextRow("Record id", item.record_id || "", { readOnly: true });
+    const actorField = createInlineValueRow("Actor", item.actor_bga_nickname || item.actor_email || "");
+    const dateField = createInlineValueRow("Date", formatDate(item.created_at));
+    const eventField = createInlineValueRow("Event", item.event_type || "");
+    const entityField = createInlineValueRow("Entity", item.entity_type || "");
+    const actionField = createInlineValueRow("Action", item.action || "");
+    const recordField = createInlineValueRow("Record id", item.record_id || "");
     const changesField = createCodeRow("Changes", formatAuditJson(item.changes));
     const metadataField = createCodeRow("Metadata", formatAuditJson(item.metadata));
 
@@ -987,9 +1307,11 @@
     sectionTitle.textContent = "Users";
     sectionCreateBtn.classList.add("hidden");
     sectionCreateBtn.onclick = null;
+    closeInlineForm();
 
     if (!state.users.length) {
       renderListEmpty("No users yet.");
+      sectionList.appendChild(createUsersPagination());
       return;
     }
 
@@ -1004,19 +1326,23 @@
         imageRound: true,
         title: item.name || item.email || `User #${item.id}`,
         subtitle: subtitleParts.join(" • "),
+        subtitleClassName: "users-subtitle",
         buttonLabel: "View",
         onClick: (row) => openUserView(item, row),
       }));
     });
+    sectionList.appendChild(createUsersPagination());
   }
 
   function renderAuditTrail() {
     sectionTitle.textContent = "Audit Trail";
     sectionCreateBtn.classList.add("hidden");
     sectionCreateBtn.onclick = null;
+    closeInlineForm();
 
     if (!state.auditTrail.length) {
       renderListEmpty("No audit trail records yet.");
+      sectionList.appendChild(createAuditPagination());
       return;
     }
 
@@ -1025,8 +1351,7 @@
       const subtitleParts = [];
       if (item.actor_bga_nickname) subtitleParts.push(`By: ${item.actor_bga_nickname}`);
       else if (item.actor_email) subtitleParts.push(`By: ${item.actor_email}`);
-      if (item.record_id) subtitleParts.push(`Record: ${item.record_id}`);
-      if (item.created_at) subtitleParts.push(formatDate(item.created_at));
+      if (item.created_at) subtitleParts.push(formatAuditTrailDate(item.created_at));
 
       sectionList.appendChild(createListRow({
         imageSrc: "",
@@ -1034,10 +1359,12 @@
         imageRound: false,
         title: item.event_type || `${item.entity_type || "Audit"} ${item.action || ""}`.trim(),
         subtitle: subtitleParts.join(" • "),
+        subtitleClassName: "audit-trail-subtitle",
         buttonLabel: "View",
         onClick: (row) => openAuditView(item, row),
       }));
     });
+    sectionList.appendChild(createAuditPagination());
   }
 
   async function loadSectionData(section) {

@@ -1340,13 +1340,40 @@ app.post("/profiles", (req, res) => {
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
   const actorPlayerId = String(req.user.player_id || "").trim() || null;
   const payload = req.body && typeof req.body === "object" ? req.body : {};
-  const hasAssociationInPayload = Object.prototype.hasOwnProperty.call(payload, "association");
   const hasNameInPayload = Object.prototype.hasOwnProperty.call(payload, "name");
+  const hasTeamCaptainInPayload = Object.prototype.hasOwnProperty.call(payload, "team_captain");
 
   const playerId = String(payload.id ?? payload.player_id ?? "").trim();
   const bgaNickname = String(payload.bga_nickname || "").trim();
   const association = String(payload.association || "").trim().toUpperCase();
   const name = String(payload.name || "").trim() || null;
+
+  const normalizeText = (value) => {
+    const v = String(value ?? "").trim();
+    return v === "" ? null : v;
+  };
+
+  const normalizeBool = (value) => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value === 1;
+    const raw = String(value ?? "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  };
+
+  const profilePatch = {
+    name,
+    status: normalizeText(payload.status) || "Active",
+    master_title: normalizeBool(payload.master_title) ? 1 : 0,
+    master_title_date: normalizeText(payload.master_title_date),
+    email: normalizeText(payload.email),
+    association,
+    team_captain: hasTeamCaptainInPayload ? (normalizeBool(payload.team_captain) ? 1 : 0) : 0,
+    telegram: normalizeText(payload.telegram),
+    whatsapp: normalizeText(payload.whatsapp),
+    discord: normalizeText(payload.discord),
+    instagram: normalizeText(payload.instagram),
+    contact_email: normalizeText(payload.contact_email),
+  };
 
   if (!/^\d{6,9}$/.test(playerId)) {
     return res.status(400).json({ ok: false, message: "id must be 6-9 digits" });
@@ -1356,6 +1383,18 @@ app.post("/profiles", (req, res) => {
   }
   if (!association) {
     return res.status(400).json({ ok: false, message: "association is required" });
+  }
+  if (profilePatch.master_title === 1 && !profilePatch.master_title_date) {
+    return res.status(400).json({
+      ok: false,
+      message: "master_title_date is required when master_title is enabled",
+    });
+  }
+  if (profilePatch.master_title === 0) {
+    profilePatch.master_title_date = null;
+  }
+  if (profilePatch.status !== "Active" && profilePatch.status !== "Inactive") {
+    return res.status(400).json({ ok: false, message: "status must be Active or Inactive" });
   }
   if (!isAdmin) {
     if (!isTeamCaptain || !userAssociation) {
@@ -1384,6 +1423,14 @@ app.post("/profiles", (req, res) => {
           return res.status(409).json({ ok: false, message: "Profile with this id or bga_nickname already exists" });
         }
 
+        const restorePatch = isAdmin
+          ? profilePatch
+          : {
+              ...profilePatch,
+              association,
+              team_captain: 0,
+            };
+
         return db.run(
           `
             UPDATE profiles
@@ -1392,14 +1439,41 @@ app.post("/profiles", (req, res) => {
               bga_nickname = ?,
               name = CASE WHEN ? THEN ? ELSE name END,
               association = ?,
-              status = 'Active',
+              status = ?,
+              email = ?,
+              master_title = ?,
+              master_title_date = ?,
+              team_captain = ?,
+              telegram = ?,
+              whatsapp = ?,
+              discord = ?,
+              instagram = ?,
+              contact_email = ?,
               deleted_at = NULL,
               deleted_by = NULL,
               updated_by = ?,
               updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
           `,
-          [playerId, bgaNickname, hasNameInPayload ? 1 : 0, name, association, actorPlayerId, String(dupRow.id || "").trim()],
+          [
+            playerId,
+            bgaNickname,
+            hasNameInPayload ? 1 : 0,
+            restorePatch.name,
+            association,
+            restorePatch.status,
+            restorePatch.email,
+            restorePatch.master_title,
+            restorePatch.master_title_date,
+            restorePatch.team_captain,
+            restorePatch.telegram,
+            restorePatch.whatsapp,
+            restorePatch.discord,
+            restorePatch.instagram,
+            restorePatch.contact_email,
+            actorPlayerId,
+            String(dupRow.id || "").trim(),
+          ],
           function onRestore(restoreErr) {
             if (restoreErr) {
               return res.status(500).json({ ok: false, message: "Failed to restore profile" });
@@ -1419,7 +1493,12 @@ app.post("/profiles", (req, res) => {
                   COALESCE(master_title, 0) AS master_title,
                   master_title_date,
                   COALESCE(team_captain, 0) AS team_captain,
-                  created_by
+                  created_by,
+                  telegram,
+                  whatsapp,
+                  discord,
+                  instagram,
+                  contact_email
                 FROM profiles
                 WHERE id = ?
                   AND deleted_at IS NULL
@@ -1455,16 +1534,42 @@ app.post("/profiles", (req, res) => {
             bga_nickname,
             name,
             association,
+            status,
+            email,
+            master_title,
+            master_title_date,
             team_captain,
             admin,
+            telegram,
+            whatsapp,
+            discord,
+            instagram,
+            contact_email,
             created_by,
             updated_by,
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, 0, 0, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
-        [playerId, bgaNickname, name, association, actorPlayerId, actorPlayerId],
+        [
+          playerId,
+          bgaNickname,
+          profilePatch.name,
+          association,
+          profilePatch.status,
+          profilePatch.email,
+          profilePatch.master_title,
+          profilePatch.master_title_date,
+          isAdmin ? profilePatch.team_captain : 0,
+          profilePatch.telegram,
+          profilePatch.whatsapp,
+          profilePatch.discord,
+          profilePatch.instagram,
+          profilePatch.contact_email,
+          actorPlayerId,
+          actorPlayerId,
+        ],
         function onInsert(insertErr) {
           if (insertErr) {
             return res.status(500).json({ ok: false, message: "Failed to create profile" });
@@ -1481,7 +1586,12 @@ app.post("/profiles", (req, res) => {
                 COALESCE(master_title, 0) AS master_title,
                 master_title_date,
                 COALESCE(team_captain, 0) AS team_captain,
-                created_by
+                created_by,
+                telegram,
+                whatsapp,
+                discord,
+                instagram,
+                contact_email
               FROM profiles
               WHERE id = ?
                 AND deleted_at IS NULL
@@ -1998,61 +2108,118 @@ app.patch("/teams/:id", requireAdmin, (req, res) => {
   );
 });
 
-app.get("/users", requireAdmin, (_req, res, next) => {
-  db.all(
-    `
-      SELECT
-        u.id,
-        u.google_id,
-        u.email,
-        u.name,
-        u.picture,
-        u.bga_id,
-        p.bga_nickname,
-        u.created_at,
-        u.last_login
-      FROM users u
-      LEFT JOIN profiles p
-        ON p.id = u.bga_id
-       AND p.deleted_at IS NULL
-      ORDER BY COALESCE(NULLIF(trim(u.name), ''), trim(u.email), printf('user-%s', u.id)) COLLATE NOCASE ASC
-    `,
-    (err, rows) => {
-      if (err) return next(err);
-      return res.json({ ok: true, users: rows || [] });
+app.get("/users", requireAdmin, (req, res, next) => {
+  const allowedPageSizes = new Set([10, 20, 50]);
+  const parsedLimit = Number.parseInt(String(req.query.limit || "10"), 10);
+  const parsedPage = Number.parseInt(String(req.query.page || "1"), 10);
+  const limit = allowedPageSizes.has(parsedLimit) ? parsedLimit : 10;
+  const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const offset = (page - 1) * limit;
+
+  return db.get(
+    "SELECT COUNT(*) AS total FROM users",
+    (countErr, countRow) => {
+      if (countErr) return next(countErr);
+      const total = Number(countRow?.total || 0);
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const safePage = Math.min(page, totalPages);
+      const safeOffset = (safePage - 1) * limit;
+
+      return db.all(
+        `
+          SELECT
+            u.id,
+            u.google_id,
+            u.email,
+            u.name,
+            u.picture,
+            u.bga_id,
+            p.bga_nickname,
+            u.created_at,
+            u.last_login
+          FROM users u
+          LEFT JOIN profiles p
+            ON p.id = u.bga_id
+           AND p.deleted_at IS NULL
+          ORDER BY datetime(COALESCE(u.last_login, u.updated_at, u.created_at)) DESC, u.id ASC
+          LIMIT ?
+          OFFSET ?
+        `,
+        [limit, total > 0 ? safeOffset : offset],
+        (err, rows) => {
+          if (err) return next(err);
+          return res.json({
+            ok: true,
+            users: rows || [],
+            pagination: {
+              page: safePage,
+              page_size: limit,
+              total,
+              total_pages: totalPages,
+            },
+          });
+        }
+      );
     }
   );
 });
 
-app.get("/audit-trail", requireAdmin, (_req, res, next) => {
-  db.all(
-    `
-      SELECT
-        id,
-        event_type,
-        entity_type,
-        action,
-        record_id,
-        actor_user_id,
-        actor_bga_id,
-        actor_bga_nickname,
-        actor_email,
-        changes,
-        metadata,
-        created_at
-      FROM audit_trail
-      ORDER BY datetime(created_at) DESC, id DESC
-    `,
-    (err, rows) => {
-      if (err) return next(err);
-      return res.json({
-        ok: true,
-        records: (rows || []).map((row) => ({
-          ...row,
-          changes: parseJsonOrNull(row?.changes),
-          metadata: parseJsonOrNull(row?.metadata),
-        })),
-      });
+app.get("/audit-trail", requireAdmin, (req, res, next) => {
+  const allowedPageSizes = new Set([10, 20, 50]);
+  const parsedLimit = Number.parseInt(String(req.query.limit || "10"), 10);
+  const parsedPage = Number.parseInt(String(req.query.page || "1"), 10);
+  const limit = allowedPageSizes.has(parsedLimit) ? parsedLimit : 10;
+  const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const offset = (page - 1) * limit;
+
+  return db.get(
+    "SELECT COUNT(*) AS total FROM audit_trail",
+    (countErr, countRow) => {
+      if (countErr) return next(countErr);
+      const total = Number(countRow?.total || 0);
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const safePage = Math.min(page, totalPages);
+      const safeOffset = (safePage - 1) * limit;
+
+      return db.all(
+        `
+          SELECT
+            id,
+            event_type,
+            entity_type,
+            action,
+            record_id,
+            actor_user_id,
+            actor_bga_id,
+            actor_bga_nickname,
+            actor_email,
+            changes,
+            metadata,
+            created_at
+          FROM audit_trail
+          ORDER BY datetime(created_at) DESC, id DESC
+          LIMIT ?
+          OFFSET ?
+        `,
+        [limit, total > 0 ? safeOffset : offset],
+        (err, rows) => {
+          if (err) return next(err);
+          return res.json({
+            ok: true,
+            records: (rows || []).map((row) => ({
+              ...row,
+              changes: parseJsonOrNull(row?.changes),
+              metadata: parseJsonOrNull(row?.metadata),
+            })),
+            pagination: {
+              page: safePage,
+              page_size: limit,
+              total,
+              total_pages: totalPages,
+            },
+          });
+        }
+      );
     }
   );
 });
@@ -3861,6 +4028,7 @@ app.patch("/profiles/:playerId", (req, res) => {
               if (selectErr) {
                 return res.status(500).json({ ok: false, message: "Failed to load updated profile" });
               }
+              const changes = buildAuditChanges(beforeRow || {}, row || {}, PROFILE_AUDIT_FIELDS);
               return syncUsersBgaIdForProfile(
                 requestedPlayerId,
                 row?.email,
@@ -3872,6 +4040,9 @@ app.patch("/profiles/:playerId", (req, res) => {
                   if (syncErr) {
                     return res.status(500).json({ ok: false, message: "Profile updated, but failed to sync linked user" });
                   }
+                  if (!Object.keys(changes).length) {
+                    return res.json({ ok: true, profile: row || null });
+                  }
                   return logAuditEvent(
                     {
                       ...getAuditActor(req.user),
@@ -3879,7 +4050,7 @@ app.patch("/profiles/:playerId", (req, res) => {
                       entity_type: "profile",
                       action: "update",
                       record_id: requestedPlayerId,
-                      changes: buildAuditChanges(beforeRow || {}, row || {}, PROFILE_AUDIT_FIELDS),
+                      changes,
                     },
                     () => res.json({ ok: true, profile: row || null })
                   );

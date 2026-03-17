@@ -2240,10 +2240,6 @@
         id: playerId,
         bga_nickname: bgaNickname,
         association,
-        name: String(nameInput.value || "").trim(),
-      };
-
-      const patchPayload = {
         status: String(statusInput.getValue() || "").trim() || "Active",
         email: String(emailInput.value || "").trim(),
         name: String(nameInput.value || "").trim(),
@@ -2267,18 +2263,6 @@
         const createResult = await createResp.json().catch(() => ({}));
         if (!createResp.ok || !createResult?.ok) {
           setError(createResult?.message || "Failed to create profile.");
-          return;
-        }
-
-        const patchResp = await fetch(`${PROFILES_URL}/${encodeURIComponent(playerId)}`, {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patchPayload),
-        });
-        const patchResult = await patchResp.json().catch(() => ({}));
-        if (!patchResp.ok || !patchResult?.ok) {
-          setError(patchResult?.message || "Profile was created, but failed to save additional fields.");
           return;
         }
 
