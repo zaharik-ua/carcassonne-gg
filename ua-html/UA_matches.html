@@ -786,13 +786,24 @@ function normalizeStage2RoundName(roundName) {
   return trimmed.slice(0, colonIndex).trim();
 }
 
+function isUkraineTeamMatch(match) {
+  const tournamentType = typeof match?.tournament_type === "string"
+    ? match.tournament_type.trim()
+    : (typeof match?.type === "string" ? match.type.trim() : "");
+  if (tournamentType !== "TEAM") return false;
+
+  const team1 = typeof match?.team1 === "string" ? match.team1.trim() : "";
+  const team2 = typeof match?.team2 === "string" ? match.team2.trim() : "";
+  return team1 === "Ukraine" || team2 === "Ukraine";
+}
+
 function filterMatchesByAllowedTournaments(matches) {
   return (matches || []).filter(match => {
     const idRaw = typeof match.tournament_id === "string"
       ? match.tournament_id
       : (typeof match.tournamentId === "string" ? match.tournamentId : "");
     const id = idRaw.trim();
-    return id && ALLOWED_TOURNAMENT_IDS.has(id);
+    return (id && ALLOWED_TOURNAMENT_IDS.has(id)) || isUkraineTeamMatch(match);
   });
 }
 

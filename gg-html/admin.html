@@ -329,7 +329,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 10px 2px 0;
+    margin: 10px 8px 8px;
+    padding: 0;
     flex-wrap: wrap;
   }
 
@@ -350,6 +351,19 @@
   }
 
   .admin-pagination-checkbox input {
+    margin: 0;
+  }
+
+  .admin-list-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 10px 0 10px 8px;
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .admin-list-filter input {
     margin: 0;
   }
 
@@ -606,10 +620,11 @@
     return placeholder;
   }
 
-  function createAuditIcon(eventType) {
+  function createAuditIcon(eventType, action) {
     const icon = document.createElement("span");
     icon.className = "admin-avatar-placeholder audit-icon";
     const eventKey = String(eventType || "").trim().toLowerCase();
+    const actionKey = String(action || "").trim().toLowerCase();
     let bg = "#e8edf4";
     let svg = `
       <svg viewBox="0 0 16 16" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -618,24 +633,29 @@
       </svg>
     `;
 
-    if (eventKey.endsWith(".updated") || eventKey === "updated") {
-      bg = "#e7f1f9";
+    if (eventKey.endsWith(".updated") || eventKey === "updated" || actionKey === "update") {
+      bg = "#cfe6f8";
       svg = `
         <svg viewBox="0 0 16 16" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3 11.75V13h1.25l7-7-1.25-1.25-7 7Z" />
           <path d="m9.75 4.75 1.25-1.25 1.25 1.25-1.25 1.25Z" />
         </svg>
       `;
-    } else if (eventKey.endsWith(".created") || eventKey === "created") {
-      bg = "#e7f5ea";
+    } else if (eventKey.endsWith(".created") || eventKey === "created" || actionKey === "create") {
+      bg = "#d6f0dd";
       svg = `
         <svg viewBox="0 0 16 16" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M8 3.5v9" />
           <path d="M3.5 8h9" />
         </svg>
       `;
-    } else if (eventKey.endsWith(".deleted") || eventKey === "deleted") {
-      bg = "#f9e8e8";
+    } else if (
+      eventKey.endsWith(".deleted")
+      || eventKey.includes(".deleted_")
+      || eventKey === "deleted"
+      || actionKey === "delete"
+    ) {
+      bg = "#f6d4d4";
       svg = `
         <svg viewBox="0 0 16 16" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3.5 5h9" />
@@ -646,7 +666,7 @@
         </svg>
       `;
     } else if (eventKey.endsWith(".bga_linked") || eventKey === "bga_linked") {
-      bg = "#f1e8fb";
+      bg = "#e3d4f7";
       svg = `
         <svg viewBox="0 0 16 16" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M6.25 9.75 4.5 11.5a2 2 0 1 1-2.75-2.9L3.5 6.85" />
@@ -821,16 +841,47 @@
     return date.toLocaleString();
   }
 
+  function parseUtcDate(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)
+      ? raw.replace(" ", "T") + "Z"
+      : raw;
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return null;
+    return date;
+  }
+
   function formatAuditTrailDate(value) {
     const raw = String(value || "").trim();
     if (!raw) return "";
-    const date = new Date(raw);
-    if (Number.isNaN(date.getTime())) return raw;
+    const date = parseUtcDate(raw);
+    if (!date) return raw;
     const day = date.getDate();
     const month = date.toLocaleString("en-US", { month: "short" });
     const hours = date.getHours();
     const minutes = String(date.getMinutes()).padStart(2, "0");
     return `${day} ${month} ${hours}:${minutes}`;
+  }
+
+  function formatUserLastLogin(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const date = parseUtcDate(raw);
+    if (!date) return raw;
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(date);
+    const day = parts.find((part) => part.type === "day")?.value || "";
+    const month = parts.find((part) => part.type === "month")?.value || "";
+    const hour = parts.find((part) => part.type === "hour")?.value || "";
+    const minute = parts.find((part) => part.type === "minute")?.value || "";
+    if (!day || !month || !hour || !minute) return raw;
+    return `${day} ${month} ${hour}:${minute}`;
   }
 
   function formatAuditJson(value) {
@@ -862,6 +913,102 @@
     empty.className = "admin-empty";
     empty.textContent = text;
     sectionList.appendChild(empty);
+  }
+
+  function createAuditFilterControl() {
+    const label = document.createElement("label");
+    label.className = "admin-list-filter";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = !!state.auditTrailNotAdmins;
+    input.addEventListener("change", async () => {
+      state.auditTrailNotAdmins = input.checked;
+      state.auditTrailPage = 1;
+      closeInlineForm();
+      sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
+      try {
+        await loadSectionData("auditTrail");
+        renderAuditTrail();
+      } catch (error) {
+        setStatus(error?.message || "Failed to load audit trail.", true);
+        renderListEmpty("Failed to load records.");
+      }
+    });
+    const text = document.createElement("span");
+    text.textContent = "Hide admins";
+    label.appendChild(input);
+    label.appendChild(text);
+    return label;
+  }
+
+  function createUserActivityList(records) {
+    const wrap = document.createElement("div");
+    wrap.className = "cp-edit-row";
+
+    const label = document.createElement("label");
+    label.textContent = "Activity";
+    wrap.appendChild(label);
+
+    if (!Array.isArray(records) || !records.length) {
+      const empty = document.createElement("p");
+      empty.className = "admin-inline-value";
+      empty.textContent = "No audit trail records.";
+      wrap.appendChild(empty);
+      return wrap;
+    }
+
+    const list = document.createElement("div");
+    list.style.display = "grid";
+    list.style.gap = "8px";
+
+    records.forEach((item) => {
+      const entry = document.createElement("div");
+      entry.style.padding = "8px 10px";
+      entry.style.border = "1px solid var(--line)";
+      entry.style.borderRadius = "4px";
+      entry.style.background = "#fff";
+
+      const title = document.createElement("div");
+      title.style.fontSize = "13px";
+      title.style.fontWeight = "600";
+      title.textContent = formatAuditTitle(item);
+      entry.appendChild(title);
+
+      const meta = document.createElement("div");
+      meta.className = "cp-player-name audit-trail-subtitle";
+      const metaParts = [];
+      if (item.event_type) metaParts.push(item.event_type);
+      if (item.action) metaParts.push(item.action);
+      if (item.created_at) metaParts.push(formatAuditTrailDate(item.created_at));
+      meta.textContent = metaParts.join(" • ");
+      entry.appendChild(meta);
+
+      if (item.record_id) {
+        const record = document.createElement("div");
+        record.className = "cp-player-name audit-trail-subtitle";
+        record.textContent = `Record id: ${item.record_id}`;
+        entry.appendChild(record);
+      }
+
+      list.appendChild(entry);
+    });
+
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  function loadUserActivity(userId) {
+    const normalizedUserId = Number(userId);
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+      return Promise.resolve([]);
+    }
+    const params = new URLSearchParams({
+      limit: "10",
+      page: "1",
+      actor_user_id: String(normalizedUserId),
+    });
+    return apiJson(`${AUDIT_TRAIL_URL}?${params.toString()}`, { method: "GET" })
+      .then((data) => Array.isArray(data?.records) ? data.records : []);
   }
 
   function createAuditPagination() {
@@ -905,32 +1052,8 @@
     const range = document.createElement("span");
     range.textContent = `${from}-${to} of ${total}`;
 
-    const notAdminsLabel = document.createElement("label");
-    notAdminsLabel.className = "admin-pagination-checkbox";
-    const notAdminsInput = document.createElement("input");
-    notAdminsInput.type = "checkbox";
-    notAdminsInput.checked = !!state.auditTrailNotAdmins;
-    notAdminsInput.addEventListener("change", async () => {
-      state.auditTrailNotAdmins = notAdminsInput.checked;
-      state.auditTrailPage = 1;
-      closeInlineForm();
-      sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
-      try {
-        await loadSectionData("auditTrail");
-        renderAuditTrail();
-      } catch (error) {
-        setStatus(error?.message || "Failed to load audit trail.", true);
-        renderListEmpty("Failed to load records.");
-      }
-    });
-    const notAdminsText = document.createElement("span");
-    notAdminsText.textContent = "Not admins";
-    notAdminsLabel.appendChild(notAdminsInput);
-    notAdminsLabel.appendChild(notAdminsText);
-
     left.appendChild(perPageLabel);
     left.appendChild(perPageSelect);
-    left.appendChild(notAdminsLabel);
     left.appendChild(range);
 
     const right = document.createElement("div");
@@ -1300,7 +1423,7 @@
     const bgaIdField = createInlineValueRow("BGA id", item.bga_id || "");
     const emailField = createInlineValueRow("Email", item.email || "");
     const createdAtField = createInlineValueRow("Created at", formatDate(item.created_at));
-    const lastLoginField = createInlineValueRow("Last login", formatDate(item.last_login));
+    const lastLoginField = createInlineValueRow("Last login", formatUserLastLogin(item.last_login));
 
     view.appendChild(bgaIdField.row);
     view.appendChild(emailField.row);
@@ -1309,15 +1432,42 @@
 
     const actions = document.createElement("div");
     actions.className = "cp-edit-actions";
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "cp-btn cp-btn-secondary";
-    closeBtn.textContent = "Close";
-    closeBtn.addEventListener("click", () => {
-      closeInlineForm();
-    });
-    actions.appendChild(closeBtn);
+    const activityBtn = document.createElement("button");
+    activityBtn.type = "button";
+    activityBtn.className = "cp-btn cp-btn-secondary";
+    activityBtn.textContent = "Show activity";
+    actions.appendChild(activityBtn);
     view.appendChild(actions);
+
+    const activityMount = document.createElement("div");
+    view.appendChild(activityMount);
+
+    let activityVisible = false;
+    activityBtn.addEventListener("click", async () => {
+      if (activityVisible) {
+        activityVisible = false;
+        activityMount.innerHTML = "";
+        activityBtn.textContent = "Show activity";
+        return;
+      }
+      activityBtn.disabled = true;
+      activityBtn.textContent = "Loading...";
+      activityMount.innerHTML = "";
+      try {
+        const records = await loadUserActivity(item.id);
+        activityMount.appendChild(createUserActivityList(records));
+        activityVisible = true;
+        activityBtn.textContent = "Hide activity";
+      } catch (error) {
+        const errorRow = document.createElement("p");
+        errorRow.className = "admin-inline-value";
+        errorRow.textContent = error?.message || "Failed to load audit trail records.";
+        activityMount.appendChild(errorRow);
+        activityBtn.textContent = "Show activity";
+      } finally {
+        activityBtn.disabled = false;
+      }
+    });
 
     sectionForm.classList.add("hidden");
     sectionForm.innerHTML = "";
@@ -1429,7 +1579,7 @@
     state.users.forEach((item) => {
       const subtitleParts = [];
       if (item.bga_nickname) subtitleParts.push(`BGA: ${item.bga_nickname}`);
-      if (item.last_login) subtitleParts.push(`Last login: ${formatDate(item.last_login)}`);
+      if (item.last_login) subtitleParts.push(`Last login: ${formatUserLastLogin(item.last_login)}`);
       sectionList.appendChild(createListRow({
         imageSrc: item.picture,
         imageAlt: item.name || item.email,
@@ -1452,11 +1602,13 @@
 
     if (!state.auditTrail.length) {
       renderListEmpty("No audit trail records yet.");
+      sectionList.insertBefore(createAuditFilterControl(), sectionList.firstChild);
       sectionList.appendChild(createAuditPagination());
       return;
     }
 
     sectionList.innerHTML = "";
+    sectionList.appendChild(createAuditFilterControl());
     state.auditTrail.forEach((item) => {
       const subtitleParts = [];
       if (item.actor_bga_nickname) subtitleParts.push(`By: ${item.actor_bga_nickname}`);
@@ -1472,7 +1624,7 @@
         subtitleClassName: "audit-trail-subtitle",
         buttonLabel: "View",
         onClick: (row) => openAuditView(item, row),
-        customAvatar: createAuditIcon(item.event_type),
+        customAvatar: createAuditIcon(item.event_type, item.action),
       }));
     });
     sectionList.appendChild(createAuditPagination());

@@ -2353,19 +2353,35 @@ app.get("/audit-trail", requireAdmin, (req, res, next) => {
   const allowedPageSizes = new Set([10, 20, 50]);
   const parsedLimit = Number.parseInt(String(req.query.limit || "10"), 10);
   const parsedPage = Number.parseInt(String(req.query.page || "1"), 10);
+  const parsedActorUserId = Number.parseInt(String(req.query.actor_user_id || ""), 10);
   const limit = allowedPageSizes.has(parsedLimit) ? parsedLimit : 10;
   const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const offset = (page - 1) * limit;
   const notAdminsOnly = String(req.query.not_admins || "").trim() === "1";
-  const auditFilterSql = notAdminsOnly
-    ? `
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM users actor_users
-          WHERE actor_users.id = audit_trail.actor_user_id
-            AND COALESCE(actor_users.admin, 0) = 1
-        )
-      `
+  const actorUserId = Number.isInteger(parsedActorUserId) && parsedActorUserId > 0
+    ? parsedActorUserId
+    : null;
+  const auditFilterClauses = [];
+  const auditFilterParams = [];
+
+  if (notAdminsOnly) {
+    auditFilterClauses.push(`
+      NOT EXISTS (
+        SELECT 1
+        FROM users actor_users
+        WHERE actor_users.id = audit_trail.actor_user_id
+          AND COALESCE(actor_users.admin, 0) = 1
+      )
+    `);
+  }
+
+  if (actorUserId != null) {
+    auditFilterClauses.push("audit_trail.actor_user_id = ?");
+    auditFilterParams.push(actorUserId);
+  }
+
+  const auditFilterSql = auditFilterClauses.length
+    ? `WHERE ${auditFilterClauses.join(" AND ")}`
     : "";
 
   return db.get(
@@ -2374,6 +2390,7 @@ app.get("/audit-trail", requireAdmin, (req, res, next) => {
       FROM audit_trail
       ${auditFilterSql}
     `,
+    auditFilterParams,
     (countErr, countRow) => {
       if (countErr) return next(countErr);
       const total = Number(countRow?.total || 0);
@@ -2402,7 +2419,7 @@ app.get("/audit-trail", requireAdmin, (req, res, next) => {
           LIMIT ?
           OFFSET ?
         `,
-        [limit, total > 0 ? safeOffset : offset],
+        [...auditFilterParams, limit, total > 0 ? safeOffset : offset],
         (err, rows) => {
           if (err) return next(err);
           return res.json({
