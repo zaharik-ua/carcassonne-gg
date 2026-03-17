@@ -414,6 +414,7 @@ function ensureUsersSchema() {
     addColumnIfMissing(columns, "users", "name", "TEXT");
     addColumnIfMissing(columns, "users", "picture", "TEXT");
     addColumnIfMissing(columns, "users", "bga_id", "TEXT");
+    addColumnIfMissing(columns, "users", "admin", "INTEGER NOT NULL DEFAULT 0");
     addColumnIfMissing(columns, "users", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
     addColumnIfMissing(columns, "users", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
     addColumnIfMissing(columns, "users", "last_login", "TEXT");
@@ -519,6 +520,185 @@ function ensureAssociationsSchema() {
   });
 }
 
+function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
+  db.exec(
+    `
+      BEGIN TRANSACTION;
+      DROP INDEX IF EXISTS idx_profiles_id;
+      ALTER TABLE profiles RENAME TO profiles_admin_legacy;
+      CREATE TABLE profiles (
+        profile_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        bga_nickname TEXT,
+        name TEXT,
+        association TEXT,
+        status TEXT NOT NULL DEFAULT 'Active',
+        master_title INTEGER NOT NULL DEFAULT 0,
+        master_title_date DATE,
+        team_captain INTEGER NOT NULL DEFAULT 0,
+        telegram TEXT,
+        whatsapp TEXT,
+        discord TEXT,
+        instagram TEXT,
+        contact_email TEXT,
+        id TEXT,
+        created_by TEXT,
+        updated_by TEXT,
+        deleted_by TEXT,
+        deleted_at TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO profiles (
+        profile_row_id,
+        email,
+        bga_nickname,
+        name,
+        association,
+        status,
+        master_title,
+        master_title_date,
+        team_captain,
+        telegram,
+        whatsapp,
+        discord,
+        instagram,
+        contact_email,
+        id,
+        created_by,
+        updated_by,
+        deleted_by,
+        deleted_at,
+        created_at,
+        updated_at
+      )
+      SELECT
+        profile_row_id,
+        email,
+        bga_nickname,
+        name,
+        association,
+        status,
+        master_title,
+        master_title_date,
+        team_captain,
+        telegram,
+        whatsapp,
+        discord,
+        instagram,
+        contact_email,
+        id,
+        created_by,
+        updated_by,
+        deleted_by,
+        deleted_at,
+        created_at,
+        updated_at
+      FROM profiles_admin_legacy;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_id ON profiles(id);
+      DROP TABLE profiles_admin_legacy;
+      COMMIT;
+    `,
+    (err) => {
+      if (err) {
+        db.exec("ROLLBACK", () => {
+          console.error("Failed to rebuild profiles table without admin column", err);
+          done(err);
+        });
+        return;
+      }
+      done(null);
+    }
+  );
+}
+
+function migrateAdminFlagToUsers() {
+  const adminEmail = "z0675006213@gmail.com";
+
+  db.all("PRAGMA table_info(users)", (usersErr, userColumns) => {
+    if (usersErr) {
+      console.error("Failed to inspect users schema for admin migration", usersErr);
+      return;
+    }
+
+    const continueWithUsersAdmin = () => {
+      db.all("PRAGMA table_info(profiles)", (profilesErr, profileColumns) => {
+        if (profilesErr) {
+          console.error("Failed to inspect profiles schema for admin migration", profilesErr);
+          return;
+        }
+
+        const hasProfilesAdmin = Array.isArray(profileColumns) && profileColumns.some((col) => col.name === "admin");
+        const setExplicitAdminUser = () => db.run(
+          `
+            UPDATE users
+            SET admin = 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE lower(trim(COALESCE(email, ''))) = lower(?)
+          `,
+          [adminEmail],
+          (setAdminErr) => {
+            if (setAdminErr) {
+              console.error(`Failed to set admin for ${adminEmail}`, setAdminErr);
+            }
+          }
+        );
+
+        if (!hasProfilesAdmin) {
+          setExplicitAdminUser();
+          return;
+        }
+
+        return db.run(
+          `
+            UPDATE users
+            SET admin = 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE EXISTS (
+              SELECT 1
+              FROM profiles p
+              WHERE trim(COALESCE(p.id, '')) = trim(COALESCE(users.bga_id, ''))
+                AND p.deleted_at IS NULL
+                AND COALESCE(p.admin, 0) = 1
+            )
+          `,
+          (copyErr) => {
+            if (copyErr) {
+              console.error("Failed to migrate profiles.admin to users.admin", copyErr);
+              setExplicitAdminUser();
+              return;
+            }
+
+            rebuildProfilesTableWithoutAdminColumn((rebuildErr) => {
+              if (rebuildErr) {
+                setExplicitAdminUser();
+                return;
+              }
+              setExplicitAdminUser();
+            });
+          }
+        );
+      });
+    };
+
+    if (Array.isArray(userColumns) && userColumns.some((col) => col.name === "admin")) {
+      continueWithUsersAdmin();
+      return;
+    }
+
+    db.run(
+      "ALTER TABLE users ADD COLUMN admin INTEGER NOT NULL DEFAULT 0",
+      (alterErr) => {
+        if (alterErr && !String(alterErr.message || "").includes("duplicate column name")) {
+          console.error("Failed to add admin column to users", alterErr);
+          return;
+        }
+        continueWithUsersAdmin();
+      }
+    );
+  });
+}
+
 function ensureProfilesSchema() {
   db.all("PRAGMA table_info(profiles)", (pragmaErr, columns) => {
     if (pragmaErr) {
@@ -528,7 +708,6 @@ function ensureProfilesSchema() {
 
     const addOrBackfillProfilesColumns = (currentColumns) => {
       addColumnIfMissing(currentColumns, "profiles", "id", "TEXT");
-      addColumnIfMissing(currentColumns, "profiles", "admin", "INTEGER NOT NULL DEFAULT 0");
       addColumnIfMissing(currentColumns, "profiles", "bga_nickname", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "name", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "association", "TEXT");
@@ -563,6 +742,7 @@ function ensureProfilesSchema() {
           }
         }
       );
+      migrateAdminFlagToUsers();
     };
 
     const hasLegacyPlayerId = columns.some((col) => col.name === "player_id");
@@ -991,6 +1171,7 @@ db.serialize(() => {
       name TEXT,
       picture TEXT,
       bga_id TEXT,
+      admin INTEGER NOT NULL DEFAULT 0,
       last_login TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -1044,7 +1225,6 @@ db.serialize(() => {
               instagram TEXT,
               contact_email TEXT,
               id TEXT,
-              admin INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
@@ -1079,8 +1259,8 @@ passport.deserializeUser((id, done) => {
         u.picture,
         u.last_login,
         u.bga_id,
+        COALESCE(u.admin, 0) AS admin,
         p.id AS player_id,
-        COALESCE(p.admin, 0) AS admin,
         p.bga_nickname,
         p.association,
         COALESCE(p.master_title, 0) AS master_title,
@@ -1114,6 +1294,7 @@ passport.use(
       const email = profile.emails?.[0]?.value || null;
       const name = profile.displayName || null;
       const picture = profile.photos?.[0]?.value || null;
+      const isSeedAdminEmail = String(email || "").trim().toLowerCase() === "z0675006213@gmail.com";
 
       db.get(
         "SELECT id, bga_id FROM users WHERE google_id = ? LIMIT 1",
@@ -1123,17 +1304,21 @@ passport.use(
 
           db.run(
             `
-              INSERT INTO users (google_id, email, name, picture, last_login)
-              VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+              INSERT INTO users (google_id, email, name, picture, admin, last_login)
+              VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
               ON CONFLICT(google_id)
               DO UPDATE SET
                 email = excluded.email,
                 name = excluded.name,
                 picture = excluded.picture,
+                admin = CASE
+                  WHEN excluded.admin = 1 THEN 1
+                  ELSE COALESCE(users.admin, 0)
+                END,
                 last_login = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
             `,
-            [googleId, email, name, picture],
+            [googleId, email, name, picture, isSeedAdminEmail ? 1 : 0],
             (insertErr) => {
               if (insertErr) return done(insertErr);
 
