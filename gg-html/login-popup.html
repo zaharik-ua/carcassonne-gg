@@ -234,6 +234,7 @@
     const profileLink = document.getElementById("lpAuthProfileLink");
     const userMenu = document.getElementById("lpAuthUserMenu");
     const logoutButton = document.getElementById("lpAuthLogoutButton");
+    let lastAuthStateKey = null;
 
     function toBool(value) {
       if (typeof value === "boolean") return value;
@@ -257,6 +258,20 @@
       authUserTrigger.setAttribute("aria-expanded", "true");
     }
 
+    function emitAuthStateChange(user) {
+      const stateKey = user
+        ? `in:${String(user.id || user.player_id || user.playerId || user.email || user.name || "user").trim()}`
+        : "out";
+      if (stateKey === lastAuthStateKey) return;
+      lastAuthStateKey = stateKey;
+      window.dispatchEvent(new CustomEvent("gg-auth-state-change", {
+        detail: {
+          authenticated: !!user,
+          user: user || null,
+        },
+      }));
+    }
+
     function setLoggedOutUI() {
       signInLabel.classList.remove("lp-auth__hidden");
       signInDropdown.classList.remove("lp-auth__hidden");
@@ -268,6 +283,7 @@
       manageTeamLink.href = "https://carcassonne.gg/captain/";
       closeUserMenu();
       authToggle.checked = false;
+      emitAuthStateChange(null);
     }
 
     function applyCaptainMenuAccess(user) {
@@ -301,6 +317,7 @@
       applyCaptainMenuAccess(user);
       authToggle.checked = false;
       closeUserMenu();
+      emitAuthStateChange(user);
     }
 
     async function fetchSession() {

@@ -1031,6 +1031,8 @@
   const filtersEl = document.getElementById("captainFilters");
   const hintEl = document.getElementById("captainHint");
   const titleEl = document.querySelector(".captain-title");
+  let isCaptainPageInitializing = false;
+  let captainPageRefreshQueued = false;
 
   function normalizeCode(value) {
     return String(value || "").trim().toUpperCase();
@@ -1080,15 +1082,11 @@
   }
 
   function isEditModeEnabled() {
-    const params = new URLSearchParams(window.location.search);
-    const raw = String(params.get("edit") || "").trim().toLowerCase();
-    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+    return captainPageState.mode === "edit";
   }
 
   function isCreateModeEnabled() {
-    const params = new URLSearchParams(window.location.search);
-    const raw = String(params.get("create") || "").trim().toLowerCase();
-    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+    return captainPageState.mode === "create";
   }
 
   function getViewFromUrl() {
@@ -1100,50 +1098,152 @@
   }
 
   function getMatchIdFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    return String(params.get("match_id") || "").trim();
+    return String(captainPageState.matchId || "").trim();
   }
 
   function getPlayerIdFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    return String(params.get("player_id") || "").trim();
+    return String(captainPageState.playerId || "").trim();
   }
 
   function buildCaptainUrl(options = {}) {
     const url = new URL(window.location.href);
-    if (typeof options.association === "string") {
-      const value = normalizeCode(options.association);
-      if (value) url.searchParams.set("association", value);
-      else url.searchParams.delete("association");
-    } else if (options.association === null) {
-      url.searchParams.delete("association");
-    }
-    if (typeof options.view === "string" && options.view.trim()) {
-      url.searchParams.set("view", options.view.trim());
-    } else if (options.view === null) {
+    url.searchParams.delete("association");
+    const nextView = String(options.view || "").trim().toLowerCase();
+    if (!nextView || nextView === CAPTAIN_VIEWS.FRIENDLIES) {
       url.searchParams.delete("view");
+    } else if (nextView === CAPTAIN_VIEWS.PLAYERS || nextView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
+      url.searchParams.set("view", nextView);
     }
-    if (options.edit === true) url.searchParams.set("edit", "1");
-    if (options.edit === false) url.searchParams.delete("edit");
-    if (options.create === true) {
-      url.searchParams.set("create", "1");
-      url.searchParams.delete("edit");
-      url.searchParams.delete("match_id");
-      url.searchParams.delete("player_id");
-    }
-    if (options.create === false) url.searchParams.delete("create");
-    if (typeof options.matchId === "string" && options.matchId.trim()) {
-      url.searchParams.set("match_id", options.matchId.trim());
-    } else if (options.matchId === null) {
-      url.searchParams.delete("match_id");
-    }
-    if (typeof options.playerId === "string" && options.playerId.trim()) {
-      url.searchParams.set("player_id", options.playerId.trim());
-    } else if (options.playerId === null) {
-      url.searchParams.delete("player_id");
-    }
+    url.searchParams.delete("edit");
+    url.searchParams.delete("create");
+    url.searchParams.delete("match_id");
+    url.searchParams.delete("player_id");
     return url.toString();
   }
+
+  function readLegacyCaptainSubviewFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const editRaw = String(params.get("edit") || "").trim().toLowerCase();
+    const createRaw = String(params.get("create") || "").trim().toLowerCase();
+    const isEdit = editRaw === "1" || editRaw === "true" || editRaw === "yes" || editRaw === "on";
+    const isCreate = createRaw === "1" || createRaw === "true" || createRaw === "yes" || createRaw === "on";
+    return {
+      mode: isEdit ? "edit" : isCreate ? "create" : "list",
+      matchId: String(params.get("match_id") || "").trim(),
+      playerId: String(params.get("player_id") || "").trim(),
+    };
+  }
+
+  const legacySubviewState = readLegacyCaptainSubviewFromUrl();
+  const captainPageState = {
+    view: getViewFromUrl(),
+    associationOverride: getAssociationOverrideFromUrl(),
+    mode: legacySubviewState.mode,
+    matchId: legacySubviewState.matchId,
+    playerId: legacySubviewState.playerId,
+  };
+
+  function sanitizeCaptainPageState() {
+    captainPageState.view = (() => {
+      const raw = String(captainPageState.view || "").trim().toLowerCase();
+      if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
+      if (raw === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
+      return CAPTAIN_VIEWS.FRIENDLIES;
+    })();
+    captainPageState.associationOverride = normalizeCode(captainPageState.associationOverride);
+    captainPageState.mode = captainPageState.mode === "edit" || captainPageState.mode === "create"
+      ? captainPageState.mode
+      : "list";
+    captainPageState.matchId = String(captainPageState.matchId || "").trim();
+    captainPageState.playerId = String(captainPageState.playerId || "").trim();
+    if (captainPageState.mode !== "edit") {
+      captainPageState.matchId = "";
+      captainPageState.playerId = "";
+    } else if (captainPageState.matchId) {
+      captainPageState.playerId = "";
+    } else if (captainPageState.playerId) {
+      captainPageState.matchId = "";
+    } else {
+      captainPageState.mode = "list";
+    }
+    if (captainPageState.mode === "create") {
+      captainPageState.matchId = "";
+      captainPageState.playerId = "";
+    }
+  }
+
+  function syncCaptainPageStateFromUrl() {
+    captainPageState.view = getViewFromUrl();
+    captainPageState.associationOverride = getAssociationOverrideFromUrl();
+    captainPageState.mode = "list";
+    captainPageState.matchId = "";
+    captainPageState.playerId = "";
+    sanitizeCaptainPageState();
+  }
+
+  function syncCaptainUrl(replace) {
+    const nextUrl = buildCaptainUrl({
+      view: captainPageState.view,
+      association: captainPageState.associationOverride || null,
+    });
+    if (replace) window.history.replaceState({}, "", nextUrl);
+    else window.history.pushState({}, "", nextUrl);
+  }
+
+  function applyCaptainPageState(nextState = {}, options = {}) {
+    if (Object.prototype.hasOwnProperty.call(nextState, "view")) {
+      captainPageState.view = nextState.view;
+    }
+    if (Object.prototype.hasOwnProperty.call(nextState, "associationOverride")) {
+      captainPageState.associationOverride = nextState.associationOverride;
+    }
+    if (Object.prototype.hasOwnProperty.call(nextState, "mode")) {
+      captainPageState.mode = nextState.mode;
+    }
+    if (Object.prototype.hasOwnProperty.call(nextState, "matchId")) {
+      captainPageState.matchId = nextState.matchId;
+    }
+    if (Object.prototype.hasOwnProperty.call(nextState, "playerId")) {
+      captainPageState.playerId = nextState.playerId;
+    }
+    sanitizeCaptainPageState();
+    if (options.syncUrl) {
+      syncCaptainUrl(!!options.replaceUrl);
+    }
+    if (options.refresh !== false) {
+      initCaptainPage();
+    }
+  }
+
+  function openCaptainCreate(view) {
+    applyCaptainPageState({
+      view,
+      mode: "create",
+      matchId: "",
+      playerId: "",
+    });
+  }
+
+  function openCaptainEdit(view, target = {}) {
+    applyCaptainPageState({
+      view,
+      mode: "edit",
+      matchId: String(target.matchId || "").trim(),
+      playerId: String(target.playerId || "").trim(),
+    });
+  }
+
+  function resetCaptainSubview(view) {
+    applyCaptainPageState({
+      view: view || captainPageState.view,
+      mode: "list",
+      matchId: "",
+      playerId: "",
+    });
+  }
+
+  sanitizeCaptainPageState();
+  syncCaptainUrl(true);
 
   function clearFilters() {
     if (!filtersEl) return;
@@ -1238,13 +1338,12 @@
       const next = findTeam(nextValue);
       if (!next || next.id === value) return;
       value = next.id;
-      window.location.href = buildCaptainUrl({
+      applyCaptainPageState({
         view: CAPTAIN_VIEWS.PLAYERS,
-        create: false,
-        edit: false,
-        matchId: null,
-        playerId: null,
-        association: value,
+        associationOverride: value,
+        mode: "list",
+        matchId: "",
+        playerId: "",
       });
     };
 
@@ -1456,7 +1555,7 @@
   }
 
   function getImmediatePageHeading() {
-    const activeView = getViewFromUrl();
+    const activeView = captainPageState.view;
     const isEditMode = isEditModeEnabled();
     const isCreateMode = isCreateModeEnabled();
     const playerId = getPlayerIdFromUrl();
@@ -1723,13 +1822,7 @@
     editBtn.className = "cp-edit-btn";
     editBtn.textContent = "Edit";
     editBtn.addEventListener("click", () => {
-      window.location.href = buildCaptainUrl({
-        view: CAPTAIN_VIEWS.FRIENDLIES,
-        edit: true,
-        create: false,
-        matchId: String(match?.id || ""),
-        playerId: null,
-      });
+      openCaptainEdit(CAPTAIN_VIEWS.FRIENDLIES, { matchId: String(match?.id || "") });
     });
     right.appendChild(editBtn);
 
@@ -1879,13 +1972,7 @@
       } catch (_error) {
         // ignore storage errors
       }
-      window.location.href = buildCaptainUrl({
-        view: CAPTAIN_VIEWS.PLAYERS,
-        edit: true,
-        create: false,
-        matchId: null,
-        playerId: String(profile?.id || ""),
-      });
+      openCaptainEdit(CAPTAIN_VIEWS.PLAYERS, { playerId: String(profile?.id || "") });
     });
     right.appendChild(editBtn);
 
@@ -2195,13 +2282,7 @@
     syncMasterDateVisibility();
 
     cancelBtn.addEventListener("click", () => {
-      window.location.href = buildCaptainUrl({
-        view: CAPTAIN_VIEWS.PLAYERS,
-        create: false,
-        edit: false,
-        matchId: null,
-        playerId: null,
-      });
+      resetCaptainSubview(CAPTAIN_VIEWS.PLAYERS);
     });
 
     document.addEventListener("click", (event) => {
@@ -2266,13 +2347,7 @@
           return;
         }
 
-        window.location.href = buildCaptainUrl({
-          view: CAPTAIN_VIEWS.PLAYERS,
-          create: false,
-          edit: false,
-          matchId: null,
-          playerId: null,
-        });
+        resetCaptainSubview(CAPTAIN_VIEWS.PLAYERS);
       } catch (_error) {
         setError("Failed to create profile.");
       } finally {
@@ -2643,13 +2718,7 @@
             return;
           }
           closeModal();
-          window.location.href = buildCaptainUrl({
-            view: CAPTAIN_VIEWS.PLAYERS,
-            edit: false,
-            create: false,
-            matchId: null,
-            playerId: null,
-          });
+          resetCaptainSubview(CAPTAIN_VIEWS.PLAYERS);
         } catch (_error) {
           setError("Failed to delete profile.");
           confirmDeleteBtn.disabled = false;
@@ -2677,13 +2746,7 @@
     syncMasterDateVisibility();
 
     cancelBtn.addEventListener("click", () => {
-      window.location.href = buildCaptainUrl({
-        view: CAPTAIN_VIEWS.PLAYERS,
-        edit: false,
-        create: false,
-        matchId: null,
-        playerId: null,
-      });
+      resetCaptainSubview(CAPTAIN_VIEWS.PLAYERS);
     });
 
     if (deleteBtn) {
@@ -2750,13 +2813,7 @@
           setError(result?.message || "Failed to save profile.");
           return;
         }
-        window.location.href = buildCaptainUrl({
-          view: CAPTAIN_VIEWS.PLAYERS,
-          edit: false,
-          create: false,
-          matchId: null,
-          playerId: null,
-        });
+        resetCaptainSubview(CAPTAIN_VIEWS.PLAYERS);
       } catch (_error) {
         setError("Failed to save profile.");
       } finally {
@@ -2948,13 +3005,7 @@
       editBtn.className = "cp-edit-btn";
       editBtn.textContent = "Edit";
       editBtn.addEventListener("click", () => {
-        window.location.href = buildCaptainUrl({
-          view: CAPTAIN_VIEWS.FRIENDLY_FIND,
-          edit: true,
-          create: false,
-          matchId: String(entry?.id || ""),
-          playerId: null,
-        });
+        openCaptainEdit(CAPTAIN_VIEWS.FRIENDLY_FIND, { matchId: String(entry?.id || "") });
       });
       right.appendChild(editBtn);
       row.appendChild(right);
@@ -3407,13 +3458,7 @@
             return;
           }
           closeModal();
-          window.location.href = buildCaptainUrl({
-            view: CAPTAIN_VIEWS.FRIENDLY_FIND,
-            edit: false,
-            create: false,
-            matchId: null,
-            playerId: null,
-          });
+          resetCaptainSubview(CAPTAIN_VIEWS.FRIENDLY_FIND);
         } catch (_error) {
           setError("Failed to delete match request.");
           confirmDeleteBtn.disabled = false;
@@ -3432,13 +3477,7 @@
     };
 
     cancelBtn.addEventListener("click", () => {
-      window.location.href = buildCaptainUrl({
-        view: CAPTAIN_VIEWS.FRIENDLY_FIND,
-        create: false,
-        edit: false,
-        matchId: null,
-        playerId: null,
-      });
+      resetCaptainSubview(CAPTAIN_VIEWS.FRIENDLY_FIND);
     });
 
     if (deleteBtn) {
@@ -3496,13 +3535,7 @@
           setError(result?.message || "Failed to save match request.");
           return;
         }
-        window.location.href = buildCaptainUrl({
-          view: CAPTAIN_VIEWS.FRIENDLY_FIND,
-          create: false,
-          edit: false,
-          matchId: null,
-          playerId: null,
-        });
+        resetCaptainSubview(CAPTAIN_VIEWS.FRIENDLY_FIND);
       } catch (_error) {
         setError("Failed to save match request.");
       } finally {
@@ -4466,13 +4499,7 @@
     };
 
     cancelBtn.addEventListener("click", () => {
-      window.location.href = buildCaptainUrl({
-        view: CAPTAIN_VIEWS.FRIENDLIES,
-        edit: false,
-        create: false,
-        matchId: null,
-        playerId: null,
-      });
+      resetCaptainSubview(CAPTAIN_VIEWS.FRIENDLIES);
     });
 
     if (deleteBtn) {
@@ -4491,13 +4518,7 @@
             setError(result?.message || "Failed to delete match.");
             return;
           }
-          window.location.href = buildCaptainUrl({
-            view: CAPTAIN_VIEWS.FRIENDLIES,
-            edit: false,
-            create: false,
-            matchId: null,
-            playerId: null,
-          });
+          resetCaptainSubview(CAPTAIN_VIEWS.FRIENDLIES);
         } catch (_error) {
           setError("Failed to delete match.");
         } finally {
@@ -4666,13 +4687,7 @@
           }
         }
 
-        window.location.href = buildCaptainUrl({
-          view: CAPTAIN_VIEWS.FRIENDLIES,
-          edit: false,
-          create: false,
-          matchId: null,
-          playerId: null,
-        });
+        resetCaptainSubview(CAPTAIN_VIEWS.FRIENDLIES);
       } catch (_error) {
         setError("Failed to save match.");
       } finally {
@@ -4686,16 +4701,21 @@
   }
 
   async function initCaptainPage() {
+    if (isCaptainPageInitializing) {
+      captainPageRefreshQueued = true;
+      return;
+    }
+    isCaptainPageInitializing = true;
     try {
       clearFilters();
       setPageHeading(getImmediatePageHeading());
       const isTestMode = isTestModeEnabled();
-      const activeView = getViewFromUrl();
-      const isEditMode = isEditModeEnabled();
-      const isCreateMode = isCreateModeEnabled();
-      const editMatchId = getMatchIdFromUrl();
-      const editPlayerId = getPlayerIdFromUrl();
-      const associationOverride = getAssociationOverrideFromUrl();
+      const activeView = captainPageState.view;
+      const isEditMode = captainPageState.mode === "edit";
+      const isCreateMode = captainPageState.mode === "create";
+      const editMatchId = String(captainPageState.matchId || "").trim();
+      const editPlayerId = String(captainPageState.playerId || "").trim();
+      const associationOverride = captainPageState.associationOverride;
       let associationCode = associationOverride;
       let captainAssociationCode = "";
       let isCaptainUser = false;
@@ -4825,13 +4845,7 @@
         addButtonEl.classList.remove("cp-hidden");
         addButtonEl.textContent = "Create";
         addButtonEl.onclick = () => {
-          window.location.href = buildCaptainUrl({
-            view: CAPTAIN_VIEWS.PLAYERS,
-            create: true,
-            edit: false,
-            matchId: null,
-            playerId: null,
-          });
+          openCaptainCreate(CAPTAIN_VIEWS.PLAYERS);
         };
         if (isCreateMode || isEditMode) {
           addButtonEl.classList.add("cp-hidden");
@@ -4840,13 +4854,7 @@
         addButtonEl.classList.remove("cp-hidden");
         addButtonEl.textContent = "Create";
         addButtonEl.onclick = () => {
-          window.location.href = buildCaptainUrl({
-            view: CAPTAIN_VIEWS.FRIENDLIES,
-            create: true,
-            edit: false,
-            matchId: null,
-            playerId: null,
-          });
+          openCaptainCreate(CAPTAIN_VIEWS.FRIENDLIES);
         };
         if (isCreateMode || isEditMode) {
           addButtonEl.classList.add("cp-hidden");
@@ -4855,13 +4863,7 @@
         addButtonEl.classList.remove("cp-hidden");
         addButtonEl.textContent = "Create";
         addButtonEl.onclick = () => {
-          window.location.href = buildCaptainUrl({
-            view: CAPTAIN_VIEWS.FRIENDLY_FIND,
-            create: true,
-            edit: false,
-            matchId: null,
-            playerId: null,
-          });
+          openCaptainCreate(CAPTAIN_VIEWS.FRIENDLY_FIND);
         };
         if (isCreateMode || isEditMode) {
           addButtonEl.classList.add("cp-hidden");
@@ -5052,8 +5054,23 @@
       contentEl.textContent = "Failed to load data.";
       countEl.textContent = "";
       hintEl.textContent = "";
+    } finally {
+      isCaptainPageInitializing = false;
+      if (captainPageRefreshQueued) {
+        captainPageRefreshQueued = false;
+        initCaptainPage();
+      }
     }
   }
+
+  window.addEventListener("gg-auth-state-change", () => {
+    initCaptainPage();
+  });
+
+  window.addEventListener("popstate", () => {
+    syncCaptainPageStateFromUrl();
+    initCaptainPage();
+  });
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initCaptainPage);

@@ -2171,9 +2171,24 @@ app.get("/audit-trail", requireAdmin, (req, res, next) => {
   const limit = allowedPageSizes.has(parsedLimit) ? parsedLimit : 10;
   const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const offset = (page - 1) * limit;
+  const notAdminsOnly = String(req.query.not_admins || "").trim() === "1";
+  const auditFilterSql = notAdminsOnly
+    ? `
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM users actor_users
+          WHERE actor_users.id = audit_trail.actor_user_id
+            AND COALESCE(actor_users.admin, 0) = 1
+        )
+      `
+    : "";
 
   return db.get(
-    "SELECT COUNT(*) AS total FROM audit_trail",
+    `
+      SELECT COUNT(*) AS total
+      FROM audit_trail
+      ${auditFilterSql}
+    `,
     (countErr, countRow) => {
       if (countErr) return next(countErr);
       const total = Number(countRow?.total || 0);
@@ -2197,6 +2212,7 @@ app.get("/audit-trail", requireAdmin, (req, res, next) => {
             metadata,
             created_at
           FROM audit_trail
+          ${auditFilterSql}
           ORDER BY datetime(created_at) DESC, id DESC
           LIMIT ?
           OFFSET ?

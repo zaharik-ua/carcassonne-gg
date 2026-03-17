@@ -300,6 +300,18 @@
     font-weight: 700;
   }
 
+  .admin-avatar-placeholder.audit-icon {
+    border-radius: 4px;
+    color: #1f2937;
+  }
+
+  .admin-avatar-placeholder.audit-icon svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+    stroke: currentColor;
+  }
+
   .admin-empty {
     padding: 16px 12px;
     font-size: 13px;
@@ -328,6 +340,17 @@
     flex-wrap: wrap;
     font-size: 13px;
     color: var(--muted);
+  }
+
+  .admin-pagination-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+  }
+
+  .admin-pagination-checkbox input {
+    margin: 0;
   }
 
   .admin-pagination select {
@@ -484,6 +507,7 @@
         const params = new URLSearchParams({
           limit: String(pageSize),
           page: String(page),
+          not_admins: state.auditTrailNotAdmins ? "1" : "0",
         });
         return apiJson(`${AUDIT_TRAIL_URL}?${params.toString()}`, { method: "GET" }).then((data) => {
           state.auditTrailPage = Number(data?.pagination?.page) || 1;
@@ -511,6 +535,7 @@
     auditTrailPageSize: 10,
     auditTrailTotal: 0,
     auditTrailTotalPages: 1,
+    auditTrailNotAdmins: false,
   };
 
   const accessCard = document.getElementById("adminAccessCard");
@@ -581,6 +606,67 @@
     return placeholder;
   }
 
+  function createAuditIcon(eventType) {
+    const icon = document.createElement("span");
+    icon.className = "admin-avatar-placeholder audit-icon";
+    const eventKey = String(eventType || "").trim().toLowerCase();
+    let bg = "#e8edf4";
+    let svg = `
+      <svg viewBox="0 0 16 16" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3.5 8h9" />
+        <path d="M8 3.5v9" />
+      </svg>
+    `;
+
+    if (eventKey.endsWith(".updated") || eventKey === "updated") {
+      bg = "#e7f1f9";
+      svg = `
+        <svg viewBox="0 0 16 16" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 11.75V13h1.25l7-7-1.25-1.25-7 7Z" />
+          <path d="m9.75 4.75 1.25-1.25 1.25 1.25-1.25 1.25Z" />
+        </svg>
+      `;
+    } else if (eventKey.endsWith(".created") || eventKey === "created") {
+      bg = "#e7f5ea";
+      svg = `
+        <svg viewBox="0 0 16 16" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 3.5v9" />
+          <path d="M3.5 8h9" />
+        </svg>
+      `;
+    } else if (eventKey.endsWith(".deleted") || eventKey === "deleted") {
+      bg = "#f9e8e8";
+      svg = `
+        <svg viewBox="0 0 16 16" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3.5 5h9" />
+          <path d="M6 5V4h4v1" />
+          <path d="M5 5l.5 7h5L11 5" />
+          <path d="M6.75 7.25v3.5" />
+          <path d="M9.25 7.25v3.5" />
+        </svg>
+      `;
+    } else if (eventKey.endsWith(".bga_linked") || eventKey === "bga_linked") {
+      bg = "#f1e8fb";
+      svg = `
+        <svg viewBox="0 0 16 16" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6.25 9.75 4.5 11.5a2 2 0 1 1-2.75-2.9L3.5 6.85" />
+          <path d="m9.75 6.25 1.75-1.75a2 2 0 1 1 2.75 2.9l-1.75 1.75" />
+          <path d="M6 10 10 6" />
+        </svg>
+      `;
+    }
+
+    icon.style.background = bg;
+    icon.innerHTML = svg;
+    return icon;
+  }
+
+  function formatAuditTitle(item) {
+    const entity = String(item?.entity_type || "").trim();
+    if (!entity) return "Audit";
+    return entity.charAt(0).toUpperCase() + entity.slice(1).replace(/_/g, " ");
+  }
+
   function createAvatar(src, alt, isRound) {
     const safeSrc = String(src || "").trim();
     if (!safeSrc) return createPlaceholder(alt, isRound);
@@ -616,7 +702,7 @@
     return true;
   }
 
-  function createListRow({ imageSrc, imageAlt, imageRound, title, subtitle, subtitleClassName, buttonLabel, onClick }) {
+  function createListRow({ imageSrc, imageAlt, imageRound, title, subtitle, subtitleClassName, buttonLabel, onClick, customAvatar }) {
     const row = document.createElement("div");
     row.className = "cp-match-row";
 
@@ -625,7 +711,7 @@
 
     const titleRow = document.createElement("div");
     titleRow.className = "cp-team-row";
-    titleRow.appendChild(createAvatar(imageSrc, imageAlt || title, imageRound));
+    titleRow.appendChild(customAvatar || createAvatar(imageSrc, imageAlt || title, imageRound));
 
     const titleSpan = document.createElement("span");
     titleSpan.textContent = title || "";
@@ -819,8 +905,32 @@
     const range = document.createElement("span");
     range.textContent = `${from}-${to} of ${total}`;
 
+    const notAdminsLabel = document.createElement("label");
+    notAdminsLabel.className = "admin-pagination-checkbox";
+    const notAdminsInput = document.createElement("input");
+    notAdminsInput.type = "checkbox";
+    notAdminsInput.checked = !!state.auditTrailNotAdmins;
+    notAdminsInput.addEventListener("change", async () => {
+      state.auditTrailNotAdmins = notAdminsInput.checked;
+      state.auditTrailPage = 1;
+      closeInlineForm();
+      sectionList.innerHTML = "<div class=\"admin-empty\">Loading...</div>";
+      try {
+        await loadSectionData("auditTrail");
+        renderAuditTrail();
+      } catch (error) {
+        setStatus(error?.message || "Failed to load audit trail.", true);
+        renderListEmpty("Failed to load records.");
+      }
+    });
+    const notAdminsText = document.createElement("span");
+    notAdminsText.textContent = "Not admins";
+    notAdminsLabel.appendChild(notAdminsInput);
+    notAdminsLabel.appendChild(notAdminsText);
+
     left.appendChild(perPageLabel);
     left.appendChild(perPageSelect);
+    left.appendChild(notAdminsLabel);
     left.appendChild(range);
 
     const right = document.createElement("div");
@@ -1354,14 +1464,15 @@
       if (item.created_at) subtitleParts.push(formatAuditTrailDate(item.created_at));
 
       sectionList.appendChild(createListRow({
-        imageSrc: "",
-        imageAlt: item.entity_type || item.event_type,
+        imageSrc: "__audit_icon__",
+        imageAlt: item.event_type || item.entity_type,
         imageRound: false,
-        title: item.event_type || `${item.entity_type || "Audit"} ${item.action || ""}`.trim(),
+        title: formatAuditTitle(item),
         subtitle: subtitleParts.join(" • "),
         subtitleClassName: "audit-trail-subtitle",
         buttonLabel: "View",
         onClick: (row) => openAuditView(item, row),
+        customAvatar: createAuditIcon(item.event_type),
       }));
     });
     sectionList.appendChild(createAuditPagination());
