@@ -5,7 +5,7 @@ echo "=== $(date) ===" >> /home/carcassonne-gg/cron_backup.log
 
 
 # List of tournament IDs
-tournaments=("BCPL-2026-WIN")
+tournaments=("MSO-2026Q1" "MSO-2026Q2" "MSO-2026FT")
 
 for tournament_id in "${tournaments[@]}"; do
   curl -s "https://api.carcassonne.com.ua/public/tournaments_done?tournament_id=${tournament_id}" -o "${tournament_id}.json"
