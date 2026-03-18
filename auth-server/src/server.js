@@ -3279,46 +3279,50 @@ app.patch("/matches/:id", (req, res) => {
             return res.status(404).json({ ok: false, message: "Match not found" });
           }
 
-          return db.get(
-            `
-              SELECT
-                id,
-                tournament_id,
-                time_utc,
-                lineup_type,
-                lineup_deadline_h,
-                lineup_deadline_utc,
-                number_of_duels,
-                team_1,
-                team_2,
-                status,
-                dw1,
-                dw2,
-                gw1,
-                gw2
-              FROM matches
-              WHERE id = ?
-              LIMIT 1
-            `,
-            [nextMatchId],
-            (selectErr, row) => {
-              if (selectErr) {
-                return res.status(500).json({ ok: false, message: "Failed to load updated match" });
+            return db.get(
+              `
+                SELECT
+                  id,
+                  tournament_id,
+                  time_utc,
+                  lineup_type,
+                  lineup_deadline_h,
+                  lineup_deadline_utc,
+                  number_of_duels,
+                  team_1,
+                  team_2,
+                  status,
+                  dw1,
+                  dw2,
+                  gw1,
+                  gw2
+                FROM matches
+                WHERE id = ?
+                LIMIT 1
+              `,
+              [nextMatchId],
+              (selectErr, row) => {
+                if (selectErr) {
+                  return res.status(500).json({ ok: false, message: "Failed to load updated match" });
+                }
+                const changes = buildAuditChanges(existingRow || {}, row || {}, MATCH_AUDIT_FIELDS);
+                if (!Object.keys(changes).length) {
+                  return res.json({ ok: true, match: row || null });
+                }
+                return logAuditEvent(
+                  {
+                    ...getAuditActor(req.user),
+                    event_type: "match.updated",
+                    entity_type: "match",
+                    action: "update",
+                    record_id: nextMatchId,
+                    changes,
+                    metadata: { previous_record_id: matchId !== nextMatchId ? matchId : null },
+                  },
+                  () => res.json({ ok: true, match: row || null })
+                );
               }
-              return logAuditEvent(
-                {
-                  ...getAuditActor(req.user),
-                  event_type: "match.updated",
-                  entity_type: "match",
-                  action: "update",
-                  record_id: nextMatchId,
-                  changes: buildAuditChanges(existingRow || {}, row || {}, MATCH_AUDIT_FIELDS),
-                  metadata: { previous_record_id: matchId !== nextMatchId ? matchId : null },
-                },
-                () => res.json({ ok: true, match: row || null })
-              );
-            }
-          );
+            );
         }
       );
     }
