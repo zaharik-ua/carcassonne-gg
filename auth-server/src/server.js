@@ -2704,7 +2704,12 @@ app.post("/lineups/bulk-upsert", (req, res) => {
                         action,
                         record_id: matchId,
                         changes,
-                        metadata: { match_id: matchId, lineups_count: 0 },
+                        metadata: {
+                          match_id: matchId,
+                          lineups_count: 0,
+                          team_1: team1,
+                          team_2: team2,
+                        },
                       },
                       () => res.json({ ok: true, lineups: [] })
                     );
@@ -2801,7 +2806,12 @@ app.post("/lineups/bulk-upsert", (req, res) => {
                                 action,
                                 record_id: matchId,
                                 changes,
-                                metadata: { match_id: matchId, lineups_count: sanitized.length },
+                                metadata: {
+                                  match_id: matchId,
+                                  lineups_count: sanitized.length,
+                                  team_1: team1,
+                                  team_2: team2,
+                                },
                               },
                               () => res.json({ ok: true, lineups: sanitized })
                             );
@@ -3572,7 +3582,12 @@ app.delete("/matches/:id", (req, res) => {
                               action: "delete",
                               record_id: matchId,
                               changes: buildAuditDeletionChanges({ lineups: activeLineups || [] }, ["lineups"]),
-                              metadata: { match_id: matchId, lineups_count: activeLineups.length },
+                              metadata: {
+                                match_id: matchId,
+                                lineups_count: activeLineups.length,
+                                team_1: row?.team_1 || null,
+                                team_2: row?.team_2 || null,
+                              },
                             },
                             () => res.json({ ok: true })
                           );
@@ -4509,7 +4524,22 @@ app.delete("/profiles/:playerId", (req, res) => {
 
   return db.get(
     `
-      SELECT id, created_by
+      SELECT
+        id,
+        created_by,
+        bga_nickname,
+        association,
+        COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
+        name,
+        email,
+        COALESCE(master_title, 0) AS master_title,
+        master_title_date,
+        COALESCE(team_captain, 0) AS team_captain,
+        telegram,
+        whatsapp,
+        discord,
+        instagram,
+        contact_email
       FROM profiles
       WHERE id = ?
         AND deleted_at IS NULL

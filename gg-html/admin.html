@@ -186,6 +186,32 @@
     word-break: break-word;
   }
 
+  .audit-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .audit-title-text {
+    min-width: 0;
+  }
+
+  .audit-title-media {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #eef2f6;
+  }
+
+  .audit-title-separator {
+    color: var(--muted);
+    font-weight: 600;
+  }
+
   .users-subtitle {
     white-space: normal;
     overflow-wrap: anywhere;
@@ -473,6 +499,8 @@
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const USERS_URL = `${AUTH_BASE}/users`;
   const AUDIT_TRAIL_URL = `${AUTH_BASE}/audit-trail`;
+  const MATCHES_URL = `${AUTH_BASE}/matches`;
+  const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
 
   const SECTION_CONFIG = {
     associations: {
@@ -523,7 +551,10 @@
           page: String(page),
           not_admins: state.auditTrailNotAdmins ? "1" : "0",
         });
-        return apiJson(`${AUDIT_TRAIL_URL}?${params.toString()}`, { method: "GET" }).then((data) => {
+        return Promise.all([
+          loadAuditReferenceData(),
+          apiJson(`${AUDIT_TRAIL_URL}?${params.toString()}`, { method: "GET" }),
+        ]).then(([, data]) => {
           state.auditTrailPage = Number(data?.pagination?.page) || 1;
           state.auditTrailPageSize = Number(data?.pagination?.page_size) || pageSize;
           state.auditTrailTotal = Number(data?.pagination?.total) || 0;
@@ -539,6 +570,8 @@
     activeSection: "",
     associations: [],
     teams: [],
+    matchesReference: [],
+    profilesPublic: [],
     users: [],
     usersPage: 1,
     usersPageSize: 10,
@@ -682,6 +715,8 @@
   }
 
   function formatAuditTitle(item) {
+    const auditTitleNode = createAuditTitleNode(item);
+    if (auditTitleNode) return auditTitleNode.textContent || "Audit";
     const entity = String(item?.entity_type || "").trim();
     if (!entity) return "Audit";
     return entity.charAt(0).toUpperCase() + entity.slice(1).replace(/_/g, " ");
@@ -722,7 +757,18 @@
     return true;
   }
 
-  function createListRow({ imageSrc, imageAlt, imageRound, title, subtitle, subtitleClassName, buttonLabel, onClick, customAvatar }) {
+  function createListRow({
+    imageSrc,
+    imageAlt,
+    imageRound,
+    title,
+    titleNode,
+    subtitle,
+    subtitleClassName,
+    buttonLabel,
+    onClick,
+    customAvatar,
+  }) {
     const row = document.createElement("div");
     row.className = "cp-match-row";
 
@@ -734,7 +780,11 @@
     titleRow.appendChild(customAvatar || createAvatar(imageSrc, imageAlt || title, imageRound));
 
     const titleSpan = document.createElement("span");
-    titleSpan.textContent = title || "";
+    if (titleNode instanceof Node) {
+      titleSpan.appendChild(titleNode);
+    } else {
+      titleSpan.textContent = title || "";
+    }
     titleRow.appendChild(titleSpan);
 
     main.appendChild(titleRow);
@@ -893,6 +943,274 @@
     }
   }
 
+  function loadAuditReferenceData() {
+    const requests = [];
+
+    if (!Array.isArray(state.associations) || !state.associations.length) {
+      requests.push(
+        apiJson(ASSOCIATIONS_URL, { method: "GET" }).then((data) => {
+          state.associations = Array.isArray(data?.associations) ? data.associations : [];
+        })
+      );
+    }
+
+    if (!Array.isArray(state.teams) || !state.teams.length) {
+      requests.push(
+        apiJson(TEAMS_URL, { method: "GET" }).then((data) => {
+          state.teams = Array.isArray(data?.teams) ? data.teams : [];
+        })
+      );
+    }
+
+    if (!Array.isArray(state.matchesReference) || !state.matchesReference.length) {
+      requests.push(
+        apiJson(MATCHES_URL, { method: "GET" }).then((data) => {
+          state.matchesReference = Array.isArray(data?.matches) ? data.matches : [];
+        })
+      );
+    }
+
+    if (!Array.isArray(state.profilesPublic) || !state.profilesPublic.length) {
+      requests.push(
+        apiJson(PROFILES_PUBLIC_URL, { method: "GET" }).then((data) => {
+          state.profilesPublic = Array.isArray(data?.profiles) ? data.profiles : [];
+        })
+      );
+    }
+
+    return requests.length ? Promise.all(requests) : Promise.resolve();
+  }
+
+  function normalizeLookupKey(value) {
+    return String(value || "").trim().toUpperCase();
+  }
+
+  function getAssociationById(associationId) {
+    const key = normalizeLookupKey(associationId);
+    if (!key) return null;
+    return state.associations.find((item) => normalizeLookupKey(item?.id) === key) || null;
+  }
+
+  function getTeamById(teamId) {
+    const key = normalizeLookupKey(teamId);
+    if (!key) return null;
+    return state.teams.find((item) => normalizeLookupKey(item?.id) === key) || null;
+  }
+
+  function getMatchById(matchId) {
+    const key = String(matchId || "").trim();
+    if (!key) return null;
+    return state.matchesReference.find((item) => String(item?.id || "").trim() === key) || null;
+  }
+
+  function getProfileById(profileId) {
+    const key = String(profileId || "").trim();
+    if (!key) return null;
+    return state.profilesPublic.find((item) => String(item?.id || "").trim() === key) || null;
+  }
+
+  function getAuditChangedField(item, field) {
+    const changes = item && typeof item === "object" ? item.changes : null;
+    if (!changes || typeof changes !== "object") return null;
+    const entry = changes[field];
+    return entry && typeof entry === "object" ? entry : null;
+  }
+
+  function getAuditFieldValue(item, field, preferredSide) {
+    const entry = getAuditChangedField(item, field);
+    if (!entry) return null;
+    if (preferredSide === "new" && entry.new != null && entry.new !== "") return entry.new;
+    if (preferredSide === "old" && entry.old != null && entry.old !== "") return entry.old;
+    if (entry.new != null && entry.new !== "") return entry.new;
+    if (entry.old != null && entry.old !== "") return entry.old;
+    return null;
+  }
+
+  function getAuditActorLabel(item) {
+    return String(item?.actor_bga_nickname || item?.actor_email || "Actor").trim() || "Actor";
+  }
+
+  function createAuditInlineMedia(src, alt) {
+    const safeSrc = String(src || "").trim();
+    if (!safeSrc) {
+      const placeholder = createPlaceholder(alt, false);
+      placeholder.classList.add("audit-title-media");
+      return placeholder;
+    }
+
+    const img = document.createElement("img");
+    img.className = "audit-title-media";
+    img.src = safeSrc;
+    img.alt = alt || "";
+    img.referrerPolicy = "no-referrer";
+    img.addEventListener("error", () => {
+      const placeholder = createPlaceholder(alt, false);
+      placeholder.classList.add("audit-title-media");
+      img.replaceWith(placeholder);
+    }, { once: true });
+    return img;
+  }
+
+  function appendAuditText(parent, text) {
+    const span = document.createElement("span");
+    span.className = "audit-title-text";
+    span.textContent = String(text || "");
+    parent.appendChild(span);
+  }
+
+  function appendTeamVisual(parent, teamId) {
+    const team = getTeamById(teamId);
+    const alt = team?.name || String(teamId || "").trim() || "?";
+    parent.appendChild(createAuditInlineMedia(team?.flag || team?.logo || "", alt));
+  }
+
+  function appendAssociationVisual(parent, associationId) {
+    const association = getAssociationById(associationId);
+    const alt = association?.name || String(associationId || "").trim() || "?";
+    parent.appendChild(createAuditInlineMedia(association?.flag || "", alt));
+  }
+
+  function appendTitleSeparator(parent) {
+    const separator = document.createElement("span");
+    separator.className = "audit-title-separator";
+    separator.textContent = "-";
+    parent.appendChild(separator);
+  }
+
+  function appendTeamsPair(parent, team1, team2) {
+    appendTeamVisual(parent, team1);
+    appendTitleSeparator(parent);
+    appendTeamVisual(parent, team2);
+  }
+
+  function resolveMatchTeams(item, preferredSide) {
+    const matchId = String(item?.record_id || item?.metadata?.match_id || "").trim();
+    const match = getMatchById(matchId);
+    const team1 = getAuditFieldValue(item, "team_1", preferredSide) || item?.metadata?.team_1 || match?.team_1 || null;
+    const team2 = getAuditFieldValue(item, "team_2", preferredSide) || item?.metadata?.team_2 || match?.team_2 || null;
+    return {
+      team1: normalizeLookupKey(team1),
+      team2: normalizeLookupKey(team2),
+    };
+  }
+
+  function resolveProfileIdentity(item, preferredSide) {
+    const profileId = String(item?.record_id || getAuditFieldValue(item, "id", preferredSide) || "").trim();
+    const profile = getProfileById(profileId);
+    return {
+      associationId: normalizeLookupKey(
+        getAuditFieldValue(item, "association", preferredSide) || profile?.association || ""
+      ),
+      nickname: String(
+        getAuditFieldValue(item, "bga_nickname", preferredSide) || profile?.bga_nickname || profileId || ""
+      ).trim(),
+    };
+  }
+
+  function resolveLinkedUserProfile(item) {
+    const linkedProfileId = String(
+      getAuditFieldValue(item, "bga_id", "new")
+      || getAuditFieldValue(item, "bga_id")
+      || ""
+    ).trim();
+    const profile = getProfileById(linkedProfileId);
+    return {
+      associationId: normalizeLookupKey(profile?.association || ""),
+      nickname: String(
+        getAuditFieldValue(item, "bga_nickname", "new")
+        || profile?.bga_nickname
+        || linkedProfileId
+        || ""
+      ).trim(),
+    };
+  }
+
+  function resolveFriendlyFindTeam(item, preferredSide) {
+    return normalizeLookupKey(
+      getAuditFieldValue(item, "team", preferredSide)
+      || getAuditFieldValue(item, "team")
+      || ""
+    );
+  }
+
+  function createAuditTitleNode(item) {
+    const eventType = String(item?.event_type || "").trim().toLowerCase();
+    const title = document.createElement("span");
+    title.className = "audit-title";
+
+    if (eventType === "match.created" || eventType === "match.updated" || eventType === "match.deleted") {
+      const { team1, team2 } = resolveMatchTeams(item, eventType === "match.deleted" ? "old" : "new");
+      appendAuditText(
+        title,
+        eventType === "match.created"
+          ? "New Match:"
+          : eventType === "match.updated"
+            ? "Match edited:"
+            : "Match removed:"
+      );
+      if (team1 && team2) appendTeamsPair(title, team1, team2);
+      return title;
+    }
+
+    if (eventType === "profile.created" || eventType === "profile.updated" || eventType === "profile.deleted") {
+      const identity = resolveProfileIdentity(item, eventType === "profile.deleted" ? "old" : "new");
+      appendAuditText(
+        title,
+        eventType === "profile.created"
+          ? "New Profile:"
+          : eventType === "profile.updated"
+            ? "Profile edited:"
+            : "Profile removed:"
+      );
+      if (identity.associationId) appendAssociationVisual(title, identity.associationId);
+      if (identity.nickname) appendAuditText(title, identity.nickname);
+      return title;
+    }
+
+    if (eventType === "user.created") {
+      appendAuditText(title, `New User: ${getAuditActorLabel(item)}`);
+      return title;
+    }
+
+    if (eventType === "user.bga_linked") {
+      const linked = resolveLinkedUserProfile(item);
+      appendAuditText(title, "User linked to BGA:");
+      if (linked.associationId) appendAssociationVisual(title, linked.associationId);
+      if (linked.nickname) appendAuditText(title, linked.nickname);
+      return title;
+    }
+
+    if (eventType === "lineups.created" || eventType === "lineups.updated" || eventType === "lineups.deleted_all") {
+      const { team1, team2 } = resolveMatchTeams(item, "new");
+      appendAuditText(
+        title,
+        eventType === "lineups.created"
+          ? "Lineups added for"
+          : eventType === "lineups.updated"
+            ? "Lineups edited for"
+            : "Lineups removed for"
+      );
+      if (team1 && team2) appendTeamsPair(title, team1, team2);
+      return title;
+    }
+
+    if (eventType === "friendly_find.created" || eventType === "friendly_find.updated" || eventType === "friendly_find.deleted") {
+      const teamId = resolveFriendlyFindTeam(item, eventType === "friendly_find.deleted" ? "old" : "new");
+      appendAuditText(
+        title,
+        eventType === "friendly_find.created"
+          ? "Friendly find added for"
+          : eventType === "friendly_find.updated"
+            ? "Friendly find edited for"
+            : "Friendly find removed for"
+      );
+      if (teamId) appendTeamVisual(title, teamId);
+      return title;
+    }
+
+    return null;
+  }
+
   function renderSectionTiles() {
     sectionsEl.innerHTML = "";
     Object.values(SECTION_CONFIG).forEach((section) => {
@@ -971,7 +1289,9 @@
       const title = document.createElement("div");
       title.style.fontSize = "13px";
       title.style.fontWeight = "600";
-      title.textContent = formatAuditTitle(item);
+      const titleNode = createAuditTitleNode(item);
+      if (titleNode) title.appendChild(titleNode);
+      else title.textContent = formatAuditTitle(item);
       entry.appendChild(title);
 
       const meta = document.createElement("div");
@@ -1007,8 +1327,10 @@
       page: "1",
       actor_user_id: String(normalizedUserId),
     });
-    return apiJson(`${AUDIT_TRAIL_URL}?${params.toString()}`, { method: "GET" })
-      .then((data) => Array.isArray(data?.records) ? data.records : []);
+    return Promise.all([
+      loadAuditReferenceData(),
+      apiJson(`${AUDIT_TRAIL_URL}?${params.toString()}`, { method: "GET" }),
+    ]).then(([, data]) => (Array.isArray(data?.records) ? data.records : []));
   }
 
   function createAuditPagination() {
@@ -1620,6 +1942,7 @@
         imageAlt: item.event_type || item.entity_type,
         imageRound: false,
         title: formatAuditTitle(item),
+        titleNode: createAuditTitleNode(item),
         subtitle: subtitleParts.join(" • "),
         subtitleClassName: "audit-trail-subtitle",
         buttonLabel: "View",
