@@ -1107,13 +1107,19 @@
 
   function buildCaptainUrl(options = {}) {
     const url = new URL(window.location.href);
-    url.searchParams.delete("association");
     const nextView = String(options.view || "").trim().toLowerCase();
-    if (!nextView || nextView === CAPTAIN_VIEWS.FRIENDLIES) {
-      url.searchParams.delete("view");
-    } else if (nextView === CAPTAIN_VIEWS.PLAYERS || nextView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
+    if (
+      nextView === CAPTAIN_VIEWS.FRIENDLIES ||
+      nextView === CAPTAIN_VIEWS.PLAYERS ||
+      nextView === CAPTAIN_VIEWS.FRIENDLY_FIND
+    ) {
       url.searchParams.set("view", nextView);
+    } else {
+      url.searchParams.set("view", CAPTAIN_VIEWS.FRIENDLIES);
     }
+    const nextAssociation = normalizeCode(options.association || "");
+    if (nextAssociation) url.searchParams.set("association", nextAssociation);
+    else url.searchParams.delete("association");
     url.searchParams.delete("edit");
     url.searchParams.delete("create");
     url.searchParams.delete("match_id");
@@ -1138,6 +1144,7 @@
   const captainPageState = {
     view: getViewFromUrl(),
     associationOverride: getAssociationOverrideFromUrl(),
+    associationOverrideTouched: new URLSearchParams(window.location.search).has("association"),
     mode: legacySubviewState.mode,
     matchId: legacySubviewState.matchId,
     playerId: legacySubviewState.playerId,
@@ -1175,6 +1182,7 @@
   function syncCaptainPageStateFromUrl() {
     captainPageState.view = getViewFromUrl();
     captainPageState.associationOverride = getAssociationOverrideFromUrl();
+    captainPageState.associationOverrideTouched = new URLSearchParams(window.location.search).has("association");
     captainPageState.mode = "list";
     captainPageState.matchId = "";
     captainPageState.playerId = "";
@@ -1196,6 +1204,7 @@
     }
     if (Object.prototype.hasOwnProperty.call(nextState, "associationOverride")) {
       captainPageState.associationOverride = nextState.associationOverride;
+      captainPageState.associationOverrideTouched = true;
     }
     if (Object.prototype.hasOwnProperty.call(nextState, "mode")) {
       captainPageState.mode = nextState.mode;
@@ -1251,18 +1260,23 @@
     filtersEl.classList.add("cp-hidden");
   }
 
-  function renderAdminPlayersAssociationFilter(teamsById, selectedAssociationCode) {
+  function renderAdminAssociationFilter(optionsList, selectedValue, onSelect) {
     if (!filtersEl) return;
-    const teams = Array.from(teamsById.values())
-      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
-    if (!teams.length) {
+    const options = (Array.isArray(optionsList) ? optionsList : [])
+      .map((option) => ({
+        value: normalizeCode(option?.value || ""),
+        label: String(option?.label || option?.value || "").trim(),
+        logo: String(option?.logo || "").trim(),
+      }))
+      .filter((option) => option.label);
+    if (!options.length) {
       clearFilters();
       return;
     }
 
-    let value = normalizeCode(selectedAssociationCode);
-    if (!teams.some((team) => team.id === value)) {
-      value = normalizeCode(teams[0]?.id);
+    let value = normalizeCode(selectedValue);
+    if (!options.some((option) => option.value === value)) {
+      value = String(options[0]?.value || "").trim();
     }
 
     filtersEl.innerHTML = "";
@@ -1290,20 +1304,14 @@
     const menu = document.createElement("div");
     menu.className = "cp-dd-menu";
 
-    const searchWrap = document.createElement("div");
-    searchWrap.className = "cp-dd-search";
-    const searchInput = document.createElement("input");
-    searchInput.type = "text";
-    searchInput.placeholder = "Type to filter...";
-    searchWrap.appendChild(searchInput);
-    menu.appendChild(searchWrap);
-
-    const findTeam = (teamId) => teams.find((team) => team.id === normalizeCode(teamId)) || null;
-    let filterQuery = "";
+    const findOption = (optionValue) => {
+      const normalizedValue = normalizeCode(optionValue);
+      return options.find((option) => option.value === normalizedValue) || null;
+    };
 
     const renderButtonContent = () => {
       btnContent.innerHTML = "";
-      const selected = findTeam(value);
+      const selected = findOption(value);
       if (!selected) return;
       if (selected.logo) {
         const img = document.createElement("img");
@@ -1313,7 +1321,7 @@
         btnContent.appendChild(img);
       }
       const text = document.createElement("span");
-      text.textContent = selected.name || selected.id;
+      text.textContent = selected.label || selected.value;
       btnContent.appendChild(text);
     };
 
@@ -1324,72 +1332,48 @@
     };
 
     const open = () => {
-      filterQuery = "";
-      searchInput.value = "";
       renderMenuOptions();
       menu.classList.add("open");
       menu.style.maxHeight = `${menu.scrollHeight}px`;
       btn.classList.add("open");
-      searchInput.focus();
-      searchInput.select();
     };
 
     const setValue = (nextValue) => {
-      const next = findTeam(nextValue);
-      if (!next || next.id === value) return;
-      value = next.id;
-      applyCaptainPageState({
-        view: CAPTAIN_VIEWS.PLAYERS,
-        associationOverride: value,
-        mode: "list",
-        matchId: "",
-        playerId: "",
-      });
+      const next = findOption(nextValue);
+      if (!next || next.value === value) return;
+      value = next.value;
+      if (typeof onSelect === "function") onSelect(value);
     };
 
-    const createOptionButton = (team) => {
+    const createOptionButton = (option) => {
       const optionBtn = document.createElement("button");
       optionBtn.type = "button";
       optionBtn.className = "cp-dd-option";
-      optionBtn.dataset.value = team.id;
-      if (team.logo) {
+      optionBtn.dataset.value = option.value;
+      if (option.logo) {
         const img = document.createElement("img");
         img.className = "cp-dd-flag";
-        img.src = team.logo;
+        img.src = option.logo;
         img.alt = "";
         optionBtn.appendChild(img);
       }
-      optionBtn.appendChild(document.createTextNode(team.name || team.id));
-      optionBtn.classList.toggle("active", team.id === value);
+      optionBtn.appendChild(document.createTextNode(option.label || option.value));
+      optionBtn.classList.toggle("active", option.value === value);
       optionBtn.addEventListener("click", (event) => {
         event.stopPropagation();
         close();
-        setValue(team.id);
+        setValue(option.value);
       });
       return optionBtn;
     };
 
     const renderMenuOptions = () => {
       menu.querySelectorAll(".cp-dd-option").forEach((node) => node.remove());
-      const query = String(filterQuery || "").trim().toLowerCase();
-      teams
-        .filter((team) => {
-          if (!query) return true;
-          const haystack = `${team.name || ""} ${team.id || ""}`.toLowerCase();
-          return haystack.includes(query);
-        })
-        .forEach((team) => {
-          menu.appendChild(createOptionButton(team));
+      options
+        .forEach((option) => {
+          menu.appendChild(createOptionButton(option));
         });
     };
-
-    searchInput.addEventListener("click", (event) => event.stopPropagation());
-    searchInput.addEventListener("keydown", (event) => event.stopPropagation());
-    searchInput.addEventListener("input", () => {
-      filterQuery = String(searchInput.value || "");
-      renderMenuOptions();
-      menu.style.maxHeight = `${menu.scrollHeight}px`;
-    });
 
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -3746,9 +3730,18 @@
         menu.classList.add("open");
         menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
         btn.classList.add("open");
-        if (isSearchable && searchInput && cfg.autoFocusSearch !== false) {
-          searchInput.focus();
+        const shouldAutoFocusSearch = typeof cfg.autoFocusSearch === "function"
+          ? cfg.autoFocusSearch()
+          : cfg.autoFocusSearch !== false;
+        if (isSearchable && searchInput && shouldAutoFocusSearch) {
+          menu.scrollTop = 0;
+          try {
+            searchInput.focus({ preventScroll: true });
+          } catch (_error) {
+            searchInput.focus();
+          }
           searchInput.select();
+          menu.scrollTop = 0;
         }
       };
       const setDisabled = (isDisabled) => {
@@ -3807,6 +3800,8 @@
       dropdowns.push(api);
       return api;
     };
+
+    const shouldAutoFocusLineupPlayerSearch = () => window.matchMedia("(min-width: 600px)").matches;
 
     const teamOptions = teams.map((team) => ({
       value: team.id,
@@ -4304,7 +4299,7 @@
             allowEmpty: true,
             searchable: true,
             alignMenuRight: !!cellConfig.alignMenuRight,
-            autoFocusSearch: false,
+            autoFocusSearch: shouldAutoFocusLineupPlayerSearch,
             maxMenuHeight: 300,
           });
           cell.style.minWidth = "0";
@@ -4827,10 +4822,25 @@
         });
       }
 
+      const friendlyMatchesAdminAssociation = activeView === CAPTAIN_VIEWS.FRIENDLIES && isAdminUser
+        ? (
+          captainPageState.associationOverrideTouched
+            ? normalizeCode(associationOverride || "")
+            : normalizeCode(captainAssociationCode || "")
+        )
+        : "";
+
       const filtered = matches
         .filter((match) => {
           if (isTestMode) return true;
-          if (isAdminUser) return true;
+          if (isAdminUser) {
+            if (activeView === CAPTAIN_VIEWS.FRIENDLIES && friendlyMatchesAdminAssociation) {
+              const team1 = readMatchTeam1(match);
+              const team2 = readMatchTeam2(match);
+              return team1 === friendlyMatchesAdminAssociation || team2 === friendlyMatchesAdminAssociation;
+            }
+            return true;
+          }
           const team1 = readMatchTeam1(match);
           const team2 = readMatchTeam2(match);
           return team1 === associationCode || team2 === associationCode;
@@ -4870,6 +4880,31 @@
         }
       } else {
         addButtonEl.classList.add("cp-hidden");
+      }
+
+      if (activeView === CAPTAIN_VIEWS.FRIENDLIES && isAdminUser && !isCreateMode && !isEditMode) {
+        const ownTeamMeta = teamsById.get(normalizeCode(captainAssociationCode)) || null;
+        const filterOptions = [{ value: "", label: "All associations", logo: "" }];
+        if (captainAssociationCode) {
+          filterOptions.push({
+            value: captainAssociationCode,
+            label: ownTeamMeta?.name || captainAssociationCode,
+            logo: ownTeamMeta?.logo || "",
+          });
+        }
+        renderAdminAssociationFilter(
+          filterOptions,
+          friendlyMatchesAdminAssociation,
+          (nextAssociation) => {
+            applyCaptainPageState({
+              view: CAPTAIN_VIEWS.FRIENDLIES,
+              associationOverride: normalizeCode(nextAssociation),
+              mode: "list",
+              matchId: "",
+              playerId: "",
+            }, { syncUrl: true });
+          }
+        );
       }
 
       if (activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
@@ -4999,7 +5034,22 @@
           teamsById.get(playersAssociationCode)?.name || playersAssociationCode || "Players"
         ).trim();
         if (isAdminUser && !isCreateMode && !isEditMode) {
-          renderAdminPlayersAssociationFilter(teamsById, playersAssociationCode);
+          const playerFilterOptions = Array.from(teamsById.values())
+            .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")))
+            .map((team) => ({
+              value: team.id,
+              label: team.name,
+              logo: team.logo,
+            }));
+          renderAdminAssociationFilter(playerFilterOptions, playersAssociationCode, (nextAssociation) => {
+            applyCaptainPageState({
+              view: CAPTAIN_VIEWS.PLAYERS,
+              associationOverride: normalizeCode(nextAssociation),
+              mode: "list",
+              matchId: "",
+              playerId: "",
+            }, { syncUrl: true });
+          });
         }
         const players = allProfiles
           .filter((profile) => {

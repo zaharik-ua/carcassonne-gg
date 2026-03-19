@@ -1049,6 +1049,63 @@ function buildAuditDeletionChanges(before, fields) {
   return buildAuditChanges(before || {}, null, fields);
 }
 
+function buildLineupsAuditChanges(previousLineups, nextLineups) {
+  const beforeMap = new Map();
+  const afterMap = new Map();
+
+  (Array.isArray(previousLineups) ? previousLineups : []).forEach((lineup) => {
+    const lineupId = normalizeNullableText(lineup?.id);
+    if (lineupId) beforeMap.set(lineupId, lineup || {});
+  });
+
+  (Array.isArray(nextLineups) ? nextLineups : []).forEach((lineup) => {
+    const lineupId = normalizeNullableText(lineup?.id);
+    if (lineupId) afterMap.set(lineupId, lineup || {});
+  });
+
+  const lineupIds = Array.from(new Set([
+    ...beforeMap.keys(),
+    ...afterMap.keys(),
+  ])).sort();
+
+  const result = {};
+  lineupIds.forEach((lineupId) => {
+    const beforeLineup = beforeMap.get(lineupId) || null;
+    const afterLineup = afterMap.get(lineupId) || null;
+    const lineupChanges = {};
+
+    if (!beforeLineup || !afterLineup) {
+      const changedFields = buildAuditChanges(beforeLineup || {}, afterLineup || {});
+      Object.keys(changedFields).forEach((field) => {
+        if (field === "id") return;
+        lineupChanges[field] = {
+          old: changedFields[field].old,
+          new: changedFields[field].new,
+        };
+      });
+      if (Object.keys(lineupChanges).length) {
+        result[lineupId] = lineupChanges;
+      }
+      return;
+    }
+
+    const changedFields = buildAuditChanges(beforeLineup, afterLineup);
+    Object.keys(changedFields).forEach((field) => {
+      if (field === "id") return;
+      lineupChanges[field] = {
+        old: changedFields[field].old,
+        new: changedFields[field].new,
+      };
+    });
+
+    if (Object.keys(lineupChanges).length) {
+      result[lineupId] = lineupChanges;
+    }
+  });
+
+  return result;
+}
+
 function getAuditActor(user) {
   return {
     actor_user_id: Number.isInteger(Number(user?.id)) ? Number(user.id) : null,
@@ -2705,7 +2762,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
                             const action = previousLineups.length ? "update" : "create";
                             const eventType = previousLineups.length ? "lineups.updated" : "lineups.created";
                             const changes = previousLineups.length
-                              ? buildAuditChanges({ lineups: previousLineups || [] }, { lineups: sanitized || [] }, ["lineups"])
+                              ? buildLineupsAuditChanges(previousLineups || [], sanitized || [])
                               : buildAuditCreationChanges({ lineups: sanitized || [] }, ["lineups"]);
 
                             return logAuditEvent(
