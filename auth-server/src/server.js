@@ -1049,18 +1049,46 @@ function buildAuditDeletionChanges(before, fields) {
   return buildAuditChanges(before || {}, null, fields);
 }
 
+function normalizeLineupAuditRecord(lineup) {
+  if (!lineup || typeof lineup !== "object") return {};
+
+  const normalizeInteger = (value) => {
+    if (value === null || value === undefined || String(value).trim() === "") return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return value;
+    return Math.trunc(parsed);
+  };
+
+  return {
+    id: normalizeNullableText(lineup.id),
+    tournament_id: normalizeNullableText(lineup.tournament_id),
+    match_id: normalizeNullableText(lineup.match_id),
+    duel_number: normalizeInteger(lineup.duel_number),
+    duel_format: normalizeNullableText(lineup.duel_format),
+    time_utc: normalizeNullableText(lineup.time_utc),
+    custom_time: normalizeInteger(lineup.custom_time),
+    player_1_id: normalizeNullableText(lineup.player_1_id),
+    player_2_id: normalizeNullableText(lineup.player_2_id),
+    dw1: normalizeInteger(lineup.dw1),
+    dw2: normalizeInteger(lineup.dw2),
+    status: normalizeNullableText(lineup.status),
+  };
+}
+
 function buildLineupsAuditChanges(previousLineups, nextLineups) {
   const beforeMap = new Map();
   const afterMap = new Map();
 
   (Array.isArray(previousLineups) ? previousLineups : []).forEach((lineup) => {
-    const lineupId = normalizeNullableText(lineup?.id);
-    if (lineupId) beforeMap.set(lineupId, lineup || {});
+    const normalizedLineup = normalizeLineupAuditRecord(lineup);
+    const lineupId = normalizeNullableText(normalizedLineup.id);
+    if (lineupId) beforeMap.set(lineupId, normalizedLineup);
   });
 
   (Array.isArray(nextLineups) ? nextLineups : []).forEach((lineup) => {
-    const lineupId = normalizeNullableText(lineup?.id);
-    if (lineupId) afterMap.set(lineupId, lineup || {});
+    const normalizedLineup = normalizeLineupAuditRecord(lineup);
+    const lineupId = normalizeNullableText(normalizedLineup.id);
+    if (lineupId) afterMap.set(lineupId, normalizedLineup);
   });
 
   const lineupIds = Array.from(new Set([
