@@ -13,8 +13,9 @@ const DB_PATH = process.env.DB_PATH || "./data/auth.sqlite";
 const dbFullPath = path.resolve(__dirname, "..", DB_PATH);
 
 const SPREADSHEET_ID = String(process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "").trim();
-const MATCHES_SHEET = String(process.env.GOOGLE_SHEETS_MATCHES_SHEET || "matches").trim();
-const LINEUPS_SHEET = String(process.env.GOOGLE_SHEETS_LINEUPS_SHEET || "lineups").trim();
+const MATCHES_SHEET = String(process.env.GOOGLE_SHEETS_MATCHES_SHEET || "db_matches").trim();
+const LINEUPS_SHEET = String(process.env.GOOGLE_SHEETS_LINEUPS_SHEET || "db_lineups").trim();
+const PLAYERS_SHEET = String(process.env.GOOGLE_SHEETS_PLAYERS_SHEET || "db_players").trim();
 const SERVICE_ACCOUNT_EMAIL = String(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "").trim();
 const SERVICE_ACCOUNT_PRIVATE_KEY = String(process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || "")
   .replaceAll("\\n", "\n")
@@ -181,6 +182,56 @@ async function getLineupsExportData() {
   return { columns, rows: mappedRows };
 }
 
+async function getPlayersExportData() {
+  const columns = [
+    "id",
+    "bga_nickname",
+  ];
+
+  const rows = await allAsync(
+    `
+      WITH lineup_player_ids AS (
+        SELECT trim(l.player_1_id) AS player_id
+        FROM lineups l
+        WHERE l.deleted_at IS NULL
+          AND trim(COALESCE(l.player_1_id, '')) <> ''
+        UNION
+        SELECT trim(l.player_2_id) AS player_id
+        FROM lineups l
+        WHERE l.deleted_at IS NULL
+          AND trim(COALESCE(l.player_2_id, '')) <> ''
+      )
+      SELECT
+        p.id AS id,
+        COALESCE(p.bga_nickname, '') AS bga_nickname
+      FROM profiles p
+      INNER JOIN lineup_player_ids lp
+        ON trim(p.id) = lp.player_id
+      WHERE trim(COALESCE(p.id, '')) <> ''
+        AND NOT EXISTS (
+          SELECT 1
+          FROM profiles p2
+          WHERE trim(p2.id) = trim(p.id)
+            AND (
+              COALESCE(p2.updated_at, '') > COALESCE(p.updated_at, '')
+              OR (
+                COALESCE(p2.updated_at, '') = COALESCE(p.updated_at, '')
+                AND p2.rowid > p.rowid
+              )
+            )
+        )
+      ORDER BY p.bga_nickname COLLATE NOCASE ASC, p.id ASC
+    `
+  );
+
+  const mappedRows = rows.map((row) => ({
+    id: row.id,
+    bga_nickname: row.bga_nickname,
+  }));
+
+  return { columns, rows: mappedRows };
+}
+
 function toSheetValues(columns, rows) {
   const header = columns;
   const body = rows.map((row) =>
@@ -236,6 +287,7 @@ async function main() {
     spreadsheetId: SPREADSHEET_ID,
     matchesSheet: MATCHES_SHEET,
     lineupsSheet: LINEUPS_SHEET,
+    playersSheet: PLAYERS_SHEET,
     dbPath: dbFullPath,
   });
 
@@ -247,17 +299,20 @@ async function main() {
     });
     const sheets = google.sheets({ version: "v4", auth });
 
-    const [matchesData, lineupsData] = await Promise.all([
+    const [matchesData, lineupsData, playersData] = await Promise.all([
       getMatchesExportData(),
       getLineupsExportData(),
+      getPlayersExportData(),
     ]);
     logInfo("Export data prepared", {
       matchesRows: matchesData.rows.length,
       lineupsRows: lineupsData.rows.length,
+      playersRows: playersData.rows.length,
     });
 
     const matchesValues = toSheetValues(matchesData.columns, matchesData.rows);
     const lineupsValues = toSheetValues(lineupsData.columns, lineupsData.rows);
+    const playersValues = toSheetValues(playersData.columns, playersData.rows);
 
     await writeSheet(sheets, SPREADSHEET_ID, MATCHES_SHEET, matchesValues);
     logInfo("Matches sheet updated", {
@@ -269,11 +324,17 @@ async function main() {
       sheet: LINEUPS_SHEET,
       rowsWritten: lineupsValues.length - 1,
     });
+    await writeSheet(sheets, SPREADSHEET_ID, PLAYERS_SHEET, playersValues);
+    logInfo("Players sheet updated", {
+      sheet: PLAYERS_SHEET,
+      rowsWritten: playersValues.length - 1,
+    });
 
     const durationMs = Date.now() - startedAtMs;
     logInfo("Sync completed", {
       matchesRows: matchesData.rows.length,
       lineupsRows: lineupsData.rows.length,
+      playersRows: playersData.rows.length,
       durationMs,
     });
   } finally {
