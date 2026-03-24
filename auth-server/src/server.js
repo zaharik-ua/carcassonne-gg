@@ -919,6 +919,38 @@ function ensureTeamsSchema() {
   });
 }
 
+function ensureTournamentsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tournaments (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      short_title TEXT,
+      logo TEXT,
+      link TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure tournaments schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(tournaments)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect tournaments schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "tournaments", "name", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "short_title", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "logo", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "link", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "tournaments", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    });
+  });
+}
+
 function ensureFriendlyFindSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS friendly_find (
@@ -1321,6 +1353,7 @@ db.serialize(() => {
           ensureMatchesSchema();
           ensureLineupsSchema();
           ensureTeamsSchema();
+          ensureTournamentsSchema();
           ensureFriendlyFindSchema();
           ensureAuditTrailSchema();
         }
@@ -2171,6 +2204,155 @@ app.get("/tournaments", (_req, res, next) => {
     (err, rows) => {
       if (err) return next(err);
       return res.json({ ok: true, tournaments: rows || [] });
+    }
+  );
+});
+
+app.post("/tournaments", requireAdmin, (req, res) => {
+  const id = normalizeEntityId(req.body?.id);
+  const name = String(req.body?.name || "").trim();
+  const shortTitle = String(req.body?.short_title || "").trim() || null;
+  const logo = String(req.body?.logo || "").trim() || null;
+  const link = String(req.body?.link || "").trim() || null;
+
+  if (!id) {
+    return res.status(400).json({ ok: false, message: "id is required" });
+  }
+  if (!name) {
+    return res.status(400).json({ ok: false, message: "name is required" });
+  }
+
+  return db.get(
+    `
+      SELECT id
+      FROM tournaments
+      WHERE upper(trim(COALESCE(id, ''))) = upper(?)
+      LIMIT 1
+    `,
+    [id],
+    (dupErr, dupRow) => {
+      if (dupErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate tournament uniqueness" });
+      }
+      if (dupRow) {
+        return res.status(409).json({ ok: false, message: "Tournament with this id already exists" });
+      }
+
+      return db.run(
+        `
+          INSERT INTO tournaments (id, name, short_title, logo, link, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        [id, name, shortTitle, logo, link],
+        (insertErr) => {
+          if (insertErr) {
+            if (String(insertErr.message || "").includes("UNIQUE")) {
+              return res.status(409).json({ ok: false, message: "Tournament with this id already exists" });
+            }
+            return res.status(500).json({ ok: false, message: "Failed to create tournament" });
+          }
+
+          return db.get(
+            `
+              SELECT
+                id,
+                name,
+                short_title,
+                logo,
+                link
+              FROM tournaments
+              WHERE upper(trim(id)) = upper(?)
+              LIMIT 1
+            `,
+            [id],
+            (selectErr, row) => {
+              if (selectErr) {
+                return res.status(500).json({ ok: false, message: "Failed to load tournament" });
+              }
+              return res.json({ ok: true, tournament: row || null });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+app.patch("/tournaments/:id", requireAdmin, (req, res) => {
+  const tournamentId = normalizeEntityId(req.params.id);
+  const payloadId = normalizeEntityId(req.body?.id);
+  const name = String(req.body?.name || "").trim();
+  const shortTitle = String(req.body?.short_title || "").trim() || null;
+  const logo = String(req.body?.logo || "").trim() || null;
+  const link = String(req.body?.link || "").trim() || null;
+
+  if (!tournamentId) {
+    return res.status(400).json({ ok: false, message: "Invalid tournament id" });
+  }
+  if (payloadId && payloadId !== tournamentId) {
+    return res.status(400).json({ ok: false, message: "Tournament id cannot be changed" });
+  }
+  if (!name) {
+    return res.status(400).json({ ok: false, message: "name is required" });
+  }
+
+  return db.get(
+    "SELECT id FROM tournaments WHERE upper(trim(id)) = upper(?) LIMIT 1",
+    [tournamentId],
+    (rowErr, currentRow) => {
+      if (rowErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load tournament" });
+      }
+      if (!currentRow) {
+        return res.status(404).json({ ok: false, message: "Tournament not found" });
+      }
+
+      return db.run(
+        `
+          UPDATE tournaments
+          SET
+            id = ?,
+            name = ?,
+            short_title = ?,
+            logo = ?,
+            link = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE upper(trim(id)) = upper(?)
+        `,
+        [tournamentId, name, shortTitle, logo, link, tournamentId],
+        function onUpdate(err) {
+          if (err) {
+            if (String(err.message || "").includes("UNIQUE")) {
+              return res.status(409).json({ ok: false, message: "Tournament with this id already exists" });
+            }
+            return res.status(500).json({ ok: false, message: "Failed to update tournament" });
+          }
+          if (!this || this.changes === 0) {
+            return res.status(404).json({ ok: false, message: "Tournament not found" });
+          }
+
+          return db.get(
+            `
+              SELECT
+                id,
+                name,
+                short_title,
+                logo,
+                link
+              FROM tournaments
+              WHERE upper(trim(id)) = upper(?)
+              LIMIT 1
+            `,
+            [tournamentId],
+            (selectErr, row) => {
+              if (selectErr) {
+                return res.status(500).json({ ok: false, message: "Failed to load tournament" });
+              }
+              return res.json({ ok: true, tournament: row || null });
+            }
+          );
+        }
+      );
     }
   );
 });

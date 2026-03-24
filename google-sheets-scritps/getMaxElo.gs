@@ -1,33 +1,23 @@
-// from Jan 1
-const START_DATE = 1735682400;
+
 
 // to Jul 1
-const END_DATE = 1751317200;
+// const END_DATE = 1751317200;
+
+// to Jan 1 2026
+// const END_DATE = 1767218400;
 
 // from Jul 1
 // const START_DATE = 1751317200;
 
-// const END_DATE   = null;
+// from Dec 26 2025
+const START_DATE = 1766700000;
+const END_DATE   = null;
 
 
 
-// to 17.Nov
-//const END_DATE = 1763337600;
-
-// from 1.07 by default
-//const START_DATE = 1751317200;
-
-// 3y ago by default
-// const START_DATE = 1640995200;
-
-// custom
-// const START_DATE = 1735686000;
-// const END_DATE   = 1744405200;
-
-//const END_DATE   = 1751317200;
 
 
-const MAX_ELO_BATCH_RANGE = 'T33:T47';
+const MAX_ELO_BATCH_RANGE = 'O3:O115';
 const MAX_ELO_RESULT_OFFSET = 1; // P
 const MAX_ELO_DETAILS_OFFSET = 2; // Q
 const MAX_ELO_STATE_KEY = 'MAX_ELO_BATCH_STATE';
@@ -35,6 +25,8 @@ const MAX_ELO_TRIGGER_HANDLER = 'runNextMaxElo';
 const MAX_ELO_SUCCESS_DELAY_MS = 1000;
 const MAX_ELO_RETRY_DELAY_DEFAULT_MS = 5000;
 const MAX_ELO_RETRY_DELAY_MAX_MS = 10000;
+const MAX_ELO_FETCH_ATTEMPTS = 3;
+const MAX_ELO_FETCH_RETRY_DELAY_MS = 2000;
 
 /**
  * Отримує найкращий elo_after - 1300 для гравця з BGA.
@@ -43,7 +35,7 @@ const MAX_ELO_RETRY_DELAY_MAX_MS = 10000;
  * @return {number} Значення elo_after - 1300
  * @customfunction
  */
-function GET_ELO_MAX(id=95199738) {
+function GET_ELO_MAX(id=84375106) {
   const result = fetchMaxEloData_(id);
   Logger.log(String(Math.trunc(result.maxElo)));
   return result.maxElo;
@@ -172,41 +164,58 @@ function fetchMaxEloData_(id) {
   if (START_DATE !== null) payload.start_date = START_DATE;
   if (END_DATE !== null) payload.end_date = END_DATE;
 
-  console.log(apiUrl, 'res');
-  const res = UrlFetchApp.fetch(apiUrl, {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { Authorization: 'Bearer ' + TOKEN },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  });
+  let lastCode = null;
+  let lastBody = '';
 
-  const code = res.getResponseCode();
-  const body = res.getContentText();
+  for (let attempt = 1; attempt <= MAX_ELO_FETCH_ATTEMPTS; attempt++) {
+    console.log(apiUrl, `attempt ${attempt}`);
 
-  // Логуємо всю відповідь сервера
-  Logger.log(`HTTP ${code} → ${body}`);
+    const res = UrlFetchApp.fetch(apiUrl, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + TOKEN },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
 
-  if (code !== 200) {
-    throw new Error(`API HTTP ${code}: ${body}`);
+    const code = res.getResponseCode();
+    const body = res.getContentText();
+
+    lastCode = code;
+    lastBody = body;
+
+    // Логуємо всю відповідь сервера
+    Logger.log(`HTTP ${code} → ${body}`);
+
+    if (code === 200) {
+      const data = JSON.parse(body);
+      if (!data || data.status === 'error') {
+        throw new Error(`API error: ${data && data.message ? data.message : body}`);
+      }
+
+      const best = data.best_table;
+      if (!best || typeof best.elo_after === 'undefined') {
+        throw new Error('best_table or elo_after not found');
+      }
+
+      const maxElo = Number(best.elo_after) - 1300;
+      return {
+        maxElo,
+        detail: `HTTP ${code} → ${body}`,
+        data
+      };
+    }
+
+    if (!isTransientHttpCode_(code)) {
+      throw new Error(`API HTTP ${code}: ${body}`);
+    }
+
+    if (attempt < MAX_ELO_FETCH_ATTEMPTS) {
+      Utilities.sleep(MAX_ELO_FETCH_RETRY_DELAY_MS * attempt);
+    }
   }
 
-  const data = JSON.parse(body);
-  if (!data || data.status === 'error') {
-    throw new Error(`API error: ${data && data.message ? data.message : body}`);
-  }
-
-  const best = data.best_table;
-  if (!best || typeof best.elo_after === 'undefined') {
-    throw new Error('best_table or elo_after not found');
-  }
-
-  const maxElo = Number(best.elo_after) - 1300;
-  return {
-    maxElo,
-    detail: `HTTP ${code} → ${body}`,
-    data
-  };
+  throw new Error(`API HTTP ${lastCode}: ${lastBody}`);
 }
 
 function scheduleNextMaxEloRun_(delayMs) {
@@ -233,7 +242,13 @@ function getRetryDelayMs_(error) {
     return null;
   }
 
-  if (error.message.indexOf('API HTTP 503') === -1) {
+  const transientCodeMatch = error.message.match(/API HTTP (\d{3})/);
+  if (!transientCodeMatch) {
+    return null;
+  }
+
+  const code = Number(transientCodeMatch[1]);
+  if (!isTransientHttpCode_(code)) {
     return null;
   }
 
@@ -245,4 +260,8 @@ function getRetryDelayMs_(error) {
 
   seconds = Math.max(5, Math.min(seconds, MAX_ELO_RETRY_DELAY_MAX_MS / 1000));
   return seconds * 1000;
+}
+
+function isTransientHttpCode_(code) {
+  return code === 429 || code === 502 || code === 503 || code === 504;
 }

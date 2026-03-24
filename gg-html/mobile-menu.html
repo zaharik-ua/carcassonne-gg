@@ -1,0 +1,845 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+  .gg-mobile-nav {
+    --gg-nav-border: #d9dde3;
+    --gg-nav-text: #222;
+    --gg-nav-muted: #6f7782;
+    --gg-nav-bg: #ffffff;
+    --gg-nav-hover: #f3f6f9;
+    --gg-nav-accent: #2f6fa3;
+    --gg-nav-shadow: 0 16px 40px rgba(16, 24, 40, 0.18);
+    font-family: "Montserrat", sans-serif;
+    color: var(--gg-nav-text);
+    width: 100%;
+    position: relative;
+    z-index: 50;
+  }
+
+  .gg-mobile-nav,
+  .gg-mobile-nav * {
+    box-sizing: border-box;
+  }
+
+  .gg-mobile-nav a,
+  .gg-mobile-nav button,
+  .gg-mobile-nav summary,
+  .gg-mobile-nav label {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .gg-mobile-nav__bar {
+    display: flex;
+    width: 100%;
+    background: var(--gg-nav-bg);
+    border-top: 1px solid var(--gg-nav-border);
+    border-bottom: 1px solid var(--gg-nav-border);
+    box-shadow: 0 4px 18px rgba(17, 24, 39, 0.08);
+    align-items: stretch;
+  }
+
+  .gg-mobile-nav__logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: var(--gg-nav-bg);
+    min-height: 44px;
+    width: 44px;
+    overflow: hidden;
+  }
+
+  .gg-mobile-nav__logo img {
+    display: block;
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+  }
+
+  .gg-mobile-nav__item,
+  .gg-mobile-nav__top-details summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 6px 12px;
+    background: var(--gg-nav-bg);
+    border: 0;
+    border-left: 1px solid var(--gg-nav-border);
+    color: var(--gg-nav-text);
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.15;
+    text-align: center;
+    cursor: pointer;
+    white-space: nowrap;
+    min-width: 0;
+    flex: var(--gg-grow, 1) 1 0;
+  }
+
+  .gg-mobile-nav__top-details {
+    position: relative;
+    min-width: 0;
+    flex: var(--gg-grow, 1) 1 0;
+  }
+
+  .gg-mobile-nav__top-details summary {
+    list-style: none;
+    width: 100%;
+  }
+
+  .gg-mobile-nav__top-details summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .gg-mobile-nav__item:hover,
+  .gg-mobile-nav__top-details summary:hover,
+  .gg-mobile-nav__drawer-trigger:hover,
+  .gg-mobile-nav__drawer-link:hover,
+  .gg-mobile-nav__drawer-summary:hover,
+  .gg-mobile-nav__auth-button:hover,
+  .gg-mobile-nav__auth-menu-item:hover {
+    background: var(--gg-nav-hover);
+  }
+
+  .gg-mobile-nav__ellipsis {
+    font-size: 24px;
+    color: #727780;
+  }
+
+  .gg-mobile-nav__top-panel {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 1px);
+    background: #fff;
+    border-top: 1px solid var(--gg-nav-border);
+    border-bottom: 1px solid var(--gg-nav-border);
+    box-shadow: 0 12px 30px rgba(17, 24, 39, 0.12);
+    min-width: 220px;
+    width: max-content;
+  }
+
+  .gg-mobile-nav__top-link {
+    display: block;
+    padding: 14px 16px;
+    border-top: 1px solid var(--gg-nav-border);
+    color: var(--gg-nav-text);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.15;
+    white-space: nowrap;
+    background: #fff;
+  }
+
+  .gg-mobile-nav__top-link:first-child {
+    border-top: 0;
+  }
+
+  .gg-mobile-nav__drawer-trigger {
+    appearance: none;
+    border: 0;
+    background: var(--gg-nav-bg);
+    padding: 6px 12px;
+    min-height: 44px;
+    border-left: 1px solid var(--gg-nav-border);
+    cursor: pointer;
+    flex: 0 0 60px;
+  }
+
+  .gg-mobile-nav__backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(12, 19, 29, 0.45);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    z-index: 70;
+  }
+
+  .gg-mobile-nav__drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: min(86vw, 360px);
+    height: 100vh;
+    background: #fff;
+    box-shadow: var(--gg-nav-shadow);
+    transform: translateX(100%);
+    transition: transform 0.24s ease;
+    z-index: 80;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .gg-mobile-nav__drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 64px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--gg-nav-border);
+    background: #fff;
+  }
+
+  .gg-mobile-nav__drawer-tools {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+  }
+
+  .gg-mobile-nav__icon-btn {
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: #7a818c;
+    font-size: 22px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .gg-mobile-nav__hint {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 40px;
+    padding: 8px 10px;
+    border: 1px solid var(--gg-nav-border);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--gg-nav-text);
+    box-shadow: 0 14px 34px rgba(16, 24, 40, 0.16);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .gg-mobile-nav__drawer-body {
+    overflow-y: auto;
+    flex: 1;
+    background: #fff;
+  }
+
+  .gg-mobile-nav__drawer-link,
+  .gg-mobile-nav__drawer-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 16px;
+    border-top: 1px solid var(--gg-nav-border);
+    background: #fff;
+    color: var(--gg-nav-text);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.15;
+    cursor: pointer;
+  }
+
+  .gg-mobile-nav__drawer-details summary {
+    list-style: none;
+  }
+
+  .gg-mobile-nav__drawer-details summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .gg-mobile-nav__drawer-chevron {
+    color: var(--gg-nav-muted);
+    font-size: 14px;
+    transition: transform 0.2s ease;
+  }
+
+  .gg-mobile-nav__drawer-details[open] .gg-mobile-nav__drawer-chevron,
+  .gg-mobile-nav__top-details[open] .gg-mobile-nav__drawer-chevron {
+    transform: rotate(180deg);
+  }
+
+  .gg-mobile-nav__drawer-submenu {
+    background: #fafbfd;
+  }
+
+  .gg-mobile-nav__drawer-sublink {
+    display: block;
+    padding: 13px 16px 13px 28px;
+    border-top: 1px solid #edf1f5;
+    color: #314152;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.15;
+  }
+
+  .gg-mobile-nav__drawer-sublink:hover,
+  .gg-mobile-nav__top-link:hover {
+    background: #f5f8fb;
+  }
+
+  .gg-mobile-nav__auth {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 0;
+    position: relative;
+  }
+
+  .gg-mobile-nav__auth-button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--gg-nav-accent);
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1;
+    padding: 8px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .gg-mobile-nav__auth-user {
+    display: none;
+    min-width: 0;
+  }
+
+  .gg-mobile-nav__auth-user--visible {
+    display: block;
+  }
+
+  .gg-mobile-nav__auth-user-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 180px;
+    border: 0;
+    background: transparent;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--gg-nav-text);
+  }
+
+  .gg-mobile-nav__auth-user-trigger:hover {
+    background: var(--gg-nav-hover);
+  }
+
+  .gg-mobile-nav__auth-user-picture {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    object-fit: cover;
+    border: 1px solid var(--gg-nav-border);
+    flex-shrink: 0;
+  }
+
+  .gg-mobile-nav__auth-user-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .gg-mobile-nav__auth-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    min-width: 190px;
+    max-width: 240px;
+    border: 1px solid var(--gg-nav-border);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 14px 34px rgba(16, 24, 40, 0.16);
+    overflow: hidden;
+  }
+
+  .gg-mobile-nav__auth-menu-item {
+    display: block;
+    width: 100%;
+    padding: 11px 14px;
+    border: 0;
+    background: #fff;
+    color: var(--gg-nav-text);
+    text-align: left;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .gg-mobile-nav__signin-panel {
+    padding: 14px;
+    border-bottom: 1px solid var(--gg-nav-border);
+    background: #f8fafc;
+  }
+
+  .gg-mobile-nav__google-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid #d7dce2;
+    border-radius: 8px;
+    background: #fff;
+    color: #314152;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .gg-mobile-nav__google-btn img {
+    width: 18px;
+    height: 18px;
+    display: block;
+  }
+
+  .gg-mobile-nav__hidden {
+    display: none !important;
+  }
+
+  .gg-mobile-nav--drawer-open .gg-mobile-nav__backdrop {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .gg-mobile-nav--drawer-open .gg-mobile-nav__drawer {
+    transform: translateX(0);
+  }
+
+  @media (max-width: 640px) {
+    .gg-mobile-nav__item,
+    .gg-mobile-nav__top-details summary,
+    .gg-mobile-nav__drawer-trigger {
+      min-height: 40px;
+      padding: 4px 6px;
+      font-size: 13px;
+    }
+
+    .gg-mobile-nav__logo {
+      min-height: 40px;
+      padding: 0;
+      width: 40px;
+    }
+
+    .gg-mobile-nav__logo img {
+      width: 40px;
+      height: 40px;
+    }
+
+    .gg-mobile-nav__drawer-trigger {
+      flex-basis: 54px;
+    }
+  }
+</style>
+
+<nav class="gg-mobile-nav" id="ggMobileNav" aria-label="Mobile navigation">
+  <div class="gg-mobile-nav__bar">
+    <a class="gg-mobile-nav__logo" href="https://carcassonne.gg" aria-label="Carcassonne GG home">
+      <img src="https://carcassonne.gg/gallery/GG-logo.svg" alt="Carcassonne GG">
+    </a>
+
+    <a class="gg-mobile-nav__item" style="--gg-grow: 4;" href="https://carcassonne.gg">Main</a>
+
+    <details class="gg-mobile-nav__top-details" id="ggTopEventsMenu" style="--gg-grow: 6;">
+      <summary>
+        <span>Events</span>
+      </summary>
+      <div class="gg-mobile-nav__top-panel">
+        <a class="gg-mobile-nav__top-link" href="https://carcassonne.gg/individual-events/">Individual Tournaments</a>
+        <a class="gg-mobile-nav__top-link" href="https://carcassonne.gg/team-events/">Team Tournaments</a>
+      </div>
+    </details>
+
+    <a class="gg-mobile-nav__item" style="--gg-grow: 7;" href="https://carcassonne.gg/nationals/">Nationals</a>
+    <a class="gg-mobile-nav__item" style="--gg-grow: 5;" href="https://carcassonne.gg/players/">Players</a>
+
+    <button class="gg-mobile-nav__drawer-trigger" id="ggDrawerOpenButton" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="ggMobileNavDrawer">
+      <i class="fa-solid fa-ellipsis gg-mobile-nav__ellipsis" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  <div class="gg-mobile-nav__backdrop" id="ggDrawerBackdrop"></div>
+
+  <aside class="gg-mobile-nav__drawer" id="ggMobileNavDrawer" aria-hidden="true">
+    <div class="gg-mobile-nav__drawer-header">
+      <div class="gg-mobile-nav__auth">
+        <button id="ggAuthSignInButton" class="gg-mobile-nav__auth-button" type="button">Sign in</button>
+
+        <div id="ggAuthUser" class="gg-mobile-nav__auth-user">
+          <button id="ggAuthUserTrigger" class="gg-mobile-nav__auth-user-trigger" type="button" aria-expanded="false" aria-controls="ggAuthUserMenu">
+            <img id="ggAuthUserPicture" class="gg-mobile-nav__auth-user-picture" alt="User">
+            <span id="ggAuthUserName" class="gg-mobile-nav__auth-user-name"></span>
+          </button>
+
+          <div id="ggAuthUserMenu" class="gg-mobile-nav__auth-menu gg-mobile-nav__hidden" role="menu">
+            <a id="ggAuthAdminLink" class="gg-mobile-nav__auth-menu-item gg-mobile-nav__hidden" href="https://carcassonne.gg/admin" role="menuitem">Admin panel</a>
+            <a id="ggAuthManageTeamLink" class="gg-mobile-nav__auth-menu-item gg-mobile-nav__hidden" href="https://carcassonne.gg/captain/" role="menuitem">Manage Team</a>
+            <a id="ggAuthProfileLink" class="gg-mobile-nav__auth-menu-item" href="https://carcassonne.gg/player/?id=noprofile" role="menuitem">My profile</a>
+            <button id="ggAuthLogoutButton" class="gg-mobile-nav__auth-menu-item" type="button" role="menuitem">Log out</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="gg-mobile-nav__drawer-tools">
+        <button class="gg-mobile-nav__icon-btn" id="ggSettingsButton" type="button" aria-label="Settings" aria-expanded="false" aria-controls="ggSettingsHint">
+          <i class="fa-solid fa-gear" aria-hidden="true"></i>
+        </button>
+        <div id="ggSettingsHint" class="gg-mobile-nav__hint gg-mobile-nav__hidden" role="status" aria-live="polite">Coming soon</div>
+        <button class="gg-mobile-nav__icon-btn" id="ggDrawerCloseButton" type="button" aria-label="Close menu">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+
+    <div id="ggAuthSignInPanel" class="gg-mobile-nav__signin-panel gg-mobile-nav__hidden">
+      <a id="ggAuthGoogleAuthLink" class="gg-mobile-nav__google-btn" href="/auth/google">
+        <img alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg">
+        <span>Sign in with Google</span>
+      </a>
+    </div>
+
+    <div class="gg-mobile-nav__drawer-body">
+      <a class="gg-mobile-nav__drawer-link" href="https://carcassonne.gg">Main</a>
+
+      <details class="gg-mobile-nav__drawer-details">
+        <summary class="gg-mobile-nav__drawer-summary">
+          <span>Individual Events</span>
+          <i class="fa-solid fa-chevron-down gg-mobile-nav__drawer-chevron" aria-hidden="true"></i>
+        </summary>
+        <div class="gg-mobile-nav__drawer-submenu">
+          <a class="gg-mobile-nav__drawer-sublink" href="https://carcassonne.gg/nationals/">Nationals</a>
+          <a class="gg-mobile-nav__drawer-sublink" href="https://carcassonne.gg/CCL-2026/">CCL</a>
+          <a class="gg-mobile-nav__drawer-sublink" href="https://carcassonne.gg/MSO-2026/">MSO</a>
+          <a class="gg-mobile-nav__drawer-sublink" href="https://carcassonne.gg/King-of-Carcassonne/">King of Carcassonne</a>
+          <a class="gg-mobile-nav__drawer-sublink" href="https://carcassonne.gg/WC-2025/">World Championship</a>
+        </div>
+      </details>
+
+      <details class="gg-mobile-nav__drawer-details">
+        <summary class="gg-mobile-nav__drawer-summary">
+          <span>Team Events</span>
+          <i class="fa-solid fa-chevron-down gg-mobile-nav__drawer-chevron" aria-hidden="true"></i>
+        </summary>
+        <div class="gg-mobile-nav__drawer-submenu">
+          <a class="gg-mobile-nav__drawer-sublink" href="https://www.carcassonne.cat/wtcoc/" target="_blank" rel="noopener noreferrer">WTCOC</a>
+          <a class="gg-mobile-nav__drawer-sublink" href="https://www.carcassonne.cat/etcoc2025/" target="_blank" rel="noopener noreferrer">ETCOC</a>
+          <a class="gg-mobile-nav__drawer-sublink" href="https://carcassonnecolombia.com/copa-america2026/">Copa America</a>
+          <a class="gg-mobile-nav__drawer-sublink" href="#" target="_blank" rel="noopener noreferrer">Asian Cup</a>
+          <a class="gg-mobile-nav__drawer-sublink" href="https://carcassonne.gg/friendly-matches/">Friendly Matches</a>
+        </div>
+      </details>
+
+      <a class="gg-mobile-nav__drawer-link" href="https://carcassonne.gg/players/">Players</a>
+      <a class="gg-mobile-nav__drawer-link" href="https://carcassonne.gg/Golden-Meeple-2025/">Golden Meeple</a>
+
+      <details class="gg-mobile-nav__drawer-details">
+        <summary class="gg-mobile-nav__drawer-summary">
+          <span>Rankings</span>
+          <i class="fa-solid fa-chevron-down gg-mobile-nav__drawer-chevron" aria-hidden="true"></i>
+        </summary>
+        <div class="gg-mobile-nav__drawer-submenu">
+          <a class="gg-mobile-nav__drawer-sublink" href="https://carcassonne.gg/Association-Ranking-2025/">Association Ranking</a>
+          <a class="gg-mobile-nav__drawer-sublink" href="https://carcassonne.gg/National-Teams-Ranking/">National Teams Ranking</a>
+        </div>
+      </details>
+
+      <a class="gg-mobile-nav__drawer-link" href="https://carcassonne.gg/Links/">Links</a>
+    </div>
+  </aside>
+</nav>
+
+<script>
+  (function () {
+    const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+
+    const navRoot = document.getElementById("ggMobileNav");
+    const drawer = document.getElementById("ggMobileNavDrawer");
+    const drawerOpenButton = document.getElementById("ggDrawerOpenButton");
+    const drawerCloseButton = document.getElementById("ggDrawerCloseButton");
+    const drawerBackdrop = document.getElementById("ggDrawerBackdrop");
+    const topEventsMenu = document.getElementById("ggTopEventsMenu");
+    const drawerAccordions = Array.from(navRoot.querySelectorAll(".gg-mobile-nav__drawer-details"));
+    const drawerLinks = Array.from(navRoot.querySelectorAll(".gg-mobile-nav__drawer a"));
+    const settingsButton = document.getElementById("ggSettingsButton");
+    const settingsHint = document.getElementById("ggSettingsHint");
+
+    const signInButton = document.getElementById("ggAuthSignInButton");
+    const signInPanel = document.getElementById("ggAuthSignInPanel");
+    const googleAuthLink = document.getElementById("ggAuthGoogleAuthLink");
+    const authUser = document.getElementById("ggAuthUser");
+    const authUserTrigger = document.getElementById("ggAuthUserTrigger");
+    const authUserPicture = document.getElementById("ggAuthUserPicture");
+    const authUserName = document.getElementById("ggAuthUserName");
+    const authUserMenu = document.getElementById("ggAuthUserMenu");
+    const adminLink = document.getElementById("ggAuthAdminLink");
+    const manageTeamLink = document.getElementById("ggAuthManageTeamLink");
+    const profileLink = document.getElementById("ggAuthProfileLink");
+    const logoutButton = document.getElementById("ggAuthLogoutButton");
+
+    let lastAuthStateKey = null;
+
+    function toBool(value) {
+      if (typeof value === "boolean") return value;
+      if (typeof value === "number") return value === 1;
+      const raw = String(value || "").trim().toLowerCase();
+      return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+    }
+
+    function getFirstName(name) {
+      const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+      return parts[0] || "";
+    }
+
+    function emitAuthStateChange(user) {
+      const stateKey = user
+        ? "in:" + String(user.id || user.player_id || user.playerId || user.email || user.name || "user").trim()
+        : "out";
+
+      if (stateKey === lastAuthStateKey) return;
+      lastAuthStateKey = stateKey;
+
+      window.dispatchEvent(new CustomEvent("gg-auth-state-change", {
+        detail: {
+          authenticated: !!user,
+          user: user || null
+        }
+      }));
+    }
+
+    function closeTopMenus(exceptId) {
+      if (topEventsMenu && exceptId !== "top-events") {
+        topEventsMenu.open = false;
+      }
+    }
+
+    function openDrawer() {
+      navRoot.classList.add("gg-mobile-nav--drawer-open");
+      drawer.setAttribute("aria-hidden", "false");
+      drawerOpenButton.setAttribute("aria-expanded", "true");
+      document.body.style.overflow = "hidden";
+      closeTopMenus();
+    }
+
+    function closeDrawer() {
+      navRoot.classList.remove("gg-mobile-nav--drawer-open");
+      drawer.setAttribute("aria-hidden", "true");
+      drawerOpenButton.setAttribute("aria-expanded", "false");
+      document.body.style.overflow = "";
+      closeUserMenu();
+      closeSettingsHint();
+      signInPanel.classList.add("gg-mobile-nav__hidden");
+    }
+
+    function closeSettingsHint() {
+      settingsHint.classList.add("gg-mobile-nav__hidden");
+      settingsButton.setAttribute("aria-expanded", "false");
+    }
+
+    function toggleSettingsHint() {
+      const isHidden = settingsHint.classList.contains("gg-mobile-nav__hidden");
+      if (isHidden) {
+        settingsHint.classList.remove("gg-mobile-nav__hidden");
+        settingsButton.setAttribute("aria-expanded", "true");
+      } else {
+        closeSettingsHint();
+      }
+    }
+
+    function closeUserMenu() {
+      authUserMenu.classList.add("gg-mobile-nav__hidden");
+      authUserTrigger.setAttribute("aria-expanded", "false");
+    }
+
+    function openUserMenu() {
+      authUserMenu.classList.remove("gg-mobile-nav__hidden");
+      authUserTrigger.setAttribute("aria-expanded", "true");
+      signInPanel.classList.add("gg-mobile-nav__hidden");
+    }
+
+    function setLoggedOutUI() {
+      signInButton.classList.remove("gg-mobile-nav__hidden");
+      signInPanel.classList.add("gg-mobile-nav__hidden");
+      authUser.classList.remove("gg-mobile-nav__auth-user--visible");
+      profileLink.href = "https://carcassonne.gg/player/?id=noprofile";
+      adminLink.classList.add("gg-mobile-nav__hidden");
+      adminLink.href = "https://carcassonne.gg/admin";
+      manageTeamLink.classList.add("gg-mobile-nav__hidden");
+      manageTeamLink.href = "https://carcassonne.gg/captain/";
+      closeUserMenu();
+      emitAuthStateChange(null);
+    }
+
+    function applyCaptainMenuAccess(user) {
+      const isTeamCaptain = toBool(user && (user.profile && user.profile.teamCaptain !== undefined ? user.profile.teamCaptain : user.teamCaptain));
+      if (isTeamCaptain) {
+        manageTeamLink.classList.remove("gg-mobile-nav__hidden");
+        manageTeamLink.href = "https://carcassonne.gg/captain/";
+      } else {
+        manageTeamLink.classList.add("gg-mobile-nav__hidden");
+        manageTeamLink.href = "https://carcassonne.gg/captain/";
+      }
+    }
+
+    function setLoggedInUI(user) {
+      signInButton.classList.add("gg-mobile-nav__hidden");
+      signInPanel.classList.add("gg-mobile-nav__hidden");
+      authUser.classList.add("gg-mobile-nav__auth-user--visible");
+      authUserName.textContent = getFirstName(user.name) || user.email || "User";
+      authUserPicture.src = user.picture || "https://www.gravatar.com/avatar/?d=mp";
+      authUserPicture.alt = user.name || "User";
+      profileLink.href = user.myProfileUrl || "https://carcassonne.gg/player/?id=noprofile";
+
+      if (user.isAdmin) {
+        adminLink.classList.remove("gg-mobile-nav__hidden");
+        adminLink.href = user.adminPanelUrl || "https://carcassonne.gg/admin";
+      } else {
+        adminLink.classList.add("gg-mobile-nav__hidden");
+        adminLink.href = "https://carcassonne.gg/admin";
+      }
+
+      manageTeamLink.classList.add("gg-mobile-nav__hidden");
+      manageTeamLink.href = "https://carcassonne.gg/captain/";
+      applyCaptainMenuAccess(user);
+      closeUserMenu();
+      emitAuthStateChange(user);
+    }
+
+    async function fetchSession() {
+      try {
+        const response = await fetch(AUTH_BASE + "/auth/me", {
+          method: "GET",
+          credentials: "include"
+        });
+
+        if (!response.ok) {
+          setLoggedOutUI();
+          return;
+        }
+
+        const data = await response.json();
+        if (data.authenticated && data.user) {
+          setLoggedInUI(data.user);
+        } else {
+          setLoggedOutUI();
+        }
+      } catch (error) {
+        setLoggedOutUI();
+      }
+    }
+
+    drawerOpenButton.addEventListener("click", openDrawer);
+    drawerCloseButton.addEventListener("click", closeDrawer);
+    drawerBackdrop.addEventListener("click", closeDrawer);
+    settingsButton.addEventListener("click", function () {
+      closeUserMenu();
+      signInPanel.classList.add("gg-mobile-nav__hidden");
+      toggleSettingsHint();
+    });
+
+    signInButton.addEventListener("click", function () {
+      signInPanel.classList.toggle("gg-mobile-nav__hidden");
+      closeUserMenu();
+    });
+
+    googleAuthLink.addEventListener("click", function (event) {
+      event.preventDefault();
+      const popup = window.open(
+        AUTH_BASE + "/auth/google",
+        "googleAuth",
+        "width=520,height=640,left=100,top=100"
+      );
+
+      if (!popup) {
+        window.location.href = AUTH_BASE + "/auth/google";
+        return;
+      }
+
+      signInPanel.classList.add("gg-mobile-nav__hidden");
+    });
+
+    authUserTrigger.addEventListener("click", function () {
+      if (authUserMenu.classList.contains("gg-mobile-nav__hidden")) {
+        openUserMenu();
+      } else {
+        closeUserMenu();
+      }
+    });
+
+    logoutButton.addEventListener("click", async function () {
+      try {
+        await fetch(AUTH_BASE + "/auth/logout", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json"
+          }
+        });
+      } finally {
+        setLoggedOutUI();
+      }
+    });
+
+    if (topEventsMenu) {
+      topEventsMenu.addEventListener("toggle", function () {
+        if (topEventsMenu.open) {
+          closeUserMenu();
+        }
+      });
+    }
+
+    drawerAccordions.forEach(function (details) {
+      details.addEventListener("toggle", function () {
+        if (!details.open) return;
+        drawerAccordions.forEach(function (other) {
+          if (other !== details) {
+            other.open = false;
+          }
+        });
+      });
+    });
+
+    drawerLinks.forEach(function (link) {
+      link.addEventListener("click", function () {
+        closeDrawer();
+      });
+    });
+
+    document.addEventListener("click", function (event) {
+      if (!navRoot.contains(event.target)) {
+        closeTopMenus();
+        closeUserMenu();
+        closeSettingsHint();
+        signInPanel.classList.add("gg-mobile-nav__hidden");
+      }
+    });
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        closeTopMenus();
+        closeDrawer();
+      }
+    });
+
+    window.addEventListener("message", function (event) {
+      if (event.origin !== new URL(AUTH_BASE).origin) return;
+      if (event.data && event.data.type === "google-auth-success") {
+        fetchSession();
+      }
+    });
+
+    fetchSession();
+  })();
+</script>

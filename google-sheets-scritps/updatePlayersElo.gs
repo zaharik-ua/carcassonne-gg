@@ -137,6 +137,10 @@ function updatePlayersElo() {
 function updatePlayersEloEmpty() {
   const sheetName = 'Players';
   const startRow = 2;
+  const playerIdColumn = 2;
+  const playerEloColumn = 4;
+  const queueIdColumn = 9;
+  const queueEloColumn = 10;
 
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
   if (!sheet) {
@@ -152,7 +156,36 @@ function updatePlayersEloEmpty() {
   }
 
   const totalRows = lastRow - startRow + 1;
-  const rows = sheet.getRange(startRow, 9, totalRows, 2).getValues();
+  const playerRows = sheet.getRange(startRow, playerIdColumn, totalRows, playerEloColumn - playerIdColumn + 1).getValues();
+  const missingIds = playerRows.reduce(function(result, row) {
+    const playerId = row[0];
+    const playerElo = row[playerEloColumn - playerIdColumn];
+
+    if (playerId && (playerElo === '' || playerElo === null)) {
+      result.push([playerId]);
+    }
+
+    return result;
+  }, []);
+
+  if (missingIds.length > 0) {
+    const queueIds = sheet.getRange(startRow, queueIdColumn, Math.max(lastRow - startRow + 1, 1), 1).getValues();
+    let queueLastRow = startRow - 1;
+
+    queueIds.forEach(function(row, index) {
+      if (row[0] !== '' && row[0] !== null) {
+        queueLastRow = startRow + index;
+      }
+    });
+
+    const appendStartRow = queueLastRow + 1;
+    sheet.getRange(appendStartRow, queueIdColumn, missingIds.length, 1).setValues(missingIds);
+    Logger.log('➕ Added ' + missingIds.length + ' player ids to the ELO queue.');
+  }
+
+  const queueLastRow = sheet.getLastRow();
+  const queueTotalRows = queueLastRow - startRow + 1;
+  const rows = sheet.getRange(startRow, queueIdColumn, queueTotalRows, 2).getValues();
   const updatedData = rows.map(function(row) {
     return [row[1]];
   });
@@ -194,7 +227,7 @@ function updatePlayersEloEmpty() {
     updatedData[index] = [elo];
   });
 
-  const eloRange = sheet.getRange(startRow, 10, totalRows, 1);
+  const eloRange = sheet.getRange(startRow, queueEloColumn, queueTotalRows, 1);
   eloRange.setValues(updatedData);
   eloRange.setBackgrounds(backgroundColors);
   Logger.log('✅ Empty Players ELO updated.');

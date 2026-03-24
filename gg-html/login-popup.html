@@ -26,6 +26,7 @@
     }
 
     .lp-auth__bar {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: flex-end;
@@ -50,20 +51,19 @@
 
     .lp-auth__button:hover { background: var(--lp-auth-btn-hover); }
 
-    .lp-auth__toggle {
-      position: absolute;
-      opacity: 0;
-      pointer-events: none;
-    }
-
     .lp-auth__dropdown {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.2s ease;
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      z-index: 1001;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translateY(-6px);
+      transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
     }
 
     .lp-auth__row {
-      margin-top: 8px;
       padding: 8px;
       border: 1px solid var(--lp-auth-border);
       border-radius: 6px;
@@ -72,8 +72,12 @@
       min-width: 240px;
     }
 
-    .lp-auth__toggle:checked ~ .lp-auth__dropdown {
-      max-height: 120px;
+    .lp-auth__dropdown--open {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: translateY(0);
+      transition-delay: 0s;
     }
 
     .lp-auth__google-btn {
@@ -187,10 +191,17 @@
   </style>
 
   <div class="lp-auth">
-    <input type="checkbox" id="lpAuthToggle" class="lp-auth__toggle" />
-
     <div class="lp-auth__bar">
-      <label id="lpAuthSignInLabel" class="lp-auth__button" for="lpAuthToggle">Sign in</label>
+      <button id="lpAuthSignInLabel" class="lp-auth__button" type="button" aria-expanded="false" aria-controls="lpAuthSignInDropdown">Sign in</button>
+
+      <div id="lpAuthSignInDropdown" class="lp-auth__dropdown" aria-hidden="true">
+        <div class="lp-auth__row">
+          <a id="lpAuthGoogleAuthLink" class="lp-auth__google-btn" href="/auth/google">
+            <img class="lp-auth__google-icon" alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />
+            Sign in with Google
+          </a>
+        </div>
+      </div>
 
       <div id="lpAuthUser" class="lp-auth__user">
         <button id="lpAuthUserTrigger" class="lp-auth__user-trigger" type="button" aria-expanded="false" aria-controls="lpAuthUserMenu">
@@ -207,24 +218,18 @@
         </div>
       </div>
     </div>
-
-    <div id="lpAuthSignInDropdown" class="lp-auth__dropdown">
-      <div class="lp-auth__row">
-        <a id="lpAuthGoogleAuthLink" class="lp-auth__google-btn" href="/auth/google">
-          <img class="lp-auth__google-icon" alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />
-          Sign in with Google
-        </a>
-      </div>
-    </div>
   </div>
 
   <script>
     const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+    const portalState = {
+      container: null,
+      cleanup: [],
+    };
 
     const signInLabel = document.getElementById("lpAuthSignInLabel");
     const signInDropdown = document.getElementById("lpAuthSignInDropdown");
     const googleAuthLink = document.getElementById("lpAuthGoogleAuthLink");
-    const authToggle = document.getElementById("lpAuthToggle");
     const authUser = document.getElementById("lpAuthUser");
     const authUserTrigger = document.getElementById("lpAuthUserTrigger");
     const authUserPicture = document.getElementById("lpAuthUserPicture");
@@ -258,6 +263,196 @@
       authUserTrigger.setAttribute("aria-expanded", "true");
     }
 
+    function canUseParentDocument() {
+      try {
+        return !!(window.parent && window.parent !== window && window.parent.document && window.frameElement);
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function ensurePortalStyles(parentDocument) {
+      if (parentDocument.getElementById("lpAuthPortalStyles")) return;
+      const style = parentDocument.createElement("style");
+      style.id = "lpAuthPortalStyles";
+      style.textContent = `
+        .lp-auth__portal {
+          position: fixed;
+          z-index: 2147483647;
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+          transform: translateY(-6px);
+          transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+          font-family: "Montserrat", sans-serif;
+        }
+        .lp-auth__portal--open {
+          opacity: 1;
+          visibility: visible;
+          pointer-events: auto;
+          transform: translateY(0);
+          transition-delay: 0s;
+        }
+        .lp-auth__portal-row {
+          padding: 8px;
+          border: 1px solid #d8d8d8;
+          border-radius: 6px;
+          background: #fff;
+          box-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
+          min-width: 240px;
+        }
+        .lp-auth__portal-link {
+          width: 100%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          padding: 10px 12px;
+          background: #fff;
+          border: 1px solid #dadce0;
+          border-radius: 4px;
+          font-weight: 600;
+          font-size: 13px;
+          color: #3c4043;
+          cursor: pointer;
+          transition: box-shadow 0.15s ease;
+          text-decoration: none;
+          white-space: nowrap;
+        }
+        .lp-auth__portal-link:hover {
+          box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+        }
+        .lp-auth__portal-icon {
+          width: 18px;
+          height: 18px;
+          display: inline-block;
+        }
+      `;
+      parentDocument.head.appendChild(style);
+    }
+
+    function positionPortal(container) {
+      const iframeRect = window.frameElement.getBoundingClientRect();
+      const buttonRect = signInLabel.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      const top = iframeRect.top + buttonRect.bottom + 8;
+      const rightEdge = iframeRect.left + buttonRect.right;
+      const left = Math.max(8, rightEdge - containerRect.width);
+      container.style.top = `${Math.max(8, top)}px`;
+      container.style.left = `${left}px`;
+    }
+
+    function teardownPortal() {
+      while (portalState.cleanup.length) {
+        const dispose = portalState.cleanup.pop();
+        dispose();
+      }
+      if (portalState.container) {
+        portalState.container.remove();
+        portalState.container = null;
+      }
+    }
+
+    function openGoogleAuthPopup() {
+      const popup = window.open(
+        `${AUTH_BASE}/auth/google`,
+        "googleAuth",
+        "width=520,height=640,left=100,top=100"
+      );
+
+      if (!popup) {
+        window.location.href = `${AUTH_BASE}/auth/google`;
+        return;
+      }
+
+      closeSignInDropdown();
+    }
+
+    function openPortalDropdown() {
+      const parentDocument = window.parent.document;
+      ensurePortalStyles(parentDocument);
+      teardownPortal();
+
+      const container = parentDocument.createElement("div");
+      container.className = "lp-auth__portal";
+      container.setAttribute("role", "dialog");
+      container.setAttribute("aria-label", "Sign in");
+      container.innerHTML = `
+        <div class="lp-auth__portal-row">
+          <a class="lp-auth__portal-link" href="/auth/google">
+            <img class="lp-auth__portal-icon" alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />
+            Sign in with Google
+          </a>
+        </div>
+      `;
+
+      parentDocument.body.appendChild(container);
+      positionPortal(container);
+      container.classList.add("lp-auth__portal--open");
+
+      const portalLink = container.querySelector(".lp-auth__portal-link");
+      const closeOnOutside = (event) => {
+        if (!container.contains(event.target)) {
+          closeSignInDropdown();
+        }
+      };
+      const closeOnEscape = (event) => {
+        if (event.key === "Escape") {
+          closeSignInDropdown();
+        }
+      };
+      const reposition = () => {
+        if (portalState.container) {
+          positionPortal(portalState.container);
+        }
+      };
+
+      portalLink.addEventListener("click", (event) => {
+        event.preventDefault();
+        openGoogleAuthPopup();
+      });
+      parentDocument.addEventListener("mousedown", closeOnOutside);
+      window.parent.addEventListener("scroll", reposition, true);
+      window.addEventListener("resize", reposition);
+      window.parent.addEventListener("resize", reposition);
+      parentDocument.addEventListener("keydown", closeOnEscape);
+
+      portalState.container = container;
+      portalState.cleanup.push(() => parentDocument.removeEventListener("mousedown", closeOnOutside));
+      portalState.cleanup.push(() => window.parent.removeEventListener("scroll", reposition, true));
+      portalState.cleanup.push(() => window.removeEventListener("resize", reposition));
+      portalState.cleanup.push(() => window.parent.removeEventListener("resize", reposition));
+      portalState.cleanup.push(() => parentDocument.removeEventListener("keydown", closeOnEscape));
+    }
+
+    function openSignInDropdown() {
+      signInDropdown.classList.add("lp-auth__dropdown--open");
+      signInDropdown.setAttribute("aria-hidden", "false");
+      signInLabel.setAttribute("aria-expanded", "true");
+      if (canUseParentDocument()) {
+        signInDropdown.classList.remove("lp-auth__dropdown--open");
+        signInDropdown.setAttribute("aria-hidden", "true");
+        openPortalDropdown();
+      }
+    }
+
+    function closeSignInDropdown() {
+      signInDropdown.classList.remove("lp-auth__dropdown--open");
+      signInDropdown.setAttribute("aria-hidden", "true");
+      signInLabel.setAttribute("aria-expanded", "false");
+      teardownPortal();
+    }
+
+    function toggleSignInDropdown() {
+      if (signInLabel.classList.contains("lp-auth__hidden")) return;
+      if (portalState.container || signInDropdown.classList.contains("lp-auth__dropdown--open")) {
+        closeSignInDropdown();
+      } else {
+        closeUserMenu();
+        openSignInDropdown();
+      }
+    }
+
     function emitAuthStateChange(user) {
       const stateKey = user
         ? `in:${String(user.id || user.player_id || user.playerId || user.email || user.name || "user").trim()}`
@@ -282,7 +477,7 @@
       manageTeamLink.classList.add("lp-auth__hidden");
       manageTeamLink.href = "https://carcassonne.gg/captain/";
       closeUserMenu();
-      authToggle.checked = false;
+      closeSignInDropdown();
       emitAuthStateChange(null);
     }
 
@@ -315,7 +510,7 @@
       manageTeamLink.classList.add("lp-auth__hidden");
       manageTeamLink.href = "https://carcassonne.gg/captain/";
       applyCaptainMenuAccess(user);
-      authToggle.checked = false;
+      closeSignInDropdown();
       closeUserMenu();
       emitAuthStateChange(user);
     }
@@ -343,23 +538,14 @@
       }
     }
 
+    signInLabel.addEventListener("click", toggleSignInDropdown);
     googleAuthLink.addEventListener("click", (event) => {
       event.preventDefault();
-      const popup = window.open(
-        `${AUTH_BASE}/auth/google`,
-        "googleAuth",
-        "width=520,height=640,left=100,top=100"
-      );
-
-      if (!popup) {
-        window.location.href = `${AUTH_BASE}/auth/google`;
-        return;
-      }
-
-      authToggle.checked = false;
+      openGoogleAuthPopup();
     });
 
     authUserTrigger.addEventListener("click", () => {
+      closeSignInDropdown();
       if (userMenu.classList.contains("lp-auth__hidden")) {
         openUserMenu();
       } else {
@@ -380,6 +566,10 @@
     });
 
     document.addEventListener("click", (event) => {
+      if (!signInDropdown.contains(event.target) && !signInLabel.contains(event.target)) {
+        closeSignInDropdown();
+      }
+
       if (!authUser.contains(event.target)) {
         closeUserMenu();
       }
@@ -387,6 +577,7 @@
 
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
+        closeSignInDropdown();
         closeUserMenu();
       }
     });

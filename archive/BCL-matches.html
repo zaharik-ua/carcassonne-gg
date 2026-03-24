@@ -153,7 +153,7 @@ code {
     align-items: center;
     min-height: 48px;
     height: auto;
-    background-color: white;
+    background-color: #fffbe8;
     border-top: 1px solid #ccc;
     padding: 4px 8px;
     box-sizing: border-box;
@@ -415,7 +415,7 @@ code {
     align-items: center;
     justify-content: space-between;
     height: auto;
-    background-color: white;
+    background-color: #fff0f0;
     font-size: 13px;
     font-weight: bold;
     padding: 6px 8px;
@@ -549,7 +549,7 @@ code {
 
   /* Time mode: compact tournament header styles */
   .time-mode .tournament-header {
-    padding: 6px 8px 1px 8px; 
+    padding: 4px 8px;
     font-size: 11px;  /* tournament name size */
     color: #555;      /* tournament name color */
   }
@@ -1402,7 +1402,7 @@ function collectFlagInfos(matches) {
 }
 
 
-let todaySortBy = "event"; // Single UI state controlling Today + Upcoming
+let todaySortBy = "time"; // Single UI state controlling Today + Upcoming
 let lastData = null; // cache of last fetched data for re-rendering without refetch
 let tournamentFilterIdCounter = 0;
 const ALLOWED_TOURNAMENTS = new Set([
@@ -1412,11 +1412,34 @@ const ALLOWED_TOURNAMENTS = new Set([
   "BCL-2026S-BL"
 ]);
 
+function normalizeTextValue(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isBelTeamValue(value) {
+  const normalized = normalizeTextValue(value).toLowerCase();
+  if (!normalized) return false;
+  return normalized === "bel" || normalized === "belgium" || normalized.includes("belgium.png");
+}
+
+function isBelTeamMatch(match) {
+  if (!match) return false;
+  const tournamentType = normalizeTextValue(match.tournament_type).toUpperCase();
+  if (tournamentType !== "TEAM") return false;
+
+  return [
+    match.flag1,
+    match.flag2,
+    match.team1,
+    match.team2
+  ].some(isBelTeamValue);
+}
+
 function filterMatchesByAllowedTournaments(matches) {
   return (matches || []).filter(match => {
     if (!match) return false;
-    const tournamentId = typeof match.tournament_id === "string" ? match.tournament_id.trim() : "";
-    return ALLOWED_TOURNAMENTS.has(tournamentId);
+    const tournamentId = normalizeTextValue(match.tournament_id);
+    return ALLOWED_TOURNAMENTS.has(tournamentId) || isBelTeamMatch(match);
   });
 }
 
@@ -1506,7 +1529,8 @@ function renderEventsCard(container, events) {
   container.appendChild(card);
 }
 
-function renderSection(container, title, tournaments, matches, events) {
+function renderSection(container, title, tournaments, matches, events, options = {}) {
+  const { showSortToggle = false } = options;
   const visibleMatches = filterMatchesByAllowedTournaments(matches);
   const visibleEvents = [];
   const visibleTournaments = (tournaments || []);
@@ -1521,8 +1545,8 @@ function renderSection(container, title, tournaments, matches, events) {
 
   const isToday = title === "Today";
   const isUpcoming = title === "Upcoming Matches";
-  // Right side: only Today — single toggle affects both Today and Upcoming
-  if (isToday) {
+  // Single toggle affects both Today and Upcoming; show it on Today, or on Upcoming when Today is empty.
+  if (showSortToggle && (isToday || isUpcoming)) {
     const toggle = document.createElement("div");
     toggle.className = "sort-toggle";
 
@@ -1995,20 +2019,24 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
   function renderAllSectionsFromData({ matches_today, matches_scheduled, matches_finished, tournaments_today, tournaments_scheduled, tournaments_finished }) {
     const container = document.getElementById("matches-container");
     container.innerHTML = "";
+    const hasTodayMatches = filterMatchesByAllowedTournaments(matches_today).length > 0;
+    const hasUpcomingMatches = filterMatchesByAllowedTournaments(matches_scheduled).length > 0;
 
     renderSection(
       container,
       "Today",
       tournaments_today,
       matches_today,
-      []
+      [],
+      { showSortToggle: hasTodayMatches }
     );
     renderSection(
       container,
       "Upcoming Matches",
       tournaments_scheduled,
       matches_scheduled,
-      []
+      [],
+      { showSortToggle: !hasTodayMatches && hasUpcomingMatches }
     );
     renderSection(
       container,

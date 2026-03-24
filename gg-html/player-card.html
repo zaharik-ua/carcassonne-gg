@@ -84,6 +84,26 @@
     padding: 8px 10px;
     font: inherit;
     font-size: 14px;
+    box-sizing: border-box;
+  }
+  .edit-form-row input[type="date"] {
+    appearance: none;
+    -webkit-appearance: none;
+    min-width: 0;
+    max-width: 100%;
+    text-align: left;
+    line-height: normal;
+    background: #fff;
+  }
+  .edit-form-row input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+  }
+  .edit-form-row input[type="date"]::-webkit-datetime-edit {
+    padding: 0;
+  }
+  .edit-form-row input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 1;
+    cursor: pointer;
   }
   .edit-form-row input[readonly] {
     background: #f3f4f6;
@@ -120,6 +140,33 @@
     color: #c62828;
     font-size: 12px;
     font-weight: 600;
+  }
+  .edit-form-note {
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: 4px;
+    background: #f5f8fc;
+    border: 1px solid #d6e2f0;
+    font-size: 12px;
+    color: #334155;
+    line-height: 1.45;
+  }
+  .edit-form-note-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1f2937;
+  }
+  .edit-form-note-icons {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .edit-form-note-icons img {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
   }
   .noprofile-warning {
     font-size: 16px;
@@ -628,6 +675,18 @@
   .player-matches-rating-delta.neg { color: #c62828; }
 
   @media (max-width: 640px) {
+    .edit-form-row input:not([type="checkbox"]),
+    .edit-form-row select {
+      font-size: 16px;
+    }
+
+    .edit-form-row input[type="date"] {
+      padding-right: 36px;
+      color: #2f3947;
+      -webkit-text-fill-color: #2f3947;
+      opacity: 1;
+    }
+
     .player-matches-controls {
       width: 100%;
       align-items: stretch;
@@ -1889,6 +1948,34 @@
     let masterDateRow = null;
     let masterDateInput = null;
 
+    const contactsNote = document.createElement("div");
+    contactsNote.className = "edit-form-note";
+
+    const contactsNoteTitle = document.createElement("div");
+    contactsNoteTitle.className = "edit-form-note-title";
+    contactsNoteTitle.textContent = "Please note";
+    contactsNote.appendChild(contactsNoteTitle);
+
+    const contactsNoteIcons = document.createElement("span");
+    contactsNoteIcons.className = "edit-form-note-icons";
+    [
+      CONTACT_ICONS.telegram,
+      CONTACT_ICONS.whatsapp,
+      CONTACT_ICONS.discord,
+      CONTACT_ICONS.instagram,
+      CONTACT_ICONS.contact_email,
+    ].forEach((iconUrl) => {
+      const icon = document.createElement("img");
+      icon.src = iconUrl;
+      icon.alt = "";
+      contactsNoteIcons.appendChild(icon);
+    });
+    contactsNote.appendChild(contactsNoteIcons);
+
+    const contactsNoteText = document.createElement("div");
+    contactsNoteText.textContent = "Your contact details are visible only to logged-in verified players. For everyone else, your contact details are not displayed on the website.";
+    contactsNote.appendChild(contactsNoteText);
+
     if (isAdmin) {
       masterInput = addCheckboxField("Master", "master_title", initial.master_title);
 
@@ -1906,6 +1993,8 @@
       masterDateRow.appendChild(masterDateInput);
       form.appendChild(masterDateRow);
     }
+
+    form.appendChild(contactsNote);
 
     const syncMasterDateVisibility = () => {
       if (!masterInput || !masterDateRow || !masterDateInput) return;
@@ -2009,10 +2098,10 @@
       const infoCard = document.createElement("div");
       infoCard.className = "player-card";
 
-      const list = document.createElement("div");
-      list.className = "player-stats-line noprofile-warning";
-      list.textContent = "The email address you used to log in to GG is not linked to a BGA account.";
-      infoCard.appendChild(list);
+      const warning = document.createElement("div");
+      warning.className = "player-stats-line noprofile-warning";
+      warning.textContent = "The email address you used to log in to GG is not linked to a BGA account.";
+      infoCard.appendChild(warning);
 
       const gap1 = document.createElement("div");
       gap1.className = "noprofile-gap";
@@ -2020,7 +2109,7 @@
 
       const intro = document.createElement("div");
       intro.className = "player-stats-line";
-      intro.textContent = "To link your BGA profile with your GG account:";
+      intro.textContent = "What to do:";
       infoCard.appendChild(intro);
 
       const gapIntroToStep1 = document.createElement("div");
@@ -2029,18 +2118,13 @@
 
       const step1 = document.createElement("div");
       step1.className = "player-stats-line compact";
-      step1.textContent = "1. Send the email address you used to log in to GG to your association captain.";
+      step1.textContent = "1. Contact your association captain.";
       infoCard.appendChild(step1);
 
       const step1Hint = document.createElement("div");
       step1Hint.className = "player-stats-line compact";
-      step1Hint.innerHTML = 'Find your captain here: <a href="https://carcassonne.gg/players/?captains=1" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/players/?captains=1</a>';
+      step1Hint.innerHTML = 'If you don\'t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=1" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/players/?captains=1</a>';
       infoCard.appendChild(step1Hint);
-
-      const step1Hint2 = document.createElement("div");
-      step1Hint2.className = "player-stats-line compact";
-      step1Hint2.textContent = "If no captain is listed for your association, contact us at carcassonne.gg@gmail.com.";
-      infoCard.appendChild(step1Hint2);
 
       const gapStep1ToStep2 = document.createElement("div");
       gapStep1ToStep2.className = "noprofile-gap";
@@ -2048,8 +2132,50 @@
 
       const step2 = document.createElement("div");
       step2.className = "player-stats-line compact";
-      step2.textContent = "2. Access is granted manually. After that, you will get access to manage your profile on GG.";
+      step2.textContent = "2. Send your captain the email you used to log in to carcassonne.gg.";
       infoCard.appendChild(step2);
+
+      const gapStep2ToStep3 = document.createElement("div");
+      gapStep2ToStep3.className = "noprofile-gap";
+      infoCard.appendChild(gapStep2ToStep3);
+
+      const step3 = document.createElement("div");
+      step3.className = "player-stats-line compact";
+      step3.textContent = "3. Your captain will:";
+      infoCard.appendChild(step3);
+
+      const step3a = document.createElement("div");
+      step3a.className = "player-stats-line compact";
+      step3a.textContent = "• Open Menu → Manage Team → Players";
+      infoCard.appendChild(step3a);
+
+      const step3b = document.createElement("div");
+      step3b.className = "player-stats-line compact";
+      step3b.textContent = "• Edit your profile (or create one if needed)";
+      infoCard.appendChild(step3b);
+
+      const step3c = document.createElement("div");
+      step3c.className = "player-stats-line compact";
+      step3c.textContent = "• Add your email to Login Email";
+      infoCard.appendChild(step3c);
+
+      const gapStep3ToOutro = document.createElement("div");
+      gapStep3ToOutro.className = "noprofile-gap";
+      infoCard.appendChild(gapStep3ToOutro);
+
+      const outro = document.createElement("div");
+      outro.className = "player-stats-line compact";
+      outro.textContent = "After that, you will get access to edit your profile.";
+      infoCard.appendChild(outro);
+
+      const contactGap = document.createElement("div");
+      contactGap.className = "noprofile-gap";
+      infoCard.appendChild(contactGap);
+
+      const contact = document.createElement("div");
+      contact.className = "player-stats-line compact";
+      contact.textContent = "If you cannot find a captain, contact us at carcassonne.gg@gmail.com.";
+      infoCard.appendChild(contact);
 
       container.innerHTML = "";
       container.appendChild(infoCard);
