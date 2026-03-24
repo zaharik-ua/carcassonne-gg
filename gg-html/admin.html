@@ -1083,6 +1083,178 @@
     };
   }
 
+  function createTournamentAccessPickerRow(labelText, options, selectedEntries) {
+    const optionsMap = new Map();
+    (Array.isArray(options) ? options : []).forEach((entry) => {
+      const value = String(entry?.value ?? "");
+      if (!value) return;
+      optionsMap.set(value, {
+        value,
+        label: String(entry?.label ?? value),
+      });
+    });
+
+    const selectedMap = new Map();
+    (Array.isArray(selectedEntries) ? selectedEntries : []).forEach((entry) => {
+      const userId = String(entry?.user_id ?? entry?.userId ?? entry?.id ?? "");
+      if (!userId || !optionsMap.has(userId)) return;
+      selectedMap.set(userId, {
+        user_id: userId,
+        role: String(entry?.role || "captain").trim().toLowerCase() === "admin" ? "admin" : "captain",
+      });
+    });
+    const selectedOrder = Array.from(selectedMap.keys());
+
+    const row = document.createElement("div");
+    row.className = "cp-edit-row";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+
+    const picker = document.createElement("div");
+    picker.className = "admin-picker";
+
+    const addWrap = document.createElement("div");
+    addWrap.className = "admin-picker-add";
+    const select = document.createElement("select");
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "cp-btn cp-btn-secondary";
+    addBtn.textContent = "Add";
+
+    const list = document.createElement("div");
+    list.className = "admin-picker-list";
+
+    const renderAddOptions = () => {
+      select.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Select user...";
+      placeholder.selected = true;
+      select.appendChild(placeholder);
+
+      Array.from(optionsMap.values()).forEach((entry) => {
+        if (selectedMap.has(entry.value)) return;
+        const option = document.createElement("option");
+        option.value = entry.value;
+        option.textContent = entry.label;
+        select.appendChild(option);
+      });
+
+      const hasAvailable = select.options.length > 1;
+      select.disabled = !hasAvailable;
+      addBtn.disabled = !hasAvailable;
+    };
+
+    const removeUser = (userId) => {
+      const normalized = String(userId || "");
+      selectedMap.delete(normalized);
+      const index = selectedOrder.indexOf(normalized);
+      if (index >= 0) selectedOrder.splice(index, 1);
+      render();
+    };
+
+    const addUser = (userId) => {
+      const normalized = String(userId || "");
+      if (!normalized || selectedMap.has(normalized) || !optionsMap.has(normalized)) return;
+      selectedMap.set(normalized, {
+        user_id: normalized,
+        role: "captain",
+      });
+      selectedOrder.push(normalized);
+      render();
+    };
+
+    const renderList = () => {
+      list.innerHTML = "";
+      if (!selectedOrder.length) {
+        const empty = document.createElement("div");
+        empty.className = "admin-picker-empty";
+        empty.textContent = "No users selected.";
+        list.appendChild(empty);
+        return;
+      }
+
+      selectedOrder.forEach((userId) => {
+        const option = optionsMap.get(userId);
+        const selected = selectedMap.get(userId);
+        if (!option || !selected) return;
+
+        const item = document.createElement("div");
+        item.className = "admin-picker-item";
+
+        const text = document.createElement("div");
+        text.className = "admin-picker-item-text";
+        text.textContent = option.label;
+
+        const roleSelect = document.createElement("select");
+        ["captain", "admin"].forEach((roleValue) => {
+          const roleOption = document.createElement("option");
+          roleOption.value = roleValue;
+          roleOption.textContent = roleValue;
+          if (selected.role === roleValue) roleOption.selected = true;
+          roleSelect.appendChild(roleOption);
+        });
+        roleSelect.addEventListener("change", () => {
+          selected.role = roleSelect.value === "admin" ? "admin" : "captain";
+        });
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "cp-btn cp-btn-secondary";
+        removeBtn.textContent = "Remove";
+        removeBtn.addEventListener("click", () => removeUser(userId));
+
+        item.appendChild(text);
+        item.appendChild(roleSelect);
+        item.appendChild(removeBtn);
+        list.appendChild(item);
+      });
+    };
+
+    const render = () => {
+      renderAddOptions();
+      renderList();
+    };
+
+    addBtn.addEventListener("click", () => {
+      addUser(select.value);
+    });
+
+    select.addEventListener("change", () => {
+      if (select.value) addBtn.disabled = false;
+    });
+
+    addWrap.appendChild(select);
+    addWrap.appendChild(addBtn);
+    picker.appendChild(addWrap);
+    picker.appendChild(list);
+    row.appendChild(label);
+    row.appendChild(picker);
+
+    render();
+
+    return {
+      row,
+      setDisabled(isDisabled) {
+        const disabled = !!isDisabled;
+        select.disabled = disabled || select.options.length <= 1;
+        addBtn.disabled = disabled || select.options.length <= 1;
+        list.querySelectorAll("button, select").forEach((control) => {
+          control.disabled = disabled;
+        });
+      },
+      getValues() {
+        return selectedOrder.map((userId) => {
+          const selected = selectedMap.get(userId);
+          return {
+            user_id: Number(userId),
+            role: selected?.role === "admin" ? "admin" : "captain",
+          };
+        }).filter((entry) => Number.isInteger(entry.user_id) && entry.user_id > 0);
+      },
+    };
+  }
+
   function createCodeRow(labelText, value) {
     const row = document.createElement("div");
     row.className = "cp-edit-row";
@@ -2012,7 +2184,7 @@
     if (lineupSizeTypeField.select.options[0]) lineupSizeTypeField.select.options[0].textContent = "1 - Fixed";
     if (lineupSizeTypeField.select.options[1]) lineupSizeTypeField.select.options[1].textContent = "2 - Flexible";
     const lineupSizeField = createNumberRow("lineup_size", item?.lineup_size || "");
-    const accessUsersField = createUserPickerRow(
+    const accessUsersField = createTournamentAccessPickerRow(
       "access_users",
       state.userOptions.map((user) => {
         const labelParts = [];
@@ -2022,7 +2194,11 @@
         const label = labelParts.filter(Boolean).join(" • ") || `User #${user.id}`;
         return { value: String(user.id), label: `${user.id} - ${label}` };
       }),
-      Array.isArray(item?.access_user_ids) ? item.access_user_ids.map((value) => String(value)) : []
+      Array.isArray(item?.access_users)
+        ? item.access_users
+        : (Array.isArray(item?.access_user_ids)
+          ? item.access_user_ids.map((value) => ({ user_id: value, role: "captain" }))
+          : [])
     );
     const accessUsersHint = document.createElement("p");
     accessUsersHint.className = "admin-inline-value";
@@ -2042,7 +2218,7 @@
       const isClosed = String(accessTypeField.select.value || "1") === "2";
       accessUsersField.setDisabled(!isClosed);
       accessUsersHint.textContent = isClosed
-        ? "Select users who will have access to this closed tournament."
+        ? "Select users who will have access to this closed tournament and assign role: admin or captain."
         : "Open tournaments are available to all captains.";
     };
     accessTypeField.select.addEventListener("change", toggleAccessUsersState);
@@ -2096,7 +2272,7 @@
         access_type: Number.parseInt(String(accessTypeField.select.value || "1"), 10) === 2 ? 2 : 1,
         lineup_size_type: Number.parseInt(String(lineupSizeTypeField.select.value || "2"), 10) === 1 ? 1 : 2,
         lineup_size: Number.parseInt(String(lineupSizeField.input.value || "").trim(), 10),
-        access_user_ids: accessUsersField.getValues(),
+        access_users: accessUsersField.getValues(),
       };
       if (!payload.id) {
         setStatus("Tournament id is required.", true);
@@ -2107,7 +2283,7 @@
         return;
       }
       if (payload.access_type === 1) {
-        payload.access_user_ids = [];
+        payload.access_users = [];
       }
       if (payload.lineup_size_type === 2) {
         payload.lineup_size = null;

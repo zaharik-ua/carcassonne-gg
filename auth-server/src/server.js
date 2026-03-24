@@ -167,6 +167,10 @@ const TOURNAMENT_ACCESS_TYPES = {
   OPEN: 1,
   CLOSED: 2,
 };
+const TOURNAMENT_ACCESS_ROLES = {
+  ADMIN: "admin",
+  CAPTAIN: "captain",
+};
 const TOURNAMENT_LINEUP_SIZE_TYPES = {
   FIXED: 1,
   FLEXIBLE: 2,
@@ -222,6 +226,42 @@ function normalizeTournamentAccessUserIds(value) {
     if (Number.isInteger(normalized) && normalized > 0) unique.add(normalized);
   });
   return Array.from(unique);
+}
+
+function normalizeTournamentAccessRole(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === TOURNAMENT_ACCESS_ROLES.ADMIN
+    ? TOURNAMENT_ACCESS_ROLES.ADMIN
+    : TOURNAMENT_ACCESS_ROLES.CAPTAIN;
+}
+
+function normalizeTournamentAccessUsers(value, fallbackUserIds) {
+  const byUserId = new Map();
+
+  const pushUser = (userIdValue, roleValue) => {
+    const userId = Number.parseInt(String(userIdValue ?? "").trim(), 10);
+    if (!Number.isInteger(userId) || userId <= 0) return;
+    byUserId.set(userId, {
+      user_id: userId,
+      role: normalizeTournamentAccessRole(roleValue),
+    });
+  };
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+        pushUser(entry.user_id ?? entry.userId ?? entry.id, entry.role);
+      } else {
+        pushUser(entry, TOURNAMENT_ACCESS_ROLES.CAPTAIN);
+      }
+    });
+  } else if (Array.isArray(fallbackUserIds)) {
+    fallbackUserIds.forEach((entry) => {
+      pushUser(entry, TOURNAMENT_ACCESS_ROLES.CAPTAIN);
+    });
+  }
+
+  return Array.from(byUserId.values()).sort((a, b) => a.user_id - b.user_id);
 }
 
 function normalizeTournamentLineupSizeType(value) {
@@ -330,12 +370,13 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
 }
 
 function validateTournamentAccessUserIds(userIds, done) {
-  const normalizedIds = normalizeTournamentAccessUserIds(userIds);
-  if (!normalizedIds.length) {
+  const normalizedUsers = normalizeTournamentAccessUsers(userIds);
+  if (!normalizedUsers.length) {
     done(null, []);
     return;
   }
 
+  const normalizedIds = normalizedUsers.map((entry) => entry.user_id);
   const placeholders = normalizedIds.map(() => "?").join(", ");
   db.all(
     `
@@ -355,14 +396,14 @@ function validateTournamentAccessUserIds(userIds, done) {
         done(new Error(`Unknown user ids: ${invalidIds.join(", ")}`));
         return;
       }
-      done(null, normalizedIds);
+      done(null, normalizedUsers);
     }
   );
 }
 
 function replaceTournamentAccessUsers(tournamentId, userIds, done) {
   const normalizedTournamentId = normalizeNullableText(tournamentId);
-  const normalizedIds = normalizeTournamentAccessUserIds(userIds);
+  const normalizedUsers = normalizeTournamentAccessUsers(userIds);
   if (!normalizedTournamentId) {
     done(new Error("Tournament id is required"));
     return;
@@ -380,7 +421,7 @@ function replaceTournamentAccessUsers(tournamentId, userIds, done) {
         return;
       }
 
-      if (!normalizedIds.length) {
+      if (!normalizedUsers.length) {
         done(null);
         return;
       }
@@ -389,13 +430,14 @@ function replaceTournamentAccessUsers(tournamentId, userIds, done) {
         INSERT INTO tournament_access_users (
           tournament_id,
           user_id,
+          role,
           created_at,
           updated_at
         )
-        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
 
-      let pending = normalizedIds.length;
+      let pending = normalizedUsers.length;
       let finished = false;
       const finish = (err) => {
         if (finished) return;
@@ -403,8 +445,8 @@ function replaceTournamentAccessUsers(tournamentId, userIds, done) {
         stmt.finalize(() => done(err || null));
       };
 
-      normalizedIds.forEach((userId) => {
-        stmt.run([normalizedTournamentId, userId], (insertErr) => {
+      normalizedUsers.forEach((entry) => {
+        stmt.run([normalizedTournamentId, entry.user_id, entry.role], (insertErr) => {
           if (insertErr) {
             finish(insertErr);
             return;
@@ -468,20 +510,26 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
 
       db.all(
         `
-          SELECT user_id
+          SELECT
+            user_id,
+            COALESCE(NULLIF(lower(trim(role)), ''), ?) AS role
           FROM tournament_access_users
           WHERE upper(trim(tournament_id)) = upper(trim(?))
           ORDER BY user_id ASC
         `,
-        [normalizedTournamentId],
+        [TOURNAMENT_ACCESS_ROLES.CAPTAIN, normalizedTournamentId],
         (accessErr, rows) => {
           if (accessErr) {
             done(accessErr);
             return;
           }
-          tournament.access_user_ids = (rows || [])
-            .map((entry) => Number(entry?.user_id))
-            .filter((id) => Number.isInteger(id) && id > 0);
+          tournament.access_users = (rows || [])
+            .map((entry) => ({
+              user_id: Number(entry?.user_id),
+              role: normalizeTournamentAccessRole(entry?.role),
+            }))
+            .filter((entry) => Number.isInteger(entry.user_id) && entry.user_id > 0);
+          tournament.access_user_ids = tournament.access_users.map((entry) => entry.user_id);
           done(null, tournament);
         }
       );
@@ -1252,6 +1300,7 @@ function ensureTournamentAccessUsersSchema() {
     CREATE TABLE IF NOT EXISTS tournament_access_users (
       tournament_id TEXT NOT NULL,
       user_id INTEGER NOT NULL,
+      role TEXT NOT NULL DEFAULT 'captain',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (tournament_id, user_id)
@@ -1259,7 +1308,18 @@ function ensureTournamentAccessUsersSchema() {
   `, (createErr) => {
     if (createErr) {
       console.error("Failed to ensure tournament_access_users schema", createErr);
+      return;
     }
+    db.all("PRAGMA table_info(tournament_access_users)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect tournament_access_users schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "tournament_access_users", "role", "TEXT NOT NULL DEFAULT 'captain'");
+      addColumnIfMissing(columns, "tournament_access_users", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "tournament_access_users", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    });
   });
 }
 
@@ -2532,7 +2592,15 @@ app.get("/tournaments", (req, res, next) => {
           SELECT GROUP_CONCAT(tau.user_id)
           FROM tournament_access_users tau
           WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
-        ) AS access_user_ids_csv
+        ) AS access_user_ids_csv,
+        (
+          SELECT GROUP_CONCAT(
+            CAST(tau.user_id AS TEXT) || ':' || COALESCE(NULLIF(lower(trim(tau.role)), ''), 'captain'),
+            '|'
+          )
+          FROM tournament_access_users tau
+          WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
+        ) AS access_users_csv
       FROM tournaments t
       ${visibilitySql}
       ORDER BY t.id COLLATE NOCASE ASC
@@ -2567,6 +2635,18 @@ app.get("/tournaments", (req, res, next) => {
               .split(",")
               .map((value) => Number.parseInt(value, 10))
               .filter((value) => Number.isInteger(value) && value > 0);
+            tournament.access_users = String(row.access_users_csv || "")
+              .split("|")
+              .map((entry) => {
+                const [userIdRaw, roleRaw] = String(entry || "").split(":");
+                const userId = Number.parseInt(String(userIdRaw || "").trim(), 10);
+                if (!Number.isInteger(userId) || userId <= 0) return null;
+                return {
+                  user_id: userId,
+                  role: normalizeTournamentAccessRole(roleRaw),
+                };
+              })
+              .filter(Boolean);
           }
           return tournament;
         }),
@@ -2586,7 +2666,7 @@ app.post("/tournaments", requireAdmin, (req, res) => {
   const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
     : null;
-  const requestedAccessUserIds = normalizeTournamentAccessUserIds(req.body?.access_user_ids);
+  const requestedAccessUsers = normalizeTournamentAccessUsers(req.body?.access_users, req.body?.access_user_ids);
 
   if (!id) {
     return res.status(400).json({ ok: false, message: "id is required" });
@@ -2615,8 +2695,8 @@ app.post("/tournaments", requireAdmin, (req, res) => {
       }
 
       return validateTournamentAccessUserIds(
-        accessType === TOURNAMENT_ACCESS_TYPES.CLOSED ? requestedAccessUserIds : [],
-        (validateErr, accessUserIds) => {
+        accessType === TOURNAMENT_ACCESS_TYPES.CLOSED ? requestedAccessUsers : [],
+        (validateErr, accessUsers) => {
           if (validateErr) {
             return res.status(400).json({ ok: false, message: validateErr.message || "Invalid tournament access users" });
           }
@@ -2649,7 +2729,7 @@ app.post("/tournaments", requireAdmin, (req, res) => {
                   return res.status(500).json({ ok: false, message: "Failed to create tournament" });
                 }
 
-                return replaceTournamentAccessUsers(id, accessUserIds, (accessErr) => {
+                return replaceTournamentAccessUsers(id, accessUsers, (accessErr) => {
                   if (accessErr) {
                     db.run("ROLLBACK");
                     return res.status(500).json({ ok: false, message: "Failed to save tournament access users" });
@@ -2690,7 +2770,7 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
   const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
     : null;
-  const requestedAccessUserIds = normalizeTournamentAccessUserIds(req.body?.access_user_ids);
+  const requestedAccessUsers = normalizeTournamentAccessUsers(req.body?.access_users, req.body?.access_user_ids);
 
   if (!tournamentId) {
     return res.status(400).json({ ok: false, message: "Invalid tournament id" });
@@ -2724,8 +2804,8 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
       }
 
       return validateTournamentAccessUserIds(
-        accessType === TOURNAMENT_ACCESS_TYPES.CLOSED ? requestedAccessUserIds : [],
-        (validateErr, accessUserIds) => {
+        accessType === TOURNAMENT_ACCESS_TYPES.CLOSED ? requestedAccessUsers : [],
+        (validateErr, accessUsers) => {
           if (validateErr) {
             return res.status(400).json({ ok: false, message: validateErr.message || "Invalid tournament access users" });
           }
@@ -2772,7 +2852,7 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
                   return res.status(404).json({ ok: false, message: "Tournament not found" });
                 }
 
-                return replaceTournamentAccessUsers(currentRow.id, accessUserIds, (accessErr) => {
+                return replaceTournamentAccessUsers(currentRow.id, accessUsers, (accessErr) => {
                   if (accessErr) {
                     db.run("ROLLBACK");
                     return res.status(500).json({ ok: false, message: "Failed to save tournament access users" });
