@@ -167,6 +167,10 @@ const TOURNAMENT_ACCESS_TYPES = {
   OPEN: 1,
   CLOSED: 2,
 };
+const TOURNAMENT_LINEUP_SIZE_TYPES = {
+  FIXED: 1,
+  FLEXIBLE: 2,
+};
 
 function addColumnIfMissing(columns, tableName, columnName, sqlDefinition) {
   if (columns.some((col) => col.name === columnName)) return;
@@ -218,6 +222,18 @@ function normalizeTournamentAccessUserIds(value) {
     if (Number.isInteger(normalized) && normalized > 0) unique.add(normalized);
   });
   return Array.from(unique);
+}
+
+function normalizeTournamentLineupSizeType(value) {
+  const normalized = Number.parseInt(String(value ?? "").trim(), 10);
+  return normalized === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
+    ? TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
+    : TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE;
+}
+
+function normalizeTournamentLineupSize(value) {
+  const normalized = Number.parseInt(String(value ?? "").trim(), 10);
+  return Number.isInteger(normalized) && normalized > 0 ? normalized : null;
 }
 
 function validateTournamentAccessUserIds(userIds, done) {
@@ -323,12 +339,18 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         short_title,
         logo,
         link,
-        COALESCE(access_type, ?) AS access_type
+        COALESCE(access_type, ?) AS access_type,
+        COALESCE(lineup_size_type, ?) AS lineup_size_type,
+        lineup_size
       FROM tournaments
       WHERE upper(trim(id)) = upper(trim(?))
       LIMIT 1
     `,
-    [TOURNAMENT_ACCESS_TYPES.OPEN, normalizedTournamentId],
+    [
+      TOURNAMENT_ACCESS_TYPES.OPEN,
+      TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE,
+      normalizedTournamentId,
+    ],
     (err, row) => {
       if (err) {
         done(err);
@@ -342,6 +364,8 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
       const tournament = {
         ...row,
         access_type: normalizeTournamentAccessType(row.access_type),
+        lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
+        lineup_size: normalizeTournamentLineupSize(row.lineup_size),
       };
       if (!includeAccessUsers) {
         done(null, tournament);
@@ -1100,6 +1124,8 @@ function ensureTournamentsSchema() {
       logo TEXT,
       link TEXT,
       access_type INTEGER NOT NULL DEFAULT 1,
+      lineup_size_type INTEGER NOT NULL DEFAULT 2,
+      lineup_size INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -1119,6 +1145,8 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "logo", "TEXT");
       addColumnIfMissing(columns, "tournaments", "link", "TEXT");
       addColumnIfMissing(columns, "tournaments", "access_type", "INTEGER NOT NULL DEFAULT 1");
+      addColumnIfMissing(columns, "tournaments", "lineup_size_type", "INTEGER NOT NULL DEFAULT 2");
+      addColumnIfMissing(columns, "tournaments", "lineup_size", "INTEGER");
       addColumnIfMissing(columns, "tournaments", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "tournaments", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
     });
@@ -2391,6 +2419,8 @@ app.get("/tournaments", (req, res, next) => {
         t.logo,
         t.link,
         COALESCE(t.access_type, ?) AS access_type,
+        COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
+        t.lineup_size,
         (
           SELECT GROUP_CONCAT(tau.user_id)
           FROM tournament_access_users tau
@@ -2399,7 +2429,7 @@ app.get("/tournaments", (req, res, next) => {
       FROM tournaments t
       ORDER BY t.id COLLATE NOCASE ASC
     `,
-    [TOURNAMENT_ACCESS_TYPES.OPEN],
+    [TOURNAMENT_ACCESS_TYPES.OPEN, TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE],
     (err, rows) => {
       if (err) return next(err);
       return res.json({
@@ -2412,6 +2442,8 @@ app.get("/tournaments", (req, res, next) => {
             logo: row.logo,
             link: row.link,
             access_type: normalizeTournamentAccessType(row.access_type),
+            lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
+            lineup_size: normalizeTournamentLineupSize(row.lineup_size),
           };
           if (includeAccessUsers) {
             tournament.access_user_ids = String(row.access_user_ids_csv || "")
@@ -2433,6 +2465,10 @@ app.post("/tournaments", requireAdmin, (req, res) => {
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const accessType = normalizeTournamentAccessType(req.body?.access_type);
+  const lineupSizeType = normalizeTournamentLineupSizeType(req.body?.lineup_size_type);
+  const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
+    ? normalizeTournamentLineupSize(req.body?.lineup_size)
+    : null;
   const requestedAccessUserIds = normalizeTournamentAccessUserIds(req.body?.access_user_ids);
 
   if (!id) {
@@ -2440,6 +2476,9 @@ app.post("/tournaments", requireAdmin, (req, res) => {
   }
   if (!name) {
     return res.status(400).json({ ok: false, message: "name is required" });
+  }
+  if (lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED && !lineupSize) {
+    return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
   }
 
   return db.get(
@@ -2476,12 +2515,14 @@ app.post("/tournaments", requireAdmin, (req, res) => {
                   logo,
                   link,
                   access_type,
+                  lineup_size_type,
+                  lineup_size,
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
-              [id, name, shortTitle, logo, link, accessType],
+              [id, name, shortTitle, logo, link, accessType, lineupSizeType, lineupSize],
               (insertErr) => {
                 if (insertErr) {
                   db.run("ROLLBACK");
@@ -2528,6 +2569,10 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const accessType = normalizeTournamentAccessType(req.body?.access_type);
+  const lineupSizeType = normalizeTournamentLineupSizeType(req.body?.lineup_size_type);
+  const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
+    ? normalizeTournamentLineupSize(req.body?.lineup_size)
+    : null;
   const requestedAccessUserIds = normalizeTournamentAccessUserIds(req.body?.access_user_ids);
 
   if (!tournamentId) {
@@ -2538,6 +2583,9 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
   }
   if (!name) {
     return res.status(400).json({ ok: false, message: "name is required" });
+  }
+  if (lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED && !lineupSize) {
+    return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
   }
 
   return db.get(
@@ -2570,10 +2618,12 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
                   logo = ?,
                   link = ?,
                   access_type = ?,
+                  lineup_size_type = ?,
+                  lineup_size = ?,
                   updated_at = CURRENT_TIMESTAMP
                 WHERE upper(trim(id)) = upper(?)
               `,
-              [tournamentId, name, shortTitle, logo, link, accessType, tournamentId],
+              [tournamentId, name, shortTitle, logo, link, accessType, lineupSizeType, lineupSize, tournamentId],
               function onUpdate(err) {
                 if (err) {
                   db.run("ROLLBACK");
