@@ -184,53 +184,36 @@
   }
 </style>
 
-<div class="captain-sections-wrap" data-captain-sections>
-  <button class="captain-sections-row" type="button" data-view="friendlies">
-    <img src="https://carcassonne.gg/gallery/friendly-matches.png" alt="">
-    <span>Friendly Matches</span>
-  </button>
-
-  <button class="captain-sections-row" type="button" data-view="players">
-    <img src="https://carcassonne.gg/gallery/active.png" alt="">
-    <span>Players</span>
-  </button>
-
-  <button class="captain-sections-row" type="button" data-view="friendly-find">
-    <img src="https://carcassonne.gg/gallery/calendar.png" alt="">
-    <span>Friendly Find</span>
-  </button>
-</div>
+<div class="captain-sections-wrap" data-captain-sections></div>
 
 <div class="captain-sections-mobile" data-captain-sections-mobile></div>
 
 <script>
 (function () {
-  const DEFAULT_TOURNAMENT_ID = "Friendly-Matches";
-  const SECTION_ITEMS = [
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const STATIC_SECTION_ITEMS = [
     {
-      view: "friendlies",
-      label: "Friendly Matches",
-      icon: "https://carcassonne.gg/gallery/friendly-matches.png",
-    },
-    {
+      type: "view",
       view: "players",
       label: "Players",
       icon: "https://carcassonne.gg/gallery/active.png",
     },
     {
+      type: "view",
       view: "friendly-find",
       label: "Friendly Find",
       icon: "https://carcassonne.gg/gallery/calendar.png",
     },
   ];
 
-  function buildUrlWithView(view) {
+  function buildUrl(item) {
     const url = new URL(window.location.href);
-    const normalizedView = String(view || "").trim().toLowerCase();
-    if (normalizedView === "friendlies") {
+    if (item?.type === "tournament") {
       url.searchParams.delete("view");
-      url.searchParams.set("tournament", DEFAULT_TOURNAMENT_ID);
+      url.searchParams.set("tournament", String(item.id || "").trim());
     } else {
+      const normalizedView = String(item?.view || "").trim().toLowerCase();
       url.searchParams.set("view", normalizedView);
       url.searchParams.delete("tournament");
     }
@@ -241,128 +224,170 @@
     return url.toString();
   }
 
-  function getCurrentView() {
+  function getCurrentSelectionKey() {
     const url = new URL(window.location.href);
     const tournamentId = String(url.searchParams.get("tournament") || "").trim();
-    if (tournamentId === DEFAULT_TOURNAMENT_ID) return "friendlies";
+    if (tournamentId) return `tournament:${tournamentId}`;
     const view = String(url.searchParams.get("view") || "").trim().toLowerCase();
-    return SECTION_ITEMS.some((item) => item.view === view) ? view : "friendlies";
+    if (view === "players" || view === "friendly-find") return `view:${view}`;
+    return "";
   }
 
   const root = document.querySelector("[data-captain-sections]");
   const mobileRoot = document.querySelector("[data-captain-sections-mobile]");
 
-  if (root) {
-    root.querySelectorAll(".captain-sections-row[data-view]").forEach((button) => {
+  function renderDesktop(items) {
+    if (!root) return;
+    root.innerHTML = "";
+    items.forEach((item) => {
+      const button = document.createElement("button");
+      button.className = "captain-sections-row";
+      button.type = "button";
+      const icon = document.createElement("img");
+      icon.src = item.icon;
+      icon.alt = "";
+      const text = document.createElement("span");
+      text.textContent = item.label;
+      button.appendChild(icon);
+      button.appendChild(text);
       button.addEventListener("click", () => {
-        const view = String(button.dataset.view || "").trim();
-        if (!view) return;
-        window.location.href = buildUrlWithView(view);
+        window.location.href = buildUrl(item);
       });
+      root.appendChild(button);
     });
   }
 
-  if (!mobileRoot) return;
+  function renderMobile(items) {
+    if (!mobileRoot) return;
+    mobileRoot.innerHTML = "";
+    if (!items.length) return;
 
-  const currentView = getCurrentView();
-  let selected = SECTION_ITEMS.find((item) => item.view === currentView) || SECTION_ITEMS[0];
+    const currentSelectionKey = getCurrentSelectionKey();
+    let selected = items.find((item) => item.key === currentSelectionKey) || items[0];
 
-  const dd = document.createElement("div");
-  dd.className = "captain-sections-dd";
+    const dd = document.createElement("div");
+    dd.className = "captain-sections-dd";
 
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "captain-sections-dd-btn";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "captain-sections-dd-btn";
 
-  const btnContent = document.createElement("span");
-  btnContent.className = "captain-sections-dd-btn-content";
+    const btnContent = document.createElement("span");
+    btnContent.className = "captain-sections-dd-btn-content";
 
-  const leading = document.createElement("span");
-  leading.className = "captain-sections-dd-leading";
-  leading.innerHTML = '<i class="fa-solid fa-bars-staggered"></i>';
+    const leading = document.createElement("span");
+    leading.className = "captain-sections-dd-leading";
+    leading.innerHTML = '<i class="fa-solid fa-bars-staggered"></i>';
 
-  const selectedIcon = document.createElement("img");
-  selectedIcon.className = "captain-sections-dd-icon";
-  selectedIcon.alt = "";
+    const selectedIcon = document.createElement("img");
+    selectedIcon.className = "captain-sections-dd-icon";
+    selectedIcon.alt = "";
 
-  const selectedText = document.createElement("span");
-  selectedText.className = "captain-sections-dd-text";
+    const selectedText = document.createElement("span");
+    selectedText.className = "captain-sections-dd-text";
 
-  const chevron = document.createElement("span");
-  chevron.className = "captain-sections-dd-chevron";
-  chevron.innerHTML = '<i class="fas fa-chevron-down"></i>';
+    const chevron = document.createElement("span");
+    chevron.className = "captain-sections-dd-chevron";
+    chevron.innerHTML = '<i class="fas fa-chevron-down"></i>';
 
-  btnContent.appendChild(leading);
-  btnContent.appendChild(selectedIcon);
-  btnContent.appendChild(selectedText);
-  btn.appendChild(btnContent);
-  btn.appendChild(chevron);
+    btnContent.appendChild(leading);
+    btnContent.appendChild(selectedIcon);
+    btnContent.appendChild(selectedText);
+    btn.appendChild(btnContent);
+    btn.appendChild(chevron);
 
-  const menu = document.createElement("div");
-  menu.className = "captain-sections-dd-menu";
+    const menu = document.createElement("div");
+    menu.className = "captain-sections-dd-menu";
 
-  const renderSelected = () => {
-    selectedIcon.src = selected.icon;
-    selectedText.textContent = selected.label;
-  };
+    const renderSelected = () => {
+      selectedIcon.src = selected.icon;
+      selectedText.textContent = selected.label;
+    };
 
-  const closeMenu = () => {
-    menu.classList.remove("open");
-    menu.style.maxHeight = "0px";
-    btn.classList.remove("open");
-  };
+    const closeMenu = () => {
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      btn.classList.remove("open");
+    };
 
-  const openMenu = () => {
-    menu.classList.add("open");
-    menu.style.maxHeight = `${menu.scrollHeight}px`;
-    btn.classList.add("open");
-  };
+    const openMenu = () => {
+      menu.classList.add("open");
+      menu.style.maxHeight = `${menu.scrollHeight}px`;
+      btn.classList.add("open");
+    };
 
-  SECTION_ITEMS.forEach((item) => {
-    const option = document.createElement("button");
-    option.type = "button";
-    option.className = "captain-sections-dd-option";
-    option.dataset.view = item.view;
-    if (item.view === selected.view) option.classList.add("active");
+    items.forEach((item) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "captain-sections-dd-option";
+      if (item.key === selected.key) option.classList.add("active");
 
-    const icon = document.createElement("img");
-    icon.className = "captain-sections-dd-icon";
-    icon.src = item.icon;
-    icon.alt = "";
+      const icon = document.createElement("img");
+      icon.className = "captain-sections-dd-icon";
+      icon.src = item.icon;
+      icon.alt = "";
 
-    const text = document.createElement("span");
-    text.className = "captain-sections-dd-text";
-    text.textContent = item.label;
+      const text = document.createElement("span");
+      text.className = "captain-sections-dd-text";
+      text.textContent = item.label;
 
-    option.appendChild(icon);
-    option.appendChild(text);
-    option.addEventListener("click", () => {
-      const nextView = String(item.view || "").trim();
-      if (!nextView || nextView === selected.view) {
-        closeMenu();
-        return;
-      }
-      window.location.href = buildUrlWithView(nextView);
+      option.appendChild(icon);
+      option.appendChild(text);
+      option.addEventListener("click", () => {
+        if (item.key === selected.key) {
+          closeMenu();
+          return;
+        }
+        window.location.href = buildUrl(item);
+      });
+      menu.appendChild(option);
     });
-    menu.appendChild(option);
-  });
 
-  btn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    if (menu.classList.contains("open")) {
-      closeMenu();
-    } else {
-      openMenu();
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menu.classList.contains("open")) closeMenu();
+      else openMenu();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!dd.contains(event.target)) closeMenu();
+    });
+
+    renderSelected();
+    dd.appendChild(btn);
+    dd.appendChild(menu);
+    mobileRoot.appendChild(dd);
+  }
+
+  async function init() {
+    let tournaments = [];
+    try {
+      const response = await fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && Array.isArray(data?.tournaments)) {
+        tournaments = data.tournaments;
+      }
+    } catch (_error) {
+      tournaments = [];
     }
-  });
 
-  document.addEventListener("click", (event) => {
-    if (!dd.contains(event.target)) closeMenu();
-  });
+    const items = tournaments.map((tournament) => ({
+      type: "tournament",
+      key: `tournament:${String(tournament?.id || "").trim()}`,
+      id: String(tournament?.id || "").trim(),
+      label: String(tournament?.short_title || tournament?.name || tournament?.id || "").trim(),
+      icon: String(tournament?.logo || "https://carcassonne.gg/gallery/friendly-matches.png").trim(),
+    }))
+      .filter((item) => item.id && item.label)
+      .concat(STATIC_SECTION_ITEMS.map((item) => ({
+        ...item,
+        key: `view:${item.view}`,
+      })));
 
-  renderSelected();
-  dd.appendChild(btn);
-  dd.appendChild(menu);
-  mobileRoot.appendChild(dd);
+    renderDesktop(items);
+    renderMobile(items);
+  }
+
+  init();
 })();
 </script>

@@ -252,6 +252,83 @@ function buildTournamentLookupWhereClause(columnName) {
   `;
 }
 
+function getTournamentAccessUserId(user) {
+  const userId = Number(user?.id);
+  return Number.isInteger(userId) && userId > 0 ? userId : 0;
+}
+
+function loadTournamentAccessForUser(tournamentId, user, done) {
+  const [rawTournamentId, normalizedTournamentId] = getTournamentLookupVariants(tournamentId);
+  if (!rawTournamentId) {
+    done(null, null);
+    return;
+  }
+
+  const isAdmin = Number(user?.admin) === 1;
+  const userId = getTournamentAccessUserId(user);
+
+  db.get(
+    `
+      SELECT
+        t.id,
+        t.name,
+        t.short_title,
+        t.logo,
+        t.link,
+        COALESCE(t.access_type, ?) AS access_type,
+        COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
+        t.lineup_size,
+        CASE
+          WHEN ? = 1 THEN 1
+          WHEN COALESCE(t.access_type, ?) = ? THEN 1
+          WHEN ? > 0 AND EXISTS (
+            SELECT 1
+            FROM tournament_access_users tau
+            WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
+              AND tau.user_id = ?
+          ) THEN 1
+          ELSE 0
+        END AS has_access
+      FROM tournaments t
+      WHERE ${buildTournamentLookupWhereClause("t.id")}
+      LIMIT 1
+    `,
+    [
+      TOURNAMENT_ACCESS_TYPES.OPEN,
+      TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE,
+      isAdmin ? 1 : 0,
+      TOURNAMENT_ACCESS_TYPES.OPEN,
+      TOURNAMENT_ACCESS_TYPES.OPEN,
+      userId,
+      userId,
+      rawTournamentId,
+      normalizedTournamentId || rawTournamentId,
+    ],
+    (err, row) => {
+      if (err) {
+        done(err);
+        return;
+      }
+      if (!row) {
+        done(null, null);
+        return;
+      }
+
+      done(null, {
+        id: row.id,
+        name: row.name,
+        short_title: row.short_title,
+        logo: row.logo,
+        link: row.link,
+        access_type: normalizeTournamentAccessType(row.access_type),
+        lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
+        lineup_size: normalizeTournamentLineupSize(row.lineup_size),
+        has_access: Number(row.has_access) === 1,
+      });
+    }
+  );
+}
+
 function validateTournamentAccessUserIds(userIds, done) {
   const normalizedIds = normalizeTournamentAccessUserIds(userIds);
   if (!normalizedIds.length) {
@@ -2427,6 +2504,19 @@ app.delete("/associations/:id", requireAdmin, (req, res) => {
 
 app.get("/tournaments", (req, res, next) => {
   const includeAccessUsers = Number(req.user?.admin) === 1;
+  const userId = getTournamentAccessUserId(req.user);
+  const visibilitySql = includeAccessUsers
+    ? ""
+    : `
+      WHERE
+        COALESCE(t.access_type, ?) = ?
+        OR (? > 0 AND EXISTS (
+          SELECT 1
+          FROM tournament_access_users tau_filter
+          WHERE upper(trim(tau_filter.tournament_id)) = upper(trim(t.id))
+            AND tau_filter.user_id = ?
+        ))
+    `;
   db.all(
     `
       SELECT
@@ -2444,9 +2534,19 @@ app.get("/tournaments", (req, res, next) => {
           WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
         ) AS access_user_ids_csv
       FROM tournaments t
+      ${visibilitySql}
       ORDER BY t.id COLLATE NOCASE ASC
     `,
-    [TOURNAMENT_ACCESS_TYPES.OPEN, TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE],
+    includeAccessUsers
+      ? [TOURNAMENT_ACCESS_TYPES.OPEN, TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE]
+      : [
+          TOURNAMENT_ACCESS_TYPES.OPEN,
+          TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE,
+          TOURNAMENT_ACCESS_TYPES.OPEN,
+          TOURNAMENT_ACCESS_TYPES.OPEN,
+          userId,
+          userId,
+        ],
     (err, rows) => {
       if (err) return next(err);
       return res.json({
@@ -3082,33 +3182,64 @@ app.get("/lineups", (req, res, next) => {
     return res.status(400).json({ ok: false, message: "match_id is required" });
   }
 
-  db.all(
+  return db.get(
     `
       SELECT
         id,
         tournament_id,
-        match_id,
-        duel_number,
-        duel_format,
-        time_utc,
-        custom_time,
-        player_1_id,
-        player_2_id,
-        dw1,
-        dw2,
-        status
-      FROM lineups
-      WHERE match_id = ?
+        team_1,
+        team_2
+      FROM matches
+      WHERE id = ?
         AND deleted_at IS NULL
-      ORDER BY
-        CASE WHEN duel_number IS NULL THEN 1 ELSE 0 END ASC,
-        duel_number ASC,
-        id ASC
+      LIMIT 1
     `,
     [matchId],
-    (err, rows) => {
-      if (err) return next(err);
-      return res.json({ ok: true, lineups: rows || [] });
+    (matchErr, matchRow) => {
+      if (matchErr) return next(matchErr);
+      if (!matchRow) {
+        return res.status(404).json({ ok: false, message: "Match not found" });
+      }
+
+      return loadTournamentAccessForUser(matchRow.tournament_id, req.user, (tournamentErr, tournament) => {
+        if (tournamentErr) return next(tournamentErr);
+        if (!tournament) {
+          return res.status(404).json({ ok: false, message: "Tournament not found" });
+        }
+        if (!tournament.has_access) {
+          return res.status(403).json({ ok: false, message: "Forbidden" });
+        }
+
+        return db.all(
+          `
+            SELECT
+              id,
+              tournament_id,
+              match_id,
+              duel_number,
+              duel_format,
+              time_utc,
+              custom_time,
+              player_1_id,
+              player_2_id,
+              dw1,
+              dw2,
+              status
+            FROM lineups
+            WHERE match_id = ?
+              AND deleted_at IS NULL
+            ORDER BY
+              CASE WHEN duel_number IS NULL THEN 1 ELSE 0 END ASC,
+              duel_number ASC,
+              id ASC
+          `,
+          [matchId],
+          (err, rows) => {
+            if (err) return next(err);
+            return res.json({ ok: true, lineups: rows || [] });
+          }
+        );
+      });
     }
   );
 });
@@ -3142,7 +3273,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
   };
 
   return db.get(
-    "SELECT team_1, team_2 FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1",
+    "SELECT tournament_id, team_1, team_2 FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1",
     [matchId],
     (matchErr, matchRow) => {
       if (matchErr) {
@@ -3153,41 +3284,53 @@ app.post("/lineups/bulk-upsert", (req, res) => {
       }
       const team1 = String(matchRow.team_1 || "").trim().toUpperCase();
       const team2 = String(matchRow.team_2 || "").trim().toUpperCase();
-      const canEdit = isAdmin || (isTeamCaptain && userAssociation && (userAssociation === team1 || userAssociation === team2));
-      if (!canEdit) {
-        return res.status(403).json({ ok: false, message: "Forbidden" });
-      }
 
-      const sanitized = [];
-      for (let index = 0; index < lineups.length; index += 1) {
-        const item = lineups[index];
-        const id = String(item?.id || "").trim();
-        const player1 = normalizeText(item?.player_1_id);
-        const player2 = normalizeText(item?.player_2_id);
-        const duelNumberRaw = toIntOrNull(item?.duel_number);
-        const duelNumber = Number.isInteger(duelNumberRaw) && duelNumberRaw > 0
-          ? duelNumberRaw
-          : index + 1;
-        if (!id || (!player1 && !player2)) {
-          return res.status(400).json({ ok: false, message: "Each lineup requires id and at least one player" });
+      return loadTournamentAccessForUser(matchRow.tournament_id, req.user, (tournamentErr, tournament) => {
+        if (tournamentErr) {
+          return res.status(500).json({ ok: false, message: "Failed to validate tournament access" });
         }
-        sanitized.push({
-          id,
-          tournament_id: normalizeText(item?.tournament_id),
-          match_id: matchId,
-          duel_number: duelNumber,
-          duel_format: normalizeText(item?.duel_format),
-          time_utc: normalizeText(item?.time_utc),
-          custom_time: toIntOrNull(item?.custom_time),
-          player_1_id: player1,
-          player_2_id: player2,
-          dw1: toIntOrNull(item?.dw1),
-          dw2: toIntOrNull(item?.dw2),
-          status: normalizeText(item?.status),
-        });
-      }
+        if (!tournament) {
+          return res.status(404).json({ ok: false, message: "Tournament not found" });
+        }
 
-      return db.all(
+        const isClosedTournament = tournament.access_type === TOURNAMENT_ACCESS_TYPES.CLOSED;
+        const canEdit = isClosedTournament
+          ? tournament.has_access
+          : (isAdmin || (isTeamCaptain && userAssociation && (userAssociation === team1 || userAssociation === team2)));
+        if (!canEdit) {
+          return res.status(403).json({ ok: false, message: "Forbidden" });
+        }
+
+        const sanitized = [];
+        for (let index = 0; index < lineups.length; index += 1) {
+          const item = lineups[index];
+          const id = String(item?.id || "").trim();
+          const player1 = normalizeText(item?.player_1_id);
+          const player2 = normalizeText(item?.player_2_id);
+          const duelNumberRaw = toIntOrNull(item?.duel_number);
+          const duelNumber = Number.isInteger(duelNumberRaw) && duelNumberRaw > 0
+            ? duelNumberRaw
+            : index + 1;
+          if (!id || (!player1 && !player2)) {
+            return res.status(400).json({ ok: false, message: "Each lineup requires id and at least one player" });
+          }
+          sanitized.push({
+            id,
+            tournament_id: normalizeText(item?.tournament_id) || tournament.id,
+            match_id: matchId,
+            duel_number: duelNumber,
+            duel_format: normalizeText(item?.duel_format),
+            time_utc: normalizeText(item?.time_utc),
+            custom_time: toIntOrNull(item?.custom_time),
+            player_1_id: player1,
+            player_2_id: player2,
+            dw1: toIntOrNull(item?.dw1),
+            dw2: toIntOrNull(item?.dw2),
+            status: normalizeText(item?.status),
+          });
+        }
+
+        return db.all(
         `
           SELECT
             id,
@@ -3211,7 +3354,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
             id ASC
         `,
         [matchId],
-        (beforeErr, previousLineups) => {
+          (beforeErr, previousLineups) => {
           if (beforeErr) {
             return res.status(500).json({ ok: false, message: "Failed to load existing lineups" });
           }
@@ -3373,34 +3516,56 @@ app.post("/lineups/bulk-upsert", (req, res) => {
               }
             );
           });
-        }
-      );
+          }
+        );
+      });
     }
   );
 });
 
-app.get("/matches", (_req, res, next) => {
+app.get("/matches", (req, res, next) => {
+  const isAdmin = Number(req.user?.admin) === 1;
+  const userId = getTournamentAccessUserId(req.user);
+  const visibilitySql = isAdmin
+    ? ""
+    : `
+      AND (
+        COALESCE(t.access_type, ?) = ?
+        OR (? > 0 AND EXISTS (
+          SELECT 1
+          FROM tournament_access_users tau
+          WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
+            AND tau.user_id = ?
+        ))
+      )
+    `;
   db.all(
     `
       SELECT
-        id,
-        tournament_id,
-        time_utc,
-        lineup_type,
-        lineup_deadline_h,
-        lineup_deadline_utc,
-        number_of_duels,
-        team_1,
-        team_2,
-        status,
-        dw1,
-        dw2,
-        gw1,
-        gw2
-      FROM matches
-      WHERE deleted_at IS NULL
+        m.id,
+        m.tournament_id,
+        m.time_utc,
+        m.lineup_type,
+        m.lineup_deadline_h,
+        m.lineup_deadline_utc,
+        m.number_of_duels,
+        m.team_1,
+        m.team_2,
+        m.status,
+        m.dw1,
+        m.dw2,
+        m.gw1,
+        m.gw2
+      FROM matches m
+      LEFT JOIN tournaments t
+        ON upper(trim(t.id)) = upper(trim(m.tournament_id))
+      WHERE m.deleted_at IS NULL
+      ${visibilitySql}
       ORDER BY time_utc DESC, id ASC
     `,
+    isAdmin
+      ? []
+      : [TOURNAMENT_ACCESS_TYPES.OPEN, TOURNAMENT_ACCESS_TYPES.OPEN, userId, userId],
     (err, rows) => {
       if (err) return next(err);
       return res.json({ ok: true, matches: rows || [] });
@@ -3417,9 +3582,6 @@ app.post("/matches", (req, res) => {
   const isTeamCaptain = Number(req.user.team_captain) === 1;
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
   const actorPlayerId = String(req.user.player_id || "").trim() || null;
-  if (!isAdmin && !isTeamCaptain) {
-    return res.status(403).json({ ok: false, message: "Forbidden" });
-  }
 
   const payload = req.body && typeof req.body === "object" ? req.body : {};
   const normalizeCode = (value) => String(value || "").trim().toUpperCase();
@@ -3457,10 +3619,6 @@ app.post("/matches", (req, res) => {
   if (team1 === team2) {
     return res.status(400).json({ ok: false, message: "team_1 and team_2 must be different" });
   }
-  if (!isAdmin && isTeamCaptain && (!userAssociation || team1 !== userAssociation)) {
-    return res.status(403).json({ ok: false, message: "Captain can create matches only for own team as team_1" });
-  }
-
   const timeUtc = parseUtcIsoOrNull(payload.time_utc);
   if (!timeUtc) {
     return res.status(400).json({ ok: false, message: "time_utc is required and must be valid UTC date-time" });
@@ -3510,7 +3668,29 @@ app.post("/matches", (req, res) => {
   const generatedId = `${timeUtc.slice(0, 10).replaceAll("-", "")}${team1}${team2}`;
   const matchId = idFromPayload || generatedId;
 
-  return db.get(
+  return loadTournamentAccessForUser(tournamentId, req.user, (tournamentErr, tournament) => {
+    if (tournamentErr) {
+      return res.status(500).json({ ok: false, message: "Failed to validate tournament access" });
+    }
+    if (!tournament) {
+      return res.status(404).json({ ok: false, message: "Tournament not found" });
+    }
+
+    const isClosedTournament = tournament.access_type === TOURNAMENT_ACCESS_TYPES.CLOSED;
+    if (isClosedTournament) {
+      if (!tournament.has_access) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    } else {
+      if (!isAdmin && !isTeamCaptain) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+      if (!isAdmin && isTeamCaptain && (!userAssociation || team1 !== userAssociation)) {
+        return res.status(403).json({ ok: false, message: "Captain can create matches only for own team as team_1" });
+      }
+    }
+
+    return db.get(
     `
       SELECT id, deleted_at
       FROM matches
@@ -3518,7 +3698,7 @@ app.post("/matches", (req, res) => {
       LIMIT 1
     `,
     [matchId],
-    (dupErr, dupRow) => {
+      (dupErr, dupRow) => {
       if (dupErr) {
         return res.status(500).json({ ok: false, message: "Failed to validate match uniqueness" });
       }
@@ -3723,8 +3903,9 @@ app.post("/matches", (req, res) => {
           );
         }
       );
-    }
-  );
+      }
+    );
+  });
 });
 
 app.patch("/matches/:id", (req, res) => {
@@ -3741,9 +3922,6 @@ app.patch("/matches/:id", (req, res) => {
   const isTeamCaptain = Number(req.user.team_captain) === 1;
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
   const actorPlayerId = String(req.user.player_id || "").trim() || null;
-  if (!isAdmin && !isTeamCaptain) {
-    return res.status(403).json({ ok: false, message: "Forbidden" });
-  }
 
   const payload = req.body && typeof req.body === "object" ? req.body : {};
   const normalizeCode = (value) => String(value || "").trim().toUpperCase();
@@ -3803,15 +3981,27 @@ app.patch("/matches/:id", (req, res) => {
         return res.status(404).json({ ok: false, message: "Match not found" });
       }
 
-      const existingTeam1 = normalizeCode(existingRow.team_1);
-      const existingTeam2 = normalizeCode(existingRow.team_2);
-      const captainCanEdit = !isAdmin
-        && isTeamCaptain
-        && userAssociation
-        && (existingTeam1 === userAssociation || existingTeam2 === userAssociation);
-      if (!isAdmin && !captainCanEdit) {
-        return res.status(403).json({ ok: false, message: "Forbidden" });
-      }
+      return loadTournamentAccessForUser(existingRow.tournament_id, req.user, (tournamentErr, tournament) => {
+        if (tournamentErr) {
+          return res.status(500).json({ ok: false, message: "Failed to validate tournament access" });
+        }
+        if (!tournament) {
+          return res.status(404).json({ ok: false, message: "Tournament not found" });
+        }
+
+        const existingTeam1 = normalizeCode(existingRow.team_1);
+        const existingTeam2 = normalizeCode(existingRow.team_2);
+        const captainCanEdit = !isAdmin
+          && isTeamCaptain
+          && userAssociation
+          && (existingTeam1 === userAssociation || existingTeam2 === userAssociation);
+        const canUseOpenTournamentRules = isAdmin || isTeamCaptain;
+        const canEdit = tournament.access_type === TOURNAMENT_ACCESS_TYPES.CLOSED
+          ? tournament.has_access
+          : (canUseOpenTournamentRules && (isAdmin || captainCanEdit));
+        if (!canEdit) {
+          return res.status(403).json({ ok: false, message: "Forbidden" });
+        }
 
       const team1 = normalizeCode(payload.team_1);
       const team2 = normalizeCode(payload.team_2);
@@ -3874,11 +4064,12 @@ app.patch("/matches/:id", (req, res) => {
         return res.status(400).json({ ok: false, message: "dw1/dw2/gw1/gw2 must be empty or non-negative integers" });
       }
 
-      return db.run(
+        return db.run(
         `
           UPDATE matches
           SET
             id = ?,
+            tournament_id = ?,
             team_1 = ?,
             team_2 = ?,
             time_utc = ?,
@@ -3897,6 +4088,7 @@ app.patch("/matches/:id", (req, res) => {
         `,
         [
           nextMatchId,
+          tournament.id,
           team1,
           team2,
           timeUtc,
@@ -3969,6 +4161,7 @@ app.patch("/matches/:id", (req, res) => {
             );
         }
       );
+      });
     }
   );
 });
@@ -3987,9 +4180,6 @@ app.delete("/matches/:id", (req, res) => {
   const isTeamCaptain = Number(req.user.team_captain) === 1;
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
   const actorPlayerId = String(req.user.player_id || "").trim() || null;
-  if (!isAdmin && !isTeamCaptain) {
-    return res.status(403).json({ ok: false, message: "Forbidden" });
-  }
 
   return db.get(
     `
@@ -4022,17 +4212,29 @@ app.delete("/matches/:id", (req, res) => {
         return res.status(404).json({ ok: false, message: "Match not found" });
       }
 
-      const team1 = String(row.team_1 || "").trim().toUpperCase();
-      const team2 = String(row.team_2 || "").trim().toUpperCase();
-      const captainCanDelete = !isAdmin
-        && isTeamCaptain
-        && userAssociation
-        && (team1 === userAssociation || team2 === userAssociation);
-      if (!isAdmin && !captainCanDelete) {
-        return res.status(403).json({ ok: false, message: "Forbidden" });
-      }
+      return loadTournamentAccessForUser(row.tournament_id, req.user, (tournamentErr, tournament) => {
+        if (tournamentErr) {
+          return res.status(500).json({ ok: false, message: "Failed to validate tournament access" });
+        }
+        if (!tournament) {
+          return res.status(404).json({ ok: false, message: "Tournament not found" });
+        }
 
-      return db.all(
+        const team1 = String(row.team_1 || "").trim().toUpperCase();
+        const team2 = String(row.team_2 || "").trim().toUpperCase();
+        const captainCanDelete = !isAdmin
+          && isTeamCaptain
+          && userAssociation
+          && (team1 === userAssociation || team2 === userAssociation);
+        const canUseOpenTournamentRules = isAdmin || isTeamCaptain;
+        const canDelete = tournament.access_type === TOURNAMENT_ACCESS_TYPES.CLOSED
+          ? tournament.has_access
+          : (canUseOpenTournamentRules && (isAdmin || captainCanDelete));
+        if (!canDelete) {
+          return res.status(403).json({ ok: false, message: "Forbidden" });
+        }
+
+        return db.all(
         `
           SELECT
             id,
@@ -4056,7 +4258,7 @@ app.delete("/matches/:id", (req, res) => {
             id ASC
         `,
         [matchId],
-        (lineupsErr, activeLineups) => {
+          (lineupsErr, activeLineups) => {
           if (lineupsErr) {
             return res.status(500).json({ ok: false, message: "Failed to load match lineups" });
           }
@@ -4148,8 +4350,9 @@ app.delete("/matches/:id", (req, res) => {
               }
             );
           });
-        }
-      );
+          }
+        );
+      });
     }
   );
 });
