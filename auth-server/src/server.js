@@ -236,6 +236,22 @@ function normalizeTournamentLineupSize(value) {
   return Number.isInteger(normalized) && normalized > 0 ? normalized : null;
 }
 
+function getTournamentLookupVariants(value) {
+  const raw = normalizeNullableText(value);
+  if (!raw) return [];
+  const normalized = normalizeEntityId(raw);
+  return Array.from(new Set([raw, normalized].filter(Boolean)));
+}
+
+function buildTournamentLookupWhereClause(columnName) {
+  return `
+    (
+      upper(trim(${columnName})) = upper(trim(?))
+      OR upper(trim(${columnName})) = upper(trim(?))
+    )
+  `;
+}
+
 function validateTournamentAccessUserIds(userIds, done) {
   const normalizedIds = normalizeTournamentAccessUserIds(userIds);
   if (!normalizedIds.length) {
@@ -325,8 +341,8 @@ function replaceTournamentAccessUsers(tournamentId, userIds, done) {
 }
 
 function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
-  const normalizedTournamentId = normalizeNullableText(tournamentId);
-  if (!normalizedTournamentId) {
+  const [rawTournamentId, normalizedTournamentId] = getTournamentLookupVariants(tournamentId);
+  if (!rawTournamentId) {
     done(null, null);
     return;
   }
@@ -343,13 +359,14 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         COALESCE(lineup_size_type, ?) AS lineup_size_type,
         lineup_size
       FROM tournaments
-      WHERE upper(trim(id)) = upper(trim(?))
+      WHERE ${buildTournamentLookupWhereClause("id")}
       LIMIT 1
     `,
     [
       TOURNAMENT_ACCESS_TYPES.OPEN,
       TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE,
-      normalizedTournamentId,
+      rawTournamentId,
+      normalizedTournamentId || rawTournamentId,
     ],
     (err, row) => {
       if (err) {
@@ -2562,8 +2579,8 @@ app.post("/tournaments", requireAdmin, (req, res) => {
 });
 
 app.patch("/tournaments/:id", requireAdmin, (req, res) => {
-  const tournamentId = normalizeEntityId(req.params.id);
-  const payloadId = normalizeEntityId(req.body?.id);
+  const tournamentId = normalizeNullableText(req.params.id);
+  const payloadId = normalizeNullableText(req.body?.id);
   const name = String(req.body?.name || "").trim();
   const shortTitle = String(req.body?.short_title || "").trim() || null;
   const logo = String(req.body?.logo || "").trim() || null;
@@ -2588,9 +2605,16 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
     return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
   }
 
+  const [rawTournamentId, normalizedTournamentId] = getTournamentLookupVariants(tournamentId);
+
   return db.get(
-    "SELECT id FROM tournaments WHERE upper(trim(id)) = upper(?) LIMIT 1",
-    [tournamentId],
+    `
+      SELECT id
+      FROM tournaments
+      WHERE ${buildTournamentLookupWhereClause("id")}
+      LIMIT 1
+    `,
+    [rawTournamentId, normalizedTournamentId || rawTournamentId],
     (rowErr, currentRow) => {
       if (rowErr) {
         return res.status(500).json({ ok: false, message: "Failed to load tournament" });
@@ -2621,9 +2645,20 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
                   lineup_size_type = ?,
                   lineup_size = ?,
                   updated_at = CURRENT_TIMESTAMP
-                WHERE upper(trim(id)) = upper(?)
+                WHERE ${buildTournamentLookupWhereClause("id")}
               `,
-              [tournamentId, name, shortTitle, logo, link, accessType, lineupSizeType, lineupSize, tournamentId],
+              [
+                currentRow.id,
+                name,
+                shortTitle,
+                logo,
+                link,
+                accessType,
+                lineupSizeType,
+                lineupSize,
+                rawTournamentId,
+                normalizedTournamentId || rawTournamentId,
+              ],
               function onUpdate(err) {
                 if (err) {
                   db.run("ROLLBACK");
@@ -2637,7 +2672,7 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
                   return res.status(404).json({ ok: false, message: "Tournament not found" });
                 }
 
-                return replaceTournamentAccessUsers(tournamentId, accessUserIds, (accessErr) => {
+                return replaceTournamentAccessUsers(currentRow.id, accessUserIds, (accessErr) => {
                   if (accessErr) {
                     db.run("ROLLBACK");
                     return res.status(500).json({ ok: false, message: "Failed to save tournament access users" });
@@ -2649,7 +2684,7 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
                       return res.status(500).json({ ok: false, message: "Failed to update tournament" });
                     }
 
-                    return loadTournamentRowById(tournamentId, true, (selectErr, row) => {
+                    return loadTournamentRowById(currentRow.id, true, (selectErr, row) => {
                       if (selectErr) {
                         return res.status(500).json({ ok: false, message: "Failed to load tournament" });
                       }
