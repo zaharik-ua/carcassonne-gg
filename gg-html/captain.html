@@ -5046,7 +5046,12 @@
           }
           const closedTournamentMatches = activeView === CAPTAIN_VIEWS.MATCHES
             && Number(currentTournament?.access_type) === 2;
-          if (closedTournamentMatches) return true;
+          if (closedTournamentMatches) {
+            if (canManageClosedTournamentMatches) return true;
+            const team1 = readMatchTeam1(match);
+            const team2 = readMatchTeam2(match);
+            return !!captainAssociationCode && (team1 === captainAssociationCode || team2 === captainAssociationCode);
+          }
           if (isAdminUser) {
             if (activeView === CAPTAIN_VIEWS.MATCHES && friendlyMatchesAdminAssociation) {
               const team1 = readMatchTeam1(match);
