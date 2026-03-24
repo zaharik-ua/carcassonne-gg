@@ -3529,14 +3529,19 @@ app.get("/matches", (req, res, next) => {
   const visibilitySql = isAdmin
     ? ""
     : `
-      AND (
-        COALESCE(t.access_type, ?) = ?
-        OR (? > 0 AND EXISTS (
-          SELECT 1
-          FROM tournament_access_users tau
-          WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
-            AND tau.user_id = ?
-        ))
+      AND EXISTS (
+        SELECT 1
+        FROM tournaments t
+        WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
+          AND (
+            COALESCE(t.access_type, ?) = ?
+            OR (? > 0 AND EXISTS (
+              SELECT 1
+              FROM tournament_access_users tau
+              WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
+                AND tau.user_id = ?
+            ))
+          )
       )
     `;
   db.all(
@@ -3557,11 +3562,9 @@ app.get("/matches", (req, res, next) => {
         m.gw1,
         m.gw2
       FROM matches m
-      LEFT JOIN tournaments t
-        ON upper(trim(t.id)) = upper(trim(m.tournament_id))
       WHERE m.deleted_at IS NULL
       ${visibilitySql}
-      ORDER BY time_utc DESC, id ASC
+      ORDER BY m.time_utc DESC, m.id ASC
     `,
     isAdmin
       ? []

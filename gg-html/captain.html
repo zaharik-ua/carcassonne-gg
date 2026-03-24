@@ -1044,7 +1044,7 @@
   const PROFILE_CONTACTS_URL = `${AUTH_BASE}/profiles/contacts`;
   const DEADLINE_HOURS_OPTIONS = [6, 12, 24, 48];
   const CAPTAIN_VIEWS = {
-    FRIENDLIES: "friendlies",
+    MATCHES: "matches",
     PLAYERS: "players",
     FRIENDLY_FIND: "friendly-find",
   };
@@ -1123,11 +1123,11 @@
   function getViewFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const tournamentId = String(params.get("tournament") || "").trim();
-    if (tournamentId) return CAPTAIN_VIEWS.FRIENDLIES;
+    if (tournamentId) return CAPTAIN_VIEWS.MATCHES;
     const raw = String(params.get("view") || "").trim().toLowerCase();
     if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
     if (raw === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
-    return CAPTAIN_VIEWS.FRIENDLIES;
+    return CAPTAIN_VIEWS.MATCHES;
   }
 
   function getTournamentIdFromUrl() {
@@ -1147,7 +1147,7 @@
     const url = new URL(window.location.href);
     const nextView = String(options.view || "").trim().toLowerCase();
     const nextTournamentId = String(options.tournamentId || "").trim();
-    if (nextView === CAPTAIN_VIEWS.FRIENDLIES) {
+    if (nextView === CAPTAIN_VIEWS.MATCHES) {
       url.searchParams.delete("view");
       if (nextTournamentId) url.searchParams.set("tournament", nextTournamentId);
       else url.searchParams.delete("tournament");
@@ -1198,7 +1198,7 @@
       const raw = String(captainPageState.view || "").trim().toLowerCase();
       if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
       if (raw === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
-      return CAPTAIN_VIEWS.FRIENDLIES;
+      return CAPTAIN_VIEWS.MATCHES;
     })();
     captainPageState.tournamentId = String(captainPageState.tournamentId || "").trim();
     captainPageState.associationOverride = normalizeCode(captainPageState.associationOverride);
@@ -1594,13 +1594,13 @@
     const playerId = getPlayerIdFromUrl();
     const cachedPlayerNick = String(window.sessionStorage?.getItem("captainEditPlayerNick") || "").trim();
     const tournamentHeading = String(
-      currentTournament?.short_title || currentTournament?.name || currentTournament?.id || "Tournament Matches"
+      currentTournament?.name || currentTournament?.short_title || currentTournament?.id || "Tournament Matches"
     ).trim();
 
     if (activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
       return "Find an Opponent for a Friendly Match";
     }
-    if (activeView === CAPTAIN_VIEWS.FRIENDLIES) {
+    if (activeView === CAPTAIN_VIEWS.MATCHES) {
       if (isEditMode) return "Match editing";
       if (isCreateMode) return tournamentHeading;
       return tournamentHeading;
@@ -1859,7 +1859,7 @@
     editBtn.className = "cp-edit-btn";
     editBtn.textContent = "Edit";
     editBtn.addEventListener("click", () => {
-      openCaptainEdit(CAPTAIN_VIEWS.FRIENDLIES, { matchId: String(match?.id || "") });
+      openCaptainEdit(CAPTAIN_VIEWS.MATCHES, { matchId: String(match?.id || "") });
     });
     right.appendChild(editBtn);
 
@@ -4633,7 +4633,7 @@
     };
 
     cancelBtn.addEventListener("click", () => {
-      resetCaptainSubview(CAPTAIN_VIEWS.FRIENDLIES);
+      resetCaptainSubview(CAPTAIN_VIEWS.MATCHES);
     });
 
     if (deleteBtn) {
@@ -4652,7 +4652,7 @@
             setError(result?.message || "Failed to delete match.");
             return;
           }
-          resetCaptainSubview(CAPTAIN_VIEWS.FRIENDLIES);
+          resetCaptainSubview(CAPTAIN_VIEWS.MATCHES);
         } catch (_error) {
           setError("Failed to delete match.");
         } finally {
@@ -4821,7 +4821,7 @@
           }
         }
 
-        resetCaptainSubview(CAPTAIN_VIEWS.FRIENDLIES);
+        resetCaptainSubview(CAPTAIN_VIEWS.MATCHES);
       } catch (_error) {
         setError("Failed to save match.");
       } finally {
@@ -4885,7 +4885,7 @@
       }
 
       if (!associationOverride) {
-        if (activeView === CAPTAIN_VIEWS.FRIENDLIES) {
+        if (activeView === CAPTAIN_VIEWS.MATCHES) {
           if (!isAuthenticatedUser) {
             renderAccessMessage();
             return;
@@ -4900,25 +4900,28 @@
         }
       }
 
-      const dataRequests = [
-        fetch(MATCHES_URL, { method: "GET", credentials: "include" }),
+      const [matchesRes, teamsRes, tournamentsRes, profilesRes, friendlyFindRes] = await Promise.all([
+        activeView === CAPTAIN_VIEWS.MATCHES
+          ? fetch(MATCHES_URL, { method: "GET", credentials: "include" })
+          : Promise.resolve(null),
         fetch(TEAMS_URL, { method: "GET" }),
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(PROFILES_PUBLIC_URL, { method: "GET" }),
-      ];
-      if (activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
-        dataRequests.push(fetch(FRIENDLY_FIND_URL, { method: "GET", credentials: "include" }));
-      }
-      const [matchesRes, teamsRes, tournamentsRes, profilesRes, friendlyFindRes] = await Promise.all(dataRequests);
+        activeView === CAPTAIN_VIEWS.FRIENDLY_FIND
+          ? fetch(FRIENDLY_FIND_URL, { method: "GET", credentials: "include" })
+          : Promise.resolve(null),
+      ]);
 
-      if (!matchesRes.ok) {
+      if (activeView === CAPTAIN_VIEWS.MATCHES && (!matchesRes || !matchesRes.ok)) {
         contentEl.className = "captain-alert";
         contentEl.textContent = "Failed to load matches.";
         countEl.textContent = "";
         return;
       }
 
-      const matchesData = await matchesRes.json();
+      const matchesData = activeView === CAPTAIN_VIEWS.MATCHES
+        ? await matchesRes.json().catch(() => ({}))
+        : {};
       const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
       let tournaments = [];
       if (tournamentsRes.ok) {
@@ -4982,12 +4985,12 @@
         if (!tournamentId) return;
         tournamentsById.set(tournamentId, tournament);
       });
-      const currentTournament = activeView === CAPTAIN_VIEWS.FRIENDLIES
+      const currentTournament = activeView === CAPTAIN_VIEWS.MATCHES
         ? (tournamentsById.get(requestedTournamentId) || null)
         : null;
       setPageHeading(getImmediatePageHeading(currentTournament));
       if (
-        activeView === CAPTAIN_VIEWS.FRIENDLIES
+        activeView === CAPTAIN_VIEWS.MATCHES
         && currentTournament
         && Number(currentTournament?.access_type) !== 2
         && !isAdminUser
@@ -4997,7 +5000,7 @@
         return;
       }
 
-      const friendlyMatchesAdminAssociation = activeView === CAPTAIN_VIEWS.FRIENDLIES && isAdminUser
+      const friendlyMatchesAdminAssociation = activeView === CAPTAIN_VIEWS.MATCHES && isAdminUser
         ? (
           captainPageState.associationOverrideTouched
             ? normalizeCode(associationOverride || "")
@@ -5007,15 +5010,15 @@
 
       const filtered = matches
         .filter((match) => {
-          if (activeView === CAPTAIN_VIEWS.FRIENDLIES) {
+          if (activeView === CAPTAIN_VIEWS.MATCHES) {
             const tournamentId = String(match?.tournament_id || "").trim();
             if (!requestedTournamentId || tournamentId !== requestedTournamentId) return false;
           }
-          const closedTournamentMatches = activeView === CAPTAIN_VIEWS.FRIENDLIES
+          const closedTournamentMatches = activeView === CAPTAIN_VIEWS.MATCHES
             && Number(currentTournament?.access_type) === 2;
           if (closedTournamentMatches) return true;
           if (isAdminUser) {
-            if (activeView === CAPTAIN_VIEWS.FRIENDLIES && friendlyMatchesAdminAssociation) {
+            if (activeView === CAPTAIN_VIEWS.MATCHES && friendlyMatchesAdminAssociation) {
               const team1 = readMatchTeam1(match);
               const team2 = readMatchTeam2(match);
               return team1 === friendlyMatchesAdminAssociation || team2 === friendlyMatchesAdminAssociation;
@@ -5041,11 +5044,11 @@
         if (isCreateMode || isEditMode) {
           addButtonEl.classList.add("cp-hidden");
         }
-      } else if (activeView === CAPTAIN_VIEWS.FRIENDLIES) {
+      } else if (activeView === CAPTAIN_VIEWS.MATCHES) {
         addButtonEl.classList.remove("cp-hidden");
         addButtonEl.textContent = "Create";
         addButtonEl.onclick = () => {
-          openCaptainCreate(CAPTAIN_VIEWS.FRIENDLIES);
+          openCaptainCreate(CAPTAIN_VIEWS.MATCHES);
         };
         if (isCreateMode || isEditMode) {
           addButtonEl.classList.add("cp-hidden");
@@ -5064,7 +5067,7 @@
       }
 
       if (
-        activeView === CAPTAIN_VIEWS.FRIENDLIES
+        activeView === CAPTAIN_VIEWS.MATCHES
         && isAdminUser
         && !isCreateMode
         && !isEditMode
@@ -5084,7 +5087,7 @@
           friendlyMatchesAdminAssociation,
           (nextAssociation) => {
             applyCaptainPageState({
-              view: CAPTAIN_VIEWS.FRIENDLIES,
+              view: CAPTAIN_VIEWS.MATCHES,
               associationOverride: normalizeCode(nextAssociation),
               mode: "list",
               matchId: "",
@@ -5137,7 +5140,7 @@
         return;
       }
 
-      if (activeView === CAPTAIN_VIEWS.FRIENDLIES && isCreateMode) {
+      if (activeView === CAPTAIN_VIEWS.MATCHES && isCreateMode) {
         if (!currentTournament) {
           contentEl.className = "captain-alert";
           contentEl.textContent = "Tournament not found or unavailable.";
@@ -5165,7 +5168,7 @@
         return;
       }
 
-      if (activeView === CAPTAIN_VIEWS.FRIENDLIES && !filtered.length) {
+      if (activeView === CAPTAIN_VIEWS.MATCHES && !filtered.length) {
         if (!currentTournament) {
           renderNoMatchesMessage("Tournament not found or unavailable.");
           return;
@@ -5178,7 +5181,7 @@
         return;
       }
 
-      if (activeView === CAPTAIN_VIEWS.FRIENDLIES && isEditMode && editMatchId) {
+      if (activeView === CAPTAIN_VIEWS.MATCHES && isEditMode && editMatchId) {
         const matchToEdit = filtered.find((m) => String(m?.id || "") === editMatchId);
         if (!matchToEdit) {
           contentEl.className = "captain-alert";
@@ -5220,7 +5223,7 @@
         return;
       }
 
-      if (activeView === CAPTAIN_VIEWS.FRIENDLIES) {
+      if (activeView === CAPTAIN_VIEWS.MATCHES) {
         const lineupsByMatch = await loadLineupsByMatchIds(filtered);
         renderMatches(filtered, teamsById, lineupsByMatch, profilesById);
       } else if (activeView === CAPTAIN_VIEWS.PLAYERS) {
