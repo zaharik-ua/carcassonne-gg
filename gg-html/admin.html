@@ -499,6 +499,7 @@
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const USERS_URL = `${AUTH_BASE}/users`;
+  const USER_OPTIONS_URL = `${AUTH_BASE}/users/options`;
   const AUDIT_TRAIL_URL = `${AUTH_BASE}/audit-trail`;
   const MATCHES_URL = `${AUTH_BASE}/matches`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
@@ -582,6 +583,8 @@
     matchesReference: [],
     profilesPublic: [],
     users: [],
+    userOptions: [],
+    userOptionsLoaded: false,
     usersPage: 1,
     usersPageSize: 10,
     usersTotal: 0,
@@ -854,6 +857,27 @@
     return { row, select };
   }
 
+  function createMultiSelectRow(labelText, options, selectedValues) {
+    const selected = new Set((Array.isArray(selectedValues) ? selectedValues : []).map((value) => String(value)));
+    const row = document.createElement("div");
+    row.className = "cp-edit-row";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const select = document.createElement("select");
+    select.multiple = true;
+    select.size = Math.min(Math.max((Array.isArray(options) ? options.length : 0) || 6, 6), 12);
+    (Array.isArray(options) ? options : []).forEach((entry) => {
+      const option = document.createElement("option");
+      option.value = String(entry?.value ?? "");
+      option.textContent = String(entry?.label ?? entry?.value ?? "");
+      if (selected.has(option.value)) option.selected = true;
+      select.appendChild(option);
+    });
+    row.appendChild(label);
+    row.appendChild(select);
+    return { row, select };
+  }
+
   function createCodeRow(labelText, value) {
     const row = document.createElement("div");
     row.className = "cp-edit-row";
@@ -951,6 +975,13 @@
     } catch (_error) {
       return String(value);
     }
+  }
+
+  async function ensureUserOptionsLoaded() {
+    if (state.userOptionsLoaded) return;
+    const data = await apiJson(USER_OPTIONS_URL, { method: "GET" });
+    state.userOptions = Array.isArray(data?.users) ? data.users : [];
+    state.userOptionsLoaded = true;
   }
 
   function loadAuditReferenceData() {
@@ -1748,7 +1779,14 @@
     }
   }
 
-  function openTournamentForm(mode, item, anchorRow) {
+  async function openTournamentForm(mode, item, anchorRow) {
+    try {
+      await ensureUserOptionsLoaded();
+    } catch (error) {
+      setStatus(error?.message || "Failed to load users.", true);
+      return;
+    }
+
     const form = document.createElement("form");
     form.className = "cp-edit-form";
 
@@ -1757,12 +1795,42 @@
     const shortTitleField = createTextRow("short_title", item?.short_title || "");
     const logoField = createTextRow("logo", item?.logo || "");
     const linkField = createTextRow("link", item?.link || "");
+    const accessTypeField = createSelectRow("access_type", String(item?.access_type || 1), ["1", "2"], false);
+    if (accessTypeField.select.options[0]) accessTypeField.select.options[0].textContent = "1 - Open";
+    if (accessTypeField.select.options[1]) accessTypeField.select.options[1].textContent = "2 - Closed";
+    const accessUsersField = createMultiSelectRow(
+      "access_users",
+      state.userOptions.map((user) => {
+        const labelParts = [];
+        if (user?.name) labelParts.push(String(user.name).trim());
+        if (user?.bga_nickname) labelParts.push(`BGA: ${String(user.bga_nickname).trim()}`);
+        if (user?.email) labelParts.push(String(user.email).trim());
+        const label = labelParts.filter(Boolean).join(" • ") || `User #${user.id}`;
+        return { value: String(user.id), label: `${user.id} - ${label}` };
+      }),
+      Array.isArray(item?.access_user_ids) ? item.access_user_ids.map((value) => String(value)) : []
+    );
+    const accessUsersHint = document.createElement("p");
+    accessUsersHint.className = "admin-inline-value";
 
     form.appendChild(idField.row);
     form.appendChild(nameField.row);
     form.appendChild(shortTitleField.row);
     form.appendChild(logoField.row);
     form.appendChild(linkField.row);
+    form.appendChild(accessTypeField.row);
+    form.appendChild(accessUsersField.row);
+    accessUsersField.row.appendChild(accessUsersHint);
+
+    const toggleAccessUsersState = () => {
+      const isClosed = String(accessTypeField.select.value || "1") === "2";
+      accessUsersField.select.disabled = !isClosed;
+      accessUsersHint.textContent = isClosed
+        ? "Select users who will have access to this closed tournament."
+        : "Open tournaments are available to all captains.";
+    };
+    accessTypeField.select.addEventListener("change", toggleAccessUsersState);
+    toggleAccessUsersState();
 
     const actions = document.createElement("div");
     actions.className = "cp-edit-actions";
@@ -1798,6 +1866,8 @@
         short_title: String(shortTitleField.input.value || "").trim(),
         logo: String(logoField.input.value || "").trim(),
         link: String(linkField.input.value || "").trim(),
+        access_type: Number.parseInt(String(accessTypeField.select.value || "1"), 10) === 2 ? 2 : 1,
+        access_user_ids: Array.from(accessUsersField.select.selectedOptions || []).map((option) => Number(option.value)),
       };
       if (!payload.id) {
         setStatus("Tournament id is required.", true);
@@ -1806,6 +1876,9 @@
       if (!payload.name) {
         setStatus("Tournament name is required.", true);
         return;
+      }
+      if (payload.access_type === 1) {
+        payload.access_user_ids = [];
       }
 
       const duplicate = state.tournaments.find((entry) => (

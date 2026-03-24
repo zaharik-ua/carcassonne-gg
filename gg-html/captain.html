@@ -1107,11 +1107,6 @@
       .replaceAll("'", "&#39;");
   }
 
-  function isTestModeEnabled() {
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    return host !== "carcassonne.gg" && host !== "www.carcassonne.gg";
-  }
-
   function getAssociationOverrideFromUrl() {
     const params = new URLSearchParams(window.location.search);
     return normalizeCode(params.get("association") || "");
@@ -1127,6 +1122,8 @@
 
   function getViewFromUrl() {
     const params = new URLSearchParams(window.location.search);
+    const tournamentId = String(params.get("tournament") || "").trim();
+    if (tournamentId === DEFAULT_TOURNAMENT_ID) return CAPTAIN_VIEWS.FRIENDLIES;
     const raw = String(params.get("view") || "").trim().toLowerCase();
     if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
     if (raw === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
@@ -1144,14 +1141,15 @@
   function buildCaptainUrl(options = {}) {
     const url = new URL(window.location.href);
     const nextView = String(options.view || "").trim().toLowerCase();
-    if (
-      nextView === CAPTAIN_VIEWS.FRIENDLIES ||
-      nextView === CAPTAIN_VIEWS.PLAYERS ||
-      nextView === CAPTAIN_VIEWS.FRIENDLY_FIND
-    ) {
+    if (nextView === CAPTAIN_VIEWS.FRIENDLIES) {
+      url.searchParams.delete("view");
+      url.searchParams.set("tournament", DEFAULT_TOURNAMENT_ID);
+    } else if (nextView === CAPTAIN_VIEWS.PLAYERS || nextView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
       url.searchParams.set("view", nextView);
+      url.searchParams.delete("tournament");
     } else {
-      url.searchParams.set("view", CAPTAIN_VIEWS.FRIENDLIES);
+      url.searchParams.delete("view");
+      url.searchParams.set("tournament", DEFAULT_TOURNAMENT_ID);
     }
     const nextAssociation = normalizeCode(options.association || "");
     if (nextAssociation) url.searchParams.set("association", nextAssociation);
@@ -4806,7 +4804,6 @@
     try {
       clearFilters();
       setPageHeading(getImmediatePageHeading());
-      const isTestMode = isTestModeEnabled();
       const activeView = captainPageState.view;
       const isEditMode = captainPageState.mode === "edit";
       const isCreateMode = captainPageState.mode === "create";
@@ -4843,10 +4840,10 @@
           isCaptainUser = meIsCaptain;
         }
       } catch (_error) {
-        // keep defaults; access rules below will handle non-test mode
+        // keep defaults; access rules below will handle unauthorized state
       }
 
-      if (!isTestMode && !associationOverride) {
+      if (!associationOverride) {
         if (!isAdminUser && (!isCaptainUser || !captainAssociationCode)) {
           renderAccessMessage();
           return;
@@ -4934,7 +4931,10 @@
 
       const filtered = matches
         .filter((match) => {
-          if (isTestMode) return true;
+          if (activeView === CAPTAIN_VIEWS.FRIENDLIES) {
+            const tournamentId = String(match?.tournament_id || "").trim();
+            if (tournamentId !== DEFAULT_TOURNAMENT_ID) return false;
+          }
           if (isAdminUser) {
             if (activeView === CAPTAIN_VIEWS.FRIENDLIES && friendlyMatchesAdminAssociation) {
               const team1 = readMatchTeam1(match);
@@ -5044,9 +5044,7 @@
         } else {
           renderFriendlyFindList(friendlyFindRequests, teamsById, friendlyFindAssociationCode, captainsByTeam);
         }
-        if (isTestMode) {
-          hintEl.textContent = "test mode: all matches";
-        } else if (associationOverride) {
+        if (associationOverride) {
           hintEl.textContent = `association override: ${associationOverride}`;
         } else {
           hintEl.textContent = "";
@@ -5072,15 +5070,12 @@
           },
           "create"
         );
-        if (isTestMode) {
-          hintEl.textContent = "test mode: all matches";
-        }
         return;
       }
 
       if (activeView === CAPTAIN_VIEWS.FRIENDLIES && !filtered.length) {
         setPageHeading("Team Friendly Matches");
-        renderNoMatchesMessage(isTestMode ? "TEST MODE" : associationCode);
+        renderNoMatchesMessage(associationCode);
         return;
       }
 
@@ -5113,9 +5108,6 @@
           existingLineups = [];
         }
         renderMatchEditForm(matchToEdit, teamsById, { lockedTeamField, profiles: allProfiles, lineups: existingLineups }, "edit");
-        if (isTestMode) {
-          hintEl.textContent = "test mode: all matches";
-        }
         return;
       }
 
@@ -5127,11 +5119,9 @@
         const defaultAdminAssociationCode = normalizeCode(
           associationOverride || captainAssociationCode || Array.from(teamsById.keys())[0] || ""
         );
-        const playersAssociationCode = isTestMode
-          ? "UKR"
-          : isAdminUser
-            ? defaultAdminAssociationCode
-            : normalizeCode(associationCode || captainAssociationCode);
+        const playersAssociationCode = isAdminUser
+          ? defaultAdminAssociationCode
+          : normalizeCode(associationCode || captainAssociationCode);
         const playersAssociationName = String(
           teamsById.get(playersAssociationCode)?.name || playersAssociationCode || "Players"
         ).trim();
@@ -5158,12 +5148,12 @@
             if (playersAssociationCode) {
               return normalizeCode(profile?.association) === playersAssociationCode;
             }
-            return isTestMode;
+            return false;
           })
           .sort((a, b) => String(a?.bga_nickname || "").localeCompare(String(b?.bga_nickname || "")));
 
         if (!players.length) {
-          renderNoPlayersMessage(playersAssociationCode || (isTestMode ? "TEST MODE" : associationCode));
+          renderNoPlayersMessage(playersAssociationCode || associationCode);
           return;
         }
 
@@ -5194,9 +5184,7 @@
         }
       }
 
-      if (isTestMode) {
-        hintEl.textContent = "test mode: all matches";
-      } else if (associationOverride) {
+      if (associationOverride) {
         hintEl.textContent = `association override: ${associationOverride}`;
       } else {
         hintEl.textContent = "";

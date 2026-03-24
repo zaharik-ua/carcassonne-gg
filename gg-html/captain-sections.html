@@ -205,6 +205,7 @@
 
 <script>
 (function () {
+  const DEFAULT_TOURNAMENT_ID = "Friendly-Matches";
   const SECTION_ITEMS = [
     {
       view: "friendlies",
@@ -225,7 +226,14 @@
 
   function buildUrlWithView(view) {
     const url = new URL(window.location.href);
-    url.searchParams.set("view", String(view || "").trim());
+    const normalizedView = String(view || "").trim().toLowerCase();
+    if (normalizedView === "friendlies") {
+      url.searchParams.delete("view");
+      url.searchParams.set("tournament", DEFAULT_TOURNAMENT_ID);
+    } else {
+      url.searchParams.set("view", normalizedView);
+      url.searchParams.delete("tournament");
+    }
     url.searchParams.delete("edit");
     url.searchParams.delete("create");
     url.searchParams.delete("match_id");
@@ -235,6 +243,8 @@
 
   function getCurrentView() {
     const url = new URL(window.location.href);
+    const tournamentId = String(url.searchParams.get("tournament") || "").trim();
+    if (tournamentId === DEFAULT_TOURNAMENT_ID) return "friendlies";
     const view = String(url.searchParams.get("view") || "").trim().toLowerCase();
     return SECTION_ITEMS.some((item) => item.view === view) ? view : "friendlies";
   }
