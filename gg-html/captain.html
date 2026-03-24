@@ -1691,7 +1691,7 @@
     return title;
   }
 
-  function renderSectionBlock(titleText, sectionMatches, teamsById, lineupsByMatch, profilesById) {
+  function renderSectionBlock(titleText, sectionMatches, teamsById, lineupsByMatch, profilesById, options = {}) {
     const sectionWrap = document.createElement("div");
     sectionWrap.style.display = "grid";
     sectionWrap.style.gap = "6px";
@@ -1702,14 +1702,14 @@
     const list = document.createElement("div");
     list.className = "captain-list";
     sectionMatches.forEach((match) => {
-      list.appendChild(createMatchRow(match, teamsById, lineupsByMatch, profilesById));
+      list.appendChild(createMatchRow(match, teamsById, lineupsByMatch, profilesById, options));
     });
     sectionWrap.appendChild(list);
 
     return sectionWrap;
   }
 
-  function createMatchRow(match, teamsById, lineupsByMatch, profilesById) {
+  function createMatchRow(match, teamsById, lineupsByMatch, profilesById, options = {}) {
     const team1Id = readMatchTeam1(match);
     const team2Id = readMatchTeam2(match);
     const team1 = teamsById.get(team1Id) || null;
@@ -1857,7 +1857,7 @@
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "cp-edit-btn";
-    editBtn.textContent = "Edit";
+    editBtn.textContent = options.lineupsOnly === true ? "Lineups" : "Edit";
     editBtn.addEventListener("click", () => {
       openCaptainEdit(CAPTAIN_VIEWS.MATCHES, { matchId: String(match?.id || "") });
     });
@@ -1870,7 +1870,7 @@
     return matchWrap;
   }
 
-  function renderMatches(matches, teamsById, lineupsByMatch, profilesById) {
+  function renderMatches(matches, teamsById, lineupsByMatch, profilesById, options = {}) {
     countEl.textContent = "";
     contentEl.className = "";
     contentEl.innerHTML = "";
@@ -1886,10 +1886,10 @@
       .sort((a, b) => parseMatchTimeUtc(b) - parseMatchTimeUtc(a));
 
     if (ongoing.length > 0) {
-      contentEl.appendChild(renderSectionBlock("Ongoing", ongoing, teamsById, lineupsByMatch, profilesById));
+      contentEl.appendChild(renderSectionBlock("Ongoing", ongoing, teamsById, lineupsByMatch, profilesById, options));
     }
     if (finished.length > 0) {
-      contentEl.appendChild(renderSectionBlock("Finished", finished, teamsById, lineupsByMatch, profilesById));
+      contentEl.appendChild(renderSectionBlock("Finished", finished, teamsById, lineupsByMatch, profilesById, options));
     }
   }
 
@@ -3655,6 +3655,7 @@
     const isCreateMode = formMode === "create";
     const allProfiles = Array.isArray(editContext?.profiles) ? editContext.profiles : [];
     const currentTournament = editContext?.tournament || null;
+    const isLineupsOnly = editContext?.lineupsOnly === true;
     const currentTournamentId = String(
       currentTournament?.id || match?.tournament_id || captainPageState.tournamentId || ""
     ).trim();
@@ -3708,7 +3709,7 @@
     const saveBtn = document.createElement("button");
     saveBtn.type = "submit";
     saveBtn.className = "cp-btn cp-btn-primary";
-    saveBtn.textContent = "Save";
+    saveBtn.textContent = isLineupsOnly ? "Save Lineups" : "Save";
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.className = "cp-btn cp-btn-secondary";
@@ -3716,7 +3717,7 @@
     topActions.appendChild(saveBtn);
     topActions.appendChild(cancelBtn);
     let deleteBtn = null;
-    if (!isCreateMode) {
+    if (!isCreateMode && !isLineupsOnly) {
       deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
       deleteBtn.className = "cp-btn cp-btn-danger";
@@ -4048,6 +4049,15 @@
         { value: "Done", label: "Done" },
       ]
     );
+
+    const setNativeControlDisabled = (control, isDisabled) => {
+      if (!control) return;
+      control.disabled = !!isDisabled;
+      control.readOnly = !!isDisabled;
+      if (isDisabled) {
+        control.title = "Match fields are read-only for your tournament role.";
+      }
+    };
 
     const lineupsToggleWrap = document.createElement("div");
     lineupsToggleWrap.style.gridColumn = "1 / -1";
@@ -4594,6 +4604,20 @@
     duelsInput.addEventListener("change", syncLineupsByRules);
     refreshLocalTimes();
 
+    if (isLineupsOnly) {
+      team1Input.setDisabled(true);
+      team2Input.setDisabled(true);
+      lineupTypeInput.setDisabled(true);
+      deadlineHoursInput.setDisabled(true);
+      statusInput.setDisabled(true);
+      setNativeControlDisabled(timeInput, true);
+      setNativeControlDisabled(duelsInput, true);
+      setNativeControlDisabled(dw1Input, true);
+      setNativeControlDisabled(dw2Input, true);
+      setNativeControlDisabled(gw1Input, true);
+      setNativeControlDisabled(gw2Input, true);
+    }
+
     document.addEventListener("click", (event) => {
       if (!form.contains(event.target)) {
         dropdowns.forEach((dd) => dd.close());
@@ -4629,7 +4653,7 @@
       saveBtn.disabled = isSaving;
       cancelBtn.disabled = isSaving;
       if (deleteBtn) deleteBtn.disabled = isSaving;
-      saveBtn.textContent = isSaving ? "Saving..." : "Save";
+      saveBtn.textContent = isSaving ? "Saving..." : (isLineupsOnly ? "Save Lineups" : "Save");
     };
 
     cancelBtn.addEventListener("click", () => {
@@ -4752,24 +4776,26 @@
 
       setSaving(true);
       try {
-        const url = isCreateMode
-          ? MATCHES_URL
-          : `${MATCHES_URL}/${encodeURIComponent(String(match?.id || ""))}`;
-        const method = isCreateMode ? "POST" : "PATCH";
-        const response = await fetch(url, {
-          method,
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result?.ok) {
-          setError(result?.message || "Failed to save match.");
-          return;
+        if (!isLineupsOnly) {
+          const url = isCreateMode
+            ? MATCHES_URL
+            : `${MATCHES_URL}/${encodeURIComponent(String(match?.id || ""))}`;
+          const method = isCreateMode ? "POST" : "PATCH";
+          const response = await fetch(url, {
+            method,
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result?.ok) {
+            setError(result?.message || "Failed to save match.");
+            return;
+          }
         }
 
         if (lineupsEnabled) {
-          const matchIdForLineups = String(payload.id || match?.id || "").trim();
+          const matchIdForLineups = String(isLineupsOnly ? match?.id : (payload.id || match?.id || "")).trim();
           reindexLineupsState();
           const lineupRowsPayload = lineupsState.map((row, index) => ({
             id: String(row.id || buildLineupIdFromMatch(timeUtc, row.player1Id, row.player2Id)).trim(),
@@ -4804,7 +4830,7 @@
             return;
           }
         } else if (hadInitialLineups && !isCreateMode) {
-          const matchIdForLineups = String(payload.id || match?.id || "").trim();
+          const matchIdForLineups = String(isLineupsOnly ? match?.id : (payload.id || match?.id || "")).trim();
           const lineupsResp = await fetch(`${LINEUPS_URL}/bulk-upsert`, {
             method: "POST",
             credentials: "include",
@@ -4988,6 +5014,10 @@
       const currentTournament = activeView === CAPTAIN_VIEWS.MATCHES
         ? (tournamentsById.get(requestedTournamentId) || null)
         : null;
+      const currentTournamentRole = String(currentTournament?.access_role || "").trim().toLowerCase();
+      const canManageClosedTournamentMatches = Number(currentTournament?.access_type) === 2
+        ? (isAdminUser || currentTournamentRole === "admin")
+        : true;
       setPageHeading(getImmediatePageHeading(currentTournament));
       if (
         activeView === CAPTAIN_VIEWS.MATCHES
@@ -5045,11 +5075,15 @@
           addButtonEl.classList.add("cp-hidden");
         }
       } else if (activeView === CAPTAIN_VIEWS.MATCHES) {
-        addButtonEl.classList.remove("cp-hidden");
-        addButtonEl.textContent = "Create";
-        addButtonEl.onclick = () => {
-          openCaptainCreate(CAPTAIN_VIEWS.MATCHES);
-        };
+        if (canManageClosedTournamentMatches) {
+          addButtonEl.classList.remove("cp-hidden");
+          addButtonEl.textContent = "Create";
+          addButtonEl.onclick = () => {
+            openCaptainCreate(CAPTAIN_VIEWS.MATCHES);
+          };
+        } else {
+          addButtonEl.classList.add("cp-hidden");
+        }
         if (isCreateMode || isEditMode) {
           addButtonEl.classList.add("cp-hidden");
         }
@@ -5147,6 +5181,12 @@
           countEl.textContent = "";
           return;
         }
+        if (!canManageClosedTournamentMatches) {
+          contentEl.className = "captain-alert";
+          contentEl.textContent = "Your role in this closed tournament allows lineups management only.";
+          countEl.textContent = "";
+          return;
+        }
         if (!captainAssociationCode && !isAdminUser && Number(currentTournament?.access_type) !== 2) {
           contentEl.className = "captain-alert";
           contentEl.textContent = "Cannot detect your team association for creating a match.";
@@ -5217,7 +5257,13 @@
         renderMatchEditForm(
           matchToEdit,
           teamsById,
-          { lockedTeamField, profiles: allProfiles, lineups: existingLineups, tournament: currentTournament },
+          {
+            lockedTeamField,
+            profiles: allProfiles,
+            lineups: existingLineups,
+            tournament: currentTournament,
+            lineupsOnly: Number(currentTournament?.access_type) === 2 && !canManageClosedTournamentMatches,
+          },
           "edit"
         );
         return;
@@ -5225,7 +5271,9 @@
 
       if (activeView === CAPTAIN_VIEWS.MATCHES) {
         const lineupsByMatch = await loadLineupsByMatchIds(filtered);
-        renderMatches(filtered, teamsById, lineupsByMatch, profilesById);
+        renderMatches(filtered, teamsById, lineupsByMatch, profilesById, {
+          lineupsOnly: Number(currentTournament?.access_type) === 2 && !canManageClosedTournamentMatches,
+        });
       } else if (activeView === CAPTAIN_VIEWS.PLAYERS) {
         const defaultAdminAssociationCode = normalizeCode(
           associationOverride || captainAssociationCode || Array.from(teamsById.keys())[0] || ""

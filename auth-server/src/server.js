@@ -319,6 +319,17 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
         t.lineup_size,
         CASE
+          WHEN ? = 1 THEN ?
+          WHEN ? > 0 THEN (
+            SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
+            FROM tournament_access_users tau
+            WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
+              AND tau.user_id = ?
+            LIMIT 1
+          )
+          ELSE NULL
+        END AS access_role,
+        CASE
           WHEN ? = 1 THEN 1
           WHEN COALESCE(t.access_type, ?) = ? THEN 1
           WHEN ? > 0 AND EXISTS (
@@ -336,6 +347,11 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
     [
       TOURNAMENT_ACCESS_TYPES.OPEN,
       TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE,
+      isAdmin ? 1 : 0,
+      TOURNAMENT_ACCESS_ROLES.ADMIN,
+      userId,
+      TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+      userId,
       isAdmin ? 1 : 0,
       TOURNAMENT_ACCESS_TYPES.OPEN,
       TOURNAMENT_ACCESS_TYPES.OPEN,
@@ -363,6 +379,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         access_type: normalizeTournamentAccessType(row.access_type),
         lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
         lineup_size: normalizeTournamentLineupSize(row.lineup_size),
+        access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
         has_access: Number(row.has_access) === 1,
       });
     }
@@ -2588,6 +2605,17 @@ app.get("/tournaments", (req, res, next) => {
         COALESCE(t.access_type, ?) AS access_type,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
         t.lineup_size,
+        CASE
+          WHEN ? = 1 THEN ?
+          WHEN ? > 0 THEN (
+            SELECT COALESCE(NULLIF(lower(trim(tau_role.role)), ''), ?)
+            FROM tournament_access_users tau_role
+            WHERE upper(trim(tau_role.tournament_id)) = upper(trim(t.id))
+              AND tau_role.user_id = ?
+            LIMIT 1
+          )
+          ELSE NULL
+        END AS access_role,
         (
           SELECT GROUP_CONCAT(tau.user_id)
           FROM tournament_access_users tau
@@ -2606,10 +2634,23 @@ app.get("/tournaments", (req, res, next) => {
       ORDER BY t.id COLLATE NOCASE ASC
     `,
     includeAccessUsers
-      ? [TOURNAMENT_ACCESS_TYPES.OPEN, TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE]
+      ? [
+          TOURNAMENT_ACCESS_TYPES.OPEN,
+          TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE,
+          1,
+          TOURNAMENT_ACCESS_ROLES.ADMIN,
+          userId,
+          TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+          userId,
+        ]
       : [
           TOURNAMENT_ACCESS_TYPES.OPEN,
           TOURNAMENT_LINEUP_SIZE_TYPES.FLEXIBLE,
+          0,
+          TOURNAMENT_ACCESS_ROLES.ADMIN,
+          userId,
+          TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+          userId,
           TOURNAMENT_ACCESS_TYPES.OPEN,
           TOURNAMENT_ACCESS_TYPES.OPEN,
           userId,
@@ -2629,6 +2670,7 @@ app.get("/tournaments", (req, res, next) => {
             access_type: normalizeTournamentAccessType(row.access_type),
             lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
             lineup_size: normalizeTournamentLineupSize(row.lineup_size),
+            access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
           };
           if (includeAccessUsers) {
             tournament.access_user_ids = String(row.access_user_ids_csv || "")
@@ -3760,8 +3802,9 @@ app.post("/matches", (req, res) => {
     }
 
     const isClosedTournament = tournament.access_type === TOURNAMENT_ACCESS_TYPES.CLOSED;
+    const canManageClosedTournamentMatches = tournament.access_role === TOURNAMENT_ACCESS_ROLES.ADMIN;
     if (isClosedTournament) {
-      if (!tournament.has_access) {
+      if (!tournament.has_access || !canManageClosedTournamentMatches) {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
     } else {
@@ -4079,8 +4122,9 @@ app.patch("/matches/:id", (req, res) => {
           && userAssociation
           && (existingTeam1 === userAssociation || existingTeam2 === userAssociation);
         const canUseOpenTournamentRules = isAdmin || isTeamCaptain;
+        const canManageClosedTournamentMatches = tournament.access_role === TOURNAMENT_ACCESS_ROLES.ADMIN;
         const canEdit = tournament.access_type === TOURNAMENT_ACCESS_TYPES.CLOSED
-          ? tournament.has_access
+          ? (tournament.has_access && canManageClosedTournamentMatches)
           : (canUseOpenTournamentRules && (isAdmin || captainCanEdit));
         if (!canEdit) {
           return res.status(403).json({ ok: false, message: "Forbidden" });
@@ -4310,8 +4354,9 @@ app.delete("/matches/:id", (req, res) => {
           && userAssociation
           && (team1 === userAssociation || team2 === userAssociation);
         const canUseOpenTournamentRules = isAdmin || isTeamCaptain;
+        const canManageClosedTournamentMatches = tournament.access_role === TOURNAMENT_ACCESS_ROLES.ADMIN;
         const canDelete = tournament.access_type === TOURNAMENT_ACCESS_TYPES.CLOSED
-          ? tournament.has_access
+          ? (tournament.has_access && canManageClosedTournamentMatches)
           : (canUseOpenTournamentRules && (isAdmin || captainCanDelete));
         if (!canDelete) {
           return res.status(403).json({ ok: false, message: "Forbidden" });
