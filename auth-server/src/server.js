@@ -2476,7 +2476,7 @@ app.get("/tournaments", (req, res, next) => {
 });
 
 app.post("/tournaments", requireAdmin, (req, res) => {
-  const id = normalizeEntityId(req.body?.id);
+  const id = normalizeNullableText(req.body?.id);
   const name = String(req.body?.name || "").trim();
   const shortTitle = String(req.body?.short_title || "").trim() || null;
   const logo = String(req.body?.logo || "").trim() || null;

@@ -2086,8 +2086,9 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const rawTournamentId = String(idField.input.value || "").trim();
       const payload = {
-        id: normalizeEntityId(idField.input.value),
+        id: rawTournamentId,
         name: String(nameField.input.value || "").trim(),
         short_title: String(shortTitleField.input.value || "").trim(),
         logo: String(logoField.input.value || "").trim(),
@@ -2116,8 +2117,8 @@
       }
 
       const duplicate = state.tournaments.find((entry) => (
-        normalizeEntityId(entry.id) === payload.id
-        && normalizeEntityId(entry.id) !== normalizeEntityId(item?.id)
+        String(entry.id || "").trim().toLowerCase() === payload.id.toLowerCase()
+        && String(entry.id || "").trim().toLowerCase() !== String(item?.id || "").trim().toLowerCase()
       ));
       if (duplicate) {
         setStatus("Tournament id already exists.", true);
