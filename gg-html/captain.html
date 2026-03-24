@@ -5034,7 +5034,11 @@
         ? (
           captainPageState.associationOverrideTouched
             ? normalizeCode(associationOverride || "")
-            : normalizeCode(captainAssociationCode || "")
+            : (
+                Number(currentTournament?.access_type) === 2
+                  ? normalizeCode(captainAssociationCode || "")
+                  : ""
+              )
         )
         : "";
 

@@ -3746,6 +3746,7 @@ app.get("/matches", (req, res, next) => {
     (err, rows) => {
       if (err) return next(err);
       const filteredRows = (rows || []).filter((row) => {
+        if (isAdmin) return true;
         const tournamentAccessType = normalizeTournamentAccessType(row?.tournament_access_type);
         if (tournamentAccessType !== TOURNAMENT_ACCESS_TYPES.CLOSED) return true;
         const tournamentAccessRole = row?.tournament_access_role
