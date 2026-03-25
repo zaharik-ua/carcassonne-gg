@@ -2099,16 +2099,9 @@ app.post("/profiles", (req, res) => {
   if (profilePatch.status !== "Active" && profilePatch.status !== "Inactive") {
     return res.status(400).json({ ok: false, message: "status must be Active or Inactive" });
   }
-  if (!isAdmin) {
-    if (!isTeamCaptain || !userAssociation) {
-      return res.status(403).json({ ok: false, message: "Forbidden" });
-    }
-    if (association !== userAssociation) {
-      return res.status(403).json({ ok: false, message: "Captain can create profiles only in own association" });
-    }
-  }
+  const requestedTournamentId = normalizeText(payload.tournament_id);
 
-  return db.get(
+  const continueWithProfileCreate = () => db.get(
     `
       SELECT id, bga_nickname, deleted_at
       FROM profiles
@@ -2322,6 +2315,38 @@ app.post("/profiles", (req, res) => {
       );
     }
   );
+
+  if (isAdmin) {
+    return continueWithProfileCreate();
+  }
+
+  if (isTeamCaptain && userAssociation && association === userAssociation) {
+    return continueWithProfileCreate();
+  }
+
+  if (!requestedTournamentId) {
+    if (!isTeamCaptain || !userAssociation) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+    return res.status(403).json({ ok: false, message: "Captain can create profiles only in own association" });
+  }
+
+  return loadTournamentAccessForUser(requestedTournamentId, req.user, (tournamentErr, tournament) => {
+    if (tournamentErr) {
+      return res.status(500).json({ ok: false, message: "Failed to validate tournament access" });
+    }
+    if (
+      tournament?.access_type === TOURNAMENT_ACCESS_TYPES.CLOSED
+      && tournament?.has_access
+      && tournament?.access_role === TOURNAMENT_ACCESS_ROLES.ADMIN
+    ) {
+      return continueWithProfileCreate();
+    }
+    if (!isTeamCaptain || !userAssociation) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+    return res.status(403).json({ ok: false, message: "Captain can create profiles only in own association" });
+  });
 });
 
 app.get("/profiles/contacts/:playerId", (req, res) => {

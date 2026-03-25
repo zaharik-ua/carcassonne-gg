@@ -983,9 +983,8 @@
   const useTestData = window.location.hostname !== "carcassonne.gg";
   let currentTournamentId = useTestData
     //? "Asian-Cup-2025"
-    //? "CCOQ-2026"
     //? "OCFC-2025"
-    ? "BCL-2026S"
+    ? "CCOQ-2026"
     //? "UCOC-2026"
     //? "UCDTC-2025"
     : window.location.pathname.split('/').filter(Boolean).pop();
@@ -1256,6 +1255,15 @@
       return "Stage 1";
     }
     return "Stage 1";
+  }
+
+  function getStandingsFormatForTournamentStage(tournament, stageFilter = null) {
+    if (!tournament) return "";
+    const stage1Format = String(tournament.stage1_format || "").trim().toLowerCase();
+    const stage2Format = String(tournament.stage2_format || "").trim().toLowerCase();
+    if (stageFilter === "Stage 1") return stage1Format;
+    if (stageFilter === "Stage 2") return stage2Format;
+    return stage1Format || stage2Format;
   }
 
   function hasIncompleteStage1Matches(tournament) {
@@ -2022,12 +2030,10 @@
       .sort((a, b) => a.localeCompare(b));
 
     const isTeam = tournament && tournament.type === "TEAM";
-    const isCOCStyleLeague = !isTeam && (
-      (tournament && tournament.type === "COC") ||
-      (tournament && tournament.type === "League") ||
-      (tournament && tournament.tournament_format === "Leagues") ||
-      (tournament && tournament.main_tournament_id && tournamentsById[tournament.main_tournament_id]?.tournament_format === "Leagues")
-    );
+    const isIndividualStandings = !isTeam;
+    const standingsFormatLower = getStandingsFormatForTournamentStage(tournament, stageFilter);
+    const isSwissStandings = isIndividualStandings && standingsFormatLower === "swiss";
+    const isRoundRobinStandings = isIndividualStandings && standingsFormatLower === "round-robin";
     const isStage1Groups = (!!tournament && tournament.stage1_groups === "Groups" && (stageFilter ? stageFilter === "Stage 1" : true));
     const isRoundRobinGroups = !!tournament && (tournament.stage1_format === "Round-robin" || tournament.stage1_format === "Swiss");
     if (isStage1Groups && groupKeys.length) {
@@ -2064,6 +2070,57 @@
     function primaryMetricsEqual(a, b) {
       if (!a || !b) return false;
       return a.mw === b.mw && a.diff === b.diff && a.gw === b.gw;
+    }
+
+    function buildDerivedStatsForGroup(groupPlayers, groupKey) {
+      const statsMap = new Map();
+      const participantOpponents = new Map();
+
+      const addOpponent = (a, b) => {
+        if (!a || !b || a === b) return;
+        const set = participantOpponents.get(a) || new Set();
+        set.add(b);
+        participantOpponents.set(a, set);
+      };
+
+      groupPlayers.forEach(player => {
+        const key = String(player && player.player_id ? player.player_id : '');
+        if (!key) return;
+        statsMap.set(key, {
+          mp: Number(player.matches_played) || 0,
+          mw: Number(player.matches_won) || 0,
+          ml: Number(player.matches_lost) || 0,
+          gw: Number(player.games_won) || 0,
+          gl: Number(player.games_lost) || 0,
+          omw: 0,
+          ogd: 0,
+          ogw: 0
+        });
+      });
+
+      (duels || []).forEach(duel => {
+        if (!duel || duel.tournament_id !== tournamentId) return;
+        if (!isStageMatch(duel.stage || null)) return;
+        if (groupKey && duel.group && duel.group !== groupKey) return;
+        const id1 = String(duel.player1_id || '');
+        const id2 = String(duel.player2_id || '');
+        if (!statsMap.has(id1) || !statsMap.has(id2)) return;
+        addOpponent(id1, id2);
+        addOpponent(id2, id1);
+      });
+
+      statsMap.forEach((stat, key) => {
+        const opps = participantOpponents.get(key) || new Set();
+        opps.forEach(oppKey => {
+          const oppStat = statsMap.get(oppKey);
+          if (!oppStat) return;
+          stat.omw += oppStat.mw;
+          stat.ogd += oppStat.gw - oppStat.gl;
+          stat.ogw += oppStat.gw;
+        });
+      });
+
+      return statsMap;
     }
 
     function extractPositionValue(raw) {
@@ -2330,16 +2387,29 @@
           return (+b.games_won || 0) - (+a.games_won || 0);
         });
       } else {
+        const derivedStats = buildDerivedStatsForGroup(groupPlayers, group);
         groupPlayers.sort((a, b) => {
-          const mwDiff = (+b.matches_won || 0) - (+a.matches_won || 0);
+          const keyA = String(a.player_id || '');
+          const keyB = String(b.player_id || '');
+          const aStat = derivedStats.get(keyA) || {};
+          const bStat = derivedStats.get(keyB) || {};
+          const mwDiff = (bStat.mw || 0) - (aStat.mw || 0);
           if (mwDiff !== 0) return mwDiff;
-          const gameDiffA = ((+a.games_won || 0) - (+a.games_lost || 0));
-          const gameDiffB = ((+b.games_won || 0) - (+b.games_lost || 0));
-          const gdDiff = gameDiffB - gameDiffA;
+          const gdDiff = ((bStat.gw || 0) - (bStat.gl || 0)) - ((aStat.gw || 0) - (aStat.gl || 0));
           if (gdDiff !== 0) return gdDiff;
-          return (+b.games_won || 0) - (+a.games_won || 0);
+          const gwDiff = (bStat.gw || 0) - (aStat.gw || 0);
+          if (gwDiff !== 0) return gwDiff;
+          if (isSwissStandings) {
+            const omwDiff = (bStat.omw || 0) - (aStat.omw || 0);
+            if (omwDiff !== 0) return omwDiff;
+            const ogdDiff = (bStat.ogd || 0) - (aStat.ogd || 0);
+            if (ogdDiff !== 0) return ogdDiff;
+            const ogwDiff = (bStat.ogw || 0) - (aStat.ogw || 0);
+            if (ogwDiff !== 0) return ogwDiff;
+          }
+          return 0;
         });
-        if (isCOCStyleLeague) {
+        if (isRoundRobinStandings) {
           applyCOCHeadToHeadTiebreak(groupPlayers, group);
         }
       }
@@ -2544,7 +2614,9 @@
 
       renderStandingsTable();
 
-      const standingsColumns = isTeam ? ['MP','MW','ML','DW','DL','GW','GL'] : ['MP','MW','ML','GW','GL'];
+      const standingsColumns = isTeam
+        ? ['MP','MW','ML','DW','DL','GW','GL']
+        : (isSwissStandings ? ['MP','MW','ML','GW','GL','OMW','OGD','OGW'] : ['MP','MW','ML','GW','GL']);
       fullViewBtn.addEventListener('click', () => {
         openTableFullscreen({
           sourceTable: table,
@@ -2562,14 +2634,7 @@
     }
 
     // Explanatory text under the table
-    const stage1FormatLower = (tournament?.stage1_format || "").toLowerCase();
-    const stage2FormatLower = (tournament?.stage2_format || "").toLowerCase();
-    let formatLower = stage1FormatLower || stage2FormatLower;
-    if (stageFilter === "Stage 1") {
-      formatLower = stage1FormatLower;
-    } else if (stageFilter === "Stage 2") {
-      formatLower = stage2FormatLower;
-    }
+    const formatLower = standingsFormatLower;
 
     const rankLegend = getRankColorLegendForStage(tournament, stageFilter);
     if (rankLegend) {
@@ -2608,7 +2673,7 @@
         </p>
       `;
       container.appendChild(explanation);
-    } else if (tournament && tournament.type === "COC") {
+    } else if (isIndividualStandings) {
       explanation = document.createElement("div");
       explanation.className = "standings-order-info";
       if (formatLower === "swiss") {
@@ -2622,6 +2687,16 @@
           5. OGD (Opponents’ Games Difference) – combined difference between GW and GL of all opponents in the league stage<br>
           6. OGW (Opponents’ Games Won) – total number of games won by all opponents in the league stage<br>
           7. Player rating`;
+      } else if (formatLower === "round-robin") {
+        explanation.innerHTML = `
+          <br>MP: Matches Played MW: Matches Won ML: Matches Lost GW: Games Won GL: Games Lost<br>
+          <br>The final positions in the group will be determined in the following order:<br>
+          1. Number of MW<br>
+          2. The difference between GW and GL<br>
+          3. Number of GW<br>
+          4. Tiebreakers 1–3, but applied only to confrontations between players with equal results<br>
+          5. The difference in points scored in confrontations between players with equal results<br>
+          6. Random draw`;
       } else {
         explanation.innerHTML = `
           <br>MP: Matches Played MW: Matches Won ML: Matches Lost GW: Games Won GL: Games Lost<br>
@@ -3878,6 +3953,10 @@
     } = config || {};
     const tableTournamentId = tournamentId || currentTournamentId;
     const contextTournament = tournamentContext || currentTournament;
+    const standingsFormatLower = getStandingsFormatForTournamentStage(contextTournament, stageFilter);
+    const isIndividualStandings = !isTeam;
+    const isSwissStandings = isIndividualStandings && standingsFormatLower === 'swiss';
+    const isRoundRobinStandings = isIndividualStandings && standingsFormatLower === 'round-robin';
 
     const isStageMatchLocal = (val) => {
       if (!stageFilter) return true;
@@ -4131,15 +4210,8 @@
       return derived;
     }
 
-    const isCOCStyleLeague = !isTeam && (
-      (contextTournament && contextTournament.type === "COC") ||
-      (contextTournament && contextTournament.type === "League") ||
-      (contextTournament && contextTournament.tournament_format === "Leagues") ||
-      (contextTournament && contextTournament.main_tournament_id && tournamentsById[contextTournament.main_tournament_id]?.tournament_format === "Leagues")
-    );
-
     function applyCOCHeadToHeadForSortedPlayers(sortedPlayers, derivedStats) {
-      if (!isCOCStyleLeague || !Array.isArray(sortedPlayers) || sortedPlayers.length < 2) return sortedPlayers;
+      if (!isRoundRobinStandings || !Array.isArray(sortedPlayers) || sortedPlayers.length < 2) return sortedPlayers;
 
       const getPlayerKey = (player) => String(player && player.player_id ? player.player_id : '');
       const getPrimaryMetrics = (player) => {
@@ -4246,13 +4318,16 @@
         if (gdDiff !== 0) return gdDiff;
         const gwDiff = (bStat.gw || 0) - (aStat.gw || 0);
         if (gwDiff !== 0) return gwDiff;
-        const omwDiff = (bStat.omw || 0) - (aStat.omw || 0);
-        if (omwDiff !== 0) return omwDiff;
-        const ogdDiff = (bStat.ogd || 0) - (aStat.ogd || 0);
-        if (ogdDiff !== 0) return ogdDiff;
-        return (bStat.ogw || 0) - (aStat.ogw || 0);
+        if (isSwissStandings) {
+          const omwDiff = (bStat.omw || 0) - (aStat.omw || 0);
+          if (omwDiff !== 0) return omwDiff;
+          const ogdDiff = (bStat.ogd || 0) - (aStat.ogd || 0);
+          if (ogdDiff !== 0) return ogdDiff;
+          return (bStat.ogw || 0) - (aStat.ogw || 0);
+        }
+        return 0;
       });
-      if (isCOCStyleLeague && !applySim) {
+      if (isRoundRobinStandings && !applySim) {
         return applyCOCHeadToHeadForSortedPlayers(sorted, derivedStats);
       }
       return sorted;
@@ -4422,7 +4497,7 @@
         tr.appendChild(tdName);
 
         const st = derivedStats.get(rowKey) || {};
-        const mapVal = { MP: 'mp', MW: 'mw', ML: 'ml', DW: 'dw', DL: 'dl', GW: 'gw', GL: 'gl' };
+        const mapVal = { MP: 'mp', MW: 'mw', ML: 'ml', DW: 'dw', DL: 'dl', GW: 'gw', GL: 'gl', OMW: 'omw', OGD: 'ogd', OGW: 'ogw' };
         standingsColumns.forEach(lbl => {
           const td = document.createElement('td');
           td.textContent = String(st[mapVal[lbl]] ?? '');
