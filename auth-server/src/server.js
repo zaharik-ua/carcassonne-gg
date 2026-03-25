@@ -211,6 +211,22 @@ function normalizeNullableText(value) {
   return normalized || null;
 }
 
+function normalizePositiveInteger(value) {
+  const normalized = Number.parseInt(String(value ?? "").trim(), 10);
+  return Number.isInteger(normalized) && normalized > 0 ? normalized : null;
+}
+
+function normalizeIntegerOrNull(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const normalized = Number.parseInt(raw, 10);
+  return Number.isInteger(normalized) ? normalized : null;
+}
+
+function hasNonEmptyValue(value) {
+  return String(value ?? "").trim() !== "";
+}
+
 function normalizeTournamentAccessType(value) {
   const normalized = Number.parseInt(String(value ?? "").trim(), 10);
   return normalized === TOURNAMENT_ACCESS_TYPES.CLOSED
@@ -1217,6 +1233,80 @@ function ensureLineupsSchema() {
   });
 }
 
+function ensureDuelFormatsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS duel_formats (
+      format TEXT PRIMARY KEY,
+      games_to_win INTEGER NOT NULL,
+      minutes_to_play INTEGER NOT NULL
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure duel_formats schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(duel_formats)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect duel_formats schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "duel_formats", "games_to_win", "INTEGER NOT NULL DEFAULT 1");
+      addColumnIfMissing(columns, "duel_formats", "minutes_to_play", "INTEGER NOT NULL DEFAULT 60");
+    });
+  });
+}
+
+function ensureGamesSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS games (
+      id TEXT PRIMARY KEY,
+      lineup_id TEXT NOT NULL,
+      bga_table_id TEXT,
+      game_number INTEGER NOT NULL,
+      player_1_score INTEGER,
+      player_2_score INTEGER,
+      player_1_rank INTEGER,
+      player_2_rank INTEGER,
+      status TEXT,
+      bga_flags TEXT
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure games schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(games)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect games schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "games", "bga_table_id", "TEXT");
+      addColumnIfMissing(columns, "games", "game_number", "INTEGER NOT NULL DEFAULT 1");
+      addColumnIfMissing(columns, "games", "player_1_score", "INTEGER");
+      addColumnIfMissing(columns, "games", "player_2_score", "INTEGER");
+      addColumnIfMissing(columns, "games", "player_1_rank", "INTEGER");
+      addColumnIfMissing(columns, "games", "player_2_rank", "INTEGER");
+      addColumnIfMissing(columns, "games", "status", "TEXT");
+      addColumnIfMissing(columns, "games", "bga_flags", "TEXT");
+    });
+
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_games_lineup_id ON games(lineup_id)",
+      (indexErr) => {
+        if (indexErr) console.error("Failed to ensure idx_games_lineup_id", indexErr);
+      }
+    );
+    db.run(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_games_bga_table_id ON games(bga_table_id)",
+      (indexErr) => {
+        if (indexErr) console.error("Failed to ensure idx_games_bga_table_id", indexErr);
+      }
+    );
+  });
+}
+
 function seedTeamTimezones() {
   const entries = Object.entries(DEFAULT_TEAM_TIMEZONES);
   if (!entries.length) return;
@@ -1751,6 +1841,8 @@ db.serialize(() => {
           ensureAssociationsSchema();
           ensureMatchesSchema();
           ensureLineupsSchema();
+          ensureDuelFormatsSchema();
+          ensureGamesSchema();
           ensureTeamsSchema();
           ensureTournamentsSchema();
           ensureTournamentAccessUsersSchema();
@@ -2614,6 +2706,139 @@ app.delete("/associations/:id", requireAdmin, (req, res) => {
   );
 });
 
+app.get("/duel-formats", requireAdmin, (_req, res, next) => {
+  db.all(
+    `
+      SELECT
+        format,
+        games_to_win,
+        minutes_to_play
+      FROM duel_formats
+      ORDER BY format COLLATE NOCASE ASC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, duel_formats: rows || [] });
+    }
+  );
+});
+
+app.post("/duel-formats", requireAdmin, (req, res) => {
+  const format = normalizeNullableText(req.body?.format);
+  const gamesToWin = normalizePositiveInteger(req.body?.games_to_win);
+  const minutesToPlay = normalizePositiveInteger(req.body?.minutes_to_play);
+
+  if (!format) {
+    return res.status(400).json({ ok: false, message: "format is required" });
+  }
+  if (!gamesToWin) {
+    return res.status(400).json({ ok: false, message: "games_to_win must be a positive integer" });
+  }
+  if (!minutesToPlay) {
+    return res.status(400).json({ ok: false, message: "minutes_to_play must be a positive integer" });
+  }
+
+  return db.get(
+    "SELECT format FROM duel_formats WHERE upper(trim(format)) = upper(?) LIMIT 1",
+    [format],
+    (dupErr, dupRow) => {
+      if (dupErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate duel format uniqueness" });
+      }
+      if (dupRow) {
+        return res.status(409).json({ ok: false, message: "Duel format already exists" });
+      }
+
+      return db.run(
+        `
+          INSERT INTO duel_formats (format, games_to_win, minutes_to_play)
+          VALUES (?, ?, ?)
+        `,
+        [format, gamesToWin, minutesToPlay],
+        (insertErr) => {
+          if (insertErr) {
+            if (String(insertErr.message || "").includes("UNIQUE")) {
+              return res.status(409).json({ ok: false, message: "Duel format already exists" });
+            }
+            return res.status(500).json({ ok: false, message: "Failed to create duel format" });
+          }
+
+          return db.get(
+            `
+              SELECT format, games_to_win, minutes_to_play
+              FROM duel_formats
+              WHERE upper(trim(format)) = upper(?)
+              LIMIT 1
+            `,
+            [format],
+            (selectErr, row) => {
+              if (selectErr) {
+                return res.status(500).json({ ok: false, message: "Failed to load duel format" });
+              }
+              return res.json({ ok: true, duel_format: row || null });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+app.patch("/duel-formats/:format", requireAdmin, (req, res) => {
+  const format = normalizeNullableText(req.params.format);
+  const payloadFormat = normalizeNullableText(req.body?.format);
+  const gamesToWin = normalizePositiveInteger(req.body?.games_to_win);
+  const minutesToPlay = normalizePositiveInteger(req.body?.minutes_to_play);
+
+  if (!format) {
+    return res.status(400).json({ ok: false, message: "Invalid duel format" });
+  }
+  if (payloadFormat && payloadFormat.toLowerCase() !== format.toLowerCase()) {
+    return res.status(400).json({ ok: false, message: "format cannot be changed" });
+  }
+  if (!gamesToWin) {
+    return res.status(400).json({ ok: false, message: "games_to_win must be a positive integer" });
+  }
+  if (!minutesToPlay) {
+    return res.status(400).json({ ok: false, message: "minutes_to_play must be a positive integer" });
+  }
+
+  return db.run(
+    `
+      UPDATE duel_formats
+      SET
+        games_to_win = ?,
+        minutes_to_play = ?
+      WHERE upper(trim(format)) = upper(?)
+    `,
+    [gamesToWin, minutesToPlay, format],
+    function onUpdate(err) {
+      if (err) {
+        return res.status(500).json({ ok: false, message: "Failed to update duel format" });
+      }
+      if (!this || this.changes === 0) {
+        return res.status(404).json({ ok: false, message: "Duel format not found" });
+      }
+
+      return db.get(
+        `
+          SELECT format, games_to_win, minutes_to_play
+          FROM duel_formats
+          WHERE upper(trim(format)) = upper(?)
+          LIMIT 1
+        `,
+        [format],
+        (selectErr, row) => {
+          if (selectErr) {
+            return res.status(500).json({ ok: false, message: "Failed to load duel format" });
+          }
+          return res.json({ ok: true, duel_format: row || null });
+        }
+      );
+    }
+  );
+});
+
 app.get("/tournaments", (req, res, next) => {
   const includeAccessUsers = Number(req.user?.admin) === 1;
   const userId = getTournamentAccessUserId(req.user);
@@ -3151,6 +3376,317 @@ app.patch("/teams/:id", requireAdmin, (req, res) => {
                     return res.status(500).json({ ok: false, message: "Failed to load team" });
                   }
                   return res.json({ ok: true, team: row || null });
+                }
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+app.get("/games", requireAdmin, (_req, res, next) => {
+  db.all(
+    `
+      SELECT
+        id,
+        lineup_id,
+        bga_table_id,
+        game_number,
+        player_1_score,
+        player_2_score,
+        player_1_rank,
+        player_2_rank,
+        status,
+        bga_flags
+      FROM games
+      ORDER BY lineup_id COLLATE NOCASE ASC, game_number ASC, id ASC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, games: rows || [] });
+    }
+  );
+});
+
+app.post("/games", requireAdmin, (req, res) => {
+  const id = normalizeNullableText(req.body?.id);
+  const lineupId = normalizeNullableText(req.body?.lineup_id);
+  const bgaTableId = normalizeNullableText(req.body?.bga_table_id);
+  const gameNumber = normalizePositiveInteger(req.body?.game_number);
+  const player1Score = normalizeIntegerOrNull(req.body?.player_1_score);
+  const player2Score = normalizeIntegerOrNull(req.body?.player_2_score);
+  const player1Rank = normalizePositiveInteger(req.body?.player_1_rank);
+  const player2Rank = normalizePositiveInteger(req.body?.player_2_rank);
+  const status = normalizeNullableText(req.body?.status);
+  const bgaFlags = normalizeNullableText(req.body?.bga_flags);
+
+  if (!id) {
+    return res.status(400).json({ ok: false, message: "id is required" });
+  }
+  if (!lineupId) {
+    return res.status(400).json({ ok: false, message: "lineup_id is required" });
+  }
+  if (!gameNumber) {
+    return res.status(400).json({ ok: false, message: "game_number must be a positive integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_1_score) && player1Score === null) {
+    return res.status(400).json({ ok: false, message: "player_1_score must be an integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_2_score) && player2Score === null) {
+    return res.status(400).json({ ok: false, message: "player_2_score must be an integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_1_rank) && !player1Rank) {
+    return res.status(400).json({ ok: false, message: "player_1_rank must be a positive integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_2_rank) && !player2Rank) {
+    return res.status(400).json({ ok: false, message: "player_2_rank must be a positive integer" });
+  }
+
+  return db.get(
+    "SELECT id FROM lineups WHERE upper(trim(id)) = upper(?) AND deleted_at IS NULL LIMIT 1",
+    [lineupId],
+    (lineupErr, lineupRow) => {
+      if (lineupErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate lineup" });
+      }
+      if (!lineupRow) {
+        return res.status(400).json({ ok: false, message: "lineup_id not found" });
+      }
+
+      return db.get(
+        `
+          SELECT id
+          FROM games
+          WHERE upper(trim(id)) = upper(?)
+             OR (
+               ? IS NOT NULL
+               AND trim(COALESCE(bga_table_id, '')) <> ''
+               AND trim(COALESCE(bga_table_id, '')) = trim(?)
+             )
+          LIMIT 1
+        `,
+        [id, bgaTableId, bgaTableId],
+        (dupErr, dupRow) => {
+          if (dupErr) {
+            return res.status(500).json({ ok: false, message: "Failed to validate game uniqueness" });
+          }
+          if (dupRow) {
+            return res.status(409).json({ ok: false, message: "Game with this id or BGA table already exists" });
+          }
+
+          return db.run(
+            `
+              INSERT INTO games (
+                id,
+                lineup_id,
+                bga_table_id,
+                game_number,
+                player_1_score,
+                player_2_score,
+                player_1_rank,
+                player_2_rank,
+                status,
+                bga_flags
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+            [
+              id,
+              lineupId,
+              bgaTableId,
+              gameNumber,
+              player1Score,
+              player2Score,
+              player1Rank,
+              player2Rank,
+              status,
+              bgaFlags,
+            ],
+            (insertErr) => {
+              if (insertErr) {
+                if (String(insertErr.message || "").includes("UNIQUE")) {
+                  return res.status(409).json({ ok: false, message: "Game with this id or BGA table already exists" });
+                }
+                return res.status(500).json({ ok: false, message: "Failed to create game" });
+              }
+
+              return db.get(
+                `
+                  SELECT
+                    id,
+                    lineup_id,
+                    bga_table_id,
+                    game_number,
+                    player_1_score,
+                    player_2_score,
+                    player_1_rank,
+                    player_2_rank,
+                    status,
+                    bga_flags
+                  FROM games
+                  WHERE upper(trim(id)) = upper(?)
+                  LIMIT 1
+                `,
+                [id],
+                (selectErr, row) => {
+                  if (selectErr) {
+                    return res.status(500).json({ ok: false, message: "Failed to load game" });
+                  }
+                  return res.json({ ok: true, game: row || null });
+                }
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+app.patch("/games/:id", requireAdmin, (req, res) => {
+  const gameId = normalizeNullableText(req.params.id);
+  const payloadId = normalizeNullableText(req.body?.id);
+  const lineupId = normalizeNullableText(req.body?.lineup_id);
+  const bgaTableId = normalizeNullableText(req.body?.bga_table_id);
+  const gameNumber = normalizePositiveInteger(req.body?.game_number);
+  const player1Score = normalizeIntegerOrNull(req.body?.player_1_score);
+  const player2Score = normalizeIntegerOrNull(req.body?.player_2_score);
+  const player1Rank = normalizePositiveInteger(req.body?.player_1_rank);
+  const player2Rank = normalizePositiveInteger(req.body?.player_2_rank);
+  const status = normalizeNullableText(req.body?.status);
+  const bgaFlags = normalizeNullableText(req.body?.bga_flags);
+
+  if (!gameId) {
+    return res.status(400).json({ ok: false, message: "Invalid game id" });
+  }
+  if (payloadId && payloadId.toLowerCase() !== gameId.toLowerCase()) {
+    return res.status(400).json({ ok: false, message: "id cannot be changed" });
+  }
+  if (!lineupId) {
+    return res.status(400).json({ ok: false, message: "lineup_id is required" });
+  }
+  if (!gameNumber) {
+    return res.status(400).json({ ok: false, message: "game_number must be a positive integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_1_score) && player1Score === null) {
+    return res.status(400).json({ ok: false, message: "player_1_score must be an integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_2_score) && player2Score === null) {
+    return res.status(400).json({ ok: false, message: "player_2_score must be an integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_1_rank) && !player1Rank) {
+    return res.status(400).json({ ok: false, message: "player_1_rank must be a positive integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_2_rank) && !player2Rank) {
+    return res.status(400).json({ ok: false, message: "player_2_rank must be a positive integer" });
+  }
+
+  return db.get(
+    "SELECT id FROM lineups WHERE upper(trim(id)) = upper(?) AND deleted_at IS NULL LIMIT 1",
+    [lineupId],
+    (lineupErr, lineupRow) => {
+      if (lineupErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate lineup" });
+      }
+      if (!lineupRow) {
+        return res.status(400).json({ ok: false, message: "lineup_id not found" });
+      }
+
+      return db.get(
+        "SELECT id FROM games WHERE upper(trim(id)) = upper(?) LIMIT 1",
+        [gameId],
+        (rowErr, currentRow) => {
+          if (rowErr) {
+            return res.status(500).json({ ok: false, message: "Failed to load game" });
+          }
+          if (!currentRow) {
+            return res.status(404).json({ ok: false, message: "Game not found" });
+          }
+
+          return db.get(
+            `
+              SELECT id
+              FROM games
+              WHERE ? IS NOT NULL
+                AND trim(COALESCE(bga_table_id, '')) <> ''
+                AND trim(COALESCE(bga_table_id, '')) = trim(?)
+                AND upper(trim(id)) <> upper(?)
+              LIMIT 1
+            `,
+            [bgaTableId, bgaTableId, gameId],
+            (dupErr, dupRow) => {
+              if (dupErr) {
+                return res.status(500).json({ ok: false, message: "Failed to validate game uniqueness" });
+              }
+              if (dupRow) {
+                return res.status(409).json({ ok: false, message: "Game with this BGA table already exists" });
+              }
+
+              return db.run(
+                `
+                  UPDATE games
+                  SET
+                    lineup_id = ?,
+                    bga_table_id = ?,
+                    game_number = ?,
+                    player_1_score = ?,
+                    player_2_score = ?,
+                    player_1_rank = ?,
+                    player_2_rank = ?,
+                    status = ?,
+                    bga_flags = ?
+                  WHERE upper(trim(id)) = upper(?)
+                `,
+                [
+                  lineupId,
+                  bgaTableId,
+                  gameNumber,
+                  player1Score,
+                  player2Score,
+                  player1Rank,
+                  player2Rank,
+                  status,
+                  bgaFlags,
+                  gameId,
+                ],
+                function onUpdate(err) {
+                  if (err) {
+                    if (String(err.message || "").includes("UNIQUE")) {
+                      return res.status(409).json({ ok: false, message: "Game with this BGA table already exists" });
+                    }
+                    return res.status(500).json({ ok: false, message: "Failed to update game" });
+                  }
+                  if (!this || this.changes === 0) {
+                    return res.status(404).json({ ok: false, message: "Game not found" });
+                  }
+
+                  return db.get(
+                    `
+                      SELECT
+                        id,
+                        lineup_id,
+                        bga_table_id,
+                        game_number,
+                        player_1_score,
+                        player_2_score,
+                        player_1_rank,
+                        player_2_rank,
+                        status,
+                        bga_flags
+                      FROM games
+                      WHERE upper(trim(id)) = upper(?)
+                      LIMIT 1
+                    `,
+                    [gameId],
+                    (selectErr, row) => {
+                      if (selectErr) {
+                        return res.status(500).json({ ok: false, message: "Failed to load game" });
+                      }
+                      return res.json({ ok: true, game: row || null });
+                    }
+                  );
                 }
               );
             }

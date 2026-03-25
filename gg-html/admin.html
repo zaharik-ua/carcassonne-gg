@@ -553,6 +553,7 @@
   const AUDIT_TRAIL_URL = `${AUTH_BASE}/audit-trail`;
   const MATCHES_URL = `${AUTH_BASE}/matches`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
+  const DUEL_FORMATS_URL = `${AUTH_BASE}/duel-formats`;
 
   const SECTION_CONFIG = {
     associations: {
@@ -575,6 +576,13 @@
       buttonLabel: "Edit",
       createLabel: "Create",
       load: () => apiJson(TOURNAMENTS_URL, { method: "GET" }).then((data) => data.tournaments || []),
+    },
+    duelFormats: {
+      key: "duelFormats",
+      title: "Duel Formats",
+      buttonLabel: "Edit",
+      createLabel: "Create",
+      load: () => apiJson(DUEL_FORMATS_URL, { method: "GET" }).then((data) => data.duel_formats || []),
     },
     users: {
       key: "users",
@@ -630,6 +638,7 @@
     associations: [],
     teams: [],
     tournaments: [],
+    duelFormats: [],
     matchesReference: [],
     profilesPublic: [],
     users: [],
@@ -2336,6 +2345,109 @@
     }
   }
 
+  function openDuelFormatForm(mode, item, anchorRow) {
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+
+    const formatField = createTextRow("format", item?.format || "", { readOnly: mode === "edit" });
+    const gamesToWinField = createNumberRow("games_to_win", item?.games_to_win || "");
+    const minutesToPlayField = createNumberRow("minutes_to_play", item?.minutes_to_play || "");
+
+    form.appendChild(formatField.row);
+    form.appendChild(gamesToWinField.row);
+    form.appendChild(minutesToPlayField.row);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = mode === "create" ? "Create" : "Save";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => {
+      if (mode === "create") {
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+      } else {
+        closeInlineForm();
+      }
+      setStatus("", false);
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = {
+        format: String(formatField.input.value || "").trim(),
+        games_to_win: Number.parseInt(String(gamesToWinField.input.value || "").trim(), 10),
+        minutes_to_play: Number.parseInt(String(minutesToPlayField.input.value || "").trim(), 10),
+      };
+
+      if (!payload.format) {
+        setStatus("Format is required.", true);
+        return;
+      }
+      if (!Number.isInteger(payload.games_to_win) || payload.games_to_win <= 0) {
+        setStatus("games_to_win must be a positive integer.", true);
+        return;
+      }
+      if (!Number.isInteger(payload.minutes_to_play) || payload.minutes_to_play <= 0) {
+        setStatus("minutes_to_play must be a positive integer.", true);
+        return;
+      }
+
+      const duplicate = state.duelFormats.find((entry) => (
+        String(entry?.format || "").trim().toLowerCase() === payload.format.toLowerCase()
+        && String(entry?.format || "").trim().toLowerCase() !== String(item?.format || "").trim().toLowerCase()
+      ));
+      if (duplicate) {
+        setStatus("Duel format already exists.", true);
+        return;
+      }
+
+      try {
+        if (mode === "create") {
+          await apiJson(DUEL_FORMATS_URL, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Duel format created.", false);
+        } else {
+          await apiJson(`${DUEL_FORMATS_URL}/${encodeURIComponent(item.format)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Duel format updated.", false);
+        }
+        if (mode === "create") {
+          sectionForm.classList.add("hidden");
+          sectionForm.innerHTML = "";
+        } else {
+          closeInlineForm();
+        }
+        await loadSectionData("duelFormats");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to save duel format.", true);
+      }
+    });
+
+    if (mode === "create") {
+      closeInlineForm();
+      showCreateForm(form);
+    } else if (anchorRow) {
+      mountDetailForm(form, anchorRow);
+    }
+  }
+
   function openUserView(item, anchorRow) {
     const view = document.createElement("div");
     view.className = "cp-edit-form";
@@ -2508,6 +2620,31 @@
     });
   }
 
+  function renderDuelFormats() {
+    sectionTitle.textContent = "Duel Formats";
+    sectionCreateBtn.textContent = "Create";
+    sectionCreateBtn.classList.remove("hidden");
+    sectionCreateBtn.onclick = () => openDuelFormatForm("create", null, null);
+
+    if (!state.duelFormats.length) {
+      renderListEmpty("No duel formats yet.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    state.duelFormats.forEach((item) => {
+      sectionList.appendChild(createListRow({
+        imageSrc: "",
+        imageAlt: item.format,
+        imageRound: false,
+        title: item.format || "-",
+        subtitle: `${item.games_to_win} to win • ${item.minutes_to_play} min`,
+        buttonLabel: "Edit",
+        onClick: (row) => openDuelFormatForm("edit", item, row),
+      }));
+    });
+  }
+
   function renderUsers() {
     sectionTitle.textContent = "Users";
     sectionCreateBtn.classList.add("hidden");
@@ -2597,6 +2734,7 @@
     if (state.activeSection === "associations") renderAssociations();
     if (state.activeSection === "teams") renderTeams();
     if (state.activeSection === "tournaments") renderTournaments();
+    if (state.activeSection === "duelFormats") renderDuelFormats();
     if (state.activeSection === "users") renderUsers();
     if (state.activeSection === "auditTrail") renderAuditTrail();
   }

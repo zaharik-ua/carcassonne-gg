@@ -107,6 +107,10 @@
     text-overflow: ellipsis;
   }
 
+  .captain-sections-dd-text.is-placeholder {
+    color: #8b95a3;
+  }
+
   .captain-sections-dd-chevron {
     display: inline-flex;
     align-items: center;
@@ -263,7 +267,7 @@
     if (!items.length) return;
 
     const currentSelectionKey = getCurrentSelectionKey();
-    let selected = items.find((item) => item.key === currentSelectionKey) || items[0];
+    let selected = items.find((item) => item.key === currentSelectionKey) || null;
 
     const dd = document.createElement("div");
     dd.className = "captain-sections-dd";
@@ -300,8 +304,17 @@
     menu.className = "captain-sections-dd-menu";
 
     const renderSelected = () => {
+      if (!selected) {
+        selectedIcon.removeAttribute("src");
+        selectedIcon.style.display = "none";
+        selectedText.textContent = "Select";
+        selectedText.classList.add("is-placeholder");
+        return;
+      }
       selectedIcon.src = selected.icon;
+      selectedIcon.style.display = "";
       selectedText.textContent = selected.label;
+      selectedText.classList.remove("is-placeholder");
     };
 
     const closeMenu = () => {
@@ -320,7 +333,7 @@
       const option = document.createElement("button");
       option.type = "button";
       option.className = "captain-sections-dd-option";
-      if (item.key === selected.key) option.classList.add("active");
+      if (selected && item.key === selected.key) option.classList.add("active");
 
       const icon = document.createElement("img");
       icon.className = "captain-sections-dd-icon";
@@ -334,7 +347,7 @@
       option.appendChild(icon);
       option.appendChild(text);
       option.addEventListener("click", () => {
-        if (item.key === selected.key) {
+        if (selected && item.key === selected.key) {
           closeMenu();
           return;
         }
@@ -387,6 +400,9 @@
     renderDesktop(items);
     renderMobile(items);
   }
+
+  window.addEventListener("popstate", init);
+  window.addEventListener("captain-url-change", init);
 
   init();
 })();

@@ -57,6 +57,62 @@
     font-size: 14px;
   }
 
+  .captain-home-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .captain-home-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 76px;
+    padding: 14px 16px;
+    border: 1px solid #d6dbe3;
+    border-radius: 8px;
+    background: #fff;
+    color: #2f3947;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+
+  .captain-home-card:hover {
+    border-color: #aeb7c4;
+    box-shadow: 0 10px 24px rgba(15, 28, 48, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .captain-home-card img {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .captain-home-card-text {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .captain-home-card-title {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #223040;
+  }
+
+  .captain-home-card-subtitle {
+    font-size: 11px;
+    line-height: 1.3;
+    color: #667286;
+  }
+
   .captain-list {
     background: #fff;
     border: 1px solid var(--border);
@@ -936,6 +992,10 @@
   }
 
   @media (max-width: 600px) {
+    .captain-home-grid {
+      grid-template-columns: 1fr;
+    }
+
     .cp-match-edit-form {
       padding-left: 5px;
       padding-right: 5px;
@@ -1048,6 +1108,22 @@
     PLAYERS: "players",
     FRIENDLY_FIND: "friendly-find",
   };
+  const CAPTAIN_STATIC_SECTION_ITEMS = [
+    {
+      type: "view",
+      view: CAPTAIN_VIEWS.PLAYERS,
+      label: "Players",
+      subtitle: "Manage player profiles",
+      icon: "https://carcassonne.gg/gallery/active.png",
+    },
+    {
+      type: "view",
+      view: CAPTAIN_VIEWS.FRIENDLY_FIND,
+      label: "Friendly Find",
+      subtitle: "Create or browse friendly match requests",
+      icon: "https://carcassonne.gg/gallery/calendar.png",
+    },
+  ];
   const CONTACT_ICONS = {
     telegram: "https://carcassonne.gg/gallery/telegram.png",
     whatsapp: "https://carcassonne.gg/gallery/whatsapp.png",
@@ -1127,7 +1203,7 @@
     const raw = String(params.get("view") || "").trim().toLowerCase();
     if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
     if (raw === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
-    return CAPTAIN_VIEWS.MATCHES;
+    return "";
   }
 
   function getTournamentIdFromUrl() {
@@ -1198,7 +1274,8 @@
       const raw = String(captainPageState.view || "").trim().toLowerCase();
       if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
       if (raw === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
-      return CAPTAIN_VIEWS.MATCHES;
+      if (raw === CAPTAIN_VIEWS.MATCHES) return CAPTAIN_VIEWS.MATCHES;
+      return "";
     })();
     captainPageState.tournamentId = String(captainPageState.tournamentId || "").trim();
     captainPageState.associationOverride = normalizeCode(captainPageState.associationOverride);
@@ -1242,6 +1319,12 @@
     });
     if (replace) window.history.replaceState({}, "", nextUrl);
     else window.history.pushState({}, "", nextUrl);
+    window.dispatchEvent(new CustomEvent("captain-url-change", {
+      detail: {
+        view: captainPageState.view,
+        tournamentId: captainPageState.tournamentId,
+      },
+    }));
   }
 
   function applyCaptainPageState(nextState = {}, options = {}) {
@@ -1307,6 +1390,76 @@
     if (!filtersEl) return;
     filtersEl.innerHTML = "";
     filtersEl.classList.add("cp-hidden");
+  }
+
+  function renderCaptainHomeSelection(items) {
+    const normalizedItems = Array.isArray(items) ? items.filter((item) => item && item.label) : [];
+    setPageHeading("Captain Panel");
+    countEl.textContent = normalizedItems.length ? "Choose a section" : "";
+    hintEl.textContent = "";
+    addButtonEl.classList.add("cp-hidden");
+    clearFilters();
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+
+    if (!normalizedItems.length) {
+      contentEl.className = "captain-alert";
+      contentEl.textContent = "No sections available.";
+      return;
+    }
+
+    const grid = document.createElement("div");
+    grid.className = "captain-home-grid";
+
+    normalizedItems.forEach((item) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "captain-home-card";
+
+      const icon = document.createElement("img");
+      icon.src = String(item.icon || "https://carcassonne.gg/gallery/friendly-matches.png").trim();
+      icon.alt = "";
+
+      const textWrap = document.createElement("div");
+      textWrap.className = "captain-home-card-text";
+
+      const title = document.createElement("div");
+      title.className = "captain-home-card-title";
+      title.textContent = item.label;
+
+      const subtitle = document.createElement("div");
+      subtitle.className = "captain-home-card-subtitle";
+      subtitle.textContent = item.subtitle || (item.type === "tournament" ? "Open tournament matches" : "Open section");
+
+      textWrap.appendChild(title);
+      textWrap.appendChild(subtitle);
+      card.appendChild(icon);
+      card.appendChild(textWrap);
+
+      card.addEventListener("click", () => {
+        if (item.type === "tournament") {
+          applyCaptainPageState({
+            view: CAPTAIN_VIEWS.MATCHES,
+            tournamentId: String(item.id || "").trim(),
+            mode: "list",
+            matchId: "",
+            playerId: "",
+          }, { syncUrl: true });
+          return;
+        }
+        applyCaptainPageState({
+          view: String(item.view || "").trim().toLowerCase(),
+          tournamentId: "",
+          mode: "list",
+          matchId: "",
+          playerId: "",
+        }, { syncUrl: true });
+      });
+
+      grid.appendChild(card);
+    });
+
+    contentEl.appendChild(grid);
   }
 
   function renderAdminAssociationFilter(optionsList, selectedValue, onSelect) {
@@ -1610,6 +1763,9 @@
       if (isEditMode && playerId) return playerId;
       if (isCreateMode) return "Players";
       return "Players";
+    }
+    if (!activeView) {
+      return "Captain Panel";
     }
     return tournamentHeading;
   }
@@ -4911,6 +5067,32 @@
         // keep defaults; access rules below will handle unauthorized state
       }
 
+      if (!activeView && !requestedTournamentId && !isCreateMode && !isEditMode) {
+        let tournaments = [];
+        try {
+          const tournamentsRes = await fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" });
+          if (tournamentsRes.ok) {
+            const tournamentsData = await tournamentsRes.json().catch(() => ({}));
+            tournaments = Array.isArray(tournamentsData?.tournaments) ? tournamentsData.tournaments : [];
+          }
+        } catch (_error) {
+          tournaments = [];
+        }
+
+        const sectionItems = tournaments.map((tournament) => ({
+          type: "tournament",
+          id: String(tournament?.id || "").trim(),
+          label: String(tournament?.short_title || tournament?.name || tournament?.id || "").trim(),
+          subtitle: "Open tournament matches",
+          icon: String(tournament?.logo || "https://carcassonne.gg/gallery/friendly-matches.png").trim(),
+        }))
+          .filter((item) => item.id && item.label)
+          .concat(CAPTAIN_STATIC_SECTION_ITEMS);
+
+        renderCaptainHomeSelection(sectionItems);
+        return;
+      }
+
       if (!associationOverride) {
         if (activeView === CAPTAIN_VIEWS.MATCHES) {
           if (!isAuthenticatedUser) {
@@ -5038,7 +5220,11 @@
             : (
                 Number(currentTournament?.access_type) === 2
                   ? normalizeCode(captainAssociationCode || "")
-                  : ""
+                  : (
+                      String(currentTournament?.id || requestedTournamentId || "").trim() === "Friendly-Matches"
+                        ? normalizeCode(captainAssociationCode || "")
+                        : ""
+                    )
               )
         )
         : "";
