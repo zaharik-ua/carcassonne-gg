@@ -1,1 +1,4 @@
 auth-server/data/
+.venv/
+update_matches/.cache/
+update_matches/**/__pycache__/

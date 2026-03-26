@@ -1206,6 +1206,7 @@ function ensureLineupsSchema() {
       dw1 INTEGER,
       dw2 INTEGER,
       status TEXT,
+      results_last_error TEXT,
       created_by TEXT,
       updated_by TEXT,
       deleted_by TEXT,
@@ -1225,6 +1226,7 @@ function ensureLineupsSchema() {
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
       addColumnIfMissing(columns, "lineups", "duel_number", "INTEGER");
+      addColumnIfMissing(columns, "lineups", "results_last_error", "TEXT");
       addColumnIfMissing(columns, "lineups", "created_by", "TEXT");
       addColumnIfMissing(columns, "lineups", "updated_by", "TEXT");
       addColumnIfMissing(columns, "lineups", "deleted_by", "TEXT");
