@@ -156,6 +156,10 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
                 score1 = scores[index1] if len(scores) > index1 else "?"
                 rank0 = ranks[index0] if len(ranks) > index0 else "?"
                 rank1 = ranks[index1] if len(ranks) > index1 else "?"
+                if rank0 == "1" and rank1 == "2":
+                    rank1 = "0"
+                elif rank0 == "2" and rank1 == "1":
+                    rank0 = "0"
 
                 table_flags = ""
                 table_status = "Finished"
@@ -175,9 +179,9 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
 
                 try:
                     if clock0 and float(score0) > float(score1):
-                        rank0, rank1 = "2", "1"
+                        rank0, rank1 = "0", "1"
                     if clock1 and float(score1) > float(score0):
-                        rank0, rank1 = "1", "2"
+                        rank0, rank1 = "1", "0"
                 except Exception as exc:
                     print(f"⚠️ Failed to compare scores in table {table_id}: {exc}", flush=True)
 
