@@ -11,6 +11,7 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
     def __init__(self, db_path: str, *, player_id: str | None = None) -> None:
         self.db_path = str(Path(db_path).resolve())
         self.player_id = str(player_id).strip() if player_id is not None else None
+        self._profiles_columns: set[str] = set()
         self._ensure_schema()
 
     def fetch_players_to_update(
@@ -38,6 +39,7 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
             params.extend(sorted(exclude_player_ids))
 
         params.append(int(limit))
+        stable_order_column = "profile_row_id" if "profile_row_id" in self._profiles_columns else "rowid"
 
         sql = f"""
             SELECT
@@ -48,7 +50,7 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
             ORDER BY
               CASE WHEN bga_elo_updated_at IS NULL OR trim(bga_elo_updated_at) = '' THEN 0 ELSE 1 END ASC,
               datetime(COALESCE(bga_elo_updated_at, '1970-01-01 00:00:00')) ASC,
-              profile_row_id ASC
+              {stable_order_column} ASC
             LIMIT ?
         """
 
@@ -103,6 +105,7 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
                 str(row["name"]).strip()
                 for row in conn.execute("PRAGMA table_info(profiles)").fetchall()
             }
+            self._profiles_columns = columns
             if "bga_elo" not in columns:
                 conn.execute("ALTER TABLE profiles ADD COLUMN bga_elo INTEGER")
             if "bga_elo_updated_at" not in columns:
