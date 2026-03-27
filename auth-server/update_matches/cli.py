@@ -12,7 +12,7 @@ except ImportError:  # pragma: no cover
         return None
 
 from .config import MATCH_UPDATE_BATCH_SIZE
-from .repository import TARGET_EMPTY_FINISHED, TARGET_ONGOING
+from .repository import TARGET_FINISHED_PENDING, TARGET_ONGOING
 from .service import MatchUpdateService
 from .sqlite_repository import SqliteMatchRepository
 
@@ -26,8 +26,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--targets",
-        default=os.getenv("MATCH_UPDATE_TARGETS", f"{TARGET_ONGOING},{TARGET_EMPTY_FINISHED}"),
-        help="Comma-separated targets: ongoing,empty_finished",
+        default=os.getenv("MATCH_UPDATE_TARGETS", f"{TARGET_ONGOING},{TARGET_FINISHED_PENDING}"),
+        help="Comma-separated targets: ongoing,finished_pending",
     )
     parser.add_argument(
         "--match-id",

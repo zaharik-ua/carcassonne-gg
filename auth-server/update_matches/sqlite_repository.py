@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .models import MatchUpdateRequest, MatchUpdateResult
-from .repository import MatchRepository, TARGET_EMPTY_FINISHED, TARGET_ONGOING
+from .repository import MatchRepository, TARGET_EMPTY_FINISHED, TARGET_FINISHED_PENDING, TARGET_ONGOING
 
 
 class SqliteMatchRepository(MatchRepository):
@@ -53,13 +53,19 @@ class SqliteMatchRepository(MatchRepository):
             AND trim(COALESCE(l.player_2_id, '')) <> ''
             AND trim(COALESCE(l.time_utc, '')) <> ''
             AND trim(COALESCE(l.duel_format, '')) <> ''
-            AND datetime(l.time_utc) <= datetime('now')
         """
 
         if target == TARGET_ONGOING:
-            where_sql += " AND COALESCE(l.status, 'Planned') = 'Planned'"
-        elif target == TARGET_EMPTY_FINISHED:
-            where_sql += " AND COALESCE(l.status, '') = 'Done' AND (l.dw1 IS NULL OR l.dw2 IS NULL)"
+            where_sql += """
+                AND datetime(l.time_utc) < datetime('now')
+                AND datetime(l.time_utc, '+' || COALESCE(df.minutes_to_play, 60) || ' minutes') > datetime('now')
+                AND COALESCE(l.status, 'Planned') <> 'Done'
+            """
+        elif target in {TARGET_FINISHED_PENDING, TARGET_EMPTY_FINISHED}:
+            where_sql += """
+                AND datetime('now') > datetime(l.time_utc, '+' || COALESCE(df.minutes_to_play, 60) || ' minutes')
+                AND COALESCE(l.status, 'Planned') NOT IN ('Done', 'Error')
+            """
         else:
             raise ValueError(f"Unsupported target: {target}")
 
@@ -98,6 +104,7 @@ class SqliteMatchRepository(MatchRepository):
                 SELECT
                   l.id,
                   l.status,
+                  l.time_utc,
                   COALESCE(df.games_to_win, ?) AS games_to_win
                 FROM duels l
                 LEFT JOIN duel_formats df
@@ -111,7 +118,19 @@ class SqliteMatchRepository(MatchRepository):
                 raise RuntimeError(f"Duel not found: {match.match_id}")
 
             target_wins = int(current["games_to_win"] or match.gtw or 2)
-            next_status = "Done" if (result.wins0 >= target_wins or result.wins1 >= target_wins) else "Planned"
+            now_ts = int(datetime.now(timezone.utc).timestamp())
+            is_ongoing = int(match.start_date) < now_ts < int(match.end_date)
+            has_winner = (
+                int(result.wins0) == target_wins and int(result.wins1) < target_wins
+            ) or (
+                int(result.wins1) == target_wins and int(result.wins0) < target_wins
+            )
+            if has_winner:
+                next_status = "Done"
+            elif is_ongoing:
+                next_status = "In progress"
+            else:
+                next_status = "Error"
 
             conn.execute(
                 """
@@ -250,8 +269,8 @@ class SqliteMatchRepository(MatchRepository):
               COALESCE(SUM(CASE
                 WHEN COALESCE(status, 'Planned') = 'Done' AND COALESCE(dw2, 0) > COALESCE(dw1, 0)
                 THEN 1 ELSE 0 END), 0) AS dw2,
-              COUNT(*) AS total_lineups,
-              COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') = 'Done' THEN 1 ELSE 0 END), 0) AS done_lineups
+              COUNT(*) AS total_duels,
+              COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') = 'Done' THEN 1 ELSE 0 END), 0) AS done_duels
             FROM duels
             WHERE match_id = ?
               AND deleted_at IS NULL
@@ -262,9 +281,9 @@ class SqliteMatchRepository(MatchRepository):
         if aggregate_row is None:
             return
 
-        total_lineups = int(aggregate_row["total_lineups"] or 0)
-        done_lineups = int(aggregate_row["done_lineups"] or 0)
-        next_status = "Done" if total_lineups > 0 and done_lineups == total_lineups else "Planned"
+        total_duels = int(aggregate_row["total_duels"] or 0)
+        done_duels = int(aggregate_row["done_duels"] or 0)
+        next_status = "Done" if total_duels > 0 and done_duels == total_duels else "Planned"
 
         conn.execute(
             """

@@ -6,8 +6,9 @@ from .models import MatchUpdateRequest, MatchUpdateResult
 
 
 TARGET_ONGOING = "ongoing"
+TARGET_FINISHED_PENDING = "finished_pending"
 TARGET_EMPTY_FINISHED = "empty_finished"
-KNOWN_TARGETS = {TARGET_ONGOING, TARGET_EMPTY_FINISHED}
+KNOWN_TARGETS = {TARGET_ONGOING, TARGET_FINISHED_PENDING, TARGET_EMPTY_FINISHED}
 
 
 class MatchRepository(ABC):
