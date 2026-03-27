@@ -1191,9 +1191,18 @@ function ensureMatchesSchema() {
   });
 }
 
-function ensureLineupsSchema() {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS lineups (
+function ensureDuelsSchema() {
+  db.all(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('duels', 'lineups')",
+    (tablesErr, tables) => {
+      if (tablesErr) {
+        console.error("Failed to inspect duels/lineups tables", tablesErr);
+        return;
+      }
+
+      const tableNames = new Set((tables || []).map((row) => String(row?.name || "").trim().toLowerCase()));
+      const finalizeDuelsSchema = () => db.run(`
+    CREATE TABLE IF NOT EXISTS duels (
       id TEXT PRIMARY KEY,
       tournament_id TEXT,
       match_id TEXT,
@@ -1216,23 +1225,37 @@ function ensureLineupsSchema() {
     )
   `, (createErr) => {
     if (createErr) {
-      console.error("Failed to ensure lineups schema", createErr);
+      console.error("Failed to ensure duels schema", createErr);
       return;
     }
-    db.all("PRAGMA table_info(lineups)", (pragmaErr, columns) => {
+    db.all("PRAGMA table_info(duels)", (pragmaErr, columns) => {
       if (pragmaErr) {
-        console.error("Failed to inspect lineups schema", pragmaErr);
+        console.error("Failed to inspect duels schema", pragmaErr);
         return;
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
-      addColumnIfMissing(columns, "lineups", "duel_number", "INTEGER");
-      addColumnIfMissing(columns, "lineups", "results_last_error", "TEXT");
-      addColumnIfMissing(columns, "lineups", "created_by", "TEXT");
-      addColumnIfMissing(columns, "lineups", "updated_by", "TEXT");
-      addColumnIfMissing(columns, "lineups", "deleted_by", "TEXT");
-      addColumnIfMissing(columns, "lineups", "deleted_at", "TEXT");
+      addColumnIfMissing(columns, "duels", "duel_number", "INTEGER");
+      addColumnIfMissing(columns, "duels", "results_last_error", "TEXT");
+      addColumnIfMissing(columns, "duels", "created_by", "TEXT");
+      addColumnIfMissing(columns, "duels", "updated_by", "TEXT");
+      addColumnIfMissing(columns, "duels", "deleted_by", "TEXT");
+      addColumnIfMissing(columns, "duels", "deleted_at", "TEXT");
     });
   });
+      if (tableNames.has("lineups") && !tableNames.has("duels")) {
+        db.run("ALTER TABLE lineups RENAME TO duels", (renameErr) => {
+          if (renameErr) {
+            console.error("Failed to rename lineups table to duels", renameErr);
+            return;
+          }
+          finalizeDuelsSchema();
+        });
+        return;
+      }
+
+      finalizeDuelsSchema();
+    }
+  );
 }
 
 function ensureDuelFormatsSchema() {
@@ -1263,7 +1286,7 @@ function ensureGamesSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS games (
       id TEXT PRIMARY KEY,
-      lineup_id TEXT NOT NULL,
+      duel_id TEXT NOT NULL,
       bga_table_id TEXT,
       game_number INTEGER NOT NULL,
       player_1_score INTEGER,
@@ -1285,6 +1308,13 @@ function ensureGamesSchema() {
         return;
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
+      if (columns.some((column) => column.name === "lineup_id") && !columns.some((column) => column.name === "duel_id")) {
+        db.run("ALTER TABLE games RENAME COLUMN lineup_id TO duel_id", (renameErr) => {
+          if (renameErr) {
+            console.error("Failed to rename games.lineup_id to games.duel_id", renameErr);
+          }
+        });
+      }
       addColumnIfMissing(columns, "games", "bga_table_id", "TEXT");
       addColumnIfMissing(columns, "games", "game_number", "INTEGER NOT NULL DEFAULT 1");
       addColumnIfMissing(columns, "games", "player_1_score", "INTEGER");
@@ -1304,11 +1334,12 @@ function ensureGamesSchema() {
     });
 
     db.run(
-      "CREATE INDEX IF NOT EXISTS idx_games_lineup_id ON games(lineup_id)",
+      "CREATE INDEX IF NOT EXISTS idx_games_duel_id ON games(duel_id)",
       (indexErr) => {
-        if (indexErr) console.error("Failed to ensure idx_games_lineup_id", indexErr);
+        if (indexErr) console.error("Failed to ensure idx_games_duel_id", indexErr);
       }
     );
+    db.run("DROP INDEX IF EXISTS idx_games_lineup_id");
     db.run(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_games_bga_table_id ON games(bga_table_id)",
       (indexErr) => {
@@ -1851,7 +1882,7 @@ db.serialize(() => {
 
           ensureAssociationsSchema();
           ensureMatchesSchema();
-          ensureLineupsSchema();
+          ensureDuelsSchema();
           ensureDuelFormatsSchema();
           ensureGamesSchema();
           ensureTeamsSchema();
@@ -3402,7 +3433,7 @@ app.get("/games", requireAdmin, (_req, res, next) => {
     `
       SELECT
         id,
-        lineup_id,
+        duel_id,
         bga_table_id,
         game_number,
         player_1_score,
@@ -3413,7 +3444,7 @@ app.get("/games", requireAdmin, (_req, res, next) => {
         player_2_clock,
         status
       FROM games
-      ORDER BY lineup_id COLLATE NOCASE ASC, game_number ASC, id ASC
+      ORDER BY duel_id COLLATE NOCASE ASC, game_number ASC, id ASC
     `,
     (err, rows) => {
       if (err) return next(err);
@@ -3424,7 +3455,7 @@ app.get("/games", requireAdmin, (_req, res, next) => {
 
 app.post("/games", requireAdmin, (req, res) => {
   const id = normalizeNullableText(req.body?.id);
-  const lineupId = normalizeNullableText(req.body?.lineup_id);
+  const duelId = normalizeNullableText(req.body?.duel_id);
   const bgaTableId = normalizeNullableText(req.body?.bga_table_id);
   const gameNumber = normalizePositiveInteger(req.body?.game_number);
   const player1Score = normalizeIntegerOrNull(req.body?.player_1_score);
@@ -3438,8 +3469,8 @@ app.post("/games", requireAdmin, (req, res) => {
   if (!id) {
     return res.status(400).json({ ok: false, message: "id is required" });
   }
-  if (!lineupId) {
-    return res.status(400).json({ ok: false, message: "lineup_id is required" });
+  if (!duelId) {
+    return res.status(400).json({ ok: false, message: "duel_id is required" });
   }
   if (!gameNumber) {
     return res.status(400).json({ ok: false, message: "game_number must be a positive integer" });
@@ -3470,14 +3501,14 @@ app.post("/games", requireAdmin, (req, res) => {
   }
 
   return db.get(
-    "SELECT id FROM lineups WHERE upper(trim(id)) = upper(?) AND deleted_at IS NULL LIMIT 1",
-    [lineupId],
-    (lineupErr, lineupRow) => {
-      if (lineupErr) {
-        return res.status(500).json({ ok: false, message: "Failed to validate lineup" });
+    "SELECT id FROM duels WHERE upper(trim(id)) = upper(?) AND deleted_at IS NULL LIMIT 1",
+    [duelId],
+    (duelErr, duelRow) => {
+      if (duelErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate duel" });
       }
-      if (!lineupRow) {
-        return res.status(400).json({ ok: false, message: "lineup_id not found" });
+      if (!duelRow) {
+        return res.status(400).json({ ok: false, message: "duel_id not found" });
       }
 
       return db.get(
@@ -3505,7 +3536,7 @@ app.post("/games", requireAdmin, (req, res) => {
             `
               INSERT INTO games (
                 id,
-                lineup_id,
+                duel_id,
                 bga_table_id,
                 game_number,
                 player_1_score,
@@ -3520,7 +3551,7 @@ app.post("/games", requireAdmin, (req, res) => {
             `,
             [
               id,
-              lineupId,
+              duelId,
               bgaTableId,
               gameNumber,
               player1Score,
@@ -3543,7 +3574,7 @@ app.post("/games", requireAdmin, (req, res) => {
                 `
                   SELECT
                     id,
-                    lineup_id,
+                    duel_id,
                     bga_table_id,
                     game_number,
                     player_1_score,
@@ -3576,7 +3607,7 @@ app.post("/games", requireAdmin, (req, res) => {
 app.patch("/games/:id", requireAdmin, (req, res) => {
   const gameId = normalizeNullableText(req.params.id);
   const payloadId = normalizeNullableText(req.body?.id);
-  const lineupId = normalizeNullableText(req.body?.lineup_id);
+  const duelId = normalizeNullableText(req.body?.duel_id);
   const bgaTableId = normalizeNullableText(req.body?.bga_table_id);
   const gameNumber = normalizePositiveInteger(req.body?.game_number);
   const player1Score = normalizeIntegerOrNull(req.body?.player_1_score);
@@ -3593,8 +3624,8 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
   if (payloadId && payloadId.toLowerCase() !== gameId.toLowerCase()) {
     return res.status(400).json({ ok: false, message: "id cannot be changed" });
   }
-  if (!lineupId) {
-    return res.status(400).json({ ok: false, message: "lineup_id is required" });
+  if (!duelId) {
+    return res.status(400).json({ ok: false, message: "duel_id is required" });
   }
   if (!gameNumber) {
     return res.status(400).json({ ok: false, message: "game_number must be a positive integer" });
@@ -3625,14 +3656,14 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
   }
 
   return db.get(
-    "SELECT id FROM lineups WHERE upper(trim(id)) = upper(?) AND deleted_at IS NULL LIMIT 1",
-    [lineupId],
-    (lineupErr, lineupRow) => {
-      if (lineupErr) {
-        return res.status(500).json({ ok: false, message: "Failed to validate lineup" });
+    "SELECT id FROM duels WHERE upper(trim(id)) = upper(?) AND deleted_at IS NULL LIMIT 1",
+    [duelId],
+    (duelErr, duelRow) => {
+      if (duelErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate duel" });
       }
-      if (!lineupRow) {
-        return res.status(400).json({ ok: false, message: "lineup_id not found" });
+      if (!duelRow) {
+        return res.status(400).json({ ok: false, message: "duel_id not found" });
       }
 
       return db.get(
@@ -3669,7 +3700,7 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
                 `
                   UPDATE games
                   SET
-                    lineup_id = ?,
+                    duel_id = ?,
                     bga_table_id = ?,
                     game_number = ?,
                     player_1_score = ?,
@@ -3682,7 +3713,7 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
                   WHERE upper(trim(id)) = upper(?)
                 `,
                 [
-                  lineupId,
+                  duelId,
                   bgaTableId,
                   gameNumber,
                   player1Score,
@@ -3709,7 +3740,7 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
                     `
                       SELECT
                         id,
-                        lineup_id,
+                        duel_id,
                         bga_table_id,
                         game_number,
                         player_1_score,
@@ -3913,11 +3944,11 @@ app.get("/audit-trail", requireAdmin, (req, res, next) => {
   );
 });
 
-app.get("/lineups", (req, res, next) => {
+app.get("/duels", (req, res, next) => {
   const matchId = String(req.query.match_id || "").trim();
   const userAssociation = String(req.user?.association || "").trim().toUpperCase();
   if (!matchId) {
-    return res.status(400).json({ ok: false, message: "match_id is required" });
+    return res.json({ ok: true, duels: [] });
   }
 
   return db.get(
@@ -3970,7 +4001,7 @@ app.get("/lineups", (req, res, next) => {
               dw1,
               dw2,
               status
-            FROM lineups
+            FROM duels
             WHERE match_id = ?
               AND deleted_at IS NULL
             ORDER BY
@@ -3981,7 +4012,7 @@ app.get("/lineups", (req, res, next) => {
           [matchId],
           (err, rows) => {
             if (err) return next(err);
-            return res.json({ ok: true, lineups: rows || [] });
+            return res.json({ ok: true, duels: rows || [] });
           }
         );
       });
@@ -3989,18 +4020,14 @@ app.get("/lineups", (req, res, next) => {
   );
 });
 
-app.post("/lineups/bulk-upsert", (req, res) => {
+app.post("/duels/bulk-upsert", (req, res) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
   }
 
   const payload = req.body && typeof req.body === "object" ? req.body : {};
   const matchId = String(payload.match_id || "").trim();
-  const lineups = Array.isArray(payload.lineups) ? payload.lineups : [];
-  if (!matchId) {
-    return res.status(400).json({ ok: false, message: "match_id is required" });
-  }
-
+  const duels = Array.isArray(payload.duels) ? payload.duels : [];
   const isAdmin = Number(req.user.admin) === 1;
   const isTeamCaptain = Number(req.user.team_captain) === 1;
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
@@ -4016,6 +4043,132 @@ app.post("/lineups/bulk-upsert", (req, res) => {
     const s = String(v ?? "").trim();
     return s === "" ? null : s;
   };
+
+  if (!matchId) {
+    if (!isAdmin) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+
+    const sanitized = [];
+    for (let index = 0; index < duels.length; index += 1) {
+      const item = duels[index];
+      const id = String(item?.id || "").trim();
+      const player1 = normalizeText(item?.player_1_id);
+      const player2 = normalizeText(item?.player_2_id);
+      const duelNumberRaw = toIntOrNull(item?.duel_number);
+      const duelNumber = Number.isInteger(duelNumberRaw) && duelNumberRaw > 0
+        ? duelNumberRaw
+        : index + 1;
+      if (!id || (!player1 && !player2)) {
+        return res.status(400).json({ ok: false, message: "Each duel requires id and at least one player" });
+      }
+      sanitized.push({
+        id,
+        tournament_id: normalizeText(item?.tournament_id),
+        match_id: null,
+        duel_number: duelNumber,
+        duel_format: normalizeText(item?.duel_format),
+        time_utc: normalizeText(item?.time_utc),
+        custom_time: toIntOrNull(item?.custom_time),
+        player_1_id: player1,
+        player_2_id: player2,
+        dw1: toIntOrNull(item?.dw1),
+        dw2: toIntOrNull(item?.dw2),
+        status: normalizeText(item?.status),
+      });
+    }
+
+    if (!sanitized.length) {
+      return res.json({ ok: true, duels: [] });
+    }
+
+    return db.serialize(() => {
+      db.run("BEGIN IMMEDIATE TRANSACTION");
+      const stmt = db.prepare(`
+        INSERT INTO duels (
+          id,
+          tournament_id,
+          match_id,
+          duel_number,
+          duel_format,
+          time_utc,
+          custom_time,
+          player_1_id,
+          player_2_id,
+          dw1,
+          dw2,
+          status,
+          created_by,
+          updated_by,
+          deleted_by,
+          deleted_at,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          tournament_id = excluded.tournament_id,
+          match_id = NULL,
+          duel_number = excluded.duel_number,
+          duel_format = excluded.duel_format,
+          time_utc = excluded.time_utc,
+          custom_time = excluded.custom_time,
+          player_1_id = excluded.player_1_id,
+          player_2_id = excluded.player_2_id,
+          dw1 = excluded.dw1,
+          dw2 = excluded.dw2,
+          status = excluded.status,
+          updated_by = excluded.updated_by,
+          deleted_by = NULL,
+          deleted_at = NULL,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+
+      let failed = false;
+      let pending = sanitized.length;
+      sanitized.forEach((item) => {
+        stmt.run(
+          [
+            item.id,
+            item.tournament_id,
+            item.duel_number,
+            item.duel_format,
+            item.time_utc,
+            item.custom_time,
+            item.player_1_id,
+            item.player_2_id,
+            item.dw1,
+            item.dw2,
+            item.status,
+            actorPlayerId,
+            actorPlayerId,
+          ],
+          (insertErr) => {
+            if (failed) return;
+            if (insertErr) {
+              failed = true;
+              stmt.finalize(() => {
+                db.run("ROLLBACK");
+                return res.status(500).json({ ok: false, message: "Failed to save duels" });
+              });
+              return;
+            }
+            pending -= 1;
+            if (pending === 0) {
+              stmt.finalize(() => {
+                db.run("COMMIT", (commitErr) => {
+                  if (commitErr) {
+                    return res.status(500).json({ ok: false, message: "Failed to save duels" });
+                  }
+                  return res.json({ ok: true, duels: sanitized });
+                });
+              });
+            }
+          }
+        );
+      });
+    });
+  }
 
   return db.get(
     "SELECT tournament_id, team_1, team_2 FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1",
@@ -4059,8 +4212,8 @@ app.post("/lineups/bulk-upsert", (req, res) => {
         }
 
         const sanitized = [];
-        for (let index = 0; index < lineups.length; index += 1) {
-          const item = lineups[index];
+        for (let index = 0; index < duels.length; index += 1) {
+          const item = duels[index];
           const id = String(item?.id || "").trim();
           const player1 = normalizeText(item?.player_1_id);
           const player2 = normalizeText(item?.player_2_id);
@@ -4069,7 +4222,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
             ? duelNumberRaw
             : index + 1;
           if (!id || (!player1 && !player2)) {
-            return res.status(400).json({ ok: false, message: "Each lineup requires id and at least one player" });
+            return res.status(400).json({ ok: false, message: "Each duel requires id and at least one player" });
           }
           sanitized.push({
             id,
@@ -4102,7 +4255,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
             dw1,
             dw2,
             status
-          FROM lineups
+            FROM duels
           WHERE match_id = ?
             AND deleted_at IS NULL
           ORDER BY
@@ -4113,14 +4266,14 @@ app.post("/lineups/bulk-upsert", (req, res) => {
         [matchId],
           (beforeErr, previousLineups) => {
           if (beforeErr) {
-            return res.status(500).json({ ok: false, message: "Failed to load existing lineups" });
+            return res.status(500).json({ ok: false, message: "Failed to load existing duels" });
           }
 
           return db.serialize(() => {
             db.run("BEGIN IMMEDIATE TRANSACTION");
             db.run(
               `
-                UPDATE lineups
+                UPDATE duels
                 SET
                   deleted_at = CURRENT_TIMESTAMP,
                   deleted_by = ?,
@@ -4133,11 +4286,11 @@ app.post("/lineups/bulk-upsert", (req, res) => {
               (deleteErr) => {
                 if (deleteErr) {
                   db.run("ROLLBACK");
-                  return res.status(500).json({ ok: false, message: "Failed to clear old lineups" });
+                  return res.status(500).json({ ok: false, message: "Failed to clear old duels" });
                 }
                 if (!sanitized.length) {
                   return db.run("COMMIT", (commitErr) => {
-                    if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
+                    if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save duels" });
 
                     const action = previousLineups.length ? "delete" : "update";
                     const eventType = previousLineups.length ? "lineups.deleted_all" : "lineups.updated";
@@ -4160,13 +4313,13 @@ app.post("/lineups/bulk-upsert", (req, res) => {
                           team_2: team2,
                         },
                       },
-                      () => res.json({ ok: true, lineups: [] })
+                      () => res.json({ ok: true, duels: [] })
                     );
                   });
                 }
 
                 const stmt = db.prepare(`
-                INSERT INTO lineups (
+                INSERT INTO duels (
                   id,
                   tournament_id,
                   match_id,
@@ -4231,7 +4384,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
                         failed = true;
                         stmt.finalize(() => {
                           db.run("ROLLBACK");
-                          return res.status(500).json({ ok: false, message: "Failed to insert lineups" });
+                          return res.status(500).json({ ok: false, message: "Failed to insert duels" });
                         });
                         return;
                       }
@@ -4239,13 +4392,13 @@ app.post("/lineups/bulk-upsert", (req, res) => {
                       if (pending === 0) {
                         stmt.finalize(() => {
                           db.run("COMMIT", (commitErr) => {
-                            if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save lineups" });
+                            if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save duels" });
 
                             const action = previousLineups.length ? "update" : "create";
-                            const eventType = previousLineups.length ? "lineups.updated" : "lineups.created";
-                            const changes = previousLineups.length
-                              ? buildLineupsAuditChanges(previousLineups || [], sanitized || [])
-                              : buildAuditCreationChanges({ lineups: sanitized || [] }, ["lineups"]);
+                    const eventType = previousLineups.length ? "lineups.updated" : "lineups.created";
+                    const changes = previousLineups.length
+                      ? buildLineupsAuditChanges(previousLineups || [], sanitized || [])
+                      : buildAuditCreationChanges({ lineups: sanitized || [] }, ["lineups"]);
 
                             return logAuditEvent(
                               {
@@ -4262,7 +4415,7 @@ app.post("/lineups/bulk-upsert", (req, res) => {
                                   team_2: team2,
                                 },
                               },
-                              () => res.json({ ok: true, lineups: sanitized })
+                              () => res.json({ ok: true, duels: sanitized })
                             );
                           });
                         });
@@ -5064,7 +5217,7 @@ app.delete("/matches/:id", (req, res) => {
             dw1,
             dw2,
             status
-          FROM lineups
+          FROM duels
           WHERE match_id = ?
             AND deleted_at IS NULL
           ORDER BY
@@ -5075,7 +5228,7 @@ app.delete("/matches/:id", (req, res) => {
         [matchId],
           (lineupsErr, activeLineups) => {
           if (lineupsErr) {
-            return res.status(500).json({ ok: false, message: "Failed to load match lineups" });
+            return res.status(500).json({ ok: false, message: "Failed to load match duels" });
           }
 
           return db.serialize(() => {
@@ -5104,7 +5257,7 @@ app.delete("/matches/:id", (req, res) => {
 
                 return db.run(
                   `
-                    UPDATE lineups
+                    UPDATE duels
                     SET
                       deleted_at = CURRENT_TIMESTAMP,
                       deleted_by = ?,
@@ -5117,7 +5270,7 @@ app.delete("/matches/:id", (req, res) => {
                   (deleteLineupsErr) => {
                     if (deleteLineupsErr) {
                       db.run("ROLLBACK");
-                      return res.status(500).json({ ok: false, message: "Failed to delete match lineups" });
+                      return res.status(500).json({ ok: false, message: "Failed to delete match duels" });
                     }
 
                     return db.run("COMMIT", (commitErr) => {
@@ -6052,7 +6205,7 @@ app.get("/profiles/:playerId/delete-check", (req, res) => {
       return db.get(
         `
           SELECT id
-          FROM lineups
+          FROM duels
           WHERE deleted_at IS NULL
             AND (player_1_id = ? OR player_2_id = ?)
           LIMIT 1
@@ -6060,13 +6213,13 @@ app.get("/profiles/:playerId/delete-check", (req, res) => {
         [requestedPlayerId, requestedPlayerId],
         (lineupErr, lineupRow) => {
           if (lineupErr) {
-            return res.status(500).json({ ok: false, message: "Failed to validate lineups" });
+            return res.status(500).json({ ok: false, message: "Failed to validate duels" });
           }
           if (lineupRow) {
             return res.json({
               ok: true,
               can_delete: false,
-              message: "This player is already assigned to one or more match lineups and cannot be deleted.",
+              message: "This player is already assigned to one or more match duels and cannot be deleted.",
             });
           }
           return res.json({ ok: true, can_delete: true });
@@ -6129,7 +6282,7 @@ app.delete("/profiles/:playerId", (req, res) => {
       return db.get(
         `
           SELECT id
-          FROM lineups
+          FROM duels
           WHERE deleted_at IS NULL
             AND (player_1_id = ? OR player_2_id = ?)
           LIMIT 1
@@ -6137,12 +6290,12 @@ app.delete("/profiles/:playerId", (req, res) => {
         [requestedPlayerId, requestedPlayerId],
         (lineupErr, lineupRow) => {
           if (lineupErr) {
-            return res.status(500).json({ ok: false, message: "Failed to validate lineups" });
+            return res.status(500).json({ ok: false, message: "Failed to validate duels" });
           }
           if (lineupRow) {
             return res.status(409).json({
               ok: false,
-              message: "This player is already assigned to one or more match lineups and cannot be deleted.",
+              message: "This player is already assigned to one or more match duels and cannot be deleted.",
             });
           }
 

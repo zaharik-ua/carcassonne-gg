@@ -14,7 +14,7 @@ const dbFullPath = path.resolve(__dirname, "..", DB_PATH);
 
 const SPREADSHEET_ID = String(process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "").trim();
 const MATCHES_SHEET = String(process.env.GOOGLE_SHEETS_MATCHES_SHEET || "db_matches").trim();
-const LINEUPS_SHEET = String(process.env.GOOGLE_SHEETS_LINEUPS_SHEET || "db_lineups").trim();
+const DUELS_SHEET = String(process.env.GOOGLE_SHEETS_DUELS_SHEET || process.env.GOOGLE_SHEETS_LINEUPS_SHEET || "db_duels").trim();
 const PLAYERS_SHEET = String(process.env.GOOGLE_SHEETS_PLAYERS_SHEET || "db_players").trim();
 const SERVICE_ACCOUNT_EMAIL = String(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "").trim();
 const SERVICE_ACCOUNT_PRIVATE_KEY = String(process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || "")
@@ -124,7 +124,7 @@ async function getMatchesExportData() {
   return { columns, rows: mappedRows };
 }
 
-async function getLineupsExportData() {
+async function getDuelsExportData() {
   const columns = [
     "id",
     "tournament_id",
@@ -161,7 +161,7 @@ async function getLineupsExportData() {
           ORDER BY p.updated_at DESC, p.id DESC
           LIMIT 1
         ), '') AS player_2_name
-      FROM lineups l
+      FROM duels l
       WHERE l.deleted_at IS NULL
       ORDER BY l.match_id ASC, l.id ASC
     `
@@ -190,14 +190,14 @@ async function getPlayersExportData() {
 
   const rows = await allAsync(
     `
-      WITH lineup_player_ids AS (
+      WITH duel_player_ids AS (
         SELECT trim(l.player_1_id) AS player_id
-        FROM lineups l
+        FROM duels l
         WHERE l.deleted_at IS NULL
           AND trim(COALESCE(l.player_1_id, '')) <> ''
         UNION
         SELECT trim(l.player_2_id) AS player_id
-        FROM lineups l
+        FROM duels l
         WHERE l.deleted_at IS NULL
           AND trim(COALESCE(l.player_2_id, '')) <> ''
       )
@@ -205,7 +205,7 @@ async function getPlayersExportData() {
         p.id AS id,
         COALESCE(p.bga_nickname, '') AS bga_nickname
       FROM profiles p
-      INNER JOIN lineup_player_ids lp
+      INNER JOIN duel_player_ids lp
         ON trim(p.id) = lp.player_id
       WHERE trim(COALESCE(p.id, '')) <> ''
         AND NOT EXISTS (
@@ -286,7 +286,7 @@ async function main() {
   logInfo("Sync started", {
     spreadsheetId: SPREADSHEET_ID,
     matchesSheet: MATCHES_SHEET,
-    lineupsSheet: LINEUPS_SHEET,
+    duelsSheet: DUELS_SHEET,
     playersSheet: PLAYERS_SHEET,
     dbPath: dbFullPath,
   });
@@ -299,19 +299,19 @@ async function main() {
     });
     const sheets = google.sheets({ version: "v4", auth });
 
-    const [matchesData, lineupsData, playersData] = await Promise.all([
+    const [matchesData, duelsData, playersData] = await Promise.all([
       getMatchesExportData(),
-      getLineupsExportData(),
+      getDuelsExportData(),
       getPlayersExportData(),
     ]);
     logInfo("Export data prepared", {
       matchesRows: matchesData.rows.length,
-      lineupsRows: lineupsData.rows.length,
+      duelsRows: duelsData.rows.length,
       playersRows: playersData.rows.length,
     });
 
     const matchesValues = toSheetValues(matchesData.columns, matchesData.rows);
-    const lineupsValues = toSheetValues(lineupsData.columns, lineupsData.rows);
+    const duelsValues = toSheetValues(duelsData.columns, duelsData.rows);
     const playersValues = toSheetValues(playersData.columns, playersData.rows);
 
     await writeSheet(sheets, SPREADSHEET_ID, MATCHES_SHEET, matchesValues);
@@ -319,10 +319,10 @@ async function main() {
       sheet: MATCHES_SHEET,
       rowsWritten: matchesValues.length - 1,
     });
-    await writeSheet(sheets, SPREADSHEET_ID, LINEUPS_SHEET, lineupsValues);
-    logInfo("Lineups sheet updated", {
-      sheet: LINEUPS_SHEET,
-      rowsWritten: lineupsValues.length - 1,
+    await writeSheet(sheets, SPREADSHEET_ID, DUELS_SHEET, duelsValues);
+    logInfo("Duels sheet updated", {
+      sheet: DUELS_SHEET,
+      rowsWritten: duelsValues.length - 1,
     });
     await writeSheet(sheets, SPREADSHEET_ID, PLAYERS_SHEET, playersValues);
     logInfo("Players sheet updated", {
@@ -333,7 +333,7 @@ async function main() {
     const durationMs = Date.now() - startedAtMs;
     logInfo("Sync completed", {
       matchesRows: matchesData.rows.length,
-      lineupsRows: lineupsData.rows.length,
+      duelsRows: duelsData.rows.length,
       playersRows: playersData.rows.length,
       durationMs,
     });

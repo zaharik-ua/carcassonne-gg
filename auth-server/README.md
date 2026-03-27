@@ -90,7 +90,7 @@ location /health {
 4. Запустити `auth-server` як systemd/pm2 сервіс.
 5. Налаштувати HTTPS (обов'язково для прод cookie `secure`).
 
-## 8) Регулярний sync `matches` + `lineups` у Google Sheets
+## 8) Регулярний sync `matches` + `duels` у Google Sheets
 
 У проєкті є скрипт:
 
@@ -99,7 +99,7 @@ npm run sync:google-sheets
 ```
 
 Він:
-- читає `matches` та `lineups` з SQLite (`DB_PATH`);
+- читає `matches` та `duels` з SQLite (`DB_PATH`);
 - бере лише записи, де `deleted_at IS NULL` (як і API);
 - перезаписує 2 листи в Google Spreadsheet.
 
@@ -109,7 +109,7 @@ npm run sync:google-sheets
 
 - `GOOGLE_SHEETS_SPREADSHEET_ID` - ID таблиці Google Sheets
 - `GOOGLE_SHEETS_MATCHES_SHEET` - назва листа для матчів (за замовчуванням `matches`)
-- `GOOGLE_SHEETS_LINEUPS_SHEET` - назва листа для лайнапів (за замовчуванням `lineups`)
+- `GOOGLE_SHEETS_DUELS_SHEET` - назва листа для дуелей (за замовчуванням `duels`)
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` - email service account
 - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` - private key service account (з `\n`)
 

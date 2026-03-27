@@ -57,7 +57,7 @@ class MatchUpdateService:
         return summary
 
     def _run_match(self, *, match_id: str) -> dict:
-        batch = self.repository.fetch_lineups_for_match(match_id=match_id)
+        batch = self.repository.fetch_duels_for_match(match_id=match_id)
         summary = {
             "match_id": match_id,
             "processed": 0,

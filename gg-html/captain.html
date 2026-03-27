@@ -1097,7 +1097,7 @@
   const MATCHES_URL = `${AUTH_BASE}/matches`;
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
-  const LINEUPS_URL = `${AUTH_BASE}/lineups`;
+  const DUELS_URL = `${AUTH_BASE}/duels`;
   const FRIENDLY_FIND_URL = `${AUTH_BASE}/friendly-find`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const PROFILES_URL = `${AUTH_BASE}/profiles`;
@@ -1778,7 +1778,7 @@
     const map = new Map();
     await Promise.all(uniqueIds.map(async (matchId) => {
       try {
-        const res = await fetch(`${LINEUPS_URL}?match_id=${encodeURIComponent(matchId)}`, {
+        const res = await fetch(`${DUELS_URL}?match_id=${encodeURIComponent(matchId)}`, {
           method: "GET",
           credentials: "include",
         });
@@ -1787,7 +1787,7 @@
           return;
         }
         const data = await res.json().catch(() => ({}));
-        map.set(matchId, Array.isArray(data?.lineups) ? data.lineups : []);
+        map.set(matchId, Array.isArray(data?.duels) ? data.duels : []);
       } catch (_error) {
         map.set(matchId, []);
       }
@@ -4972,13 +4972,13 @@
             setError("Failed to generate lineup IDs.");
             return;
           }
-          const lineupsResp = await fetch(`${LINEUPS_URL}/bulk-upsert`, {
+          const lineupsResp = await fetch(`${DUELS_URL}/bulk-upsert`, {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               match_id: matchIdForLineups,
-              lineups: lineupRowsPayload,
+              duels: lineupRowsPayload,
             }),
           });
           const lineupsResult = await lineupsResp.json().catch(() => ({}));
@@ -4988,13 +4988,13 @@
           }
         } else if (hadInitialLineups && !isCreateMode) {
           const matchIdForLineups = String(isLineupsOnly ? match?.id : (payload.id || match?.id || "")).trim();
-          const lineupsResp = await fetch(`${LINEUPS_URL}/bulk-upsert`, {
+          const lineupsResp = await fetch(`${DUELS_URL}/bulk-upsert`, {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               match_id: matchIdForLineups,
-              lineups: [],
+              duels: [],
             }),
           });
           const lineupsResult = await lineupsResp.json().catch(() => ({}));
@@ -5439,13 +5439,13 @@
         }
         let existingLineups = [];
         try {
-          const lineupsRes = await fetch(`${LINEUPS_URL}?match_id=${encodeURIComponent(String(matchToEdit?.id || ""))}`, {
+          const lineupsRes = await fetch(`${DUELS_URL}?match_id=${encodeURIComponent(String(matchToEdit?.id || ""))}`, {
             method: "GET",
             credentials: "include",
           });
           if (lineupsRes.ok) {
             const lineupsData = await lineupsRes.json().catch(() => ({}));
-            existingLineups = Array.isArray(lineupsData?.lineups) ? lineupsData.lineups : [];
+            existingLineups = Array.isArray(lineupsData?.duels) ? lineupsData.duels : [];
           }
         } catch (_error) {
           existingLineups = [];

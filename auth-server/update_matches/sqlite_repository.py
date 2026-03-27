@@ -12,10 +12,10 @@ class SqliteMatchRepository(MatchRepository):
     def __init__(self, db_path: str) -> None:
         self.db_path = str(Path(db_path).resolve())
 
-    def fetch_lineups_for_match(self, *, match_id: str) -> list[MatchUpdateRequest]:
+    def fetch_duels_for_match(self, *, match_id: str) -> list[MatchUpdateRequest]:
         sql = """
             SELECT
-              l.id AS lineup_id,
+              l.id AS duel_id,
               l.match_id,
               l.player_1_id,
               l.player_2_id,
@@ -25,7 +25,7 @@ class SqliteMatchRepository(MatchRepository):
               COALESCE(df.minutes_to_play, 60) AS minutes_to_play,
               p1.bga_nickname AS player_1_nickname,
               p2.bga_nickname AS player_2_nickname
-            FROM lineups l
+            FROM duels l
             JOIN duel_formats df
               ON lower(trim(df.format)) = lower(trim(l.duel_format))
             LEFT JOIN profiles p1
@@ -65,7 +65,7 @@ class SqliteMatchRepository(MatchRepository):
 
         sql = f"""
             SELECT
-              l.id AS lineup_id,
+              l.id AS duel_id,
               l.player_1_id,
               l.player_2_id,
               l.time_utc,
@@ -74,7 +74,7 @@ class SqliteMatchRepository(MatchRepository):
               COALESCE(df.minutes_to_play, 60) AS minutes_to_play,
               p1.bga_nickname AS player_1_nickname,
               p2.bga_nickname AS player_2_nickname
-            FROM lineups l
+            FROM duels l
             JOIN duel_formats df
               ON lower(trim(df.format)) = lower(trim(l.duel_format))
             LEFT JOIN profiles p1
@@ -99,7 +99,7 @@ class SqliteMatchRepository(MatchRepository):
                   l.id,
                   l.status,
                   COALESCE(df.games_to_win, ?) AS games_to_win
-                FROM lineups l
+                FROM duels l
                 LEFT JOIN duel_formats df
                   ON lower(trim(df.format)) = lower(trim(l.duel_format))
                 WHERE l.id = ?
@@ -108,14 +108,14 @@ class SqliteMatchRepository(MatchRepository):
                 (match.gtw or 2, match.match_id),
             ).fetchone()
             if current is None:
-                raise RuntimeError(f"Lineup not found: {match.match_id}")
+                raise RuntimeError(f"Duel not found: {match.match_id}")
 
             target_wins = int(current["games_to_win"] or match.gtw or 2)
             next_status = "Done" if (result.wins0 >= target_wins or result.wins1 >= target_wins) else "Planned"
 
             conn.execute(
                 """
-                UPDATE lineups
+                UPDATE duels
                 SET
                   dw1 = ?,
                   dw2 = ?,
@@ -130,7 +130,7 @@ class SqliteMatchRepository(MatchRepository):
             match_row = conn.execute(
                 """
                 SELECT match_id
-                FROM lineups
+                FROM duels
                 WHERE id = ?
                 LIMIT 1
                 """,
@@ -146,7 +146,7 @@ class SqliteMatchRepository(MatchRepository):
                     """
                     INSERT INTO games (
                       id,
-                      lineup_id,
+                      duel_id,
                       bga_table_id,
                       game_number,
                       player_1_score,
@@ -160,7 +160,7 @@ class SqliteMatchRepository(MatchRepository):
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(bga_table_id) DO UPDATE SET
                       id = excluded.id,
-                      lineup_id = excluded.lineup_id,
+                      duel_id = excluded.duel_id,
                       game_number = excluded.game_number,
                       player_1_score = excluded.player_1_score,
                       player_2_score = excluded.player_2_score,
@@ -190,7 +190,7 @@ class SqliteMatchRepository(MatchRepository):
                 conn.execute(
                     f"""
                     DELETE FROM games
-                    WHERE lineup_id = ?
+                    WHERE duel_id = ?
                       AND COALESCE(bga_table_id, '') <> ''
                       AND bga_table_id NOT IN ({placeholders})
                     """,
@@ -206,7 +206,7 @@ class SqliteMatchRepository(MatchRepository):
         with self._connect() as conn:
             conn.execute(
                 """
-                UPDATE lineups
+                UPDATE duels
                 SET
                   results_last_error = ?,
                   updated_at = CURRENT_TIMESTAMP
@@ -215,7 +215,7 @@ class SqliteMatchRepository(MatchRepository):
                 (message, match.match_id),
             )
             conn.commit()
-        print(f"⚠️ Match update failed for lineup {match.match_id}: {message}", flush=True)
+        print(f"⚠️ Match update failed for duel {match.match_id}: {message}", flush=True)
 
     def _row_to_request(self, row: sqlite3.Row, target: str) -> MatchUpdateRequest:
         start_dt = self._parse_iso_datetime(row["time_utc"])
@@ -224,7 +224,7 @@ class SqliteMatchRepository(MatchRepository):
         player1_id = self._to_int_or_none(row["player_2_id"])
 
         return MatchUpdateRequest(
-            match_id=row["lineup_id"],
+            match_id=row["duel_id"],
             target=target,
             player0=str(row["player_1_nickname"] or row["player_1_id"]),
             player1=str(row["player_2_nickname"] or row["player_2_id"]),
@@ -252,7 +252,7 @@ class SqliteMatchRepository(MatchRepository):
                 THEN 1 ELSE 0 END), 0) AS dw2,
               COUNT(*) AS total_lineups,
               COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') = 'Done' THEN 1 ELSE 0 END), 0) AS done_lineups
-            FROM lineups
+            FROM duels
             WHERE match_id = ?
               AND deleted_at IS NULL
             """,

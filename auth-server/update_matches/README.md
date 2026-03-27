@@ -1,23 +1,20 @@
 # Auth Server Match Updates
 
-Python module for updating lineup results from BGA using the `auth-server` SQLite database.
+Python module for updating duel results from BGA using the `auth-server` SQLite database.
 
 It reads:
-- `lineups`
+- `duels`
 - `duel_formats`
 - `profiles`
 
 It writes:
-- `lineups.dw1`
-- `lineups.dw2`
-- `lineups.status`
+- `duels.dw1`
+- `duels.dw2`
+- `duels.status`
 - `games`
 
 It persists sync errors into:
-- `lineups.results_last_error`
-
-It still does not persist:
-- aggregated lineup-level BGA flags, because `lineups` currently has no `bga_flags` column
+- `duels.results_last_error`
 
 ## Install
 
@@ -61,12 +58,12 @@ python3 run_update_matches.py --match-id 20250330UKRPRT
 
 ## Selection rules
 
-- `ongoing`: `lineups.status = 'Planned'`, start time already passed, players assigned
-- `empty_finished`: `lineups.status = 'Done'` and `dw1` or `dw2` is empty
-- manual test mode: `--match-id <match_id>` ignores automatic selection and loads all lineups of that match
+- `ongoing`: `duels.status = 'Planned'`, start time already passed, players assigned
+- `empty_finished`: `duels.status = 'Done'` and `dw1` or `dw2` is empty
+- manual test mode: `--match-id <match_id>` ignores automatic selection and loads all duels of that match
 
 ## Result rules
 
 - `dw1` / `dw2` updated from BGA
-- lineup status becomes `Done` when one side reaches `games_to_win`
+- duel status becomes `Done` when one side reaches `games_to_win`
 - `games` rows are upserted by `bga_table_id`

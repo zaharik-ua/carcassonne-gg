@@ -18,7 +18,7 @@ from .sqlite_repository import SqliteMatchRepository
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Update auth-server lineups from BGA.")
+    parser = argparse.ArgumentParser(description="Update auth-server duels from BGA.")
     parser.add_argument(
         "--db-path",
         default=os.getenv("AUTH_SQLITE_PATH") or str(_default_db_path()),
@@ -38,13 +38,13 @@ def parse_args() -> argparse.Namespace:
         "--batch-size",
         type=int,
         default=MATCH_UPDATE_BATCH_SIZE,
-        help="How many lineups to process per BGA batch request.",
+        help="How many duels to process per BGA batch request.",
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=int(os.getenv("MATCH_UPDATE_LIMIT", "0")) or None,
-        help="Optional total number of lineups to process in one run.",
+        help="Optional total number of duels to process in one run.",
     )
     return parser.parse_args()
 

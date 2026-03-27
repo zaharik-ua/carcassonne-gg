@@ -12,8 +12,8 @@ KNOWN_TARGETS = {TARGET_ONGOING, TARGET_EMPTY_FINISHED}
 
 class MatchRepository(ABC):
     @abstractmethod
-    def fetch_lineups_for_match(self, *, match_id: str) -> list[MatchUpdateRequest]:
-        """Return all lineups for a specific match id."""
+    def fetch_duels_for_match(self, *, match_id: str) -> list[MatchUpdateRequest]:
+        """Return all duels for a specific match id."""
 
     @abstractmethod
     def fetch_matches_to_update(self, *, target: str, limit: int) -> list[MatchUpdateRequest]:
