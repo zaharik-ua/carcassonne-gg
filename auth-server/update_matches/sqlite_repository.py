@@ -244,8 +244,12 @@ class SqliteMatchRepository(MatchRepository):
             SELECT
               COALESCE(SUM(COALESCE(dw1, 0)), 0) AS gw1,
               COALESCE(SUM(COALESCE(dw2, 0)), 0) AS gw2,
-              COALESCE(SUM(CASE WHEN COALESCE(dw1, 0) > COALESCE(dw2, 0) THEN 1 ELSE 0 END), 0) AS dw1,
-              COALESCE(SUM(CASE WHEN COALESCE(dw2, 0) > COALESCE(dw1, 0) THEN 1 ELSE 0 END), 0) AS dw2,
+              COALESCE(SUM(CASE
+                WHEN COALESCE(status, 'Planned') = 'Done' AND COALESCE(dw1, 0) > COALESCE(dw2, 0)
+                THEN 1 ELSE 0 END), 0) AS dw1,
+              COALESCE(SUM(CASE
+                WHEN COALESCE(status, 'Planned') = 'Done' AND COALESCE(dw2, 0) > COALESCE(dw1, 0)
+                THEN 1 ELSE 0 END), 0) AS dw2,
               COUNT(*) AS total_lineups,
               COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') = 'Done' THEN 1 ELSE 0 END), 0) AS done_lineups
             FROM lineups
