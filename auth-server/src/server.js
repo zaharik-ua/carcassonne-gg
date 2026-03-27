@@ -1114,6 +1114,8 @@ function ensureProfilesSchema() {
       addColumnIfMissing(currentColumns, "profiles", "discord", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "instagram", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "contact_email", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "bga_elo", "INTEGER");
+      addColumnIfMissing(currentColumns, "profiles", "bga_elo_updated_at", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "created_by", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "updated_by", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "deleted_by", "TEXT");

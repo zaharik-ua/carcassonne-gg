@@ -134,3 +134,41 @@ cd auth-server
 npm install
 npm run sync:google-sheets
 ```
+
+## 9) Оновлення Elo гравців з BGA
+
+При старті `auth-server` таблиця `profiles` тепер автоматично отримує поля:
+
+- `bga_elo INTEGER`
+- `bga_elo_updated_at TEXT`
+
+Python-скрипт для ручного оновлення одного гравця:
+
+```bash
+cd auth-server
+python3 -m pip install requests python-dotenv
+python3 run_update_player_elo.py --player-id 85016225
+```
+
+Альтернатива через shell-обгортку:
+
+```bash
+cd auth-server
+./scripts/run_update_player_elo.sh --player-id 85016225
+```
+
+Як це працює:
+
+- бере `profiles.id` як numeric BGA player id;
+- читає сторінку `https://boardgamearena.com/playerstat?id=<id>&game=1`;
+- зберігає Elo в `profiles.bga_elo`;
+- ставить час успішного оновлення в `profiles.bga_elo_updated_at`.
+
+Для майбутнього регулярного запуску по всіх профілях скрипт уже вміє працювати порціями:
+
+```bash
+cd auth-server
+python3 run_update_player_elo.py --batch-size 50 --limit 200
+```
+
+У такому режимі він бере профілі з найстарішим `bga_elo_updated_at` першими, тому підходить для cron/systemd batch-run без одночасного проходу по всій таблиці.
