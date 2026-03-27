@@ -425,20 +425,33 @@
       portalState.cleanup.push(() => parentDocument.removeEventListener("keydown", closeOnEscape));
     }
 
+    function moveFocusOutOfSignInDropdown() {
+      if (!signInDropdown) return;
+      const activeElement = document.activeElement;
+      if (activeElement && signInDropdown.contains(activeElement)) {
+        signInLabel.focus();
+      }
+    }
+
     function openSignInDropdown() {
       signInDropdown.classList.add("lp-auth__dropdown--open");
       signInDropdown.setAttribute("aria-hidden", "false");
+      signInDropdown.removeAttribute("inert");
       signInLabel.setAttribute("aria-expanded", "true");
       if (canUseParentDocument()) {
+        moveFocusOutOfSignInDropdown();
         signInDropdown.classList.remove("lp-auth__dropdown--open");
         signInDropdown.setAttribute("aria-hidden", "true");
+        signInDropdown.setAttribute("inert", "");
         openPortalDropdown();
       }
     }
 
     function closeSignInDropdown() {
+      moveFocusOutOfSignInDropdown();
       signInDropdown.classList.remove("lp-auth__dropdown--open");
       signInDropdown.setAttribute("aria-hidden", "true");
+      signInDropdown.setAttribute("inert", "");
       signInLabel.setAttribute("aria-expanded", "false");
       teardownPortal();
     }
@@ -470,6 +483,7 @@
     function setLoggedOutUI() {
       signInLabel.classList.remove("lp-auth__hidden");
       signInDropdown.classList.remove("lp-auth__hidden");
+      signInDropdown.setAttribute("inert", "");
       authUser.classList.remove("lp-auth__user--visible");
       profileLink.href = "https://carcassonne.gg/player/?id=noprofile";
       adminLink.classList.add("lp-auth__hidden");
@@ -495,6 +509,7 @@
     function setLoggedInUI(user) {
       signInLabel.classList.add("lp-auth__hidden");
       signInDropdown.classList.add("lp-auth__hidden");
+      signInDropdown.setAttribute("inert", "");
       authUser.classList.add("lp-auth__user--visible");
       authUserName.textContent = getFirstName(user.name) || user.email || "User";
       authUserPicture.src = user.picture || "https://www.gravatar.com/avatar/?d=mp";

@@ -25,10 +25,23 @@ for (const envName of requiredEnv) {
 }
 
 const PORT = Number(process.env.PORT || 3100);
-const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGIN || "http://localhost:8080")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const DEFAULT_FRONTEND_ORIGINS = [
+  "http://localhost:8080",
+  "http://127.0.0.1:8080",
+  "https://carcassonne.gg",
+  "https://www.carcassonne.gg",
+  "https://carcassonne.com.ua",
+  "https://www.carcassonne.com.ua",
+];
+const FRONTEND_ORIGINS = Array.from(
+  new Set(
+    (process.env.FRONTEND_ORIGIN || "")
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+      .concat(DEFAULT_FRONTEND_ORIGINS)
+  )
+);
 const PRIMARY_FRONTEND_ORIGIN = FRONTEND_ORIGINS[0];
 const DB_PATH = process.env.DB_PATH || "./data/auth.sqlite";
 const isProd = process.env.NODE_ENV === "production";
