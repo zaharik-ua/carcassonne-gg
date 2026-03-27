@@ -29,7 +29,8 @@ class MatchTable:
     rank0: str
     rank1: str
     timestamp: int
-    flags: str = ""
+    player0_clock: int = 0
+    player1_clock: int = 0
     status: str = "Finished"
 
 
@@ -41,6 +42,5 @@ class MatchUpdateResult:
     player0_id: int | None = None
     player1_id: int | None = None
     players_url: str = ""
-    flags: str = ""
     tables: list[MatchTable] = field(default_factory=list)
     message: str | None = None

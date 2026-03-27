@@ -127,6 +127,17 @@ class SqliteMatchRepository(MatchRepository):
                 (result.wins0, result.wins1, next_status, match.match_id),
             )
 
+            match_row = conn.execute(
+                """
+                SELECT match_id
+                FROM lineups
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (match.match_id,),
+            ).fetchone()
+            parent_match_id = str(match_row["match_id"]).strip() if match_row and match_row["match_id"] is not None else ""
+
             incoming_ids = []
             for index, table in enumerate(result.tables, start=1):
                 game_id = f"{match.match_id}-{table.id}"
@@ -142,10 +153,11 @@ class SqliteMatchRepository(MatchRepository):
                       player_2_score,
                       player_1_rank,
                       player_2_rank,
-                      status,
-                      bga_flags
+                      player_1_clock,
+                      player_2_clock,
+                      status
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(bga_table_id) DO UPDATE SET
                       id = excluded.id,
                       lineup_id = excluded.lineup_id,
@@ -154,8 +166,9 @@ class SqliteMatchRepository(MatchRepository):
                       player_2_score = excluded.player_2_score,
                       player_1_rank = excluded.player_1_rank,
                       player_2_rank = excluded.player_2_rank,
-                      status = excluded.status,
-                      bga_flags = excluded.bga_flags
+                      player_1_clock = excluded.player_1_clock,
+                      player_2_clock = excluded.player_2_clock,
+                      status = excluded.status
                     """,
                     (
                         game_id,
@@ -166,8 +179,9 @@ class SqliteMatchRepository(MatchRepository):
                         self._to_int_or_none(table.score1),
                         self._to_int_or_none(table.rank0),
                         self._to_int_or_none(table.rank1),
+                        int(table.player0_clock or 0),
+                        int(table.player1_clock or 0),
                         table.status,
-                        table.flags or None,
                     ),
                 )
 
@@ -182,6 +196,9 @@ class SqliteMatchRepository(MatchRepository):
                     """,
                     [match.match_id, *incoming_ids],
                 )
+
+            if parent_match_id:
+                self._update_match_aggregates(conn, match_id=parent_match_id)
 
             conn.commit()
 
@@ -218,6 +235,53 @@ class SqliteMatchRepository(MatchRepository):
             player1_id=player1_id,
             gtw=int(row["games_to_win"] or 1),
             stat=False,
+        )
+
+    @staticmethod
+    def _update_match_aggregates(conn: sqlite3.Connection, *, match_id: str) -> None:
+        aggregate_row = conn.execute(
+            """
+            SELECT
+              COALESCE(SUM(COALESCE(dw1, 0)), 0) AS gw1,
+              COALESCE(SUM(COALESCE(dw2, 0)), 0) AS gw2,
+              COALESCE(SUM(CASE WHEN COALESCE(dw1, 0) > COALESCE(dw2, 0) THEN 1 ELSE 0 END), 0) AS dw1,
+              COALESCE(SUM(CASE WHEN COALESCE(dw2, 0) > COALESCE(dw1, 0) THEN 1 ELSE 0 END), 0) AS dw2,
+              COUNT(*) AS total_lineups,
+              COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') = 'Done' THEN 1 ELSE 0 END), 0) AS done_lineups
+            FROM lineups
+            WHERE match_id = ?
+              AND deleted_at IS NULL
+            """,
+            (match_id,),
+        ).fetchone()
+
+        if aggregate_row is None:
+            return
+
+        total_lineups = int(aggregate_row["total_lineups"] or 0)
+        done_lineups = int(aggregate_row["done_lineups"] or 0)
+        next_status = "Done" if total_lineups > 0 and done_lineups == total_lineups else "Planned"
+
+        conn.execute(
+            """
+            UPDATE matches
+            SET
+              dw1 = ?,
+              dw2 = ?,
+              gw1 = ?,
+              gw2 = ?,
+              status = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                int(aggregate_row["dw1"] or 0),
+                int(aggregate_row["dw2"] or 0),
+                int(aggregate_row["gw1"] or 0),
+                int(aggregate_row["gw2"] or 0),
+                next_status,
+                match_id,
+            ),
         )
 
     def _connect(self) -> sqlite3.Connection:

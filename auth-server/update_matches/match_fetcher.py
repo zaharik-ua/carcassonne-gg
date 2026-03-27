@@ -127,7 +127,6 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
             enriched_batch.append(MatchUpdateResult(status="error", message="Missing tables in payload"))
             continue
 
-        flags = ""
         enriched_tables: list[MatchTable] = []
 
         def _ts(table: dict, key: str) -> int:
@@ -161,21 +160,14 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
                 elif rank0 == "2" and rank1 == "1":
                     rank0 = "0"
 
-                table_flags = ""
                 table_status = "Finished"
                 if table.get("concede") == "1":
-                    table_flags += " 🏳️"
                     table_status = "Conceded"
-                if table.get("arena_win"):
-                    table_flags += " 🏟️"
 
                 penalties_payload = request_json("/table/table/tableinfos.html", params={"id": table_id})
                 penalties = penalties_payload.get("data", {}).get("result", {}).get("penalties", {})
-                clock0 = penalties.get(str(item.player0_id), {}).get("clock") == "1"
-                clock1 = penalties.get(str(item.player1_id), {}).get("clock") == "1"
-                if clock0 or clock1:
-                    table_flags += " ⌛"
-                    table_status = "Timed out"
+                clock0 = 1 if penalties.get(str(item.player0_id), {}).get("clock") == "1" else 0
+                clock1 = 1 if penalties.get(str(item.player1_id), {}).get("clock") == "1" else 0
 
                 try:
                     if clock0 and float(score0) > float(score1):
@@ -185,7 +177,6 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
                 except Exception as exc:
                     print(f"⚠️ Failed to compare scores in table {table_id}: {exc}", flush=True)
 
-                flags += table_flags
                 enriched_tables.append(
                     MatchTable(
                         id=table_id,
@@ -195,7 +186,8 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
                         rank0=rank0,
                         rank1=rank1,
                         timestamp=int(table["start"]),
-                        flags=table_flags.strip(),
+                        player0_clock=clock0,
+                        player1_clock=clock1,
                         status=table_status,
                     )
                 )
@@ -226,7 +218,6 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
                 wins0=wins0,
                 wins1=wins1,
                 players_url=players_url,
-                flags=flags.strip(),
                 tables=enriched_tables,
             )
         )

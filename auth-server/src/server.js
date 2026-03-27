@@ -1270,8 +1270,9 @@ function ensureGamesSchema() {
       player_2_score INTEGER,
       player_1_rank INTEGER,
       player_2_rank INTEGER,
-      status TEXT,
-      bga_flags TEXT
+      player_1_clock INTEGER NOT NULL DEFAULT 0,
+      player_2_clock INTEGER NOT NULL DEFAULT 0,
+      status TEXT
     )
   `, (createErr) => {
     if (createErr) {
@@ -1290,8 +1291,16 @@ function ensureGamesSchema() {
       addColumnIfMissing(columns, "games", "player_2_score", "INTEGER");
       addColumnIfMissing(columns, "games", "player_1_rank", "INTEGER");
       addColumnIfMissing(columns, "games", "player_2_rank", "INTEGER");
+      addColumnIfMissing(columns, "games", "player_1_clock", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "games", "player_2_clock", "INTEGER NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "games", "status", "TEXT");
-      addColumnIfMissing(columns, "games", "bga_flags", "TEXT");
+      if (columns.some((column) => column.name === "bga_flags")) {
+        db.run("ALTER TABLE games DROP COLUMN bga_flags", (dropErr) => {
+          if (dropErr) {
+            console.error("Failed to drop games.bga_flags", dropErr);
+          }
+        });
+      }
     });
 
     db.run(
@@ -3400,8 +3409,9 @@ app.get("/games", requireAdmin, (_req, res, next) => {
         player_2_score,
         player_1_rank,
         player_2_rank,
-        status,
-        bga_flags
+        player_1_clock,
+        player_2_clock,
+        status
       FROM games
       ORDER BY lineup_id COLLATE NOCASE ASC, game_number ASC, id ASC
     `,
@@ -3421,8 +3431,9 @@ app.post("/games", requireAdmin, (req, res) => {
   const player2Score = normalizeIntegerOrNull(req.body?.player_2_score);
   const player1Rank = normalizePositiveInteger(req.body?.player_1_rank);
   const player2Rank = normalizePositiveInteger(req.body?.player_2_rank);
+  const player1Clock = normalizeIntegerOrNull(req.body?.player_1_clock);
+  const player2Clock = normalizeIntegerOrNull(req.body?.player_2_clock);
   const status = normalizeNullableText(req.body?.status);
-  const bgaFlags = normalizeNullableText(req.body?.bga_flags);
 
   if (!id) {
     return res.status(400).json({ ok: false, message: "id is required" });
@@ -3444,6 +3455,18 @@ app.post("/games", requireAdmin, (req, res) => {
   }
   if (hasNonEmptyValue(req.body?.player_2_rank) && !player2Rank) {
     return res.status(400).json({ ok: false, message: "player_2_rank must be a positive integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_1_clock) && player1Clock === null) {
+    return res.status(400).json({ ok: false, message: "player_1_clock must be an integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_2_clock) && player2Clock === null) {
+    return res.status(400).json({ ok: false, message: "player_2_clock must be an integer" });
+  }
+  if (player1Clock !== null && player1Clock !== 0 && player1Clock !== 1) {
+    return res.status(400).json({ ok: false, message: "player_1_clock must be 0 or 1" });
+  }
+  if (player2Clock !== null && player2Clock !== 0 && player2Clock !== 1) {
+    return res.status(400).json({ ok: false, message: "player_2_clock must be 0 or 1" });
   }
 
   return db.get(
@@ -3489,10 +3512,11 @@ app.post("/games", requireAdmin, (req, res) => {
                 player_2_score,
                 player_1_rank,
                 player_2_rank,
-                status,
-                bga_flags
+                player_1_clock,
+                player_2_clock,
+                status
               )
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
             [
               id,
@@ -3503,8 +3527,9 @@ app.post("/games", requireAdmin, (req, res) => {
               player2Score,
               player1Rank,
               player2Rank,
+              player1Clock ?? 0,
+              player2Clock ?? 0,
               status,
-              bgaFlags,
             ],
             (insertErr) => {
               if (insertErr) {
@@ -3525,8 +3550,9 @@ app.post("/games", requireAdmin, (req, res) => {
                     player_2_score,
                     player_1_rank,
                     player_2_rank,
-                    status,
-                    bga_flags
+                    player_1_clock,
+                    player_2_clock,
+                    status
                   FROM games
                   WHERE upper(trim(id)) = upper(?)
                   LIMIT 1
@@ -3557,8 +3583,9 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
   const player2Score = normalizeIntegerOrNull(req.body?.player_2_score);
   const player1Rank = normalizePositiveInteger(req.body?.player_1_rank);
   const player2Rank = normalizePositiveInteger(req.body?.player_2_rank);
+  const player1Clock = normalizeIntegerOrNull(req.body?.player_1_clock);
+  const player2Clock = normalizeIntegerOrNull(req.body?.player_2_clock);
   const status = normalizeNullableText(req.body?.status);
-  const bgaFlags = normalizeNullableText(req.body?.bga_flags);
 
   if (!gameId) {
     return res.status(400).json({ ok: false, message: "Invalid game id" });
@@ -3583,6 +3610,18 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
   }
   if (hasNonEmptyValue(req.body?.player_2_rank) && !player2Rank) {
     return res.status(400).json({ ok: false, message: "player_2_rank must be a positive integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_1_clock) && player1Clock === null) {
+    return res.status(400).json({ ok: false, message: "player_1_clock must be an integer" });
+  }
+  if (hasNonEmptyValue(req.body?.player_2_clock) && player2Clock === null) {
+    return res.status(400).json({ ok: false, message: "player_2_clock must be an integer" });
+  }
+  if (player1Clock !== null && player1Clock !== 0 && player1Clock !== 1) {
+    return res.status(400).json({ ok: false, message: "player_1_clock must be 0 or 1" });
+  }
+  if (player2Clock !== null && player2Clock !== 0 && player2Clock !== 1) {
+    return res.status(400).json({ ok: false, message: "player_2_clock must be 0 or 1" });
   }
 
   return db.get(
@@ -3637,8 +3676,9 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
                     player_2_score = ?,
                     player_1_rank = ?,
                     player_2_rank = ?,
-                    status = ?,
-                    bga_flags = ?
+                    player_1_clock = ?,
+                    player_2_clock = ?,
+                    status = ?
                   WHERE upper(trim(id)) = upper(?)
                 `,
                 [
@@ -3649,8 +3689,9 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
                   player2Score,
                   player1Rank,
                   player2Rank,
+                  player1Clock ?? 0,
+                  player2Clock ?? 0,
                   status,
-                  bgaFlags,
                   gameId,
                 ],
                 function onUpdate(err) {
@@ -3675,8 +3716,9 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
                         player_2_score,
                         player_1_rank,
                         player_2_rank,
-                        status,
-                        bga_flags
+                        player_1_clock,
+                        player_2_clock,
+                        status
                       FROM games
                       WHERE upper(trim(id)) = upper(?)
                       LIMIT 1
