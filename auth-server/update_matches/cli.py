@@ -26,8 +26,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--targets",
-        default=os.getenv("MATCH_UPDATE_TARGETS", f"{TARGET_ONGOING},{TARGET_FINISHED_PENDING}"),
-        help="Comma-separated targets: ongoing,finished_pending",
+        default=os.getenv("MATCH_UPDATE_TARGETS", f"{TARGET_FINISHED_PENDING},{TARGET_ONGOING}"),
+        help="Comma-separated targets: finished_pending,ongoing",
     )
     parser.add_argument(
         "--match-id",

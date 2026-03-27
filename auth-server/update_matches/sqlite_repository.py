@@ -11,6 +11,7 @@ from .repository import MatchRepository, TARGET_EMPTY_FINISHED, TARGET_FINISHED_
 class SqliteMatchRepository(MatchRepository):
     def __init__(self, db_path: str) -> None:
         self.db_path = str(Path(db_path).resolve())
+        self._ensure_schema()
 
     def fetch_duels_for_match(self, *, match_id: str) -> list[MatchUpdateRequest]:
         sql = """
@@ -88,7 +89,10 @@ class SqliteMatchRepository(MatchRepository):
             LEFT JOIN profiles p2
               ON trim(COALESCE(p2.id, '')) = trim(COALESCE(l.player_2_id, ''))
             WHERE {where_sql}
-            ORDER BY datetime(l.time_utc) ASC, l.id ASC
+            ORDER BY
+              COALESCE(datetime(l.results_checked_at), datetime('1970-01-01 00:00:00')) ASC,
+              datetime(l.time_utc) ASC,
+              l.id ASC
             LIMIT :limit
         """
 
@@ -140,6 +144,7 @@ class SqliteMatchRepository(MatchRepository):
                   dw2 = ?,
                   status = ?,
                   results_last_error = NULL,
+                  results_checked_at = CURRENT_TIMESTAMP,
                   updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
@@ -228,6 +233,7 @@ class SqliteMatchRepository(MatchRepository):
                 UPDATE duels
                 SET
                   results_last_error = ?,
+                  results_checked_at = CURRENT_TIMESTAMP,
                   updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
@@ -311,6 +317,17 @@ class SqliteMatchRepository(MatchRepository):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _ensure_schema(self) -> None:
+        with self._connect() as conn:
+            columns = {
+                str(row["name"]).strip().lower()
+                for row in conn.execute("PRAGMA table_info(duels)").fetchall()
+                if row["name"] is not None
+            }
+            if "results_checked_at" not in columns:
+                conn.execute("ALTER TABLE duels ADD COLUMN results_checked_at TEXT")
+                conn.commit()
 
     @staticmethod
     def _parse_iso_datetime(value: str) -> datetime:

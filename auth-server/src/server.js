@@ -1229,6 +1229,7 @@ function ensureDuelsSchema() {
       dw2 INTEGER,
       status TEXT,
       results_last_error TEXT,
+      results_checked_at TEXT,
       created_by TEXT,
       updated_by TEXT,
       deleted_by TEXT,
@@ -1249,6 +1250,7 @@ function ensureDuelsSchema() {
       if (!Array.isArray(columns) || columns.length === 0) return;
       addColumnIfMissing(columns, "duels", "duel_number", "INTEGER");
       addColumnIfMissing(columns, "duels", "results_last_error", "TEXT");
+      addColumnIfMissing(columns, "duels", "results_checked_at", "TEXT");
       addColumnIfMissing(columns, "duels", "created_by", "TEXT");
       addColumnIfMissing(columns, "duels", "updated_by", "TEXT");
       addColumnIfMissing(columns, "duels", "deleted_by", "TEXT");

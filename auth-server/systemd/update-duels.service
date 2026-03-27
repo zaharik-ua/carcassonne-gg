@@ -1,0 +1,13 @@
+[Unit]
+Description=Update Carcassonne GG duel results from BGA
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/carcassonne-gg/auth-server
+ExecStart=/usr/bin/flock -n /tmp/carcassonne-update-duels.lock /home/carcassonne-gg/auth-server/.venv/bin/python -m update_matches.cli --db-path /home/carcassonne-gg/auth-server/data/auth.sqlite --limit 20
+TimeoutStartSec=5min
+
+[Install]
+WantedBy=multi-user.target

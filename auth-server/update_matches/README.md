@@ -11,6 +11,7 @@ It writes:
 - `duels.dw1`
 - `duels.dw2`
 - `duels.status`
+- `duels.results_checked_at`
 - `games`
 
 It persists sync errors into:
@@ -47,7 +48,7 @@ python3 run_update_matches.py --targets ongoing --limit 10
 ```
 
 ```bash
-python3 run_update_matches.py --targets empty_finished
+python3 run_update_matches.py --targets finished_pending
 ```
 
 Manual test for one match:
@@ -58,12 +59,16 @@ python3 run_update_matches.py --match-id 20250330UKRPRT
 
 ## Selection rules
 
-- `ongoing`: `duels.status = 'Planned'`, start time already passed, players assigned
-- `empty_finished`: `duels.status = 'Done'` and `dw1` or `dw2` is empty
+- `finished_pending`: duel already ended, status is not `Done` and not `Error`
+- `ongoing`: duel already started, not yet ended, status is not `Done`
 - manual test mode: `--match-id <match_id>` ignores automatic selection and loads all duels of that match
+- automatic runs prioritize the least recently checked duels via `duels.results_checked_at`
 
 ## Result rules
 
 - `dw1` / `dw2` updated from BGA
-- duel status becomes `Done` when one side reaches `games_to_win`
+- duel status becomes:
+  - `Done` when one side exactly reaches `games_to_win` and the other is still below
+  - `In progress` while the duel is still inside its play window and no winner is determined yet
+  - `Error` when the play window is over and no valid winner is determined
 - `games` rows are upserted by `bga_table_id`

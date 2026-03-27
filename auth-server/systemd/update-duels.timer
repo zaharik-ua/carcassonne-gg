@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Carcassonne GG duel updater 1 minute after previous completion
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+Unit=update-duels.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
