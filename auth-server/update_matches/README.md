@@ -72,3 +72,13 @@ python3 run_update_matches.py --match-id 20250330UKRPRT
   - `In progress` while the duel is still inside its play window and no winner is determined yet
   - `Error` when the play window is over and no valid winner is determined
 - `games` rows are upserted by `bga_table_id`
+
+## Logging
+
+- manual run: logs go to console with timestamps
+- systemd run: logs are appended to `/var/log/carcassonne/update-duels.log`
+- recommended inspection:
+
+```bash
+tail -f /var/log/carcassonne/update-duels.log
+```
