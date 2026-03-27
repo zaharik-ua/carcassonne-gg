@@ -62,3 +62,7 @@ def main() -> int:
     summary = service.run(targets=targets, total_limit=args.limit, match_id=args.match_id)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
