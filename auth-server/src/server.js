@@ -861,7 +861,7 @@ function syncUsersBgaIdForProfile(profileId, email, options, done) {
               () => callback(null, targetUserId)
             );
           }
-        );
+        });
       });
     }
   );
@@ -4480,7 +4480,6 @@ app.post("/duels/bulk-upsert", (req, res) => {
               }
             );
           });
-          }
         });
       });
     }
@@ -5379,8 +5378,7 @@ app.delete("/matches/:id", (req, res) => {
               }
             );
           });
-          }
-        );
+        });
       });
     }
   );
