@@ -136,7 +136,9 @@
 
 <!-- СКРИПТ -->
 <script>
-  
+  if (!window.__ggTournamentsListMainInitialized) {
+    window.__ggTournamentsListMainInitialized = true;
+
   function setupToggle(toggle, content) {
     let open = false;
     toggle.addEventListener("click", () => {
@@ -314,4 +316,5 @@
   }
 
   document.addEventListener("DOMContentLoaded", fetchCOCTournaments);
+  }
 </script>

@@ -861,7 +861,7 @@ function syncUsersBgaIdForProfile(profileId, email, options, done) {
               () => callback(null, targetUserId)
             );
           }
-        });
+        );
       });
     }
   );
