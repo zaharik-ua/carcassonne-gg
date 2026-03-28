@@ -4593,6 +4593,170 @@ app.get("/matches", (req, res, next) => {
   );
 });
 
+app.get("/public/friendly-matches", (_req, res, next) => {
+  const tournamentId = "Friendly-Matches";
+
+  return db.get(
+    `
+      SELECT
+        t.id,
+        t.name,
+        t.short_title,
+        t.logo,
+        t.link
+      FROM tournaments t
+      WHERE upper(trim(t.id)) = upper(trim(?))
+      LIMIT 1
+    `,
+    [tournamentId],
+    (tournamentErr, tournamentRow) => {
+      if (tournamentErr) return next(tournamentErr);
+      if (!tournamentRow) {
+        return res.json({ ok: true, tournament: null, matches: [], duels: [] });
+      }
+
+      return db.all(
+        `
+          SELECT
+            m.id,
+            m.tournament_id,
+            m.time_utc,
+            m.lineup_type,
+            m.lineup_deadline_h,
+            m.lineup_deadline_utc,
+            m.number_of_duels,
+            m.team_1,
+            m.team_2,
+            m.status,
+            m.dw1,
+            m.dw2,
+            m.gw1,
+            m.gw2,
+            m.rating,
+            team1.name AS team_1_name,
+            COALESCE(NULLIF(trim(team1.flag), ''), NULLIF(trim(team1.logo), '')) AS team_1_flag,
+            team2.name AS team_2_name,
+            COALESCE(NULLIF(trim(team2.flag), ''), NULLIF(trim(team2.logo), '')) AS team_2_flag
+          FROM matches m
+          LEFT JOIN teams team1
+            ON upper(trim(COALESCE(team1.id, ''))) = upper(trim(COALESCE(m.team_1, '')))
+          LEFT JOIN teams team2
+            ON upper(trim(COALESCE(team2.id, ''))) = upper(trim(COALESCE(m.team_2, '')))
+          WHERE m.deleted_at IS NULL
+            AND upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))
+          ORDER BY datetime(COALESCE(m.time_utc, '1970-01-01 00:00:00')) DESC, m.id ASC
+        `,
+        [tournamentId],
+        (matchesErr, matchRows) => {
+          if (matchesErr) return next(matchesErr);
+
+          const normalizedMatchIds = Array.from(new Set(
+            (matchRows || [])
+              .map((row) => String(row?.id || "").trim())
+              .filter(Boolean)
+          ));
+
+          const finalize = (duelRows) => {
+            return res.json({
+              ok: true,
+              tournament: {
+                id: tournamentRow.id,
+                name: tournamentRow.name,
+                short_title: tournamentRow.short_title,
+                logo: tournamentRow.logo,
+                link: tournamentRow.link,
+                type: "TEAM",
+              },
+              matches: (matchRows || []).map((row) => ({
+                id: row.id,
+                tournament_id: row.tournament_id,
+                time_utc: row.time_utc,
+                lineup_type: row.lineup_type,
+                lineup_deadline_h: row.lineup_deadline_h,
+                lineup_deadline_utc: row.lineup_deadline_utc,
+                number_of_duels: row.number_of_duels,
+                team_1: row.team_1,
+                team_2: row.team_2,
+                team_1_name: row.team_1_name,
+                team_1_flag: row.team_1_flag,
+                team_2_name: row.team_2_name,
+                team_2_flag: row.team_2_flag,
+                status: row.status,
+                dw1: row.dw1,
+                dw2: row.dw2,
+                gw1: row.gw1,
+                gw2: row.gw2,
+                rating: row.rating,
+              })),
+              duels: (duelRows || []).map((row) => ({
+                id: row.id,
+                match_id: row.match_id,
+                duel_number: row.duel_number,
+                duel_format: row.duel_format,
+                time_utc: row.time_utc,
+                player_1_id: row.player_1_id,
+                player_1_name: row.player_1_name,
+                player_1_elo: row.player_1_elo,
+                player_2_id: row.player_2_id,
+                player_2_name: row.player_2_name,
+                player_2_elo: row.player_2_elo,
+                dw1: row.dw1,
+                dw2: row.dw2,
+                rating: row.rating,
+                status: row.status,
+              })),
+            });
+          };
+
+          if (!normalizedMatchIds.length) {
+            return finalize([]);
+          }
+
+          const placeholders = normalizedMatchIds.map(() => "?").join(", ");
+          return db.all(
+            `
+              SELECT
+                d.id,
+                d.match_id,
+                d.duel_number,
+                d.duel_format,
+                d.time_utc,
+                d.player_1_id,
+                COALESCE(NULLIF(trim(p1.bga_nickname), ''), trim(d.player_1_id)) AS player_1_name,
+                p1.bga_elo AS player_1_elo,
+                d.player_2_id,
+                COALESCE(NULLIF(trim(p2.bga_nickname), ''), trim(d.player_2_id)) AS player_2_name,
+                p2.bga_elo AS player_2_elo,
+                d.dw1,
+                d.dw2,
+                d.rating,
+                d.status
+              FROM duels d
+              LEFT JOIN profiles p1
+                ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
+              LEFT JOIN profiles p2
+                ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
+              WHERE d.deleted_at IS NULL
+                AND upper(trim(COALESCE(d.tournament_id, ''))) = upper(trim(?))
+                AND trim(COALESCE(d.match_id, '')) IN (${placeholders})
+              ORDER BY
+                CASE WHEN d.duel_number IS NULL THEN 1 ELSE 0 END ASC,
+                d.duel_number ASC,
+                datetime(COALESCE(d.time_utc, '1970-01-01 00:00:00')) ASC,
+                d.id ASC
+            `,
+            [tournamentId, ...normalizedMatchIds],
+            (duelsErr, duelRows) => {
+              if (duelsErr) return next(duelsErr);
+              return finalize(duelRows || []);
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
 app.post("/matches", (req, res) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
