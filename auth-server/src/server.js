@@ -236,6 +236,76 @@ function normalizeIntegerOrNull(value) {
   return Number.isInteger(normalized) ? normalized : null;
 }
 
+function loadDuelsByMatchId(matchId, callback) {
+  return db.all(
+    `
+      SELECT
+        id,
+        tournament_id,
+        match_id,
+        duel_number,
+        duel_format,
+        time_utc,
+        custom_time,
+        player_1_id,
+        player_2_id,
+        dw1,
+        dw2,
+        rating_full,
+        rating,
+        status
+      FROM duels
+      WHERE match_id = ?
+        AND deleted_at IS NULL
+      ORDER BY
+        CASE WHEN duel_number IS NULL THEN 1 ELSE 0 END ASC,
+        duel_number ASC,
+        id ASC
+    `,
+    [matchId],
+    callback
+  );
+}
+
+function loadDuelsByIds(duelIds, callback) {
+  const normalizedIds = Array.from(new Set((Array.isArray(duelIds) ? duelIds : [])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)));
+  if (!normalizedIds.length) {
+    callback(null, []);
+    return;
+  }
+  const placeholders = normalizedIds.map(() => "?").join(", ");
+  return db.all(
+    `
+      SELECT
+        id,
+        tournament_id,
+        match_id,
+        duel_number,
+        duel_format,
+        time_utc,
+        custom_time,
+        player_1_id,
+        player_2_id,
+        dw1,
+        dw2,
+        rating_full,
+        rating,
+        status
+      FROM duels
+      WHERE id IN (${placeholders})
+        AND deleted_at IS NULL
+      ORDER BY
+        CASE WHEN duel_number IS NULL THEN 1 ELSE 0 END ASC,
+        duel_number ASC,
+        id ASC
+    `,
+    normalizedIds,
+    callback
+  );
+}
+
 function hasNonEmptyValue(value) {
   return String(value ?? "").trim() !== "";
 }
@@ -1203,6 +1273,7 @@ function ensureMatchesSchema() {
     addColumnIfMissing(columns, "matches", "created_by", "TEXT");
     addColumnIfMissing(columns, "matches", "updated_by", "TEXT");
     addColumnIfMissing(columns, "matches", "deleted_by", "TEXT");
+    addColumnIfMissing(columns, "matches", "rating", "INTEGER");
   });
 }
 
@@ -1229,6 +1300,8 @@ function ensureDuelsSchema() {
       player_2_id TEXT,
       dw1 INTEGER,
       dw2 INTEGER,
+      rating_full REAL,
+      rating INTEGER,
       status TEXT,
       results_last_error TEXT,
       results_checked_at TEXT,
@@ -1253,6 +1326,8 @@ function ensureDuelsSchema() {
       addColumnIfMissing(columns, "duels", "duel_number", "INTEGER");
       addColumnIfMissing(columns, "duels", "results_last_error", "TEXT");
       addColumnIfMissing(columns, "duels", "results_checked_at", "TEXT");
+      addColumnIfMissing(columns, "duels", "rating_full", "REAL");
+      addColumnIfMissing(columns, "duels", "rating", "INTEGER");
       addColumnIfMissing(columns, "duels", "created_by", "TEXT");
       addColumnIfMissing(columns, "duels", "updated_by", "TEXT");
       addColumnIfMissing(columns, "duels", "deleted_by", "TEXT");
@@ -4003,35 +4078,10 @@ app.get("/duels", (req, res, next) => {
           return res.status(403).json({ ok: false, message: "Forbidden" });
         }
 
-        return db.all(
-          `
-            SELECT
-              id,
-              tournament_id,
-              match_id,
-              duel_number,
-              duel_format,
-              time_utc,
-              custom_time,
-              player_1_id,
-              player_2_id,
-              dw1,
-              dw2,
-              status
-            FROM duels
-            WHERE match_id = ?
-              AND deleted_at IS NULL
-            ORDER BY
-              CASE WHEN duel_number IS NULL THEN 1 ELSE 0 END ASC,
-              duel_number ASC,
-              id ASC
-          `,
-          [matchId],
-          (err, rows) => {
-            if (err) return next(err);
-            return res.json({ ok: true, duels: rows || [] });
-          }
-        );
+        return loadDuelsByMatchId(matchId, (err, rows) => {
+          if (err) return next(err);
+          return res.json({ ok: true, duels: rows || [] });
+        });
       });
     }
   );
@@ -4177,7 +4227,12 @@ app.post("/duels/bulk-upsert", (req, res) => {
                   if (commitErr) {
                     return res.status(500).json({ ok: false, message: "Failed to save duels" });
                   }
-                  return res.json({ ok: true, duels: sanitized });
+                  return loadDuelsByIds(sanitized.map((item) => item.id), (loadErr, rows) => {
+                    if (loadErr) {
+                      return res.status(500).json({ ok: false, message: "Failed to load saved duels" });
+                    }
+                    return res.json({ ok: true, duels: rows || [] });
+                  });
                 });
               });
             }
@@ -4257,31 +4312,7 @@ app.post("/duels/bulk-upsert", (req, res) => {
           });
         }
 
-        return db.all(
-        `
-          SELECT
-            id,
-            tournament_id,
-            match_id,
-            duel_number,
-            duel_format,
-            time_utc,
-            custom_time,
-            player_1_id,
-            player_2_id,
-            dw1,
-            dw2,
-            status
-            FROM duels
-          WHERE match_id = ?
-            AND deleted_at IS NULL
-          ORDER BY
-            CASE WHEN duel_number IS NULL THEN 1 ELSE 0 END ASC,
-            duel_number ASC,
-            id ASC
-        `,
-        [matchId],
-          (beforeErr, previousLineups) => {
+        return loadDuelsByMatchId(matchId, (beforeErr, previousLineups) => {
           if (beforeErr) {
             return res.status(500).json({ ok: false, message: "Failed to load existing duels" });
           }
@@ -4411,29 +4442,35 @@ app.post("/duels/bulk-upsert", (req, res) => {
                           db.run("COMMIT", (commitErr) => {
                             if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save duels" });
 
-                            const action = previousLineups.length ? "update" : "create";
-                    const eventType = previousLineups.length ? "lineups.updated" : "lineups.created";
-                    const changes = previousLineups.length
-                      ? buildLineupsAuditChanges(previousLineups || [], sanitized || [])
-                      : buildAuditCreationChanges({ lineups: sanitized || [] }, ["lineups"]);
+                            return loadDuelsByMatchId(matchId, (loadErr, savedDuels) => {
+                              if (loadErr) {
+                                return res.status(500).json({ ok: false, message: "Failed to load saved duels" });
+                              }
 
-                            return logAuditEvent(
-                              {
-                                ...getAuditActor(req.user),
-                                event_type: eventType,
-                                entity_type: "lineups",
-                                action,
-                                record_id: matchId,
-                                changes,
-                                metadata: {
-                                  match_id: matchId,
-                                  lineups_count: sanitized.length,
-                                  team_1: team1,
-                                  team_2: team2,
+                              const action = previousLineups.length ? "update" : "create";
+                              const eventType = previousLineups.length ? "lineups.updated" : "lineups.created";
+                              const changes = previousLineups.length
+                                ? buildLineupsAuditChanges(previousLineups || [], savedDuels || [])
+                                : buildAuditCreationChanges({ lineups: savedDuels || [] }, ["lineups"]);
+
+                              return logAuditEvent(
+                                {
+                                  ...getAuditActor(req.user),
+                                  event_type: eventType,
+                                  entity_type: "lineups",
+                                  action,
+                                  record_id: matchId,
+                                  changes,
+                                  metadata: {
+                                    match_id: matchId,
+                                    lineups_count: savedDuels.length,
+                                    team_1: team1,
+                                    team_2: team2,
+                                  },
                                 },
-                              },
-                              () => res.json({ ok: true, duels: sanitized })
-                            );
+                                () => res.json({ ok: true, duels: savedDuels || [] })
+                              );
+                            });
                           });
                         });
                       }
@@ -4444,7 +4481,7 @@ app.post("/duels/bulk-upsert", (req, res) => {
             );
           });
           }
-        );
+        });
       });
     }
   );
@@ -4489,6 +4526,7 @@ app.get("/matches", (req, res, next) => {
         m.dw2,
         m.gw1,
         m.gw2,
+        m.rating,
         (
           SELECT COALESCE(t.access_type, ?)
           FROM tournaments t
@@ -4549,6 +4587,7 @@ app.get("/matches", (req, res, next) => {
         dw2: row.dw2,
         gw1: row.gw1,
         gw2: row.gw2,
+        rating: row.rating,
       }));
       return res.json({ ok: true, matches: filteredRows });
     }
@@ -4766,7 +4805,8 @@ app.post("/matches", (req, res) => {
                       dw1,
                       dw2,
                       gw1,
-                      gw2
+                      gw2,
+                      rating
                     FROM matches
                     WHERE id = ?
                       AND deleted_at IS NULL
@@ -4861,7 +4901,8 @@ app.post("/matches", (req, res) => {
                 dw1,
                 dw2,
                 gw1,
-                gw2
+                gw2,
+                rating
               FROM matches
               WHERE id = ?
               LIMIT 1
@@ -4949,7 +4990,8 @@ app.patch("/matches/:id", (req, res) => {
         dw1,
         dw2,
         gw1,
-        gw2
+        gw2,
+        rating
       FROM matches
       WHERE id = ?
         AND deleted_at IS NULL
@@ -5115,7 +5157,8 @@ app.patch("/matches/:id", (req, res) => {
                   dw1,
                   dw2,
                   gw1,
-                  gw2
+                  gw2,
+                  rating
                 FROM matches
                 WHERE id = ?
                 LIMIT 1
@@ -5181,7 +5224,8 @@ app.delete("/matches/:id", (req, res) => {
         dw1,
         dw2,
         gw1,
-        gw2
+        gw2,
+        rating
       FROM matches
       WHERE id = ?
         AND deleted_at IS NULL

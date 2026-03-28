@@ -110,4 +110,18 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
                 conn.execute("ALTER TABLE profiles ADD COLUMN bga_elo INTEGER")
             if "bga_elo_updated_at" not in columns:
                 conn.execute("ALTER TABLE profiles ADD COLUMN bga_elo_updated_at TEXT")
+            duel_columns = {
+                str(row["name"]).strip()
+                for row in conn.execute("PRAGMA table_info(duels)").fetchall()
+            }
+            match_columns = {
+                str(row["name"]).strip()
+                for row in conn.execute("PRAGMA table_info(matches)").fetchall()
+            }
+            if "rating_full" not in duel_columns:
+                conn.execute("ALTER TABLE duels ADD COLUMN rating_full REAL")
+            if "rating" not in duel_columns:
+                conn.execute("ALTER TABLE duels ADD COLUMN rating INTEGER")
+            if "rating" not in match_columns:
+                conn.execute("ALTER TABLE matches ADD COLUMN rating INTEGER")
             conn.commit()

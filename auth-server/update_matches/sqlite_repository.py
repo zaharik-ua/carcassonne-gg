@@ -135,7 +135,6 @@ class SqliteMatchRepository(MatchRepository):
                 next_status = "In progress"
             else:
                 next_status = "Error"
-
             conn.execute(
                 """
                 UPDATE duels
@@ -148,7 +147,12 @@ class SqliteMatchRepository(MatchRepository):
                   updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
-                (result.wins0, result.wins1, next_status, match.match_id),
+                (
+                    result.wins0,
+                    result.wins1,
+                    next_status,
+                    match.match_id,
+                ),
             )
 
             match_row = conn.execute(
@@ -320,14 +324,25 @@ class SqliteMatchRepository(MatchRepository):
 
     def _ensure_schema(self) -> None:
         with self._connect() as conn:
-            columns = {
+            duel_columns = {
                 str(row["name"]).strip().lower()
                 for row in conn.execute("PRAGMA table_info(duels)").fetchall()
                 if row["name"] is not None
             }
-            if "results_checked_at" not in columns:
+            match_columns = {
+                str(row["name"]).strip().lower()
+                for row in conn.execute("PRAGMA table_info(matches)").fetchall()
+                if row["name"] is not None
+            }
+            if "results_checked_at" not in duel_columns:
                 conn.execute("ALTER TABLE duels ADD COLUMN results_checked_at TEXT")
-                conn.commit()
+            if "rating_full" not in duel_columns:
+                conn.execute("ALTER TABLE duels ADD COLUMN rating_full REAL")
+            if "rating" not in duel_columns:
+                conn.execute("ALTER TABLE duels ADD COLUMN rating INTEGER")
+            if "rating" not in match_columns:
+                conn.execute("ALTER TABLE matches ADD COLUMN rating INTEGER")
+            conn.commit()
 
     @staticmethod
     def _parse_iso_datetime(value: str) -> datetime:
