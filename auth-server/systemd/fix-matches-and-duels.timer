@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Carcassonne GG matches/duels fixer every hour
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+Unit=fix-matches-and-duels.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -209,3 +209,20 @@ python3 run_fix_matches_and_duels.py --dry-run
 ```cron
 0 * * * * cd /path/to/carcassonne-gg/auth-server && /usr/bin/env python3 run_fix_matches_and_duels.py >> /var/log/carcassonne-fix-matches-and-duels.log 2>&1
 ```
+
+### systemd-варіант на запуск раз на годину
+
+У репозиторії є готові файли:
+
+- `auth-server/systemd/fix-matches-and-duels.service`
+- `auth-server/systemd/fix-matches-and-duels.timer`
+
+Встановлення на сервері:
+
+```bash
+sudo cp auth-server/systemd/fix-matches-and-duels.service /etc/systemd/system/
+sudo cp auth-server/systemd/fix-matches-and-duels.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now fix-matches-and-duels.timer
+sudo systemctl status fix-matches-and-duels.timer
+```

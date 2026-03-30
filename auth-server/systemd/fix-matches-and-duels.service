@@ -1,0 +1,16 @@
+[Unit]
+Description=Fix future Carcassonne GG matches and duels state
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/carcassonne-gg/auth-server
+LogsDirectory=carcassonne
+StandardOutput=append:/var/log/carcassonne/fix-matches-and-duels.log
+StandardError=append:/var/log/carcassonne/fix-matches-and-duels.log
+ExecStart=/usr/bin/flock -n /tmp/carcassonne-fix-matches-and-duels.lock /usr/bin/python3 /home/carcassonne-gg/auth-server/run_fix_matches_and_duels.py
+TimeoutStartSec=5min
+
+[Install]
+WantedBy=multi-user.target
