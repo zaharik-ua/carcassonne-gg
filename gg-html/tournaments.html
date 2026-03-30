@@ -984,8 +984,8 @@
   let currentTournamentId = useTestData
     //? "Asian-Cup-2025"
     //? "OCFC-2025"
-    ? "CCOQ-2026"
-    //? "UCOC-2026"
+    //? "CCOQ-2026"
+    ? "UCOC-2026"
     //? "UCDTC-2025"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
@@ -1209,74 +1209,101 @@
     return wrapper;
   }
 
-  function getStage2Label(tournament) {
-    if (!tournament) return "Stage 2";
-    const stage2_name = (tournament.stage2_name || "").trim();
-    if (stage2_name) return stage2_name;
-    const stage2_format = tournament.stage2_format || "";
-    if (stage2_format === "Single Elimination" || stage2_format === "Double Elimination") {
+  function getTournamentStageCount(tournament) {
+    const tournamentFormat = String(tournament?.tournament_format || "").trim();
+    if (tournamentFormat === "3 Stages") return 3;
+    if (tournamentFormat === "2 Stages") return 2;
+    return 1;
+  }
+
+  function getStageLabel(tournament, stageNumber) {
+    if (!Number.isInteger(stageNumber) || stageNumber < 1) return "Stage 1";
+    if (!tournament) return `Stage ${stageNumber}`;
+
+    const explicitLabel = String(tournament[`stage${stageNumber}_name`] || "").trim();
+    if (explicitLabel) return explicitLabel;
+
+    if (stageNumber === 1) {
+      const tournament_format = tournament.tournament_format || "";
+      const stage1_format = tournament.stage1_format || "";
+      const stage1_groups = tournament.stage1_groups || null;
+      if (tournament_format === "1 Stage") {
+        if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
+          return "Standings";
+        }
+        if (stage1_format === "Single Elimination") {
+          return "Single Elimination Bracket";
+        }
+        if (stage1_format === "Double Elimination") {
+          return "Double Elimination Bracket";
+        }
+        return "Stage 1";
+      }
+      if (tournament_format === "2 Stages" || tournament_format === "3 Stages") {
+        if (stage1_groups === "Groups") {
+          return "Groups Stage";
+        }
+        if (stage1_groups === null && stage1_format === "Round-robin") {
+          return "Round-robin Stage";
+        }
+        if (stage1_groups === null && stage1_format === "Swiss") {
+          return "Swiss Stage";
+        }
+      }
+      return "Stage 1";
+    }
+
+    const stageFormat = String(tournament[`stage${stageNumber}_format`] || "").trim();
+    if (stageFormat === "Single Elimination" || stageFormat === "Double Elimination") {
       return "Playoffs";
     }
-    if (stage2_format === "Round-robin" || stage2_format === "Swiss") {
-      return "Final Stage";
+    if (stageFormat === "Round-robin" || stageFormat === "Swiss") {
+      return stageNumber === getTournamentStageCount(tournament) ? "Final Stage" : `Stage ${stageNumber}`;
     }
-    return "Stage 2";
+    return `Stage ${stageNumber}`;
+  }
+
+  function getStage2Label(tournament) {
+    return getStageLabel(tournament, 2);
+  }
+
+  function getStage3Label(tournament) {
+    return getStageLabel(tournament, 3);
   }
 
   function getStage1Label(tournament) {
-    if (!tournament) return "Stage 1";
-    const tournament_format = tournament.tournament_format || "";
-    const stage1_format = tournament.stage1_format || "";
-    const stage1_groups = tournament.stage1_groups || null;
-    const stage1_name = (tournament.stage1_name || "").trim();
-    if (stage1_name) return stage1_name;
-    if (tournament_format === "1 Stage") {
-      if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
-        return "Standings";
-      }
-      if (stage1_format === "Single Elimination") {
-        return "Single Elimination Bracket";
-      }
-      if (stage1_format === "Double Elimination") {
-        return "Double Elimination Bracket";
-      }
-      return "Stage 1";
-    }
-    if (tournament_format === "2 Stages") {
-      if (stage1_groups === "Groups") {
-        return "Groups Stage";
-      }
-      if (stage1_groups === null && stage1_format === "Round-robin") {
-        return "Round-robin Stage";
-      }
-      if (stage1_groups === null && stage1_format === "Swiss") {
-        return "Swiss Stage";
-      }
-      return "Stage 1";
-    }
-    return "Stage 1";
+    return getStageLabel(tournament, 1);
   }
 
   function getStandingsFormatForTournamentStage(tournament, stageFilter = null) {
     if (!tournament) return "";
-    const stage1Format = String(tournament.stage1_format || "").trim().toLowerCase();
-    const stage2Format = String(tournament.stage2_format || "").trim().toLowerCase();
-    if (stageFilter === "Stage 1") return stage1Format;
-    if (stageFilter === "Stage 2") return stage2Format;
-    return stage1Format || stage2Format;
+    const stageFormats = [1, 2, 3]
+      .map(stageNumber => String(tournament[`stage${stageNumber}_format`] || "").trim().toLowerCase());
+    if (stageFilter === "Stage 1") return stageFormats[0];
+    if (stageFilter === "Stage 2") return stageFormats[1];
+    if (stageFilter === "Stage 3") return stageFormats[2];
+    return stageFormats.find(Boolean) || "";
   }
 
-  function hasIncompleteStage1Matches(tournament) {
+  function hasIncompleteMatchesBeforeStage(tournament, stageNumber) {
     if (!tournament) return false;
+    if (!Number.isInteger(stageNumber) || stageNumber <= 1) return false;
     const tournamentId = tournament.tournament_id;
     const matchesToCheck = tournament.type === "TEAM" ? matches : duels;
     return matchesToCheck.some(match => {
       if (!match || match.tournament_id !== tournamentId) return false;
-      const stageValue = match.stage;
-      const isStage1 = !stageValue || stageValue === "Stage 1";
-      if (!isStage1) return false;
+      const rawStageValue = String(match.stage || "").trim();
+      const normalizedStageValue = rawStageValue || "Stage 1";
+      const matchedStageNumber = normalizedStageValue.match(/^Stage\s+(\d+)$/i);
+      const matchStageNumber = matchedStageNumber ? Number(matchedStageNumber[1]) : 1;
+      if (matchStageNumber >= stageNumber) return false;
       return match.status !== "DONE";
     });
+  }
+
+  function getStageFormatForTournament(tournament, stageNumber) {
+    if (!tournament || !Number.isInteger(stageNumber) || stageNumber < 1) return "";
+    return String(tournament[`stage${stageNumber}_format`] || "").trim();
   }
 
   function getLeaguesForTournament(mainId) {
@@ -1589,73 +1616,85 @@
         contentNode.innerHTML = "";
         if (leagueTournament && leagueTournament.tournament_format === "1 Stage") {
           renderStage1ContentForTournament(leagueTournament, contentNode, { tabId: `league-${league.tournament_id}` });
-        } else if (leagueTournament && leagueTournament.tournament_format === "2 Stages") {
-          const stage2Wrapper = document.createElement("div");
-          stage2Wrapper.className = "group-section";
-          const stage2Header = document.createElement("div");
-          stage2Header.className = "stage2-toggle-row";
-          const stage2Title = document.createElement("div");
-          stage2Title.className = "overview-section-title";
-          stage2Title.textContent = getStage2Label(leagueTournament);
-          stage2Header.appendChild(stage2Title);
+        } else if (leagueTournament && (leagueTournament.tournament_format === "2 Stages" || leagueTournament.tournament_format === "3 Stages")) {
+          const stageCount = getTournamentStageCount(leagueTournament);
+          const tabId = `league-${league.tournament_id}`;
 
-          const stage2Collapsible = document.createElement("div");
-          stage2Collapsible.className = "stage2-collapsible";
-          const stage2Inner = document.createElement("div");
-          stage2Inner.className = "stage2-collapsible__inner";
-          const stage2Content = document.createElement("div");
-          stage2Inner.appendChild(stage2Content);
-          stage2Collapsible.appendChild(stage2Inner);
+          for (let stageNumber = stageCount; stageNumber >= 2; stageNumber--) {
+            const stageWrapper = document.createElement("div");
+            stageWrapper.className = "group-section";
 
-          stage2Wrapper.appendChild(stage2Header);
-          stage2Wrapper.appendChild(stage2Collapsible);
+            const stageHeader = document.createElement("div");
+            stageHeader.className = "stage2-toggle-row";
+            const stageTitle = document.createElement("div");
+            stageTitle.className = "overview-section-title";
+            stageTitle.textContent = getStageLabel(leagueTournament, stageNumber);
+            stageHeader.appendChild(stageTitle);
 
-          renderStage2ContentForTournament(leagueTournament, stage2Content);
+            const stageCollapsible = document.createElement("div");
+            stageCollapsible.className = "stage2-collapsible";
+            const stageInner = document.createElement("div");
+            stageInner.className = "stage2-collapsible__inner";
+            const stageContent = document.createElement("div");
+            stageInner.appendChild(stageContent);
+            stageCollapsible.appendChild(stageInner);
 
-          const shouldCollapseStage2 = hasIncompleteStage1Matches(leagueTournament);
-          if (shouldCollapseStage2) {
-            const stage2Toggle = document.createElement("div");
-            stage2Toggle.className = "chevron";
-            const stage2Icon = document.createElement("i");
-            stage2Icon.className = "fas fa-chevron-down";
-            stage2Toggle.appendChild(stage2Icon);
-            stage2Header.prepend(stage2Toggle);
-            stage2Collapsible.style.height = "0px";
-          } else {
-            stage2Collapsible.classList.add("open");
-            stage2Header.classList.add("open");
-            stage2Collapsible.style.height = "auto";
-          }
+            stageWrapper.appendChild(stageHeader);
+            stageWrapper.appendChild(stageCollapsible);
 
-          const toggleStage2 = () => {
-            const isOpen = stage2Collapsible.classList.contains("open");
-            if (isOpen) {
-              stage2Collapsible.style.height = stage2Collapsible.scrollHeight + "px";
-              requestAnimationFrame(() => {
-                stage2Collapsible.style.height = "0px";
-                stage2Collapsible.classList.remove("open");
-                stage2Header.classList.remove("open");
-              });
+            if (stageNumber === 2) {
+              renderStage2ContentForTournament(leagueTournament, stageContent);
+            } else if (stageNumber === 3) {
+              renderStage3ContentForTournament(leagueTournament, stageContent);
+            }
+
+            const shouldCollapseStage = hasIncompleteMatchesBeforeStage(leagueTournament, stageNumber);
+            if (shouldCollapseStage) {
+              const stageToggle = document.createElement("div");
+              stageToggle.className = "chevron";
+              const stageIcon = document.createElement("i");
+              stageIcon.className = "fas fa-chevron-down";
+              stageToggle.appendChild(stageIcon);
+              stageHeader.prepend(stageToggle);
+              stageCollapsible.style.height = "0px";
             } else {
-              stage2Collapsible.style.height = "0px";
-              stage2Collapsible.classList.add("open");
-              stage2Header.classList.add("open");
-              requestAnimationFrame(() => {
-                stage2Collapsible.style.height = stage2Collapsible.scrollHeight + "px";
-              });
-              stage2Collapsible.addEventListener("transitionend", function handler() {
-                if (stage2Collapsible.classList.contains("open")) {
-                  stage2Collapsible.style.height = "auto";
-                }
-                stage2Collapsible.removeEventListener("transitionend", handler);
+              stageCollapsible.classList.add("open");
+              stageHeader.classList.add("open");
+              stageCollapsible.style.height = "auto";
+            }
+
+            const toggleStage = () => {
+              const isOpen = stageCollapsible.classList.contains("open");
+              if (isOpen) {
+                stageCollapsible.style.height = stageCollapsible.scrollHeight + "px";
+                requestAnimationFrame(() => {
+                  stageCollapsible.style.height = "0px";
+                  stageCollapsible.classList.remove("open");
+                  stageHeader.classList.remove("open");
+                });
+              } else {
+                stageCollapsible.style.height = "0px";
+                stageCollapsible.classList.add("open");
+                stageHeader.classList.add("open");
+                requestAnimationFrame(() => {
+                  stageCollapsible.style.height = stageCollapsible.scrollHeight + "px";
+                });
+                stageCollapsible.addEventListener("transitionend", function handler() {
+                  if (stageCollapsible.classList.contains("open")) {
+                    stageCollapsible.style.height = "auto";
+                  }
+                  stageCollapsible.removeEventListener("transitionend", handler);
+                });
+              }
+            };
+
+            if (shouldCollapseStage) {
+              stageHeader.addEventListener("click", () => {
+                toggleStage();
               });
             }
-          };
 
-          if (shouldCollapseStage2) {
-            stage2Header.addEventListener("click", () => {
-              toggleStage2();
-            });
+            contentNode.appendChild(stageWrapper);
           }
 
           const stage1Wrapper = document.createElement("div");
@@ -1667,9 +1706,8 @@
           const stage1Content = document.createElement("div");
           stage1Wrapper.appendChild(stage1Title);
           stage1Wrapper.appendChild(stage1Content);
-          renderStage1ContentForTournament(leagueTournament, stage1Content, { tabId: `league-${league.tournament_id}` });
+          renderStage1ContentForTournament(leagueTournament, stage1Content, { tabId });
 
-          contentNode.appendChild(stage2Wrapper);
           contentNode.appendChild(stage1Wrapper);
         } else {
           contentNode.textContent = "League data not available.";
@@ -3092,7 +3130,7 @@
       } else {
         container.textContent = "Stage 1 info not available.";
       }
-    } else if (tournament_format === "2 Stages") {
+    } else if (tournament_format === "2 Stages" || tournament_format === "3 Stages") {
       if (stage1_groups === "Groups") {
         if (stage1_format === "Round-robin" || stage1_format === "Swiss") {
           renderStandingsData(
@@ -3219,36 +3257,41 @@
   }
 
   function renderStage2ContentForTournament(tournament, container) {
-    if (!tournament || !container) return;
+    renderAdditionalStageContentForTournament(tournament, container, 2);
+  }
+
+  function renderStage3ContentForTournament(tournament, container) {
+    renderAdditionalStageContentForTournament(tournament, container, 3);
+  }
+
+  function renderAdditionalStageContentForTournament(tournament, container, stageNumber) {
+    if (!tournament || !container || !Number.isInteger(stageNumber) || stageNumber < 2) return;
     container.innerHTML = "";
     const tournamentId = tournament.tournament_id;
-    const stage2_format = tournament.stage2_format || "";
+    const stageLabel = `Stage ${stageNumber}`;
+    const stageFormat = getStageFormatForTournament(tournament, stageNumber);
+    const stageMatches = (tournament.type === "TEAM" ? matches : duels).filter(
+      d => d.tournament_id === tournamentId && d.stage === stageLabel
+    );
 
-    if (stage2_format === "Single Elimination") {
-      renderSingleElimination(
-        tournament.type === "TEAM"
-          ? matches.filter(d => d.tournament_id === tournamentId && d.stage === "Stage 2")
-          : duels.filter(d => d.tournament_id === tournamentId && d.stage === "Stage 2"),
-        container,
-        tournament.type
-      );
-    } else if (stage2_format === "Double Elimination") {
-      renderDoubleElimination(
-        tournament.type === "TEAM"
-          ? matches.filter(d => d.tournament_id === tournamentId && d.stage === "Stage 2")
-          : duels.filter(d => d.tournament_id === tournamentId && d.stage === "Stage 2"),
-        container,
-        tournament.type
-      );
-    } else if (stage2_format === "Round-robin" || stage2_format === "Swiss") {
+    let inferredStageFormat = stageFormat;
+    if (!inferredStageFormat && stageMatches.length) {
+      inferredStageFormat = String(stageMatches[0].format_type || "").trim();
+    }
+
+    if (inferredStageFormat === "Single Elimination") {
+      renderSingleElimination(stageMatches, container, tournament.type);
+    } else if (inferredStageFormat === "Double Elimination") {
+      renderDoubleElimination(stageMatches, container, tournament.type);
+    } else if (inferredStageFormat === "Round-robin" || inferredStageFormat === "Swiss") {
       renderStandingsData(
-        standings.filter(s => s.tournament_id === tournamentId && s.stage === "Stage 2"),
+        standings.filter(s => s.tournament_id === tournamentId && s.stage === stageLabel),
         container,
         tournament,
-        { stage: "Stage 2" }
+        { stage: stageLabel }
       );
     } else {
-      container.textContent = "Stage 2 info not available.";
+      container.textContent = `${stageLabel} info not available.`;
     }
   }
 

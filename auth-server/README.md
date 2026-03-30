@@ -172,3 +172,40 @@ python3 run_update_player_elo.py --batch-size 50 --limit 200
 ```
 
 У такому режимі він бере профілі з найстарішим `bga_elo_updated_at` першими, тому підходить для cron/systemd batch-run без одночасного проходу по всій таблиці.
+
+## 10) Регулярний фікс майбутніх матчів
+
+Є окремий maintenance-скрипт:
+
+```bash
+cd auth-server
+python3 run_fix_matches_and_duels.py
+```
+
+Або через shell-обгортку:
+
+```bash
+cd auth-server
+./scripts/run_fix_matches_and_duels.sh
+```
+
+Що він робить зараз для `matches`:
+
+- якщо `time_utc` у майбутньому;
+- і при цьому `status <> 'Planned'` або будь-яке з полів `dw1`, `dw2`, `gw1`, `gw2` не порожнє;
+- тоді ставить `status = 'Planned'` і очищає `dw1`, `dw2`, `gw1`, `gw2`.
+
+Для `duels` логіка поки що не реалізована: скрипт повертає явний `skipped` у summary.
+
+Безпечна перевірка без запису:
+
+```bash
+cd auth-server
+python3 run_fix_matches_and_duels.py --dry-run
+```
+
+Приклад cron на запуск щогодини:
+
+```cron
+0 * * * * cd /path/to/carcassonne-gg/auth-server && /usr/bin/env python3 run_fix_matches_and_duels.py >> /var/log/carcassonne-fix-matches-and-duels.log 2>&1
+```
