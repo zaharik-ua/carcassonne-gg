@@ -195,9 +195,25 @@ python3 run_update_player_elo.py --selection-mode only_null
 
 - daily таймер запускає повне оновлення Elo щодня о `01:00 UTC`;
 - після завершення full refresh запускається `python3 run_update_ratings.py --planned`;
+- після повністю успішного daily запуску в таблицю `job_runs` записується `last_success_at` для `update-player-elo-daily`;
 - hourly таймер запускає оновлення тільки для профілів з `bga_elo IS NULL` щогодини о `:05 UTC`;
 - після hourly запуску `run_update_ratings.py --planned` викликається тільки якщо було оновлено хоча б одного гравця;
 - обидва сервіси використовують спільний `flock`, тому не накладаються один на одного.
+
+### Службова таблиця запусків
+
+Для стану регулярних джобів використовується окрема таблиця `job_runs` в `auth.sqlite`.
+
+Зараз туди пишеться:
+
+- `job_name = 'update-player-elo-daily'`
+- `last_success_at` = час останнього повністю успішного daily запуску
+
+Подивитися значення можна так:
+
+```bash
+sqlite3 /home/carcassonne-gg/auth-server/data/auth.sqlite "SELECT job_name, last_success_at, last_status FROM job_runs ORDER BY job_name;"
+```
 
 Встановлення на сервері:
 

@@ -12,4 +12,5 @@ cd "${AUTH_SERVER_DIR}"
   cd "'"${AUTH_SERVER_DIR}"'"
   python3 run_update_player_elo.py --selection-mode stale_first "$@"
   python3 run_update_ratings.py --planned
+  python3 run_record_job_success.py --job-name update-player-elo-daily "$@"
 ' bash "$@"
