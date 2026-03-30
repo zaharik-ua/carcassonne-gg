@@ -50,4 +50,4 @@ SQL
 
 echo "Status import done. First 20 rows:"
 sqlite3 -header -column "$DB_PATH" \
-"SELECT profile_row_id, id, bga_nickname, status FROM profiles ORDER BY profile_row_id LIMIT 20;"
+"SELECT id, bga_nickname, status FROM profiles ORDER BY id LIMIT 20;"

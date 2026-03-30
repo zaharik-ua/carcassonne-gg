@@ -46,7 +46,7 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
             params.extend(sorted(exclude_player_ids))
 
         params.append(int(limit))
-        stable_order_column = "profile_row_id" if "profile_row_id" in self._profiles_columns else "rowid"
+        stable_order_column = "rowid"
         order_by_sql = f"""
               CASE WHEN bga_elo_updated_at IS NULL OR trim(bga_elo_updated_at) = '' THEN 0 ELSE 1 END ASC,
               datetime(COALESCE(bga_elo_updated_at, '1970-01-01 00:00:00')) ASC,

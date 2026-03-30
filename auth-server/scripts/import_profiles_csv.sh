@@ -18,7 +18,6 @@ sqlite3 "$DB_PATH" <<SQL
 PRAGMA foreign_keys = OFF;
 
 CREATE TABLE IF NOT EXISTS profiles (
-  profile_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT UNIQUE COLLATE NOCASE,
   bga_nickname TEXT,
   name TEXT,
@@ -108,4 +107,4 @@ SQL
 
 echo "Import done. First 20 rows:"
 sqlite3 -header -column "$DB_PATH" \
-"SELECT profile_row_id, id, bga_nickname, name, association, status, email, master_title, master_title_date, team_captain FROM profiles ORDER BY profile_row_id LIMIT 20;"
+"SELECT id, bga_nickname, name, association, status, email, master_title, master_title_date, team_captain FROM profiles ORDER BY id LIMIT 20;"

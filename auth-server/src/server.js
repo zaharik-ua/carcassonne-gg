@@ -1025,7 +1025,6 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
       DROP INDEX IF EXISTS idx_profiles_id;
       ALTER TABLE profiles RENAME TO profiles_admin_legacy;
       CREATE TABLE profiles (
-        profile_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT NOT NULL UNIQUE COLLATE NOCASE,
         bga_nickname TEXT,
         name TEXT,
@@ -1048,7 +1047,6 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       INSERT INTO profiles (
-        profile_row_id,
         email,
         bga_nickname,
         name,
@@ -1071,7 +1069,6 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         updated_at
       )
       SELECT
-        profile_row_id,
         email,
         bga_nickname,
         name,
@@ -1247,7 +1244,6 @@ function ensureProfilesSchema() {
 
     const hasLegacyPlayerId = columns.some((col) => col.name === "player_id");
     const hasIdColumn = columns.some((col) => col.name === "id");
-    const hasProfileRowId = columns.some((col) => col.name === "profile_row_id");
     const idColumn = columns.find((col) => col.name === "id");
     const idIsPrimaryKey = Number(idColumn?.pk || 0) === 1;
 
@@ -1273,15 +1269,9 @@ function ensureProfilesSchema() {
       });
     };
 
-    if (hasIdColumn && idIsPrimaryKey && !hasProfileRowId) {
-      db.run("ALTER TABLE profiles RENAME COLUMN id TO profile_row_id", (renamePkErr) => {
-        if (renamePkErr) {
-          console.error("Failed to rename legacy profiles.id PK to profile_row_id", renamePkErr);
-          addOrBackfillProfilesColumns(columns);
-          return;
-        }
-        renameLegacyPlayerId();
-      });
+    if (hasIdColumn && idIsPrimaryKey) {
+      console.error("Legacy profiles schema uses id as primary key while player_id still exists; skipping auto-migration to avoid corrupting profiles.id");
+      addOrBackfillProfilesColumns(columns);
       return;
     }
 
@@ -1984,7 +1974,6 @@ db.serialize(() => {
 
           db.run(`
             CREATE TABLE IF NOT EXISTS profiles (
-              profile_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
               email TEXT NOT NULL UNIQUE COLLATE NOCASE,
               bga_nickname TEXT,
               name TEXT,
