@@ -4,7 +4,7 @@ const CONFIG = {
   // Якщо пусто, скрипт візьме всі листи, крім службових (ELO_*).
   tournamentSheetNameAllowlist: [
     "C26-D","C25-D","C24-D","W25-D","W24-D","W23-D","W22-D","W21-D","W20-D",
-    "E25-D","E23-D","E21-D","E20-D","As25-D","As24-D","Am25-D","Am24-D","Am21-D"
+    "E25-D","E23-D","E21-D","E20-D","As25-D","As24-D","Am26-D","Am25-D","Am24-D","Am21-D"
   ],
 
   // Службові листи (скрипт їх не читає як турніри)
@@ -560,10 +560,6 @@ function applyTimestampFormats_(sheet, startRow, col, hasTimeFlags) {
 function writeRatings_(ss, ratings, playersIndex) {
   const sh = ensureSheet_(ss, "ELO_Ratings");
 
-  // cutoff = сьогодні мінус 2 роки
-  const cutoff = new Date();
-  cutoff.setFullYear(cutoff.getFullYear() - 2);
-
   const header = [
     "rank",
     "player",   // ім'я з BGA PLAYERS якщо знайдено
@@ -577,24 +573,13 @@ function writeRatings_(ss, ratings, playersIndex) {
   const byId = playersIndex?.byId || new Map();
   const byName = playersIndex?.byName || new Map();
 
-  // Перевірка активності за lastTimePlayed:
-  // неактивні гравці теж потрапляють у список, але без значення elo.
-  const isActiveByLastTimePlayed = (p) => {
-    if (!p.lastTimePlayed) return false;
-    const d = (Object.prototype.toString.call(p.lastTimePlayed) === "[object Date]")
-      ? p.lastTimePlayed
-      : new Date(p.lastTimePlayed);
-    if (isNaN(d.getTime())) return false;
-    return d >= cutoff;
-  };
-
   const rows = ratings.map((p, i) => {
     const key = String(p.player || "").trim(); // у тебе це ID з матчів
     const rec = byId.get(key) || byName.get(key.toLowerCase());
 
     const displayName = rec?.name || key;
     const id = rec?.id || (key && /^\d+$/.test(key) ? key : "");
-    const eloValue = isActiveByLastTimePlayed(p) ? round_(p.elo) : "";
+    const eloValue = round_(p.elo);
 
     return [
       i + 1,

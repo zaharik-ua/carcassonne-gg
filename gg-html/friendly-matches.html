@@ -340,7 +340,7 @@ code {
   .score-box.match-score {
     width: 13px;
     text-align: center;
-    font-weight: bold;
+    font-weight: 600;
     font-size: 18px;
     line-height: 20px;
   }
@@ -576,6 +576,55 @@ code {
 
 .lineup__row-score {
   font-weight: 500;
+}
+
+.lineup__row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+}
+
+.lineup__games {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  flex-wrap: wrap;
+}
+
+.lineup__game-link {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.lineup__game-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px;
+  border-radius: 1px;
+  background: #eceff1;
+  color: #222;
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.lineup__game-badge--p1 {
+  background: #dceeff;
+}
+
+.lineup__game-badge--p2 {
+  background: #dff4df;
+}
+
+.lineup__game-badge--clock {
+  background: #f8dede;
+}
+
+.lineup__game-clock {
+  font-size: 10px;
+  line-height: 1;
 }
 
   .event-row {
@@ -931,6 +980,105 @@ function playerLabel(duel, side) {
   return id || "-";
 }
 
+function isTruthyOne(value) {
+  return value === 1 || value === true || String(value || "").trim() === "1";
+}
+
+function collectGameEntries(duel) {
+  if (Array.isArray(duel?.games) && duel.games.length > 0) {
+    return duel.games.filter(Boolean);
+  }
+
+  const hasSingleGameData =
+    hasValue(duel?.player_1_score) ||
+    hasValue(duel?.player_2_score) ||
+    hasValue(duel?.player_1_rank) ||
+    hasValue(duel?.player_2_rank) ||
+    isTruthyOne(duel?.player_1_clock) ||
+    isTruthyOne(duel?.player_2_clock) ||
+    hasValue(duel?.bga_table_id);
+
+  return hasSingleGameData ? [duel] : [];
+}
+
+function createGameBadge(game) {
+  const p1Clock = isTruthyOne(game?.player_1_clock);
+  const p2Clock = isTruthyOne(game?.player_2_clock);
+  const p1RankWon = String(game?.player_1_rank || "").trim() === "1";
+  const p2RankWon = String(game?.player_2_rank || "").trim() === "1";
+  const p1Score = String(game?.player_1_score ?? "").trim();
+  const p2Score = String(game?.player_2_score ?? "").trim();
+
+  const badge = document.createElement("span");
+  badge.className = "lineup__game-badge";
+
+  if ((p1Clock || p2Clock) && p1Clock !== p2Clock) {
+    badge.classList.add("lineup__game-badge--clock");
+    const left = document.createElement("span");
+    const right = document.createElement("span");
+    const icon = document.createElement("i");
+    icon.className = "fa-regular fa-clock lineup__game-clock";
+
+    if (p1Clock) {
+      left.textContent = "[";
+      right.textContent = "0-1]";
+      badge.appendChild(left);
+      badge.appendChild(icon);
+      badge.appendChild(right);
+    } else {
+      left.textContent = "[1-0";
+      right.textContent = "]";
+      badge.appendChild(left);
+      badge.appendChild(icon);
+      badge.appendChild(right);
+    }
+
+    return badge;
+  }
+
+  if (!hasValue(p1Score) || !hasValue(p2Score)) {
+    return null;
+  }
+
+  if (p1RankWon) {
+    badge.classList.add("lineup__game-badge--p1");
+  } else if (p2RankWon) {
+    badge.classList.add("lineup__game-badge--p2");
+  }
+
+  badge.textContent = `[${p1Score}-${p2Score}]`;
+  return badge;
+}
+
+function createGameBadgesWrap(duel) {
+  const games = collectGameEntries(duel);
+  if (!games.length) return null;
+
+  const wrap = document.createElement("span");
+  wrap.className = "lineup__games";
+
+  games.forEach((game) => {
+    const badge = createGameBadge(game);
+    if (!badge) return;
+
+    const tableId = String(game?.bga_table_id || "").trim();
+    if (tableId) {
+      const link = document.createElement("a");
+      link.className = "lineup__game-link";
+      link.href = `https://boardgamearena.com/table?table=${encodeURIComponent(tableId)}`;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.appendChild(badge);
+      wrap.appendChild(link);
+      return;
+    }
+
+    wrap.appendChild(badge);
+  });
+
+  return wrap.childNodes.length ? wrap : null;
+}
+
 function createLineupPanel(matchId, lineups, chevronIcon) {
   const lineupPanel = document.createElement("div");
   lineupPanel.className = "lineup";
@@ -940,6 +1088,7 @@ function createLineupPanel(matchId, lineups, chevronIcon) {
 
   sortLineups(lineups).forEach((duel) => {
     const row = document.createElement("div");
+    row.className = "lineup__row";
 
     const p1Id = String(duel?.player_1_id || "").trim();
     const p2Id = String(duel?.player_2_id || "").trim();
@@ -973,10 +1122,14 @@ function createLineupPanel(matchId, lineups, chevronIcon) {
     const scoreEl = document.createElement("span");
     scoreEl.className = "lineup__row-score";
     scoreEl.textContent = hasDuelScore ? ` ${duel.dw1} - ${duel.dw2} ` : " - ";
+    const gamesWrap = createGameBadgesWrap(duel);
 
     row.appendChild(p1Link);
     row.appendChild(hasDuelScore ? scoreEl : sep);
     row.appendChild(p2Link);
+    if (gamesWrap) {
+      row.appendChild(gamesWrap);
+    }
     lineupBody.appendChild(row);
   });
 

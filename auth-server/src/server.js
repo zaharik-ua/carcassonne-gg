@@ -306,6 +306,40 @@ function loadDuelsByIds(duelIds, callback) {
   );
 }
 
+function loadGamesByDuelIds(duelIds, callback) {
+  const normalizedIds = Array.from(new Set(
+    (Array.isArray(duelIds) ? duelIds : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  ));
+  if (!normalizedIds.length) {
+    callback(null, []);
+    return;
+  }
+  const placeholders = normalizedIds.map(() => "?").join(", ");
+  return db.all(
+    `
+      SELECT
+        id,
+        duel_id,
+        bga_table_id,
+        game_number,
+        player_1_score,
+        player_2_score,
+        player_1_rank,
+        player_2_rank,
+        player_1_clock,
+        player_2_clock,
+        status
+      FROM games
+      WHERE trim(COALESCE(duel_id, '')) IN (${placeholders})
+      ORDER BY duel_id COLLATE NOCASE ASC, game_number ASC, id ASC
+    `,
+    normalizedIds,
+    callback
+  );
+}
+
 function hasNonEmptyValue(value) {
   return String(value ?? "").trim() !== "";
 }
@@ -4656,7 +4690,29 @@ app.get("/public/friendly-matches", (_req, res, next) => {
               .filter(Boolean)
           ));
 
-          const finalize = (duelRows) => {
+          const finalize = (duelRows, gameRows = []) => {
+            const gamesByDuelId = new Map();
+            (gameRows || []).forEach((row) => {
+              const duelId = String(row?.duel_id || "").trim();
+              if (!duelId) return;
+              if (!gamesByDuelId.has(duelId)) {
+                gamesByDuelId.set(duelId, []);
+              }
+              gamesByDuelId.get(duelId).push({
+                id: row.id,
+                duel_id: row.duel_id,
+                bga_table_id: row.bga_table_id,
+                game_number: row.game_number,
+                player_1_score: row.player_1_score,
+                player_2_score: row.player_2_score,
+                player_1_rank: row.player_1_rank,
+                player_2_rank: row.player_2_rank,
+                player_1_clock: row.player_1_clock,
+                player_2_clock: row.player_2_clock,
+                status: row.status,
+              });
+            });
+
             return res.json({
               ok: true,
               tournament: {
@@ -4704,6 +4760,7 @@ app.get("/public/friendly-matches", (_req, res, next) => {
                 dw2: row.dw2,
                 rating: row.rating,
                 status: row.status,
+                games: gamesByDuelId.get(String(row.id || "").trim()) || [],
               })),
             });
           };
@@ -4748,7 +4805,18 @@ app.get("/public/friendly-matches", (_req, res, next) => {
             [tournamentId, ...normalizedMatchIds],
             (duelsErr, duelRows) => {
               if (duelsErr) return next(duelsErr);
-              return finalize(duelRows || []);
+              const normalizedDuelIds = Array.from(new Set(
+                (duelRows || [])
+                  .map((row) => String(row?.id || "").trim())
+                  .filter(Boolean)
+              ));
+              if (!normalizedDuelIds.length) {
+                return finalize(duelRows || [], []);
+              }
+              return loadGamesByDuelIds(normalizedDuelIds, (gamesErr, gameRows) => {
+                if (gamesErr) return next(gamesErr);
+                return finalize(duelRows || [], gameRows || []);
+              });
             }
           );
         }
