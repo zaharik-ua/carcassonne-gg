@@ -1,4 +1,4 @@
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <!-- Material Icons Round for rating stars -->
 <link href="https://fonts.googleapis.com/css2?family=Material+Icons+Round" rel="stylesheet">
@@ -340,7 +340,7 @@ code {
   .score-box.match-score {
     width: 13px;
     text-align: center;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 18px;
     line-height: 20px;
   }
@@ -575,7 +575,17 @@ code {
   }
 
 .lineup__row-score {
-  font-weight: 500;
+  display: inline-block;
+  padding: 0 7px;
+  font-weight: 600;
+  color: #222;
+  letter-spacing: 0.01em;
+  text-shadow: 0 0 0.01px currentColor;
+}
+
+.lineup__row-sep {
+  display: inline-block;
+  padding: 0 7px;
 }
 
 .lineup__row {
@@ -602,12 +612,13 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 1px 4px;
-  border-radius: 1px;
+  padding: 0 4px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
   background: #eceff1;
   color: #222;
   font-size: 11px;
-  line-height: 15px;
+  line-height: 13px;
 }
 
 .lineup__game-badge--p1 {
@@ -620,6 +631,10 @@ code {
 
 .lineup__game-badge--clock {
   background: #f8dede;
+}
+
+.lineup__game-badge:hover {
+  filter: brightness(0.96);
 }
 
 .lineup__game-clock {
@@ -1020,14 +1035,14 @@ function createGameBadge(game) {
     icon.className = "fa-regular fa-clock lineup__game-clock";
 
     if (p1Clock) {
-      left.textContent = "[";
-      right.textContent = "0-1]";
+      left.textContent = "";
+      right.textContent = "0-1";
       badge.appendChild(left);
       badge.appendChild(icon);
       badge.appendChild(right);
     } else {
-      left.textContent = "[1-0";
-      right.textContent = "]";
+      left.textContent = "1-0";
+      right.textContent = "";
       badge.appendChild(left);
       badge.appendChild(icon);
       badge.appendChild(right);
@@ -1046,7 +1061,7 @@ function createGameBadge(game) {
     badge.classList.add("lineup__game-badge--p2");
   }
 
-  badge.textContent = `[${p1Score}-${p2Score}]`;
+  badge.textContent = `${p1Score}-${p2Score}`;
   return badge;
 }
 
@@ -1105,6 +1120,7 @@ function createLineupPanel(matchId, lineups, chevronIcon) {
     }
 
     const sep = document.createElement("span");
+    sep.className = "lineup__row-sep";
     sep.textContent = " - ";
 
     const p2Link = document.createElement("a");

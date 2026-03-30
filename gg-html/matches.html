@@ -1492,7 +1492,8 @@ function renderEventsCard(container, events) {
   container.appendChild(card);
 }
 
-function renderSection(container, title, tournaments, matches, events) {
+function renderSection(container, title, tournaments, matches, events, options = {}) {
+  const { renderEventsLast = false } = options;
   const visibleMatches = (matches || []).filter(match => !isMatchHidden(match));
   const visibleEvents = Array.isArray(events) ? events : [];
   if (visibleMatches.length === 0 && visibleEvents.length === 0) return;
@@ -1596,7 +1597,9 @@ function renderSection(container, title, tournaments, matches, events) {
     sectionTitle.appendChild(toggle);
   }
   container.appendChild(sectionTitle);
-  renderEventsCard(container, visibleEvents);
+  if (!renderEventsLast) {
+    renderEventsCard(container, visibleEvents);
+  }
 
   // Time mode — single block, all tournaments merged and sorted by time
   if ((isToday || isUpcoming) && todaySortBy === "time") {
@@ -1642,6 +1645,9 @@ function renderSection(container, title, tournaments, matches, events) {
 
     if (matchesSorted.length > 0) {
       container.appendChild(card);
+    }
+    if (renderEventsLast) {
+      renderEventsCard(container, visibleEvents);
     }
     return; // Skip default per-tournament rendering
   }
@@ -1902,6 +1908,10 @@ function renderSection(container, title, tournaments, matches, events) {
     container.appendChild(card);
   });
 
+  if (renderEventsLast) {
+    renderEventsCard(container, visibleEvents);
+  }
+
 }
 
 const autoUpdate = new URLSearchParams(window.location.search).get("autoupdate") === "true";
@@ -1945,6 +1955,175 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
   }
 }
 
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function formatUtcIsoAsLegacyTime(isoValue) {
+  const ts = Date.parse(String(isoValue || "").trim());
+  if (!Number.isFinite(ts)) return "";
+  const date = new Date(ts);
+  return `${pad2(date.getUTCDate())}.${pad2(date.getUTCMonth() + 1)}.${date.getUTCFullYear()} ${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}:${pad2(date.getUTCSeconds())}`;
+}
+
+function getFriendlySectionKeyByLocalTime(isoValue) {
+  const ts = Date.parse(String(isoValue || "").trim());
+  if (!Number.isFinite(ts)) return "scheduled";
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+  if (ts < startToday) return "finished";
+  if (ts < startTomorrow) return "today";
+  return "scheduled";
+}
+
+function isFriendlyFinishedWithinLastDays(isoValue, days = 7) {
+  const ts = Date.parse(String(isoValue || "").trim());
+  if (!Number.isFinite(ts)) return false;
+  const nowTs = Date.now();
+  const maxAgeMs = days * 24 * 60 * 60 * 1000;
+  return ts <= nowTs && ts >= (nowTs - maxAgeMs);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function buildFriendlyLineupsHtml(duels) {
+  const list = (Array.isArray(duels) ? duels : []).slice().sort((a, b) => {
+    const aNo = Number(a?.duel_number);
+    const bNo = Number(b?.duel_number);
+    if (Number.isFinite(aNo) && Number.isFinite(bNo) && aNo !== bNo) return aNo - bNo;
+    return String(a?.id || "").localeCompare(String(b?.id || ""));
+  });
+  if (!list.length) return "";
+
+  return list.map((duel) => {
+    const p1Id = String(duel?.player_1_id || "").trim();
+    const p2Id = String(duel?.player_2_id || "").trim();
+    const p1Name = String(duel?.player_1_name || p1Id || "-").trim() || "-";
+    const p2Name = String(duel?.player_2_name || p2Id || "-").trim() || "-";
+    const left = p1Id
+      ? `<a href="https://boardgamearena.com/player?id=${encodeURIComponent(p1Id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(p1Name)}</a>`
+      : escapeHtml(p1Name);
+    const right = p2Id
+      ? `<a href="https://boardgamearena.com/player?id=${encodeURIComponent(p2Id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(p2Name)}</a>`
+      : escapeHtml(p2Name);
+    const hasScore = duel?.dw1 !== null && duel?.dw1 !== undefined && String(duel.dw1).trim() !== ""
+      && duel?.dw2 !== null && duel?.dw2 !== undefined && String(duel.dw2).trim() !== "";
+    const middle = hasScore
+      ? `<span style="display:inline-block;padding:0 7px;font-weight:600;color:#222;">${escapeHtml(duel.dw1)} - ${escapeHtml(duel.dw2)}</span>`
+      : `<span style="display:inline-block;padding:0 7px;">-</span>`;
+    return `<div>${left}${middle}${right}</div>`;
+  }).join("");
+}
+
+function adaptFriendlyMatchesData(data) {
+  const result = {
+    matches_today: [],
+    matches_scheduled: [],
+    matches_finished: [],
+    tournaments_today: [],
+    tournaments_scheduled: [],
+    tournaments_finished: [],
+    events_today: [],
+    events_scheduled: [],
+  };
+  const tournamentsByKey = {
+    today: new Map(),
+    scheduled: new Map(),
+    finished: new Map(),
+  };
+
+  const duelsByMatchId = new Map();
+  (Array.isArray(data?.duels) ? data.duels : []).forEach((duel) => {
+    const matchId = String(duel?.match_id || "").trim();
+    if (!matchId) return;
+    if (!duelsByMatchId.has(matchId)) duelsByMatchId.set(matchId, []);
+    duelsByMatchId.get(matchId).push(duel);
+  });
+
+  (Array.isArray(data?.matches) ? data.matches : []).forEach((match) => {
+    const sectionKey = getFriendlySectionKeyByLocalTime(match?.time_utc);
+    if (sectionKey === "finished" && !isFriendlyFinishedWithinLastDays(match?.time_utc, 7)) {
+      return;
+    }
+    const tournamentName = String(
+      match?.tournament_name || match?.tournament_short_title || data?.tournament?.name || data?.tournament?.short_title || "Friendly Matches"
+    ).trim();
+    const tournamentLogo = String(
+      match?.tournament_logo || data?.tournament?.logo || "https://carcassonne.gg/gallery/friendly-matches.png"
+    ).trim();
+    const tournamentLink = String(match?.tournament_link || data?.tournament?.link || "").trim();
+    const tournamentType = String(match?.tournament_type || data?.tournament?.type || "TEAM").trim() || "TEAM";
+    const tournamentKey = `${tournamentName}||${tournamentLink}`;
+    if (!tournamentsByKey[sectionKey].has(tournamentKey)) {
+      tournamentsByKey[sectionKey].set(tournamentKey, {
+        name: tournamentName,
+        logo: tournamentLogo,
+        link: tournamentLink,
+        type: tournamentType,
+      });
+    }
+    const normalizedMatch = {
+      id: String(match?.id || "").trim(),
+      tournament: tournamentName,
+      tournament_logo: tournamentLogo,
+      tournament_link: tournamentLink,
+      tournament_type: tournamentType,
+      time: formatUtcIsoAsLegacyTime(match?.time_utc),
+      team1: String(match?.team_1_name || match?.team_1 || "").trim(),
+      team2: String(match?.team_2_name || match?.team_2 || "").trim(),
+      flag1: String(match?.team_1_flag || "").trim(),
+      flag2: String(match?.team_2_flag || "").trim(),
+      status: String(match?.status || "").trim(),
+      dw1: match?.dw1,
+      dw2: match?.dw2,
+      gw1: match?.gw1,
+      gw2: match?.gw2,
+      rating: match?.rating,
+      lineups: buildFriendlyLineupsHtml(duelsByMatchId.get(String(match?.id || "").trim()) || []),
+    };
+
+    if (sectionKey === "today") result.matches_today.push(normalizedMatch);
+    else if (sectionKey === "scheduled") result.matches_scheduled.push(normalizedMatch);
+    else result.matches_finished.push(normalizedMatch);
+  });
+
+  result.tournaments_today = Array.from(tournamentsByKey.today.values());
+  result.tournaments_scheduled = Array.from(tournamentsByKey.scheduled.values());
+  result.tournaments_finished = Array.from(tournamentsByKey.finished.values());
+
+  return result;
+}
+
+function dedupeMatchesById(matches) {
+  const seen = new Set();
+  return (Array.isArray(matches) ? matches : []).filter((match) => {
+    const key = String(match?.id || "").trim();
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function dedupeTournamentsByIdentity(tournaments) {
+  const seen = new Set();
+  return (Array.isArray(tournaments) ? tournaments : []).filter((tournament) => {
+    const key = `${String(tournament?.name || "").trim()}||${String(tournament?.link || "").trim()}`;
+    if (!key || key === "||") return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
   function setLoading(visible) {
     const el = document.getElementById("matches-loading");
     if (!el) return;
@@ -1955,8 +2134,9 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
   setLoading(true);
   const primaryURL = "https://api.carcassonne.com.ua/public/matches";
   const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches.json";
+  const friendlyURL = "https://api.carcassonne.gg/public/main-page-matches";
 
-  fetchPrimaryWithRetry(primaryURL, { retries: 2, delayMs: 500, timeout: 10000 })
+  const baseMatchesPromise = fetchPrimaryWithRetry(primaryURL, { retries: 2, delayMs: 500, timeout: 10000 })
     .catch(err => {
       console.warn("⚠️ Primary failed, using fallback:", err && err.message ? err.message : err);
       return fetch(fallbackURL)
@@ -1965,10 +2145,22 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
           console.info("ℹ️ Data loaded from fallbackURL");
           return data;
         });
+    });
+
+  const friendlyMatchesPromise = fetch(friendlyURL)
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
     })
-    .then((data) => {
-      lastData = data;
-      renderAllSectionsFromData(data);
+    .catch(err => {
+      console.warn("⚠️ Main page DB matches failed:", err && err.message ? err.message : err);
+      return null;
+    });
+
+  Promise.all([baseMatchesPromise, friendlyMatchesPromise])
+    .then(([baseData, friendlyData]) => {
+      lastData = { baseData, friendlyData };
+      renderAllSectionsFromData(lastData);
       setLoading(false);
     })
     .catch(err => {
@@ -1977,13 +2169,41 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
     });
   }
 
-  function renderAllSectionsFromData({ matches_today, matches_scheduled, matches_finished, tournaments_today, tournaments_scheduled, tournaments_finished, events_today, events_scheduled }) {
+  function renderAllSectionsFromData(dataBundle) {
+    const baseData = dataBundle?.baseData || {};
+    const friendlyData = adaptFriendlyMatchesData(dataBundle?.friendlyData || {});
+    const mergedTodayTournaments = dedupeTournamentsByIdentity([...(friendlyData.tournaments_today || []), ...(baseData.tournaments_today || [])]);
+    const mergedScheduledTournaments = dedupeTournamentsByIdentity([...(friendlyData.tournaments_scheduled || []), ...(baseData.tournaments_scheduled || [])]);
+    const mergedFinishedTournaments = dedupeTournamentsByIdentity([...(friendlyData.tournaments_finished || []), ...(baseData.tournaments_finished || [])]);
+    const mergedTodayMatches = dedupeMatchesById([...(friendlyData.matches_today || []), ...(baseData.matches_today || [])]);
+    const mergedScheduledMatches = dedupeMatchesById([...(friendlyData.matches_scheduled || []), ...(baseData.matches_scheduled || [])]);
+    const mergedFinishedMatches = dedupeMatchesById([...(friendlyData.matches_finished || []), ...(baseData.matches_finished || [])]);
+
     const container = document.getElementById("matches-container");
     container.innerHTML = "";
 
-    renderSection(container, "Today", tournaments_today, matches_today, events_today);
-    renderSection(container, "Upcoming Matches", tournaments_scheduled, matches_scheduled, events_scheduled);
-    renderSection(container, "Last Results", tournaments_finished, matches_finished);
+    renderSection(
+      container,
+      "Today",
+      mergedTodayTournaments,
+      mergedTodayMatches,
+      baseData.events_today || [],
+      { renderEventsLast: true }
+    );
+    renderSection(
+      container,
+      "Upcoming Matches",
+      mergedScheduledTournaments,
+      mergedScheduledMatches,
+      baseData.events_scheduled || [],
+      { renderEventsLast: true }
+    );
+    renderSection(
+      container,
+      "Last Results",
+      mergedFinishedTournaments,
+      mergedFinishedMatches
+    );
   }
 
   fetchAndRenderMatches();
