@@ -4710,8 +4710,26 @@ function publicMainPageMatchesHandler(_req, res, next) {
           });
         });
 
+        const tournaments = Array.from(new Map(
+          (matchRows || [])
+            .map((row) => {
+              const tournamentId = String(row?.tournament_id || "").trim();
+              if (!tournamentId) return null;
+              return [tournamentId, {
+                id: tournamentId,
+                name: row.tournament_name,
+                short_title: row.tournament_short_title,
+                logo: row.tournament_logo,
+                link: row.tournament_link,
+                type: row.tournament_type,
+              }];
+            })
+            .filter(Boolean)
+        ).values());
+
         return res.json({
           ok: true,
+          tournaments,
           matches: (matchRows || []).map((row) => ({
             id: row.id,
             tournament_id: row.tournament_id,

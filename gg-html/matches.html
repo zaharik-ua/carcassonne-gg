@@ -570,8 +570,73 @@ code {
   }
 
   .lineup__overview {
-      padding: 10px 0;
+      padding: 10px 12px 10px 15px;
       line-height: 22px;
+  }
+
+  .lineup__row-sep {
+    display: inline-block;
+    padding: 0 7px;
+  }
+
+  .lineup__row-score {
+    display: inline-block;
+    padding: 0 7px;
+    font-weight: 600;
+    color: #222;
+  }
+
+  .lineup__row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+  }
+
+  .lineup__games {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    flex-wrap: wrap;
+  }
+
+  .lineup__game-link {
+    display: inline-flex;
+    text-decoration: none;
+  }
+
+  .lineup__game-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 4px;
+    border-radius: 2px;
+    background: #d9d9d9;
+    color: #444;
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 600;
+  }
+
+  .lineup__game-badge--p1 {
+    background: #d5ead5;
+    color: #2b6f2b;
+  }
+
+  .lineup__game-badge--p2 {
+    background: #ead5d5;
+    color: #8a3434;
+  }
+
+  .lineup__game-badge--clock {
+    background: #f3e4c4;
+    color: #8c6418;
+  }
+
+  .lineup__game-clock {
+    font-size: 10px;
+    line-height: 1;
   }
 
   .event-row {
@@ -1497,6 +1562,30 @@ function renderSection(container, title, tournaments, matches, events, options =
   const visibleMatches = (matches || []).filter(match => !isMatchHidden(match));
   const visibleEvents = Array.isArray(events) ? events : [];
   if (visibleMatches.length === 0 && visibleEvents.length === 0) return;
+  const isToday = title === "Today";
+  const isUpcoming = title === "Upcoming Matches";
+  const isLastResults = title === "Last Results";
+  const sortMatchesForSection = (list) => {
+    const copy = (Array.isArray(list) ? list.slice() : []);
+    if (isLastResults) {
+      return copy.sort((a, b) => parseUtcTimestamp(b.time) - parseUtcTimestamp(a.time));
+    }
+    if (isToday || isUpcoming) {
+      return copy.sort((a, b) => parseUtcTimestamp(a.time) - parseUtcTimestamp(b.time));
+    }
+    return copy;
+  };
+  const sortedVisibleMatches = sortMatchesForSection(visibleMatches);
+  const tournamentsWithSortTime = (tournaments || []).map((tournament) => {
+    const tournamentMatches = sortedVisibleMatches.filter(m => m.tournament === tournament.name);
+    const sortTime = tournamentMatches.length
+      ? Math.min(...tournamentMatches.map(match => parseUtcTimestamp(match.time)))
+      : Number.POSITIVE_INFINITY;
+    return { tournament, sortTime };
+  });
+  const sortedTournaments = (isToday || isUpcoming)
+    ? tournamentsWithSortTime.slice().sort((a, b) => a.sortTime - b.sortTime).map(entry => entry.tournament)
+    : (tournaments || []);
 
   const sectionTitle = document.createElement("div");
   sectionTitle.className = "section-title";
@@ -1504,9 +1593,6 @@ function renderSection(container, title, tournaments, matches, events, options =
   const titleSpan = document.createElement("span");
   titleSpan.textContent = title;
   sectionTitle.appendChild(titleSpan);
-
-  const isToday = title === "Today";
-  const isUpcoming = title === "Upcoming Matches";
   // Right side: only Today — single toggle affects both Today and Upcoming
   if (isToday) {
     const toggle = document.createElement("div");
@@ -1610,7 +1696,7 @@ function renderSection(container, title, tournaments, matches, events, options =
     const tMap = new Map((tournaments || []).map(t => [t.name, t]));
 
     // Sort matches by time ascending (UTC)
-    const matchesSorted = visibleMatches.slice().sort((a, b) => parseUtcTimestamp(a.time) - parseUtcTimestamp(b.time));
+    const matchesSorted = sortedVisibleMatches.slice();
 
     matchesSorted.forEach((match, idx) => {
       // Divider between matches (show before each, including first, to match spec ordering)
@@ -1653,8 +1739,8 @@ function renderSection(container, title, tournaments, matches, events, options =
   }
 
   // Default (Event mode and other sections): per-tournament cards
-  (tournaments || []).forEach(tournament => {
-    const filtered = visibleMatches.filter(m => m.tournament === tournament.name);
+  sortedTournaments.forEach(tournament => {
+    const filtered = sortedVisibleMatches.filter(m => m.tournament === tournament.name);
     if (filtered.length === 0) return;
 
     const card = document.createElement("div");
@@ -1994,7 +2080,70 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function buildFriendlyLineupsHtml(duels) {
+function hasValue(value) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function isTruthyOne(value) {
+  return value === 1 || value === true || String(value || "").trim() === "1";
+}
+
+function collectGameEntries(duel) {
+  if (Array.isArray(duel?.games) && duel.games.length > 0) {
+    return duel.games.filter(Boolean);
+  }
+
+  const hasSingleGameData =
+    hasValue(duel?.player_1_score) ||
+    hasValue(duel?.player_2_score) ||
+    hasValue(duel?.player_1_rank) ||
+    hasValue(duel?.player_2_rank) ||
+    isTruthyOne(duel?.player_1_clock) ||
+    isTruthyOne(duel?.player_2_clock) ||
+    hasValue(duel?.bga_table_id);
+
+  return hasSingleGameData ? [duel] : [];
+}
+
+function createGameBadgeHtml(game) {
+  const p1Clock = isTruthyOne(game?.player_1_clock);
+  const p2Clock = isTruthyOne(game?.player_2_clock);
+  const p1RankWon = String(game?.player_1_rank || "").trim() === "1";
+  const p2RankWon = String(game?.player_2_rank || "").trim() === "1";
+  const p1Score = String(game?.player_1_score ?? "").trim();
+  const p2Score = String(game?.player_2_score ?? "").trim();
+
+  if ((p1Clock || p2Clock) && p1Clock !== p2Clock) {
+    const left = p1Clock ? "" : "1-0";
+    const right = p1Clock ? "0-1" : "";
+    return `<span class="lineup__game-badge lineup__game-badge--clock"><span>${left}</span><i class="fa-regular fa-clock lineup__game-clock"></i><span>${right}</span></span>`;
+  }
+
+  if (!hasValue(p1Score) || !hasValue(p2Score)) {
+    return "";
+  }
+
+  let extraClass = "";
+  if (p1RankWon) extraClass = " lineup__game-badge--p1";
+  else if (p2RankWon) extraClass = " lineup__game-badge--p2";
+
+  return `<span class="lineup__game-badge${extraClass}">${escapeHtml(`${p1Score}-${p2Score}`)}</span>`;
+}
+
+function buildGameBadgesHtml(duel) {
+  const badgeHtmlList = collectGameEntries(duel).map((game) => {
+    const badgeHtml = createGameBadgeHtml(game);
+    if (!badgeHtml) return "";
+    const tableId = String(game?.bga_table_id || "").trim();
+    if (!tableId) return badgeHtml;
+    return `<a class="lineup__game-link" href="https://boardgamearena.com/table?table=${encodeURIComponent(tableId)}" target="_blank" rel="noopener noreferrer">${badgeHtml}</a>`;
+  }).filter(Boolean);
+
+  if (!badgeHtmlList.length) return "";
+  return `<span class="lineup__games">${badgeHtmlList.join("")}</span>`;
+}
+
+function buildDbMatchLineupsHtml(duels, match) {
   const list = (Array.isArray(duels) ? duels : []).slice().sort((a, b) => {
     const aNo = Number(a?.duel_number);
     const bNo = Number(b?.duel_number);
@@ -2002,6 +2151,7 @@ function buildFriendlyLineupsHtml(duels) {
     return String(a?.id || "").localeCompare(String(b?.id || ""));
   });
   if (!list.length) return "";
+  const matchHasScore = hasValue(match?.dw1) && hasValue(match?.dw2);
 
   return list.map((duel) => {
     const p1Id = String(duel?.player_1_id || "").trim();
@@ -2017,13 +2167,14 @@ function buildFriendlyLineupsHtml(duels) {
     const hasScore = duel?.dw1 !== null && duel?.dw1 !== undefined && String(duel.dw1).trim() !== ""
       && duel?.dw2 !== null && duel?.dw2 !== undefined && String(duel.dw2).trim() !== "";
     const middle = hasScore
-      ? `<span style="display:inline-block;padding:0 7px;font-weight:600;color:#222;">${escapeHtml(duel.dw1)} - ${escapeHtml(duel.dw2)}</span>`
-      : `<span style="display:inline-block;padding:0 7px;">-</span>`;
-    return `<div>${left}${middle}${right}</div>`;
+      ? `<span class="lineup__row-score">${escapeHtml(duel.dw1)} - ${escapeHtml(duel.dw2)}</span>`
+      : `<span class="lineup__row-sep"> - </span>`;
+    const gamesHtml = matchHasScore ? buildGameBadgesHtml(duel) : "";
+    return `<div class="lineup__row">${left}${middle}${right}${gamesHtml}</div>`;
   }).join("");
 }
 
-function adaptFriendlyMatchesData(data) {
+function adaptDbMainPageMatchesData(data) {
   const result = {
     matches_today: [],
     matches_scheduled: [],
@@ -2039,6 +2190,19 @@ function adaptFriendlyMatchesData(data) {
     scheduled: new Map(),
     finished: new Map(),
   };
+  const tournamentsById = new Map();
+  (Array.isArray(data?.tournaments) ? data.tournaments : []).forEach((tournament) => {
+    const id = String(tournament?.id || "").trim();
+    if (!id) return;
+    tournamentsById.set(id, {
+      id,
+      name: String(tournament?.name || tournament?.short_title || "").trim(),
+      short_title: String(tournament?.short_title || "").trim(),
+      logo: String(tournament?.logo || "").trim(),
+      link: String(tournament?.link || "").trim(),
+      type: String(tournament?.type || "").trim(),
+    });
+  });
 
   const duelsByMatchId = new Map();
   (Array.isArray(data?.duels) ? data.duels : []).forEach((duel) => {
@@ -2053,14 +2217,15 @@ function adaptFriendlyMatchesData(data) {
     if (sectionKey === "finished" && !isFriendlyFinishedWithinLastDays(match?.time_utc, 7)) {
       return;
     }
+    const tournamentMeta = tournamentsById.get(String(match?.tournament_id || "").trim()) || null;
     const tournamentName = String(
-      match?.tournament_name || match?.tournament_short_title || data?.tournament?.name || data?.tournament?.short_title || "Friendly Matches"
+      tournamentMeta?.name || tournamentMeta?.short_title || match?.tournament_name || match?.tournament_short_title || "Friendly Matches"
     ).trim();
     const tournamentLogo = String(
-      match?.tournament_logo || data?.tournament?.logo || "https://carcassonne.gg/gallery/friendly-matches.png"
+      tournamentMeta?.logo || match?.tournament_logo || "https://carcassonne.gg/gallery/friendly-matches.png"
     ).trim();
-    const tournamentLink = String(match?.tournament_link || data?.tournament?.link || "").trim();
-    const tournamentType = String(match?.tournament_type || data?.tournament?.type || "TEAM").trim() || "TEAM";
+    const tournamentLink = String(tournamentMeta?.link || match?.tournament_link || "").trim();
+    const tournamentType = String(tournamentMeta?.type || match?.tournament_type || "TEAM").trim() || "TEAM";
     const tournamentKey = `${tournamentName}||${tournamentLink}`;
     if (!tournamentsByKey[sectionKey].has(tournamentKey)) {
       tournamentsByKey[sectionKey].set(tournamentKey, {
@@ -2087,7 +2252,7 @@ function adaptFriendlyMatchesData(data) {
       gw1: match?.gw1,
       gw2: match?.gw2,
       rating: match?.rating,
-      lineups: buildFriendlyLineupsHtml(duelsByMatchId.get(String(match?.id || "").trim()) || []),
+      lineups: buildDbMatchLineupsHtml(duelsByMatchId.get(String(match?.id || "").trim()) || [], match),
     };
 
     if (sectionKey === "today") result.matches_today.push(normalizedMatch);
@@ -2134,7 +2299,7 @@ function dedupeTournamentsByIdentity(tournaments) {
   setLoading(true);
   const primaryURL = "https://api.carcassonne.com.ua/public/matches";
   const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches.json";
-  const friendlyURL = "https://api.carcassonne.gg/public/main-page-matches";
+  const dbMatchesURL = "https://api.carcassonne.gg/public/main-page-matches";
 
   const baseMatchesPromise = fetchPrimaryWithRetry(primaryURL, { retries: 2, delayMs: 500, timeout: 10000 })
     .catch(err => {
@@ -2147,7 +2312,7 @@ function dedupeTournamentsByIdentity(tournaments) {
         });
     });
 
-  const friendlyMatchesPromise = fetch(friendlyURL)
+  const dbMatchesPromise = fetch(dbMatchesURL)
     .then(res => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
@@ -2157,9 +2322,9 @@ function dedupeTournamentsByIdentity(tournaments) {
       return null;
     });
 
-  Promise.all([baseMatchesPromise, friendlyMatchesPromise])
-    .then(([baseData, friendlyData]) => {
-      lastData = { baseData, friendlyData };
+  Promise.all([baseMatchesPromise, dbMatchesPromise])
+    .then(([baseData, dbMatchesData]) => {
+      lastData = { baseData, dbMatchesData };
       renderAllSectionsFromData(lastData);
       setLoading(false);
     })
@@ -2171,13 +2336,13 @@ function dedupeTournamentsByIdentity(tournaments) {
 
   function renderAllSectionsFromData(dataBundle) {
     const baseData = dataBundle?.baseData || {};
-    const friendlyData = adaptFriendlyMatchesData(dataBundle?.friendlyData || {});
-    const mergedTodayTournaments = dedupeTournamentsByIdentity([...(friendlyData.tournaments_today || []), ...(baseData.tournaments_today || [])]);
-    const mergedScheduledTournaments = dedupeTournamentsByIdentity([...(friendlyData.tournaments_scheduled || []), ...(baseData.tournaments_scheduled || [])]);
-    const mergedFinishedTournaments = dedupeTournamentsByIdentity([...(friendlyData.tournaments_finished || []), ...(baseData.tournaments_finished || [])]);
-    const mergedTodayMatches = dedupeMatchesById([...(friendlyData.matches_today || []), ...(baseData.matches_today || [])]);
-    const mergedScheduledMatches = dedupeMatchesById([...(friendlyData.matches_scheduled || []), ...(baseData.matches_scheduled || [])]);
-    const mergedFinishedMatches = dedupeMatchesById([...(friendlyData.matches_finished || []), ...(baseData.matches_finished || [])]);
+    const dbMatchesData = adaptDbMainPageMatchesData(dataBundle?.dbMatchesData || {});
+    const mergedTodayTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_today || []), ...(baseData.tournaments_today || [])]);
+    const mergedScheduledTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_scheduled || []), ...(baseData.tournaments_scheduled || [])]);
+    const mergedFinishedTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_finished || []), ...(baseData.tournaments_finished || [])]);
+    const mergedTodayMatches = dedupeMatchesById([...(dbMatchesData.matches_today || []), ...(baseData.matches_today || [])]);
+    const mergedScheduledMatches = dedupeMatchesById([...(dbMatchesData.matches_scheduled || []), ...(baseData.matches_scheduled || [])]);
+    const mergedFinishedMatches = dedupeMatchesById([...(dbMatchesData.matches_finished || []), ...(baseData.matches_finished || [])]);
 
     const container = document.getElementById("matches-container");
     container.innerHTML = "";
