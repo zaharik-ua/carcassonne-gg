@@ -173,6 +173,48 @@ python3 run_update_player_elo.py --batch-size 50 --limit 200
 
 У такому режимі він бере профілі з найстарішим `bga_elo_updated_at` першими, тому підходить для cron/systemd batch-run без одночасного проходу по всій таблиці.
 
+Для запуску тільки по профілях без Elo (`bga_elo IS NULL`) є окремий режим:
+
+```bash
+cd auth-server
+python3 run_update_player_elo.py --selection-mode only_null
+```
+
+`0` не вважається порожнім значенням, тому такі профілі цей режим не чіпає.
+
+### systemd-таймери для Elo гравців
+
+У репозиторії є готові юніти:
+
+- `auth-server/systemd/update-player-elo-daily.service`
+- `auth-server/systemd/update-player-elo-daily.timer`
+- `auth-server/systemd/update-player-elo-missing.service`
+- `auth-server/systemd/update-player-elo-missing.timer`
+
+Логіка така:
+
+- daily таймер запускає повне оновлення Elo щодня о `01:00 UTC`;
+- після завершення full refresh запускається `python3 run_update_ratings.py --planned`;
+- hourly таймер запускає оновлення тільки для профілів з `bga_elo IS NULL`;
+- після hourly запуску `run_update_ratings.py --planned` викликається тільки якщо було оновлено хоча б одного гравця;
+- обидва сервіси використовують спільний `flock`, тому не накладаються один на одного.
+
+Встановлення на сервері:
+
+```bash
+sudo cp auth-server/systemd/update-player-elo-daily.service /etc/systemd/system/
+sudo cp auth-server/systemd/update-player-elo-daily.timer /etc/systemd/system/
+sudo cp auth-server/systemd/update-player-elo-missing.service /etc/systemd/system/
+sudo cp auth-server/systemd/update-player-elo-missing.timer /etc/systemd/system/
+sudo chmod +x /home/carcassonne-gg/auth-server/scripts/run_update_player_elo_daily.sh
+sudo chmod +x /home/carcassonne-gg/auth-server/scripts/run_update_player_elo_missing.sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now update-player-elo-daily.timer
+sudo systemctl enable --now update-player-elo-missing.timer
+sudo systemctl status update-player-elo-daily.timer
+sudo systemctl status update-player-elo-missing.timer
+```
+
 ## 10) Регулярний фікс майбутніх матчів
 
 Є окремий maintenance-скрипт:

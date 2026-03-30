@@ -11,6 +11,7 @@ class PlayerEloRepository(ABC):
         self,
         *,
         limit: int,
+        selection_mode: str = "stale_first",
         exclude_player_ids: set[str] | None = None,
     ) -> list[PlayerEloUpdateRequest]:
         """Return players that need an Elo refresh."""

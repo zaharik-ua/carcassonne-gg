@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Carcassonne GG full player Elo refresh daily at 01:00 UTC
+
+[Timer]
+OnCalendar=*-*-* 01:00:00 UTC
+Unit=update-player-elo-daily.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

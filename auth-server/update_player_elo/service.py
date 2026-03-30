@@ -18,10 +18,14 @@ class PlayerEloUpdateService:
         self.client = client or BgaEloClient()
 
     def run(self, *, total_limit: int | None = None) -> dict:
+        return self.run_with_mode(total_limit=total_limit, selection_mode="stale_first")
+
+    def run_with_mode(self, *, total_limit: int | None = None, selection_mode: str = "stale_first") -> dict:
         summary = {
             "processed": 0,
             "updated": 0,
             "failed": 0,
+            "selection_mode": selection_mode,
         }
         remaining = total_limit
         seen_ids: set[str] = set()
@@ -30,6 +34,7 @@ class PlayerEloUpdateService:
             limit = self.batch_size if remaining is None else min(self.batch_size, remaining)
             batch = self.repository.fetch_players_to_update(
                 limit=limit,
+                selection_mode=selection_mode,
                 exclude_player_ids=seen_ids,
             )
             if not batch:

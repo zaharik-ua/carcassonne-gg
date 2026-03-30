@@ -40,6 +40,12 @@ def parse_args() -> argparse.Namespace:
         default=int(os.getenv("PLAYER_ELO_LIMIT", "0")) or None,
         help="Optional total number of players to process in one run.",
     )
+    parser.add_argument(
+        "--selection-mode",
+        choices=("stale_first", "only_null"),
+        default=os.getenv("PLAYER_ELO_SELECTION_MODE", "stale_first"),
+        help="Select all players ordered by staleness, or only profiles where bga_elo IS NULL.",
+    )
     return parser.parse_args()
 
 
@@ -50,7 +56,7 @@ def main() -> int:
     repository = SqlitePlayerEloRepository(db_path, player_id=args.player_id)
     service = PlayerEloUpdateService(repository=repository, batch_size=args.batch_size)
     effective_limit = 1 if args.player_id and args.limit is None else args.limit
-    summary = service.run(total_limit=effective_limit)
+    summary = service.run_with_mode(total_limit=effective_limit, selection_mode=args.selection_mode)
     if args.player_id and summary["processed"] == 0:
         print(
             f"Profile with id={args.player_id} was not found or id is not a numeric BGA player id.",

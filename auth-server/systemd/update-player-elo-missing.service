@@ -1,0 +1,16 @@
+[Unit]
+Description=Update missing Carcassonne GG player Elo values and refresh planned ratings when changed
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/carcassonne-gg/auth-server
+LogsDirectory=carcassonne
+StandardOutput=append:/var/log/carcassonne/update-player-elo-missing.log
+StandardError=append:/var/log/carcassonne/update-player-elo-missing.log
+ExecStart=/home/carcassonne-gg/auth-server/scripts/run_update_player_elo_missing.sh --db-path /home/carcassonne-gg/auth-server/data/auth.sqlite
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target

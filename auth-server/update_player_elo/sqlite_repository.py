@@ -18,8 +18,12 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
         self,
         *,
         limit: int,
+        selection_mode: str = "stale_first",
         exclude_player_ids: set[str] | None = None,
     ) -> list[PlayerEloUpdateRequest]:
+        if selection_mode not in {"stale_first", "only_null"}:
+            raise ValueError(f"Unknown player Elo selection mode: {selection_mode}")
+
         exclude_player_ids = {str(player_id).strip() for player_id in (exclude_player_ids or set()) if str(player_id).strip()}
 
         params: list[object] = []
@@ -28,6 +32,9 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
             "trim(COALESCE(id, '')) <> ''",
             "trim(COALESCE(id, '')) GLOB '[0-9]*'",
         ]
+
+        if selection_mode == "only_null":
+            where_parts.append("bga_elo IS NULL")
 
         if self.player_id is not None:
             where_parts.append("trim(COALESCE(id, '')) = trim(?)")
@@ -40,6 +47,16 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
 
         params.append(int(limit))
         stable_order_column = "profile_row_id" if "profile_row_id" in self._profiles_columns else "rowid"
+        order_by_sql = f"""
+              CASE WHEN bga_elo_updated_at IS NULL OR trim(bga_elo_updated_at) = '' THEN 0 ELSE 1 END ASC,
+              datetime(COALESCE(bga_elo_updated_at, '1970-01-01 00:00:00')) ASC,
+              {stable_order_column} ASC
+        """
+        if selection_mode == "only_null":
+            order_by_sql = f"""
+              CASE WHEN bga_elo_updated_at IS NULL OR trim(bga_elo_updated_at) = '' THEN 0 ELSE 1 END ASC,
+              {stable_order_column} ASC
+            """
 
         sql = f"""
             SELECT
@@ -48,9 +65,7 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
             FROM profiles
             WHERE {' AND '.join(where_parts)}
             ORDER BY
-              CASE WHEN bga_elo_updated_at IS NULL OR trim(bga_elo_updated_at) = '' THEN 0 ELSE 1 END ASC,
-              datetime(COALESCE(bga_elo_updated_at, '1970-01-01 00:00:00')) ASC,
-              {stable_order_column} ASC
+              {order_by_sql}
             LIMIT ?
         """
 
