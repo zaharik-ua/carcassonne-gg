@@ -2,7 +2,7 @@
 Description=Run Carcassonne GG missing player Elo refresh hourly
 
 [Timer]
-OnCalendar=*-*-* *:00:00 UTC
+OnCalendar=*-*-* *:05:00 UTC
 Unit=update-player-elo-missing.service
 Persistent=true
 
