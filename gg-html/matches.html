@@ -950,52 +950,12 @@ function createMatchElement(match, options = {}) {
   chevronIcon.style.fontSize = "12px";
   chevronIcon.style.padding = "0 4px";
   toggleBtn.appendChild(chevronIcon);
-
-  const lineupDiv = document.createElement("div");
-  lineupDiv.className = "lineup";
-
-  const lineupContDiv = document.createElement("div");
-  lineupContDiv.innerHTML = match.lineups;
-  lineupContDiv.className = "lineup__overview";
-  lineupDiv.appendChild(lineupContDiv);
-
-  if (match.lineups) {
-    const isOpen = openLineupsSet.has(match.id);
-    if (isOpen) {
-      lineupDiv.classList.add("open");
-      lineupDiv.style.height = "auto";
-      chevronIcon.style.transform = "rotate(0deg)";
-    }
-
-    toggleBtn.addEventListener("click", () => {
-      const isOpen = lineupDiv.classList.contains("open");
-
-      if (isOpen) {
-        lineupDiv.style.height = lineupDiv.scrollHeight + "px";
-        requestAnimationFrame(() => {
-          lineupDiv.style.height = "0px";
-          lineupDiv.classList.remove("open");
-          chevronIcon.style.transform = "rotate(180deg)";
-          openLineupsSet.delete(match.id);
-        });
-      } else {
-        lineupDiv.style.height = "0px";
-        lineupDiv.classList.add("open");
-        chevronIcon.style.transform = "rotate(0deg)";
-        openLineupsSet.add(match.id);
-
-        requestAnimationFrame(() => {
-          lineupDiv.style.height = lineupDiv.scrollHeight + "px";
-        });
-
-        lineupDiv.addEventListener("transitionend", function handler() {
-          if (lineupDiv.classList.contains("open")) {
-            lineupDiv.style.height = "auto";
-          }
-          lineupDiv.removeEventListener("transitionend", handler);
-        });
-      }
-    });
+  const matchId = String(match?.id || "").trim();
+  const matchLineups = Array.isArray(match?.lineupsData) ? match.lineupsData.filter(Boolean) : [];
+  let lineupDiv = null;
+  if (matchId && matchLineups.length > 0) {
+    lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon);
+    bindLineupToggle(matchId, lineupDiv, chevronIcon, toggleBtn);
   }
   
   if(!streamsOff) {
@@ -1144,13 +1104,13 @@ function createMatchElement(match, options = {}) {
       }
   }
 
-  if (match.lineups) {
+  if (lineupDiv) {
     rightDiv.appendChild(toggleBtn);
   }
 
   container.appendChild(rightDiv);
   wrapper.appendChild(container);
-  if (match.lineups) wrapper.appendChild(lineupDiv);
+  if (lineupDiv) wrapper.appendChild(lineupDiv);
 
   appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
 
@@ -1567,24 +1527,31 @@ function renderSection(container, title, tournaments, matches, events, options =
   const isLastResults = title === "Last Results";
   const sortMatchesForSection = (list) => {
     const copy = (Array.isArray(list) ? list.slice() : []);
+    const compareSourcePriority = (a, b) => Number(b?.source_priority || 0) - Number(a?.source_priority || 0);
     if (isLastResults) {
-      return copy.sort((a, b) => parseUtcTimestamp(b.time) - parseUtcTimestamp(a.time));
+      return copy.sort((a, b) => compareSourcePriority(a, b) || (parseUtcTimestamp(b.time) - parseUtcTimestamp(a.time)));
     }
     if (isToday || isUpcoming) {
-      return copy.sort((a, b) => parseUtcTimestamp(a.time) - parseUtcTimestamp(b.time));
+      return copy.sort((a, b) => compareSourcePriority(a, b) || (parseUtcTimestamp(a.time) - parseUtcTimestamp(b.time)));
     }
     return copy;
   };
   const sortedVisibleMatches = sortMatchesForSection(visibleMatches);
   const tournamentsWithSortTime = (tournaments || []).map((tournament) => {
     const tournamentMatches = sortedVisibleMatches.filter(m => m.tournament === tournament.name);
+    const sourcePriority = tournamentMatches.length
+      ? Math.max(...tournamentMatches.map(match => Number(match?.source_priority || 0)))
+      : Number.NEGATIVE_INFINITY;
     const sortTime = tournamentMatches.length
       ? Math.min(...tournamentMatches.map(match => parseUtcTimestamp(match.time)))
       : Number.POSITIVE_INFINITY;
-    return { tournament, sortTime };
+    return { tournament, sortTime, sourcePriority };
   });
   const sortedTournaments = (isToday || isUpcoming)
-    ? tournamentsWithSortTime.slice().sort((a, b) => a.sortTime - b.sortTime).map(entry => entry.tournament)
+    ? tournamentsWithSortTime
+        .slice()
+        .sort((a, b) => (b.sourcePriority - a.sourcePriority) || (a.sortTime - b.sortTime))
+        .map(entry => entry.tournament)
     : (tournaments || []);
 
   const sectionTitle = document.createElement("div");
@@ -2084,6 +2051,24 @@ function hasValue(value) {
   return value !== null && value !== undefined && String(value).trim() !== "";
 }
 
+function sortLineups(lineups) {
+  return (Array.isArray(lineups) ? lineups.slice() : []).sort((a, b) => {
+    const aNo = Number(a?.duel_number);
+    const bNo = Number(b?.duel_number);
+    if (Number.isFinite(aNo) && Number.isFinite(bNo) && aNo !== bNo) {
+      return aNo - bNo;
+    }
+    return String(a?.id || "").localeCompare(String(b?.id || ""));
+  });
+}
+
+function playerLabel(duel, side) {
+  const name = String(duel?.[`player_${side}_name`] || "").trim();
+  if (name) return name;
+  const id = String(duel?.[`player_${side}_id`] || "").trim();
+  return id || "-";
+}
+
 function isTruthyOne(value) {
   return value === 1 || value === true || String(value || "").trim() === "1";
 }
@@ -2105,7 +2090,7 @@ function collectGameEntries(duel) {
   return hasSingleGameData ? [duel] : [];
 }
 
-function createGameBadgeHtml(game) {
+function createGameBadge(game) {
   const p1Clock = isTruthyOne(game?.player_1_clock);
   const p2Clock = isTruthyOne(game?.player_2_clock);
   const p1RankWon = String(game?.player_1_rank || "").trim() === "1";
@@ -2113,65 +2098,170 @@ function createGameBadgeHtml(game) {
   const p1Score = String(game?.player_1_score ?? "").trim();
   const p2Score = String(game?.player_2_score ?? "").trim();
 
+  const badge = document.createElement("span");
+  badge.className = "lineup__game-badge";
+
   if ((p1Clock || p2Clock) && p1Clock !== p2Clock) {
-    const left = p1Clock ? "" : "1-0";
-    const right = p1Clock ? "0-1" : "";
-    return `<span class="lineup__game-badge lineup__game-badge--clock"><span>${left}</span><i class="fa-regular fa-clock lineup__game-clock"></i><span>${right}</span></span>`;
+    badge.classList.add("lineup__game-badge--clock");
+    const left = document.createElement("span");
+    const right = document.createElement("span");
+    const icon = document.createElement("i");
+    icon.className = "fa-regular fa-clock lineup__game-clock";
+
+    if (p1Clock) {
+      left.textContent = "";
+      right.textContent = "0-1";
+      badge.appendChild(left);
+      badge.appendChild(icon);
+      badge.appendChild(right);
+    } else {
+      left.textContent = "1-0";
+      right.textContent = "";
+      badge.appendChild(left);
+      badge.appendChild(icon);
+      badge.appendChild(right);
+    }
+
+    return badge;
   }
 
   if (!hasValue(p1Score) || !hasValue(p2Score)) {
-    return "";
+    return null;
   }
 
-  let extraClass = "";
-  if (p1RankWon) extraClass = " lineup__game-badge--p1";
-  else if (p2RankWon) extraClass = " lineup__game-badge--p2";
+  if (p1RankWon) {
+    badge.classList.add("lineup__game-badge--p1");
+  } else if (p2RankWon) {
+    badge.classList.add("lineup__game-badge--p2");
+  }
 
-  return `<span class="lineup__game-badge${extraClass}">${escapeHtml(`${p1Score}-${p2Score}`)}</span>`;
+  badge.textContent = `${p1Score}-${p2Score}`;
+  return badge;
 }
 
-function buildGameBadgesHtml(duel) {
-  const badgeHtmlList = collectGameEntries(duel).map((game) => {
-    const badgeHtml = createGameBadgeHtml(game);
-    if (!badgeHtml) return "";
+function createGameBadgesWrap(duel) {
+  const games = collectGameEntries(duel);
+  if (!games.length) return null;
+
+  const wrap = document.createElement("span");
+  wrap.className = "lineup__games";
+
+  games.forEach((game) => {
+    const badge = createGameBadge(game);
+    if (!badge) return;
     const tableId = String(game?.bga_table_id || "").trim();
-    if (!tableId) return badgeHtml;
-    return `<a class="lineup__game-link" href="https://boardgamearena.com/table?table=${encodeURIComponent(tableId)}" target="_blank" rel="noopener noreferrer">${badgeHtml}</a>`;
-  }).filter(Boolean);
+    if (tableId) {
+      const link = document.createElement("a");
+      link.className = "lineup__game-link";
+      link.href = `https://boardgamearena.com/table?table=${encodeURIComponent(tableId)}`;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.appendChild(badge);
+      wrap.appendChild(link);
+      return;
+    }
 
-  if (!badgeHtmlList.length) return "";
-  return `<span class="lineup__games">${badgeHtmlList.join("")}</span>`;
+    wrap.appendChild(badge);
+  });
+
+  return wrap.childNodes.length ? wrap : null;
 }
 
-function buildDbMatchLineupsHtml(duels, match) {
-  const list = (Array.isArray(duels) ? duels : []).slice().sort((a, b) => {
-    const aNo = Number(a?.duel_number);
-    const bNo = Number(b?.duel_number);
-    if (Number.isFinite(aNo) && Number.isFinite(bNo) && aNo !== bNo) return aNo - bNo;
-    return String(a?.id || "").localeCompare(String(b?.id || ""));
-  });
-  if (!list.length) return "";
-  const matchHasScore = hasValue(match?.dw1) && hasValue(match?.dw2);
+function createLineupPanel(matchId, lineups, chevronIcon) {
+  const lineupPanel = document.createElement("div");
+  lineupPanel.className = "lineup";
 
-  return list.map((duel) => {
+  const lineupBody = document.createElement("div");
+  lineupBody.className = "lineup__overview";
+
+  sortLineups(lineups).forEach((duel) => {
+    const row = document.createElement("div");
+    row.className = "lineup__row";
+
     const p1Id = String(duel?.player_1_id || "").trim();
     const p2Id = String(duel?.player_2_id || "").trim();
-    const p1Name = String(duel?.player_1_name || p1Id || "-").trim() || "-";
-    const p2Name = String(duel?.player_2_name || p2Id || "-").trim() || "-";
-    const left = p1Id
-      ? `<a href="https://boardgamearena.com/player?id=${encodeURIComponent(p1Id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(p1Name)}</a>`
-      : escapeHtml(p1Name);
-    const right = p2Id
-      ? `<a href="https://boardgamearena.com/player?id=${encodeURIComponent(p2Id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(p2Name)}</a>`
-      : escapeHtml(p2Name);
-    const hasScore = duel?.dw1 !== null && duel?.dw1 !== undefined && String(duel.dw1).trim() !== ""
-      && duel?.dw2 !== null && duel?.dw2 !== undefined && String(duel.dw2).trim() !== "";
-    const middle = hasScore
-      ? `<span class="lineup__row-score">${escapeHtml(duel.dw1)} - ${escapeHtml(duel.dw2)}</span>`
-      : `<span class="lineup__row-sep"> - </span>`;
-    const gamesHtml = matchHasScore ? buildGameBadgesHtml(duel) : "";
-    return `<div class="lineup__row">${left}${middle}${right}${gamesHtml}</div>`;
-  }).join("");
+
+    const p1Link = document.createElement("a");
+    p1Link.href = p1Id ? `https://boardgamearena.com/player?id=${encodeURIComponent(p1Id)}` : "#";
+    p1Link.target = "_blank";
+    p1Link.rel = "noopener noreferrer";
+    p1Link.textContent = playerLabel(duel, 1);
+    if (!p1Id) {
+      p1Link.removeAttribute("href");
+      p1Link.removeAttribute("target");
+      p1Link.removeAttribute("rel");
+    }
+
+    const sep = document.createElement("span");
+    sep.className = "lineup__row-sep";
+    sep.textContent = " - ";
+
+    const p2Link = document.createElement("a");
+    p2Link.href = p2Id ? `https://boardgamearena.com/player?id=${encodeURIComponent(p2Id)}` : "#";
+    p2Link.target = "_blank";
+    p2Link.rel = "noopener noreferrer";
+    p2Link.textContent = playerLabel(duel, 2);
+    if (!p2Id) {
+      p2Link.removeAttribute("href");
+      p2Link.removeAttribute("target");
+      p2Link.removeAttribute("rel");
+    }
+
+    const hasDuelScore = hasValue(duel?.dw1) && hasValue(duel?.dw2);
+    const scoreEl = document.createElement("span");
+    scoreEl.className = "lineup__row-score";
+    scoreEl.textContent = hasDuelScore ? ` ${duel.dw1} - ${duel.dw2} ` : " - ";
+    const gamesWrap = createGameBadgesWrap(duel);
+
+    row.appendChild(p1Link);
+    row.appendChild(hasDuelScore ? scoreEl : sep);
+    row.appendChild(p2Link);
+    if (gamesWrap) {
+      row.appendChild(gamesWrap);
+    }
+    lineupBody.appendChild(row);
+  });
+
+  lineupPanel.appendChild(lineupBody);
+
+  const isOpen = openLineupsSet.has(matchId);
+  if (isOpen) {
+    lineupPanel.classList.add("open");
+    lineupPanel.style.height = "auto";
+    chevronIcon.style.transform = "rotate(0deg)";
+  }
+
+  return lineupPanel;
+}
+
+function bindLineupToggle(matchId, lineupPanel, chevronIcon, toggleBtn) {
+  toggleBtn.addEventListener("click", () => {
+    const isOpen = lineupPanel.classList.contains("open");
+    if (isOpen) {
+      lineupPanel.style.height = `${lineupPanel.scrollHeight}px`;
+      requestAnimationFrame(() => {
+        lineupPanel.style.height = "0px";
+        lineupPanel.classList.remove("open");
+        chevronIcon.style.transform = "rotate(180deg)";
+        openLineupsSet.delete(matchId);
+      });
+      return;
+    }
+
+    lineupPanel.style.height = "0px";
+    lineupPanel.classList.add("open");
+    chevronIcon.style.transform = "rotate(0deg)";
+    openLineupsSet.add(matchId);
+    requestAnimationFrame(() => {
+      lineupPanel.style.height = `${lineupPanel.scrollHeight}px`;
+    });
+    lineupPanel.addEventListener("transitionend", function handler() {
+      if (lineupPanel.classList.contains("open")) {
+        lineupPanel.style.height = "auto";
+      }
+      lineupPanel.removeEventListener("transitionend", handler);
+    });
+  });
 }
 
 function adaptDbMainPageMatchesData(data) {
@@ -2252,7 +2342,7 @@ function adaptDbMainPageMatchesData(data) {
       gw1: match?.gw1,
       gw2: match?.gw2,
       rating: match?.rating,
-      lineups: buildDbMatchLineupsHtml(duelsByMatchId.get(String(match?.id || "").trim()) || [], match),
+      lineupsData: sortLineups(duelsByMatchId.get(String(match?.id || "").trim()) || []),
     };
 
     if (sectionKey === "today") result.matches_today.push(normalizedMatch);
@@ -2287,6 +2377,13 @@ function dedupeTournamentsByIdentity(tournaments) {
     seen.add(key);
     return true;
   });
+}
+
+function applySourcePriority(matches, priority) {
+  return (Array.isArray(matches) ? matches : []).map((match) => ({
+    ...match,
+    source_priority: priority,
+  }));
 }
 
   function setLoading(visible) {
@@ -2340,9 +2437,18 @@ function dedupeTournamentsByIdentity(tournaments) {
     const mergedTodayTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_today || []), ...(baseData.tournaments_today || [])]);
     const mergedScheduledTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_scheduled || []), ...(baseData.tournaments_scheduled || [])]);
     const mergedFinishedTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_finished || []), ...(baseData.tournaments_finished || [])]);
-    const mergedTodayMatches = dedupeMatchesById([...(dbMatchesData.matches_today || []), ...(baseData.matches_today || [])]);
-    const mergedScheduledMatches = dedupeMatchesById([...(dbMatchesData.matches_scheduled || []), ...(baseData.matches_scheduled || [])]);
-    const mergedFinishedMatches = dedupeMatchesById([...(dbMatchesData.matches_finished || []), ...(baseData.matches_finished || [])]);
+    const mergedTodayMatches = dedupeMatchesById([
+      ...applySourcePriority(dbMatchesData.matches_today || [], 2),
+      ...applySourcePriority(baseData.matches_today || [], 1),
+    ]);
+    const mergedScheduledMatches = dedupeMatchesById([
+      ...applySourcePriority(dbMatchesData.matches_scheduled || [], 2),
+      ...applySourcePriority(baseData.matches_scheduled || [], 1),
+    ]);
+    const mergedFinishedMatches = dedupeMatchesById([
+      ...applySourcePriority(dbMatchesData.matches_finished || [], 2),
+      ...applySourcePriority(baseData.matches_finished || [], 1),
+    ]);
 
     const container = document.getElementById("matches-container");
     container.innerHTML = "";

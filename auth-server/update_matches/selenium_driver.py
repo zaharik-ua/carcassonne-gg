@@ -4,6 +4,7 @@ import os
 import random
 import shutil
 import subprocess
+import signal
 import time
 from contextlib import contextmanager
 from threading import Condition, Lock, Thread
@@ -134,7 +135,7 @@ class DriverManager:
             thread.join(timeout=CHROME_STARTUP_TIMEOUT)
 
             if thread.is_alive():
-                self._kill_stray_processes()
+                self._stop_service_process(service)
                 last_exc = TimeoutError(f"Chrome startup timed out after {CHROME_STARTUP_TIMEOUT}s")
             elif holder["driver"] is not None:
                 self.driver = holder["driver"]
@@ -205,10 +206,24 @@ class DriverManager:
             self.driver = None
 
     @staticmethod
-    def _kill_stray_processes() -> None:
+    def _stop_service_process(service: Service) -> None:
+        process = getattr(service, "process", None)
+        pid = getattr(process, "pid", None)
+        if not pid:
+            return
+
         try:
-            subprocess.run(["pkill", "-x", "chromedriver"], check=False)
-            subprocess.run(["pkill", "-x", "chromium"], check=False)
+            subprocess.run(["pkill", "-TERM", "-P", str(pid)], check=False)
+            os.kill(pid, signal.SIGTERM)
+
+            deadline = time.time() + 5
+            while time.time() < deadline:
+                if process.poll() is not None:
+                    return
+                time.sleep(0.1)
+
+            subprocess.run(["pkill", "-KILL", "-P", str(pid)], check=False)
+            os.kill(pid, signal.SIGKILL)
         except Exception:
             pass
 
