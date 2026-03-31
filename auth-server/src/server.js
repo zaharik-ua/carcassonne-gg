@@ -4719,55 +4719,68 @@ function publicMainPageMatchesHandler(_req, res, next) {
             .filter(Boolean)
         ).values());
 
-        return res.json({
-          ok: true,
-          tournaments,
-          matches: (matchRows || []).map((row) => ({
-            id: row.id,
-            tournament_id: row.tournament_id,
-            time_utc: row.time_utc,
-            lineup_type: row.lineup_type,
-            lineup_deadline_h: row.lineup_deadline_h,
-            lineup_deadline_utc: row.lineup_deadline_utc,
-            number_of_duels: row.number_of_duels,
-            team_1: row.team_1,
-            team_2: row.team_2,
-            team_1_name: row.team_1_name,
-            team_1_flag: row.team_1_flag,
-            team_2_name: row.team_2_name,
-            team_2_flag: row.team_2_flag,
-            status: row.status,
-            dw1: row.dw1,
-            dw2: row.dw2,
-            gw1: row.gw1,
-            gw2: row.gw2,
-            rating: row.rating,
-            tournament_name: row.tournament_name,
-            tournament_short_title: row.tournament_short_title,
-            tournament_logo: row.tournament_logo,
-            tournament_link: row.tournament_link,
-            tournament_type: row.tournament_type,
-          })),
-          duels: (duelRows || []).map((row) => ({
-            id: row.id,
-            tournament_id: row.tournament_id,
-            match_id: row.match_id,
-            duel_number: row.duel_number,
-            duel_format: row.duel_format,
-            time_utc: row.time_utc,
-            player_1_id: row.player_1_id,
-            player_1_name: row.player_1_name,
-            player_1_elo: row.player_1_elo,
-            player_2_id: row.player_2_id,
-            player_2_name: row.player_2_name,
-            player_2_elo: row.player_2_elo,
-            dw1: row.dw1,
-            dw2: row.dw2,
-            rating: row.rating,
-            status: row.status,
-            games: gamesByDuelId.get(String(row.id || "").trim()) || [],
-          })),
-        });
+        return db.get(
+          `
+            SELECT last_success_at
+            FROM job_runs
+            WHERE job_name = 'update-player-elo-daily'
+            LIMIT 1
+          `,
+          [],
+          (jobRunsErr, jobRunRow) => {
+            if (jobRunsErr) return next(jobRunsErr);
+            return res.json({
+              ok: true,
+              elo_updated_at: jobRunRow?.last_success_at || null,
+              tournaments,
+              matches: (matchRows || []).map((row) => ({
+                id: row.id,
+                tournament_id: row.tournament_id,
+                time_utc: row.time_utc,
+                lineup_type: row.lineup_type,
+                lineup_deadline_h: row.lineup_deadline_h,
+                lineup_deadline_utc: row.lineup_deadline_utc,
+                number_of_duels: row.number_of_duels,
+                team_1: row.team_1,
+                team_2: row.team_2,
+                team_1_name: row.team_1_name,
+                team_1_flag: row.team_1_flag,
+                team_2_name: row.team_2_name,
+                team_2_flag: row.team_2_flag,
+                status: row.status,
+                dw1: row.dw1,
+                dw2: row.dw2,
+                gw1: row.gw1,
+                gw2: row.gw2,
+                rating: row.rating,
+                tournament_name: row.tournament_name,
+                tournament_short_title: row.tournament_short_title,
+                tournament_logo: row.tournament_logo,
+                tournament_link: row.tournament_link,
+                tournament_type: row.tournament_type,
+              })),
+              duels: (duelRows || []).map((row) => ({
+                id: row.id,
+                tournament_id: row.tournament_id,
+                match_id: row.match_id,
+                duel_number: row.duel_number,
+                duel_format: row.duel_format,
+                time_utc: row.time_utc,
+                player_1_id: row.player_1_id,
+                player_1_name: row.player_1_name,
+                player_1_elo: row.player_1_elo,
+                player_2_id: row.player_2_id,
+                player_2_name: row.player_2_name,
+                player_2_elo: row.player_2_elo,
+                dw1: row.dw1,
+                dw2: row.dw2,
+                rating: row.rating,
+                status: row.status,
+                games: gamesByDuelId.get(String(row.id || "").trim()) || [],
+              })),
+            });
+          }
+        );
       };
 
       if (!normalizedMatchIds.length) {

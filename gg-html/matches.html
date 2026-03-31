@@ -574,18 +574,35 @@ code {
       line-height: 22px;
   }
 
+  .lineup__elo-updated {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 10px;
+    padding: 0 6px;
+    color: #666;
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .lineup__elo-updated img {
+    width: 13px;
+    height: auto;
+    flex-shrink: 0;
+  }
+
   .lineup__elo {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     min-width: 36px;
     margin: 0 6px 0 0;
-    padding: 2px 6px;
-    border-radius: 6px;
+    padding: 1px 3px;
+    border-radius: 3px;
     color: #fff;
     font-size: 12px;
     line-height: 1.1;
-    font-weight: 700;
+    font-weight: 500;
     white-space: nowrap;
     box-sizing: border-box;
   }
@@ -597,6 +614,10 @@ code {
   .lineup__row-sep {
     display: inline-block;
     padding: 0 7px;
+  }
+
+  .lineup__row-sep--vs {
+    font-weight: 600;
   }
 
   .lineup__row-score {
@@ -974,7 +995,7 @@ function createMatchElement(match, options = {}) {
   const matchLineups = Array.isArray(match?.lineupsData) ? match.lineupsData.filter(Boolean) : [];
   let lineupDiv = null;
   if (matchId && matchLineups.length > 0) {
-    lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon, match.status);
+    lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon, match.status, match.elo_updated_at);
     bindLineupToggle(matchId, lineupDiv, chevronIcon, toggleBtn);
   }
   
@@ -2103,6 +2124,7 @@ function getGamerankClass(ap6Value) {
 }
 
 function createLineupEloBadge(eloValue, side) {
+  if (!hasValue(eloValue)) return null;
   const num = Number(eloValue);
   if (!Number.isFinite(num)) return null;
   const badge = document.createElement("span");
@@ -2110,6 +2132,21 @@ function createLineupEloBadge(eloValue, side) {
   badge.className = `lineup__elo ${gamerankClass}${side === 2 ? " lineup__elo--right" : ""}`.trim();
   badge.textContent = String(Math.trunc(num));
   return badge;
+}
+
+function formatEloUpdatedAtLabel(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const isoLike = raw.includes("T") ? raw : `${raw.replace(" ", "T")}Z`;
+  const date = new Date(isoLike);
+  if (!Number.isFinite(date.getTime())) return raw;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  const mon = months[date.getUTCMonth()];
+  const yyyy = date.getUTCFullYear();
+  const hh = String(date.getUTCHours()).padStart(2, "0");
+  const mm = String(date.getUTCMinutes()).padStart(2, "0");
+  return `${dd} ${mon} ${yyyy} ${hh}:${mm} utc`;
 }
 
 function playerLabel(duel, side) {
@@ -2217,7 +2254,7 @@ function createGameBadgesWrap(duel) {
   return wrap.childNodes.length ? wrap : null;
 }
 
-function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "") {
+function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloUpdatedAt = "") {
   const lineupPanel = document.createElement("div");
   lineupPanel.className = "lineup";
 
@@ -2247,7 +2284,7 @@ function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "") {
 
     const sep = document.createElement("span");
     sep.className = "lineup__row-sep";
-    sep.textContent = " - ";
+    sep.textContent = "vs";
 
     const p2Link = document.createElement("a");
     p2Link.href = p2Id ? `https://boardgamearena.com/player?id=${encodeURIComponent(p2Id)}` : "#";
@@ -2263,14 +2300,19 @@ function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "") {
     const hasDuelScore = hasValue(duel?.dw1) && hasValue(duel?.dw2);
     const scoreEl = document.createElement("span");
     scoreEl.className = "lineup__row-score";
-    scoreEl.textContent = hasDuelScore ? ` ${duel.dw1} - ${duel.dw2} ` : " - ";
+    scoreEl.textContent = ` ${duel.dw1} - ${duel.dw2} `;
     const gamesWrap = createGameBadgesWrap(duel);
 
     if (p1Elo) {
       row.appendChild(p1Elo);
     }
     row.appendChild(p1Link);
-    row.appendChild(hasDuelScore ? scoreEl : sep);
+    if (hasDuelScore) {
+      row.appendChild(scoreEl);
+    } else {
+      sep.classList.add("lineup__row-sep--vs");
+      row.appendChild(sep);
+    }
     row.appendChild(p2Link);
     if (p2Elo) {
       row.appendChild(p2Elo);
@@ -2280,6 +2322,23 @@ function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "") {
     }
     lineupBody.appendChild(row);
   });
+
+  const eloUpdatedLabel = formatEloUpdatedAtLabel(eloUpdatedAt);
+  if (String(matchStatus || "").trim().toLowerCase() !== "done" && eloUpdatedLabel) {
+    const info = document.createElement("div");
+    info.className = "lineup__elo-updated";
+
+    const icon = document.createElement("img");
+    icon.src = "https://carcassonne.gg/gallery/ELO.png";
+    icon.alt = "Elo";
+    info.appendChild(icon);
+
+    const text = document.createElement("span");
+    text.textContent = `Elo rating updated on: ${eloUpdatedLabel}`;
+    info.appendChild(text);
+
+    lineupBody.appendChild(info);
+  }
 
   lineupPanel.appendChild(lineupBody);
 
@@ -2333,6 +2392,7 @@ function adaptDbMainPageMatchesData(data) {
     tournaments_finished: [],
     events_today: [],
     events_scheduled: [],
+    elo_updated_at: String(data?.elo_updated_at || "").trim(),
   };
   const tournamentsByKey = {
     today: new Map(),
@@ -2401,6 +2461,7 @@ function adaptDbMainPageMatchesData(data) {
       gw1: match?.gw1,
       gw2: match?.gw2,
       rating: match?.rating,
+      elo_updated_at: result.elo_updated_at,
       lineupsData: sortLineups(duelsByMatchId.get(String(match?.id || "").trim()) || []),
     };
 
