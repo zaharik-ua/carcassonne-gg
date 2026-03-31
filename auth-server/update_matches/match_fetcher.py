@@ -166,8 +166,14 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
 
                 penalties_payload = request_json("/table/table/tableinfos.html", params={"id": table_id})
                 penalties = penalties_payload.get("data", {}).get("result", {}).get("penalties", {})
-                clock0 = 1 if penalties.get(str(item.player0_id), {}).get("clock") == "1" else 0
-                clock1 = 1 if penalties.get(str(item.player1_id), {}).get("clock") == "1" else 0
+
+                def has_active_clock_penalty(player_penalty: dict[str, object]) -> int:
+                    clock = str(player_penalty.get("clock", ""))
+                    clock_cancelled = str(player_penalty.get("clock_cancelled", ""))
+                    return 1 if clock == "1" and clock_cancelled != "1" else 0
+
+                clock0 = has_active_clock_penalty(penalties.get(str(item.player0_id), {}))
+                clock1 = has_active_clock_penalty(penalties.get(str(item.player1_id), {}))
 
                 try:
                     if clock0 and float(score0) > float(score1):

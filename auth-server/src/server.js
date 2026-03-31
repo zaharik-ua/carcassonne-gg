@@ -1,4 +1,5 @@
 import path from "node:path";
+import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
@@ -342,6 +343,56 @@ function loadGamesByDuelIds(duelIds, callback) {
     normalizedIds,
     callback
   );
+}
+
+function dbGetAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(row || null);
+    });
+  });
+}
+
+function dbAllAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(rows || []);
+    });
+  });
+}
+
+function dbRunAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function onRun(err) {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(this);
+    });
+  });
+}
+
+function execFileAsync(file, args = [], options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, options, (error, stdout, stderr) => {
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+  });
 }
 
 function hasNonEmptyValue(value) {
@@ -5836,6 +5887,252 @@ app.delete("/matches/:id", (req, res) => {
       });
     }
   );
+});
+
+app.post("/matches/:id/get-results", requireAdmin, async (req, res) => {
+  const matchId = String(req.params.id || "").trim();
+  if (!matchId) {
+    return res.status(400).json({ ok: false, message: "Match id is required" });
+  }
+
+  const actorPlayerId = String(req.user?.player_id || "").trim() || null;
+  const authServerRoot = path.resolve(__dirname, "..");
+  const updateScriptPath = path.resolve(authServerRoot, "run_update_matches.py");
+  const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
+
+  const rollbackQuietly = async () => {
+    try {
+      await dbRunAsync("ROLLBACK");
+    } catch (_error) {
+      // ignore rollback errors
+    }
+  };
+
+  try {
+    const existingMatch = await dbGetAsync(
+      `
+        SELECT
+          id,
+          tournament_id,
+          time_utc,
+          lineup_type,
+          lineup_deadline_h,
+          lineup_deadline_utc,
+          number_of_duels,
+          team_1,
+          team_2,
+          status,
+          dw1,
+          dw2,
+          gw1,
+          gw2,
+          rating
+        FROM matches
+        WHERE id = ?
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [matchId]
+    );
+    if (!existingMatch) {
+      return res.status(404).json({ ok: false, message: "Match not found" });
+    }
+
+    const duelRows = await dbAllAsync(
+      `
+        SELECT id
+        FROM duels
+        WHERE match_id = ?
+          AND deleted_at IS NULL
+      `,
+      [matchId]
+    );
+    const duelIds = duelRows
+      .map((row) => String(row?.id || "").trim())
+      .filter(Boolean);
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await dbRunAsync(
+        `
+          UPDATE matches
+          SET
+            dw1 = NULL,
+            dw2 = NULL,
+            gw1 = NULL,
+            gw2 = NULL,
+            status = 'Planned',
+            updated_by = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+            AND deleted_at IS NULL
+        `,
+        [actorPlayerId, matchId]
+      );
+
+      await dbRunAsync(
+        `
+          UPDATE duels
+          SET
+            dw1 = NULL,
+            dw2 = NULL,
+            status = 'Planned',
+            results_last_error = NULL,
+            results_checked_at = NULL,
+            updated_by = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE match_id = ?
+            AND deleted_at IS NULL
+        `,
+        [actorPlayerId, matchId]
+      );
+
+      if (duelIds.length) {
+        const placeholders = duelIds.map(() => "?").join(", ");
+        await dbRunAsync(
+          `
+            DELETE FROM games
+            WHERE trim(COALESCE(duel_id, '')) IN (${placeholders})
+          `,
+          duelIds
+        );
+      }
+
+      await dbRunAsync("COMMIT");
+    } catch (resetError) {
+      await rollbackQuietly();
+      throw resetError;
+    }
+
+    const execResult = await execFileAsync(
+      pythonBin,
+      [
+        updateScriptPath,
+        "--db-path",
+        dbFullPath,
+        "--match-id",
+        matchId,
+      ],
+      {
+        cwd: authServerRoot,
+        env: process.env,
+        timeout: 5 * 60 * 1000,
+        maxBuffer: 1024 * 1024 * 10,
+      }
+    );
+
+    const refreshedMatch = await dbGetAsync(
+      `
+        SELECT
+          id,
+          tournament_id,
+          time_utc,
+          lineup_type,
+          lineup_deadline_h,
+          lineup_deadline_utc,
+          number_of_duels,
+          team_1,
+          team_2,
+          status,
+          dw1,
+          dw2,
+          gw1,
+          gw2,
+          rating
+        FROM matches
+        WHERE id = ?
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [matchId]
+    );
+    const refreshedDuels = await dbAllAsync(
+      `
+        SELECT
+          id,
+          dw1,
+          dw2,
+          status,
+          results_last_error,
+          results_checked_at
+        FROM duels
+        WHERE match_id = ?
+          AND deleted_at IS NULL
+        ORDER BY
+          CASE WHEN duel_number IS NULL THEN 1 ELSE 0 END ASC,
+          duel_number ASC,
+          id ASC
+      `,
+      [matchId]
+    );
+    const refreshedDuelIds = refreshedDuels
+      .map((row) => String(row?.id || "").trim())
+      .filter(Boolean);
+    const refreshedGames = refreshedDuelIds.length
+      ? await dbAllAsync(
+          `
+            SELECT id
+            FROM games
+            WHERE trim(COALESCE(duel_id, '')) IN (${refreshedDuelIds.map(() => "?").join(", ")})
+          `,
+          refreshedDuelIds
+        )
+      : [];
+
+    return logAuditEvent(
+      {
+        ...getAuditActor(req.user),
+        event_type: "match.results_refetched",
+        entity_type: "match",
+        action: "refresh_results",
+        record_id: matchId,
+        changes: {
+          results_refresh: {
+            before: {
+              status: existingMatch.status ?? null,
+              dw1: existingMatch.dw1 ?? null,
+              dw2: existingMatch.dw2 ?? null,
+              gw1: existingMatch.gw1 ?? null,
+              gw2: existingMatch.gw2 ?? null,
+            },
+            after: {
+              status: refreshedMatch?.status ?? null,
+              dw1: refreshedMatch?.dw1 ?? null,
+              dw2: refreshedMatch?.dw2 ?? null,
+              gw1: refreshedMatch?.gw1 ?? null,
+              gw2: refreshedMatch?.gw2 ?? null,
+            },
+          },
+        },
+        metadata: {
+          duels_total: refreshedDuels.length,
+          duels_with_errors: refreshedDuels.filter((row) => String(row?.results_last_error || "").trim()).length,
+          games_total: refreshedGames.length,
+        },
+      },
+      () => res.json({
+        ok: true,
+        message: "Results updated.",
+        match: refreshedMatch,
+        summary: {
+          duels_total: refreshedDuels.length,
+          duels_done: refreshedDuels.filter((row) => String(row?.status || "").trim() === "Done").length,
+          duels_in_progress: refreshedDuels.filter((row) => String(row?.status || "").trim() === "In progress").length,
+          duels_error: refreshedDuels.filter((row) => String(row?.results_last_error || "").trim()).length,
+          games_total: refreshedGames.length,
+        },
+        logs: String(execResult.stdout || execResult.stderr || "").trim(),
+      })
+    );
+  } catch (error) {
+    console.error(`Failed to refresh match results for ${matchId}`, error);
+    const stderr = String(error?.stderr || "").trim();
+    const stdout = String(error?.stdout || "").trim();
+    return res.status(500).json({
+      ok: false,
+      message: stderr || stdout || error.message || "Failed to update match results.",
+    });
+  }
 });
 
 app.get("/friendly-find", (_req, res, next) => {

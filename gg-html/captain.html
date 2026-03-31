@@ -646,6 +646,32 @@
     padding-left: 18px;
   }
 
+  .cp-action-status {
+    grid-column: 1 / -1;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+  }
+
+  .cp-action-status img {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .cp-action-status.cp-action-status--success {
+    color: #166534;
+  }
+
+  .cp-action-status.cp-action-status--error {
+    color: #b91c1c;
+  }
+
   .cp-lineup-order {
     color: #4b5563;
     font-size: 12px;
@@ -3809,6 +3835,7 @@
 
   function renderMatchEditForm(match, teamsById, editContext, formMode) {
     const isCreateMode = formMode === "create";
+    const canTriggerResultsRefresh = !!editContext?.isGlobalAdmin && !isCreateMode;
     const allProfiles = Array.isArray(editContext?.profiles) ? editContext.profiles : [];
     const currentTournament = editContext?.tournament || null;
     const isLineupsOnly = editContext?.lineupsOnly === true;
@@ -3872,6 +3899,14 @@
     cancelBtn.textContent = "Cancel";
     topActions.appendChild(saveBtn);
     topActions.appendChild(cancelBtn);
+    let getResultsBtn = null;
+    if (canTriggerResultsRefresh) {
+      getResultsBtn = document.createElement("button");
+      getResultsBtn.type = "button";
+      getResultsBtn.className = "cp-btn cp-btn-secondary";
+      getResultsBtn.textContent = "Get Results";
+      topActions.appendChild(getResultsBtn);
+    }
     let deleteBtn = null;
     if (!isCreateMode && !isLineupsOnly) {
       deleteBtn = document.createElement("button");
@@ -3885,6 +3920,17 @@
     const errorEl = document.createElement("div");
     errorEl.className = "cp-edit-error cp-hidden";
     form.appendChild(errorEl);
+
+    const actionStatusEl = document.createElement("div");
+    actionStatusEl.className = "cp-action-status cp-hidden";
+    const actionStatusSpinner = document.createElement("img");
+    actionStatusSpinner.src = "https://carcassonne.gg/gallery/loading.gif";
+    actionStatusSpinner.alt = "";
+    actionStatusSpinner.classList.add("cp-hidden");
+    const actionStatusText = document.createElement("span");
+    actionStatusEl.appendChild(actionStatusSpinner);
+    actionStatusEl.appendChild(actionStatusText);
+    form.appendChild(actionStatusEl);
 
     const addRow = (labelText, control) => {
       const row = document.createElement("div");
@@ -4806,11 +4852,38 @@
       errorEl.classList.remove("cp-hidden");
     };
 
+    const setActionStatus = (message, type = "info", loading = false) => {
+      const text = String(message || "").trim();
+      actionStatusEl.classList.remove("cp-action-status--success", "cp-action-status--error");
+      if (!text) {
+        actionStatusText.textContent = "";
+        actionStatusSpinner.classList.add("cp-hidden");
+        actionStatusEl.classList.add("cp-hidden");
+        return;
+      }
+      if (type === "success") actionStatusEl.classList.add("cp-action-status--success");
+      if (type === "error") actionStatusEl.classList.add("cp-action-status--error");
+      actionStatusText.textContent = text;
+      actionStatusSpinner.classList.toggle("cp-hidden", !loading);
+      actionStatusEl.classList.remove("cp-hidden");
+    };
+
     const setSaving = (isSaving) => {
       saveBtn.disabled = isSaving;
       cancelBtn.disabled = isSaving;
+      if (getResultsBtn) getResultsBtn.disabled = isSaving;
       if (deleteBtn) deleteBtn.disabled = isSaving;
       saveBtn.textContent = isSaving ? "Saving..." : (isLineupsOnly ? "Save Lineups" : "Save");
+    };
+
+    const setResultsLoading = (isLoading) => {
+      saveBtn.disabled = isLoading;
+      cancelBtn.disabled = isLoading;
+      if (getResultsBtn) getResultsBtn.disabled = isLoading;
+      if (deleteBtn) deleteBtn.disabled = isLoading;
+      if (getResultsBtn) {
+        getResultsBtn.textContent = isLoading ? "Getting..." : "Get Results";
+      }
     };
 
     cancelBtn.addEventListener("click", () => {
@@ -4842,9 +4915,40 @@
       });
     }
 
+    if (getResultsBtn) {
+      getResultsBtn.addEventListener("click", async () => {
+        setError("");
+        setActionStatus("Updating results from BGA...", "info", true);
+        setResultsLoading(true);
+        try {
+          const response = await fetch(`${MATCHES_URL}/${encodeURIComponent(String(match?.id || ""))}/get-results`, {
+            method: "POST",
+            credentials: "include",
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result?.ok) {
+            setActionStatus(result?.message || "Failed to update match results.", "error", false);
+            return;
+          }
+          const duelsError = Number(result?.summary?.duels_error || 0);
+          const gamesTotal = Number(result?.summary?.games_total || 0);
+          const duelsDone = Number(result?.summary?.duels_done || 0);
+          const successText = duelsError > 0
+            ? `Completed with ${duelsError} duel errors. Loaded ${gamesTotal} games, finished ${duelsDone} duels.`
+            : `Completed. Loaded ${gamesTotal} games, finished ${duelsDone} duels.`;
+          setActionStatus(successText, duelsError > 0 ? "error" : "success", false);
+        } catch (_error) {
+          setActionStatus("Failed to update match results.", "error", false);
+        } finally {
+          setResultsLoading(false);
+        }
+      });
+    }
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       setError("");
+      setActionStatus("");
       const validationErrors = [];
 
       if (!team1Input.getValue() || !team2Input.getValue()) {
@@ -5398,6 +5502,7 @@
             profiles: allProfiles,
             lineups: [],
             tournament: currentTournament,
+            isGlobalAdmin: isAdminUser,
           },
           "create"
         );
@@ -5459,6 +5564,7 @@
             lineups: existingLineups,
             tournament: currentTournament,
             lineupsOnly: Number(currentTournament?.access_type) === 2 && !canManageClosedTournamentMatches,
+            isGlobalAdmin: isAdminUser,
           },
           "edit"
         );
