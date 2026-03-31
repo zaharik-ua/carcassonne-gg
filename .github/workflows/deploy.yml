@@ -19,6 +19,7 @@ jobs:
           port: ${{ secrets.DEPLOY_PORT }}
           script: |
             set -e
+            git config --global --add safe.directory /home/carcassonne-gg
             cd /home/carcassonne-gg
             git pull --rebase origin main
             cd /home/carcassonne-gg/auth-server
