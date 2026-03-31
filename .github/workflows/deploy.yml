@@ -25,4 +25,8 @@ jobs:
             git pull --rebase origin main
             cd /home/carcassonne-gg/auth-server
             npm install
-            systemctl restart carcassonne-auth.service
+            systemctl restart carcassonne-auth.service || {
+              systemctl --no-pager --full status carcassonne-auth.service || true
+              journalctl --no-pager -xeu carcassonne-auth.service -n 200 || true
+              exit 1
+            }
