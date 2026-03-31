@@ -28,6 +28,9 @@ const PORT = Number(process.env.PORT || 3100);
 const DEFAULT_FRONTEND_ORIGINS = [
   "http://localhost:8080",
   "http://127.0.0.1:8080",
+  "http://localhost:5500",
+  "http://127.0.0.1:5500",
+  "http://192.168.0.113:5500",
   "https://carcassonne.gg",
   "https://www.carcassonne.gg",
   "https://carcassonne.com.ua",

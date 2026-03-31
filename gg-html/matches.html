@@ -574,6 +574,26 @@ code {
       line-height: 22px;
   }
 
+  .lineup__elo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    margin: 0 6px 0 0;
+    padding: 2px 6px;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.1;
+    font-weight: 700;
+    white-space: nowrap;
+    box-sizing: border-box;
+  }
+
+  .lineup__elo--right {
+    margin: 0 0 0 6px;
+  }
+
   .lineup__row-sep {
     display: inline-block;
     padding: 0 7px;
@@ -954,7 +974,7 @@ function createMatchElement(match, options = {}) {
   const matchLineups = Array.isArray(match?.lineupsData) ? match.lineupsData.filter(Boolean) : [];
   let lineupDiv = null;
   if (matchId && matchLineups.length > 0) {
-    lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon);
+    lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon, match.status);
     bindLineupToggle(matchId, lineupDiv, chevronIcon, toggleBtn);
   }
   
@@ -2062,6 +2082,36 @@ function sortLineups(lineups) {
   });
 }
 
+function getLineupPlayerElo(duel, side) {
+  const candidates = side === 1
+    ? [duel?.player_1_elo, duel?.player1_elo, duel?.eloA_before, duel?.eloA]
+    : [duel?.player_2_elo, duel?.player2_elo, duel?.eloB_before, duel?.eloB];
+  const value = candidates.find(hasValue);
+  const num = Number(value);
+  return Number.isFinite(num) ? Math.trunc(num) : null;
+}
+
+function getGamerankClass(ap6Value) {
+  const num = Number(ap6Value);
+  if (!Number.isFinite(num)) return "";
+  if (num < 100) return "gamerank_beginner";
+  if (num < 200) return "gamerank_average";
+  if (num < 300) return "gamerank_good";
+  if (num < 500) return "gamerank_strong";
+  if (num < 700) return "gamerank_expert";
+  return "gamerank_master";
+}
+
+function createLineupEloBadge(eloValue, side) {
+  const num = Number(eloValue);
+  if (!Number.isFinite(num)) return null;
+  const badge = document.createElement("span");
+  const gamerankClass = getGamerankClass(num);
+  badge.className = `lineup__elo ${gamerankClass}${side === 2 ? " lineup__elo--right" : ""}`.trim();
+  badge.textContent = String(Math.trunc(num));
+  return badge;
+}
+
 function playerLabel(duel, side) {
   const name = String(duel?.[`player_${side}_name`] || "").trim();
   if (name) return name;
@@ -2167,7 +2217,7 @@ function createGameBadgesWrap(duel) {
   return wrap.childNodes.length ? wrap : null;
 }
 
-function createLineupPanel(matchId, lineups, chevronIcon) {
+function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "") {
   const lineupPanel = document.createElement("div");
   lineupPanel.className = "lineup";
 
@@ -2177,9 +2227,12 @@ function createLineupPanel(matchId, lineups, chevronIcon) {
   sortLineups(lineups).forEach((duel) => {
     const row = document.createElement("div");
     row.className = "lineup__row";
+    const shouldShowElo = String(matchStatus || "").trim().toLowerCase() !== "done";
 
     const p1Id = String(duel?.player_1_id || "").trim();
     const p2Id = String(duel?.player_2_id || "").trim();
+    const p1Elo = shouldShowElo ? createLineupEloBadge(getLineupPlayerElo(duel, 1), 1) : null;
+    const p2Elo = shouldShowElo ? createLineupEloBadge(getLineupPlayerElo(duel, 2), 2) : null;
 
     const p1Link = document.createElement("a");
     p1Link.href = p1Id ? `https://boardgamearena.com/player?id=${encodeURIComponent(p1Id)}` : "#";
@@ -2213,9 +2266,15 @@ function createLineupPanel(matchId, lineups, chevronIcon) {
     scoreEl.textContent = hasDuelScore ? ` ${duel.dw1} - ${duel.dw2} ` : " - ";
     const gamesWrap = createGameBadgesWrap(duel);
 
+    if (p1Elo) {
+      row.appendChild(p1Elo);
+    }
     row.appendChild(p1Link);
     row.appendChild(hasDuelScore ? scoreEl : sep);
     row.appendChild(p2Link);
+    if (p2Elo) {
+      row.appendChild(p2Elo);
+    }
     if (gamesWrap) {
       row.appendChild(gamesWrap);
     }
