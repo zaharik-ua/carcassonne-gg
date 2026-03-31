@@ -153,7 +153,7 @@ code {
     align-items: center;
     min-height: 48px;
     height: auto;
-    background-color: white;
+    background-color: #fffbe8;
     border-top: 1px solid #ccc;
     padding: 4px 8px;
     box-sizing: border-box;
@@ -415,7 +415,7 @@ code {
     align-items: center;
     justify-content: space-between;
     height: auto;
-    background-color: white;
+    background-color: #fff0f0;
     font-size: 13px;
     font-weight: bold;
     padding: 6px 8px;
@@ -880,24 +880,6 @@ if (openMatchId) {
 const streamsOff = new URLSearchParams(window.location.search).get("streams") === "false";
 const DUEL_TOURNAMENT_TYPES = new Set(["coc", "league", "individual"]);
 const INDIVIDUAL_TOURNAMENT_TYPE = "individual";
-const ALLOWED_TOURNAMENT_IDS = new Set([
-  "UCOC-2026-SL",
-  "UCOC-2026-ML",
-  "UCOC-2026-1ST",
-  "UCOC-2026-2ND"
-]);
-const TOURNAMENT_NAME_OVERRIDES = {
-  "UCOC-2026-SL": "Суперліга",
-  "UCOC-2026-ML": "Вища ліга",
-  "UCOC-2026-1ST": "Перша ліга",
-  "UCOC-2026-2ND": "Друга ліга"
-};
-const UCOC_TOURNAMENT_TABS = {
-  "UCOC-2026-SL": "league1",
-  "UCOC-2026-ML": "league2",
-  "UCOC-2026-1ST": "league3",
-  "UCOC-2026-2ND": "league4"
-};
 const INDIVIDUAL_STAGE_CLASS_MAP = {
   Q1: "individual-stage-q1",
   Q2: "individual-stage-q2",
@@ -928,85 +910,6 @@ function normalizeStage2RoundName(roundName) {
   const colonIndex = trimmed.indexOf(':');
   if (colonIndex === -1) return trimmed;
   return trimmed.slice(0, colonIndex).trim();
-}
-
-function isUkraineTeamMatch(match) {
-  const tournamentType = typeof match?.tournament_type === "string"
-    ? match.tournament_type.trim()
-    : (typeof match?.type === "string" ? match.type.trim() : "");
-  if (tournamentType !== "TEAM") return false;
-
-  const team1 = typeof match?.team1 === "string" ? match.team1.trim() : "";
-  const team2 = typeof match?.team2 === "string" ? match.team2.trim() : "";
-  return team1 === "Ukraine" || team2 === "Ukraine";
-}
-
-function filterMatchesByAllowedTournaments(matches) {
-  return (matches || []).filter(match => {
-    const idRaw = typeof match.tournament_id === "string"
-      ? match.tournament_id
-      : (typeof match.tournamentId === "string" ? match.tournamentId : "");
-    const id = idRaw.trim();
-    return (id && ALLOWED_TOURNAMENT_IDS.has(id)) || isUkraineTeamMatch(match);
-  });
-}
-
-function filterTournamentsByMatches(tournaments, matches) {
-  const idByName = new Map();
-  (matches || []).forEach(match => {
-    const name = typeof match.tournament === "string" ? match.tournament.trim() : "";
-    const id = typeof match.tournament_id === "string" ? match.tournament_id.trim() : "";
-    if (name && id && !idByName.has(name)) {
-      idByName.set(name, id);
-    }
-  });
-  const names = new Set(
-    (matches || [])
-      .map(m => (typeof m.tournament === "string" ? m.tournament.trim() : ""))
-      .filter(Boolean)
-  );
-  return (tournaments || [])
-    .filter(t => {
-      const name = typeof t.name === "string" ? t.name.trim() : "";
-      return name && names.has(name);
-    })
-    .map(t => {
-      const name = typeof t.name === "string" ? t.name.trim() : "";
-      const id = idByName.get(name);
-      const override = id ? TOURNAMENT_NAME_OVERRIDES[id] : "";
-      const overrideLink = id ? getTournamentLinkOverride(id) : "";
-      return {
-        ...t,
-        tournament_id: id || t.tournament_id,
-        displayName: override || name,
-        link: overrideLink || t.link
-      };
-    });
-}
-
-function getTournamentDisplayName(tournament) {
-  if (!tournament) return "";
-  if (typeof tournament.displayName === "string" && tournament.displayName.trim()) {
-    return tournament.displayName.trim();
-  }
-  const id = typeof tournament.tournament_id === "string" ? tournament.tournament_id.trim() : "";
-  if (id && TOURNAMENT_NAME_OVERRIDES[id]) return TOURNAMENT_NAME_OVERRIDES[id];
-  return typeof tournament.name === "string" ? tournament.name.trim() : "";
-}
-
-function isEnglishSite() {
-  const path = (window.location && window.location.pathname) ? window.location.pathname.toLowerCase() : "";
-  return path.split("/").includes("en");
-}
-
-function getTournamentLinkOverride(tournamentId) {
-  if (typeof tournamentId !== "string") return "";
-  const tab = UCOC_TOURNAMENT_TABS[tournamentId.trim()];
-  if (!tab) return "";
-  const base = isEnglishSite()
-    ? "https://carcassonne.com.ua/en/UCOC-2026/?tab="
-    : "https://carcassonne.com.ua/UCOC-2026/?tab=";
-  return `${base}${tab}`;
 }
 
 // Build rating stars element (1-5 grey stars, 6 = 5 gold stars)
@@ -1487,7 +1390,6 @@ function createTournamentHeader(tournament) {
   header.className = "tournament-header";
 
   const linkValue = typeof tournament.link === "string" ? tournament.link.trim() : "";
-  const displayName = getTournamentDisplayName(tournament);
   const hasLink = !!linkValue;
   const titleEl = document.createElement(hasLink ? "a" : "div");
   titleEl.className = "tournament-header__title";
@@ -1500,10 +1402,10 @@ function createTournamentHeader(tournament) {
   const icon = document.createElement("img");
   icon.className = "tournament-icon";
   icon.src = tournament.logo;
-  icon.alt = displayName || tournament.name || "";
+  icon.alt = tournament.name;
 
   const span = document.createElement("span");
-  span.textContent = displayName;
+  span.textContent = tournament.name;
 
   titleEl.appendChild(icon);
   titleEl.appendChild(span);
@@ -1570,6 +1472,43 @@ function collectFlagInfos(matches) {
 let todaySortBy = "time"; // Single UI state controlling Today + Upcoming
 let lastData = null; // cache of last fetched data for re-rendering without refetch
 let tournamentFilterIdCounter = 0;
+const ALLOWED_TOURNAMENTS = new Set([
+  "BCL-2026S-ML",
+  "BCL-2026S-GL",
+  "BCL-2026S-SL",
+  "BCL-2026S-BL"
+]);
+
+function normalizeTextValue(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isBelTeamValue(value) {
+  const normalized = normalizeTextValue(value).toLowerCase();
+  if (!normalized) return false;
+  return normalized === "bel" || normalized === "belgium" || normalized.includes("belgium.png");
+}
+
+function isBelTeamMatch(match) {
+  if (!match) return false;
+  const tournamentType = normalizeTextValue(match.tournament_type).toUpperCase();
+  if (tournamentType !== "TEAM") return false;
+
+  return [
+    match.flag1,
+    match.flag2,
+    match.team1,
+    match.team2
+  ].some(isBelTeamValue);
+}
+
+function filterMatchesByAllowedTournaments(matches) {
+  return (matches || []).filter(match => {
+    if (!match) return false;
+    const tournamentId = normalizeTextValue(match.tournament_id);
+    return ALLOWED_TOURNAMENTS.has(tournamentId) || isBelTeamMatch(match);
+  });
+}
 
 function isMatchHidden(match) {
   if (!match) return false;
@@ -1662,9 +1601,9 @@ function renderSection(container, title, tournaments, matches, events, options =
   const visibleMatches = (matches || []).filter(match => !isMatchHidden(match));
   const visibleEvents = Array.isArray(events) ? events : [];
   if (visibleMatches.length === 0 && visibleEvents.length === 0) return;
-  const isToday = title === "Сьогодні";
-  const isUpcoming = title === "Заплановані матчі";
-  const isLastResults = title === "Останні результати";
+  const isToday = title === "Today";
+  const isUpcoming = title === "Upcoming Matches";
+  const isLastResults = title === "Last Results";
   const sortMatchesForSection = (list) => {
     const copy = (Array.isArray(list) ? list.slice() : []);
     const compareSourcePriority = (a, b) => Number(b?.source_priority || 0) - Number(a?.source_priority || 0);
@@ -1707,18 +1646,18 @@ function renderSection(container, title, tournaments, matches, events, options =
 
     const label = document.createElement("span");
     label.className = "sort-toggle__label";
-    label.textContent = "Сортувати:";
+    label.textContent = "Sort by:";
 
     const options = document.createElement("div");
     options.className = "sort-toggle__options";
 
     const optEvent = document.createElement("div");
     optEvent.className = "sort-toggle__option";
-    optEvent.textContent = "Подія";
+    optEvent.textContent = "Event";
 
     const optTime = document.createElement("div");
     optTime.className = "sort-toggle__option";
-    optTime.textContent = "Час";
+    optTime.textContent = "Time";
 
     function updateToggleUI() {
       if (todaySortBy === "event") {
@@ -1986,7 +1925,7 @@ function renderSection(container, title, tournaments, matches, events, options =
       });
     }
 
-    if (title === "Останні результати") {
+    if (title === "Last Results") {
       // For Last Results: all tournament types are collapsed by default.
       const teamList = filtered.filter(m => !isDuelTournament(tournament.type || m.tournament_type));
       const duelList = filtered.filter(m => isDuelTournament(tournament.type || m.tournament_type));
@@ -2083,12 +2022,12 @@ function renderSection(container, title, tournaments, matches, events, options =
         const tType = tournament.type || match.tournament_type;
         // For Today and Upcoming + duel tournaments add rating above time
         if (isDuelTournament(tType)) {
-          const showRating = (title === "Сьогодні" || title === "Заплановані матчі");
+          const showRating = (title === "Today" || title === "Upcoming Matches");
           const el = createDuelElement(match, { showRating, isToday });
           card.appendChild(el);
         } else {
           // TEAM: show rating on Today/Upcoming like duel tournaments
-          const showRating = (title === "Сьогодні" || title === "Заплановані матчі");
+          const showRating = (title === "Today" || title === "Upcoming Matches");
           const el = createMatchElement(match, { showRating, isToday });
           if ((tournament.type || match.tournament_type) === "TEAM") {
             registerTeamMatchElement(el, match);
@@ -2545,7 +2484,6 @@ function adaptDbMainPageMatchesData(data) {
     }
     const normalizedMatch = {
       id: String(match?.id || "").trim(),
-      tournament_id: String(match?.tournament_id || "").trim(),
       tournament: tournamentName,
       tournament_logo: tournamentLogo,
       tournament_link: tournamentLink,
@@ -2666,36 +2604,49 @@ function applySourcePriority(matches, priority) {
       ...applySourcePriority(dbMatchesData.matches_finished || [], 2),
       ...applySourcePriority(baseData.matches_finished || [], 1),
     ]);
-    const todayMatches = filterMatchesByAllowedTournaments(mergedTodayMatches);
-    const scheduledMatches = filterMatchesByAllowedTournaments(mergedScheduledMatches);
-    const finishedMatches = filterMatchesByAllowedTournaments(mergedFinishedMatches);
+    const filteredTodayMatches = filterMatchesByAllowedTournaments(mergedTodayMatches);
+    const filteredScheduledMatches = filterMatchesByAllowedTournaments(mergedScheduledMatches);
+    const filteredFinishedMatches = filterMatchesByAllowedTournaments(mergedFinishedMatches);
     const mergedTodayTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_today || []), ...(baseData.tournaments_today || [])]);
     const mergedScheduledTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_scheduled || []), ...(baseData.tournaments_scheduled || [])]);
     const mergedFinishedTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_finished || []), ...(baseData.tournaments_finished || [])]);
-    const todayTournaments = filterTournamentsByMatches(mergedTodayTournaments, todayMatches);
-    const scheduledTournaments = filterTournamentsByMatches(mergedScheduledTournaments, scheduledMatches);
-    const finishedTournaments = filterTournamentsByMatches(mergedFinishedTournaments, finishedMatches);
+    const filteredTodayTournaments = mergedTodayTournaments.filter(tournament => {
+      const name = String(tournament?.name || "").trim();
+      return filteredTodayMatches.some(match => String(match?.tournament || "").trim() === name);
+    });
+    const filteredScheduledTournaments = mergedScheduledTournaments.filter(tournament => {
+      const name = String(tournament?.name || "").trim();
+      return filteredScheduledMatches.some(match => String(match?.tournament || "").trim() === name);
+    });
+    const filteredFinishedTournaments = mergedFinishedTournaments.filter(tournament => {
+      const name = String(tournament?.name || "").trim();
+      return filteredFinishedMatches.some(match => String(match?.tournament || "").trim() === name);
+    });
 
     const container = document.getElementById("matches-container");
     container.innerHTML = "";
 
     renderSection(
       container,
-      "Сьогодні",
-      todayTournaments,
-      todayMatches
+      "Today",
+      filteredTodayTournaments,
+      filteredTodayMatches,
+      [],
+      { renderEventsLast: false }
     );
     renderSection(
       container,
-      "Заплановані матчі",
-      scheduledTournaments,
-      scheduledMatches
+      "Upcoming Matches",
+      filteredScheduledTournaments,
+      filteredScheduledMatches,
+      [],
+      { renderEventsLast: false }
     );
     renderSection(
       container,
-      "Останні результати",
-      finishedTournaments,
-      finishedMatches
+      "Last Results",
+      filteredFinishedTournaments,
+      filteredFinishedMatches
     );
   }
 

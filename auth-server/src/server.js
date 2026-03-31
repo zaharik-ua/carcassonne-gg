@@ -35,6 +35,7 @@ const DEFAULT_FRONTEND_ORIGINS = [
   "https://www.carcassonne.gg",
   "https://carcassonne.com.ua",
   "https://www.carcassonne.com.ua",
+  "https://carcassonnebelgium.weebly.com",
 ];
 const FRONTEND_ORIGINS = Array.from(
   new Set(
