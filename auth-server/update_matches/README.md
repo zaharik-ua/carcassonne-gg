@@ -71,6 +71,10 @@ python3 run_update_matches.py --match-id 20250330UKRPRT
   - `Done` when one side exactly reaches `games_to_win` and the other is still below
   - `In progress` while the duel is still inside its play window and no winner is determined yet
   - `Error` when the play window is over and no valid winner is determined
+- match status becomes:
+  - `Done` when all non-deleted duels of the match are `Done`
+  - `In progress` while the current time is inside the combined duel time window of the match and not all duels are `Done`
+  - `Planned` otherwise
 - `games` rows are upserted by `bga_table_id`
 
 ## Logging

@@ -1598,7 +1598,7 @@ function renderEventsCard(container, events) {
 
 function renderSection(container, title, tournaments, matches, events, options = {}) {
   const { renderEventsLast = false } = options;
-  const visibleMatches = (matches || []).filter(match => !isMatchHidden(match));
+  const visibleMatches = Array.isArray(matches) ? matches : [];
   const visibleEvents = Array.isArray(events) ? events : [];
   if (visibleMatches.length === 0 && visibleEvents.length === 0) return;
   const isToday = title === "Today";

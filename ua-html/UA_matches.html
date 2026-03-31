@@ -1659,7 +1659,7 @@ function renderEventsCard(container, events) {
 
 function renderSection(container, title, tournaments, matches, events, options = {}) {
   const { renderEventsLast = false } = options;
-  const visibleMatches = (matches || []).filter(match => !isMatchHidden(match));
+  const visibleMatches = Array.isArray(matches) ? matches : [];
   const visibleEvents = Array.isArray(events) ? events : [];
   if (visibleMatches.length === 0 && visibleEvents.length === 0) return;
   const isToday = title === "Сьогодні";
@@ -2550,6 +2550,7 @@ function adaptDbMainPageMatchesData(data) {
       tournament_logo: tournamentLogo,
       tournament_link: tournamentLink,
       tournament_type: tournamentType,
+      hide: match?.hide,
       time: formatUtcIsoAsLegacyTime(match?.time_utc),
       team1: String(match?.team_1_name || match?.team_1 || "").trim(),
       team2: String(match?.team_2_name || match?.team_2 || "").trim(),

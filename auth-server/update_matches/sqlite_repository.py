@@ -280,10 +280,21 @@ class SqliteMatchRepository(MatchRepository):
                 WHEN COALESCE(status, 'Planned') = 'Done' AND COALESCE(dw2, 0) > COALESCE(dw1, 0)
                 THEN 1 ELSE 0 END), 0) AS dw2,
               COUNT(*) AS total_duels,
-              COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') = 'Done' THEN 1 ELSE 0 END), 0) AS done_duels
-            FROM duels
-            WHERE match_id = ?
-              AND deleted_at IS NULL
+              COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') = 'Done' THEN 1 ELSE 0 END), 0) AS done_duels,
+              MIN(CASE
+                WHEN datetime(l.time_utc) IS NOT NULL THEN unixepoch(l.time_utc)
+                ELSE NULL
+              END) AS start_ts,
+              MAX(CASE
+                WHEN datetime(l.time_utc) IS NOT NULL
+                THEN unixepoch(l.time_utc) + (COALESCE(df.minutes_to_play, 60) * 60)
+                ELSE NULL
+              END) AS end_ts
+            FROM duels l
+            LEFT JOIN duel_formats df
+              ON lower(trim(df.format)) = lower(trim(l.duel_format))
+            WHERE l.match_id = ?
+              AND l.deleted_at IS NULL
             """,
             (match_id,),
         ).fetchone()
@@ -293,7 +304,16 @@ class SqliteMatchRepository(MatchRepository):
 
         total_duels = int(aggregate_row["total_duels"] or 0)
         done_duels = int(aggregate_row["done_duels"] or 0)
-        next_status = "Done" if total_duels > 0 and done_duels == total_duels else "Planned"
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        start_ts = SqliteMatchRepository._to_int_or_none(aggregate_row["start_ts"])
+        end_ts = SqliteMatchRepository._to_int_or_none(aggregate_row["end_ts"])
+
+        if total_duels > 0 and done_duels == total_duels:
+            next_status = "Done"
+        elif start_ts is not None and end_ts is not None and start_ts <= now_ts < end_ts:
+            next_status = "In progress"
+        else:
+            next_status = "Planned"
 
         conn.execute(
             """
