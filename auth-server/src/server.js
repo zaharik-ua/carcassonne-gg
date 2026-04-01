@@ -427,6 +427,13 @@ function dbAllAsync(sql, params = []) {
   });
 }
 
+async function ensureProfileAvatarColumn() {
+  const columns = await dbAllAsync("PRAGMA table_info(profiles)");
+  const hasAvatarColumn = Array.isArray(columns) && columns.some((column) => String(column?.name || "").trim() === "avatar");
+  if (hasAvatarColumn) return;
+  await dbRunAsync("ALTER TABLE profiles ADD COLUMN avatar TEXT");
+}
+
 function dbRunAsync(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function onRun(err) {
@@ -7141,6 +7148,8 @@ app.post("/profiles/:playerId/get-bga-data", requireAdmin, async (req, res) => {
   };
 
   try {
+    await ensureProfileAvatarColumn();
+
     const beforeRow = await dbGetAsync(
       `
         SELECT
@@ -7252,7 +7261,10 @@ app.post("/profiles/:playerId/get-bga-data", requireAdmin, async (req, res) => {
     );
   } catch (error) {
     console.error("Failed to get BGA profile data", error);
-    return res.status(500).json({ ok: false, message: "Failed to get BGA data" });
+    return res.status(500).json({
+      ok: false,
+      message: String(error?.message || "").trim() || "Failed to get BGA data",
+    });
   }
 });
 

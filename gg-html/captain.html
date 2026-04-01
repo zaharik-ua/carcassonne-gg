@@ -3407,9 +3407,16 @@
             method: "POST",
             credentials: "include",
           });
-          const result = await response.json().catch(() => ({}));
+          const rawText = await response.text().catch(() => "");
+          let result = {};
+          try {
+            result = rawText ? JSON.parse(rawText) : {};
+          } catch (_error) {
+            result = {};
+          }
           if (!response.ok || !result?.ok) {
-            setActionStatus(result?.message || "Failed to get BGA data.", "error", false);
+            const fallbackMessage = String(rawText || "").trim();
+            setActionStatus(result?.message || fallbackMessage || "Failed to get BGA data.", "error", false);
             return;
           }
 
