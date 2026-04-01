@@ -7189,6 +7189,15 @@ app.post("/profiles/:playerId/get-bga-data", requireAdmin, async (req, res) => {
       scriptPayload = parseScriptJson(stdout);
     } catch (error) {
       scriptPayload = parseScriptJson(error?.stdout);
+      console.error("Get BGA Data failed", {
+        playerId: requestedPlayerId,
+        pythonBin,
+        script: updateScriptPath,
+        code: error?.code ?? null,
+        signal: error?.signal ?? null,
+        stdout: String(error?.stdout || "").trim(),
+        stderr: String(error?.stderr || "").trim(),
+      });
       const message = scriptPayload?.message
         || String(error?.stderr || "").trim()
         || "Failed to get BGA data";
