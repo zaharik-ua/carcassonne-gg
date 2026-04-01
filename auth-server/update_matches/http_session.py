@@ -65,6 +65,7 @@ def refresh_http_session(reason: str = "startup") -> tuple[requests.Session, str
     global _session, _token, _last_refresh
 
     attempts = 3
+    recovered_after_driver_recreate = False
     for attempt in range(1, attempts + 1):
         try:
             with driver_manager.use_driver(f"http_refresh_{int(time.time())}") as driver:
@@ -90,6 +91,12 @@ def refresh_http_session(reason: str = "startup") -> tuple[requests.Session, str
                 _session = sess
                 _token = token
                 _last_refresh = time.time()
+                if recovered_after_driver_recreate:
+                    print(
+                        f"♻️ Selenium driver recreated successfully; BGA HTTP session recovered ({reason})",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                 print(f"✅ BGA HTTP session refreshed ({reason})", file=sys.stderr, flush=True)
                 return sess, token
 
@@ -100,7 +107,24 @@ def refresh_http_session(reason: str = "startup") -> tuple[requests.Session, str
             raise
         except DriverStartupError:
             raise
-        except (InvalidSessionIdException, WebDriverException):
+        except (InvalidSessionIdException, WebDriverException) as exc:
+            try:
+                driver_manager.close_driver()
+            except Exception:
+                pass
+            _session = None
+            _token = None
+            _last_refresh = 0.0
+            if attempt < attempts:
+                recovered_after_driver_recreate = True
+                print(
+                    f"⚠️ Selenium session refresh failed ({reason}), recreating driver "
+                    f"({attempt}/{attempts}): {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                time.sleep(min(5, attempt))
+                continue
             raise
 
     raise RuntimeError("Failed to refresh BGA HTTP session")
