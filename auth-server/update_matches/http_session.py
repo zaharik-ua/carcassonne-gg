@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import re
 import threading
 import time
@@ -89,7 +90,7 @@ def refresh_http_session(reason: str = "startup") -> tuple[requests.Session, str
                 _session = sess
                 _token = token
                 _last_refresh = time.time()
-                print(f"✅ BGA HTTP session refreshed ({reason})", flush=True)
+                print(f"✅ BGA HTTP session refreshed ({reason})", file=sys.stderr, flush=True)
                 return sess, token
 
         except BusyError as exc:

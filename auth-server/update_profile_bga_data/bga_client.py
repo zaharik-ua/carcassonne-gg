@@ -21,7 +21,15 @@ class BgaProfileDataClient:
                 message=f"HTTP error: {exc}",
             )
 
-        players = payload.get("players")
+        players = None
+        if isinstance(payload, dict):
+            direct_players = payload.get("players")
+            nested_data = payload.get("data")
+            nested_players = nested_data.get("players") if isinstance(nested_data, dict) else None
+            if isinstance(direct_players, list):
+                players = direct_players
+            elif isinstance(nested_players, list):
+                players = nested_players
         if not isinstance(players, list):
             return ProfileBgaDataUpdateResult(
                 status="error",
