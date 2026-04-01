@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
 from pathlib import Path
 
 from update_profile_bga_data.service import ProfileBgaDataUpdateService
@@ -72,6 +73,7 @@ class ProfileBgaDataBatchService:
     def run_all(self, *, limit: int, stop_after_consecutive_failures: int = 5) -> dict:
         batch_limit = max(1, int(limit))
         failure_limit = max(1, int(stop_after_consecutive_failures))
+        processed_ids: set[str] = set()
         skipped_failed_ids: set[str] = set()
         consecutive_failed_players = 0
         summary: dict[str, object] = {
@@ -89,12 +91,16 @@ class ProfileBgaDataBatchService:
             "failed": 0,
             "stopped_early": False,
             "stop_reason": "",
+            "processed_player_ids": 0,
             "skipped_failed_player_ids": [],
             "results": [],
         }
 
         while True:
-            target_ids = self._fetch_player_ids(limit=batch_limit, exclude_ids=skipped_failed_ids)
+            target_ids = self._fetch_player_ids(
+                limit=batch_limit,
+                exclude_ids=processed_ids | skipped_failed_ids,
+            )
             if not target_ids:
                 break
 
@@ -121,8 +127,19 @@ class ProfileBgaDataBatchService:
                 "results": batch_results,
             })
 
+            batch_processed = int(batch_summary.get("processed", 0))
+            batch_failed = int(batch_summary.get("failed", 0))
+            batch_success = max(0, batch_processed - batch_failed)
+            print(
+                f"[batch {int(summary['batches'])}] {batch_success} of {batch_processed} completed successfully.",
+                file=sys.stderr,
+                flush=True,
+            )
+
             for item in batch_results:
                 player_id = str(item.get("player_id") or "").strip()
+                if player_id:
+                    processed_ids.add(player_id)
                 if item.get("ok"):
                     consecutive_failed_players = 0
                     continue
@@ -137,11 +154,27 @@ class ProfileBgaDataBatchService:
                     summary["stop_reason"] = (
                         f"Stopped after {consecutive_failed_players} consecutive failed players."
                     )
+                    summary["processed_player_ids"] = len(processed_ids)
                     summary["skipped_failed_player_ids"] = sorted(skipped_failed_ids)
+                    print(
+                        f"[batch {int(summary['batches'])}] stopped early: {summary['stop_reason']}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                     return summary
 
+            summary["processed_player_ids"] = len(processed_ids)
             summary["skipped_failed_player_ids"] = sorted(skipped_failed_ids)
 
+        print(
+            (
+                f"[done] processed {int(summary['processed'])} player(s) in {int(summary['batches'])} batch(es); "
+                f"updated={int(summary['updated'])}, removed={int(summary['removed'])}, "
+                f"unchanged={int(summary['unchanged'])}, failed={int(summary['failed'])}"
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
         return summary
 
     def _fetch_player_ids(self, *, limit: int, exclude_ids: set[str] | None = None) -> list[str]:
