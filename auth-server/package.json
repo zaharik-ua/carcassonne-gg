@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "sync:google-sheets": "node scripts/sync_matches_lineups_to_sheets.js"
+    "start": "node src/server.js"
   },
   "dependencies": {
     "connect-sqlite3": "^0.9.15",
@@ -13,7 +12,6 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
-    "googleapis": "^154.1.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "sqlite3": "^5.1.7"

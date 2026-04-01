@@ -130,6 +130,7 @@ const DEFAULT_TEAM_TIMEZONES = {
 const PROFILE_AUDIT_FIELDS = [
   "id",
   "bga_nickname",
+  "avatar",
   "name",
   "association",
   "status",
@@ -7115,6 +7116,144 @@ app.patch("/profiles/:playerId", (req, res) => {
   }
 
   return decideAndUpdate(false);
+});
+
+app.post("/profiles/:playerId/get-bga-data", requireAdmin, async (req, res) => {
+  const requestedPlayerId = String(req.params.playerId || "").trim();
+  if (!requestedPlayerId) {
+    return res.status(400).json({ ok: false, message: "playerId is required" });
+  }
+
+  const actor = getAuditActor(req.user);
+  const actorPlayerId = String(req.user?.player_id || "").trim() || null;
+  const authServerRoot = path.resolve(__dirname, "..");
+  const updateScriptPath = path.resolve(authServerRoot, "run_update_profile_bga_data.py");
+  const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
+
+  const parseScriptJson = (raw) => {
+    const text = String(raw || "").trim();
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  try {
+    const beforeRow = await dbGetAsync(
+      `
+        SELECT
+          id,
+          bga_nickname,
+          avatar,
+          name,
+          association,
+          COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
+          email,
+          COALESCE(master_title, 0) AS master_title,
+          master_title_date,
+          COALESCE(team_captain, 0) AS team_captain,
+          telegram,
+          whatsapp,
+          discord,
+          instagram,
+          contact_email
+        FROM profiles
+        WHERE id = ?
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [requestedPlayerId]
+    );
+    if (!beforeRow) {
+      return res.status(404).json({ ok: false, message: "Profile not found" });
+    }
+
+    let scriptPayload = null;
+    try {
+      const { stdout } = await execFileAsync(
+        pythonBin,
+        [updateScriptPath, "--db-path", dbFullPath, "--player-id", requestedPlayerId],
+        { cwd: authServerRoot }
+      );
+      scriptPayload = parseScriptJson(stdout);
+    } catch (error) {
+      scriptPayload = parseScriptJson(error?.stdout);
+      const message = scriptPayload?.message
+        || String(error?.stderr || "").trim()
+        || "Failed to get BGA data";
+      return res.status(500).json({ ok: false, message });
+    }
+
+    const afterRow = await dbGetAsync(
+      `
+        SELECT
+          id,
+          bga_nickname,
+          avatar,
+          name,
+          association,
+          COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
+          email,
+          COALESCE(master_title, 0) AS master_title,
+          master_title_date,
+          COALESCE(team_captain, 0) AS team_captain,
+          telegram,
+          whatsapp,
+          discord,
+          instagram,
+          contact_email
+        FROM profiles
+        WHERE id = ?
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [requestedPlayerId]
+    );
+    if (!afterRow) {
+      return res.status(404).json({ ok: false, message: "Profile not found after update" });
+    }
+
+    const changes = buildAuditChanges(beforeRow || {}, afterRow || {}, PROFILE_AUDIT_FIELDS);
+    const responsePayload = {
+      ok: true,
+      message: scriptPayload?.updated
+        ? "BGA data updated."
+        : "BGA data is already up to date.",
+      profile: {
+        id: afterRow.id,
+        bga_nickname: afterRow.bga_nickname || null,
+        avatar: afterRow.avatar || null,
+      },
+      result: scriptPayload || null,
+    };
+
+    if (!Object.keys(changes).length) {
+      return res.json(responsePayload);
+    }
+
+    return logAuditEvent(
+      {
+        ...actor,
+        actor_player_id: actorPlayerId,
+        event_type: "profile.updated",
+        entity_type: "profile",
+        action: "update",
+        record_id: requestedPlayerId,
+        changes,
+        metadata: {
+          source: "bga_get_data",
+          matched_player_id: scriptPayload?.matched_player_id ?? null,
+          source_url: scriptPayload?.source_url ?? null,
+        },
+      },
+      () => res.json(responsePayload)
+    );
+  } catch (error) {
+    console.error("Failed to get BGA profile data", error);
+    return res.status(500).json({ ok: false, message: "Failed to get BGA data" });
+  }
 });
 
 app.get("/profiles/:playerId/delete-check", (req, res) => {
