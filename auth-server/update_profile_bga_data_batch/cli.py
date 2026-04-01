@@ -43,6 +43,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Process all eligible profiles in repeated batches until none are left.",
     )
+    parser.add_argument(
+        "--stop-after-consecutive-failures",
+        type=int,
+        default=5,
+        help="Stop --all mode after this many failed players in a row.",
+    )
     return parser.parse_args()
 
 
@@ -57,6 +63,13 @@ def main() -> int:
     if args.all and args.player_id:
         raise SystemExit("--all cannot be used together with --player-id.")
 
-    summary = service.run_all(limit=args.limit) if args.all else service.run(limit=args.limit, player_ids=args.player_id)
+    summary = (
+        service.run_all(
+            limit=args.limit,
+            stop_after_consecutive_failures=args.stop_after_consecutive_failures,
+        )
+        if args.all
+        else service.run(limit=args.limit, player_ids=args.player_id)
+    )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if int(summary.get("failed", 0)) == 0 else 1

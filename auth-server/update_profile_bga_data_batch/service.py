@@ -69,13 +69,17 @@ class ProfileBgaDataBatchService:
 
         return summary
 
-    def run_all(self, *, limit: int) -> dict:
+    def run_all(self, *, limit: int, stop_after_consecutive_failures: int = 5) -> dict:
         batch_limit = max(1, int(limit))
+        failure_limit = max(1, int(stop_after_consecutive_failures))
+        skipped_failed_ids: set[str] = set()
+        consecutive_failed_players = 0
         summary: dict[str, object] = {
             "ok": True,
             "db_path": self.db_path,
             "mode": "all",
             "batch_limit": batch_limit,
+            "stop_after_consecutive_failures": failure_limit,
             "batches": 0,
             "requested": 0,
             "processed": 0,
@@ -83,11 +87,14 @@ class ProfileBgaDataBatchService:
             "removed": 0,
             "unchanged": 0,
             "failed": 0,
+            "stopped_early": False,
+            "stop_reason": "",
+            "skipped_failed_player_ids": [],
             "results": [],
         }
 
         while True:
-            target_ids = self._fetch_player_ids(limit=batch_limit)
+            target_ids = self._fetch_player_ids(limit=batch_limit, exclude_ids=skipped_failed_ids)
             if not target_ids:
                 break
 
@@ -114,13 +121,30 @@ class ProfileBgaDataBatchService:
                 "results": batch_results,
             })
 
-            # Stop on failure to avoid repeatedly retrying the same oldest profile forever.
-            if int(batch_summary.get("failed", 0)) > 0:
-                break
+            for item in batch_results:
+                player_id = str(item.get("player_id") or "").strip()
+                if item.get("ok"):
+                    consecutive_failed_players = 0
+                    continue
+
+                consecutive_failed_players += 1
+                if player_id:
+                    skipped_failed_ids.add(player_id)
+
+                if consecutive_failed_players >= failure_limit:
+                    summary["ok"] = False
+                    summary["stopped_early"] = True
+                    summary["stop_reason"] = (
+                        f"Stopped after {consecutive_failed_players} consecutive failed players."
+                    )
+                    summary["skipped_failed_player_ids"] = sorted(skipped_failed_ids)
+                    return summary
+
+            summary["skipped_failed_player_ids"] = sorted(skipped_failed_ids)
 
         return summary
 
-    def _fetch_player_ids(self, *, limit: int) -> list[str]:
+    def _fetch_player_ids(self, *, limit: int, exclude_ids: set[str] | None = None) -> list[str]:
         where_parts = [
             "deleted_at IS NULL",
             "trim(COALESCE(id, '')) <> ''",
@@ -128,9 +152,18 @@ class ProfileBgaDataBatchService:
             "trim(COALESCE(id, '')) GLOB '[0-9]*'",
         ]
         params: list[object] = []
+        normalized_exclude_ids = sorted({
+            str(player_id).strip()
+            for player_id in (exclude_ids or set())
+            if str(player_id).strip()
+        })
 
         if not self.include_removed:
             where_parts.append("COALESCE(NULLIF(trim(status), ''), 'Active') <> 'Removed'")
+        if normalized_exclude_ids:
+            placeholders = ", ".join("?" for _ in normalized_exclude_ids)
+            where_parts.append(f"trim(id) NOT IN ({placeholders})")
+            params.extend(normalized_exclude_ids)
 
         params.append(int(limit))
         sql = f"""
