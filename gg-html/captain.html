@@ -133,6 +133,12 @@
     border-top: none;
   }
 
+  .cp-match-row.cp-match-row-error {
+    border-left: 4px solid #c62828;
+    padding-left: 4px;
+    background: linear-gradient(90deg, #fff4f4 0%, #ffffff 22%);
+  }
+
   .cp-match-time {
     width: 46px;
     min-width: 46px;
@@ -303,6 +309,29 @@
 
   .cp-edit-btn.cp-edit-btn-view {
     background: #f3f4f6;
+  }
+
+  .cp-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 20px;
+    margin-right: 8px;
+    padding: 0 8px;
+    border: 1px solid #d5dbe4;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #475467;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .cp-status-badge.cp-status-badge-error {
+    background: #fde8e8;
+    border-color: #f5c2c0;
+    color: #b42318;
   }
 
   .cp-edit-form {
@@ -479,6 +508,28 @@
     background: #f3f4f6;
     color: #444;
     cursor: not-allowed;
+  }
+
+  .cp-dd-btn.cp-dd-btn-readonly-compact {
+    height: 30px;
+    min-height: 30px;
+    max-height: 30px;
+    justify-content: center;
+    padding: 4px 4px;
+    line-height: 1;
+    overflow: hidden;
+  }
+
+  .cp-dd-btn.cp-dd-btn-readonly-compact .cp-dd-btn-content {
+    width: 100%;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cp-dd-btn.cp-dd-btn-readonly-compact .cp-dd-chevron {
+    display: none;
   }
 
   .cp-dd-btn-content {
@@ -1020,16 +1071,31 @@
     flex-wrap: wrap;
   }
 
+  .lineup__row.lineup__row--error {
+    background: linear-gradient(90deg, #fff4f4 0%, #ffffff 24%);
+    border-left: 3px solid #c62828;
+    border-right: 3px solid #c62828;
+    padding: 1px 6px;
+  }
+
   .lineup__row-score {
     color: #4b5563;
     font-weight: 700;
   }
 
+  .cp-lineup-grid-row--error {
+    background: linear-gradient(90deg, #fff4f4 0%, #ffffff 24%);
+    border-left: 3px solid #c62828;
+    border-right: 3px solid #c62828;
+    padding: 4px 8px;
+  }
+
   .lineup__games {
     display: inline-flex;
+    align-items: center;
     flex-wrap: wrap;
     gap: 4px;
-    margin-left: 6px;
+    margin-left: 8px;
   }
 
   .lineup__game-link {
@@ -1040,30 +1106,29 @@
   .lineup__game-badge {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    min-height: 18px;
-    padding: 0 5px;
-    border-radius: 999px;
-    background: #e5e7eb;
-    color: #374151;
+    gap: 2px;
+    padding: 0 4px;
+    border-radius: 2px;
+    background: #d9d9d9;
+    color: #444;
     font-size: 11px;
-    font-weight: 700;
-    line-height: 1;
+    line-height: 16px;
+    font-weight: 600;
   }
 
   .lineup__game-badge--p1 {
-    background: #dbeafe;
-    color: #1d4ed8;
+    background: #d5ead5;
+    color: #2b6f2b;
   }
 
   .lineup__game-badge--p2 {
-    background: #fee2e2;
-    color: #b91c1c;
+    background: #ead5d5;
+    color: #8a3434;
   }
 
   .lineup__game-badge--clock {
-    background: #f3f4f6;
-    color: #4b5563;
+    background: #f3e4c4;
+    color: #8c6418;
   }
 
   .lineup__game-clock {
@@ -1115,17 +1180,9 @@
       font-size: 14px;
     }
 
-    .cp-edit-row input:not([type="checkbox"]),
-    .cp-edit-row select,
-    .cp-dd-btn,
-    .cp-dd-search input {
-      font-size: 16px;
-    }
-
     .cp-edit-row input[type="date"] {
       max-width: 100%;
       padding-right: 36px;
-      font-size: 16px;
       background: #fff;
       color: #2f3947;
       -webkit-text-fill-color: #2f3947;
@@ -1135,11 +1192,17 @@
     .cp-edit-row input[type="datetime-local"] {
       max-width: 100%;
       padding-right: 36px;
-      font-size: 16px;
       background: #fff;
       color: #2f3947;
       -webkit-text-fill-color: #2f3947;
       opacity: 1;
+    }
+
+    .cp-edit-row input.cp-readonly-input[type="date"],
+    .cp-edit-row input.cp-readonly-input[type="datetime-local"] {
+      background: #f3f4f6;
+      color: #444;
+      -webkit-text-fill-color: #444;
     }
     .cp-friendly-team {
       max-width: 28px;
@@ -1766,6 +1829,37 @@
     return Math.trunc(n);
   }
 
+  function getDuelWinsLimit(duelFormat) {
+    const raw = String(duelFormat || "").trim().toLowerCase();
+    const match = raw.match(/^bo(\d+)$/);
+    const bestOf = match ? Number(match[1]) : NaN;
+    if (!Number.isFinite(bestOf) || bestOf <= 0) return 2;
+    return Math.max(1, Math.ceil(bestOf / 2));
+  }
+
+  function buildDuelScoreOptions(duelFormat) {
+    const gamesToWin = getDuelWinsLimit(duelFormat);
+    const scores = [];
+
+    for (let losses = 0; losses < gamesToWin; losses += 1) {
+      scores.push(`${gamesToWin}-${losses}`);
+    }
+    for (let wins = gamesToWin - 1; wins >= 0; wins -= 1) {
+      scores.push(`${wins}-${gamesToWin}`);
+    }
+    for (let left = gamesToWin - 1; left >= 0; left -= 1) {
+      for (let right = gamesToWin - 1; right >= 0; right -= 1) {
+        scores.push(`${left}-${right}`);
+      }
+    }
+
+    return Array.from(new Set(scores));
+  }
+
+  function getReadonlyDuelScoreFieldWidth() {
+    return window.matchMedia("(max-width: 600px)").matches ? 40 : 50;
+  }
+
   function hasValue(value) {
     return value !== null && value !== undefined && String(value).trim() !== "";
   }
@@ -1877,6 +1971,10 @@
       lineup?.duel_number ?? lineup?.duel_no ?? lineup?.duel_order ?? lineup?.order_no
     );
     return Number.isInteger(value) && value > 0 ? value : null;
+  }
+
+  function isErrorDuelStatus(duel) {
+    return String(duel?.status || "").trim().toLowerCase() === "error";
   }
 
   function sortLineups(lineups) {
@@ -2085,10 +2183,14 @@
     const team2Name = team2?.name || team2Id || "-";
     const timeLabel = formatMatchTime(match?.time_utc ?? match?.time);
     const isPlannedMatch = isPlannedMatchStatus(match?.status);
+    const isErrorMatch = String(match?.status || "").trim().toLowerCase() === "error";
 
     const matchWrap = document.createDocumentFragment();
     const row = document.createElement("div");
     row.className = "cp-match-row";
+    if (isErrorMatch) {
+      row.classList.add("cp-match-row-error");
+    }
 
     const timeWrap = document.createElement("div");
     timeWrap.className = "cp-match-time";
@@ -2178,6 +2280,9 @@
         const p2 = String(lineup?.player_2_id || "").trim();
         const rowEl = document.createElement("div");
         rowEl.className = "lineup__row";
+        if (isErrorDuelStatus(lineup)) {
+          rowEl.classList.add("lineup__row--error");
+        }
         const duelNumber = readLineupDuelNumber(lineup) ?? index + 1;
 
         const orderEl = document.createElement("span");
@@ -2246,6 +2351,13 @@
 
       matchWrap.appendChild(row);
       matchWrap.appendChild(lineupPanel);
+    }
+
+    if (isErrorMatch) {
+      const errorBadge = document.createElement("div");
+      errorBadge.className = "cp-status-badge cp-status-badge-error";
+      errorBadge.textContent = "Error";
+      right.appendChild(errorBadge);
     }
 
     const editBtn = document.createElement("button");
@@ -4112,6 +4224,7 @@
 
     const topActions = document.createElement("div");
     topActions.className = "cp-edit-actions";
+    const secondaryActionLabel = isReadOnlyNonPlanned ? "Back" : "Cancel";
     const saveBtn = document.createElement("button");
     saveBtn.type = "submit";
     saveBtn.className = "cp-btn cp-btn-primary";
@@ -4119,7 +4232,7 @@
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.className = "cp-btn cp-btn-secondary";
-    cancelBtn.textContent = "Cancel";
+    cancelBtn.textContent = secondaryActionLabel;
     topActions.appendChild(saveBtn);
     topActions.appendChild(cancelBtn);
     let getResultsBtn = null;
@@ -4482,6 +4595,7 @@
       control.disabled = !!isDisabled;
       control.readOnly = !!isDisabled;
       control.title = isDisabled ? String(title || readOnlyMatchTooltip) : "";
+      control.classList.toggle("cp-readonly-input", !!isDisabled);
     };
 
     const lineupsToggleWrap = document.createElement("div");
@@ -4526,6 +4640,9 @@
     lineupTitleTeam1.style.gap = "6px";
     lineupsHeader.appendChild(lineupTitleTeam1);
 
+    const lineupTitleScore = document.createElement("div");
+    lineupsHeader.appendChild(lineupTitleScore);
+
     const lineupTitleTeam2 = document.createElement("div");
     lineupTitleTeam2.style.fontSize = "12px";
     lineupTitleTeam2.style.fontWeight = "600";
@@ -4557,16 +4674,24 @@
     let lineupsState = sortedInitialLineups.map((l, index) => ({
       id: String(l?.id || buildLineupIdFromMatch(source?.time_utc ?? source?.time, l?.player_1_id, l?.player_2_id)).trim(),
       duelNumber: readLineupDuelNumber(l) ?? index + 1,
+      duelFormat: String(l?.duel_format || "Bo3").trim() || "Bo3",
       player1Id: String(l?.player_1_id || "").trim(),
       player2Id: String(l?.player_2_id || "").trim(),
+      dw1: parseNullableInt(l?.dw1),
+      dw2: parseNullableInt(l?.dw2),
+      status: String(l?.status || "").trim(),
     }));
     if (!lineupsState.length && isCreateMode) lineupsState = [];
 
     const createEmptyLineupEntry = () => ({
       id: buildLineupIdFromMatch(source?.time_utc ?? source?.time, "", ""),
       duelNumber: null,
+      duelFormat: "Bo3",
       player1Id: "",
       player2Id: "",
+      dw1: null,
+      dw2: null,
+      status: "",
     });
 
     const createDefaultLineupsState = () => {
@@ -4787,19 +4912,60 @@
       const team1Code = normalizeCode(team1Input.getValue());
       const team2Code = normalizeCode(team2Input.getValue());
       const canChangeCount = !isReadOnlyNonPlanned && !isFixedTournamentLineup && !isSecretLineupType();
-      lineupsHeader.style.gridTemplateColumns = canChangeCount
-        ? "24px minmax(0, 1fr) minmax(0, 1fr) 26px"
-        : "24px minmax(0, 1fr) minmax(0, 1fr)";
+      const showLineupOrder = isGlobalAdmin;
+      const showDuelScoreField = !isPlannedMatchStatus(source?.status);
+      const duelScoreFieldWidth = getReadonlyDuelScoreFieldWidth();
+      const duelScoreColumn = `${duelScoreFieldWidth}px`;
+      lineupTitle1.style.display = showLineupOrder ? "" : "none";
+      lineupTitleScore.style.display = showDuelScoreField ? "" : "none";
+      lineupsHeader.style.gridTemplateColumns = showLineupOrder
+        ? (
+            showDuelScoreField
+              ? (canChangeCount
+                  ? `24px minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr) 26px`
+                  : `24px minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr)`)
+              : (canChangeCount
+                  ? "24px minmax(0, 1fr) minmax(0, 1fr) 26px"
+                  : "24px minmax(0, 1fr) minmax(0, 1fr)")
+          )
+        : (
+            showDuelScoreField
+              ? (canChangeCount
+                  ? `minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr) 26px`
+                  : `minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr)`)
+              : (canChangeCount
+                  ? "minmax(0, 1fr) minmax(0, 1fr) 26px"
+                  : "minmax(0, 1fr) minmax(0, 1fr)")
+          );
       lineupsOpenActions.style.display = canChangeCount ? "" : "none";
       reindexLineupsState();
 
       lineupsState.forEach((entry, index) => {
         const row = document.createElement("div");
         row.dataset.index = String(index);
+        if (isErrorDuelStatus(entry)) {
+          row.classList.add("cp-lineup-grid-row--error");
+        }
         row.style.display = "grid";
-        row.style.gridTemplateColumns = canChangeCount
-          ? "24px minmax(0, 1fr) minmax(0, 1fr) 26px"
-          : "24px minmax(0, 1fr) minmax(0, 1fr)";
+        row.style.gridTemplateColumns = showLineupOrder
+          ? (
+              showDuelScoreField
+                ? (canChangeCount
+                    ? `24px minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr) 26px`
+                    : `24px minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr)`)
+                : (canChangeCount
+                    ? "24px minmax(0, 1fr) minmax(0, 1fr) 26px"
+                    : "24px minmax(0, 1fr) minmax(0, 1fr)")
+            )
+          : (
+              showDuelScoreField
+                ? (canChangeCount
+                    ? `minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr) 26px`
+                    : `minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr)`)
+                : (canChangeCount
+                    ? "minmax(0, 1fr) minmax(0, 1fr) 26px"
+                    : "minmax(0, 1fr) minmax(0, 1fr)")
+            );
         row.style.gap = "8px";
         row.style.alignItems = "center";
 
@@ -4828,46 +4994,48 @@
           });
         }
 
-        const dragHandle = document.createElement("div");
-        dragHandle.className = isReadOnlyNonPlanned ? "cp-lineup-order" : "cp-lineup-drag";
-        dragHandle.draggable = !isReadOnlyNonPlanned && lineupsState.length > 1;
-        dragHandle.title = !isReadOnlyNonPlanned && lineupsState.length > 1 ? "Drag to reorder duel" : "";
-        dragHandle.style.alignSelf = "center";
-        if (!isReadOnlyNonPlanned) {
-          const dragIcon = document.createElement("i");
-          dragIcon.className = "fa-solid fa-grip-vertical";
-          dragHandle.appendChild(dragIcon);
+        if (showLineupOrder) {
+          const dragHandle = document.createElement("div");
+          dragHandle.className = isReadOnlyNonPlanned ? "cp-lineup-order" : "cp-lineup-drag";
+          dragHandle.draggable = !isReadOnlyNonPlanned && lineupsState.length > 1;
+          dragHandle.title = !isReadOnlyNonPlanned && lineupsState.length > 1 ? "Drag to reorder duel" : "";
+          dragHandle.style.alignSelf = "center";
+          if (!isReadOnlyNonPlanned) {
+            const dragIcon = document.createElement("i");
+            dragIcon.className = "fa-solid fa-grip-vertical";
+            dragHandle.appendChild(dragIcon);
+          }
+          const duelNo = document.createElement("span");
+          duelNo.className = "cp-lineup-order";
+          duelNo.style.height = "30px";
+          duelNo.style.display = "inline-flex";
+          duelNo.style.alignItems = "center";
+          duelNo.style.fontSize = "13px";
+          duelNo.style.fontWeight = "600";
+          duelNo.textContent = `${index + 1}:`;
+          dragHandle.appendChild(duelNo);
+          if (!isReadOnlyNonPlanned) {
+            dragHandle.addEventListener("dragstart", (event) => {
+              if (lineupsState.length <= 1) {
+                event.preventDefault();
+                return;
+              }
+              draggedLineupIndex = index;
+              row.classList.add("cp-lineup-row-dragging");
+              if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", String(index));
+              }
+            });
+            dragHandle.addEventListener("dragend", () => {
+              draggedLineupIndex = null;
+              draggedLineupDropIndex = null;
+              row.classList.remove("cp-lineup-row-dragging");
+              clearLineupDropMarkers();
+            });
+          }
+          row.appendChild(dragHandle);
         }
-        const duelNo = document.createElement("span");
-        duelNo.className = "cp-lineup-order";
-        duelNo.style.height = "30px";
-        duelNo.style.display = "inline-flex";
-        duelNo.style.alignItems = "center";
-        duelNo.style.fontSize = "13px";
-        duelNo.style.fontWeight = "600";
-        duelNo.textContent = `${index + 1}:`;
-        dragHandle.appendChild(duelNo);
-        if (!isReadOnlyNonPlanned) {
-          dragHandle.addEventListener("dragstart", (event) => {
-            if (lineupsState.length <= 1) {
-              event.preventDefault();
-              return;
-            }
-            draggedLineupIndex = index;
-            row.classList.add("cp-lineup-row-dragging");
-            if (event.dataTransfer) {
-              event.dataTransfer.effectAllowed = "move";
-              event.dataTransfer.setData("text/plain", String(index));
-            }
-          });
-          dragHandle.addEventListener("dragend", () => {
-            draggedLineupIndex = null;
-            draggedLineupDropIndex = null;
-            row.classList.remove("cp-lineup-row-dragging");
-            clearLineupDropMarkers();
-          });
-        }
-        row.appendChild(dragHandle);
 
         const createPlayerCell = (teamCodeForCell, currentValue, onSelect, cellConfig = {}) => {
           const cell = document.createElement("div");
@@ -4925,13 +5093,76 @@
           return cell;
         };
 
+        const createReadonlyScoreCell = (dw1Value, dw2Value, duelFormat, onSelect) => {
+          const options = [{ value: "", label: "-" }]
+            .concat(buildDuelScoreOptions(duelFormat).map((score) => ({
+              value: score,
+              label: score,
+            })));
+          const normalizedValue = (
+            dw1Value === null || dw1Value === undefined || dw2Value === null || dw2Value === undefined
+          )
+            ? ""
+            : `${dw1Value}-${dw2Value}`;
+          const fieldWidth = getReadonlyDuelScoreFieldWidth();
+          const fieldWidthPx = `${fieldWidth}px`;
+          const cell = document.createElement("div");
+          cell.style.flex = `0 0 ${fieldWidthPx}`;
+          cell.style.height = "30px";
+          cell.style.minHeight = "30px";
+          cell.style.maxHeight = "30px";
+          cell.style.alignSelf = "center";
+          cell.style.overflow = "hidden";
+          cell.style.minWidth = fieldWidthPx;
+          cell.style.width = fieldWidthPx;
+          cell.style.maxWidth = fieldWidthPx;
+          const dd = createDropdown(normalizedValue, options, {
+            allowEmpty: true,
+          });
+          dd.root.style.flex = `0 0 ${fieldWidthPx}`;
+          dd.root.style.height = "30px";
+          dd.root.style.minHeight = "30px";
+          dd.root.style.maxHeight = "30px";
+          dd.root.style.width = fieldWidthPx;
+          dd.root.style.minWidth = fieldWidthPx;
+          dd.root.style.maxWidth = fieldWidthPx;
+          dd.setDisabled(true);
+          const ddBtn = dd.root.querySelector(".cp-dd-btn");
+          if (ddBtn) {
+            ddBtn.classList.add("cp-dd-btn-readonly-compact");
+            ddBtn.style.flex = `0 0 ${fieldWidthPx}`;
+            ddBtn.style.height = "30px";
+            ddBtn.style.minHeight = "30px";
+            ddBtn.style.maxHeight = "30px";
+            ddBtn.style.width = fieldWidthPx;
+            ddBtn.style.minWidth = fieldWidthPx;
+            ddBtn.style.maxWidth = fieldWidthPx;
+          }
+          dd.setOnChange((nextValue) => {
+            const [nextDw1, nextDw2] = String(nextValue || "").split("-");
+            onSelect({
+              dw1: parseNullableInt(nextDw1),
+              dw2: parseNullableInt(nextDw2),
+            });
+          });
+          cell.appendChild(dd.root);
+          return cell;
+        };
+
         const p1Cell = createPlayerCell(team1Code, entry.player1Id, (v) => {
           lineupsState[index].player1Id = String(v || "").trim();
+        });
+        const scoreCell = createReadonlyScoreCell(entry.dw1, entry.dw2, entry.duelFormat, (nextScore) => {
+          lineupsState[index].dw1 = nextScore?.dw1 ?? null;
+          lineupsState[index].dw2 = nextScore?.dw2 ?? null;
         });
         const p2Cell = createPlayerCell(team2Code, entry.player2Id, (v) => {
           lineupsState[index].player2Id = String(v || "").trim();
         }, { alignMenuRight: true });
         row.appendChild(p1Cell);
+        if (showDuelScoreField) {
+          row.appendChild(scoreCell);
+        }
         row.appendChild(p2Cell);
 
         if (canChangeCount) {
@@ -5334,13 +5565,15 @@
             tournament_id: String(source?.tournament_id || currentTournamentId),
             match_id: matchIdForLineups,
             duel_number: index + 1,
-            duel_format: "Bo3",
+            duel_format: String(row.duelFormat || "Bo3").trim() || "Bo3",
             time_utc: timeUtc,
             custom_time: 0,
             player_1_id: String(row.player1Id || "").trim(),
             player_2_id: String(row.player2Id || "").trim(),
-            dw1: null,
-            dw2: null,
+            dw1: parseNullableInt(row.dw1),
+            dw2: parseNullableInt(row.dw2),
+            gw1: null,
+            gw2: null,
             status: "Planned",
           }));
           if (lineupRowsPayload.some((r) => !r.id)) {

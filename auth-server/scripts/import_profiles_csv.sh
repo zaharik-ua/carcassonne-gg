@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   master_title INTEGER NOT NULL DEFAULT 0,
   master_title_date DATE,
   team_captain INTEGER NOT NULL DEFAULT 0,
+  avatar TEXT,
   id TEXT,
   admin INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -1232,6 +1232,7 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         discord TEXT,
         instagram TEXT,
         contact_email TEXT,
+        avatar TEXT,
         id TEXT,
         created_by TEXT,
         updated_by TEXT,
@@ -1254,6 +1255,7 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         discord,
         instagram,
         contact_email,
+        avatar,
         id,
         created_by,
         updated_by,
@@ -1276,6 +1278,7 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         discord,
         instagram,
         contact_email,
+        avatar,
         id,
         created_by,
         updated_by,
@@ -1409,6 +1412,7 @@ function ensureProfilesSchema() {
       addColumnIfMissing(currentColumns, "profiles", "discord", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "instagram", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "contact_email", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "avatar", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "bga_elo", "INTEGER");
       addColumnIfMissing(currentColumns, "profiles", "bga_elo_updated_at", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "created_by", "TEXT");
@@ -2181,6 +2185,7 @@ db.serialize(() => {
               discord TEXT,
               instagram TEXT,
               contact_email TEXT,
+              avatar TEXT,
               id TEXT,
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
