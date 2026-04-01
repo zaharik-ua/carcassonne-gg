@@ -1171,7 +1171,7 @@ function createMatchElement(match, options = {}) {
   const rightDiv = document.createElement("div");
   rightDiv.className = "match-right";
 
-  if (match.status === "IN PROGRESS") {
+  if (String(match.status || "").trim().toUpperCase() === "IN PROGRESS") {
     const liveIcon = document.createElement("img");
     liveIcon.className = "live-icon";
     liveIcon.src = "https://carcassonne.gg/gallery_gen/f4d6792e3ac5f7356502e64aefa51f32_60x28_fit.png";
@@ -1345,7 +1345,7 @@ function createDuelElement(match, options = {}) {
   const rightDiv = document.createElement("div");
   rightDiv.className = "match-right";
 
-  if (match.status === "IN PROGRESS") {
+  if (String(match.status || "").trim().toUpperCase() === "IN PROGRESS") {
     const liveIcon = document.createElement("img");
     liveIcon.className = "live-icon";
     liveIcon.src = "https://carcassonne.gg/gallery_gen/f4d6792e3ac5f7356502e64aefa51f32_60x28_fit.png";
@@ -1436,7 +1436,7 @@ function createDuelElementCompact(match) {
   const rightDiv = document.createElement("div");
   rightDiv.className = "match-right";
 
-  if (match.status === "IN PROGRESS") {
+  if (String(match.status || "").trim().toUpperCase() === "IN PROGRESS") {
     const liveIcon = document.createElement("img");
     liveIcon.className = "live-icon";
     liveIcon.src = "https://carcassonne.gg/gallery_gen/f4d6792e3ac5f7356502e64aefa51f32_60x28_fit.png";

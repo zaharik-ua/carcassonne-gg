@@ -301,6 +301,10 @@
     border-color: #9ea7b3;
   }
 
+  .cp-edit-btn.cp-edit-btn-view {
+    background: #f3f4f6;
+  }
+
   .cp-edit-form {
     background: #fff;
     border: 1px solid var(--border);
@@ -632,6 +636,23 @@
     border-color: #e6b4b4;
     color: #a12a2a;
     margin-left: auto;
+  }
+
+  .cp-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+  }
+
+  .cp-btn-danger:disabled {
+    background: #f3f4f6;
+    border-color: #d7dbe2;
+    color: #8c96a4;
+  }
+
+  .cp-btn-danger.cp-btn-danger-disabled {
+    background: #f3f4f6;
+    border-color: #d7dbe2;
+    color: #8c96a4;
   }
 
   .cp-edit-error {
@@ -992,6 +1013,64 @@
     font-family: "Montserrat", sans-serif;
   }
 
+  .lineup__row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .lineup__row-score {
+    color: #4b5563;
+    font-weight: 700;
+  }
+
+  .lineup__games {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-left: 6px;
+  }
+
+  .lineup__game-link {
+    display: inline-flex;
+    text-decoration: none;
+  }
+
+  .lineup__game-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    min-height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    color: #374151;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .lineup__game-badge--p1 {
+    background: #dbeafe;
+    color: #1d4ed8;
+  }
+
+  .lineup__game-badge--p2 {
+    background: #fee2e2;
+    color: #b91c1c;
+  }
+
+  .lineup__game-badge--clock {
+    background: #f3f4f6;
+    color: #4b5563;
+  }
+
+  .lineup__game-clock {
+    font-size: 10px;
+    line-height: 1;
+  }
+
   .lineup a {
     color: #333333;
     text-decoration: none;
@@ -1201,7 +1280,7 @@
   }
 
   function esc(value) {
-    return String(value || "")
+    return String(value ?? "")
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
@@ -1687,6 +1766,112 @@
     return Math.trunc(n);
   }
 
+  function hasValue(value) {
+    return value !== null && value !== undefined && String(value).trim() !== "";
+  }
+
+  function isPlannedMatchStatus(status) {
+    return String(status || "").trim().toLowerCase() === "planned";
+  }
+
+  function isTruthyOne(value) {
+    return value === 1 || value === true || String(value || "").trim() === "1";
+  }
+
+  function collectGameEntries(duel) {
+    if (Array.isArray(duel?.games) && duel.games.length > 0) {
+      return duel.games.filter(Boolean);
+    }
+
+    const hasSingleGameData =
+      hasValue(duel?.player_1_score) ||
+      hasValue(duel?.player_2_score) ||
+      hasValue(duel?.player_1_rank) ||
+      hasValue(duel?.player_2_rank) ||
+      isTruthyOne(duel?.player_1_clock) ||
+      isTruthyOne(duel?.player_2_clock) ||
+      hasValue(duel?.bga_table_id);
+
+    return hasSingleGameData ? [duel] : [];
+  }
+
+  function createGameBadge(game) {
+    const p1Clock = isTruthyOne(game?.player_1_clock);
+    const p2Clock = isTruthyOne(game?.player_2_clock);
+    const p1RankWon = String(game?.player_1_rank || "").trim() === "1";
+    const p2RankWon = String(game?.player_2_rank || "").trim() === "1";
+    const p1Score = String(game?.player_1_score ?? "").trim();
+    const p2Score = String(game?.player_2_score ?? "").trim();
+
+    const badge = document.createElement("span");
+    badge.className = "lineup__game-badge";
+
+    if ((p1Clock || p2Clock) && p1Clock !== p2Clock) {
+      badge.classList.add("lineup__game-badge--clock");
+      const left = document.createElement("span");
+      const right = document.createElement("span");
+      const icon = document.createElement("i");
+      icon.className = "fa-regular fa-clock lineup__game-clock";
+
+      if (p1Clock) {
+        left.textContent = "";
+        right.textContent = "0-1";
+        badge.appendChild(left);
+        badge.appendChild(icon);
+        badge.appendChild(right);
+      } else {
+        left.textContent = "1-0";
+        right.textContent = "";
+        badge.appendChild(left);
+        badge.appendChild(icon);
+        badge.appendChild(right);
+      }
+
+      return badge;
+    }
+
+    if (!hasValue(p1Score) || !hasValue(p2Score)) {
+      return null;
+    }
+
+    if (p1RankWon) {
+      badge.classList.add("lineup__game-badge--p1");
+    } else if (p2RankWon) {
+      badge.classList.add("lineup__game-badge--p2");
+    }
+
+    badge.textContent = `${p1Score}-${p2Score}`;
+    return badge;
+  }
+
+  function createGameBadgesWrap(duel) {
+    const games = collectGameEntries(duel);
+    if (!games.length) return null;
+
+    const wrap = document.createElement("span");
+    wrap.className = "lineup__games";
+
+    games.forEach((game) => {
+      const badge = createGameBadge(game);
+      if (!badge) return;
+      const tableId = String(game?.bga_table_id || "").trim();
+      if (tableId) {
+        const link = document.createElement("a");
+        link.className = "lineup__game-link";
+        link.href = `https://boardgamearena.com/table?table=${encodeURIComponent(tableId)}`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.appendChild(badge);
+        wrap.appendChild(link);
+        return;
+      }
+
+      wrap.appendChild(badge);
+    });
+
+    return wrap.childNodes.length ? wrap : null;
+  }
+
   function readLineupDuelNumber(lineup) {
     const value = parseNullableInt(
       lineup?.duel_number ?? lineup?.duel_no ?? lineup?.duel_order ?? lineup?.order_no
@@ -1899,6 +2084,7 @@
     const team1Name = team1?.name || team1Id || "-";
     const team2Name = team2?.name || team2Id || "-";
     const timeLabel = formatMatchTime(match?.time_utc ?? match?.time);
+    const isPlannedMatch = isPlannedMatchStatus(match?.status);
 
     const matchWrap = document.createDocumentFragment();
     const row = document.createElement("div");
@@ -1952,6 +2138,19 @@
     const right = document.createElement("div");
     right.className = "cp-match-right";
 
+    if (hasValue(match?.dw1) && hasValue(match?.dw2)) {
+      const scoreBox = document.createElement("div");
+      scoreBox.className = "cp-score-box cp-match-score";
+      scoreBox.innerHTML = `<div>${esc(match.dw1)}</div><div>${esc(match.dw2)}</div>`;
+      right.appendChild(scoreBox);
+    }
+    if (hasValue(match?.gw1) && hasValue(match?.gw2)) {
+      const scoreBoxAlt = document.createElement("div");
+      scoreBoxAlt.className = "cp-score-box-alt";
+      scoreBoxAlt.innerHTML = `<div>(${esc(match.gw1)})</div><div>(${esc(match.gw2)})</div>`;
+      right.appendChild(scoreBoxAlt);
+    }
+
     const matchLineups = sortLineups(
       Array.isArray(lineupsByMatch?.get(String(match?.id || "").trim()))
         ? lineupsByMatch.get(String(match?.id || "").trim())
@@ -1978,6 +2177,7 @@
         const p1 = String(lineup?.player_1_id || "").trim();
         const p2 = String(lineup?.player_2_id || "").trim();
         const rowEl = document.createElement("div");
+        rowEl.className = "lineup__row";
         const duelNumber = readLineupDuelNumber(lineup) ?? index + 1;
 
         const orderEl = document.createElement("span");
@@ -1991,18 +2191,30 @@
         p1Link.rel = "noopener noreferrer";
         p1Link.textContent = playerLabel(profilesById?.get(p1) || { id: p1 });
 
+        const hasDuelScore = hasValue(lineup?.dw1) && hasValue(lineup?.dw2);
         const sep = document.createElement("span");
-        sep.textContent = " - ";
+        sep.textContent = hasDuelScore ? " " : " - ";
 
         const p2Link = document.createElement("a");
         p2Link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(p2)}`;
         p2Link.target = "_blank";
         p2Link.rel = "noopener noreferrer";
         p2Link.textContent = playerLabel(profilesById?.get(p2) || { id: p2 });
+        const gamesWrap = createGameBadgesWrap(lineup);
 
         rowEl.appendChild(p1Link);
-        rowEl.appendChild(sep);
+        if (hasDuelScore) {
+          const scoreEl = document.createElement("span");
+          scoreEl.className = "lineup__row-score";
+          scoreEl.textContent = `${lineup.dw1} - ${lineup.dw2}`;
+          rowEl.appendChild(scoreEl);
+        } else {
+          rowEl.appendChild(sep);
+        }
         rowEl.appendChild(p2Link);
+        if (gamesWrap) {
+          rowEl.appendChild(gamesWrap);
+        }
         lineupBody.appendChild(rowEl);
       });
       lineupPanel.appendChild(lineupBody);
@@ -2039,7 +2251,12 @@
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "cp-edit-btn";
-    editBtn.textContent = options.lineupsOnly === true ? "Lineups" : "Edit";
+    if (!isPlannedMatch) {
+      editBtn.textContent = "View";
+      editBtn.classList.add("cp-edit-btn-view");
+    } else {
+      editBtn.textContent = options.lineupsOnly === true ? "Lineups" : "Edit";
+    }
     editBtn.addEventListener("click", () => {
       openCaptainEdit(CAPTAIN_VIEWS.MATCHES, { matchId: String(match?.id || "") });
     });
@@ -3835,10 +4052,12 @@
 
   function renderMatchEditForm(match, teamsById, editContext, formMode) {
     const isCreateMode = formMode === "create";
-    const canTriggerResultsRefresh = !!editContext?.isGlobalAdmin && !isCreateMode;
+    const isGlobalAdmin = !!editContext?.isGlobalAdmin;
+    const canTriggerResultsRefresh = isGlobalAdmin && !isCreateMode;
     const allProfiles = Array.isArray(editContext?.profiles) ? editContext.profiles : [];
     const currentTournament = editContext?.tournament || null;
     const isLineupsOnly = editContext?.lineupsOnly === true;
+    const isReadOnlyNonPlanned = !isCreateMode && !isGlobalAdmin && !isPlannedMatchStatus(match?.status);
     const currentTournamentId = String(
       currentTournament?.id || match?.tournament_id || captainPageState.tournamentId || ""
     ).trim();
@@ -3855,9 +4074,13 @@
     const initialLineups = Array.isArray(editContext?.lineups) ? editContext.lineups : [];
     setPageHeading(formMode === "edit" ? "Match editing" : currentTournamentTitle);
     hintEl.textContent = "";
-    countEl.textContent = isCreateMode
-      ? "Creating a new match"
-      : `Editing: ${String(match?.id || "")}`;
+    if (isCreateMode) {
+      countEl.textContent = "Creating a new match";
+    } else if (isReadOnlyNonPlanned) {
+      countEl.textContent = `Viewing: ${String(match?.id || "")}`;
+    } else {
+      countEl.textContent = `Editing: ${String(match?.id || "")}`;
+    }
     contentEl.className = "cp-edit-form";
     contentEl.innerHTML = "";
 
@@ -3892,7 +4115,7 @@
     const saveBtn = document.createElement("button");
     saveBtn.type = "submit";
     saveBtn.className = "cp-btn cp-btn-primary";
-    saveBtn.textContent = isLineupsOnly ? "Save Lineups" : "Save";
+    saveBtn.textContent = isReadOnlyNonPlanned ? "View Only" : (isLineupsOnly ? "Save Lineups" : "Save");
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.className = "cp-btn cp-btn-secondary";
@@ -4252,13 +4475,13 @@
       ]
     );
 
-    const setNativeControlDisabled = (control, isDisabled) => {
+    const readOnlyMatchTooltip = "Only global admins can edit non-planned matches.";
+
+    const setNativeControlDisabled = (control, isDisabled, title = "") => {
       if (!control) return;
       control.disabled = !!isDisabled;
       control.readOnly = !!isDisabled;
-      if (isDisabled) {
-        control.title = "Match fields are read-only for your tournament role.";
-      }
+      control.title = isDisabled ? String(title || readOnlyMatchTooltip) : "";
     };
 
     const lineupsToggleWrap = document.createElement("div");
@@ -4359,6 +4582,8 @@
 
     const syncLineupsToggleButton = () => {
       createLineupsBtn.textContent = lineupsEnabled ? "Delete Lineups" : "Create Lineups";
+      createLineupsBtn.classList.toggle("cp-hidden", isReadOnlyNonPlanned);
+      lineupsToggleWrap.classList.toggle("cp-hidden", isReadOnlyNonPlanned);
     };
 
     const getPlayersForTeam = (teamId) => {
@@ -4561,7 +4786,7 @@
 
       const team1Code = normalizeCode(team1Input.getValue());
       const team2Code = normalizeCode(team2Input.getValue());
-      const canChangeCount = !isFixedTournamentLineup && !isSecretLineupType();
+      const canChangeCount = !isReadOnlyNonPlanned && !isFixedTournamentLineup && !isSecretLineupType();
       lineupsHeader.style.gridTemplateColumns = canChangeCount
         ? "24px minmax(0, 1fr) minmax(0, 1fr) 26px"
         : "24px minmax(0, 1fr) minmax(0, 1fr)";
@@ -4578,37 +4803,41 @@
         row.style.gap = "8px";
         row.style.alignItems = "center";
 
-        row.addEventListener("dragover", (event) => {
-          if (draggedLineupIndex === null || draggedLineupIndex === index) return;
-          event.preventDefault();
-          const rect = row.getBoundingClientRect();
-          const placeAfter = event.clientY >= rect.top + rect.height / 2;
-          clearLineupDropMarkers();
-          row.classList.add(placeAfter ? "cp-lineup-row-drop-after" : "cp-lineup-row-drop-before");
-          draggedLineupDropIndex = index + (placeAfter ? 1 : 0);
-        });
-        row.addEventListener("dragleave", () => {
-          row.classList.remove("cp-lineup-row-drop-before", "cp-lineup-row-drop-after");
-        });
-        row.addEventListener("drop", (event) => {
-          if (draggedLineupIndex === null) return;
-          event.preventDefault();
-          clearLineupDropMarkers();
-          if (draggedLineupDropIndex !== null) {
-            moveLineupRow(draggedLineupIndex, draggedLineupDropIndex);
-          }
-          draggedLineupIndex = null;
-          draggedLineupDropIndex = null;
-        });
+        if (!isReadOnlyNonPlanned) {
+          row.addEventListener("dragover", (event) => {
+            if (draggedLineupIndex === null || draggedLineupIndex === index) return;
+            event.preventDefault();
+            const rect = row.getBoundingClientRect();
+            const placeAfter = event.clientY >= rect.top + rect.height / 2;
+            clearLineupDropMarkers();
+            row.classList.add(placeAfter ? "cp-lineup-row-drop-after" : "cp-lineup-row-drop-before");
+            draggedLineupDropIndex = index + (placeAfter ? 1 : 0);
+          });
+          row.addEventListener("dragleave", () => {
+            row.classList.remove("cp-lineup-row-drop-before", "cp-lineup-row-drop-after");
+          });
+          row.addEventListener("drop", (event) => {
+            if (draggedLineupIndex === null) return;
+            event.preventDefault();
+            clearLineupDropMarkers();
+            if (draggedLineupDropIndex !== null) {
+              moveLineupRow(draggedLineupIndex, draggedLineupDropIndex);
+            }
+            draggedLineupIndex = null;
+            draggedLineupDropIndex = null;
+          });
+        }
 
         const dragHandle = document.createElement("div");
-        dragHandle.className = "cp-lineup-drag";
-        dragHandle.draggable = lineupsState.length > 1;
-        dragHandle.title = lineupsState.length > 1 ? "Drag to reorder duel" : "";
+        dragHandle.className = isReadOnlyNonPlanned ? "cp-lineup-order" : "cp-lineup-drag";
+        dragHandle.draggable = !isReadOnlyNonPlanned && lineupsState.length > 1;
+        dragHandle.title = !isReadOnlyNonPlanned && lineupsState.length > 1 ? "Drag to reorder duel" : "";
         dragHandle.style.alignSelf = "center";
-        const dragIcon = document.createElement("i");
-        dragIcon.className = "fa-solid fa-grip-vertical";
-        dragHandle.appendChild(dragIcon);
+        if (!isReadOnlyNonPlanned) {
+          const dragIcon = document.createElement("i");
+          dragIcon.className = "fa-solid fa-grip-vertical";
+          dragHandle.appendChild(dragIcon);
+        }
         const duelNo = document.createElement("span");
         duelNo.className = "cp-lineup-order";
         duelNo.style.height = "30px";
@@ -4618,24 +4847,26 @@
         duelNo.style.fontWeight = "600";
         duelNo.textContent = `${index + 1}:`;
         dragHandle.appendChild(duelNo);
-        dragHandle.addEventListener("dragstart", (event) => {
-          if (lineupsState.length <= 1) {
-            event.preventDefault();
-            return;
-          }
-          draggedLineupIndex = index;
-          row.classList.add("cp-lineup-row-dragging");
-          if (event.dataTransfer) {
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", String(index));
-          }
-        });
-        dragHandle.addEventListener("dragend", () => {
-          draggedLineupIndex = null;
-          draggedLineupDropIndex = null;
-          row.classList.remove("cp-lineup-row-dragging");
-          clearLineupDropMarkers();
-        });
+        if (!isReadOnlyNonPlanned) {
+          dragHandle.addEventListener("dragstart", (event) => {
+            if (lineupsState.length <= 1) {
+              event.preventDefault();
+              return;
+            }
+            draggedLineupIndex = index;
+            row.classList.add("cp-lineup-row-dragging");
+            if (event.dataTransfer) {
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", String(index));
+            }
+          });
+          dragHandle.addEventListener("dragend", () => {
+            draggedLineupIndex = null;
+            draggedLineupDropIndex = null;
+            row.classList.remove("cp-lineup-row-dragging");
+            clearLineupDropMarkers();
+          });
+        }
         row.appendChild(dragHandle);
 
         const createPlayerCell = (teamCodeForCell, currentValue, onSelect, cellConfig = {}) => {
@@ -4646,16 +4877,20 @@
           }));
           const playerOptions = [{ value: "", label: "Select player" }]
             .concat(optionPlayers)
-            .concat([{ value: "__add_new__", label: "Add new player" }]);
+            .concat(isReadOnlyNonPlanned ? [] : [{ value: "__add_new__", label: "Add new player" }]);
           const dd = createDropdown(currentValue || "", playerOptions, {
             allowEmpty: true,
-            searchable: true,
+            searchable: !isReadOnlyNonPlanned,
             alignMenuRight: !!cellConfig.alignMenuRight,
             autoFocusSearch: shouldAutoFocusLineupPlayerSearch,
             maxMenuHeight: 300,
           });
           cell.style.minWidth = "0";
           dd.root.style.minWidth = "0";
+          if (isReadOnlyNonPlanned) {
+            dd.setDisabled(true);
+            dd.setTitle(readOnlyMatchTooltip);
+          }
           const ddBtn = dd.root.querySelector(".cp-dd-btn");
           const syncSelectedHighlight = () => {
             if (!ddBtn) return;
@@ -4737,6 +4972,7 @@
     };
 
     createLineupsBtn.addEventListener("click", () => {
+      if (isReadOnlyNonPlanned) return;
       if (lineupsEnabled) {
         lineupsEnabled = false;
         lineupsState = [];
@@ -4749,6 +4985,7 @@
     });
 
     addLineupRowBtn.addEventListener("click", () => {
+      if (isReadOnlyNonPlanned) return;
       if (isFixedTournamentLineup || isSecretLineupType()) return;
       lineupsState.push(createEmptyLineupEntry());
       reindexLineupsState();
@@ -4821,6 +5058,32 @@
       setNativeControlDisabled(gw2Input, true);
     }
 
+    if (isReadOnlyNonPlanned) {
+      team1Input.setDisabled(true);
+      team1Input.setTitle(readOnlyMatchTooltip);
+      team2Input.setDisabled(true);
+      team2Input.setTitle(readOnlyMatchTooltip);
+      lineupTypeInput.setDisabled(true);
+      lineupTypeInput.setTitle(readOnlyMatchTooltip);
+      deadlineHoursInput.setDisabled(true);
+      deadlineHoursInput.setTitle(readOnlyMatchTooltip);
+      statusInput.setDisabled(true);
+      statusInput.setTitle(readOnlyMatchTooltip);
+      setNativeControlDisabled(timeInput, true, readOnlyMatchTooltip);
+      setNativeControlDisabled(duelsInput, true, readOnlyMatchTooltip);
+      setNativeControlDisabled(dw1Input, true, readOnlyMatchTooltip);
+      setNativeControlDisabled(dw2Input, true, readOnlyMatchTooltip);
+      setNativeControlDisabled(gw1Input, true, readOnlyMatchTooltip);
+      setNativeControlDisabled(gw2Input, true, readOnlyMatchTooltip);
+      saveBtn.disabled = true;
+      saveBtn.title = readOnlyMatchTooltip;
+      if (deleteBtn) {
+        deleteBtn.classList.add("cp-btn-danger-disabled");
+        deleteBtn.setAttribute("aria-disabled", "true");
+        deleteBtn.title = "Only planned matches can be deleted.";
+      }
+    }
+
     document.addEventListener("click", (event) => {
       if (!form.contains(event.target)) {
         dropdowns.forEach((dd) => dd.close());
@@ -4872,15 +5135,21 @@
       saveBtn.disabled = isSaving;
       cancelBtn.disabled = isSaving;
       if (getResultsBtn) getResultsBtn.disabled = isSaving;
-      if (deleteBtn) deleteBtn.disabled = isSaving;
-      saveBtn.textContent = isSaving ? "Saving..." : (isLineupsOnly ? "Save Lineups" : "Save");
+      if (deleteBtn) {
+        deleteBtn.disabled = isSaving || deleteBtn.getAttribute("aria-disabled") === "true";
+      }
+      saveBtn.textContent = isSaving
+        ? "Saving..."
+        : (isReadOnlyNonPlanned ? "View Only" : (isLineupsOnly ? "Save Lineups" : "Save"));
     };
 
     const setResultsLoading = (isLoading) => {
       saveBtn.disabled = isLoading;
       cancelBtn.disabled = isLoading;
       if (getResultsBtn) getResultsBtn.disabled = isLoading;
-      if (deleteBtn) deleteBtn.disabled = isLoading;
+      if (deleteBtn) {
+        deleteBtn.disabled = isLoading || deleteBtn.getAttribute("aria-disabled") === "true";
+      }
       if (getResultsBtn) {
         getResultsBtn.textContent = isLoading ? "Getting..." : "Get Results";
       }
@@ -4892,6 +5161,7 @@
 
     if (deleteBtn) {
       deleteBtn.addEventListener("click", async () => {
+        if (isReadOnlyNonPlanned) return;
         const ok = window.confirm(`Delete match ${String(match?.id || "")}?`);
         if (!ok) return;
         setError("");
@@ -4947,6 +5217,7 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (isReadOnlyNonPlanned) return;
       setError("");
       setActionStatus("");
       const validationErrors = [];

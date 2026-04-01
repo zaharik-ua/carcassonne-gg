@@ -268,7 +268,37 @@ function loadDuelsByMatchId(matchId, callback) {
         id ASC
     `,
     [matchId],
-    callback
+    (err, rows) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+      const duels = Array.isArray(rows) ? rows : [];
+      const duelIds = duels
+        .map((row) => String(row?.id || "").trim())
+        .filter(Boolean);
+      if (!duelIds.length) {
+        callback(null, duels);
+        return;
+      }
+      loadGamesByDuelIds(duelIds, (gamesErr, gameRows) => {
+        if (gamesErr) {
+          callback(gamesErr);
+          return;
+        }
+        const gamesByDuelId = new Map();
+        (Array.isArray(gameRows) ? gameRows : []).forEach((game) => {
+          const duelId = String(game?.duel_id || "").trim();
+          if (!duelId) return;
+          if (!gamesByDuelId.has(duelId)) gamesByDuelId.set(duelId, []);
+          gamesByDuelId.get(duelId).push(game);
+        });
+        callback(null, duels.map((duel) => ({
+          ...duel,
+          games: gamesByDuelId.get(String(duel?.id || "").trim()) || [],
+        })));
+      });
+    }
   );
 }
 
@@ -307,7 +337,34 @@ function loadDuelsByIds(duelIds, callback) {
         id ASC
     `,
     normalizedIds,
-    callback
+    (err, rows) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+      const duels = Array.isArray(rows) ? rows : [];
+      if (!duels.length) {
+        callback(null, duels);
+        return;
+      }
+      loadGamesByDuelIds(normalizedIds, (gamesErr, gameRows) => {
+        if (gamesErr) {
+          callback(gamesErr);
+          return;
+        }
+        const gamesByDuelId = new Map();
+        (Array.isArray(gameRows) ? gameRows : []).forEach((game) => {
+          const duelId = String(game?.duel_id || "").trim();
+          if (!duelId) return;
+          if (!gamesByDuelId.has(duelId)) gamesByDuelId.set(duelId, []);
+          gamesByDuelId.get(duelId).push(game);
+        });
+        callback(null, duels.map((duel) => ({
+          ...duel,
+          games: gamesByDuelId.get(String(duel?.id || "").trim()) || [],
+        })));
+      });
+    }
   );
 }
 
