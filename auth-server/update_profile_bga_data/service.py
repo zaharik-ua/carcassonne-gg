@@ -21,7 +21,7 @@ class ProfileBgaDataUpdateService:
 
         before = self.repository.load_profile_snapshot(player.player_id) or {}
         result = self.client.fetch_profile_data(player)
-        if result.status != "success":
+        if result.status not in {"success", "removed"}:
             return {
                 "ok": False,
                 "player_id": player.player_id,
@@ -42,13 +42,17 @@ class ProfileBgaDataUpdateService:
             "updated": (
                 str(before.get("bga_nickname") or "") != str(after.get("bga_nickname") or "")
                 or str(before.get("avatar") or "") != str(after.get("avatar") or "")
+                or str(before.get("status") or "") != str(after.get("status") or "")
             ),
             "before": {
                 "bga_nickname": before.get("bga_nickname"),
                 "avatar": before.get("avatar"),
+                "status": before.get("status"),
             },
             "after": {
                 "bga_nickname": after.get("bga_nickname"),
                 "avatar": after.get("avatar"),
+                "status": after.get("status"),
             },
+            "message": result.message or ("Player marked as Removed." if result.status == "removed" else "BGA data updated."),
         }

@@ -2553,8 +2553,8 @@ app.post("/profiles", (req, res) => {
   if (profilePatch.master_title === 0) {
     profilePatch.master_title_date = null;
   }
-  if (profilePatch.status !== "Active" && profilePatch.status !== "Inactive") {
-    return res.status(400).json({ ok: false, message: "status must be Active or Inactive" });
+  if (profilePatch.status !== "Active" && profilePatch.status !== "Inactive" && profilePatch.status !== "Removed") {
+    return res.status(400).json({ ok: false, message: "status must be Active, Inactive or Removed" });
   }
   const requestedTournamentId = normalizeText(payload.tournament_id);
 
@@ -6832,8 +6832,8 @@ app.patch("/profiles/:playerId", (req, res) => {
     profilePatch.master_title_date = null;
   }
 
-  if (profilePatch.status !== "Active" && profilePatch.status !== "Inactive") {
-    return res.status(400).json({ ok: false, message: "status must be Active or Inactive" });
+  if (profilePatch.status !== "Active" && profilePatch.status !== "Inactive" && profilePatch.status !== "Removed") {
+    return res.status(400).json({ ok: false, message: "status must be Active, Inactive or Removed" });
   }
 
   if (isAdmin && hasAssociationInPayload && !profilePatch.association) {
@@ -7237,13 +7237,13 @@ app.post("/profiles/:playerId/get-bga-data", requireAdmin, async (req, res) => {
     const changes = buildAuditChanges(beforeRow || {}, afterRow || {}, PROFILE_AUDIT_FIELDS);
     const responsePayload = {
       ok: true,
-      message: scriptPayload?.updated
-        ? "BGA data updated."
-        : "BGA data is already up to date.",
+      message: scriptPayload?.message
+        || (scriptPayload?.updated ? "BGA data updated." : "BGA data is already up to date."),
       profile: {
         id: afterRow.id,
         bga_nickname: afterRow.bga_nickname || null,
         avatar: afterRow.avatar || null,
+        status: afterRow.status || "Active",
       },
       result: scriptPayload || null,
     };

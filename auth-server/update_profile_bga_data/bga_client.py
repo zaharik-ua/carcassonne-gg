@@ -46,7 +46,7 @@ class BgaProfileDataClient:
         )
         if matched is None:
             return ProfileBgaDataUpdateResult(
-                status="error",
+                status="removed",
                 source_url=source_url,
                 message=f"Player id {player.bga_player_id} was not found in BGA search results",
             )

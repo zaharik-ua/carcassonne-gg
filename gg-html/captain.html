@@ -1314,6 +1314,7 @@
   const MASTER_TITLE_LOGO_URL = "https://carcassonne.gg/gallery/master-title-logo.png";
   const ACTIVE_STATUS_LOGO_URL = "https://carcassonne.gg/gallery/active.png";
   const INACTIVE_STATUS_LOGO_URL = "https://carcassonne.gg/gallery/inactive.png";
+  const REMOVED_STATUS_LOGO_URL = "https://carcassonne.gg/gallery/profile-removed.png";
   const CAPTAIN_PROFILE_ICON_URL = "https://carcassonne.gg/gallery/captain-profile.png";
 
   const contentEl = document.getElementById("captainContent");
@@ -2506,7 +2507,16 @@
       ? ACTIVE_STATUS_LOGO_URL
       : statusRaw === "inactive"
         ? INACTIVE_STATUS_LOGO_URL
-        : "";
+        : statusRaw === "removed"
+          ? REMOVED_STATUS_LOGO_URL
+          : "";
+    const statusTitle = statusRaw === "active"
+      ? "Active"
+      : statusRaw === "inactive"
+        ? "Inactive"
+        : statusRaw === "removed"
+          ? "Removed"
+          : "";
 
     if (hasEmail) {
       const ggWrap = document.createElement("div");
@@ -2546,7 +2556,7 @@
       const statusIcon = document.createElement("img");
       statusIcon.src = statusIconUrl;
       statusIcon.alt = "";
-      statusIcon.title = statusRaw === "active" ? "Active" : "Inactive";
+      statusIcon.title = statusTitle;
       statusWrap.appendChild(statusIcon);
       row.appendChild(statusWrap);
     }
@@ -2827,6 +2837,7 @@
       createDropdown("Active", [
         { value: "Active", label: "Active" },
         { value: "Inactive", label: "Inactive" },
+        { value: "Removed", label: "Removed" },
       ])
     );
     const emailInput = addTextField("Login Email", "create_email", "", "email");
@@ -3235,6 +3246,7 @@
       createDropdown(String(profile?.status || "").trim() || "Active", [
         { value: "Active", label: "Active" },
         { value: "Inactive", label: "Inactive" },
+        { value: "Removed", label: "Removed" },
       ])
     );
 
@@ -3474,9 +3486,13 @@
           if (Object.prototype.hasOwnProperty.call(result?.profile || {}, "avatar")) {
             profile.avatar = result.profile.avatar || null;
           }
+          if (Object.prototype.hasOwnProperty.call(result?.profile || {}, "status")) {
+            profile.status = String(result.profile.status || "").trim() || "Active";
+          }
           const doneMessage = result?.message
             || "BGA data updated.";
-          setActionStatus(doneMessage, "success", false);
+          const resultStatus = String(result?.result?.status || result?.profile?.status || "").trim().toLowerCase();
+          setActionStatus(doneMessage, resultStatus === "removed" ? "error" : "success", false);
         } catch (_error) {
           setActionStatus("Failed to get BGA data.", "error", false);
         } finally {

@@ -47,6 +47,10 @@ class SqliteProfileBgaDataRepository:
         )
 
     def save_player_result(self, player: ProfileBgaDataUpdateRequest, result: ProfileBgaDataUpdateResult) -> None:
+        next_bga_nickname = result.bga_nickname if result.status == "success" else player.bga_nickname
+        next_avatar = result.avatar if result.status == "success" else player.avatar
+        next_status = "Removed" if result.status == "removed" else None
+
         with self._connect() as conn:
             conn.execute(
                 """
@@ -54,11 +58,12 @@ class SqliteProfileBgaDataRepository:
                 SET
                   bga_nickname = ?,
                   avatar = ?,
+                  status = COALESCE(?, status),
                   updated_at = CURRENT_TIMESTAMP
                 WHERE trim(COALESCE(id, '')) = trim(?)
                   AND deleted_at IS NULL
                 """,
-                (result.bga_nickname, result.avatar, str(player.player_id)),
+                (next_bga_nickname, next_avatar, next_status, str(player.player_id)),
             )
             conn.commit()
 
@@ -73,7 +78,8 @@ class SqliteProfileBgaDataRepository:
                 SELECT
                   trim(id) AS id,
                   NULLIF(trim(COALESCE(bga_nickname, '')), '') AS bga_nickname,
-                  NULLIF(trim(COALESCE(avatar, '')), '') AS avatar
+                  NULLIF(trim(COALESCE(avatar, '')), '') AS avatar,
+                  COALESCE(NULLIF(trim(status), ''), 'Active') AS status
                 FROM profiles
                 WHERE trim(COALESCE(id, '')) = trim(?)
                   AND deleted_at IS NULL
