@@ -196,6 +196,16 @@
     gap: 2px;
   }
 
+  .cp-player-avatar {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #eef2f6;
+  }
+
   .cp-player-nick {
     font-size: 16px;
     line-height: 1.1;
@@ -2424,6 +2434,32 @@
     });
   }
 
+  function buildBgaAvatarUrl(playerId, avatar) {
+    const playerIdText = String(playerId || "").trim();
+    const avatarText = String(avatar || "").trim();
+    if (!playerIdText || !avatarText) return "";
+
+    if (/^https?:\/\//i.test(avatarText)) {
+      return avatarText;
+    }
+
+    const defaultMatch = avatarText.match(/^_def_(\d+)$/);
+    if (defaultMatch) {
+      return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultMatch[1]}.jpg`;
+    }
+
+    if (!/^\d+$/.test(playerIdText)) return "";
+
+    const playerIdNumber = Number(playerIdText);
+    if (!Number.isFinite(playerIdNumber)) return "";
+
+    const firstFolder = String(Math.floor(playerIdNumber / 100000000));
+    const secondFolder = String(Math.floor(playerIdNumber / 1000000));
+    const thirdFolder = String(Math.floor(playerIdNumber / 1000));
+
+    return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+  }
+
   function createPlayerRow(profile) {
     const row = document.createElement("div");
     row.className = "cp-match-row";
@@ -2433,6 +2469,16 @@
       divider.className = "cp-divider-vertical";
       row.appendChild(divider);
     };
+
+    const avatarUrl = buildBgaAvatarUrl(profile?.id, profile?.avatar);
+    if (avatarUrl) {
+      const avatarImg = document.createElement("img");
+      avatarImg.className = "cp-player-avatar";
+      avatarImg.src = avatarUrl;
+      avatarImg.alt = "";
+      row.appendChild(avatarImg);
+      appendDivider();
+    }
 
     const main = document.createElement("div");
     main.className = "cp-player-main";
@@ -5867,6 +5913,7 @@
           const profileObj = {
             id: playerId,
             bga_nickname: String(profile?.bga_nickname || "").trim(),
+            avatar: String(profile?.avatar || "").trim(),
             name: String(profile?.name || "").trim(),
             association: normalizeCode(profile?.association),
             team_captain: profile?.team_captain,

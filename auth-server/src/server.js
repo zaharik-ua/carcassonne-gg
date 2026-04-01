@@ -2470,6 +2470,7 @@ app.get("/profiles/public", (_req, res, next) => {
       SELECT
         id,
         bga_nickname,
+        avatar,
         name,
         association,
         COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
