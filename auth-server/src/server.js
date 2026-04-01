@@ -438,6 +438,88 @@ function dbRunAsync(sql, params = []) {
   });
 }
 
+async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
+  const normalizedMatchId = String(matchId || "").trim();
+  if (!normalizedMatchId) return;
+
+  const aggregateRow = await dbGetAsync(
+    `
+      SELECT
+        COALESCE(SUM(COALESCE(l.dw1, 0)), 0) AS gw1,
+        COALESCE(SUM(COALESCE(l.dw2, 0)), 0) AS gw2,
+        COALESCE(SUM(CASE
+          WHEN COALESCE(l.status, 'Planned') = 'Done' AND COALESCE(l.dw1, 0) > COALESCE(l.dw2, 0)
+          THEN 1 ELSE 0 END), 0) AS dw1,
+        COALESCE(SUM(CASE
+          WHEN COALESCE(l.status, 'Planned') = 'Done' AND COALESCE(l.dw2, 0) > COALESCE(l.dw1, 0)
+          THEN 1 ELSE 0 END), 0) AS dw2,
+        COUNT(*) AS total_duels,
+        COALESCE(SUM(CASE WHEN COALESCE(l.status, 'Planned') = 'Done' THEN 1 ELSE 0 END), 0) AS done_duels,
+        COALESCE(SUM(CASE WHEN COALESCE(l.status, 'Planned') = 'Error' THEN 1 ELSE 0 END), 0) AS error_duels,
+        MIN(CASE
+          WHEN datetime(l.time_utc) IS NOT NULL THEN unixepoch(l.time_utc)
+          ELSE NULL
+        END) AS start_ts,
+        MAX(CASE
+          WHEN datetime(l.time_utc) IS NOT NULL
+          THEN unixepoch(l.time_utc) + (COALESCE(df.minutes_to_play, 60) * 60)
+          ELSE NULL
+        END) AS end_ts
+      FROM duels l
+      LEFT JOIN duel_formats df
+        ON lower(trim(df.format)) = lower(trim(l.duel_format))
+      WHERE trim(COALESCE(l.match_id, '')) = trim(?)
+        AND l.deleted_at IS NULL
+    `,
+    [normalizedMatchId]
+  );
+
+  const totalDuels = Number(aggregateRow?.total_duels || 0);
+  const doneDuels = Number(aggregateRow?.done_duels || 0);
+  const errorDuels = Number(aggregateRow?.error_duels || 0);
+  const startTs = aggregateRow?.start_ts === null || aggregateRow?.start_ts === undefined
+    ? null
+    : Number(aggregateRow.start_ts);
+  const endTs = aggregateRow?.end_ts === null || aggregateRow?.end_ts === undefined
+    ? null
+    : Number(aggregateRow.end_ts);
+  const nowTs = Math.floor(Date.now() / 1000);
+
+  let nextStatus = "Planned";
+  if (errorDuels > 0) {
+    nextStatus = "Error";
+  } else if (totalDuels > 0 && doneDuels === totalDuels) {
+    nextStatus = "Done";
+  } else if (startTs !== null && endTs !== null && startTs <= nowTs && nowTs < endTs) {
+    nextStatus = "In progress";
+  }
+
+  await dbRunAsync(
+    `
+      UPDATE matches
+      SET
+        dw1 = ?,
+        dw2 = ?,
+        gw1 = ?,
+        gw2 = ?,
+        status = ?,
+        updated_by = COALESCE(?, updated_by),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+        AND deleted_at IS NULL
+    `,
+    [
+      Number(aggregateRow?.dw1 || 0),
+      Number(aggregateRow?.dw2 || 0),
+      Number(aggregateRow?.gw1 || 0),
+      Number(aggregateRow?.gw2 || 0),
+      nextStatus,
+      actorPlayerId,
+      normalizedMatchId,
+    ]
+  );
+}
+
 function execFileAsync(file, args = [], options = {}) {
   return new Promise((resolve, reject) => {
     execFile(file, args, options, (error, stdout, stderr) => {
@@ -4472,33 +4554,37 @@ app.post("/duels/bulk-upsert", (req, res) => {
                   return res.status(500).json({ ok: false, message: "Failed to clear old duels" });
                 }
                 if (!sanitized.length) {
-                  return db.run("COMMIT", (commitErr) => {
-                    if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save duels" });
+                  return recomputeMatchAggregates(matchId, actorPlayerId)
+                    .then(() => dbRunAsync("COMMIT"))
+                    .then(() => {
+                      const action = previousLineups.length ? "delete" : "update";
+                      const eventType = previousLineups.length ? "lineups.deleted_all" : "lineups.updated";
+                      const changes = previousLineups.length
+                        ? buildAuditDeletionChanges({ lineups: previousLineups || [] }, ["lineups"])
+                        : buildAuditChanges({ lineups: previousLineups || [] }, { lineups: [] }, ["lineups"]);
 
-                    const action = previousLineups.length ? "delete" : "update";
-                    const eventType = previousLineups.length ? "lineups.deleted_all" : "lineups.updated";
-                    const changes = previousLineups.length
-                      ? buildAuditDeletionChanges({ lineups: previousLineups || [] }, ["lineups"])
-                      : buildAuditChanges({ lineups: previousLineups || [] }, { lineups: [] }, ["lineups"]);
-
-                    return logAuditEvent(
-                      {
-                        ...getAuditActor(req.user),
-                        event_type: eventType,
-                        entity_type: "lineups",
-                        action,
-                        record_id: matchId,
-                        changes,
-                        metadata: {
-                          match_id: matchId,
-                          lineups_count: 0,
-                          team_1: team1,
-                          team_2: team2,
+                      return logAuditEvent(
+                        {
+                          ...getAuditActor(req.user),
+                          event_type: eventType,
+                          entity_type: "lineups",
+                          action,
+                          record_id: matchId,
+                          changes,
+                          metadata: {
+                            match_id: matchId,
+                            lineups_count: 0,
+                            team_1: team1,
+                            team_2: team2,
+                          },
                         },
-                      },
-                      () => res.json({ ok: true, duels: [] })
-                    );
-                  });
+                        () => res.json({ ok: true, duels: [] })
+                      );
+                    })
+                    .catch(() => {
+                      db.run("ROLLBACK");
+                      return res.status(500).json({ ok: false, message: "Failed to save duels" });
+                    });
                 }
 
                 const stmt = db.prepare(`
@@ -4574,14 +4660,18 @@ app.post("/duels/bulk-upsert", (req, res) => {
                       pending -= 1;
                       if (pending === 0) {
                         stmt.finalize(() => {
-                          db.run("COMMIT", (commitErr) => {
-                            if (commitErr) return res.status(500).json({ ok: false, message: "Failed to save duels" });
-
-                            return loadDuelsByMatchId(matchId, (loadErr, savedDuels) => {
-                              if (loadErr) {
-                                return res.status(500).json({ ok: false, message: "Failed to load saved duels" });
-                              }
-
+                          recomputeMatchAggregates(matchId, actorPlayerId)
+                            .then(() => dbRunAsync("COMMIT"))
+                            .then(() => new Promise((resolve, reject) => {
+                              loadDuelsByMatchId(matchId, (loadErr, savedDuels) => {
+                                if (loadErr) {
+                                  reject(loadErr);
+                                  return;
+                                }
+                                resolve(savedDuels || []);
+                              });
+                            }))
+                            .then((savedDuels) => {
                               const action = previousLineups.length ? "update" : "create";
                               const eventType = previousLineups.length ? "lineups.updated" : "lineups.created";
                               const changes = previousLineups.length
@@ -4605,8 +4695,11 @@ app.post("/duels/bulk-upsert", (req, res) => {
                                 },
                                 () => res.json({ ok: true, duels: savedDuels || [] })
                               );
+                            })
+                            .catch(() => {
+                              db.run("ROLLBACK");
+                              return res.status(500).json({ ok: false, message: "Failed to save duels" });
                             });
-                          });
                         });
                       }
                     }

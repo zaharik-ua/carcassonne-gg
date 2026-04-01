@@ -281,6 +281,7 @@ class SqliteMatchRepository(MatchRepository):
                 THEN 1 ELSE 0 END), 0) AS dw2,
               COUNT(*) AS total_duels,
               COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') = 'Done' THEN 1 ELSE 0 END), 0) AS done_duels,
+              COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') = 'Error' THEN 1 ELSE 0 END), 0) AS error_duels,
               MIN(CASE
                 WHEN datetime(l.time_utc) IS NOT NULL THEN unixepoch(l.time_utc)
                 ELSE NULL
@@ -304,11 +305,14 @@ class SqliteMatchRepository(MatchRepository):
 
         total_duels = int(aggregate_row["total_duels"] or 0)
         done_duels = int(aggregate_row["done_duels"] or 0)
+        error_duels = int(aggregate_row["error_duels"] or 0)
         now_ts = int(datetime.now(timezone.utc).timestamp())
         start_ts = SqliteMatchRepository._to_int_or_none(aggregate_row["start_ts"])
         end_ts = SqliteMatchRepository._to_int_or_none(aggregate_row["end_ts"])
 
-        if total_duels > 0 and done_duels == total_duels:
+        if error_duels > 0:
+            next_status = "Error"
+        elif total_duels > 0 and done_duels == total_duels:
             next_status = "Done"
         elif start_ts is not None and end_ts is not None and start_ts <= now_ts < end_ts:
             next_status = "In progress"
