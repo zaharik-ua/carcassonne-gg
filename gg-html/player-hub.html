@@ -987,6 +987,60 @@
     font-size: 14px;
   }
 
+  .cp-streamer-field {
+    justify-content: flex-start;
+  }
+
+  .cp-streamer-field img {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .cp-stream-match-picker {
+    display: grid;
+    gap: 8px;
+  }
+
+  .cp-stream-match-option {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 10px;
+    border: 1px solid #d6dbe3;
+    border-radius: 6px;
+    background: #fff;
+  }
+
+  .cp-stream-match-option input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+  }
+
+  .cp-stream-match-option .cp-match-row {
+    min-height: 0;
+    border-top: none;
+    padding: 0;
+    width: 100%;
+  }
+
+  .cp-stream-match-option .cp-match-right {
+    display: none;
+  }
+
+  .cp-stream-empty {
+    border: 1px dashed #c8ced8;
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 13px;
+    color: #667286;
+    background: #fafbfc;
+  }
+
   .cp-calendar {
     border: 1px solid #c8ced8;
     border-radius: 6px;
@@ -1306,6 +1360,7 @@
   const DUELS_URL = `${AUTH_BASE}/duels`;
   const FRIENDLY_FIND_URL = `${AUTH_BASE}/friendly-find`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
+  const STREAMS_URL = `${AUTH_BASE}/streams`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const PROFILES_URL = `${AUTH_BASE}/profiles`;
   const PROFILE_CONTACTS_URL = `${AUTH_BASE}/profiles/contacts`;
@@ -1455,6 +1510,10 @@
     return String(captainPageState.playerId || "").trim();
   }
 
+  function getStreamIdFromUrl() {
+    return String(captainPageState.streamId || "").trim();
+  }
+
   function buildCaptainUrl(options = {}) {
     const url = new URL(window.location.href);
     const nextView = String(options.view || "").trim().toLowerCase();
@@ -1484,6 +1543,7 @@
     url.searchParams.delete("create");
     url.searchParams.delete("match_id");
     url.searchParams.delete("player_id");
+    url.searchParams.delete("stream_id");
     return url.toString();
   }
 
@@ -1497,6 +1557,7 @@
       mode: isEdit ? "edit" : isCreate ? "create" : "list",
       matchId: String(params.get("match_id") || "").trim(),
       playerId: String(params.get("player_id") || "").trim(),
+      streamId: String(params.get("stream_id") || "").trim(),
     };
   }
 
@@ -1509,6 +1570,7 @@
     mode: legacySubviewState.mode,
     matchId: legacySubviewState.matchId,
     playerId: legacySubviewState.playerId,
+    streamId: legacySubviewState.streamId,
   };
 
   function sanitizeCaptainPageState() {
@@ -1529,19 +1591,27 @@
       : "list";
     captainPageState.matchId = String(captainPageState.matchId || "").trim();
     captainPageState.playerId = String(captainPageState.playerId || "").trim();
+    captainPageState.streamId = String(captainPageState.streamId || "").trim();
     if (captainPageState.mode !== "edit") {
       captainPageState.matchId = "";
       captainPageState.playerId = "";
+      captainPageState.streamId = "";
     } else if (captainPageState.matchId) {
       captainPageState.playerId = "";
+      captainPageState.streamId = "";
     } else if (captainPageState.playerId) {
       captainPageState.matchId = "";
+      captainPageState.streamId = "";
+    } else if (captainPageState.streamId) {
+      captainPageState.matchId = "";
+      captainPageState.playerId = "";
     } else {
       captainPageState.mode = "list";
     }
     if (captainPageState.mode === "create") {
       captainPageState.matchId = "";
       captainPageState.playerId = "";
+      captainPageState.streamId = "";
     }
   }
 
@@ -1553,6 +1623,7 @@
     captainPageState.mode = "list";
     captainPageState.matchId = "";
     captainPageState.playerId = "";
+    captainPageState.streamId = "";
     sanitizeCaptainPageState();
   }
 
@@ -1592,6 +1663,9 @@
     if (Object.prototype.hasOwnProperty.call(nextState, "playerId")) {
       captainPageState.playerId = nextState.playerId;
     }
+    if (Object.prototype.hasOwnProperty.call(nextState, "streamId")) {
+      captainPageState.streamId = nextState.streamId;
+    }
     sanitizeCaptainPageState();
     if (options.syncUrl) {
       syncCaptainUrl(!!options.replaceUrl);
@@ -1607,6 +1681,7 @@
       mode: "create",
       matchId: "",
       playerId: "",
+      streamId: "",
     });
   }
 
@@ -1616,6 +1691,7 @@
       mode: "edit",
       matchId: String(target.matchId || "").trim(),
       playerId: String(target.playerId || "").trim(),
+      streamId: String(target.streamId || "").trim(),
     });
   }
 
@@ -1625,6 +1701,7 @@
       mode: "list",
       matchId: "",
       playerId: "",
+      streamId: "",
     });
   }
 
@@ -1689,6 +1766,7 @@
             mode: "list",
             matchId: "",
             playerId: "",
+            streamId: "",
           }, { syncUrl: true });
           return;
         }
@@ -1698,6 +1776,7 @@
           mode: "list",
           matchId: "",
           playerId: "",
+          streamId: "",
         }, { syncUrl: true });
       });
 
@@ -2686,6 +2765,441 @@
     if (finished.length > 0) {
       contentEl.appendChild(renderSectionBlock("Finished", finished, teamsById, lineupsByMatch, profilesById, options));
     }
+  }
+
+  function getStreamerForCurrentUser(streamers, currentUserPlayerId) {
+    const profileId = String(currentUserPlayerId || "").trim();
+    if (!profileId) return null;
+    return (Array.isArray(streamers) ? streamers : []).find((entry) => (
+      String(entry?.profile_id ?? entry?.player_id ?? "").trim() === profileId
+    )) || null;
+  }
+
+  function createStreamerStaticField(streamer) {
+    const field = document.createElement("div");
+    field.className = "cp-static-field cp-streamer-field";
+    const avatarUrl = String(streamer?.avatar || "").trim() || buildBgaAvatarUrl(streamer?.profile_id, streamer?.avatar);
+    if (avatarUrl) {
+      const img = document.createElement("img");
+      img.src = avatarUrl;
+      img.alt = "";
+      field.appendChild(img);
+    }
+    const text = document.createElement("span");
+    text.textContent = String(streamer?.name || streamer?.profile_bga_nickname || streamer?.profile_name || streamer?.profile_id || "-").trim() || "-";
+    field.appendChild(text);
+    return field;
+  }
+
+  function createStreamMatchRow(match, teamsById, tournamentsById, options = {}) {
+    const row = document.createElement("div");
+    row.className = "cp-match-row";
+
+    const tournamentId = String(match?.tournament_id || "").trim();
+    const tournament = tournamentsById?.get(tournamentId) || null;
+    const tournamentLogo = String(tournament?.logo || "").trim();
+    if (tournamentLogo) {
+      const logoWrap = document.createElement("div");
+      logoWrap.className = "cp-match-time";
+      const logo = document.createElement("img");
+      logo.className = "cp-team-flag";
+      logo.src = tournamentLogo;
+      logo.alt = "";
+      logo.style.width = "28px";
+      logo.style.height = "28px";
+      logoWrap.appendChild(logo);
+      row.appendChild(logoWrap);
+
+      const divider = document.createElement("div");
+      divider.className = "cp-divider-vertical";
+      row.appendChild(divider);
+    }
+
+    const timeWrap = document.createElement("div");
+    timeWrap.className = "cp-match-time";
+    const timeText = document.createElement("div");
+    timeText.className = "cp-match-time-text";
+    timeText.innerHTML = esc(formatMatchTime(match?.time_utc ?? match?.time)).replaceAll("\n", "<br>");
+    timeWrap.appendChild(timeText);
+    row.appendChild(timeWrap);
+
+    const timeDivider = document.createElement("div");
+    timeDivider.className = "cp-divider-vertical";
+    row.appendChild(timeDivider);
+
+    const teamsWrap = document.createElement("div");
+    teamsWrap.className = "cp-teams";
+    const team1Id = readMatchTeam1(match);
+    const team2Id = readMatchTeam2(match);
+    const team1 = teamsById.get(team1Id) || null;
+    const team2 = teamsById.get(team2Id) || null;
+
+    [
+      { team: team1, name: team1?.name || team1Id || "-", key: "team1" },
+      { team: team2, name: team2?.name || team2Id || "-", key: "team2" },
+    ].forEach((entry) => {
+      const teamRow = document.createElement("div");
+      teamRow.className = "cp-team-row";
+      if (entry.team?.logo) {
+        const img = document.createElement("img");
+        img.className = "cp-team-flag";
+        img.src = entry.team.logo;
+        img.alt = "";
+        teamRow.appendChild(img);
+      }
+      const nameEl = document.createElement("span");
+      nameEl.textContent = entry.name;
+      teamRow.appendChild(nameEl);
+      teamsWrap.appendChild(teamRow);
+    });
+    row.appendChild(teamsWrap);
+
+    const right = document.createElement("div");
+    right.className = "cp-match-right";
+    if (options.showEdit) {
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "cp-edit-btn";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => {
+        openCaptainEdit(CAPTAIN_VIEWS.STREAMS, { streamId: String(options.streamId || "") });
+      });
+      right.appendChild(editBtn);
+    }
+    row.appendChild(right);
+
+    return row;
+  }
+
+  function renderStreams(streams, teamsById, tournamentsById) {
+    setPageHeading("My Streams");
+    countEl.textContent = `${streams.length} streams`;
+    hintEl.textContent = "";
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.style.display = "grid";
+    contentEl.style.gap = "20px";
+
+    const ongoing = streams
+      .filter((item) => item?.match_id && !isPastMatch(item))
+      .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
+    const finished = streams
+      .filter((item) => item?.match_id && isPastMatch(item))
+      .sort((a, b) => parseMatchTimeUtc(b) - parseMatchTimeUtc(a));
+
+    const addSection = (title, rows) => {
+      if (!rows.length) return;
+      const wrap = document.createElement("div");
+      wrap.style.display = "grid";
+      wrap.style.gap = "6px";
+      wrap.appendChild(renderSectionTitle(title));
+      const list = document.createElement("div");
+      list.className = "captain-list";
+      rows.forEach((stream) => {
+        list.appendChild(createStreamMatchRow(stream, teamsById, tournamentsById, {
+          showEdit: true,
+          streamId: String(stream?.id || ""),
+        }));
+      });
+      wrap.appendChild(list);
+      contentEl.appendChild(wrap);
+    };
+
+    addSection("Ongoing", ongoing);
+    addSection("Finished", finished);
+
+    if (!ongoing.length && !finished.length) {
+      contentEl.className = "captain-alert";
+      contentEl.textContent = "No streams found.";
+    }
+  }
+
+  function renderStreamEditForm(streamer, teamsById, tournamentsById, formContext = {}, formMode = "create") {
+    const isCreateMode = formMode === "create";
+    const source = formContext?.stream && typeof formContext.stream === "object" ? formContext.stream : {};
+    const ongoingMatches = Array.isArray(formContext?.ongoingMatches) ? formContext.ongoingMatches : [];
+    setPageHeading(isCreateMode ? "Create stream" : "Edit stream");
+    countEl.textContent = isCreateMode ? "Creating stream entries" : `Editing stream: ${String(source?.id || "")}`;
+    hintEl.textContent = "";
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.style.display = "";
+    contentEl.style.gap = "";
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+    form.noValidate = true;
+
+    const topActions = document.createElement("div");
+    topActions.className = "cp-edit-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    topActions.appendChild(saveBtn);
+    topActions.appendChild(cancelBtn);
+    let deleteBtn = null;
+    if (!isCreateMode) {
+      deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "cp-btn cp-btn-danger";
+      deleteBtn.textContent = "Delete";
+      topActions.appendChild(deleteBtn);
+    }
+    form.appendChild(topActions);
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "cp-edit-error cp-hidden";
+    form.appendChild(errorEl);
+
+    const addRow = (labelText, control) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      row.appendChild(label);
+      row.appendChild(control);
+      form.appendChild(row);
+      return row;
+    };
+
+    const setError = (message) => {
+      const text = String(message || "").trim();
+      if (!text) {
+        errorEl.textContent = "";
+        errorEl.classList.add("cp-hidden");
+        return;
+      }
+      errorEl.textContent = text;
+      errorEl.classList.remove("cp-hidden");
+    };
+
+    const setSaving = (isSaving) => {
+      saveBtn.disabled = isSaving;
+      cancelBtn.disabled = isSaving;
+      if (deleteBtn) deleteBtn.disabled = isSaving;
+      saveBtn.textContent = isSaving ? "Saving..." : "Save";
+    };
+
+    addRow("Streamer", createStreamerStaticField(streamer));
+
+    const linkInput = document.createElement("input");
+    linkInput.type = "url";
+    linkInput.value = String(source?.link || "");
+    linkInput.required = true;
+    addRow("Link", linkInput);
+
+    if (isCreateMode) {
+      const matchesWrap = document.createElement("div");
+      matchesWrap.className = "cp-stream-match-picker";
+      const checkboxes = [];
+      ongoingMatches.forEach((match) => {
+        const option = document.createElement("label");
+        option.className = "cp-stream-match-option";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = String(match?.id || "");
+        option.appendChild(checkbox);
+        option.appendChild(createStreamMatchRow(match, teamsById, tournamentsById));
+        matchesWrap.appendChild(option);
+        checkboxes.push(checkbox);
+      });
+      if (!ongoingMatches.length) {
+        const empty = document.createElement("div");
+        empty.className = "cp-stream-empty";
+        empty.textContent = "No ongoing matches available.";
+        matchesWrap.appendChild(empty);
+      }
+      addRow("Matches", matchesWrap);
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        setError("");
+        const link = String(linkInput.value || "").trim();
+        const entityIds = checkboxes.map((input) => input.checked ? input.value : "").filter(Boolean);
+        if (!link) {
+          setError("Link is required.");
+          return;
+        }
+        if (!entityIds.length) {
+          setError("Select at least one match.");
+          return;
+        }
+
+        setSaving(true);
+        try {
+          const response = await fetch(STREAMS_URL, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              entity_type: "matches",
+              entity_ids: entityIds,
+              streamer_id: streamer?.id,
+              link,
+            }),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result?.ok) {
+            setError(result?.message || "Failed to create streams.");
+            return;
+          }
+          resetCaptainSubview(CAPTAIN_VIEWS.STREAMS);
+        } catch (_error) {
+          setError("Failed to create streams.");
+        } finally {
+          setSaving(false);
+        }
+      });
+    } else {
+      const matchField = document.createElement("div");
+      matchField.className = "cp-static-field";
+      matchField.style.padding = "8px";
+      matchField.style.background = "#fff";
+      matchField.style.borderColor = "#d6dbe3";
+      matchField.appendChild(createStreamMatchRow(source, teamsById, tournamentsById));
+      addRow("Match", matchField);
+
+      const showDeleteConfirmDialog = () => {
+        const overlay = document.createElement("div");
+        overlay.style.position = "fixed";
+        overlay.style.inset = "0";
+        overlay.style.background = "rgba(24, 31, 41, 0.42)";
+        overlay.style.display = "flex";
+        overlay.style.alignItems = "center";
+        overlay.style.justifyContent = "center";
+        overlay.style.padding = "16px";
+        overlay.style.zIndex = "1000";
+
+        const dialog = document.createElement("div");
+        dialog.style.width = "100%";
+        dialog.style.maxWidth = "420px";
+        dialog.style.background = "#fff";
+        dialog.style.border = "1px solid #d8dee8";
+        dialog.style.borderRadius = "8px";
+        dialog.style.boxShadow = "0 16px 36px rgba(15, 28, 48, 0.22)";
+        dialog.style.padding = "16px";
+        dialog.style.display = "grid";
+        dialog.style.gap = "12px";
+
+        const title = document.createElement("div");
+        title.textContent = "Delete stream?";
+        title.style.fontSize = "16px";
+        title.style.fontWeight = "700";
+        title.style.color = "#222";
+
+        const text = document.createElement("div");
+        text.textContent = "This action will soft delete the stream entry.";
+        text.style.fontSize = "14px";
+        text.style.lineHeight = "1.4";
+        text.style.color = "#4b5563";
+
+        const actions = document.createElement("div");
+        actions.style.display = "flex";
+        actions.style.justifyContent = "flex-end";
+        actions.style.gap = "8px";
+
+        const cancelModalBtn = document.createElement("button");
+        cancelModalBtn.type = "button";
+        cancelModalBtn.className = "cp-btn cp-btn-secondary";
+        cancelModalBtn.textContent = "Cancel";
+
+        const confirmDeleteBtn = document.createElement("button");
+        confirmDeleteBtn.type = "button";
+        confirmDeleteBtn.className = "cp-btn cp-btn-danger";
+        confirmDeleteBtn.textContent = "Delete";
+        confirmDeleteBtn.style.marginLeft = "0";
+
+        const closeModal = () => overlay.remove();
+        cancelModalBtn.addEventListener("click", closeModal);
+        overlay.addEventListener("click", (event) => {
+          if (event.target === overlay) closeModal();
+        });
+        confirmDeleteBtn.addEventListener("click", async () => {
+          confirmDeleteBtn.disabled = true;
+          cancelModalBtn.disabled = true;
+          confirmDeleteBtn.textContent = "Deleting...";
+          try {
+            const response = await fetch(`${STREAMS_URL}/${encodeURIComponent(String(source?.id || ""))}`, {
+              method: "DELETE",
+              credentials: "include",
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result?.ok) {
+              setError(result?.message || "Failed to delete stream.");
+              confirmDeleteBtn.disabled = false;
+              cancelModalBtn.disabled = false;
+              confirmDeleteBtn.textContent = "Delete";
+              return;
+            }
+            closeModal();
+            resetCaptainSubview(CAPTAIN_VIEWS.STREAMS);
+          } catch (_error) {
+            setError("Failed to delete stream.");
+            confirmDeleteBtn.disabled = false;
+            cancelModalBtn.disabled = false;
+            confirmDeleteBtn.textContent = "Delete";
+          }
+        });
+
+        actions.appendChild(cancelModalBtn);
+        actions.appendChild(confirmDeleteBtn);
+        dialog.appendChild(title);
+        dialog.appendChild(text);
+        dialog.appendChild(actions);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+      };
+
+      if (deleteBtn) {
+        deleteBtn.addEventListener("click", () => {
+          setError("");
+          showDeleteConfirmDialog();
+        });
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        setError("");
+        const link = String(linkInput.value || "").trim();
+        if (!link) {
+          setError("Link is required.");
+          return;
+        }
+        setSaving(true);
+        try {
+          const response = await fetch(`${STREAMS_URL}/${encodeURIComponent(String(source?.id || ""))}`, {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: source?.id,
+              link,
+            }),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result?.ok) {
+            setError(result?.message || "Failed to update stream.");
+            return;
+          }
+          resetCaptainSubview(CAPTAIN_VIEWS.STREAMS);
+        } catch (_error) {
+          setError("Failed to update stream.");
+        } finally {
+          setSaving(false);
+        }
+      });
+    }
+
+    cancelBtn.addEventListener("click", () => {
+      resetCaptainSubview(CAPTAIN_VIEWS.STREAMS);
+    });
+
+    contentEl.appendChild(form);
   }
 
   function isTruthyFlag(value) {
@@ -6068,6 +6582,7 @@
       const isCreateMode = captainPageState.mode === "create";
       const editMatchId = String(captainPageState.matchId || "").trim();
       const editPlayerId = String(captainPageState.playerId || "").trim();
+      const editStreamId = String(captainPageState.streamId || "").trim();
       const associationOverride = captainPageState.associationOverride;
       let associationCode = associationOverride;
       let captainAssociationCode = "";
@@ -6197,8 +6712,8 @@
         associationCode = isAdminUser ? associationCode : captainAssociationCode;
       }
 
-      const [matchesRes, teamsRes, tournamentsRes, profilesRes, friendlyFindRes, streamersRes] = await Promise.all([
-        activeView === CAPTAIN_VIEWS.MATCHES
+      const [matchesRes, teamsRes, tournamentsRes, profilesRes, friendlyFindRes, streamersRes, streamsRes] = await Promise.all([
+        (activeView === CAPTAIN_VIEWS.MATCHES || activeView === CAPTAIN_VIEWS.STREAMS)
           ? fetch(MATCHES_URL, { method: "GET", credentials: "include" })
           : Promise.resolve(null),
         fetch(TEAMS_URL, { method: "GET" }),
@@ -6210,16 +6725,19 @@
         activeView === CAPTAIN_VIEWS.STREAMS
           ? fetch(STREAMERS_URL, { method: "GET", credentials: "include" })
           : Promise.resolve(null),
+        activeView === CAPTAIN_VIEWS.STREAMS
+          ? fetch(STREAMS_URL, { method: "GET", credentials: "include" })
+          : Promise.resolve(null),
       ]);
 
-      if (activeView === CAPTAIN_VIEWS.MATCHES && (!matchesRes || !matchesRes.ok)) {
+      if ((activeView === CAPTAIN_VIEWS.MATCHES || activeView === CAPTAIN_VIEWS.STREAMS) && (!matchesRes || !matchesRes.ok)) {
         contentEl.className = "captain-alert";
         contentEl.textContent = "Failed to load matches.";
         countEl.textContent = "";
         return;
       }
 
-      const matchesData = activeView === CAPTAIN_VIEWS.MATCHES
+      const matchesData = (activeView === CAPTAIN_VIEWS.MATCHES || activeView === CAPTAIN_VIEWS.STREAMS)
         ? await matchesRes.json().catch(() => ({}))
         : {};
       const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
@@ -6236,9 +6754,14 @@
         ? await streamersRes.json().catch(() => ({}))
         : {};
       const streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
+      const streamsData = streamsRes?.ok
+        ? await streamsRes.json().catch(() => ({}))
+        : {};
+      const streams = Array.isArray(streamsData?.streams) ? streamsData.streams : [];
       const isStreamerUser = !!currentUserPlayerId && streamers.some((entry) => (
         String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserPlayerId
       ));
+      const currentStreamer = getStreamerForCurrentUser(streamers, currentUserPlayerId);
 
       const teamsById = new Map();
       if (teamsRes.ok) {
@@ -6322,8 +6845,6 @@
           renderRestrictedSectionMessage("This section is available only to users added to streamers.");
           return;
         }
-        renderStaticInfoSection("My Streams");
-        return;
       }
 
       if (activeView === CAPTAIN_VIEWS.NATIONALS) {
@@ -6432,6 +6953,15 @@
         if (isCreateMode || isEditMode) {
           addButtonEl.classList.add("cp-hidden");
         }
+      } else if (activeView === CAPTAIN_VIEWS.STREAMS) {
+        addButtonEl.classList.remove("cp-hidden");
+        addButtonEl.textContent = "Create";
+        addButtonEl.onclick = () => {
+          openCaptainCreate(CAPTAIN_VIEWS.STREAMS);
+        };
+        if (isCreateMode || isEditMode) {
+          addButtonEl.classList.add("cp-hidden");
+        }
       } else {
         addButtonEl.classList.add("cp-hidden");
       }
@@ -6462,6 +6992,7 @@
               mode: "list",
               matchId: "",
               playerId: "",
+              streamId: "",
             }, { syncUrl: true });
           }
         );
@@ -6507,6 +7038,44 @@
         } else {
           hintEl.textContent = "";
         }
+        return;
+      }
+
+      if (activeView === CAPTAIN_VIEWS.STREAMS) {
+        const ongoingMatches = matches
+          .filter((match) => !isPastMatch(match))
+          .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
+        const streamMatchIds = new Set(matches.map((match) => String(match?.id || "").trim()).filter(Boolean));
+        const visibleStreams = streams.filter((stream) => (
+          String(stream?.entity_type || "").trim().toLowerCase() === "match"
+          && streamMatchIds.has(String(stream?.entity_id || stream?.match_id || "").trim())
+        ));
+
+        if (isCreateMode) {
+          if (!currentStreamer) {
+            contentEl.className = "captain-alert";
+            contentEl.textContent = "Current user is not linked to a streamer.";
+            countEl.textContent = "";
+            return;
+          }
+          renderStreamEditForm(currentStreamer, teamsById, tournamentsById, { ongoingMatches }, "create");
+          return;
+        }
+
+        if (isEditMode) {
+          const streamToEdit = visibleStreams.find((item) => String(item?.id || "") === editStreamId);
+          if (!streamToEdit) {
+            contentEl.className = "captain-alert";
+            contentEl.textContent = `Stream not found: ${editStreamId}`;
+            countEl.textContent = "";
+            return;
+          }
+          const streamerForForm = streamers.find((entry) => Number(entry?.id) === Number(streamToEdit?.streamer_id)) || currentStreamer;
+          renderStreamEditForm(streamerForForm, teamsById, tournamentsById, { stream: streamToEdit }, "edit");
+          return;
+        }
+
+        renderStreams(visibleStreams, teamsById, tournamentsById);
         return;
       }
 
@@ -6637,6 +7206,7 @@
               mode: "list",
               matchId: "",
               playerId: "",
+              streamId: "",
             }, { syncUrl: true });
           });
         }

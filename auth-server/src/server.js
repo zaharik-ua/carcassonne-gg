@@ -1881,6 +1881,7 @@ function ensureStreamsSchema() {
       entity_id TEXT NOT NULL,
       streamer_id INTEGER NOT NULL,
       link TEXT NOT NULL,
+      deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -1899,6 +1900,7 @@ function ensureStreamsSchema() {
       addColumnIfMissing(columns, "streams", "entity_id", "TEXT");
       addColumnIfMissing(columns, "streams", "streamer_id", "INTEGER");
       addColumnIfMissing(columns, "streams", "link", "TEXT");
+      addColumnIfMissing(columns, "streams", "deleted_at", "TEXT");
       addColumnIfMissing(columns, "streams", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "streams", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
     });
@@ -2512,6 +2514,96 @@ function requireAdmin(req, res, next) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
   }
   return next();
+}
+
+function normalizeStreamEntityType(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "match" || raw === "matches") return "match";
+  if (raw === "duel" || raw === "duels") return "duel";
+  return null;
+}
+
+function getUserStreamerByProfileId(profileId, done) {
+  const normalizedProfileId = String(profileId || "").trim();
+  if (!normalizedProfileId) {
+    done(null, null);
+    return;
+  }
+  db.get(
+    `
+      SELECT
+        s.id,
+        s.name,
+        s.avatar,
+        s.profile_id
+      FROM streamers s
+      WHERE trim(COALESCE(s.profile_id, '')) = trim(?)
+      LIMIT 1
+    `,
+    [normalizedProfileId],
+    done
+  );
+}
+
+function getStreamById(streamId, done) {
+  db.get(
+    `
+      SELECT
+        s.id,
+        s.entity_type,
+        s.entity_id,
+        s.streamer_id,
+        s.link,
+        s.created_at,
+        s.updated_at,
+        sr.name AS streamer_name,
+        sr.avatar AS streamer_avatar,
+        sr.profile_id AS streamer_profile_id,
+        m.id AS match_id,
+        m.tournament_id,
+        m.time_utc,
+        m.team_1,
+        m.team_2,
+        m.status AS match_status
+      FROM streams s
+      INNER JOIN streamers sr
+        ON sr.id = s.streamer_id
+      LEFT JOIN matches m
+        ON s.entity_type = 'match'
+       AND m.id = s.entity_id
+       AND m.deleted_at IS NULL
+      WHERE s.id = ?
+        AND s.deleted_at IS NULL
+      LIMIT 1
+    `,
+    [streamId],
+    done
+  );
+}
+
+function canManageStreamRow(row, user) {
+  if (!row || !user) return false;
+  if (Number(user.admin) === 1) return true;
+  const linkedPlayerId = String(user.player_id || "").trim();
+  return !!linkedPlayerId && linkedPlayerId === String(row.streamer_profile_id || "").trim();
+}
+
+function validateStreamMatchEntity(entityType, entityId, done) {
+  if (entityType !== "match") {
+    done(null, false);
+    return;
+  }
+  db.get(
+    `
+      SELECT id
+      FROM matches
+      WHERE id = ?
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
+    [entityId],
+    (err, row) => done(err, !!row)
+  );
 }
 
 app.get("/health", (_req, res) => {
@@ -4064,6 +4156,333 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
       );
     }
   );
+});
+
+app.get("/streams", (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const isAdmin = Number(req.user.admin) === 1;
+  const linkedPlayerId = String(req.user.player_id || "").trim();
+  const streamIdFilter = normalizePositiveInteger(req.query?.id);
+
+  const continueWithStreamer = (streamerRow) => {
+    if (!isAdmin && !streamerRow) {
+      return res.status(403).json({ ok: false, message: "This section is available only to users added to streamers." });
+    }
+
+    const params = [];
+    let whereSql = "WHERE s.deleted_at IS NULL";
+    if (!isAdmin) {
+      whereSql += " AND s.streamer_id = ?";
+      params.push(streamerRow.id);
+    }
+    if (streamIdFilter) {
+      whereSql += " AND s.id = ?";
+      params.push(streamIdFilter);
+    }
+
+    return db.all(
+      `
+        SELECT
+          s.id,
+          s.entity_type,
+          s.entity_id,
+          s.streamer_id,
+          s.link,
+          s.created_at,
+          s.updated_at,
+          sr.name AS streamer_name,
+          sr.avatar AS streamer_avatar,
+          sr.profile_id AS streamer_profile_id,
+          m.id AS match_id,
+          m.tournament_id,
+          m.time_utc,
+          m.team_1,
+          m.team_2,
+          m.status AS match_status
+        FROM streams s
+        INNER JOIN streamers sr
+          ON sr.id = s.streamer_id
+        LEFT JOIN matches m
+          ON s.entity_type = 'match'
+         AND m.id = s.entity_id
+         AND m.deleted_at IS NULL
+        ${whereSql}
+        ORDER BY datetime(COALESCE(m.time_utc, s.created_at)) DESC, s.id DESC
+      `,
+      params,
+      (err, rows) => {
+        if (err) return next(err);
+        return res.json({ ok: true, streams: rows || [] });
+      }
+    );
+  };
+
+  if (isAdmin) return continueWithStreamer(null);
+  return getUserStreamerByProfileId(linkedPlayerId, (streamerErr, streamerRow) => {
+    if (streamerErr) return next(streamerErr);
+    return continueWithStreamer(streamerRow || null);
+  });
+});
+
+app.post("/streams", (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const isAdmin = Number(req.user.admin) === 1;
+  const linkedPlayerId = String(req.user.player_id || "").trim();
+  const entityType = normalizeStreamEntityType(req.body?.entity_type);
+  const link = String(req.body?.link || "").trim();
+  const entityIds = Array.from(new Set(
+    (Array.isArray(req.body?.entity_ids) ? req.body.entity_ids : [req.body?.entity_id])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  ));
+
+  if (!entityType) {
+    return res.status(400).json({ ok: false, message: "entity_type must be match/matches or duel/duels" });
+  }
+  if (!link) {
+    return res.status(400).json({ ok: false, message: "link is required" });
+  }
+  if (!entityIds.length) {
+    return res.status(400).json({ ok: false, message: "At least one entity_id is required" });
+  }
+
+  const continueWithStreamer = (streamerRow) => {
+    if (!streamerRow) {
+      return res.status(403).json({ ok: false, message: "Current user is not linked to a streamer." });
+    }
+
+    const validateOne = (index) => {
+      if (index >= entityIds.length) {
+        const placeholders = entityIds.map(() => "?").join(", ");
+        return db.all(
+          `
+            SELECT entity_id
+            FROM streams
+            WHERE deleted_at IS NULL
+              AND streamer_id = ?
+              AND entity_type = ?
+              AND entity_id IN (${placeholders})
+          `,
+          [streamerRow.id, entityType, ...entityIds],
+          (dupErr, rows) => {
+            if (dupErr) return next(dupErr);
+            const duplicates = new Set((rows || []).map((row) => String(row?.entity_id || "").trim()).filter(Boolean));
+            if (duplicates.size) {
+              return res.status(409).json({
+                ok: false,
+                message: "One or more selected matches already have a stream for this streamer.",
+              });
+            }
+
+            db.run("BEGIN TRANSACTION", (beginErr) => {
+              if (beginErr) return next(beginErr);
+              const insertedIds = [];
+
+              const rollback = (statusCode, message) => {
+                db.run("ROLLBACK", () => {
+                  res.status(statusCode).json({ ok: false, message });
+                });
+              };
+
+              const insertOne = (insertIndex) => {
+                if (insertIndex >= entityIds.length) {
+                  return db.run("COMMIT", (commitErr) => {
+                    if (commitErr) return rollback(500, "Failed to save streams.");
+                    if (!insertedIds.length) return res.status(201).json({ ok: true, streams: [] });
+                    const resultPlaceholders = insertedIds.map(() => "?").join(", ");
+                    return db.all(
+                      `
+                        SELECT
+                          s.id,
+                          s.entity_type,
+                          s.entity_id,
+                          s.streamer_id,
+                          s.link,
+                          s.created_at,
+                          s.updated_at,
+                          sr.name AS streamer_name,
+                          sr.avatar AS streamer_avatar,
+                          sr.profile_id AS streamer_profile_id,
+                          m.id AS match_id,
+                          m.tournament_id,
+                          m.time_utc,
+                          m.team_1,
+                          m.team_2,
+                          m.status AS match_status
+                        FROM streams s
+                        INNER JOIN streamers sr
+                          ON sr.id = s.streamer_id
+                        LEFT JOIN matches m
+                          ON s.entity_type = 'match'
+                         AND m.id = s.entity_id
+                         AND m.deleted_at IS NULL
+                        WHERE s.id IN (${resultPlaceholders})
+                        ORDER BY s.id ASC
+                      `,
+                      insertedIds,
+                      (selectErr, rows) => {
+                        if (selectErr) return next(selectErr);
+                        return res.status(201).json({ ok: true, streams: rows || [] });
+                      }
+                    );
+                  });
+                }
+
+                return db.run(
+                  `
+                    INSERT INTO streams (
+                      entity_type,
+                      entity_id,
+                      streamer_id,
+                      link,
+                      created_at,
+                      updated_at
+                    )
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                  `,
+                  [entityType, entityIds[insertIndex], streamerRow.id, link],
+                  function onInsert(insertErr) {
+                    if (insertErr) return rollback(500, "Failed to create stream.");
+                    insertedIds.push(this.lastID);
+                    return insertOne(insertIndex + 1);
+                  }
+                );
+              };
+
+              return insertOne(0);
+            });
+          }
+        );
+      }
+
+      return validateStreamMatchEntity(entityType, entityIds[index], (validateErr, isValid) => {
+        if (validateErr) return next(validateErr);
+        if (!isValid) {
+          return res.status(400).json({ ok: false, message: `Invalid entity_id: ${entityIds[index]}` });
+        }
+        return validateOne(index + 1);
+      });
+    };
+
+    return validateOne(0);
+  };
+
+  if (isAdmin) {
+    const requestedStreamerId = normalizePositiveInteger(req.body?.streamer_id);
+    if (requestedStreamerId) {
+      return db.get(
+        "SELECT id, name, avatar, profile_id FROM streamers WHERE id = ? LIMIT 1",
+        [requestedStreamerId],
+        (streamerErr, streamerRow) => {
+          if (streamerErr) return next(streamerErr);
+          return continueWithStreamer(streamerRow || null);
+        }
+      );
+    }
+  }
+
+  return getUserStreamerByProfileId(linkedPlayerId, (streamerErr, streamerRow) => {
+    if (streamerErr) return next(streamerErr);
+    return continueWithStreamer(streamerRow || null);
+  });
+});
+
+app.patch("/streams/:id", (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const streamId = normalizePositiveInteger(req.params.id);
+  const payloadId = normalizePositiveInteger(req.body?.id);
+  const link = String(req.body?.link || "").trim();
+
+  if (!streamId) {
+    return res.status(400).json({ ok: false, message: "Invalid stream id" });
+  }
+  if (payloadId && payloadId !== streamId) {
+    return res.status(400).json({ ok: false, message: "Stream id cannot be changed" });
+  }
+  if (!link) {
+    return res.status(400).json({ ok: false, message: "link is required" });
+  }
+
+  return getStreamById(streamId, (streamErr, streamRow) => {
+    if (streamErr) return next(streamErr);
+    if (!streamRow) {
+      return res.status(404).json({ ok: false, message: "Stream not found" });
+    }
+    if (!canManageStreamRow(streamRow, req.user)) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+
+    return db.run(
+      `
+        UPDATE streams
+        SET
+          link = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND deleted_at IS NULL
+      `,
+      [link, streamId],
+      function onUpdate(updateErr) {
+        if (updateErr) return next(updateErr);
+        if (!this || this.changes === 0) {
+          return res.status(404).json({ ok: false, message: "Stream not found" });
+        }
+        return getStreamById(streamId, (selectErr, updatedRow) => {
+          if (selectErr) return next(selectErr);
+          return res.json({ ok: true, stream: updatedRow || null });
+        });
+      }
+    );
+  });
+});
+
+app.delete("/streams/:id", (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const streamId = normalizePositiveInteger(req.params.id);
+  if (!streamId) {
+    return res.status(400).json({ ok: false, message: "Invalid stream id" });
+  }
+
+  return getStreamById(streamId, (streamErr, streamRow) => {
+    if (streamErr) return next(streamErr);
+    if (!streamRow) {
+      return res.status(404).json({ ok: false, message: "Stream not found" });
+    }
+    if (!canManageStreamRow(streamRow, req.user)) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+
+    return db.run(
+      `
+        UPDATE streams
+        SET
+          deleted_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND deleted_at IS NULL
+      `,
+      [streamId],
+      function onDelete(deleteErr) {
+        if (deleteErr) return next(deleteErr);
+        if (!this || this.changes === 0) {
+          return res.status(404).json({ ok: false, message: "Stream not found" });
+        }
+        return res.json({ ok: true });
+      }
+    );
+  });
 });
 
 app.get("/games", requireAdmin, (_req, res, next) => {

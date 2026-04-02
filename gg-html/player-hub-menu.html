@@ -245,6 +245,7 @@
     url.searchParams.delete("create");
     url.searchParams.delete("match_id");
     url.searchParams.delete("player_id");
+    url.searchParams.delete("stream_id");
     return url.toString();
   }
 
@@ -260,6 +261,9 @@
   function getCurrentUserProfileId(user) {
     return String(
       user?.profile?.id ??
+      user?.profile?.player_id ??
+      user?.profile?.bga_id ??
+      user?.bga_id ??
       user?.player_id ??
       user?.playerId ??
       ""
@@ -280,6 +284,7 @@
 
   function canSeeTournament(tournament, authState = {}) {
     const accessType = Number(tournament?.access_type || 1) === 2 ? 2 : 1;
+    if (authState.isAdminUser) return true;
     if (accessType === 1) return !!authState.isCaptainUser;
     const accessRole = String(tournament?.access_role || "").trim().toLowerCase();
     const accessUsers = normalizeTournamentAccessUsers(
@@ -448,6 +453,7 @@
     let tournaments = [];
     let isAuthenticatedUser = false;
     let isCaptainUser = false;
+    let isAdminUser = false;
     let currentUserAuthId = "";
     let currentUserProfileId = "";
     let hasLinkedBgaId = false;
@@ -462,6 +468,7 @@
         const meData = await meRes.json().catch(() => ({}));
         const meUser = meData?.authenticated ? meData?.user : null;
         isAuthenticatedUser = !!meData?.authenticated;
+        isAdminUser = meUser?.isAdmin === true || Number(meUser?.admin) === 1;
         isCaptainUser = Number(
           meUser?.profile?.team_captain ??
           meUser?.team_captain ??
@@ -489,7 +496,7 @@
     }
 
     const items = tournaments
-      .filter((tournament) => canSeeTournament(tournament, { currentUserAuthId, isCaptainUser }))
+      .filter((tournament) => canSeeTournament(tournament, { currentUserAuthId, isCaptainUser, isAdminUser }))
       .map((tournament) => ({
       type: "tournament",
       key: `tournament:${String(tournament?.id || "").trim()}`,
@@ -499,6 +506,7 @@
     }))
       .filter((item) => item.id && item.label)
       .concat(STATIC_SECTION_ITEMS.filter((item) => {
+        if (isAdminUser) return true;
         if (item.view === "players" || item.view === "friendly-find") return isCaptainUser;
         if (item.view === "streams") return isStreamerUser;
         if (item.view === "nationals" || item.view === "challenges") {
