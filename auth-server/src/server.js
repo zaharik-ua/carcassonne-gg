@@ -3841,6 +3841,228 @@ app.patch("/teams/:id", requireAdmin, (req, res) => {
   );
 });
 
+app.get("/streamers", requireAdmin, (_req, res, next) => {
+  db.all(
+    `
+      SELECT
+        s.id,
+        s.name,
+        s.avatar,
+        s.profile_id,
+        p.bga_nickname AS profile_bga_nickname,
+        p.name AS profile_name
+      FROM streamers s
+      LEFT JOIN profiles p
+        ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.profile_id, ''))
+       AND p.deleted_at IS NULL
+      ORDER BY s.name COLLATE NOCASE ASC, s.id ASC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, streamers: rows || [] });
+    }
+  );
+});
+
+app.post("/streamers", requireAdmin, (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const avatar = String(req.body?.avatar || "").trim() || null;
+  const profileId = String(req.body?.profile_id || "").trim();
+
+  if (!name) {
+    return res.status(400).json({ ok: false, message: "name is required" });
+  }
+  if (!profileId) {
+    return res.status(400).json({ ok: false, message: "profile_id is required" });
+  }
+
+  return db.get(
+    `
+      SELECT id, deleted_at
+      FROM profiles
+      WHERE trim(COALESCE(id, '')) = trim(?)
+      LIMIT 1
+    `,
+    [profileId],
+    (profileErr, profileRow) => {
+      if (profileErr) {
+        return res.status(500).json({ ok: false, message: "Failed to validate profile" });
+      }
+      if (!profileRow || profileRow.deleted_at) {
+        return res.status(400).json({ ok: false, message: "profile_id must reference an existing active profile" });
+      }
+
+      return db.get(
+        "SELECT id FROM streamers WHERE trim(COALESCE(profile_id, '')) = trim(?) LIMIT 1",
+        [profileId],
+        (dupErr, dupRow) => {
+          if (dupErr) {
+            return res.status(500).json({ ok: false, message: "Failed to validate streamer uniqueness" });
+          }
+          if (dupRow) {
+            return res.status(409).json({ ok: false, message: "Streamer for this profile already exists" });
+          }
+
+          return db.run(
+            `
+              INSERT INTO streamers (name, avatar, profile_id, created_at, updated_at)
+              VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `,
+            [name, avatar, profileId],
+            function onInsert(insertErr) {
+              if (insertErr) {
+                if (String(insertErr.message || "").includes("UNIQUE")) {
+                  return res.status(409).json({ ok: false, message: "Streamer for this profile already exists" });
+                }
+                return res.status(500).json({ ok: false, message: "Failed to create streamer" });
+              }
+
+              return db.get(
+                `
+                  SELECT
+                    s.id,
+                    s.name,
+                    s.avatar,
+                    s.profile_id,
+                    p.bga_nickname AS profile_bga_nickname,
+                    p.name AS profile_name
+                  FROM streamers s
+                  LEFT JOIN profiles p
+                    ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.profile_id, ''))
+                   AND p.deleted_at IS NULL
+                  WHERE s.id = ?
+                  LIMIT 1
+                `,
+                [this?.lastID],
+                (selectErr, row) => {
+                  if (selectErr) {
+                    return res.status(500).json({ ok: false, message: "Failed to load streamer" });
+                  }
+                  return res.json({ ok: true, streamer: row || null });
+                }
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+app.patch("/streamers/:id", requireAdmin, (req, res) => {
+  const streamerId = normalizePositiveInteger(req.params.id);
+  const payloadId = normalizePositiveInteger(req.body?.id);
+  const name = String(req.body?.name || "").trim();
+  const avatar = String(req.body?.avatar || "").trim() || null;
+  const profileId = String(req.body?.profile_id || "").trim();
+
+  if (!streamerId) {
+    return res.status(400).json({ ok: false, message: "Invalid streamer id" });
+  }
+  if (payloadId && payloadId !== streamerId) {
+    return res.status(400).json({ ok: false, message: "Streamer id cannot be changed" });
+  }
+  if (!name) {
+    return res.status(400).json({ ok: false, message: "name is required" });
+  }
+  if (!profileId) {
+    return res.status(400).json({ ok: false, message: "profile_id is required" });
+  }
+
+  return db.get(
+    "SELECT id FROM streamers WHERE id = ? LIMIT 1",
+    [streamerId],
+    (streamerErr, currentRow) => {
+      if (streamerErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load streamer" });
+      }
+      if (!currentRow) {
+        return res.status(404).json({ ok: false, message: "Streamer not found" });
+      }
+
+      return db.get(
+        `
+          SELECT id, deleted_at
+          FROM profiles
+          WHERE trim(COALESCE(id, '')) = trim(?)
+          LIMIT 1
+        `,
+        [profileId],
+        (profileErr, profileRow) => {
+          if (profileErr) {
+            return res.status(500).json({ ok: false, message: "Failed to validate profile" });
+          }
+          if (!profileRow || profileRow.deleted_at) {
+            return res.status(400).json({ ok: false, message: "profile_id must reference an existing active profile" });
+          }
+
+          return db.get(
+            "SELECT id FROM streamers WHERE trim(COALESCE(profile_id, '')) = trim(?) AND id <> ? LIMIT 1",
+            [profileId, streamerId],
+            (dupErr, dupRow) => {
+              if (dupErr) {
+                return res.status(500).json({ ok: false, message: "Failed to validate streamer uniqueness" });
+              }
+              if (dupRow) {
+                return res.status(409).json({ ok: false, message: "Streamer for this profile already exists" });
+              }
+
+              return db.run(
+                `
+                  UPDATE streamers
+                  SET
+                    name = ?,
+                    avatar = ?,
+                    profile_id = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                  WHERE id = ?
+                `,
+                [name, avatar, profileId, streamerId],
+                function onUpdate(err) {
+                  if (err) {
+                    if (String(err.message || "").includes("UNIQUE")) {
+                      return res.status(409).json({ ok: false, message: "Streamer for this profile already exists" });
+                    }
+                    return res.status(500).json({ ok: false, message: "Failed to update streamer" });
+                  }
+                  if (!this || this.changes === 0) {
+                    return res.status(404).json({ ok: false, message: "Streamer not found" });
+                  }
+
+                  return db.get(
+                    `
+                      SELECT
+                        s.id,
+                        s.name,
+                        s.avatar,
+                        s.profile_id,
+                        p.bga_nickname AS profile_bga_nickname,
+                        p.name AS profile_name
+                      FROM streamers s
+                      LEFT JOIN profiles p
+                        ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.profile_id, ''))
+                       AND p.deleted_at IS NULL
+                      WHERE s.id = ?
+                      LIMIT 1
+                    `,
+                    [streamerId],
+                    (selectErr, row) => {
+                      if (selectErr) {
+                        return res.status(500).json({ ok: false, message: "Failed to load streamer" });
+                      }
+                      return res.json({ ok: true, streamer: row || null });
+                    }
+                  );
+                }
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
 app.get("/games", requireAdmin, (_req, res, next) => {
   db.all(
     `
