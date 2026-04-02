@@ -1834,6 +1834,94 @@ function ensureFriendlyFindSchema() {
   });
 }
 
+function ensureStreamersSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS streamers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      avatar TEXT,
+      profile_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure streamers schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(streamers)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect streamers schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "streamers", "name", "TEXT");
+      addColumnIfMissing(columns, "streamers", "avatar", "TEXT");
+      addColumnIfMissing(columns, "streamers", "profile_id", "TEXT");
+      addColumnIfMissing(columns, "streamers", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "streamers", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    });
+
+    db.run(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_streamers_profile_id ON streamers(profile_id)",
+      (indexErr) => {
+        if (indexErr) {
+          console.error("Failed to ensure unique index for streamers.profile_id", indexErr);
+        }
+      }
+    );
+  });
+}
+
+function ensureStreamsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS streams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL CHECK (entity_type IN ('match', 'duel')),
+      entity_id TEXT NOT NULL,
+      streamer_id INTEGER NOT NULL,
+      link TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure streams schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(streams)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect streams schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "streams", "entity_type", "TEXT");
+      addColumnIfMissing(columns, "streams", "entity_id", "TEXT");
+      addColumnIfMissing(columns, "streams", "streamer_id", "INTEGER");
+      addColumnIfMissing(columns, "streams", "link", "TEXT");
+      addColumnIfMissing(columns, "streams", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "streams", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    });
+
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_streams_entity ON streams(entity_type, entity_id)",
+      (indexErr) => {
+        if (indexErr) {
+          console.error("Failed to ensure idx_streams_entity", indexErr);
+        }
+      }
+    );
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_streams_streamer_id ON streams(streamer_id)",
+      (indexErr) => {
+        if (indexErr) {
+          console.error("Failed to ensure idx_streams_streamer_id", indexErr);
+        }
+      }
+    );
+  });
+}
+
 function ensureAuditTrailSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS audit_trail (
@@ -2211,6 +2299,8 @@ db.serialize(() => {
           ensureTournamentsSchema();
           ensureTournamentAccessUsersSchema();
           ensureFriendlyFindSchema();
+          ensureStreamersSchema();
+          ensureStreamsSchema();
           ensureAuditTrailSchema();
         }
       );

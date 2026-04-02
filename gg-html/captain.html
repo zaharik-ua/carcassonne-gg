@@ -197,10 +197,10 @@
   }
 
   .cp-player-avatar {
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border-radius: 5px;
     object-fit: cover;
     flex-shrink: 0;
     background: #eef2f6;
@@ -2438,10 +2438,14 @@
   function buildBgaAvatarUrl(playerId, avatar) {
     const playerIdText = String(playerId || "").trim();
     const avatarText = String(avatar || "").trim();
-    if (!playerIdText || !avatarText) return "";
+    if (!avatarText) return "";
 
     if (/^https?:\/\//i.test(avatarText)) {
       return avatarText;
+    }
+
+    if (avatarText === "x00000") {
+      return "https://x.boardgamearena.net/data/avatar/default_184.jpg";
     }
 
     const defaultMatch = avatarText.match(/^_def_(\d+)$/);
@@ -2449,6 +2453,7 @@
       return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultMatch[1]}.jpg`;
     }
 
+    if (!playerIdText) return "";
     if (!/^\d+$/.test(playerIdText)) return "";
 
     const playerIdNumber = Number(playerIdText);
