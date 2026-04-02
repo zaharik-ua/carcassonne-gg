@@ -486,7 +486,7 @@
 
           <div id="ggAuthUserMenu" class="gg-mobile-nav__auth-menu gg-mobile-nav__hidden" role="menu">
             <a id="ggAuthAdminLink" class="gg-mobile-nav__auth-menu-item gg-mobile-nav__hidden" href="https://carcassonne.gg/admin" role="menuitem">Admin panel</a>
-            <a id="ggAuthManageTeamLink" class="gg-mobile-nav__auth-menu-item gg-mobile-nav__hidden" href="https://carcassonne.gg/captain/" role="menuitem">Manage Team</a>
+            <a id="ggAuthManageTeamLink" class="gg-mobile-nav__auth-menu-item gg-mobile-nav__hidden" href="https://carcassonne.gg/player-hub/" role="menuitem">Player Hub</a>
             <a id="ggAuthProfileLink" class="gg-mobile-nav__auth-menu-item" href="https://carcassonne.gg/player/?id=noprofile" role="menuitem">My profile</a>
             <button id="ggAuthLogoutButton" class="gg-mobile-nav__auth-menu-item" type="button" role="menuitem">Log out</button>
           </div>
@@ -677,20 +677,9 @@
       adminLink.classList.add("gg-mobile-nav__hidden");
       adminLink.href = "https://carcassonne.gg/admin";
       manageTeamLink.classList.add("gg-mobile-nav__hidden");
-      manageTeamLink.href = "https://carcassonne.gg/captain/";
+      manageTeamLink.href = "https://carcassonne.gg/player-hub/";
       closeUserMenu();
       emitAuthStateChange(null);
-    }
-
-    function applyCaptainMenuAccess(user) {
-      const isTeamCaptain = toBool(user && (user.profile && user.profile.teamCaptain !== undefined ? user.profile.teamCaptain : user.teamCaptain));
-      if (isTeamCaptain) {
-        manageTeamLink.classList.remove("gg-mobile-nav__hidden");
-        manageTeamLink.href = "https://carcassonne.gg/captain/";
-      } else {
-        manageTeamLink.classList.add("gg-mobile-nav__hidden");
-        manageTeamLink.href = "https://carcassonne.gg/captain/";
-      }
     }
 
     function setLoggedInUI(user) {
@@ -710,9 +699,8 @@
         adminLink.href = "https://carcassonne.gg/admin";
       }
 
-      manageTeamLink.classList.add("gg-mobile-nav__hidden");
-      manageTeamLink.href = "https://carcassonne.gg/captain/";
-      applyCaptainMenuAccess(user);
+      manageTeamLink.classList.remove("gg-mobile-nav__hidden");
+      manageTeamLink.href = "https://carcassonne.gg/player-hub/";
       closeUserMenu();
       emitAuthStateChange(user);
     }

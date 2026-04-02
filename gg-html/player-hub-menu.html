@@ -195,7 +195,9 @@
 <script>
 (function () {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const ME_URL = `${AUTH_BASE}/auth/me`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const STREAMERS_URL = `${AUTH_BASE}/streamers`;
   const STATIC_SECTION_ITEMS = [
     {
       type: "view",
@@ -208,6 +210,24 @@
       view: "friendly-find",
       label: "Friendly Find",
       icon: "https://carcassonne.gg/gallery/calendar.png",
+    },
+    {
+      type: "view",
+      view: "streams",
+      label: "My Streams",
+      icon: "https://carcassonne.gg/gallery/streams.png",
+    },
+    {
+      type: "view",
+      view: "nationals",
+      label: "Nationals",
+      icon: "https://carcassonne.gg/gallery/nationals.png",
+    },
+    {
+      type: "view",
+      view: "challenges",
+      label: "Challenges",
+      icon: "https://carcassonne.gg/gallery/challenges.png",
     },
   ];
 
@@ -228,12 +248,64 @@
     return url.toString();
   }
 
+  function getCurrentUserAuthId(user) {
+    return String(
+      user?.id ??
+      user?.user_id ??
+      user?.userId ??
+      ""
+    ).trim();
+  }
+
+  function getCurrentUserProfileId(user) {
+    return String(
+      user?.profile?.id ??
+      user?.player_id ??
+      user?.playerId ??
+      ""
+    ).trim();
+  }
+
+  function normalizeTournamentAccessUsers(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((entry) => {
+        if (entry && typeof entry === "object") {
+          return String(entry.user_id ?? entry.id ?? "").trim();
+        }
+        return String(entry || "").trim();
+      })
+      .filter(Boolean);
+  }
+
+  function canSeeTournament(tournament, authState = {}) {
+    const accessType = Number(tournament?.access_type || 1) === 2 ? 2 : 1;
+    if (accessType === 1) return !!authState.isCaptainUser;
+    const accessRole = String(tournament?.access_role || "").trim().toLowerCase();
+    const accessUsers = normalizeTournamentAccessUsers(
+      Array.isArray(tournament?.access_users)
+        ? tournament.access_users
+        : tournament?.access_user_ids
+    );
+    return !!(
+      accessRole === "admin"
+      || accessRole === "captain"
+      || (authState.currentUserAuthId && accessUsers.includes(authState.currentUserAuthId))
+    );
+  }
+
   function getCurrentSelectionKey() {
     const url = new URL(window.location.href);
     const tournamentId = String(url.searchParams.get("tournament") || "").trim();
     if (tournamentId) return `tournament:${tournamentId}`;
     const view = String(url.searchParams.get("view") || "").trim().toLowerCase();
-    if (view === "players" || view === "friendly-find") return `view:${view}`;
+    if (
+      view === "players"
+      || view === "friendly-find"
+      || view === "streams"
+      || view === "nationals"
+      || view === "challenges"
+    ) return `view:${view}`;
     return "";
   }
 
@@ -374,17 +446,51 @@
 
   async function init() {
     let tournaments = [];
+    let isAuthenticatedUser = false;
+    let isCaptainUser = false;
+    let currentUserAuthId = "";
+    let currentUserProfileId = "";
+    let hasLinkedBgaId = false;
+    let isStreamerUser = false;
     try {
-      const response = await fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && Array.isArray(data?.tournaments)) {
-        tournaments = data.tournaments;
+      const [meRes, tournamentsRes, streamersRes] = await Promise.all([
+        fetch(ME_URL, { method: "GET", credentials: "include" }),
+        fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
+        fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
+      ]);
+      if (meRes.ok) {
+        const meData = await meRes.json().catch(() => ({}));
+        const meUser = meData?.authenticated ? meData?.user : null;
+        isAuthenticatedUser = !!meData?.authenticated;
+        isCaptainUser = Number(
+          meUser?.profile?.team_captain ??
+          meUser?.team_captain ??
+          (meUser?.profile?.teamCaptain === true ? 1 : 0)
+        ) === 1;
+        currentUserAuthId = getCurrentUserAuthId(meUser);
+        currentUserProfileId = getCurrentUserProfileId(meUser);
+        hasLinkedBgaId = !!currentUserProfileId;
+      }
+      if (tournamentsRes.ok) {
+        const data = await tournamentsRes.json().catch(() => ({}));
+        if (Array.isArray(data?.tournaments)) {
+          tournaments = data.tournaments;
+        }
+      }
+      if (streamersRes.ok) {
+        const streamersData = await streamersRes.json().catch(() => ({}));
+        const streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
+        isStreamerUser = !!currentUserProfileId && streamers.some((entry) => (
+          String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserProfileId
+        ));
       }
     } catch (_error) {
       tournaments = [];
     }
 
-    const items = tournaments.map((tournament) => ({
+    const items = tournaments
+      .filter((tournament) => canSeeTournament(tournament, { currentUserAuthId, isCaptainUser }))
+      .map((tournament) => ({
       type: "tournament",
       key: `tournament:${String(tournament?.id || "").trim()}`,
       id: String(tournament?.id || "").trim(),
@@ -392,7 +498,14 @@
       icon: String(tournament?.logo || "https://carcassonne.gg/gallery/friendly-matches.png").trim(),
     }))
       .filter((item) => item.id && item.label)
-      .concat(STATIC_SECTION_ITEMS.map((item) => ({
+      .concat(STATIC_SECTION_ITEMS.filter((item) => {
+        if (item.view === "players" || item.view === "friendly-find") return isCaptainUser;
+        if (item.view === "streams") return isStreamerUser;
+        if (item.view === "nationals" || item.view === "challenges") {
+          return isAuthenticatedUser && hasLinkedBgaId;
+        }
+        return false;
+      }).map((item) => ({
         ...item,
         key: `view:${item.view}`,
       })));

@@ -120,6 +120,34 @@
     overflow: hidden;
   }
 
+  .player-card {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    padding: 10px 12px;
+    margin: 0 8px 12px;
+  }
+
+  .player-stats-line {
+    font-size: 14px;
+    line-height: 1.45;
+    color: #222;
+  }
+
+  .player-stats-line.compact {
+    font-size: 13px;
+  }
+
+  .noprofile-warning {
+    font-size: 16px;
+    font-weight: 600;
+    color: #b23a48;
+  }
+
+  .noprofile-gap {
+    margin-top: 10px;
+  }
+
   .cp-match-row {
     display: flex;
     align-items: center;
@@ -1277,6 +1305,7 @@
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const DUELS_URL = `${AUTH_BASE}/duels`;
   const FRIENDLY_FIND_URL = `${AUTH_BASE}/friendly-find`;
+  const STREAMERS_URL = `${AUTH_BASE}/streamers`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const PROFILES_URL = `${AUTH_BASE}/profiles`;
   const PROFILE_CONTACTS_URL = `${AUTH_BASE}/profiles/contacts`;
@@ -1286,13 +1315,16 @@
     MATCHES: "matches",
     PLAYERS: "players",
     FRIENDLY_FIND: "friendly-find",
+    STREAMS: "streams",
+    NATIONALS: "nationals",
+    CHALLENGES: "challenges",
   };
   const CAPTAIN_STATIC_SECTION_ITEMS = [
     {
       type: "view",
       view: CAPTAIN_VIEWS.PLAYERS,
       label: "Players",
-      subtitle: "Manage player profiles",
+      subtitle: "Manage player profiles for your association",
       icon: "https://carcassonne.gg/gallery/active.png",
     },
     {
@@ -1301,6 +1333,27 @@
       label: "Friendly Find",
       subtitle: "Create or browse friendly match requests",
       icon: "https://carcassonne.gg/gallery/calendar.png",
+    },
+    {
+      type: "view",
+      view: CAPTAIN_VIEWS.STREAMS,
+      label: "My Streams",
+      subtitle: "Manage your streams",
+      icon: "https://carcassonne.gg/gallery/streams.png",
+    },
+    {
+      type: "view",
+      view: CAPTAIN_VIEWS.NATIONALS,
+      label: "Nationals",
+      subtitle: "Manage your online nationals matches",
+      icon: "https://carcassonne.gg/gallery/nationals.png",
+    },
+    {
+      type: "view",
+      view: CAPTAIN_VIEWS.CHALLENGES,
+      label: "Challenges",
+      subtitle: "Open rated challenge matches",
+      icon: "https://carcassonne.gg/gallery/challenges.png",
     },
   ];
   const CONTACT_ICONS = {
@@ -1383,6 +1436,9 @@
     const raw = String(params.get("view") || "").trim().toLowerCase();
     if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
     if (raw === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
+    if (raw === CAPTAIN_VIEWS.STREAMS) return CAPTAIN_VIEWS.STREAMS;
+    if (raw === CAPTAIN_VIEWS.NATIONALS) return CAPTAIN_VIEWS.NATIONALS;
+    if (raw === CAPTAIN_VIEWS.CHALLENGES) return CAPTAIN_VIEWS.CHALLENGES;
     return "";
   }
 
@@ -1407,7 +1463,13 @@
       url.searchParams.delete("view");
       if (nextTournamentId) url.searchParams.set("tournament", nextTournamentId);
       else url.searchParams.delete("tournament");
-    } else if (nextView === CAPTAIN_VIEWS.PLAYERS || nextView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
+    } else if (
+      nextView === CAPTAIN_VIEWS.PLAYERS
+      || nextView === CAPTAIN_VIEWS.FRIENDLY_FIND
+      || nextView === CAPTAIN_VIEWS.STREAMS
+      || nextView === CAPTAIN_VIEWS.NATIONALS
+      || nextView === CAPTAIN_VIEWS.CHALLENGES
+    ) {
       url.searchParams.set("view", nextView);
       url.searchParams.delete("tournament");
     } else {
@@ -1454,6 +1516,9 @@
       const raw = String(captainPageState.view || "").trim().toLowerCase();
       if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
       if (raw === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
+      if (raw === CAPTAIN_VIEWS.STREAMS) return CAPTAIN_VIEWS.STREAMS;
+      if (raw === CAPTAIN_VIEWS.NATIONALS) return CAPTAIN_VIEWS.NATIONALS;
+      if (raw === CAPTAIN_VIEWS.CHALLENGES) return CAPTAIN_VIEWS.CHALLENGES;
       if (raw === CAPTAIN_VIEWS.MATCHES) return CAPTAIN_VIEWS.MATCHES;
       return "";
     })();
@@ -1574,7 +1639,7 @@
 
   function renderCaptainHomeSelection(items) {
     const normalizedItems = Array.isArray(items) ? items.filter((item) => item && item.label) : [];
-    setPageHeading("Captain Panel");
+    setPageHeading("Player Hub");
     countEl.textContent = normalizedItems.length ? "Choose a section" : "";
     hintEl.textContent = "";
     addButtonEl.classList.add("cp-hidden");
@@ -2042,6 +2107,13 @@
     hintEl.textContent = "";
   }
 
+  function renderRestrictedSectionMessage(text) {
+    contentEl.className = "captain-alert";
+    contentEl.textContent = String(text || "You do not have access to this section.").trim();
+    countEl.textContent = "";
+    hintEl.textContent = "";
+  }
+
   function renderNoMatchesMessage(text) {
     contentEl.className = "captain-alert";
     contentEl.textContent = text || "No matches found.";
@@ -2056,8 +2128,199 @@
     hintEl.textContent = "";
   }
 
+  function renderStaticInfoSection(title, paragraphs = []) {
+    setPageHeading(title);
+    countEl.textContent = "";
+    hintEl.textContent = "";
+    addButtonEl.classList.add("cp-hidden");
+    clearFilters();
+    contentEl.className = "captain-alert";
+    contentEl.innerHTML = "";
+
+    const fragment = document.createDocumentFragment();
+    (Array.isArray(paragraphs) ? paragraphs : []).forEach((text) => {
+      const paragraph = document.createElement("p");
+      if (text instanceof Node) {
+        paragraph.appendChild(text);
+      } else {
+        paragraph.textContent = String(text || "").trim();
+      }
+      paragraph.style.margin = "0 0 10px";
+      fragment.appendChild(paragraph);
+    });
+    if (fragment.childNodes.length && fragment.lastChild?.style) {
+      fragment.lastChild.style.marginBottom = "0";
+    }
+    contentEl.appendChild(fragment);
+  }
+
+  function renderNoProfileInfoCard() {
+    setPageHeading("Player Hub");
+    countEl.textContent = "";
+    hintEl.textContent = "";
+    addButtonEl.classList.add("cp-hidden");
+    clearFilters();
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+
+    const infoCard = document.createElement("div");
+    infoCard.className = "player-card";
+
+    const warning = document.createElement("div");
+    warning.className = "player-stats-line noprofile-warning";
+    warning.textContent = "The email address you used to log in to GG is not linked to a BGA account.";
+    infoCard.appendChild(warning);
+
+    const gap1 = document.createElement("div");
+    gap1.className = "noprofile-gap";
+    infoCard.appendChild(gap1);
+
+    const intro = document.createElement("div");
+    intro.className = "player-stats-line";
+    intro.textContent = "What to do:";
+    infoCard.appendChild(intro);
+
+    const gapIntroToStep1 = document.createElement("div");
+    gapIntroToStep1.className = "noprofile-gap";
+    infoCard.appendChild(gapIntroToStep1);
+
+    const step1 = document.createElement("div");
+    step1.className = "player-stats-line compact";
+    step1.textContent = "1. Contact your association captain.";
+    infoCard.appendChild(step1);
+
+    const step1Hint = document.createElement("div");
+    step1Hint.className = "player-stats-line compact";
+    step1Hint.innerHTML = 'If you don\'t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=1" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/players/?captains=1</a>';
+    infoCard.appendChild(step1Hint);
+
+    const gapStep1ToStep2 = document.createElement("div");
+    gapStep1ToStep2.className = "noprofile-gap";
+    infoCard.appendChild(gapStep1ToStep2);
+
+    const step2 = document.createElement("div");
+    step2.className = "player-stats-line compact";
+    step2.textContent = "2. Send your captain the email you used to log in to carcassonne.gg.";
+    infoCard.appendChild(step2);
+
+    const gapStep2ToStep3 = document.createElement("div");
+    gapStep2ToStep3.className = "noprofile-gap";
+    infoCard.appendChild(gapStep2ToStep3);
+
+    const step3 = document.createElement("div");
+    step3.className = "player-stats-line compact";
+    step3.textContent = "3. Your captain will:";
+    infoCard.appendChild(step3);
+
+    const step3a = document.createElement("div");
+    step3a.className = "player-stats-line compact";
+    step3a.textContent = "• Open Menu → Manage Team → Players";
+    infoCard.appendChild(step3a);
+
+    const step3b = document.createElement("div");
+    step3b.className = "player-stats-line compact";
+    step3b.textContent = "• Edit your profile (or create one if needed)";
+    infoCard.appendChild(step3b);
+
+    const step3c = document.createElement("div");
+    step3c.className = "player-stats-line compact";
+    step3c.textContent = "• Add your email to Login Email";
+    infoCard.appendChild(step3c);
+
+    const gapStep3ToOutro = document.createElement("div");
+    gapStep3ToOutro.className = "noprofile-gap";
+    infoCard.appendChild(gapStep3ToOutro);
+
+    const outro = document.createElement("div");
+    outro.className = "player-stats-line compact";
+    outro.textContent = "After that, you will get access to edit your profile.";
+    infoCard.appendChild(outro);
+
+    const contactGap = document.createElement("div");
+    contactGap.className = "noprofile-gap";
+    infoCard.appendChild(contactGap);
+
+    const contact = document.createElement("div");
+    contact.className = "player-stats-line compact";
+    contact.textContent = "If you cannot find a captain, contact us at carcassonne.gg@gmail.com.";
+    infoCard.appendChild(contact);
+
+    contentEl.appendChild(infoCard);
+  }
+
+  function getCurrentUserAuthId(user) {
+    return String(
+      user?.id ??
+      user?.user_id ??
+      user?.userId ??
+      ""
+    ).trim();
+  }
+
+  function getCurrentUserProfileId(user) {
+    return String(
+      user?.profile?.id ??
+      user?.profile?.player_id ??
+      user?.profile?.bga_id ??
+      user?.bga_id ??
+      user?.player_id ??
+      user?.playerId ??
+      ""
+    ).trim();
+  }
+
+  function normalizeTournamentAccessUsers(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((entry) => {
+        if (entry && typeof entry === "object") {
+          return {
+            userId: String(entry.user_id ?? entry.id ?? "").trim(),
+            role: String(entry.role || "").trim().toLowerCase(),
+          };
+        }
+        return {
+          userId: String(entry || "").trim(),
+          role: "",
+        };
+      })
+      .filter((entry) => entry.userId);
+  }
+
+  function getTournamentAccessState(tournament, authState = {}) {
+    const accessType = Number(tournament?.access_type || 1) === 2 ? 2 : 1;
+    const accessRole = String(tournament?.access_role || "").trim().toLowerCase();
+    const isAdminUser = !!authState.isAdminUser;
+    const accessUsers = normalizeTournamentAccessUsers(
+      Array.isArray(tournament?.access_users)
+        ? tournament.access_users
+        : tournament?.access_user_ids
+    );
+    const currentUserAuthId = String(authState.currentUserAuthId || "").trim();
+    const currentUserEntry = currentUserAuthId
+      ? accessUsers.find((entry) => entry.userId === currentUserAuthId) || null
+      : null;
+    const hasClosedAccess = accessType === 2
+      ? !!(isAdminUser || currentUserEntry || accessRole === "admin" || accessRole === "captain")
+      : false;
+    const canSee = accessType === 2
+      ? hasClosedAccess
+      : !!(isAdminUser || authState.isCaptainUser);
+    const canManage = accessType === 2
+      ? !!(isAdminUser || currentUserEntry?.role === "admin" || accessRole === "admin")
+      : true;
+    return {
+      accessType,
+      accessRole,
+      currentUserEntry,
+      hasClosedAccess,
+      canSee,
+      canManage,
+    };
+  }
+
   function setPageHeading(text) {
-    const title = String(text || "").trim() || "Captain Panel";
+    const title = String(text || "").trim() || "Player Hub";
     if (titleEl) titleEl.textContent = title;
   }
 
@@ -2074,6 +2337,15 @@
     if (activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
       return "Find an Opponent for a Friendly Match";
     }
+    if (activeView === CAPTAIN_VIEWS.STREAMS) {
+      return "My Streams";
+    }
+    if (activeView === CAPTAIN_VIEWS.NATIONALS) {
+      return "Nationals";
+    }
+    if (activeView === CAPTAIN_VIEWS.CHALLENGES) {
+      return "Challenges";
+    }
     if (activeView === CAPTAIN_VIEWS.MATCHES) {
       if (isEditMode) return "Match editing";
       if (isCreateMode) return tournamentHeading;
@@ -2086,7 +2358,7 @@
       return "Players";
     }
     if (!activeView) {
-      return "Captain Panel";
+      return "Player Hub";
     }
     return tournamentHeading;
   }
@@ -3002,7 +3274,7 @@
     const isOwnProfile = currentUserPlayerId && currentUserPlayerId === playerId;
     const createdByPlayerId = String(profile?.created_by || "").trim();
     const canDeletePlayer = !!currentUserPlayerId && !!createdByPlayerId && currentUserPlayerId === createdByPlayerId;
-    setPageHeading(String(profile?.bga_nickname || playerId || "Captain Panel"));
+    setPageHeading(String(profile?.bga_nickname || playerId || "Player Hub"));
     countEl.textContent = playerId ? `Editing: ${playerId}` : "Editing player";
     hintEl.textContent = "";
     contentEl.className = "";
@@ -5802,7 +6074,9 @@
       let isCaptainUser = false;
       let isAdminUser = false;
       let isAuthenticatedUser = false;
+      let currentUserAuthId = "";
       let currentUserPlayerId = "";
+      let hasLinkedBgaId = false;
 
       try {
         const meRes = await fetch(ME_URL, { method: "GET", credentials: "include" });
@@ -5819,12 +6093,9 @@
             meUser?.team_captain ??
             (meUser?.profile?.teamCaptain === true ? 1 : 0)
           ) === 1;
-          currentUserPlayerId = String(
-            meUser?.profile?.id ??
-            meUser?.player_id ??
-            meUser?.playerId ??
-            ""
-          ).trim();
+          currentUserAuthId = getCurrentUserAuthId(meUser);
+          currentUserPlayerId = getCurrentUserProfileId(meUser);
+          hasLinkedBgaId = !!currentUserPlayerId;
           captainAssociationCode = meAssociation;
           isCaptainUser = meIsCaptain;
         }
@@ -5834,17 +6105,38 @@
 
       if (!activeView && !requestedTournamentId && !isCreateMode && !isEditMode) {
         let tournaments = [];
+        let streamers = [];
         try {
-          const tournamentsRes = await fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" });
+          const [tournamentsRes, streamersRes] = await Promise.all([
+            fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
+            fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
+          ]);
           if (tournamentsRes.ok) {
             const tournamentsData = await tournamentsRes.json().catch(() => ({}));
             tournaments = Array.isArray(tournamentsData?.tournaments) ? tournamentsData.tournaments : [];
           }
+          if (streamersRes.ok) {
+            const streamersData = await streamersRes.json().catch(() => ({}));
+            streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
+          }
         } catch (_error) {
           tournaments = [];
+          streamers = [];
         }
 
-        const sectionItems = tournaments.map((tournament) => ({
+        const isStreamerUser = !!currentUserPlayerId && streamers.some((entry) => (
+          String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserPlayerId
+        ));
+
+        const visibleTournaments = tournaments.filter((tournament) => (
+          getTournamentAccessState(tournament, {
+            currentUserAuthId,
+            isCaptainUser,
+            isAdminUser,
+          }).canSee
+        ));
+
+        const sectionItems = visibleTournaments.map((tournament) => ({
           type: "tournament",
           id: String(tournament?.id || "").trim(),
           label: String(tournament?.short_title || tournament?.name || tournament?.id || "").trim(),
@@ -5852,29 +6144,60 @@
           icon: String(tournament?.logo || "https://carcassonne.gg/gallery/friendly-matches.png").trim(),
         }))
           .filter((item) => item.id && item.label)
-          .concat(CAPTAIN_STATIC_SECTION_ITEMS);
+          .concat(CAPTAIN_STATIC_SECTION_ITEMS.filter((item) => {
+            if (isAdminUser) {
+              return true;
+            }
+            if (item.view === CAPTAIN_VIEWS.PLAYERS || item.view === CAPTAIN_VIEWS.FRIENDLY_FIND) {
+              return isCaptainUser;
+            }
+            if (item.view === CAPTAIN_VIEWS.STREAMS) {
+              return isStreamerUser;
+            }
+            if (item.view === CAPTAIN_VIEWS.NATIONALS || item.view === CAPTAIN_VIEWS.CHALLENGES) {
+              return isAuthenticatedUser && hasLinkedBgaId;
+            }
+            return false;
+          }));
+
+        if (!sectionItems.length && isAuthenticatedUser && !hasLinkedBgaId) {
+          renderNoProfileInfoCard();
+          return;
+        }
 
         renderCaptainHomeSelection(sectionItems);
         return;
       }
 
-      if (!associationOverride) {
-        if (activeView === CAPTAIN_VIEWS.MATCHES) {
-          if (!isAuthenticatedUser) {
-            renderAccessMessage();
-            return;
-          }
-          associationCode = isAdminUser ? associationCode : captainAssociationCode;
-        } else {
-          if (!isAdminUser && (!isCaptainUser || !captainAssociationCode)) {
-            renderAccessMessage();
-            return;
-          }
-          associationCode = isAdminUser ? associationCode : captainAssociationCode;
+      if (activeView === CAPTAIN_VIEWS.PLAYERS || activeView === CAPTAIN_VIEWS.FRIENDLY_FIND) {
+        if (!isAdminUser && (!isCaptainUser || !captainAssociationCode)) {
+          renderRestrictedSectionMessage("This section is available only for captains.");
+          return;
         }
+      } else if (activeView === CAPTAIN_VIEWS.STREAMS) {
+        if (!isAuthenticatedUser) {
+          renderAccessMessage();
+          return;
+        }
+      } else if (activeView === CAPTAIN_VIEWS.NATIONALS || activeView === CAPTAIN_VIEWS.CHALLENGES) {
+        if (!isAuthenticatedUser) {
+          renderAccessMessage();
+          return;
+        }
+        if (!isAdminUser && !hasLinkedBgaId) {
+          renderNoProfileInfoCard();
+          return;
+        }
+      } else if (activeView === CAPTAIN_VIEWS.MATCHES && !isAuthenticatedUser) {
+        renderAccessMessage();
+        return;
       }
 
-      const [matchesRes, teamsRes, tournamentsRes, profilesRes, friendlyFindRes] = await Promise.all([
+      if (!associationOverride) {
+        associationCode = isAdminUser ? associationCode : captainAssociationCode;
+      }
+
+      const [matchesRes, teamsRes, tournamentsRes, profilesRes, friendlyFindRes, streamersRes] = await Promise.all([
         activeView === CAPTAIN_VIEWS.MATCHES
           ? fetch(MATCHES_URL, { method: "GET", credentials: "include" })
           : Promise.resolve(null),
@@ -5883,6 +6206,9 @@
         fetch(PROFILES_PUBLIC_URL, { method: "GET" }),
         activeView === CAPTAIN_VIEWS.FRIENDLY_FIND
           ? fetch(FRIENDLY_FIND_URL, { method: "GET", credentials: "include" })
+          : Promise.resolve(null),
+        activeView === CAPTAIN_VIEWS.STREAMS
+          ? fetch(STREAMERS_URL, { method: "GET", credentials: "include" })
           : Promise.resolve(null),
       ]);
 
@@ -5906,6 +6232,13 @@
         ? await friendlyFindRes.json().catch(() => ({}))
         : {};
       const friendlyFindRequests = Array.isArray(friendlyFindData?.requests) ? friendlyFindData.requests : [];
+      const streamersData = streamersRes?.ok
+        ? await streamersRes.json().catch(() => ({}))
+        : {};
+      const streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
+      const isStreamerUser = !!currentUserPlayerId && streamers.some((entry) => (
+        String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserPlayerId
+      ));
 
       const teamsById = new Map();
       if (teamsRes.ok) {
@@ -5963,19 +6296,59 @@
       const currentTournament = activeView === CAPTAIN_VIEWS.MATCHES
         ? (tournamentsById.get(requestedTournamentId) || null)
         : null;
-      const currentTournamentRole = String(currentTournament?.access_role || "").trim().toLowerCase();
-      const canManageClosedTournamentMatches = Number(currentTournament?.access_type) === 2
-        ? (isAdminUser || currentTournamentRole === "admin")
-        : true;
+      const currentTournamentAccess = getTournamentAccessState(currentTournament, {
+        currentUserAuthId,
+        isCaptainUser,
+        isAdminUser,
+      });
+      const currentTournamentRole = currentTournamentAccess.accessRole;
+      const canManageClosedTournamentMatches = currentTournamentAccess.canManage;
       setPageHeading(getImmediatePageHeading(currentTournament));
       if (
         activeView === CAPTAIN_VIEWS.MATCHES
         && currentTournament
-        && Number(currentTournament?.access_type) !== 2
-        && !isAdminUser
-        && (!isCaptainUser || !captainAssociationCode)
+        && !currentTournamentAccess.canSee
       ) {
-        renderAccessMessage();
+        renderRestrictedSectionMessage(
+          currentTournamentAccess.accessType === 2
+            ? "This closed tournament is available only to users added to access_users."
+            : "This tournament is available only for captains."
+        );
+        return;
+      }
+
+      if (activeView === CAPTAIN_VIEWS.STREAMS) {
+        if (!isAdminUser && !isStreamerUser) {
+          renderRestrictedSectionMessage("This section is available only to users added to streamers.");
+          return;
+        }
+        renderStaticInfoSection("My Streams");
+        return;
+      }
+
+      if (activeView === CAPTAIN_VIEWS.NATIONALS) {
+        const nationalsLink = document.createElement("a");
+        nationalsLink.href = "https://carcassonne.gg/nationals";
+        nationalsLink.target = "_blank";
+        nationalsLink.rel = "noopener noreferrer";
+        nationalsLink.textContent = "Nationals";
+        renderStaticInfoSection("Nationals", [
+          "Your online national tournament matches will appear here.",
+          (() => {
+            const text = document.createElement("span");
+            text.append("For now, please find your local tournaments here: ", nationalsLink);
+            return text;
+          })(),
+        ]);
+        return;
+      }
+
+      if (activeView === CAPTAIN_VIEWS.CHALLENGES) {
+        renderStaticInfoSection("Challenges", [
+          "Here you will be able to challenge other players to a rated Bo3 or Bo5 match.",
+          "We plan to launch this closer to the end of WTCOC 2026.",
+          "Follow the announcements on the website.",
+        ]);
         return;
       }
 
@@ -5984,7 +6357,7 @@
           captainPageState.associationOverrideTouched
             ? normalizeCode(associationOverride || "")
             : (
-                Number(currentTournament?.access_type) === 2
+                currentTournamentAccess.accessType === 2
                   ? normalizeCode(captainAssociationCode || "")
                   : (
                       String(currentTournament?.id || requestedTournamentId || "").trim() === "Friendly-Matches"
@@ -6002,8 +6375,9 @@
             if (!requestedTournamentId || tournamentId !== requestedTournamentId) return false;
           }
           const closedTournamentMatches = activeView === CAPTAIN_VIEWS.MATCHES
-            && Number(currentTournament?.access_type) === 2;
+            && currentTournamentAccess.accessType === 2;
           if (closedTournamentMatches) {
+            if (!currentTournamentAccess.hasClosedAccess) return false;
             if (canManageClosedTournamentMatches) return true;
             const team1 = readMatchTeam1(match);
             const team2 = readMatchTeam2(match);
@@ -6067,7 +6441,7 @@
         && isAdminUser
         && !isCreateMode
         && !isEditMode
-        && Number(currentTournament?.access_type) !== 2
+        && currentTournamentAccess.accessType !== 2
       ) {
         const ownTeamMeta = teamsById.get(normalizeCode(captainAssociationCode)) || null;
         const filterOptions = [{ value: "", label: "All associations", logo: "" }];
@@ -6177,7 +6551,7 @@
           return;
         }
         renderNoMatchesMessage(
-          Number(currentTournament?.access_type) === 2
+          currentTournamentAccess.accessType === 2
             ? "No matches found for this tournament."
             : `No matches found for association ${associationCode}.`
         );
@@ -6196,7 +6570,7 @@
         const matchTeam2 = readMatchTeam2(matchToEdit);
         let lockedTeamField = "";
         if (
-          Number(currentTournament?.access_type) !== 2
+          currentTournamentAccess.accessType !== 2
           && !isAdminUser
           && isCaptainUser
           && captainAssociationCode

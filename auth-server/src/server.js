@@ -3841,7 +3841,10 @@ app.patch("/teams/:id", requireAdmin, (req, res) => {
   );
 });
 
-app.get("/streamers", requireAdmin, (_req, res, next) => {
+app.get("/streamers", (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
   db.all(
     `
       SELECT
@@ -6987,23 +6990,35 @@ app.get("/auth/me", (req, res) => {
     authenticated: true,
     user: {
       id,
+      user_id: id,
       googleId: google_id,
+      google_id,
       email,
       name,
       picture,
       bgaId: bga_id || null,
+      bga_id: bga_id || null,
       playerId: player_id || null,
+      player_id: player_id || null,
       isAdmin,
+      admin: Number(admin) === 1 ? 1 : 0,
       myProfileUrl,
       adminPanelUrl: isAdmin ? `${SITE_BASE_URL}/admin` : null,
       profile: {
+        id: player_id || bga_id || null,
+        player_id: player_id || null,
+        bga_id: bga_id || null,
         bgaNickname: bga_nickname || null,
+        bga_nickname: bga_nickname || null,
         name: profile_name || null,
         association: association || null,
         email: profile_email || null,
         masterTitle: Number(master_title) === 1,
+        master_title: Number(master_title) === 1 ? 1 : 0,
         masterTitleDate: master_title_date || null,
+        master_title_date: master_title_date || null,
         teamCaptain: Number(team_captain) === 1,
+        team_captain: Number(team_captain) === 1 ? 1 : 0,
       },
     },
   });
