@@ -2606,6 +2606,45 @@ function validateStreamMatchEntity(entityType, entityId, done) {
   );
 }
 
+function loadStreamsByMatchIds(matchIds, done) {
+  const normalizedMatchIds = Array.from(new Set(
+    (Array.isArray(matchIds) ? matchIds : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  ));
+
+  if (!normalizedMatchIds.length) {
+    done(null, []);
+    return;
+  }
+
+  const placeholders = normalizedMatchIds.map(() => "?").join(", ");
+  db.all(
+    `
+      SELECT
+        s.id,
+        s.entity_id,
+        s.link,
+        s.created_at,
+        s.updated_at,
+        sr.name AS streamer_name,
+        sr.avatar AS streamer_avatar,
+        sr.profile_id AS streamer_profile_id
+      FROM streams s
+      INNER JOIN streamers sr
+        ON sr.id = s.streamer_id
+      WHERE s.deleted_at IS NULL
+        AND s.entity_type = 'match'
+        AND trim(COALESCE(s.entity_id, '')) IN (${placeholders})
+      ORDER BY
+        datetime(COALESCE(s.updated_at, s.created_at, '1970-01-01 00:00:00')) ASC,
+        s.id ASC
+    `,
+    normalizedMatchIds,
+    done
+  );
+}
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -5629,7 +5668,7 @@ function publicMainPageMatchesHandler(_req, res, next) {
           .filter(Boolean)
       ));
 
-      const finalize = (duelRows, gameRows = []) => {
+      const finalize = (duelRows, gameRows = [], streamRows = []) => {
         const gamesByDuelId = new Map();
         (gameRows || []).forEach((row) => {
           const duelId = String(row?.duel_id || "").trim();
@@ -5649,6 +5688,22 @@ function publicMainPageMatchesHandler(_req, res, next) {
             player_1_clock: row.player_1_clock,
             player_2_clock: row.player_2_clock,
             status: row.status,
+          });
+        });
+
+        const streamsByMatchId = new Map();
+        (streamRows || []).forEach((row) => {
+          const matchId = String(row?.entity_id || "").trim();
+          if (!matchId) return;
+          if (!streamsByMatchId.has(matchId)) {
+            streamsByMatchId.set(matchId, []);
+          }
+          streamsByMatchId.get(matchId).push({
+            id: row.id,
+            link: row.link,
+            streamer_name: row.streamer_name,
+            streamer_avatar: row.streamer_avatar,
+            streamer_profile_id: row.streamer_profile_id,
           });
         });
 
@@ -5703,6 +5758,8 @@ function publicMainPageMatchesHandler(_req, res, next) {
                 gw1: row.gw1,
                 gw2: row.gw2,
                 rating: row.rating,
+                streams: (streamsByMatchId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
+                streamers: (streamsByMatchId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_avatar),
                 tournament_name: row.tournament_name,
                 tournament_short_title: row.tournament_short_title,
                 tournament_logo: row.tournament_logo,
@@ -5738,60 +5795,64 @@ function publicMainPageMatchesHandler(_req, res, next) {
       }
 
       const placeholders = normalizedMatchIds.map(() => "?").join(", ");
-      return db.all(
-        `
-          SELECT
-            d.id,
-            d.tournament_id,
-            d.match_id,
-            d.duel_number,
-            d.duel_format,
-            d.time_utc,
-            d.player_1_id,
-            COALESCE(NULLIF(trim(p1.bga_nickname), ''), trim(d.player_1_id)) AS player_1_name,
-            p1.bga_elo AS player_1_elo,
-            d.player_2_id,
-            COALESCE(NULLIF(trim(p2.bga_nickname), ''), trim(d.player_2_id)) AS player_2_name,
-            p2.bga_elo AS player_2_elo,
-            d.dw1,
-            d.dw2,
-            d.rating,
-            d.status
-          FROM duels d
-          LEFT JOIN profiles p1
-            ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
-          LEFT JOIN profiles p2
-            ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
-          WHERE d.deleted_at IS NULL
-            AND trim(COALESCE(d.match_id, '')) IN (${placeholders})
-            AND (
-              trim(COALESCE(d.time_utc, '')) = ''
-              OR datetime(d.time_utc) IS NULL
-              OR datetime(d.time_utc) >= datetime('now', '-7 days')
-            )
-          ORDER BY
-            CASE WHEN d.duel_number IS NULL THEN 1 ELSE 0 END ASC,
-            d.duel_number ASC,
-            datetime(COALESCE(d.time_utc, '1970-01-01 00:00:00')) ASC,
-            d.id ASC
-        `,
-        normalizedMatchIds,
-        (duelsErr, duelRows) => {
-          if (duelsErr) return next(duelsErr);
-          const normalizedDuelIds = Array.from(new Set(
-            (duelRows || [])
-              .map((row) => String(row?.id || "").trim())
-              .filter(Boolean)
-          ));
-          if (!normalizedDuelIds.length) {
-            return finalize(duelRows || [], []);
+      return loadStreamsByMatchIds(normalizedMatchIds, (streamsErr, streamRows) => {
+        if (streamsErr) return next(streamsErr);
+
+        return db.all(
+          `
+            SELECT
+              d.id,
+              d.tournament_id,
+              d.match_id,
+              d.duel_number,
+              d.duel_format,
+              d.time_utc,
+              d.player_1_id,
+              COALESCE(NULLIF(trim(p1.bga_nickname), ''), trim(d.player_1_id)) AS player_1_name,
+              p1.bga_elo AS player_1_elo,
+              d.player_2_id,
+              COALESCE(NULLIF(trim(p2.bga_nickname), ''), trim(d.player_2_id)) AS player_2_name,
+              p2.bga_elo AS player_2_elo,
+              d.dw1,
+              d.dw2,
+              d.rating,
+              d.status
+            FROM duels d
+            LEFT JOIN profiles p1
+              ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
+            LEFT JOIN profiles p2
+              ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
+            WHERE d.deleted_at IS NULL
+              AND trim(COALESCE(d.match_id, '')) IN (${placeholders})
+              AND (
+                trim(COALESCE(d.time_utc, '')) = ''
+                OR datetime(d.time_utc) IS NULL
+                OR datetime(d.time_utc) >= datetime('now', '-7 days')
+              )
+            ORDER BY
+              CASE WHEN d.duel_number IS NULL THEN 1 ELSE 0 END ASC,
+              d.duel_number ASC,
+              datetime(COALESCE(d.time_utc, '1970-01-01 00:00:00')) ASC,
+              d.id ASC
+          `,
+          normalizedMatchIds,
+          (duelsErr, duelRows) => {
+            if (duelsErr) return next(duelsErr);
+            const normalizedDuelIds = Array.from(new Set(
+              (duelRows || [])
+                .map((row) => String(row?.id || "").trim())
+                .filter(Boolean)
+            ));
+            if (!normalizedDuelIds.length) {
+              return finalize(duelRows || [], [], streamRows || []);
+            }
+            return loadGamesByDuelIds(normalizedDuelIds, (gamesErr, gameRows) => {
+              if (gamesErr) return next(gamesErr);
+              return finalize(duelRows || [], gameRows || [], streamRows || []);
+            });
           }
-          return loadGamesByDuelIds(normalizedDuelIds, (gamesErr, gameRows) => {
-            if (gamesErr) return next(gamesErr);
-            return finalize(duelRows || [], gameRows || []);
-          });
-        }
-      );
+        );
+      });
     }
   );
 }

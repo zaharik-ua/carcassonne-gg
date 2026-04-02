@@ -1001,7 +1001,7 @@
 
   .cp-stream-match-picker {
     display: grid;
-    gap: 8px;
+    gap: 4px;
   }
 
   .cp-stream-match-option {
@@ -1009,16 +1009,21 @@
     grid-template-columns: auto 1fr;
     gap: 10px;
     align-items: center;
-    padding: 8px 10px;
+    padding: 4px 8px;
     border: 1px solid #d6dbe3;
     border-radius: 6px;
-    background: #fff;
+    background: #f3f4f6;
+    transition: background-color 0.16s ease, border-color 0.16s ease;
   }
 
   .cp-stream-match-option input[type="checkbox"] {
     width: 16px;
     height: 16px;
     margin: 0;
+  }
+
+  .cp-stream-match-option.is-selected {
+    background: #fff;
   }
 
   .cp-stream-match-option .cp-match-row {
@@ -1032,6 +1037,52 @@
     display: none;
   }
 
+  .cp-stream-row .cp-team-row {
+    font-size: 14px;
+    font-weight: 400;
+  }
+
+  .cp-stream-row .cp-team-row span {
+    font-weight: 400;
+  }
+
+  .cp-stream-row .cp-match-time {
+    width: 42px;
+    min-width: 42px;
+  }
+
+  .cp-stream-row .cp-match-time-text {
+    font-weight: 500;
+  }
+
+  .cp-stream-row .cp-divider-vertical {
+    margin: 0 4px;
+  }
+
+  .cp-stream-row .cp-team-flag {
+    width: 18px;
+    height: 18px;
+  }
+
+  .cp-stream-row .cp-match-right {
+    margin-left: 8px;
+  }
+
+  .cp-stream-row__streamer {
+    width: 28px;
+    min-width: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cp-stream-row__streamer img {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
   .cp-stream-empty {
     border: 1px dashed #c8ced8;
     border-radius: 6px;
@@ -1039,6 +1090,10 @@
     font-size: 13px;
     color: #667286;
     background: #fafbfc;
+  }
+
+  .cp-stream-form {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .cp-calendar {
@@ -1333,6 +1388,10 @@
   @media (min-width: 600px) {
     .cp-edit-form {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .cp-stream-form {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>
@@ -2793,7 +2852,22 @@
 
   function createStreamMatchRow(match, teamsById, tournamentsById, options = {}) {
     const row = document.createElement("div");
-    row.className = "cp-match-row";
+    row.className = "cp-match-row cp-stream-row";
+
+    const streamerAvatar = String(options.streamerAvatar || "").trim();
+    if (streamerAvatar) {
+      const streamerWrap = document.createElement("div");
+      streamerWrap.className = "cp-stream-row__streamer";
+      const streamerImg = document.createElement("img");
+      streamerImg.src = streamerAvatar;
+      streamerImg.alt = "";
+      streamerWrap.appendChild(streamerImg);
+      row.appendChild(streamerWrap);
+
+      const streamerDivider = document.createElement("div");
+      streamerDivider.className = "cp-divider-vertical";
+      row.appendChild(streamerDivider);
+    }
 
     const tournamentId = String(match?.tournament_id || "").trim();
     const tournament = tournamentsById?.get(tournamentId) || null;
@@ -2871,7 +2945,8 @@
     return row;
   }
 
-  function renderStreams(streams, teamsById, tournamentsById) {
+  function renderStreams(streams, teamsById, tournamentsById, options = {}) {
+    const showStreamerAvatar = options.showStreamerAvatar === true;
     setPageHeading("My Streams");
     countEl.textContent = `${streams.length} streams`;
     hintEl.textContent = "";
@@ -2896,9 +2971,11 @@
       const list = document.createElement("div");
       list.className = "captain-list";
       rows.forEach((stream) => {
+        const streamerAvatar = String(stream?.streamer_avatar || "").trim();
         list.appendChild(createStreamMatchRow(stream, teamsById, tournamentsById, {
           showEdit: true,
           streamId: String(stream?.id || ""),
+          streamerAvatar: showStreamerAvatar === true ? streamerAvatar : "",
         }));
       });
       wrap.appendChild(list);
@@ -2927,7 +3004,7 @@
     contentEl.style.gap = "";
 
     const form = document.createElement("form");
-    form.className = "cp-edit-form";
+    form.className = "cp-edit-form cp-stream-form";
     form.noValidate = true;
 
     const topActions = document.createElement("div");
@@ -3003,6 +3080,11 @@
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.value = String(match?.id || "");
+        const syncSelectedState = () => {
+          option.classList.toggle("is-selected", checkbox.checked);
+        };
+        checkbox.addEventListener("change", syncSelectedState);
+        syncSelectedState();
         option.appendChild(checkbox);
         option.appendChild(createStreamMatchRow(match, teamsById, tournamentsById));
         matchesWrap.appendChild(option);
@@ -7075,7 +7157,9 @@
           return;
         }
 
-        renderStreams(visibleStreams, teamsById, tournamentsById);
+        renderStreams(visibleStreams, teamsById, tournamentsById, {
+          showStreamerAvatar: isAdminUser,
+        });
         return;
       }
 

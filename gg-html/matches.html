@@ -2462,6 +2462,12 @@ function adaptDbMainPageMatchesData(data) {
       gw1: match?.gw1,
       gw2: match?.gw2,
       rating: match?.rating,
+      streams: Array.isArray(match?.streams)
+        ? match.streams.map((value) => String(value || "").trim()).filter(Boolean)
+        : [],
+      streamers: Array.isArray(match?.streamers)
+        ? match.streamers.map((value) => String(value || "").trim()).filter(Boolean)
+        : [],
       elo_updated_at: result.elo_updated_at,
       lineupsData: sortLineups(duelsByMatchId.get(String(match?.id || "").trim()) || []),
     };
