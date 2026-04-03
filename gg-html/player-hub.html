@@ -1237,6 +1237,128 @@
     padding: 4px 8px;
   }
 
+  .cp-duel-edit-trigger {
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #e5cf8d;
+    border-radius: 6px;
+    background: #fff3c4;
+    color: #8a5a00;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .cp-duel-edit-trigger:hover {
+    background: #ffe79a;
+    border-color: #d8bb68;
+  }
+
+  .cp-duel-edit-trigger i {
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .cp-duel-edit-panel {
+    display: grid;
+    gap: 10px;
+    margin-top: 4px;
+    padding: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fafcfe;
+  }
+
+  .cp-duel-edit-games {
+    display: grid;
+    gap: 10px;
+  }
+
+  .cp-duel-edit-game {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid #d9e1ea;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .cp-duel-edit-meta {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 82px;
+    gap: 8px;
+  }
+
+  .cp-duel-edit-players {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .cp-duel-edit-player {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f8fafc;
+  }
+
+  .cp-duel-edit-player-head {
+    font-size: 13px;
+    font-weight: 700;
+    color: #223040;
+  }
+
+  .cp-duel-edit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .cp-duel-edit-field {
+    display: grid;
+    gap: 3px;
+  }
+
+  .cp-duel-edit-field label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #475467;
+  }
+
+  .cp-duel-edit-field input,
+  .cp-duel-edit-field select {
+    width: 100%;
+    height: 30px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    box-sizing: border-box;
+    font: inherit;
+    font-size: 13px;
+    background: #fff;
+  }
+
+  .cp-duel-edit-field input[readonly] {
+    background: #f3f4f6;
+    color: #444;
+  }
+
+  .cp-duel-edit-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cp-duel-edit-loading {
+    font-size: 13px;
+    color: #667286;
+  }
+
   .lineup__games {
     display: inline-flex;
     align-items: center;
@@ -1383,6 +1505,12 @@
     .cp-friendly-date-sub {
       display: none;
     }
+
+    .cp-duel-edit-meta,
+    .cp-duel-edit-players,
+    .cp-duel-edit-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 
   @media (min-width: 600px) {
@@ -1424,6 +1552,7 @@
   const PROFILES_URL = `${AUTH_BASE}/profiles`;
   const PROFILE_CONTACTS_URL = `${AUTH_BASE}/profiles/contacts`;
   const PROFILE_GET_BGA_DATA_URL = (playerId) => `${PROFILES_URL}/${encodeURIComponent(playerId)}/get-bga-data`;
+  const DUEL_GAMES_SAVE_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/games/save`;
   const DEADLINE_HOURS_OPTIONS = [6, 12, 24, 48];
   const CAPTAIN_VIEWS = {
     MATCHES: "matches",
@@ -2081,6 +2210,20 @@
 
   function isPlannedMatchStatus(status) {
     return String(status || "").trim().toLowerCase() === "planned";
+  }
+
+  function isCompletedMatchStatus(status) {
+    const raw = String(status || "").trim().toLowerCase();
+    return raw === "done" || raw === "error";
+  }
+
+  function hasMatchStartedMoreThanHoursAgo(match, hours) {
+    const startedAt = Date.parse(String(match?.time_utc || match?.time || "").trim());
+    const hoursNumber = Number(hours);
+    if (!Number.isFinite(startedAt) || !Number.isFinite(hoursNumber) || hoursNumber <= 0) {
+      return false;
+    }
+    return (Date.now() - startedAt) > hoursNumber * 60 * 60 * 1000;
   }
 
   function isTruthyOne(value) {
@@ -5195,6 +5338,9 @@
     const currentTournament = editContext?.tournament || null;
     const isLineupsOnly = editContext?.lineupsOnly === true;
     const isReadOnlyNonPlanned = !isCreateMode && !isGlobalAdmin && !isPlannedMatchStatus(match?.status);
+    const canShowEditResultsButton = !isCreateMode && isCompletedMatchStatus(match?.status);
+    const canEditResults = !!editContext?.canEditResults;
+    const canShowExpiredResultsWarning = !!editContext?.canShowExpiredResultsWarning;
     const currentTournamentId = String(
       currentTournament?.id || match?.tournament_id || captainPageState.tournamentId || ""
     ).trim();
@@ -5625,11 +5771,26 @@
 
     const lineupsToggleWrap = document.createElement("div");
     lineupsToggleWrap.style.gridColumn = "1 / -1";
+    lineupsToggleWrap.style.display = "inline-flex";
+    lineupsToggleWrap.style.alignItems = "center";
+    lineupsToggleWrap.style.gap = "8px";
     const createLineupsBtn = document.createElement("button");
     createLineupsBtn.type = "button";
     createLineupsBtn.className = "cp-btn cp-btn-secondary";
     createLineupsBtn.textContent = "Create Lineups";
     lineupsToggleWrap.appendChild(createLineupsBtn);
+    let editResultsBtn = null;
+    if (canShowEditResultsButton) {
+      editResultsBtn = document.createElement("button");
+      editResultsBtn.type = "button";
+      editResultsBtn.className = "cp-btn cp-btn-secondary";
+      editResultsBtn.textContent = "Edit Results";
+      if (!canEditResults && !canShowExpiredResultsWarning) {
+        editResultsBtn.disabled = true;
+        editResultsBtn.title = "Results editing is not available for this match.";
+      }
+      lineupsToggleWrap.appendChild(editResultsBtn);
+    }
     form.appendChild(lineupsToggleWrap);
 
     const lineupsWrap = document.createElement("div");
@@ -5696,6 +5857,9 @@
     const sortedInitialLineups = sortLineups(initialLineups);
     let lineupsEnabled = sortedInitialLineups.length > 0;
     const hadInitialLineups = sortedInitialLineups.length > 0;
+    let isResultsEditModeEnabled = false;
+    let activeDuelEditorId = "";
+    let activeDuelEditorState = null;
     let lineupsState = sortedInitialLineups.map((l, index) => ({
       id: String(l?.id || buildLineupIdFromMatch(source?.time_utc ?? source?.time, l?.player_1_id, l?.player_2_id)).trim(),
       duelNumber: readLineupDuelNumber(l) ?? index + 1,
@@ -5705,6 +5869,7 @@
       dw1: parseNullableInt(l?.dw1),
       dw2: parseNullableInt(l?.dw2),
       status: String(l?.status || "").trim(),
+      games: Array.isArray(l?.games) ? l.games.map((game) => ({ ...game })) : [],
     }));
     if (!lineupsState.length && isCreateMode) lineupsState = [];
 
@@ -5717,6 +5882,7 @@
       dw1: null,
       dw2: null,
       status: "",
+      games: [],
     });
 
     const createDefaultLineupsState = () => {
@@ -5730,10 +5896,92 @@
       return Array.from({ length: 5 }, () => createEmptyLineupEntry());
     };
 
+    const syncEditResultsButton = () => {
+      if (!editResultsBtn) return;
+      editResultsBtn.textContent = isResultsEditModeEnabled ? "Close Editing" : "Edit Results";
+    };
+
+    const determineNoShowSide = (game) => {
+      if (String(game?.status || "").trim() !== "No show") return "";
+      if (parseNullableInt(game?.player_1_rank) === 0) return "player1";
+      if (parseNullableInt(game?.player_2_rank) === 0) return "player2";
+      return "";
+    };
+
+    const buildEditableGamesFromLineup = (lineup) => {
+      const games = collectGameEntries(lineup);
+      if (!games.length) {
+        return [{
+          id: `${String(lineup?.id || "duel").trim()}-1`,
+          duel_id: String(lineup?.id || "").trim(),
+          bga_table_id: "",
+          game_number: 1,
+          player_1_score: null,
+          player_2_score: null,
+          player_1_rank: null,
+          player_2_rank: null,
+          player_1_clock: 0,
+          player_2_clock: 0,
+          status: "",
+          no_show_side: "",
+        }];
+      }
+      return games.map((game, index) => ({
+        id: String(game?.id || `${String(lineup?.id || "duel").trim()}-${index + 1}`).trim(),
+        duel_id: String(lineup?.id || "").trim(),
+        bga_table_id: String(game?.bga_table_id || "").trim(),
+        game_number: parseNullableInt(game?.game_number) || index + 1,
+        player_1_score: parseNullableInt(game?.player_1_score),
+        player_2_score: parseNullableInt(game?.player_2_score),
+        player_1_rank: parseNullableInt(game?.player_1_rank),
+        player_2_rank: parseNullableInt(game?.player_2_rank),
+        player_1_clock: parseNullableInt(game?.player_1_clock) || 0,
+        player_2_clock: parseNullableInt(game?.player_2_clock) || 0,
+        status: String(game?.status || "").trim(),
+        no_show_side: determineNoShowSide(game),
+      }));
+    };
+
+    const findLineupStateById = (duelId) => (
+      lineupsState.find((row) => String(row?.id || "").trim() === String(duelId || "").trim()) || null
+    );
+
+    const updateLineupStateFromServer = (savedDuel) => {
+      const duelId = String(savedDuel?.id || "").trim();
+      if (!duelId) return null;
+      const nextGames = Array.isArray(savedDuel?.games) ? savedDuel.games.map((game) => ({ ...game })) : [];
+      lineupsState = lineupsState.map((row) => (
+        String(row?.id || "").trim() === duelId
+          ? {
+              ...row,
+              duelFormat: String(savedDuel?.duel_format || row.duelFormat || "Bo3").trim() || "Bo3",
+              dw1: parseNullableInt(savedDuel?.dw1),
+              dw2: parseNullableInt(savedDuel?.dw2),
+              status: String(savedDuel?.status || "").trim(),
+              games: nextGames,
+            }
+          : row
+      ));
+      return findLineupStateById(duelId);
+    };
+
+    const syncMatchResultSummary = (savedMatch) => {
+      if (!savedMatch || typeof savedMatch !== "object") return;
+      source.status = String(savedMatch?.status || source.status || "").trim();
+      source.dw1 = parseNullableInt(savedMatch?.dw1);
+      source.dw2 = parseNullableInt(savedMatch?.dw2);
+      source.gw1 = parseNullableInt(savedMatch?.gw1);
+      source.gw2 = parseNullableInt(savedMatch?.gw2);
+      dw1Input.value = hasValue(savedMatch?.dw1) ? String(savedMatch.dw1) : "";
+      dw2Input.value = hasValue(savedMatch?.dw2) ? String(savedMatch.dw2) : "";
+      gw1Input.value = hasValue(savedMatch?.gw1) ? String(savedMatch.gw1) : "";
+      gw2Input.value = hasValue(savedMatch?.gw2) ? String(savedMatch.gw2) : "";
+    };
+
     const syncLineupsToggleButton = () => {
       createLineupsBtn.textContent = lineupsEnabled ? "Delete Lineups" : "Create Lineups";
       createLineupsBtn.classList.toggle("cp-hidden", isReadOnlyNonPlanned);
-      lineupsToggleWrap.classList.toggle("cp-hidden", isReadOnlyNonPlanned);
+      lineupsToggleWrap.classList.toggle("cp-hidden", isReadOnlyNonPlanned && !canShowEditResultsButton);
     };
 
     const getPlayersForTeam = (teamId) => {
@@ -5927,10 +6175,341 @@
       });
     };
 
+    const buildLineupGridTemplate = (showLineupOrder, showDuelScoreField, canChangeCount, showResultsEditAction) => {
+      const parts = [];
+      if (showLineupOrder) parts.push("24px");
+      parts.push("minmax(0, 1fr)");
+      if (showDuelScoreField) parts.push(`${getReadonlyDuelScoreFieldWidth()}px`);
+      parts.push("minmax(0, 1fr)");
+      if (canChangeCount) parts.push("26px");
+      if (showResultsEditAction) parts.push("30px");
+      return parts.join(" ");
+    };
+
+    const openDuelResultsEditor = async (duelId) => {
+      const normalizedDuelId = String(duelId || "").trim();
+      const currentLineup = findLineupStateById(normalizedDuelId);
+      if (!currentLineup) return;
+
+      activeDuelEditorId = normalizedDuelId;
+      activeDuelEditorState = {
+        duelId: normalizedDuelId,
+        games: buildEditableGamesFromLineup(currentLineup),
+        loading: true,
+        saving: false,
+        error: "",
+      };
+      renderLineupsRows();
+
+      try {
+        const matchIdForFetch = String(source?.id || match?.id || "").trim();
+        if (!matchIdForFetch) {
+          activeDuelEditorState.loading = false;
+          renderLineupsRows();
+          return;
+        }
+        const response = await fetch(`${DUELS_URL}?match_id=${encodeURIComponent(matchIdForFetch)}`, {
+          method: "GET",
+          credentials: "include",
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && result?.ok) {
+          const refreshedDuel = (Array.isArray(result?.duels) ? result.duels : [])
+            .find((row) => String(row?.id || "").trim() === normalizedDuelId) || null;
+          if (refreshedDuel) {
+            const refreshedLineup = updateLineupStateFromServer(refreshedDuel) || currentLineup;
+            activeDuelEditorState.games = buildEditableGamesFromLineup(refreshedLineup);
+          }
+        }
+      } catch (_error) {
+        // keep cached duel games
+      } finally {
+        if (activeDuelEditorState && activeDuelEditorState.duelId === normalizedDuelId) {
+          activeDuelEditorState.loading = false;
+          renderLineupsRows();
+        }
+      }
+    };
+
+    const renderDuelEditorPanel = (entry) => {
+      const duelId = String(entry?.id || "").trim();
+      if (!isResultsEditModeEnabled || !canEditResults || activeDuelEditorId !== duelId || !activeDuelEditorState) {
+        return null;
+      }
+
+      const panel = document.createElement("div");
+      panel.className = "cp-duel-edit-panel";
+
+      if (activeDuelEditorState.loading) {
+        const loading = document.createElement("div");
+        loading.className = "cp-duel-edit-loading";
+        loading.textContent = "Loading duel games...";
+        panel.appendChild(loading);
+        return panel;
+      }
+
+      const gamesWrap = document.createElement("div");
+      gamesWrap.className = "cp-duel-edit-games";
+
+      const createYesNoSelect = (value, options) => {
+        const select = document.createElement("select");
+        options.forEach((option) => {
+          const opt = document.createElement("option");
+          opt.value = option.value;
+          opt.textContent = option.label;
+          if (String(option.value) === String(value)) opt.selected = true;
+          select.appendChild(opt);
+        });
+        return select;
+      };
+
+      activeDuelEditorState.games.forEach((game) => {
+        const gameWrap = document.createElement("div");
+        gameWrap.className = "cp-duel-edit-game";
+        const noShowSelects = {};
+
+        const metaRow = document.createElement("div");
+        metaRow.className = "cp-duel-edit-meta";
+
+        const tableField = document.createElement("div");
+        tableField.className = "cp-duel-edit-field";
+        const tableLabel = document.createElement("label");
+        tableLabel.textContent = "Table ID";
+        const tableInput = document.createElement("input");
+        tableInput.type = "text";
+        tableInput.value = String(game?.bga_table_id || "");
+        tableInput.addEventListener("input", () => {
+          game.bga_table_id = String(tableInput.value || "").trim();
+        });
+        tableField.appendChild(tableLabel);
+        tableField.appendChild(tableInput);
+        metaRow.appendChild(tableField);
+
+        const gameNumberField = document.createElement("div");
+        gameNumberField.className = "cp-duel-edit-field";
+        const gameNumberLabel = document.createElement("label");
+        gameNumberLabel.textContent = "Game #";
+        const gameNumberInput = document.createElement("input");
+        gameNumberInput.type = "text";
+        gameNumberInput.readOnly = true;
+        gameNumberInput.value = String(game?.game_number || "");
+        gameNumberField.appendChild(gameNumberLabel);
+        gameNumberField.appendChild(gameNumberInput);
+        metaRow.appendChild(gameNumberField);
+
+        gameWrap.appendChild(metaRow);
+
+        const playersRow = document.createElement("div");
+        playersRow.className = "cp-duel-edit-players";
+
+        [
+          {
+            key: "player_1",
+            label: playerLabel(profilesMap.get(String(entry?.player1Id || "").trim()) || { id: entry?.player1Id }),
+            scoreField: "player_1_score",
+            rankField: "player_1_rank",
+            clockField: "player_1_clock",
+            noShowValue: "player1",
+          },
+          {
+            key: "player_2",
+            label: playerLabel(profilesMap.get(String(entry?.player2Id || "").trim()) || { id: entry?.player2Id }),
+            scoreField: "player_2_score",
+            rankField: "player_2_rank",
+            clockField: "player_2_clock",
+            noShowValue: "player2",
+          },
+        ].forEach((playerConfig) => {
+          const playerCard = document.createElement("div");
+          playerCard.className = "cp-duel-edit-player";
+
+          const head = document.createElement("div");
+          head.className = "cp-duel-edit-player-head";
+          head.textContent = playerConfig.label;
+          playerCard.appendChild(head);
+
+          const grid = document.createElement("div");
+          grid.className = "cp-duel-edit-grid";
+
+          const scoreField = document.createElement("div");
+          scoreField.className = "cp-duel-edit-field";
+          const scoreLabel = document.createElement("label");
+          scoreLabel.textContent = "Score";
+          const scoreInput = document.createElement("input");
+          scoreInput.type = "number";
+          scoreInput.step = "1";
+          scoreInput.value = hasValue(game?.[playerConfig.scoreField]) ? String(game[playerConfig.scoreField]) : "";
+          scoreInput.addEventListener("input", () => {
+            game[playerConfig.scoreField] = parseNullableInt(scoreInput.value);
+          });
+          scoreField.appendChild(scoreLabel);
+          scoreField.appendChild(scoreInput);
+          grid.appendChild(scoreField);
+
+          const wonField = document.createElement("div");
+          wonField.className = "cp-duel-edit-field";
+          const wonLabel = document.createElement("label");
+          wonLabel.textContent = "Won";
+          const wonSelect = createYesNoSelect(
+            hasValue(game?.[playerConfig.rankField]) ? String(game[playerConfig.rankField]) : "",
+            [
+              { value: "", label: "" },
+              { value: "1", label: "Yes" },
+              { value: "0", label: "No" },
+            ]
+          );
+          wonSelect.addEventListener("change", () => {
+            game[playerConfig.rankField] = wonSelect.value === "" ? null : parseNullableInt(wonSelect.value);
+          });
+          wonField.appendChild(wonLabel);
+          wonField.appendChild(wonSelect);
+          grid.appendChild(wonField);
+
+          const clockField = document.createElement("div");
+          clockField.className = "cp-duel-edit-field";
+          const clockLabel = document.createElement("label");
+          clockLabel.textContent = "Time loss";
+          const clockSelect = createYesNoSelect(
+            String(parseNullableInt(game?.[playerConfig.clockField]) === 1 ? 1 : ""),
+            [
+              { value: "", label: "" },
+              { value: "1", label: "Yes" },
+            ]
+          );
+          clockSelect.addEventListener("change", () => {
+            game[playerConfig.clockField] = clockSelect.value === "1" ? 1 : 0;
+          });
+          clockField.appendChild(clockLabel);
+          clockField.appendChild(clockSelect);
+          grid.appendChild(clockField);
+
+          const noShowField = document.createElement("div");
+          noShowField.className = "cp-duel-edit-field";
+          const noShowLabel = document.createElement("label");
+          noShowLabel.textContent = "No show";
+          const noShowSelect = createYesNoSelect(
+            game?.no_show_side === playerConfig.noShowValue ? "1" : "",
+            [
+              { value: "", label: "" },
+              { value: "1", label: "Yes" },
+            ]
+          );
+          noShowSelects[playerConfig.noShowValue] = noShowSelect;
+          noShowSelect.addEventListener("change", () => {
+            if (noShowSelect.value === "1") {
+              game.no_show_side = playerConfig.noShowValue;
+              Object.entries(noShowSelects).forEach(([side, select]) => {
+                if (side !== playerConfig.noShowValue) {
+                  select.value = "";
+                }
+              });
+            } else if (game.no_show_side === playerConfig.noShowValue) {
+              game.no_show_side = "";
+            }
+          });
+          noShowField.appendChild(noShowLabel);
+          noShowField.appendChild(noShowSelect);
+          grid.appendChild(noShowField);
+
+          playerCard.appendChild(grid);
+          playersRow.appendChild(playerCard);
+        });
+
+        gameWrap.appendChild(playersRow);
+        gamesWrap.appendChild(gameWrap);
+      });
+
+      panel.appendChild(gamesWrap);
+
+      const errorEl = document.createElement("div");
+      errorEl.className = "cp-edit-error";
+      errorEl.textContent = String(activeDuelEditorState.error || "").trim();
+      errorEl.classList.toggle("cp-hidden", !activeDuelEditorState.error);
+      panel.appendChild(errorEl);
+
+      const actions = document.createElement("div");
+      actions.className = "cp-duel-edit-actions";
+      const saveBtnLocal = document.createElement("button");
+      saveBtnLocal.type = "button";
+      saveBtnLocal.className = "cp-btn cp-btn-primary";
+      saveBtnLocal.textContent = activeDuelEditorState.saving ? "Saving..." : "Save";
+      saveBtnLocal.disabled = !!activeDuelEditorState.saving;
+      const cancelBtnLocal = document.createElement("button");
+      cancelBtnLocal.type = "button";
+      cancelBtnLocal.className = "cp-btn cp-btn-secondary";
+      cancelBtnLocal.textContent = "Cancel";
+      cancelBtnLocal.disabled = !!activeDuelEditorState.saving;
+      actions.appendChild(saveBtnLocal);
+      actions.appendChild(cancelBtnLocal);
+      panel.appendChild(actions);
+
+      cancelBtnLocal.addEventListener("click", () => {
+        activeDuelEditorId = "";
+        activeDuelEditorState = null;
+        renderLineupsRows();
+      });
+
+      saveBtnLocal.addEventListener("click", async () => {
+        activeDuelEditorState.error = "";
+        activeDuelEditorState.saving = true;
+        renderLineupsRows();
+        try {
+          const payloadGames = activeDuelEditorState.games.map((game) => ({
+            id: String(game?.id || "").trim(),
+            duel_id: String(entry?.id || "").trim(),
+            bga_table_id: String(game?.bga_table_id || "").trim(),
+            game_number: parseNullableInt(game?.game_number),
+            player_1_score: parseNullableInt(game?.player_1_score),
+            player_2_score: parseNullableInt(game?.player_2_score),
+            player_1_rank: parseNullableInt(game?.player_1_rank),
+            player_2_rank: parseNullableInt(game?.player_2_rank),
+            player_1_clock: parseNullableInt(game?.player_1_clock) === 1 ? 1 : 0,
+            player_2_clock: parseNullableInt(game?.player_2_clock) === 1 ? 1 : 0,
+            status: game?.no_show_side ? "No show" : "",
+          }));
+          const response = await fetch(DUEL_GAMES_SAVE_URL(entry.id), {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ games: payloadGames }),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result?.ok) {
+            activeDuelEditorState.error = result?.message || "Failed to save duel games.";
+            activeDuelEditorState.saving = false;
+            renderLineupsRows();
+            return;
+          }
+          const nextLineup = updateLineupStateFromServer(result?.duel);
+          syncMatchResultSummary(result?.match);
+          activeDuelEditorState = nextLineup
+            ? {
+                duelId: String(nextLineup.id || "").trim(),
+                games: buildEditableGamesFromLineup(nextLineup),
+                loading: false,
+                saving: false,
+                error: "",
+              }
+            : null;
+          if (!activeDuelEditorState) {
+            activeDuelEditorId = "";
+          }
+          renderLineupsRows();
+        } catch (_error) {
+          activeDuelEditorState.error = "Failed to save duel games.";
+          activeDuelEditorState.saving = false;
+          renderLineupsRows();
+        }
+      });
+
+      return panel;
+    };
+
     const renderLineupsRows = () => {
       lineupsRows.innerHTML = "";
       syncLineupsHeader();
       syncLineupsToggleButton();
+      syncEditResultsButton();
       lineupsWrap.style.display = lineupsEnabled ? "" : "none";
       if (!lineupsEnabled) return;
 
@@ -5939,58 +6518,34 @@
       const canChangeCount = !isReadOnlyNonPlanned && !isFixedTournamentLineup && !isSecretLineupType();
       const showLineupOrder = isGlobalAdmin;
       const showDuelScoreField = !isPlannedMatchStatus(source?.status);
-      const duelScoreFieldWidth = getReadonlyDuelScoreFieldWidth();
-      const duelScoreColumn = `${duelScoreFieldWidth}px`;
+      const showResultsEditAction = isResultsEditModeEnabled && canEditResults;
       lineupTitle1.style.display = showLineupOrder ? "" : "none";
       lineupTitleScore.style.display = showDuelScoreField ? "" : "none";
-      lineupsHeader.style.gridTemplateColumns = showLineupOrder
-        ? (
-            showDuelScoreField
-              ? (canChangeCount
-                  ? `24px minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr) 26px`
-                  : `24px minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr)`)
-              : (canChangeCount
-                  ? "24px minmax(0, 1fr) minmax(0, 1fr) 26px"
-                  : "24px minmax(0, 1fr) minmax(0, 1fr)")
-          )
-        : (
-            showDuelScoreField
-              ? (canChangeCount
-                  ? `minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr) 26px`
-                  : `minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr)`)
-              : (canChangeCount
-                  ? "minmax(0, 1fr) minmax(0, 1fr) 26px"
-                  : "minmax(0, 1fr) minmax(0, 1fr)")
-          );
+      lineupsHeader.style.gridTemplateColumns = buildLineupGridTemplate(
+        showLineupOrder,
+        showDuelScoreField,
+        canChangeCount,
+        showResultsEditAction
+      );
       lineupsOpenActions.style.display = canChangeCount ? "" : "none";
       reindexLineupsState();
 
       lineupsState.forEach((entry, index) => {
+        const rowWrap = document.createElement("div");
+        rowWrap.style.display = "grid";
+        rowWrap.style.gap = "6px";
         const row = document.createElement("div");
         row.dataset.index = String(index);
         if (isErrorDuelStatus(entry)) {
           row.classList.add("cp-lineup-grid-row--error");
         }
         row.style.display = "grid";
-        row.style.gridTemplateColumns = showLineupOrder
-          ? (
-              showDuelScoreField
-                ? (canChangeCount
-                    ? `24px minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr) 26px`
-                    : `24px minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr)`)
-                : (canChangeCount
-                    ? "24px minmax(0, 1fr) minmax(0, 1fr) 26px"
-                    : "24px minmax(0, 1fr) minmax(0, 1fr)")
-            )
-          : (
-              showDuelScoreField
-                ? (canChangeCount
-                    ? `minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr) 26px`
-                    : `minmax(0, 1fr) ${duelScoreColumn} minmax(0, 1fr)`)
-                : (canChangeCount
-                    ? "minmax(0, 1fr) minmax(0, 1fr) 26px"
-                    : "minmax(0, 1fr) minmax(0, 1fr)")
-            );
+        row.style.gridTemplateColumns = buildLineupGridTemplate(
+          showLineupOrder,
+          showDuelScoreField,
+          canChangeCount,
+          showResultsEditAction
+        );
         row.style.gap = "8px";
         row.style.alignItems = "center";
 
@@ -6210,7 +6765,30 @@
           row.appendChild(removeBtn);
         }
 
-        lineupsRows.appendChild(row);
+        if (showResultsEditAction) {
+          const triggerBtn = document.createElement("button");
+          triggerBtn.type = "button";
+          triggerBtn.className = "cp-duel-edit-trigger";
+          triggerBtn.title = "Edit duel games";
+          triggerBtn.innerHTML = '<i class="fas fa-pen"></i>';
+          triggerBtn.addEventListener("click", async () => {
+            if (activeDuelEditorId === String(entry?.id || "").trim()) {
+              activeDuelEditorId = "";
+              activeDuelEditorState = null;
+              renderLineupsRows();
+              return;
+            }
+            await openDuelResultsEditor(entry.id);
+          });
+          row.appendChild(triggerBtn);
+        }
+
+        rowWrap.appendChild(row);
+        const duelPanel = renderDuelEditorPanel(entry);
+        if (duelPanel) {
+          rowWrap.appendChild(duelPanel);
+        }
+        lineupsRows.appendChild(rowWrap);
       });
     };
 
@@ -6239,6 +6817,85 @@
       if (!lineupsState.length) lineupsState = createDefaultLineupsState();
       syncLineupsByRules();
     });
+
+    const showResultsEditExpiredDialog = () => {
+      const overlay = document.createElement("div");
+      overlay.style.position = "fixed";
+      overlay.style.inset = "0";
+      overlay.style.background = "rgba(24, 31, 41, 0.42)";
+      overlay.style.display = "flex";
+      overlay.style.alignItems = "center";
+      overlay.style.justifyContent = "center";
+      overlay.style.padding = "16px";
+      overlay.style.zIndex = "1000";
+
+      const dialog = document.createElement("div");
+      dialog.style.width = "100%";
+      dialog.style.maxWidth = "420px";
+      dialog.style.background = "#fff";
+      dialog.style.border = "1px solid #d8dee8";
+      dialog.style.borderRadius = "8px";
+      dialog.style.boxShadow = "0 16px 36px rgba(15, 28, 48, 0.22)";
+      dialog.style.padding = "16px";
+      dialog.style.display = "grid";
+      dialog.style.gap = "12px";
+
+      const title = document.createElement("div");
+      title.textContent = "Edit results unavailable";
+      title.style.fontSize = "16px";
+      title.style.fontWeight = "700";
+      title.style.color = "#222";
+
+      const text = document.createElement("div");
+      text.textContent = "Match result editing is available for 1 day after match start. To correct the result, contact the tournament administrators or write to carcassonne.gg@gmail.com.";
+      text.style.fontSize = "14px";
+      text.style.lineHeight = "1.4";
+      text.style.color = "#4b5563";
+
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.justifyContent = "flex-end";
+      actions.style.gap = "8px";
+
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "cp-btn cp-btn-secondary";
+      closeBtn.textContent = "Close";
+
+      const closeModal = () => {
+        overlay.remove();
+      };
+
+      closeBtn.addEventListener("click", closeModal);
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) closeModal();
+      });
+
+      actions.appendChild(closeBtn);
+      dialog.appendChild(title);
+      dialog.appendChild(text);
+      dialog.appendChild(actions);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+    };
+
+    if (editResultsBtn) {
+      editResultsBtn.addEventListener("click", () => {
+        setError("");
+        setActionStatus("");
+        if (canShowExpiredResultsWarning && !canEditResults) {
+          showResultsEditExpiredDialog();
+          return;
+        }
+        if (!canEditResults) return;
+        isResultsEditModeEnabled = !isResultsEditModeEnabled;
+        if (!isResultsEditModeEnabled) {
+          activeDuelEditorId = "";
+          activeDuelEditorState = null;
+        }
+        renderLineupsRows();
+      });
+    }
 
     addLineupRowBtn.addEventListener("click", () => {
       if (isReadOnlyNonPlanned) return;
@@ -7244,6 +7901,31 @@
         } catch (_error) {
           existingLineups = [];
         }
+        const isOpenTournamentCaptainResultsEditor = currentTournamentAccess.accessType !== 2
+          && !isAdminUser
+          && isCaptainUser
+          && !!captainAssociationCode
+          && (matchTeam1 === captainAssociationCode || matchTeam2 === captainAssociationCode);
+        const isClosedTournamentCaptainResultsEditor = currentTournamentAccess.accessType === 2
+          && !canManageClosedTournamentMatches
+          && (
+            String(currentTournamentAccess?.currentUserEntry?.role || "").trim().toLowerCase() === "captain"
+            || currentTournamentRole === "captain"
+          )
+          && !!captainAssociationCode
+          && (matchTeam1 === captainAssociationCode || matchTeam2 === captainAssociationCode);
+        const isClosedTournamentCaptainResultsEditExpired = isClosedTournamentCaptainResultsEditor
+          && hasMatchStartedMoreThanHoursAgo(matchToEdit, 24);
+        const canEditResults = isCompletedMatchStatus(matchToEdit?.status)
+          && (
+            isAdminUser
+            || canManageClosedTournamentMatches
+            || isOpenTournamentCaptainResultsEditor
+            || (isClosedTournamentCaptainResultsEditor && !isClosedTournamentCaptainResultsEditExpired)
+          );
+        const canShowExpiredResultsWarning = isCompletedMatchStatus(matchToEdit?.status)
+          && isClosedTournamentCaptainResultsEditor
+          && isClosedTournamentCaptainResultsEditExpired;
         renderMatchEditForm(
           matchToEdit,
           teamsById,
@@ -7254,6 +7936,8 @@
             tournament: currentTournament,
             lineupsOnly: Number(currentTournament?.access_type) === 2 && !canManageClosedTournamentMatches,
             isGlobalAdmin: isAdminUser,
+            canEditResults,
+            canShowExpiredResultsWarning,
           },
           "edit"
         );

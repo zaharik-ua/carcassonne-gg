@@ -528,6 +528,137 @@ async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
   );
 }
 
+function isCompletedMatchStatus(status) {
+  const normalized = String(status || "").trim().toLowerCase();
+  return normalized === "done" || normalized === "error";
+}
+
+function hasStartedMoreThanHoursAgo(timeUtc, hours) {
+  const startedAt = Date.parse(String(timeUtc || "").trim());
+  const hoursNumber = Number(hours);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(hoursNumber) || hoursNumber <= 0) {
+    return false;
+  }
+  return (Date.now() - startedAt) > hoursNumber * 60 * 60 * 1000;
+}
+
+function canUserEditMatchResults({ tournament, user, matchRow }) {
+  if (!user || !tournament || !matchRow) {
+    return { allowed: false, expired: false };
+  }
+
+  const isAdmin = Number(user.admin) === 1;
+  if (isAdmin) {
+    return { allowed: true, expired: false };
+  }
+
+  const isTeamCaptain = Number(user.team_captain) === 1;
+  const userAssociation = String(user.association || "").trim().toUpperCase();
+  const team1 = String(matchRow.team_1 || "").trim().toUpperCase();
+  const team2 = String(matchRow.team_2 || "").trim().toUpperCase();
+  const isOwnMatch = !!userAssociation && (userAssociation === team1 || userAssociation === team2);
+  const isClosedTournament = tournament.access_type === TOURNAMENT_ACCESS_TYPES.CLOSED;
+  const isClosedAdmin = tournament.has_access && tournament.access_role === TOURNAMENT_ACCESS_ROLES.ADMIN;
+  if (isClosedAdmin) {
+    return { allowed: true, expired: false };
+  }
+
+  if (isClosedTournament) {
+    const isClosedCaptain = tournament.has_access
+      && tournament.access_role === TOURNAMENT_ACCESS_ROLES.CAPTAIN
+      && canClosedTournamentCaptainAccessMatch(tournament, userAssociation, team1, team2);
+    if (!isClosedCaptain) {
+      return { allowed: false, expired: false };
+    }
+    const expired = hasStartedMoreThanHoursAgo(matchRow.time_utc, 24);
+    return {
+      allowed: !expired,
+      expired,
+    };
+  }
+
+  if (isTeamCaptain && isOwnMatch) {
+    return { allowed: true, expired: false };
+  }
+
+  return { allowed: false, expired: false };
+}
+
+async function recomputeDuelAggregates(duelId, actorPlayerId = null) {
+  const normalizedDuelId = String(duelId || "").trim();
+  if (!normalizedDuelId) return null;
+
+  const aggregateRow = await dbGetAsync(
+    `
+      SELECT
+        d.id,
+        d.match_id,
+        d.time_utc,
+        COALESCE(df.games_to_win, 1) AS games_to_win,
+        COALESCE(df.minutes_to_play, 60) AS minutes_to_play,
+        COALESCE(SUM(CASE WHEN COALESCE(g.player_1_rank, 0) = 1 THEN 1 ELSE 0 END), 0) AS dw1,
+        COALESCE(SUM(CASE WHEN COALESCE(g.player_2_rank, 0) = 1 THEN 1 ELSE 0 END), 0) AS dw2
+      FROM duels d
+      LEFT JOIN duel_formats df
+        ON lower(trim(df.format)) = lower(trim(d.duel_format))
+      LEFT JOIN games g
+        ON trim(COALESCE(g.duel_id, '')) = trim(COALESCE(d.id, ''))
+      WHERE trim(COALESCE(d.id, '')) = trim(?)
+        AND d.deleted_at IS NULL
+      GROUP BY
+        d.id,
+        d.match_id,
+        d.time_utc,
+        df.games_to_win,
+        df.minutes_to_play
+      LIMIT 1
+    `,
+    [normalizedDuelId]
+  );
+
+  if (!aggregateRow) return null;
+
+  const dw1 = Number(aggregateRow.dw1 || 0);
+  const dw2 = Number(aggregateRow.dw2 || 0);
+  const gamesToWin = Math.max(1, Number(aggregateRow.games_to_win || 1));
+  const minutesToPlay = Math.max(1, Number(aggregateRow.minutes_to_play || 60));
+  const startTs = Date.parse(String(aggregateRow.time_utc || "").trim());
+  const endTs = Number.isFinite(startTs) ? startTs + minutesToPlay * 60 * 1000 : null;
+  const nowTs = Date.now();
+
+  let status = "Planned";
+  if ((dw1 === gamesToWin && dw2 < gamesToWin) || (dw2 === gamesToWin && dw1 < gamesToWin)) {
+    status = "Done";
+  } else if (Number.isFinite(startTs) && endTs !== null && startTs <= nowTs && nowTs < endTs) {
+    status = "In progress";
+  } else if (Number.isFinite(startTs) && endTs !== null && nowTs >= endTs) {
+    status = "Error";
+  }
+
+  await dbRunAsync(
+    `
+      UPDATE duels
+      SET
+        dw1 = ?,
+        dw2 = ?,
+        status = ?,
+        updated_by = COALESCE(?, updated_by),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+        AND deleted_at IS NULL
+    `,
+    [dw1, dw2, status, actorPlayerId, normalizedDuelId]
+  );
+
+  return {
+    duelId: normalizedDuelId,
+    matchId: String(aggregateRow.match_id || "").trim(),
+    dw1,
+    dw2,
+    status,
+  };
+}
+
 function execFileAsync(file, args = [], options = {}) {
   return new Promise((resolve, reject) => {
     execFile(file, args, options, (error, stdout, stderr) => {
@@ -5086,6 +5217,215 @@ app.get("/duels", (req, res, next) => {
           if (err) return next(err);
           return res.json({ ok: true, duels: rows || [] });
         });
+      });
+    }
+  );
+});
+
+app.post("/duels/:id/games/save", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const duelId = String(req.params.id || "").trim();
+  if (!duelId) {
+    return res.status(400).json({ ok: false, message: "Duel id is required" });
+  }
+
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const games = Array.isArray(payload.games) ? payload.games : [];
+  const actorPlayerId = String(req.user.player_id || "").trim() || null;
+
+  const normalizeZeroOneOrNull = (value) => {
+    const normalized = normalizeIntegerOrNull(value);
+    if (normalized === null) return null;
+    return normalized === 0 || normalized === 1 ? normalized : null;
+  };
+
+  return db.get(
+    `
+      SELECT
+        d.id,
+        d.match_id,
+        d.time_utc,
+        d.duel_format,
+        m.tournament_id,
+        m.team_1,
+        m.team_2,
+        m.status AS match_status
+      FROM duels d
+      JOIN matches m
+        ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
+       AND m.deleted_at IS NULL
+      WHERE trim(COALESCE(d.id, '')) = trim(?)
+        AND d.deleted_at IS NULL
+      LIMIT 1
+    `,
+    [duelId],
+    (duelErr, duelRow) => {
+      if (duelErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load duel" });
+      }
+      if (!duelRow) {
+        return res.status(404).json({ ok: false, message: "Duel not found" });
+      }
+      if (!isCompletedMatchStatus(duelRow.match_status)) {
+        return res.status(403).json({ ok: false, message: "Match results can be edited only for completed matches" });
+      }
+
+      return loadTournamentAccessForUser(duelRow.tournament_id, req.user, (tournamentErr, tournament) => {
+        if (tournamentErr) {
+          return res.status(500).json({ ok: false, message: "Failed to validate tournament access" });
+        }
+        if (!tournament) {
+          return res.status(404).json({ ok: false, message: "Tournament not found" });
+        }
+
+        const resultAccess = canUserEditMatchResults({
+          tournament,
+          user: req.user,
+          matchRow: duelRow,
+        });
+        if (!resultAccess.allowed) {
+          return res.status(403).json({
+            ok: false,
+            message: resultAccess.expired
+              ? "Match result editing is available for 1 day after match start."
+              : "Forbidden",
+          });
+        }
+
+        const sanitizedGames = [];
+        for (let index = 0; index < games.length; index += 1) {
+          const item = games[index] && typeof games[index] === "object" ? games[index] : {};
+          const gameNumber = normalizePositiveInteger(item.game_number);
+          if (!gameNumber) {
+            return res.status(400).json({ ok: false, message: "game_number must be a positive integer" });
+          }
+          const id = normalizeNullableText(item.id) || `${duelId}-${gameNumber}`;
+          const bgaTableId = normalizeNullableText(item.bga_table_id);
+          const player1Score = normalizeIntegerOrNull(item.player_1_score);
+          const player2Score = normalizeIntegerOrNull(item.player_2_score);
+          const player1Rank = normalizeZeroOneOrNull(item.player_1_rank);
+          const player2Rank = normalizeZeroOneOrNull(item.player_2_rank);
+          const player1Clock = normalizeZeroOneOrNull(item.player_1_clock);
+          const player2Clock = normalizeZeroOneOrNull(item.player_2_clock);
+          const status = normalizeNullableText(item.status);
+
+          sanitizedGames.push({
+            id,
+            duel_id: duelId,
+            bga_table_id: bgaTableId,
+            game_number: gameNumber,
+            player_1_score: player1Score,
+            player_2_score: player2Score,
+            player_1_rank: player1Rank,
+            player_2_rank: player2Rank,
+            player_1_clock: player1Clock ?? 0,
+            player_2_clock: player2Clock ?? 0,
+            status,
+          });
+        }
+
+        return (async () => {
+          await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+          try {
+            for (const item of sanitizedGames) {
+              await dbRunAsync(
+                `
+                  INSERT INTO games (
+                    id,
+                    duel_id,
+                    bga_table_id,
+                    game_number,
+                    player_1_score,
+                    player_2_score,
+                    player_1_rank,
+                    player_2_rank,
+                    player_1_clock,
+                    player_2_clock,
+                    status
+                  )
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET
+                    duel_id = excluded.duel_id,
+                    bga_table_id = excluded.bga_table_id,
+                    game_number = excluded.game_number,
+                    player_1_score = excluded.player_1_score,
+                    player_2_score = excluded.player_2_score,
+                    player_1_rank = excluded.player_1_rank,
+                    player_2_rank = excluded.player_2_rank,
+                    player_1_clock = excluded.player_1_clock,
+                    player_2_clock = excluded.player_2_clock,
+                    status = excluded.status
+                `,
+                [
+                  item.id,
+                  item.duel_id,
+                  item.bga_table_id,
+                  item.game_number,
+                  item.player_1_score,
+                  item.player_2_score,
+                  item.player_1_rank,
+                  item.player_2_rank,
+                  item.player_1_clock,
+                  item.player_2_clock,
+                  item.status,
+                ]
+              );
+            }
+
+            const recomputedDuel = await recomputeDuelAggregates(duelId, actorPlayerId);
+            if (recomputedDuel?.matchId) {
+              await recomputeMatchAggregates(recomputedDuel.matchId, actorPlayerId);
+            }
+            await dbRunAsync("COMMIT");
+
+            const [savedDuel] = await new Promise((resolve, reject) => {
+              loadDuelsByIds([duelId], (loadErr, rows) => {
+                if (loadErr) {
+                  reject(loadErr);
+                  return;
+                }
+                resolve(rows || []);
+              });
+            });
+            const savedMatch = recomputedDuel?.matchId
+              ? await dbGetAsync(
+                  `
+                    SELECT
+                      id,
+                      status,
+                      dw1,
+                      dw2,
+                      gw1,
+                      gw2
+                    FROM matches
+                    WHERE id = ?
+                      AND deleted_at IS NULL
+                    LIMIT 1
+                  `,
+                  [recomputedDuel.matchId]
+                )
+              : null;
+
+            return res.json({
+              ok: true,
+              duel: savedDuel || null,
+              match: savedMatch || null,
+            });
+          } catch (error) {
+            try {
+              await dbRunAsync("ROLLBACK");
+            } catch (_rollbackErr) {
+              // ignore rollback error
+            }
+            if (String(error?.message || "").includes("UNIQUE")) {
+              return res.status(409).json({ ok: false, message: "Game with this id or BGA table already exists" });
+            }
+            return res.status(500).json({ ok: false, message: "Failed to save duel games" });
+          }
+        })();
       });
     }
   );
