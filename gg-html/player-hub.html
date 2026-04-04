@@ -6029,11 +6029,9 @@
       !game?.isNewLocal && String(game?.status || "").trim().toLowerCase() === "finished"
     );
 
-    const isReadonlyNoShowExistingGame = (game) => {
-      if (game?.isNewLocal) return false;
-      const normalizedStatus = String(game?.status || "").trim().toLowerCase();
-      return normalizedStatus === "finished" || normalizedStatus === "no show";
-    };
+    const isReadonlyNoShowExistingGame = (game) => (
+      !game?.isNewLocal
+    );
 
     const canEditGameScore = (game) => (
       !!game?.isNewLocal || isGlobalAdmin

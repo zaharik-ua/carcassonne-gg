@@ -5336,8 +5336,7 @@ app.post("/duels/:id/games/save", (req, res) => {
             const id = normalizeNullableText(item.id) || `${duelId}-${gameNumber}`;
             const bgaTableId = normalizeNullableText(item.bga_table_id);
             const existingGame = existingGamesById.get(id) || existingGamesByNumber.get(gameNumber) || null;
-            const existingStatus = String(existingGame?.status || "").trim().toLowerCase();
-            const isLockedNoShowGame = existingStatus === "finished" || existingStatus === "no show";
+            const isLockedNoShowGame = !!existingGame;
             const player1Score = !isAdmin && existingGame
               ? normalizeIntegerOrNull(existingGame.player_1_score)
               : normalizeIntegerOrNull(item.player_1_score);
