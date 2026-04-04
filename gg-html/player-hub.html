@@ -6029,6 +6029,12 @@
       !game?.isNewLocal && String(game?.status || "").trim().toLowerCase() === "finished"
     );
 
+    const isReadonlyNoShowExistingGame = (game) => {
+      if (game?.isNewLocal) return false;
+      const normalizedStatus = String(game?.status || "").trim().toLowerCase();
+      return normalizedStatus === "finished" || normalizedStatus === "no show";
+    };
+
     const canEditGameScore = (game) => (
       !!game?.isNewLocal || isGlobalAdmin
     );
@@ -6699,7 +6705,7 @@
         refreshGameUiState = () => {
           const noShowSide = String(game?.no_show_side || "").trim();
           const isGameNoShowLocked = !!noShowSide;
-          const finishedGameNoShowReadonly = isFinishedExistingGame(game);
+          const finishedGameNoShowReadonly = isReadonlyNoShowExistingGame(game);
 
           if (game?.isNewLocal && tableInput instanceof HTMLInputElement) {
             tableInput.value = String(game?.bga_table_id || "");

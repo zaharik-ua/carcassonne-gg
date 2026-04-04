@@ -5308,6 +5308,7 @@ app.post("/duels/:id/games/save", (req, res) => {
               SELECT
                 id,
                 game_number,
+                status,
                 player_1_score,
                 player_2_score
               FROM games
@@ -5335,6 +5336,8 @@ app.post("/duels/:id/games/save", (req, res) => {
             const id = normalizeNullableText(item.id) || `${duelId}-${gameNumber}`;
             const bgaTableId = normalizeNullableText(item.bga_table_id);
             const existingGame = existingGamesById.get(id) || existingGamesByNumber.get(gameNumber) || null;
+            const existingStatus = String(existingGame?.status || "").trim().toLowerCase();
+            const isLockedNoShowGame = existingStatus === "finished" || existingStatus === "no show";
             const player1Score = !isAdmin && existingGame
               ? normalizeIntegerOrNull(existingGame.player_1_score)
               : normalizeIntegerOrNull(item.player_1_score);
@@ -5345,7 +5348,9 @@ app.post("/duels/:id/games/save", (req, res) => {
             const player2Rank = normalizeZeroOneOrNull(item.player_2_rank);
             const player1Clock = normalizeZeroOneOrNull(item.player_1_clock);
             const player2Clock = normalizeZeroOneOrNull(item.player_2_clock);
-            const status = normalizeNullableText(item.status);
+            const status = isLockedNoShowGame
+              ? normalizeNullableText(existingGame?.status)
+              : normalizeNullableText(item.status);
 
             sanitizedGames.push({
               id,
