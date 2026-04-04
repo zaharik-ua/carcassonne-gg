@@ -447,9 +447,143 @@ function dbRunAsync(sql, params = []) {
   });
 }
 
+function normalizeStatusText(status) {
+  return String(status || "").trim().toLowerCase();
+}
+
+function normalizePlannedDuelScores(status, dw1, dw2) {
+  if (normalizeStatusText(status) === "planned") {
+    return { dw1: null, dw2: null };
+  }
+  return { dw1, dw2 };
+}
+
+function normalizePlannedMatchScores(status, dw1, dw2, gw1, gw2) {
+  if (normalizeStatusText(status) === "planned") {
+    return {
+      dw1: null,
+      dw2: null,
+      gw1: null,
+      gw2: null,
+    };
+  }
+  return { dw1, dw2, gw1, gw2 };
+}
+
+function ratingValueToIntOrNull(value) {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim();
+  if (!raw || raw === "?") return null;
+  const number = Number(raw);
+  if (!Number.isFinite(number)) return null;
+  return Math.trunc(number);
+}
+
+function calculateDuelRatingFull(elo1, elo2) {
+  if (!Number.isInteger(elo1) || !Number.isInteger(elo2)) {
+    return null;
+  }
+
+  const powValue = 1.5;
+  const maxRating = 5.49;
+  const maxElo = 700;
+  const minElo = 300;
+  const avg = (elo1 + elo2) / 2;
+  const normalizedAverage = Math.min(Math.max((avg - minElo) / (maxElo - minElo), 0), 1);
+  const delta = Math.abs(elo1 - elo2) / 175;
+  const score = Math.min(
+    maxRating,
+    (normalizedAverage ** powValue) * maxRating
+      + normalizedAverage * ((1 - Math.min(1, delta)) ** powValue)
+  );
+  if (elo1 >= 700 && elo2 >= 700) {
+    return 6.0;
+  }
+  return score;
+}
+
+function calculateDuelRating(ratingFull) {
+  if (typeof ratingFull !== "number" || !Number.isFinite(ratingFull)) {
+    return null;
+  }
+  return Math.round(ratingFull);
+}
+
+function calculateMatchRating(duelRatingFullValues) {
+  const ratings = Array.isArray(duelRatingFullValues)
+    ? duelRatingFullValues.filter((value) => typeof value === "number" && Number.isFinite(value))
+    : [];
+  if (!ratings.length) {
+    return null;
+  }
+  const meanSquare = ratings.reduce((sum, value) => sum + value * value, 0) / ratings.length;
+  return Math.round(Math.sqrt(meanSquare));
+}
+
+async function recomputeDuelRatingsForMatch(matchId) {
+  const normalizedMatchId = String(matchId || "").trim();
+  if (!normalizedMatchId) {
+    return { matchRating: null };
+  }
+
+  const duelRows = await dbAllAsync(
+    `
+      SELECT
+        d.id,
+        p1.bga_elo AS elo1,
+        p2.bga_elo AS elo2
+      FROM duels d
+      LEFT JOIN profiles p1
+        ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
+      LEFT JOIN profiles p2
+        ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
+      WHERE trim(COALESCE(d.match_id, '')) = trim(?)
+        AND d.deleted_at IS NULL
+      ORDER BY
+        CASE WHEN d.duel_number IS NULL THEN 1 ELSE 0 END ASC,
+        d.duel_number ASC,
+        d.id ASC
+    `,
+    [normalizedMatchId]
+  );
+
+  const ratingRows = duelRows.map((row) => {
+    const ratingFull = calculateDuelRatingFull(
+      ratingValueToIntOrNull(row?.elo1),
+      ratingValueToIntOrNull(row?.elo2)
+    );
+    return {
+      id: String(row?.id || "").trim(),
+      ratingFull,
+      rating: calculateDuelRating(ratingFull),
+    };
+  });
+
+  for (const row of ratingRows) {
+    if (!row.id) continue;
+    await dbRunAsync(
+      `
+        UPDATE duels
+        SET
+          rating_full = ?,
+          rating = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE trim(COALESCE(id, '')) = trim(?)
+          AND deleted_at IS NULL
+      `,
+      [row.ratingFull, row.rating, row.id]
+    );
+  }
+
+  return {
+    matchRating: calculateMatchRating(ratingRows.map((row) => row.ratingFull)),
+  };
+}
+
 async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
   const normalizedMatchId = String(matchId || "").trim();
   if (!normalizedMatchId) return;
+  const { matchRating } = await recomputeDuelRatingsForMatch(normalizedMatchId);
 
   const aggregateRow = await dbGetAsync(
     `
@@ -503,6 +637,14 @@ async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
     nextStatus = "In progress";
   }
 
+  const normalizedMatchScores = normalizePlannedMatchScores(
+    nextStatus,
+    Number(aggregateRow?.dw1 || 0),
+    Number(aggregateRow?.dw2 || 0),
+    Number(aggregateRow?.gw1 || 0),
+    Number(aggregateRow?.gw2 || 0)
+  );
+
   await dbRunAsync(
     `
       UPDATE matches
@@ -511,6 +653,7 @@ async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
         dw2 = ?,
         gw1 = ?,
         gw2 = ?,
+        rating = ?,
         status = ?,
         updated_by = COALESCE(?, updated_by),
         updated_at = CURRENT_TIMESTAMP
@@ -518,10 +661,11 @@ async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
         AND deleted_at IS NULL
     `,
     [
-      Number(aggregateRow?.dw1 || 0),
-      Number(aggregateRow?.dw2 || 0),
-      Number(aggregateRow?.gw1 || 0),
-      Number(aggregateRow?.gw2 || 0),
+      normalizedMatchScores.dw1,
+      normalizedMatchScores.dw2,
+      normalizedMatchScores.gw1,
+      normalizedMatchScores.gw2,
+      matchRating,
       nextStatus,
       actorPlayerId,
       normalizedMatchId,
@@ -637,6 +781,8 @@ async function recomputeDuelAggregates(duelId, actorPlayerId = null) {
     status = "Error";
   }
 
+  const normalizedDuelScores = normalizePlannedDuelScores(status, dw1, dw2);
+
   await dbRunAsync(
     `
       UPDATE duels
@@ -649,14 +795,14 @@ async function recomputeDuelAggregates(duelId, actorPlayerId = null) {
       WHERE id = ?
         AND deleted_at IS NULL
     `,
-    [dw1, dw2, status, actorPlayerId, normalizedDuelId]
+    [normalizedDuelScores.dw1, normalizedDuelScores.dw2, status, actorPlayerId, normalizedDuelId]
   );
 
   return {
     duelId: normalizedDuelId,
     matchId: String(aggregateRow.match_id || "").trim(),
-    dw1,
-    dw2,
+    dw1: normalizedDuelScores.dw1,
+    dw2: normalizedDuelScores.dw2,
     status,
   };
 }
@@ -5354,10 +5500,10 @@ app.post("/duels/:id/games/save", (req, res) => {
 
             if (!existingGame && !isNoShowGame) {
               if (!bgaTableId) {
-                return res.status(400).json({ ok: false, message: "bga_table_id is required for new games unless status is No show" });
+                return res.status(400).json({ ok: false, message: "Table ID is required." });
               }
               if (!/^\d{9}$/.test(String(bgaTableId))) {
-                return res.status(400).json({ ok: false, message: "bga_table_id must be exactly 9 digits for new games unless status is No show" });
+                return res.status(400).json({ ok: false, message: "Table ID must be exactly 9 digits." });
               }
             }
 
@@ -5553,6 +5699,12 @@ app.post("/duels/bulk-upsert", (req, res) => {
       if (!id || (!player1 && !player2)) {
         return res.status(400).json({ ok: false, message: "Each duel requires id and at least one player" });
       }
+      const status = normalizeText(item?.status) || "Planned";
+      const normalizedDuelScores = normalizePlannedDuelScores(
+        status,
+        toIntOrNull(item?.dw1),
+        toIntOrNull(item?.dw2)
+      );
       sanitized.push({
         id,
         tournament_id: normalizeText(item?.tournament_id),
@@ -5563,9 +5715,9 @@ app.post("/duels/bulk-upsert", (req, res) => {
         custom_time: toIntOrNull(item?.custom_time),
         player_1_id: player1,
         player_2_id: player2,
-        dw1: toIntOrNull(item?.dw1),
-        dw2: toIntOrNull(item?.dw2),
-        status: normalizeText(item?.status),
+        dw1: normalizedDuelScores.dw1,
+        dw2: normalizedDuelScores.dw2,
+        status,
       });
     }
 
@@ -5720,6 +5872,12 @@ app.post("/duels/bulk-upsert", (req, res) => {
           if (!id || (!player1 && !player2)) {
             return res.status(400).json({ ok: false, message: "Each duel requires id and at least one player" });
           }
+          const status = normalizeText(item?.status) || "Planned";
+          const normalizedDuelScores = normalizePlannedDuelScores(
+            status,
+            toIntOrNull(item?.dw1),
+            toIntOrNull(item?.dw2)
+          );
           sanitized.push({
             id,
             tournament_id: normalizeText(item?.tournament_id) || tournament.id,
@@ -5730,9 +5888,9 @@ app.post("/duels/bulk-upsert", (req, res) => {
             custom_time: toIntOrNull(item?.custom_time),
             player_1_id: player1,
             player_2_id: player2,
-            dw1: toIntOrNull(item?.dw1),
-            dw2: toIntOrNull(item?.dw2),
-            status: normalizeText(item?.status),
+            dw1: normalizedDuelScores.dw1,
+            dw2: normalizedDuelScores.dw2,
+            status,
           });
         }
 
@@ -6567,6 +6725,7 @@ app.post("/matches", (req, res) => {
   if (!nonNegative) {
     return res.status(400).json({ ok: false, message: "dw1/dw2/gw1/gw2 must be empty or non-negative integers" });
   }
+  const normalizedMatchScores = normalizePlannedMatchScores(status, dw1, dw2, gw1, gw2);
 
   const idFromPayload = normalizeText(payload.id);
   const generatedId = `${timeUtc.slice(0, 10).replaceAll("-", "")}${team1}${team2}`;
@@ -6649,10 +6808,10 @@ app.post("/matches", (req, res) => {
               team1,
               team2,
               status,
-              dw1,
-              dw2,
-              gw1,
-              gw2,
+              normalizedMatchScores.dw1,
+              normalizedMatchScores.dw2,
+              normalizedMatchScores.gw1,
+              normalizedMatchScores.gw2,
               actorPlayerId,
               matchId,
             ],
@@ -6753,10 +6912,10 @@ app.post("/matches", (req, res) => {
           team1,
           team2,
           status,
-          dw1,
-          dw2,
-          gw1,
-          gw2,
+          normalizedMatchScores.dw1,
+          normalizedMatchScores.dw2,
+          normalizedMatchScores.gw1,
+          normalizedMatchScores.gw2,
           actorPlayerId,
           actorPlayerId,
         ],
@@ -6972,6 +7131,7 @@ app.patch("/matches/:id", (req, res) => {
       if (!nonNegative) {
         return res.status(400).json({ ok: false, message: "dw1/dw2/gw1/gw2 must be empty or non-negative integers" });
       }
+      const normalizedMatchScores = normalizePlannedMatchScores(status, dw1, dw2, gw1, gw2);
 
         return db.run(
         `
@@ -7006,10 +7166,10 @@ app.patch("/matches/:id", (req, res) => {
           lineupDeadlineUtc,
           numberOfDuels,
           status,
-          dw1,
-          dw2,
-          gw1,
-          gw2,
+          normalizedMatchScores.dw1,
+          normalizedMatchScores.dw2,
+          normalizedMatchScores.gw1,
+          normalizedMatchScores.gw2,
           actorPlayerId,
           matchId,
         ],
