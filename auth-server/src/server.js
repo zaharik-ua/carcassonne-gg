@@ -5241,6 +5241,7 @@ app.post("/duels/:id/games/save", (req, res) => {
   const payload = req.body && typeof req.body === "object" ? req.body : {};
   const games = Array.isArray(payload.games) ? payload.games : [];
   const actorPlayerId = String(req.user.player_id || "").trim() || null;
+  const isAdmin = Number(req.user.admin) === 1;
 
   const normalizeZeroOneOrNull = (value) => {
     const normalized = normalizeIntegerOrNull(value);
@@ -5301,39 +5302,66 @@ app.post("/duels/:id/games/save", (req, res) => {
           });
         }
 
-        const sanitizedGames = [];
-        for (let index = 0; index < games.length; index += 1) {
-          const item = games[index] && typeof games[index] === "object" ? games[index] : {};
-          const gameNumber = normalizePositiveInteger(item.game_number);
-          if (!gameNumber) {
-            return res.status(400).json({ ok: false, message: "game_number must be a positive integer" });
-          }
-          const id = normalizeNullableText(item.id) || `${duelId}-${gameNumber}`;
-          const bgaTableId = normalizeNullableText(item.bga_table_id);
-          const player1Score = normalizeIntegerOrNull(item.player_1_score);
-          const player2Score = normalizeIntegerOrNull(item.player_2_score);
-          const player1Rank = normalizeZeroOneOrNull(item.player_1_rank);
-          const player2Rank = normalizeZeroOneOrNull(item.player_2_rank);
-          const player1Clock = normalizeZeroOneOrNull(item.player_1_clock);
-          const player2Clock = normalizeZeroOneOrNull(item.player_2_clock);
-          const status = normalizeNullableText(item.status);
-
-          sanitizedGames.push({
-            id,
-            duel_id: duelId,
-            bga_table_id: bgaTableId,
-            game_number: gameNumber,
-            player_1_score: player1Score,
-            player_2_score: player2Score,
-            player_1_rank: player1Rank,
-            player_2_rank: player2Rank,
-            player_1_clock: player1Clock ?? 0,
-            player_2_clock: player2Clock ?? 0,
-            status,
-          });
-        }
-
         return (async () => {
+          const existingGames = await dbAllAsync(
+            `
+              SELECT
+                id,
+                game_number,
+                player_1_score,
+                player_2_score
+              FROM games
+              WHERE trim(COALESCE(duel_id, '')) = trim(?)
+                AND deleted_at IS NULL
+            `,
+            [duelId]
+          );
+          const existingGamesById = new Map();
+          const existingGamesByNumber = new Map();
+          for (const row of Array.isArray(existingGames) ? existingGames : []) {
+            const existingId = String(row?.id || "").trim();
+            if (existingId) existingGamesById.set(existingId, row);
+            const existingGameNumber = normalizePositiveInteger(row?.game_number);
+            if (existingGameNumber) existingGamesByNumber.set(existingGameNumber, row);
+          }
+
+          const sanitizedGames = [];
+          for (let index = 0; index < games.length; index += 1) {
+            const item = games[index] && typeof games[index] === "object" ? games[index] : {};
+            const gameNumber = normalizePositiveInteger(item.game_number);
+            if (!gameNumber) {
+              return res.status(400).json({ ok: false, message: "game_number must be a positive integer" });
+            }
+            const id = normalizeNullableText(item.id) || `${duelId}-${gameNumber}`;
+            const bgaTableId = normalizeNullableText(item.bga_table_id);
+            const existingGame = existingGamesById.get(id) || existingGamesByNumber.get(gameNumber) || null;
+            const player1Score = !isAdmin && existingGame
+              ? normalizeIntegerOrNull(existingGame.player_1_score)
+              : normalizeIntegerOrNull(item.player_1_score);
+            const player2Score = !isAdmin && existingGame
+              ? normalizeIntegerOrNull(existingGame.player_2_score)
+              : normalizeIntegerOrNull(item.player_2_score);
+            const player1Rank = normalizeZeroOneOrNull(item.player_1_rank);
+            const player2Rank = normalizeZeroOneOrNull(item.player_2_rank);
+            const player1Clock = normalizeZeroOneOrNull(item.player_1_clock);
+            const player2Clock = normalizeZeroOneOrNull(item.player_2_clock);
+            const status = normalizeNullableText(item.status);
+
+            sanitizedGames.push({
+              id,
+              duel_id: duelId,
+              bga_table_id: bgaTableId,
+              game_number: gameNumber,
+              player_1_score: player1Score,
+              player_2_score: player2Score,
+              player_1_rank: player1Rank,
+              player_2_rank: player2Rank,
+              player_1_clock: player1Clock ?? 0,
+              player_2_clock: player2Clock ?? 0,
+              status,
+            });
+          }
+
           await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
           try {
             for (const item of sanitizedGames) {

@@ -6029,6 +6029,10 @@
       !game?.isNewLocal && String(game?.status || "").trim().toLowerCase() === "finished"
     );
 
+    const canEditGameScore = (game) => (
+      !!game?.isNewLocal || isGlobalAdmin
+    );
+
     const syncWonFieldsWithinGame = (game, winnerSide) => {
       if (!game) return;
       if (winnerSide === "player1") {
@@ -6053,12 +6057,14 @@
       game.player_1_clock = 0;
       game.player_2_clock = 0;
       syncWonFieldsWithinGame(game, winnerSide);
-      if (nextNoShowSide === "player1") {
-        game.player_1_score = 0;
-        game.player_2_score = 1;
-      } else {
-        game.player_1_score = 1;
-        game.player_2_score = 0;
+      if (canEditGameScore(game)) {
+        if (nextNoShowSide === "player1") {
+          game.player_1_score = 0;
+          game.player_2_score = 1;
+        } else {
+          game.player_1_score = 1;
+          game.player_2_score = 0;
+        }
       }
     };
 
@@ -6712,7 +6718,7 @@
 
             if (scoreInput) {
               scoreInput.value = hasValue(game?.[scoreFieldName]) ? String(game[scoreFieldName]) : "";
-              setGameInputReadonly(scoreInput, isGameNoShowLocked);
+              setGameInputReadonly(scoreInput, isGameNoShowLocked || !canEditGameScore(game));
             }
             if (wonSelect) {
               wonSelect.setValue(hasValue(game?.[rankFieldName]) ? String(game[rankFieldName]) : "", false);
