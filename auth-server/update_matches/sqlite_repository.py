@@ -183,9 +183,10 @@ class SqliteMatchRepository(MatchRepository):
                       player_2_rank,
                       player_1_clock,
                       player_2_clock,
-                      status
+                      status,
+                      deleted_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
                     ON CONFLICT(bga_table_id) DO UPDATE SET
                       id = excluded.id,
                       duel_id = excluded.duel_id,
@@ -196,7 +197,8 @@ class SqliteMatchRepository(MatchRepository):
                       player_2_rank = excluded.player_2_rank,
                       player_1_clock = excluded.player_1_clock,
                       player_2_clock = excluded.player_2_clock,
-                      status = excluded.status
+                      status = excluded.status,
+                      deleted_at = NULL
                     """,
                     (
                         game_id,
@@ -358,6 +360,11 @@ class SqliteMatchRepository(MatchRepository):
                 for row in conn.execute("PRAGMA table_info(matches)").fetchall()
                 if row["name"] is not None
             }
+            game_columns = {
+                str(row["name"]).strip().lower()
+                for row in conn.execute("PRAGMA table_info(games)").fetchall()
+                if row["name"] is not None
+            }
             if "results_checked_at" not in duel_columns:
                 conn.execute("ALTER TABLE duels ADD COLUMN results_checked_at TEXT")
             if "rating_full" not in duel_columns:
@@ -366,6 +373,8 @@ class SqliteMatchRepository(MatchRepository):
                 conn.execute("ALTER TABLE duels ADD COLUMN rating INTEGER")
             if "rating" not in match_columns:
                 conn.execute("ALTER TABLE matches ADD COLUMN rating INTEGER")
+            if "deleted_at" not in game_columns:
+                conn.execute("ALTER TABLE games ADD COLUMN deleted_at TEXT")
             conn.commit()
 
     @staticmethod

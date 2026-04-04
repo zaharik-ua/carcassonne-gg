@@ -396,6 +396,7 @@ function loadGamesByDuelIds(duelIds, callback) {
         status
       FROM games
       WHERE trim(COALESCE(duel_id, '')) IN (${placeholders})
+        AND deleted_at IS NULL
       ORDER BY duel_id COLLATE NOCASE ASC, game_number ASC, id ASC
     `,
     normalizedIds,
@@ -603,6 +604,7 @@ async function recomputeDuelAggregates(duelId, actorPlayerId = null) {
         ON lower(trim(df.format)) = lower(trim(d.duel_format))
       LEFT JOIN games g
         ON trim(COALESCE(g.duel_id, '')) = trim(COALESCE(d.id, ''))
+       AND g.deleted_at IS NULL
       WHERE trim(COALESCE(d.id, '')) = trim(?)
         AND d.deleted_at IS NULL
       GROUP BY
@@ -1748,7 +1750,8 @@ function ensureGamesSchema() {
       player_2_rank INTEGER,
       player_1_clock INTEGER NOT NULL DEFAULT 0,
       player_2_clock INTEGER NOT NULL DEFAULT 0,
-      status TEXT
+      status TEXT,
+      deleted_at TEXT
     )
   `, (createErr) => {
     if (createErr) {
@@ -1777,6 +1780,7 @@ function ensureGamesSchema() {
       addColumnIfMissing(columns, "games", "player_1_clock", "INTEGER NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "games", "player_2_clock", "INTEGER NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "games", "status", "TEXT");
+      addColumnIfMissing(columns, "games", "deleted_at", "TEXT");
       if (columns.some((column) => column.name === "bga_flags")) {
         db.run("ALTER TABLE games DROP COLUMN bga_flags", (dropErr) => {
           if (dropErr) {
@@ -4893,10 +4897,10 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
         return res.status(400).json({ ok: false, message: "duel_id not found" });
       }
 
-      return db.get(
-        "SELECT id FROM games WHERE upper(trim(id)) = upper(?) LIMIT 1",
-        [gameId],
-        (rowErr, currentRow) => {
+          return db.get(
+            "SELECT id FROM games WHERE upper(trim(id)) = upper(?) AND deleted_at IS NULL LIMIT 1",
+            [gameId],
+            (rowErr, currentRow) => {
           if (rowErr) {
             return res.status(500).json({ ok: false, message: "Failed to load game" });
           }
@@ -4936,7 +4940,8 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
                     player_2_rank = ?,
                     player_1_clock = ?,
                     player_2_clock = ?,
-                    status = ?
+                    status = ?,
+                    deleted_at = NULL
                   WHERE upper(trim(id)) = upper(?)
                 `,
                 [
@@ -4979,6 +4984,7 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
                         status
                       FROM games
                       WHERE upper(trim(id)) = upper(?)
+                        AND deleted_at IS NULL
                       LIMIT 1
                     `,
                     [gameId],
@@ -5344,9 +5350,10 @@ app.post("/duels/:id/games/save", (req, res) => {
                     player_2_rank,
                     player_1_clock,
                     player_2_clock,
-                    status
+                    status,
+                    deleted_at
                   )
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
                   ON CONFLICT(id) DO UPDATE SET
                     duel_id = excluded.duel_id,
                     bga_table_id = excluded.bga_table_id,
@@ -5357,7 +5364,8 @@ app.post("/duels/:id/games/save", (req, res) => {
                     player_2_rank = excluded.player_2_rank,
                     player_1_clock = excluded.player_1_clock,
                     player_2_clock = excluded.player_2_clock,
-                    status = excluded.status
+                    status = excluded.status,
+                    deleted_at = NULL
                 `,
                 [
                   item.id,
@@ -5372,6 +5380,36 @@ app.post("/duels/:id/games/save", (req, res) => {
                   item.player_2_clock,
                   item.status,
                 ]
+              );
+            }
+
+            const incomingGameIds = new Set(
+              sanitizedGames
+                .map((item) => String(item?.id || "").trim())
+                .filter(Boolean)
+            );
+            const existingGames = await dbAllAsync(
+              `
+                SELECT id
+                FROM games
+                WHERE trim(COALESCE(duel_id, '')) = trim(?)
+                  AND deleted_at IS NULL
+              `,
+              [duelId]
+            );
+            const gameIdsToSoftDelete = (Array.isArray(existingGames) ? existingGames : [])
+              .map((row) => String(row?.id || "").trim())
+              .filter((id) => id && !incomingGameIds.has(id));
+
+            if (gameIdsToSoftDelete.length) {
+              await dbRunAsync(
+                `
+                  UPDATE games
+                  SET
+                    deleted_at = CURRENT_TIMESTAMP
+                  WHERE id IN (${gameIdsToSoftDelete.map(() => "?").join(", ")})
+                `,
+                gameIdsToSoftDelete
               );
             }
 
