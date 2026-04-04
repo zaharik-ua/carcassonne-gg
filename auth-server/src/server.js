@@ -5350,6 +5350,16 @@ app.post("/duels/:id/games/save", (req, res) => {
             const status = isLockedNoShowGame
               ? normalizeNullableText(existingGame?.status)
               : normalizeNullableText(item.status);
+            const isNoShowGame = String(status || "").trim().toLowerCase() === "no show";
+
+            if (!existingGame && !isNoShowGame) {
+              if (!bgaTableId) {
+                return res.status(400).json({ ok: false, message: "bga_table_id is required for new games unless status is No show" });
+              }
+              if (!/^\d{9}$/.test(String(bgaTableId))) {
+                return res.status(400).json({ ok: false, message: "bga_table_id must be exactly 9 digits for new games unless status is No show" });
+              }
+            }
 
             sanitizedGames.push({
               id,

@@ -6076,8 +6076,18 @@
       const normalizedGames = Array.isArray(games) ? games : [];
       for (const game of normalizedGames) {
         if (!game?.isNewLocal) continue;
+        const noShowSide = String(game?.no_show_side || "").trim();
+        const tableId = String(game?.bga_table_id || "").trim();
         const p1Won = parseNullableInt(game?.player_1_rank);
         const p2Won = parseNullableInt(game?.player_2_rank);
+        if (!noShowSide) {
+          if (!tableId) {
+            return "Table ID is required for each new game unless No show is selected.";
+          }
+          if (!/^\d{9}$/.test(tableId)) {
+            return "Table ID must be exactly 9 digits for each new game unless No show is selected.";
+          }
+        }
         if (p1Won !== 1 && p2Won !== 1) {
           return "Select the player who won the game.";
         }
