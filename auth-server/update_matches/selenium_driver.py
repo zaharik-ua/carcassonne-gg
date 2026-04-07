@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import glob
 import os
 import random
 import shutil
 import subprocess
 import signal
+import tempfile
 import time
 from contextlib import contextmanager
 from threading import Condition, Lock, Thread
@@ -26,6 +28,7 @@ CHROME_STARTUP_TIMEOUT = _env_int("CHROME_STARTUP_TIMEOUT", 20)
 DRIVER_ACQUIRE_TIMEOUT = _env_int("DRIVER_ACQUIRE_TIMEOUT", 5)
 SELENIUM_MAX_QUEUE = _env_int("SELENIUM_MAX_QUEUE", 2)
 PAGE_LOAD_TIMEOUT = _env_int("CHROME_PAGE_LOAD_TIMEOUT", 30)
+CHROME_TMP_CLEANUP_TTL_SECONDS = _env_int("CHROME_TMP_CLEANUP_TTL_SECONDS", 6 * 3600)
 
 last_activity_time = time.time()
 
@@ -35,6 +38,32 @@ def _first_existing_path(candidates: list[str]) -> str | None:
         if path and os.path.exists(path):
             return path
     return None
+
+
+def _remove_tree(path: str) -> None:
+    try:
+        shutil.rmtree(path, ignore_errors=True)
+    except Exception:
+        pass
+
+
+def _cleanup_old_chrome_tmp_dirs() -> None:
+    now = time.time()
+    patterns = [
+        "/tmp/org.chromium.Chromium.scoped_dir.*",
+        "/tmp/carcassonne-chrome-profile-*",
+    ]
+    for pattern in patterns:
+        for path in glob.glob(pattern):
+            try:
+                if not os.path.isdir(path):
+                    continue
+                age_seconds = now - os.path.getmtime(path)
+                if age_seconds < CHROME_TMP_CLEANUP_TTL_SECONDS:
+                    continue
+                _remove_tree(path)
+            except Exception:
+                continue
 
 
 class BusyError(Exception):
@@ -89,6 +118,7 @@ def _resolve_chrome_binary_path() -> str:
 class DriverManager:
     def __init__(self) -> None:
         self.driver = None
+        self._profile_dir: str | None = None
         self.driver_lock = Lock()
         self._create_lock = Lock()
         self._create_cond = Condition(self._create_lock)
@@ -109,8 +139,10 @@ class DriverManager:
 
         attempts = 3
         last_exc = None
+        _cleanup_old_chrome_tmp_dirs()
         for attempt in range(attempts):
             chrome_options = Options()
+            profile_dir = tempfile.mkdtemp(prefix="carcassonne-chrome-profile-", dir="/tmp")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-gpu")
@@ -119,6 +151,7 @@ class DriverManager:
             chrome_options.add_argument("--disable-background-networking")
             chrome_options.add_argument("--metrics-recording-only")
             chrome_options.add_argument("--mute-audio")
+            chrome_options.add_argument(f"--user-data-dir={profile_dir}")
             chrome_options.add_argument("--headless=new" if attempt == 0 else "--headless")
             chrome_options.binary_location = chrome_binary
 
@@ -136,9 +169,11 @@ class DriverManager:
 
             if thread.is_alive():
                 self._stop_service_process(service)
+                _remove_tree(profile_dir)
                 last_exc = TimeoutError(f"Chrome startup timed out after {CHROME_STARTUP_TIMEOUT}s")
             elif holder["driver"] is not None:
                 self.driver = holder["driver"]
+                self._profile_dir = profile_dir
                 try:
                     self.driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
                     self.driver.set_script_timeout(PAGE_LOAD_TIMEOUT)
@@ -146,6 +181,7 @@ class DriverManager:
                     pass
                 return self.driver
             else:
+                _remove_tree(profile_dir)
                 last_exc = holder["error"] or RuntimeError("Unknown Chrome startup failure")
 
             if attempt < attempts - 1:
@@ -202,8 +238,16 @@ class DriverManager:
 
     def close_driver(self) -> None:
         if self.driver:
-            self.driver.quit()
-            self.driver = None
+            try:
+                self.driver.quit()
+            except Exception:
+                pass
+            finally:
+                self.driver = None
+        if self._profile_dir:
+            _remove_tree(self._profile_dir)
+            self._profile_dir = None
+        _cleanup_old_chrome_tmp_dirs()
 
     @staticmethod
     def _stop_service_process(service: Service) -> None:
