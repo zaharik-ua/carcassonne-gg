@@ -1,7 +1,1 @@
-<html>
-<head><title>504 Gateway Time-out</title></head>
-<body>
-<center><h1>504 Gateway Time-out</h1></center>
-<hr><center>nginx/1.24.0 (Ubuntu)</center>
-</body>
-</html>
+{"message":"<HttpError 503 when requesting https://sheets.googleapis.com/v4/spreadsheets/13b2NOXPCbvAaFgMBm1VaOlptWGaiENlHHN_VGjNpirE/values/Duels%21B%3AZ?alt=json returned \"The service is currently unavailable.\". Details: \"The service is currently unavailable.\">","status":"error"}
