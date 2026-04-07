@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
 from pathlib import Path
 
 from .models import PlayerEloUpdateRequest, PlayerEloUpdateResult
@@ -96,7 +97,11 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
             conn.commit()
 
     def save_player_error(self, player: PlayerEloUpdateRequest, message: str) -> None:
-        print(f"⚠️ Player Elo update failed for profile {player.player_id}: {message}", flush=True)
+        print(
+            f"⚠️ Player Elo update failed for profile {player.player_id}: {message}",
+            file=sys.stderr,
+            flush=True,
+        )
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)

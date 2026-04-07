@@ -229,6 +229,17 @@ class SqliteRatingsRepository:
 
     @staticmethod
     def _calculate_match_rating(conn: sqlite3.Connection, *, match_id: str) -> int | None:
+        total_duels_row = conn.execute(
+            """
+            SELECT COUNT(*) AS total_duels
+            FROM duels
+            WHERE trim(COALESCE(match_id, '')) = trim(?)
+              AND deleted_at IS NULL
+            """,
+            (match_id,),
+        ).fetchone()
+        total_duels = int(total_duels_row["total_duels"] or 0) if total_duels_row is not None else 0
+
         rows = conn.execute(
             """
             SELECT rating_full
@@ -244,7 +255,7 @@ class SqliteRatingsRepository:
             for row in rows
             if row["rating_full"] is not None and str(row["rating_full"]).strip() != ""
         ]
-        if not duel_ratings:
+        if not duel_ratings or len(duel_ratings) != total_duels:
             return None
         mean_square = sum(rating * rating for rating in duel_ratings) / len(duel_ratings)
         return round(mean_square**0.5)

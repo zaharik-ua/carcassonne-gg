@@ -510,10 +510,9 @@ function calculateDuelRating(ratingFull) {
 }
 
 function calculateMatchRating(duelRatingFullValues) {
-  const ratings = Array.isArray(duelRatingFullValues)
-    ? duelRatingFullValues.filter((value) => typeof value === "number" && Number.isFinite(value))
-    : [];
-  if (!ratings.length) {
+  const rawRatings = Array.isArray(duelRatingFullValues) ? duelRatingFullValues : [];
+  const ratings = rawRatings.filter((value) => typeof value === "number" && Number.isFinite(value));
+  if (!ratings.length || ratings.length !== rawRatings.length) {
     return null;
   }
   const meanSquare = ratings.reduce((sum, value) => sum + value * value, 0) / ratings.length;

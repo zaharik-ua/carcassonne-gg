@@ -1,4 +1,4 @@
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <!-- Material Icons Round for rating stars -->
 <link href="https://fonts.googleapis.com/css2?family=Material+Icons+Round" rel="stylesheet">
@@ -703,14 +703,87 @@ code {
 
   .lineup__overview {
       padding: 10px 0;
-      line-height: calc(22px * var(--matches-scale));
-      font-size: calc(14px * var(--matches-scale));
+      line-height: calc(18px * var(--matches-scale));
+      font-size: calc(12px * var(--matches-scale));
+  }
+  .lineup__elo {
+    color: #fff;
+    font-weight: 500;
+    border-radius: 2px;
+    padding: 0 2px;
+    min-width: calc(28px * var(--matches-scale));
+    text-align: center;
+    line-height: calc(13px * var(--matches-scale));
+    font-size: calc(10px * var(--matches-scale));
+  }
+  .lineup__elo--right {
+    margin-left: 3px;
+  }
+  .lineup__row-sep {
+    margin: 0 5px;
+    color: #666;
+    font-size: calc(11px * var(--matches-scale));
+    font-style: normal;
+  }
+  .lineup__row-score {
+    margin: 0 5px;
+    font-weight: 600;
+    font-style: normal;
+    color: #222;
+    font-size: calc(11px * var(--matches-scale));
+  }
+  .lineup__row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding: 2px 10px;
+    font-size: calc(12px * var(--matches-scale));
+  }
+  .matches-size-medium .lineup__elo,
+  .matches-size-large .lineup__elo {
+    font-size: calc(9px * var(--matches-scale));
+  }
+  .lineup__games {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-left: 6px;
+  }
+  .lineup__game-link {
+    text-decoration: none;
+  }
+  .lineup__game-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: calc(34px * var(--matches-scale));
+    padding: 0 6px;
+    border-radius: 999px;
+    line-height: calc(18px * var(--matches-scale));
+    font-size: calc(11px * var(--matches-scale));
+    background: #ececec;
+    color: #333;
+  }
+  .lineup__game-badge--p1 {
+    background: #d7ecff;
+    color: #0d4d7a;
+  }
+  .lineup__game-badge--p2 {
+    background: #ffe1e1;
+    color: #7a1d1d;
+  }
+  .lineup__game-badge--clock {
+    gap: 4px;
+  }
+  .lineup__game-clock {
+    font-size: calc(10px * var(--matches-scale));
   }
   
   @media (max-width: 600px) {
       .lineup__overview {
-        font-size: calc(13px * var(--matches-scale));
-        line-height: calc(18px * var(--matches-scale));
+        font-size: calc(11px * var(--matches-scale));
+        line-height: calc(16px * var(--matches-scale));
       }
     }
     
@@ -1668,15 +1741,19 @@ function createMatchElement(match, options = {}) {
   container.dataset.id = match.id;
   wrapper.appendChild(container);
 
-  const lineupDiv = document.createElement("div");
-  lineupDiv.className = "lineup";
+  const matchId = String(match?.id || "").trim();
+  const matchLineups = Array.isArray(match?.lineupsData) ? match.lineupsData.filter(Boolean) : [];
+  let lineupDiv = null;
+  if (matchId && matchLineups.length > 0) {
+    lineupDiv = createLineupPanel(matchId, matchLineups, match.status, match.elo_updated_at);
+  } else if (match.lineups) {
+    lineupDiv = document.createElement("div");
+    lineupDiv.className = "lineup";
 
-  const lineupContDiv = document.createElement("div");
-  lineupContDiv.innerHTML = sanitizeLineupsHtml(match.lineups);
-  lineupContDiv.className = "lineup__overview";
-  lineupDiv.appendChild(lineupContDiv);
-
-  if (match.lineups) {
+    const lineupContDiv = document.createElement("div");
+    lineupContDiv.innerHTML = sanitizeLineupsHtml(match.lineups);
+    lineupContDiv.className = "lineup__overview";
+    lineupDiv.appendChild(lineupContDiv);
     lineupDiv.classList.add("open");
     lineupDiv.style.height = "auto";
   }
@@ -1743,7 +1820,7 @@ function createMatchElement(match, options = {}) {
     container.appendChild(horizontalRow);
 
     appendRoundBadge({ match, container, rightDiv: null, tournamentType: match.tournament_type });
-    if (match.lineups) {
+    if (lineupDiv) {
       wrapper.appendChild(lineupDiv);
     }
     registerMatchSelection(match, wrapper, extras);
@@ -1839,7 +1916,7 @@ function createMatchElement(match, options = {}) {
   }
 
   container.appendChild(rightDiv);
-  if (match.lineups) wrapper.appendChild(lineupDiv);
+  if (lineupDiv) wrapper.appendChild(lineupDiv);
 
   appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
   registerMatchSelection(match, wrapper, rightDiv);
@@ -2255,6 +2332,248 @@ function sanitizeLineupsHtml(rawHtml) {
   });
 
   return temp.innerHTML;
+}
+
+function hasValue(value) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function sortLineups(lineups) {
+  return (Array.isArray(lineups) ? lineups.slice() : []).sort((a, b) => {
+    const aNo = Number(a?.duel_number);
+    const bNo = Number(b?.duel_number);
+    if (Number.isFinite(aNo) && Number.isFinite(bNo) && aNo !== bNo) {
+      return aNo - bNo;
+    }
+    return String(a?.id || "").localeCompare(String(b?.id || ""));
+  });
+}
+
+function getLineupPlayerElo(duel, side) {
+  const candidates = side === 1
+    ? [duel?.player_1_elo, duel?.player1_elo, duel?.eloA_before, duel?.eloA]
+    : [duel?.player_2_elo, duel?.player2_elo, duel?.eloB_before, duel?.eloB];
+  const value = candidates.find(hasValue);
+  const num = Number(value);
+  return Number.isFinite(num) ? Math.trunc(num) : null;
+}
+
+function getGamerankClass(ap6Value) {
+  const num = Number(ap6Value);
+  if (!Number.isFinite(num)) return "";
+  if (num < 100) return "gamerank_beginner";
+  if (num < 200) return "gamerank_average";
+  if (num < 300) return "gamerank_good";
+  if (num < 500) return "gamerank_strong";
+  if (num < 700) return "gamerank_expert";
+  return "gamerank_master";
+}
+
+function createLineupEloBadge(eloValue, side) {
+  if (!hasValue(eloValue)) return null;
+  const num = Number(eloValue);
+  if (!Number.isFinite(num)) return null;
+  const badge = document.createElement("span");
+  const gamerankClass = getGamerankClass(num);
+  badge.className = `lineup__elo ${gamerankClass}${side === 2 ? " lineup__elo--right" : ""}`.trim();
+  badge.textContent = String(Math.trunc(num));
+  return badge;
+}
+
+function formatEloUpdatedAtLabel(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const isoLike = raw.includes("T") ? raw : `${raw.replace(" ", "T")}Z`;
+  const date = new Date(isoLike);
+  if (!Number.isFinite(date.getTime())) return raw;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  const mon = months[date.getUTCMonth()];
+  const yyyy = date.getUTCFullYear();
+  const hh = String(date.getUTCHours()).padStart(2, "0");
+  const mm = String(date.getUTCMinutes()).padStart(2, "0");
+  return `${dd} ${mon} ${yyyy} ${hh}:${mm} utc`;
+}
+
+function playerLabel(duel, side) {
+  const name = String(duel?.[`player_${side}_name`] || "").trim();
+  if (name) return name;
+  const id = String(duel?.[`player_${side}_id`] || "").trim();
+  return id || "-";
+}
+
+function isTruthyOne(value) {
+  return value === 1 || value === true || String(value || "").trim() === "1";
+}
+
+function collectGameEntries(duel) {
+  if (Array.isArray(duel?.games) && duel.games.length > 0) {
+    return duel.games.filter(Boolean);
+  }
+
+  const hasSingleGameData =
+    hasValue(duel?.player_1_score) ||
+    hasValue(duel?.player_2_score) ||
+    hasValue(duel?.player_1_rank) ||
+    hasValue(duel?.player_2_rank) ||
+    isTruthyOne(duel?.player_1_clock) ||
+    isTruthyOne(duel?.player_2_clock) ||
+    hasValue(duel?.bga_table_id);
+
+  return hasSingleGameData ? [duel] : [];
+}
+
+function createGameBadge(game) {
+  const p1Clock = isTruthyOne(game?.player_1_clock);
+  const p2Clock = isTruthyOne(game?.player_2_clock);
+  const p1RankWon = String(game?.player_1_rank || "").trim() === "1";
+  const p2RankWon = String(game?.player_2_rank || "").trim() === "1";
+  const p1Score = String(game?.player_1_score ?? "").trim();
+  const p2Score = String(game?.player_2_score ?? "").trim();
+
+  const badge = document.createElement("span");
+  badge.className = "lineup__game-badge";
+
+  if ((p1Clock || p2Clock) && p1Clock !== p2Clock) {
+    badge.classList.add("lineup__game-badge--clock");
+    const left = document.createElement("span");
+    const right = document.createElement("span");
+    const icon = document.createElement("i");
+    icon.className = "fa-regular fa-clock lineup__game-clock";
+
+    if (p1Clock) {
+      left.textContent = "";
+      right.textContent = "0-1";
+      badge.appendChild(left);
+      badge.appendChild(icon);
+      badge.appendChild(right);
+    } else {
+      left.textContent = "1-0";
+      right.textContent = "";
+      badge.appendChild(left);
+      badge.appendChild(icon);
+      badge.appendChild(right);
+    }
+
+    return badge;
+  }
+
+  if (!hasValue(p1Score) || !hasValue(p2Score)) {
+    return null;
+  }
+
+  if (p1RankWon) {
+    badge.classList.add("lineup__game-badge--p1");
+  } else if (p2RankWon) {
+    badge.classList.add("lineup__game-badge--p2");
+  }
+
+  badge.textContent = `${p1Score}-${p2Score}`;
+  return badge;
+}
+
+function createGameBadgesWrap(duel) {
+  const games = collectGameEntries(duel);
+  if (!games.length) return null;
+
+  const wrap = document.createElement("span");
+  wrap.className = "lineup__games";
+
+  games.forEach((game) => {
+    const badge = createGameBadge(game);
+    if (!badge) return;
+    const tableId = String(game?.bga_table_id || "").trim();
+    if (tableId) {
+      const link = document.createElement("a");
+      link.className = "lineup__game-link";
+      link.href = `https://boardgamearena.com/table?table=${encodeURIComponent(tableId)}`;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.appendChild(badge);
+      wrap.appendChild(link);
+      return;
+    }
+
+    wrap.appendChild(badge);
+  });
+
+  return wrap.childNodes.length ? wrap : null;
+}
+
+function createLineupPanel(matchId, lineups, matchStatus = "", eloUpdatedAt = "") {
+  const lineupPanel = document.createElement("div");
+  lineupPanel.className = "lineup";
+
+  const lineupBody = document.createElement("div");
+  lineupBody.className = "lineup__overview";
+
+  sortLineups(lineups).forEach((duel) => {
+    const row = document.createElement("div");
+    row.className = "lineup__row";
+    const shouldShowElo = String(matchStatus || "").trim().toLowerCase() !== "done";
+
+    const p1Id = String(duel?.player_1_id || "").trim();
+    const p2Id = String(duel?.player_2_id || "").trim();
+    const p1Elo = shouldShowElo ? createLineupEloBadge(getLineupPlayerElo(duel, 1), 1) : null;
+    const p2Elo = shouldShowElo ? createLineupEloBadge(getLineupPlayerElo(duel, 2), 2) : null;
+
+    const p1Link = document.createElement("a");
+    p1Link.href = p1Id ? `https://boardgamearena.com/player?id=${encodeURIComponent(p1Id)}` : "#";
+    p1Link.target = "_blank";
+    p1Link.rel = "noopener noreferrer";
+    p1Link.textContent = playerLabel(duel, 1);
+    if (!p1Id) {
+      p1Link.removeAttribute("href");
+      p1Link.removeAttribute("target");
+      p1Link.removeAttribute("rel");
+    }
+
+    const sep = document.createElement("span");
+    sep.className = "lineup__row-sep";
+    sep.textContent = "vs";
+
+    const p2Link = document.createElement("a");
+    p2Link.href = p2Id ? `https://boardgamearena.com/player?id=${encodeURIComponent(p2Id)}` : "#";
+    p2Link.target = "_blank";
+    p2Link.rel = "noopener noreferrer";
+    p2Link.textContent = playerLabel(duel, 2);
+    if (!p2Id) {
+      p2Link.removeAttribute("href");
+      p2Link.removeAttribute("target");
+      p2Link.removeAttribute("rel");
+    }
+
+    const hasDuelScore = hasValue(duel?.dw1) && hasValue(duel?.dw2);
+    const scoreEl = document.createElement("span");
+    scoreEl.className = "lineup__row-score";
+    scoreEl.textContent = ` ${duel.dw1} - ${duel.dw2} `;
+    const gamesWrap = createGameBadgesWrap(duel);
+
+    if (p1Elo) {
+      row.appendChild(p1Elo);
+    }
+    row.appendChild(p1Link);
+    if (hasDuelScore) {
+      row.appendChild(scoreEl);
+    } else {
+      sep.classList.add("lineup__row-sep--vs");
+      row.appendChild(sep);
+    }
+    row.appendChild(p2Link);
+    if (p2Elo) {
+      row.appendChild(p2Elo);
+    }
+    if (gamesWrap) {
+      row.appendChild(gamesWrap);
+    }
+    lineupBody.appendChild(row);
+  });
+
+  lineupPanel.appendChild(lineupBody);
+  lineupPanel.classList.add("open");
+  lineupPanel.style.height = "auto";
+
+  return lineupPanel;
 }
 
 
@@ -2755,11 +3074,167 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
   }
 }
 
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function formatUtcIsoAsLegacyTime(isoValue) {
+  const ts = Date.parse(String(isoValue || "").trim());
+  if (!Number.isFinite(ts)) return "";
+  const date = new Date(ts);
+  return `${pad2(date.getUTCDate())}.${pad2(date.getUTCMonth() + 1)}.${date.getUTCFullYear()} ${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}:${pad2(date.getUTCSeconds())}`;
+}
+
+function getFriendlySectionKeyByLocalTime(isoValue) {
+  const ts = Date.parse(String(isoValue || "").trim());
+  if (!Number.isFinite(ts)) return "scheduled";
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+  if (ts < startToday) return "finished";
+  if (ts < startTomorrow) return "today";
+  return "scheduled";
+}
+
+function isFriendlyFinishedWithinLastDays(isoValue, days = 7) {
+  const ts = Date.parse(String(isoValue || "").trim());
+  if (!Number.isFinite(ts)) return false;
+  const nowTs = Date.now();
+  const maxAgeMs = days * 24 * 60 * 60 * 1000;
+  return ts <= nowTs && ts >= (nowTs - maxAgeMs);
+}
+
+function adaptDbMainPageMatchesData(data) {
+  const result = {
+    matches_today: [],
+    matches_scheduled: [],
+    matches_finished: [],
+    tournaments_today: [],
+    tournaments_scheduled: [],
+    tournaments_finished: [],
+    elo_updated_at: String(data?.elo_updated_at || "").trim()
+  };
+  const tournamentsByKey = {
+    today: new Map(),
+    scheduled: new Map(),
+    finished: new Map()
+  };
+  const tournamentsById = new Map();
+  const duelsByMatchId = new Map();
+
+  (Array.isArray(data?.tournaments) ? data.tournaments : []).forEach((tournament) => {
+    const id = String(tournament?.id || "").trim();
+    if (!id) return;
+    tournamentsById.set(id, {
+      id,
+      name: String(tournament?.name || tournament?.short_title || "").trim(),
+      short_title: String(tournament?.short_title || "").trim(),
+      logo: String(tournament?.logo || "").trim(),
+      link: String(tournament?.link || "").trim(),
+      type: String(tournament?.type || "").trim()
+    });
+  });
+
+  (Array.isArray(data?.duels) ? data.duels : []).forEach((duel) => {
+    const matchId = String(duel?.match_id || "").trim();
+    if (!matchId) return;
+    if (!duelsByMatchId.has(matchId)) duelsByMatchId.set(matchId, []);
+    duelsByMatchId.get(matchId).push(duel);
+  });
+
+  (Array.isArray(data?.matches) ? data.matches : []).forEach((match) => {
+    const sectionKey = getFriendlySectionKeyByLocalTime(match?.time_utc);
+    if (sectionKey === "finished" && !isFriendlyFinishedWithinLastDays(match?.time_utc, 7)) {
+      return;
+    }
+
+    const tournamentMeta = tournamentsById.get(String(match?.tournament_id || "").trim()) || null;
+    const tournamentName = String(
+      tournamentMeta?.name || tournamentMeta?.short_title || match?.tournament_name || match?.tournament_short_title || "Friendly Matches"
+    ).trim();
+    const tournamentLogo = String(
+      tournamentMeta?.logo || match?.tournament_logo || "https://carcassonne.gg/gallery/friendly-matches.png"
+    ).trim();
+    const tournamentLink = String(tournamentMeta?.link || match?.tournament_link || "").trim();
+    const tournamentType = String(tournamentMeta?.type || match?.tournament_type || "TEAM").trim() || "TEAM";
+    const tournamentKey = `${tournamentName}||${tournamentLink}`;
+
+    if (!tournamentsByKey[sectionKey].has(tournamentKey)) {
+      tournamentsByKey[sectionKey].set(tournamentKey, {
+        name: tournamentName,
+        logo: tournamentLogo,
+        link: tournamentLink,
+        type: tournamentType
+      });
+    }
+
+    const normalizedMatch = {
+      id: String(match?.id || "").trim(),
+      tournament: tournamentName,
+      tournament_logo: tournamentLogo,
+      tournament_link: tournamentLink,
+      tournament_type: tournamentType,
+      time: formatUtcIsoAsLegacyTime(match?.time_utc),
+      team1: String(match?.team_1_name || match?.team_1 || "").trim(),
+      team2: String(match?.team_2_name || match?.team_2 || "").trim(),
+      flag1: String(match?.team_1_flag || "").trim(),
+      flag2: String(match?.team_2_flag || "").trim(),
+      status: String(match?.status || "").trim(),
+      dw1: match?.dw1,
+      dw2: match?.dw2,
+      gw1: match?.gw1,
+      gw2: match?.gw2,
+      rating: match?.rating,
+      elo_updated_at: result.elo_updated_at,
+      streams: Array.isArray(match?.streams)
+        ? match.streams.map((value) => String(value || "").trim()).filter(Boolean)
+        : [],
+      streamers: Array.isArray(match?.streamers)
+        ? match.streamers.map((value) => String(value || "").trim()).filter(Boolean)
+        : [],
+      lineupsData: sortLineups(duelsByMatchId.get(String(match?.id || "").trim()) || [])
+    };
+
+    if (sectionKey === "today") result.matches_today.push(normalizedMatch);
+    else if (sectionKey === "scheduled") result.matches_scheduled.push(normalizedMatch);
+    else result.matches_finished.push(normalizedMatch);
+  });
+
+  result.tournaments_today = Array.from(tournamentsByKey.today.values());
+  result.tournaments_scheduled = Array.from(tournamentsByKey.scheduled.values());
+  result.tournaments_finished = Array.from(tournamentsByKey.finished.values());
+
+  return result;
+}
+
+function dedupeMatchesById(matches) {
+  const seen = new Set();
+  return (Array.isArray(matches) ? matches : []).filter((match) => {
+    const key = String(match?.id || "").trim();
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function dedupeTournamentsByIdentity(tournaments) {
+  const seen = new Set();
+  return (Array.isArray(tournaments) ? tournaments : []).filter((tournament) => {
+    const key = `${String(tournament?.name || "").trim()}||${String(tournament?.link || "").trim()}`;
+    if (!key || key === "||") return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function fetchAndRenderMatches() {
   const primaryURL = "https://api.carcassonne.com.ua/public/matches";
   const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches.json";
+  const dbMatchesURL = "https://api.carcassonne.gg/public/main-page-matches";
 
-  fetchPrimaryWithRetry(primaryURL, { retries: 2, delayMs: 500, timeout: 10000 })
+  const baseMatchesPromise = fetchPrimaryWithRetry(primaryURL, { retries: 2, delayMs: 500, timeout: 10000 })
     .catch(err => {
       console.warn("⚠️ Primary failed, using fallback:", err && err.message ? err.message : err);
       return fetch(fallbackURL)
@@ -2769,16 +3244,48 @@ function fetchAndRenderMatches() {
           return data;
         });
     })
-    .then((data) => {
-      lastData = data;
-      renderAllSectionsFromData(data);
+  ;
+
+  const dbMatchesPromise = fetch(dbMatchesURL)
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    })
+    .catch(err => {
+      console.warn("⚠️ Main page DB matches failed:", err && err.message ? err.message : err);
+      return null;
+    });
+
+  Promise.all([baseMatchesPromise, dbMatchesPromise])
+    .then(([baseData, dbMatchesData]) => {
+      lastData = { baseData, dbMatchesData };
+      renderAllSectionsFromData(lastData);
     })
     .catch(err => {
       console.error("❌ Failed to load any match data:", err);
     });
 }
 
-  function renderAllSectionsFromData({ matches_today, matches_scheduled, tournaments_today, tournaments_scheduled }) {
+  function renderAllSectionsFromData(dataBundle) {
+    const baseData = dataBundle?.baseData || {};
+    const dbMatchesData = adaptDbMainPageMatchesData(dataBundle?.dbMatchesData || {});
+    const mergedTodayTournaments = dedupeTournamentsByIdentity([
+      ...(dbMatchesData.tournaments_today || []),
+      ...(baseData.tournaments_today || [])
+    ]);
+    const mergedScheduledTournaments = dedupeTournamentsByIdentity([
+      ...(dbMatchesData.tournaments_scheduled || []),
+      ...(baseData.tournaments_scheduled || [])
+    ]);
+    const mergedTodayMatches = dedupeMatchesById([
+      ...(dbMatchesData.matches_today || []),
+      ...(baseData.matches_today || [])
+    ]);
+    const mergedScheduledMatches = dedupeMatchesById([
+      ...(dbMatchesData.matches_scheduled || []),
+      ...(baseData.matches_scheduled || [])
+    ]);
+
     const container = document.getElementById("matches-container");
     const settingsSlot = document.getElementById("matches-settings-slot");
     container.innerHTML = "";
@@ -2793,10 +3300,10 @@ function fetchAndRenderMatches() {
     container.appendChild(listWrapper);
 
     renderTodayAndTomorrow(listWrapper, {
-      matchesToday: matches_today,
-      matchesScheduled: matches_scheduled,
-      tournamentsToday: tournaments_today,
-      tournamentsScheduled: tournaments_scheduled
+      matchesToday: mergedTodayMatches,
+      matchesScheduled: mergedScheduledMatches,
+      tournamentsToday: mergedTodayTournaments,
+      tournamentsScheduled: mergedScheduledTournaments
     });
 
     renderSettingsSection(settingsSlot || container);
