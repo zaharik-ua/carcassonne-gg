@@ -259,7 +259,9 @@ function loadDuelsByMatchId(matchId, callback) {
         dw2,
         rating_full,
         rating,
-        status
+        status,
+        results_last_error,
+        results_checked_at
       FROM duels
       WHERE match_id = ?
         AND deleted_at IS NULL
@@ -328,7 +330,9 @@ function loadDuelsByIds(duelIds, callback) {
         dw2,
         rating_full,
         rating,
-        status
+        status,
+        results_last_error,
+        results_checked_at
       FROM duels
       WHERE id IN (${placeholders})
         AND deleted_at IS NULL
@@ -456,6 +460,11 @@ function normalizePlannedDuelScores(status, dw1, dw2) {
     return { dw1: null, dw2: null };
   }
   return { dw1, dw2 };
+}
+
+function isResolvedDuelStatus(status) {
+  const normalized = normalizeStatusText(status);
+  return normalized === "done" || normalized === "no show";
 }
 
 function normalizePlannedMatchScores(status, dw1, dw2, gw1, gw2) {
@@ -590,13 +599,13 @@ async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
         COALESCE(SUM(COALESCE(l.dw1, 0)), 0) AS gw1,
         COALESCE(SUM(COALESCE(l.dw2, 0)), 0) AS gw2,
         COALESCE(SUM(CASE
-          WHEN COALESCE(l.status, 'Planned') = 'Done' AND COALESCE(l.dw1, 0) > COALESCE(l.dw2, 0)
+          WHEN COALESCE(l.status, 'Planned') IN ('Done', 'No Show') AND COALESCE(l.dw1, 0) > COALESCE(l.dw2, 0)
           THEN 1 ELSE 0 END), 0) AS dw1,
         COALESCE(SUM(CASE
-          WHEN COALESCE(l.status, 'Planned') = 'Done' AND COALESCE(l.dw2, 0) > COALESCE(l.dw1, 0)
+          WHEN COALESCE(l.status, 'Planned') IN ('Done', 'No Show') AND COALESCE(l.dw2, 0) > COALESCE(l.dw1, 0)
           THEN 1 ELSE 0 END), 0) AS dw2,
         COUNT(*) AS total_duels,
-        COALESCE(SUM(CASE WHEN COALESCE(l.status, 'Planned') = 'Done' THEN 1 ELSE 0 END), 0) AS done_duels,
+        COALESCE(SUM(CASE WHEN COALESCE(l.status, 'Planned') IN ('Done', 'No Show') THEN 1 ELSE 0 END), 0) AS done_duels,
         COALESCE(SUM(CASE WHEN COALESCE(l.status, 'Planned') = 'Error' THEN 1 ELSE 0 END), 0) AS error_duels,
         MIN(CASE
           WHEN datetime(l.time_utc) IS NOT NULL THEN unixepoch(l.time_utc)
@@ -5651,6 +5660,483 @@ app.post("/duels/:id/games/save", (req, res) => {
             return res.status(500).json({ ok: false, message: "Failed to save duel games" });
           }
         })();
+      });
+    }
+  );
+});
+
+app.post("/duels/:id/fix", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const duelId = String(req.params.id || "").trim();
+  if (!duelId) {
+    return res.status(400).json({ ok: false, message: "Duel id is required" });
+  }
+
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const action = String(payload.action || "").trim();
+  const replacementPlayerId = normalizeNullableText(payload.replacement_player_id);
+  const actorPlayerId = String(req.user.player_id || "").trim() || null;
+
+  return db.get(
+    `
+      SELECT
+        d.id,
+        d.match_id,
+        d.duel_format,
+        d.player_1_id,
+        d.player_2_id,
+        d.status,
+        d.dw1,
+        d.dw2,
+        m.tournament_id,
+        m.team_1,
+        m.team_2,
+        m.status AS match_status
+      FROM duels d
+      JOIN matches m
+        ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
+       AND m.deleted_at IS NULL
+      WHERE trim(COALESCE(d.id, '')) = trim(?)
+        AND d.deleted_at IS NULL
+      LIMIT 1
+    `,
+    [duelId],
+    (duelErr, duelRow) => {
+      if (duelErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load duel" });
+      }
+      if (!duelRow) {
+        return res.status(404).json({ ok: false, message: "Duel not found" });
+      }
+      if (!isCompletedMatchStatus(duelRow.match_status)) {
+        return res.status(403).json({ ok: false, message: "Match results can be edited only for completed matches" });
+      }
+
+      return loadTournamentAccessForUser(duelRow.tournament_id, req.user, async (tournamentErr, tournament) => {
+        if (tournamentErr) {
+          return res.status(500).json({ ok: false, message: "Failed to validate tournament access" });
+        }
+        if (!tournament) {
+          return res.status(404).json({ ok: false, message: "Tournament not found" });
+        }
+
+        const resultAccess = canUserEditMatchResults({
+          tournament,
+          user: req.user,
+          matchRow: duelRow,
+        });
+        if (!resultAccess.allowed) {
+          return res.status(403).json({
+            ok: false,
+            message: resultAccess.expired
+              ? "Match result editing is available for 1 day after match start."
+              : "Forbidden",
+          });
+        }
+
+        try {
+          if (!["player1_no_show", "player2_no_show", "replace_player1", "replace_player2", "cancel_duel"].includes(action)) {
+            return res.status(400).json({ ok: false, message: "Unsupported duel fix action" });
+          }
+
+          const gamesToWinRow = await dbGetAsync(
+            `
+              SELECT COALESCE(df.games_to_win, 1) AS games_to_win
+              FROM duels d
+              LEFT JOIN duel_formats df
+                ON lower(trim(df.format)) = lower(trim(d.duel_format))
+              WHERE trim(COALESCE(d.id, '')) = trim(?)
+                AND d.deleted_at IS NULL
+              LIMIT 1
+            `,
+            [duelId]
+          );
+          const gamesToWin = Math.max(1, Number(gamesToWinRow?.games_to_win || 1));
+          const currentPlayer1Id = String(duelRow.player_1_id || "").trim();
+          const currentPlayer2Id = String(duelRow.player_2_id || "").trim();
+
+          if (action === "replace_player1" || action === "replace_player2") {
+            if (!replacementPlayerId) {
+              return res.status(400).json({ ok: false, message: "Replacement player is required" });
+            }
+            const replacementProfile = await dbGetAsync(
+              `
+                SELECT id
+                FROM profiles
+                WHERE trim(COALESCE(id, '')) = trim(?)
+                LIMIT 1
+              `,
+              [replacementPlayerId]
+            );
+            if (!replacementProfile) {
+              return res.status(404).json({ ok: false, message: "Replacement player not found" });
+            }
+            if (
+              (action === "replace_player1" && replacementPlayerId === currentPlayer1Id)
+              || (action === "replace_player2" && replacementPlayerId === currentPlayer2Id)
+            ) {
+              return res.status(400).json({ ok: false, message: "Select a different player for replacement" });
+            }
+            if (
+              (action === "replace_player1" && replacementPlayerId === currentPlayer2Id)
+              || (action === "replace_player2" && replacementPlayerId === currentPlayer1Id)
+            ) {
+              return res.status(400).json({ ok: false, message: "This player is already used on the other side of the duel" });
+            }
+          }
+
+          await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+          try {
+            if (action === "cancel_duel") {
+              await dbRunAsync(
+                `
+                  UPDATE games
+                  SET deleted_at = CURRENT_TIMESTAMP
+                  WHERE trim(COALESCE(duel_id, '')) = trim(?)
+                    AND deleted_at IS NULL
+                `,
+                [duelId]
+              );
+              await dbRunAsync(
+                `
+                  UPDATE duels
+                  SET
+                    deleted_at = CURRENT_TIMESTAMP,
+                    deleted_by = ?,
+                    updated_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                  WHERE trim(COALESCE(id, '')) = trim(?)
+                    AND deleted_at IS NULL
+                `,
+                [actorPlayerId, actorPlayerId, duelId]
+              );
+            } else if (action === "player1_no_show" || action === "player2_no_show") {
+              const noShowSide = action === "player1_no_show" ? "player1" : "player2";
+              const nextDw1 = noShowSide === "player1" ? 0 : gamesToWin;
+              const nextDw2 = noShowSide === "player1" ? gamesToWin : 0;
+              await dbRunAsync(
+                `
+                  UPDATE games
+                  SET deleted_at = CURRENT_TIMESTAMP
+                  WHERE trim(COALESCE(duel_id, '')) = trim(?)
+                    AND deleted_at IS NULL
+                `,
+                [duelId]
+              );
+              await dbRunAsync(
+                `
+                  UPDATE duels
+                  SET
+                    dw1 = ?,
+                    dw2 = ?,
+                    status = 'No Show',
+                    results_last_error = NULL,
+                    results_checked_at = CURRENT_TIMESTAMP,
+                    updated_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                  WHERE trim(COALESCE(id, '')) = trim(?)
+                    AND deleted_at IS NULL
+                `,
+                [nextDw1, nextDw2, actorPlayerId, duelId]
+              );
+            } else {
+              const fieldName = action === "replace_player1" ? "player_1_id" : "player_2_id";
+              await dbRunAsync(
+                `
+                  UPDATE games
+                  SET deleted_at = CURRENT_TIMESTAMP
+                  WHERE trim(COALESCE(duel_id, '')) = trim(?)
+                    AND deleted_at IS NULL
+                `,
+                [duelId]
+              );
+              await dbRunAsync(
+                `
+                  UPDATE duels
+                  SET
+                    ${fieldName} = ?,
+                    dw1 = 0,
+                    dw2 = 0,
+                    status = 'Error',
+                    results_last_error = NULL,
+                    results_checked_at = NULL,
+                    updated_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                  WHERE trim(COALESCE(id, '')) = trim(?)
+                    AND deleted_at IS NULL
+                `,
+                [replacementPlayerId, actorPlayerId, duelId]
+              );
+            }
+
+            await recomputeMatchAggregates(duelRow.match_id, actorPlayerId);
+            await dbRunAsync("COMMIT");
+          } catch (error) {
+            try {
+              await dbRunAsync("ROLLBACK");
+            } catch (_rollbackErr) {
+              // ignore rollback errors
+            }
+            throw error;
+          }
+
+          const savedDuel = action === "cancel_duel"
+            ? null
+            : (await new Promise((resolve, reject) => {
+                loadDuelsByIds([duelId], (loadErr, rows) => {
+                  if (loadErr) {
+                    reject(loadErr);
+                    return;
+                  }
+                  resolve((rows || [])[0] || null);
+                });
+              }));
+          const savedMatch = await dbGetAsync(
+            `
+              SELECT
+                id,
+                status,
+                dw1,
+                dw2,
+                gw1,
+                gw2
+              FROM matches
+              WHERE id = ?
+                AND deleted_at IS NULL
+              LIMIT 1
+            `,
+            [duelRow.match_id]
+          );
+
+          return res.json({
+            ok: true,
+            duel: savedDuel,
+            match: savedMatch || null,
+            deleted_duel_id: action === "cancel_duel" ? duelId : null,
+          });
+        } catch (error) {
+          console.error(`Failed to apply duel fix for ${duelId}`, error);
+          return res.status(500).json({
+            ok: false,
+            message: error?.message || "Failed to apply duel fix",
+          });
+        }
+      });
+    }
+  );
+});
+
+app.post("/duels/:id/refetch-results", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const duelId = String(req.params.id || "").trim();
+  if (!duelId) {
+    return res.status(400).json({ ok: false, message: "Duel id is required" });
+  }
+
+  const actorPlayerId = String(req.user.player_id || "").trim() || null;
+  const authServerRoot = path.resolve(__dirname, "..");
+  const updateScriptPath = path.resolve(authServerRoot, "run_update_matches.py");
+  const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
+
+  return db.get(
+    `
+      SELECT
+        d.id,
+        d.match_id,
+        m.tournament_id,
+        m.team_1,
+        m.team_2,
+        m.time_utc,
+        m.status AS match_status
+      FROM duels d
+      JOIN matches m
+        ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
+       AND m.deleted_at IS NULL
+      WHERE trim(COALESCE(d.id, '')) = trim(?)
+        AND d.deleted_at IS NULL
+      LIMIT 1
+    `,
+    [duelId],
+    (duelErr, duelRow) => {
+      if (duelErr) {
+        return res.status(500).json({ ok: false, message: "Failed to load duel" });
+      }
+      if (!duelRow) {
+        return res.status(404).json({ ok: false, message: "Duel not found" });
+      }
+      if (!isCompletedMatchStatus(duelRow.match_status)) {
+        return res.status(403).json({ ok: false, message: "Match results can be edited only for completed matches" });
+      }
+
+      return loadTournamentAccessForUser(duelRow.tournament_id, req.user, async (tournamentErr, tournament) => {
+        if (tournamentErr) {
+          return res.status(500).json({ ok: false, message: "Failed to validate tournament access" });
+        }
+        if (!tournament) {
+          return res.status(404).json({ ok: false, message: "Tournament not found" });
+        }
+
+        const resultAccess = canUserEditMatchResults({
+          tournament,
+          user: req.user,
+          matchRow: duelRow,
+        });
+        if (!resultAccess.allowed) {
+          return res.status(403).json({
+            ok: false,
+            message: resultAccess.expired
+              ? "Match result editing is available for 1 day after match start."
+              : "Forbidden",
+          });
+        }
+
+        try {
+          await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+          try {
+            await dbRunAsync(
+              `
+                UPDATE duels
+                SET
+                  dw1 = 0,
+                  dw2 = 0,
+                  status = 'Planned',
+                  results_last_error = NULL,
+                  results_checked_at = NULL,
+                  updated_by = ?,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE trim(COALESCE(id, '')) = trim(?)
+                  AND deleted_at IS NULL
+              `,
+              [actorPlayerId, duelId]
+            );
+            await dbRunAsync(
+              `
+                DELETE FROM games
+                WHERE trim(COALESCE(duel_id, '')) = trim(?)
+              `,
+              [duelId]
+            );
+            await dbRunAsync("COMMIT");
+          } catch (resetError) {
+            try {
+              await dbRunAsync("ROLLBACK");
+            } catch (_rollbackErr) {
+              // ignore rollback errors
+            }
+            throw resetError;
+          }
+
+          let execLogs = "";
+          try {
+            const execResult = await execFileAsync(
+              pythonBin,
+              [
+                updateScriptPath,
+                "--db-path",
+                dbFullPath,
+                "--match-id",
+                String(duelRow.match_id || "").trim(),
+              ],
+              {
+                cwd: authServerRoot,
+                env: process.env,
+                timeout: 5 * 60 * 1000,
+                maxBuffer: 1024 * 1024 * 10,
+              }
+            );
+            execLogs = String(execResult.stdout || execResult.stderr || "").trim();
+          } catch (error) {
+            execLogs = String(error?.stderr || error?.stdout || error?.message || "").trim();
+          }
+
+          let refreshedDuel = await new Promise((resolve, reject) => {
+            loadDuelsByIds([duelId], (loadErr, rows) => {
+              if (loadErr) {
+                reject(loadErr);
+                return;
+              }
+              resolve((rows || [])[0] || null);
+            });
+          });
+
+          const duelErrorMessage = String(refreshedDuel?.results_last_error || "").trim();
+          if (!refreshedDuel || !isResolvedDuelStatus(refreshedDuel?.status)) {
+            const persistedErrorMessage = duelErrorMessage || execLogs || "Failed to fetch duel results from BGA.";
+            await dbRunAsync(
+              `
+                UPDATE duels
+                SET
+                  status = 'Error',
+                  results_last_error = COALESCE(?, results_last_error),
+                  results_checked_at = CURRENT_TIMESTAMP,
+                  updated_by = ?,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE trim(COALESCE(id, '')) = trim(?)
+                  AND deleted_at IS NULL
+              `,
+              [persistedErrorMessage, actorPlayerId, duelId]
+            );
+            await recomputeMatchAggregates(duelRow.match_id, actorPlayerId);
+            refreshedDuel = await new Promise((resolve, reject) => {
+              loadDuelsByIds([duelId], (loadErr, rows) => {
+                if (loadErr) {
+                  reject(loadErr);
+                  return;
+                }
+                resolve((rows || [])[0] || null);
+              });
+            });
+          }
+
+          const savedMatch = await dbGetAsync(
+            `
+              SELECT
+                id,
+                status,
+                dw1,
+                dw2,
+                gw1,
+                gw2
+              FROM matches
+              WHERE id = ?
+                AND deleted_at IS NULL
+              LIMIT 1
+            `,
+            [duelRow.match_id]
+          );
+
+          if (!refreshedDuel || !isResolvedDuelStatus(refreshedDuel.status)) {
+            const errorMessage = String(refreshedDuel?.results_last_error || "").trim()
+              || execLogs
+              || "Failed to fetch duel results from BGA.";
+            return res.status(409).json({
+              ok: false,
+              message: errorMessage,
+              duel: refreshedDuel || null,
+              match: savedMatch || null,
+              logs: execLogs,
+            });
+          }
+
+          return res.json({
+            ok: true,
+            duel: refreshedDuel,
+            match: savedMatch || null,
+            logs: execLogs,
+          });
+        } catch (error) {
+          console.error(`Failed to refetch duel results for ${duelId}`, error);
+          return res.status(500).json({
+            ok: false,
+            message: error?.message || "Failed to fetch duel results from BGA.",
+          });
+        }
       });
     }
   );

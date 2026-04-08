@@ -276,13 +276,13 @@ class SqliteMatchRepository(MatchRepository):
               COALESCE(SUM(COALESCE(dw1, 0)), 0) AS gw1,
               COALESCE(SUM(COALESCE(dw2, 0)), 0) AS gw2,
               COALESCE(SUM(CASE
-                WHEN COALESCE(status, 'Planned') = 'Done' AND COALESCE(dw1, 0) > COALESCE(dw2, 0)
+                WHEN COALESCE(status, 'Planned') IN ('Done', 'No Show') AND COALESCE(dw1, 0) > COALESCE(dw2, 0)
                 THEN 1 ELSE 0 END), 0) AS dw1,
               COALESCE(SUM(CASE
-                WHEN COALESCE(status, 'Planned') = 'Done' AND COALESCE(dw2, 0) > COALESCE(dw1, 0)
+                WHEN COALESCE(status, 'Planned') IN ('Done', 'No Show') AND COALESCE(dw2, 0) > COALESCE(dw1, 0)
                 THEN 1 ELSE 0 END), 0) AS dw2,
               COUNT(*) AS total_duels,
-              COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') = 'Done' THEN 1 ELSE 0 END), 0) AS done_duels,
+              COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') IN ('Done', 'No Show') THEN 1 ELSE 0 END), 0) AS done_duels,
               COALESCE(SUM(CASE WHEN COALESCE(status, 'Planned') = 'Error' THEN 1 ELSE 0 END), 0) AS error_duels,
               MIN(CASE
                 WHEN datetime(l.time_utc) IS NOT NULL THEN unixepoch(l.time_utc)
