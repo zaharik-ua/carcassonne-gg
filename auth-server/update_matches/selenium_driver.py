@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import os
 import random
 import shutil
@@ -89,6 +90,7 @@ def _resolve_chrome_binary_path() -> str:
 class DriverManager:
     def __init__(self) -> None:
         self.driver = None
+        self._service_pid = None
         self.driver_lock = Lock()
         self._create_lock = Lock()
         self._create_cond = Condition(self._create_lock)
@@ -139,6 +141,7 @@ class DriverManager:
                 last_exc = TimeoutError(f"Chrome startup timed out after {CHROME_STARTUP_TIMEOUT}s")
             elif holder["driver"] is not None:
                 self.driver = holder["driver"]
+                self._service_pid = getattr(getattr(service, "process", None), "pid", None)
                 try:
                     self.driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
                     self.driver.set_script_timeout(PAGE_LOAD_TIMEOUT)
@@ -201,6 +204,7 @@ class DriverManager:
             self.driver_lock.release()
 
     def close_driver(self) -> None:
+        service_pid = self._service_pid
         if self.driver:
             try:
                 self.driver.quit()
@@ -208,11 +212,27 @@ class DriverManager:
                 pass
             finally:
                 self.driver = None
+        if service_pid:
+            self._terminate_process_tree(service_pid)
+        self._service_pid = None
+
+    def shutdown(self) -> None:
+        try:
+            self.close_driver()
+        except Exception:
+            pass
 
     @staticmethod
     def _stop_service_process(service: Service) -> None:
         process = getattr(service, "process", None)
         pid = getattr(process, "pid", None)
+        if not pid:
+            return
+
+        DriverManager._terminate_process_tree(pid)
+
+    @staticmethod
+    def _terminate_process_tree(pid: int) -> None:
         if not pid:
             return
 
@@ -254,3 +274,20 @@ def monitor_idle_time() -> None:
 
 
 Thread(target=monitor_idle_time, daemon=True).start()
+
+
+def _register_shutdown_hooks() -> None:
+    atexit.register(driver_manager.shutdown)
+
+    def _handle_signal(signum, _frame) -> None:
+        driver_manager.shutdown()
+        raise SystemExit(128 + int(signum))
+
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(signum, _handle_signal)
+        except Exception:
+            pass
+
+
+_register_shutdown_hooks()

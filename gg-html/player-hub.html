@@ -6556,6 +6556,7 @@
       }
 
       if (isFixableEmptyErrorDuel(entry)) {
+        const isFixBusy = !!activeDuelEditorState.applyingFix || !!activeDuelEditorState.refetchingResults;
         const fixOptions = [
           { value: "", label: "Select action" },
           { value: "player1_no_show", label: `${getDuelPlayerName(entry?.player1Id)} - No Show` },
@@ -6573,10 +6574,10 @@
           }));
           const playerOptions = [{ value: "", label: "Select player" }]
             .concat(optionPlayers)
-            .concat(isReadOnlyNonPlanned ? [] : [{ value: "__add_new__", label: "Add new player" }]);
+            .concat(canEditResults ? [{ value: "__add_new__", label: "Add new player" }] : []);
           const dd = createDropdown(selectedValue || "", playerOptions, {
             allowEmpty: true,
-            searchable: !isReadOnlyNonPlanned,
+            searchable: true,
             autoFocusSearch: shouldAutoFocusLineupPlayerSearch,
             maxMenuHeight: 300,
           });
@@ -6589,10 +6590,12 @@
             ddBtn.style.color = hasSelectedPlayer ? "#2f3947" : "#999";
           };
           syncSelectedHighlight();
+          dd.setDisabled(isFixBusy);
           const inlineArea = document.createElement("div");
           cell.appendChild(dd.root);
           cell.appendChild(inlineArea);
           dd.setOnChange((nextValue) => {
+            if (isFixBusy) return;
             activeDuelEditorState.error = "";
             if (nextValue === "__add_new__") {
               dd.setValue("", false);
@@ -6629,7 +6632,9 @@
           allowEmpty: true,
         });
         fixDropdown.root.classList.add("cp-duel-edit-select");
+        fixDropdown.setDisabled(isFixBusy);
         fixDropdown.setOnChange((nextValue) => {
+          if (isFixBusy) return;
           activeDuelEditorState.fixAction = String(nextValue || "").trim();
           activeDuelEditorState.replacementPlayerId = "";
           activeDuelEditorState.error = "";
@@ -6681,6 +6686,13 @@
             && String(activeDuelEditorState.replacementPlayerId || "").trim() !== currentReplacementPlayerId
           )
         );
+        const buildReplaceNotFoundMessage = () => {
+          const replacementPlayerName = getDuelPlayerName(activeDuelEditorState.replacementPlayerId || "");
+          const opponentPlayerName = replacementSide === "player1"
+            ? getDuelPlayerName(entry?.player2Id)
+            : getDuelPlayerName(entry?.player1Id);
+          return `Could not find completed games for ${replacementPlayerName} and ${opponentPlayerName}. Please check the players or enter the result manually.`;
+        };
 
         const actions = document.createElement("div");
         actions.className = "cp-duel-edit-actions";
@@ -6749,10 +6761,10 @@
               return;
             }
 
-            if (fixResult?.duel) {
+            if (fixResult?.duel && selectedAction !== "replace_player1" && selectedAction !== "replace_player2") {
               updateLineupStateFromServer(fixResult.duel);
             }
-            if (fixResult?.match) {
+            if (fixResult?.match && selectedAction !== "replace_player1" && selectedAction !== "replace_player2") {
               syncMatchResultSummary(fixResult.match);
             }
             if (selectedAction === "cancel_duel") {
@@ -6779,25 +6791,30 @@
             activeDuelEditorState.refetchingResults = false;
             activeDuelEditorState.applyingFix = false;
 
+            if (!refetchResponse.ok || !refetchResult?.ok) {
+              const isReplaceAction = selectedAction === "replace_player1" || selectedAction === "replace_player2";
+              const isDuelNotFound = String(refetchResult?.message || "").trim() === "Duel not found on BGA.";
+              activeDuelEditorState.error = isReplaceAction && isDuelNotFound
+                ? buildReplaceNotFoundMessage()
+                : (refetchResult?.message || "Failed to fetch duel results from BGA.");
+              renderLineupsRows();
+              return;
+            }
+
             if (refetchResult?.duel) {
               updateLineupStateFromServer(refetchResult.duel);
             }
             if (refetchResult?.match) {
               syncMatchResultSummary(refetchResult.match);
             }
-
-            if (!refetchResponse.ok || !refetchResult?.ok) {
-              activeDuelEditorState.error = refetchResult?.message || "Failed to fetch duel results from BGA.";
-              renderLineupsRows();
-              return;
-            }
-
             closeDuelResultsEditor(duelId);
             renderLineupsRows();
           } catch (_error) {
             activeDuelEditorState.applyingFix = false;
             activeDuelEditorState.refetchingResults = false;
-            activeDuelEditorState.error = "Failed to fix duel.";
+            activeDuelEditorState.error = (selectedAction === "replace_player1" || selectedAction === "replace_player2")
+              ? buildReplaceNotFoundMessage()
+              : "Failed to fix duel.";
             renderLineupsRows();
           }
         });
