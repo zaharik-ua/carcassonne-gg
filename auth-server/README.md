@@ -300,6 +300,8 @@ ALERT_DISK_MOUNTS=/
 ALERT_UNITS="update-duels.timer cleanup-chrome-tmp.timer"
 ALERT_UPDATE_DUELS_LOG=/var/log/carcassonne/update-duels.log
 ALERT_LOG_PATTERN=tab crashed
+ALERT_LOG_PERSISTENCE_MINUTES=10
+ALERT_LOG_MIN_MATCHES=2
 ```
 
 Що робить зараз:
@@ -307,7 +309,7 @@ ALERT_LOG_PATTERN=tab crashed
 - перевіряє вказані mount points через `df`;
 - для `.timer` юнітів очікує стан `active`;
 - для `.service` юнітів шле alert тільки при `failed`;
-- читає тільки новий хвіст `update-duels.log`, тому не дублює старі `tab crashed`;
+- для `tab crashed` шле alert тільки якщо проблема повторюється щонайменше `10` хвилин, а не від разового збою;
 - зберігає state у `auth-server/monitoring-state`, щоб не спамити однаковими alert-ами щоп'ять хвилин.
 
 Встановлення на сервері:
