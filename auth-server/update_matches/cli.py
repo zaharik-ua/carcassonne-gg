@@ -70,6 +70,11 @@ def parse_args() -> argparse.Namespace:
         help="Manual match id for testing. When provided, automatic target selection is skipped.",
     )
     parser.add_argument(
+        "--duel-id",
+        default=os.getenv("MATCH_UPDATE_DUEL_ID"),
+        help="Manual duel id for testing. When provided, only this duel is processed.",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=MATCH_UPDATE_BATCH_SIZE,
@@ -102,7 +107,12 @@ def main() -> int:
     repository = SqliteMatchRepository(args.db_path)
     service = MatchUpdateService(repository=repository, batch_size=args.batch_size)
     targets = [part.strip() for part in args.targets.split(",") if part.strip()]
-    summary = service.run(targets=targets, total_limit=args.limit, match_id=args.match_id)
+    summary = service.run(
+        targets=targets,
+        total_limit=args.limit,
+        match_id=args.match_id,
+        duel_id=args.duel_id,
+    )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 

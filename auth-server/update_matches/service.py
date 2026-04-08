@@ -11,7 +11,16 @@ class MatchUpdateService:
         self.repository = repository
         self.batch_size = batch_size
 
-    def run(self, *, targets: list[str], total_limit: int | None = None, match_id: str | None = None) -> dict:
+    def run(
+        self,
+        *,
+        targets: list[str],
+        total_limit: int | None = None,
+        match_id: str | None = None,
+        duel_id: str | None = None,
+    ) -> dict:
+        if duel_id:
+            return self._run_duel(duel_id=duel_id)
         if match_id:
             return self._run_match(match_id=match_id)
 
@@ -60,6 +69,28 @@ class MatchUpdateService:
         batch = self.repository.fetch_duels_for_match(match_id=match_id)
         summary = {
             "match_id": match_id,
+            "processed": 0,
+            "updated": 0,
+            "failed": 0,
+        }
+        if not batch:
+            return summary
+
+        results = get_games_batch(batch)
+        for match, result in zip(batch, results):
+            summary["processed"] += 1
+            if result.status == "success":
+                self.repository.save_match_result(match, result)
+                summary["updated"] += 1
+            else:
+                self.repository.save_match_error(match, result.message or "Unknown error")
+                summary["failed"] += 1
+        return summary
+
+    def _run_duel(self, *, duel_id: str) -> dict:
+        batch = self.repository.fetch_duel_by_id(duel_id=duel_id)
+        summary = {
+            "duel_id": duel_id,
             "processed": 0,
             "updated": 0,
             "failed": 0,

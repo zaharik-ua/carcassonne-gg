@@ -6040,8 +6040,8 @@ app.post("/duels/:id/refetch-results", (req, res) => {
                 updateScriptPath,
                 "--db-path",
                 dbFullPath,
-                "--match-id",
-                String(duelRow.match_id || "").trim(),
+                "--duel-id",
+                duelId,
               ],
               {
                 cwd: authServerRoot,
@@ -6067,7 +6067,10 @@ app.post("/duels/:id/refetch-results", (req, res) => {
 
           const duelErrorMessage = String(refreshedDuel?.results_last_error || "").trim();
           if (!refreshedDuel || !isResolvedDuelStatus(refreshedDuel?.status)) {
-            const persistedErrorMessage = duelErrorMessage || execLogs || "Failed to fetch duel results from BGA.";
+            const hasGames = Array.isArray(refreshedDuel?.games) && refreshedDuel.games.length > 0;
+            const persistedErrorMessage = !hasGames
+              ? "Duel not found on BGA."
+              : (duelErrorMessage || "Failed to fetch duel results from BGA.");
             await dbRunAsync(
               `
                 UPDATE duels
@@ -6112,15 +6115,15 @@ app.post("/duels/:id/refetch-results", (req, res) => {
           );
 
           if (!refreshedDuel || !isResolvedDuelStatus(refreshedDuel.status)) {
-            const errorMessage = String(refreshedDuel?.results_last_error || "").trim()
-              || execLogs
+            const hasGames = Array.isArray(refreshedDuel?.games) && refreshedDuel.games.length > 0;
+            const errorMessage = (!hasGames ? "Duel not found on BGA." : "")
+              || String(refreshedDuel?.results_last_error || "").trim()
               || "Failed to fetch duel results from BGA.";
             return res.status(409).json({
               ok: false,
               message: errorMessage,
               duel: refreshedDuel || null,
               match: savedMatch || null,
-              logs: execLogs,
             });
           }
 
@@ -6128,7 +6131,6 @@ app.post("/duels/:id/refetch-results", (req, res) => {
             ok: true,
             duel: refreshedDuel,
             match: savedMatch || null,
-            logs: execLogs,
           });
         } catch (error) {
           console.error(`Failed to refetch duel results for ${duelId}`, error);

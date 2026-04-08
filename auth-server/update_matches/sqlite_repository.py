@@ -13,6 +13,39 @@ class SqliteMatchRepository(MatchRepository):
         self.db_path = str(Path(db_path).resolve())
         self._ensure_schema()
 
+    def fetch_duel_by_id(self, *, duel_id: str) -> list[MatchUpdateRequest]:
+        sql = """
+            SELECT
+              l.id AS duel_id,
+              l.match_id,
+              l.player_1_id,
+              l.player_2_id,
+              l.time_utc,
+              l.duel_format,
+              COALESCE(df.games_to_win, 1) AS games_to_win,
+              COALESCE(df.minutes_to_play, 60) AS minutes_to_play,
+              p1.bga_nickname AS player_1_nickname,
+              p2.bga_nickname AS player_2_nickname
+            FROM duels l
+            JOIN duel_formats df
+              ON lower(trim(df.format)) = lower(trim(l.duel_format))
+            LEFT JOIN profiles p1
+              ON trim(COALESCE(p1.id, '')) = trim(COALESCE(l.player_1_id, ''))
+            LEFT JOIN profiles p2
+              ON trim(COALESCE(p2.id, '')) = trim(COALESCE(l.player_2_id, ''))
+            WHERE l.deleted_at IS NULL
+              AND trim(COALESCE(l.id, '')) = trim(?)
+              AND trim(COALESCE(l.player_1_id, '')) <> ''
+              AND trim(COALESCE(l.player_2_id, '')) <> ''
+              AND trim(COALESCE(l.time_utc, '')) <> ''
+              AND trim(COALESCE(l.duel_format, '')) <> ''
+            LIMIT 1
+        """
+
+        with self._connect() as conn:
+            rows = conn.execute(sql, (duel_id,)).fetchall()
+        return [self._row_to_request(row, "manual")] if rows else []
+
     def fetch_duels_for_match(self, *, match_id: str) -> list[MatchUpdateRequest]:
         sql = """
             SELECT

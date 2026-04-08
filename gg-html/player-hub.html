@@ -6556,13 +6556,6 @@
       }
 
       if (isFixableEmptyErrorDuel(entry)) {
-        const title = document.createElement("div");
-        title.style.fontSize = "16px";
-        title.style.fontWeight = "700";
-        title.style.color = "#223040";
-        title.textContent = "Fix the duel";
-        panel.appendChild(title);
-
         const fixOptions = [
           { value: "", label: "Select action" },
           { value: "player1_no_show", label: `${getDuelPlayerName(entry?.player1Id)} - No Show` },
@@ -6587,6 +6580,15 @@
             autoFocusSearch: shouldAutoFocusLineupPlayerSearch,
             maxMenuHeight: 300,
           });
+          const ddBtn = dd.root.querySelector(".cp-dd-btn");
+          const syncSelectedHighlight = () => {
+            if (!ddBtn) return;
+            const selectedPlayerId = String(dd.getValue() || "").trim();
+            const hasSelectedPlayer = selectedPlayerId !== "" && selectedPlayerId !== "__add_new__";
+            ddBtn.style.fontWeight = "400";
+            ddBtn.style.color = hasSelectedPlayer ? "#2f3947" : "#999";
+          };
+          syncSelectedHighlight();
           const inlineArea = document.createElement("div");
           cell.appendChild(dd.root);
           cell.appendChild(inlineArea);
@@ -6594,6 +6596,7 @@
             activeDuelEditorState.error = "";
             if (nextValue === "__add_new__") {
               dd.setValue("", false);
+              syncSelectedHighlight();
               const inline = createAddPlayerInline(teamCodeForCell, (profile) => {
                 inlineArea.innerHTML = "";
                 const nextPlayerId = String(profile?.id ?? profile?.player_id ?? "").trim();
@@ -6609,6 +6612,7 @@
             }
             inlineArea.innerHTML = "";
             onSelect(nextValue);
+            syncSelectedHighlight();
             renderLineupsRows();
           });
           if (currentValue) {
@@ -6620,7 +6624,7 @@
         const fixField = document.createElement("div");
         fixField.className = "cp-duel-edit-field";
         const fixLabel = document.createElement("label");
-        fixLabel.textContent = "Action";
+        fixLabel.textContent = "Fix the duel";
         const fixDropdown = createDropdown(activeDuelEditorState.fixAction || "", fixOptions, {
           allowEmpty: true,
         });

@@ -17,6 +17,10 @@ class MatchRepository(ABC):
         """Return all duels for a specific match id."""
 
     @abstractmethod
+    def fetch_duel_by_id(self, *, duel_id: str) -> list[MatchUpdateRequest]:
+        """Return exactly one duel for a specific duel id."""
+
+    @abstractmethod
     def fetch_matches_to_update(self, *, target: str, limit: int) -> list[MatchUpdateRequest]:
         """Return matches that currently need updating for the requested target."""
 
