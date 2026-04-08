@@ -44,7 +44,7 @@ class SqliteMatchRepository(MatchRepository):
 
         with self._connect() as conn:
             rows = conn.execute(sql, (duel_id,)).fetchall()
-        return [self._row_to_request(row, "manual_duel")] if rows else []
+        return [self._row_to_request(rows[0], "manual_duel")] if rows else []
 
     def fetch_duels_for_match(self, *, match_id: str) -> list[MatchUpdateRequest]:
         sql = """
