@@ -1,0 +1,11 @@
+[Unit]
+Description=Check server health and send Telegram alerts for Carcassonne GG
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/carcassonne-gg/auth-server
+StandardOutput=journal
+StandardError=journal
+ExecStart=/usr/bin/flock -n /tmp/carcassonne-server-alerts.lock /home/carcassonne-gg/auth-server/scripts/run_server_alerts.sh

@@ -275,3 +275,55 @@ sudo systemctl status cleanup-chrome-tmp.timer
 sudo systemctl start cleanup-chrome-tmp.service
 journalctl -u cleanup-chrome-tmp.service -n 100 --no-pager
 ```
+
+## 11) Telegram alerts for server health
+
+У репозиторії є готовий health-check, який надсилає Telegram alerts для:
+
+- переповнення диска;
+- неактивних timer-ів або failed service-ів;
+- нових `tab crashed` у `update-duels.log`.
+
+Файли:
+
+- `auth-server/scripts/run_server_alerts.sh`
+- `auth-server/systemd/server-alerts.service`
+- `auth-server/systemd/server-alerts.timer`
+
+Налаштування в `.env`:
+
+```env
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+ALERT_DISK_USED_PERCENT=90
+ALERT_DISK_MOUNTS=/
+ALERT_UNITS="update-duels.timer cleanup-chrome-tmp.timer"
+ALERT_UPDATE_DUELS_LOG=/var/log/carcassonne/update-duels.log
+ALERT_LOG_PATTERN=tab crashed
+```
+
+Що робить зараз:
+
+- перевіряє вказані mount points через `df`;
+- для `.timer` юнітів очікує стан `active`;
+- для `.service` юнітів шле alert тільки при `failed`;
+- читає тільки новий хвіст `update-duels.log`, тому не дублює старі `tab crashed`;
+- зберігає state у `auth-server/monitoring-state`, щоб не спамити однаковими alert-ами щоп'ять хвилин.
+
+Встановлення на сервері:
+
+```bash
+sudo cp auth-server/systemd/server-alerts.service /etc/systemd/system/
+sudo cp auth-server/systemd/server-alerts.timer /etc/systemd/system/
+sudo chmod +x /home/carcassonne-gg/auth-server/scripts/run_server_alerts.sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now server-alerts.timer
+sudo systemctl status server-alerts.timer
+```
+
+Ручний запуск:
+
+```bash
+sudo systemctl start server-alerts.service
+journalctl -u server-alerts.service -n 100 --no-pager
+```

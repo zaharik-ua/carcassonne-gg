@@ -1,0 +1,11 @@
+[Unit]
+Description=Run server health alerts every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=server-alerts.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
