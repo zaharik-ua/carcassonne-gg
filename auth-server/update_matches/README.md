@@ -59,8 +59,8 @@ python3 run_update_matches.py --match-id 20250330UKRPRT
 
 ## Selection rules
 
-- `finished_pending`: duel already ended, status is not `Done` and not `Error`
-- `ongoing`: duel already started, not yet ended, status is not `Done`
+- `finished_pending`: duel already ended, status is not `Done`, `Error`, or `No Show`
+- `ongoing`: duel already started, not yet ended, status is not `Done`, `Error`, or `No Show`
 - manual test mode: `--match-id <match_id>` ignores automatic selection and loads all duels of that match
 - automatic runs prioritize the least recently checked duels via `duels.results_checked_at`
 

@@ -2513,6 +2513,10 @@
     return String(duel?.status || "").trim().toLowerCase() === "error";
   }
 
+  function isNoShowDuelStatus(duel) {
+    return String(duel?.status || "").trim().toLowerCase() === "no show";
+  }
+
   function sortLineups(lineups) {
     return (Array.isArray(lineups) ? lineups.slice() : []).sort((a, b) => {
       const duelA = readLineupDuelNumber(a);
@@ -6067,6 +6071,8 @@
       dw2: parseNullableInt(l?.dw2),
       status: String(l?.status || "").trim(),
       games: Array.isArray(l?.games) ? l.games.map((game) => ({ ...game })) : [],
+      statusMessage: "",
+      statusType: "",
     }));
     if (!lineupsState.length && isCreateMode) lineupsState = [];
 
@@ -6080,7 +6086,25 @@
       dw2: null,
       status: "",
       games: [],
+      statusMessage: "",
+      statusType: "",
     });
+
+    const setLineupStatus = (duelId, message, type = "info") => {
+      const normalizedDuelId = String(duelId || "").trim();
+      if (!normalizedDuelId) return;
+      const nextMessage = String(message || "").trim();
+      const nextType = String(type || "").trim();
+      lineupsState = lineupsState.map((row) => (
+        String(row?.id || "").trim() === normalizedDuelId
+          ? {
+              ...row,
+              statusMessage: nextMessage,
+              statusType: nextMessage ? nextType : "",
+            }
+          : row
+      ));
+    };
 
     const createDefaultLineupsState = () => {
       if (isFixedTournamentLineup) {
@@ -6130,7 +6154,7 @@
     );
 
     const isFixableEmptyErrorDuel = (duel) => (
-      isErrorDuelStatus(duel)
+      (isErrorDuelStatus(duel) || isNoShowDuelStatus(duel))
       && isZeroZeroDuel(duel)
       && collectGameEntries(duel).length === 0
     );
@@ -6260,6 +6284,8 @@
               dw2: parseNullableInt(savedDuel?.dw2),
               status: String(savedDuel?.status || "").trim(),
               games: nextGames,
+              statusMessage: row.statusMessage || "",
+              statusType: row.statusType || "",
             }
           : row
       ));
@@ -6556,13 +6582,14 @@
       }
 
       if (isFixableEmptyErrorDuel(entry)) {
-        const isFixBusy = !!activeDuelEditorState.applyingFix || !!activeDuelEditorState.refetchingResults;
+        const isFixBusy = !!activeDuelEditorState.applyingFix || !!activeDuelEditorState.refetchingResults || !!activeDuelEditorState.saving;
         const fixOptions = [
           { value: "", label: "Select action" },
           { value: "player1_no_show", label: `${getDuelPlayerName(entry?.player1Id)} - No Show` },
           { value: "player2_no_show", label: `${getDuelPlayerName(entry?.player2Id)} - No Show` },
           { value: "replace_player1", label: `${getDuelPlayerName(entry?.player1Id)} - Replace` },
           { value: "replace_player2", label: `${getDuelPlayerName(entry?.player2Id)} - Replace` },
+          { value: "add_manually", label: "Add manually" },
           { value: "cancel_duel", label: "Cancel Duel" },
         ];
 
@@ -6645,6 +6672,7 @@
         panel.appendChild(fixField);
 
         const selectedAction = String(activeDuelEditorState.fixAction || "").trim();
+        const isManualAddAction = selectedAction === "add_manually";
         const replacementSide = selectedAction === "replace_player1"
           ? "player1"
           : selectedAction === "replace_player2"
@@ -6679,6 +6707,7 @@
         const canSaveFix = (
           selectedAction === "player1_no_show"
           || selectedAction === "player2_no_show"
+          || selectedAction === "add_manually"
           || selectedAction === "cancel_duel"
           || (
             (selectedAction === "replace_player1" || selectedAction === "replace_player2")
@@ -6699,20 +6728,294 @@
         const saveBtnLocal = document.createElement("button");
         saveBtnLocal.type = "button";
         saveBtnLocal.className = "cp-btn cp-btn-primary";
-        saveBtnLocal.textContent = activeDuelEditorState.applyingFix
+        saveBtnLocal.textContent = activeDuelEditorState.saving
+          ? "Saving..."
+          : activeDuelEditorState.applyingFix
           ? "Saving..."
           : activeDuelEditorState.refetchingResults
             ? "Getting..."
             : "Save";
-        saveBtnLocal.disabled = !canSaveFix || !!activeDuelEditorState.applyingFix || !!activeDuelEditorState.refetchingResults;
+        saveBtnLocal.disabled = !canSaveFix || !!activeDuelEditorState.applyingFix || !!activeDuelEditorState.refetchingResults || !!activeDuelEditorState.saving;
         const cancelBtnLocal = document.createElement("button");
         cancelBtnLocal.type = "button";
         cancelBtnLocal.className = "cp-btn cp-btn-secondary";
         cancelBtnLocal.textContent = "Cancel";
-        cancelBtnLocal.disabled = !!activeDuelEditorState.applyingFix || !!activeDuelEditorState.refetchingResults;
+        cancelBtnLocal.disabled = !!activeDuelEditorState.applyingFix || !!activeDuelEditorState.refetchingResults || !!activeDuelEditorState.saving;
         actions.appendChild(saveBtnLocal);
         actions.appendChild(cancelBtnLocal);
         panel.appendChild(actions);
+
+        if (isManualAddAction) {
+          const gamesWrap = document.createElement("div");
+          gamesWrap.className = "cp-duel-edit-games";
+
+          const createGameDropdown = (value, options, onChange) => {
+            const dropdown = createDropdown(value, options, {
+              allowEmpty: true,
+            });
+            dropdown.root.classList.add("cp-duel-edit-select");
+            dropdown.setOnChange((nextValue) => {
+              if (typeof onChange === "function") onChange(nextValue);
+            });
+            return dropdown;
+          };
+
+          const setGameInputReadonly = (input, isReadonly) => {
+            if (!input || typeof input.readOnly === "undefined") return;
+            input.readOnly = !!isReadonly;
+          };
+
+          activeDuelEditorState.games.forEach((game, gameIndex) => {
+            const gameWrap = document.createElement("div");
+            gameWrap.className = "cp-duel-edit-game";
+            const noShowSelects = {};
+            const wonSelects = {};
+            const clockSelects = {};
+            const scoreInputs = {};
+            let refreshGameUiState = () => {};
+
+            const metaRow = document.createElement("div");
+            metaRow.className = "cp-duel-edit-meta";
+
+            const gameNumberField = document.createElement("div");
+            gameNumberField.className = "cp-duel-edit-field cp-duel-edit-field--inline";
+            const gameNumberLabel = document.createElement("label");
+            gameNumberLabel.textContent = "Game #";
+            const gameNumberValue = document.createElement("div");
+            gameNumberValue.className = "cp-duel-edit-game-number";
+            gameNumberValue.textContent = String(game?.game_number || "");
+            gameNumberField.appendChild(gameNumberLabel);
+            gameNumberField.appendChild(gameNumberValue);
+            metaRow.appendChild(gameNumberField);
+
+            const tableField = document.createElement("div");
+            tableField.className = "cp-duel-edit-field cp-duel-edit-field--inline cp-duel-edit-table-field";
+            const tableLabel = document.createElement("label");
+            tableLabel.textContent = "Table ID";
+            const tableInput = document.createElement("input");
+            tableInput.type = "text";
+            tableInput.value = String(game?.bga_table_id || "");
+            tableInput.addEventListener("input", () => {
+              game.bga_table_id = String(tableInput.value || "").trim();
+            });
+            tableField.appendChild(tableLabel);
+            tableField.appendChild(tableInput);
+            metaRow.appendChild(tableField);
+
+            const metaActions = document.createElement("div");
+            metaActions.className = "cp-duel-edit-meta-actions";
+            const deleteGameBtn = document.createElement("button");
+            deleteGameBtn.type = "button";
+            deleteGameBtn.className = "cp-btn cp-btn-danger cp-duel-edit-delete-btn";
+            deleteGameBtn.title = "Delete";
+            deleteGameBtn.setAttribute("aria-label", "Delete");
+            const deleteGameBtnIcon = document.createElement("i");
+            deleteGameBtnIcon.className = "fa-regular fa-trash-can cp-duel-edit-delete-btn-icon";
+            deleteGameBtnIcon.setAttribute("aria-hidden", "true");
+            const deleteGameBtnText = document.createElement("span");
+            deleteGameBtnText.className = "cp-duel-edit-delete-btn-text";
+            deleteGameBtnText.textContent = "Delete";
+            deleteGameBtn.appendChild(deleteGameBtnIcon);
+            deleteGameBtn.appendChild(deleteGameBtnText);
+            deleteGameBtn.disabled = !!activeDuelEditorState.saving;
+            metaActions.appendChild(deleteGameBtn);
+            metaRow.appendChild(metaActions);
+
+            gameWrap.appendChild(metaRow);
+
+            const playersRow = document.createElement("div");
+            playersRow.className = "cp-duel-edit-players";
+
+            [
+              {
+                scoreField: "player_1_score",
+                rankField: "player_1_rank",
+                clockField: "player_1_clock",
+                noShowValue: "player1",
+              },
+              {
+                scoreField: "player_2_score",
+                rankField: "player_2_rank",
+                clockField: "player_2_clock",
+                noShowValue: "player2",
+              },
+            ].forEach((playerConfig) => {
+              const playerCard = document.createElement("div");
+              playerCard.className = "cp-duel-edit-player";
+
+              const grid = document.createElement("div");
+              grid.className = "cp-duel-edit-grid";
+
+              const scoreField = document.createElement("div");
+              scoreField.className = "cp-duel-edit-field cp-duel-edit-field--score";
+              const scoreLabel = document.createElement("label");
+              scoreLabel.textContent = "Score";
+              const scoreInput = document.createElement("input");
+              scoreInput.type = "number";
+              scoreInput.step = "1";
+              scoreInput.value = hasValue(game?.[playerConfig.scoreField]) ? String(game[playerConfig.scoreField]) : "";
+              scoreInput.addEventListener("input", () => {
+                game[playerConfig.scoreField] = parseNullableInt(scoreInput.value);
+              });
+              scoreInputs[playerConfig.noShowValue] = scoreInput;
+              scoreField.appendChild(scoreLabel);
+              scoreField.appendChild(scoreInput);
+              grid.appendChild(scoreField);
+
+              const wonField = document.createElement("div");
+              wonField.className = "cp-duel-edit-field cp-duel-edit-field--compact";
+              const wonLabel = document.createElement("label");
+              wonLabel.textContent = "Won";
+              const wonSelect = createGameDropdown(
+                hasValue(game?.[playerConfig.rankField]) ? String(game[playerConfig.rankField]) : "",
+                [
+                  { value: "1", label: "Yes" },
+                  { value: "0", label: "No" },
+                ],
+                (nextValue) => {
+                  if (nextValue !== "1" && nextValue !== "0") return;
+                  syncWonFieldsWithinGame(
+                    game,
+                    nextValue === "1" ? playerConfig.noShowValue : (playerConfig.noShowValue === "player1" ? "player2" : "player1")
+                  );
+                  refreshGameUiState();
+                }
+              );
+              wonSelects[playerConfig.noShowValue] = wonSelect;
+              wonField.appendChild(wonLabel);
+              wonField.appendChild(wonSelect.root);
+              grid.appendChild(wonField);
+
+              const clockField = document.createElement("div");
+              clockField.className = "cp-duel-edit-field cp-duel-edit-field--compact";
+              const clockLabel = document.createElement("label");
+              clockLabel.textContent = "Time loss";
+              const clockSelect = createGameDropdown(
+                String(parseNullableInt(game?.[playerConfig.clockField]) === 1 ? 1 : ""),
+                [
+                  { value: "", label: "" },
+                  { value: "1", label: "Yes" },
+                ],
+                (nextValue) => {
+                  game[playerConfig.clockField] = nextValue === "1" ? 1 : 0;
+                }
+              );
+              clockSelects[playerConfig.noShowValue] = clockSelect;
+              clockField.appendChild(clockLabel);
+              clockField.appendChild(clockSelect.root);
+              grid.appendChild(clockField);
+
+              const noShowField = document.createElement("div");
+              noShowField.className = "cp-duel-edit-field cp-duel-edit-field--compact";
+              const noShowLabel = document.createElement("label");
+              noShowLabel.textContent = "No show";
+              const noShowSelect = createGameDropdown(
+                game?.no_show_side === playerConfig.noShowValue ? "1" : "",
+                [
+                  { value: "", label: "" },
+                  { value: "1", label: "Yes" },
+                ],
+                (nextValue) => {
+                  if (nextValue === "1") {
+                    applyGameNoShowRules(game, playerConfig.noShowValue);
+                  } else if (game.no_show_side === playerConfig.noShowValue) {
+                    applyGameNoShowRules(game, "");
+                  }
+                  refreshGameUiState();
+                }
+              );
+              noShowSelects[playerConfig.noShowValue] = noShowSelect;
+              noShowField.appendChild(noShowLabel);
+              noShowField.appendChild(noShowSelect.root);
+              grid.appendChild(noShowField);
+
+              playerCard.appendChild(grid);
+              playersRow.appendChild(playerCard);
+            });
+
+            gameWrap.appendChild(playersRow);
+            gamesWrap.appendChild(gameWrap);
+
+            refreshGameUiState = () => {
+              const noShowSide = String(game?.no_show_side || "").trim();
+              const isGameNoShowLocked = !!noShowSide;
+
+              tableInput.value = String(game?.bga_table_id || "");
+              setGameInputReadonly(tableInput, isGameNoShowLocked);
+
+              ["player1", "player2"].forEach((side) => {
+                const scoreFieldName = side === "player1" ? "player_1_score" : "player_2_score";
+                const clockFieldName = side === "player1" ? "player_1_clock" : "player_2_clock";
+                const rankFieldName = side === "player1" ? "player_1_rank" : "player_2_rank";
+                const scoreInput = scoreInputs[side];
+                const wonSelect = wonSelects[side];
+                const clockSelect = clockSelects[side];
+                const noShowSelect = noShowSelects[side];
+                const oppositeSide = side === "player1" ? "player2" : "player1";
+
+                if (scoreInput) {
+                  scoreInput.value = hasValue(game?.[scoreFieldName]) ? String(game[scoreFieldName]) : "";
+                  setGameInputReadonly(scoreInput, isGameNoShowLocked || !canEditGameScore(game));
+                }
+                if (wonSelect) {
+                  wonSelect.setValue(hasValue(game?.[rankFieldName]) ? String(game[rankFieldName]) : "", false);
+                  wonSelect.setDisabled(isGameNoShowLocked);
+                }
+                if (clockSelect) {
+                  clockSelect.setValue(String(parseNullableInt(game?.[clockFieldName]) === 1 ? 1 : ""), false);
+                  clockSelect.setDisabled(isGameNoShowLocked);
+                }
+                if (noShowSelect) {
+                  noShowSelect.setValue(noShowSide === side ? "1" : "", false);
+                  noShowSelect.setDisabled(isGameNoShowLocked && noShowSide === oppositeSide);
+                }
+              });
+            };
+
+            refreshGameUiState();
+
+            deleteGameBtn.addEventListener("click", () => {
+              activeDuelEditorState.games.splice(gameIndex, 1);
+              renderLineupsRows();
+            });
+          });
+
+          panel.appendChild(gamesWrap);
+
+          const addGameActions = document.createElement("div");
+          addGameActions.className = "cp-duel-edit-actions";
+          const addGameBtn = document.createElement("button");
+          addGameBtn.type = "button";
+          addGameBtn.className = "cp-btn cp-btn-secondary";
+          addGameBtn.textContent = "Add Game";
+          addGameBtn.disabled = !!activeDuelEditorState.saving;
+          addGameActions.appendChild(addGameBtn);
+          panel.appendChild(addGameActions);
+
+          addGameBtn.addEventListener("click", () => {
+            const nextGameNumber = activeDuelEditorState.games.reduce((maxValue, game) => {
+              const gameNumber = parseNullableInt(game?.game_number);
+              return gameNumber && gameNumber > maxValue ? gameNumber : maxValue;
+            }, 0) + 1;
+            const localGameId = `${duelId || "duel"}-game-${nextGameNumber}-${Date.now()}`;
+            activeDuelEditorState.games.push({
+              id: localGameId,
+              duel_id: duelId,
+              bga_table_id: "",
+              game_number: nextGameNumber,
+              player_1_score: null,
+              player_2_score: null,
+              player_1_rank: null,
+              player_2_rank: null,
+              player_1_clock: 0,
+              player_2_clock: 0,
+              status: "",
+              no_show_side: "",
+              isNewLocal: true,
+            });
+            renderLineupsRows();
+          });
+        }
 
         if (activeDuelEditorState.refetchingResults) {
           const loadingStatus = document.createElement("div");
@@ -6740,6 +7043,55 @@
 
         saveBtnLocal.addEventListener("click", async () => {
           if (!canSaveFix) return;
+          if (isManualAddAction) {
+            activeDuelEditorState.error = "";
+            const validationError = validateEditableGames(activeDuelEditorState.games);
+            if (validationError) {
+              activeDuelEditorState.error = validationError;
+              renderLineupsRows();
+              return;
+            }
+            activeDuelEditorState.saving = true;
+            renderLineupsRows();
+            try {
+              const payloadGames = activeDuelEditorState.games.map((game) => ({
+                id: String(game?.id || "").trim(),
+                duel_id: String(entry?.id || "").trim(),
+                bga_table_id: String(game?.bga_table_id || "").trim(),
+                game_number: parseNullableInt(game?.game_number),
+                player_1_score: parseNullableInt(game?.player_1_score),
+                player_2_score: parseNullableInt(game?.player_2_score),
+                player_1_rank: parseNullableInt(game?.player_1_rank),
+                player_2_rank: parseNullableInt(game?.player_2_rank),
+                player_1_clock: parseNullableInt(game?.player_1_clock) === 1 ? 1 : 0,
+                player_2_clock: parseNullableInt(game?.player_2_clock) === 1 ? 1 : 0,
+                status: game?.no_show_side ? "No show" : "",
+              }));
+              const response = await fetch(DUEL_GAMES_SAVE_URL(entry.id), {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ games: payloadGames }),
+              });
+              const result = await response.json().catch(() => ({}));
+              if (!response.ok || !result?.ok) {
+                activeDuelEditorState.error = result?.message || "Failed to save duel games.";
+                activeDuelEditorState.saving = false;
+                renderLineupsRows();
+                return;
+              }
+              updateLineupStateFromServer(result?.duel);
+              syncMatchResultSummary(result?.match);
+              setLineupStatus(duelId, "Updated", "success");
+              closeDuelResultsEditor(duelId);
+              renderLineupsRows();
+            } catch (_error) {
+              activeDuelEditorState.error = "Failed to save duel games.";
+              activeDuelEditorState.saving = false;
+              renderLineupsRows();
+            }
+            return;
+          }
           activeDuelEditorState.error = "";
           activeDuelEditorState.applyingFix = true;
           renderLineupsRows();
@@ -6774,6 +7126,7 @@
               return;
             }
             if (selectedAction === "player1_no_show" || selectedAction === "player2_no_show") {
+              setLineupStatus(duelId, "Updated", "success");
               closeDuelResultsEditor(duelId);
               renderLineupsRows();
               return;
@@ -6807,6 +7160,7 @@
             if (refetchResult?.match) {
               syncMatchResultSummary(refetchResult.match);
             }
+            setLineupStatus(duelId, "Updated", "success");
             closeDuelResultsEditor(duelId);
             renderLineupsRows();
           } catch (_error) {
@@ -7240,6 +7594,7 @@
           }
           updateLineupStateFromServer(result?.duel);
           syncMatchResultSummary(result?.match);
+          setLineupStatus(duelId, "Updated", "success");
           closeDuelResultsEditor(duelId);
           renderLineupsRows();
         } catch (_error) {
@@ -7533,6 +7888,20 @@
         const duelPanel = renderDuelEditorPanel(entry);
         if (duelPanel) {
           rowWrap.appendChild(duelPanel);
+        }
+        const lineupStatusText = String(entry?.statusMessage || "").trim();
+        if (lineupStatusText) {
+          const lineupStatus = document.createElement("div");
+          lineupStatus.className = "cp-action-status";
+          if (String(entry?.statusType || "").trim() === "success") {
+            lineupStatus.classList.add("cp-action-status--success");
+          } else if (String(entry?.statusType || "").trim() === "error") {
+            lineupStatus.classList.add("cp-action-status--error");
+          }
+          const lineupStatusLabel = document.createElement("span");
+          lineupStatusLabel.textContent = lineupStatusText;
+          lineupStatus.appendChild(lineupStatusLabel);
+          rowWrap.appendChild(lineupStatus);
         }
         lineupsRows.appendChild(rowWrap);
       });

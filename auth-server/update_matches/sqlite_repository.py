@@ -93,12 +93,12 @@ class SqliteMatchRepository(MatchRepository):
             where_sql += """
                 AND datetime(l.time_utc) < datetime('now')
                 AND datetime(l.time_utc, '+' || COALESCE(df.minutes_to_play, 60) || ' minutes') > datetime('now')
-                AND COALESCE(l.status, 'Planned') <> 'Done'
+                AND COALESCE(l.status, 'Planned') NOT IN ('Done', 'Error', 'No Show')
             """
         elif target in {TARGET_FINISHED_PENDING, TARGET_EMPTY_FINISHED}:
             where_sql += """
                 AND datetime('now') > datetime(l.time_utc, '+' || COALESCE(df.minutes_to_play, 60) || ' minutes')
-                AND COALESCE(l.status, 'Planned') NOT IN ('Done', 'Error')
+                AND COALESCE(l.status, 'Planned') NOT IN ('Done', 'Error', 'No Show')
             """
         else:
             raise ValueError(f"Unsupported target: {target}")
