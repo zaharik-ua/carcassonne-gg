@@ -58,13 +58,18 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
 
     def _fetch_item(item: MatchUpdateRequest) -> dict:
         session = _make_session(cookies, headers)
+        finished_flag = 0
+        try:
+            finished_flag = int(item.extra.get("finished", 0))
+        except Exception:
+            finished_flag = 0
         params = {
             "game_id": item.game_id,
             "player": item.player0_id,
             "opponent_id": item.player1_id,
             "start_date": item.start_date,
             "end_date": item.end_date,
-            "finished": 0,
+            "finished": finished_flag,
             "updateStats": 1,
         }
         request_headers = {

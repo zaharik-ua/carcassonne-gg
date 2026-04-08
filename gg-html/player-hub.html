@@ -6761,10 +6761,10 @@
               return;
             }
 
-            if (fixResult?.duel && selectedAction !== "replace_player1" && selectedAction !== "replace_player2") {
+            if (fixResult?.duel) {
               updateLineupStateFromServer(fixResult.duel);
             }
-            if (fixResult?.match && selectedAction !== "replace_player1" && selectedAction !== "replace_player2") {
+            if (fixResult?.match) {
               syncMatchResultSummary(fixResult.match);
             }
             if (selectedAction === "cancel_duel") {

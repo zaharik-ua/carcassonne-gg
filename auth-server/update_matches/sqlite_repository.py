@@ -44,7 +44,7 @@ class SqliteMatchRepository(MatchRepository):
 
         with self._connect() as conn:
             rows = conn.execute(sql, (duel_id,)).fetchall()
-        return [self._row_to_request(row, "manual")] if rows else []
+        return [self._row_to_request(row, "manual_duel")] if rows else []
 
     def fetch_duels_for_match(self, *, match_id: str) -> list[MatchUpdateRequest]:
         sql = """
@@ -286,6 +286,9 @@ class SqliteMatchRepository(MatchRepository):
         end_dt = start_dt.timestamp() + (int(row["minutes_to_play"] or 60) * 60)
         player0_id = self._to_int_or_none(row["player_1_id"])
         player1_id = self._to_int_or_none(row["player_2_id"])
+        extra: dict[str, object] = {}
+        if target == "manual_duel":
+            extra["finished"] = 1
 
         return MatchUpdateRequest(
             match_id=row["duel_id"],
@@ -299,6 +302,7 @@ class SqliteMatchRepository(MatchRepository):
             player1_id=player1_id,
             gtw=int(row["games_to_win"] or 1),
             stat=False,
+            extra=extra,
         )
 
     @staticmethod

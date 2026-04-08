@@ -6032,38 +6032,43 @@ app.post("/duels/:id/refetch-results", (req, res) => {
             throw resetError;
           }
 
-          let execLogs = "";
-          try {
-            const execResult = await execFileAsync(
-              pythonBin,
-              [
-                updateScriptPath,
-                "--db-path",
-                dbFullPath,
-                "--duel-id",
-                duelId,
-              ],
-              {
-                cwd: authServerRoot,
-                env: process.env,
-                timeout: 5 * 60 * 1000,
-                maxBuffer: 1024 * 1024 * 10,
-              }
-            );
-            execLogs = String(execResult.stdout || execResult.stderr || "").trim();
-          } catch (error) {
-            execLogs = String(error?.stderr || error?.stdout || error?.message || "").trim();
-          }
+          const runUpdater = async (args) => {
+            try {
+              const execResult = await execFileAsync(
+                pythonBin,
+                [
+                  updateScriptPath,
+                  "--db-path",
+                  dbFullPath,
+                  ...args,
+                ],
+                {
+                  cwd: authServerRoot,
+                  env: process.env,
+                  timeout: 5 * 60 * 1000,
+                  maxBuffer: 1024 * 1024 * 10,
+                }
+              );
+              return String(execResult.stdout || execResult.stderr || "").trim();
+            } catch (error) {
+              return String(error?.stderr || error?.stdout || error?.message || "").trim();
+            }
+          };
 
-          let refreshedDuel = await new Promise((resolve, reject) => {
-            loadDuelsByIds([duelId], (loadErr, rows) => {
-              if (loadErr) {
-                reject(loadErr);
-                return;
-              }
-              resolve((rows || [])[0] || null);
-            });
-          });
+          const loadRefreshedDuel = async () => (
+            await new Promise((resolve, reject) => {
+              loadDuelsByIds([duelId], (loadErr, rows) => {
+                if (loadErr) {
+                  reject(loadErr);
+                  return;
+                }
+                resolve((rows || [])[0] || null);
+              });
+            })
+          );
+
+          await runUpdater(["--duel-id", duelId]);
+          let refreshedDuel = await loadRefreshedDuel();
 
           const duelErrorMessage = String(refreshedDuel?.results_last_error || "").trim();
           if (!refreshedDuel || !isResolvedDuelStatus(refreshedDuel?.status)) {
