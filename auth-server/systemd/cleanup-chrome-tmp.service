@@ -1,0 +1,9 @@
+[Unit]
+Description=Clean up stale Chromium temp directories for Carcassonne GG
+
+[Service]
+Type=oneshot
+Environment=CHROME_TMP_CLEANUP_TTL_MINUTES=360
+StandardOutput=journal
+StandardError=journal
+ExecStart=/usr/bin/flock -n /tmp/carcassonne-cleanup-chrome-tmp.lock /home/carcassonne-gg/auth-server/scripts/run_cleanup_chrome_tmp.sh

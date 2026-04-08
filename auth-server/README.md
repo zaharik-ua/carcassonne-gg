@@ -239,3 +239,39 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now fix-matches-and-duels.timer
 sudo systemctl status fix-matches-and-duels.timer
 ```
+
+## 10) Прибирання тимчасових каталогів Chromium
+
+Якщо headless Chromium аварійно завершується, у `/tmp` можуть залишатися каталоги виду:
+
+- `org.chromium.Chromium.scoped_dir.*`
+- `carcassonne-chrome-profile-*`
+
+Для регулярного cleanup у репозиторії є готові файли:
+
+- `auth-server/scripts/run_cleanup_chrome_tmp.sh`
+- `auth-server/systemd/cleanup-chrome-tmp.service`
+- `auth-server/systemd/cleanup-chrome-tmp.timer`
+
+Поточна політика:
+
+- таймер запускається кожні `6h`;
+- видаляються тільки каталоги в `/tmp`, старші за `6h`.
+
+Встановлення на сервері:
+
+```bash
+sudo cp auth-server/systemd/cleanup-chrome-tmp.service /etc/systemd/system/
+sudo cp auth-server/systemd/cleanup-chrome-tmp.timer /etc/systemd/system/
+sudo chmod +x /home/carcassonne-gg/auth-server/scripts/run_cleanup_chrome_tmp.sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now cleanup-chrome-tmp.timer
+sudo systemctl status cleanup-chrome-tmp.timer
+```
+
+Ручний запуск:
+
+```bash
+sudo systemctl start cleanup-chrome-tmp.service
+journalctl -u cleanup-chrome-tmp.service -n 100 --no-pager
+```

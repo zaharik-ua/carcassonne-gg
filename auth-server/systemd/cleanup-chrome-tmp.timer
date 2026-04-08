@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Chromium temp cleanup every 6 hours
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+Unit=cleanup-chrome-tmp.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
