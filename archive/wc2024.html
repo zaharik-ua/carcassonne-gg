@@ -291,69 +291,25 @@
   const HORIZONTAL_SPACING = 50;
   let THIRD_PLACE_VERTICAL_OFFSET = 80;
 
-  // --- Fetch helpers (with timeout, retries, and fallback) ---
-  function fetchWithTimeout(resource, options = {}) {
-    const { timeout = 10000 } = options;
-    return Promise.race([
-      fetch(resource, options),
-      new Promise((_, reject) => {
-        const err = new Error("Request timed out");
-        err.name = "TimeoutError";
-        setTimeout(() => reject(err), timeout);
-      })
-    ]);
-  }
-
-  function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
-
-  async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout = 10000 } = {}) {
-    let attempt = 0;
-    while (true) {
-      attempt += 1;
-      try {
-        const res = await fetchWithTimeout(url, { timeout });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        console.info(`✅ Data loaded from primaryURL (attempt ${attempt})`);
-        return data;
-      } catch (err) {
-        if (err && err.name === "TimeoutError") {
-          throw err;
-        }
-        if (attempt > (retries + 1)) {
-          throw err;
-        }
-        //await sleep(delayMs);
-      }
-    }
-  }
-
-  // Fetch WC2024 data (primary API with fallback JSON)
+  // Fetch WC2024 data from the static JSON file
   function fetchWc2024Data() {
-    const primaryURL = "https://api.carcassonne.com.ua/public/wc2024";
-    const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/wc2024.json";
+    const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/wc2024.json";
 
-    fetchPrimaryWithRetry(primaryURL, { retries: 0, delayMs: 500, timeout: 2000 }) // update to retries: 0 and timeout: 2000
-      .catch(err => {
-        console.warn("⚠️ Primary failed, using fallback:", err && err.message ? err.message : err);
-        return fetch(fallbackURL)
-          .then(res => res.json())
-          .then(data => {
-            console.info("ℹ️ Data loaded from fallbackURL");
-            return data;
-          });
+    fetch(dataURL)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
       })
       .then(data => {
         players = Array.isArray(data.players) ? data.players : [];
         rounds = Array.isArray(data.rounds) ? data.rounds : [];
         standings = Array.isArray(data.swiss) ? data.swiss : [];
         playoffs = Array.isArray(data.playoffs) ? data.playoffs : [];
-        // No page title element
+        console.info("ℹ️ Data loaded from static wc2024.json");
         initAndRenderTournamentContent();
       })
       .catch(err => {
         console.error("❌ Failed to load WC2024 data:", err);
-        // No page title element
       });
   }
 

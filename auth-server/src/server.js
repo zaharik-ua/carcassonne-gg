@@ -607,6 +607,11 @@ async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
         COUNT(*) AS total_duels,
         COALESCE(SUM(CASE WHEN COALESCE(l.status, 'Planned') IN ('Done', 'No Show') THEN 1 ELSE 0 END), 0) AS done_duels,
         COALESCE(SUM(CASE WHEN COALESCE(l.status, 'Planned') = 'Error' THEN 1 ELSE 0 END), 0) AS error_duels,
+        COALESCE(SUM(CASE
+          WHEN COALESCE(l.status, 'Planned') NOT IN ('Done', 'No Show', 'Error')
+            AND datetime(l.time_utc) IS NOT NULL
+            AND (unixepoch(l.time_utc) + (COALESCE(df.minutes_to_play, 60) * 60)) <= unixepoch('now')
+          THEN 1 ELSE 0 END), 0) AS overdue_unresolved_duels,
         MIN(CASE
           WHEN datetime(l.time_utc) IS NOT NULL THEN unixepoch(l.time_utc)
           ELSE NULL
@@ -628,6 +633,7 @@ async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
   const totalDuels = Number(aggregateRow?.total_duels || 0);
   const doneDuels = Number(aggregateRow?.done_duels || 0);
   const errorDuels = Number(aggregateRow?.error_duels || 0);
+  const overdueUnresolvedDuels = Number(aggregateRow?.overdue_unresolved_duels || 0);
   const startTs = aggregateRow?.start_ts === null || aggregateRow?.start_ts === undefined
     ? null
     : Number(aggregateRow.start_ts);
@@ -637,7 +643,7 @@ async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
   const nowTs = Math.floor(Date.now() / 1000);
 
   let nextStatus = "Planned";
-  if (errorDuels > 0) {
+  if (errorDuels > 0 || overdueUnresolvedDuels > 0) {
     nextStatus = "Error";
   } else if (totalDuels > 0 && doneDuels === totalDuels) {
     nextStatus = "Done";

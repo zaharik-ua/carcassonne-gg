@@ -1,0 +1,242 @@
+function syncWTCOCMatches() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet();
+  const matchesSheet = sheet.getSheetByName("Matches");
+  const lineupsSheet = sheet.getSheetByName("Lineups");
+  const apiUrl = "https://www.carcassonne.cat/wtcoc/api/calendar/index.php?token=y8u93klm876wrfu45lrt";
+  
+  const response = UrlFetchApp.fetch(apiUrl);
+  const data = JSON.parse(response.getContentText());
+
+  if (data.response !== "ok" || !data.matches) {
+    Logger.log("❌ Invalid API response");
+    return;
+  }
+
+  const matches = data.matches;
+  const existingIdDuels = lineupsSheet.getRange("T2:T" + lineupsSheet.getLastRow()).getValues().flat().filter(Boolean).map(String);
+  const existingIds = matchesSheet.getRange("O2:O" + matchesSheet.getLastRow()).getValues().flat().filter(Boolean);
+  const idIndexMap = {};
+  existingIds.forEach((id, idx) => {
+    if (id) idIndexMap[id] = idx + 2;
+  });
+
+  matches.forEach(match => {
+    updateMatches(matchesSheet, match, idIndexMap);
+    updateLineups(lineupsSheet, match, existingIdDuels);
+  });
+
+}
+
+function updateLineups(lineupsSheet, match, existingIdDuels) {
+  const idMatch = match.idMatch;
+  const status = match.status.toString();
+
+  if (match.duels[0].idLocalPlayer !== "0" && status !== "tancat") {
+    if (existingIdDuels.includes(idMatch)) {
+      const allIds = lineupsSheet.getRange("T3:T" + lineupsSheet.getLastRow()).getValues().flat();
+      const rowsToUpdate = [];
+      allIds.forEach((id, index) => {
+        if (id.toString() === idMatch.toString()) {
+          rowsToUpdate.push(index + 3); // +3 бо починаємо з 3-го рядка
+        }
+      });
+      match.duels.forEach((duel, i) => {
+        const row = rowsToUpdate[i]; // відповідний рядок
+        if (row) {
+          const duelNumber = duel.name.replace("Duel ", "").trim();
+          lineupsSheet.getRange(row, 4).setValue(duelNumber);
+          lineupsSheet.getRange(row, 5).setValue(duel.nameLocalPlayer);
+          lineupsSheet.getRange(row, 11).setValue(duel.nameVisitorPlayer);
+        }
+      });
+      Logger.log(`🔄 Updated lineups for match ${idMatch}`);
+    } else {
+      match.duels.forEach(duel => {
+        const duelNumber = duel.name.replace("Duel ", "").trim();
+        const targetRow = getFirstEmptyRowInColumn(lineupsSheet, "E");
+
+        lineupsSheet.getRange(targetRow, 4).setValue(duelNumber);             
+        lineupsSheet.getRange(targetRow, 5).setValue(duel.nameLocalPlayer);  
+        lineupsSheet.getRange(targetRow, 11).setValue(duel.nameVisitorPlayer); 
+        lineupsSheet.getRange(targetRow, 20).setValue(idMatch);              
+      });
+      Logger.log(`➕ Inserted lineups for match ${idMatch}`);
+    }
+  }
+}
+
+function updateMatches(matchesSheet, match, idIndexMap) {
+  const idMatch = match.idMatch;
+  const date = formatApiDate(match.date);
+  const team1 = match.nameLocalTeam;
+  const team2 = match.nameVisitorTeam;
+  const status = match.status.toString();
+  const tournament = "WTCOC 2025";
+
+  const columnsToUpdate = [3, 4, 5, 12, 15, 16];
+  const rowValues = [date, tournament, team1, team2, idMatch, status];
+
+  if (idIndexMap[idMatch]) {
+    const rowNum = idIndexMap[idMatch];
+    columnsToUpdate.forEach((col, i) => {
+      matchesSheet.getRange(rowNum, col).setValue(rowValues[i]);
+    });
+    if (date instanceof Date) {
+      matchesSheet.getRange(rowNum, 2).setNumberFormat("dd.mm.yyyy hh:mm:ss");
+    }
+    Logger.log(`🔄 Updated match: ${idMatch}`);
+  } else {
+    const targetRow = getFirstEmptyRowInColumn(matchesSheet, "E");
+    columnsToUpdate.forEach((col, i) => {
+      matchesSheet.getRange(targetRow, col).setValue(rowValues[i]);
+    });
+    if (date instanceof Date) {
+      matchesSheet.getRange(targetRow, 2).setNumberFormat("dd.mm.yyyy hh:mm:ss");
+    }
+    Logger.log(`➕ Inserted new match: ${idMatch}`);
+  }
+}
+
+function formatApiDate(isoDateStr) {
+  if (!isoDateStr || isoDateStr === "0000-00-00 00:00:00") return null;
+    const [datePart, timePart] = isoDateStr.split(" ");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute, second] = timePart.split(":").map(Number);
+
+  return new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+}
+
+function getFirstEmptyRowInColumn(sheet, col) {
+  const startRow = 3;
+  const values = sheet.getRange(col + startRow + ":" + col + sheet.getLastRow()).getValues();
+  for (let i = 0; i < values.length; i++) {
+    if (values[i][0] === "") {
+      return i + startRow;
+    }
+  }
+  return sheet.getLastRow() + 1;
+}
+
+function syncWTCOCPlayoff() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet();
+  const matchesSheet = sheet.getSheetByName("Matches");
+  const lineupsSheet = sheet.getSheetByName("Lineups");
+  const apiUrl = "https://www.carcassonne.cat/wtcoc/api/playoff/index.php?token=y8u93klm876wrfu45lrt";
+  
+  const response = UrlFetchApp.fetch(apiUrl);
+  let responseText = response.getContentText();
+  responseText = responseText.replace(/Warning: .*\n/g, '');
+  try {
+    const data = JSON.parse(responseText);
+    if (data.response !== "ok" || !data.matches) {
+      Logger.log("❌ Invalid API response");
+      return;
+    }
+    const matches = data.matches;
+    const existingIdDuels = lineupsSheet.getRange("T2:T" + lineupsSheet.getLastRow()).getValues().flat().filter(Boolean).map(String);
+    const existingIds = matchesSheet.getRange("O2:O" + matchesSheet.getLastRow()).getValues().flat().filter(Boolean);
+    const idIndexMap = {};
+    existingIds.forEach((id, idx) => {
+      if (id) idIndexMap[id] = idx + 2;
+    });
+    matches.forEach(match => {
+      updateMatches(matchesSheet, match, idIndexMap);
+      updateLineups(lineupsSheet, match, existingIdDuels);
+    });
+  } catch (e) {
+    console.error("Error parsing JSON:", e);
+  }
+}
+
+function updateLineups(lineupsSheet, match, existingIdDuels) {
+  const idMatch = match.idMatch + 'PO';
+  const status = match.status.toString();
+
+  console.log(match.duels[0], 'match.duels[0]');
+
+  if (match.duels[0].idLocalPlayer !== "0" && status !== "tancat") {
+    if (existingIdDuels.includes(idMatch)) {
+      const allIds = lineupsSheet.getRange("T3:T" + lineupsSheet.getLastRow()).getValues().flat();
+      const rowsToUpdate = [];
+      allIds.forEach((id, index) => {
+        if (id.toString() === idMatch.toString()) {
+          rowsToUpdate.push(index + 3); // +3 бо починаємо з 3-го рядка
+        }
+      });
+      match.duels.forEach((duel, i) => {
+        const row = rowsToUpdate[i]; // відповідний рядок
+        if (row) {
+          const duelNumber = duel.name.replace("Duel ", "").trim();
+          lineupsSheet.getRange(row, 4).setValue(duelNumber);
+          lineupsSheet.getRange(row, 5).setValue(duel.nameLocalPlayer);
+          lineupsSheet.getRange(row, 11).setValue(duel.nameVisitorPlayer);
+        }
+      });
+      Logger.log(`🔄 Updated lineups for match ${idMatch}`);
+    } else {
+      match.duels.forEach(duel => {
+        const duelNumber = duel.name.replace("Duel ", "").trim();
+        const targetRow = getFirstEmptyRowInColumn(lineupsSheet, "E");
+
+        lineupsSheet.getRange(targetRow, 4).setValue(duelNumber);             
+        lineupsSheet.getRange(targetRow, 5).setValue(duel.nameLocalPlayer);  
+        lineupsSheet.getRange(targetRow, 11).setValue(duel.nameVisitorPlayer); 
+        lineupsSheet.getRange(targetRow, 20).setValue(idMatch);              
+      });
+      Logger.log(`➕ Inserted lineups for match ${idMatch}`);
+    }
+  }
+}
+
+function updateMatches(matchesSheet, match, idIndexMap) {
+  const idMatch = match.idMatch + 'PO';
+  const date = formatApiDate(match.date);
+  const team1 = match.nameLocalTeam;
+  const team2 = match.nameVisitorTeam;
+  const status = match.status.toString();
+  const tournament = "WTCOC 2025";
+
+  const columnsToUpdate = [3, 4, 5, 12, 15, 16];
+  const rowValues = [date, tournament, team1, team2, idMatch, status];
+
+  if (idIndexMap[idMatch]) {
+    const rowNum = idIndexMap[idMatch];
+    columnsToUpdate.forEach((col, i) => {
+      matchesSheet.getRange(rowNum, col).setValue(rowValues[i]);
+    });
+    if (date instanceof Date) {
+      matchesSheet.getRange(rowNum, 2).setNumberFormat("dd.mm.yyyy hh:mm:ss");
+    }
+    Logger.log(`🔄 Updated match: ${idMatch}`);
+  } else {
+    const targetRow = getFirstEmptyRowInColumn(matchesSheet, "E");
+    columnsToUpdate.forEach((col, i) => {
+      matchesSheet.getRange(targetRow, col).setValue(rowValues[i]);
+    });
+    if (date instanceof Date) {
+      matchesSheet.getRange(targetRow, 2).setNumberFormat("dd.mm.yyyy hh:mm:ss");
+    }
+    Logger.log(`➕ Inserted new match: ${idMatch}`);
+  }
+}
+
+function formatApiDate(isoDateStr) {
+  if (!isoDateStr || isoDateStr === "0000-00-00 00:00:00") return null;
+
+  const [datePart, timePart] = isoDateStr.split(" ");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute, second] = timePart.split(":").map(Number);
+
+  return new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+}
+
+function getFirstEmptyRowInColumn(sheet, col) {
+  const startRow = 3;
+  const values = sheet.getRange(col + startRow + ":" + col + sheet.getLastRow()).getValues();
+  for (let i = 0; i < values.length; i++) {
+    if (values[i][0] === "") {
+      return i + startRow;
+    }
+  }
+  return sheet.getLastRow() + 1;
+}
