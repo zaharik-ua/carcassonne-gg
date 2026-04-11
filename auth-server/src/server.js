@@ -1791,13 +1791,132 @@ function ensureMatchesSchema() {
       return;
     }
     if (!Array.isArray(columns) || columns.length === 0) return;
-    addColumnIfMissing(columns, "matches", "lineup_deadline_h", "INTEGER");
-    addColumnIfMissing(columns, "matches", "deleted_at", "TEXT");
-    addColumnIfMissing(columns, "matches", "created_by", "TEXT");
-    addColumnIfMissing(columns, "matches", "updated_by", "TEXT");
-    addColumnIfMissing(columns, "matches", "deleted_by", "TEXT");
-    addColumnIfMissing(columns, "matches", "rating", "INTEGER");
+
+    const addOrBackfillMatchesColumns = (currentColumns) => {
+      addColumnIfMissing(currentColumns, "matches", "lineup_deadline_h", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "lineup_deadline_utc", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "deleted_at", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "created_by", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "updated_by", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "deleted_by", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(currentColumns, "matches", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(currentColumns, "matches", "rating", "INTEGER");
+    };
+
+    const timeUtcColumn = columns.find((col) => col.name === "time_utc");
+    const timeUtcIsRequired = Number(timeUtcColumn?.notnull || 0) === 1;
+    if (!timeUtcIsRequired) {
+      addOrBackfillMatchesColumns(columns);
+      return;
+    }
+
+    const columnNames = new Set(columns.map((col) => String(col?.name || "").trim()));
+    const selectExpr = (name, fallback = "NULL") => (columnNames.has(name) ? name : fallback);
+    db.exec(
+      `
+        BEGIN TRANSACTION;
+        ALTER TABLE matches RENAME TO matches_time_utc_legacy;
+        CREATE TABLE matches (
+          id TEXT PRIMARY KEY,
+          tournament_id TEXT,
+          time_utc TEXT,
+          lineup_type TEXT,
+          lineup_deadline_h INTEGER,
+          lineup_deadline_utc TEXT,
+          number_of_duels INTEGER,
+          team_1 TEXT,
+          team_2 TEXT,
+          status TEXT,
+          dw1 INTEGER,
+          dw2 INTEGER,
+          gw1 INTEGER,
+          gw2 INTEGER,
+          created_by TEXT,
+          updated_by TEXT,
+          deleted_by TEXT,
+          deleted_at TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          rating INTEGER
+        );
+        INSERT INTO matches (
+          id,
+          tournament_id,
+          time_utc,
+          lineup_type,
+          lineup_deadline_h,
+          lineup_deadline_utc,
+          number_of_duels,
+          team_1,
+          team_2,
+          status,
+          dw1,
+          dw2,
+          gw1,
+          gw2,
+          created_by,
+          updated_by,
+          deleted_by,
+          deleted_at,
+          created_at,
+          updated_at,
+          rating
+        )
+        SELECT
+          ${selectExpr("id")},
+          ${selectExpr("tournament_id")},
+          ${selectExpr("time_utc")},
+          ${selectExpr("lineup_type")},
+          ${selectExpr("lineup_deadline_h")},
+          ${selectExpr("lineup_deadline_utc")},
+          ${selectExpr("number_of_duels")},
+          ${selectExpr("team_1")},
+          ${selectExpr("team_2")},
+          ${selectExpr("status")},
+          ${selectExpr("dw1")},
+          ${selectExpr("dw2")},
+          ${selectExpr("gw1")},
+          ${selectExpr("gw2")},
+          ${selectExpr("created_by")},
+          ${selectExpr("updated_by")},
+          ${selectExpr("deleted_by")},
+          ${selectExpr("deleted_at")},
+          ${selectExpr("created_at", "CURRENT_TIMESTAMP")},
+          ${selectExpr("updated_at", "CURRENT_TIMESTAMP")},
+          ${selectExpr("rating")}
+        FROM matches_time_utc_legacy;
+        DROP TABLE matches_time_utc_legacy;
+        COMMIT;
+      `,
+      (rebuildErr) => {
+        if (rebuildErr) {
+          db.exec("ROLLBACK", () => {
+            console.error("Failed to rebuild matches schema with nullable time_utc", rebuildErr);
+          });
+          return;
+        }
+        db.all("PRAGMA table_info(matches)", (refreshErr, refreshedColumns) => {
+          if (refreshErr) {
+            console.error("Failed to inspect matches schema after time_utc rebuild", refreshErr);
+            return;
+          }
+          addOrBackfillMatchesColumns(refreshedColumns || []);
+        });
+      }
+    );
   });
+}
+
+function buildGeneratedMatchId(timeUtc, team1, team2, fallbackDateIso = "") {
+  const normalizedTeam1 = String(team1 || "").trim().toUpperCase();
+  const normalizedTeam2 = String(team2 || "").trim().toUpperCase();
+  if (!normalizedTeam1 || !normalizedTeam2) return "";
+
+  const rawIso = String(timeUtc || "").trim() || String(fallbackDateIso || "").trim();
+  const datePart = rawIso.slice(0, 10).replaceAll("-", "");
+  if (!/^\d{8}$/.test(datePart)) return `${normalizedTeam1}${normalizedTeam2}`;
+  return `${datePart}${normalizedTeam1}${normalizedTeam2}`;
 }
 
 function ensureDuelsSchema() {
@@ -7180,9 +7299,6 @@ app.post("/matches", (req, res) => {
     return res.status(400).json({ ok: false, message: "team_1 and team_2 must be different" });
   }
   const timeUtc = parseUtcIsoOrNull(payload.time_utc);
-  if (!timeUtc) {
-    return res.status(400).json({ ok: false, message: "time_utc is required and must be valid UTC date-time" });
-  }
 
   const lineupTypeRaw = String(payload.lineup_type || "").trim() || "Open";
   const lineupType = lineupTypeRaw === "Closed" ? "Secret" : lineupTypeRaw;
@@ -7194,14 +7310,14 @@ app.post("/matches", (req, res) => {
   const allowedDeadlineHours = new Set([6, 12, 24, 48]);
   const lineupDeadlineHours = lineupType === "Open"
     ? null
-    : (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24);
-  if (lineupType === "Secret" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
+    : (timeUtc ? (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24) : null);
+  if (lineupType === "Secret" && timeUtc && !allowedDeadlineHours.has(lineupDeadlineHours)) {
     return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Secret lineup" });
   }
   const lineupDeadlineUtc = lineupType === "Open"
     ? null
     : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
-  if (lineupType === "Secret" && !lineupDeadlineUtc) {
+  if (lineupType === "Secret" && timeUtc && !lineupDeadlineUtc) {
     return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
   }
 
@@ -7226,7 +7342,12 @@ app.post("/matches", (req, res) => {
   const normalizedMatchScores = normalizePlannedMatchScores(status, dw1, dw2, gw1, gw2);
 
   const idFromPayload = normalizeText(payload.id);
-  const generatedId = `${timeUtc.slice(0, 10).replaceAll("-", "")}${team1}${team2}`;
+  const generatedId = buildGeneratedMatchId(
+    timeUtc,
+    team1,
+    team2,
+    new Date().toISOString(),
+  );
   const matchId = idFromPayload || generatedId;
 
   return loadTournamentAccessForUser(tournamentId, req.user, (tournamentErr, tournament) => {
@@ -7520,6 +7641,7 @@ app.patch("/matches/:id", (req, res) => {
         id,
         tournament_id,
         time_utc,
+        created_at,
         lineup_type,
         lineup_deadline_h,
         lineup_deadline_utc,
@@ -7579,9 +7701,6 @@ app.patch("/matches/:id", (req, res) => {
       }
 
       const timeUtc = parseUtcIsoOrNull(payload.time_utc);
-      if (!timeUtc) {
-        return res.status(400).json({ ok: false, message: "time_utc is required and must be valid UTC date-time" });
-      }
 
       const lineupTypeRaw = String(payload.lineup_type || "").trim();
       const lineupType = lineupTypeRaw === "Closed" ? "Secret" : lineupTypeRaw;
@@ -7593,14 +7712,14 @@ app.patch("/matches/:id", (req, res) => {
       const allowedDeadlineHours = new Set([6, 12, 24, 48]);
       const lineupDeadlineHours = lineupType === "Open"
         ? null
-        : (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24);
-      if (lineupType === "Secret" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
+        : (timeUtc ? (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24) : null);
+      if (lineupType === "Secret" && timeUtc && !allowedDeadlineHours.has(lineupDeadlineHours)) {
         return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Secret lineup" });
       }
       const lineupDeadlineUtc = lineupType === "Open"
         ? null
         : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
-      if (lineupType === "Secret" && !lineupDeadlineUtc) {
+      if (lineupType === "Secret" && timeUtc && !lineupDeadlineUtc) {
         return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
       }
 
@@ -7615,8 +7734,15 @@ app.patch("/matches/:id", (req, res) => {
       }
 
       const idFromPayload = normalizeText(payload.id);
-      const generatedId = `${timeUtc.slice(0, 10).replaceAll("-", "")}${team1}${team2}`;
-      const nextMatchId = idFromPayload || generatedId;
+      const generatedId = buildGeneratedMatchId(
+        timeUtc,
+        team1,
+        team2,
+        existingRow?.created_at || "",
+      );
+      const nextMatchId = (!idFromPayload || idFromPayload === matchId)
+        ? generatedId
+        : idFromPayload;
       if (!nextMatchId) {
         return res.status(400).json({ ok: false, message: "id is required" });
       }

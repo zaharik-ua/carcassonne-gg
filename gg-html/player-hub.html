@@ -2359,8 +2359,9 @@
     const iso = String(timeUtc || "").trim();
     const t1 = normalizeCode(team1Id);
     const t2 = normalizeCode(team2Id);
-    if (!iso || !t1 || !t2) return "";
-    const datePart = iso.slice(0, 10).replaceAll("-", "");
+    if (!t1 || !t2) return "";
+    const fallbackIso = iso || new Date().toISOString();
+    const datePart = fallbackIso.slice(0, 10).replaceAll("-", "");
     if (!/^\d{8}$/.test(datePart)) return "";
     return `${datePart}${t1}${t2}`;
   }
@@ -2984,7 +2985,7 @@
     const team2 = teamsById.get(team2Id) || null;
     const team1Name = team1?.name || team1Id || "-";
     const team2Name = team2?.name || team2Id || "-";
-    const timeLabel = formatMatchTime(match?.time_utc ?? match?.time);
+    const timeLabel = options.hideTime === true ? "" : formatMatchTime(match?.time_utc ?? match?.time);
     const isPlannedMatch = isPlannedMatchStatus(match?.status);
     const isErrorMatch = String(match?.status || "").trim().toLowerCase() === "error";
 
@@ -3193,16 +3194,23 @@
     contentEl.style.display = "grid";
     contentEl.style.gap = "20px";
 
+    const calendar = matches
+      .filter((match) => !String(match?.time_utc || match?.time || "").trim())
+      .sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+
     const ongoing = matches
-      .filter((match) => !isPastMatch(match))
+      .filter((match) => String(match?.time_utc || match?.time || "").trim() && !isPastMatch(match))
       .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
 
     const finished = matches
-      .filter((match) => isPastMatch(match))
+      .filter((match) => String(match?.time_utc || match?.time || "").trim() && isPastMatch(match))
       .sort((a, b) => parseMatchTimeUtc(b) - parseMatchTimeUtc(a));
 
     if (ongoing.length > 0) {
       contentEl.appendChild(renderSectionBlock("Ongoing", ongoing, teamsById, lineupsByMatch, profilesById, options));
+    }
+    if (calendar.length > 0) {
+      contentEl.appendChild(renderSectionBlock("Calendar", calendar, teamsById, lineupsByMatch, profilesById, { ...options, hideTime: true }));
     }
     if (finished.length > 0) {
       contentEl.appendChild(renderSectionBlock("Finished", finished, teamsById, lineupsByMatch, profilesById, options));
@@ -8449,21 +8457,18 @@
         validationErrors.push("Team 1 and Team 2 must be different.");
       }
       const timeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
-      if (!timeUtc) {
-        validationErrors.push("Time, UTC is required.");
-      }
       const lineupType = String(lineupTypeInput.getValue() || "").trim();
       const deadlineHoursRaw = String(deadlineHoursInput.getValue() || "").trim();
       const deadlineHours = deadlineHoursRaw.endsWith("h")
         ? Number(deadlineHoursRaw.slice(0, -1))
         : Number(deadlineHoursRaw);
-      if (lineupType === "Secret" && !DEADLINE_HOURS_OPTIONS.includes(deadlineHours)) {
+      if (lineupType === "Secret" && timeUtc && !DEADLINE_HOURS_OPTIONS.includes(deadlineHours)) {
         validationErrors.push("To Lineup Deadline is required for Secret lineup.");
       }
       const lineupDeadlineUtc = lineupType === "Open"
         ? null
-        : computeLineupDeadlineUtc(timeUtc, deadlineHours);
-      if (lineupType === "Secret" && !lineupDeadlineUtc) {
+        : (timeUtc ? computeLineupDeadlineUtc(timeUtc, deadlineHours) : null);
+      if (lineupType === "Secret" && timeUtc && !lineupDeadlineUtc) {
         validationErrors.push("Failed to calculate Lineup Deadline, UTC.");
       }
       const duels = isFixedTournamentLineup ? fixedTournamentLineupSize : parseNullableInt(duelsInput.value);
@@ -8472,13 +8477,17 @@
       }
 
       const payload = {
-        id: buildMatchIdFromUtcAndTeams(timeUtc, team1Input.getValue(), team2Input.getValue()),
+        id: String(
+          timeUtc
+            ? buildMatchIdFromUtcAndTeams(timeUtc, team1Input.getValue(), team2Input.getValue())
+            : (source?.id || buildMatchIdFromUtcAndTeams(timeUtc, team1Input.getValue(), team2Input.getValue()))
+        ).trim(),
         tournament_id: String(source?.tournament_id || currentTournamentId),
         team_1: normalizeCode(team1Input.getValue()),
         team_2: normalizeCode(team2Input.getValue()),
         time_utc: timeUtc,
         lineup_type: lineupType,
-        lineup_deadline_h: lineupType === "Open" ? null : deadlineHours,
+        lineup_deadline_h: lineupType === "Open" ? null : (timeUtc ? deadlineHours : null),
         lineup_deadline_utc: lineupDeadlineUtc,
         number_of_duels: duels,
         status: String(statusInput.getValue() || "").trim() || "Planned",
