@@ -276,7 +276,41 @@ sudo systemctl start cleanup-chrome-tmp.service
 journalctl -u cleanup-chrome-tmp.service -n 100 --no-pager
 ```
 
-## 11) Telegram alerts for server health
+## 11) WTCOC sync probe
+
+Для WTCOC є окремий ручний CLI-скрипт, який поки не записує дані в БД, а робить live fetch із WTCOC API та показує:
+
+- скільки матчів / дуелей вже є в API;
+- чи є `time_utc`, лайнапи, результати;
+- чи мапляться назви команд у локальні `associations`;
+- яких полів ще бракує для безпечного upsert у `matches` / `duels`.
+
+Файли:
+
+- `auth-server/run_sync_wtcoc_matches.py`
+- `auth-server/scripts/run_sync_wtcoc_matches.sh`
+- `auth-server/sync_wtcoc_matches/README.md`
+
+Приклад запуску:
+
+```bash
+cd auth-server
+python3 run_sync_wtcoc_matches.py --db-path ./data/auth.sqlite --tournament-id WTCOC-2026
+```
+
+Або через wrapper:
+
+```bash
+auth-server/scripts/run_sync_wtcoc_matches.sh --db-path ./auth-server/data/auth.sqlite --tournament-id WTCOC-2026
+```
+
+Фільтр одного WTCOC матчу:
+
+```bash
+python3 run_sync_wtcoc_matches.py --db-path ./data/auth.sqlite --tournament-id WTCOC-2026 --match-id 1
+```
+
+## 12) Telegram alerts for server health
 
 У репозиторії є готовий health-check, який надсилає Telegram alerts для:
 
