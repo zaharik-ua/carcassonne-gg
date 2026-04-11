@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .client import WtcocApiClient
-from .sqlite_repository import AssociationMapping, SqliteWtcocRepository
+from .sqlite_repository import SqliteWtcocRepository, TeamMapping
 
 
 ZERO_DATE = "0000-00-00 00:00:00"
@@ -13,13 +13,13 @@ ZERO_DATE = "0000-00-00 00:00:00"
 
 @dataclass(frozen=True)
 class _AssociationResolver:
-    by_code: dict[str, AssociationMapping]
-    by_name: dict[str, AssociationMapping]
+    by_code: dict[str, TeamMapping]
+    by_name: dict[str, TeamMapping]
 
     @classmethod
-    def from_rows(cls, rows: list[AssociationMapping]) -> "_AssociationResolver":
-        by_code: dict[str, AssociationMapping] = {}
-        by_name: dict[str, AssociationMapping] = {}
+    def from_rows(cls, rows: list[TeamMapping]) -> "_AssociationResolver":
+        by_code: dict[str, TeamMapping] = {}
+        by_name: dict[str, TeamMapping] = {}
         for row in rows:
             normalized_code = _normalize_token(row.code)
             normalized_name = _normalize_token(row.name)
@@ -58,7 +58,7 @@ class WtcocSyncService:
             responses.append(self.client.fetch_playoff())
 
         db_summary = self.repository.load_db_summary(tournament_id=normalized_tournament_id)
-        resolver = _AssociationResolver.from_rows(self.repository.load_association_mappings())
+        resolver = _AssociationResolver.from_rows(self.repository.load_team_mappings())
 
         source_summaries: list[dict[str, Any]] = []
         all_matches: list[dict[str, Any]] = []
@@ -178,14 +178,14 @@ class WtcocSyncService:
                     "ready_fields": [
                         "id",
                         "tournament_id",
-                        "team_1/team_2 after association name->code resolution",
-                        "number_of_duels",
-                        "dw1/dw2 from localResult/visitorResult when results appear",
+                        "time_utc when WTCOC captains approve it",
+                        "lineup_type='Closed'",
+                        "number_of_duels=5",
+                        "team_1/team_2 after teams.name -> teams.id resolution",
                     ],
                     "missing_or_unstable_fields": [
                         "time_utc is missing when API date is 0000-00-00 00:00:00",
-                        "lineup_type is not present in WTCOC API",
-                        "lineup_deadline_h / lineup_deadline_utc are not present in WTCOC API",
+                        "teams.name -> teams.id mapping must exist in local DB for both teams",
                     ],
                 },
                 "duels": {
@@ -193,17 +193,116 @@ class WtcocSyncService:
                         "id",
                         "match_id",
                         "duel_number",
-                        "dw1/dw2 from localResult/visitorResult when results appear",
+                        "duel_format='Bo3'",
+                        "time_utc copied from parent match time_utc",
                     ],
                     "missing_or_unstable_fields": [
                         "player_1_id / player_2_id are absent until WTCOC lineups are published",
-                        "duel_format is not present in WTCOC API",
-                        "time_utc per duel is not present in WTCOC API",
                         "WTCOC player ids are not confirmed to match profiles.id in auth-server",
                     ],
                 },
             },
         }
+
+    def build_apply_payload(
+        self,
+        *,
+        tournament_id: str,
+        include_playoff: bool = True,
+        external_match_id: str | None = None,
+    ) -> dict[str, Any]:
+        analysis = self.analyze(
+            tournament_id=tournament_id,
+            include_playoff=include_playoff,
+            external_match_id=external_match_id,
+            sample_limit=1,
+        )
+        resolver = _AssociationResolver.from_rows(self.repository.load_team_mappings())
+        responses = [self.client.fetch_calendar()]
+        if include_playoff:
+            responses.append(self.client.fetch_playoff())
+
+        matches_payload: list[dict[str, Any]] = []
+        duels_payload: list[dict[str, Any]] = []
+        unresolved_matches: list[dict[str, Any]] = []
+
+        for response in responses:
+            payload = response.payload
+            matches = payload.get("matches")
+            if not isinstance(matches, list):
+                continue
+            for match in matches:
+                if not isinstance(match, dict):
+                    continue
+                if external_match_id and str(match.get("idMatch") or "").strip() != str(external_match_id).strip():
+                    continue
+                match_preview = self._normalize_match_preview(
+                    tournament_id=tournament_id,
+                    source=response.source,
+                    match=match,
+                    resolver=resolver,
+                )
+                if not match_preview["team_1"] or not match_preview["team_2"]:
+                    unresolved_matches.append(
+                        {
+                            "match_id": match_preview["match_id"],
+                            "team_1_name": match_preview["team_1_name"],
+                            "team_2_name": match_preview["team_2_name"],
+                        }
+                    )
+                    continue
+                matches_payload.append(
+                    {
+                        "id": match_preview["match_id"],
+                        "tournament_id": tournament_id,
+                        "time_utc": match_preview["time_utc"],
+                        "lineup_type": "Closed",
+                        "lineup_deadline_h": None,
+                        "lineup_deadline_utc": None,
+                        "number_of_duels": 5,
+                        "team_1": match_preview["team_1"],
+                        "team_2": match_preview["team_2"],
+                    }
+                )
+                duels = match.get("duels")
+                if not isinstance(duels, list):
+                    duels = []
+                for duel in duels:
+                    if not isinstance(duel, dict):
+                        continue
+                    duel_preview = self._normalize_duel_preview(
+                        tournament_id=tournament_id,
+                        source=response.source,
+                        match=match,
+                        duel=duel,
+                        match_preview=match_preview,
+                    )
+                    duels_payload.append(
+                        {
+                            "id": duel_preview["duel_id"],
+                            "tournament_id": tournament_id,
+                            "match_id": match_preview["match_id"],
+                            "duel_number": duel_preview["duel_number"],
+                            "duel_format": "Bo3",
+                            "time_utc": match_preview["time_utc"],
+                            "custom_time": None,
+                            "player_1_id": duel_preview["player_1_wtcoc_id"],
+                            "player_2_id": duel_preview["player_2_wtcoc_id"],
+                        }
+                    )
+
+        analysis["apply_preview"] = {
+            "matches_ready": len(matches_payload),
+            "duels_ready": len(duels_payload),
+            "matches_skipped_without_team_mapping": unresolved_matches,
+            "sample_match": matches_payload[0] if matches_payload else None,
+            "sample_duel": duels_payload[0] if duels_payload else None,
+        }
+        analysis["apply_payload"] = {
+            "matches": matches_payload,
+            "duels": duels_payload,
+        }
+        return analysis
 
     def _normalize_match_preview(
         self,
@@ -290,13 +389,11 @@ class WtcocSyncService:
             )
         if unresolved_team_names:
             names = ", ".join(sorted(name for name in unresolved_team_names if name)[:10])
-            gaps.append(f"Association mapping is missing for these team names: {names}.")
+            gaps.append(f"Team mapping is missing for these team names in teams.name: {names}.")
         if totals["duels_without_players"] > 0:
             gaps.append(
                 f"WTCOC API does not provide player assignments for {totals['duels_without_players']} of {totals['duels']} duels yet."
             )
-        gaps.append("WTCOC API does not provide duel_format, so duels cannot be fully mapped into auth-server yet.")
-        gaps.append("WTCOC API does not provide duel-specific time_utc, so duels cannot be scheduled precisely yet.")
         return gaps
 
 

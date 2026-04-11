@@ -53,6 +53,16 @@ def parse_args() -> argparse.Namespace:
         default=3,
         help="How many sample normalized matches/duels to include in output.",
     )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Upsert mapped WTCOC matches and duels into SQLite.",
+    )
+    parser.add_argument(
+        "--actor-id",
+        default=os.getenv("WTCOC_SYNC_ACTOR_ID", "1"),
+        help="created_by/updated_by value for script writes. Default: 1",
+    )
     return parser.parse_args()
 
 
@@ -69,12 +79,24 @@ def main() -> int:
         base_url=args.base_url or None or "https://www.carcassonne.cat/wtcoc/api",
     )
     service = WtcocSyncService(repository=repository, client=client)
-    summary = service.analyze(
+    summary = service.build_apply_payload(
         tournament_id=args.tournament_id,
         include_playoff=not args.skip_playoff,
         external_match_id=args.match_id,
-        sample_limit=max(1, int(args.sample_limit)),
     )
+    summary["samples"]["matches"] = summary["samples"]["matches"][:max(1, int(args.sample_limit))]
+    summary["samples"]["duels"] = summary["samples"]["duels"][:max(1, int(args.sample_limit))]
+    if args.apply:
+        apply_payload = summary.pop("apply_payload")
+        apply_result = repository.upsert_matches_and_duels(
+            tournament_id=args.tournament_id,
+            actor_id=args.actor_id,
+            matches=apply_payload["matches"],
+            duels=apply_payload["duels"],
+        )
+        summary["apply_result"] = apply_result
+    else:
+        summary.pop("apply_payload")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 

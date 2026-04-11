@@ -282,7 +282,7 @@ journalctl -u cleanup-chrome-tmp.service -n 100 --no-pager
 
 - скільки матчів / дуелей вже є в API;
 - чи є `time_utc`, лайнапи, результати;
-- чи мапляться назви команд у локальні `associations`;
+- чи мапляться назви команд у локальні `teams`;
 - яких полів ще бракує для безпечного upsert у `matches` / `duels`.
 
 Файли:
@@ -308,6 +308,12 @@ auth-server/scripts/run_sync_wtcoc_matches.sh --db-path ./auth-server/data/auth.
 
 ```bash
 python3 run_sync_wtcoc_matches.py --db-path ./data/auth.sqlite --tournament-id WTCOC-2026 --match-id 1
+```
+
+Запис у БД:
+
+```bash
+python3 run_sync_wtcoc_matches.py --db-path ./data/auth.sqlite --tournament-id WTCOC-2026 --apply
 ```
 
 ## 12) Telegram alerts for server health
