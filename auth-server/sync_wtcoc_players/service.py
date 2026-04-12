@@ -56,7 +56,6 @@ class WtcocPlayersSyncService:
         resolver = _AssociationResolver.from_rows(self.repository.load_association_mappings())
 
         duplicate_groups: dict[str, list[dict[str, Any]]] = {}
-        parsed_candidates: list[dict[str, Any]] = []
         invalid_bga_link_rows: list[dict[str, Any]] = []
         unresolved_association_rows: list[dict[str, Any]] = []
         existing_profile_rows: list[dict[str, Any]] = []
@@ -70,7 +69,7 @@ class WtcocPlayersSyncService:
                 continue
 
             association = resolver.resolve(str(player.get("team") or "").strip())
-            if association is None:
+            if association is None or not str(association.id or "").strip():
                 unresolved_association_rows.append(_preview_row(player, bga_player_id=bga_player_id, reason="association_not_found"))
                 continue
 
@@ -82,7 +81,6 @@ class WtcocPlayersSyncService:
                 "team": str(player.get("team") or "").strip() or None,
                 "wtcoc_player_id": str(player.get("playerId") or "").strip() or None,
                 "bga_link": str(player.get("bgaLink") or "").strip() or None,
-                "email": _build_placeholder_email(bga_player_id),
                 "premium": str(player.get("premium") or "").strip() or None,
                 "captain": str(player.get("captain") or "").strip() or None,
                 "disqualified": str(player.get("disqualified") or "").strip() or None,
@@ -102,7 +100,6 @@ class WtcocPlayersSyncService:
                 duplicate_bga_id_rows.extend(rows)
                 continue
             candidate = rows[0]
-            parsed_candidates.append(candidate)
             if candidate["id"] in existing_profile_ids:
                 existing_profile_rows.append(candidate)
                 continue
@@ -136,6 +133,7 @@ class WtcocPlayersSyncService:
             "samples": {
                 "profiles_ready_to_create": ready_to_create[:max(1, int(sample_limit))],
                 "already_existing_profiles": existing_profile_rows[:max(1, int(sample_limit))],
+                "invalid_bga_links": invalid_bga_link_rows[:max(1, int(sample_limit))],
                 "unresolved_associations": unresolved_association_rows[:max(1, int(sample_limit))],
                 "duplicate_bga_id_groups": [
                     rows[:max(1, int(sample_limit))]
@@ -164,10 +162,6 @@ def _extract_bga_player_id(value: Any) -> str | None:
     player_id = parse_qs(parsed.query).get("id", [None])[0]
     normalized = str(player_id or "").strip()
     return normalized if normalized.isdigit() else None
-
-
-def _build_placeholder_email(player_id: str) -> str:
-    return f"wtcoc-bga-{player_id}@placeholder.invalid"
 
 
 def _preview_row(player: dict[str, Any], *, bga_player_id: str | None = None, reason: str) -> dict[str, Any]:

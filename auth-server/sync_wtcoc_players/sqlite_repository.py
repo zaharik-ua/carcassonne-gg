@@ -73,6 +73,11 @@ class SqliteWtcocPlayersRepository:
             missing_tables = [name for name in ("profiles", "associations") if name not in tables]
             if missing_tables:
                 raise RuntimeError(f"SQLite DB is missing required tables: {', '.join(missing_tables)}")
+            profile_columns = self._load_profile_columns(conn)
+            required_columns = {"id", "bga_nickname", "association"}
+            missing_profile_columns = sorted(required_columns - profile_columns)
+            if missing_profile_columns:
+                raise RuntimeError(f"profiles table is missing required columns: {', '.join(missing_profile_columns)}")
 
             conn.execute("BEGIN IMMEDIATE TRANSACTION")
             try:
@@ -91,35 +96,41 @@ class SqliteWtcocPlayersRepository:
                     if existing is not None:
                         skipped_existing += 1
                         continue
+                    if not str(item.get("association") or "").strip():
+                        raise RuntimeError(f"Profile {item['id']} has empty association and cannot be inserted")
+
+                    insert_columns: list[str] = []
+                    insert_values: list[str] = []
+                    insert_params: list[str] = []
+
+                    def add_value(column: str, value: object) -> None:
+                        if column in profile_columns:
+                            insert_columns.append(column)
+                            insert_values.append("?")
+                            insert_params.append(value)
+
+                    def add_sql_value(column: str, sql_value: str) -> None:
+                        if column in profile_columns:
+                            insert_columns.append(column)
+                            insert_values.append(sql_value)
+
+                    add_value("id", item["id"])
+                    add_value("bga_nickname", item["bga_nickname"])
+                    add_value("association", item["association"])
+                    add_value("status", "Active")
+                    add_sql_value("created_at", "CURRENT_TIMESTAMP")
+                    add_sql_value("updated_at", "CURRENT_TIMESTAMP")
+                    add_value("created_by", normalized_actor_id)
+                    add_value("updated_by", normalized_actor_id)
 
                     conn.execute(
-                        """
+                        f"""
                         INSERT INTO profiles (
-                          id,
-                          bga_nickname,
-                          association,
-                          email,
-                          status,
-                          name,
-                          master_title,
-                          team_captain,
-                          created_by,
-                          updated_by,
-                          deleted_by,
-                          deleted_at,
-                          created_at,
-                          updated_at
+                          {", ".join(insert_columns)}
                         )
-                        VALUES (?, ?, ?, ?, 'Active', NULL, 0, 0, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        VALUES ({", ".join(insert_values)})
                         """,
-                        (
-                            item["id"],
-                            item["bga_nickname"],
-                            item["association"],
-                            item["email"],
-                            normalized_actor_id,
-                            normalized_actor_id,
-                        ),
+                        insert_params,
                     )
                     inserted += 1
 
@@ -139,6 +150,11 @@ class SqliteWtcocPlayersRepository:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    @staticmethod
+    def _load_profile_columns(conn: sqlite3.Connection) -> set[str]:
+        rows = conn.execute("PRAGMA table_info(profiles)").fetchall()
+        return {str(row["name"]).strip() for row in rows if str(row["name"] or "").strip()}
 
     @staticmethod
     def _load_table_names(conn: sqlite3.Connection) -> set[str]:
