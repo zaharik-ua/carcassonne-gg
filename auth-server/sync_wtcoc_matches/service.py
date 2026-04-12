@@ -9,6 +9,7 @@ from .sqlite_repository import SqliteWtcocRepository, TeamMapping
 
 
 ZERO_DATE = "0000-00-00 00:00:00"
+UNCONFIRMED_MATCH_STATUSES = {"10", "01"}
 
 
 @dataclass(frozen=True)
@@ -313,11 +314,12 @@ class WtcocSyncService:
         resolver: _AssociationResolver,
     ) -> dict[str, Any]:
         raw_match_id = str(match.get("idMatch") or "").strip()
+        match_status = str(match.get("status") or "").strip() or None
         local_team_name = str(match.get("nameLocalTeam") or "").strip()
         visitor_team_name = str(match.get("nameVisitorTeam") or "").strip()
         local_team = resolver.resolve(local_team_name)
         visitor_team = resolver.resolve(visitor_team_name)
-        match_time = _normalize_api_datetime(match.get("date"))
+        match_time = None if match_status in UNCONFIRMED_MATCH_STATUSES else _normalize_api_datetime(match.get("date"))
         duels = match.get("duels")
         duel_count = len(duels) if isinstance(duels, list) else 0
         return {
@@ -331,7 +333,7 @@ class WtcocSyncService:
             "team_1_name": local_team_name or None,
             "team_2_name": visitor_team_name or None,
             "number_of_duels": duel_count or None,
-            "status_raw": str(match.get("status") or "").strip() or None,
+            "status_raw": match_status,
             "dw1_raw": _to_int_or_none(match.get("localResult")),
             "dw2_raw": _to_int_or_none(match.get("visitorResult")),
             "round_number": _to_int_or_none(match.get("numberRound")),
