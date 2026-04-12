@@ -1,0 +1,10 @@
+/var/log/carcassonne/sync-wtcoc-matches.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    create 0640 root root
+}

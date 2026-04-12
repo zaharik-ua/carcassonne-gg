@@ -106,13 +106,26 @@ class SqliteWtcocRepository:
             try:
                 inserted_matches = 0
                 updated_matches = 0
+                unchanged_matches = 0
                 inserted_duels = 0
                 updated_duels = 0
+                unchanged_duels = 0
+                changed_match_ids: list[str] = []
+                changed_duel_ids: list[str] = []
 
                 for item in matches:
                     existing = conn.execute(
                         """
-                        SELECT 1
+                        SELECT
+                          trim(COALESCE(tournament_id, '')) AS tournament_id,
+                          trim(COALESCE(time_utc, '')) AS time_utc,
+                          trim(COALESCE(lineup_type, '')) AS lineup_type,
+                          lineup_deadline_h,
+                          trim(COALESCE(lineup_deadline_utc, '')) AS lineup_deadline_utc,
+                          number_of_duels,
+                          trim(COALESCE(team_1, '')) AS team_1,
+                          trim(COALESCE(team_2, '')) AS team_2,
+                          trim(COALESCE(deleted_at, '')) AS deleted_at
                         FROM matches
                         WHERE trim(COALESCE(id, '')) = trim(?)
                         LIMIT 1
@@ -121,49 +134,96 @@ class SqliteWtcocRepository:
                     ).fetchone()
                     if existing is None:
                         inserted_matches += 1
-                    else:
-                        updated_matches += 1
+                        changed_match_ids.append(str(item["id"]))
+                        conn.execute(
+                            """
+                            INSERT INTO matches (
+                              id,
+                              tournament_id,
+                              time_utc,
+                              lineup_type,
+                              lineup_deadline_h,
+                              lineup_deadline_utc,
+                              number_of_duels,
+                              team_1,
+                              team_2,
+                              status,
+                              dw1,
+                              dw2,
+                              gw1,
+                              gw2,
+                              created_by,
+                              updated_by,
+                              deleted_by,
+                              deleted_at,
+                              created_at,
+                              updated_at
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Planned', NULL, NULL, NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            """,
+                            (
+                                item["id"],
+                                tournament_id,
+                                item["time_utc"],
+                                item["lineup_type"],
+                                item["lineup_deadline_h"],
+                                item["lineup_deadline_utc"],
+                                item["number_of_duels"],
+                                item["team_1"],
+                                item["team_2"],
+                                normalized_actor_id,
+                                normalized_actor_id,
+                            ),
+                        )
+                        continue
+
+                    normalized_existing_match = {
+                        "tournament_id": self._normalize_db_value(existing["tournament_id"]),
+                        "time_utc": self._normalize_db_value(existing["time_utc"]),
+                        "lineup_type": self._normalize_db_value(existing["lineup_type"]),
+                        "lineup_deadline_h": self._normalize_nullable_number(existing["lineup_deadline_h"]),
+                        "lineup_deadline_utc": self._normalize_db_value(existing["lineup_deadline_utc"]),
+                        "number_of_duels": self._normalize_nullable_number(existing["number_of_duels"]),
+                        "team_1": self._normalize_db_value(existing["team_1"]),
+                        "team_2": self._normalize_db_value(existing["team_2"]),
+                        "deleted_at": self._normalize_db_value(existing["deleted_at"]),
+                    }
+                    normalized_incoming_match = {
+                        "tournament_id": self._normalize_db_value(tournament_id),
+                        "time_utc": self._normalize_db_value(item["time_utc"]),
+                        "lineup_type": self._normalize_db_value(item["lineup_type"]),
+                        "lineup_deadline_h": self._normalize_nullable_number(item["lineup_deadline_h"]),
+                        "lineup_deadline_utc": self._normalize_db_value(item["lineup_deadline_utc"]),
+                        "number_of_duels": self._normalize_nullable_number(item["number_of_duels"]),
+                        "team_1": self._normalize_db_value(item["team_1"]),
+                        "team_2": self._normalize_db_value(item["team_2"]),
+                        "deleted_at": None,
+                    }
+                    if normalized_existing_match == normalized_incoming_match:
+                        unchanged_matches += 1
+                        continue
+
+                    updated_matches += 1
+                    changed_match_ids.append(str(item["id"]))
                     conn.execute(
                         """
-                        INSERT INTO matches (
-                          id,
-                          tournament_id,
-                          time_utc,
-                          lineup_type,
-                          lineup_deadline_h,
-                          lineup_deadline_utc,
-                          number_of_duels,
-                          team_1,
-                          team_2,
-                          status,
-                          dw1,
-                          dw2,
-                          gw1,
-                          gw2,
-                          created_by,
-                          updated_by,
-                          deleted_by,
-                          deleted_at,
-                          created_at,
-                          updated_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Planned', NULL, NULL, NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                        ON CONFLICT(id) DO UPDATE SET
-                          tournament_id = excluded.tournament_id,
-                          time_utc = excluded.time_utc,
-                          lineup_type = excluded.lineup_type,
-                          lineup_deadline_h = excluded.lineup_deadline_h,
-                          lineup_deadline_utc = excluded.lineup_deadline_utc,
-                          number_of_duels = excluded.number_of_duels,
-                          team_1 = excluded.team_1,
-                          team_2 = excluded.team_2,
-                          updated_by = excluded.updated_by,
+                        UPDATE matches
+                        SET
+                          tournament_id = ?,
+                          time_utc = ?,
+                          lineup_type = ?,
+                          lineup_deadline_h = ?,
+                          lineup_deadline_utc = ?,
+                          number_of_duels = ?,
+                          team_1 = ?,
+                          team_2 = ?,
+                          updated_by = ?,
                           deleted_by = NULL,
                           deleted_at = NULL,
                           updated_at = CURRENT_TIMESTAMP
+                        WHERE trim(COALESCE(id, '')) = trim(?)
                         """,
                         (
-                            item["id"],
                             tournament_id,
                             item["time_utc"],
                             item["lineup_type"],
@@ -173,14 +233,23 @@ class SqliteWtcocRepository:
                             item["team_1"],
                             item["team_2"],
                             normalized_actor_id,
-                            normalized_actor_id,
+                            item["id"],
                         ),
                     )
 
                 for item in duels:
                     existing = conn.execute(
                         """
-                        SELECT 1
+                        SELECT
+                          trim(COALESCE(tournament_id, '')) AS tournament_id,
+                          trim(COALESCE(match_id, '')) AS match_id,
+                          duel_number,
+                          trim(COALESCE(duel_format, '')) AS duel_format,
+                          trim(COALESCE(time_utc, '')) AS time_utc,
+                          trim(COALESCE(custom_time, '')) AS custom_time,
+                          trim(COALESCE(player_1_id, '')) AS player_1_id,
+                          trim(COALESCE(player_2_id, '')) AS player_2_id,
+                          trim(COALESCE(deleted_at, '')) AS deleted_at
                         FROM duels
                         WHERE trim(COALESCE(id, '')) = trim(?)
                         LIMIT 1
@@ -189,51 +258,98 @@ class SqliteWtcocRepository:
                     ).fetchone()
                     if existing is None:
                         inserted_duels += 1
-                    else:
-                        updated_duels += 1
+                        changed_duel_ids.append(str(item["id"]))
+                        conn.execute(
+                            """
+                            INSERT INTO duels (
+                              id,
+                              tournament_id,
+                              match_id,
+                              duel_number,
+                              duel_format,
+                              time_utc,
+                              custom_time,
+                              player_1_id,
+                              player_2_id,
+                              dw1,
+                              dw2,
+                              rating_full,
+                              rating,
+                              status,
+                              results_last_error,
+                              results_checked_at,
+                              created_by,
+                              updated_by,
+                              deleted_by,
+                              deleted_at,
+                              created_at,
+                              updated_at
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 'Planned', NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            """,
+                            (
+                                item["id"],
+                                tournament_id,
+                                item["match_id"],
+                                item["duel_number"],
+                                item["duel_format"],
+                                item["time_utc"],
+                                item["custom_time"],
+                                item["player_1_id"],
+                                item["player_2_id"],
+                                normalized_actor_id,
+                                normalized_actor_id,
+                            ),
+                        )
+                        continue
+
+                    normalized_existing_duel = {
+                        "tournament_id": self._normalize_db_value(existing["tournament_id"]),
+                        "match_id": self._normalize_db_value(existing["match_id"]),
+                        "duel_number": self._normalize_nullable_number(existing["duel_number"]),
+                        "duel_format": self._normalize_db_value(existing["duel_format"]),
+                        "time_utc": self._normalize_db_value(existing["time_utc"]),
+                        "custom_time": self._normalize_db_value(existing["custom_time"]),
+                        "player_1_id": self._normalize_db_value(existing["player_1_id"]),
+                        "player_2_id": self._normalize_db_value(existing["player_2_id"]),
+                        "deleted_at": self._normalize_db_value(existing["deleted_at"]),
+                    }
+                    normalized_incoming_duel = {
+                        "tournament_id": self._normalize_db_value(tournament_id),
+                        "match_id": self._normalize_db_value(item["match_id"]),
+                        "duel_number": self._normalize_nullable_number(item["duel_number"]),
+                        "duel_format": self._normalize_db_value(item["duel_format"]),
+                        "time_utc": self._normalize_db_value(item["time_utc"]),
+                        "custom_time": self._normalize_db_value(item["custom_time"]),
+                        "player_1_id": self._normalize_db_value(item["player_1_id"]),
+                        "player_2_id": self._normalize_db_value(item["player_2_id"]),
+                        "deleted_at": None,
+                    }
+                    if normalized_existing_duel == normalized_incoming_duel:
+                        unchanged_duels += 1
+                        continue
+
+                    updated_duels += 1
+                    changed_duel_ids.append(str(item["id"]))
                     conn.execute(
                         """
-                        INSERT INTO duels (
-                          id,
-                          tournament_id,
-                          match_id,
-                          duel_number,
-                          duel_format,
-                          time_utc,
-                          custom_time,
-                          player_1_id,
-                          player_2_id,
-                          dw1,
-                          dw2,
-                          rating_full,
-                          rating,
-                          status,
-                          results_last_error,
-                          results_checked_at,
-                          created_by,
-                          updated_by,
-                          deleted_by,
-                          deleted_at,
-                          created_at,
-                          updated_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 'Planned', NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                        ON CONFLICT(id) DO UPDATE SET
-                          tournament_id = excluded.tournament_id,
-                          match_id = excluded.match_id,
-                          duel_number = excluded.duel_number,
-                          duel_format = excluded.duel_format,
-                          time_utc = excluded.time_utc,
-                          custom_time = excluded.custom_time,
-                          player_1_id = excluded.player_1_id,
-                          player_2_id = excluded.player_2_id,
-                          updated_by = excluded.updated_by,
+                        UPDATE duels
+                        SET
+                          tournament_id = ?,
+                          match_id = ?,
+                          duel_number = ?,
+                          duel_format = ?,
+                          time_utc = ?,
+                          custom_time = ?,
+                          player_1_id = ?,
+                          player_2_id = ?,
+                          updated_by = ?,
                           deleted_by = NULL,
                           deleted_at = NULL,
                           updated_at = CURRENT_TIMESTAMP
+                        WHERE trim(COALESCE(id, '')) = trim(?)
                         """,
                         (
-                            item["id"],
                             tournament_id,
                             item["match_id"],
                             item["duel_number"],
@@ -243,7 +359,7 @@ class SqliteWtcocRepository:
                             item["player_1_id"],
                             item["player_2_id"],
                             normalized_actor_id,
-                            normalized_actor_id,
+                            item["id"],
                         ),
                     )
 
@@ -258,9 +374,13 @@ class SqliteWtcocRepository:
             "matches_processed": len(matches),
             "matches_inserted": inserted_matches,
             "matches_updated": updated_matches,
+            "matches_unchanged": unchanged_matches,
             "duels_processed": len(duels),
             "duels_inserted": inserted_duels,
             "duels_updated": updated_duels,
+            "duels_unchanged": unchanged_duels,
+            "changed_match_ids": changed_match_ids,
+            "changed_duel_ids": changed_duel_ids,
         }
 
     def _connect(self) -> sqlite3.Connection:
@@ -278,3 +398,27 @@ class SqliteWtcocRepository:
             """
         ).fetchall()
         return {str(row["name"] or "").strip() for row in rows if row["name"] is not None}
+
+    @staticmethod
+    def _normalize_db_value(value: object) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    @staticmethod
+    def _normalize_nullable_number(value: object) -> int | float | None:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return value
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            return int(text)
+        except ValueError:
+            try:
+                return float(text)
+            except ValueError:
+                return None

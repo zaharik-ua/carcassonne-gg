@@ -1,0 +1,11 @@
+[Unit]
+Description=Run WTCOC sync every 30 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30min
+Unit=sync-wtcoc-matches.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

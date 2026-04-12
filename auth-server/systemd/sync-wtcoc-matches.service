@@ -1,0 +1,19 @@
+[Unit]
+Description=Sync WTCOC matches and duels into Carcassonne GG auth DB
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/carcassonne-gg/auth-server
+LogsDirectory=carcassonne
+Environment=AUTH_SQLITE_PATH=/home/carcassonne-gg/auth-server/data/auth.sqlite
+Environment=WTCOC_TOURNAMENT_ID=WTCOC-2026
+Environment=WTCOC_SYNC_ACTOR_ID=1
+StandardOutput=append:/var/log/carcassonne/sync-wtcoc-matches.log
+StandardError=append:/var/log/carcassonne/sync-wtcoc-matches.log
+ExecStart=/usr/bin/flock -n /tmp/carcassonne-sync-wtcoc-matches.lock /home/carcassonne-gg/auth-server/scripts/run_sync_wtcoc_matches_periodic.sh
+TimeoutStartSec=5min
+
+[Install]
+WantedBy=multi-user.target

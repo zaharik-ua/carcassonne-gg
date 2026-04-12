@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -14,6 +16,39 @@ except ImportError:  # pragma: no cover
 from .client import DEFAULT_WTCOC_API_TOKEN, WtcocApiClient
 from .service import WtcocSyncService
 from .sqlite_repository import SqliteWtcocRepository
+
+
+class _TimestampedStream:
+    def __init__(self, wrapped) -> None:
+        self._wrapped = wrapped
+        self._buffer = ""
+
+    def write(self, data) -> int:
+        text = str(data)
+        if not text:
+            return 0
+        self._buffer += text
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            self._emit(line)
+        return len(text)
+
+    def flush(self) -> None:
+        if self._buffer:
+            self._emit(self._buffer)
+            self._buffer = ""
+        self._wrapped.flush()
+
+    def _emit(self, line: str) -> None:
+        ts = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S%z")
+        self._wrapped.write(f"[{ts}] {line}\n")
+
+    def isatty(self) -> bool:
+        return bool(getattr(self._wrapped, "isatty", lambda: False)())
+
+    @property
+    def encoding(self):
+        return getattr(self._wrapped, "encoding", "utf-8")
 
 
 def parse_args() -> argparse.Namespace:
@@ -70,7 +105,15 @@ def _default_db_path() -> Path:
     return Path(__file__).resolve().parents[1] / "data" / "auth.sqlite"
 
 
+def _configure_stream_logging() -> None:
+    if not isinstance(sys.stdout, _TimestampedStream):
+        sys.stdout = _TimestampedStream(sys.stdout)
+    if not isinstance(sys.stderr, _TimestampedStream):
+        sys.stderr = _TimestampedStream(sys.stderr)
+
+
 def main() -> int:
+    _configure_stream_logging()
     load_dotenv()
     args = parse_args()
     repository = SqliteWtcocRepository(args.db_path)
