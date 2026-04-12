@@ -33,6 +33,9 @@ class WtcocApiClient:
     def fetch_playoff(self) -> WtcocApiResponse:
         return self._fetch_endpoint("playoff")
 
+    def fetch_players(self) -> WtcocApiResponse:
+        return self._fetch_endpoint("players")
+
     def _fetch_endpoint(self, source: str) -> WtcocApiResponse:
         query = urlencode({"token": self.token})
         url = f"{self.base_url}/{source}/index.php?{query}"
