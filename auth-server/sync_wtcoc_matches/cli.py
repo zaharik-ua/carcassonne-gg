@@ -83,12 +83,6 @@ def parse_args() -> argparse.Namespace:
         help="Do not call the playoff endpoint.",
     )
     parser.add_argument(
-        "--sample-limit",
-        type=int,
-        default=3,
-        help="How many sample normalized matches/duels to include in output.",
-    )
-    parser.add_argument(
         "--apply",
         action="store_true",
         help="Upsert mapped WTCOC matches and duels into SQLite.",
@@ -127,8 +121,11 @@ def main() -> int:
         include_playoff=not args.skip_playoff,
         external_match_id=args.match_id,
     )
-    summary["samples"]["matches"] = summary["samples"]["matches"][:max(1, int(args.sample_limit))]
-    summary["samples"]["duels"] = summary["samples"]["duels"][:max(1, int(args.sample_limit))]
+    output = {
+        "fetched_at_utc": summary.get("fetched_at_utc"),
+        "sources": summary.get("sources", []),
+        "apply_preview": summary.get("apply_preview", {}),
+    }
     if args.apply:
         apply_payload = summary.pop("apply_payload")
         apply_result = repository.upsert_matches_and_duels(
@@ -137,10 +134,8 @@ def main() -> int:
             matches=apply_payload["matches"],
             duels=apply_payload["duels"],
         )
-        summary["apply_result"] = apply_result
-    else:
-        summary.pop("apply_payload")
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
+        output["apply_result"] = apply_result
+    print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 
 
