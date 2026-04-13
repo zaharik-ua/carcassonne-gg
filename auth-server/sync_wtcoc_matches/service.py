@@ -9,7 +9,7 @@ from .sqlite_repository import SqliteWtcocRepository, TeamMapping
 
 
 ZERO_DATE = "0000-00-00 00:00:00"
-UNCONFIRMED_MATCH_STATUSES = {"10", "01"}
+UNCONFIRMED_MATCH_STATUSES = {"", "10", "01", "11", "12", "21"}
 
 
 @dataclass(frozen=True)
@@ -116,6 +116,8 @@ class WtcocSyncService:
                         "team_2": match_preview["team_2"],
                     }
                 )
+                if not _can_import_duels(match_preview["status"]):
+                    continue
                 duels = match.get("duels")
                 if not isinstance(duels, list):
                     duels = []
@@ -169,7 +171,7 @@ class WtcocSyncService:
         visitor_team_name = str(match.get("nameVisitorTeam") or "").strip()
         local_team = resolver.resolve(local_team_name)
         visitor_team = resolver.resolve(visitor_team_name)
-        match_time = None if match_status in UNCONFIRMED_MATCH_STATUSES else _normalize_api_datetime(match.get("date"))
+        match_time = None if not _can_import_duels(match_status) else _normalize_api_datetime(match.get("date"))
         duels = match.get("duels")
         duel_count = len(duels) if isinstance(duels, list) else 0
         return {
@@ -177,6 +179,7 @@ class WtcocSyncService:
             "external_match_id": raw_match_id,
             "match_id": _build_match_id(tournament_id=tournament_id, source=source, external_match_id=raw_match_id),
             "tournament_id": tournament_id,
+            "status": match_status,
             "time_utc": match_time,
             "team_1": local_team.code if local_team else None,
             "team_2": visitor_team.code if visitor_team else None,
@@ -207,6 +210,15 @@ def _normalize_api_datetime(value: Any) -> str | None:
     if not raw or raw == ZERO_DATE:
         return None
     return raw.replace(" ", "T") + "Z"
+
+
+def _can_import_duels(status: Any) -> bool:
+    raw = str(status or "").strip()
+    if raw in UNCONFIRMED_MATCH_STATUSES:
+        return False
+    if len(raw) != 2 or not raw.isdigit():
+        return False
+    return all(ch >= "2" for ch in raw)
 
 
 def _normalize_token(value: str) -> str:

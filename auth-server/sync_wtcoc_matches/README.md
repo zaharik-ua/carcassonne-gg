@@ -26,3 +26,4 @@ Current scope:
 - compares WTCOC team names against local `teams`
 - reports what is ready to map into `matches` / `duels`
 - can upsert mapped rows into SQLite with `--apply`
+- imports duels only for matches with confirmed lineups, for example statuses `22`, `23`, `32`

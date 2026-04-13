@@ -1060,6 +1060,50 @@
     return { url: "", alt: "" };
   }
 
+  function getMatchByDuel(duel) {
+    const duelMatchId = String(firstDefined(duel?.match_id, duel?.matchId) || "").trim();
+    if (!duelMatchId) return null;
+    return (matches || []).find((match) => {
+      const matchId = String(firstDefined(match?.match_id, match?.matchId) || "").trim();
+      return matchId === duelMatchId;
+    }) || null;
+  }
+
+  function isTeamTournamentDuel(duel) {
+    const tournamentId = String(firstDefined(duel?.tournament_id, duel?.tournamentId) || "").trim();
+    if (!tournamentId) return false;
+    const tournament = tournamentsById.get(tournamentId) || null;
+    return String(tournament?.type || "").trim().toUpperCase() === "TEAM";
+  }
+
+  function resolveTeamFlagMeta(match, side) {
+    if (!match || (side !== 1 && side !== 2)) return null;
+    const teamId = String(match[`team${side}_id`] || "").trim();
+    const teamName = String(match[`team${side}`] || "").trim();
+    const meta =
+      countriesByKey.get(teamId) ||
+      countriesByKey.get(teamName) ||
+      null;
+    const flag = String(meta?.flag || "").trim();
+    if (!flag) return null;
+    return {
+      url: flag,
+      alt: String(teamName || meta?.team || meta?.name || "").trim()
+    };
+  }
+
+  function getBadgeByDuelPlayer(duel, playerId) {
+    if (isTeamTournamentDuel(duel)) {
+      const pid = String(playerId || "");
+      const p1Id = String(firstDefined(duel?.player1_id, duel?.playerAid) || "");
+      const p2Id = String(firstDefined(duel?.player2_id, duel?.playerBid) || "");
+      const side = p1Id === pid ? 1 : (p2Id === pid ? 2 : null);
+      const teamBadge = resolveTeamFlagMeta(getMatchByDuel(duel), side);
+      if (teamBadge?.url) return teamBadge;
+    }
+    return getBadgeByPlayerId(playerId);
+  }
+
   function getPlayerCountryMeta(playerId) {
     const pid = String(playerId || "");
     const profile = ggProfilesById.get(pid);
@@ -1387,8 +1431,8 @@
         date.className = "player-matches-date";
         date.textContent = formatMatchDate(matchDate);
 
-        const badge1 = getBadgeByPlayerId(p1Id);
-        const badge2 = getBadgeByPlayerId(p2Id);
+        const badge1 = getBadgeByDuelPlayer(duel, p1Id);
+        const badge2 = getBadgeByDuelPlayer(duel, p2Id);
 
         const line2 = document.createElement("div");
         line2.className = "player-matches-line2";
@@ -1482,10 +1526,7 @@
         }
 
         if (duelMatchId) {
-          const match = (matches || []).find(m => {
-            const mId = firstDefined(m.match_id, m.matchId);
-            return String(mId || "") === String(duelMatchId);
-          });
+          const match = getMatchByDuel(duel);
           const roundText = match && match.round ? match.round : (duel.round || "");
           if (roundText) {
             const roundLine = document.createElement("div");

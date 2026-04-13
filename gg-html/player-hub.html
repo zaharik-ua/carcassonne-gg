@@ -3709,7 +3709,8 @@
 
     const defaultMatch = avatarText.match(/^_def_(\d+)$/);
     if (defaultMatch) {
-      return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultMatch[1]}.jpg`;
+      const defaultAvatarId = defaultMatch[1].padStart(4, "0");
+      return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultAvatarId}.jpg`;
     }
 
     if (!playerIdText) return "";
@@ -3723,6 +3724,65 @@
     const thirdFolder = String(Math.floor(playerIdNumber / 1000));
 
     return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+  }
+
+  function applyProfileBgaPayload(targetProfile, profilePayload) {
+    if (!targetProfile || !profilePayload || typeof profilePayload !== "object") return targetProfile || null;
+    const nextNickname = String(profilePayload?.bga_nickname || "").trim();
+    if (nextNickname) {
+      targetProfile.bga_nickname = nextNickname;
+    }
+    if (Object.prototype.hasOwnProperty.call(profilePayload, "avatar")) {
+      targetProfile.avatar = String(profilePayload.avatar || "").trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(profilePayload, "status")) {
+      targetProfile.status = String(profilePayload.status || "").trim() || "Active";
+    }
+    return targetProfile;
+  }
+
+  async function triggerPlayerBgaDataRefresh(playerId, options = {}) {
+    const normalizedPlayerId = String(playerId || "").trim();
+    if (!normalizedPlayerId) return { ok: false, message: "Missing player id." };
+
+    try {
+      const response = await fetch(PROFILE_GET_BGA_DATA_URL(normalizedPlayerId), {
+        method: "POST",
+        credentials: "include",
+      });
+      const rawText = await response.text().catch(() => "");
+      let result = {};
+      try {
+        result = rawText ? JSON.parse(rawText) : {};
+      } catch (_error) {
+        result = {};
+      }
+      if (!response.ok || !result?.ok) {
+        const failure = {
+          ok: false,
+          message: String(result?.message || rawText || "Failed to get BGA data.").trim() || "Failed to get BGA data.",
+          result,
+        };
+        if (typeof options.onError === "function") {
+          options.onError(failure);
+        }
+        return failure;
+      }
+
+      if (typeof options.onProfile === "function") {
+        options.onProfile(result?.profile || {}, result);
+      }
+      if (typeof options.onSuccess === "function") {
+        options.onSuccess(result);
+      }
+      return { ok: true, result };
+    } catch (_error) {
+      const failure = { ok: false, message: "Failed to get BGA data." };
+      if (typeof options.onError === "function") {
+        options.onError(failure);
+      }
+      return failure;
+    }
   }
 
   function createPlayerRow(profile) {
@@ -4244,6 +4304,13 @@
           return;
         }
 
+        void triggerPlayerBgaDataRefresh(playerId, {
+          onSuccess: () => {
+            if (captainPageState.view === CAPTAIN_VIEWS.PLAYERS && captainPageState.mode === "list") {
+              initCaptainPage();
+            }
+          },
+        });
         resetCaptainSubview(CAPTAIN_VIEWS.PLAYERS);
       } catch (_error) {
         setError("Failed to create profile.");
@@ -4727,33 +4794,18 @@
         setActionStatus("Getting BGA data...", "info", true);
         setBgaLoading(true);
         try {
-          const response = await fetch(PROFILE_GET_BGA_DATA_URL(playerId), {
-            method: "POST",
-            credentials: "include",
+          const refreshResult = await triggerPlayerBgaDataRefresh(playerId, {
+            onProfile: (nextProfile) => {
+              applyProfileBgaPayload(profile, nextProfile);
+              if (profile.bga_nickname) {
+                setPageHeading(profile.bga_nickname);
+              }
+            },
           });
-          const rawText = await response.text().catch(() => "");
-          let result = {};
-          try {
-            result = rawText ? JSON.parse(rawText) : {};
-          } catch (_error) {
-            result = {};
-          }
-          if (!response.ok || !result?.ok) {
-            const fallbackMessage = String(rawText || "").trim();
-            setActionStatus(result?.message || fallbackMessage || "Failed to get BGA data.", "error", false);
+          const result = refreshResult?.result || {};
+          if (!refreshResult?.ok) {
+            setActionStatus(refreshResult?.message || "Failed to get BGA data.", "error", false);
             return;
-          }
-
-          const nextNickname = String(result?.profile?.bga_nickname || "").trim();
-          if (nextNickname) {
-            profile.bga_nickname = nextNickname;
-            setPageHeading(nextNickname);
-          }
-          if (Object.prototype.hasOwnProperty.call(result?.profile || {}, "avatar")) {
-            profile.avatar = result.profile.avatar || null;
-          }
-          if (Object.prototype.hasOwnProperty.call(result?.profile || {}, "status")) {
-            profile.status = String(result.profile.status || "").trim() || "Active";
           }
           const doneMessage = result?.message
             || "BGA data updated.";
@@ -6603,8 +6655,20 @@
             name: nick,
             association: associationCode,
           };
+          profile.id = String(profile?.id ?? profile?.player_id ?? pid).trim();
+          profile.bga_nickname = String(profile?.bga_nickname || nick).trim();
+          profile.avatar = String(profile?.avatar || "").trim();
+          profile.association = normalizeCode(profile?.association || associationCode);
           allProfiles.push(profile);
           profilesMap.set(String(profile?.id ?? profile?.player_id ?? "").trim(), profile);
+          void triggerPlayerBgaDataRefresh(profile.id, {
+            onProfile: (nextProfile) => {
+              applyProfileBgaPayload(profile, nextProfile);
+              if (typeof onCreated === "function") {
+                onCreated(profile, { backgroundRefresh: true });
+              }
+            },
+          });
           onCreated(profile);
         } catch (_error) {
           setInlineError("Failed to create profile.");

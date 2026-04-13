@@ -1524,6 +1524,12 @@ function parseUtcTimestamp(timeValue) {
   return Date.UTC(year || 0, (month || 1) - 1, day || 1, hour || 0, minute || 0, second || 0);
 }
 
+function hasLegacyMatchTime(timeValue) {
+  const raw = String(timeValue || "").trim();
+  if (!raw) return false;
+  return /^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$/.test(raw);
+}
+
 function buildEventDateTimeLabel(timeValue) {
   const dateObj = new Date(parseUtcTimestamp(timeValue));
   const MONTHS_3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -1598,7 +1604,7 @@ function renderEventsCard(container, events) {
 
 function renderSection(container, title, tournaments, matches, events, options = {}) {
   const { renderEventsLast = false } = options;
-  const visibleMatches = Array.isArray(matches) ? matches : [];
+  const visibleMatches = (Array.isArray(matches) ? matches : []).filter((match) => hasLegacyMatchTime(match?.time));
   const visibleEvents = Array.isArray(events) ? events : [];
   if (visibleMatches.length === 0 && visibleEvents.length === 0) return;
   const isToday = title === "Today";
@@ -2460,6 +2466,10 @@ function adaptDbMainPageMatchesData(data) {
   });
 
   (Array.isArray(data?.matches) ? data.matches : []).forEach((match) => {
+    const timeUtc = String(match?.time_utc || "").trim();
+    if (!timeUtc || !Number.isFinite(Date.parse(timeUtc))) {
+      return;
+    }
     const sectionKey = getFriendlySectionKeyByLocalTime(match?.time_utc);
     if (sectionKey === "finished" && !isFriendlyFinishedWithinLastDays(match?.time_utc, 7)) {
       return;
