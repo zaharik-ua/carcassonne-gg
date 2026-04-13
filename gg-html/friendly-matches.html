@@ -65,6 +65,168 @@ code {
     justify-content: space-between;
 }
 
+.results-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  background: #f7f8fa;
+  border-bottom: 1px solid #d9dde3;
+  border-radius: 4px 4px 0 0;
+  flex-wrap: wrap;
+}
+
+.results-pagesize {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #555;
+  margin-bottom: 0;
+}
+
+.results-pagesize-picker {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 58px;
+}
+
+.results-pagesize-btn {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 24px;
+  border: 1px solid #c8ced8;
+  border-radius: 4px;
+  background: #fff;
+  color: #2f3947;
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.results-pagesize-btn:hover,
+.results-pagesize-btn:focus-visible {
+  border-color: #9ea7b3;
+}
+
+.results-pagesize-btn.open {
+  border-color: #9ea7b3;
+}
+
+.results-pagesize-label {
+  font-weight: 600;
+  color: #2f3947;
+  white-space: nowrap;
+}
+
+.results-pagesize-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6f7785;
+  font-size: 10px;
+}
+
+.results-pagesize-chevron i {
+  transition: transform 0.18s ease;
+}
+
+.results-pagesize-btn.open .results-pagesize-chevron i {
+  transform: rotate(180deg);
+}
+
+.results-pagesize-menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  min-width: 100%;
+  width: max-content;
+  max-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #d5dbe4;
+  border-radius: 4px;
+  box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+  z-index: 20;
+}
+
+.results-pagesize-menu.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.results-pagesize-option {
+  all: unset;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border-top: 1px solid #edf1f6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #2f3947;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.results-pagesize-option:first-child {
+  border-top: none;
+}
+
+.results-pagesize-option:hover {
+  background: #f5f5f5;
+}
+
+.results-pagesize-option.active {
+  background: #e4f0fb;
+}
+
+.results-pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.results-pagebtn {
+  font: inherit;
+  font-size: 12px;
+  color: #333;
+  background: #fff;
+  border: 1px solid #cfcfcf;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.results-pagebtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.results-pageinfo {
+  font-size: 12px;
+  color: #555;
+  min-width: 72px;
+  text-align: center;
+}
+
 /* Sort toggle on Today row */
 .sort-toggle {
   display: flex;
@@ -835,6 +997,13 @@ code {
 <script>
 const TOURNAMENT_ID = "Friendly-Matches";
 const MATCHES_URL = "https://api.carcassonne.gg/public/friendly-matches";
+const RESULTS_PAGE_SIZE_OPTIONS = [10, 20, 50];
+const resultsPaginationState = {
+  pageSize: 10,
+  currentPage: 1,
+  totalItems: 0,
+  totalPages: 1
+};
 const autoUpdate = new URLSearchParams(window.location.search).get("autoupdate") === "true";
 const openLineupsSet = new Set();
 const openMatchId = new URLSearchParams(window.location.search).get("open");
@@ -864,6 +1033,14 @@ function getTodayBoundsLocal() {
   return { start, end };
 }
 
+function buildMatchesUrl() {
+  const url = new URL(MATCHES_URL);
+  url.searchParams.set("results_page_size", String(resultsPaginationState.pageSize));
+  url.searchParams.set("results_page", String(resultsPaginationState.currentPage));
+  url.searchParams.set("results_before", new Date(getTodayBoundsLocal().start).toISOString());
+  return url.toString();
+}
+
 function getMatchSectionKey(match) {
   const ts = parseUtc(match?.time_utc);
   const { start, end } = getTodayBoundsLocal();
@@ -880,8 +1057,9 @@ function formatMatchTime(isoValue, { isToday = false } = {}) {
   const MONTHS_3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const dd = String(date.getDate()).padStart(2, "0");
   const mon = MONTHS_3[date.getMonth()];
+  const yyyy = String(date.getFullYear());
   const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-  return isToday ? time : `${dd} ${mon}\n${time}`;
+  return isToday ? time : `${dd} ${mon}\n${yyyy}\n${time}`;
 }
 
 function createRatingElement(rating) {
@@ -1323,7 +1501,6 @@ function renderSection(container, title, tournament, matches, lineupMap, options
 
   const card = document.createElement("div");
   card.className = "tournament-card";
-  card.appendChild(createTournamentHeader(tournament));
 
   matches.forEach((match) => {
     const matchId = String(match?.id || "").trim();
@@ -1331,6 +1508,147 @@ function renderSection(container, title, tournament, matches, lineupMap, options
   });
 
   container.appendChild(card);
+}
+
+function renderResultsSection(container, title, matches, lineupMap, options = {}) {
+  if (!Array.isArray(matches) || matches.length === 0) return;
+
+  container.appendChild(createSectionTitle(title));
+
+  const card = document.createElement("div");
+  card.className = "tournament-card";
+  container.appendChild(card);
+
+  const controls = document.createElement("div");
+  controls.className = "results-controls";
+  card.appendChild(controls);
+
+  const pageSizeWrap = document.createElement("label");
+  pageSizeWrap.className = "results-pagesize";
+  pageSizeWrap.appendChild(document.createTextNode("Per page:"));
+
+  const pageSizePicker = document.createElement("div");
+  pageSizePicker.className = "results-pagesize-picker";
+  const pageSizeBtn = document.createElement("button");
+  pageSizeBtn.type = "button";
+  pageSizeBtn.className = "results-pagesize-btn";
+  const pageSizeBtnLabel = document.createElement("span");
+  pageSizeBtnLabel.className = "results-pagesize-label";
+  pageSizeBtnLabel.textContent = String(resultsPaginationState.pageSize);
+  const pageSizeChevron = document.createElement("span");
+  pageSizeChevron.className = "results-pagesize-chevron";
+  pageSizeChevron.innerHTML = '<i class="fa fa-chevron-down"></i>';
+  pageSizeBtn.appendChild(pageSizeBtnLabel);
+  pageSizeBtn.appendChild(pageSizeChevron);
+
+  const pageSizeMenu = document.createElement("div");
+  pageSizeMenu.className = "results-pagesize-menu";
+  RESULTS_PAGE_SIZE_OPTIONS.forEach((size) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "results-pagesize-option";
+    option.dataset.value = String(size);
+    option.textContent = String(size);
+    if (size === resultsPaginationState.pageSize) option.classList.add("active");
+    pageSizeMenu.appendChild(option);
+  });
+
+  pageSizePicker.appendChild(pageSizeBtn);
+  pageSizePicker.appendChild(pageSizeMenu);
+  pageSizeWrap.appendChild(pageSizePicker);
+  controls.appendChild(pageSizeWrap);
+
+  const pagination = document.createElement("div");
+  pagination.className = "results-pagination";
+
+  const prevBtn = document.createElement("button");
+  prevBtn.type = "button";
+  prevBtn.className = "results-pagebtn";
+  prevBtn.textContent = "Prev";
+
+  const pageInfo = document.createElement("span");
+  pageInfo.className = "results-pageinfo";
+
+  const nextBtn = document.createElement("button");
+  nextBtn.type = "button";
+  nextBtn.className = "results-pagebtn";
+  nextBtn.textContent = "Next";
+
+  pagination.appendChild(prevBtn);
+  pagination.appendChild(pageInfo);
+  pagination.appendChild(nextBtn);
+  controls.appendChild(pagination);
+
+  function renderPage() {
+    card.querySelectorAll(".match-wrapper").forEach((el) => el.remove());
+
+    matches.forEach((match) => {
+      const matchId = String(match?.id || "").trim();
+      card.appendChild(createMatchElement(match, lineupMap.get(matchId) || [], options));
+    });
+
+    pageInfo.textContent = `Page ${resultsPaginationState.currentPage} of ${resultsPaginationState.totalPages}`;
+    prevBtn.disabled = resultsPaginationState.currentPage <= 1;
+    nextBtn.disabled = resultsPaginationState.currentPage >= resultsPaginationState.totalPages;
+  }
+
+  function closePageSizeMenu() {
+    pageSizeMenu.classList.remove("open");
+    pageSizeMenu.style.maxHeight = "0px";
+    pageSizeBtn.classList.remove("open");
+  }
+
+  function setPageSize(nextSize) {
+    resultsPaginationState.pageSize = RESULTS_PAGE_SIZE_OPTIONS.includes(nextSize) ? nextSize : 10;
+    resultsPaginationState.currentPage = 1;
+    pageSizeBtnLabel.textContent = String(resultsPaginationState.pageSize);
+    pageSizeMenu.querySelectorAll(".results-pagesize-option").forEach((el) => {
+      el.classList.toggle("active", el.dataset.value === String(resultsPaginationState.pageSize));
+    });
+    fetchAndRenderMatches();
+  }
+
+  pageSizeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isOpen = pageSizeMenu.classList.contains("open");
+    closePageSizeMenu();
+    if (!isOpen) {
+      pageSizeMenu.classList.add("open");
+      pageSizeMenu.style.maxHeight = `${pageSizeMenu.scrollHeight}px`;
+      pageSizeBtn.classList.add("open");
+    }
+  });
+
+  pageSizeMenu.querySelectorAll(".results-pagesize-option").forEach((optBtn) => {
+    optBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const nextSize = Number(optBtn.dataset.value) || 10;
+      setPageSize(nextSize);
+      closePageSizeMenu();
+    });
+  });
+
+  if (window.__friendlyMatchesResultsPageSizeHandler) {
+    document.removeEventListener("click", window.__friendlyMatchesResultsPageSizeHandler);
+  }
+  window.__friendlyMatchesResultsPageSizeHandler = (e) => {
+    if (!pageSizeWrap.contains(e.target)) closePageSizeMenu();
+  };
+  document.addEventListener("click", window.__friendlyMatchesResultsPageSizeHandler);
+
+  prevBtn.addEventListener("click", () => {
+    if (resultsPaginationState.currentPage <= 1) return;
+    resultsPaginationState.currentPage -= 1;
+    fetchAndRenderMatches();
+  });
+
+  nextBtn.addEventListener("click", () => {
+    if (resultsPaginationState.currentPage >= resultsPaginationState.totalPages) return;
+    resultsPaginationState.currentPage += 1;
+    fetchAndRenderMatches();
+  });
+
+  renderPage();
 }
 
 function renderAllSectionsFromData(data) {
@@ -1356,6 +1674,13 @@ function renderAllSectionsFromData(data) {
     (Array.isArray(data?.duels) ? data.duels : [])
       .filter((duel) => String(duel?.match_id || "").trim())
   );
+  const resultsPagination = data?.pagination?.results || null;
+  resultsPaginationState.totalItems = Number(resultsPagination?.total) || 0;
+  resultsPaginationState.totalPages = Math.max(1, Number(resultsPagination?.total_pages) || 1);
+  resultsPaginationState.currentPage = Math.min(
+    Math.max(1, Number(resultsPagination?.page) || resultsPaginationState.currentPage || 1),
+    resultsPaginationState.totalPages
+  );
 
   const sections = {
     today: [],
@@ -1373,7 +1698,7 @@ function renderAllSectionsFromData(data) {
 
   renderSection(container, "Today", tournament, sections.today, lineupMap, { isToday: true, showRating: true });
   renderSection(container, "Upcoming", tournament, sections.upcoming, lineupMap, { isToday: false, showRating: true });
-  renderSection(container, "Results", tournament, sections.results, lineupMap, { isToday: false, showRating: false });
+  renderResultsSection(container, "Results", sections.results, lineupMap, { isToday: false, showRating: false });
 
   if (!sections.today.length && !sections.upcoming.length && !sections.results.length) {
     container.appendChild(createEmptyCard("No friendly matches found."));
@@ -1389,7 +1714,7 @@ function setLoading(visible) {
 async function fetchAndRenderMatches() {
   setLoading(true);
   try {
-    const response = await fetch(MATCHES_URL, { method: "GET" });
+    const response = await fetch(buildMatchesUrl(), { method: "GET" });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }

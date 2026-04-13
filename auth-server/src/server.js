@@ -7054,8 +7054,20 @@ function publicMainPageMatchesHandler(_req, res, next) {
 
 app.get("/public/main-page-matches", publicMainPageMatchesHandler);
 
-app.get("/public/friendly-matches", (_req, res, next) => {
+app.get("/public/friendly-matches", (req, res, next) => {
   const tournamentId = "Friendly-Matches";
+  const rawResultsPageSize = parseInt(String(req?.query?.results_page_size || "").trim(), 10);
+  const rawResultsPage = parseInt(String(req?.query?.results_page || "").trim(), 10);
+  const resultsPageSize = Number.isInteger(rawResultsPageSize) && rawResultsPageSize > 0
+    ? Math.min(rawResultsPageSize, 100)
+    : null;
+  const resultsPage = Number.isInteger(rawResultsPage) && rawResultsPage > 0
+    ? rawResultsPage
+    : 1;
+  const resultsBeforeValue = String(req?.query?.results_before || "").trim();
+  const resultsBeforeTs = Date.parse(resultsBeforeValue);
+  const hasResultsPagination = resultsPageSize && Number.isFinite(resultsBeforeTs);
+  const resultsBeforeIso = hasResultsPagination ? new Date(resultsBeforeTs).toISOString() : null;
 
   return db.get(
     `
@@ -7076,39 +7088,112 @@ app.get("/public/friendly-matches", (_req, res, next) => {
         return res.json({ ok: true, tournament: null, matches: [], duels: [] });
       }
 
-      return db.all(
-        `
-          SELECT
-            m.id,
-            m.tournament_id,
-            m.time_utc,
-            m.lineup_type,
-            m.lineup_deadline_h,
-            m.lineup_deadline_utc,
-            m.number_of_duels,
-            m.team_1,
-            m.team_2,
-            m.status,
-            m.dw1,
-            m.dw2,
-            m.gw1,
-            m.gw2,
-            m.rating,
-            team1.name AS team_1_name,
-            COALESCE(NULLIF(trim(team1.flag), ''), NULLIF(trim(team1.logo), '')) AS team_1_flag,
-            team2.name AS team_2_name,
-            COALESCE(NULLIF(trim(team2.flag), ''), NULLIF(trim(team2.logo), '')) AS team_2_flag
-          FROM matches m
-          LEFT JOIN teams team1
-            ON upper(trim(COALESCE(team1.id, ''))) = upper(trim(COALESCE(m.team_1, '')))
-          LEFT JOIN teams team2
-            ON upper(trim(COALESCE(team2.id, ''))) = upper(trim(COALESCE(m.team_2, '')))
-          WHERE m.deleted_at IS NULL
-            AND upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))
-          ORDER BY datetime(COALESCE(m.time_utc, '1970-01-01 00:00:00')) DESC, m.id ASC
-        `,
-        [tournamentId],
-        (matchesErr, matchRows) => {
+      const selectMatchFields = `
+        SELECT
+          m.id,
+          m.tournament_id,
+          m.time_utc,
+          m.lineup_type,
+          m.lineup_deadline_h,
+          m.lineup_deadline_utc,
+          m.number_of_duels,
+          m.team_1,
+          m.team_2,
+          m.status,
+          m.dw1,
+          m.dw2,
+          m.gw1,
+          m.gw2,
+          m.rating,
+          team1.name AS team_1_name,
+          COALESCE(NULLIF(trim(team1.flag), ''), NULLIF(trim(team1.logo), '')) AS team_1_flag,
+          team2.name AS team_2_name,
+          COALESCE(NULLIF(trim(team2.flag), ''), NULLIF(trim(team2.logo), '')) AS team_2_flag
+        FROM matches m
+        LEFT JOIN teams team1
+          ON upper(trim(COALESCE(team1.id, ''))) = upper(trim(COALESCE(m.team_1, '')))
+        LEFT JOIN teams team2
+          ON upper(trim(COALESCE(team2.id, ''))) = upper(trim(COALESCE(m.team_2, '')))
+        WHERE m.deleted_at IS NULL
+          AND upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))
+      `;
+
+      const loadMatchRows = (callback) => {
+        if (!hasResultsPagination) {
+          return db.all(
+            `
+              ${selectMatchFields}
+              ORDER BY datetime(COALESCE(m.time_utc, '1970-01-01 00:00:00')) DESC, m.id ASC
+            `,
+            [tournamentId],
+            (matchesErr, matchRows) => callback(matchesErr, matchRows || [], null)
+          );
+        }
+
+        return db.all(
+          `
+            ${selectMatchFields}
+            AND (
+              trim(COALESCE(m.time_utc, '')) = ''
+              OR datetime(m.time_utc) >= datetime(?)
+            )
+            ORDER BY datetime(COALESCE(m.time_utc, '9999-12-31 23:59:59')) ASC, m.id ASC
+          `,
+          [tournamentId, resultsBeforeIso],
+          (activeMatchesErr, activeMatchRows) => {
+            if (activeMatchesErr) return callback(activeMatchesErr);
+
+            return db.get(
+              `
+                SELECT COUNT(*) AS total
+                FROM matches m
+                WHERE m.deleted_at IS NULL
+                  AND upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))
+                  AND trim(COALESCE(m.time_utc, '')) <> ''
+                  AND datetime(m.time_utc) < datetime(?)
+              `,
+              [tournamentId, resultsBeforeIso],
+              (countErr, countRow) => {
+                if (countErr) return callback(countErr);
+
+                const totalResults = Number(countRow?.total) || 0;
+                const totalPages = Math.max(1, Math.ceil(totalResults / resultsPageSize));
+                const safePage = Math.min(resultsPage, totalPages);
+                const offset = (safePage - 1) * resultsPageSize;
+
+                return db.all(
+                  `
+                    ${selectMatchFields}
+                    AND trim(COALESCE(m.time_utc, '')) <> ''
+                    AND datetime(m.time_utc) < datetime(?)
+                    ORDER BY datetime(m.time_utc) DESC, m.id ASC
+                    LIMIT ? OFFSET ?
+                  `,
+                  [tournamentId, resultsBeforeIso, resultsPageSize, offset],
+                  (resultsErr, resultsMatchRows) => {
+                    if (resultsErr) return callback(resultsErr);
+                    return callback(
+                      null,
+                      [...(activeMatchRows || []), ...(resultsMatchRows || [])],
+                      {
+                        results: {
+                          before: resultsBeforeIso,
+                          page: safePage,
+                          page_size: resultsPageSize,
+                          total: totalResults,
+                          total_pages: totalPages,
+                        },
+                      }
+                    );
+                  }
+                );
+              }
+            );
+          }
+        );
+      };
+
+      return loadMatchRows((matchesErr, matchRows, pagination) => {
           if (matchesErr) return next(matchesErr);
 
           const normalizedMatchIds = Array.from(new Set(
@@ -7150,6 +7235,7 @@ app.get("/public/friendly-matches", (_req, res, next) => {
                 link: tournamentRow.link,
                 type: "TEAM",
               },
+              pagination: pagination || null,
               matches: (matchRows || []).map((row) => ({
                 id: row.id,
                 tournament_id: row.tournament_id,
@@ -7246,8 +7332,7 @@ app.get("/public/friendly-matches", (_req, res, next) => {
               });
             }
           );
-        }
-      );
+        });
     }
   );
 });

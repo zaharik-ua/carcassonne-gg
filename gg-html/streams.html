@@ -1321,10 +1321,14 @@ function updateUrlFromSettings() {
   const allMatchIds = getCurrentMatchIds();
   if (allMatchIds.length) {
     const selectedIds = allMatchIds.filter(id => matchSelectionState.get(id) !== false);
-    if (selectedIds.length === allMatchIds.length) {
+    const unresolvedInitialIds = (initialSelectedIdsFromUrl || []).filter(id => !allMatchIds.includes(id));
+    const effectiveSelectedIds = selectedIds.concat(
+      unresolvedInitialIds.filter(id => !selectedIds.includes(id))
+    );
+    if (selectedIds.length === allMatchIds.length && unresolvedInitialIds.length === 0) {
       params.delete("selected");
     } else {
-      params.set("selected", selectedIds.join(","));
+      params.set("selected", effectiveSelectedIds.join(","));
     }
     initialSelectedIdsFromUrl = null;
   } else {
@@ -2804,10 +2808,24 @@ function renderSettingsSection(container) {
   container.appendChild(wrap);
 }
 
-function renderTodayAndTomorrow(container, { matchesToday = [], matchesScheduled = [], tournamentsToday = [], tournamentsScheduled = [] }) {
+function renderTodayAndTomorrow(container, { matchesToday = [], matchesScheduled = [], tournamentsToday = [], tournamentsScheduled = [], extraSelectedMatches = [] }) {
   resetMatchElementRefs();
   const { matches: rawMatchesToDisplay, startOfTomorrow } = getMatchesTodayAndTomorrow(matchesToday, matchesScheduled);
-  const matchesToDisplay = rawMatchesToDisplay.filter(match => !isMatchHidden(match));
+  const selectedIds = selectedMatchIdsFromUrl instanceof Set ? selectedMatchIdsFromUrl : null;
+  const matchesById = new Map();
+
+  [...rawMatchesToDisplay, ...(Array.isArray(extraSelectedMatches) ? extraSelectedMatches : [])].forEach(match => {
+    const matchId = String(match?.id || "").trim();
+    const key = matchId || `__match_${matchesById.size}`;
+    if (!matchesById.has(key)) {
+      matchesById.set(key, match);
+    }
+  });
+
+  const matchesToDisplay = Array.from(matchesById.values()).filter(match => {
+    const matchId = String(match?.id || "").trim();
+    return !isMatchHidden(match) || (!!matchId && selectedIds && selectedIds.has(matchId));
+  });
 
   if (matchesToDisplay.length === 0) {
     const emptyState = document.createElement("div");
@@ -3229,6 +3247,17 @@ function dedupeTournamentsByIdentity(tournaments) {
   });
 }
 
+function collectDirectSelectedMatches(allMatches, selectedIds) {
+  if (!(selectedIds instanceof Set) || selectedIds.size === 0) return [];
+  const seen = new Set();
+  return (Array.isArray(allMatches) ? allMatches : []).filter((match) => {
+    const matchId = String(match?.id || "").trim();
+    if (!matchId || !selectedIds.has(matchId) || seen.has(matchId)) return false;
+    seen.add(matchId);
+    return true;
+  });
+}
+
 function fetchAndRenderMatches() {
   const primaryURL = "https://api.carcassonne.com.ua/public/matches";
   const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches.json";
@@ -3285,6 +3314,15 @@ function fetchAndRenderMatches() {
       ...(dbMatchesData.matches_scheduled || []),
       ...(baseData.matches_scheduled || [])
     ]);
+    const allKnownMatches = dedupeMatchesById([
+      ...(dbMatchesData.matches_today || []),
+      ...(dbMatchesData.matches_scheduled || []),
+      ...(dbMatchesData.matches_finished || []),
+      ...(baseData.matches_today || []),
+      ...(baseData.matches_scheduled || []),
+      ...(baseData.matches_finished || [])
+    ]);
+    const extraSelectedMatches = collectDirectSelectedMatches(allKnownMatches, selectedMatchIdsFromUrl);
 
     const container = document.getElementById("matches-container");
     const settingsSlot = document.getElementById("matches-settings-slot");
@@ -3303,7 +3341,8 @@ function fetchAndRenderMatches() {
       matchesToday: mergedTodayMatches,
       matchesScheduled: mergedScheduledMatches,
       tournamentsToday: mergedTodayTournaments,
-      tournamentsScheduled: mergedScheduledTournaments
+      tournamentsScheduled: mergedScheduledTournaments,
+      extraSelectedMatches
     });
 
     renderSettingsSection(settingsSlot || container);

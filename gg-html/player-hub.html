@@ -1012,7 +1012,7 @@
     padding: 4px 8px;
     border: 1px solid #d6dbe3;
     border-radius: 6px;
-    background: #f3f4f6;
+    background: #fff;
     transition: background-color 0.16s ease, border-color 0.16s ease;
   }
 
@@ -1023,7 +1023,8 @@
   }
 
   .cp-stream-match-option.is-selected {
-    background: #fff;
+    background: #edf4f8;
+    border-color: #c7d8e3;
   }
 
   .cp-stream-match-option .cp-match-row {
@@ -1081,6 +1082,29 @@
     height: 24px;
     border-radius: 50%;
     object-fit: cover;
+  }
+
+  .cp-stream-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: 8px;
+    color: #5b6573;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: color 0.16s ease, background-color 0.16s ease;
+  }
+
+  .cp-stream-link:hover {
+    color: #1a73b7;
+    background: #eef5fb;
+  }
+
+  .cp-stream-link i {
+    font-size: 12px;
+    line-height: 1;
   }
 
   .cp-stream-empty {
@@ -1760,6 +1784,7 @@
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const MATCHES_URL = `${AUTH_BASE}/matches`;
+  const PUBLIC_MAIN_PAGE_MATCHES_URL = `${AUTH_BASE}/public/main-page-matches`;
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const DUELS_URL = `${AUTH_BASE}/duels`;
@@ -3321,6 +3346,32 @@
 
     const right = document.createElement("div");
     right.className = "cp-match-right";
+    const scoreboardLink = String(options.scoreboardLink || "").trim();
+    if (scoreboardLink) {
+      const scoreboardBtn = document.createElement("a");
+      scoreboardBtn.className = "cp-stream-link";
+      scoreboardBtn.href = scoreboardLink;
+      scoreboardBtn.target = "_blank";
+      scoreboardBtn.rel = "noopener noreferrer";
+      scoreboardBtn.title = "Open scoreboard";
+      const icon = document.createElement("i");
+      icon.className = "fa-solid fa-table-cells-large";
+      scoreboardBtn.appendChild(icon);
+      right.appendChild(scoreboardBtn);
+    }
+    const streamLink = String(options.streamLink || "").trim();
+    if (streamLink) {
+      const linkBtn = document.createElement("a");
+      linkBtn.className = "cp-stream-link";
+      linkBtn.href = streamLink;
+      linkBtn.target = "_blank";
+      linkBtn.rel = "noopener noreferrer";
+      linkBtn.title = "Open stream link";
+      const icon = document.createElement("i");
+      icon.className = "fa-solid fa-arrow-up-right-from-square";
+      linkBtn.appendChild(icon);
+      right.appendChild(linkBtn);
+    }
     if (options.showEdit) {
       const editBtn = document.createElement("button");
       editBtn.type = "button";
@@ -3366,6 +3417,10 @@
         list.appendChild(createStreamMatchRow(stream, teamsById, tournamentsById, {
           showEdit: true,
           streamId: String(stream?.id || ""),
+          scoreboardLink: String(stream?.match_id || "").trim()
+            ? `https://carcassonne.gg/stream/?selected=${encodeURIComponent(String(stream.match_id).trim())}`
+            : "",
+          streamLink: String(stream?.link || "").trim(),
           streamerAvatar: showStreamerAvatar === true ? streamerAvatar : "",
         }));
       });
@@ -3459,7 +3514,7 @@
     linkInput.type = "url";
     linkInput.value = String(source?.link || "");
     linkInput.required = true;
-    addRow("Link", linkInput);
+    addRow("Stream link", linkInput);
 
     if (isCreateMode) {
       const matchesWrap = document.createElement("div");
@@ -8832,8 +8887,10 @@
       }
 
       const [matchesRes, teamsRes, tournamentsRes, profilesRes, friendlyFindRes, streamersRes, streamsRes] = await Promise.all([
-        (activeView === CAPTAIN_VIEWS.MATCHES || activeView === CAPTAIN_VIEWS.STREAMS)
+        activeView === CAPTAIN_VIEWS.MATCHES
           ? fetch(MATCHES_URL, { method: "GET", credentials: "include" })
+          : activeView === CAPTAIN_VIEWS.STREAMS
+            ? fetch(PUBLIC_MAIN_PAGE_MATCHES_URL, { method: "GET" })
           : Promise.resolve(null),
         fetch(TEAMS_URL, { method: "GET" }),
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
@@ -9162,6 +9219,7 @@
 
       if (activeView === CAPTAIN_VIEWS.STREAMS) {
         const ongoingMatches = matches
+          .filter((match) => String(match?.time_utc || match?.time || "").trim())
           .filter((match) => !isPastMatch(match))
           .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
         const streamMatchIds = new Set(matches.map((match) => String(match?.id || "").trim()).filter(Boolean));
