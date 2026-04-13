@@ -214,7 +214,7 @@ def _normalize_api_datetime(value: Any) -> str | None:
 
 def _normalize_match_time(status: Any, value: Any) -> str | None:
     raw_status = str(status or "").strip()
-    if not raw_status or raw_status in {"10", "01", "11"}:
+    if not raw_status or raw_status in {"10", "01"}:
         return None
     return _normalize_api_datetime(value)
 

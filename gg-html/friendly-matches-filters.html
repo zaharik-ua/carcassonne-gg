@@ -157,15 +157,15 @@
     cursor: pointer;
   }
   .pf-search-wrap {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 6px;
     position: relative;
     width: 100%;
   }
   .pf-search-input {
     font-size: 13px;
     padding: 4px 8px;
+    padding-right: 24px;
     border: 1px solid #ccc;
     border-radius: 4px;
     width: 100%;
@@ -224,6 +224,7 @@
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
+    margin-bottom: 2px;
   }
   .pf-apply-btn,
   .pf-clear-filters-btn {
@@ -243,9 +244,38 @@
     border-color: #0277BD;
     box-shadow: 0 0 3px rgba(2, 119, 189, 0.4);
   }
+  .pf-apply-btn:disabled,
+  .pf-clear-filters-btn:disabled {
+    cursor: default;
+    box-shadow: none;
+  }
   .pf-apply-btn {
-    background: #fff7cf;
+    background: #f3f4f6;
+    border-color: #c8ced8;
+    color: #333;
     font-weight: 600;
+  }
+  .pf-apply-btn.is-active {
+    background: #2c6da3;
+    border-color: #2c6da3;
+    color: #fff;
+  }
+  .pf-clear-filters-btn {
+    background: #fff3f3;
+    border-color: #e6b4b4;
+    color: #a12a2a;
+  }
+  .pf-clear-filters-btn:disabled {
+    background: #f6f7f9;
+    border-color: #d8dde3;
+    color: #98a3ae;
+  }
+  .pf-apply-btn:disabled {
+    background: #f3f4f6;
+    border-color: #c8ced8;
+    color: #333;
+    opacity: 0.72;
+    cursor: not-allowed;
   }
   @media (max-width: 768px) {
     .pf-search-input {
@@ -255,6 +285,10 @@
 </style>
 
 <div class="pf-filters">
+  <div class="pf-actions">
+    <button class="pf-apply-btn" id="fmf-apply-btn" type="button">Filter</button>
+    <button class="pf-clear-filters-btn" id="fmf-clear-btn" type="button">Clear filters</button>
+  </div>
   <div class="pf-search-host" id="fmf-search-host">
     <button class="pf-search-btn" id="fmf-search-btn" type="button">Search Player</button>
   </div>
@@ -274,10 +308,6 @@
     <span class="pf-clear" id="fmf-year-clear" style="display:none;">✕</span>
   </button>
   <div class="pf-year-row" id="fmf-year-row"></div>
-  <div class="pf-actions">
-    <button class="pf-apply-btn" id="fmf-apply-btn" type="button">Filter</button>
-    <button class="pf-clear-filters-btn" id="fmf-clear-btn" type="button">Clear filters</button>
-  </div>
 </div>
 
 <script>
@@ -328,6 +358,31 @@
     window.dispatchEvent(new Event("friendly-matches-filter-change"));
   }
 
+  function fmfIsSameState(left, right) {
+    return (
+      String(left?.association || "") === String(right?.association || "") &&
+      String(left?.year || "") === String(right?.year || "") &&
+      String(left?.player || "") === String(right?.player || "")
+    );
+  }
+
+  function fmfUpdateApplyButton() {
+    const appliedState = fmfReadStateFromUrl();
+    const isDirty = !fmfIsSameState(fmfDraftState, appliedState);
+    fmfApplyBtn.classList.toggle("is-active", isDirty);
+    fmfApplyBtn.disabled = !isDirty;
+  }
+
+  function fmfUpdateClearButton() {
+    const appliedState = fmfReadStateFromUrl();
+    const hasAppliedFilters = Boolean(
+      appliedState.association ||
+      appliedState.year ||
+      appliedState.player
+    );
+    fmfClearBtn.disabled = !hasAppliedFilters;
+  }
+
   function fmfReplaceUrlFromState(state) {
     const params = new URLSearchParams(window.location.search);
     if (state.association) params.set("association", state.association);
@@ -354,6 +409,14 @@
     fmfYearToggle.classList.toggle("active", shouldOpen);
   }
 
+  function fmfCloseAllPanels() {
+    fmfToggleCountryRow(false);
+    fmfToggleYearRow(false);
+    if (fmfSearchWrap && fmfSearchHost.contains(fmfSearchWrap)) {
+      fmfUnmountSearchUi();
+    }
+  }
+
   function fmfUpdateCountryToggle() {
     const active = fmfDraftState.association;
     const opt = fmfCountryOptions.find((item) => item.key === active);
@@ -372,6 +435,7 @@
     fmfCountryRow.querySelectorAll(".pf-flag-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.association === active);
     });
+    fmfUpdateApplyButton();
   }
 
   function fmfUpdateYearToggle() {
@@ -383,10 +447,28 @@
     fmfYearRow.querySelectorAll(".pf-year-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.year === active);
     });
+    fmfUpdateApplyButton();
   }
 
   function fmfHideSearchResults() {
     if (fmfSearchResults) fmfSearchResults.style.display = "none";
+  }
+
+  function fmfUnmountSearchUi({ focusButton = false } = {}) {
+    fmfDraftState.player = "";
+    if (fmfSearchInput) {
+      fmfSearchInput.value = "";
+      fmfSearchInput.readOnly = false;
+      fmfSearchInput.removeAttribute("aria-readonly");
+    }
+    fmfHideSearchResults();
+    if (fmfSearchWrap && fmfSearchHost.contains(fmfSearchWrap)) {
+      fmfSearchHost.replaceChild(fmfSearchBtn, fmfSearchWrap);
+    }
+    fmfUpdateApplyButton();
+    if (focusButton) {
+      fmfSearchBtn.focus();
+    }
   }
 
   function fmfRenderSearchSelected() {
@@ -395,15 +477,15 @@
       fmfSearchInput.value = fmfDraftState.player;
       fmfSearchInput.readOnly = true;
       fmfSearchInput.setAttribute("aria-readonly", "true");
-      if (fmfSearchClear) fmfSearchClear.style.display = "inline-flex";
     } else {
       fmfSearchInput.value = "";
       fmfSearchInput.readOnly = false;
       fmfSearchInput.removeAttribute("aria-readonly");
       fmfSearchInput.placeholder = "Search player...";
-      if (fmfSearchClear) fmfSearchClear.style.display = "none";
     }
+    if (fmfSearchClear) fmfSearchClear.style.display = "inline-flex";
     fmfHideSearchResults();
+    fmfUpdateApplyButton();
   }
 
   async function fmfFetchAssociations() {
@@ -472,16 +554,12 @@
     fmfSearchClear = document.createElement("button");
     fmfSearchClear.type = "button";
     fmfSearchClear.className = "pf-search-clear";
-    fmfSearchClear.setAttribute("aria-label", "Clear player filter");
+    fmfSearchClear.setAttribute("aria-label", "Close player search");
     fmfSearchClear.textContent = "✕";
-    fmfSearchClear.style.display = "none";
+    fmfSearchClear.style.display = "inline-flex";
     fmfSearchClear.addEventListener("click", (event) => {
       event.stopPropagation();
-      fmfDraftState.player = "";
-      fmfRenderSearchSelected();
-      if (fmfSearchInput) {
-        fmfSearchInput.focus();
-      }
+      fmfUnmountSearchUi({ focusButton: true });
     });
 
     fmfSearchWrap.appendChild(fmfSearchInput);
@@ -527,12 +605,7 @@
     fmfSearchInput.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        if (fmfDraftState.player) {
-          fmfDraftState.player = "";
-          fmfRenderSearchSelected();
-        } else {
-          fmfHideSearchResults();
-        }
+        fmfUnmountSearchUi({ focusButton: true });
       }
     });
   }
@@ -557,6 +630,8 @@
     if (fmfDraftState.player || fmfSearchWrap) {
       fmfMountSearchUi();
     }
+    fmfUpdateApplyButton();
+    fmfUpdateClearButton();
   }
 
   function fmfRenderCountryOptions() {
@@ -639,6 +714,8 @@
       fmfRenderYearOptions();
       fmfUpdateCountryToggle();
       fmfUpdateYearToggle();
+      fmfUpdateApplyButton();
+      fmfUpdateClearButton();
       if (fmfDraftState.player) {
         fmfMountSearchUi();
       }
@@ -666,15 +743,22 @@
   });
 
   fmfApplyBtn.addEventListener("click", () => {
+    if (fmfApplyBtn.disabled) return;
     fmfReplaceUrlFromState(fmfDraftState);
+    fmfUpdateApplyButton();
+    fmfUpdateClearButton();
   });
 
   fmfClearBtn.addEventListener("click", () => {
+    if (fmfClearBtn.disabled) return;
     fmfDraftState = { association: "", year: "", player: "" };
+    fmfCloseAllPanels();
     fmfUpdateCountryToggle();
     fmfUpdateYearToggle();
     if (fmfSearchWrap) fmfRenderSearchSelected();
     fmfReplaceUrlFromState(fmfDraftState);
+    fmfUpdateApplyButton();
+    fmfUpdateClearButton();
   });
 
   window.addEventListener("popstate", () => {
