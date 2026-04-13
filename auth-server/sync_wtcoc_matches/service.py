@@ -171,7 +171,7 @@ class WtcocSyncService:
         visitor_team_name = str(match.get("nameVisitorTeam") or "").strip()
         local_team = resolver.resolve(local_team_name)
         visitor_team = resolver.resolve(visitor_team_name)
-        match_time = None if not _can_import_duels(match_status) else _normalize_api_datetime(match.get("date"))
+        match_time = _normalize_match_time(match_status, match.get("date"))
         duels = match.get("duels")
         duel_count = len(duels) if isinstance(duels, list) else 0
         return {
@@ -210,6 +210,13 @@ def _normalize_api_datetime(value: Any) -> str | None:
     if not raw or raw == ZERO_DATE:
         return None
     return raw.replace(" ", "T") + "Z"
+
+
+def _normalize_match_time(status: Any, value: Any) -> str | None:
+    raw_status = str(status or "").strip()
+    if not raw_status or raw_status in {"10", "01", "11"}:
+        return None
+    return _normalize_api_datetime(value)
 
 
 def _can_import_duels(status: Any) -> bool:
