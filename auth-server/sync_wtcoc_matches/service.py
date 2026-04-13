@@ -162,6 +162,8 @@ class WtcocSyncService:
                 for duel in duels:
                     if not isinstance(duel, dict):
                         continue
+                    if not _has_named_players(duel):
+                        continue
                     duel_preview = self._normalize_duel_preview(
                         tournament_id=normalized_tournament_id,
                         duel=duel,
@@ -268,6 +270,12 @@ def _can_import_duels(status: Any) -> bool:
     return all(ch >= "2" for ch in raw)
 
 
+def _has_named_players(duel: dict[str, Any]) -> bool:
+    local_name = str(duel.get("nameLocalPlayer") or "").strip()
+    visitor_name = str(duel.get("nameVisitorPlayer") or "").strip()
+    return bool(local_name and visitor_name)
+
+
 def _normalize_token(value: str) -> str:
     return str(value or "").strip().upper()
 
@@ -290,4 +298,3 @@ def _extract_duel_number(value: Any) -> int | None:
         return None
     digits = "".join(ch for ch in raw if ch.isdigit())
     return int(digits) if digits else None
-
