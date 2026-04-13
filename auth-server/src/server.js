@@ -7056,6 +7056,13 @@ app.get("/public/main-page-matches", publicMainPageMatchesHandler);
 
 app.get("/public/friendly-matches", (req, res, next) => {
   const tournamentId = "Friendly-Matches";
+  const normalizeText = (value) => String(value ?? "").trim();
+  const associationFilter = normalizeText(req?.query?.association).toUpperCase();
+  const playerFilter = normalizeText(req?.query?.player);
+  const rawYear = parseInt(normalizeText(req?.query?.year), 10);
+  const yearFilter = Number.isInteger(rawYear) && rawYear >= 2000 && rawYear <= 3000
+    ? String(rawYear)
+    : "";
   const rawResultsPageSize = parseInt(String(req?.query?.results_page_size || "").trim(), 10);
   const rawResultsPage = parseInt(String(req?.query?.results_page || "").trim(), 10);
   const resultsPageSize = Number.isInteger(rawResultsPageSize) && rawResultsPageSize > 0
@@ -7068,6 +7075,49 @@ app.get("/public/friendly-matches", (req, res, next) => {
   const resultsBeforeTs = Date.parse(resultsBeforeValue);
   const hasResultsPagination = resultsPageSize && Number.isFinite(resultsBeforeTs);
   const resultsBeforeIso = hasResultsPagination ? new Date(resultsBeforeTs).toISOString() : null;
+  const matchFilterClauses = [
+    "m.deleted_at IS NULL",
+    "upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))",
+  ];
+  const matchFilterParams = [tournamentId];
+
+  if (associationFilter) {
+    matchFilterClauses.push(`
+      (
+        upper(trim(COALESCE(m.team_1, ''))) = upper(trim(?))
+        OR upper(trim(COALESCE(m.team_2, ''))) = upper(trim(?))
+      )
+    `);
+    matchFilterParams.push(associationFilter, associationFilter);
+  }
+
+  if (yearFilter) {
+    matchFilterClauses.push("trim(COALESCE(m.time_utc, '')) <> ''");
+    matchFilterClauses.push("strftime('%Y', datetime(m.time_utc)) = ?");
+    matchFilterParams.push(yearFilter);
+  }
+
+  if (playerFilter) {
+    matchFilterClauses.push(`
+      EXISTS (
+        SELECT 1
+        FROM duels fd
+        LEFT JOIN profiles fp1
+          ON trim(COALESCE(fp1.id, '')) = trim(COALESCE(fd.player_1_id, ''))
+        LEFT JOIN profiles fp2
+          ON trim(COALESCE(fp2.id, '')) = trim(COALESCE(fd.player_2_id, ''))
+        WHERE fd.deleted_at IS NULL
+          AND trim(COALESCE(fd.match_id, '')) = trim(COALESCE(m.id, ''))
+          AND (
+            lower(trim(COALESCE(fp1.bga_nickname, ''))) = lower(trim(?))
+            OR lower(trim(COALESCE(fp2.bga_nickname, ''))) = lower(trim(?))
+            OR trim(COALESCE(fd.player_1_id, '')) = trim(?)
+            OR trim(COALESCE(fd.player_2_id, '')) = trim(?)
+          )
+      )
+    `);
+    matchFilterParams.push(playerFilter, playerFilter, playerFilter, playerFilter);
+  }
 
   return db.get(
     `
@@ -7114,8 +7164,7 @@ app.get("/public/friendly-matches", (req, res, next) => {
           ON upper(trim(COALESCE(team1.id, ''))) = upper(trim(COALESCE(m.team_1, '')))
         LEFT JOIN teams team2
           ON upper(trim(COALESCE(team2.id, ''))) = upper(trim(COALESCE(m.team_2, '')))
-        WHERE m.deleted_at IS NULL
-          AND upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))
+        WHERE ${matchFilterClauses.join("\n          AND ")}
       `;
 
       const loadMatchRows = (callback) => {
@@ -7125,21 +7174,21 @@ app.get("/public/friendly-matches", (req, res, next) => {
               ${selectMatchFields}
               ORDER BY datetime(COALESCE(m.time_utc, '1970-01-01 00:00:00')) DESC, m.id ASC
             `,
-            [tournamentId],
+            matchFilterParams,
             (matchesErr, matchRows) => callback(matchesErr, matchRows || [], null)
           );
         }
 
         return db.all(
           `
-            ${selectMatchFields}
-            AND (
-              trim(COALESCE(m.time_utc, '')) = ''
-              OR datetime(m.time_utc) >= datetime(?)
-            )
+              ${selectMatchFields}
+              AND (
+                trim(COALESCE(m.time_utc, '')) = ''
+                OR datetime(m.time_utc) >= datetime(?)
+              )
             ORDER BY datetime(COALESCE(m.time_utc, '9999-12-31 23:59:59')) ASC, m.id ASC
           `,
-          [tournamentId, resultsBeforeIso],
+          [...matchFilterParams, resultsBeforeIso],
           (activeMatchesErr, activeMatchRows) => {
             if (activeMatchesErr) return callback(activeMatchesErr);
 
@@ -7147,12 +7196,11 @@ app.get("/public/friendly-matches", (req, res, next) => {
               `
                 SELECT COUNT(*) AS total
                 FROM matches m
-                WHERE m.deleted_at IS NULL
-                  AND upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))
+                WHERE ${matchFilterClauses.join("\n                  AND ")}
                   AND trim(COALESCE(m.time_utc, '')) <> ''
                   AND datetime(m.time_utc) < datetime(?)
               `,
-              [tournamentId, resultsBeforeIso],
+              [...matchFilterParams, resultsBeforeIso],
               (countErr, countRow) => {
                 if (countErr) return callback(countErr);
 
@@ -7169,7 +7217,7 @@ app.get("/public/friendly-matches", (req, res, next) => {
                     ORDER BY datetime(m.time_utc) DESC, m.id ASC
                     LIMIT ? OFFSET ?
                   `,
-                  [tournamentId, resultsBeforeIso, resultsPageSize, offset],
+                  [...matchFilterParams, resultsBeforeIso, resultsPageSize, offset],
                   (resultsErr, resultsMatchRows) => {
                     if (resultsErr) return callback(resultsErr);
                     return callback(
@@ -7335,6 +7383,80 @@ app.get("/public/friendly-matches", (req, res, next) => {
         });
     }
   );
+});
+
+app.get("/public/friendly-matches/filters", async (_req, res, next) => {
+  const tournamentId = "Friendly-Matches";
+
+  try {
+    const yearRows = await dbAllAsync(
+      `
+        SELECT DISTINCT strftime('%Y', datetime(m.time_utc)) AS year
+        FROM matches m
+        WHERE m.deleted_at IS NULL
+          AND upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))
+          AND trim(COALESCE(m.time_utc, '')) <> ''
+          AND strftime('%Y', datetime(m.time_utc)) IS NOT NULL
+        ORDER BY year DESC
+      `,
+      [tournamentId]
+    );
+
+    return res.json({
+      ok: true,
+      years: yearRows
+        .map((row) => String(row?.year || "").trim())
+        .filter(Boolean),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/public/friendly-matches/players", async (req, res, next) => {
+  const tournamentId = "Friendly-Matches";
+  const query = String(req?.query?.query || "").trim();
+  const rawLimit = parseInt(String(req?.query?.limit || "").trim(), 10);
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 50) : 20;
+
+  if (!query) {
+    return res.json({ ok: true, players: [] });
+  }
+
+  try {
+    const rows = await dbAllAsync(
+      `
+        SELECT DISTINCT
+          p.id,
+          p.bga_nickname
+        FROM profiles p
+        JOIN duels d
+          ON trim(COALESCE(p.id, '')) = trim(COALESCE(d.player_1_id, ''))
+          OR trim(COALESCE(p.id, '')) = trim(COALESCE(d.player_2_id, ''))
+        JOIN matches m
+          ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
+        WHERE p.deleted_at IS NULL
+          AND d.deleted_at IS NULL
+          AND m.deleted_at IS NULL
+          AND upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))
+          AND trim(COALESCE(p.bga_nickname, '')) <> ''
+          AND lower(COALESCE(p.bga_nickname, '')) LIKE lower(?)
+        ORDER BY lower(trim(COALESCE(p.bga_nickname, ''))) ASC, trim(COALESCE(p.id, '')) ASC
+        LIMIT ?
+      `,
+      [tournamentId, `${query}%`, limit]
+    );
+
+    return res.json({
+      ok: true,
+      players: rows.map((row) => ({
+        id: row.id,
+        bga_nickname: row.bga_nickname,
+      })),
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 app.post("/matches", (req, res) => {

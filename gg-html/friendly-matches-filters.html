@@ -1,0 +1,690 @@
+<!-- FILTERS: Friendly Matches -->
+<style>
+  .pf-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 6px 8px 10px;
+  }
+  .pf-country-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .pf-year-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .pf-year-toggle .pf-title-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .pf-year-toggle .pf-label {
+    display: block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pf-year-toggle .pf-selected-label {
+    color: #333;
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 1.1;
+    text-align: left;
+  }
+  .pf-year-toggle .pf-clear {
+    color: #d32f2f;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    margin-left: 3px;
+  }
+  .pf-year-toggle.active {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.3);
+  }
+  .pf-year-row {
+    display: none;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .pf-year-row.open {
+    display: flex;
+  }
+  .pf-year-btn {
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background-color: #fffde5;
+    color: #333;
+    transition: all 0.2s ease;
+  }
+  .pf-year-btn.active {
+    border-color: #0277BD;
+    background-color: #fbf092;
+  }
+  .pf-country-toggle .pf-selected-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pf-country-toggle .pf-selected-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .pf-country-toggle .pf-selected-flag img {
+    width: 18px;
+    height: auto;
+    object-fit: contain;
+  }
+  .pf-country-toggle .pf-clear {
+    color: #d32f2f;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .pf-country-toggle.active {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.3);
+  }
+  .pf-country-row {
+    display: none;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+  .pf-country-row.open {
+    display: flex;
+  }
+  .pf-flag-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .pf-flag-btn.active {
+    border-color: #0277BD;
+  }
+  .pf-flag-btn img {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+  }
+  .pf-search-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .pf-search-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+    width: 100%;
+  }
+  .pf-search-input {
+    font-size: 13px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .pf-search-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 90%;
+    background: #eaf4ff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    max-height: 220px;
+    overflow: auto;
+    z-index: 10;
+    display: none;
+  }
+  .pf-search-results ul {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+  }
+  .pf-search-results li {
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .pf-search-results li:hover {
+    background: #f0f6ff;
+  }
+  .pf-search-results li.no-results {
+    color: #888;
+    cursor: default;
+  }
+  .pf-search-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #d32f2f;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 0;
+  }
+  .pf-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .pf-apply-btn,
+  .pf-clear-filters-btn {
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 8px;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    height: 24px;
+    line-height: 18px;
+    transition: all 0.2s ease;
+    width: fit-content;
+  }
+  .pf-apply-btn:hover,
+  .pf-clear-filters-btn:hover {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.4);
+  }
+  .pf-apply-btn {
+    background: #fff7cf;
+    font-weight: 600;
+  }
+  @media (max-width: 768px) {
+    .pf-search-input {
+      font-size: 16px;
+    }
+  }
+</style>
+
+<div class="pf-filters">
+  <div class="pf-search-host" id="fmf-search-host">
+    <button class="pf-search-btn" id="fmf-search-btn" type="button">Search Player</button>
+  </div>
+  <button class="pf-country-toggle" id="fmf-country-toggle" type="button">
+    <span class="pf-label">Country</span>
+    <span class="pf-selected-wrap" id="fmf-selected-wrap" style="display:none;">
+      <span class="pf-selected-flag" id="fmf-selected-flag"></span>
+      <span class="pf-clear" id="fmf-country-clear">✕</span>
+    </span>
+  </button>
+  <div class="pf-country-row" id="fmf-country-row"></div>
+  <button class="pf-year-toggle" id="fmf-year-toggle" type="button">
+    <span class="pf-title-wrap">
+      <span class="pf-label">Year</span>
+      <span class="pf-selected-label" id="fmf-year-selected-label" style="display:none;"></span>
+    </span>
+    <span class="pf-clear" id="fmf-year-clear" style="display:none;">✕</span>
+  </button>
+  <div class="pf-year-row" id="fmf-year-row"></div>
+  <div class="pf-actions">
+    <button class="pf-apply-btn" id="fmf-apply-btn" type="button">Filter</button>
+    <button class="pf-clear-filters-btn" id="fmf-clear-btn" type="button">Clear filters</button>
+  </div>
+</div>
+
+<script>
+  const fmfDataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
+  const fmfAuthBase = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const fmfAssociationsURL = `${fmfAuthBase}/associations`;
+  const fmfFiltersURL = `${fmfAuthBase}/public/friendly-matches/filters`;
+  const fmfPlayersURL = `${fmfAuthBase}/public/friendly-matches/players`;
+
+  const fmfCountryToggle = document.getElementById("fmf-country-toggle");
+  const fmfCountryRow = document.getElementById("fmf-country-row");
+  const fmfSelectedWrap = document.getElementById("fmf-selected-wrap");
+  const fmfSelectedFlag = document.getElementById("fmf-selected-flag");
+  const fmfCountryClear = document.getElementById("fmf-country-clear");
+  const fmfYearToggle = document.getElementById("fmf-year-toggle");
+  const fmfYearRow = document.getElementById("fmf-year-row");
+  const fmfYearSelectedLabel = document.getElementById("fmf-year-selected-label");
+  const fmfYearClear = document.getElementById("fmf-year-clear");
+  const fmfSearchHost = document.getElementById("fmf-search-host");
+  const fmfSearchBtn = document.getElementById("fmf-search-btn");
+  const fmfApplyBtn = document.getElementById("fmf-apply-btn");
+  const fmfClearBtn = document.getElementById("fmf-clear-btn");
+
+  let fmfCountryOptions = [];
+  let fmfYearOptions = [];
+  let fmfSearchWrap = null;
+  let fmfSearchInput = null;
+  let fmfSearchResults = null;
+  let fmfSearchClear = null;
+  let fmfSearchAbortController = null;
+  let fmfAssociationNamesById = new Map();
+  let fmfDraftState = { association: "", year: "", player: "" };
+
+  function fmfNormalizeKey(value) {
+    return String(value || "").trim().toUpperCase();
+  }
+
+  function fmfReadStateFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      association: fmfNormalizeKey(params.get("association") || ""),
+      year: String(params.get("year") || "").trim(),
+      player: String(params.get("player") || "").trim()
+    };
+  }
+
+  function fmfDispatchFilterChange() {
+    window.dispatchEvent(new Event("friendly-matches-filter-change"));
+  }
+
+  function fmfReplaceUrlFromState(state) {
+    const params = new URLSearchParams(window.location.search);
+    if (state.association) params.set("association", state.association);
+    else params.delete("association");
+    if (state.year) params.set("year", state.year);
+    else params.delete("year");
+    if (state.player) params.set("player", state.player);
+    else params.delete("player");
+    const query = params.toString();
+    const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", nextUrl);
+    fmfDispatchFilterChange();
+  }
+
+  function fmfToggleCountryRow(forceOpen) {
+    const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !fmfCountryRow.classList.contains("open");
+    fmfCountryRow.classList.toggle("open", shouldOpen);
+    fmfCountryToggle.classList.toggle("active", shouldOpen);
+  }
+
+  function fmfToggleYearRow(forceOpen) {
+    const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !fmfYearRow.classList.contains("open");
+    fmfYearRow.classList.toggle("open", shouldOpen);
+    fmfYearToggle.classList.toggle("active", shouldOpen);
+  }
+
+  function fmfUpdateCountryToggle() {
+    const active = fmfDraftState.association;
+    const opt = fmfCountryOptions.find((item) => item.key === active);
+    if (opt) {
+      fmfSelectedFlag.innerHTML = "";
+      const img = document.createElement("img");
+      img.src = opt.flag;
+      img.alt = opt.title || "Country flag";
+      img.title = opt.title || "";
+      fmfSelectedFlag.appendChild(img);
+      fmfSelectedWrap.style.display = "inline-flex";
+    } else {
+      fmfSelectedFlag.innerHTML = "";
+      fmfSelectedWrap.style.display = "none";
+    }
+    fmfCountryRow.querySelectorAll(".pf-flag-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.association === active);
+    });
+  }
+
+  function fmfUpdateYearToggle() {
+    const active = fmfDraftState.year;
+    const hasActive = Boolean(active);
+    fmfYearSelectedLabel.textContent = hasActive ? active : "";
+    fmfYearSelectedLabel.style.display = hasActive ? "inline" : "none";
+    fmfYearClear.style.display = hasActive ? "inline-flex" : "none";
+    fmfYearRow.querySelectorAll(".pf-year-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.year === active);
+    });
+  }
+
+  function fmfHideSearchResults() {
+    if (fmfSearchResults) fmfSearchResults.style.display = "none";
+  }
+
+  function fmfRenderSearchSelected() {
+    if (!fmfSearchWrap || !fmfSearchInput) return;
+    if (fmfDraftState.player) {
+      fmfSearchInput.value = fmfDraftState.player;
+      fmfSearchInput.readOnly = true;
+      fmfSearchInput.setAttribute("aria-readonly", "true");
+      if (fmfSearchClear) fmfSearchClear.style.display = "inline-flex";
+    } else {
+      fmfSearchInput.value = "";
+      fmfSearchInput.readOnly = false;
+      fmfSearchInput.removeAttribute("aria-readonly");
+      fmfSearchInput.placeholder = "Search player...";
+      if (fmfSearchClear) fmfSearchClear.style.display = "none";
+    }
+    fmfHideSearchResults();
+  }
+
+  async function fmfFetchAssociations() {
+    try {
+      const response = await fetch(fmfAssociationsURL);
+      if (!response.ok) return [];
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.associations) ? payload.associations : [];
+      return rows
+        .map((row) => ({
+          id: fmfNormalizeKey(row?.id || ""),
+          name: String(row?.name || "").trim()
+        }))
+        .filter((row) => row.id && row.name);
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  async function fmfFetchYears() {
+    try {
+      const response = await fetch(fmfFiltersURL);
+      if (!response.ok) return [];
+      const payload = await response.json();
+      return Array.isArray(payload?.years) ? payload.years.map((value) => String(value || "").trim()).filter(Boolean) : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  async function fmfFetchPlayers(query) {
+    const q = String(query || "").trim();
+    if (!q) return [];
+    if (fmfSearchAbortController) fmfSearchAbortController.abort();
+    fmfSearchAbortController = new AbortController();
+    try {
+      const url = new URL(fmfPlayersURL);
+      url.searchParams.set("query", q);
+      url.searchParams.set("limit", "20");
+      const response = await fetch(url.toString(), { signal: fmfSearchAbortController.signal });
+      if (!response.ok) return [];
+      const payload = await response.json();
+      return Array.isArray(payload?.players) ? payload.players : [];
+    } catch (error) {
+      if (error?.name === "AbortError") return [];
+      return [];
+    }
+  }
+
+  function fmfEnsureSearchUi() {
+    if (fmfSearchWrap) return;
+
+    fmfSearchWrap = document.createElement("div");
+    fmfSearchWrap.className = "pf-search-wrap";
+
+    fmfSearchInput = document.createElement("input");
+    fmfSearchInput.className = "pf-search-input";
+    fmfSearchInput.type = "text";
+    fmfSearchInput.placeholder = "Search player...";
+
+    fmfSearchResults = document.createElement("div");
+    fmfSearchResults.className = "pf-search-results";
+    const list = document.createElement("ul");
+    fmfSearchResults.appendChild(list);
+
+    fmfSearchClear = document.createElement("button");
+    fmfSearchClear.type = "button";
+    fmfSearchClear.className = "pf-search-clear";
+    fmfSearchClear.setAttribute("aria-label", "Clear player filter");
+    fmfSearchClear.textContent = "✕";
+    fmfSearchClear.style.display = "none";
+    fmfSearchClear.addEventListener("click", (event) => {
+      event.stopPropagation();
+      fmfDraftState.player = "";
+      fmfRenderSearchSelected();
+      if (fmfSearchInput) {
+        fmfSearchInput.focus();
+      }
+    });
+
+    fmfSearchWrap.appendChild(fmfSearchInput);
+    fmfSearchWrap.appendChild(fmfSearchResults);
+    fmfSearchWrap.appendChild(fmfSearchClear);
+
+    fmfSearchInput.addEventListener("input", async () => {
+      if (!fmfSearchInput || fmfSearchInput.readOnly) return;
+      const query = fmfSearchInput.value.trim();
+      const listEl = fmfSearchResults.querySelector("ul");
+      listEl.innerHTML = "";
+      if (!query) {
+        fmfHideSearchResults();
+        return;
+      }
+
+      const players = await fmfFetchPlayers(query);
+      if (fmfSearchInput.value.trim() !== query) return;
+
+      if (!players.length) {
+        const li = document.createElement("li");
+        li.className = "no-results";
+        li.textContent = "No players found";
+        listEl.appendChild(li);
+        fmfSearchResults.style.display = "block";
+        return;
+      }
+
+      players.forEach((player) => {
+        const name = String(player?.bga_nickname || "").trim();
+        if (!name) return;
+        const li = document.createElement("li");
+        li.textContent = name;
+        li.addEventListener("click", () => {
+          fmfDraftState.player = name;
+          fmfRenderSearchSelected();
+        });
+        listEl.appendChild(li);
+      });
+      fmfSearchResults.style.display = "block";
+    });
+
+    fmfSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (fmfDraftState.player) {
+          fmfDraftState.player = "";
+          fmfRenderSearchSelected();
+        } else {
+          fmfHideSearchResults();
+        }
+      }
+    });
+  }
+
+  function fmfMountSearchUi() {
+    fmfEnsureSearchUi();
+    if (fmfSearchHost.contains(fmfSearchBtn)) {
+      fmfSearchHost.replaceChild(fmfSearchWrap, fmfSearchBtn);
+    } else if (!fmfSearchHost.contains(fmfSearchWrap)) {
+      fmfSearchHost.appendChild(fmfSearchWrap);
+    }
+    fmfRenderSearchSelected();
+    if (fmfSearchInput && !fmfDraftState.player) {
+      fmfSearchInput.focus();
+    }
+  }
+
+  function fmfSyncDraftFromUrl() {
+    fmfDraftState = fmfReadStateFromUrl();
+    fmfUpdateCountryToggle();
+    fmfUpdateYearToggle();
+    if (fmfDraftState.player || fmfSearchWrap) {
+      fmfMountSearchUi();
+    }
+  }
+
+  function fmfRenderCountryOptions() {
+    const active = fmfDraftState.association;
+    fmfCountryRow.innerHTML = "";
+    fmfCountryOptions.forEach((opt) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pf-flag-btn";
+      btn.dataset.association = opt.key;
+      if (opt.key === active) btn.classList.add("active");
+
+      const img = document.createElement("img");
+      img.src = opt.flag;
+      img.alt = opt.title || "Country flag";
+      img.title = opt.title || "";
+      btn.appendChild(img);
+
+      btn.addEventListener("click", () => {
+        fmfDraftState.association = fmfDraftState.association === opt.key ? "" : opt.key;
+        fmfUpdateCountryToggle();
+        fmfToggleCountryRow(true);
+      });
+
+      fmfCountryRow.appendChild(btn);
+    });
+  }
+
+  function fmfRenderYearOptions() {
+    const active = fmfDraftState.year;
+    fmfYearRow.innerHTML = "";
+    fmfYearOptions.forEach((year) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pf-year-btn";
+      btn.dataset.year = year;
+      btn.textContent = year;
+      if (year === active) btn.classList.add("active");
+      btn.addEventListener("click", () => {
+        fmfDraftState.year = fmfDraftState.year === year ? "" : year;
+        fmfUpdateYearToggle();
+        fmfToggleYearRow(true);
+      });
+      fmfYearRow.appendChild(btn);
+    });
+  }
+
+  async function fmfInitFilters() {
+    try {
+      const [countriesResponse, associationsList, years] = await Promise.all([
+        fetch(fmfDataURL),
+        fmfFetchAssociations(),
+        fmfFetchYears()
+      ]);
+      if (!countriesResponse.ok) throw new Error("Failed to load filter data");
+
+      const data = await countriesResponse.json();
+      const countries = Array.isArray(data?.countries) ? data.countries : [];
+      fmfAssociationNamesById = new Map(
+        (Array.isArray(associationsList) ? associationsList : [])
+          .map((row) => [fmfNormalizeKey(row?.id || ""), String(row?.name || "").trim()])
+          .filter(([id, name]) => id && name)
+      );
+
+      fmfCountryOptions = countries
+        .map((country) => {
+          const key = fmfNormalizeKey(country.iso || country.team);
+          const titleFromMap = fmfAssociationNamesById.get(key);
+          return {
+            key,
+            flag: country.flag || "",
+            title: titleFromMap || country.team || country.iso || key
+          };
+        })
+        .filter((country) => country.key && country.flag);
+
+      fmfYearOptions = years;
+      fmfDraftState = fmfReadStateFromUrl();
+      fmfRenderCountryOptions();
+      fmfRenderYearOptions();
+      fmfUpdateCountryToggle();
+      fmfUpdateYearToggle();
+      if (fmfDraftState.player) {
+        fmfMountSearchUi();
+      }
+    } catch (error) {
+      console.error("Failed to initialize friendly match filters:", error);
+    }
+  }
+
+  fmfCountryToggle.addEventListener("click", () => fmfToggleCountryRow());
+  fmfCountryClear.addEventListener("click", (event) => {
+    event.stopPropagation();
+    fmfDraftState.association = "";
+    fmfUpdateCountryToggle();
+  });
+
+  fmfYearToggle.addEventListener("click", () => fmfToggleYearRow());
+  fmfYearClear.addEventListener("click", (event) => {
+    event.stopPropagation();
+    fmfDraftState.year = "";
+    fmfUpdateYearToggle();
+  });
+
+  fmfSearchBtn.addEventListener("click", () => {
+    fmfMountSearchUi();
+  });
+
+  fmfApplyBtn.addEventListener("click", () => {
+    fmfReplaceUrlFromState(fmfDraftState);
+  });
+
+  fmfClearBtn.addEventListener("click", () => {
+    fmfDraftState = { association: "", year: "", player: "" };
+    fmfUpdateCountryToggle();
+    fmfUpdateYearToggle();
+    if (fmfSearchWrap) fmfRenderSearchSelected();
+    fmfReplaceUrlFromState(fmfDraftState);
+  });
+
+  window.addEventListener("popstate", () => {
+    fmfSyncDraftFromUrl();
+  });
+
+  const fmfInit = () => fmfInitFilters();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", fmfInit);
+  } else {
+    fmfInit();
+  }
+</script>

@@ -70,9 +70,9 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 8px;
+  padding: 6px 8px;
   background: #f7f8fa;
-  border-bottom: 1px solid #d9dde3;
+  border-bottom: 1px solid #ccc;
   border-radius: 4px 4px 0 0;
   flex-wrap: wrap;
 }
@@ -320,6 +320,10 @@ code {
     padding: 4px 8px;
     box-sizing: border-box;
     position: relative; /* allows top-right badge */
+  }
+
+  .match-wrapper--first .match-row {
+    border-top: none;
   }
 
   .match-time {
@@ -978,21 +982,45 @@ code {
   margin-top: 12px;
   }
 
-  /* Loading indicator */
-  .loading-indicator {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+  .matches-shell {
+    position: relative;
+    min-height: 72px;
   }
-  .loading-indicator img { height: 32px; width: 32px; }
+
+  /* Loading indicator overlay */
+  .loading-indicator {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 16px 0;
+    background: rgba(255, 255, 255, 0.6);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.18s ease, visibility 0.18s ease;
+    z-index: 15;
+  }
+
+  .loading-indicator.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .loading-indicator img {
+    height: 32px;
+    width: 32px;
+  }
 
 </style>
-<div id="matches-loading" class="loading-indicator">
-  <img src="https://carcassonne.gg/gallery/loading.gif" alt="Loading...">
-  
+<div class="matches-shell">
+  <div id="matches-loading" class="loading-indicator">
+    <img src="https://carcassonne.gg/gallery/loading.gif" alt="Loading...">
+  </div>
+  <div id="matches-container"></div>
 </div>
-<div id="matches-container"></div>
 
 <script>
 const TOURNAMENT_ID = "Friendly-Matches";
@@ -1026,6 +1054,15 @@ function parseUtc(value) {
   return Number.isFinite(ts) ? ts : 0;
 }
 
+function readFriendlyMatchesFiltersFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    association: String(params.get("association") || "").trim().toUpperCase(),
+    year: String(params.get("year") || "").trim(),
+    player: String(params.get("player") || "").trim()
+  };
+}
+
 function getTodayBoundsLocal() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -1034,10 +1071,14 @@ function getTodayBoundsLocal() {
 }
 
 function buildMatchesUrl() {
+  const filters = readFriendlyMatchesFiltersFromUrl();
   const url = new URL(MATCHES_URL);
   url.searchParams.set("results_page_size", String(resultsPaginationState.pageSize));
   url.searchParams.set("results_page", String(resultsPaginationState.currentPage));
   url.searchParams.set("results_before", new Date(getTodayBoundsLocal().start).toISOString());
+  if (filters.association) url.searchParams.set("association", filters.association);
+  if (filters.year) url.searchParams.set("year", filters.year);
+  if (filters.player) url.searchParams.set("player", filters.player);
   return url.toString();
 }
 
@@ -1050,7 +1091,7 @@ function getMatchSectionKey(match) {
   return "upcoming";
 }
 
-function formatMatchTime(isoValue, { isToday = false } = {}) {
+function formatMatchTime(isoValue, { isToday = false, showYear = true, showTime = true } = {}) {
   const ts = parseUtc(isoValue);
   if (!ts) return "--:--";
   const date = new Date(ts);
@@ -1059,7 +1100,12 @@ function formatMatchTime(isoValue, { isToday = false } = {}) {
   const mon = MONTHS_3[date.getMonth()];
   const yyyy = String(date.getFullYear());
   const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-  return isToday ? time : `${dd} ${mon}\n${yyyy}\n${time}`;
+  if (isToday) return time;
+
+  const parts = [`${dd} ${mon}`];
+  if (showYear) parts.push(yyyy);
+  if (showTime) parts.push(time);
+  return parts.join("\n");
 }
 
 function createRatingElement(rating) {
@@ -1370,7 +1416,7 @@ function bindLineupToggle(matchId, lineupPanel, chevronIcon, toggleBtn) {
 }
 
 function createMatchElement(match, lineups, options = {}) {
-  const { isToday = false, showRating = false } = options;
+  const { isToday = false, showRating = false, showYear = true, showTime = true, showExpandedTime = false } = options;
   const wrapper = document.createElement("div");
   wrapper.className = "match-wrapper";
 
@@ -1386,7 +1432,14 @@ function createMatchElement(match, lineups, options = {}) {
   }
   const timeText = document.createElement("div");
   timeText.className = "match-time-text";
-  timeText.innerHTML = esc(formatMatchTime(match?.time_utc, { isToday })).replaceAll("\n", "<br>");
+  const renderTimeText = (expanded = false) => {
+    timeText.innerHTML = esc(formatMatchTime(match?.time_utc, {
+      isToday,
+      showYear,
+      showTime: expanded ? true : showTime
+    })).replaceAll("\n", "<br>");
+  };
+  renderTimeText(false);
   timeDiv.appendChild(timeText);
   row.appendChild(timeDiv);
 
@@ -1461,6 +1514,13 @@ function createMatchElement(match, lineups, options = {}) {
 
     lineupPanel = createLineupPanel(matchId, matchLineups, chevronIcon);
     bindLineupToggle(matchId, lineupPanel, chevronIcon, toggleBtn);
+    if (showExpandedTime) {
+      const syncExpandedTime = () => renderTimeText(lineupPanel.classList.contains("open"));
+      syncExpandedTime();
+      toggleBtn.addEventListener("click", () => {
+        requestAnimationFrame(syncExpandedTime);
+      });
+    }
     rightDiv.appendChild(toggleBtn);
   }
 
@@ -1502,9 +1562,11 @@ function renderSection(container, title, tournament, matches, lineupMap, options
   const card = document.createElement("div");
   card.className = "tournament-card";
 
-  matches.forEach((match) => {
+  matches.forEach((match, index) => {
     const matchId = String(match?.id || "").trim();
-    card.appendChild(createMatchElement(match, lineupMap.get(matchId) || [], options));
+    const matchEl = createMatchElement(match, lineupMap.get(matchId) || [], options);
+    if (index === 0) matchEl.classList.add("match-wrapper--first");
+    card.appendChild(matchEl);
   });
 
   container.appendChild(card);
@@ -1582,9 +1644,11 @@ function renderResultsSection(container, title, matches, lineupMap, options = {}
   function renderPage() {
     card.querySelectorAll(".match-wrapper").forEach((el) => el.remove());
 
-    matches.forEach((match) => {
+    matches.forEach((match, index) => {
       const matchId = String(match?.id || "").trim();
-      card.appendChild(createMatchElement(match, lineupMap.get(matchId) || [], options));
+      const matchEl = createMatchElement(match, lineupMap.get(matchId) || [], options);
+      if (index === 0) matchEl.classList.add("match-wrapper--first");
+      card.appendChild(matchEl);
     });
 
     pageInfo.textContent = `Page ${resultsPaginationState.currentPage} of ${resultsPaginationState.totalPages}`;
@@ -1696,9 +1760,9 @@ function renderAllSectionsFromData(data) {
   sections.upcoming.sort((a, b) => parseUtc(a?.time_utc) - parseUtc(b?.time_utc));
   sections.results.sort((a, b) => parseUtc(b?.time_utc) - parseUtc(a?.time_utc));
 
-  renderSection(container, "Today", tournament, sections.today, lineupMap, { isToday: true, showRating: true });
-  renderSection(container, "Upcoming", tournament, sections.upcoming, lineupMap, { isToday: false, showRating: true });
-  renderResultsSection(container, "Results", sections.results, lineupMap, { isToday: false, showRating: false });
+  renderSection(container, "Today", tournament, sections.today, lineupMap, { isToday: true, showRating: true, showYear: false, showTime: true });
+  renderSection(container, "Upcoming", tournament, sections.upcoming, lineupMap, { isToday: false, showRating: true, showYear: false, showTime: true });
+  renderResultsSection(container, "Results", sections.results, lineupMap, { isToday: false, showRating: false, showYear: true, showTime: false, showExpandedTime: true });
 
   if (!sections.today.length && !sections.upcoming.length && !sections.results.length) {
     container.appendChild(createEmptyCard("No friendly matches found."));
@@ -1708,7 +1772,7 @@ function renderAllSectionsFromData(data) {
 function setLoading(visible) {
   const el = document.getElementById("matches-loading");
   if (!el) return;
-  el.style.display = visible ? "flex" : "none";
+  el.classList.toggle("is-visible", Boolean(visible));
 }
 
 async function fetchAndRenderMatches() {
@@ -1737,4 +1801,12 @@ fetchAndRenderMatches();
 if (autoUpdate) {
   setInterval(fetchAndRenderMatches, 60000);
 }
+
+function resetPaginationAndReloadFriendlyMatches() {
+  resultsPaginationState.currentPage = 1;
+  fetchAndRenderMatches();
+}
+
+window.addEventListener("popstate", resetPaginationAndReloadFriendlyMatches);
+window.addEventListener("friendly-matches-filter-change", resetPaginationAndReloadFriendlyMatches);
 </script>
