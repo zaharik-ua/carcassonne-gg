@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .client import WtcocApiClient
-from .sqlite_repository import SqliteWtcocRepository, TeamMapping
+from .sqlite_repository import ProfileMapping, SqliteWtcocRepository, TeamMapping
 
 
 ZERO_DATE = "0000-00-00 00:00:00"
@@ -37,6 +37,43 @@ class _AssociationResolver:
         return self.by_code.get(normalized) or self.by_name.get(normalized)
 
 
+@dataclass(frozen=True)
+class _PlayerResolver:
+    by_nickname: dict[str, ProfileMapping]
+    by_name: dict[str, ProfileMapping]
+
+    @classmethod
+    def from_rows(cls, rows: list[ProfileMapping]) -> "_PlayerResolver":
+        nickname_groups: dict[str, list[ProfileMapping]] = {}
+        name_groups: dict[str, list[ProfileMapping]] = {}
+        for row in rows:
+            normalized_nickname = _normalize_token(row.bga_nickname or "")
+            normalized_name = _normalize_token(row.name or "")
+            if normalized_nickname:
+                nickname_groups.setdefault(normalized_nickname, []).append(row)
+            if normalized_name:
+                name_groups.setdefault(normalized_name, []).append(row)
+        return cls(
+            by_nickname={
+                key: values[0]
+                for key, values in nickname_groups.items()
+                if len(values) == 1 and str(values[0].id or "").strip()
+            },
+            by_name={
+                key: values[0]
+                for key, values in name_groups.items()
+                if len(values) == 1 and str(values[0].id or "").strip()
+            },
+        )
+
+    def resolve(self, raw_value: str) -> str | None:
+        normalized = _normalize_token(raw_value)
+        if not normalized:
+            return None
+        row = self.by_nickname.get(normalized) or self.by_name.get(normalized)
+        return str(row.id or "").strip() or None if row else None
+
+
 class WtcocSyncService:
     def __init__(self, *, repository: SqliteWtcocRepository, client: WtcocApiClient) -> None:
         self.repository = repository
@@ -58,6 +95,7 @@ class WtcocSyncService:
             responses.append(self.client.fetch_playoff())
 
         resolver = _AssociationResolver.from_rows(self.repository.load_team_mappings())
+        player_resolver = _PlayerResolver.from_rows(self.repository.load_profile_mappings())
 
         source_summaries: list[dict[str, Any]] = []
         matches_payload: list[dict[str, Any]] = []
@@ -128,6 +166,7 @@ class WtcocSyncService:
                         tournament_id=normalized_tournament_id,
                         duel=duel,
                         match_preview=match_preview,
+                        player_resolver=player_resolver,
                     )
                     duels_payload.append(
                         {
@@ -138,8 +177,8 @@ class WtcocSyncService:
                             "duel_format": "Bo3",
                             "time_utc": match_preview["time_utc"],
                             "custom_time": None,
-                            "player_1_id": duel_preview["player_1_wtcoc_id"],
-                            "player_2_id": duel_preview["player_2_wtcoc_id"],
+                            "player_1_id": duel_preview["player_1_id"],
+                            "player_2_id": duel_preview["player_2_id"],
                         }
                     )
 
@@ -194,14 +233,15 @@ class WtcocSyncService:
         tournament_id: str,
         duel: dict[str, Any],
         match_preview: dict[str, Any],
+        player_resolver: _PlayerResolver,
     ) -> dict[str, Any]:
         duel_number = _extract_duel_number(duel.get("name"))
         return {
             "match_id": match_preview["match_id"],
             "duel_number": duel_number,
             "duel_id": _build_duel_id(match_preview["match_id"], duel_number),
-            "player_1_wtcoc_id": _non_zero_string(duel.get("idLocalPlayer")),
-            "player_2_wtcoc_id": _non_zero_string(duel.get("idVisitorPlayer")),
+            "player_1_id": player_resolver.resolve(str(duel.get("nameLocalPlayer") or "").strip()),
+            "player_2_id": player_resolver.resolve(str(duel.get("nameVisitorPlayer") or "").strip()),
             "tournament_id": tournament_id,
         }
 
@@ -251,9 +291,3 @@ def _extract_duel_number(value: Any) -> int | None:
     digits = "".join(ch for ch in raw if ch.isdigit())
     return int(digits) if digits else None
 
-
-def _non_zero_string(value: Any) -> str | None:
-    raw = str(value or "").strip()
-    if not raw or raw == "0":
-        return None
-    return raw

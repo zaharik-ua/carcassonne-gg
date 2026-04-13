@@ -11,6 +11,13 @@ class TeamMapping:
     name: str
 
 
+@dataclass(frozen=True)
+class ProfileMapping:
+    id: str
+    bga_nickname: str | None
+    name: str | None
+
+
 class SqliteWtcocRepository:
     def __init__(self, db_path: str) -> None:
         self.db_path = str(Path(db_path).resolve())
@@ -31,6 +38,31 @@ class SqliteWtcocRepository:
             ).fetchall()
         return [
             TeamMapping(code=str(row["code"] or "").strip(), name=str(row["name"] or "").strip())
+            for row in rows
+        ]
+
+    def load_profile_mappings(self) -> list[ProfileMapping]:
+        with self._connect() as conn:
+            if "profiles" not in self._load_table_names(conn):
+                return []
+            rows = conn.execute(
+                """
+                SELECT
+                  trim(COALESCE(id, '')) AS id,
+                  trim(COALESCE(bga_nickname, '')) AS bga_nickname,
+                  trim(COALESCE(name, '')) AS name
+                FROM profiles
+                WHERE trim(COALESCE(id, '')) <> ''
+                  AND trim(COALESCE(deleted_at, '')) = ''
+                ORDER BY id COLLATE NOCASE ASC
+                """
+            ).fetchall()
+        return [
+            ProfileMapping(
+                id=str(row["id"] or "").strip(),
+                bga_nickname=str(row["bga_nickname"] or "").strip() or None,
+                name=str(row["name"] or "").strip() or None,
+            )
             for row in rows
         ]
 
