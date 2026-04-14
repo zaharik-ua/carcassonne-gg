@@ -3287,7 +3287,7 @@
 
     const tournamentId = String(match?.tournament_id || "").trim();
     const tournament = tournamentsById?.get(tournamentId) || null;
-    const tournamentLogo = String(tournament?.logo || "").trim();
+    const tournamentLogo = String(tournament?.logo || match?.tournament_logo || "").trim();
     if (tournamentLogo) {
       const logoWrap = document.createElement("div");
       logoWrap.className = "cp-match-time";

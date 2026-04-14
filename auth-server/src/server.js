@@ -65,6 +65,22 @@ const __dirname = path.dirname(__filename);
 const dbFullPath = path.resolve(__dirname, "..", DB_PATH);
 
 const db = new sqlite3.Database(dbFullPath);
+
+function logUpdaterOutput(context, output) {
+  const label = String(context || "").trim() || "runUpdater";
+  const text = String(output || "").trim();
+  if (!text) {
+    console.info(`[${label}] No updater output`);
+    return;
+  }
+
+  console.info(`[${label}] Updater output start`);
+  text.split(/\r?\n/).forEach((line) => {
+    console.info(`[${label}] ${line}`);
+  });
+  console.info(`[${label}] Updater output end`);
+}
+
 const DEFAULT_TEAM_TIMEZONES = {
   ARG: "America/Argentina/Buenos_Aires",
   AUS: "Australia/Sydney",
@@ -6174,9 +6190,15 @@ app.post("/duels/:id/refetch-results", (req, res) => {
                   maxBuffer: 1024 * 1024 * 10,
                 }
               );
-              return String(execResult.stdout || execResult.stderr || "").trim();
+              return [execResult.stdout, execResult.stderr]
+                .map((part) => String(part || "").trim())
+                .filter(Boolean)
+                .join("\n");
             } catch (error) {
-              return String(error?.stderr || error?.stdout || error?.message || "").trim();
+              return [error?.stdout, error?.stderr, error?.message]
+                .map((part) => String(part || "").trim())
+                .filter(Boolean)
+                .join("\n");
             }
           };
 
@@ -6192,7 +6214,8 @@ app.post("/duels/:id/refetch-results", (req, res) => {
             })
           );
 
-          await runUpdater(["--duel-id", duelId]);
+          const updaterOutput = await runUpdater(["--duel-id", duelId]);
+          logUpdaterOutput(`duel-refetch:${duelId}`, updaterOutput);
           let refreshedDuel = await loadRefreshedDuel();
 
           const duelErrorMessage = String(refreshedDuel?.results_last_error || "").trim();
@@ -8389,6 +8412,13 @@ app.post("/matches/:id/get-results", requireAdmin, async (req, res) => {
         timeout: 5 * 60 * 1000,
         maxBuffer: 1024 * 1024 * 10,
       }
+    );
+    logUpdaterOutput(
+      `match-results:${matchId}`,
+      [execResult.stdout, execResult.stderr]
+        .map((part) => String(part || "").trim())
+        .filter(Boolean)
+        .join("\n")
     );
 
     const refreshedMatch = await dbGetAsync(

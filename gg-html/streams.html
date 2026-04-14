@@ -740,6 +740,16 @@ code {
     padding: 2px 10px;
     font-size: calc(12px * var(--matches-scale));
   }
+  .lineup.lineup--db-main-page .lineup__row {
+    font-size: calc(13px * var(--matches-scale));
+  }
+  .lineup.lineup--db-main-page .lineup__row a {
+    font-size: calc(13px * var(--matches-scale));
+  }
+  .lineup.lineup--db-main-page .lineup__row-score {
+    font-size: calc(13px * var(--matches-scale));
+    font-weight: 700;
+  }
   .matches-size-medium .lineup__elo,
   .matches-size-large .lineup__elo {
     font-size: calc(9px * var(--matches-scale));
@@ -750,6 +760,15 @@ code {
     gap: 4px;
     margin-left: 6px;
   }
+  .lineup__games-row {
+    display: flex;
+    width: 100%;
+    padding: 0 10px 2px 10px;
+    box-sizing: border-box;
+  }
+  .lineup.lineup--db-main-page .lineup__games-row .lineup__games {
+    margin-left: 0;
+  }
   .lineup__game-link {
     text-decoration: none;
   }
@@ -757,27 +776,31 @@ code {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: calc(34px * var(--matches-scale));
-    padding: 0 6px;
-    border-radius: 999px;
-    line-height: calc(18px * var(--matches-scale));
-    font-size: calc(11px * var(--matches-scale));
-    background: #ececec;
-    color: #333;
+    min-width: calc(28px * var(--matches-scale));
+    padding: 0 4px;
+    border-radius: 2px;
+    line-height: calc(15px * var(--matches-scale));
+    font-size: calc(9px * var(--matches-scale));
+    font-weight: 600;
+    background: #d9d9d9;
+    color: #444;
   }
   .lineup__game-badge--p1 {
-    background: #d7ecff;
-    color: #0d4d7a;
+    background: #d5ead5;
+    color: #2b6f2b;
   }
   .lineup__game-badge--p2 {
-    background: #ffe1e1;
-    color: #7a1d1d;
+    background: #ead5d5;
+    color: #8a3434;
   }
   .lineup__game-badge--clock {
-    gap: 4px;
+    gap: 2px;
+    background: #f3e4c4;
+    color: #8c6418;
   }
   .lineup__game-clock {
-    font-size: calc(10px * var(--matches-scale));
+    font-size: calc(8px * var(--matches-scale));
+    line-height: 1;
   }
   
   @media (max-width: 600px) {
@@ -936,6 +959,9 @@ code {
     font-size: 14px;
     color: #555;
     font-weight: 600;
+  }
+  .matches-list {
+    width: 100%;
   }
   .matches-layout {
     display: flex;
@@ -1114,7 +1140,10 @@ const contentSettings = {
   path: true,
   roundName: true,
   tournament: true,
-  liveIcon: true
+  tournamentShortName: true,
+  liveIcon: true,
+  dbElo: false,
+  dbGames: false
 };
 const DEFAULT_SETTINGS = {
   size: "medium",
@@ -1127,7 +1156,10 @@ const DEFAULT_SETTINGS = {
     path: true,
     roundName: true,
     tournament: true,
-    liveIcon: true
+    tournamentShortName: true,
+    liveIcon: true,
+    dbElo: false,
+    dbGames: false
   }
 };
 let selectedMatchIdsFromUrl = null;
@@ -1316,7 +1348,10 @@ function updateUrlFromSettings() {
   setBooleanParam("path", contentSettings.path, DEFAULT_SETTINGS.content.path);
   setBooleanParam("round", contentSettings.roundName, DEFAULT_SETTINGS.content.roundName);
   setBooleanParam("tournament", contentSettings.tournament, DEFAULT_SETTINGS.content.tournament);
+  setBooleanParam("tournamentShortName", contentSettings.tournamentShortName, DEFAULT_SETTINGS.content.tournamentShortName);
   setBooleanParam("liveIcon", contentSettings.liveIcon, DEFAULT_SETTINGS.content.liveIcon);
+  setBooleanParam("dbElo", contentSettings.dbElo, DEFAULT_SETTINGS.content.dbElo);
+  setBooleanParam("dbGames", contentSettings.dbGames, DEFAULT_SETTINGS.content.dbGames);
 
   const allMatchIds = getCurrentMatchIds();
   if (allMatchIds.length) {
@@ -1384,8 +1419,14 @@ function loadSettingsFromUrl() {
   if (roundParam !== null) contentSettings.roundName = roundParam;
   const tournamentParam = parseBooleanParam(params.get("tournament"));
   if (tournamentParam !== null) contentSettings.tournament = tournamentParam;
+  const tournamentShortNameParam = parseBooleanParam(params.get("tournamentShortName"));
+  if (tournamentShortNameParam !== null) contentSettings.tournamentShortName = tournamentShortNameParam;
   const liveIconParam = parseBooleanParam(params.get("liveIcon"));
   if (liveIconParam !== null) contentSettings.liveIcon = liveIconParam;
+  const dbEloParam = parseBooleanParam(params.get("dbElo"));
+  if (dbEloParam !== null) contentSettings.dbElo = dbEloParam;
+  const dbGamesParam = parseBooleanParam(params.get("dbGames"));
+  if (dbGamesParam !== null) contentSettings.dbGames = dbGamesParam;
 
   const selectedParam = params.get("selected");
   if (selectedParam) {
@@ -1447,6 +1488,7 @@ function applyWidthSetting() {
   const main = document.querySelector(".matches-main");
   if (!container) return;
   const value = widthSetting === "100" ? "100%" : `${widthSetting}px`;
+  container.style.width = value;
   container.style.maxWidth = value;
   container.classList.toggle("matches-width-300", widthSetting === "300");
   container.classList.toggle("matches-width-400", widthSetting === "400");
@@ -1456,6 +1498,8 @@ function applyWidthSetting() {
     layout.classList.toggle("matches-layout--stacked", widthSetting === "100");
   }
   if (main) {
+    main.style.width = value;
+    main.style.minWidth = widthSetting === "100" ? "320px" : value;
     main.classList.toggle("matches-main--fullwidth", widthSetting === "100");
   }
   updateLiveIcons();
@@ -1749,7 +1793,9 @@ function createMatchElement(match, options = {}) {
   const matchLineups = Array.isArray(match?.lineupsData) ? match.lineupsData.filter(Boolean) : [];
   let lineupDiv = null;
   if (matchId && matchLineups.length > 0) {
-    lineupDiv = createLineupPanel(matchId, matchLineups, match.status, match.elo_updated_at);
+    lineupDiv = createLineupPanel(matchId, matchLineups, match.status, match.elo_updated_at, {
+      isDbMainPageMatch: match.isDbMainPageMatch === true
+    });
   } else if (match.lineups) {
     lineupDiv = document.createElement("div");
     lineupDiv.className = "lineup";
@@ -2140,6 +2186,9 @@ function createDuelElementCompact(match) {
 function createTournamentHeader(tournament) {
   const header = document.createElement("div");
   header.className = "tournament-header";
+  const displayName = contentSettings.tournamentShortName
+    ? String(tournament.shortTitle || tournament.name || "").trim()
+    : String(tournament.name || tournament.shortTitle || "").trim();
 
   const linkValue = typeof tournament.link === "string" ? tournament.link.trim() : "";
   const hasLink = !!linkValue;
@@ -2154,10 +2203,10 @@ function createTournamentHeader(tournament) {
   const icon = document.createElement("img");
   icon.className = "tournament-icon";
   icon.src = tournament.logo;
-  icon.alt = tournament.name;
+  icon.alt = displayName;
 
   const span = document.createElement("span");
-  span.textContent = tournament.name;
+  span.textContent = displayName;
 
   titleEl.appendChild(icon);
   titleEl.appendChild(span);
@@ -2504,12 +2553,18 @@ function createGameBadgesWrap(duel) {
   return wrap.childNodes.length ? wrap : null;
 }
 
-function createLineupPanel(matchId, lineups, matchStatus = "", eloUpdatedAt = "") {
+function createLineupPanel(matchId, lineups, matchStatus = "", eloUpdatedAt = "", options = {}) {
   const lineupPanel = document.createElement("div");
   lineupPanel.className = "lineup";
 
   const lineupBody = document.createElement("div");
   lineupBody.className = "lineup__overview";
+  const isDbMainPageMatch = options?.isDbMainPageMatch === true;
+  const allowDbElo = !isDbMainPageMatch || !!contentSettings.dbElo;
+  const allowDbGames = !isDbMainPageMatch || !!contentSettings.dbGames;
+  if (isDbMainPageMatch) {
+    lineupPanel.classList.add("lineup--db-main-page");
+  }
 
   sortLineups(lineups).forEach((duel) => {
     const row = document.createElement("div");
@@ -2518,8 +2573,8 @@ function createLineupPanel(matchId, lineups, matchStatus = "", eloUpdatedAt = ""
 
     const p1Id = String(duel?.player_1_id || "").trim();
     const p2Id = String(duel?.player_2_id || "").trim();
-    const p1Elo = shouldShowElo ? createLineupEloBadge(getLineupPlayerElo(duel, 1), 1) : null;
-    const p2Elo = shouldShowElo ? createLineupEloBadge(getLineupPlayerElo(duel, 2), 2) : null;
+    const p1Elo = shouldShowElo && allowDbElo ? createLineupEloBadge(getLineupPlayerElo(duel, 1), 1) : null;
+    const p2Elo = shouldShowElo && allowDbElo ? createLineupEloBadge(getLineupPlayerElo(duel, 2), 2) : null;
 
     const p1Link = document.createElement("a");
     p1Link.href = p1Id ? `https://boardgamearena.com/player?id=${encodeURIComponent(p1Id)}` : "#";
@@ -2551,7 +2606,7 @@ function createLineupPanel(matchId, lineups, matchStatus = "", eloUpdatedAt = ""
     const scoreEl = document.createElement("span");
     scoreEl.className = "lineup__row-score";
     scoreEl.textContent = ` ${duel.dw1} - ${duel.dw2} `;
-    const gamesWrap = createGameBadgesWrap(duel);
+    const gamesWrap = allowDbGames ? createGameBadgesWrap(duel) : null;
 
     if (p1Elo) {
       row.appendChild(p1Elo);
@@ -2567,10 +2622,16 @@ function createLineupPanel(matchId, lineups, matchStatus = "", eloUpdatedAt = ""
     if (p2Elo) {
       row.appendChild(p2Elo);
     }
-    if (gamesWrap) {
+    if (gamesWrap && !isDbMainPageMatch) {
       row.appendChild(gamesWrap);
     }
     lineupBody.appendChild(row);
+    if (gamesWrap && isDbMainPageMatch) {
+      const gamesRow = document.createElement("div");
+      gamesRow.className = "lineup__games-row";
+      gamesRow.appendChild(gamesWrap);
+      lineupBody.appendChild(gamesRow);
+    }
   });
 
   lineupPanel.appendChild(lineupBody);
@@ -2638,7 +2699,10 @@ function renderSettingsSection(container) {
     { key: "path", label: "Path" },
     { key: "roundName", label: "Round" },
     { key: "tournament", label: "Tournament" },
-    { key: "liveIcon", label: "Live icon" }
+    { key: "tournamentShortName", label: "Short name" },
+    { key: "liveIcon", label: "Live icon" },
+    { key: "dbElo", label: "Player Elo" },
+    { key: "dbGames", label: "Games score" }
   ].forEach(({ key, label }) => {
     const optionLabel = document.createElement("label");
     optionLabel.className = "content-toggle";
@@ -2646,7 +2710,11 @@ function renderSettingsSection(container) {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = !!contentSettings[key];
+    if (key === "tournamentShortName") {
+      checkbox.disabled = !contentSettings.tournament;
+    }
     checkbox.addEventListener("change", () => {
+      if (key === "tournamentShortName" && !contentSettings.tournament) return;
       contentSettings[key] = checkbox.checked;
       if (lastData) {
         renderAllSectionsFromData(lastData);
@@ -2840,8 +2908,16 @@ function renderTodayAndTomorrow(container, { matchesToday = [], matchesScheduled
   const registerTournament = (source = {}) => {
     const nameValue = typeof source.name === "string" ? source.name.trim() : "";
     if (!nameValue || tournamentMap.has(nameValue)) return;
+    const shortTitleValue = typeof source.shortTitle === "string"
+      ? source.shortTitle.trim()
+      : typeof source.short_title === "string"
+        ? source.short_title.trim()
+        : typeof source.tournament_short_title === "string"
+          ? source.tournament_short_title.trim()
+          : "";
     const normalized = {
       name: nameValue,
+      shortTitle: shortTitleValue || nameValue,
       logo: source.logo || source.tournament_logo || "",
       link: source.link || source.tournament_link || "",
       type: source.type || source.tournament_type || ""
@@ -2858,6 +2934,7 @@ function renderTodayAndTomorrow(container, { matchesToday = [], matchesScheduled
     const tournamentName = getMatchTournamentName(match);
     registerTournament({
       name: tournamentName,
+      shortTitle: match.tournament_short_title,
       logo: match.tournament_logo,
       link: match.tournament_link,
       type: match.tournament_type || match.type
@@ -3180,6 +3257,7 @@ function adaptDbMainPageMatchesData(data) {
     if (!tournamentsByKey[sectionKey].has(tournamentKey)) {
       tournamentsByKey[sectionKey].set(tournamentKey, {
         name: tournamentName,
+        shortTitle: String(tournamentMeta?.short_title || match?.tournament_short_title || tournamentName).trim(),
         logo: tournamentLogo,
         link: tournamentLink,
         type: tournamentType
@@ -3188,7 +3266,9 @@ function adaptDbMainPageMatchesData(data) {
 
     const normalizedMatch = {
       id: String(match?.id || "").trim(),
+      isDbMainPageMatch: true,
       tournament: tournamentName,
+      tournament_short_title: String(tournamentMeta?.short_title || match?.tournament_short_title || "").trim(),
       tournament_logo: tournamentLogo,
       tournament_link: tournamentLink,
       tournament_type: tournamentType,
