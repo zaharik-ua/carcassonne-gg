@@ -3417,9 +3417,12 @@
         list.appendChild(createStreamMatchRow(stream, teamsById, tournamentsById, {
           showEdit: true,
           streamId: String(stream?.id || ""),
-          scoreboardLink: String(stream?.match_id || "").trim()
-            ? `https://carcassonne.gg/stream/?selected=${encodeURIComponent(String(stream.match_id).trim())}`
-            : "",
+          scoreboardLink: (() => {
+            const matchId = String(stream?.match_id || "").trim();
+            if (!matchId) return "";
+            const scoreboardStyle = String(stream?.streamer_scoreboard_style || "").trim() || "Default";
+            return `https://carcassonne.gg/stream/?selected=${encodeURIComponent(matchId)}&style=${encodeURIComponent(scoreboardStyle)}`;
+          })(),
           streamLink: String(stream?.link || "").trim(),
           streamerAvatar: showStreamerAvatar === true ? streamerAvatar : "",
         }));

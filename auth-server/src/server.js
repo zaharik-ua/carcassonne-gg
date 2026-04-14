@@ -2967,6 +2967,7 @@ function getUserStreamerByProfileId(profileId, done) {
         s.id,
         s.name,
         s.avatar,
+        s.scoreboard_style,
         s.profile_id
       FROM streamers s
       WHERE trim(COALESCE(s.profile_id, '')) = trim(?)
@@ -2990,6 +2991,7 @@ function getStreamById(streamId, done) {
         s.updated_at,
         sr.name AS streamer_name,
         sr.avatar AS streamer_avatar,
+        sr.scoreboard_style AS streamer_scoreboard_style,
         sr.profile_id AS streamer_profile_id,
         m.id AS match_id,
         m.tournament_id,
@@ -3061,6 +3063,7 @@ function loadStreamsByMatchIds(matchIds, done) {
         s.updated_at,
         sr.name AS streamer_name,
         sr.avatar AS streamer_avatar,
+        sr.scoreboard_style AS streamer_scoreboard_style,
         sr.profile_id AS streamer_profile_id
       FROM streams s
       INNER JOIN streamers sr
@@ -4680,6 +4683,7 @@ app.get("/streams", (req, res, next) => {
           s.updated_at,
           sr.name AS streamer_name,
           sr.avatar AS streamer_avatar,
+          sr.scoreboard_style AS streamer_scoreboard_style,
           sr.profile_id AS streamer_profile_id,
           m.id AS match_id,
           m.tournament_id,
@@ -4793,6 +4797,7 @@ app.post("/streams", (req, res, next) => {
                           s.updated_at,
                           sr.name AS streamer_name,
                           sr.avatar AS streamer_avatar,
+                          sr.scoreboard_style AS streamer_scoreboard_style,
                           sr.profile_id AS streamer_profile_id,
                           m.id AS match_id,
                           m.tournament_id,
