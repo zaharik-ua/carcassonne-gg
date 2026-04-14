@@ -555,6 +555,7 @@
   const MATCHES_URL = `${AUTH_BASE}/matches`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const DUEL_FORMATS_URL = `${AUTH_BASE}/duel-formats`;
+  const STREAMER_SCOREBOARD_STYLE_OPTIONS = ["Default", "Nallerheim"];
 
   const SECTION_CONFIG = {
     associations: {
@@ -2210,6 +2211,12 @@
     const idField = createTextRow("id", item?.id || "", { readOnly: true });
     const nameField = createTextRow("name", item?.name || "");
     const avatarField = createTextRow("avatar", item?.avatar || "");
+    const scoreboardStyleField = createSelectRow(
+      "scoreboard style",
+      String(item?.scoreboard_style || "Default").trim() || "Default",
+      STREAMER_SCOREBOARD_STYLE_OPTIONS,
+      false
+    );
     const profileOptions = [{ value: "", label: "Select profile..." }].concat(
       state.profilesPublic
         .slice()
@@ -2238,6 +2245,7 @@
     if (mode === "edit") form.appendChild(idField.row);
     form.appendChild(nameField.row);
     form.appendChild(avatarField.row);
+    form.appendChild(scoreboardStyleField.row);
     form.appendChild(profileField.row);
 
     const actions = document.createElement("div");
@@ -2272,6 +2280,7 @@
         id: Number.parseInt(String(idField.input.value || "").trim(), 10),
         name: String(nameField.input.value || "").trim(),
         avatar: String(avatarField.input.value || "").trim(),
+        scoreboard_style: String(scoreboardStyleField.select.value || "Default").trim() || "Default",
         profile_id: String(profileField.select.value || "").trim(),
       };
 
@@ -2776,7 +2785,7 @@
         imageAlt: item.name,
         imageRound: false,
         title: item.name || `Streamer #${item.id}`,
-        subtitle: "",
+        subtitle: String(item?.scoreboard_style || "Default").trim() || "Default",
         buttonLabel: "Edit",
         onClick: (row) => openStreamerForm("edit", item, row),
       }));

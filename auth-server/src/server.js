@@ -2270,6 +2270,7 @@ function ensureStreamersSchema() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       avatar TEXT,
+      scoreboard_style TEXT NOT NULL DEFAULT 'Default',
       profile_id TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -2287,6 +2288,7 @@ function ensureStreamersSchema() {
       if (!Array.isArray(columns) || columns.length === 0) return;
       addColumnIfMissing(columns, "streamers", "name", "TEXT");
       addColumnIfMissing(columns, "streamers", "avatar", "TEXT");
+      addColumnIfMissing(columns, "streamers", "scoreboard_style", "TEXT NOT NULL DEFAULT 'Default'");
       addColumnIfMissing(columns, "streamers", "profile_id", "TEXT");
       addColumnIfMissing(columns, "streamers", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "streamers", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
@@ -4412,6 +4414,7 @@ app.get("/streamers", (req, res, next) => {
         s.id,
         s.name,
         s.avatar,
+        s.scoreboard_style,
         s.profile_id,
         p.bga_nickname AS profile_bga_nickname,
         p.name AS profile_name
@@ -4431,10 +4434,15 @@ app.get("/streamers", (req, res, next) => {
 app.post("/streamers", requireAdmin, (req, res) => {
   const name = String(req.body?.name || "").trim();
   const avatar = String(req.body?.avatar || "").trim() || null;
+  const scoreboardStyle = String(req.body?.scoreboard_style || "Default").trim() || "Default";
   const profileId = String(req.body?.profile_id || "").trim();
+  const allowedScoreboardStyles = new Set(["Default", "Nallerheim"]);
 
   if (!name) {
     return res.status(400).json({ ok: false, message: "name is required" });
+  }
+  if (!allowedScoreboardStyles.has(scoreboardStyle)) {
+    return res.status(400).json({ ok: false, message: "scoreboard_style must be Default or Nallerheim" });
   }
   if (!profileId) {
     return res.status(400).json({ ok: false, message: "profile_id is required" });
@@ -4469,10 +4477,10 @@ app.post("/streamers", requireAdmin, (req, res) => {
 
           return db.run(
             `
-              INSERT INTO streamers (name, avatar, profile_id, created_at, updated_at)
-              VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              INSERT INTO streamers (name, avatar, scoreboard_style, profile_id, created_at, updated_at)
+              VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `,
-            [name, avatar, profileId],
+            [name, avatar, scoreboardStyle, profileId],
             function onInsert(insertErr) {
               if (insertErr) {
                 if (String(insertErr.message || "").includes("UNIQUE")) {
@@ -4487,6 +4495,7 @@ app.post("/streamers", requireAdmin, (req, res) => {
                     s.id,
                     s.name,
                     s.avatar,
+                    s.scoreboard_style,
                     s.profile_id,
                     p.bga_nickname AS profile_bga_nickname,
                     p.name AS profile_name
@@ -4518,7 +4527,9 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
   const payloadId = normalizePositiveInteger(req.body?.id);
   const name = String(req.body?.name || "").trim();
   const avatar = String(req.body?.avatar || "").trim() || null;
+  const scoreboardStyle = String(req.body?.scoreboard_style || "Default").trim() || "Default";
   const profileId = String(req.body?.profile_id || "").trim();
+  const allowedScoreboardStyles = new Set(["Default", "Nallerheim"]);
 
   if (!streamerId) {
     return res.status(400).json({ ok: false, message: "Invalid streamer id" });
@@ -4528,6 +4539,9 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
   }
   if (!name) {
     return res.status(400).json({ ok: false, message: "name is required" });
+  }
+  if (!allowedScoreboardStyles.has(scoreboardStyle)) {
+    return res.status(400).json({ ok: false, message: "scoreboard_style must be Default or Nallerheim" });
   }
   if (!profileId) {
     return res.status(400).json({ ok: false, message: "profile_id is required" });
@@ -4577,11 +4591,12 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
                   SET
                     name = ?,
                     avatar = ?,
+                    scoreboard_style = ?,
                     profile_id = ?,
                     updated_at = CURRENT_TIMESTAMP
                   WHERE id = ?
                 `,
-                [name, avatar, profileId, streamerId],
+                [name, avatar, scoreboardStyle, profileId, streamerId],
                 function onUpdate(err) {
                   if (err) {
                     if (String(err.message || "").includes("UNIQUE")) {
@@ -4599,6 +4614,7 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
                         s.id,
                         s.name,
                         s.avatar,
+                        s.scoreboard_style,
                         s.profile_id,
                         p.bga_nickname AS profile_bga_nickname,
                         p.name AS profile_name
