@@ -6976,6 +6976,9 @@
             : getDuelPlayerName(entry?.player1Id);
           return `Could not find completed games for ${replacementPlayerName} and ${opponentPlayerName}. Please check the players or enter the result manually.`;
         };
+        const buildReplaceGenericErrorMessage = () => {
+          return "Something went wrong. Please refresh the page and try again.";
+        };
 
         const actions = document.createElement("div");
         actions.className = "cp-duel-edit-actions";
@@ -7447,7 +7450,9 @@
               const isDuelNotFound = String(refetchResult?.message || "").trim() === "Duel not found on BGA.";
               activeDuelEditorState.error = isReplaceAction && isDuelNotFound
                 ? buildReplaceNotFoundMessage()
-                : (refetchResult?.message || "Failed to fetch duel results from BGA.");
+                : isReplaceAction
+                  ? buildReplaceGenericErrorMessage()
+                  : (refetchResult?.message || "Failed to fetch duel results from BGA.");
               renderLineupsRows();
               return;
             }
@@ -7465,7 +7470,7 @@
             activeDuelEditorState.applyingFix = false;
             activeDuelEditorState.refetchingResults = false;
             activeDuelEditorState.error = (selectedAction === "replace_player1" || selectedAction === "replace_player2")
-              ? buildReplaceNotFoundMessage()
+              ? buildReplaceGenericErrorMessage()
               : "Failed to fix duel.";
             renderLineupsRows();
           }
