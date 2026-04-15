@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .config import EMPTY_TABLES_ERROR_LIMIT
 from .models import MatchUpdateRequest, MatchUpdateResult
 from .repository import MatchRepository, TARGET_EMPTY_FINISHED, TARGET_FINISHED_PENDING, TARGET_ONGOING
+
+EMPTY_TABLES_COUNT_PREFIX = "empty_tables_count="
+EMPTY_TABLES_ERROR_PREFIX = "BGA returned empty tables"
+MASS_EMPTY_TABLES_BATCH_MESSAGE = "Mass empty tables anomaly from BGA; skipped entire batch for retry"
 
 
 class SqliteMatchRepository(MatchRepository):
@@ -266,20 +272,65 @@ class SqliteMatchRepository(MatchRepository):
             conn.commit()
 
     def save_match_error(self, match: MatchUpdateRequest, message: str) -> None:
+        if message == MASS_EMPTY_TABLES_BATCH_MESSAGE:
+            print(f"⚠️ Match update skipped for duel {match.match_id}: {message}", flush=True)
+            return
+
         with self._connect() as conn:
+            current = conn.execute(
+                """
+                SELECT
+                  COALESCE(status, 'Planned') AS status,
+                  results_last_error
+                FROM duels
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (match.match_id,),
+            ).fetchone()
+            if current is None:
+                raise RuntimeError(f"Duel not found: {match.match_id}")
+
+            next_status = str(current["status"] or "Planned")
+            next_error = message
+
+            if self._is_empty_tables_message(message):
+                empty_count = self._extract_empty_tables_count(current["results_last_error"]) + 1
+                next_error = f"{EMPTY_TABLES_COUNT_PREFIX}{empty_count}; last_error={message}"
+                if empty_count >= EMPTY_TABLES_ERROR_LIMIT:
+                    next_status = "Error"
+            elif message == MASS_EMPTY_TABLES_BATCH_MESSAGE:
+                next_error = message
+
             conn.execute(
                 """
                 UPDATE duels
                 SET
+                  status = ?,
                   results_last_error = ?,
                   results_checked_at = CURRENT_TIMESTAMP,
                   updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
-                (message, match.match_id),
+                (next_status, next_error, match.match_id),
             )
             conn.commit()
         print(f"⚠️ Match update failed for duel {match.match_id}: {message}", flush=True)
+
+    @staticmethod
+    def _is_empty_tables_message(message: str) -> bool:
+        return str(message or "").startswith(EMPTY_TABLES_ERROR_PREFIX)
+
+    @staticmethod
+    def _extract_empty_tables_count(value: object) -> int:
+        raw = str(value or "")
+        match = re.search(r"empty_tables_count=(\d+)", raw)
+        if not match:
+            return 0
+        try:
+            return int(match.group(1))
+        except Exception:
+            return 0
 
     def _row_to_request(self, row: sqlite3.Row, target: str) -> MatchUpdateRequest:
         start_dt = self._parse_iso_datetime(row["time_utc"])

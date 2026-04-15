@@ -1799,6 +1799,7 @@
   const DUEL_FIX_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/fix`;
   const DUEL_REFETCH_RESULTS_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/refetch-results`;
   const DEADLINE_HOURS_OPTIONS = [6, 12, 24, 48];
+  const ADMIN_MATCH_FILTER_ERROR = "__ERROR__";
   const CAPTAIN_VIEWS = {
     MATCHES: "matches",
     PLAYERS: "players",
@@ -2243,7 +2244,7 @@
 
     const label = document.createElement("div");
     label.className = "captain-filter-label";
-    label.textContent = "Association";
+    label.textContent = "Filter";
     filtersEl.appendChild(label);
 
     const root = document.createElement("div");
@@ -9072,6 +9073,7 @@
               )
         )
         : "";
+      const isAdminErrorMatchesFilter = friendlyMatchesAdminAssociation === ADMIN_MATCH_FILTER_ERROR;
 
       const filtered = matches
         .filter((match) => {
@@ -9090,6 +9092,9 @@
           }
           if (isAdminUser) {
             if (activeView === CAPTAIN_VIEWS.MATCHES && friendlyMatchesAdminAssociation) {
+              if (isAdminErrorMatchesFilter) {
+                return String(match?.status || "").trim().toLowerCase() === "error";
+              }
               const team1 = readMatchTeam1(match);
               const team2 = readMatchTeam2(match);
               return team1 === friendlyMatchesAdminAssociation || team2 === friendlyMatchesAdminAssociation;
@@ -9158,7 +9163,10 @@
         && currentTournamentAccess.accessType !== 2
       ) {
         const ownTeamMeta = teamsById.get(normalizeCode(captainAssociationCode)) || null;
-        const filterOptions = [{ value: "", label: "All associations", logo: "" }];
+        const filterOptions = [
+          { value: "", label: "All matches", logo: "" },
+          { value: ADMIN_MATCH_FILTER_ERROR, label: "Error matches", logo: "" },
+        ];
         if (captainAssociationCode) {
           filterOptions.push({
             value: captainAssociationCode,
@@ -9309,7 +9317,11 @@
         renderNoMatchesMessage(
           currentTournamentAccess.accessType === 2
             ? "No matches found for this tournament."
-            : `No matches found for association ${associationCode}.`
+            : isAdminErrorMatchesFilter
+              ? "No matches with status Error found for this tournament."
+              : friendlyMatchesAdminAssociation
+                ? `No matches found for association ${friendlyMatchesAdminAssociation}.`
+                : "No matches found for this tournament."
         );
         return;
       }
@@ -9466,7 +9478,13 @@
       }
 
       if (associationOverride) {
-        hintEl.textContent = `association override: ${associationOverride}`;
+        hintEl.textContent = activeView === CAPTAIN_VIEWS.MATCHES && isAdminUser
+          ? (
+              associationOverride === ADMIN_MATCH_FILTER_ERROR
+                ? "filter: Error matches"
+                : `filter: ${associationOverride}`
+            )
+          : `association override: ${associationOverride}`;
       } else {
         hintEl.textContent = "";
       }

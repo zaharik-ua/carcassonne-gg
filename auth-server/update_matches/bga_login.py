@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import re
 import time
+from dataclasses import dataclass
 
 try:
     from dotenv import load_dotenv
@@ -15,13 +17,64 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 load_dotenv()
 
-BGA_EMAIL = os.getenv("BGA_EMAIL")
-BGA_PASSWORD = os.getenv("BGA_PASSWORD")
+
+@dataclass(frozen=True)
+class BGACredential:
+    email: str
+    password: str
+    label: str
 
 
-def login_if_needed(driver) -> None:
-    if not BGA_EMAIL or not BGA_PASSWORD:
-        raise RuntimeError("Missing BGA_EMAIL or BGA_PASSWORD")
+def _mask_email(email: str) -> str:
+    local, sep, domain = email.partition("@")
+    if not sep:
+        return email[:2] + "***" if len(email) > 2 else "***"
+    visible_local = local[:2] if len(local) > 2 else local[:1]
+    return f"{visible_local}***@{domain}"
+
+
+def get_bga_credentials() -> list[BGACredential]:
+    credentials: list[BGACredential] = []
+
+    primary_email = (os.getenv("BGA_EMAIL") or "").strip()
+    primary_password = os.getenv("BGA_PASSWORD") or ""
+    if primary_email and primary_password:
+        credentials.append(
+            BGACredential(
+                email=primary_email,
+                password=primary_password,
+                label=f"primary:{_mask_email(primary_email)}",
+            )
+        )
+
+    indexed_emails: list[tuple[int, str]] = []
+    for key, value in os.environ.items():
+        match = re.fullmatch(r"BGA_EMAIL_(\d+)", key)
+        if not match:
+            continue
+        email = str(value or "").strip()
+        if not email:
+            continue
+        indexed_emails.append((int(match.group(1)), email))
+
+    for index, email in sorted(indexed_emails):
+        password = os.getenv(f"BGA_PASSWORD_{index}") or ""
+        if not password:
+            continue
+        credentials.append(
+            BGACredential(
+                email=email,
+                password=password,
+                label=f"reserve{index}:{_mask_email(email)}",
+            )
+        )
+
+    return credentials
+
+
+def login_if_needed(driver, credential: BGACredential) -> None:
+    if not credential.email or not credential.password:
+        raise RuntimeError("Missing BGA credential email/password")
 
     driver.get("https://boardgamearena.com/account")
 
@@ -46,7 +99,7 @@ def login_if_needed(driver) -> None:
     if not visible_inputs:
         raise RuntimeError("No active email input found on BGA login page")
 
-    visible_inputs[0].send_keys(BGA_EMAIL)
+    visible_inputs[0].send_keys(credential.email)
 
     wait.until(lambda d: any(
         el.is_displayed() and el.is_enabled()
@@ -64,7 +117,7 @@ def login_if_needed(driver) -> None:
     password_input = wait.until(
         EC.visibility_of_element_located((By.CSS_SELECTOR, "input[type='password']"))
     )
-    password_input.send_keys(BGA_PASSWORD)
+    password_input.send_keys(credential.password)
 
     wait.until(lambda d: any(
         el.is_displayed() and el.is_enabled()

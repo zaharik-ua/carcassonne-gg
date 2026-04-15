@@ -1,15 +1,30 @@
 from __future__ import annotations
-
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from .config import DEBUG_LOG, HTTP_WORKERS, REQUEST_TIMEOUT_SECONDS
-from .http_session import _throttle, get_http_session, request_json, snapshot_session
+from .config import (
+    DEBUG_LOG,
+    HTTP_WORKERS,
+    REQUEST_TIMEOUT_SECONDS,
+    empty_tables_batch_failure_threshold,
+)
+from .http_session import (
+    _throttle,
+    current_account_label,
+    get_http_session,
+    request_json,
+    rotate_http_session,
+    snapshot_session,
+)
 from .models import MatchTable, MatchUpdateRequest, MatchUpdateResult
 from .player_id import get_player_id
+
+EMPTY_TABLES_RETRY_MESSAGE = "BGA returned empty tables; duel left unchanged for retry"
+EMPTY_TABLES_ROTATION_MESSAGE = "BGA returned empty tables after account rotation; keeping duel pending for retry"
+EMPTY_TABLES_BATCH_MESSAGE = "Mass empty tables anomaly from BGA; skipped entire batch for retry"
 
 
 def get_games_batch(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
@@ -31,6 +46,32 @@ def _make_session(cookies: dict, headers: dict) -> requests.Session:
     session.headers.update(headers)
     session.cookies.update(cookies)
     return session
+
+
+def _unwrap_payload(payload: object) -> dict | None:
+    if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
+        payload = payload["data"]
+    return payload if isinstance(payload, dict) else None
+
+
+def _payload_tables(payload: object) -> list:
+    normalized = _unwrap_payload(payload)
+    if normalized is None:
+        return []
+    tables = normalized.get("tables", [])
+    return tables if isinstance(tables, list) else []
+
+
+def _is_empty_tables_payload(payload: object) -> bool:
+    normalized = _unwrap_payload(payload)
+    if normalized is None:
+        return False
+    tables = normalized.get("tables", [])
+    return isinstance(tables, list) and len(tables) == 0
+
+
+def _should_retry_empty_tables(item: MatchUpdateRequest) -> bool:
+    return item.target in {"finished_pending", "empty_finished", "manual", "manual_duel", "ongoing"}
 
 
 def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
@@ -57,37 +98,26 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
     cookies, headers, token = snapshot_session()
 
     def _fetch_item(item: MatchUpdateRequest) -> dict:
-        session = _make_session(cookies, headers)
-        finished_flag = 0
-        try:
-            finished_flag = int(item.extra.get("finished", 0))
-        except Exception:
+        def _run_request(session_cookies: dict, session_headers: dict, request_token: str) -> dict:
+            session = _make_session(session_cookies, session_headers)
             finished_flag = 0
-        params = {
-            "game_id": item.game_id,
-            "player": item.player0_id,
-            "opponent_id": item.player1_id,
-            "start_date": item.start_date,
-            "end_date": item.end_date,
-            "finished": finished_flag,
-            "updateStats": 1,
-        }
-        request_headers = {
-            "X-Requested-With": "XMLHttpRequest",
-            "X-Request-Token": token,
-        }
-        _throttle()
-        response = session.get(
-            "https://boardgamearena.com/gamestats/gamestats/getGames.html",
-            params=params,
-            headers=request_headers,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-        if response.status_code in (401, 403):
-            get_http_session(force_refresh=True)
-            new_cookies, new_headers, new_token = snapshot_session()
-            session = _make_session(new_cookies, new_headers)
-            request_headers["X-Request-Token"] = new_token
+            try:
+                finished_flag = int(item.extra.get("finished", 0))
+            except Exception:
+                finished_flag = 0
+            params = {
+                "game_id": item.game_id,
+                "player": item.player0_id,
+                "opponent_id": item.player1_id,
+                "start_date": item.start_date,
+                "end_date": item.end_date,
+                "finished": finished_flag,
+                "updateStats": 1,
+            }
+            request_headers = {
+                "X-Requested-With": "XMLHttpRequest",
+                "X-Request-Token": request_token,
+            }
             _throttle()
             response = session.get(
                 "https://boardgamearena.com/gamestats/gamestats/getGames.html",
@@ -95,8 +125,40 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
                 headers=request_headers,
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
-        response.raise_for_status()
-        return {"status": "success", "data": response.json()}
+            if response.status_code in (401, 403):
+                get_http_session(force_refresh=True)
+                new_cookies, new_headers, new_token = snapshot_session()
+                session = _make_session(new_cookies, new_headers)
+                request_headers["X-Request-Token"] = new_token
+                _throttle()
+                response = session.get(
+                    "https://boardgamearena.com/gamestats/gamestats/getGames.html",
+                    params=params,
+                    headers=request_headers,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+            response.raise_for_status()
+            return response.json()
+
+        payload = _run_request(cookies, headers, token)
+        if _should_retry_empty_tables(item) and _is_empty_tables_payload(payload):
+            active_account = current_account_label() or "unknown"
+            print(
+                f"⚠️ Empty tables from BGA for duel {item.match_id}; rotating account "
+                f"(target={item.target}, account={active_account})",
+                flush=True,
+            )
+            rotate_http_session(reason=f"empty_tables_duel_{item.match_id}")
+            retry_cookies, retry_headers, retry_token = snapshot_session()
+            retry_payload = _run_request(retry_cookies, retry_headers, retry_token)
+            if _is_empty_tables_payload(retry_payload):
+                return {
+                    "status": "error",
+                    "message": EMPTY_TABLES_ROTATION_MESSAGE,
+                }
+            payload = retry_payload
+
+        return {"status": "success", "data": payload}
 
     results: list[dict | None] = [None] * len(prepared)
     with ThreadPoolExecutor(max_workers=min(HTTP_WORKERS, max(1, len(prepared)))) as executor:
@@ -120,16 +182,22 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
             enriched_batch.append(MatchUpdateResult(status="error", message=message))
             continue
 
-        payload = result.get("data", {})
-        if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
-            payload = payload["data"]
+        payload = _unwrap_payload(result.get("data", {}))
         if not isinstance(payload, dict):
             enriched_batch.append(MatchUpdateResult(status="error", message="Unexpected payload format"))
             continue
 
-        tables = payload.get("tables", [])
+        tables = _payload_tables(payload)
         if tables is None:
             enriched_batch.append(MatchUpdateResult(status="error", message="Missing tables in payload"))
+            continue
+        if len(tables) == 0:
+            enriched_batch.append(
+                MatchUpdateResult(
+                    status="error",
+                    message=EMPTY_TABLES_RETRY_MESSAGE,
+                )
+            )
             continue
 
         enriched_tables: list[MatchTable] = []
@@ -232,5 +300,23 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
                 tables=enriched_tables,
             )
         )
+
+    empty_tables_failures = sum(
+        1
+        for result in enriched_batch
+        if result.status == "error"
+        and str(result.message or "") in {EMPTY_TABLES_RETRY_MESSAGE, EMPTY_TABLES_ROTATION_MESSAGE}
+    )
+    batch_failure_threshold = empty_tables_batch_failure_threshold(len(prepared))
+    if empty_tables_failures >= batch_failure_threshold:
+        print(
+            f"🚨 Mass empty tables anomaly detected: {empty_tables_failures}/{len(prepared)} "
+            f"(threshold={batch_failure_threshold}). Skipping all updates in this batch.",
+            flush=True,
+        )
+        return [
+            MatchUpdateResult(status="error", message=EMPTY_TABLES_BATCH_MESSAGE)
+            for _ in prepared
+        ]
 
     return enriched_batch

@@ -9,7 +9,7 @@ from typing import Optional
 import requests
 from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
 
-from .bga_login import login_if_needed
+from .bga_login import BGACredential, get_bga_credentials, login_if_needed
 from .config import BASE_URL, MIN_INTERVAL_MS, REQUEST_TIMEOUT_SECONDS, TOKEN_TTL_SECONDS, USER_AGENT
 from .selenium_driver import BusyError, DriverStartupError, driver_manager
 
@@ -18,6 +18,8 @@ _session: requests.Session | None = None
 _token: str | None = None
 _last_refresh: float = 0.0
 _last_request_ts: float = 0.0
+_credential_index: int = 0
+_credential_label: str | None = None
 
 
 def _extract_request_token(html: str) -> Optional[str]:
@@ -61,72 +63,125 @@ def _is_expired() -> bool:
     return (time.time() - _last_refresh) > TOKEN_TTL_SECONDS
 
 
-def refresh_http_session(reason: str = "startup") -> tuple[requests.Session, str]:
-    global _session, _token, _last_refresh
+def _credential_cycle(credentials: list[BGACredential], *, rotate_account: bool) -> list[tuple[int, BGACredential]]:
+    if not credentials:
+        return []
+
+    start_index = _credential_index % len(credentials)
+    if rotate_account and len(credentials) > 1:
+        start_index = (start_index + 1) % len(credentials)
+
+    ordered: list[tuple[int, BGACredential]] = []
+    for offset in range(len(credentials)):
+        index = (start_index + offset) % len(credentials)
+        ordered.append((index, credentials[index]))
+    return ordered
+
+
+def refresh_http_session(reason: str = "startup", *, rotate_account: bool = False) -> tuple[requests.Session, str]:
+    global _session, _token, _last_refresh, _credential_index, _credential_label
+
+    credentials = get_bga_credentials()
+    if not credentials:
+        raise RuntimeError("Missing BGA credentials. Configure BGA_EMAIL/BGA_PASSWORD and optional BGA_EMAIL_N/BGA_PASSWORD_N.")
 
     attempts = 3
-    recovered_after_driver_recreate = False
-    for attempt in range(1, attempts + 1):
-        try:
-            with driver_manager.use_driver(f"http_refresh_{int(time.time())}") as driver:
-                driver.get(f"{BASE_URL}/gamestats")
-                if "/account" in driver.current_url:
-                    login_if_needed(driver)
+    cycle = _credential_cycle(credentials, rotate_account=rotate_account)
+    last_error: Exception | None = None
+
+    for credential_index, credential in cycle:
+        recovered_after_driver_recreate = False
+        for attempt in range(1, attempts + 1):
+            try:
+                with driver_manager.use_driver(f"http_refresh_{int(time.time())}") as driver:
                     driver.get(f"{BASE_URL}/gamestats")
+                    if "/account" in driver.current_url:
+                        login_if_needed(driver, credential)
+                        driver.get(f"{BASE_URL}/gamestats")
 
-                token = None
-                try:
-                    token = driver.execute_script(
-                        "return window.bgaConfig && bgaConfig.requestToken ? bgaConfig.requestToken : null;"
-                    )
-                except Exception:
                     token = None
+                    try:
+                        token = driver.execute_script(
+                            "return window.bgaConfig && bgaConfig.requestToken ? bgaConfig.requestToken : null;"
+                        )
+                    except Exception:
+                        token = None
 
-                if not token:
-                    token = _extract_request_token(driver.page_source)
-                if not token:
-                    raise RuntimeError("Failed to extract bgaConfig.requestToken from /gamestats")
+                    if not token:
+                        token = _extract_request_token(driver.page_source)
+                    if not token:
+                        raise RuntimeError("Failed to extract bgaConfig.requestToken from /gamestats")
 
-                sess = _cookies_to_session(driver.get_cookies())
-                _session = sess
-                _token = token
-                _last_refresh = time.time()
-                if recovered_after_driver_recreate:
+                    sess = _cookies_to_session(driver.get_cookies())
+                    _session = sess
+                    _token = token
+                    _last_refresh = time.time()
+                    _credential_index = credential_index
+                    _credential_label = credential.label
+                    if recovered_after_driver_recreate:
+                        print(
+                            f"♻️ Selenium driver recreated successfully; BGA HTTP session recovered "
+                            f"({reason}, account={credential.label})",
+                            file=sys.stderr,
+                            flush=True,
+                        )
                     print(
-                        f"♻️ Selenium driver recreated successfully; BGA HTTP session recovered ({reason})",
+                        f"✅ BGA HTTP session refreshed ({reason}, account={credential.label})",
                         file=sys.stderr,
                         flush=True,
                     )
-                print(f"✅ BGA HTTP session refreshed ({reason})", file=sys.stderr, flush=True)
-                return sess, token
+                    return sess, token
 
-        except BusyError as exc:
-            if str(exc) == "warming_up" and attempt < attempts:
-                time.sleep(2)
-                continue
-            raise
-        except DriverStartupError:
-            raise
-        except (InvalidSessionIdException, WebDriverException) as exc:
-            try:
-                driver_manager.close_driver()
-            except Exception:
-                pass
-            _session = None
-            _token = None
-            _last_refresh = 0.0
-            if attempt < attempts:
-                recovered_after_driver_recreate = True
+            except BusyError as exc:
+                last_error = exc
+                if str(exc) == "warming_up" and attempt < attempts:
+                    time.sleep(2)
+                    continue
+                raise
+            except DriverStartupError as exc:
+                last_error = exc
+                raise
+            except (InvalidSessionIdException, WebDriverException) as exc:
+                last_error = exc
+                try:
+                    driver_manager.close_driver()
+                except Exception:
+                    pass
+                _session = None
+                _token = None
+                _last_refresh = 0.0
+                if attempt < attempts:
+                    recovered_after_driver_recreate = True
+                    print(
+                        f"⚠️ Selenium session refresh failed ({reason}, account={credential.label}), "
+                        f"recreating driver ({attempt}/{attempts}): {exc}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    time.sleep(min(5, attempt))
+                    continue
+                break
+            except Exception as exc:
+                last_error = exc
+                _session = None
+                _token = None
+                _last_refresh = 0.0
                 print(
-                    f"⚠️ Selenium session refresh failed ({reason}), recreating driver "
-                    f"({attempt}/{attempts}): {exc}",
+                    f"⚠️ BGA HTTP session refresh failed ({reason}, account={credential.label}): {exc}",
                     file=sys.stderr,
                     flush=True,
                 )
-                time.sleep(min(5, attempt))
-                continue
-            raise
+                break
 
+        if len(credentials) > 1:
+            print(
+                f"🔁 Switching BGA account after refresh failure ({reason}, account={credential.label})",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    if last_error is not None:
+        raise RuntimeError(f"Failed to refresh BGA HTTP session: {last_error}") from last_error
     raise RuntimeError("Failed to refresh BGA HTTP session")
 
 
@@ -138,9 +193,18 @@ def get_http_session(force_refresh: bool = False) -> tuple[requests.Session, str
         return _session, _token
 
 
+def rotate_http_session(reason: str) -> tuple[requests.Session, str]:
+    with _lock:
+        return refresh_http_session(reason=reason, rotate_account=True)
+
+
 def snapshot_session() -> tuple[dict, dict, str]:
     session, token = get_http_session()
     return session.cookies.copy(), dict(session.headers), token
+
+
+def current_account_label() -> str | None:
+    return _credential_label
 
 
 def request_json(
