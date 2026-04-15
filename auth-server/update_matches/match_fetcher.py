@@ -23,7 +23,6 @@ from .models import MatchTable, MatchUpdateRequest, MatchUpdateResult
 from .player_id import get_player_id
 
 EMPTY_TABLES_RETRY_MESSAGE = "BGA returned empty tables; duel left unchanged for retry"
-EMPTY_TABLES_ROTATION_MESSAGE = "BGA returned empty tables after account rotation; keeping duel pending for retry"
 EMPTY_TABLES_BATCH_MESSAGE = "Mass empty tables anomaly from BGA; skipped entire batch for retry"
 
 
@@ -74,6 +73,95 @@ def _should_retry_empty_tables(item: MatchUpdateRequest) -> bool:
     return item.target in {"finished_pending", "empty_finished", "manual", "manual_duel", "ongoing"}
 
 
+def _run_bga_request_for_item(
+    item: MatchUpdateRequest,
+    *,
+    session_cookies: dict,
+    session_headers: dict,
+    request_token: str,
+) -> dict:
+    session = _make_session(session_cookies, session_headers)
+    finished_flag = 0
+    try:
+        finished_flag = int(item.extra.get("finished", 0))
+    except Exception:
+        finished_flag = 0
+    params = {
+        "game_id": item.game_id,
+        "player": item.player0_id,
+        "opponent_id": item.player1_id,
+        "start_date": item.start_date,
+        "end_date": item.end_date,
+        "finished": finished_flag,
+        "updateStats": 1,
+    }
+    request_headers = {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Request-Token": request_token,
+    }
+    _throttle()
+    response = session.get(
+        "https://boardgamearena.com/gamestats/gamestats/getGames.html",
+        params=params,
+        headers=request_headers,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    if response.status_code in (401, 403):
+        get_http_session(force_refresh=True)
+        new_cookies, new_headers, new_token = snapshot_session()
+        session = _make_session(new_cookies, new_headers)
+        request_headers["X-Request-Token"] = new_token
+        _throttle()
+        response = session.get(
+            "https://boardgamearena.com/gamestats/gamestats/getGames.html",
+            params=params,
+            headers=request_headers,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    response.raise_for_status()
+    return response.json()
+
+
+def _fetch_raw_batch(
+    prepared: list[MatchUpdateRequest],
+    *,
+    session_cookies: dict,
+    session_headers: dict,
+    request_token: str,
+) -> list[dict | None]:
+    def _fetch_item(item: MatchUpdateRequest) -> dict:
+        payload = _run_bga_request_for_item(
+            item,
+            session_cookies=session_cookies,
+            session_headers=session_headers,
+            request_token=request_token,
+        )
+        return {"status": "success", "data": payload}
+
+    results: list[dict | None] = [None] * len(prepared)
+    with ThreadPoolExecutor(max_workers=min(HTTP_WORKERS, max(1, len(prepared)))) as executor:
+        future_to_index = {executor.submit(_fetch_item, item): i for i, item in enumerate(prepared)}
+        for future in as_completed(future_to_index):
+            index = future_to_index[future]
+            try:
+                results[index] = future.result()
+            except Exception as exc:
+                results[index] = {"status": "error", "message": str(exc)}
+    return results
+
+
+def _count_empty_tables_results(prepared: list[MatchUpdateRequest], results: list[dict | None]) -> int:
+    empty_tables = 0
+    for item, result in zip(prepared, results):
+        if not _should_retry_empty_tables(item):
+            continue
+        if result is None or result.get("status") != "success":
+            continue
+        if _is_empty_tables_payload(result.get("data")):
+            empty_tables += 1
+    return empty_tables
+
+
 def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
     prepared: list[MatchUpdateRequest] = []
     for item in batch:
@@ -96,79 +184,30 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
         print(f"🧪 Batch preview: {prepared[0]}", flush=True)
 
     cookies, headers, token = snapshot_session()
-
-    def _fetch_item(item: MatchUpdateRequest) -> dict:
-        def _run_request(session_cookies: dict, session_headers: dict, request_token: str) -> dict:
-            session = _make_session(session_cookies, session_headers)
-            finished_flag = 0
-            try:
-                finished_flag = int(item.extra.get("finished", 0))
-            except Exception:
-                finished_flag = 0
-            params = {
-                "game_id": item.game_id,
-                "player": item.player0_id,
-                "opponent_id": item.player1_id,
-                "start_date": item.start_date,
-                "end_date": item.end_date,
-                "finished": finished_flag,
-                "updateStats": 1,
-            }
-            request_headers = {
-                "X-Requested-With": "XMLHttpRequest",
-                "X-Request-Token": request_token,
-            }
-            _throttle()
-            response = session.get(
-                "https://boardgamearena.com/gamestats/gamestats/getGames.html",
-                params=params,
-                headers=request_headers,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
-            if response.status_code in (401, 403):
-                get_http_session(force_refresh=True)
-                new_cookies, new_headers, new_token = snapshot_session()
-                session = _make_session(new_cookies, new_headers)
-                request_headers["X-Request-Token"] = new_token
-                _throttle()
-                response = session.get(
-                    "https://boardgamearena.com/gamestats/gamestats/getGames.html",
-                    params=params,
-                    headers=request_headers,
-                    timeout=REQUEST_TIMEOUT_SECONDS,
-                )
-            response.raise_for_status()
-            return response.json()
-
-        payload = _run_request(cookies, headers, token)
-        if _should_retry_empty_tables(item) and _is_empty_tables_payload(payload):
-            active_account = current_account_label() or "unknown"
-            print(
-                f"⚠️ Empty tables from BGA for duel {item.match_id}; rotating account "
-                f"(target={item.target}, account={active_account})",
-                flush=True,
-            )
-            rotate_http_session(reason=f"empty_tables_duel_{item.match_id}")
-            retry_cookies, retry_headers, retry_token = snapshot_session()
-            retry_payload = _run_request(retry_cookies, retry_headers, retry_token)
-            if _is_empty_tables_payload(retry_payload):
-                return {
-                    "status": "error",
-                    "message": EMPTY_TABLES_ROTATION_MESSAGE,
-                }
-            payload = retry_payload
-
-        return {"status": "success", "data": payload}
-
-    results: list[dict | None] = [None] * len(prepared)
-    with ThreadPoolExecutor(max_workers=min(HTTP_WORKERS, max(1, len(prepared)))) as executor:
-        future_to_index = {executor.submit(_fetch_item, item): i for i, item in enumerate(prepared)}
-        for future in as_completed(future_to_index):
-            index = future_to_index[future]
-            try:
-                results[index] = future.result()
-            except Exception as exc:
-                results[index] = {"status": "error", "message": str(exc)}
+    results = _fetch_raw_batch(
+        prepared,
+        session_cookies=cookies,
+        session_headers=headers,
+        request_token=token,
+    )
+    batch_failure_threshold = empty_tables_batch_failure_threshold(len(prepared))
+    empty_tables_failures = _count_empty_tables_results(prepared, results)
+    if empty_tables_failures >= batch_failure_threshold:
+        active_account = current_account_label() or "unknown"
+        print(
+            f"⚠️ Mass empty tables from BGA for batch: {empty_tables_failures}/{len(prepared)} "
+            f"(threshold={batch_failure_threshold}, account={active_account}). Rotating account once and retrying batch.",
+            flush=True,
+        )
+        rotate_http_session(reason=f"empty_tables_batch_{len(prepared)}")
+        retry_cookies, retry_headers, retry_token = snapshot_session()
+        results = _fetch_raw_batch(
+            prepared,
+            session_cookies=retry_cookies,
+            session_headers=retry_headers,
+            request_token=retry_token,
+        )
+        empty_tables_failures = _count_empty_tables_results(prepared, results)
 
     enriched_batch: list[MatchUpdateResult] = []
 
@@ -304,10 +343,8 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
     empty_tables_failures = sum(
         1
         for result in enriched_batch
-        if result.status == "error"
-        and str(result.message or "") in {EMPTY_TABLES_RETRY_MESSAGE, EMPTY_TABLES_ROTATION_MESSAGE}
+        if result.status == "error" and str(result.message or "") == EMPTY_TABLES_RETRY_MESSAGE
     )
-    batch_failure_threshold = empty_tables_batch_failure_threshold(len(prepared))
     if empty_tables_failures >= batch_failure_threshold:
         print(
             f"🚨 Mass empty tables anomaly detected: {empty_tables_failures}/{len(prepared)} "
