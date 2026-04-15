@@ -2,6 +2,7 @@ from __future__ import annotations
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlencode
 
 import requests
 
@@ -24,6 +25,7 @@ from .player_id import get_player_id
 
 EMPTY_TABLES_RETRY_MESSAGE = "BGA returned empty tables; duel left unchanged for retry"
 EMPTY_TABLES_BATCH_MESSAGE = "Mass empty tables anomaly from BGA; skipped entire batch for retry"
+BGA_GET_GAMES_URL = "https://boardgamearena.com/gamestats/gamestats/getGames.html"
 
 
 def get_games_batch(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
@@ -73,20 +75,13 @@ def _should_retry_empty_tables(item: MatchUpdateRequest) -> bool:
     return item.target in {"finished_pending", "empty_finished", "manual", "manual_duel", "ongoing"}
 
 
-def _run_bga_request_for_item(
-    item: MatchUpdateRequest,
-    *,
-    session_cookies: dict,
-    session_headers: dict,
-    request_token: str,
-) -> dict:
-    session = _make_session(session_cookies, session_headers)
+def _build_request_params(item: MatchUpdateRequest) -> dict[str, int]:
     finished_flag = 0
     try:
         finished_flag = int(item.extra.get("finished", 0))
     except Exception:
         finished_flag = 0
-    params = {
+    return {
         "game_id": item.game_id,
         "player": item.player0_id,
         "opponent_id": item.player1_id,
@@ -95,13 +90,55 @@ def _run_bga_request_for_item(
         "finished": finished_flag,
         "updateStats": 1,
     }
+
+
+def _request_url(params: dict[str, int]) -> str:
+    return f"{BGA_GET_GAMES_URL}?{urlencode(params)}"
+
+
+def _log_request(item: MatchUpdateRequest, params: dict[str, int]) -> None:
+    account = current_account_label() or "unknown"
+    print(
+        f"🛰️ BGA request duel={item.match_id} target={item.target} account={account} url={_request_url(params)}",
+        flush=True,
+    )
+
+
+def _log_response(item: MatchUpdateRequest, params: dict[str, int], payload: object) -> None:
+    normalized = _unwrap_payload(payload)
+    if normalized is None:
+        print(
+            f"🧾 BGA response duel={item.match_id} target={item.target} invalid_payload=true url={_request_url(params)}",
+            flush=True,
+        )
+        return
+    tables = _payload_tables(normalized)
+    played = normalized.get("stats", {}).get("general", {}).get("played") if isinstance(normalized.get("stats"), dict) else None
+    sample_table_ids = ",".join(str(table.get("table_id")) for table in tables[:3] if table.get("table_id") is not None) or "-"
+    print(
+        f"🧾 BGA response duel={item.match_id} target={item.target} tables={len(tables)} played={played} "
+        f"sample_table_ids={sample_table_ids} url={_request_url(params)}",
+        flush=True,
+    )
+
+
+def _run_bga_request_for_item(
+    item: MatchUpdateRequest,
+    *,
+    session_cookies: dict,
+    session_headers: dict,
+    request_token: str,
+) -> dict:
+    session = _make_session(session_cookies, session_headers)
+    params = _build_request_params(item)
+    _log_request(item, params)
     request_headers = {
         "X-Requested-With": "XMLHttpRequest",
         "X-Request-Token": request_token,
     }
     _throttle()
     response = session.get(
-        "https://boardgamearena.com/gamestats/gamestats/getGames.html",
+        BGA_GET_GAMES_URL,
         params=params,
         headers=request_headers,
         timeout=REQUEST_TIMEOUT_SECONDS,
@@ -113,13 +150,15 @@ def _run_bga_request_for_item(
         request_headers["X-Request-Token"] = new_token
         _throttle()
         response = session.get(
-            "https://boardgamearena.com/gamestats/gamestats/getGames.html",
+            BGA_GET_GAMES_URL,
             params=params,
             headers=request_headers,
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
     response.raise_for_status()
-    return response.json()
+    payload = response.json()
+    _log_response(item, params, payload)
+    return payload
 
 
 def _fetch_raw_batch(
