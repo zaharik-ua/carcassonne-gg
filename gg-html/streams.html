@@ -1098,8 +1098,193 @@ code {
     height: 16px;
     cursor: pointer;
   }
-  .match-wrapper.match-selection-hidden {
+.match-wrapper.match-selection-hidden {
     display: none !important;
+  }
+
+  .matches-style-nallerheim .tournament-card {
+    background: transparent;
+    box-shadow: none;
+    margin-bottom: 18px;
+    overflow: visible;
+  }
+  .matches-style-nallerheim .tournament-header {
+    background: transparent;
+    padding: 0 4px 8px 4px;
+  }
+  .matches-style-nallerheim .tournament-header__title,
+  .matches-style-nallerheim .tournament-header a {
+    color: #3d1463;
+  }
+  .matches-style-nallerheim .match-wrapper--nallerheim {
+    margin-bottom: 10px;
+  }
+  .matches-style-nallerheim .match-selection-control {
+    margin-left: 0;
+  }
+  .nallerheim-team-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px 12px 16px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #8a10b2 0%, #70009f 100%);
+    color: #ffe38a;
+    box-shadow: 0 8px 20px rgba(92, 0, 132, 0.22);
+    overflow: hidden;
+  }
+  .nallerheim-team-card a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .nallerheim-team-card a:hover {
+    color: #fff1bc;
+  }
+  .nallerheim-team-card__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .nallerheim-team-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .nallerheim-team-card__time {
+    font-size: calc(12px * var(--matches-scale));
+    font-weight: 700;
+    line-height: 1;
+    color: #fff3bf;
+    white-space: nowrap;
+  }
+  .nallerheim-team-card__live {
+    width: calc(22px * var(--matches-scale));
+    height: auto;
+    filter: brightness(1.08);
+  }
+  .nallerheim-team-card__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 16px;
+  }
+  .nallerheim-team-card__team {
+    font-size: calc(24px * var(--matches-scale));
+    font-weight: 700;
+    line-height: 1.05;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.12);
+    min-width: 0;
+    justify-self: end;
+    text-align: right;
+  }
+  .nallerheim-team-card__team--right {
+    justify-self: start;
+    text-align: left;
+  }
+  .nallerheim-team-card__team-text {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .nallerheim-team-card__score {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: calc(28px * var(--matches-scale));
+    font-weight: 700;
+    line-height: 1;
+    color: #ffb336;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.18);
+    white-space: nowrap;
+  }
+  .nallerheim-team-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .nallerheim-team-card__body--html {
+    gap: 0;
+    font-size: calc(14px * var(--matches-scale));
+    line-height: 1.35;
+  }
+  .nallerheim-team-card__body--html .lineup__overview {
+    padding: 0;
+    font-size: inherit;
+    line-height: inherit;
+  }
+  .nallerheim-team-card__body--html a {
+    color: inherit;
+  }
+  .nallerheim-team-card__line {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 16px;
+  }
+  .nallerheim-team-card__player {
+    font-size: calc(16px * var(--matches-scale));
+    font-weight: 700;
+    line-height: 1.15;
+    min-width: 0;
+    justify-self: end;
+    text-align: right;
+  }
+  .nallerheim-team-card__player--right {
+    justify-self: start;
+    text-align: left;
+  }
+  .nallerheim-team-card__player-text {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .nallerheim-team-card__duel-score {
+    min-width: 60px;
+    text-align: center;
+    font-size: calc(18px * var(--matches-scale));
+    font-weight: 700;
+    color: #ffcf62;
+    white-space: nowrap;
+  }
+  .nallerheim-team-card__round {
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff1bc;
+    font-size: calc(11px * var(--matches-scale));
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .nallerheim-team-card__selection {
+    margin-left: auto;
+  }
+  @media (max-width: 600px) {
+    .nallerheim-team-card {
+      padding: 12px 12px 10px 12px;
+    }
+    .nallerheim-team-card__header {
+      column-gap: 12px;
+    }
+    .nallerheim-team-card__team {
+      font-size: calc(18px * var(--matches-scale));
+    }
+    .nallerheim-team-card__score {
+      font-size: calc(22px * var(--matches-scale));
+      gap: 4px;
+    }
+    .nallerheim-team-card__player {
+      font-size: calc(13px * var(--matches-scale));
+    }
+    .nallerheim-team-card__duel-score {
+      min-width: 50px;
+      font-size: calc(15px * var(--matches-scale));
+    }
   }
 
 </style>
@@ -1133,6 +1318,8 @@ let widthSetting = "400";
 let widthControls = null;
 let orientationSetting = "vertical";
 let orientationControls = null;
+let styleSetting = "default";
+let styleControls = null;
 const contentSettings = {
   rating: false,
   time: true,
@@ -1146,6 +1333,7 @@ const contentSettings = {
   dbGames: false
 };
 const DEFAULT_SETTINGS = {
+  style: "default",
   size: "medium",
   width: "400",
   orientation: "vertical",
@@ -1341,6 +1529,7 @@ function updateUrlFromSettings() {
   setParam("width", widthSetting, DEFAULT_SETTINGS.width);
   setParam("size", sizeSetting, DEFAULT_SETTINGS.size);
   setParam("orientation", orientationSetting, DEFAULT_SETTINGS.orientation);
+  setParam("style", styleSetting, DEFAULT_SETTINGS.style);
 
   setBooleanParam("rating", contentSettings.rating, DEFAULT_SETTINGS.content.rating);
   setBooleanParam("time", contentSettings.time, DEFAULT_SETTINGS.content.time);
@@ -1395,6 +1584,12 @@ function loadSettingsFromUrl() {
   const widthParam = params.get("width");
   if (["300", "400", "500", "100"].includes(widthParam)) {
     widthSetting = widthParam;
+  }
+
+  const styleParam = params.get("style");
+  const normalizedStyleParam = typeof styleParam === "string" ? styleParam.trim().toLowerCase() : "";
+  if (["default", "nallerheim"].includes(normalizedStyleParam)) {
+    styleSetting = normalizedStyleParam;
   }
 
   const sizeParam = params.get("size");
@@ -1528,6 +1723,25 @@ function updateOrientationButtons() {
   });
 }
 
+function updateStyleButtons() {
+  if (!styleControls) return;
+  styleControls.buttons.forEach(btn => {
+    if (btn.key === styleSetting) {
+      btn.element.classList.add("size-btn--active");
+    } else {
+      btn.element.classList.remove("size-btn--active");
+    }
+  });
+}
+
+function applyStyleSetting() {
+  const container = document.getElementById("matches-container");
+  if (!container) return;
+  container.classList.remove("matches-style-default", "matches-style-nallerheim");
+  container.classList.add(`matches-style-${styleSetting}`);
+  updateUrlFromSettings();
+}
+
 function applyOrientationClass() {
   const container = document.getElementById("matches-container");
   if (!container) return;
@@ -1607,6 +1821,10 @@ function isHorizontalOrientation() {
   return orientationSetting === "horizontal";
 }
 
+function isNallerheimStyle() {
+  return styleSetting === "nallerheim";
+}
+
 function countActiveContent({ showRating = false, includeFormat = false } = {}) {
   let count = 0;
   if (showRating && contentSettings.rating) count += 1;
@@ -1660,6 +1878,167 @@ function createHorizontalScoreBlock(score1, score2) {
     block.style.minWidth = "0";
   }
   return block;
+}
+
+function createNallerheimTeamElement(match, options = {}) {
+  const { isToday = false } = options;
+  const wrapper = document.createElement("div");
+  wrapper.className = "match-wrapper match-wrapper--nallerheim";
+
+  const card = document.createElement("div");
+  card.className = "nallerheim-team-card";
+  card.dataset.id = match.id;
+  wrapper.appendChild(card);
+
+  const topRow = document.createElement("div");
+  topRow.className = "nallerheim-team-card__top";
+
+  const roundText = (() => {
+    const showPath = !!contentSettings.path;
+    const showRoundName = !!contentSettings.roundName;
+    if (!showPath && !showRoundName) return "";
+    const parts = [];
+    if (showPath && typeof match.round_badge === "string" && match.round_badge.trim() !== "") {
+      parts.push(match.round_badge.trim());
+    }
+    if (showRoundName) {
+      const normalizedRound = normalizeRoundName(match.round);
+      if (normalizedRound && !parts.includes(normalizedRound)) {
+        parts.push(normalizedRound);
+      }
+    }
+    return parts.join(parts.length > 1 ? " - " : "");
+  })();
+
+  if (roundText) {
+    const roundEl = document.createElement("div");
+    roundEl.className = "nallerheim-team-card__round";
+    roundEl.textContent = roundText;
+    topRow.appendChild(roundEl);
+  } else {
+    const spacer = document.createElement("div");
+    spacer.style.flex = "1 1 auto";
+    topRow.appendChild(spacer);
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "nallerheim-team-card__meta";
+
+  if (contentSettings.time) {
+    const label = getMatchTimeLabel(match, isToday);
+    if (label) {
+      const timeEl = document.createElement("div");
+      timeEl.className = "nallerheim-team-card__time";
+      timeEl.textContent = label;
+      meta.appendChild(timeEl);
+    }
+  }
+
+  if (contentSettings.liveIcon && match.status === "IN PROGRESS") {
+    const liveIcon = document.createElement("img");
+    liveIcon.className = "nallerheim-team-card__live";
+    liveIcon.src = getLiveIconSrc();
+    liveIcon.alt = "LIVE";
+    meta.appendChild(liveIcon);
+  }
+
+  const selectionHost = document.createElement("div");
+  selectionHost.className = "nallerheim-team-card__selection";
+  meta.appendChild(selectionHost);
+
+  topRow.appendChild(meta);
+  card.appendChild(topRow);
+
+  const header = document.createElement("div");
+  header.className = "nallerheim-team-card__header";
+
+  const team1 = document.createElement("div");
+  team1.className = "nallerheim-team-card__team";
+  const team1Text = document.createElement("span");
+  team1Text.className = "nallerheim-team-card__team-text";
+  team1Text.textContent = match.team1 || "";
+  team1.appendChild(team1Text);
+
+  const score = document.createElement("div");
+  score.className = "nallerheim-team-card__score";
+  const scorePair = formatScorePair(match.dw1, match.dw2, match.gw1, match.gw2) || ["-", "-"];
+  const leftScore = document.createElement("span");
+  leftScore.textContent = scorePair[0];
+  const sep = document.createElement("span");
+  sep.textContent = "-";
+  const rightScore = document.createElement("span");
+  rightScore.textContent = scorePair[1];
+  score.append(leftScore, sep, rightScore);
+
+  const team2 = document.createElement("div");
+  team2.className = "nallerheim-team-card__team nallerheim-team-card__team--right";
+  const team2Text = document.createElement("span");
+  team2Text.className = "nallerheim-team-card__team-text";
+  team2Text.textContent = match.team2 || "";
+  team2.appendChild(team2Text);
+
+  header.append(team1, score, team2);
+  card.appendChild(header);
+
+  const lineups = Array.isArray(match?.lineupsData) ? sortLineups(match.lineupsData).filter(Boolean) : [];
+  if (lineups.length) {
+    const body = document.createElement("div");
+    body.className = "nallerheim-team-card__body";
+    lineups.forEach((duel) => {
+      const line = document.createElement("div");
+      line.className = "nallerheim-team-card__line";
+
+      const p1Wrap = document.createElement("div");
+      p1Wrap.className = "nallerheim-team-card__player";
+      const p1Link = document.createElement("a");
+      const p1Id = String(duel?.player_1_id || "").trim();
+      if (p1Id) {
+        p1Link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(p1Id)}`;
+        p1Link.target = "_blank";
+        p1Link.rel = "noopener noreferrer";
+      }
+      const p1Text = document.createElement("span");
+      p1Text.className = "nallerheim-team-card__player-text";
+      p1Text.textContent = playerLabel(duel, 1);
+      p1Link.appendChild(p1Text);
+      p1Wrap.appendChild(p1Link);
+
+      const duelScore = document.createElement("div");
+      duelScore.className = "nallerheim-team-card__duel-score";
+      const duelScorePair = formatScorePair(duel?.dw1, duel?.dw2, null, null) || ["-", "-"];
+      duelScore.textContent = `${duelScorePair[0]} - ${duelScorePair[1]}`;
+
+      const p2Wrap = document.createElement("div");
+      p2Wrap.className = "nallerheim-team-card__player nallerheim-team-card__player--right";
+      const p2Link = document.createElement("a");
+      const p2Id = String(duel?.player_2_id || "").trim();
+      if (p2Id) {
+        p2Link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(p2Id)}`;
+        p2Link.target = "_blank";
+        p2Link.rel = "noopener noreferrer";
+      }
+      const p2Text = document.createElement("span");
+      p2Text.className = "nallerheim-team-card__player-text";
+      p2Text.textContent = playerLabel(duel, 2);
+      p2Link.appendChild(p2Text);
+      p2Wrap.appendChild(p2Link);
+
+      line.append(p1Wrap, duelScore, p2Wrap);
+      body.appendChild(line);
+    });
+    card.appendChild(body);
+  } else if (match.lineups) {
+    const body = document.createElement("div");
+    body.className = "nallerheim-team-card__body nallerheim-team-card__body--html";
+    const content = document.createElement("div");
+    content.className = "lineup__overview";
+    content.innerHTML = sanitizeLineupsHtml(match.lineups);
+    body.appendChild(content);
+    card.appendChild(body);
+  }
+
+  registerMatchSelection(match, wrapper, selectionHost);
+  return wrapper;
 }
 
 function buildMatchTimeBlock(match, { isToday = false, showRating = false, includeFormat = false } = {}) {
@@ -1780,6 +2159,9 @@ function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
 
 function createMatchElement(match, options = {}) {
   const { showRating = false, isToday = false } = options;
+  if (isNallerheimStyle()) {
+    return createNallerheimTeamElement(match, { isToday });
+  }
   // Only for TEAM tournaments
   const wrapper = document.createElement("div");
   wrapper.className = "match-wrapper";
@@ -2761,6 +3143,41 @@ function renderSettingsSection(container) {
     sizeGroup.appendChild(btn);
     sizeButtons.push({ key, element: btn });
   });
+
+  const styleSection = document.createElement("div");
+  styleSection.className = "matches-settings__size";
+  const styleTitle = document.createElement("div");
+  styleTitle.className = "matches-settings__content-title";
+  styleTitle.textContent = "Style";
+  styleSection.appendChild(styleTitle);
+
+  const styleGroup = document.createElement("div");
+  styleGroup.className = "size-toggle-group";
+  styleSection.appendChild(styleGroup);
+
+  const styleButtons = [];
+  [
+    { key: "default", label: "Default" },
+    { key: "nallerheim", label: "Nallerheim" }
+  ].forEach(({ key, label }) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "size-btn";
+    btn.textContent = label;
+    btn.addEventListener("click", () => {
+      if (styleSetting === key) return;
+      styleSetting = key;
+      if (lastData) {
+        renderAllSectionsFromData(lastData);
+      } else {
+        applyStyleSetting();
+        updateStyleButtons();
+      }
+    });
+    styleGroup.appendChild(btn);
+    styleButtons.push({ key, element: btn });
+  });
+
   const widthSection = document.createElement("div");
   widthSection.className = "matches-settings__size";
   const widthTitle = document.createElement("div");
@@ -2829,6 +3246,7 @@ function renderSettingsSection(container) {
   controlsRow.className = "matches-settings__controls";
 
   controlsRow.appendChild(actions);
+  controlsRow.appendChild(styleSection);
   controlsRow.appendChild(contentSection);
   controlsRow.appendChild(sizeSection);
   controlsRow.appendChild(widthSection);
@@ -2868,6 +3286,8 @@ function renderSettingsSection(container) {
   updateSettingsButtons();
   sizeControls = { buttons: sizeButtons };
   updateSizeButtons();
+  styleControls = { buttons: styleButtons };
+  updateStyleButtons();
   widthControls = { buttons: widthButtons };
   updateWidthButtons();
   orientationControls = { buttons: orientationButtons };
@@ -3411,6 +3831,7 @@ function fetchAndRenderMatches() {
       settingsSlot.innerHTML = "";
     }
     applySizeSetting();
+    applyStyleSetting();
     applyOrientationClass();
 
     const listWrapper = document.createElement("div");
