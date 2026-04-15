@@ -14,9 +14,9 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class ImportPaths:
-    profiles_csv: Path
-    matches_csv: Path
-    duels_csv: Path
+    profiles_csv: Path | None
+    matches_csv: Path | None
+    duels_csv: Path | None
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,6 +40,23 @@ def parse_args() -> argparse.Namespace:
         "--apply",
         action="store_true",
         help="Write changes to SQLite. Without this flag the script only prints a preview.",
+    )
+    parser.add_argument(
+        "--only",
+        choices=("profiles", "matches", "duels"),
+        help="Import only one entity type.",
+    )
+    parser.add_argument(
+        "--profiles-csv",
+        help="Override path to profiles CSV file.",
+    )
+    parser.add_argument(
+        "--matches-csv",
+        help="Override path to matches CSV file.",
+    )
+    parser.add_argument(
+        "--duels-csv",
+        help="Override path to duels CSV file.",
     )
     return parser.parse_args()
 
@@ -106,11 +123,15 @@ def _load_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
     return {str(row["name"]).strip() for row in rows if str(row["name"] or "").strip()}
 
 
-def _build_paths(import_dir: Path) -> ImportPaths:
+def _build_paths(import_dir: Path, args: argparse.Namespace) -> ImportPaths:
+    only = str(args.only or "").strip()
+    profiles_csv = Path(args.profiles_csv).resolve() if args.profiles_csv else import_dir / "profiles_csv.csv"
+    matches_csv = Path(args.matches_csv).resolve() if args.matches_csv else import_dir / "matches_csv.csv"
+    duels_csv = Path(args.duels_csv).resolve() if args.duels_csv else import_dir / "duels_csv.csv"
     return ImportPaths(
-        profiles_csv=import_dir / "profiles_csv.csv",
-        matches_csv=import_dir / "matches_csv.csv",
-        duels_csv=import_dir / "duels_csv.csv",
+        profiles_csv=None if only and only != "profiles" else profiles_csv,
+        matches_csv=None if only and only != "matches" else matches_csv,
+        duels_csv=None if only and only != "duels" else duels_csv,
     )
 
 
@@ -195,9 +216,8 @@ def _dedupe_by_id(items: list[dict[str, object]]) -> tuple[list[dict[str, object
     return list(deduped.values()), duplicate_counts
 
 
-def _validate_required_tables(conn: sqlite3.Connection) -> None:
+def _validate_required_tables(conn: sqlite3.Connection, *, required_tables: set[str]) -> None:
     table_names = _load_table_names(conn)
-    required_tables = {"profiles", "matches", "duels"}
     missing_tables = sorted(required_tables - table_names)
     if missing_tables:
         raise RuntimeError(f"SQLite DB is missing required tables: {', '.join(missing_tables)}")
@@ -487,9 +507,15 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
 
 
 def build_import_plan(paths: ImportPaths) -> dict[str, object]:
-    profiles, duplicate_profile_ids = _dedupe_by_id(_prepare_profiles(_parse_csv_rows(paths.profiles_csv)))
-    matches, duplicate_match_ids = _dedupe_by_id(_prepare_matches(_parse_csv_rows(paths.matches_csv)))
-    duels, duplicate_duel_ids = _dedupe_by_id(_prepare_duels(_parse_csv_rows(paths.duels_csv)))
+    profiles, duplicate_profile_ids = (
+        _dedupe_by_id(_prepare_profiles(_parse_csv_rows(paths.profiles_csv))) if paths.profiles_csv else ([], {})
+    )
+    matches, duplicate_match_ids = (
+        _dedupe_by_id(_prepare_matches(_parse_csv_rows(paths.matches_csv))) if paths.matches_csv else ([], {})
+    )
+    duels, duplicate_duel_ids = (
+        _dedupe_by_id(_prepare_duels(_parse_csv_rows(paths.duels_csv))) if paths.duels_csv else ([], {})
+    )
     tournament_ids = sorted({str(item["tournament_id"]) for item in matches} | {str(item["tournament_id"]) for item in duels})
     duels_by_match: dict[str, int] = defaultdict(int)
     for duel in duels:
@@ -529,14 +555,46 @@ def apply_import(*, db_path: Path, actor_id: str, plan: dict[str, object]) -> di
             + json.dumps(blocking_duplicates, ensure_ascii=False)
         )
 
+    required_tables: set[str] = set()
+    if plan["profiles"]:
+        required_tables.add("profiles")
+    if plan["matches"]:
+        required_tables.add("matches")
+    if plan["duels"]:
+        required_tables.add("duels")
+
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
-        _validate_required_tables(conn)
+        _validate_required_tables(conn, required_tables=required_tables)
         conn.execute("BEGIN IMMEDIATE TRANSACTION")
         try:
-            profile_result = _insert_profiles(conn, actor_id=actor_id, profiles=plan["profiles"])
-            match_result = _upsert_matches(conn, actor_id=actor_id, matches=plan["matches"])
-            duel_result = _upsert_duels(conn, actor_id=actor_id, duels=plan["duels"])
+            profile_result = (
+                _insert_profiles(conn, actor_id=actor_id, profiles=plan["profiles"])
+                if plan["profiles"]
+                else {
+                    "profiles_requested": 0,
+                    "profiles_inserted": 0,
+                    "profiles_skipped_existing": 0,
+                }
+            )
+            match_result = (
+                _upsert_matches(conn, actor_id=actor_id, matches=plan["matches"])
+                if plan["matches"]
+                else {
+                    "matches_requested": 0,
+                    "matches_inserted": 0,
+                    "matches_updated": 0,
+                }
+            )
+            duel_result = (
+                _upsert_duels(conn, actor_id=actor_id, duels=plan["duels"])
+                if plan["duels"]
+                else {
+                    "duels_requested": 0,
+                    "duels_inserted": 0,
+                    "duels_updated": 0,
+                }
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -552,8 +610,8 @@ def apply_import(*, db_path: Path, actor_id: str, plan: dict[str, object]) -> di
 def main() -> int:
     args = parse_args()
     import_dir = Path(args.import_dir).resolve()
-    paths = _build_paths(import_dir)
-    missing_files = [str(path) for path in paths.__dict__.values() if not Path(path).is_file()]
+    paths = _build_paths(import_dir, args)
+    missing_files = [str(path) for path in paths.__dict__.values() if path is not None and not Path(path).is_file()]
     if missing_files:
         raise SystemExit(f"Missing CSV files: {', '.join(missing_files)}")
 
