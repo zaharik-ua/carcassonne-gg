@@ -1397,8 +1397,21 @@
 
   .cp-duel-edit-meta-actions {
     display: inline-flex;
+    align-items: center;
+    gap: 6px;
     justify-content: flex-end;
     justify-self: end;
+  }
+
+  .cp-duel-edit-move-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    padding: 0 8px;
+    margin-left: 0;
+    font-size: 14px;
+    line-height: 1;
   }
 
   .cp-duel-edit-delete-btn {
@@ -1713,10 +1726,12 @@
     }
 
     .cp-duel-edit-meta-actions {
+      gap: 4px;
       justify-self: end;
       align-self: center;
     }
 
+    .cp-duel-edit-move-btn,
     .cp-duel-edit-delete-btn {
       width: 25px;
       min-width: 25px;
@@ -2479,7 +2494,16 @@
 
   function collectGameEntries(duel) {
     if (Array.isArray(duel?.games) && duel.games.length > 0) {
-      return duel.games.filter(Boolean);
+      return duel.games
+        .filter(Boolean)
+        .sort((a, b) => {
+          const aNumber = parseNullableInt(a?.game_number);
+          const bNumber = parseNullableInt(b?.game_number);
+          if (aNumber !== null && bNumber !== null && aNumber !== bNumber) return aNumber - bNumber;
+          if (aNumber !== null && bNumber === null) return -1;
+          if (aNumber === null && bNumber !== null) return 1;
+          return 0;
+        });
     }
 
     const hasSingleGameData =
@@ -6516,11 +6540,37 @@
       return "";
     };
 
+    const normalizeEditableGamesOrder = (games) => {
+      const normalizedGames = Array.isArray(games) ? games.filter(Boolean) : [];
+      normalizedGames.forEach((game, index) => {
+        game.game_number = index + 1;
+      });
+      return normalizedGames;
+    };
+
+    const moveEditableGame = (games, fromIndex, toIndex) => {
+      const normalizedGames = Array.isArray(games) ? games : [];
+      if (
+        fromIndex < 0
+        || toIndex < 0
+        || fromIndex >= normalizedGames.length
+        || toIndex >= normalizedGames.length
+        || fromIndex === toIndex
+      ) {
+        return false;
+      }
+      const [movedGame] = normalizedGames.splice(fromIndex, 1);
+      if (!movedGame) return false;
+      normalizedGames.splice(toIndex, 0, movedGame);
+      normalizeEditableGamesOrder(normalizedGames);
+      return true;
+    };
+
     const buildEditableGamesFromLineup = (lineup) => {
       const persistedGames = getActivePersistedDuelGames(lineup);
       const games = persistedGames.length ? persistedGames : collectGameEntries(lineup);
       if (!games.length) {
-        return [{
+        return normalizeEditableGamesOrder([{
           id: `${String(lineup?.id || "duel").trim()}-1`,
           duel_id: String(lineup?.id || "").trim(),
           bga_table_id: "",
@@ -6534,9 +6584,17 @@
           status: "",
           no_show_side: "",
           isNewLocal: true,
-        }];
+        }]);
       }
-      return games.map((game, index) => ({
+      const sortedGames = [...games].sort((a, b) => {
+        const aNumber = parseNullableInt(a?.game_number);
+        const bNumber = parseNullableInt(b?.game_number);
+        if (aNumber !== null && bNumber !== null && aNumber !== bNumber) return aNumber - bNumber;
+        if (aNumber !== null && bNumber === null) return -1;
+        if (aNumber === null && bNumber !== null) return 1;
+        return 0;
+      });
+      return normalizeEditableGamesOrder(sortedGames.map((game, index) => ({
         id: String(game?.id || `${String(lineup?.id || "duel").trim()}-${index + 1}`).trim(),
         duel_id: String(lineup?.id || "").trim(),
         bga_table_id: String(game?.bga_table_id || "").trim(),
@@ -6550,7 +6608,7 @@
         status: String(game?.status || "").trim(),
         no_show_side: determineNoShowSide(game),
         isNewLocal: false,
-      }));
+      })));
     };
 
     const findLineupStateById = (duelId) => (
@@ -7109,6 +7167,22 @@
 
             const metaActions = document.createElement("div");
             metaActions.className = "cp-duel-edit-meta-actions";
+            const moveUpBtn = document.createElement("button");
+            moveUpBtn.type = "button";
+            moveUpBtn.className = "cp-btn cp-btn-secondary cp-duel-edit-move-btn";
+            moveUpBtn.textContent = "↑";
+            moveUpBtn.title = "Move up";
+            moveUpBtn.setAttribute("aria-label", "Move up");
+            moveUpBtn.disabled = !!activeDuelEditorState.saving || gameIndex === 0;
+            metaActions.appendChild(moveUpBtn);
+            const moveDownBtn = document.createElement("button");
+            moveDownBtn.type = "button";
+            moveDownBtn.className = "cp-btn cp-btn-secondary cp-duel-edit-move-btn";
+            moveDownBtn.textContent = "↓";
+            moveDownBtn.title = "Move down";
+            moveDownBtn.setAttribute("aria-label", "Move down");
+            moveDownBtn.disabled = !!activeDuelEditorState.saving || gameIndex === activeDuelEditorState.games.length - 1;
+            metaActions.appendChild(moveDownBtn);
             const deleteGameBtn = document.createElement("button");
             deleteGameBtn.type = "button";
             deleteGameBtn.className = "cp-btn cp-btn-danger cp-duel-edit-delete-btn";
@@ -7279,8 +7353,21 @@
 
             refreshGameUiState();
 
+            moveUpBtn.addEventListener("click", () => {
+              if (moveEditableGame(activeDuelEditorState.games, gameIndex, gameIndex - 1)) {
+                renderLineupsRows();
+              }
+            });
+
+            moveDownBtn.addEventListener("click", () => {
+              if (moveEditableGame(activeDuelEditorState.games, gameIndex, gameIndex + 1)) {
+                renderLineupsRows();
+              }
+            });
+
             deleteGameBtn.addEventListener("click", () => {
               activeDuelEditorState.games.splice(gameIndex, 1);
+              normalizeEditableGamesOrder(activeDuelEditorState.games);
               renderLineupsRows();
             });
           });
@@ -7298,10 +7385,8 @@
           panel.appendChild(addGameActions);
 
           addGameBtn.addEventListener("click", () => {
-            const nextGameNumber = activeDuelEditorState.games.reduce((maxValue, game) => {
-              const gameNumber = parseNullableInt(game?.game_number);
-              return gameNumber && gameNumber > maxValue ? gameNumber : maxValue;
-            }, 0) + 1;
+            normalizeEditableGamesOrder(activeDuelEditorState.games);
+            const nextGameNumber = activeDuelEditorState.games.length + 1;
             const localGameId = `${duelId || "duel"}-game-${nextGameNumber}-${Date.now()}`;
             activeDuelEditorState.games.push({
               id: localGameId,
@@ -7359,6 +7444,7 @@
             activeDuelEditorState.saving = true;
             renderLineupsRows();
             try {
+              normalizeEditableGamesOrder(activeDuelEditorState.games);
               const payloadGames = activeDuelEditorState.games.map((game) => ({
                 id: String(game?.id || "").trim(),
                 duel_id: String(entry?.id || "").trim(),
@@ -7590,6 +7676,7 @@
         });
         confirmDeleteBtn.addEventListener("click", () => {
           activeDuelEditorState.games.splice(gameIndex, 1);
+          normalizeEditableGamesOrder(activeDuelEditorState.games);
           closeModal();
           renderLineupsRows();
         });
@@ -7647,6 +7734,22 @@
 
         const metaActions = document.createElement("div");
         metaActions.className = "cp-duel-edit-meta-actions";
+        const moveUpBtn = document.createElement("button");
+        moveUpBtn.type = "button";
+        moveUpBtn.className = "cp-btn cp-btn-secondary cp-duel-edit-move-btn";
+        moveUpBtn.textContent = "↑";
+        moveUpBtn.title = "Move up";
+        moveUpBtn.setAttribute("aria-label", "Move up");
+        moveUpBtn.disabled = !!activeDuelEditorState.saving || gameIndex === 0;
+        metaActions.appendChild(moveUpBtn);
+        const moveDownBtn = document.createElement("button");
+        moveDownBtn.type = "button";
+        moveDownBtn.className = "cp-btn cp-btn-secondary cp-duel-edit-move-btn";
+        moveDownBtn.textContent = "↓";
+        moveDownBtn.title = "Move down";
+        moveDownBtn.setAttribute("aria-label", "Move down");
+        moveDownBtn.disabled = !!activeDuelEditorState.saving || gameIndex === activeDuelEditorState.games.length - 1;
+        metaActions.appendChild(moveDownBtn);
         const deleteGameBtn = document.createElement("button");
         deleteGameBtn.type = "button";
         deleteGameBtn.className = "cp-btn cp-btn-danger cp-duel-edit-delete-btn";
@@ -7817,9 +7920,22 @@
 
         refreshGameUiState();
 
+        moveUpBtn.addEventListener("click", () => {
+          if (moveEditableGame(activeDuelEditorState.games, gameIndex, gameIndex - 1)) {
+            renderLineupsRows();
+          }
+        });
+
+        moveDownBtn.addEventListener("click", () => {
+          if (moveEditableGame(activeDuelEditorState.games, gameIndex, gameIndex + 1)) {
+            renderLineupsRows();
+          }
+        });
+
         deleteGameBtn.addEventListener("click", () => {
           if (game?.isNewLocal) {
             activeDuelEditorState.games.splice(gameIndex, 1);
+            normalizeEditableGamesOrder(activeDuelEditorState.games);
             renderLineupsRows();
             return;
           }
@@ -7846,10 +7962,8 @@
       panel.appendChild(errorEl);
 
       addGameBtn.addEventListener("click", () => {
-        const nextGameNumber = activeDuelEditorState.games.reduce((maxValue, game) => {
-          const gameNumber = parseNullableInt(game?.game_number);
-          return gameNumber && gameNumber > maxValue ? gameNumber : maxValue;
-        }, 0) + 1;
+        normalizeEditableGamesOrder(activeDuelEditorState.games);
+        const nextGameNumber = activeDuelEditorState.games.length + 1;
         const localGameId = `${duelId || "duel"}-game-${nextGameNumber}-${Date.now()}`;
         activeDuelEditorState.games.push({
           id: localGameId,
@@ -7885,6 +7999,7 @@
         activeDuelEditorState.saving = true;
         renderLineupsRows();
         try {
+          normalizeEditableGamesOrder(activeDuelEditorState.games);
           const payloadGames = activeDuelEditorState.games.map((game) => ({
             id: String(game?.id || "").trim(),
             duel_id: String(entry?.id || "").trim(),
