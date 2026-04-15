@@ -41,9 +41,7 @@ Notes:
 
 - `BGA_EMAIL` / `BGA_PASSWORD` are the primary account.
 - `BGA_EMAIL_2` / `BGA_PASSWORD_2`, `BGA_EMAIL_3` / `BGA_PASSWORD_3`, and so on are optional reserve accounts.
-- when BGA starts returning empty tables, the updater refreshes the HTTP session and rotates to the next configured account automatically.
-- repeated empty-table responses are counted inside `duels.results_last_error`; after `BGA_EMPTY_TABLES_ERROR_LIMIT` attempts the duel is marked `Error`.
-- if a batch hits a mass empty-table anomaly, the updater skips the whole batch without updating duel rows, so the same duels will be retried on the next run.
+- reserve accounts are used only when the current BGA account/session fails to return a valid response.
 
 ## Run
 
@@ -79,8 +77,6 @@ python3 run_update_matches.py --match-id 20250330UKRPRT
 ## Result rules
 
 - `dw1` / `dw2` updated from BGA
-- empty `tables=[]` from BGA is treated as a temporary fetch failure, not as a valid `0:0` result
-- repeated empty-table responses eventually escalate the duel to `Error`
 - duel status becomes:
   - `Done` when one side exactly reaches `games_to_win` and the other is still below
   - `In progress` while the duel is still inside its play window and no winner is determined yet
@@ -95,7 +91,6 @@ python3 run_update_matches.py --match-id 20250330UKRPRT
 
 - manual run: logs go to console with timestamps
 - systemd run: logs are appended to `/var/log/carcassonne/update-duels.log`
-- when BGA returns empty tables, the updater logs the active account label and rotates to the next configured account before retrying
 - recommended inspection:
 
 ```bash

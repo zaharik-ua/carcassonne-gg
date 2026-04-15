@@ -5,15 +5,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from .config import (
-    DEBUG_LOG,
-    HTTP_WORKERS,
-    REQUEST_TIMEOUT_SECONDS,
-    empty_tables_batch_failure_threshold,
-)
+from .config import DEBUG_LOG, HTTP_WORKERS, REQUEST_TIMEOUT_SECONDS
 from .http_session import (
     _throttle,
-    current_account_label,
     get_http_session,
     request_json,
     rotate_http_session,
@@ -22,8 +16,6 @@ from .http_session import (
 from .models import MatchTable, MatchUpdateRequest, MatchUpdateResult
 from .player_id import get_player_id
 
-EMPTY_TABLES_RETRY_MESSAGE = "BGA returned empty tables; duel left unchanged for retry"
-EMPTY_TABLES_BATCH_MESSAGE = "Mass empty tables anomaly from BGA; skipped entire batch for retry"
 BGA_GET_GAMES_URL = "https://boardgamearena.com/gamestats/gamestats/getGames.html"
 
 
@@ -62,18 +54,6 @@ def _payload_tables(payload: object) -> list:
     return tables if isinstance(tables, list) else []
 
 
-def _is_empty_tables_payload(payload: object) -> bool:
-    normalized = _unwrap_payload(payload)
-    if normalized is None:
-        return False
-    tables = normalized.get("tables", [])
-    return isinstance(tables, list) and len(tables) == 0
-
-
-def _should_retry_empty_tables(item: MatchUpdateRequest) -> bool:
-    return item.target in {"finished_pending", "empty_finished", "manual", "manual_duel", "ongoing"}
-
-
 def _build_request_params(item: MatchUpdateRequest) -> dict[str, int]:
     finished_flag = 0
     try:
@@ -91,15 +71,14 @@ def _build_request_params(item: MatchUpdateRequest) -> dict[str, int]:
     }
 
 
-def _run_bga_request_for_item(
-    item: MatchUpdateRequest,
+def _perform_bga_request(
+    params: dict[str, int],
     *,
     session_cookies: dict,
     session_headers: dict,
     request_token: str,
 ) -> dict:
     session = _make_session(session_cookies, session_headers)
-    params = _build_request_params(item)
     request_headers = {
         "X-Requested-With": "XMLHttpRequest",
         "X-Request-Token": request_token,
@@ -124,7 +103,40 @@ def _run_bga_request_for_item(
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
     response.raise_for_status()
-    return response.json()
+    payload = response.json()
+    if int(payload.get("status", 0) or 0) != 1:
+        raise RuntimeError(f"BGA returned non-success status: {payload.get('status')}")
+    return payload
+
+
+def _run_bga_request_for_item(
+    item: MatchUpdateRequest,
+    *,
+    session_cookies: dict,
+    session_headers: dict,
+    request_token: str,
+) -> dict:
+    params = _build_request_params(item)
+    try:
+        return _perform_bga_request(
+            params,
+            session_cookies=session_cookies,
+            session_headers=session_headers,
+            request_token=request_token,
+        )
+    except Exception as exc:
+        print(
+            f"⚠️ BGA request failed for duel {item.match_id} on current account: {exc}. Rotating account and retrying.",
+            flush=True,
+        )
+        rotate_http_session(reason=f"request_failure_duel_{item.match_id}")
+        retry_cookies, retry_headers, retry_token = snapshot_session()
+        return _perform_bga_request(
+            params,
+            session_cookies=retry_cookies,
+            session_headers=retry_headers,
+            request_token=retry_token,
+        )
 
 
 def _fetch_raw_batch(
@@ -155,18 +167,6 @@ def _fetch_raw_batch(
     return results
 
 
-def _count_empty_tables_results(prepared: list[MatchUpdateRequest], results: list[dict | None]) -> int:
-    empty_tables = 0
-    for item, result in zip(prepared, results):
-        if not _should_retry_empty_tables(item):
-            continue
-        if result is None or result.get("status") != "success":
-            continue
-        if _is_empty_tables_payload(result.get("data")):
-            empty_tables += 1
-    return empty_tables
-
-
 def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
     prepared: list[MatchUpdateRequest] = []
     for item in batch:
@@ -195,24 +195,6 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
         session_headers=headers,
         request_token=token,
     )
-    batch_failure_threshold = empty_tables_batch_failure_threshold(len(prepared))
-    empty_tables_failures = _count_empty_tables_results(prepared, results)
-    if empty_tables_failures >= batch_failure_threshold:
-        active_account = current_account_label() or "unknown"
-        print(
-            f"⚠️ Mass empty tables from BGA for batch: {empty_tables_failures}/{len(prepared)} "
-            f"(threshold={batch_failure_threshold}, account={active_account}). Rotating account once and retrying batch.",
-            flush=True,
-        )
-        rotate_http_session(reason=f"empty_tables_batch_{len(prepared)}")
-        retry_cookies, retry_headers, retry_token = snapshot_session()
-        results = _fetch_raw_batch(
-            prepared,
-            session_cookies=retry_cookies,
-            session_headers=retry_headers,
-            request_token=retry_token,
-        )
-        empty_tables_failures = _count_empty_tables_results(prepared, results)
 
     enriched_batch: list[MatchUpdateResult] = []
 
@@ -234,14 +216,6 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
         tables = _payload_tables(payload)
         if tables is None:
             enriched_batch.append(MatchUpdateResult(status="error", message="Missing tables in payload"))
-            continue
-        if len(tables) == 0:
-            enriched_batch.append(
-                MatchUpdateResult(
-                    status="error",
-                    message=EMPTY_TABLES_RETRY_MESSAGE,
-                )
-            )
             continue
 
         enriched_tables: list[MatchTable] = []
@@ -344,21 +318,5 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
                 tables=enriched_tables,
             )
         )
-
-    empty_tables_failures = sum(
-        1
-        for result in enriched_batch
-        if result.status == "error" and str(result.message or "") == EMPTY_TABLES_RETRY_MESSAGE
-    )
-    if empty_tables_failures >= batch_failure_threshold:
-        print(
-            f"🚨 Mass empty tables anomaly detected: {empty_tables_failures}/{len(prepared)} "
-            f"(threshold={batch_failure_threshold}). Skipping all updates in this batch.",
-            flush=True,
-        )
-        return [
-            MatchUpdateResult(status="error", message=EMPTY_TABLES_BATCH_MESSAGE)
-            for _ in prepared
-        ]
 
     return enriched_batch
