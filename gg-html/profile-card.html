@@ -2280,7 +2280,6 @@
         profile_id: profileId,
         bga_nickname: String(dbProfile?.bga_nickname || jsonProfile?.bga_nickname || jsonProfile?.bga_name || jsonProfile?.nickname || "").trim(),
         name: String(dbProfile?.name || ""),
-        email: String(dbProfile?.email || ""),
         association: String(dbProfile?.association || jsonProfile?.association || jsonProfile?.assosiation || ""),
         status: String(dbProfile?.status || jsonProfile?.status || ""),
         master_title: Number(dbProfile?.master_title || 0),

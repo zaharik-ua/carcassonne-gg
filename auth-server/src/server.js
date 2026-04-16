@@ -3130,7 +3130,6 @@ app.get("/profiles/public", (_req, res, next) => {
         name,
         association,
         COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
-        email,
         created_by,
         COALESCE(master_title, 0) AS master_title,
         master_title_date,
@@ -3480,6 +3479,7 @@ app.get("/profiles/contacts/:playerId", (req, res) => {
   return db.get(
     `
       SELECT
+        email,
         telegram,
         whatsapp,
         discord,
@@ -3501,6 +3501,7 @@ app.get("/profiles/contacts/:playerId", (req, res) => {
       return res.json({
         ok: true,
         contacts: {
+          email: row.email || null,
           telegram: row.telegram || null,
           whatsapp: row.whatsapp || null,
           discord: row.discord || null,

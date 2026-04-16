@@ -9096,14 +9096,8 @@
             team_captain: profile?.team_captain,
             status: String(profile?.status || "").trim(),
             created_by: String(profile?.created_by || "").trim(),
-            email: String(profile?.email || "").trim(),
             master_title: profile?.master_title,
             master_title_date: String(profile?.master_title_date || "").trim(),
-            telegram: String(profile?.telegram || "").trim(),
-            whatsapp: String(profile?.whatsapp || "").trim(),
-            discord: String(profile?.discord || "").trim(),
-            instagram: String(profile?.instagram || "").trim(),
-            contact_email: String(profile?.contact_email || "").trim(),
           };
           allProfiles.push(profileObj);
           profilesById.set(playerId, profileObj);

@@ -1,0 +1,736 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+  body {
+    font-family: "Montserrat", sans-serif;
+  }
+
+  .fmstat-wrap {
+    margin: 0 8px 14px;
+    color: #222;
+  }
+
+  .fmstat-shell {
+    padding: 0;
+  }
+
+  .fmstat-head {
+    margin-bottom: 12px;
+  }
+
+  .fmstat-title-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .fmstat-title-flag {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .fmstat-kicker {
+    font-size: 13px;
+    font-weight: 600;
+    color: #222;
+    margin-bottom: 0;
+  }
+
+  .fmstat-title {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.1;
+    color: #222;
+  }
+
+  .fmstat-title-player {
+    font-size: 15px;
+  }
+
+  .fmstat-subtitle {
+    font-size: 9px;
+    color: #666;
+    margin-top: 3px;
+  }
+
+  .fmstat-grid {
+    display: block;
+  }
+
+  .fmstat-card {
+    padding: 0;
+    margin-bottom: 12px;
+    min-width: 0;
+  }
+
+  .fmstat-label {
+    font-size: 9px;
+    font-weight: 600;
+    color: #222;
+    margin-bottom: 4px;
+  }
+
+  .fmstat-stat-line {
+    font-size: 12px;
+    line-height: 1.45;
+    color: #222;
+  }
+
+  .fmstat-stat-name {
+    font-weight: 400;
+    color: #222;
+  }
+
+  .fmstat-stat-value {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: #222;
+  }
+
+  .fmstat-empty-title {
+    font-size: 12px;
+    font-weight: 400;
+    color: #222;
+    line-height: 1.45;
+  }
+
+  .fmstat-list {
+    display: block;
+  }
+
+  .fmstat-list-item {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 4px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .fmstat-list-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .fmstat-list-main img {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .fmstat-list-name {
+    font-size: 12px;
+    font-weight: 400;
+    color: #222;
+  }
+
+  .fmstat-list-meta {
+    display: inline;
+    margin-left: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #222;
+  }
+
+  .fmstat-total {
+    color: #1565c0;
+  }
+
+  .fmstat-wins {
+    color: #2e7d32;
+  }
+
+  .fmstat-draws {
+    color: #8d6e63;
+  }
+
+  .fmstat-losses {
+    color: #c62828;
+  }
+
+  .fmstat-note,
+  .fmstat-loading,
+  .fmstat-error {
+    font-size: 11px;
+    line-height: 1.45;
+    color: #666;
+  }
+
+  .fmstat-error {
+    color: #b23a48;
+  }
+</style>
+
+<div class="fmstat-wrap">
+  <div id="fmstat-root" class="fmstat-shell">
+    <div class="fmstat-loading">Loading stats...</div>
+  </div>
+</div>
+
+<script>
+const FMSTAT_API_URL = "https://api.carcassonne.gg/public/friendly-matches";
+const FMSTAT_TOURNAMENT_ID = "Friendly-Matches";
+const FMSTAT_RESULTS_PAGE_SIZE = 500;
+let fmstatLoadRequestId = 0;
+
+function fmstatHasValue(value) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function fmstatParseInt(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function fmstatNormalizePlayerRef(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function fmstatReadFilters() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    player: String(params.get("player") || "").trim(),
+    association: String(params.get("association") || params.get("country") || "").trim().toUpperCase()
+  };
+}
+
+function fmstatBuildUrl(filters) {
+  const url = new URL(FMSTAT_API_URL);
+  url.searchParams.set("results_page_size", String(FMSTAT_RESULTS_PAGE_SIZE));
+  url.searchParams.set("results_page", "1");
+  url.searchParams.set("results_before", new Date().toISOString());
+  if (filters.player) url.searchParams.set("player", filters.player);
+  else if (filters.association) url.searchParams.set("association", filters.association);
+  return url.toString();
+}
+
+function fmstatCollectGames(duel) {
+  return Array.isArray(duel?.games) ? duel.games.filter(Boolean) : [];
+}
+
+function fmstatMatchHasResult(match) {
+  return fmstatHasValue(match?.dw1) && fmstatHasValue(match?.dw2);
+}
+
+function fmstatDuelHasResult(duel) {
+  return fmstatHasValue(duel?.dw1) && fmstatHasValue(duel?.dw2);
+}
+
+function fmstatGameWinnerSide(game) {
+  const p1Rank = String(game?.player_1_rank ?? "").trim();
+  const p2Rank = String(game?.player_2_rank ?? "").trim();
+  if (p1Rank === "1" && p2Rank !== "1") return 1;
+  if (p2Rank === "1" && p1Rank !== "1") return 2;
+  const p1Score = fmstatParseInt(game?.player_1_score);
+  const p2Score = fmstatParseInt(game?.player_2_score);
+  if (p1Score === null || p2Score === null || p1Score === p2Score) return 0;
+  return p1Score > p2Score ? 1 : 2;
+}
+
+function fmstatDuelPlayerSide(duel, playerRef) {
+  const target = fmstatNormalizePlayerRef(playerRef);
+  if (!target) return 0;
+
+  const player1Id = fmstatNormalizePlayerRef(duel?.player_1_id);
+  const player2Id = fmstatNormalizePlayerRef(duel?.player_2_id);
+  const player1Name = fmstatNormalizePlayerRef(duel?.player_1_name);
+  const player2Name = fmstatNormalizePlayerRef(duel?.player_2_name);
+
+  if (target === player1Id || target === player1Name) return 1;
+  if (target === player2Id || target === player2Name) return 2;
+  return 0;
+}
+
+function fmstatBuildDuelsByMatch(duels) {
+  const map = new Map();
+  (Array.isArray(duels) ? duels : []).forEach((duel) => {
+    const matchId = String(duel?.match_id || "").trim();
+    if (!matchId || !fmstatDuelHasResult(duel)) return;
+    if (!map.has(matchId)) map.set(matchId, []);
+    map.get(matchId).push(duel);
+  });
+  return map;
+}
+
+function fmstatTopEntries(counterMap, extraMap, minCount, limit) {
+  return Array.from(counterMap.entries())
+    .map(([key, count]) => ({ key, count, ...(extraMap.get(key) || {}) }))
+    .filter((item) => item.count > minCount)
+    .sort((a, b) => b.count - a.count || String(a.name || a.key || "").localeCompare(String(b.name || b.key || "")))
+    .slice(0, limit);
+}
+
+async function fmstatFetchAllData(filters) {
+  const matchesMap = new Map();
+  const duelsMap = new Map();
+  let tournament = null;
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const url = new URL(fmstatBuildUrl(filters));
+    url.searchParams.set("results_page", String(page));
+    const response = await fetch(url.toString(), { method: "GET" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (!tournament && data?.tournament) tournament = data.tournament;
+
+    (Array.isArray(data?.matches) ? data.matches : []).forEach((match) => {
+      const key = String(match?.id || "").trim();
+      if (key) matchesMap.set(key, match);
+    });
+
+    (Array.isArray(data?.duels) ? data.duels : []).forEach((duel) => {
+      const key = String(duel?.id || "").trim() || `${String(duel?.match_id || "").trim()}-${String(duel?.duel_number || "").trim()}`;
+      if (key) duelsMap.set(key, duel);
+    });
+
+    totalPages = Math.max(1, Number(data?.pagination?.results?.total_pages) || 1);
+    page += 1;
+  } while (page <= totalPages);
+
+  return {
+    tournament,
+    matches: Array.from(matchesMap.values()),
+    duels: Array.from(duelsMap.values())
+  };
+}
+
+function fmstatComputeTeamStats(data, association) {
+  const matches = (Array.isArray(data?.matches) ? data.matches : [])
+    .filter((match) => String(match?.tournament_id || "").trim() === FMSTAT_TOURNAMENT_ID)
+    .filter((match) => fmstatMatchHasResult(match))
+    .filter((match) => String(match?.team_1 || "").trim().toUpperCase() === association || String(match?.team_2 || "").trim().toUpperCase() === association);
+
+  if (!matches.length) return null;
+
+  const duelsByMatch = fmstatBuildDuelsByMatch(data?.duels);
+  const playerMatchesCount = new Map();
+  const playerMeta = new Map();
+  const opponentCount = new Map();
+  const opponentMeta = new Map();
+  const uniquePlayers = new Set();
+
+  let matchWins = 0;
+  let matchDraws = 0;
+  let matchLosses = 0;
+  let duelWins = 0;
+  let duelLosses = 0;
+  let gameWins = 0;
+  let gameLosses = 0;
+
+  matches.forEach((match) => {
+    const team1 = String(match?.team_1 || "").trim().toUpperCase();
+    const team2 = String(match?.team_2 || "").trim().toUpperCase();
+    const isSide1 = team1 === association;
+    const ownDw = Number(isSide1 ? match?.dw1 : match?.dw2) || 0;
+    const oppDw = Number(isSide1 ? match?.dw2 : match?.dw1) || 0;
+    const ownGw = Number(isSide1 ? match?.gw1 : match?.gw2) || 0;
+    const oppGw = Number(isSide1 ? match?.gw2 : match?.gw1) || 0;
+    const opponentCode = isSide1 ? team2 : team1;
+    const opponentName = String(
+      isSide1 ? (match?.team_2_name || match?.team_2 || opponentCode) : (match?.team_1_name || match?.team_1 || opponentCode)
+    ).trim() || opponentCode;
+    const opponentFlag = String(isSide1 ? (match?.team_2_flag || "") : (match?.team_1_flag || "")).trim();
+
+    if (ownDw > oppDw) matchWins += 1;
+    else if (ownDw === oppDw) matchDraws += 1;
+    else matchLosses += 1;
+
+    duelWins += ownDw;
+    duelLosses += oppDw;
+    gameWins += ownGw;
+    gameLosses += oppGw;
+
+    if (opponentCode) {
+      opponentCount.set(opponentCode, (opponentCount.get(opponentCode) || 0) + 1);
+      opponentMeta.set(opponentCode, { name: opponentName, flag: opponentFlag });
+    }
+
+    const matchPlayers = new Set();
+    (duelsByMatch.get(String(match?.id || "").trim()) || []).forEach((duel) => {
+      const playerId = String(isSide1 ? (duel?.player_1_id || "") : (duel?.player_2_id || "")).trim();
+      const playerName = String(isSide1 ? (duel?.player_1_name || "") : (duel?.player_2_name || "")).trim() || playerId;
+      if (!playerId) return;
+      uniquePlayers.add(playerId);
+      matchPlayers.add(playerId);
+      playerMeta.set(playerId, { name: playerName });
+    });
+
+    matchPlayers.forEach((playerId) => {
+      playerMatchesCount.set(playerId, (playerMatchesCount.get(playerId) || 0) + 1);
+    });
+  });
+
+  const sample = matches[0];
+  const ownIsTeam1 = String(sample?.team_1 || "").trim().toUpperCase() === association;
+
+  return {
+    header: {
+      title: String(ownIsTeam1 ? (sample?.team_1_name || sample?.team_1 || association) : (sample?.team_2_name || sample?.team_2 || association)).trim() || association,
+      image: String(ownIsTeam1 ? (sample?.team_1_flag || "") : (sample?.team_2_flag || "")).trim()
+    },
+    matches: matches.length,
+    matchWins,
+    matchDraws,
+    matchLosses,
+    duelWins,
+    duelLosses,
+    gameWins,
+    gameLosses,
+    playersCount: uniquePlayers.size,
+    topPlayers: fmstatTopEntries(playerMatchesCount, playerMeta, 0, 3),
+    topOpponents: fmstatTopEntries(opponentCount, opponentMeta, 1, 3)
+  };
+}
+
+function fmstatComputePlayerStats(data, playerId) {
+  const matches = (Array.isArray(data?.matches) ? data.matches : [])
+    .filter((match) => String(match?.tournament_id || "").trim() === FMSTAT_TOURNAMENT_ID)
+    .filter((match) => fmstatMatchHasResult(match));
+  const duelsByMatch = fmstatBuildDuelsByMatch(data?.duels);
+
+  const playedMatches = [];
+  const opponentTeamCount = new Map();
+  const opponentTeamMeta = new Map();
+  const opponentPlayerMatchSets = new Map();
+  const opponentPlayerMeta = new Map();
+
+  let playerName = playerId;
+  let playerAssociation = "";
+  let matchWins = 0;
+  let matchLosses = 0;
+  let duelWins = 0;
+  let duelLosses = 0;
+  let gameWins = 0;
+  let gameLosses = 0;
+
+  matches.forEach((match) => {
+    const matchId = String(match?.id || "").trim();
+    const matchDuels = duelsByMatch.get(matchId) || [];
+    const playerDuels = matchDuels.filter((duel) => fmstatDuelPlayerSide(duel, playerId));
+    if (!playerDuels.length) return;
+
+    playedMatches.push(match);
+    const firstDuel = playerDuels[0];
+    const isSide1 = fmstatDuelPlayerSide(firstDuel, playerId) === 1;
+    playerName = String(isSide1 ? (firstDuel?.player_1_name || "") : (firstDuel?.player_2_name || "")).trim() || playerName;
+
+    const ownDw = Number(isSide1 ? match?.dw1 : match?.dw2) || 0;
+    const oppDw = Number(isSide1 ? match?.dw2 : match?.dw1) || 0;
+    if (ownDw > oppDw) matchWins += 1;
+    else if (ownDw < oppDw) matchLosses += 1;
+
+    const ownTeamCode = String(isSide1 ? (match?.team_1 || "") : (match?.team_2 || "")).trim().toUpperCase();
+    const oppTeamCode = String(isSide1 ? (match?.team_2 || "") : (match?.team_1 || "")).trim().toUpperCase();
+    const oppTeamName = String(
+      isSide1 ? (match?.team_2_name || match?.team_2 || oppTeamCode) : (match?.team_1_name || match?.team_1 || oppTeamCode)
+    ).trim() || oppTeamCode;
+    const oppTeamFlag = String(isSide1 ? (match?.team_2_flag || "") : (match?.team_1_flag || "")).trim();
+    if (!playerAssociation) playerAssociation = ownTeamCode;
+    if (oppTeamCode) {
+      opponentTeamCount.set(oppTeamCode, (opponentTeamCount.get(oppTeamCode) || 0) + 1);
+      opponentTeamMeta.set(oppTeamCode, { name: oppTeamName, flag: oppTeamFlag });
+    }
+
+    playerDuels.forEach((duel) => {
+      const duelIsSide1 = fmstatDuelPlayerSide(duel, playerId) === 1;
+      const ownDwDuel = Number(duelIsSide1 ? duel?.dw1 : duel?.dw2) || 0;
+      const oppDwDuel = Number(duelIsSide1 ? duel?.dw2 : duel?.dw1) || 0;
+      if (ownDwDuel > oppDwDuel) duelWins += 1;
+      else if (ownDwDuel < oppDwDuel) duelLosses += 1;
+
+      const opponentPlayerId = String(duelIsSide1 ? (duel?.player_2_id || "") : (duel?.player_1_id || "")).trim();
+      const opponentPlayerName = String(duelIsSide1 ? (duel?.player_2_name || "") : (duel?.player_1_name || "")).trim() || opponentPlayerId;
+      if (opponentPlayerId) {
+        if (!opponentPlayerMatchSets.has(opponentPlayerId)) opponentPlayerMatchSets.set(opponentPlayerId, new Set());
+        opponentPlayerMatchSets.get(opponentPlayerId).add(matchId);
+        opponentPlayerMeta.set(opponentPlayerId, { name: opponentPlayerName, flag: oppTeamFlag });
+      }
+
+      fmstatCollectGames(duel).forEach((game) => {
+        const winnerSide = fmstatGameWinnerSide(game);
+        if (!winnerSide) return;
+        if ((duelIsSide1 && winnerSide === 1) || (!duelIsSide1 && winnerSide === 2)) gameWins += 1;
+        else gameLosses += 1;
+      });
+    });
+  });
+
+  if (!playedMatches.length) return null;
+
+  const sampleMatch = playedMatches[0];
+  const sampleDuel = (duelsByMatch.get(String(sampleMatch?.id || "").trim()) || []).find((duel) => (
+    fmstatDuelPlayerSide(duel, playerId)
+  )) || null;
+  const sampleIsSide1 = sampleDuel ? fmstatDuelPlayerSide(sampleDuel, playerId) === 1 : true;
+
+  const opponentPlayerCounts = new Map();
+  opponentPlayerMatchSets.forEach((set, oppId) => opponentPlayerCounts.set(oppId, set.size));
+
+  return {
+    header: {
+      title: playerName,
+      image: String(sampleDuel ? (sampleIsSide1 ? (sampleMatch?.team_1_flag || "") : (sampleMatch?.team_2_flag || "")) : "").trim(),
+      titleClass: "fmstat-title-player"
+    },
+    matches: playedMatches.length,
+    matchWins,
+    matchLosses,
+    duelWins,
+    duelLosses,
+    gameWins,
+    gameLosses,
+    topOpponentTeams: fmstatTopEntries(opponentTeamCount, opponentTeamMeta, 1, 3),
+    topOpponentPlayers: fmstatTopEntries(opponentPlayerCounts, opponentPlayerMeta, 1, 3)
+  };
+}
+
+function fmstatClearRoot(root) {
+  while (root.firstChild) root.removeChild(root.firstChild);
+}
+
+function fmstatCreateTextBlock(className, text) {
+  const el = document.createElement("div");
+  el.className = className;
+  el.textContent = text;
+  return el;
+}
+
+function fmstatAppendHeader(parent, header) {
+  const head = document.createElement("div");
+  head.className = "fmstat-head";
+
+  const main = document.createElement("div");
+  main.className = "fmstat-head-main";
+
+  if (header?.kicker) {
+    const kicker = document.createElement("div");
+    kicker.className = "fmstat-kicker";
+    kicker.textContent = header.kicker;
+    main.appendChild(kicker);
+  }
+
+  const row = document.createElement("div");
+  row.className = "fmstat-title-row";
+  if (header?.image) {
+    const img = document.createElement("img");
+    img.className = "fmstat-title-flag";
+    img.src = header.image;
+    img.alt = "";
+    row.appendChild(img);
+  }
+  const title = document.createElement("span");
+  title.className = `fmstat-title${header?.titleClass ? ` ${header.titleClass}` : ""}`;
+  title.textContent = String(header?.title || "");
+  row.appendChild(title);
+  main.appendChild(row);
+
+  if (header?.subtitle) {
+    const subtitle = document.createElement("div");
+    subtitle.className = "fmstat-subtitle";
+    subtitle.textContent = header.subtitle;
+    main.appendChild(subtitle);
+  }
+
+  head.appendChild(main);
+  parent.appendChild(head);
+}
+
+function fmstatAppendStatLine(parent, label, value, valueClass) {
+  const line = document.createElement("div");
+  line.className = "fmstat-stat-line";
+
+  const name = document.createElement("span");
+  name.className = "fmstat-stat-name";
+  name.textContent = label;
+
+  const valueEl = document.createElement("span");
+  valueEl.className = `fmstat-stat-value${valueClass ? ` ${valueClass}` : ""}`;
+  valueEl.textContent = String(value);
+
+  line.appendChild(name);
+  line.appendChild(valueEl);
+  parent.appendChild(line);
+}
+
+function fmstatAppendSection(parent, label, linesBuilder) {
+  const card = document.createElement("div");
+  card.className = "fmstat-card";
+
+  const title = document.createElement("div");
+  title.className = "fmstat-label";
+  title.textContent = label;
+  card.appendChild(title);
+
+  linesBuilder(card);
+  parent.appendChild(card);
+}
+
+function fmstatAppendListSection(parent, label, items, type, emptyText) {
+  const card = document.createElement("div");
+  card.className = "fmstat-card";
+
+  const title = document.createElement("div");
+  title.className = "fmstat-label";
+  title.textContent = label;
+  card.appendChild(title);
+
+  if (!items.length) {
+    const note = document.createElement("div");
+    note.className = "fmstat-note";
+    note.textContent = emptyText;
+    card.appendChild(note);
+    parent.appendChild(card);
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "fmstat-list";
+
+  items.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "fmstat-list-item";
+
+    const main = document.createElement("span");
+    main.className = "fmstat-list-main";
+
+    if (item.flag && (type === "team" || type === "player")) {
+      const img = document.createElement("img");
+      img.src = item.flag;
+      img.alt = "";
+      main.appendChild(img);
+    }
+
+    const name = document.createElement("span");
+    name.className = "fmstat-list-name";
+    name.textContent = String(item.name || item.key || "");
+    main.appendChild(name);
+
+    const meta = document.createElement("span");
+    meta.className = "fmstat-list-meta";
+    meta.textContent = ` - ${item.count}`;
+
+    row.appendChild(main);
+    row.appendChild(meta);
+    list.appendChild(row);
+  });
+
+  card.appendChild(list);
+  parent.appendChild(card);
+}
+
+function fmstatRenderTeamStats(root, stats) {
+  fmstatAppendHeader(root, stats.header);
+
+  const grid = document.createElement("div");
+  grid.className = "fmstat-grid";
+
+  fmstatAppendSection(grid, "Matches:", (card) => {
+    fmstatAppendStatLine(card, "Total ", stats.matches, "fmstat-total");
+    fmstatAppendStatLine(card, "Won ", stats.matchWins, "fmstat-wins");
+    fmstatAppendStatLine(card, "Draw ", stats.matchDraws, "fmstat-draws");
+    fmstatAppendStatLine(card, "Lost ", stats.matchLosses, "fmstat-losses");
+  });
+
+  fmstatAppendSection(grid, "Duels:", (card) => {
+    fmstatAppendStatLine(card, "Won ", stats.duelWins, "fmstat-wins");
+    fmstatAppendStatLine(card, "Lost ", stats.duelLosses, "fmstat-losses");
+  });
+
+  fmstatAppendSection(grid, "Games:", (card) => {
+    fmstatAppendStatLine(card, "Won ", stats.gameWins, "fmstat-wins");
+    fmstatAppendStatLine(card, "Lost ", stats.gameLosses, "fmstat-losses");
+  });
+
+  fmstatAppendSection(grid, "Players:", (card) => {
+    fmstatAppendStatLine(card, "Total ", stats.playersCount, "fmstat-total");
+  });
+
+  fmstatAppendListSection(grid, "Top Players:", stats.topPlayers, "player", "No players yet.");
+  fmstatAppendListSection(grid, "Top Opponents:", stats.topOpponents, "team", "No repeat opponents yet.");
+
+  root.appendChild(grid);
+}
+
+function fmstatRenderPlayerStats(root, stats) {
+  fmstatAppendHeader(root, stats.header);
+
+  const grid = document.createElement("div");
+  grid.className = "fmstat-grid";
+
+  fmstatAppendSection(grid, "Team Results:", (card) => {
+    fmstatAppendStatLine(card, "Total ", stats.matches, "fmstat-total");
+    fmstatAppendStatLine(card, "Won ", stats.matchWins, "fmstat-wins");
+    fmstatAppendStatLine(card, "Lost ", stats.matchLosses, "fmstat-losses");
+  });
+
+  fmstatAppendSection(grid, "Duels:", (card) => {
+    fmstatAppendStatLine(card, "Won ", stats.duelWins, "fmstat-wins");
+    fmstatAppendStatLine(card, "Lost ", stats.duelLosses, "fmstat-losses");
+  });
+
+  fmstatAppendSection(grid, "Games:", (card) => {
+    fmstatAppendStatLine(card, "Won ", stats.gameWins, "fmstat-wins");
+    fmstatAppendStatLine(card, "Lost ", stats.gameLosses, "fmstat-losses");
+  });
+
+  fmstatAppendListSection(grid, "Top Opponent Teams:", stats.topOpponentTeams, "team", "No repeat opponents yet.");
+  fmstatAppendListSection(grid, "Top Opponent Players:", stats.topOpponentPlayers, "player", "No repeat opponents yet.");
+
+  root.appendChild(grid);
+}
+
+async function fmstatLoad() {
+  const root = document.getElementById("fmstat-root");
+  if (!root) return;
+  const requestId = ++fmstatLoadRequestId;
+  fmstatClearRoot(root);
+
+  const filters = fmstatReadFilters();
+  if (!filters.player && !filters.association) {
+    root.appendChild(fmstatCreateTextBlock("fmstat-empty-title", "To view statistics, select a country or player."));
+    return;
+  }
+
+  const loading = fmstatCreateTextBlock("fmstat-loading", "Loading stats...");
+  root.appendChild(loading);
+
+  try {
+    const data = await fmstatFetchAllData(filters);
+    if (requestId !== fmstatLoadRequestId) return;
+    fmstatClearRoot(root);
+
+    if (filters.player) {
+      const stats = fmstatComputePlayerStats(data || {}, filters.player);
+      if (!stats) {
+        root.appendChild(fmstatCreateTextBlock("fmstat-empty-title", `No finished friendly matches found for player ${filters.player}.`));
+        return;
+      }
+      fmstatRenderPlayerStats(root, stats);
+      return;
+    }
+
+    const stats = fmstatComputeTeamStats(data || {}, filters.association);
+    if (!stats) {
+      root.appendChild(fmstatCreateTextBlock("fmstat-empty-title", `No finished friendly matches found for country ${filters.association}.`));
+      return;
+    }
+    fmstatRenderTeamStats(root, stats);
+  } catch (error) {
+    if (requestId !== fmstatLoadRequestId) return;
+    fmstatClearRoot(root);
+    console.error("Failed to load friendly matches stats:", error);
+    root.appendChild(fmstatCreateTextBlock("fmstat-error", "Failed to load stats."));
+  }
+}
+
+fmstatLoad();
+window.addEventListener("friendly-matches-filter-change", fmstatLoad);
+window.addEventListener("popstate", fmstatLoad);
+</script>
