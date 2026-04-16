@@ -3127,6 +3127,8 @@ app.get("/profiles/public", (_req, res, next) => {
         id,
         bga_nickname,
         avatar,
+        bga_elo,
+        bga_elo_updated_at,
         name,
         association,
         COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
