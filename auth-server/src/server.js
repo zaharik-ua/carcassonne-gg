@@ -5079,7 +5079,27 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
   );
 });
 
-app.get("/news-editors", requireAdmin, (_req, res, next) => {
+app.get("/news-editors", (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const isAdmin = Number(req.user.admin) === 1;
+  const currentProfileId = String(req.user.player_id || "").trim();
+  if (!isAdmin && !currentProfileId) {
+    return res.json({ ok: true, news_editors: [] });
+  }
+
+  const params = [];
+  const whereClause = isAdmin
+    ? ""
+    : `
+      WHERE trim(COALESCE(ne.profile_id, '')) = trim(?)
+    `;
+  if (!isAdmin) {
+    params.push(currentProfileId);
+  }
+
   db.all(
     `
       SELECT
@@ -5107,6 +5127,7 @@ app.get("/news-editors", requireAdmin, (_req, res, next) => {
         ON upper(trim(COALESCE(a.code, ''))) = upper(trim(COALESCE(ne.country_id, '')))
       LEFT JOIN tournaments t
         ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(ne.tournament_id, '')))
+      ${whereClause}
       ORDER BY
         COALESCE(ne.is_captain, 0) DESC,
         lower(COALESCE(ne.access_type, '')) ASC,
@@ -5115,6 +5136,7 @@ app.get("/news-editors", requireAdmin, (_req, res, next) => {
         lower(COALESCE(p.bga_nickname, p.name, ne.profile_id, '')) ASC,
         ne.id ASC
     `,
+    params,
     (err, rows) => {
       if (err) return next(err);
       return res.json({ ok: true, news_editors: rows || [] });

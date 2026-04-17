@@ -1806,6 +1806,7 @@
   const FRIENDLY_FIND_URL = `${AUTH_BASE}/friendly-find`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
   const STREAMS_URL = `${AUTH_BASE}/streams`;
+  const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const PROFILES_URL = `${AUTH_BASE}/profiles`;
   const PROFILE_CONTACTS_URL = `${AUTH_BASE}/profiles/contacts`;
@@ -1820,6 +1821,7 @@
     PLAYERS: "players",
     FRIENDLY_FIND: "friendly-find",
     STREAMS: "streams",
+    NEWS: "news",
     NATIONALS: "nationals",
     CHALLENGES: "challenges",
   };
@@ -1844,6 +1846,13 @@
       label: "My Streams",
       subtitle: "Manage your streams",
       icon: "https://carcassonne.gg/gallery/streams.png",
+    },
+    {
+      type: "view",
+      view: CAPTAIN_VIEWS.NEWS,
+      label: "My News",
+      subtitle: "Manage your news access",
+      icon: "https://carcassonne.gg/gallery/news.png",
     },
     {
       type: "view",
@@ -1941,6 +1950,7 @@
     if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
     if (raw === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
     if (raw === CAPTAIN_VIEWS.STREAMS) return CAPTAIN_VIEWS.STREAMS;
+    if (raw === CAPTAIN_VIEWS.NEWS) return CAPTAIN_VIEWS.NEWS;
     if (raw === CAPTAIN_VIEWS.NATIONALS) return CAPTAIN_VIEWS.NATIONALS;
     if (raw === CAPTAIN_VIEWS.CHALLENGES) return CAPTAIN_VIEWS.CHALLENGES;
     return "";
@@ -1975,6 +1985,7 @@
       nextView === CAPTAIN_VIEWS.PLAYERS
       || nextView === CAPTAIN_VIEWS.FRIENDLY_FIND
       || nextView === CAPTAIN_VIEWS.STREAMS
+      || nextView === CAPTAIN_VIEWS.NEWS
       || nextView === CAPTAIN_VIEWS.NATIONALS
       || nextView === CAPTAIN_VIEWS.CHALLENGES
     ) {
@@ -2028,6 +2039,7 @@
       if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
       if (raw === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
       if (raw === CAPTAIN_VIEWS.STREAMS) return CAPTAIN_VIEWS.STREAMS;
+      if (raw === CAPTAIN_VIEWS.NEWS) return CAPTAIN_VIEWS.NEWS;
       if (raw === CAPTAIN_VIEWS.NATIONALS) return CAPTAIN_VIEWS.NATIONALS;
       if (raw === CAPTAIN_VIEWS.CHALLENGES) return CAPTAIN_VIEWS.CHALLENGES;
       if (raw === CAPTAIN_VIEWS.MATCHES) return CAPTAIN_VIEWS.MATCHES;
@@ -2916,6 +2928,9 @@
     }
     if (activeView === CAPTAIN_VIEWS.STREAMS) {
       return "My Streams";
+    }
+    if (activeView === CAPTAIN_VIEWS.NEWS) {
+      return "My News";
     }
     if (activeView === CAPTAIN_VIEWS.NATIONALS) {
       return "Nationals";
@@ -8897,6 +8912,7 @@
       let currentUserAuthId = "";
       let currentUserPlayerId = "";
       let hasLinkedBgaId = false;
+      let isNewsEditorUser = false;
 
       try {
         const meRes = await fetch(ME_URL, { method: "GET", credentials: "include" });
@@ -8926,10 +8942,12 @@
       if (!activeView && !requestedTournamentId && !isCreateMode && !isEditMode) {
         let tournaments = [];
         let streamers = [];
+        let newsEditors = [];
         try {
-          const [tournamentsRes, streamersRes] = await Promise.all([
+          const [tournamentsRes, streamersRes, newsEditorsRes] = await Promise.all([
             fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
             fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
+            fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" }),
           ]);
           if (tournamentsRes.ok) {
             const tournamentsData = await tournamentsRes.json().catch(() => ({}));
@@ -8939,12 +8957,20 @@
             const streamersData = await streamersRes.json().catch(() => ({}));
             streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
           }
+          if (newsEditorsRes.ok) {
+            const newsEditorsData = await newsEditorsRes.json().catch(() => ({}));
+            newsEditors = Array.isArray(newsEditorsData?.news_editors) ? newsEditorsData.news_editors : [];
+          }
         } catch (_error) {
           tournaments = [];
           streamers = [];
+          newsEditors = [];
         }
 
         const isStreamerUser = !!currentUserPlayerId && streamers.some((entry) => (
+          String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserPlayerId
+        ));
+        isNewsEditorUser = !!currentUserPlayerId && newsEditors.some((entry) => (
           String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserPlayerId
         ));
 
@@ -8975,6 +9001,9 @@
             if (item.view === CAPTAIN_VIEWS.STREAMS) {
               return isStreamerUser;
             }
+            if (item.view === CAPTAIN_VIEWS.NEWS) {
+              return isNewsEditorUser;
+            }
             if (item.view === CAPTAIN_VIEWS.NATIONALS || item.view === CAPTAIN_VIEWS.CHALLENGES) {
               return isAuthenticatedUser && hasLinkedBgaId;
             }
@@ -9000,6 +9029,11 @@
           renderAccessMessage();
           return;
         }
+      } else if (activeView === CAPTAIN_VIEWS.NEWS) {
+        if (!isAuthenticatedUser) {
+          renderAccessMessage();
+          return;
+        }
       } else if (activeView === CAPTAIN_VIEWS.NATIONALS || activeView === CAPTAIN_VIEWS.CHALLENGES) {
         if (!isAuthenticatedUser) {
           renderAccessMessage();
@@ -9018,7 +9052,7 @@
         associationCode = isAdminUser ? associationCode : captainAssociationCode;
       }
 
-      const [matchesRes, teamsRes, tournamentsRes, profilesRes, friendlyFindRes, streamersRes, streamsRes] = await Promise.all([
+      const [matchesRes, teamsRes, tournamentsRes, profilesRes, friendlyFindRes, streamersRes, streamsRes, newsEditorsRes] = await Promise.all([
         activeView === CAPTAIN_VIEWS.MATCHES
           ? fetch(MATCHES_URL, { method: "GET", credentials: "include" })
           : activeView === CAPTAIN_VIEWS.STREAMS
@@ -9035,6 +9069,9 @@
           : Promise.resolve(null),
         activeView === CAPTAIN_VIEWS.STREAMS
           ? fetch(STREAMS_URL, { method: "GET", credentials: "include" })
+          : Promise.resolve(null),
+        activeView === CAPTAIN_VIEWS.NEWS
+          ? fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" })
           : Promise.resolve(null),
       ]);
 
@@ -9070,6 +9107,13 @@
         String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserPlayerId
       ));
       const currentStreamer = getStreamerForCurrentUser(streamers, currentUserPlayerId);
+      const newsEditorsData = newsEditorsRes?.ok
+        ? await newsEditorsRes.json().catch(() => ({}))
+        : {};
+      const newsEditors = Array.isArray(newsEditorsData?.news_editors) ? newsEditorsData.news_editors : [];
+      isNewsEditorUser = !!currentUserPlayerId && newsEditors.some((entry) => (
+        String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserPlayerId
+      ));
 
       const teamsById = new Map();
       if (teamsRes.ok) {
@@ -9149,6 +9193,13 @@
         }
       }
 
+      if (activeView === CAPTAIN_VIEWS.NEWS) {
+        if (!isAdminUser && !isNewsEditorUser) {
+          renderRestrictedSectionMessage("This section is available only to users added to News Editors.");
+          return;
+        }
+      }
+
       if (activeView === CAPTAIN_VIEWS.NATIONALS) {
         const nationalsLink = document.createElement("a");
         nationalsLink.href = "https://carcassonne.gg/nationals";
@@ -9162,6 +9213,13 @@
             text.append("For now, please find your local tournaments here: ", nationalsLink);
             return text;
           })(),
+        ]);
+        return;
+      }
+
+      if (activeView === CAPTAIN_VIEWS.NEWS) {
+        renderStaticInfoSection("My News", [
+          "This section is under development.",
         ]);
         return;
       }

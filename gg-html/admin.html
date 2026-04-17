@@ -2468,12 +2468,22 @@
     toggleAccessUsersState();
 
     const toggleLineupSizeState = () => {
+      const tournamentType = String(tournamentTypeField.select.value || "").trim();
+      const supportsLineupSize = tournamentType === "Teams" || tournamentType === "Clubs";
       const isFixed = String(lineupSizeTypeField.select.value || "2") === "1";
-      lineupSizeField.input.disabled = !isFixed;
-      lineupSizeField.input.required = isFixed;
-      lineupSizeField.row.classList.toggle("hidden", !isFixed);
-      if (!isFixed) lineupSizeField.input.value = "";
+      lineupSizeTypeField.row.classList.toggle("hidden", !supportsLineupSize);
+      lineupSizeTypeField.select.disabled = !supportsLineupSize;
+      lineupSizeField.input.disabled = !supportsLineupSize || !isFixed;
+      lineupSizeField.input.required = supportsLineupSize && isFixed;
+      lineupSizeField.row.classList.toggle("hidden", !supportsLineupSize || !isFixed);
+      if (!supportsLineupSize) {
+        lineupSizeTypeField.select.value = "2";
+        lineupSizeField.input.value = "";
+      } else if (!isFixed) {
+        lineupSizeField.input.value = "";
+      }
     };
+    tournamentTypeField.select.addEventListener("change", toggleLineupSizeState);
     lineupSizeTypeField.select.addEventListener("change", toggleLineupSizeState);
     toggleLineupSizeState();
 
@@ -2532,6 +2542,10 @@
         payload.access_users = [];
       } else if (payload.subtype !== "Official") {
         payload.access_users = [];
+      }
+      if (payload.tournament_type !== "Teams" && payload.tournament_type !== "Clubs") {
+        payload.lineup_size_type = 2;
+        payload.lineup_size = null;
       }
       if (payload.lineup_size_type === 2) {
         payload.lineup_size = null;
