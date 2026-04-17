@@ -194,12 +194,12 @@ class SqliteRatingsRepository:
                 WHERE d.deleted_at IS NULL
                   AND trim(COALESCE(d.player_1_id, '')) <> ''
                   AND trim(COALESCE(d.player_2_id, '')) <> ''
-                  AND COALESCE(status, 'Planned') = 'Planned'
+                  AND COALESCE(d.status, 'Planned') = 'Planned'
                   AND (
-                    rating_full IS NULL
-                    OR trim(COALESCE(CAST(rating_full AS TEXT), '')) = ''
-                    OR rating IS NULL
-                    OR trim(COALESCE(CAST(rating AS TEXT), '')) = ''
+                    d.rating_full IS NULL
+                    OR trim(COALESCE(CAST(d.rating_full AS TEXT), '')) = ''
+                    OR d.rating IS NULL
+                    OR trim(COALESCE(CAST(d.rating AS TEXT), '')) = ''
                   )
                   AND p1.bga_elo IS NOT NULL
                   AND p2.bga_elo IS NOT NULL
