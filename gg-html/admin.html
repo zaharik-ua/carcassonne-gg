@@ -2392,9 +2392,24 @@
     const shortTitleField = createTextRow("short_title", item?.short_title || "");
     const logoField = createTextRow("logo", item?.logo || "");
     const linkField = createTextRow("link", item?.link || "");
-    const accessTypeField = createSelectRow("access_type", String(item?.access_type || 1), ["1", "2"], false);
-    if (accessTypeField.select.options[0]) accessTypeField.select.options[0].textContent = "1 - Open";
-    if (accessTypeField.select.options[1]) accessTypeField.select.options[1].textContent = "2 - Closed";
+    const tournamentTypeField = createSelectRow(
+      "tournament_type",
+      String(item?.tournament_type || item?.type || "Teams"),
+      ["Individuals", "Teams", "Clubs", "National"],
+      false
+    );
+    const subtypeField = createSelectRow(
+      "subtype",
+      String(item?.subtype || item?.access_type || "Friendly"),
+      ["Friendly", "Official"],
+      false
+    );
+    const playerHubVisibilityField = createSelectRow(
+      "player_hub_visibility",
+      String(item?.player_hub_visibility || "Visible"),
+      ["Visible", "Hidden"],
+      false
+    );
     const lineupSizeTypeField = createSelectRow(
       "lineup_size_type",
       String(item?.lineup_size_type || 2),
@@ -2428,20 +2443,28 @@
     form.appendChild(shortTitleField.row);
     form.appendChild(logoField.row);
     form.appendChild(linkField.row);
-    form.appendChild(accessTypeField.row);
+    form.appendChild(tournamentTypeField.row);
+    form.appendChild(subtypeField.row);
+    form.appendChild(playerHubVisibilityField.row);
     form.appendChild(lineupSizeTypeField.row);
     form.appendChild(lineupSizeField.row);
     form.appendChild(accessUsersField.row);
     accessUsersField.row.appendChild(accessUsersHint);
 
     const toggleAccessUsersState = () => {
-      const isClosed = String(accessTypeField.select.value || "1") === "2";
-      accessUsersField.setDisabled(!isClosed);
-      accessUsersHint.textContent = isClosed
-        ? "Select users who will have access to this closed tournament and assign role: admin or captain."
-        : "Open tournaments are available to all captains.";
+      const isTeams = String(tournamentTypeField.select.value || "").trim() === "Teams";
+      const isOfficial = String(subtypeField.select.value || "").trim() === "Official";
+      subtypeField.row.classList.toggle("hidden", !isTeams);
+      accessUsersField.row.classList.toggle("hidden", !isTeams);
+      accessUsersField.setDisabled(!(isTeams && isOfficial));
+      accessUsersHint.textContent = !isTeams
+        ? "Subtype is used only for team tournaments."
+        : isOfficial
+          ? "Select users who will have access to this official tournament and assign role: admin or captain."
+          : "Friendly tournaments are available to all captains.";
     };
-    accessTypeField.select.addEventListener("change", toggleAccessUsersState);
+    tournamentTypeField.select.addEventListener("change", toggleAccessUsersState);
+    subtypeField.select.addEventListener("change", toggleAccessUsersState);
     toggleAccessUsersState();
 
     const toggleLineupSizeState = () => {
@@ -2489,7 +2512,9 @@
         short_title: String(shortTitleField.input.value || "").trim(),
         logo: String(logoField.input.value || "").trim(),
         link: String(linkField.input.value || "").trim(),
-        access_type: Number.parseInt(String(accessTypeField.select.value || "1"), 10) === 2 ? 2 : 1,
+        tournament_type: String(tournamentTypeField.select.value || "Teams").trim(),
+        subtype: String(subtypeField.select.value || "Friendly").trim(),
+        player_hub_visibility: String(playerHubVisibilityField.select.value || "Visible").trim(),
         lineup_size_type: Number.parseInt(String(lineupSizeTypeField.select.value || "2"), 10) === 1 ? 1 : 2,
         lineup_size: Number.parseInt(String(lineupSizeField.input.value || "").trim(), 10),
         access_users: accessUsersField.getValues(),
@@ -2502,7 +2527,10 @@
         setStatus("Tournament name is required.", true);
         return;
       }
-      if (payload.access_type === 1) {
+      if (payload.tournament_type !== "Teams") {
+        payload.subtype = null;
+        payload.access_users = [];
+      } else if (payload.subtype !== "Official") {
         payload.access_users = [];
       }
       if (payload.lineup_size_type === 2) {
@@ -2572,9 +2600,14 @@
       state.profilesPublic
         .slice()
         .sort((left, right) => {
-          const leftLabel = `${left?.bga_nickname || ""} ${left?.name || ""} ${left?.id || ""}`.trim().toLowerCase();
-          const rightLabel = `${right?.bga_nickname || ""} ${right?.name || ""} ${right?.id || ""}`.trim().toLowerCase();
-          return leftLabel.localeCompare(rightLabel);
+          const leftId = Number.parseInt(String(left?.id || "").trim(), 10);
+          const rightId = Number.parseInt(String(right?.id || "").trim(), 10);
+          if (Number.isNaN(leftId) && Number.isNaN(rightId)) {
+            return String(left?.id || "").trim().localeCompare(String(right?.id || "").trim());
+          }
+          if (Number.isNaN(leftId)) return 1;
+          if (Number.isNaN(rightId)) return -1;
+          return leftId - rightId;
         })
         .map((profile) => {
           const id = String(profile?.id || "").trim();
@@ -3106,12 +3139,20 @@
 
     sectionList.innerHTML = "";
     state.tournaments.forEach((item) => {
+      const subtitleParts = [];
+      const tournamentType = String(item?.tournament_type || item?.type || "").trim();
+      const subtype = String(item?.subtype || item?.access_type || "").trim();
+      const playerHubVisibility = String(item?.player_hub_visibility || "").trim();
+      if (item.short_title) subtitleParts.push(String(item.short_title).trim());
+      if (tournamentType) subtitleParts.push(tournamentType);
+      if (tournamentType === "Teams" && subtype) subtitleParts.push(subtype);
+      if (playerHubVisibility) subtitleParts.push(playerHubVisibility);
       sectionList.appendChild(createListRow({
         imageSrc: item.logo,
         imageAlt: item.name,
         imageRound: false,
         title: item.name || item.id,
-        subtitle: item.short_title || "",
+        subtitle: subtitleParts.join(" • "),
         buttonLabel: "Edit",
         onClick: (row) => openTournamentForm("edit", item, row),
       }));

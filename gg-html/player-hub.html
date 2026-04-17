@@ -2858,7 +2858,10 @@
   }
 
   function getTournamentAccessState(tournament, authState = {}) {
-    const accessType = Number(tournament?.access_type || 1) === 2 ? 2 : 1;
+    const subtypeRaw = String(tournament?.subtype || tournament?.access_type || "").trim().toLowerCase();
+    const accessType = (subtypeRaw === "official" || subtypeRaw === "closed" || subtypeRaw === "2")
+      ? "Official"
+      : "Friendly";
     const accessRole = String(tournament?.access_role || "").trim().toLowerCase();
     const isAdminUser = !!authState.isAdminUser;
     const accessUsers = normalizeTournamentAccessUsers(
@@ -2870,13 +2873,13 @@
     const currentUserEntry = currentUserAuthId
       ? accessUsers.find((entry) => entry.userId === currentUserAuthId) || null
       : null;
-    const hasClosedAccess = accessType === 2
+    const hasClosedAccess = accessType === "Official"
       ? !!(isAdminUser || currentUserEntry || accessRole === "admin" || accessRole === "captain")
       : false;
-    const canSee = accessType === 2
+    const canSee = accessType === "Official"
       ? hasClosedAccess
       : !!(isAdminUser || authState.isCaptainUser);
-    const canManage = accessType === 2
+    const canManage = accessType === "Official"
       ? !!(isAdminUser || currentUserEntry?.role === "admin" || accessRole === "admin")
       : true;
     return {
@@ -2887,6 +2890,10 @@
       canSee,
       canManage,
     };
+  }
+
+  function isTournamentHiddenInPlayerHub(tournament) {
+    return String(tournament?.player_hub_visibility || "").trim().toLowerCase() === "hidden";
   }
 
   function setPageHeading(text) {
@@ -8942,7 +8949,8 @@
         ));
 
         const visibleTournaments = tournaments.filter((tournament) => (
-          getTournamentAccessState(tournament, {
+          !isTournamentHiddenInPlayerHub(tournament)
+          && getTournamentAccessState(tournament, {
             currentUserAuthId,
             isCaptainUser,
             isAdminUser,
@@ -8953,7 +8961,7 @@
           type: "tournament",
           id: String(tournament?.id || "").trim(),
           label: String(tournament?.short_title || tournament?.name || tournament?.id || "").trim(),
-          subtitle: "Open tournament matches",
+          subtitle: "Tournament matches",
           icon: String(tournament?.logo || "https://carcassonne.gg/gallery/friendly-matches.png").trim(),
         }))
           .filter((item) => item.id && item.label)
@@ -9127,8 +9135,8 @@
         && !currentTournamentAccess.canSee
       ) {
         renderRestrictedSectionMessage(
-          currentTournamentAccess.accessType === 2
-            ? "This closed tournament is available only to users added to access_users."
+          currentTournamentAccess.accessType === "Official"
+            ? "This official tournament is available only to users added to access_users."
             : "This tournament is available only for captains."
         );
         return;
@@ -9172,7 +9180,7 @@
           captainPageState.associationOverrideTouched
             ? normalizeCode(associationOverride || "")
             : (
-                currentTournamentAccess.accessType === 2
+                currentTournamentAccess.accessType === "Official"
                   ? normalizeCode(captainAssociationCode || "")
                   : (
                       String(currentTournament?.id || requestedTournamentId || "").trim() === "Friendly-Matches"
@@ -9191,7 +9199,7 @@
             if (!requestedTournamentId || tournamentId !== requestedTournamentId) return false;
           }
           const closedTournamentMatches = activeView === CAPTAIN_VIEWS.MATCHES
-            && currentTournamentAccess.accessType === 2;
+            && currentTournamentAccess.accessType === "Official";
           if (closedTournamentMatches) {
             if (!currentTournamentAccess.hasClosedAccess) return false;
             if (canManageClosedTournamentMatches) return true;
@@ -9269,7 +9277,7 @@
         && isAdminUser
         && !isCreateMode
         && !isEditMode
-        && currentTournamentAccess.accessType !== 2
+        && currentTournamentAccess.accessType !== "Official"
       ) {
         const ownTeamMeta = teamsById.get(normalizeCode(captainAssociationCode)) || null;
         const filterOptions = [
@@ -9392,11 +9400,11 @@
         }
         if (!canManageClosedTournamentMatches) {
           contentEl.className = "captain-alert";
-          contentEl.textContent = "Your role in this closed tournament allows lineups management only.";
+          contentEl.textContent = "Your role in this official tournament allows lineups management only.";
           countEl.textContent = "";
           return;
         }
-        if (!captainAssociationCode && !isAdminUser && Number(currentTournament?.access_type) !== 2) {
+        if (!captainAssociationCode && !isAdminUser && currentTournamentAccess.accessType !== "Official") {
           contentEl.className = "captain-alert";
           contentEl.textContent = "Cannot detect your team association for creating a match.";
           countEl.textContent = "";
@@ -9406,7 +9414,7 @@
           null,
           teamsById,
           {
-            lockedTeamField: (!isAdminUser && Number(currentTournament?.access_type) !== 2) ? "team_1" : "",
+            lockedTeamField: (!isAdminUser && currentTournamentAccess.accessType !== "Official") ? "team_1" : "",
             team1Default: captainAssociationCode,
             profiles: allProfiles,
             lineups: [],
@@ -9424,7 +9432,7 @@
           return;
         }
         renderNoMatchesMessage(
-          currentTournamentAccess.accessType === 2
+          currentTournamentAccess.accessType === "Official"
             ? "No matches found for this tournament."
             : isAdminErrorMatchesFilter
               ? "No matches with status Error found for this tournament."
@@ -9447,7 +9455,7 @@
         const matchTeam2 = readMatchTeam2(matchToEdit);
         let lockedTeamField = "";
         if (
-          currentTournamentAccess.accessType !== 2
+          currentTournamentAccess.accessType !== "Official"
           && !isAdminUser
           && isCaptainUser
           && captainAssociationCode
@@ -9468,12 +9476,12 @@
         } catch (_error) {
           existingLineups = [];
         }
-        const isOpenTournamentCaptainResultsEditor = currentTournamentAccess.accessType !== 2
+        const isOpenTournamentCaptainResultsEditor = currentTournamentAccess.accessType !== "Official"
           && !isAdminUser
           && isCaptainUser
           && !!captainAssociationCode
           && (matchTeam1 === captainAssociationCode || matchTeam2 === captainAssociationCode);
-        const isClosedTournamentCaptainResultsEditor = currentTournamentAccess.accessType === 2
+        const isClosedTournamentCaptainResultsEditor = currentTournamentAccess.accessType === "Official"
           && !canManageClosedTournamentMatches
           && (
             String(currentTournamentAccess?.currentUserEntry?.role || "").trim().toLowerCase() === "captain"
@@ -9501,7 +9509,7 @@
             profiles: allProfiles,
             lineups: existingLineups,
             tournament: currentTournament,
-            lineupsOnly: Number(currentTournament?.access_type) === 2 && !canManageClosedTournamentMatches,
+            lineupsOnly: currentTournamentAccess.accessType === "Official" && !canManageClosedTournamentMatches,
             isGlobalAdmin: isAdminUser,
             canEditResults,
             canShowExpiredResultsWarning,
@@ -9514,7 +9522,7 @@
       if (activeView === CAPTAIN_VIEWS.MATCHES) {
         const lineupsByMatch = await loadLineupsByMatchIds(filtered);
         renderMatches(filtered, teamsById, lineupsByMatch, profilesById, {
-          lineupsOnly: Number(currentTournament?.access_type) === 2 && !canManageClosedTournamentMatches,
+          lineupsOnly: currentTournamentAccess.accessType === "Official" && !canManageClosedTournamentMatches,
         });
       } else if (activeView === CAPTAIN_VIEWS.PLAYERS) {
         const defaultAdminAssociationCode = normalizeCode(
