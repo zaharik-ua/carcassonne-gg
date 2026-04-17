@@ -553,6 +553,7 @@
   const USER_OPTIONS_URL = `${AUTH_BASE}/users/options`;
   const AUDIT_TRAIL_URL = `${AUTH_BASE}/audit-trail`;
   const MATCHES_URL = `${AUTH_BASE}/matches`;
+  const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const DUEL_FORMATS_URL = `${AUTH_BASE}/duel-formats`;
   const STREAMER_SCOREBOARD_STYLE_OPTIONS = ["Default", "Nallerheim"];
@@ -578,6 +579,13 @@
       buttonLabel: "Edit",
       createLabel: "Create",
       load: () => apiJson(STREAMERS_URL, { method: "GET" }).then((data) => data.streamers || []),
+    },
+    newsEditors: {
+      key: "newsEditors",
+      title: "News Editors",
+      buttonLabel: "Edit",
+      createLabel: "Create",
+      load: () => apiJson(NEWS_EDITORS_URL, { method: "GET" }).then((data) => data.news_editors || []),
     },
     tournaments: {
       key: "tournaments",
@@ -647,6 +655,7 @@
     associations: [],
     teams: [],
     streamers: [],
+    newsEditors: [],
     tournaments: [],
     duelFormats: [],
     matchesReference: [],
@@ -1430,6 +1439,36 @@
       requests.push(
         apiJson(PROFILES_PUBLIC_URL, { method: "GET" }).then((data) => {
           state.profilesPublic = Array.isArray(data?.profiles) ? data.profiles : [];
+        })
+      );
+    }
+
+    return requests.length ? Promise.all(requests) : Promise.resolve();
+  }
+
+  function loadNewsEditorReferenceData() {
+    const requests = [];
+
+    if (!Array.isArray(state.profilesPublic) || !state.profilesPublic.length) {
+      requests.push(
+        apiJson(PROFILES_PUBLIC_URL, { method: "GET" }).then((data) => {
+          state.profilesPublic = Array.isArray(data?.profiles) ? data.profiles : [];
+        })
+      );
+    }
+
+    if (!Array.isArray(state.associations) || !state.associations.length) {
+      requests.push(
+        apiJson(ASSOCIATIONS_URL, { method: "GET" }).then((data) => {
+          state.associations = Array.isArray(data?.associations) ? data.associations : [];
+        })
+      );
+    }
+
+    if (!Array.isArray(state.tournaments) || !state.tournaments.length) {
+      requests.push(
+        apiJson(TOURNAMENTS_URL, { method: "GET" }).then((data) => {
+          state.tournaments = Array.isArray(data?.tournaments) ? data.tournaments : [];
         })
       );
     }
@@ -2517,6 +2556,220 @@
     }
   }
 
+  async function openNewsEditorForm(mode, item, anchorRow) {
+    try {
+      await loadNewsEditorReferenceData();
+    } catch (error) {
+      setStatus(error?.message || "Failed to load references.", true);
+      return;
+    }
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+
+    const idField = createTextRow("id", item?.id || "", { readOnly: true });
+    const profileOptions = [{ value: "", label: "Select profile..." }].concat(
+      state.profilesPublic
+        .slice()
+        .sort((left, right) => {
+          const leftLabel = `${left?.bga_nickname || ""} ${left?.name || ""} ${left?.id || ""}`.trim().toLowerCase();
+          const rightLabel = `${right?.bga_nickname || ""} ${right?.name || ""} ${right?.id || ""}`.trim().toLowerCase();
+          return leftLabel.localeCompare(rightLabel);
+        })
+        .map((profile) => {
+          const id = String(profile?.id || "").trim();
+          const parts = [
+            id,
+            String(profile?.bga_nickname || "").trim(),
+            String(profile?.name || "").trim(),
+            String(profile?.association || "").trim(),
+          ].filter(Boolean);
+          return { value: id, label: parts.join(" • ") || id };
+        })
+    );
+    const profileField = createSelectOptionsRow("profile_id", String(item?.profile_id || ""), profileOptions, false);
+    const accessTypeField = createSelectOptionsRow(
+      "access_type",
+      String(item?.access_type || "local"),
+      [
+        { value: "local", label: "Local" },
+        { value: "tournament", label: "Tournament" },
+        { value: "global", label: "Global" },
+      ],
+      false
+    );
+    const tournamentField = createSelectOptionsRow(
+      "tournament_id",
+      String(item?.tournament_id || ""),
+      [{ value: "", label: "Select tournament..." }].concat(
+        state.tournaments
+          .slice()
+          .sort((left, right) => String(left?.name || left?.id || "").localeCompare(String(right?.name || right?.id || "")))
+          .map((tournament) => ({
+            value: String(tournament?.id || ""),
+            label: [String(tournament?.id || "").trim(), String(tournament?.short_title || tournament?.name || "").trim()]
+              .filter(Boolean)
+              .join(" • "),
+          }))
+      ),
+      false
+    );
+    const countryField = createSelectOptionsRow(
+      "country_id",
+      String(item?.country_id || ""),
+      [{ value: "", label: "Select country..." }].concat(
+        state.associations
+          .slice()
+          .sort((left, right) => String(left?.name || left?.id || "").localeCompare(String(right?.name || right?.id || "")))
+          .map((association) => ({
+            value: String(association?.id || ""),
+            label: [String(association?.id || "").trim(), String(association?.name || "").trim()].filter(Boolean).join(" • "),
+          }))
+      ),
+      false
+    );
+    const captainRow = createInlineValueRow("captain", Number(item?.is_captain) === 1 ? "Yes" : "No");
+    const managedRow = createInlineValueRow(
+      "management",
+      Number(item?.is_captain) === 1
+        ? "Automatic. Created and removed when the profile is assigned as captain."
+        : "Manual. Can be changed here by admin."
+    );
+
+    const updateVisibility = () => {
+      const accessType = String(accessTypeField.select.value || "").trim().toLowerCase();
+      tournamentField.row.classList.toggle("hidden", accessType !== "tournament");
+      countryField.row.classList.toggle("hidden", accessType !== "local");
+    };
+
+    if (mode === "edit") form.appendChild(idField.row);
+    form.appendChild(profileField.row);
+    form.appendChild(accessTypeField.row);
+    form.appendChild(tournamentField.row);
+    form.appendChild(countryField.row);
+    if (mode === "edit") {
+      form.appendChild(captainRow.row);
+      form.appendChild(managedRow.row);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = mode === "create" ? "Create" : "Save";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => {
+      if (mode === "create") {
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+      } else {
+        closeInlineForm();
+      }
+      setStatus("", false);
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "cp-btn cp-btn-secondary";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.classList.toggle("hidden", mode !== "edit");
+    deleteBtn.disabled = Number(item?.is_captain) === 1;
+    deleteBtn.addEventListener("click", async () => {
+      if (!item?.id || Number(item?.is_captain) === 1) return;
+      if (!window.confirm("Delete this news editor access?")) return;
+      try {
+        await apiJson(`${NEWS_EDITORS_URL}/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+        closeInlineForm();
+        setStatus("News editor access deleted.", false);
+        await loadSectionData("newsEditors");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to delete news editor access.", true);
+      }
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    if (mode === "edit") actions.appendChild(deleteBtn);
+    form.appendChild(actions);
+
+    accessTypeField.select.addEventListener("change", updateVisibility);
+    updateVisibility();
+
+    if (Number(item?.is_captain) === 1) {
+      profileField.select.disabled = true;
+      accessTypeField.select.disabled = true;
+      tournamentField.select.disabled = true;
+      countryField.select.disabled = true;
+      saveBtn.disabled = true;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const payload = {
+        id: Number.parseInt(String(idField.input.value || "").trim(), 10),
+        profile_id: String(profileField.select.value || "").trim(),
+        access_type: String(accessTypeField.select.value || "").trim().toLowerCase(),
+        tournament_id: String(tournamentField.select.value || "").trim(),
+        country_id: String(countryField.select.value || "").trim(),
+      };
+
+      if (!payload.profile_id) {
+        setStatus("profile_id is required.", true);
+        return;
+      }
+      if (!payload.access_type) {
+        setStatus("access_type is required.", true);
+        return;
+      }
+      if (payload.access_type === "local" && !payload.country_id) {
+        setStatus("country_id is required for local access.", true);
+        return;
+      }
+      if (payload.access_type === "tournament" && !payload.tournament_id) {
+        setStatus("tournament_id is required for tournament access.", true);
+        return;
+      }
+
+      try {
+        if (mode === "create") {
+          await apiJson(NEWS_EDITORS_URL, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          setStatus("News editor access created.", false);
+          sectionForm.classList.add("hidden");
+          sectionForm.innerHTML = "";
+        } else {
+          await apiJson(`${NEWS_EDITORS_URL}/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+          setStatus("News editor access updated.", false);
+          closeInlineForm();
+        }
+        await loadSectionData("newsEditors");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to save news editor access.", true);
+      }
+    });
+
+    if (mode === "create") {
+      closeInlineForm();
+      showCreateForm(form);
+    } else if (anchorRow) {
+      mountDetailForm(form, anchorRow, { toggleSameRow: true });
+    }
+  }
+
   function openDuelFormatForm(mode, item, anchorRow) {
     const form = document.createElement("form");
     form.className = "cp-edit-form";
@@ -2792,6 +3045,54 @@
     });
   }
 
+  function renderNewsEditors() {
+    sectionTitle.textContent = "News Editors";
+    sectionCreateBtn.textContent = "Create";
+    sectionCreateBtn.classList.remove("hidden");
+    sectionCreateBtn.onclick = () => openNewsEditorForm("create", null, null);
+
+    if (!state.newsEditors.length) {
+      renderListEmpty("No news editor access records yet.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    state.newsEditors.forEach((item) => {
+      const titleParts = [
+        String(item?.profile_bga_nickname || "").trim(),
+        String(item?.profile_name || "").trim(),
+        String(item?.profile_id || "").trim(),
+      ].filter(Boolean);
+
+      const subtitleParts = [];
+      const accessType = String(item?.access_type || "").trim().toLowerCase();
+      if (accessType) {
+        subtitleParts.push(accessType === "local"
+          ? "Local"
+          : accessType === "tournament"
+            ? "Tournament"
+            : "Global");
+      }
+      if (item?.country_name || item?.country_id) {
+        subtitleParts.push(`Country: ${String(item.country_name || item.country_id).trim()}`);
+      }
+      if (item?.tournament_name || item?.tournament_id) {
+        subtitleParts.push(`Tournament: ${String(item.tournament_name || item.tournament_id).trim()}`);
+      }
+      subtitleParts.push(Number(item?.is_captain) === 1 ? "Captain • auto" : "Manual");
+
+      sectionList.appendChild(createListRow({
+        imageSrc: item.profile_avatar,
+        imageAlt: titleParts[0] || item?.profile_id || "Profile",
+        imageRound: true,
+        title: titleParts.join(" • ") || `Profile ${item.profile_id}`,
+        subtitle: subtitleParts.join(" • "),
+        buttonLabel: "Edit",
+        onClick: (row) => openNewsEditorForm("edit", item, row),
+      }));
+    });
+  }
+
   function renderTournaments() {
     sectionTitle.textContent = "Tournaments";
     sectionCreateBtn.textContent = "Create";
@@ -2931,6 +3232,7 @@
     if (state.activeSection === "associations") renderAssociations();
     if (state.activeSection === "teams") renderTeams();
     if (state.activeSection === "streamers") renderStreamers();
+    if (state.activeSection === "newsEditors") renderNewsEditors();
     if (state.activeSection === "tournaments") renderTournaments();
     if (state.activeSection === "duelFormats") renderDuelFormats();
     if (state.activeSection === "users") renderUsers();

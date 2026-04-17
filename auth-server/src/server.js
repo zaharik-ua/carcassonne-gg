@@ -160,6 +160,14 @@ const PROFILE_AUDIT_FIELDS = [
   "instagram",
   "contact_email",
 ];
+const NEWS_EDITOR_AUDIT_FIELDS = [
+  "id",
+  "profile_id",
+  "access_type",
+  "tournament_id",
+  "country_id",
+  "is_captain",
+];
 const MATCH_AUDIT_FIELDS = [
   "id",
   "tournament_id",
@@ -205,6 +213,11 @@ const TOURNAMENT_ACCESS_TYPES = {
 const TOURNAMENT_ACCESS_ROLES = {
   ADMIN: "admin",
   CAPTAIN: "captain",
+};
+const NEWS_EDITOR_ACCESS_TYPES = {
+  LOCAL: "local",
+  TOURNAMENT: "tournament",
+  GLOBAL: "global",
 };
 const TOURNAMENT_LINEUP_SIZE_TYPES = {
   FIXED: 1,
@@ -256,6 +269,222 @@ function normalizeIntegerOrNull(value) {
   if (!raw) return null;
   const normalized = Number.parseInt(raw, 10);
   return Number.isInteger(normalized) ? normalized : null;
+}
+
+function normalizeNewsEditorAccessType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === NEWS_EDITOR_ACCESS_TYPES.LOCAL) return NEWS_EDITOR_ACCESS_TYPES.LOCAL;
+  if (normalized === NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT) return NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT;
+  if (normalized === NEWS_EDITOR_ACCESS_TYPES.GLOBAL) return NEWS_EDITOR_ACCESS_TYPES.GLOBAL;
+  return null;
+}
+
+async function resolveAssociationId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const normalizedCode = normalizeEntityId(raw);
+  const row = await dbGetAsync(
+    `
+      SELECT COALESCE(NULLIF(trim(code), ''), printf('ASSOCIATION_%s', rowid)) AS id
+      FROM associations
+      WHERE upper(trim(COALESCE(code, ''))) = upper(?)
+         OR lower(trim(COALESCE(name, ''))) = lower(?)
+      LIMIT 1
+    `,
+    [normalizedCode, raw]
+  );
+  return String(row?.id || "").trim() || null;
+}
+
+async function loadNewsEditorById(newsEditorId) {
+  const normalizedId = Number(newsEditorId);
+  if (!Number.isInteger(normalizedId) || normalizedId <= 0) return null;
+  return dbGetAsync(
+    `
+      SELECT
+        ne.id,
+        ne.profile_id,
+        ne.access_type,
+        ne.tournament_id,
+        ne.country_id,
+        COALESCE(ne.is_captain, 0) AS is_captain,
+        ne.created_by,
+        ne.updated_by,
+        ne.created_at,
+        ne.updated_at,
+        p.bga_nickname AS profile_bga_nickname,
+        p.name AS profile_name,
+        p.avatar AS profile_avatar,
+        a.name AS country_name,
+        a.flag AS country_flag,
+        COALESCE(t.short_title, t.name) AS tournament_name
+      FROM news_editors ne
+      LEFT JOIN profiles p
+        ON trim(COALESCE(p.id, '')) = trim(COALESCE(ne.profile_id, ''))
+       AND p.deleted_at IS NULL
+      LEFT JOIN associations a
+        ON upper(trim(COALESCE(a.code, ''))) = upper(trim(COALESCE(ne.country_id, '')))
+      LEFT JOIN tournaments t
+        ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(ne.tournament_id, '')))
+      WHERE ne.id = ?
+      LIMIT 1
+    `,
+    [normalizedId]
+  );
+}
+
+async function deleteNewsEditorsForProfile(profileId) {
+  const normalizedProfileId = String(profileId || "").trim();
+  if (!normalizedProfileId) return;
+  await dbRunAsync(
+    `
+      DELETE FROM news_editors
+      WHERE trim(COALESCE(profile_id, '')) = trim(?)
+    `,
+    [normalizedProfileId]
+  );
+}
+
+async function syncCaptainNewsEditorForProfile(profileId, actorPlayerId = null) {
+  const normalizedProfileId = String(profileId || "").trim();
+  if (!normalizedProfileId) return;
+
+  const profileRow = await dbGetAsync(
+    `
+      SELECT
+        id,
+        association,
+        COALESCE(team_captain, 0) AS team_captain,
+        deleted_at
+      FROM profiles
+      WHERE trim(COALESCE(id, '')) = trim(?)
+      LIMIT 1
+    `,
+    [normalizedProfileId]
+  );
+
+  const shouldHaveCaptainEditor = !!profileRow
+    && !String(profileRow.deleted_at || "").trim()
+    && Number(profileRow.team_captain) === 1;
+  const countryId = shouldHaveCaptainEditor
+    ? await resolveAssociationId(profileRow.association)
+    : null;
+
+  if (!shouldHaveCaptainEditor || !countryId) {
+    await dbRunAsync(
+      `
+        DELETE FROM news_editors
+        WHERE trim(COALESCE(profile_id, '')) = trim(?)
+          AND COALESCE(is_captain, 0) = 1
+      `,
+      [normalizedProfileId]
+    );
+    return;
+  }
+
+  await dbRunAsync(
+    `
+      DELETE FROM news_editors
+      WHERE trim(COALESCE(profile_id, '')) = trim(?)
+        AND COALESCE(is_captain, 0) = 1
+        AND (
+          access_type <> ?
+          OR trim(COALESCE(country_id, '')) <> trim(?)
+          OR trim(COALESCE(tournament_id, '')) <> ''
+        )
+    `,
+    [normalizedProfileId, NEWS_EDITOR_ACCESS_TYPES.LOCAL, countryId]
+  );
+
+  const existingRow = await dbGetAsync(
+    `
+      SELECT id
+      FROM news_editors
+      WHERE trim(COALESCE(profile_id, '')) = trim(?)
+        AND access_type = ?
+        AND trim(COALESCE(country_id, '')) = trim(?)
+        AND trim(COALESCE(tournament_id, '')) = ''
+        AND COALESCE(is_captain, 0) = 1
+      LIMIT 1
+    `,
+    [normalizedProfileId, NEWS_EDITOR_ACCESS_TYPES.LOCAL, countryId]
+  );
+
+  if (existingRow) {
+    await dbRunAsync(
+      `
+        UPDATE news_editors
+        SET
+          updated_by = COALESCE(?, updated_by),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [actorPlayerId, existingRow.id]
+    );
+    return;
+  }
+
+  await dbRunAsync(
+    `
+      INSERT INTO news_editors (
+        profile_id,
+        access_type,
+        tournament_id,
+        country_id,
+        is_captain,
+        created_by,
+        updated_by,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, NULL, ?, 1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `,
+    [normalizedProfileId, NEWS_EDITOR_ACCESS_TYPES.LOCAL, countryId, actorPlayerId, actorPlayerId]
+  );
+}
+
+async function syncCaptainNewsEditorsFromProfiles() {
+  const captainProfiles = await dbAllAsync(
+    `
+      SELECT
+        id,
+        association,
+        COALESCE(team_captain, 0) AS team_captain
+      FROM profiles
+      WHERE deleted_at IS NULL
+        AND COALESCE(team_captain, 0) = 1
+        AND trim(COALESCE(id, '')) <> ''
+    `
+  );
+
+  const expected = new Map();
+  for (const profileRow of captainProfiles) {
+    const profileId = String(profileRow?.id || "").trim();
+    if (!profileId) continue;
+    const countryId = await resolveAssociationId(profileRow?.association);
+    if (!countryId) continue;
+    expected.set(profileId, countryId);
+    await syncCaptainNewsEditorForProfile(profileId, null);
+  }
+
+  const captainEditors = await dbAllAsync(
+    `
+      SELECT id, profile_id, access_type, tournament_id, country_id
+      FROM news_editors
+      WHERE COALESCE(is_captain, 0) = 1
+    `
+  );
+
+  for (const row of captainEditors) {
+    const profileId = String(row?.profile_id || "").trim();
+    const expectedCountryId = expected.get(profileId);
+    const hasUnexpectedShape = String(row?.access_type || "").trim().toLowerCase() !== NEWS_EDITOR_ACCESS_TYPES.LOCAL
+      || String(row?.tournament_id || "").trim() !== "";
+    const hasUnexpectedCountry = String(row?.country_id || "").trim() !== String(expectedCountryId || "").trim();
+    if (!expectedCountryId || hasUnexpectedShape || hasUnexpectedCountry) {
+      await dbRunAsync("DELETE FROM news_editors WHERE id = ?", [row.id]);
+    }
+  }
 }
 
 function loadDuelsByMatchId(matchId, callback) {
@@ -2305,6 +2534,65 @@ function ensureStreamersSchema() {
   });
 }
 
+function ensureNewsEditorsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS news_editors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile_id TEXT NOT NULL,
+      access_type TEXT NOT NULL,
+      tournament_id TEXT,
+      country_id TEXT,
+      is_captain INTEGER NOT NULL DEFAULT 0,
+      created_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure news_editors schema", createErr);
+      return;
+    }
+
+    db.all("PRAGMA table_info(news_editors)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect news_editors schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "news_editors", "tournament_id", "TEXT");
+      addColumnIfMissing(columns, "news_editors", "country_id", "TEXT");
+      addColumnIfMissing(columns, "news_editors", "is_captain", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "news_editors", "created_by", "TEXT");
+      addColumnIfMissing(columns, "news_editors", "updated_by", "TEXT");
+      addColumnIfMissing(columns, "news_editors", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "news_editors", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+
+      db.run(
+        `
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_news_editors_unique
+          ON news_editors (
+            profile_id,
+            access_type,
+            COALESCE(tournament_id, ''),
+            COALESCE(country_id, ''),
+            is_captain
+          )
+        `,
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure unique index for news_editors", indexErr);
+          }
+        }
+      );
+
+      syncCaptainNewsEditorsFromProfiles().catch((syncErr) => {
+        console.error("Failed to sync captain news editors", syncErr);
+      });
+    });
+  });
+}
+
 function ensureStreamsSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS streams (
@@ -2734,6 +3022,7 @@ db.serialize(() => {
           ensureTournamentAccessUsersSchema();
           ensureFriendlyFindSchema();
           ensureStreamersSchema();
+          ensureNewsEditorsSchema();
           ensureStreamsSchema();
           ensureAuditTrailSchema();
         }
@@ -3319,18 +3608,23 @@ app.post("/profiles", (req, res) => {
                 if (selectErr) {
                   return res.status(500).json({ ok: false, message: "Failed to load restored profile" });
                 }
-                return logAuditEvent(
-                  {
-                    ...getAuditActor(req.user),
-                    event_type: "profile.created",
-                    entity_type: "profile",
-                    action: "create",
-                    record_id: playerId,
-                    changes: buildAuditCreationChanges(row || {}, PROFILE_AUDIT_FIELDS),
-                    metadata: { restored: true },
-                  },
-                  () => res.status(200).json({ ok: true, restored: true, profile: row || null })
-                );
+                return syncCaptainNewsEditorForProfile(playerId, actorPlayerId)
+                  .then(() => logAuditEvent(
+                    {
+                      ...getAuditActor(req.user),
+                      event_type: "profile.created",
+                      entity_type: "profile",
+                      action: "create",
+                      record_id: playerId,
+                      changes: buildAuditCreationChanges(row || {}, PROFILE_AUDIT_FIELDS),
+                      metadata: { restored: true },
+                    },
+                    () => res.status(200).json({ ok: true, restored: true, profile: row || null })
+                  ))
+                  .catch((syncErr) => {
+                    console.error("Failed to sync news editor after profile restore", syncErr);
+                    return res.status(500).json({ ok: false, message: "Profile restored, but failed to sync news editor access" });
+                  });
               }
             );
           }
@@ -3412,17 +3706,22 @@ app.post("/profiles", (req, res) => {
               if (selectErr) {
                 return res.status(500).json({ ok: false, message: "Failed to load created profile" });
               }
-              return logAuditEvent(
-                {
-                  ...getAuditActor(req.user),
-                  event_type: "profile.created",
-                  entity_type: "profile",
-                  action: "create",
-                  record_id: playerId,
-                  changes: buildAuditCreationChanges(row || {}, PROFILE_AUDIT_FIELDS),
-                },
-                () => res.status(201).json({ ok: true, profile: row || null })
-              );
+              return syncCaptainNewsEditorForProfile(playerId, actorPlayerId)
+                .then(() => logAuditEvent(
+                  {
+                    ...getAuditActor(req.user),
+                    event_type: "profile.created",
+                    entity_type: "profile",
+                    action: "create",
+                    record_id: playerId,
+                    changes: buildAuditCreationChanges(row || {}, PROFILE_AUDIT_FIELDS),
+                  },
+                  () => res.status(201).json({ ok: true, profile: row || null })
+                ))
+                .catch((syncErr) => {
+                  console.error("Failed to sync news editor after profile create", syncErr);
+                  return res.status(500).json({ ok: false, message: "Profile created, but failed to sync news editor access" });
+                });
             }
           );
         }
@@ -4647,6 +4946,332 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
       );
     }
   );
+});
+
+app.get("/news-editors", requireAdmin, (_req, res, next) => {
+  db.all(
+    `
+      SELECT
+        ne.id,
+        ne.profile_id,
+        ne.access_type,
+        ne.tournament_id,
+        ne.country_id,
+        COALESCE(ne.is_captain, 0) AS is_captain,
+        ne.created_by,
+        ne.updated_by,
+        ne.created_at,
+        ne.updated_at,
+        p.bga_nickname AS profile_bga_nickname,
+        p.name AS profile_name,
+        p.avatar AS profile_avatar,
+        a.name AS country_name,
+        a.flag AS country_flag,
+        COALESCE(t.short_title, t.name) AS tournament_name
+      FROM news_editors ne
+      LEFT JOIN profiles p
+        ON trim(COALESCE(p.id, '')) = trim(COALESCE(ne.profile_id, ''))
+       AND p.deleted_at IS NULL
+      LEFT JOIN associations a
+        ON upper(trim(COALESCE(a.code, ''))) = upper(trim(COALESCE(ne.country_id, '')))
+      LEFT JOIN tournaments t
+        ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(ne.tournament_id, '')))
+      ORDER BY
+        COALESCE(ne.is_captain, 0) DESC,
+        lower(COALESCE(ne.access_type, '')) ASC,
+        lower(COALESCE(a.name, ne.country_id, '')) ASC,
+        lower(COALESCE(t.short_title, t.name, ne.tournament_id, '')) ASC,
+        lower(COALESCE(p.bga_nickname, p.name, ne.profile_id, '')) ASC,
+        ne.id ASC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, news_editors: rows || [] });
+    }
+  );
+});
+
+app.post("/news-editors", requireAdmin, async (req, res) => {
+  try {
+    const actorPlayerId = String(req.user?.player_id || "").trim() || null;
+    const profileId = String(req.body?.profile_id || "").trim();
+    const accessType = normalizeNewsEditorAccessType(req.body?.access_type);
+    const tournamentIdRaw = String(req.body?.tournament_id || "").trim();
+    const countryIdRaw = String(req.body?.country_id || "").trim();
+
+    if (!profileId) {
+      return res.status(400).json({ ok: false, message: "profile_id is required" });
+    }
+    if (!accessType) {
+      return res.status(400).json({ ok: false, message: "access_type must be local, tournament or global" });
+    }
+
+    const profileRow = await dbGetAsync(
+      `
+        SELECT id
+        FROM profiles
+        WHERE trim(COALESCE(id, '')) = trim(?)
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [profileId]
+    );
+    if (!profileRow) {
+      return res.status(400).json({ ok: false, message: "profile_id must reference an existing active profile" });
+    }
+
+    let tournamentId = null;
+    let countryId = null;
+    if (accessType === NEWS_EDITOR_ACCESS_TYPES.LOCAL) {
+      countryId = await resolveAssociationId(countryIdRaw);
+      if (!countryId) {
+        return res.status(400).json({ ok: false, message: "country_id is required for local access" });
+      }
+    } else if (accessType === NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT) {
+      tournamentId = normalizeNullableText(tournamentIdRaw);
+      if (!tournamentId) {
+        return res.status(400).json({ ok: false, message: "tournament_id is required for tournament access" });
+      }
+      const tournamentRow = await dbGetAsync(
+        `
+          SELECT id
+          FROM tournaments
+          WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
+          LIMIT 1
+        `,
+        [tournamentId]
+      );
+      if (!tournamentRow) {
+        return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
+      }
+    }
+
+    const duplicateRow = await dbGetAsync(
+      `
+        SELECT id
+        FROM news_editors
+        WHERE trim(COALESCE(profile_id, '')) = trim(?)
+          AND access_type = ?
+          AND trim(COALESCE(tournament_id, '')) = trim(COALESCE(?, ''))
+          AND trim(COALESCE(country_id, '')) = trim(COALESCE(?, ''))
+          AND COALESCE(is_captain, 0) = 0
+        LIMIT 1
+      `,
+      [profileId, accessType, tournamentId, countryId]
+    );
+    if (duplicateRow) {
+      return res.status(409).json({ ok: false, message: "This news editor access already exists" });
+    }
+
+    const insertResult = await dbRunAsync(
+      `
+        INSERT INTO news_editors (
+          profile_id,
+          access_type,
+          tournament_id,
+          country_id,
+          is_captain,
+          created_by,
+          updated_by,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, 0, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [profileId, accessType, tournamentId, countryId, actorPlayerId, actorPlayerId]
+    );
+
+    const createdRow = await loadNewsEditorById(insertResult?.lastID);
+    return logAuditEvent(
+      {
+        ...getAuditActor(req.user),
+        event_type: "news_editor.created",
+        entity_type: "news_editor",
+        action: "create",
+        record_id: String(insertResult?.lastID || ""),
+        changes: buildAuditCreationChanges(createdRow || {}, NEWS_EDITOR_AUDIT_FIELDS),
+      },
+      () => res.status(201).json({ ok: true, news_editor: createdRow || null })
+    );
+  } catch (error) {
+    if (String(error?.message || "").includes("UNIQUE")) {
+      return res.status(409).json({ ok: false, message: "This news editor access already exists" });
+    }
+    console.error("Failed to create news editor", error);
+    return res.status(500).json({ ok: false, message: "Failed to create news editor" });
+  }
+});
+
+app.patch("/news-editors/:id", requireAdmin, async (req, res) => {
+  try {
+    const newsEditorId = normalizePositiveInteger(req.params.id);
+    const payloadId = normalizePositiveInteger(req.body?.id);
+    const actorPlayerId = String(req.user?.player_id || "").trim() || null;
+    const profileId = String(req.body?.profile_id || "").trim();
+    const accessType = normalizeNewsEditorAccessType(req.body?.access_type);
+    const tournamentIdRaw = String(req.body?.tournament_id || "").trim();
+    const countryIdRaw = String(req.body?.country_id || "").trim();
+
+    if (!newsEditorId) {
+      return res.status(400).json({ ok: false, message: "Invalid news editor id" });
+    }
+    if (payloadId && payloadId !== newsEditorId) {
+      return res.status(400).json({ ok: false, message: "News editor id cannot be changed" });
+    }
+    if (!profileId) {
+      return res.status(400).json({ ok: false, message: "profile_id is required" });
+    }
+    if (!accessType) {
+      return res.status(400).json({ ok: false, message: "access_type must be local, tournament or global" });
+    }
+
+    const beforeRow = await loadNewsEditorById(newsEditorId);
+    if (!beforeRow) {
+      return res.status(404).json({ ok: false, message: "News editor not found" });
+    }
+    if (Number(beforeRow.is_captain) === 1) {
+      return res.status(403).json({ ok: false, message: "Captain news editor access is managed automatically" });
+    }
+
+    const profileRow = await dbGetAsync(
+      `
+        SELECT id
+        FROM profiles
+        WHERE trim(COALESCE(id, '')) = trim(?)
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [profileId]
+    );
+    if (!profileRow) {
+      return res.status(400).json({ ok: false, message: "profile_id must reference an existing active profile" });
+    }
+
+    let tournamentId = null;
+    let countryId = null;
+    if (accessType === NEWS_EDITOR_ACCESS_TYPES.LOCAL) {
+      countryId = await resolveAssociationId(countryIdRaw);
+      if (!countryId) {
+        return res.status(400).json({ ok: false, message: "country_id is required for local access" });
+      }
+    } else if (accessType === NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT) {
+      tournamentId = normalizeNullableText(tournamentIdRaw);
+      if (!tournamentId) {
+        return res.status(400).json({ ok: false, message: "tournament_id is required for tournament access" });
+      }
+      const tournamentRow = await dbGetAsync(
+        `
+          SELECT id
+          FROM tournaments
+          WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
+          LIMIT 1
+        `,
+        [tournamentId]
+      );
+      if (!tournamentRow) {
+        return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
+      }
+    }
+
+    const duplicateRow = await dbGetAsync(
+      `
+        SELECT id
+        FROM news_editors
+        WHERE trim(COALESCE(profile_id, '')) = trim(?)
+          AND access_type = ?
+          AND trim(COALESCE(tournament_id, '')) = trim(COALESCE(?, ''))
+          AND trim(COALESCE(country_id, '')) = trim(COALESCE(?, ''))
+          AND COALESCE(is_captain, 0) = 0
+          AND id <> ?
+        LIMIT 1
+      `,
+      [profileId, accessType, tournamentId, countryId, newsEditorId]
+    );
+    if (duplicateRow) {
+      return res.status(409).json({ ok: false, message: "This news editor access already exists" });
+    }
+
+    await dbRunAsync(
+      `
+        UPDATE news_editors
+        SET
+          profile_id = ?,
+          access_type = ?,
+          tournament_id = ?,
+          country_id = ?,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND COALESCE(is_captain, 0) = 0
+      `,
+      [profileId, accessType, tournamentId, countryId, actorPlayerId, newsEditorId]
+    );
+
+    const updatedRow = await loadNewsEditorById(newsEditorId);
+    const changes = buildAuditChanges(beforeRow || {}, updatedRow || {}, NEWS_EDITOR_AUDIT_FIELDS);
+    if (!Object.keys(changes).length) {
+      return res.json({ ok: true, news_editor: updatedRow || null });
+    }
+
+    return logAuditEvent(
+      {
+        ...getAuditActor(req.user),
+        event_type: "news_editor.updated",
+        entity_type: "news_editor",
+        action: "update",
+        record_id: String(newsEditorId),
+        changes,
+      },
+      () => res.json({ ok: true, news_editor: updatedRow || null })
+    );
+  } catch (error) {
+    if (String(error?.message || "").includes("UNIQUE")) {
+      return res.status(409).json({ ok: false, message: "This news editor access already exists" });
+    }
+    console.error("Failed to update news editor", error);
+    return res.status(500).json({ ok: false, message: "Failed to update news editor" });
+  }
+});
+
+app.delete("/news-editors/:id", requireAdmin, async (req, res) => {
+  try {
+    const newsEditorId = normalizePositiveInteger(req.params.id);
+    if (!newsEditorId) {
+      return res.status(400).json({ ok: false, message: "Invalid news editor id" });
+    }
+
+    const beforeRow = await loadNewsEditorById(newsEditorId);
+    if (!beforeRow) {
+      return res.status(404).json({ ok: false, message: "News editor not found" });
+    }
+    if (Number(beforeRow.is_captain) === 1) {
+      return res.status(403).json({ ok: false, message: "Captain news editor access is managed automatically" });
+    }
+
+    await dbRunAsync(
+      `
+        DELETE FROM news_editors
+        WHERE id = ?
+          AND COALESCE(is_captain, 0) = 0
+      `,
+      [newsEditorId]
+    );
+
+    return logAuditEvent(
+      {
+        ...getAuditActor(req.user),
+        event_type: "news_editor.deleted",
+        entity_type: "news_editor",
+        action: "delete",
+        record_id: String(newsEditorId),
+        changes: buildAuditDeletionChanges(beforeRow || {}, NEWS_EDITOR_AUDIT_FIELDS),
+      },
+      () => res.json({ ok: true })
+    );
+  } catch (error) {
+    console.error("Failed to delete news editor", error);
+    return res.status(500).json({ ok: false, message: "Failed to delete news editor" });
+  }
 });
 
 app.get("/streams", (req, res, next) => {
@@ -9324,9 +9949,15 @@ app.patch("/profiles/:playerId", (req, res) => {
                   actor: getAuditActor(req.user),
                   source: "profile_email_change",
                 },
-                (syncErr) => {
+                async (syncErr) => {
                   if (syncErr) {
                     return res.status(500).json({ ok: false, message: "Profile updated, but failed to sync linked user" });
+                  }
+                  try {
+                    await syncCaptainNewsEditorForProfile(requestedPlayerId, actorPlayerId);
+                  } catch (newsEditorSyncErr) {
+                    console.error("Failed to sync news editor after profile update", newsEditorSyncErr);
+                    return res.status(500).json({ ok: false, message: "Profile updated, but failed to sync news editor access" });
                   }
                   if (!Object.keys(changes).length) {
                     return res.json({ ok: true, profile: row || null });
@@ -9716,17 +10347,22 @@ app.delete("/profiles/:playerId", (req, res) => {
               if (!this || this.changes === 0) {
                 return res.status(404).json({ ok: false, message: "Profile not found" });
               }
-              return logAuditEvent(
-                {
-                  ...getAuditActor(req.user),
-                  event_type: "profile.deleted",
-                  entity_type: "profile",
-                  action: "delete",
-                  record_id: requestedPlayerId,
-                  changes: buildAuditDeletionChanges(profileRow || {}, PROFILE_AUDIT_FIELDS),
-                },
-                () => res.json({ ok: true })
-              );
+              return deleteNewsEditorsForProfile(requestedPlayerId)
+                .then(() => logAuditEvent(
+                  {
+                    ...getAuditActor(req.user),
+                    event_type: "profile.deleted",
+                    entity_type: "profile",
+                    action: "delete",
+                    record_id: requestedPlayerId,
+                    changes: buildAuditDeletionChanges(profileRow || {}, PROFILE_AUDIT_FIELDS),
+                  },
+                  () => res.json({ ok: true })
+                ))
+                .catch((newsEditorDeleteErr) => {
+                  console.error("Failed to delete news editor access after profile delete", newsEditorDeleteErr);
+                  return res.status(500).json({ ok: false, message: "Profile deleted, but failed to clean news editor access" });
+                });
             }
           );
         }
