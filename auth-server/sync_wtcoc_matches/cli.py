@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -106,6 +107,29 @@ def _configure_stream_logging() -> None:
         sys.stderr = _TimestampedStream(sys.stderr)
 
 
+def _run_update_ratings_for_missing_planned_duels() -> dict:
+    auth_server_dir = Path(__file__).resolve().parents[1]
+    command = [
+        sys.executable,
+        str(auth_server_dir / "run_update_ratings.py"),
+        "--planned-missing-ratings",
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=str(auth_server_dir),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    stdout = str(completed.stdout or "").strip()
+    if not stdout:
+        return {"ok": True, "mode": "planned_missing_ratings", "output": None}
+    try:
+        return json.loads(stdout)
+    except json.JSONDecodeError:
+        return {"ok": True, "mode": "planned_missing_ratings", "output": stdout}
+
+
 def main() -> int:
     _configure_stream_logging()
     load_dotenv()
@@ -135,6 +159,20 @@ def main() -> int:
             duels=apply_payload["duels"],
         )
         output["apply_result"] = apply_result
+        changed_duel_ids = list(apply_result.get("changed_duel_ids") or [])
+        if changed_duel_ids:
+            output["ratings_update"] = {
+                "triggered": True,
+                "reason": "wtcoc_duels_changed",
+                "changed_duel_ids_count": len(changed_duel_ids),
+                "result": _run_update_ratings_for_missing_planned_duels(),
+            }
+        else:
+            output["ratings_update"] = {
+                "triggered": False,
+                "reason": "no_wtcoc_duel_changes",
+                "changed_duel_ids_count": 0,
+            }
     print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 
