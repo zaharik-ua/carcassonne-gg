@@ -168,6 +168,19 @@ const NEWS_EDITOR_AUDIT_FIELDS = [
   "country_id",
   "is_captain",
 ];
+const NEWS_AUDIT_FIELDS = [
+  "id",
+  "significance",
+  "category",
+  "association_id",
+  "tournament_id",
+  "associations",
+  "time_utc",
+  "icon",
+  "title",
+  "short_title",
+  "description",
+];
 const MATCH_AUDIT_FIELDS = [
   "id",
   "tournament_id",
@@ -351,6 +364,135 @@ async function loadNewsEditorById(newsEditorId) {
     `,
     [normalizedId]
   );
+}
+
+function normalizeNewsSignificance(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "important") return "Important";
+  if (raw === "major") return "Major";
+  return "Regular";
+}
+
+function normalizeNewsCategory(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const normalized = raw.toLowerCase();
+  const categories = new Map([
+    ["players", "Players"],
+    ["gg", "GG"],
+    ["local", "Local"],
+    ["wtcoc", "WTCOC"],
+    ["etcoc", "ETCOC"],
+    ["asian", "Asian"],
+    ["cup", "Cup"],
+    ["copa america", "Copa America"],
+    ["ccl", "CCL"],
+    ["mso", "MSO"],
+    ["koc", "KoC"],
+    ["world championship", "World Championship"],
+  ]);
+  return categories.get(normalized) || null;
+}
+
+function normalizeNewsAssociations(value) {
+  const rawItems = Array.isArray(value)
+    ? value
+    : parseJsonOrNull(value);
+  if (!Array.isArray(rawItems)) return [];
+  return Array.from(new Set(
+    rawItems
+      .map((item) => normalizeEntityId(item?.id ?? item?.code ?? item))
+      .filter(Boolean)
+  ));
+}
+
+async function resolveNewsAssociations(values) {
+  const normalized = normalizeNewsAssociations(values);
+  if (!normalized.length) return [];
+  const resolved = [];
+  for (const value of normalized) {
+    const resolvedId = await resolveAssociationId(value);
+    if (resolvedId && !resolved.includes(resolvedId)) {
+      resolved.push(resolvedId);
+    }
+  }
+  return resolved;
+}
+
+async function resolveNewsAssociationValue(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  return resolveAssociationId(raw);
+}
+
+async function loadNewsById(newsId) {
+  const normalizedId = Number(newsId);
+  if (!Number.isInteger(normalizedId) || normalizedId <= 0) return null;
+  const row = await dbGetAsync(
+    `
+      SELECT
+        n.id,
+        n.significance,
+        n.category,
+        n.association_id,
+        n.tournament_id,
+        n.associations,
+        n.time_utc,
+        n.icon,
+        n.title,
+        n.short_title,
+        n.description,
+        n.created_by,
+        n.updated_by,
+        n.created_at,
+        n.updated_at,
+        a.name AS association_name,
+        a.flag AS association_flag,
+        COALESCE(t.short_title, t.name) AS tournament_name,
+        t.logo AS tournament_logo
+      FROM news n
+      LEFT JOIN associations a
+        ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.association_row_id)))) = upper(trim(COALESCE(n.association_id, '')))
+      LEFT JOIN tournaments t
+        ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(n.tournament_id, '')))
+      WHERE n.id = ?
+      LIMIT 1
+    `,
+    [normalizedId]
+  );
+  if (!row) return null;
+  const associationIds = normalizeNewsAssociations(row.associations);
+  let associations = [];
+  if (associationIds.length) {
+    const placeholders = associationIds.map(() => "?").join(", ");
+    const associationRows = await dbAllAsync(
+      `
+        SELECT
+          COALESCE(NULLIF(trim(code), ''), printf('ASSOCIATION_%s', association_row_id)) AS id,
+          name,
+          flag
+        FROM associations
+        WHERE upper(trim(COALESCE(NULLIF(code, ''), printf('ASSOCIATION_%s', association_row_id)))) IN (${placeholders})
+        ORDER BY lower(COALESCE(name, '')) ASC
+      `,
+      associationIds
+    );
+    const byId = new Map(
+      (associationRows || []).map((item) => [String(item?.id || "").trim().toUpperCase(), item])
+    );
+    associations = associationIds.map((id) => {
+      const meta = byId.get(String(id || "").trim().toUpperCase()) || null;
+      return {
+        id,
+        name: String(meta?.name || id).trim(),
+        flag: String(meta?.flag || "").trim(),
+      };
+    });
+  }
+  return {
+    ...row,
+    associations,
+  };
 }
 
 async function deleteNewsEditorsForProfile(profileId) {
@@ -2724,6 +2866,91 @@ function ensureNewsEditorsSchema() {
   });
 }
 
+function ensureNewsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS news (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      significance TEXT NOT NULL DEFAULT 'Regular',
+      category TEXT,
+      association_id TEXT,
+      tournament_id TEXT,
+      associations TEXT NOT NULL DEFAULT '[]',
+      time_utc TEXT,
+      icon TEXT,
+      title TEXT NOT NULL,
+      short_title TEXT,
+      description TEXT,
+      created_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure news schema", createErr);
+      return;
+    }
+
+    db.all("PRAGMA table_info(news)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect news schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "news", "significance", "TEXT NOT NULL DEFAULT 'Regular'");
+      addColumnIfMissing(columns, "news", "category", "TEXT");
+      addColumnIfMissing(columns, "news", "association_id", "TEXT");
+      addColumnIfMissing(columns, "news", "tournament_id", "TEXT");
+      addColumnIfMissing(columns, "news", "associations", "TEXT NOT NULL DEFAULT '[]'");
+      addColumnIfMissing(columns, "news", "time_utc", "TEXT");
+      addColumnIfMissing(columns, "news", "icon", "TEXT");
+      addColumnIfMissing(columns, "news", "title", "TEXT");
+      addColumnIfMissing(columns, "news", "short_title", "TEXT");
+      addColumnIfMissing(columns, "news", "description", "TEXT");
+      addColumnIfMissing(columns, "news", "created_by", "TEXT");
+      addColumnIfMissing(columns, "news", "updated_by", "TEXT");
+      addColumnIfMissing(columns, "news", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "news", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+
+      db.run(
+        `
+          UPDATE news
+          SET
+            significance = CASE
+              WHEN lower(trim(COALESCE(significance, ''))) = 'important' THEN 'Important'
+              WHEN lower(trim(COALESCE(significance, ''))) = 'major' THEN 'Major'
+              ELSE 'Regular'
+            END,
+            category = NULLIF(trim(category), ''),
+            association_id = NULLIF(trim(association_id), ''),
+            tournament_id = NULLIF(trim(tournament_id), ''),
+            associations = CASE
+              WHEN trim(COALESCE(associations, '')) = '' THEN '[]'
+              ELSE associations
+            END,
+            icon = NULLIF(trim(icon), ''),
+            short_title = NULLIF(trim(short_title), ''),
+            description = NULLIF(description, '')
+        `,
+        (normalizeErr) => {
+          if (normalizeErr) {
+            console.error("Failed to normalize news schema data", normalizeErr);
+          }
+        }
+      );
+
+      db.run(
+        "CREATE INDEX IF NOT EXISTS idx_news_time_utc ON news(time_utc DESC, id DESC)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure index for news.time_utc", indexErr);
+          }
+        }
+      );
+    });
+  });
+}
+
 function ensureStreamsSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS streams (
@@ -3154,6 +3381,7 @@ db.serialize(() => {
           ensureFriendlyFindSchema();
           ensureStreamersSchema();
           ensureNewsEditorsSchema();
+          ensureNewsSchema();
           ensureStreamsSchema();
           ensureAuditTrailSchema();
         }
@@ -5181,6 +5409,300 @@ app.get("/news-editors", (req, res, next) => {
       return res.json({ ok: true, news_editors: rows || [] });
     }
   );
+});
+
+app.get("/news", requireAdmin, async (_req, res) => {
+  try {
+    const rows = await dbAllAsync(
+      `
+        SELECT
+          n.id,
+          n.significance,
+          n.category,
+          n.association_id,
+          n.tournament_id,
+          n.associations,
+          n.time_utc,
+          n.icon,
+          n.title,
+          n.short_title,
+          n.description,
+          n.created_by,
+          n.updated_by,
+          n.created_at,
+          n.updated_at,
+          a.name AS association_name,
+          a.flag AS association_flag,
+          COALESCE(t.short_title, t.name) AS tournament_name,
+          t.logo AS tournament_logo
+        FROM news n
+        LEFT JOIN associations a
+          ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.association_row_id)))) = upper(trim(COALESCE(n.association_id, '')))
+        LEFT JOIN tournaments t
+          ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(n.tournament_id, '')))
+        ORDER BY
+          CASE
+            WHEN n.time_utc IS NULL OR trim(n.time_utc) = '' THEN 1
+            ELSE 0
+          END ASC,
+          datetime(n.time_utc) DESC,
+          n.id DESC
+      `
+    );
+    const newsItems = [];
+    for (const row of rows || []) {
+      const fullRow = await loadNewsById(row?.id);
+      if (fullRow) newsItems.push(fullRow);
+    }
+    return res.json({ ok: true, news: newsItems });
+  } catch (error) {
+    console.error("Failed to load news", error);
+    return res.status(500).json({ ok: false, message: "Failed to load news" });
+  }
+});
+
+app.post("/news", requireAdmin, async (req, res) => {
+  try {
+    const actorPlayerId = String(req.user?.player_id || "").trim() || null;
+    const significance = normalizeNewsSignificance(req.body?.significance);
+    const category = normalizeNewsCategory(req.body?.category);
+    const associationId = await resolveNewsAssociationValue(req.body?.association_id);
+    const tournamentId = normalizeNullableText(req.body?.tournament_id);
+    const associations = await resolveNewsAssociations(req.body?.associations);
+    const timeUtc = normalizeNullableText(req.body?.time_utc);
+    const icon = normalizeNullableText(req.body?.icon);
+    const title = String(req.body?.title || "").trim();
+    const shortTitle = String(req.body?.short_title || "").trim();
+    const description = String(req.body?.description || "").trim();
+
+    if (!title) {
+      return res.status(400).json({ ok: false, message: "title is required" });
+    }
+    if (title.length > 100) {
+      return res.status(400).json({ ok: false, message: "title must be 100 characters or fewer" });
+    }
+    if (shortTitle.length > 40) {
+      return res.status(400).json({ ok: false, message: "short_title must be 40 characters or fewer" });
+    }
+    if (req.body?.association_id && !associationId) {
+      return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
+    }
+    if (tournamentId) {
+      const tournamentRow = await dbGetAsync(
+        `
+          SELECT id
+          FROM tournaments
+          WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
+          LIMIT 1
+        `,
+        [tournamentId]
+      );
+      if (!tournamentRow) {
+        return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
+      }
+    }
+
+    const insertResult = await dbRunAsync(
+      `
+        INSERT INTO news (
+          significance,
+          category,
+          association_id,
+          tournament_id,
+          associations,
+          time_utc,
+          icon,
+          title,
+          short_title,
+          description,
+          created_by,
+          updated_by,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [
+        significance,
+        category,
+        associationId,
+        tournamentId,
+        JSON.stringify(associations),
+        timeUtc,
+        icon,
+        title,
+        shortTitle || null,
+        description || null,
+        actorPlayerId,
+        actorPlayerId,
+      ]
+    );
+
+    const createdRow = await loadNewsById(insertResult?.lastID);
+    return logAuditEvent(
+      {
+        ...getAuditActor(req.user),
+        event_type: "news.created",
+        entity_type: "news",
+        action: "create",
+        record_id: String(insertResult?.lastID || ""),
+        changes: buildAuditCreationChanges(createdRow || {}, NEWS_AUDIT_FIELDS),
+      },
+      () => res.status(201).json({ ok: true, news: createdRow || null })
+    );
+  } catch (error) {
+    console.error("Failed to create news", error);
+    return res.status(500).json({ ok: false, message: "Failed to create news" });
+  }
+});
+
+app.patch("/news/:id", requireAdmin, async (req, res) => {
+  try {
+    const newsId = normalizePositiveInteger(req.params.id);
+    const payloadId = normalizePositiveInteger(req.body?.id);
+    const actorPlayerId = String(req.user?.player_id || "").trim() || null;
+    if (!newsId) {
+      return res.status(400).json({ ok: false, message: "Invalid news id" });
+    }
+    if (payloadId && payloadId !== newsId) {
+      return res.status(400).json({ ok: false, message: "News id cannot be changed" });
+    }
+
+    const beforeRow = await loadNewsById(newsId);
+    if (!beforeRow) {
+      return res.status(404).json({ ok: false, message: "News not found" });
+    }
+
+    const significance = normalizeNewsSignificance(req.body?.significance);
+    const category = normalizeNewsCategory(req.body?.category);
+    const associationId = await resolveNewsAssociationValue(req.body?.association_id);
+    const tournamentId = normalizeNullableText(req.body?.tournament_id);
+    const associations = await resolveNewsAssociations(req.body?.associations);
+    const timeUtc = normalizeNullableText(req.body?.time_utc);
+    const icon = normalizeNullableText(req.body?.icon);
+    const title = String(req.body?.title || "").trim();
+    const shortTitle = String(req.body?.short_title || "").trim();
+    const description = String(req.body?.description || "").trim();
+
+    if (!title) {
+      return res.status(400).json({ ok: false, message: "title is required" });
+    }
+    if (title.length > 100) {
+      return res.status(400).json({ ok: false, message: "title must be 100 characters or fewer" });
+    }
+    if (shortTitle.length > 40) {
+      return res.status(400).json({ ok: false, message: "short_title must be 40 characters or fewer" });
+    }
+    if (req.body?.association_id && !associationId) {
+      return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
+    }
+    if (tournamentId) {
+      const tournamentRow = await dbGetAsync(
+        `
+          SELECT id
+          FROM tournaments
+          WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
+          LIMIT 1
+        `,
+        [tournamentId]
+      );
+      if (!tournamentRow) {
+        return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
+      }
+    }
+
+    await dbRunAsync(
+      `
+        UPDATE news
+        SET
+          significance = ?,
+          category = ?,
+          association_id = ?,
+          tournament_id = ?,
+          associations = ?,
+          time_utc = ?,
+          icon = ?,
+          title = ?,
+          short_title = ?,
+          description = ?,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        significance,
+        category,
+        associationId,
+        tournamentId,
+        JSON.stringify(associations),
+        timeUtc,
+        icon,
+        title,
+        shortTitle || null,
+        description || null,
+        actorPlayerId,
+        newsId,
+      ]
+    );
+
+    const updatedRow = await loadNewsById(newsId);
+    const changes = buildAuditChanges(beforeRow || {}, updatedRow || {}, NEWS_AUDIT_FIELDS);
+    if (!Object.keys(changes).length) {
+      return res.json({ ok: true, news: updatedRow || null });
+    }
+
+    return logAuditEvent(
+      {
+        ...getAuditActor(req.user),
+        event_type: "news.updated",
+        entity_type: "news",
+        action: "update",
+        record_id: String(newsId),
+        changes,
+      },
+      () => res.json({ ok: true, news: updatedRow || null })
+    );
+  } catch (error) {
+    console.error("Failed to update news", error);
+    return res.status(500).json({ ok: false, message: "Failed to update news" });
+  }
+});
+
+app.delete("/news/:id", requireAdmin, async (req, res) => {
+  try {
+    const newsId = normalizePositiveInteger(req.params.id);
+    if (!newsId) {
+      return res.status(400).json({ ok: false, message: "Invalid news id" });
+    }
+
+    const beforeRow = await loadNewsById(newsId);
+    if (!beforeRow) {
+      return res.status(404).json({ ok: false, message: "News not found" });
+    }
+
+    await dbRunAsync(
+      `
+        DELETE FROM news
+        WHERE id = ?
+      `,
+      [newsId]
+    );
+
+    return logAuditEvent(
+      {
+        ...getAuditActor(req.user),
+        event_type: "news.deleted",
+        entity_type: "news",
+        action: "delete",
+        record_id: String(newsId),
+        changes: buildAuditDeletionChanges(beforeRow || {}, NEWS_AUDIT_FIELDS),
+      },
+      () => res.json({ ok: true })
+    );
+  } catch (error) {
+    console.error("Failed to delete news", error);
+    return res.status(500).json({ ok: false, message: "Failed to delete news" });
+  }
 });
 
 app.post("/news-editors", requireAdmin, async (req, res) => {

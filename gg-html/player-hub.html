@@ -393,7 +393,8 @@
   }
 
   .cp-edit-row input,
-  .cp-edit-row select {
+  .cp-edit-row select,
+  .cp-edit-row textarea {
     width: 100%;
     border: 1px solid #c8ced8;
     border-radius: 4px;
@@ -402,6 +403,15 @@
     font: inherit;
     font-size: 14px;
     box-sizing: border-box;
+  }
+
+  .cp-edit-row textarea {
+    min-height: 120px;
+    height: auto;
+    resize: vertical;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    line-height: 1.4;
   }
 
   .cp-edit-row input[type="date"] {
@@ -449,7 +459,8 @@
   }
 
   .cp-edit-row input:disabled,
-  .cp-edit-row select:disabled {
+  .cp-edit-row select:disabled,
+  .cp-edit-row textarea:disabled {
     background: #f3f4f6;
     color: #444;
     cursor: not-allowed;
@@ -458,6 +469,114 @@
   .cp-edit-row input.cp-readonly-input {
     background: #f3f4f6;
     color: #444;
+  }
+
+  .cp-news-list {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .cp-news-row {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .cp-news-row:first-child {
+    border-top: none;
+  }
+
+  .cp-news-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+  }
+
+  .cp-news-icon.cp-news-icon--placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .cp-news-main {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .cp-news-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1f2937;
+    line-height: 1.25;
+    word-break: break-word;
+  }
+
+  .cp-news-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .cp-news-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    border: 1px solid #dbe2ea;
+    background: #f8fafc;
+    color: #475467;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .cp-news-chip img {
+    width: 14px;
+    height: 10px;
+    border-radius: 2px;
+    object-fit: cover;
+  }
+
+  .cp-news-desc {
+    font-size: 13px;
+    line-height: 1.45;
+    color: #667085;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .cp-news-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cp-news-form .cp-edit-actions,
+  .cp-news-form .cp-edit-error,
+  .cp-news-form .cp-edit-row--full {
+    grid-column: 1 / -1;
+  }
+
+  .cp-news-form .cp-edit-row--description textarea {
+    min-height: 300px;
   }
 
   .cp-edit-note {
@@ -1648,6 +1767,21 @@
       font-size: 16px;
     }
 
+    .cp-edit-row textarea,
+    .cp-edit-row select {
+      font-size: 16px;
+    }
+
+    .cp-news-row {
+      grid-template-columns: 44px minmax(0, 1fr);
+    }
+
+    .cp-news-row .cp-edit-btn {
+      grid-column: 1 / -1;
+      justify-self: end;
+      margin-left: 0;
+    }
+
     .cp-friendly-team {
       max-width: 28px;
       flex: 0 0 28px;
@@ -1778,6 +1912,10 @@
     .cp-stream-form {
       grid-template-columns: minmax(0, 1fr);
     }
+
+    .cp-news-form {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 </style>
 
@@ -1802,10 +1940,12 @@
   const PUBLIC_MAIN_PAGE_MATCHES_URL = `${AUTH_BASE}/public/main-page-matches`;
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
   const DUELS_URL = `${AUTH_BASE}/duels`;
   const FRIENDLY_FIND_URL = `${AUTH_BASE}/friendly-find`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
   const STREAMS_URL = `${AUTH_BASE}/streams`;
+  const NEWS_URL = `${AUTH_BASE}/news`;
   const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const PROFILES_URL = `${AUTH_BASE}/profiles`;
@@ -1815,6 +1955,21 @@
   const DUEL_FIX_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/fix`;
   const DUEL_REFETCH_RESULTS_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/refetch-results`;
   const DEADLINE_HOURS_OPTIONS = [6, 12, 24, 48];
+  const NEWS_SIGNIFICANCE_OPTIONS = ["Regular", "Important", "Major"];
+  const NEWS_CATEGORY_OPTIONS = [
+    "Players",
+    "GG",
+    "Local",
+    "WTCOC",
+    "ETCOC",
+    "Asian",
+    "Cup",
+    "Copa America",
+    "CCL",
+    "MSO",
+    "KoC",
+    "World Championship",
+  ];
   const ADMIN_MATCH_FILTER_ERROR = "__ERROR__";
   const CAPTAIN_VIEWS = {
     MATCHES: "matches",
@@ -1973,6 +2128,10 @@
     return String(captainPageState.streamId || "").trim();
   }
 
+  function getNewsIdFromUrl() {
+    return String(captainPageState.newsId || "").trim();
+  }
+
   function buildCaptainUrl(options = {}) {
     const url = new URL(window.location.href);
     const nextView = String(options.view || "").trim().toLowerCase();
@@ -2004,6 +2163,7 @@
     url.searchParams.delete("match_id");
     url.searchParams.delete("player_id");
     url.searchParams.delete("stream_id");
+    url.searchParams.delete("news_id");
     return url.toString();
   }
 
@@ -2018,6 +2178,7 @@
       matchId: String(params.get("match_id") || "").trim(),
       playerId: String(params.get("player_id") || "").trim(),
       streamId: String(params.get("stream_id") || "").trim(),
+      newsId: String(params.get("news_id") || "").trim(),
     };
   }
 
@@ -2031,6 +2192,7 @@
     matchId: legacySubviewState.matchId,
     playerId: legacySubviewState.playerId,
     streamId: legacySubviewState.streamId,
+    newsId: legacySubviewState.newsId,
   };
 
   function sanitizeCaptainPageState() {
@@ -2053,19 +2215,28 @@
     captainPageState.matchId = String(captainPageState.matchId || "").trim();
     captainPageState.playerId = String(captainPageState.playerId || "").trim();
     captainPageState.streamId = String(captainPageState.streamId || "").trim();
+    captainPageState.newsId = String(captainPageState.newsId || "").trim();
     if (captainPageState.mode !== "edit") {
       captainPageState.matchId = "";
       captainPageState.playerId = "";
       captainPageState.streamId = "";
+      captainPageState.newsId = "";
     } else if (captainPageState.matchId) {
       captainPageState.playerId = "";
       captainPageState.streamId = "";
+      captainPageState.newsId = "";
     } else if (captainPageState.playerId) {
       captainPageState.matchId = "";
       captainPageState.streamId = "";
+      captainPageState.newsId = "";
     } else if (captainPageState.streamId) {
       captainPageState.matchId = "";
       captainPageState.playerId = "";
+      captainPageState.newsId = "";
+    } else if (captainPageState.newsId) {
+      captainPageState.matchId = "";
+      captainPageState.playerId = "";
+      captainPageState.streamId = "";
     } else {
       captainPageState.mode = "list";
     }
@@ -2073,6 +2244,7 @@
       captainPageState.matchId = "";
       captainPageState.playerId = "";
       captainPageState.streamId = "";
+      captainPageState.newsId = "";
     }
   }
 
@@ -2085,6 +2257,7 @@
     captainPageState.matchId = "";
     captainPageState.playerId = "";
     captainPageState.streamId = "";
+    captainPageState.newsId = "";
     sanitizeCaptainPageState();
   }
 
@@ -2127,6 +2300,9 @@
     if (Object.prototype.hasOwnProperty.call(nextState, "streamId")) {
       captainPageState.streamId = nextState.streamId;
     }
+    if (Object.prototype.hasOwnProperty.call(nextState, "newsId")) {
+      captainPageState.newsId = nextState.newsId;
+    }
     sanitizeCaptainPageState();
     if (options.syncUrl) {
       syncCaptainUrl(!!options.replaceUrl);
@@ -2143,6 +2319,7 @@
       matchId: "",
       playerId: "",
       streamId: "",
+      newsId: "",
     });
   }
 
@@ -2153,6 +2330,7 @@
       matchId: String(target.matchId || "").trim(),
       playerId: String(target.playerId || "").trim(),
       streamId: String(target.streamId || "").trim(),
+      newsId: String(target.newsId || "").trim(),
     });
   }
 
@@ -2163,6 +2341,7 @@
       matchId: "",
       playerId: "",
       streamId: "",
+      newsId: "",
     });
   }
 
@@ -2238,6 +2417,7 @@
             matchId: "",
             playerId: "",
             streamId: "",
+            newsId: "",
           }, { syncUrl: true });
           return;
         }
@@ -2248,6 +2428,7 @@
           matchId: "",
           playerId: "",
           streamId: "",
+          newsId: "",
         }, { syncUrl: true });
       });
 
@@ -3785,6 +3966,655 @@
 
     cancelBtn.addEventListener("click", () => {
       resetCaptainSubview(CAPTAIN_VIEWS.STREAMS);
+    });
+
+    contentEl.appendChild(form);
+  }
+
+  function formatNewsDateTime(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "No time";
+    const date = new Date(raw);
+    if (!Number.isFinite(date.getTime())) return raw;
+    const dd = String(date.getUTCDate()).padStart(2, "0");
+    const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const yyyy = date.getUTCFullYear();
+    const hh = String(date.getUTCHours()).padStart(2, "0");
+    const mi = String(date.getUTCMinutes()).padStart(2, "0");
+    return `${dd}.${mm}.${yyyy} ${hh}:${mi} UTC`;
+  }
+
+  function renderNewsList(newsItems, associationsById, tournamentsById) {
+    const rows = Array.isArray(newsItems) ? newsItems : [];
+    setPageHeading("My News");
+    countEl.textContent = `${rows.length} news`;
+    hintEl.textContent = "";
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.style.display = "grid";
+    contentEl.style.gap = "10px";
+
+    if (!rows.length) {
+      contentEl.className = "captain-alert";
+      contentEl.textContent = "No news yet.";
+      return;
+    }
+
+    const list = document.createElement("div");
+    list.className = "cp-news-list";
+
+    rows.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "cp-news-row";
+
+      const iconUrl = String(item?.icon || "").trim();
+      if (iconUrl) {
+        const img = document.createElement("img");
+        img.className = "cp-news-icon";
+        img.src = iconUrl;
+        img.alt = "";
+        row.appendChild(img);
+      } else {
+        const placeholder = document.createElement("div");
+        placeholder.className = "cp-news-icon cp-news-icon--placeholder";
+        placeholder.textContent = String(item?.significance || "News").trim();
+        row.appendChild(placeholder);
+      }
+
+      const main = document.createElement("div");
+      main.className = "cp-news-main";
+
+      const title = document.createElement("div");
+      title.className = "cp-news-title";
+      title.textContent = String(item?.title || item?.short_title || `News #${item?.id || ""}`).trim();
+      main.appendChild(title);
+
+      const meta = document.createElement("div");
+      meta.className = "cp-news-meta";
+      const addChip = (text, logo = "") => {
+        const chip = document.createElement("span");
+        chip.className = "cp-news-chip";
+        if (logo) {
+          const img = document.createElement("img");
+          img.src = logo;
+          img.alt = "";
+          chip.appendChild(img);
+        }
+        const label = document.createElement("span");
+        label.textContent = text;
+        chip.appendChild(label);
+        meta.appendChild(chip);
+      };
+      addChip(String(item?.significance || "Regular").trim() || "Regular");
+      if (item?.category) addChip(String(item.category).trim());
+      const associationId = normalizeCode(item?.association_id);
+      const associationMeta = associationsById.get(associationId) || null;
+      if (associationMeta) addChip(associationMeta.name || associationId, associationMeta.flag || "");
+      const tournamentId = String(item?.tournament_id || "").trim();
+      const tournamentMeta = tournamentsById.get(tournamentId) || null;
+      if (tournamentMeta) addChip(tournamentMeta.short_title || tournamentMeta.name || tournamentId, tournamentMeta.logo || "");
+      if (Array.isArray(item?.associations) && item.associations.length) {
+        addChip(`${item.associations.length} associations`);
+      }
+      addChip(formatNewsDateTime(item?.time_utc));
+      main.appendChild(meta);
+
+      if (item?.description) {
+        const desc = document.createElement("div");
+        desc.className = "cp-news-desc";
+        desc.textContent = String(item.description || "").trim();
+        main.appendChild(desc);
+      }
+
+      row.appendChild(main);
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "cp-edit-btn";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => {
+        openCaptainEdit(CAPTAIN_VIEWS.NEWS, { newsId: String(item?.id || "") });
+      });
+      row.appendChild(editBtn);
+
+      list.appendChild(row);
+    });
+
+    contentEl.appendChild(list);
+  }
+
+  function renderNewsEditForm(newsItem, associationsList, tournamentsList, formMode = "create") {
+    const isCreateMode = formMode === "create";
+    const source = newsItem && typeof newsItem === "object" ? newsItem : {};
+    const dropdowns = [];
+    setPageHeading(isCreateMode ? "Create news" : "Edit news");
+    countEl.textContent = isCreateMode ? "Creating news" : `Editing news: ${String(source?.id || "")}`;
+    hintEl.textContent = "";
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.style.display = "";
+    contentEl.style.gap = "";
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form cp-news-form";
+    form.noValidate = true;
+
+    const topActions = document.createElement("div");
+    topActions.className = "cp-edit-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    topActions.appendChild(saveBtn);
+    topActions.appendChild(cancelBtn);
+    let deleteBtn = null;
+    if (!isCreateMode) {
+      deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "cp-btn cp-btn-danger";
+      deleteBtn.textContent = "Delete";
+      topActions.appendChild(deleteBtn);
+    }
+    form.appendChild(topActions);
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "cp-edit-error cp-hidden";
+    form.appendChild(errorEl);
+
+    const addRow = (labelText, control, extraClass = "") => {
+      const row = document.createElement("div");
+      row.className = `cp-edit-row ${extraClass}`.trim();
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      row.appendChild(label);
+      row.appendChild(control);
+      form.appendChild(row);
+      return row;
+    };
+
+    const setError = (message) => {
+      const text = String(message || "").trim();
+      errorEl.textContent = text;
+      errorEl.classList.toggle("cp-hidden", !text);
+    };
+
+    const setSaving = (isSaving, actionLabel = "Saving...") => {
+      saveBtn.disabled = !!isSaving;
+      cancelBtn.disabled = !!isSaving;
+      if (deleteBtn) deleteBtn.disabled = !!isSaving;
+      saveBtn.textContent = isSaving ? actionLabel : "Save";
+    };
+
+    const maxMenuHeight = window.matchMedia("(max-width: 600px)").matches ? 220 : 260;
+    const shouldAutoFocusSearch = () => window.matchMedia("(min-width: 600px)").matches;
+    const closeAllDropdowns = () => dropdowns.forEach((dropdown) => dropdown.close());
+
+    const createSingleSelect = (initialValue, options, cfg = {}) => {
+      const normalizedOptions = (Array.isArray(options) ? options : [])
+        .map((opt) => ({
+          value: String(opt?.value ?? "").trim(),
+          label: String(opt?.label ?? opt?.value ?? "").trim(),
+          logo: String(opt?.logo || "").trim(),
+        }))
+        .filter((opt) => opt.label);
+      let value = String(initialValue || "").trim();
+      if (!normalizedOptions.some((opt) => opt.value === value)) value = "";
+      let filterQuery = "";
+
+      const root = document.createElement("div");
+      root.className = "cp-dd";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cp-dd-btn";
+      const btnContent = document.createElement("span");
+      btnContent.className = "cp-dd-btn-content";
+      const chevron = document.createElement("span");
+      chevron.className = "cp-dd-chevron";
+      chevron.textContent = "▾";
+      btn.appendChild(btnContent);
+      btn.appendChild(chevron);
+      const menu = document.createElement("div");
+      menu.className = "cp-dd-menu";
+      const searchWrap = document.createElement("div");
+      searchWrap.className = "cp-dd-search";
+      const searchInput = document.createElement("input");
+      searchInput.type = "text";
+      searchInput.placeholder = "Type to filter...";
+      searchWrap.appendChild(searchInput);
+      menu.appendChild(searchWrap);
+
+      const renderButtonContent = () => {
+        btnContent.innerHTML = "";
+        const selected = normalizedOptions.find((opt) => opt.value === value) || null;
+        if (!selected) {
+          const placeholder = document.createElement("span");
+          placeholder.textContent = cfg.placeholderLabel || "Select";
+          placeholder.style.color = "#999";
+          btnContent.appendChild(placeholder);
+          return;
+        }
+        if (selected.logo) {
+          const img = document.createElement("img");
+          img.className = "cp-dd-flag";
+          img.src = selected.logo;
+          img.alt = "";
+          btnContent.appendChild(img);
+        }
+        const label = document.createElement("span");
+        label.textContent = selected.label;
+        btnContent.appendChild(label);
+      };
+
+      const setValue = (nextValue, trigger = false) => {
+        value = String(nextValue || "").trim();
+        renderButtonContent();
+        menu.querySelectorAll(".cp-dd-option").forEach((node) => {
+          node.classList.toggle("active", String(node.dataset.value || "") === value);
+        });
+        if (trigger && typeof cfg.onChange === "function") cfg.onChange(value);
+      };
+
+      const renderMenu = () => {
+        menu.querySelectorAll(".cp-dd-option,.cp-dd-empty").forEach((node) => node.remove());
+        const query = String(filterQuery || "").trim().toLowerCase();
+        const visible = normalizedOptions.filter((opt) => {
+          if (!query) return true;
+          return `${opt.label} ${opt.value}`.toLowerCase().includes(query);
+        });
+        if (!visible.length) {
+          const empty = document.createElement("div");
+          empty.className = "cp-dd-empty";
+          empty.textContent = "Nothing found.";
+          empty.style.padding = "8px 10px";
+          empty.style.fontSize = "13px";
+          empty.style.color = "#6b7280";
+          menu.appendChild(empty);
+          return;
+        }
+        visible.forEach((opt) => {
+          const optionBtn = document.createElement("button");
+          optionBtn.type = "button";
+          optionBtn.className = "cp-dd-option";
+          optionBtn.dataset.value = opt.value;
+          if (opt.logo) {
+            const img = document.createElement("img");
+            img.className = "cp-dd-flag";
+            img.src = opt.logo;
+            img.alt = "";
+            optionBtn.appendChild(img);
+          }
+          optionBtn.appendChild(document.createTextNode(opt.label));
+          optionBtn.classList.toggle("active", opt.value === value);
+          optionBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            setValue(opt.value, true);
+            api.close();
+          });
+          menu.appendChild(optionBtn);
+        });
+      };
+
+      const api = {
+        root,
+        close: () => {
+          menu.classList.remove("open");
+          menu.style.maxHeight = "0px";
+          btn.classList.remove("open");
+        },
+        getValue: () => value,
+      };
+
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const isOpen = menu.classList.contains("open");
+        closeAllDropdowns();
+        if (isOpen) return;
+        filterQuery = "";
+        searchInput.value = "";
+        renderMenu();
+        menu.classList.add("open");
+        menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
+        btn.classList.add("open");
+        if (shouldAutoFocusSearch()) {
+          try {
+            searchInput.focus({ preventScroll: true });
+          } catch (_error) {
+            searchInput.focus();
+          }
+        }
+      });
+      searchInput.addEventListener("click", (event) => event.stopPropagation());
+      searchInput.addEventListener("keydown", (event) => event.stopPropagation());
+      searchInput.addEventListener("input", () => {
+        filterQuery = String(searchInput.value || "");
+        renderMenu();
+        menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
+      });
+      document.addEventListener("click", (event) => {
+        if (!root.contains(event.target)) api.close();
+      });
+
+      renderButtonContent();
+      renderMenu();
+      root.appendChild(btn);
+      root.appendChild(menu);
+      dropdowns.push(api);
+      return api;
+    };
+
+    const createMultiSelect = (initialValues, options, cfg = {}) => {
+      const normalizedOptions = (Array.isArray(options) ? options : [])
+        .map((opt) => ({
+          value: String(opt?.value ?? "").trim(),
+          label: String(opt?.label ?? opt?.value ?? "").trim(),
+          logo: String(opt?.logo || "").trim(),
+        }))
+        .filter((opt) => opt.value);
+      let selectedValues = Array.from(new Set((Array.isArray(initialValues) ? initialValues : [])
+        .map((item) => String(item || "").trim())
+        .filter((value) => normalizedOptions.some((opt) => opt.value === value))));
+      let filterQuery = "";
+
+      const root = document.createElement("div");
+      root.className = "cp-dd";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cp-dd-btn";
+      const btnContent = document.createElement("span");
+      btnContent.className = "cp-dd-btn-content";
+      const chevron = document.createElement("span");
+      chevron.className = "cp-dd-chevron";
+      chevron.textContent = "▾";
+      btn.appendChild(btnContent);
+      btn.appendChild(chevron);
+      const menu = document.createElement("div");
+      menu.className = "cp-dd-menu";
+      const searchWrap = document.createElement("div");
+      searchWrap.className = "cp-dd-search";
+      const searchInput = document.createElement("input");
+      searchInput.type = "text";
+      searchInput.placeholder = "Type to filter...";
+      searchWrap.appendChild(searchInput);
+      menu.appendChild(searchWrap);
+
+      const renderButtonContent = () => {
+        btnContent.innerHTML = "";
+        if (!selectedValues.length) {
+          const placeholder = document.createElement("span");
+          placeholder.textContent = cfg.placeholderLabel || "Select";
+          placeholder.style.color = "#999";
+          btnContent.appendChild(placeholder);
+          return;
+        }
+        const label = document.createElement("span");
+        label.textContent = selectedValues
+          .map((value) => normalizedOptions.find((opt) => opt.value === value)?.label || value)
+          .join(", ");
+        btnContent.appendChild(label);
+      };
+
+      const renderMenu = () => {
+        menu.querySelectorAll(".cp-dd-option,.cp-dd-empty").forEach((node) => node.remove());
+        const query = String(filterQuery || "").trim().toLowerCase();
+        const visible = normalizedOptions.filter((opt) => {
+          if (!query) return true;
+          return `${opt.label} ${opt.value}`.toLowerCase().includes(query);
+        });
+        if (!visible.length) {
+          const empty = document.createElement("div");
+          empty.className = "cp-dd-empty";
+          empty.textContent = "Nothing found.";
+          empty.style.padding = "8px 10px";
+          empty.style.fontSize = "13px";
+          empty.style.color = "#6b7280";
+          menu.appendChild(empty);
+          return;
+        }
+        visible.forEach((opt) => {
+          const optionBtn = document.createElement("button");
+          optionBtn.type = "button";
+          optionBtn.className = "cp-dd-option";
+          optionBtn.dataset.value = opt.value;
+          if (opt.logo) {
+            const img = document.createElement("img");
+            img.className = "cp-dd-flag";
+            img.src = opt.logo;
+            img.alt = "";
+            optionBtn.appendChild(img);
+          }
+          optionBtn.appendChild(document.createTextNode(opt.label));
+          optionBtn.classList.toggle("active", selectedValues.includes(opt.value));
+          optionBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (selectedValues.includes(opt.value)) {
+              selectedValues = selectedValues.filter((value) => value !== opt.value);
+            } else {
+              selectedValues = selectedValues.concat(opt.value);
+            }
+            renderButtonContent();
+            optionBtn.classList.toggle("active", selectedValues.includes(opt.value));
+          });
+          menu.appendChild(optionBtn);
+        });
+      };
+
+      const api = {
+        root,
+        close: () => {
+          menu.classList.remove("open");
+          menu.style.maxHeight = "0px";
+          btn.classList.remove("open");
+        },
+        getValue: () => selectedValues.slice(),
+      };
+
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const isOpen = menu.classList.contains("open");
+        closeAllDropdowns();
+        if (isOpen) return;
+        filterQuery = "";
+        searchInput.value = "";
+        renderMenu();
+        menu.classList.add("open");
+        menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
+        btn.classList.add("open");
+        if (shouldAutoFocusSearch()) {
+          try {
+            searchInput.focus({ preventScroll: true });
+          } catch (_error) {
+            searchInput.focus();
+          }
+        }
+      });
+      searchInput.addEventListener("click", (event) => event.stopPropagation());
+      searchInput.addEventListener("keydown", (event) => event.stopPropagation());
+      searchInput.addEventListener("input", () => {
+        filterQuery = String(searchInput.value || "");
+        renderMenu();
+        menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
+      });
+      document.addEventListener("click", (event) => {
+        if (!root.contains(event.target)) api.close();
+      });
+
+      renderButtonContent();
+      renderMenu();
+      root.appendChild(btn);
+      root.appendChild(menu);
+      dropdowns.push(api);
+      return api;
+    };
+
+    const associationOptions = [{ value: "", label: "Not selected", logo: "" }].concat((Array.isArray(associationsList) ? associationsList : [])
+      .map((item) => ({
+        value: normalizeCode(item?.id || item?.code),
+        label: String(item?.name || item?.id || item?.code || "").trim(),
+        logo: String(item?.flag || "").trim(),
+      }))
+      .filter((item) => item.label));
+    const tournamentOptions = [{ value: "", label: "Not selected", logo: "" }].concat((Array.isArray(tournamentsList) ? tournamentsList : [])
+      .map((item) => ({
+        value: String(item?.id || "").trim(),
+        label: String(item?.short_title || item?.name || item?.id || "").trim(),
+        logo: String(item?.logo || "").trim(),
+      }))
+      .filter((item) => item.label));
+
+    const significanceInput = createSingleSelect(
+      String(source?.significance || "Regular").trim() || "Regular",
+      NEWS_SIGNIFICANCE_OPTIONS.map((value) => ({ value, label: value })),
+      { placeholderLabel: "Select significance" }
+    );
+    addRow("Significance", significanceInput.root);
+
+    const categoryInput = createSingleSelect(
+      String(source?.category || "").trim(),
+      [{ value: "", label: "Not selected" }].concat(NEWS_CATEGORY_OPTIONS.map((value) => ({ value, label: value }))),
+      { placeholderLabel: "Select category" }
+    );
+    addRow("Category", categoryInput.root);
+
+    const associationInput = createSingleSelect(
+      normalizeCode(source?.association_id),
+      associationOptions,
+      { placeholderLabel: "Select association" }
+    );
+    addRow("Association", associationInput.root);
+
+    const tournamentInput = createSingleSelect(
+      String(source?.tournament_id || "").trim(),
+      tournamentOptions,
+      { placeholderLabel: "Select tournament" }
+    );
+    addRow("Tournament", tournamentInput.root);
+
+    const associationsInput = createMultiSelect(
+      (Array.isArray(source?.associations) ? source.associations : [])
+        .map((item) => normalizeCode(item?.id || item))
+        .filter(Boolean),
+      associationOptions,
+      { placeholderLabel: "Select associations" }
+    );
+    addRow("Associations", associationsInput.root);
+
+    const timeInput = document.createElement("input");
+    timeInput.type = "datetime-local";
+    timeInput.value = toDatetimeLocalFromUtc(source?.time_utc);
+    addRow("Time, UTC", timeInput);
+
+    const iconInput = document.createElement("input");
+    iconInput.type = "text";
+    iconInput.value = String(source?.icon || "").trim();
+    addRow("Icon", iconInput);
+
+    const titleInput = document.createElement("input");
+    titleInput.type = "text";
+    titleInput.maxLength = 100;
+    titleInput.value = String(source?.title || "").trim();
+    addRow("Title", titleInput);
+
+    const shortTitleInput = document.createElement("input");
+    shortTitleInput.type = "text";
+    shortTitleInput.maxLength = 40;
+    shortTitleInput.value = String(source?.short_title || "").trim();
+    addRow("Short title", shortTitleInput);
+
+    const descriptionInput = document.createElement("textarea");
+    descriptionInput.value = String(source?.description || "").trim();
+    descriptionInput.style.height = "300px";
+    addRow("Description", descriptionInput, "cp-edit-row--full cp-edit-row--description");
+
+    const buildPayload = () => ({
+      significance: significanceInput.getValue() || "Regular",
+      category: categoryInput.getValue() || "",
+      association_id: associationInput.getValue() || "",
+      tournament_id: tournamentInput.getValue() || "",
+      associations: associationsInput.getValue(),
+      time_utc: toUtcIsoFromDatetimeLocal(timeInput.value),
+      icon: String(iconInput.value || "").trim(),
+      title: String(titleInput.value || "").trim(),
+      short_title: String(shortTitleInput.value || "").trim(),
+      description: String(descriptionInput.value || "").trim(),
+    });
+
+    const validatePayload = (payload) => {
+      if (!payload.title) return "Title is required.";
+      if (payload.title.length > 100) return "Title must be 100 characters or fewer.";
+      if (payload.short_title.length > 40) return "Short title must be 40 characters or fewer.";
+      if (String(timeInput.value || "").trim() && !payload.time_utc) return "Time, UTC is invalid.";
+      return "";
+    };
+
+    cancelBtn.addEventListener("click", () => {
+      resetCaptainSubview(CAPTAIN_VIEWS.NEWS);
+    });
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", async () => {
+        setError("");
+        if (!window.confirm("Delete this news item?")) return;
+        setSaving(true, "Saving...");
+        deleteBtn.textContent = "Deleting...";
+        try {
+          const response = await fetch(`${NEWS_URL}/${encodeURIComponent(String(source?.id || ""))}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result?.ok) {
+            setError(result?.message || "Failed to delete news.");
+            return;
+          }
+          resetCaptainSubview(CAPTAIN_VIEWS.NEWS);
+        } catch (_error) {
+          setError("Failed to delete news.");
+        } finally {
+          if (deleteBtn) deleteBtn.textContent = "Delete";
+          setSaving(false);
+        }
+      });
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setError("");
+      closeAllDropdowns();
+      const payload = buildPayload();
+      const validationError = validatePayload(payload);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+      if (!payload.time_utc) delete payload.time_utc;
+
+      setSaving(true, "Saving...");
+      try {
+        const isEdit = !isCreateMode;
+        const response = await fetch(
+          isEdit ? `${NEWS_URL}/${encodeURIComponent(String(source?.id || ""))}` : NEWS_URL,
+          {
+            method: isEdit ? "PATCH" : "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(isEdit ? { id: source?.id, ...payload } : payload),
+          }
+        );
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok) {
+          setError(result?.message || `Failed to ${isEdit ? "update" : "create"} news.`);
+          return;
+        }
+        resetCaptainSubview(CAPTAIN_VIEWS.NEWS);
+      } catch (_error) {
+        setError(`Failed to ${isCreateMode ? "create" : "update"} news.`);
+      } finally {
+        setSaving(false);
+      }
     });
 
     contentEl.appendChild(form);
@@ -8913,6 +9743,7 @@
       const editMatchId = String(captainPageState.matchId || "").trim();
       const editPlayerId = String(captainPageState.playerId || "").trim();
       const editStreamId = String(captainPageState.streamId || "").trim();
+      const editNewsId = String(captainPageState.newsId || "").trim();
       const associationOverride = captainPageState.associationOverride;
       let associationCode = associationOverride;
       let captainAssociationCode = "";
@@ -9062,7 +9893,7 @@
         associationCode = isAdminUser ? associationCode : captainAssociationCode;
       }
 
-      const [matchesRes, teamsRes, tournamentsRes, profilesRes, friendlyFindRes, streamersRes, streamsRes, newsEditorsRes] = await Promise.all([
+      const [matchesRes, teamsRes, tournamentsRes, profilesRes, friendlyFindRes, streamersRes, streamsRes, newsEditorsRes, newsRes, associationsRes] = await Promise.all([
         activeView === CAPTAIN_VIEWS.MATCHES
           ? fetch(MATCHES_URL, { method: "GET", credentials: "include" })
           : activeView === CAPTAIN_VIEWS.STREAMS
@@ -9082,6 +9913,12 @@
           : Promise.resolve(null),
         activeView === CAPTAIN_VIEWS.NEWS
           ? fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" })
+          : Promise.resolve(null),
+        activeView === CAPTAIN_VIEWS.NEWS && isAdminUser
+          ? fetch(NEWS_URL, { method: "GET", credentials: "include" })
+          : Promise.resolve(null),
+        activeView === CAPTAIN_VIEWS.NEWS && isAdminUser
+          ? fetch(ASSOCIATIONS_URL, { method: "GET", credentials: "include" })
           : Promise.resolve(null),
       ]);
 
@@ -9124,6 +9961,24 @@
       isNewsEditorUser = !!currentUserPlayerId && newsEditors.some((entry) => (
         String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserPlayerId
       ));
+      const newsData = newsRes?.ok
+        ? await newsRes.json().catch(() => ({}))
+        : {};
+      const newsItems = Array.isArray(newsData?.news) ? newsData.news : [];
+      const associationsData = associationsRes?.ok
+        ? await associationsRes.json().catch(() => ({}))
+        : {};
+      const associations = Array.isArray(associationsData?.associations) ? associationsData.associations : [];
+      const associationsById = new Map();
+      associations.forEach((item) => {
+        const associationId = normalizeCode(item?.id || item?.code);
+        if (!associationId) return;
+        associationsById.set(associationId, {
+          id: associationId,
+          name: String(item?.name || associationId).trim(),
+          flag: String(item?.flag || "").trim(),
+        });
+      });
 
       const teamsById = new Map();
       if (teamsRes.ok) {
@@ -9204,8 +10059,10 @@
       }
 
       if (activeView === CAPTAIN_VIEWS.NEWS) {
-        if (!isAdminUser && !isNewsEditorUser) {
-          renderRestrictedSectionMessage("This section is available only to users added to News Editors.");
+        if (!isAdminUser) {
+          renderStaticInfoSection("My News", [
+            "This section is under development.",
+          ]);
           return;
         }
       }
@@ -9223,13 +10080,6 @@
             text.append("For now, please find your local tournaments here: ", nationalsLink);
             return text;
           })(),
-        ]);
-        return;
-      }
-
-      if (activeView === CAPTAIN_VIEWS.NEWS) {
-        renderStaticInfoSection("My News", [
-          "This section is under development.",
         ]);
         return;
       }
@@ -9336,6 +10186,15 @@
         if (isCreateMode || isEditMode) {
           addButtonEl.classList.add("cp-hidden");
         }
+      } else if (activeView === CAPTAIN_VIEWS.NEWS) {
+        addButtonEl.classList.remove("cp-hidden");
+        addButtonEl.textContent = "Create";
+        addButtonEl.onclick = () => {
+          openCaptainCreate(CAPTAIN_VIEWS.NEWS);
+        };
+        if (isCreateMode || isEditMode) {
+          addButtonEl.classList.add("cp-hidden");
+        }
       } else {
         addButtonEl.classList.add("cp-hidden");
       }
@@ -9370,6 +10229,7 @@
               matchId: "",
               playerId: "",
               streamId: "",
+              newsId: "",
             }, { syncUrl: true });
           }
         );
@@ -9456,6 +10316,28 @@
         renderStreams(visibleStreams, teamsById, tournamentsById, {
           showStreamerAvatar: isAdminUser,
         });
+        return;
+      }
+
+      if (activeView === CAPTAIN_VIEWS.NEWS) {
+        if (isCreateMode) {
+          renderNewsEditForm(null, associations, tournaments, "create");
+          return;
+        }
+
+        if (isEditMode) {
+          const newsToEdit = newsItems.find((item) => String(item?.id || "") === editNewsId);
+          if (!newsToEdit) {
+            contentEl.className = "captain-alert";
+            contentEl.textContent = `News not found: ${editNewsId}`;
+            countEl.textContent = "";
+            return;
+          }
+          renderNewsEditForm(newsToEdit, associations, tournaments, "edit");
+          return;
+        }
+
+        renderNewsList(newsItems, associationsById, tournamentsById);
         return;
       }
 
@@ -9618,6 +10500,7 @@
               matchId: "",
               playerId: "",
               streamId: "",
+              newsId: "",
             }, { syncUrl: true });
           });
         }
