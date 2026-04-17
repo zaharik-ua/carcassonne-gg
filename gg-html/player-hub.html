@@ -1786,7 +1786,7 @@
     <div class="captain-title"></div>
     <div>
       <span id="captainCount" class="captain-sub"></span>
-      <button id="captainAddButton" class="cp-edit-btn" type="button">Create</button>
+      <button id="captainAddButton" class="cp-edit-btn cp-hidden" type="button">Create</button>
     </div>
   </div>
   <div id="captainFilters" class="captain-filters cp-hidden"></div>
@@ -2173,6 +2173,16 @@
     if (!filtersEl) return;
     filtersEl.innerHTML = "";
     filtersEl.classList.add("cp-hidden");
+  }
+
+  function renderCaptainLoadingState() {
+    clearFilters();
+    hintEl.textContent = "";
+    countEl.textContent = "";
+    addButtonEl.classList.add("cp-hidden");
+    addButtonEl.onclick = null;
+    contentEl.className = "captain-alert";
+    contentEl.textContent = "Loading...";
   }
 
   function renderCaptainHomeSelection(items) {
@@ -8895,7 +8905,7 @@
     }
     isCaptainPageInitializing = true;
     try {
-      clearFilters();
+      renderCaptainLoadingState();
       const activeView = captainPageState.view;
       const requestedTournamentId = String(captainPageState.tournamentId || "").trim();
       const isEditMode = captainPageState.mode === "edit";

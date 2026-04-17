@@ -2398,6 +2398,13 @@
       ["Individuals", "Teams", "Clubs", "National"],
       false
     );
+    const categoryField = createSelectRow(
+      "category",
+      String(item?.category || ""),
+      ["", "WTCOC", "ETCOC", "Asian Cup", "Copa America", "CCL", "MSO", "KoC", "World Championship"],
+      false
+    );
+    if (categoryField.select.options[0]) categoryField.select.options[0].textContent = "No category";
     const subtypeField = createSelectRow(
       "subtype",
       String(item?.subtype || item?.access_type || "Friendly"),
@@ -2444,6 +2451,7 @@
     form.appendChild(logoField.row);
     form.appendChild(linkField.row);
     form.appendChild(tournamentTypeField.row);
+    form.appendChild(categoryField.row);
     form.appendChild(subtypeField.row);
     form.appendChild(playerHubVisibilityField.row);
     form.appendChild(lineupSizeTypeField.row);
@@ -2466,6 +2474,18 @@
     tournamentTypeField.select.addEventListener("change", toggleAccessUsersState);
     subtypeField.select.addEventListener("change", toggleAccessUsersState);
     toggleAccessUsersState();
+
+    const toggleCategoryState = () => {
+      const tournamentType = String(tournamentTypeField.select.value || "").trim();
+      const supportsCategory = tournamentType === "Individuals" || tournamentType === "Teams";
+      categoryField.row.classList.toggle("hidden", !supportsCategory);
+      categoryField.select.disabled = !supportsCategory;
+      if (!supportsCategory) {
+        categoryField.select.value = "";
+      }
+    };
+    tournamentTypeField.select.addEventListener("change", toggleCategoryState);
+    toggleCategoryState();
 
     const toggleLineupSizeState = () => {
       const tournamentType = String(tournamentTypeField.select.value || "").trim();
@@ -2523,6 +2543,7 @@
         logo: String(logoField.input.value || "").trim(),
         link: String(linkField.input.value || "").trim(),
         tournament_type: String(tournamentTypeField.select.value || "Teams").trim(),
+        category: String(categoryField.select.value || "").trim(),
         subtype: String(subtypeField.select.value || "Friendly").trim(),
         player_hub_visibility: String(playerHubVisibilityField.select.value || "Visible").trim(),
         lineup_size_type: Number.parseInt(String(lineupSizeTypeField.select.value || "2"), 10) === 1 ? 1 : 2,
@@ -2542,6 +2563,9 @@
         payload.access_users = [];
       } else if (payload.subtype !== "Official") {
         payload.access_users = [];
+      }
+      if (payload.tournament_type !== "Individuals" && payload.tournament_type !== "Teams") {
+        payload.category = null;
       }
       if (payload.tournament_type !== "Teams" && payload.tournament_type !== "Clubs") {
         payload.lineup_size_type = 2;
@@ -3155,10 +3179,12 @@
     state.tournaments.forEach((item) => {
       const subtitleParts = [];
       const tournamentType = String(item?.tournament_type || item?.type || "").trim();
+      const category = String(item?.category || "").trim();
       const subtype = String(item?.subtype || item?.access_type || "").trim();
       const playerHubVisibility = String(item?.player_hub_visibility || "").trim();
       if (item.short_title) subtitleParts.push(String(item.short_title).trim());
       if (tournamentType) subtitleParts.push(tournamentType);
+      if (category) subtitleParts.push(category);
       if (tournamentType === "Teams" && subtype) subtitleParts.push(subtype);
       if (playerHubVisibility) subtitleParts.push(playerHubVisibility);
       sectionList.appendChild(createListRow({

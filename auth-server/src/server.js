@@ -216,6 +216,16 @@ const TOURNAMENT_TYPES = {
   CLUBS: "Clubs",
   NATIONAL: "National",
 };
+const TOURNAMENT_CATEGORIES = [
+  "WTCOC",
+  "ETCOC",
+  "Asian Cup",
+  "Copa America",
+  "CCL",
+  "MSO",
+  "KoC",
+  "World Championship",
+];
 const TOURNAMENT_ACCESS_ROLES = {
   ADMIN: "admin",
   CAPTAIN: "captain",
@@ -1142,6 +1152,17 @@ function normalizeTournamentPlayerHubVisibility(value) {
     : TOURNAMENT_PLAYER_HUB_VISIBILITY.VISIBLE;
 }
 
+function normalizeTournamentCategory(typeValue, categoryValue) {
+  const tournamentType = normalizeTournamentType(typeValue);
+  if (tournamentType !== TOURNAMENT_TYPES.INDIVIDUALS && tournamentType !== TOURNAMENT_TYPES.TEAMS) {
+    return null;
+  }
+  const raw = String(categoryValue ?? "").trim();
+  if (!raw) return null;
+  const matched = TOURNAMENT_CATEGORIES.find((entry) => entry.toLowerCase() === raw.toLowerCase());
+  return matched || null;
+}
+
 function normalizeTournamentAccessRole(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return normalized === TOURNAMENT_ACCESS_ROLES.ADMIN
@@ -1240,6 +1261,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(t.tournament_type), ''), ?) AS tournament_type,
+        NULLIF(trim(t.category), '') AS category,
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
         t.lineup_size,
@@ -1307,6 +1329,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         access_type: normalizeTournamentAccessType(row.access_type),
         subtype: normalizeTournamentAccessType(row.subtype),
         tournament_type: normalizeTournamentType(row.tournament_type),
+        category: normalizeTournamentCategory(row.tournament_type, row.category),
         player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
         lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
         lineup_size: normalizeTournamentLineupSize(row.lineup_size),
@@ -1435,6 +1458,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(tournament_type), ''), ?) AS tournament_type,
+        NULLIF(trim(category), '') AS category,
         COALESCE(NULLIF(trim(player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(lineup_size_type, ?) AS lineup_size_type,
         lineup_size
@@ -1466,6 +1490,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         access_type: normalizeTournamentAccessType(row.access_type),
         subtype: normalizeTournamentAccessType(row.subtype),
         tournament_type: normalizeTournamentType(row.tournament_type),
+        category: normalizeTournamentCategory(row.tournament_type, row.category),
         player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
         lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
         lineup_size: normalizeTournamentLineupSize(row.lineup_size),
@@ -2473,6 +2498,7 @@ function ensureTournamentsSchema() {
       logo TEXT,
       link TEXT,
       tournament_type TEXT NOT NULL DEFAULT 'Teams',
+      category TEXT,
       subtype TEXT,
       access_type TEXT NOT NULL DEFAULT 'Friendly',
       player_hub_visibility TEXT NOT NULL DEFAULT 'Visible',
@@ -2497,6 +2523,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "logo", "TEXT");
       addColumnIfMissing(columns, "tournaments", "link", "TEXT");
       addColumnIfMissing(columns, "tournaments", "tournament_type", "TEXT NOT NULL DEFAULT 'Teams'");
+      addColumnIfMissing(columns, "tournaments", "category", "TEXT");
       addColumnIfMissing(columns, "tournaments", "subtype", "TEXT");
       addColumnIfMissing(columns, "tournaments", "access_type", "TEXT NOT NULL DEFAULT 'Friendly'");
       addColumnIfMissing(columns, "tournaments", "player_hub_visibility", "TEXT NOT NULL DEFAULT 'Visible'");
@@ -2509,6 +2536,11 @@ function ensureTournamentsSchema() {
           UPDATE tournaments
           SET
             tournament_type = COALESCE(NULLIF(trim(tournament_type), ''), 'Teams'),
+            category = CASE
+              WHEN COALESCE(NULLIF(trim(category), ''), '') = '' THEN NULL
+              WHEN lower(trim(tournament_type)) IN ('individuals', 'individual', 'teams', 'team') THEN category
+              ELSE NULL
+            END,
             subtype = CASE
               WHEN COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), '')) IS NULL THEN NULL
               WHEN lower(trim(COALESCE(NULLIF(subtype, ''), access_type))) IN ('2', 'closed', 'official') THEN 'Official'
@@ -4290,6 +4322,7 @@ app.get("/tournaments", (req, res, next) => {
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(t.tournament_type), ''), ?) AS tournament_type,
+        NULLIF(trim(t.category), '') AS category,
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
         t.lineup_size,
@@ -4366,6 +4399,7 @@ app.get("/tournaments", (req, res, next) => {
             access_type: normalizeTournamentAccessType(row.access_type),
             subtype: row.subtype ? normalizeTournamentAccessType(row.subtype) : null,
             tournament_type: normalizeTournamentType(row.tournament_type),
+            category: normalizeTournamentCategory(row.tournament_type, row.category),
             player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
             lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
             lineup_size: normalizeTournamentLineupSize(row.lineup_size),
@@ -4403,6 +4437,7 @@ app.post("/tournaments", requireAdmin, (req, res) => {
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
+  const category = normalizeTournamentCategory(tournamentType, req.body?.category);
   const subtype = normalizeTournamentSubtypeForType(tournamentType, req.body?.subtype ?? req.body?.access_type);
   const playerHubVisibility = normalizeTournamentPlayerHubVisibility(req.body?.player_hub_visibility);
   const accessType = subtype || TOURNAMENT_ACCESS_TYPES.FRIENDLY;
@@ -4456,6 +4491,7 @@ app.post("/tournaments", requireAdmin, (req, res) => {
                   logo,
                   link,
                   tournament_type,
+                  category,
                   subtype,
                   access_type,
                   player_hub_visibility,
@@ -4464,9 +4500,9 @@ app.post("/tournaments", requireAdmin, (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
-              [id, name, shortTitle, logo, link, tournamentType, subtype, accessType, playerHubVisibility, lineupSizeType, lineupSize],
+              [id, name, shortTitle, logo, link, tournamentType, category, subtype, accessType, playerHubVisibility, lineupSizeType, lineupSize],
               (insertErr) => {
                 if (insertErr) {
                   db.run("ROLLBACK");
@@ -4513,6 +4549,7 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
+  const category = normalizeTournamentCategory(tournamentType, req.body?.category);
   const subtype = normalizeTournamentSubtypeForType(tournamentType, req.body?.subtype ?? req.body?.access_type);
   const playerHubVisibility = normalizeTournamentPlayerHubVisibility(req.body?.player_hub_visibility);
   const accessType = subtype || TOURNAMENT_ACCESS_TYPES.FRIENDLY;
@@ -4572,6 +4609,7 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
                   logo = ?,
                   link = ?,
                   tournament_type = ?,
+                  category = ?,
                   subtype = ?,
                   access_type = ?,
                   player_hub_visibility = ?,
@@ -4587,6 +4625,7 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
                 logo,
                 link,
                 tournamentType,
+                category,
                 subtype,
                 accessType,
                 playerHubVisibility,
