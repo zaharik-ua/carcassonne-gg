@@ -124,6 +124,26 @@ class SqliteRatingsRepository:
             "planned_matches": match_results,
         }
 
+    def update_planned_missing_ratings(self) -> dict:
+        planned_duel_ids = self.fetch_planned_duel_ids_missing_ratings()
+        duel_results = [self.update_duel_rating(duel_id) for duel_id in planned_duel_ids]
+
+        planned_match_ids = []
+        seen_match_ids: set[str] = set()
+        for duel_result in duel_results:
+            match_id = str(duel_result.get("match_id") or "").strip()
+            if not match_id or match_id in seen_match_ids:
+                continue
+            seen_match_ids.add(match_id)
+            planned_match_ids.append(match_id)
+
+        match_results = [self.update_match_rating(match_id) for match_id in planned_match_ids]
+
+        return {
+            "planned_duels_missing_ratings": duel_results,
+            "planned_matches_for_missing_ratings": match_results,
+        }
+
     def fetch_duel_ids_for_match(self, *, match_id: str) -> list[str]:
         normalized_match_id = str(match_id).strip()
         if not normalized_match_id:
@@ -157,6 +177,37 @@ class SqliteRatingsRepository:
                   CASE WHEN duel_number IS NULL THEN 1 ELSE 0 END ASC,
                   duel_number ASC,
                   id ASC
+                """
+            ).fetchall()
+        return [str(row["id"]).strip() for row in rows if row["id"] is not None and str(row["id"]).strip()]
+
+    def fetch_planned_duel_ids_missing_ratings(self) -> list[str]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT d.id
+                FROM duels d
+                LEFT JOIN profiles p1
+                  ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
+                LEFT JOIN profiles p2
+                  ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
+                WHERE d.deleted_at IS NULL
+                  AND trim(COALESCE(d.player_1_id, '')) <> ''
+                  AND trim(COALESCE(d.player_2_id, '')) <> ''
+                  AND COALESCE(status, 'Planned') = 'Planned'
+                  AND (
+                    rating_full IS NULL
+                    OR trim(COALESCE(CAST(rating_full AS TEXT), '')) = ''
+                    OR rating IS NULL
+                    OR trim(COALESCE(CAST(rating AS TEXT), '')) = ''
+                  )
+                  AND p1.bga_elo IS NOT NULL
+                  AND p2.bga_elo IS NOT NULL
+                ORDER BY
+                  datetime(COALESCE(d.time_utc, '1970-01-01 00:00:00')) ASC,
+                  CASE WHEN d.duel_number IS NULL THEN 1 ELSE 0 END ASC,
+                  d.duel_number ASC,
+                  d.id ASC
                 """
             ).fetchall()
         return [str(row["id"]).strip() for row in rows if row["id"] is not None and str(row["id"]).strip()]

@@ -35,6 +35,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Update ratings for all Planned duels first, then all Planned matches.",
     )
+    mode.add_argument(
+        "--planned-missing-ratings",
+        action="store_true",
+        help="Update ratings only for Planned duels without ratings and their parent matches.",
+    )
     return parser.parse_args()
 
 
@@ -65,6 +70,14 @@ def main() -> int:
         }
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0 if summary["match"].get("found") else 1
+
+    if args.planned_missing_ratings:
+        summary = {
+            "mode": "planned_missing_ratings",
+            **repository.update_planned_missing_ratings(),
+        }
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return 0
 
     summary = {
         "mode": "planned",

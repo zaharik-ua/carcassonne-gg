@@ -12,8 +12,5 @@ cd "${AUTH_SERVER_DIR}"
   cd "'"${AUTH_SERVER_DIR}"'"
   elo_output="$(python3 run_update_player_elo.py --selection-mode only_null "$@")"
   printf "%s\n" "${elo_output}"
-  updated_count="$(printf "%s" "${elo_output}" | python3 -c '"'"'import json,sys; data=json.load(sys.stdin); print(int(data.get("updated", 0)))'"'"')"
-  if [ "${updated_count}" -gt 0 ]; then
-    python3 run_update_ratings.py --planned
-  fi
+  python3 run_update_ratings.py --planned-missing-ratings
 ' bash "$@"
