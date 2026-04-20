@@ -20,6 +20,12 @@ Apply into DB:
 python3 run_sync_wtcoc_matches.py --db-path ./data/auth.sqlite --tournament-id WTCOC-2026 --apply
 ```
 
+Check finished WTCOC results against DB:
+
+```bash
+python3 run_check_wtcoc_results.py --db-path ./data/auth.sqlite --tournament-id WTCOC-2026
+```
+
 Current scope:
 
 - fetches `calendar` and optionally `playoff`
