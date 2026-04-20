@@ -194,6 +194,7 @@
 
 <script>
 (function () {
+  const PLAYER_HUB_BASE_PATH = "/player-hub";
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
@@ -239,20 +240,25 @@
   ];
 
   function buildUrl(item) {
-    const url = new URL(window.location.href);
+    const url = new URL(window.location.origin);
     if (item?.type === "tournament") {
-      url.searchParams.delete("view");
-      url.searchParams.set("tournament", String(item.id || "").trim());
+      url.pathname = `${PLAYER_HUB_BASE_PATH}/tournaments/`;
+      url.searchParams.set("id", String(item.id || "").trim());
     } else {
       const normalizedView = String(item?.view || "").trim().toLowerCase();
-      url.searchParams.set("view", normalizedView);
-      url.searchParams.delete("tournament");
+      url.pathname = `${PLAYER_HUB_BASE_PATH}/${normalizedView}/`;
     }
+    if (item?.type !== "tournament") {
+      url.searchParams.delete("id");
+    }
+    url.searchParams.delete("view");
+    url.searchParams.delete("tournament");
     url.searchParams.delete("edit");
     url.searchParams.delete("create");
     url.searchParams.delete("match_id");
     url.searchParams.delete("player_id");
     url.searchParams.delete("stream_id");
+    url.searchParams.delete("news_id");
     return url.toString();
   }
 
@@ -318,9 +324,12 @@
 
   function getCurrentSelectionKey() {
     const url = new URL(window.location.href);
-    const tournamentId = String(url.searchParams.get("tournament") || "").trim();
+    const path = String(url.pathname || "").replace(/\/+$/, "");
+    const tournamentId = String(url.searchParams.get("id") || url.searchParams.get("tournament") || "").trim();
     if (tournamentId) return `tournament:${tournamentId}`;
-    const view = String(url.searchParams.get("view") || "").trim().toLowerCase();
+    const view = path.startsWith(`${PLAYER_HUB_BASE_PATH}/`)
+      ? path.slice(`${PLAYER_HUB_BASE_PATH}/`.length).split("/")[0].trim().toLowerCase()
+      : String(url.searchParams.get("view") || "").trim().toLowerCase();
     if (
       view === "players"
       || view === "friendly-find"

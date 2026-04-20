@@ -30,7 +30,7 @@ class _AssociationResolver:
                 by_name[normalized_name] = row
         return cls(by_code=by_code, by_name=by_name)
 
-    def resolve(self, raw_value: str) -> AssociationMapping | None:
+    def resolve(self, raw_value: str) -> TeamMapping | None:
         normalized = _normalize_token(raw_value)
         if not normalized:
             return None
@@ -96,6 +96,11 @@ class WtcocSyncService:
 
         resolver = _AssociationResolver.from_rows(self.repository.load_team_mappings())
         player_resolver = _PlayerResolver.from_rows(self.repository.load_profile_mappings())
+        stored_links = {
+            _build_wtcoc_link_key(source=link.source, external_match_id=link.external_match_id): link
+            for link in self.repository.load_wtcoc_match_links(normalized_tournament_id)
+        }
+        default_fallback_date_iso = datetime.now(timezone.utc).isoformat()
 
         source_summaries: list[dict[str, Any]] = []
         matches_payload: list[dict[str, Any]] = []
@@ -126,11 +131,16 @@ class WtcocSyncService:
             for match in filtered_matches:
                 if not isinstance(match, dict):
                     continue
+                raw_external_match_id = str(match.get("idMatch") or "").strip()
+                stored_link = stored_links.get(
+                    _build_wtcoc_link_key(source=response.source, external_match_id=raw_external_match_id)
+                )
                 match_preview = self._normalize_match_preview(
                     tournament_id=normalized_tournament_id,
                     source=response.source,
                     match=match,
                     resolver=resolver,
+                    fallback_date_iso=stored_link.fallback_date_iso if stored_link else default_fallback_date_iso,
                 )
                 if not match_preview["team_1"] or not match_preview["team_2"]:
                     unresolved_matches.append(
@@ -152,6 +162,9 @@ class WtcocSyncService:
                         "number_of_duels": 5,
                         "team_1": match_preview["team_1"],
                         "team_2": match_preview["team_2"],
+                        "source": match_preview["source"],
+                        "external_match_id": match_preview["external_match_id"],
+                        "fallback_date_iso": match_preview["fallback_date_iso"],
                     }
                 )
                 if not _can_import_duels(match_preview["status"]):
@@ -205,6 +218,7 @@ class WtcocSyncService:
         source: str,
         match: dict[str, Any],
         resolver: _AssociationResolver,
+        fallback_date_iso: str | None,
     ) -> dict[str, Any]:
         raw_match_id = str(match.get("idMatch") or "").strip()
         match_status = str(match.get("status") or "").strip() or None
@@ -215,10 +229,21 @@ class WtcocSyncService:
         match_time = _normalize_match_time(match_status, match.get("date"))
         duels = match.get("duels")
         duel_count = len(duels) if isinstance(duels, list) else 0
+        resolved_fallback_date_iso = str(fallback_date_iso or "").strip() or None
         return {
             "source": source,
             "external_match_id": raw_match_id,
-            "match_id": _build_match_id(tournament_id=tournament_id, source=source, external_match_id=raw_match_id),
+            "fallback_date_iso": resolved_fallback_date_iso,
+            "match_id": _build_generated_match_id(
+                time_utc=match_time,
+                team_1=local_team.code if local_team else None,
+                team_2=visitor_team.code if visitor_team else None,
+                fallback_date_iso=resolved_fallback_date_iso,
+            ) or _build_legacy_match_id(
+                tournament_id=tournament_id,
+                source=source,
+                external_match_id=raw_match_id,
+            ),
             "tournament_id": tournament_id,
             "status": match_status,
             "time_utc": match_time,
@@ -280,10 +305,41 @@ def _normalize_token(value: str) -> str:
     return str(value or "").strip().upper()
 
 
-def _build_match_id(*, tournament_id: str, source: str, external_match_id: str) -> str:
+def _build_wtcoc_link_key(*, source: str, external_match_id: str) -> str | None:
+    normalized_source = str(source or "").strip().lower()
+    normalized_external = str(external_match_id or "").strip()
+    if not normalized_source or not normalized_external:
+        return None
+    return f"{normalized_source}:{normalized_external}"
+
+
+def _build_legacy_match_id(*, tournament_id: str, source: str, external_match_id: str) -> str:
     suffix = "PO" if source == "playoff" else "M"
     normalized_external = str(external_match_id or "").strip() or "UNKNOWN"
     return f"{tournament_id}-{suffix}{normalized_external}"
+
+
+def _build_generated_match_id(
+    *,
+    time_utc: str | None,
+    team_1: str | None,
+    team_2: str | None,
+    fallback_date_iso: str | None = None,
+) -> str:
+    normalized_team_1 = str(team_1 or "").strip().upper()
+    normalized_team_2 = str(team_2 or "").strip().upper()
+    if not normalized_team_1 or not normalized_team_2:
+        return ""
+    raw_iso = str(time_utc or "").strip() or str(fallback_date_iso or "").strip()
+    date_part = raw_iso[:10].replace("-", "")
+    if not _is_generated_match_date_part(date_part):
+        return f"{normalized_team_1}{normalized_team_2}"
+    return f"{date_part}{normalized_team_1}{normalized_team_2}"
+
+
+def _is_generated_match_date_part(value: str) -> bool:
+    raw = str(value or "").strip()
+    return len(raw) == 8 and raw.isdigit()
 
 
 def _build_duel_id(match_id: str, duel_number: int | None) -> str | None:

@@ -27,3 +27,5 @@ Current scope:
 - reports what is ready to map into `matches` / `duels`
 - can upsert mapped rows into SQLite with `--apply`
 - imports duels only for matches with confirmed lineups, for example statuses `22`, `23`, `32`
+- generates WTCOC match ids in the same `YYYYMMDDTEAM1TEAM2` format as player-hub
+- if WTCOC API has no match date yet, uses the match creation date as the `YYYYMMDD` part and later renames the match/duels when the API date appears
