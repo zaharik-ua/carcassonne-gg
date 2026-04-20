@@ -262,7 +262,7 @@ def _is_completed_api_match(match: dict[str, Any]) -> bool:
 
     if not str(match.get("localResult") or "").strip() or not str(match.get("visitorResult") or "").strip():
         return False
-    if str(match.get("idTeamWin") or "").strip() or str(match.get("idTeamLost") or "").strip():
+    if _has_real_identifier(match.get("idTeamWin")) or _has_real_identifier(match.get("idTeamLost")):
         return True
 
     duels = match.get("duels")
@@ -270,7 +270,7 @@ def _is_completed_api_match(match: dict[str, Any]) -> bool:
         return False
     return any(
         isinstance(duel, dict)
-        and (str(duel.get("idPlayerWin") or "").strip() or str(duel.get("idPlayerLost") or "").strip())
+        and (_has_real_identifier(duel.get("idPlayerWin")) or _has_real_identifier(duel.get("idPlayerLost")))
         for duel in duels
     )
 
@@ -317,6 +317,11 @@ def _has_named_players(duel: dict[str, Any]) -> bool:
     local_name = str(duel.get("nameLocalPlayer") or "").strip()
     visitor_name = str(duel.get("nameVisitorPlayer") or "").strip()
     return bool(local_name and visitor_name)
+
+
+def _has_real_identifier(value: Any) -> bool:
+    raw = str(value or "").strip()
+    return raw not in {"", "0"}
 
 
 def _to_int_or_none(value: Any) -> int | None:
