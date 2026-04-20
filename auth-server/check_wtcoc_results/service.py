@@ -164,6 +164,8 @@ class WtcocResultsCheckService:
             expected_dw2 = _to_int_or_none(api_duel.get("visitorResult"))
             if duel_number is None:
                 continue
+            if not _has_named_players(api_duel):
+                continue
             seen_duel_numbers.add(duel_number)
             db_duel = db_duels_by_number.get(duel_number)
             if db_duel is None:
@@ -309,6 +311,12 @@ def _extract_duel_number(value: Any) -> int | None:
     raw = str(value or "").strip()
     digits = "".join(ch for ch in raw if ch.isdigit())
     return int(digits) if digits else None
+
+
+def _has_named_players(duel: dict[str, Any]) -> bool:
+    local_name = str(duel.get("nameLocalPlayer") or "").strip()
+    visitor_name = str(duel.get("nameVisitorPlayer") or "").strip()
+    return bool(local_name and visitor_name)
 
 
 def _to_int_or_none(value: Any) -> int | None:
