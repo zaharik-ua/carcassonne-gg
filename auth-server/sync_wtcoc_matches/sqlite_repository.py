@@ -610,6 +610,14 @@ class SqliteWtcocRepository:
             if current_duel_id and next_duel_id and current_duel_id != next_duel_id:
                 conn.execute(
                     """
+                    UPDATE games
+                    SET duel_id = ?
+                    WHERE trim(COALESCE(duel_id, '')) = trim(?)
+                    """,
+                    (next_duel_id, current_duel_id),
+                )
+                conn.execute(
+                    """
                     UPDATE duels
                     SET
                       id = ?,
