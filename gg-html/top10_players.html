@@ -36,6 +36,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    min-height: 35px;
     padding: 6px 8px;
     background-color: white;
     border-top: 1px solid #ccc;
@@ -58,6 +59,7 @@
 
   .top10-widget .player-nick {
     min-width: 0;
+    line-height: 18px;
   }
 
   .top10-widget .player-nick a {
@@ -84,6 +86,29 @@
     white-space: nowrap;
   }
 
+  .top10-widget .gg-elo-block {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-left: 3px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  .top10-widget .gg-elo-change {
+    margin-top: 2px;
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  .top10-widget .gg-elo-change.positive {
+    color: #1a8f3c;
+  }
+
+  .top10-widget .gg-elo-change.negative {
+    color: #c62828;
+  }
+
   .top10-widget .last-updated {
     font-size: 12px;
     font-weight: 400;
@@ -106,6 +131,10 @@
 
   .top10-widget[data-view="mobile"] .gg-elo-rating {
     font-size: 13px;
+  }
+
+  .top10-widget[data-view="mobile"] .gg-elo-change {
+    font-size: 11px;
   }
 
   .top10-widget[data-view="desktop"] .player-row {
@@ -182,6 +211,7 @@
             id: profileId,
             player: String(dbProfile?.bga_nickname || jsonProfile?.bga_nickname || jsonProfile?.bga_name || "").trim(),
             gg_elo: jsonProfile?.gg_elo || "",
+            gg_elo_previous: jsonProfile?.gg_elo_previous || "",
             flag: country?.flag || ""
           };
         })
@@ -217,18 +247,40 @@
         left.appendChild(flag);
         left.appendChild(nick);
 
+        const eloBlock = document.createElement("div");
+        eloBlock.className = "gg-elo-block";
+
         const elo = document.createElement("span");
         elo.className = "gg-elo-rating";
         elo.textContent = `${Math.trunc(Number(player.gg_elo))}`;
+        eloBlock.appendChild(elo);
+
+        const currentElo = Number(String(player.gg_elo).trim());
+        const previousElo = Number(String(player.gg_elo_previous).trim());
+        if (Number.isFinite(currentElo) && Number.isFinite(previousElo) && currentElo !== previousElo) {
+          const diff = Math.round(currentElo - previousElo);
+          const change = document.createElement("span");
+          change.className = "gg-elo-change";
+          if (diff > 0) {
+            change.classList.add("positive");
+            change.textContent = `+${diff}`;
+          } else if (diff < 0) {
+            change.classList.add("negative");
+            change.textContent = String(diff);
+          } else {
+            change.textContent = "+0";
+          }
+          eloBlock.appendChild(change);
+        }
 
         row.appendChild(left);
-        row.appendChild(elo);
+        row.appendChild(eloBlock);
         card.appendChild(row);
       });
 
       const header = document.createElement("div");
       header.className = "header-row";
-      header.innerHTML = '<a href="https://carcassonne.gg/players/" target="_self">See all players</a><div class="last-updated">Last updated: 30th of Mar</div>';
+      header.innerHTML = '<a href="https://carcassonne.gg/players/" target="_self">See all players</a><div class="last-updated">Last updated: 20th of Apr</div>';
       card.appendChild(header);
 
       container.appendChild(card);

@@ -586,6 +586,9 @@ class SqliteWtcocRepository:
         normalized_old_match_id = str(old_match_id or "").strip()
         normalized_new_match_id = str(new_match_id or "").strip()
         normalized_actor_id = str(actor_id or "").strip() or "1"
+        table_names = self._load_table_names(conn)
+        has_games_table = "games" in table_names
+        has_streams_table = "streams" in table_names
         if not normalized_old_match_id or not normalized_new_match_id or normalized_old_match_id == normalized_new_match_id:
             return []
         if self._match_exists(conn, normalized_new_match_id):
@@ -608,14 +611,25 @@ class SqliteWtcocRepository:
             duel_number = self._normalize_nullable_number(row["duel_number"])
             next_duel_id = self._build_generated_duel_id(normalized_new_match_id, duel_number)
             if current_duel_id and next_duel_id and current_duel_id != next_duel_id:
-                conn.execute(
-                    """
-                    UPDATE games
-                    SET duel_id = ?
-                    WHERE trim(COALESCE(duel_id, '')) = trim(?)
-                    """,
-                    (next_duel_id, current_duel_id),
-                )
+                if has_streams_table:
+                    conn.execute(
+                        """
+                        UPDATE streams
+                        SET entity_id = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE trim(COALESCE(entity_type, '')) = 'duel'
+                          AND trim(COALESCE(entity_id, '')) = trim(?)
+                        """,
+                        (next_duel_id, current_duel_id),
+                    )
+                if has_games_table:
+                    conn.execute(
+                        """
+                        UPDATE games
+                        SET duel_id = ?
+                        WHERE trim(COALESCE(duel_id, '')) = trim(?)
+                        """,
+                        (next_duel_id, current_duel_id),
+                    )
                 conn.execute(
                     """
                     UPDATE duels
@@ -644,6 +658,16 @@ class SqliteWtcocRepository:
             if current_duel_id:
                 changed_duel_ids.append(current_duel_id)
 
+        if has_streams_table:
+            conn.execute(
+                """
+                UPDATE streams
+                SET entity_id = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE trim(COALESCE(entity_type, '')) = 'match'
+                  AND trim(COALESCE(entity_id, '')) = trim(?)
+                """,
+                (normalized_new_match_id, normalized_old_match_id),
+            )
         conn.execute(
             """
             UPDATE matches

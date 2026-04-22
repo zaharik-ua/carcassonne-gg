@@ -67,6 +67,23 @@
     white-space: nowrap;
   }
 
+  .elo-rating-change {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  .elo-rating-change.positive {
+    color: #1a8f3c;
+  }
+
+  .elo-rating-change.negative {
+    color: #c62828;
+  }
+
   .player-date {
     font-size: 14px;
   }
@@ -278,12 +295,30 @@
     tdElo.className = "col-elo";
     {
       const rawElo = (player.gg_elo ?? "").toString().trim();
+      const rawPreviousElo = (player.gg_elo_previous ?? "").toString().trim();
       const val = Number(rawElo);
+      const previousVal = Number(rawPreviousElo);
       if (rawElo !== "" && Number.isFinite(val)) {
         const span = document.createElement("span");
         span.classList.add("elo-rating");
         span.textContent = String(Math.trunc(val));
         tdElo.appendChild(span);
+
+        if (rawPreviousElo !== "" && Number.isFinite(previousVal) && val !== previousVal) {
+          const diff = Math.round(val - previousVal);
+          const diffEl = document.createElement("span");
+          diffEl.classList.add("elo-rating-change");
+          if (diff > 0) {
+            diffEl.classList.add("positive");
+            diffEl.textContent = `+${diff}`;
+          } else if (diff < 0) {
+            diffEl.classList.add("negative");
+            diffEl.textContent = String(diff);
+          } else {
+            diffEl.textContent = "+0";
+          }
+          tdElo.appendChild(diffEl);
+        }
       } else if (rawElo) {
         const span = document.createElement("span");
         span.textContent = rawElo;
@@ -437,6 +472,7 @@
           player: String(dbProfile?.bga_nickname || jsonProfile?.bga_nickname || jsonProfile?.bga_name || "").trim(),
           name: String(dbProfile?.name || ""),
           gg_elo: jsonProfile?.gg_elo || "",
+          gg_elo_previous: jsonProfile?.gg_elo_previous || "",
           achievements: Array.isArray(jsonProfile?.achievements) ? jsonProfile.achievements : [],
           master_title: Number(dbProfile?.master_title || 0),
           team_captain: Number(dbProfile?.team_captain || 0),

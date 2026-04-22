@@ -3,7 +3,7 @@ const CONFIG = {
   // Якщо треба — обмеж список вкладок турнірів.
   // Якщо пусто, скрипт візьме всі листи, крім службових (ELO_*).
   tournamentSheetNameAllowlist: [
-    "C26-D","C25-D","C24-D","W25-D","W24-D","W23-D","W22-D","W21-D","W20-D",
+    "W26-D","C26-D","C25-D","C24-D","W25-D","W24-D","W23-D","W22-D","W21-D","W20-D",
     "E25-D","E23-D","E21-D","E20-D","As25-D","As24-D","Am26-D","Am25-D","Am24-D","Am21-D"
   ],
 
@@ -21,6 +21,9 @@ const CONFIG = {
 
   // Якщо дуелі можуть дублюватись між листами — увімкни дедуп
   dedupeDuels: true,
+
+  // Дата зрізу для попереднього Elo (включно по цій даті)
+  previousEloDate: "12.04.2026",
 };
 
 /**
@@ -72,16 +75,20 @@ function recalculateElo() {
 
   const duels = collectDuels_(tournamentSheets);
   const normalizedDuels = normalizeAndSortDuels_(duels);
+  const previousEloCutoff = parseConfigDateEndOfDay_(CONFIG.previousEloDate);
 
   const result = computeElo_(normalizedDuels);
+  const previousResult = computeElo_(
+    normalizedDuels.filter(duel => duel.timestamp.getTime() <= previousEloCutoff.getTime())
+  );
 
   const playersIndex = loadBgaPlayersIndex_(ss);
 
   writeDuelsLog_(ss, result.duelLog);
-  writeRatings_(ss, result.ratingsTable, playersIndex);
+  writeRatings_(ss, result.ratingsTable, previousResult.ratingsTable, playersIndex);
 
   SpreadsheetApp.getUi().alert(
-    `Done.\nDuels processed: ${result.duelLog.length}\nPlayers: ${result.ratingsTable.length}`
+    `Done.\nDuels processed: ${result.duelLog.length}\nPlayers: ${result.ratingsTable.length}\nPrevious Elo date: ${CONFIG.previousEloDate}`
   );
 }
 
@@ -259,6 +266,18 @@ function parseTimestamp_(v, displayValue) {
     date: d,
     hasTime: hasTimeFromDisplay || hasTimeInDate_(d),
   };
+}
+
+function parseConfigDateEndOfDay_(dateStr) {
+  const match = String(dateStr || "").trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (!match) {
+    throw new Error(`Invalid CONFIG.previousEloDate: ${dateStr}. Expected dd.MM.yyyy`);
+  }
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  return new Date(year, month - 1, day, 23, 59, 59, 999);
 }
 
 function hasTimeInDisplay_(v) {
@@ -557,7 +576,7 @@ function applyTimestampFormats_(sheet, startRow, col, hasTimeFlags) {
 }
 
 
-function writeRatings_(ss, ratings, playersIndex) {
+function writeRatings_(ss, ratings, previousRatings, playersIndex) {
   const sh = ensureSheet_(ss, "ELO_Ratings");
 
   const header = [
@@ -565,6 +584,7 @@ function writeRatings_(ss, ratings, playersIndex) {
     "player",   // ім'я з BGA PLAYERS якщо знайдено
     "id",       // BGA ID
     "elo",
+    "eloPrevious",
     "duels","wins","draws","losses",
     "firstSeenSheet","firstTimePlayed","lastTimePlayed"
   ];
@@ -572,20 +592,26 @@ function writeRatings_(ss, ratings, playersIndex) {
 
   const byId = playersIndex?.byId || new Map();
   const byName = playersIndex?.byName || new Map();
+  const previousRatingsByPlayer = new Map(
+    (previousRatings || []).map(p => [String(p.player || "").trim(), p])
+  );
 
   const rows = ratings.map((p, i) => {
     const key = String(p.player || "").trim(); // у тебе це ID з матчів
     const rec = byId.get(key) || byName.get(key.toLowerCase());
+    const previous = previousRatingsByPlayer.get(key);
 
     const displayName = rec?.name || key;
     const id = rec?.id || (key && /^\d+$/.test(key) ? key : "");
     const eloValue = round_(p.elo);
+    const eloPreviousValue = round_(previous ? previous.elo : CONFIG.initialElo);
 
     return [
       i + 1,
       displayName,
       id,
       eloValue,
+      eloPreviousValue,
       p.duels, p.wins, p.draws, p.losses,
       p.firstSeenSheet,
       p.firstTimePlayed,
