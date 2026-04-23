@@ -50,6 +50,202 @@
     overflow: hidden;
   }
 
+  .captain-section-shell {
+    position: relative;
+    display: grid;
+    gap: 6px;
+    min-height: 72px;
+  }
+
+  .captain-content-shell {
+    position: relative;
+    min-height: 72px;
+  }
+
+  .loading-indicator {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 16px 0;
+    background: rgba(255, 255, 255, 0.6);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.18s ease, visibility 0.18s ease;
+    z-index: 15;
+  }
+
+  .loading-indicator.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .loading-indicator img {
+    height: 32px;
+    width: 32px;
+  }
+
+  .results-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #f7f8fa;
+    border-bottom: 1px solid #ccc;
+    flex-wrap: wrap;
+  }
+
+  .results-pagesize {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 400;
+    color: #555;
+    margin-bottom: 0;
+  }
+
+  .results-pagesize-picker {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    min-width: 58px;
+  }
+
+  .results-pagesize-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 24px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    font-size: 12px;
+    line-height: 1;
+    padding: 4px 7px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    cursor: pointer;
+  }
+
+  .results-pagesize-btn:hover,
+  .results-pagesize-btn:focus-visible,
+  .results-pagesize-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .results-pagesize-label {
+    font-weight: 600;
+    color: #2f3947;
+    white-space: nowrap;
+  }
+
+  .results-pagesize-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #6f7785;
+    font-size: 10px;
+  }
+
+  .results-pagesize-chevron i {
+    transition: transform 0.18s ease;
+  }
+
+  .results-pagesize-btn.open .results-pagesize-chevron i {
+    transform: rotate(180deg);
+  }
+
+  .results-pagesize-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    min-width: 100%;
+    width: max-content;
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+    z-index: 20;
+  }
+
+  .results-pagesize-menu.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .results-pagesize-option {
+    all: unset;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    border-top: 1px solid #edf1f6;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #2f3947;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .results-pagesize-option:first-child {
+    border-top: none;
+  }
+
+  .results-pagesize-option:hover {
+    background: #f5f5f5;
+  }
+
+  .results-pagesize-option.active {
+    background: #e4f0fb;
+  }
+
+  .results-pagination {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .results-pagebtn {
+    font: inherit;
+    font-size: 12px;
+    color: #333;
+    background: #fff;
+    border: 1px solid #cfcfcf;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+
+  .results-pagebtn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .results-pageinfo {
+    font-size: 12px;
+    color: #555;
+    min-width: 72px;
+    text-align: center;
+  }
+
   .cp-match-row {
     display: flex;
     align-items: center;
@@ -409,7 +605,12 @@
     </div>
   </div>
   <div id="captainFilters" class="captain-filters cp-hidden"></div>
-  <div id="captainContent" class="captain-alert">Loading...</div>
+  <div class="captain-content-shell">
+    <div id="streams-loading" class="loading-indicator">
+      <img src="https://carcassonne.gg/gallery/loading-red.gif" alt="Loading...">
+    </div>
+    <div id="captainContent" class="captain-alert">Loading...</div>
+  </div>
   <div id="captainHint" class="captain-sub"></div>
 </div>
 
@@ -429,6 +630,14 @@
   const filtersEl = document.getElementById("captainFilters");
   const hintEl = document.getElementById("captainHint");
   const titleEl = document.querySelector(".captain-title");
+  const STREAMS_PAGE_SIZE_OPTIONS = [10, 20, 50];
+  const streamsFinishedPaginationState = {
+    pageSize: 10,
+    currentPage: 1,
+    totalItems: 0,
+    totalPages: 1,
+  };
+  let streamsListContext = null;
   let isCaptainPageInitializing = false;
   let captainPageRefreshQueued = false;
 
@@ -620,6 +829,146 @@
     return title;
   }
 
+  function clampStreamsPageSize(value) {
+    const numeric = Number(value) || 10;
+    return STREAMS_PAGE_SIZE_OPTIONS.includes(numeric) ? numeric : 10;
+  }
+
+  function syncFinishedStreamsPaginationFromData(pagination = {}) {
+    const payload = pagination?.finished || {};
+    streamsFinishedPaginationState.pageSize = clampStreamsPageSize(
+      payload.page_size ?? streamsFinishedPaginationState.pageSize
+    );
+    streamsFinishedPaginationState.totalItems = Number(payload.total) || 0;
+    streamsFinishedPaginationState.totalPages = Math.max(1, Number(payload.total_pages) || 1);
+    streamsFinishedPaginationState.currentPage = Math.min(
+      Math.max(1, Number(payload.page) || streamsFinishedPaginationState.currentPage || 1),
+      streamsFinishedPaginationState.totalPages
+    );
+  }
+
+  function buildStreamsFetchUrl(options = {}) {
+    const url = new URL(STREAMS_URL);
+    const section = String(options.section || "").trim().toLowerCase();
+    if (section) url.searchParams.set("section", section);
+    url.searchParams.set("today_start", new Date(getStartOfTodayLocal()).toISOString());
+    if (section === "finished") {
+      url.searchParams.set("page_size", String(clampStreamsPageSize(streamsFinishedPaginationState.pageSize)));
+      url.searchParams.set("page", String(Math.max(1, Number(streamsFinishedPaginationState.currentPage) || 1)));
+    }
+    return url.toString();
+  }
+
+  function createFinishedStreamsPaginationControls() {
+    const state = streamsFinishedPaginationState;
+    const controls = document.createElement("div");
+    controls.className = "results-controls";
+
+    const pageSizeWrap = document.createElement("label");
+    pageSizeWrap.className = "results-pagesize";
+    pageSizeWrap.appendChild(document.createTextNode("Per page:"));
+
+    const pageSizePicker = document.createElement("div");
+    pageSizePicker.className = "results-pagesize-picker";
+    const pageSizeBtn = document.createElement("button");
+    pageSizeBtn.type = "button";
+    pageSizeBtn.className = "results-pagesize-btn";
+    const pageSizeBtnLabel = document.createElement("span");
+    pageSizeBtnLabel.className = "results-pagesize-label";
+    pageSizeBtnLabel.textContent = String(state.pageSize);
+    const pageSizeChevron = document.createElement("span");
+    pageSizeChevron.className = "results-pagesize-chevron";
+    pageSizeChevron.innerHTML = '<i class="fa fa-chevron-down"></i>';
+    pageSizeBtn.appendChild(pageSizeBtnLabel);
+    pageSizeBtn.appendChild(pageSizeChevron);
+
+    const pageSizeMenu = document.createElement("div");
+    pageSizeMenu.className = "results-pagesize-menu";
+    STREAMS_PAGE_SIZE_OPTIONS.forEach((size) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "results-pagesize-option";
+      option.dataset.value = String(size);
+      option.textContent = String(size);
+      if (size === state.pageSize) option.classList.add("active");
+      pageSizeMenu.appendChild(option);
+    });
+
+    pageSizePicker.appendChild(pageSizeBtn);
+    pageSizePicker.appendChild(pageSizeMenu);
+    pageSizeWrap.appendChild(pageSizePicker);
+    controls.appendChild(pageSizeWrap);
+
+    const pagination = document.createElement("div");
+    pagination.className = "results-pagination";
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "results-pagebtn";
+    prevBtn.textContent = "Prev";
+    const pageInfo = document.createElement("span");
+    pageInfo.className = "results-pageinfo";
+    pageInfo.textContent = `Page ${state.currentPage} of ${state.totalPages}`;
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "results-pagebtn";
+    nextBtn.textContent = "Next";
+    prevBtn.disabled = state.currentPage <= 1;
+    nextBtn.disabled = state.currentPage >= state.totalPages;
+    pagination.appendChild(prevBtn);
+    pagination.appendChild(pageInfo);
+    pagination.appendChild(nextBtn);
+    controls.appendChild(pagination);
+
+    function closePageSizeMenu() {
+      pageSizeMenu.classList.remove("open");
+      pageSizeMenu.style.maxHeight = "0px";
+      pageSizeBtn.classList.remove("open");
+    }
+
+    pageSizeBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const isOpen = pageSizeMenu.classList.contains("open");
+      closePageSizeMenu();
+      if (!isOpen) {
+        pageSizeMenu.classList.add("open");
+        pageSizeMenu.style.maxHeight = `${pageSizeMenu.scrollHeight}px`;
+        pageSizeBtn.classList.add("open");
+      }
+    });
+
+    pageSizeMenu.querySelectorAll(".results-pagesize-option").forEach((optBtn) => {
+      optBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        state.pageSize = clampStreamsPageSize(optBtn.dataset.value);
+        state.currentPage = 1;
+        closePageSizeMenu();
+        loadAndRenderFinishedStreamsSection();
+      });
+    });
+
+    if (window.__streamsPageSizeHandler) {
+      document.removeEventListener("click", window.__streamsPageSizeHandler);
+    }
+    window.__streamsPageSizeHandler = (event) => {
+      if (!pageSizeWrap.contains(event.target)) closePageSizeMenu();
+    };
+    document.addEventListener("click", window.__streamsPageSizeHandler);
+
+    prevBtn.addEventListener("click", () => {
+      if (state.currentPage <= 1) return;
+      state.currentPage -= 1;
+      loadAndRenderFinishedStreamsSection();
+    });
+
+    nextBtn.addEventListener("click", () => {
+      if (state.currentPage >= state.totalPages) return;
+      state.currentPage += 1;
+      loadAndRenderFinishedStreamsSection();
+    });
+
+    return controls;
+  }
+
   function getStreamerForCurrentUser(streamers, currentUserPlayerId) {
     const profileId = String(currentUserPlayerId || "").trim();
     if (!profileId) return null;
@@ -775,54 +1124,151 @@
     return row;
   }
 
-  function renderStreams(streams, teamsById, tournamentsById, options = {}) {
+  function getStreamRowOptions(stream, showStreamerAvatar) {
+    const streamerAvatar = String(stream?.streamer_avatar || "").trim();
+    return {
+      showEdit: true,
+      streamId: String(stream?.id || ""),
+      scoreboardLink: (() => {
+        const matchId = String(stream?.match_id || "").trim();
+        if (!matchId) return "";
+        const scoreboardStyle = String(stream?.streamer_scoreboard_style || "").trim() || "Default";
+        return `https://carcassonne.gg/stream/?selected=${encodeURIComponent(matchId)}&style=${encodeURIComponent(scoreboardStyle)}`;
+      })(),
+      streamLink: String(stream?.link || "").trim(),
+      streamerAvatar: showStreamerAvatar === true ? streamerAvatar : "",
+    };
+  }
+
+  function renderStreamSectionBlock(title, rows, teamsById, tournamentsById, options = {}) {
+    const wrap = document.createElement("div");
+    wrap.className = "captain-section-shell";
+    if (options.paginationKey) {
+      wrap.dataset.sectionKey = options.paginationKey;
+    }
+
+    const loading = document.createElement("div");
+    loading.className = "loading-indicator";
+    const loadingImg = document.createElement("img");
+    loadingImg.src = "https://carcassonne.gg/gallery/loading-red.gif";
+    loadingImg.alt = "Loading...";
+    loading.appendChild(loadingImg);
+    wrap.appendChild(loading);
+
+    wrap.appendChild(renderSectionTitle(title));
+    const list = document.createElement("div");
+    list.className = "captain-list";
+    if (options.paginationKey === "finished") {
+      list.appendChild(createFinishedStreamsPaginationControls());
+    }
+    rows.forEach((stream) => {
+      list.appendChild(createStreamMatchRow(stream, teamsById, tournamentsById, getStreamRowOptions(
+        stream,
+        options.showStreamerAvatar === true
+      )));
+    });
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  function setFinishedStreamsLoading(visible) {
+    const sectionEl = contentEl.querySelector('[data-section-key="finished"]');
+    const loadingEl = sectionEl?.querySelector(".loading-indicator") || null;
+    if (!loadingEl) return;
+    loadingEl.classList.toggle("is-visible", Boolean(visible));
+  }
+
+  async function fetchStreamsSection(section) {
+    const response = await fetch(buildStreamsFetchUrl({ section }), {
+      method: "GET",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data = await response.json().catch(() => ({}));
+    if (section === "finished") {
+      syncFinishedStreamsPaginationFromData(data?.pagination || {});
+    }
+    return Array.isArray(data?.streams) ? data.streams : [];
+  }
+
+  async function loadAndRenderFinishedStreamsSection() {
+    if (!streamsListContext) return;
+    setFinishedStreamsLoading(true);
+    try {
+      const finished = await fetchStreamsSection("finished");
+      const sectionEl = renderStreamSectionBlock(
+        "Finished",
+        finished,
+        streamsListContext.teamsById,
+        streamsListContext.tournamentsById,
+        {
+          paginationKey: "finished",
+          showStreamerAvatar: streamsListContext.showStreamerAvatar,
+        }
+      );
+      const currentEl = contentEl.querySelector('[data-section-key="finished"]');
+      if (currentEl) {
+        currentEl.replaceWith(sectionEl);
+      } else {
+        contentEl.appendChild(sectionEl);
+      }
+      countEl.textContent = `${streamsListContext.ongoingCount + streamsFinishedPaginationState.totalItems} streams`;
+    } catch (error) {
+      console.error("Failed to load finished streams:", error);
+    } finally {
+      setFinishedStreamsLoading(false);
+    }
+  }
+
+  function renderStreams(streamGroups, teamsById, tournamentsById, options = {}) {
     const showStreamerAvatar = options.showStreamerAvatar === true;
     setPageHeading("My Streams");
-    countEl.textContent = `${streams.length} streams`;
     hintEl.textContent = "";
     contentEl.className = "";
     contentEl.innerHTML = "";
     contentEl.style.display = "grid";
     contentEl.style.gap = "20px";
 
-    const ongoing = streams
-      .filter((item) => item?.match_id && !isPastMatch(item))
-      .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
-    const finished = streams
-      .filter((item) => item?.match_id && isPastMatch(item))
-      .sort((a, b) => parseMatchTimeUtc(b) - parseMatchTimeUtc(a));
+    const source = streamGroups && typeof streamGroups === "object" && !Array.isArray(streamGroups)
+      ? streamGroups
+      : { all: Array.isArray(streamGroups) ? streamGroups : [] };
+    const ongoing = Array.isArray(source.ongoing)
+      ? source.ongoing
+      : source.all
+        .filter((item) => item?.match_id && !isPastMatch(item))
+        .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
+    const finished = Array.isArray(source.finished)
+      ? source.finished
+      : source.all
+        .filter((item) => item?.match_id && isPastMatch(item))
+        .sort((a, b) => parseMatchTimeUtc(b) - parseMatchTimeUtc(a));
+    streamsListContext = {
+      teamsById,
+      tournamentsById,
+      showStreamerAvatar,
+      ongoingCount: ongoing.length,
+    };
+    countEl.textContent = `${ongoing.length + streamsFinishedPaginationState.totalItems} streams`;
 
-    const addSection = (title, rows) => {
+    const addSection = (title, rows, sectionOptions = {}) => {
       if (!rows.length) return;
-      const wrap = document.createElement("div");
-      wrap.style.display = "grid";
-      wrap.style.gap = "6px";
-      wrap.appendChild(renderSectionTitle(title));
-      const list = document.createElement("div");
-      list.className = "captain-list";
-      rows.forEach((stream) => {
-        const streamerAvatar = String(stream?.streamer_avatar || "").trim();
-        list.appendChild(createStreamMatchRow(stream, teamsById, tournamentsById, {
-          showEdit: true,
-          streamId: String(stream?.id || ""),
-          scoreboardLink: (() => {
-            const matchId = String(stream?.match_id || "").trim();
-            if (!matchId) return "";
-            const scoreboardStyle = String(stream?.streamer_scoreboard_style || "").trim() || "Default";
-            return `https://carcassonne.gg/stream/?selected=${encodeURIComponent(matchId)}&style=${encodeURIComponent(scoreboardStyle)}`;
-          })(),
-          streamLink: String(stream?.link || "").trim(),
-          streamerAvatar: showStreamerAvatar === true ? streamerAvatar : "",
-        }));
-      });
-      wrap.appendChild(list);
-      contentEl.appendChild(wrap);
+      contentEl.appendChild(renderStreamSectionBlock(title, rows, teamsById, tournamentsById, {
+        ...sectionOptions,
+        showStreamerAvatar,
+      }));
     };
 
     addSection("Ongoing", ongoing);
-    addSection("Finished", finished);
+    if (finished.length || streamsFinishedPaginationState.totalItems > 0) {
+      contentEl.appendChild(renderStreamSectionBlock("Finished", finished, teamsById, tournamentsById, {
+        paginationKey: "finished",
+        showStreamerAvatar,
+      }));
+    }
 
-    if (!ongoing.length && !finished.length) {
+    if (!ongoing.length && !finished.length && streamsFinishedPaginationState.totalItems <= 0) {
       contentEl.className = "captain-alert";
       contentEl.textContent = "No streams found.";
     }
@@ -1228,12 +1674,11 @@
         return;
       }
 
-      const [matchesRes, teamsRes, tournamentsRes, streamersRes, streamsRes] = await Promise.all([
+      const [matchesRes, teamsRes, tournamentsRes, streamersRes] = await Promise.all([
         fetch(PUBLIC_MAIN_PAGE_MATCHES_URL, { method: "GET" }),
         fetch(TEAMS_URL, { method: "GET" }),
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
-        fetch(STREAMS_URL, { method: "GET", credentials: "include" }),
       ]);
 
       if (!matchesRes.ok) {
@@ -1254,10 +1699,6 @@
         ? await streamersRes.json().catch(() => ({}))
         : {};
       const streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
-      const streamsData = streamsRes?.ok
-        ? await streamsRes.json().catch(() => ({}))
-        : {};
-      const streams = Array.isArray(streamsData?.streams) ? streamsData.streams : [];
       const isStreamerUser = !!currentUserPlayerId && streamers.some((entry) => (
         String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserPlayerId
       ));
@@ -1305,11 +1746,6 @@
         .filter((match) => String(match?.time_utc || match?.time || "").trim())
         .filter((match) => !isPastMatch(match))
         .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
-      const streamMatchIds = new Set(matches.map((match) => String(match?.id || "").trim()).filter(Boolean));
-      const visibleStreams = streams.filter((stream) => (
-        String(stream?.entity_type || "").trim().toLowerCase() === "match"
-        && streamMatchIds.has(String(stream?.entity_id || stream?.match_id || "").trim())
-      ));
 
       if (isCreateMode) {
         if (!isAdminUser && !currentStreamer) {
@@ -1339,6 +1775,16 @@
       }
 
       if (isEditMode) {
+        const streamRes = await fetch(`${STREAMS_URL}?id=${encodeURIComponent(editStreamId)}`, {
+          method: "GET",
+          credentials: "include",
+        });
+        const streamsData = streamRes?.ok
+          ? await streamRes.json().catch(() => ({}))
+          : {};
+        const visibleStreams = (Array.isArray(streamsData?.streams) ? streamsData.streams : []).filter((stream) => (
+          String(stream?.entity_type || "").trim().toLowerCase() === "match"
+        ));
         const streamToEdit = visibleStreams.find((item) => String(item?.id || "") === editStreamId);
         if (!streamToEdit) {
           contentEl.className = "captain-alert";
@@ -1351,7 +1797,15 @@
         return;
       }
 
-      renderStreams(visibleStreams, teamsById, tournamentsById, {
+      const [ongoingStreams, finishedStreams] = await Promise.all([
+        fetchStreamsSection("ongoing"),
+        fetchStreamsSection("finished"),
+      ]);
+
+      renderStreams({
+        ongoing: ongoingStreams,
+        finished: finishedStreams,
+      }, teamsById, tournamentsById, {
         showStreamerAvatar: isAdminUser,
       });
     } catch (_error) {

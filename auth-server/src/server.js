@@ -5996,6 +5996,16 @@ app.get("/streams", (req, res, next) => {
   const isAdmin = Number(req.user.admin) === 1;
   const linkedPlayerId = String(req.user.player_id || "").trim();
   const streamIdFilter = normalizePositiveInteger(req.query?.id);
+  const sectionFilter = String(req.query?.section || "").trim().toLowerCase();
+  const rawPageSize = normalizePositiveInteger(req.query?.page_size);
+  const pageSize = [10, 20, 50].includes(rawPageSize) ? rawPageSize : 10;
+  const requestedPage = normalizePositiveInteger(req.query?.page) || 1;
+  const rawTodayStart = String(req.query?.today_start || "").trim();
+  const todayStartMs = Date.parse(rawTodayStart);
+  const now = new Date();
+  const todayStart = Number.isFinite(todayStartMs)
+    ? new Date(todayStartMs).toISOString()
+    : new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
   const continueWithStreamer = (streamerRow) => {
     if (!isAdmin && !streamerRow) {
@@ -6012,27 +6022,83 @@ app.get("/streams", (req, res, next) => {
       whereSql += " AND s.id = ?";
       params.push(streamIdFilter);
     }
+    if (sectionFilter === "ongoing" || sectionFilter === "finished") {
+      whereSql += " AND s.entity_type = 'match' AND m.id IS NOT NULL";
+      if (sectionFilter === "finished") {
+        whereSql += " AND trim(COALESCE(m.time_utc, '')) <> '' AND datetime(m.time_utc) < datetime(?)";
+        params.push(todayStart);
+      } else {
+        whereSql += `
+          AND (
+            trim(COALESCE(m.time_utc, '')) = ''
+            OR datetime(m.time_utc) IS NULL
+            OR datetime(m.time_utc) >= datetime(?)
+          )
+        `;
+        params.push(todayStart);
+      }
+    }
 
-    return db.all(
+    const orderSql = sectionFilter === "ongoing"
+      ? "ORDER BY datetime(COALESCE(m.time_utc, s.created_at)) ASC, s.id ASC"
+      : "ORDER BY datetime(COALESCE(m.time_utc, s.created_at)) DESC, s.id DESC";
+    const shouldPaginate = !streamIdFilter && sectionFilter === "finished";
+    const selectStreams = (paginationPayload = null) => {
+      const selectParams = params.slice();
+      let limitSql = "";
+      if (paginationPayload) {
+        limitSql = "LIMIT ? OFFSET ?";
+        selectParams.push(pageSize, (paginationPayload.finished.page - 1) * pageSize);
+      }
+
+      return db.all(
+        `
+          SELECT
+            s.id,
+            s.entity_type,
+            s.entity_id,
+            s.streamer_id,
+            s.link,
+            s.created_at,
+            s.updated_at,
+            sr.name AS streamer_name,
+            sr.avatar AS streamer_avatar,
+            sr.scoreboard_style AS streamer_scoreboard_style,
+            sr.profile_id AS streamer_profile_id,
+            m.id AS match_id,
+            m.tournament_id,
+            m.time_utc,
+            m.team_1,
+            m.team_2,
+            m.status AS match_status
+          FROM streams s
+          INNER JOIN streamers sr
+            ON sr.id = s.streamer_id
+          LEFT JOIN matches m
+            ON s.entity_type = 'match'
+           AND m.id = s.entity_id
+           AND m.deleted_at IS NULL
+          ${whereSql}
+          ${orderSql}
+          ${limitSql}
+        `,
+        selectParams,
+        (err, rows) => {
+          if (err) return next(err);
+          const payload = { ok: true, streams: rows || [] };
+          if (paginationPayload) payload.pagination = paginationPayload;
+          return res.json(payload);
+        }
+      );
+    };
+
+    if (!shouldPaginate) {
+      return selectStreams(null);
+    }
+
+    return db.get(
       `
-        SELECT
-          s.id,
-          s.entity_type,
-          s.entity_id,
-          s.streamer_id,
-          s.link,
-          s.created_at,
-          s.updated_at,
-          sr.name AS streamer_name,
-          sr.avatar AS streamer_avatar,
-          sr.scoreboard_style AS streamer_scoreboard_style,
-          sr.profile_id AS streamer_profile_id,
-          m.id AS match_id,
-          m.tournament_id,
-          m.time_utc,
-          m.team_1,
-          m.team_2,
-          m.status AS match_status
+        SELECT COUNT(*) AS total
         FROM streams s
         INNER JOIN streamers sr
           ON sr.id = s.streamer_id
@@ -6041,12 +6107,21 @@ app.get("/streams", (req, res, next) => {
          AND m.id = s.entity_id
          AND m.deleted_at IS NULL
         ${whereSql}
-        ORDER BY datetime(COALESCE(m.time_utc, s.created_at)) DESC, s.id DESC
       `,
       params,
-      (err, rows) => {
-        if (err) return next(err);
-        return res.json({ ok: true, streams: rows || [] });
+      (countErr, countRow) => {
+        if (countErr) return next(countErr);
+        const total = Number(countRow?.total) || 0;
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        const page = Math.min(Math.max(1, requestedPage), totalPages);
+        return selectStreams({
+          finished: {
+            page,
+            page_size: pageSize,
+            total,
+            total_pages: totalPages,
+          },
+        });
       }
     );
   };
