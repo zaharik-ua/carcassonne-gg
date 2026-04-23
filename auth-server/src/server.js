@@ -8088,6 +8088,9 @@ app.get("/matches", (req, res, next) => {
   const userAssociation = String(req.user?.association || "").trim().toUpperCase();
   const allowedPageSizes = [10, 20, 50];
   const matchSectionKeys = ["ongoing", "calendar", "finished"];
+  const requestedSectionKey = matchSectionKeys.includes(String(req.query?.section || "").trim().toLowerCase())
+    ? String(req.query.section).trim().toLowerCase()
+    : "";
   const requestedTournamentId = String(req.query?.tournament_id || req.query?.tournament || "").trim();
   const requestedAssociation = String(req.query?.association || "").trim().toUpperCase();
   const requestedStatus = String(req.query?.status || "").trim().toLowerCase();
@@ -8108,7 +8111,7 @@ app.get("/matches", (req, res, next) => {
     acc[key] = parseSectionPagination(key);
     return acc;
   }, {});
-  const hasSectionPagination = matchSectionKeys.some((key) => (
+  const hasSectionPagination = !!requestedSectionKey || matchSectionKeys.some((key) => (
     Object.prototype.hasOwnProperty.call(req.query || {}, `${key}_page_size`)
     || Object.prototype.hasOwnProperty.call(req.query || {}, `${key}_page`)
   ));
@@ -8257,7 +8260,8 @@ app.get("/matches", (req, res, next) => {
     return (async () => {
       const pagination = {};
       const rowsById = new Map();
-      for (const key of matchSectionKeys) {
+      const keysToLoad = requestedSectionKey ? [requestedSectionKey] : matchSectionKeys;
+      for (const key of keysToLoad) {
         const section = sectionSql[key];
         const requested = requestedPagination[key];
         const countRow = await dbGetPromise(

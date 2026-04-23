@@ -120,6 +120,13 @@
     overflow: hidden;
   }
 
+  .captain-section-shell {
+    position: relative;
+    display: grid;
+    gap: 6px;
+    min-height: 72px;
+  }
+
   .captain-content-shell {
     position: relative;
     min-height: 72px;
@@ -1484,6 +1491,7 @@
   const titleEl = document.querySelector(".captain-title");
   let isCaptainPageInitializing = false;
   let captainPageRefreshQueued = false;
+  let matchesListContext = null;
 
   function setMatchesLoading(visible) {
     const el = document.getElementById("matches-loading");
@@ -1732,6 +1740,7 @@
     countEl.textContent = "";
     addButtonEl.classList.add("cp-hidden");
     addButtonEl.onclick = null;
+    matchesListContext = null;
     contentEl.className = "captain-alert";
     contentEl.style.display = "";
     contentEl.style.gap = "";
@@ -2501,11 +2510,14 @@
     const tournamentId = String(options.tournamentId || "").trim();
     const association = normalizeCode(options.association || "");
     const status = String(options.status || "").trim().toLowerCase();
+    const sectionKey = MATCH_SECTION_KEYS.includes(options.sectionKey) ? options.sectionKey : "";
     if (tournamentId) url.searchParams.set("tournament_id", tournamentId);
     if (association) url.searchParams.set("association", association);
     if (status) url.searchParams.set("status", status);
     url.searchParams.set("today_start", new Date(getStartOfTodayLocal()).toISOString());
-    MATCH_SECTION_KEYS.forEach((key) => {
+    if (sectionKey) url.searchParams.set("section", sectionKey);
+    const keys = sectionKey ? [sectionKey] : MATCH_SECTION_KEYS;
+    keys.forEach((key) => {
       const state = matchesPaginationState[key];
       url.searchParams.set(`${key}_page_size`, String(clampMatchesPageSize(state.pageSize)));
       url.searchParams.set(`${key}_page`, String(Math.max(1, Number(state.currentPage) || 1)));
@@ -2529,8 +2541,9 @@
     return MATCHES_PAGE_SIZE_OPTIONS.includes(numeric) ? numeric : 10;
   }
 
-  function syncMatchesPaginationFromData(pagination = {}) {
-    MATCH_SECTION_KEYS.forEach((key) => {
+  function syncMatchesPaginationFromData(pagination = {}, sectionKey = "") {
+    const keys = MATCH_SECTION_KEYS.includes(sectionKey) ? [sectionKey] : MATCH_SECTION_KEYS;
+    keys.forEach((key) => {
       const state = matchesPaginationState[key];
       const payload = pagination?.[key] || {};
       state.pageSize = clampMatchesPageSize(payload.page_size ?? state.pageSize);
@@ -2626,7 +2639,7 @@
         state.pageSize = clampMatchesPageSize(optBtn.dataset.value);
         state.currentPage = 1;
         closePageSizeMenu();
-        initCaptainPage();
+        loadAndRenderMatchesSection(sectionKey);
       });
     });
 
@@ -2642,13 +2655,13 @@
     prevBtn.addEventListener("click", () => {
       if (state.currentPage <= 1) return;
       state.currentPage -= 1;
-      initCaptainPage();
+      loadAndRenderMatchesSection(sectionKey);
     });
 
     nextBtn.addEventListener("click", () => {
       if (state.currentPage >= state.totalPages) return;
       state.currentPage += 1;
-      initCaptainPage();
+      loadAndRenderMatchesSection(sectionKey);
     });
 
     return controls;
@@ -2656,8 +2669,18 @@
 
   function renderSectionBlock(titleText, sectionMatches, teamsById, lineupsByMatch, profilesById, options = {}) {
     const sectionWrap = document.createElement("div");
-    sectionWrap.style.display = "grid";
-    sectionWrap.style.gap = "6px";
+    sectionWrap.className = "captain-section-shell";
+    if (options.paginationKey) {
+      sectionWrap.dataset.sectionKey = options.paginationKey;
+    }
+
+    const loading = document.createElement("div");
+    loading.className = "loading-indicator";
+    const loadingImg = document.createElement("img");
+    loadingImg.src = "https://carcassonne.gg/gallery/loading-red.gif";
+    loadingImg.alt = "Loading...";
+    loading.appendChild(loadingImg);
+    sectionWrap.appendChild(loading);
 
     const title = renderSectionTitle(titleText);
     sectionWrap.appendChild(title);
@@ -2673,6 +2696,99 @@
     sectionWrap.appendChild(list);
 
     return sectionWrap;
+  }
+
+  function getMatchesSectionTitle(sectionKey) {
+    if (sectionKey === "ongoing") return "Ongoing";
+    if (sectionKey === "calendar") return "Calendar";
+    if (sectionKey === "finished") return "Finished";
+    return "";
+  }
+
+  function getMatchesSectionOptions(sectionKey, options = {}) {
+    if (sectionKey === "calendar") {
+      return { ...options, hideTime: true, paginationKey: sectionKey };
+    }
+    return { ...options, paginationKey: sectionKey };
+  }
+
+  function normalizeMatchesForSection(sectionKey, matches) {
+    const rows = Array.isArray(matches) ? matches.slice() : [];
+    if (sectionKey === "calendar") {
+      return rows
+        .filter((match) => !String(match?.time_utc || match?.time || "").trim())
+        .sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+    }
+    if (sectionKey === "ongoing") {
+      return rows
+        .filter((match) => String(match?.time_utc || match?.time || "").trim() && !isPastMatch(match))
+        .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
+    }
+    if (sectionKey === "finished") {
+      return rows
+        .filter((match) => String(match?.time_utc || match?.time || "").trim() && isPastMatch(match))
+        .sort((a, b) => parseMatchTimeUtc(b) - parseMatchTimeUtc(a));
+    }
+    return rows;
+  }
+
+  function setMatchesSectionLoading(sectionKey, visible) {
+    const sectionEl = contentEl.querySelector(`[data-section-key="${sectionKey}"]`);
+    const loadingEl = sectionEl?.querySelector(".loading-indicator") || null;
+    if (!loadingEl) return;
+    loadingEl.classList.toggle("is-visible", Boolean(visible));
+  }
+
+  async function fetchMatchesSection(sectionKey, requestOptions = {}) {
+    const response = await fetch(buildMatchesFetchUrl({ ...requestOptions, sectionKey }), {
+      method: "GET",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data = await response.json().catch(() => ({}));
+    syncMatchesPaginationFromData(data?.pagination || {}, sectionKey);
+    return Array.isArray(data?.matches) ? data.matches : [];
+  }
+
+  async function loadAndRenderMatchesSection(sectionKey) {
+    if (!MATCH_SECTION_KEYS.includes(sectionKey) || !matchesListContext) return;
+    setMatchesSectionLoading(sectionKey, true);
+    try {
+      const matches = await fetchMatchesSection(sectionKey, matchesListContext.requestOptions || {});
+      const lineupsByMatch = await loadLineupsByMatchIds(matches);
+      const sectionMatches = normalizeMatchesForSection(sectionKey, matches);
+      const sectionEl = renderSectionBlock(
+        getMatchesSectionTitle(sectionKey),
+        sectionMatches,
+        matchesListContext.teamsById,
+        lineupsByMatch,
+        matchesListContext.profilesById,
+        getMatchesSectionOptions(sectionKey, matchesListContext.options || {})
+      );
+      const currentEl = contentEl.querySelector(`[data-section-key="${sectionKey}"]`);
+      if (currentEl) {
+        currentEl.replaceWith(sectionEl);
+      } else {
+        const insertAfterKey = MATCH_SECTION_KEYS
+          .slice(0, MATCH_SECTION_KEYS.indexOf(sectionKey))
+          .reverse()
+          .find((key) => contentEl.querySelector(`[data-section-key="${key}"]`));
+        const insertBeforeKey = MATCH_SECTION_KEYS
+          .slice(MATCH_SECTION_KEYS.indexOf(sectionKey) + 1)
+          .find((key) => contentEl.querySelector(`[data-section-key="${key}"]`));
+        const afterEl = insertAfterKey ? contentEl.querySelector(`[data-section-key="${insertAfterKey}"]`) : null;
+        const beforeEl = insertBeforeKey ? contentEl.querySelector(`[data-section-key="${insertBeforeKey}"]`) : null;
+        if (afterEl) afterEl.after(sectionEl);
+        else if (beforeEl) contentEl.insertBefore(sectionEl, beforeEl);
+        else contentEl.appendChild(sectionEl);
+      }
+    } catch (error) {
+      console.error(`Failed to load ${sectionKey} matches:`, error);
+    } finally {
+      setMatchesSectionLoading(sectionKey, false);
+    }
   }
 
   function createMatchRow(match, teamsById, lineupsByMatch, profilesById, options = {}) {
@@ -2891,27 +3007,27 @@
     contentEl.style.display = "grid";
     contentEl.style.gap = "20px";
     syncMatchesPaginationFromData(options.pagination || {});
+    matchesListContext = {
+      teamsById,
+      profilesById,
+      options: {
+        lineupsOnly: options.lineupsOnly === true,
+      },
+      requestOptions: options.requestOptions || {},
+    };
 
-    const calendar = matches
-      .filter((match) => !String(match?.time_utc || match?.time || "").trim())
-      .sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
-
-    const ongoing = matches
-      .filter((match) => String(match?.time_utc || match?.time || "").trim() && !isPastMatch(match))
-      .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
-
-    const finished = matches
-      .filter((match) => String(match?.time_utc || match?.time || "").trim() && isPastMatch(match))
-      .sort((a, b) => parseMatchTimeUtc(b) - parseMatchTimeUtc(a));
+    const calendar = normalizeMatchesForSection("calendar", matches);
+    const ongoing = normalizeMatchesForSection("ongoing", matches);
+    const finished = normalizeMatchesForSection("finished", matches);
 
     if (ongoing.length > 0 || matchesPaginationState.ongoing.totalItems > 0) {
-      contentEl.appendChild(renderSectionBlock("Ongoing", ongoing, teamsById, lineupsByMatch, profilesById, { ...options, paginationKey: "ongoing" }));
+      contentEl.appendChild(renderSectionBlock("Ongoing", ongoing, teamsById, lineupsByMatch, profilesById, getMatchesSectionOptions("ongoing", matchesListContext.options)));
     }
     if (calendar.length > 0 || matchesPaginationState.calendar.totalItems > 0) {
-      contentEl.appendChild(renderSectionBlock("Calendar", calendar, teamsById, lineupsByMatch, profilesById, { ...options, hideTime: true, paginationKey: "calendar" }));
+      contentEl.appendChild(renderSectionBlock("Calendar", calendar, teamsById, lineupsByMatch, profilesById, getMatchesSectionOptions("calendar", matchesListContext.options)));
     }
     if (finished.length > 0 || matchesPaginationState.finished.totalItems > 0) {
-      contentEl.appendChild(renderSectionBlock("Finished", finished, teamsById, lineupsByMatch, profilesById, { ...options, paginationKey: "finished" }));
+      contentEl.appendChild(renderSectionBlock("Finished", finished, teamsById, lineupsByMatch, profilesById, getMatchesSectionOptions("finished", matchesListContext.options)));
     }
   }
 
@@ -6300,48 +6416,70 @@
 
       const friendlyMatchesAdminAssociation = activeView === CAPTAIN_VIEWS.MATCHES && isAdminUser
         ? (
-          captainPageState.associationOverrideTouched
+          currentTournamentAccess.accessType === "Official"
+            ? ""
+            : captainPageState.associationOverrideTouched
             ? normalizeCode(associationOverride || "")
             : (
-                currentTournamentAccess.accessType === "Official"
+                String(currentTournament?.id || requestedTournamentId || "").trim() === "Friendly-Matches"
                   ? normalizeCode(captainAssociationCode || "")
-                  : (
-                      String(currentTournament?.id || requestedTournamentId || "").trim() === "Friendly-Matches"
-                        ? normalizeCode(captainAssociationCode || "")
-                        : ""
-                    )
+                  : ""
               )
         )
         : "";
       const isAdminErrorMatchesFilter = friendlyMatchesAdminAssociation === ADMIN_MATCH_FILTER_ERROR;
+      const matchesRequestOptions = {
+        tournamentId: requestedTournamentId,
+        association: isAdminErrorMatchesFilter
+          ? ""
+          : (
+              friendlyMatchesAdminAssociation
+              || (
+                currentTournamentAccess.accessType !== "Official" && !isAdminUser
+                  ? captainAssociationCode
+                  : ""
+              )
+            ),
+        status: isAdminErrorMatchesFilter ? "error" : "",
+      };
 
       if (activeView === CAPTAIN_VIEWS.MATCHES) {
         const shouldUsePaginatedMatches = !isEditMode;
-        const matchesUrl = shouldUsePaginatedMatches
-          ? buildMatchesFetchUrl({
-              tournamentId: requestedTournamentId,
-              association: isAdminErrorMatchesFilter
-                ? ""
-                : (
-                    friendlyMatchesAdminAssociation
-                    || (
-                      currentTournamentAccess.accessType !== "Official" && !isAdminUser
-                        ? captainAssociationCode
-                        : ""
-                    )
-                  ),
-              status: isAdminErrorMatchesFilter ? "error" : "",
-            })
-          : MATCHES_URL;
-        const matchesRes = await fetch(matchesUrl, { method: "GET", credentials: "include" });
-        if (!matchesRes.ok) {
-          contentEl.className = "captain-alert";
-          contentEl.textContent = "Failed to load matches.";
-          countEl.textContent = "";
-          return;
+        if (shouldUsePaginatedMatches) {
+          try {
+            const sectionMatches = await Promise.all(
+              MATCH_SECTION_KEYS.map((sectionKey) => fetchMatchesSection(sectionKey, matchesRequestOptions))
+            );
+            matches = sectionMatches.flat();
+            matchesData = {
+              pagination: MATCH_SECTION_KEYS.reduce((acc, sectionKey) => {
+                const state = matchesPaginationState[sectionKey];
+                acc[sectionKey] = {
+                  page: state.currentPage,
+                  page_size: state.pageSize,
+                  total: state.totalItems,
+                  total_pages: state.totalPages,
+                };
+                return acc;
+              }, {}),
+            };
+          } catch (_error) {
+            contentEl.className = "captain-alert";
+            contentEl.textContent = "Failed to load matches.";
+            countEl.textContent = "";
+            return;
+          }
+        } else {
+          const matchesRes = await fetch(MATCHES_URL, { method: "GET", credentials: "include" });
+          if (!matchesRes.ok) {
+            contentEl.className = "captain-alert";
+            contentEl.textContent = "Failed to load matches.";
+            countEl.textContent = "";
+            return;
+          }
+          matchesData = await matchesRes.json().catch(() => ({}));
+          matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
         }
-        matchesData = await matchesRes.json().catch(() => ({}));
-        matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
       }
 
       const filtered = matches
@@ -6564,6 +6702,7 @@
         renderMatches(filtered, teamsById, lineupsByMatch, profilesById, {
           lineupsOnly: currentTournamentAccess.accessType === "Official" && !canManageClosedTournamentMatches,
           pagination: matchesData?.pagination || {},
+          requestOptions: matchesRequestOptions,
         });
       }
 
