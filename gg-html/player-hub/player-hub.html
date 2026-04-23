@@ -1,0 +1,375 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --text: #222;
+    --muted: #666;
+    --border: #e0e0e0;
+    --card: #fff;
+  }
+
+  body {
+    margin: 0;
+    font-family: "Montserrat", sans-serif;
+    color: var(--text);
+  }
+
+  .hub-wrap {
+    display: grid;
+    gap: 12px;
+    margin: 0 8px 12px;
+  }
+
+  .hub-head {
+    display: grid;
+    gap: 4px;
+  }
+
+  .hub-title {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .hub-subtitle {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+
+  .hub-alert {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .hub-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .hub-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 78px;
+    padding: 14px 16px;
+    border: 1px solid #d6dbe3;
+    border-radius: 8px;
+    background: var(--card);
+    color: #2f3947;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+
+  .hub-card:hover {
+    border-color: #aeb7c4;
+    box-shadow: 0 10px 24px rgba(15, 28, 48, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .hub-card img {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .hub-card-text {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .hub-card-title {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #223040;
+  }
+
+  .hub-card-subtitle {
+    font-size: 11px;
+    line-height: 1.35;
+    color: #667286;
+  }
+
+  @media (max-width: 720px) {
+    .hub-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>
+
+<div class="hub-wrap">
+  <div class="hub-head">
+    <div class="hub-title">Player Hub</div>
+    <div class="hub-subtitle">Choose a section to open the dedicated page.</div>
+  </div>
+  <div id="hubContent" class="hub-alert">Loading...</div>
+</div>
+
+<script>
+(function () {
+  const PLAYER_HUB_BASE_PATH = "/player-hub";
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const ME_URL = `${AUTH_BASE}/auth/me`;
+  const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const STREAMERS_URL = `${AUTH_BASE}/streamers`;
+  const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
+  const STATIC_SECTION_ITEMS = [
+    {
+      type: "view",
+      view: "players",
+      label: "Players",
+      subtitle: "Manage player profiles for your association",
+      icon: "https://carcassonne.gg/gallery/active.png",
+    },
+    {
+      type: "view",
+      view: "friendly-find",
+      label: "Friendly Find",
+      subtitle: "Create or browse friendly match requests",
+      icon: "https://carcassonne.gg/gallery/calendar.png",
+    },
+    {
+      type: "view",
+      view: "streams",
+      label: "My Streams",
+      subtitle: "Manage your streams",
+      icon: "https://carcassonne.gg/gallery/streams.png",
+    },
+    {
+      type: "view",
+      view: "news",
+      label: "My News",
+      subtitle: "Manage your news access",
+      icon: "https://carcassonne.gg/gallery/news.png",
+    },
+    {
+      type: "view",
+      view: "nationals",
+      label: "Nationals",
+      subtitle: "Manage your online national matches",
+      icon: "https://carcassonne.gg/gallery/nationals.png",
+    },
+    {
+      type: "view",
+      view: "challenges",
+      label: "Challenges",
+      subtitle: "Open rated challenge matches",
+      icon: "https://carcassonne.gg/gallery/challenges.png",
+    },
+  ];
+
+  const contentEl = document.getElementById("hubContent");
+
+  function getCurrentUserAuthId(user) {
+    return String(
+      user?.id ??
+      user?.user_id ??
+      user?.userId ??
+      ""
+    ).trim();
+  }
+
+  function getCurrentUserProfileId(user) {
+    return String(
+      user?.profile?.id ??
+      user?.profile?.player_id ??
+      user?.profile?.bga_id ??
+      user?.bga_id ??
+      user?.player_id ??
+      user?.playerId ??
+      ""
+    ).trim();
+  }
+
+  function normalizeTournamentAccessUsers(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((entry) => {
+        if (entry && typeof entry === "object") {
+          return String(entry.user_id ?? entry.id ?? "").trim();
+        }
+        return String(entry || "").trim();
+      })
+      .filter(Boolean);
+  }
+
+  function getTournamentSubtype(tournament) {
+    const raw = String(tournament?.subtype || tournament?.access_type || "").trim().toLowerCase();
+    return (raw === "official" || raw === "closed" || raw === "2") ? "Official" : "Friendly";
+  }
+
+  function isTournamentHiddenInPlayerHub(tournament) {
+    return String(tournament?.player_hub_visibility || "").trim().toLowerCase() === "hidden";
+  }
+
+  function canSeeTournament(tournament, authState) {
+    if (isTournamentHiddenInPlayerHub(tournament)) return false;
+    const accessType = getTournamentSubtype(tournament);
+    if (authState.isAdminUser) return true;
+    if (accessType === "Friendly") return !!authState.isCaptainUser;
+    const accessRole = String(tournament?.access_role || "").trim().toLowerCase();
+    const accessUsers = normalizeTournamentAccessUsers(
+      Array.isArray(tournament?.access_users) ? tournament.access_users : tournament?.access_user_ids
+    );
+    return !!(
+      accessRole === "admin"
+      || accessRole === "captain"
+      || (authState.currentUserAuthId && accessUsers.includes(authState.currentUserAuthId))
+    );
+  }
+
+  function buildUrl(item) {
+    const url = new URL(window.location.origin);
+    if (item?.type === "tournament") {
+      url.pathname = `${PLAYER_HUB_BASE_PATH}/tournaments`;
+      url.searchParams.set("id", String(item.id || "").trim());
+    } else {
+      url.pathname = `${PLAYER_HUB_BASE_PATH}/${String(item?.view || "").trim().toLowerCase()}`;
+    }
+    return url.toString();
+  }
+
+  function renderHome(items) {
+    const normalizedItems = Array.isArray(items) ? items.filter((item) => item?.label) : [];
+    if (!normalizedItems.length) {
+      contentEl.className = "hub-alert";
+      contentEl.textContent = "No sections available.";
+      return;
+    }
+
+    const grid = document.createElement("div");
+    grid.className = "hub-grid";
+
+    normalizedItems.forEach((item) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "hub-card";
+
+      const icon = document.createElement("img");
+      icon.src = String(item.icon || "https://carcassonne.gg/gallery/friendly-matches.png").trim();
+      icon.alt = "";
+
+      const textWrap = document.createElement("div");
+      textWrap.className = "hub-card-text";
+
+      const title = document.createElement("div");
+      title.className = "hub-card-title";
+      title.textContent = item.label;
+
+      const subtitle = document.createElement("div");
+      subtitle.className = "hub-card-subtitle";
+      subtitle.textContent = item.subtitle || (item.type === "tournament" ? "Open tournament matches" : "Open section");
+
+      textWrap.appendChild(title);
+      textWrap.appendChild(subtitle);
+      card.appendChild(icon);
+      card.appendChild(textWrap);
+      card.addEventListener("click", () => {
+        window.location.href = buildUrl(item);
+      });
+      grid.appendChild(card);
+    });
+
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.appendChild(grid);
+  }
+
+  async function init() {
+    let tournaments = [];
+    let isAuthenticatedUser = false;
+    let isCaptainUser = false;
+    let isAdminUser = false;
+    let currentUserAuthId = "";
+    let currentUserProfileId = "";
+    let hasLinkedBgaId = false;
+    let isStreamerUser = false;
+    let isNewsEditorUser = false;
+
+    try {
+      const [meRes, tournamentsRes, streamersRes, newsEditorsRes] = await Promise.all([
+        fetch(ME_URL, { method: "GET", credentials: "include" }),
+        fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
+        fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
+        fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" }),
+      ]);
+
+      if (meRes.ok) {
+        const meData = await meRes.json().catch(() => ({}));
+        const meUser = meData?.authenticated ? meData?.user : null;
+        isAuthenticatedUser = !!meData?.authenticated;
+        isAdminUser = meUser?.isAdmin === true || Number(meUser?.admin) === 1;
+        isCaptainUser = Number(
+          meUser?.profile?.team_captain ??
+          meUser?.team_captain ??
+          (meUser?.profile?.teamCaptain === true ? 1 : 0)
+        ) === 1;
+        currentUserAuthId = getCurrentUserAuthId(meUser);
+        currentUserProfileId = getCurrentUserProfileId(meUser);
+        hasLinkedBgaId = !!currentUserProfileId;
+      }
+
+      if (tournamentsRes.ok) {
+        const tournamentsData = await tournamentsRes.json().catch(() => ({}));
+        tournaments = Array.isArray(tournamentsData?.tournaments) ? tournamentsData.tournaments : [];
+      }
+
+      if (streamersRes.ok) {
+        const streamersData = await streamersRes.json().catch(() => ({}));
+        const streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
+        isStreamerUser = !!currentUserProfileId && streamers.some((entry) => (
+          String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserProfileId
+        ));
+      }
+
+      if (newsEditorsRes.ok) {
+        const newsEditorsData = await newsEditorsRes.json().catch(() => ({}));
+        const newsEditors = Array.isArray(newsEditorsData?.news_editors) ? newsEditorsData.news_editors : [];
+        isNewsEditorUser = !!currentUserProfileId && newsEditors.some((entry) => (
+          String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserProfileId
+        ));
+      }
+    } catch (_error) {
+      tournaments = [];
+    }
+
+    const items = tournaments
+      .filter((tournament) => canSeeTournament(tournament, { currentUserAuthId, isCaptainUser, isAdminUser }))
+      .map((tournament) => ({
+        type: "tournament",
+        id: String(tournament?.id || "").trim(),
+        label: String(tournament?.short_title || tournament?.name || tournament?.id || "").trim(),
+        subtitle: "Open tournament matches",
+        icon: String(tournament?.logo || "https://carcassonne.gg/gallery/friendly-matches.png").trim(),
+      }))
+      .filter((item) => item.id && item.label)
+      .concat(
+        STATIC_SECTION_ITEMS.filter((item) => {
+          if (isAdminUser) return true;
+          if (item.view === "players" || item.view === "friendly-find") return isCaptainUser;
+          if (item.view === "streams") return isStreamerUser;
+          if (item.view === "news") return isNewsEditorUser;
+          if (item.view === "nationals" || item.view === "challenges") {
+            return isAuthenticatedUser && hasLinkedBgaId;
+          }
+          return false;
+        })
+      );
+
+    renderHome(items);
+  }
+
+  init();
+})();
+</script>

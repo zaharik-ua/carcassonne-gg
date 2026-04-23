@@ -8086,6 +8086,32 @@ app.get("/matches", (req, res, next) => {
   const isAdmin = Number(req.user?.admin) === 1;
   const userId = getTournamentAccessUserId(req.user);
   const userAssociation = String(req.user?.association || "").trim().toUpperCase();
+  const allowedPageSizes = [10, 20, 50];
+  const matchSectionKeys = ["ongoing", "calendar", "finished"];
+  const requestedTournamentId = String(req.query?.tournament_id || req.query?.tournament || "").trim();
+  const requestedAssociation = String(req.query?.association || "").trim().toUpperCase();
+  const requestedStatus = String(req.query?.status || "").trim().toLowerCase();
+  const todayStartRaw = String(req.query?.today_start || "").trim();
+  const todayStartTs = Date.parse(todayStartRaw);
+  const todayStartIso = Number.isFinite(todayStartTs)
+    ? new Date(todayStartTs).toISOString()
+    : new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()).toISOString();
+  const parseSectionPagination = (key) => {
+    const rawPageSize = parseInt(String(req.query?.[`${key}_page_size`] || "").trim(), 10);
+    const rawPage = parseInt(String(req.query?.[`${key}_page`] || "").trim(), 10);
+    return {
+      pageSize: allowedPageSizes.includes(rawPageSize) ? rawPageSize : 10,
+      page: Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1,
+    };
+  };
+  const requestedPagination = matchSectionKeys.reduce((acc, key) => {
+    acc[key] = parseSectionPagination(key);
+    return acc;
+  }, {});
+  const hasSectionPagination = matchSectionKeys.some((key) => (
+    Object.prototype.hasOwnProperty.call(req.query || {}, `${key}_page_size`)
+    || Object.prototype.hasOwnProperty.call(req.query || {}, `${key}_page`)
+  ));
   const visibilitySql = isAdmin
     ? ""
     : `
@@ -8101,9 +8127,197 @@ app.get("/matches", (req, res, next) => {
               WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
                 AND tau.user_id = ?
             ))
-          )
+        )
       )
     `;
+  const officialCaptainVisibilitySql = isAdmin
+    ? ""
+    : `
+      AND (
+        COALESCE((
+          SELECT COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?)
+          FROM tournaments t
+          WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
+          LIMIT 1
+        ), ?) <> ?
+        OR COALESCE((
+          SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
+          FROM tournament_access_users tau
+          WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
+            AND tau.user_id = ?
+          LIMIT 1
+        ), '') = ?
+        OR upper(trim(COALESCE(m.team_1, ''))) = upper(trim(?))
+        OR upper(trim(COALESCE(m.team_2, ''))) = upper(trim(?))
+      )
+    `;
+  const baseWhereClauses = ["m.deleted_at IS NULL"];
+  const baseWhereParams = [];
+  if (requestedTournamentId) {
+    baseWhereClauses.push("upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))");
+    baseWhereParams.push(requestedTournamentId);
+  }
+  if (requestedAssociation) {
+    baseWhereClauses.push(`
+      (
+        upper(trim(COALESCE(m.team_1, ''))) = upper(trim(?))
+        OR upper(trim(COALESCE(m.team_2, ''))) = upper(trim(?))
+      )
+    `);
+    baseWhereParams.push(requestedAssociation, requestedAssociation);
+  }
+  if (requestedStatus === "error") {
+    baseWhereClauses.push("lower(trim(COALESCE(m.status, ''))) = ?");
+    baseWhereParams.push("error");
+  }
+  const sectionVisibilityParams = isAdmin
+    ? []
+    : [
+        TOURNAMENT_ACCESS_TYPES.FRIENDLY,
+        TOURNAMENT_ACCESS_TYPES.FRIENDLY,
+        TOURNAMENT_ACCESS_TYPES.OFFICIAL,
+        TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+        userId,
+        TOURNAMENT_ACCESS_ROLES.ADMIN,
+        userAssociation,
+        userAssociation,
+      ];
+  const sectionWhereSql = `
+      WHERE ${baseWhereClauses.join("\n        AND ")}
+      ${visibilitySql}
+      ${officialCaptainVisibilitySql}
+    `;
+  const sectionBaseParams = isAdmin
+    ? [...baseWhereParams]
+    : [
+        ...baseWhereParams,
+        TOURNAMENT_ACCESS_TYPES.FRIENDLY,
+        TOURNAMENT_ACCESS_TYPES.FRIENDLY,
+        userId,
+        userId,
+        ...sectionVisibilityParams,
+      ];
+  const selectMatchFields = `
+      SELECT
+        m.id,
+        m.tournament_id,
+        m.time_utc,
+        m.lineup_type,
+        m.lineup_deadline_h,
+        m.lineup_deadline_utc,
+        m.number_of_duels,
+        m.team_1,
+        m.team_2,
+        m.status,
+        m.dw1,
+        m.dw2,
+        m.gw1,
+        m.gw2,
+        m.rating,
+        (
+          SELECT COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?)
+          FROM tournaments t
+          WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
+          LIMIT 1
+        ) AS tournament_access_type,
+        (
+          SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
+          FROM tournament_access_users tau
+          WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
+            AND tau.user_id = ?
+          LIMIT 1
+        ) AS tournament_access_role
+      FROM matches m
+    `;
+  const selectMatchParams = [TOURNAMENT_ACCESS_TYPES.FRIENDLY, TOURNAMENT_ACCESS_ROLES.CAPTAIN, userId];
+  const sectionSql = {
+    ongoing: {
+      filter: "trim(COALESCE(m.time_utc, '')) <> '' AND datetime(m.time_utc) >= datetime(?)",
+      order: "datetime(m.time_utc) ASC, m.id ASC",
+      params: [todayStartIso],
+    },
+    calendar: {
+      filter: "trim(COALESCE(m.time_utc, '')) = ''",
+      order: "m.id ASC",
+      params: [],
+    },
+    finished: {
+      filter: "trim(COALESCE(m.time_utc, '')) <> '' AND datetime(m.time_utc) < datetime(?)",
+      order: "datetime(m.time_utc) DESC, m.id ASC",
+      params: [todayStartIso],
+    },
+  };
+  const dbGetPromise = (sql, params) => new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+  });
+  const dbAllPromise = (sql, params) => new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
+  });
+  if (hasSectionPagination) {
+    return (async () => {
+      const pagination = {};
+      const rowsById = new Map();
+      for (const key of matchSectionKeys) {
+        const section = sectionSql[key];
+        const requested = requestedPagination[key];
+        const countRow = await dbGetPromise(
+          `
+            SELECT COUNT(*) AS total
+            FROM matches m
+            ${sectionWhereSql}
+              AND ${section.filter}
+          `,
+          [...sectionBaseParams, ...section.params]
+        );
+        const total = Number(countRow?.total) || 0;
+        const totalPages = Math.max(1, Math.ceil(total / requested.pageSize));
+        const page = Math.min(requested.page, totalPages);
+        const offset = (page - 1) * requested.pageSize;
+        const rows = await dbAllPromise(
+          `
+            ${selectMatchFields}
+            ${sectionWhereSql}
+              AND ${section.filter}
+            ORDER BY ${section.order}
+            LIMIT ? OFFSET ?
+          `,
+          [...selectMatchParams, ...sectionBaseParams, ...section.params, requested.pageSize, offset]
+        );
+        rows.forEach((row) => {
+          const id = String(row?.id || "").trim();
+          if (id) rowsById.set(id, row);
+        });
+        pagination[key] = {
+          page,
+          page_size: requested.pageSize,
+          total,
+          total_pages: totalPages,
+        };
+      }
+      const rows = Array.from(rowsById.values());
+      return res.json({
+        ok: true,
+        pagination,
+        matches: rows.map((row) => ({
+          id: row.id,
+          tournament_id: row.tournament_id,
+          time_utc: row.time_utc,
+          lineup_type: row.lineup_type,
+          lineup_deadline_h: row.lineup_deadline_h,
+          lineup_deadline_utc: row.lineup_deadline_utc,
+          number_of_duels: row.number_of_duels,
+          team_1: row.team_1,
+          team_2: row.team_2,
+          status: row.status,
+          dw1: row.dw1,
+          dw2: row.dw2,
+          gw1: row.gw1,
+          gw2: row.gw2,
+          rating: row.rating,
+        })),
+      });
+    })().catch(next);
+  }
   db.all(
     `
       SELECT

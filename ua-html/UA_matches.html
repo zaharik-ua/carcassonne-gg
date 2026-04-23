@@ -873,6 +873,7 @@ code {
 
 <script>
 let openLineupsSet = new Set();
+let closedLineupsSet = new Set();
 const openMatchId = new URLSearchParams(window.location.search).get("open");
 if (openMatchId) {
   openMatchId.split(',').forEach(id => openLineupsSet.add(id));
@@ -1093,7 +1094,9 @@ function createMatchElement(match, options = {}) {
   const matchLineups = Array.isArray(match?.lineupsData) ? match.lineupsData.filter(Boolean) : [];
   let lineupDiv = null;
   if (matchId && matchLineups.length > 0) {
-    lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon, match.status, match.elo_updated_at);
+    const matchType = String(match?.tournament_type || "").trim().toUpperCase();
+    const defaultOpenLineup = !matchType || matchType === "TEAM";
+    lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon, match.status, match.elo_updated_at, defaultOpenLineup);
     bindLineupToggle(matchId, lineupDiv, chevronIcon, toggleBtn);
   }
   
@@ -1993,7 +1996,7 @@ function renderSection(container, title, tournaments, matches, events, options =
     }
 
     if (title === "Останні результати") {
-      // For Last Results: all tournament types are collapsed by default.
+      // For Last Results: show tournament results expanded by default.
       const teamList = filtered.filter(m => !isDuelTournament(tournament.type || m.tournament_type));
       const duelList = filtered.filter(m => isDuelTournament(tournament.type || m.tournament_type));
 
@@ -2024,6 +2027,8 @@ function renderSection(container, title, tournaments, matches, events, options =
       const totalResultsCount = teamList.length + duelList.length;
       if (totalResultsCount > 0) {
         collapsible.appendChild(collapsibleInner);
+        collapsible.classList.add("open");
+        collapsible.style.height = "auto";
 
         // Right-side controls: count badge + chevron.
         // If TEAM filter button exists in header, it stays left of these controls.
@@ -2039,7 +2044,7 @@ function renderSection(container, title, tournaments, matches, events, options =
         const chevronIcon = document.createElement("i");
         chevronIcon.className = "fas fa-chevron-down";
         chevronIcon.style.transition = "transform 0.3s ease";
-        chevronIcon.style.transform = "rotate(180deg)"; // default closed
+        chevronIcon.style.transform = "rotate(0deg)";
         chevronIcon.style.fontSize = "12px";
         chevronIcon.style.padding = "0 4px";
         toggleBtn.appendChild(chevronIcon);
@@ -2359,7 +2364,7 @@ function createGameBadgesWrap(duel) {
   return wrap.childNodes.length ? wrap : null;
 }
 
-function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloUpdatedAt = "") {
+function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloUpdatedAt = "", defaultOpen = false) {
   const lineupPanel = document.createElement("div");
   lineupPanel.className = "lineup";
 
@@ -2447,11 +2452,12 @@ function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloU
 
   lineupPanel.appendChild(lineupBody);
 
-  const isOpen = openLineupsSet.has(matchId);
+  const isOpen = openLineupsSet.has(matchId) || (defaultOpen && !closedLineupsSet.has(matchId));
   if (isOpen) {
     lineupPanel.classList.add("open");
     lineupPanel.style.height = "auto";
     chevronIcon.style.transform = "rotate(0deg)";
+    openLineupsSet.add(matchId);
   }
 
   return lineupPanel;
@@ -2467,6 +2473,7 @@ function bindLineupToggle(matchId, lineupPanel, chevronIcon, toggleBtn) {
         lineupPanel.classList.remove("open");
         chevronIcon.style.transform = "rotate(180deg)";
         openLineupsSet.delete(matchId);
+        closedLineupsSet.add(matchId);
       });
       return;
     }
@@ -2475,6 +2482,7 @@ function bindLineupToggle(matchId, lineupPanel, chevronIcon, toggleBtn) {
     lineupPanel.classList.add("open");
     chevronIcon.style.transform = "rotate(0deg)";
     openLineupsSet.add(matchId);
+    closedLineupsSet.delete(matchId);
     requestAnimationFrame(() => {
       lineupPanel.style.height = `${lineupPanel.scrollHeight}px`;
     });
@@ -2532,7 +2540,7 @@ function adaptDbMainPageMatchesData(data) {
       return;
     }
     const sectionKey = getFriendlySectionKeyByLocalTime(match?.time_utc);
-    if (sectionKey === "finished" && !isFriendlyFinishedWithinLastDays(match?.time_utc, 7)) {
+    if (sectionKey === "finished" && !isFriendlyFinishedWithinLastDays(match?.time_utc, 14)) {
       return;
     }
     const tournamentMeta = tournamentsById.get(String(match?.tournament_id || "").trim()) || null;

@@ -1,5 +1,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
 <style>
   :root {
     --text: #222;
@@ -1916,7 +1917,6 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
-
 </style>
 
 <div class="captain-wrap">
@@ -1933,13 +1933,7 @@
 </div>
 
 <script>
-  window.PLAYER_HUB_CONFIG = {
-    basePath: "/player-hub"
-  };
-</script>
-<script>
 (function () {
-  const PAGE_CONFIG = window.PLAYER_HUB_CONFIG || {};
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const MATCHES_URL = `${AUTH_BASE}/matches`;
@@ -1985,22 +1979,6 @@
     NEWS: "news",
     NATIONALS: "nationals",
     CHALLENGES: "challenges",
-  };
-  const PLAYER_HUB_BASE_PATH = (() => {
-    const raw = String(PAGE_CONFIG.basePath || "/player-hub").trim();
-    if (!raw) return "/player-hub";
-    return raw.replace(/\/+$/, "") || "/player-hub";
-  })();
-  const PAGE_VIEW = String(PAGE_CONFIG.view || "").trim().toLowerCase();
-  const PAGE_PATHS = {
-    HOME: PLAYER_HUB_BASE_PATH,
-    MATCHES: `${PLAYER_HUB_BASE_PATH}/tournaments/`,
-    PLAYERS: `${PLAYER_HUB_BASE_PATH}/players/`,
-    FRIENDLY_FIND: `${PLAYER_HUB_BASE_PATH}/friendly-find/`,
-    STREAMS: `${PLAYER_HUB_BASE_PATH}/streams/`,
-    NEWS: `${PLAYER_HUB_BASE_PATH}/news/`,
-    NATIONALS: `${PLAYER_HUB_BASE_PATH}/nationals/`,
-    CHALLENGES: `${PLAYER_HUB_BASE_PATH}/challenges/`,
   };
   const CAPTAIN_STATIC_SECTION_ITEMS = [
     {
@@ -2111,17 +2089,6 @@
     return normalizeCode(params.get("association") || "");
   }
 
-  function getPathView() {
-    if (PAGE_VIEW === CAPTAIN_VIEWS.MATCHES) return CAPTAIN_VIEWS.MATCHES;
-    if (PAGE_VIEW === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
-    if (PAGE_VIEW === CAPTAIN_VIEWS.FRIENDLY_FIND) return CAPTAIN_VIEWS.FRIENDLY_FIND;
-    if (PAGE_VIEW === CAPTAIN_VIEWS.STREAMS) return CAPTAIN_VIEWS.STREAMS;
-    if (PAGE_VIEW === CAPTAIN_VIEWS.NEWS) return CAPTAIN_VIEWS.NEWS;
-    if (PAGE_VIEW === CAPTAIN_VIEWS.NATIONALS) return CAPTAIN_VIEWS.NATIONALS;
-    if (PAGE_VIEW === CAPTAIN_VIEWS.CHALLENGES) return CAPTAIN_VIEWS.CHALLENGES;
-    return "";
-  }
-
   function isEditModeEnabled() {
     return captainPageState.mode === "edit";
   }
@@ -2131,10 +2098,8 @@
   }
 
   function getViewFromUrl() {
-    const pathView = getPathView();
-    if (pathView) return pathView;
     const params = new URLSearchParams(window.location.search);
-    const tournamentId = String(params.get("id") || params.get("tournament") || "").trim();
+    const tournamentId = String(params.get("tournament") || "").trim();
     if (tournamentId) return CAPTAIN_VIEWS.MATCHES;
     const raw = String(params.get("view") || "").trim().toLowerCase();
     if (raw === CAPTAIN_VIEWS.PLAYERS) return CAPTAIN_VIEWS.PLAYERS;
@@ -2148,7 +2113,7 @@
 
   function getTournamentIdFromUrl() {
     const params = new URLSearchParams(window.location.search);
-    return String(params.get("id") || params.get("tournament") || "").trim();
+    return String(params.get("tournament") || "").trim();
   }
 
   function getMatchIdFromUrl() {
@@ -2168,12 +2133,13 @@
   }
 
   function buildCaptainUrl(options = {}) {
-    const url = new URL(window.location.origin);
+    const url = new URL(window.location.href);
     const nextView = String(options.view || "").trim().toLowerCase();
     const nextTournamentId = String(options.tournamentId || "").trim();
     if (nextView === CAPTAIN_VIEWS.MATCHES) {
-      url.pathname = PAGE_PATHS.MATCHES;
-      if (nextTournamentId) url.searchParams.set("id", nextTournamentId);
+      url.searchParams.delete("view");
+      if (nextTournamentId) url.searchParams.set("tournament", nextTournamentId);
+      else url.searchParams.delete("tournament");
     } else if (
       nextView === CAPTAIN_VIEWS.PLAYERS
       || nextView === CAPTAIN_VIEWS.FRIENDLY_FIND
@@ -2182,20 +2148,12 @@
       || nextView === CAPTAIN_VIEWS.NATIONALS
       || nextView === CAPTAIN_VIEWS.CHALLENGES
     ) {
-      url.pathname =
-        nextView === CAPTAIN_VIEWS.PLAYERS ? PAGE_PATHS.PLAYERS
-          : nextView === CAPTAIN_VIEWS.FRIENDLY_FIND ? PAGE_PATHS.FRIENDLY_FIND
-            : nextView === CAPTAIN_VIEWS.STREAMS ? PAGE_PATHS.STREAMS
-              : nextView === CAPTAIN_VIEWS.NEWS ? PAGE_PATHS.NEWS
-                : nextView === CAPTAIN_VIEWS.NATIONALS ? PAGE_PATHS.NATIONALS
-                  : PAGE_PATHS.CHALLENGES;
+      url.searchParams.set("view", nextView);
+      url.searchParams.delete("tournament");
     } else {
-      url.pathname = PAGE_PATHS.HOME;
-    }
-    url.searchParams.delete("view");
-    url.searchParams.delete("tournament");
-    if (!nextTournamentId || nextView !== CAPTAIN_VIEWS.MATCHES) {
-      url.searchParams.delete("id");
+      url.searchParams.delete("view");
+      if (nextTournamentId) url.searchParams.set("tournament", nextTournamentId);
+      else url.searchParams.delete("tournament");
     }
     const nextAssociation = normalizeCode(options.association || "");
     if (nextAssociation) url.searchParams.set("association", nextAssociation);
@@ -3006,8 +2964,7 @@
 
     const step1Hint = document.createElement("div");
     step1Hint.className = "player-stats-line compact";
-    step1Hint.innerHTML = 'If you don
-t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=1" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/players/?captains=1</a>';
+    step1Hint.innerHTML = 'If you don\'t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=1" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/players/?captains=1</a>';
     infoCard.appendChild(step1Hint);
 
     const gapStep1ToStep2 = document.createElement("div");
@@ -3531,6 +3488,16 @@ t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=
     )) || null;
   }
 
+  function getStreamerDisplayName(streamer) {
+    return String(
+      streamer?.name
+      || streamer?.profile_bga_nickname
+      || streamer?.profile_name
+      || streamer?.profile_id
+      || "-"
+    ).trim() || "-";
+  }
+
   function createStreamerStaticField(streamer) {
     const field = document.createElement("div");
     field.className = "cp-static-field cp-streamer-field";
@@ -3542,7 +3509,7 @@ t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=
       field.appendChild(img);
     }
     const text = document.createElement("span");
-    text.textContent = String(streamer?.name || streamer?.profile_bga_nickname || streamer?.profile_name || streamer?.profile_id || "-").trim() || "-";
+    text.textContent = getStreamerDisplayName(streamer);
     field.appendChild(text);
     return field;
   }
@@ -3725,6 +3692,9 @@ t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=
     const isCreateMode = formMode === "create";
     const source = formContext?.stream && typeof formContext.stream === "object" ? formContext.stream : {};
     const ongoingMatches = Array.isArray(formContext?.ongoingMatches) ? formContext.ongoingMatches : [];
+    const availableStreamers = Array.isArray(formContext?.availableStreamers) ? formContext.availableStreamers : [];
+    const allowStreamerSelect = isCreateMode && formContext?.allowStreamerSelect === true;
+    let selectedStreamer = streamer || null;
     setPageHeading(isCreateMode ? "Create stream" : "Edit stream");
     countEl.textContent = isCreateMode ? "Creating stream entries" : `Editing stream: ${String(source?.id || "")}`;
     hintEl.textContent = "";
@@ -3792,7 +3762,41 @@ t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=
       saveBtn.textContent = isSaving ? "Saving..." : "Save";
     };
 
-    addRow("Streamer", createStreamerStaticField(streamer));
+    if (allowStreamerSelect) {
+      const streamerField = document.createElement("div");
+      streamerField.style.display = "grid";
+      streamerField.style.gap = "8px";
+
+      const streamerSelect = document.createElement("select");
+      streamerSelect.required = true;
+
+      availableStreamers.forEach((entry) => {
+        const option = document.createElement("option");
+        option.value = String(entry?.id || "").trim();
+        option.textContent = getStreamerDisplayName(entry);
+        streamerSelect.appendChild(option);
+      });
+
+      const syncSelectedStreamer = () => {
+        const selectedId = String(streamerSelect.value || "").trim();
+        selectedStreamer = availableStreamers.find((entry) => String(entry?.id || "").trim() === selectedId) || null;
+        previewWrap.innerHTML = "";
+        previewWrap.appendChild(createStreamerStaticField(selectedStreamer));
+      };
+
+      const initialStreamerId = String(selectedStreamer?.id || availableStreamers[0]?.id || "").trim();
+      streamerSelect.value = initialStreamerId;
+
+      const previewWrap = document.createElement("div");
+      syncSelectedStreamer();
+      streamerSelect.addEventListener("change", syncSelectedStreamer);
+
+      streamerField.appendChild(streamerSelect);
+      streamerField.appendChild(previewWrap);
+      addRow("Streamer", streamerField);
+    } else {
+      addRow("Streamer", createStreamerStaticField(streamer));
+    }
 
     const linkInput = document.createElement("input");
     linkInput.type = "url";
@@ -3837,6 +3841,11 @@ t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=
           setError("Link is required.");
           return;
         }
+        const selectedStreamerId = String((allowStreamerSelect ? selectedStreamer?.id : streamer?.id) || "").trim();
+        if (!selectedStreamerId) {
+          setError("Streamer is required.");
+          return;
+        }
         if (!entityIds.length) {
           setError("Select at least one match.");
           return;
@@ -3851,7 +3860,7 @@ t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=
             body: JSON.stringify({
               entity_type: "matches",
               entity_ids: entityIds,
-              streamer_id: streamer?.id,
+              streamer_id: selectedStreamerId,
               link,
             }),
           });
@@ -10333,13 +10342,29 @@ t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=
         ));
 
         if (isCreateMode) {
-          if (!currentStreamer) {
+          if (!isAdminUser && !currentStreamer) {
             contentEl.className = "captain-alert";
             contentEl.textContent = "Current user is not linked to a streamer.";
             countEl.textContent = "";
             return;
           }
-          renderStreamEditForm(currentStreamer, teamsById, tournamentsById, { ongoingMatches }, "create");
+          if (isAdminUser && !streamers.length) {
+            contentEl.className = "captain-alert";
+            contentEl.textContent = "No streamers available.";
+            countEl.textContent = "";
+            return;
+          }
+          renderStreamEditForm(
+            currentStreamer || streamers[0] || null,
+            teamsById,
+            tournamentsById,
+            {
+              ongoingMatches,
+              availableStreamers: streamers,
+              allowStreamerSelect: isAdminUser,
+            },
+            "create"
+          );
           return;
         }
 
@@ -10628,5 +10653,4 @@ t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=
     initCaptainPage();
   }
 })();
-
 </script>

@@ -1,0 +1,558 @@
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+  .captain-sections-wrap {
+    display: grid;
+    gap: 8px;
+    margin: 6px 0 10px;
+    width: 200px;
+  }
+
+  .captain-sections-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid #d6dbe3;
+    border-radius: 6px;
+    background: #fff;
+    color: #2f3947;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+
+  .captain-sections-row:hover {
+    border-color: #aeb7c4;
+  }
+
+  .captain-sections-row img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .captain-sections-row span {
+    min-width: 0;
+  }
+
+  .captain-sections-mobile {
+    display: none;
+    margin: 6px 0 10px;
+  }
+
+  .captain-sections-dd {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .captain-sections-dd-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    font-size: 14px;
+    padding: 6px 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .captain-sections-dd-btn:hover,
+  .captain-sections-dd-btn:focus-visible,
+  .captain-sections-dd-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .captain-sections-dd-btn-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .captain-sections-dd-leading {
+    width: 18px;
+    color: #6f7785;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .captain-sections-dd-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .captain-sections-dd-text {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .captain-sections-dd-text.is-placeholder {
+    color: #8b95a3;
+  }
+
+  .captain-sections-dd-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #6f7785;
+    font-size: 12px;
+    transition: transform 0.3s ease;
+    flex-shrink: 0;
+  }
+
+  .captain-sections-dd-btn.open .captain-sections-dd-chevron {
+    transform: rotate(180deg);
+  }
+
+  .captain-sections-dd-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    width: 100%;
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+    z-index: 20;
+  }
+
+  .captain-sections-dd-menu.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .captain-sections-dd-option {
+    all: unset;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border-top: 1px solid #edf1f6;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #2f3947;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+
+  .captain-sections-dd-option:first-child {
+    border-top: none;
+  }
+
+  .captain-sections-dd-option:hover {
+    background: #f5f5f5;
+  }
+
+  .captain-sections-dd-option.active {
+    background: #e4f0fb;
+  }
+
+  @media (max-width: 600px) {
+    .captain-sections-wrap {
+      display: none;
+    }
+
+    .captain-sections-mobile {
+      display: block;
+    }
+  }
+</style>
+
+<div class="captain-sections-wrap" data-captain-sections></div>
+
+<div class="captain-sections-mobile" data-captain-sections-mobile></div>
+
+<script>
+(function () {
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const ME_URL = `${AUTH_BASE}/auth/me`;
+  const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const STREAMERS_URL = `${AUTH_BASE}/streamers`;
+  const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
+  const STATIC_SECTION_ITEMS = [
+    {
+      type: "view",
+      view: "players",
+      label: "Players",
+      icon: "https://carcassonne.gg/gallery/active.png",
+    },
+    {
+      type: "view",
+      view: "friendly-find",
+      label: "Friendly Find",
+      icon: "https://carcassonne.gg/gallery/calendar.png",
+    },
+    {
+      type: "view",
+      view: "streams",
+      label: "My Streams",
+      icon: "https://carcassonne.gg/gallery/streams.png",
+    },
+    {
+      type: "view",
+      view: "news",
+      label: "My News",
+      icon: "https://carcassonne.gg/gallery/news.png",
+    },
+    {
+      type: "view",
+      view: "nationals",
+      label: "Nationals",
+      icon: "https://carcassonne.gg/gallery/nationals.png",
+    },
+    {
+      type: "view",
+      view: "challenges",
+      label: "Challenges",
+      icon: "https://carcassonne.gg/gallery/challenges.png",
+    },
+  ];
+
+  function buildUrl(item) {
+    const url = new URL(window.location.href);
+    if (item?.type === "tournament") {
+      url.searchParams.delete("view");
+      url.searchParams.set("tournament", String(item.id || "").trim());
+    } else {
+      const normalizedView = String(item?.view || "").trim().toLowerCase();
+      url.searchParams.set("view", normalizedView);
+      url.searchParams.delete("tournament");
+    }
+    url.searchParams.delete("edit");
+    url.searchParams.delete("create");
+    url.searchParams.delete("match_id");
+    url.searchParams.delete("player_id");
+    url.searchParams.delete("stream_id");
+    return url.toString();
+  }
+
+  function getCurrentUserAuthId(user) {
+    return String(
+      user?.id ??
+      user?.user_id ??
+      user?.userId ??
+      ""
+    ).trim();
+  }
+
+  function getCurrentUserProfileId(user) {
+    return String(
+      user?.profile?.id ??
+      user?.profile?.player_id ??
+      user?.profile?.bga_id ??
+      user?.bga_id ??
+      user?.player_id ??
+      user?.playerId ??
+      ""
+    ).trim();
+  }
+
+  function normalizeTournamentAccessUsers(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((entry) => {
+        if (entry && typeof entry === "object") {
+          return String(entry.user_id ?? entry.id ?? "").trim();
+        }
+        return String(entry || "").trim();
+      })
+      .filter(Boolean);
+  }
+
+  function getTournamentSubtype(tournament) {
+    const raw = String(tournament?.subtype || tournament?.access_type || "").trim().toLowerCase();
+    return (raw === "official" || raw === "closed" || raw === "2") ? "Official" : "Friendly";
+  }
+
+  function isTournamentHiddenInPlayerHub(tournament) {
+    return String(tournament?.player_hub_visibility || "").trim().toLowerCase() === "hidden";
+  }
+
+  function canSeeTournament(tournament, authState = {}) {
+    if (isTournamentHiddenInPlayerHub(tournament)) return false;
+    const accessType = getTournamentSubtype(tournament);
+    if (authState.isAdminUser) return true;
+    if (accessType === "Friendly") return !!authState.isCaptainUser;
+    const accessRole = String(tournament?.access_role || "").trim().toLowerCase();
+    const accessUsers = normalizeTournamentAccessUsers(
+      Array.isArray(tournament?.access_users)
+        ? tournament.access_users
+        : tournament?.access_user_ids
+    );
+    return !!(
+      accessRole === "admin"
+      || accessRole === "captain"
+      || (authState.currentUserAuthId && accessUsers.includes(authState.currentUserAuthId))
+    );
+  }
+
+  function getCurrentSelectionKey() {
+    const url = new URL(window.location.href);
+    const tournamentId = String(url.searchParams.get("tournament") || "").trim();
+    if (tournamentId) return `tournament:${tournamentId}`;
+    const view = String(url.searchParams.get("view") || "").trim().toLowerCase();
+    if (
+      view === "players"
+      || view === "friendly-find"
+      || view === "streams"
+      || view === "news"
+      || view === "nationals"
+      || view === "challenges"
+    ) return `view:${view}`;
+    return "";
+  }
+
+  const root = document.querySelector("[data-captain-sections]");
+  const mobileRoot = document.querySelector("[data-captain-sections-mobile]");
+
+  function renderDesktop(items) {
+    if (!root) return;
+    root.innerHTML = "";
+    items.forEach((item) => {
+      const button = document.createElement("button");
+      button.className = "captain-sections-row";
+      button.type = "button";
+      const icon = document.createElement("img");
+      icon.src = item.icon;
+      icon.alt = "";
+      const text = document.createElement("span");
+      text.textContent = item.label;
+      button.appendChild(icon);
+      button.appendChild(text);
+      button.addEventListener("click", () => {
+        window.location.href = buildUrl(item);
+      });
+      root.appendChild(button);
+    });
+  }
+
+  function renderMobile(items) {
+    if (!mobileRoot) return;
+    mobileRoot.innerHTML = "";
+    if (!items.length) return;
+
+    const currentSelectionKey = getCurrentSelectionKey();
+    let selected = items.find((item) => item.key === currentSelectionKey) || null;
+
+    const dd = document.createElement("div");
+    dd.className = "captain-sections-dd";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "captain-sections-dd-btn";
+
+    const btnContent = document.createElement("span");
+    btnContent.className = "captain-sections-dd-btn-content";
+
+    const leading = document.createElement("span");
+    leading.className = "captain-sections-dd-leading";
+    leading.innerHTML = '<i class="fa-solid fa-bars-staggered"></i>';
+
+    const selectedIcon = document.createElement("img");
+    selectedIcon.className = "captain-sections-dd-icon";
+    selectedIcon.alt = "";
+
+    const selectedText = document.createElement("span");
+    selectedText.className = "captain-sections-dd-text";
+
+    const chevron = document.createElement("span");
+    chevron.className = "captain-sections-dd-chevron";
+    chevron.innerHTML = '<i class="fas fa-chevron-down"></i>';
+
+    btnContent.appendChild(leading);
+    btnContent.appendChild(selectedIcon);
+    btnContent.appendChild(selectedText);
+    btn.appendChild(btnContent);
+    btn.appendChild(chevron);
+
+    const menu = document.createElement("div");
+    menu.className = "captain-sections-dd-menu";
+
+    const renderSelected = () => {
+      if (!selected) {
+        selectedIcon.removeAttribute("src");
+        selectedIcon.style.display = "none";
+        selectedText.textContent = "Select";
+        selectedText.classList.add("is-placeholder");
+        return;
+      }
+      selectedIcon.src = selected.icon;
+      selectedIcon.style.display = "";
+      selectedText.textContent = selected.label;
+      selectedText.classList.remove("is-placeholder");
+    };
+
+    const closeMenu = () => {
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      btn.classList.remove("open");
+    };
+
+    const openMenu = () => {
+      menu.classList.add("open");
+      menu.style.maxHeight = `${menu.scrollHeight}px`;
+      btn.classList.add("open");
+    };
+
+    items.forEach((item) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "captain-sections-dd-option";
+      if (selected && item.key === selected.key) option.classList.add("active");
+
+      const icon = document.createElement("img");
+      icon.className = "captain-sections-dd-icon";
+      icon.src = item.icon;
+      icon.alt = "";
+
+      const text = document.createElement("span");
+      text.className = "captain-sections-dd-text";
+      text.textContent = item.label;
+
+      option.appendChild(icon);
+      option.appendChild(text);
+      option.addEventListener("click", () => {
+        if (selected && item.key === selected.key) {
+          closeMenu();
+          return;
+        }
+        window.location.href = buildUrl(item);
+      });
+      menu.appendChild(option);
+    });
+
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menu.classList.contains("open")) closeMenu();
+      else openMenu();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!dd.contains(event.target)) closeMenu();
+    });
+
+    renderSelected();
+    dd.appendChild(btn);
+    dd.appendChild(menu);
+    mobileRoot.appendChild(dd);
+  }
+
+  async function init() {
+    let tournaments = [];
+    let isAuthenticatedUser = false;
+    let isCaptainUser = false;
+    let isAdminUser = false;
+    let currentUserAuthId = "";
+    let currentUserProfileId = "";
+    let hasLinkedBgaId = false;
+    let isStreamerUser = false;
+    let isNewsEditorUser = false;
+    try {
+      const [meRes, tournamentsRes, streamersRes, newsEditorsRes] = await Promise.all([
+        fetch(ME_URL, { method: "GET", credentials: "include" }),
+        fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
+        fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
+        fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" }),
+      ]);
+      if (meRes.ok) {
+        const meData = await meRes.json().catch(() => ({}));
+        const meUser = meData?.authenticated ? meData?.user : null;
+        isAuthenticatedUser = !!meData?.authenticated;
+        isAdminUser = meUser?.isAdmin === true || Number(meUser?.admin) === 1;
+        isCaptainUser = Number(
+          meUser?.profile?.team_captain ??
+          meUser?.team_captain ??
+          (meUser?.profile?.teamCaptain === true ? 1 : 0)
+        ) === 1;
+        currentUserAuthId = getCurrentUserAuthId(meUser);
+        currentUserProfileId = getCurrentUserProfileId(meUser);
+        hasLinkedBgaId = !!currentUserProfileId;
+      }
+      if (tournamentsRes.ok) {
+        const data = await tournamentsRes.json().catch(() => ({}));
+        if (Array.isArray(data?.tournaments)) {
+          tournaments = data.tournaments;
+        }
+      }
+      if (streamersRes.ok) {
+        const streamersData = await streamersRes.json().catch(() => ({}));
+        const streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
+        isStreamerUser = !!currentUserProfileId && streamers.some((entry) => (
+          String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserProfileId
+        ));
+      }
+      if (newsEditorsRes.ok) {
+        const newsEditorsData = await newsEditorsRes.json().catch(() => ({}));
+        const newsEditors = Array.isArray(newsEditorsData?.news_editors) ? newsEditorsData.news_editors : [];
+        isNewsEditorUser = !!currentUserProfileId && newsEditors.some((entry) => (
+          String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserProfileId
+        ));
+      }
+    } catch (_error) {
+      tournaments = [];
+    }
+
+    const items = tournaments
+      .filter((tournament) => canSeeTournament(tournament, { currentUserAuthId, isCaptainUser, isAdminUser }))
+      .map((tournament) => ({
+      type: "tournament",
+      key: `tournament:${String(tournament?.id || "").trim()}`,
+      id: String(tournament?.id || "").trim(),
+      label: String(tournament?.short_title || tournament?.name || tournament?.id || "").trim(),
+      icon: String(tournament?.logo || "https://carcassonne.gg/gallery/friendly-matches.png").trim(),
+    }))
+      .filter((item) => item.id && item.label)
+      .concat(STATIC_SECTION_ITEMS.filter((item) => {
+        if (isAdminUser) return true;
+        if (item.view === "players" || item.view === "friendly-find") return isCaptainUser;
+        if (item.view === "streams") return isStreamerUser;
+        if (item.view === "news") return isNewsEditorUser;
+        if (item.view === "nationals" || item.view === "challenges") {
+          return isAuthenticatedUser && hasLinkedBgaId;
+        }
+        return false;
+      }).map((item) => ({
+        ...item,
+        key: `view:${item.view}`,
+      })));
+
+    renderDesktop(items);
+    renderMobile(items);
+  }
+
+  window.addEventListener("popstate", init);
+  window.addEventListener("captain-url-change", init);
+
+  init();
+})();
+</script>

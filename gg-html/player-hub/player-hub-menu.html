@@ -242,11 +242,11 @@
   function buildUrl(item) {
     const url = new URL(window.location.origin);
     if (item?.type === "tournament") {
-      url.pathname = `${PLAYER_HUB_BASE_PATH}/tournaments/`;
+      url.pathname = `${PLAYER_HUB_BASE_PATH}/tournaments`;
       url.searchParams.set("id", String(item.id || "").trim());
     } else {
       const normalizedView = String(item?.view || "").trim().toLowerCase();
-      url.pathname = `${PLAYER_HUB_BASE_PATH}/${normalizedView}/`;
+      url.pathname = `${PLAYER_HUB_BASE_PATH}/${normalizedView}`;
     }
     if (item?.type !== "tournament") {
       url.searchParams.delete("id");
