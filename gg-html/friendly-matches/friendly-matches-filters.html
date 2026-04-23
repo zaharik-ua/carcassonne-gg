@@ -226,7 +226,6 @@
     flex-wrap: wrap;
     margin-bottom: 2px;
   }
-  .pf-apply-btn,
   .pf-clear-filters-btn {
     font-size: 12px;
     cursor: pointer;
@@ -239,26 +238,13 @@
     transition: all 0.2s ease;
     width: fit-content;
   }
-  .pf-apply-btn:hover,
   .pf-clear-filters-btn:hover {
     border-color: #0277BD;
     box-shadow: 0 0 3px rgba(2, 119, 189, 0.4);
   }
-  .pf-apply-btn:disabled,
   .pf-clear-filters-btn:disabled {
     cursor: default;
     box-shadow: none;
-  }
-  .pf-apply-btn {
-    background: #f3f4f6;
-    border-color: #c8ced8;
-    color: #333;
-    font-weight: 600;
-  }
-  .pf-apply-btn.is-active {
-    background: #2c6da3;
-    border-color: #2c6da3;
-    color: #fff;
   }
   .pf-clear-filters-btn {
     background: #fff3f3;
@@ -270,13 +256,6 @@
     border-color: #d8dde3;
     color: #98a3ae;
   }
-  .pf-apply-btn:disabled {
-    background: #f3f4f6;
-    border-color: #c8ced8;
-    color: #333;
-    opacity: 0.72;
-    cursor: not-allowed;
-  }
   @media (max-width: 768px) {
     .pf-search-input {
       font-size: 16px;
@@ -286,7 +265,6 @@
 
 <div class="pf-filters">
   <div class="pf-actions">
-    <button class="pf-apply-btn" id="fmf-apply-btn" type="button">Filter</button>
     <button class="pf-clear-filters-btn" id="fmf-clear-btn" type="button">Clear filters</button>
   </div>
   <div class="pf-search-host" id="fmf-search-host">
@@ -328,7 +306,6 @@
   const fmfYearClear = document.getElementById("fmf-year-clear");
   const fmfSearchHost = document.getElementById("fmf-search-host");
   const fmfSearchBtn = document.getElementById("fmf-search-btn");
-  const fmfApplyBtn = document.getElementById("fmf-apply-btn");
   const fmfClearBtn = document.getElementById("fmf-clear-btn");
 
   let fmfCountryOptions = [];
@@ -366,13 +343,6 @@
     );
   }
 
-  function fmfUpdateApplyButton() {
-    const appliedState = fmfReadStateFromUrl();
-    const isDirty = !fmfIsSameState(fmfDraftState, appliedState);
-    fmfApplyBtn.classList.toggle("is-active", isDirty);
-    fmfApplyBtn.disabled = !isDirty;
-  }
-
   function fmfUpdateClearButton() {
     const appliedState = fmfReadStateFromUrl();
     const hasAppliedFilters = Boolean(
@@ -384,6 +354,12 @@
   }
 
   function fmfReplaceUrlFromState(state) {
+    const appliedState = fmfReadStateFromUrl();
+    if (fmfIsSameState(state, appliedState)) {
+      fmfUpdateClearButton();
+      return;
+    }
+
     const params = new URLSearchParams(window.location.search);
     if (state.association) params.set("association", state.association);
     else params.delete("association");
@@ -395,6 +371,11 @@
     const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash || ""}`;
     window.history.replaceState({}, "", nextUrl);
     fmfDispatchFilterChange();
+    fmfUpdateClearButton();
+  }
+
+  function fmfApplyDraftState() {
+    fmfReplaceUrlFromState(fmfDraftState);
   }
 
   function fmfToggleCountryRow(forceOpen) {
@@ -435,7 +416,6 @@
     fmfCountryRow.querySelectorAll(".pf-flag-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.association === active);
     });
-    fmfUpdateApplyButton();
   }
 
   function fmfUpdateYearToggle() {
@@ -447,7 +427,6 @@
     fmfYearRow.querySelectorAll(".pf-year-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.year === active);
     });
-    fmfUpdateApplyButton();
   }
 
   function fmfHideSearchResults() {
@@ -465,7 +444,7 @@
     if (fmfSearchWrap && fmfSearchHost.contains(fmfSearchWrap)) {
       fmfSearchHost.replaceChild(fmfSearchBtn, fmfSearchWrap);
     }
-    fmfUpdateApplyButton();
+    fmfApplyDraftState();
     if (focusButton) {
       fmfSearchBtn.focus();
     }
@@ -485,7 +464,6 @@
     }
     if (fmfSearchClear) fmfSearchClear.style.display = "inline-flex";
     fmfHideSearchResults();
-    fmfUpdateApplyButton();
   }
 
   async function fmfFetchAssociations() {
@@ -594,6 +572,7 @@
         li.addEventListener("click", () => {
           fmfDraftState.player = name;
           fmfRenderSearchSelected();
+          fmfApplyDraftState();
         });
         listEl.appendChild(li);
       });
@@ -628,7 +607,6 @@
     if (fmfDraftState.player || fmfSearchWrap) {
       fmfMountSearchUi();
     }
-    fmfUpdateApplyButton();
     fmfUpdateClearButton();
   }
 
@@ -651,6 +629,7 @@
       btn.addEventListener("click", () => {
         fmfDraftState.association = fmfDraftState.association === opt.key ? "" : opt.key;
         fmfUpdateCountryToggle();
+        fmfApplyDraftState();
         fmfToggleCountryRow(true);
       });
 
@@ -671,6 +650,7 @@
       btn.addEventListener("click", () => {
         fmfDraftState.year = fmfDraftState.year === year ? "" : year;
         fmfUpdateYearToggle();
+        fmfApplyDraftState();
         fmfToggleYearRow(true);
       });
       fmfYearRow.appendChild(btn);
@@ -718,7 +698,6 @@
       fmfRenderYearOptions();
       fmfUpdateCountryToggle();
       fmfUpdateYearToggle();
-      fmfUpdateApplyButton();
       fmfUpdateClearButton();
       if (fmfDraftState.player) {
         fmfMountSearchUi();
@@ -733,6 +712,7 @@
     event.stopPropagation();
     fmfDraftState.association = "";
     fmfUpdateCountryToggle();
+    fmfApplyDraftState();
   });
 
   fmfYearToggle.addEventListener("click", () => fmfToggleYearRow());
@@ -740,17 +720,11 @@
     event.stopPropagation();
     fmfDraftState.year = "";
     fmfUpdateYearToggle();
+    fmfApplyDraftState();
   });
 
   fmfSearchBtn.addEventListener("click", () => {
     fmfMountSearchUi();
-  });
-
-  fmfApplyBtn.addEventListener("click", () => {
-    if (fmfApplyBtn.disabled) return;
-    fmfReplaceUrlFromState(fmfDraftState);
-    fmfUpdateApplyButton();
-    fmfUpdateClearButton();
   });
 
   fmfClearBtn.addEventListener("click", () => {
@@ -761,7 +735,6 @@
     fmfUpdateYearToggle();
     if (fmfSearchWrap) fmfRenderSearchSelected();
     fmfReplaceUrlFromState(fmfDraftState);
-    fmfUpdateApplyButton();
     fmfUpdateClearButton();
   });
 

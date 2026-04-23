@@ -452,7 +452,7 @@ async function loadNewsById(newsId) {
         t.logo AS tournament_logo
       FROM news n
       LEFT JOIN associations a
-        ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.association_row_id)))) = upper(trim(COALESCE(n.association_id, '')))
+        ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(n.association_id, '')))
       LEFT JOIN tournaments t
         ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(n.tournament_id, '')))
       WHERE n.id = ?
@@ -468,11 +468,11 @@ async function loadNewsById(newsId) {
     const associationRows = await dbAllAsync(
       `
         SELECT
-          COALESCE(NULLIF(trim(code), ''), printf('ASSOCIATION_%s', association_row_id)) AS id,
+          COALESCE(NULLIF(trim(code), ''), printf('ASSOCIATION_%s', rowid)) AS id,
           name,
           flag
         FROM associations
-        WHERE upper(trim(COALESCE(NULLIF(code, ''), printf('ASSOCIATION_%s', association_row_id)))) IN (${placeholders})
+        WHERE upper(trim(COALESCE(NULLIF(code, ''), printf('ASSOCIATION_%s', rowid)))) IN (${placeholders})
         ORDER BY lower(COALESCE(name, '')) ASC
       `,
       associationIds
@@ -5437,7 +5437,7 @@ app.get("/news", requireAdmin, async (_req, res) => {
           t.logo AS tournament_logo
         FROM news n
         LEFT JOIN associations a
-          ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.association_row_id)))) = upper(trim(COALESCE(n.association_id, '')))
+          ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(n.association_id, '')))
         LEFT JOIN tournaments t
           ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(n.tournament_id, '')))
         ORDER BY

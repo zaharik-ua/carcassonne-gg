@@ -509,6 +509,7 @@
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
   const NEWS_URL = `${AUTH_BASE}/news`;
+  const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
   const NEWS_SIGNIFICANCE_OPTIONS = ["Regular", "Important", "Major"];
   const NEWS_CATEGORY_OPTIONS = [
     "Players",
@@ -697,6 +698,18 @@
       fragment.lastChild.style.marginBottom = "0";
     }
     contentEl.appendChild(fragment);
+  }
+
+  function getCurrentUserProfileId(user) {
+    return String(
+      user?.profile?.id ??
+      user?.profile?.player_id ??
+      user?.profile?.bga_id ??
+      user?.bga_id ??
+      user?.player_id ??
+      user?.playerId ??
+      ""
+    ).trim();
   }
 
   function setPageHeading(text) {
@@ -1370,6 +1383,8 @@
       const editNewsId = String(captainPageState.newsId || "").trim();
       let isAdminUser = false;
       let isAuthenticatedUser = false;
+      let currentUserProfileId = "";
+      let isNewsEditorUser = false;
 
       try {
         const meRes = await fetch(ME_URL, { method: "GET", credentials: "include" });
@@ -1377,7 +1392,8 @@
           const meData = await meRes.json();
           const meUser = meData?.authenticated ? meData?.user : null;
           isAuthenticatedUser = !!meData?.authenticated;
-          isAdminUser = meUser?.isAdmin === true;
+          isAdminUser = meUser?.isAdmin === true || Number(meUser?.admin) === 1;
+          currentUserProfileId = getCurrentUserProfileId(meUser);
         }
       } catch (_error) {
         // keep defaults; access rules below will handle unauthorized state
@@ -1388,8 +1404,9 @@
         return;
       }
 
-      const [tournamentsRes, newsRes, associationsRes] = await Promise.all([
+      const [tournamentsRes, newsEditorsRes, newsRes, associationsRes] = await Promise.all([
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
+        fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" }),
         isAdminUser
           ? fetch(NEWS_URL, { method: "GET", credentials: "include" })
           : Promise.resolve(null),
@@ -1397,6 +1414,13 @@
           ? fetch(ASSOCIATIONS_URL, { method: "GET", credentials: "include" })
           : Promise.resolve(null),
       ]);
+      const newsEditorsData = newsEditorsRes?.ok
+        ? await newsEditorsRes.json().catch(() => ({}))
+        : {};
+      const newsEditors = Array.isArray(newsEditorsData?.news_editors) ? newsEditorsData.news_editors : [];
+      isNewsEditorUser = !!currentUserProfileId && newsEditors.some((entry) => (
+        String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserProfileId
+      ));
       let tournaments = [];
       if (tournamentsRes?.ok) {
         const tournamentsData = await tournamentsRes.json().catch(() => ({}));
@@ -1431,7 +1455,9 @@
 
       if (!isAdminUser) {
         renderStaticInfoSection("My News", [
-          "This section is under development.",
+          isNewsEditorUser
+            ? "This section is under development."
+            : "This section is available only to users added to news editors.",
         ]);
         return;
       }
