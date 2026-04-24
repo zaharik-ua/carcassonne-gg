@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,6 +18,47 @@ from .models import MatchTable, MatchUpdateRequest, MatchUpdateResult
 from .player_id import get_player_id
 
 BGA_GET_GAMES_URL = "https://boardgamearena.com/gamestats/gamestats/getGames.html"
+
+
+def _log_update_probe(message: str, payload: object | None = None) -> None:
+    if payload is None:
+        print(f"🔎 update_probe {message}", flush=True)
+        return
+    try:
+        body = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        body = str(payload)
+    print(f"🔎 update_probe {message}: {body}", flush=True)
+
+
+def _summarize_bga_payload(payload: object) -> dict:
+    normalized = _unwrap_payload(payload)
+    if normalized is None:
+        return {
+            "payload_type": type(payload).__name__,
+            "normalized": None,
+        }
+    tables = normalized.get("tables", [])
+    if not isinstance(tables, list):
+        tables = []
+    return {
+        "status": payload.get("status") if isinstance(payload, dict) else None,
+        "tables_count": len(tables),
+        "tables": [
+            {
+                "table_id": table.get("table_id"),
+                "players": table.get("players"),
+                "scores": table.get("scores"),
+                "ranks": table.get("ranks"),
+                "start": table.get("start"),
+                "end": table.get("end"),
+                "concede": table.get("concede"),
+                "status": table.get("status"),
+            }
+            for table in tables
+            if isinstance(table, dict)
+        ],
+    }
 
 
 def get_games_batch(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
@@ -117,13 +159,30 @@ def _run_bga_request_for_item(
     request_token: str,
 ) -> dict:
     params = _build_request_params(item)
+    _log_update_probe(
+        "bga_request",
+        {
+            "duel_id": item.match_id,
+            "target": item.target,
+            "params": params,
+        },
+    )
     try:
-        return _perform_bga_request(
+        payload = _perform_bga_request(
             params,
             session_cookies=session_cookies,
             session_headers=session_headers,
             request_token=request_token,
         )
+        _log_update_probe(
+            "bga_response",
+            {
+                "duel_id": item.match_id,
+                "target": item.target,
+                "summary": _summarize_bga_payload(payload),
+            },
+        )
+        return payload
     except Exception as exc:
         print(
             f"⚠️ BGA request failed for duel {item.match_id} on current account: {exc}. Rotating account and retrying.",
@@ -131,12 +190,21 @@ def _run_bga_request_for_item(
         )
         rotate_http_session(reason=f"request_failure_duel_{item.match_id}")
         retry_cookies, retry_headers, retry_token = snapshot_session()
-        return _perform_bga_request(
+        payload = _perform_bga_request(
             params,
             session_cookies=retry_cookies,
             session_headers=retry_headers,
             request_token=retry_token,
         )
+        _log_update_probe(
+            "bga_response_after_retry",
+            {
+                "duel_id": item.match_id,
+                "target": item.target,
+                "summary": _summarize_bga_payload(payload),
+            },
+        )
+        return payload
 
 
 def _fetch_raw_batch(
@@ -317,6 +385,32 @@ def fetch_games(batch: list[MatchUpdateRequest]) -> list[MatchUpdateResult]:
                 players_url=players_url,
                 tables=enriched_tables,
             )
+        )
+        _log_update_probe(
+            "parsed_result",
+            {
+                "duel_id": item.match_id,
+                "target": item.target,
+                "wins0": wins0,
+                "wins1": wins1,
+                "gtw": item.gtw,
+                "parsed_tables_count": len(enriched_tables),
+                "players_url": players_url,
+                "parsed_tables": [
+                    {
+                        "table_id": table.id,
+                        "score0": table.score0,
+                        "score1": table.score1,
+                        "rank0": table.rank0,
+                        "rank1": table.rank1,
+                        "timestamp": table.timestamp,
+                        "status": table.status,
+                        "player0_clock": table.player0_clock,
+                        "player1_clock": table.player1_clock,
+                    }
+                    for table in enriched_tables
+                ],
+            },
         )
 
     return enriched_batch
