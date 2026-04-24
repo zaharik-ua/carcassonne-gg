@@ -99,13 +99,12 @@ def _match_status_and_scores(row: sqlite3.Row) -> tuple[str, int | None, int | N
     total_duels = int(row["total_duels"] or 0)
     done_duels = int(row["done_duels"] or 0)
     error_duels = int(row["error_duels"] or 0)
-    overdue_unresolved = int(row["overdue_unresolved_duels"] or 0)
     start_ts = row["start_ts"]
     end_ts = row["end_ts"]
 
     status = "Planned"
     now_expr = int(datetime.now(timezone.utc).timestamp())
-    if error_duels > 0 or overdue_unresolved > 0:
+    if error_duels > 0:
         status = "Error"
     elif total_duels > 0 and done_duels == total_duels:
         status = "Done"
@@ -154,11 +153,6 @@ def fix_matches(conn: sqlite3.Connection, *, dry_run: bool) -> dict[str, object]
           COUNT(d.id) AS total_duels,
           COALESCE(SUM(CASE WHEN COALESCE(d.status, 'Planned') IN ('Done', 'No Show') THEN 1 ELSE 0 END), 0) AS done_duels,
           COALESCE(SUM(CASE WHEN COALESCE(d.status, 'Planned') = 'Error' THEN 1 ELSE 0 END), 0) AS error_duels,
-          COALESCE(SUM(CASE
-            WHEN COALESCE(d.status, 'Planned') NOT IN ('Done', 'No Show', 'Error')
-              AND datetime(d.time_utc) IS NOT NULL
-              AND (unixepoch(d.time_utc) + (COALESCE(df.minutes_to_play, 60) * 60)) <= unixepoch('now')
-            THEN 1 ELSE 0 END), 0) AS overdue_unresolved_duels,
           MIN(CASE
             WHEN datetime(d.time_utc) IS NOT NULL THEN unixepoch(d.time_utc)
             ELSE NULL
@@ -186,7 +180,6 @@ def fix_matches(conn: sqlite3.Connection, *, dry_run: bool) -> dict[str, object]
             "total_duels": row["total_duels"],
             "done_duels": row["done_duels"],
             "error_duels": row["error_duels"],
-            "overdue_unresolved_duels": row["overdue_unresolved_duels"],
             "start_ts": row["start_ts"],
             "end_ts": row["end_ts"],
             "dw1": row["dw1_calc"],
