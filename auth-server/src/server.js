@@ -2275,6 +2275,10 @@ function ensureMatchesSchema() {
       addColumnIfMissing(currentColumns, "matches", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(currentColumns, "matches", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(currentColumns, "matches", "rating", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "dw1_import", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "dw2_import", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "gw1_import", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "gw2_import", "INTEGER");
     };
 
     const timeUtcColumn = columns.find((col) => col.name === "time_utc");
@@ -2305,6 +2309,10 @@ function ensureMatchesSchema() {
           dw2 INTEGER,
           gw1 INTEGER,
           gw2 INTEGER,
+          dw1_import INTEGER,
+          dw2_import INTEGER,
+          gw1_import INTEGER,
+          gw2_import INTEGER,
           created_by TEXT,
           updated_by TEXT,
           deleted_by TEXT,
@@ -2328,6 +2336,10 @@ function ensureMatchesSchema() {
           dw2,
           gw1,
           gw2,
+          dw1_import,
+          dw2_import,
+          gw1_import,
+          gw2_import,
           created_by,
           updated_by,
           deleted_by,
@@ -2351,6 +2363,10 @@ function ensureMatchesSchema() {
           ${selectExpr("dw2")},
           ${selectExpr("gw1")},
           ${selectExpr("gw2")},
+          ${selectExpr("dw1_import")},
+          ${selectExpr("dw2_import")},
+          ${selectExpr("gw1_import")},
+          ${selectExpr("gw2_import")},
           ${selectExpr("created_by")},
           ${selectExpr("updated_by")},
           ${selectExpr("deleted_by")},
@@ -2415,6 +2431,8 @@ function ensureDuelsSchema() {
       player_2_id TEXT,
       dw1 INTEGER,
       dw2 INTEGER,
+      dw1_import INTEGER,
+      dw2_import INTEGER,
       rating_full REAL,
       rating INTEGER,
       status TEXT,
@@ -2443,6 +2461,8 @@ function ensureDuelsSchema() {
       addColumnIfMissing(columns, "duels", "results_checked_at", "TEXT");
       addColumnIfMissing(columns, "duels", "rating_full", "REAL");
       addColumnIfMissing(columns, "duels", "rating", "INTEGER");
+      addColumnIfMissing(columns, "duels", "dw1_import", "INTEGER");
+      addColumnIfMissing(columns, "duels", "dw2_import", "INTEGER");
       addColumnIfMissing(columns, "duels", "created_by", "TEXT");
       addColumnIfMissing(columns, "duels", "updated_by", "TEXT");
       addColumnIfMissing(columns, "duels", "deleted_by", "TEXT");

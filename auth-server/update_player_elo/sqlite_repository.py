@@ -142,6 +142,18 @@ class SqlitePlayerEloRepository(PlayerEloRepository):
                 conn.execute("ALTER TABLE duels ADD COLUMN rating_full REAL")
             if "rating" not in duel_columns:
                 conn.execute("ALTER TABLE duels ADD COLUMN rating INTEGER")
+            if "dw1_import" not in duel_columns:
+                conn.execute("ALTER TABLE duels ADD COLUMN dw1_import INTEGER")
+            if "dw2_import" not in duel_columns:
+                conn.execute("ALTER TABLE duels ADD COLUMN dw2_import INTEGER")
             if "rating" not in match_columns:
                 conn.execute("ALTER TABLE matches ADD COLUMN rating INTEGER")
+            if "dw1_import" not in match_columns:
+                conn.execute("ALTER TABLE matches ADD COLUMN dw1_import INTEGER")
+            if "dw2_import" not in match_columns:
+                conn.execute("ALTER TABLE matches ADD COLUMN dw2_import INTEGER")
+            if "gw1_import" not in match_columns:
+                conn.execute("ALTER TABLE matches ADD COLUMN gw1_import INTEGER")
+            if "gw2_import" not in match_columns:
+                conn.execute("ALTER TABLE matches ADD COLUMN gw2_import INTEGER")
             conn.commit()

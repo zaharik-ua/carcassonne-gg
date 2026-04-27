@@ -122,6 +122,7 @@ class SqliteWtcocRepository:
             missing_tables = [name for name in ("matches", "duels", "teams") if name not in tables]
             if missing_tables:
                 raise RuntimeError(f"SQLite DB is missing required tables: {', '.join(missing_tables)}")
+            self._ensure_import_result_columns(conn)
             self._ensure_wtcoc_match_links_table(conn)
             link_map = self._load_wtcoc_match_link_map(conn, tournament_id)
 
@@ -195,6 +196,10 @@ class SqliteWtcocRepository:
                           number_of_duels,
                           trim(COALESCE(team_1, '')) AS team_1,
                           trim(COALESCE(team_2, '')) AS team_2,
+                          dw1_import,
+                          dw2_import,
+                          gw1_import,
+                          gw2_import,
                           trim(COALESCE(deleted_at, '')) AS deleted_at
                         FROM matches
                         WHERE trim(COALESCE(id, '')) = trim(?)
@@ -222,6 +227,10 @@ class SqliteWtcocRepository:
                               dw2,
                               gw1,
                               gw2,
+                              dw1_import,
+                              dw2_import,
+                              gw1_import,
+                              gw2_import,
                               created_by,
                               updated_by,
                               deleted_by,
@@ -229,7 +238,7 @@ class SqliteWtcocRepository:
                               created_at,
                               updated_at
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Planned', NULL, NULL, NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Planned', NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                             """,
                             (
                                 item["id"],
@@ -241,6 +250,10 @@ class SqliteWtcocRepository:
                                 item["number_of_duels"],
                                 item["team_1"],
                                 item["team_2"],
+                                item.get("dw1_import") if item.get("import_results_ready") else None,
+                                item.get("dw2_import") if item.get("import_results_ready") else None,
+                                item.get("gw1_import") if item.get("import_results_ready") else None,
+                                item.get("gw2_import") if item.get("import_results_ready") else None,
                                 normalized_actor_id,
                                 normalized_actor_id,
                             ),
@@ -269,43 +282,101 @@ class SqliteWtcocRepository:
                         "team_2": self._normalize_db_value(item["team_2"]),
                         "deleted_at": None,
                     }
+                    if item.get("import_results_ready"):
+                        normalized_existing_match.update(
+                            {
+                                "dw1_import": self._normalize_nullable_number(existing["dw1_import"]),
+                                "dw2_import": self._normalize_nullable_number(existing["dw2_import"]),
+                                "gw1_import": self._normalize_nullable_number(existing["gw1_import"]),
+                                "gw2_import": self._normalize_nullable_number(existing["gw2_import"]),
+                            }
+                        )
+                        normalized_incoming_match.update(
+                            {
+                                "dw1_import": self._normalize_nullable_number(item.get("dw1_import")),
+                                "dw2_import": self._normalize_nullable_number(item.get("dw2_import")),
+                                "gw1_import": self._normalize_nullable_number(item.get("gw1_import")),
+                                "gw2_import": self._normalize_nullable_number(item.get("gw2_import")),
+                            }
+                        )
                     if normalized_existing_match == normalized_incoming_match:
                         unchanged_matches += 1
                         continue
 
                     updated_matches += 1
                     changed_match_ids.append(str(item["id"]))
-                    conn.execute(
-                        """
-                        UPDATE matches
-                        SET
-                          tournament_id = ?,
-                          time_utc = ?,
-                          lineup_type = ?,
-                          lineup_deadline_h = ?,
-                          lineup_deadline_utc = ?,
-                          number_of_duels = ?,
-                          team_1 = ?,
-                          team_2 = ?,
-                          updated_by = ?,
-                          deleted_by = NULL,
-                          deleted_at = NULL,
-                          updated_at = CURRENT_TIMESTAMP
-                        WHERE trim(COALESCE(id, '')) = trim(?)
-                        """,
-                        (
-                            tournament_id,
-                            item["time_utc"],
-                            item["lineup_type"],
-                            item["lineup_deadline_h"],
-                            item["lineup_deadline_utc"],
-                            item["number_of_duels"],
-                            item["team_1"],
-                            item["team_2"],
-                            normalized_actor_id,
-                            item["id"],
-                        ),
-                    )
+                    if item.get("import_results_ready"):
+                        conn.execute(
+                            """
+                            UPDATE matches
+                            SET
+                              tournament_id = ?,
+                              time_utc = ?,
+                              lineup_type = ?,
+                              lineup_deadline_h = ?,
+                              lineup_deadline_utc = ?,
+                              number_of_duels = ?,
+                              team_1 = ?,
+                              team_2 = ?,
+                              dw1_import = ?,
+                              dw2_import = ?,
+                              gw1_import = ?,
+                              gw2_import = ?,
+                              updated_by = ?,
+                              deleted_by = NULL,
+                              deleted_at = NULL,
+                              updated_at = CURRENT_TIMESTAMP
+                            WHERE trim(COALESCE(id, '')) = trim(?)
+                            """,
+                            (
+                                tournament_id,
+                                item["time_utc"],
+                                item["lineup_type"],
+                                item["lineup_deadline_h"],
+                                item["lineup_deadline_utc"],
+                                item["number_of_duels"],
+                                item["team_1"],
+                                item["team_2"],
+                                item.get("dw1_import"),
+                                item.get("dw2_import"),
+                                item.get("gw1_import"),
+                                item.get("gw2_import"),
+                                normalized_actor_id,
+                                item["id"],
+                            ),
+                        )
+                    else:
+                        conn.execute(
+                            """
+                            UPDATE matches
+                            SET
+                              tournament_id = ?,
+                              time_utc = ?,
+                              lineup_type = ?,
+                              lineup_deadline_h = ?,
+                              lineup_deadline_utc = ?,
+                              number_of_duels = ?,
+                              team_1 = ?,
+                              team_2 = ?,
+                              updated_by = ?,
+                              deleted_by = NULL,
+                              deleted_at = NULL,
+                              updated_at = CURRENT_TIMESTAMP
+                            WHERE trim(COALESCE(id, '')) = trim(?)
+                            """,
+                            (
+                                tournament_id,
+                                item["time_utc"],
+                                item["lineup_type"],
+                                item["lineup_deadline_h"],
+                                item["lineup_deadline_utc"],
+                                item["number_of_duels"],
+                                item["team_1"],
+                                item["team_2"],
+                                normalized_actor_id,
+                                item["id"],
+                            ),
+                        )
 
                 for item in duels:
                     existing = conn.execute(
@@ -319,6 +390,8 @@ class SqliteWtcocRepository:
                           trim(COALESCE(custom_time, '')) AS custom_time,
                           trim(COALESCE(player_1_id, '')) AS player_1_id,
                           trim(COALESCE(player_2_id, '')) AS player_2_id,
+                          dw1_import,
+                          dw2_import,
                           trim(COALESCE(deleted_at, '')) AS deleted_at
                         FROM duels
                         WHERE trim(COALESCE(id, '')) = trim(?)
@@ -343,6 +416,8 @@ class SqliteWtcocRepository:
                               player_2_id,
                               dw1,
                               dw2,
+                              dw1_import,
+                              dw2_import,
                               rating_full,
                               rating,
                               status,
@@ -355,7 +430,7 @@ class SqliteWtcocRepository:
                               created_at,
                               updated_at
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 'Planned', NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, 'Planned', NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                             """,
                             (
                                 item["id"],
@@ -367,6 +442,8 @@ class SqliteWtcocRepository:
                                 item["custom_time"],
                                 item["player_1_id"],
                                 item["player_2_id"],
+                                item.get("dw1_import") if item.get("import_results_ready") else None,
+                                item.get("dw2_import") if item.get("import_results_ready") else None,
                                 normalized_actor_id,
                                 normalized_actor_id,
                             ),
@@ -395,43 +472,93 @@ class SqliteWtcocRepository:
                         "player_2_id": self._normalize_db_value(item["player_2_id"]),
                         "deleted_at": None,
                     }
+                    if item.get("import_results_ready"):
+                        normalized_existing_duel.update(
+                            {
+                                "dw1_import": self._normalize_nullable_number(existing["dw1_import"]),
+                                "dw2_import": self._normalize_nullable_number(existing["dw2_import"]),
+                            }
+                        )
+                        normalized_incoming_duel.update(
+                            {
+                                "dw1_import": self._normalize_nullable_number(item.get("dw1_import")),
+                                "dw2_import": self._normalize_nullable_number(item.get("dw2_import")),
+                            }
+                        )
                     if normalized_existing_duel == normalized_incoming_duel:
                         unchanged_duels += 1
                         continue
 
                     updated_duels += 1
                     changed_duel_ids.append(str(item["id"]))
-                    conn.execute(
-                        """
-                        UPDATE duels
-                        SET
-                          tournament_id = ?,
-                          match_id = ?,
-                          duel_number = ?,
-                          duel_format = ?,
-                          time_utc = ?,
-                          custom_time = ?,
-                          player_1_id = ?,
-                          player_2_id = ?,
-                          updated_by = ?,
-                          deleted_by = NULL,
-                          deleted_at = NULL,
-                          updated_at = CURRENT_TIMESTAMP
-                        WHERE trim(COALESCE(id, '')) = trim(?)
-                        """,
-                        (
-                            tournament_id,
-                            item["match_id"],
-                            item["duel_number"],
-                            item["duel_format"],
-                            item["time_utc"],
-                            item["custom_time"],
-                            item["player_1_id"],
-                            item["player_2_id"],
-                            normalized_actor_id,
-                            item["id"],
-                        ),
-                    )
+                    if item.get("import_results_ready"):
+                        conn.execute(
+                            """
+                            UPDATE duels
+                            SET
+                              tournament_id = ?,
+                              match_id = ?,
+                              duel_number = ?,
+                              duel_format = ?,
+                              time_utc = ?,
+                              custom_time = ?,
+                              player_1_id = ?,
+                              player_2_id = ?,
+                              dw1_import = ?,
+                              dw2_import = ?,
+                              updated_by = ?,
+                              deleted_by = NULL,
+                              deleted_at = NULL,
+                              updated_at = CURRENT_TIMESTAMP
+                            WHERE trim(COALESCE(id, '')) = trim(?)
+                            """,
+                            (
+                                tournament_id,
+                                item["match_id"],
+                                item["duel_number"],
+                                item["duel_format"],
+                                item["time_utc"],
+                                item["custom_time"],
+                                item["player_1_id"],
+                                item["player_2_id"],
+                                item.get("dw1_import"),
+                                item.get("dw2_import"),
+                                normalized_actor_id,
+                                item["id"],
+                            ),
+                        )
+                    else:
+                        conn.execute(
+                            """
+                            UPDATE duels
+                            SET
+                              tournament_id = ?,
+                              match_id = ?,
+                              duel_number = ?,
+                              duel_format = ?,
+                              time_utc = ?,
+                              custom_time = ?,
+                              player_1_id = ?,
+                              player_2_id = ?,
+                              updated_by = ?,
+                              deleted_by = NULL,
+                              deleted_at = NULL,
+                              updated_at = CURRENT_TIMESTAMP
+                            WHERE trim(COALESCE(id, '')) = trim(?)
+                            """,
+                            (
+                                tournament_id,
+                                item["match_id"],
+                                item["duel_number"],
+                                item["duel_format"],
+                                item["time_utc"],
+                                item["custom_time"],
+                                item["player_1_id"],
+                                item["player_2_id"],
+                                normalized_actor_id,
+                                item["id"],
+                            ),
+                        )
 
                 conn.commit()
             except Exception:
@@ -457,6 +584,30 @@ class SqliteWtcocRepository:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    @staticmethod
+    def _ensure_import_result_columns(conn: sqlite3.Connection) -> None:
+        match_columns = {
+            str(row["name"] or "").strip().lower()
+            for row in conn.execute("PRAGMA table_info(matches)").fetchall()
+            if row["name"] is not None
+        }
+        duel_columns = {
+            str(row["name"] or "").strip().lower()
+            for row in conn.execute("PRAGMA table_info(duels)").fetchall()
+            if row["name"] is not None
+        }
+        changed = False
+        for column_name in ("dw1_import", "dw2_import", "gw1_import", "gw2_import"):
+            if column_name not in match_columns:
+                conn.execute(f"ALTER TABLE matches ADD COLUMN {column_name} INTEGER")
+                changed = True
+        for column_name in ("dw1_import", "dw2_import"):
+            if column_name not in duel_columns:
+                conn.execute(f"ALTER TABLE duels ADD COLUMN {column_name} INTEGER")
+                changed = True
+        if changed:
+            conn.commit()
 
     @staticmethod
     def _build_link_key(*, source: str, external_match_id: str) -> str | None:

@@ -165,13 +165,18 @@ class WtcocSyncService:
                         "source": match_preview["source"],
                         "external_match_id": match_preview["external_match_id"],
                         "fallback_date_iso": match_preview["fallback_date_iso"],
+                        "dw1_import": match_preview["dw1_import"],
+                        "dw2_import": match_preview["dw2_import"],
+                        "gw1_import": match_preview["gw1_import"],
+                        "gw2_import": match_preview["gw2_import"],
+                        "import_results_ready": match_preview["import_results_ready"],
                     }
                 )
-                if not _can_import_duels(match_preview["status"]):
-                    continue
                 duels = match.get("duels")
                 if not isinstance(duels, list):
                     duels = []
+                if not _can_import_duels(match_preview["status"]):
+                    continue
                 for duel in duels:
                     if not isinstance(duel, dict):
                         continue
@@ -194,6 +199,9 @@ class WtcocSyncService:
                             "custom_time": None,
                             "player_1_id": duel_preview["player_1_id"],
                             "player_2_id": duel_preview["player_2_id"],
+                            "dw1_import": duel_preview["dw1_import"],
+                            "dw2_import": duel_preview["dw2_import"],
+                            "import_results_ready": duel_preview["import_results_ready"],
                         }
                     )
 
@@ -206,8 +214,8 @@ class WtcocSyncService:
                 "matches_skipped_without_team_mapping": unresolved_matches,
             },
             "apply_payload": {
-            "matches": matches_payload,
-            "duels": duels_payload,
+                "matches": matches_payload,
+                "duels": duels_payload,
             },
         }
 
@@ -229,6 +237,7 @@ class WtcocSyncService:
         match_time = _normalize_match_time(match_status, match.get("date"))
         duels = match.get("duels")
         duel_count = len(duels) if isinstance(duels, list) else 0
+        is_closed = _is_closed_match_status(match_status)
         resolved_fallback_date_iso = str(fallback_date_iso or "").strip() or None
         return {
             "source": source,
@@ -252,6 +261,11 @@ class WtcocSyncService:
             "team_1_name": local_team_name or None,
             "team_2_name": visitor_team_name or None,
             "number_of_duels": duel_count or None,
+            "dw1_import": _normalize_int_result(match.get("localResult")) if is_closed else None,
+            "dw2_import": _normalize_int_result(match.get("visitorResult")) if is_closed else None,
+            "gw1_import": _sum_duel_results(duels, "localResult") if is_closed else None,
+            "gw2_import": _sum_duel_results(duels, "visitorResult") if is_closed else None,
+            "import_results_ready": is_closed,
         }
 
     def _normalize_duel_preview(
@@ -269,6 +283,13 @@ class WtcocSyncService:
             "duel_id": _build_duel_id(match_preview["match_id"], duel_number),
             "player_1_id": player_resolver.resolve(str(duel.get("nameLocalPlayer") or "").strip()),
             "player_2_id": player_resolver.resolve(str(duel.get("nameVisitorPlayer") or "").strip()),
+            "dw1_import": _normalize_int_result(duel.get("localResult"))
+            if _is_closed_match_status(match_preview["status"])
+            else None,
+            "dw2_import": _normalize_int_result(duel.get("visitorResult"))
+            if _is_closed_match_status(match_preview["status"])
+            else None,
+            "import_results_ready": _is_closed_match_status(match_preview["status"]),
             "tournament_id": tournament_id,
         }
 
@@ -288,11 +309,43 @@ def _normalize_match_time(status: Any, value: Any) -> str | None:
 
 def _can_import_duels(status: Any) -> bool:
     raw = str(status or "").strip()
+    if _is_closed_match_status(raw):
+        return True
     if raw in UNCONFIRMED_MATCH_STATUSES:
         return False
     if len(raw) != 2 or not raw.isdigit():
         return False
     return all(ch >= "2" for ch in raw)
+
+
+def _is_closed_match_status(status: Any) -> bool:
+    return str(status or "").strip().lower() == "tancat"
+
+
+def _normalize_int_result(value: Any) -> int | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def _sum_duel_results(duels: Any, key: str) -> int | None:
+    if not isinstance(duels, list):
+        return None
+    total = 0
+    has_value = False
+    for duel in duels:
+        if not isinstance(duel, dict):
+            continue
+        value = _normalize_int_result(duel.get(key))
+        if value is None:
+            continue
+        total += value
+        has_value = True
+    return total if has_value else None
 
 
 def _has_named_players(duel: dict[str, Any]) -> bool:
