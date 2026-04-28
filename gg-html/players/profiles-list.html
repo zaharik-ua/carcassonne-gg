@@ -194,6 +194,12 @@
     return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
   }
 
+  function readRatingChangedFilterFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("rating_changed") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
   function readAchievementTypeFilterFromUrl() {
     const params = new URLSearchParams(window.location.search);
     return String(params.get("achievement_type") || "").trim();
@@ -213,6 +219,14 @@
     if (typeof value === "number") return value === 1;
     const raw = String(value || "").trim().toLowerCase();
     return raw === "1" || raw === "true" || raw === "yes" || raw === "on" || raw === "master" || raw === "captain";
+  }
+
+  function hasRatingChange(player) {
+    const rawElo = String(player?.gg_elo ?? "").trim();
+    const rawPreviousElo = String(player?.gg_elo_previous ?? "").trim();
+    const current = Number(rawElo);
+    const previous = Number(rawPreviousElo);
+    return rawElo !== "" && rawPreviousElo !== "" && Number.isFinite(current) && Number.isFinite(previous) && current !== previous;
   }
 
   async function fetchProfilesMap() {
@@ -387,6 +401,7 @@
     const activePlayerFilter = readPlayerFilterFromUrl();
     const mastersOnly = readMastersFilterFromUrl();
     const captainsOnly = readCaptainsFilterFromUrl();
+    const ratingChangedOnly = readRatingChangedFilterFromUrl();
     const achievementType = readAchievementTypeFilterFromUrl();
     const matchesMin = readMatchesMinFilterFromUrl();
 
@@ -402,6 +417,9 @@
     }
     if (captainsOnly) {
       filtered = filtered.filter(p => toBool(p.team_captain));
+    }
+    if (ratingChangedOnly) {
+      filtered = filtered.filter(p => hasRatingChange(p));
     }
     if (achievementType) {
       filtered = filtered.filter(p =>
@@ -517,6 +535,7 @@
   window.addEventListener("player-filter-change", () => renderFilteredPlayers());
   window.addEventListener("masters-filter-change", () => renderFilteredPlayers());
   window.addEventListener("captains-filter-change", () => renderFilteredPlayers());
+  window.addEventListener("rating-change-filter-change", () => renderFilteredPlayers());
   window.addEventListener("matches-filter-change", () => renderFilteredPlayers());
 })();
 </script>

@@ -364,6 +364,9 @@
   <div class="pf-toggle-line" id="pf-captains-toggle" role="button" tabindex="0" aria-pressed="false">
     <span class="pf-toggle-label">Captains</span>
   </div>
+  <div class="pf-toggle-line" id="pf-rating-change-toggle" role="button" tabindex="0" aria-pressed="false">
+    <span class="pf-toggle-label">Rating Changed</span>
+  </div>
   <button class="pf-clear-filters-btn" id="pf-clear-filters-btn" type="button">Clear filters</button>
 </div>
 
@@ -390,6 +393,7 @@
   const pfSearchBtn = document.getElementById("pf-search-btn");
   const pfMastersToggle = document.getElementById("pf-masters-toggle");
   const pfCaptainsToggle = document.getElementById("pf-captains-toggle");
+  const pfRatingChangeToggle = document.getElementById("pf-rating-change-toggle");
   let pfOptions = [];
   let pfAchievementTypes = [];
   const pfMatchesOptions = [10, 20, 30, 40, 50];
@@ -534,6 +538,28 @@
     pfCaptainsToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
   }
 
+  function pfGetRatingChangedOnly() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("rating_changed") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  function pfSetRatingChangedOnly(enabled) {
+    const params = new URLSearchParams(window.location.search);
+    if (enabled) params.set("rating_changed", "1");
+    else params.delete("rating_changed");
+    const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", newUrl);
+    window.dispatchEvent(new Event("rating-change-filter-change"));
+  }
+
+  function pfUpdateRatingChangeToggle() {
+    if (!pfRatingChangeToggle) return;
+    const enabled = pfGetRatingChangedOnly();
+    pfRatingChangeToggle.classList.toggle("active", enabled);
+    pfRatingChangeToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
+  }
+
   function pfUpdateToggle() {
     const active = pfGetActiveAssociation();
     const opt = pfOptions.find(o => o.key === active);
@@ -663,6 +689,21 @@
       }
     });
   }
+  if (pfRatingChangeToggle) {
+    pfRatingChangeToggle.addEventListener("click", () => {
+      const next = !pfGetRatingChangedOnly();
+      pfSetRatingChangedOnly(next);
+      pfUpdateRatingChangeToggle();
+    });
+    pfRatingChangeToggle.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        const next = !pfGetRatingChangedOnly();
+        pfSetRatingChangedOnly(next);
+        pfUpdateRatingChangeToggle();
+      }
+    });
+  }
   if (pfClearFiltersBtn) {
     pfClearFiltersBtn.addEventListener("click", () => {
       pfSetActiveAssociation("");
@@ -670,11 +711,13 @@
       pfSetActivePlayer("");
       pfSetMastersOnly(false);
       pfSetCaptainsOnly(false);
+      pfSetRatingChangedOnly(false);
       pfSetMatchesMin(0);
       pfUpdateToggle();
       pfUpdateAchievementToggle();
       pfUpdateMastersToggle();
       pfUpdateCaptainsToggle();
+      pfUpdateRatingChangeToggle();
       pfUpdateMatchesToggle();
       pfRow.querySelectorAll(".pf-flag-btn").forEach(b => b.classList.remove("active"));
       if (pfAchievementRow) pfAchievementRow.querySelectorAll(".pf-ach-btn").forEach(b => b.classList.remove("active"));
@@ -911,6 +954,7 @@
       pfUpdateAchievementToggle();
       pfUpdateMastersToggle();
       pfUpdateCaptainsToggle();
+      pfUpdateRatingChangeToggle();
       pfUpdateMatchesToggle();
       const activePlayer = pfGetActivePlayer();
       if (activePlayer) {
@@ -936,6 +980,7 @@
     pfUpdateAchievementToggle();
     pfUpdateMastersToggle();
     pfUpdateCaptainsToggle();
+    pfUpdateRatingChangeToggle();
     pfUpdateMatchesToggle();
   });
 </script>

@@ -228,6 +228,30 @@
     -webkit-box-orient: vertical;
   }
 
+  .cp-news-desc p,
+  .cp-news-editor-area p {
+    margin: 0 0 8px;
+  }
+
+  .cp-news-desc p:last-child,
+  .cp-news-editor-area p:last-child {
+    margin-bottom: 0;
+  }
+
+  .cp-news-desc ol,
+  .cp-news-desc ul,
+  .cp-news-editor-area ol,
+  .cp-news-editor-area ul {
+    margin: 4px 0 8px 20px;
+    padding: 0;
+  }
+
+  .cp-news-desc a,
+  .cp-news-editor-area a {
+    color: #1a73b7;
+    text-decoration: underline;
+  }
+
   .cp-news-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -238,7 +262,62 @@
     grid-column: 1 / -1;
   }
 
-  .cp-news-form .cp-edit-row--description textarea {
+  .cp-news-editor {
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .cp-news-editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px;
+    border-bottom: 1px solid #dbe2ea;
+    background: #f8fafc;
+  }
+
+  .cp-news-editor-btn {
+    width: 30px;
+    height: 28px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .cp-news-editor-btn:hover,
+  .cp-news-editor-btn:focus-visible,
+  .cp-news-editor-btn.active {
+    border-color: #1a73b7;
+    color: #1a73b7;
+  }
+
+  .cp-news-editor-area {
+    min-height: 300px;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 14px;
+    line-height: 1.45;
+    color: #2f3947;
+    outline: none;
+    overflow-y: auto;
+    word-break: break-word;
+  }
+
+  .cp-news-editor-area:empty::before {
+    content: attr(data-placeholder);
+    color: #98a2b3;
+  }
+
+  .cp-news-form .cp-edit-row--description textarea,
+  .cp-news-form .cp-edit-row--description .cp-news-editor-area {
     min-height: 300px;
   }
 
@@ -666,6 +745,217 @@
     const mi = Number(m[5]);
     return new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi, 0)).toISOString();
   } 
+
+  function sanitizeNewsDescriptionHtml(rawHtml) {
+    const raw = String(rawHtml || "").trim();
+    if (!raw) return "";
+    const allowedTags = new Set(["P", "BR", "STRONG", "EM", "A", "OL", "UL", "LI"]);
+    const template = document.createElement("template");
+    template.innerHTML = raw;
+
+    const sanitizeNode = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return document.createTextNode(node.textContent || "");
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return null;
+
+      const tagName = node.tagName.toUpperCase();
+      const outputTag = tagName === "B"
+        ? "STRONG"
+        : tagName === "I"
+          ? "EM"
+          : tagName === "DIV"
+            ? "P"
+            : tagName;
+      if (!allowedTags.has(outputTag)) {
+        const fragment = document.createDocumentFragment();
+        Array.from(node.childNodes).forEach((child) => {
+          const safeChild = sanitizeNode(child);
+          if (safeChild) fragment.appendChild(safeChild);
+        });
+        return fragment;
+      }
+
+      const safeNode = document.createElement(outputTag.toLowerCase());
+      if (outputTag === "A") {
+        const href = String(node.getAttribute("href") || "").trim();
+        if (/^(https?:|mailto:)/i.test(href)) {
+          safeNode.setAttribute("href", href);
+          safeNode.setAttribute("target", "_blank");
+          safeNode.setAttribute("rel", "noopener noreferrer");
+        }
+      }
+      Array.from(node.childNodes).forEach((child) => {
+        const safeChild = sanitizeNode(child);
+        if (safeChild) safeNode.appendChild(safeChild);
+      });
+      return safeNode;
+    };
+
+    const fragment = document.createDocumentFragment();
+    Array.from(template.content.childNodes).forEach((child) => {
+      const safeChild = sanitizeNode(child);
+      if (safeChild) fragment.appendChild(safeChild);
+    });
+    const output = document.createElement("div");
+    output.appendChild(fragment);
+    output.querySelectorAll("p").forEach((paragraph) => {
+      if (!paragraph.textContent.trim() && !paragraph.querySelector("br")) paragraph.remove();
+    });
+    if (!output.textContent.trim()) return "";
+    if (
+      output.textContent.trim()
+      && !Array.from(output.children).some((child) => ["P", "OL", "UL"].includes(child.tagName.toUpperCase()))
+    ) {
+      const paragraph = document.createElement("p");
+      while (output.firstChild) paragraph.appendChild(output.firstChild);
+      output.appendChild(paragraph);
+    }
+    return output.innerHTML.trim();
+  }
+
+  function createNewsDescriptionEditor(initialHtml = "") {
+    const root = document.createElement("div");
+    root.className = "cp-news-editor";
+    const toolbar = document.createElement("div");
+    toolbar.className = "cp-news-editor-toolbar";
+    const editor = document.createElement("div");
+    editor.className = "cp-news-editor-area";
+    editor.contentEditable = "true";
+    editor.spellcheck = true;
+    editor.dataset.placeholder = "Write formatted news description...";
+    editor.innerHTML = sanitizeNewsDescriptionHtml(initialHtml) || "<p><br></p>";
+    const escapeHtml = (value) => String(value || "").replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;",
+      "'": "&#39;",
+    }[ch]));
+
+    const runCommand = (command, value = null, shouldNormalize = true) => {
+      editor.focus();
+      document.execCommand(command, false, value);
+      if (shouldNormalize) normalizeEditorHtml();
+      updateToolbarState();
+    };
+
+    const makeButton = (label, iconClass, title, onClick) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cp-news-editor-btn";
+      btn.title = title;
+      btn.setAttribute("aria-label", label);
+      const icon = document.createElement("i");
+      icon.className = iconClass;
+      btn.appendChild(icon);
+      btn.addEventListener("mousedown", (event) => event.preventDefault());
+      btn.addEventListener("click", onClick);
+      toolbar.appendChild(btn);
+      return btn;
+    };
+
+    const buttons = {
+      bold: makeButton("Bold", "fa-solid fa-bold", "Bold (Ctrl/Cmd+B)", () => runCommand("bold")),
+      italic: makeButton("Italic", "fa-solid fa-italic", "Italic (Ctrl/Cmd+I)", () => runCommand("italic")),
+      ordered: makeButton("Numbered list", "fa-solid fa-list-ol", "Numbered list (Ctrl/Cmd+Shift+7)", () => runCommand("insertOrderedList")),
+      unordered: makeButton("Bullet list", "fa-solid fa-list-ul", "Bullet list (Ctrl/Cmd+Shift+8)", () => runCommand("insertUnorderedList")),
+      link: makeButton("Link", "fa-solid fa-link", "Add or edit link", () => {
+        const selectedText = String(window.getSelection()?.toString() || "").trim();
+        const currentHref = document.queryCommandValue("createLink") || "";
+        const href = window.prompt("Link URL", currentHref || "https://");
+        if (href === null) return;
+        const normalizedHref = String(href || "").trim();
+        if (!normalizedHref) {
+          runCommand("unlink");
+          return;
+        }
+        if (!/^https?:\/\//i.test(normalizedHref) && !/^mailto:/i.test(normalizedHref)) {
+          window.alert("Use an https://, http://, or mailto: link.");
+          return;
+        }
+        if (!selectedText) {
+          runCommand("insertHTML", `<a href="${escapeHtml(normalizedHref)}">${escapeHtml(normalizedHref)}</a>`);
+          return;
+        }
+        runCommand("createLink", normalizedHref);
+      }),
+    };
+
+    const normalizeEditorHtml = () => {
+      editor.innerHTML = sanitizeNewsDescriptionHtml(editor.innerHTML) || "<p><br></p>";
+    };
+
+    const updateToolbarState = () => {
+      buttons.bold.classList.toggle("active", document.queryCommandState("bold"));
+      buttons.italic.classList.toggle("active", document.queryCommandState("italic"));
+      buttons.ordered.classList.toggle("active", document.queryCommandState("insertOrderedList"));
+      buttons.unordered.classList.toggle("active", document.queryCommandState("insertUnorderedList"));
+    };
+
+    try {
+      document.execCommand("defaultParagraphSeparator", false, "p");
+    } catch (_error) {}
+
+    editor.addEventListener("keydown", (event) => {
+      const modifier = event.ctrlKey || event.metaKey;
+      if (event.key === "Enter" && event.shiftKey) {
+        event.preventDefault();
+        runCommand("insertLineBreak", null, false);
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        runCommand("insertParagraph", null, false);
+        return;
+      }
+      if (!modifier) return;
+      const key = String(event.key || "").toLowerCase();
+      if (key === "b") {
+        event.preventDefault();
+        runCommand("bold");
+      } else if (key === "i") {
+        event.preventDefault();
+        runCommand("italic");
+      } else if (event.shiftKey && event.key === "7") {
+        event.preventDefault();
+        runCommand("insertOrderedList");
+      } else if (event.shiftKey && event.key === "8") {
+        event.preventDefault();
+        runCommand("insertUnorderedList");
+      }
+    });
+
+    editor.addEventListener("paste", (event) => {
+      event.preventDefault();
+      const html = event.clipboardData?.getData("text/html") || "";
+      const text = event.clipboardData?.getData("text/plain") || "";
+      const safeHtml = html
+        ? sanitizeNewsDescriptionHtml(html)
+        : String(text || "")
+          .split(/\n{2,}/)
+          .map((paragraph) => `<p>${paragraph.split(/\n/).map(escapeHtml).join("<br>")}</p>`)
+          .join("");
+      runCommand("insertHTML", safeHtml);
+    });
+
+    editor.addEventListener("keyup", updateToolbarState);
+    editor.addEventListener("mouseup", updateToolbarState);
+    editor.addEventListener("input", updateToolbarState);
+    editor.addEventListener("blur", normalizeEditorHtml);
+
+    root.appendChild(toolbar);
+    root.appendChild(editor);
+
+    return {
+      root,
+      getHtml: () => {
+        normalizeEditorHtml();
+        const html = sanitizeNewsDescriptionHtml(editor.innerHTML);
+        return html === "<p><br></p>" ? "" : html;
+      },
+    };
+  }
  
   function renderAccessMessage() {
     contentEl.className = "captain-alert";
@@ -757,7 +1047,7 @@
       const row = document.createElement("div");
       row.className = "cp-news-row";
 
-      const iconUrl = String(item?.icon || "").trim();
+      const iconUrl = String(item?.image || "").trim();
       if (iconUrl) {
         const img = document.createElement("img");
         img.className = "cp-news-icon";
@@ -812,7 +1102,7 @@
       if (item?.description) {
         const desc = document.createElement("div");
         desc.className = "cp-news-desc";
-        desc.textContent = String(item.description || "").trim();
+        desc.innerHTML = sanitizeNewsDescriptionHtml(item.description);
         main.appendChild(desc);
       }
 
@@ -1257,10 +1547,10 @@
     timeInput.value = toDatetimeLocalFromUtc(source?.time_utc);
     addRow("Time, UTC", timeInput);
 
-    const iconInput = document.createElement("input");
-    iconInput.type = "text";
-    iconInput.value = String(source?.icon || "").trim();
-    addRow("Icon", iconInput);
+    const imageInput = document.createElement("input");
+    imageInput.type = "text";
+    imageInput.value = String(source?.image || "").trim();
+    addRow("Image", imageInput);
 
     const titleInput = document.createElement("input");
     titleInput.type = "text";
@@ -1274,10 +1564,8 @@
     shortTitleInput.value = String(source?.short_title || "").trim();
     addRow("Short title", shortTitleInput);
 
-    const descriptionInput = document.createElement("textarea");
-    descriptionInput.value = String(source?.description || "").trim();
-    descriptionInput.style.height = "300px";
-    addRow("Description", descriptionInput, "cp-edit-row--full cp-edit-row--description");
+    const descriptionInput = createNewsDescriptionEditor(source?.description || "");
+    addRow("Description", descriptionInput.root, "cp-edit-row--full cp-edit-row--description");
 
     const buildPayload = () => ({
       significance: significanceInput.getValue() || "Regular",
@@ -1286,10 +1574,10 @@
       tournament_id: tournamentInput.getValue() || "",
       associations: associationsInput.getValue(),
       time_utc: toUtcIsoFromDatetimeLocal(timeInput.value),
-      icon: String(iconInput.value || "").trim(),
+      image: String(imageInput.value || "").trim(),
       title: String(titleInput.value || "").trim(),
       short_title: String(shortTitleInput.value || "").trim(),
-      description: String(descriptionInput.value || "").trim(),
+      description: descriptionInput.getHtml(),
     });
 
     const validatePayload = (payload) => {

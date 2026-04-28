@@ -176,7 +176,7 @@ const NEWS_AUDIT_FIELDS = [
   "tournament_id",
   "associations",
   "time_utc",
-  "icon",
+  "image",
   "title",
   "short_title",
   "description",
@@ -438,7 +438,7 @@ async function loadNewsById(newsId) {
         n.tournament_id,
         n.associations,
         n.time_utc,
-        n.icon,
+        n.image,
         n.title,
         n.short_title,
         n.description,
@@ -2890,7 +2890,7 @@ function ensureNewsSchema() {
       tournament_id TEXT,
       associations TEXT NOT NULL DEFAULT '[]',
       time_utc TEXT,
-      icon TEXT,
+      image TEXT,
       title TEXT NOT NULL,
       short_title TEXT,
       description TEXT,
@@ -2917,7 +2917,27 @@ function ensureNewsSchema() {
       addColumnIfMissing(columns, "news", "tournament_id", "TEXT");
       addColumnIfMissing(columns, "news", "associations", "TEXT NOT NULL DEFAULT '[]'");
       addColumnIfMissing(columns, "news", "time_utc", "TEXT");
-      addColumnIfMissing(columns, "news", "icon", "TEXT");
+      const hasIconColumn = columns.some((col) => col.name === "icon");
+      const hasImageColumn = columns.some((col) => col.name === "image");
+      if (hasIconColumn && !hasImageColumn) {
+        db.run("ALTER TABLE news RENAME COLUMN icon TO image", (renameErr) => {
+          if (renameErr) {
+            console.error("Failed to rename news.icon to news.image", renameErr);
+          }
+        });
+      } else {
+        addColumnIfMissing(columns, "news", "image", "TEXT");
+        if (hasIconColumn && hasImageColumn) {
+          db.run(
+            "UPDATE news SET image = COALESCE(NULLIF(trim(image), ''), NULLIF(trim(icon), ''))",
+            (copyErr) => {
+              if (copyErr) {
+                console.error("Failed to copy news.icon to news.image", copyErr);
+              }
+            }
+          );
+        }
+      }
       addColumnIfMissing(columns, "news", "title", "TEXT");
       addColumnIfMissing(columns, "news", "short_title", "TEXT");
       addColumnIfMissing(columns, "news", "description", "TEXT");
@@ -2942,7 +2962,7 @@ function ensureNewsSchema() {
               WHEN trim(COALESCE(associations, '')) = '' THEN '[]'
               ELSE associations
             END,
-            icon = NULLIF(trim(icon), ''),
+            image = NULLIF(trim(image), ''),
             short_title = NULLIF(trim(short_title), ''),
             description = NULLIF(description, '')
         `,
@@ -5425,6 +5445,45 @@ app.get("/news-editors", (req, res, next) => {
   );
 });
 
+app.get("/public/news", async (_req, res) => {
+  try {
+    const rows = await dbAllAsync(
+      `
+        SELECT
+          id,
+          significance,
+          category,
+          association_id,
+          tournament_id,
+          associations,
+          time_utc,
+          image,
+          title,
+          short_title,
+          description,
+          created_by,
+          updated_by,
+          created_at,
+          updated_at
+        FROM news
+        WHERE trim(COALESCE(title, '')) <> ''
+        ORDER BY
+          CASE
+            WHEN time_utc IS NULL OR trim(time_utc) = '' THEN 1
+            ELSE 0
+          END ASC,
+          datetime(time_utc) DESC,
+          id DESC
+      `
+    );
+
+    return res.json({ ok: true, news: rows || [] });
+  } catch (error) {
+    console.error("Failed to load public news", error);
+    return res.status(500).json({ ok: false, message: "Failed to load news" });
+  }
+});
+
 app.get("/news", requireAdmin, async (_req, res) => {
   try {
     const rows = await dbAllAsync(
@@ -5437,7 +5496,7 @@ app.get("/news", requireAdmin, async (_req, res) => {
           n.tournament_id,
           n.associations,
           n.time_utc,
-          n.icon,
+          n.image,
           n.title,
           n.short_title,
           n.description,
@@ -5484,7 +5543,7 @@ app.post("/news", requireAdmin, async (req, res) => {
     const tournamentId = normalizeNullableText(req.body?.tournament_id);
     const associations = await resolveNewsAssociations(req.body?.associations);
     const timeUtc = normalizeNullableText(req.body?.time_utc);
-    const icon = normalizeNullableText(req.body?.icon);
+    const image = normalizeNullableText(req.body?.image);
     const title = String(req.body?.title || "").trim();
     const shortTitle = String(req.body?.short_title || "").trim();
     const description = String(req.body?.description || "").trim();
@@ -5525,7 +5584,7 @@ app.post("/news", requireAdmin, async (req, res) => {
           tournament_id,
           associations,
           time_utc,
-          icon,
+          image,
           title,
           short_title,
           description,
@@ -5543,7 +5602,7 @@ app.post("/news", requireAdmin, async (req, res) => {
         tournamentId,
         JSON.stringify(associations),
         timeUtc,
-        icon,
+        image,
         title,
         shortTitle || null,
         description || null,
@@ -5593,7 +5652,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
     const tournamentId = normalizeNullableText(req.body?.tournament_id);
     const associations = await resolveNewsAssociations(req.body?.associations);
     const timeUtc = normalizeNullableText(req.body?.time_utc);
-    const icon = normalizeNullableText(req.body?.icon);
+    const image = normalizeNullableText(req.body?.image);
     const title = String(req.body?.title || "").trim();
     const shortTitle = String(req.body?.short_title || "").trim();
     const description = String(req.body?.description || "").trim();
@@ -5635,7 +5694,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
           tournament_id = ?,
           associations = ?,
           time_utc = ?,
-          icon = ?,
+          image = ?,
           title = ?,
           short_title = ?,
           description = ?,
@@ -5650,7 +5709,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
         tournamentId,
         JSON.stringify(associations),
         timeUtc,
-        icon,
+        image,
         title,
         shortTitle || null,
         description || null,
