@@ -1,0 +1,454 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+<style>
+  body {
+    font-family: 'Montserrat', sans-serif;
+  }
+  .news-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background-color: #2C6DA3;
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 6px 5px;
+  }
+  .news-row {
+    background: white;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border-top: 1px solid #ccc;
+    padding: 7px 5px;
+    font-size: 13px;
+    line-height: 15px;
+  }
+  .news-row:hover {
+    background-color: #f9f9f9;
+  }
+  .news-icon {
+    height: auto;
+    object-fit: contain;
+    cursor: default;
+  }
+  .news-icon-low {
+    width: 20px;
+  }
+  .news-icon-medium {
+    width: 40px;
+  }
+  .news-icon-high {
+    width: 60px;
+    cursor: zoom-in;
+  }
+  .news-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .news-content-high .news-title {
+    font-size: 14px;
+  }
+  .news-title-high {
+    font-size: 14px;
+  }
+  .news-title {
+    flex-grow: 1;
+  }
+  .news-title a,
+  .news-title span {
+    color: #146997;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .news-title a:hover {
+    color: #0e4f73;
+    text-decoration: none;
+  }
+  .news-chevron {
+    cursor: pointer;
+    font-size: 14px;
+    padding-left: 2px;
+    transition: transform 0.3s ease;
+  }
+  .news-description {
+    height: 0;
+    overflow: hidden;
+    transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+    background-color: #f5f5f5;
+    padding: 0 7px;
+  }
+  .news-description.open {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .news-description-content {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .news-description-content-high {
+    font-size: 13px;
+  }
+  .news-description-content p {
+    margin: 0 0 8px;
+  }
+  .news-description-content p:last-child {
+    margin-bottom: 0;
+  }
+  .news-description-time {
+    font-size: 11px;
+    color: #545454;
+    margin-bottom: 4px;
+    word-break: break-word;
+    padding: 7px 0 0;
+  }
+  .news-description-date {
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 4px;
+  }
+  .news-state {
+    background: #fff;
+    border-top: 1px solid #ccc;
+    color: #555;
+    font-size: 13px;
+    padding: 10px 7px;
+  }
+  .news-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 9999;
+    padding: 20px;
+  }
+  .news-modal.open {
+    display: flex;
+  }
+  .news-modal-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .news-modal-content img {
+    width: auto;
+    height: auto;
+    max-width: calc(90vw - 40px);
+    max-height: calc(90vh - 40px);
+    border-radius: 4px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  }
+</style>
+
+<div class="news-header">
+  <span class="news-header-title">Carcassonne News</span>
+</div>
+<div id="news-container"></div>
+
+<script>
+  const NEWS_PUBLIC_URL = "https://api.carcassonne.gg/public/news";
+  const newsContainer = document.getElementById("news-container");
+  let imageModal;
+  let allNewsItems = [];
+  let hasNewsDataLoaded = false;
+
+  const closeImageModal = () => {
+    if (!imageModal) return;
+    imageModal.classList.remove("open");
+    const img = imageModal.querySelector("img");
+    if (img) img.src = "";
+  };
+
+  const ensureImageModal = () => {
+    if (imageModal) return imageModal;
+
+    imageModal = document.createElement("div");
+    imageModal.className = "news-modal";
+    imageModal.innerHTML = `
+      <div class="news-modal-content">
+        <img src="" alt="News preview">
+      </div>
+    `;
+
+    imageModal.addEventListener("click", closeImageModal);
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && imageModal.classList.contains("open")) {
+        closeImageModal();
+      }
+    });
+
+    document.body.appendChild(imageModal);
+    return imageModal;
+  };
+
+  const openImageModal = (src, alt) => {
+    const modal = ensureImageModal();
+    const img = modal.querySelector("img");
+    img.src = src;
+    img.alt = alt || "News preview";
+    modal.classList.add("open");
+  };
+
+  const normalizeImportance = (value) => {
+    const normalized = String(value ?? "").trim().toLowerCase();
+    if (normalized === "major" || normalized === "high") return "high";
+    if (normalized === "important" || normalized === "medium") return "medium";
+    return "low";
+  };
+
+  const getNewsTimestampValue = (item) => {
+    return item?.time_utc || item?.updated_at || item?.created_at || item?.time || "";
+  };
+
+  const parseDateTime = (value) => {
+    if (!value) return 0;
+
+    const trimmed = String(value).trim();
+    if (!trimmed) return 0;
+
+    const directDate = new Date(trimmed);
+    if (!Number.isNaN(directDate.getTime())) {
+      return directDate.getTime();
+    }
+
+    const [rawDate = "", rawTime = "00:00"] = trimmed.split(/\s+/);
+    const separatorMatch = rawDate.match(/[./-]/);
+    if (!separatorMatch) return 0;
+
+    const dateSegments = rawDate.split(separatorMatch[0]);
+    if (dateSegments.length !== 3) return 0;
+
+    let day;
+    let month;
+    let rawYear;
+    if (separatorMatch[0] === "-" && dateSegments[0].length === 4) {
+      [rawYear, month, day] = dateSegments;
+    } else {
+      [day, month, rawYear] = dateSegments;
+    }
+
+    const year = rawYear && rawYear.length === 2 ? `20${rawYear}` : rawYear;
+    const normalizedTime = rawTime.includes(":") ? rawTime : `${rawTime}:00`;
+    const parsed = new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${normalizedTime}`);
+
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+  };
+
+  const formatDisplayDate = (value) => {
+    const timestamp = parseDateTime(value);
+    if (!timestamp) return "";
+
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "";
+
+    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = monthLabels[date.getMonth()] || "";
+    const year = date.getFullYear();
+    return month ? `${day}.${month} ${year}` : "";
+  };
+
+  const formatNewsTime = (value) => {
+    const timestamp = parseDateTime(value);
+    if (!timestamp) return "";
+
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "";
+
+    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = monthLabels[date.getMonth()] || "";
+    const day = String(date.getDate()).padStart(2, "0");
+    const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    return month ? `${day} ${month} ${time}` : "";
+  };
+
+  const setNewsState = (message) => {
+    if (!newsContainer) return;
+    newsContainer.innerHTML = "";
+    const state = document.createElement("div");
+    state.className = "news-state";
+    state.textContent = message;
+    newsContainer.appendChild(state);
+  };
+
+  function renderNewsList() {
+    if (!newsContainer) return;
+
+    newsContainer.innerHTML = "";
+
+    if (!allNewsItems.length) {
+      if (hasNewsDataLoaded) {
+        setNewsState("ℹ️ Наразі немає новин для відображення.");
+      }
+      return;
+    }
+
+    allNewsItems.forEach(newsItem => {
+      const row = document.createElement("div");
+      row.className = "news-row";
+
+      const normalizedImportance = normalizeImportance(newsItem.significance || newsItem.importance);
+      const dateValue = getNewsTimestampValue(newsItem);
+      const displayDate = (normalizedImportance === "high" || normalizedImportance === "medium")
+        ? formatDisplayDate(dateValue)
+        : "";
+
+      const iconUrl = String(newsItem.image || newsItem.icon || newsItem.icon1 || "").trim();
+      if (iconUrl) {
+        const icon = document.createElement("img");
+        icon.className = "news-icon";
+        icon.src = iconUrl;
+        icon.alt = newsItem.title || newsItem.short_title || "News icon";
+        icon.classList.add(`news-icon-${normalizedImportance}`);
+        if (normalizedImportance === "high") {
+          icon.addEventListener("click", event => {
+            event.stopPropagation();
+            openImageModal(iconUrl, icon.alt);
+          });
+        }
+        row.appendChild(icon);
+      }
+
+      const contentWrapper = document.createElement("div");
+      contentWrapper.className = "news-content";
+      if (normalizedImportance === "high") {
+        contentWrapper.classList.add("news-content-high");
+      }
+
+      if (displayDate) {
+        const dateLabel = document.createElement("div");
+        dateLabel.className = "news-description-date";
+        dateLabel.textContent = displayDate;
+        contentWrapper.appendChild(dateLabel);
+      }
+
+      const title = document.createElement("div");
+      title.className = "news-title";
+      if (normalizedImportance === "high") {
+        title.classList.add("news-title-high");
+      }
+
+      const titleText = String(newsItem.title || newsItem.short_title || "").trim() || "News";
+      const linkValue = String(newsItem.link || "").trim();
+      if (linkValue) {
+        const link = document.createElement("a");
+        link.textContent = titleText;
+        link.href = linkValue;
+        if (!link.href.toLowerCase().includes("carcassonne.gg")) {
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+        }
+        title.appendChild(link);
+      } else {
+        const span = document.createElement("span");
+        span.textContent = titleText;
+        title.appendChild(span);
+      }
+
+      contentWrapper.appendChild(title);
+      row.appendChild(contentWrapper);
+
+      const descriptionHtml = String(newsItem.description || "").trim();
+      if (descriptionHtml) {
+        const chevron = document.createElement("i");
+        chevron.className = "fa fa-chevron-down news-chevron";
+        row.appendChild(chevron);
+
+        const descriptionBlock = document.createElement("div");
+        descriptionBlock.className = "news-description";
+
+        const formattedTimeValue = formatNewsTime(dateValue);
+        if (formattedTimeValue) {
+          const descriptionTime = document.createElement("div");
+          descriptionTime.className = "news-description-time";
+          descriptionTime.textContent = formattedTimeValue;
+          descriptionBlock.appendChild(descriptionTime);
+        }
+
+        const descriptionContent = document.createElement("div");
+        descriptionContent.className = "news-description-content";
+        if (normalizedImportance === "high") {
+          descriptionContent.classList.add("news-description-content-high");
+        }
+        descriptionContent.innerHTML = descriptionHtml;
+        descriptionBlock.appendChild(descriptionContent);
+
+        const toggleDescription = () => {
+          const isOpen = descriptionBlock.classList.contains("open");
+          if (isOpen) {
+            descriptionBlock.style.height = `${descriptionBlock.scrollHeight}px`;
+            requestAnimationFrame(() => {
+              descriptionBlock.style.height = "0px";
+              descriptionBlock.classList.remove("open");
+              chevron.style.transform = "rotate(0deg)";
+            });
+          } else {
+            descriptionBlock.style.height = "0px";
+            descriptionBlock.classList.add("open");
+            chevron.style.transform = "rotate(180deg)";
+            requestAnimationFrame(() => {
+              descriptionBlock.style.height = `${descriptionBlock.scrollHeight}px`;
+            });
+          }
+        };
+
+        descriptionBlock.addEventListener("transitionend", event => {
+          if (event.propertyName === "height" && descriptionBlock.classList.contains("open")) {
+            descriptionBlock.style.height = "auto";
+          }
+        });
+
+        chevron.addEventListener("click", event => {
+          event.stopPropagation();
+          toggleDescription();
+        });
+
+        if (!linkValue) {
+          row.addEventListener("click", toggleDescription);
+        }
+
+        newsContainer.appendChild(row);
+        newsContainer.appendChild(descriptionBlock);
+      } else {
+        newsContainer.appendChild(row);
+      }
+    });
+  }
+
+  function fetchNews() {
+    setNewsState("Loading news...");
+
+    fetch(NEWS_PUBLIC_URL, { method: "GET" })
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`News request failed: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        allNewsItems = Array.isArray(data.news) ? [...data.news] : [];
+        allNewsItems.sort((a, b) => {
+          const byTime = parseDateTime(getNewsTimestampValue(b)) - parseDateTime(getNewsTimestampValue(a));
+          return byTime || Number(b?.id || 0) - Number(a?.id || 0);
+        });
+        hasNewsDataLoaded = true;
+        renderNewsList();
+      })
+      .catch(err => {
+        hasNewsDataLoaded = true;
+        allNewsItems = [];
+        setNewsState("❌ Failed to load news.");
+        console.error(err);
+      });
+  }
+
+  fetchNews();
+</script>

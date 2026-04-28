@@ -1564,6 +1564,12 @@
     shortTitleInput.value = String(source?.short_title || "").trim();
     addRow("Short title", shortTitleInput);
 
+    const shortDescriptionInput = document.createElement("input");
+    shortDescriptionInput.type = "text";
+    shortDescriptionInput.maxLength = 200;
+    shortDescriptionInput.value = String(source?.short_description || "").trim();
+    addRow("Short description", shortDescriptionInput, "cp-edit-row--full");
+
     const descriptionInput = createNewsDescriptionEditor(source?.description || "");
     addRow("Description", descriptionInput.root, "cp-edit-row--full cp-edit-row--description");
 
@@ -1577,6 +1583,7 @@
       image: String(imageInput.value || "").trim(),
       title: String(titleInput.value || "").trim(),
       short_title: String(shortTitleInput.value || "").trim(),
+      short_description: String(shortDescriptionInput.value || "").trim(),
       description: descriptionInput.getHtml(),
     });
 
@@ -1584,6 +1591,7 @@
       if (!payload.title) return "Title is required.";
       if (payload.title.length > 100) return "Title must be 100 characters or fewer.";
       if (payload.short_title.length > 40) return "Short title must be 40 characters or fewer.";
+      if (payload.short_description.length > 200) return "Short description must be 200 characters or fewer.";
       if (String(timeInput.value || "").trim() && !payload.time_utc) return "Time, UTC is invalid.";
       return "";
     };

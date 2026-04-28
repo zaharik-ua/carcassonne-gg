@@ -179,6 +179,7 @@ const NEWS_AUDIT_FIELDS = [
   "image",
   "title",
   "short_title",
+  "short_description",
   "description",
 ];
 const MATCH_AUDIT_FIELDS = [
@@ -441,6 +442,7 @@ async function loadNewsById(newsId) {
         n.image,
         n.title,
         n.short_title,
+        n.short_description,
         n.description,
         n.created_by,
         n.updated_by,
@@ -2893,6 +2895,7 @@ function ensureNewsSchema() {
       image TEXT,
       title TEXT NOT NULL,
       short_title TEXT,
+      short_description TEXT,
       description TEXT,
       created_by TEXT,
       updated_by TEXT,
@@ -2940,6 +2943,7 @@ function ensureNewsSchema() {
       }
       addColumnIfMissing(columns, "news", "title", "TEXT");
       addColumnIfMissing(columns, "news", "short_title", "TEXT");
+      addColumnIfMissing(columns, "news", "short_description", "TEXT");
       addColumnIfMissing(columns, "news", "description", "TEXT");
       addColumnIfMissing(columns, "news", "created_by", "TEXT");
       addColumnIfMissing(columns, "news", "updated_by", "TEXT");
@@ -2964,6 +2968,7 @@ function ensureNewsSchema() {
             END,
             image = NULLIF(trim(image), ''),
             short_title = NULLIF(trim(short_title), ''),
+            short_description = NULLIF(trim(short_description), ''),
             description = NULLIF(description, '')
         `,
         (normalizeErr) => {
@@ -5460,6 +5465,7 @@ app.get("/public/news", async (_req, res) => {
           image,
           title,
           short_title,
+          short_description,
           description,
           created_by,
           updated_by,
@@ -5499,6 +5505,7 @@ app.get("/news", requireAdmin, async (_req, res) => {
           n.image,
           n.title,
           n.short_title,
+          n.short_description,
           n.description,
           n.created_by,
           n.updated_by,
@@ -5546,6 +5553,7 @@ app.post("/news", requireAdmin, async (req, res) => {
     const image = normalizeNullableText(req.body?.image);
     const title = String(req.body?.title || "").trim();
     const shortTitle = String(req.body?.short_title || "").trim();
+    const shortDescription = String(req.body?.short_description || "").trim();
     const description = String(req.body?.description || "").trim();
 
     if (!title) {
@@ -5556,6 +5564,9 @@ app.post("/news", requireAdmin, async (req, res) => {
     }
     if (shortTitle.length > 40) {
       return res.status(400).json({ ok: false, message: "short_title must be 40 characters or fewer" });
+    }
+    if (shortDescription.length > 200) {
+      return res.status(400).json({ ok: false, message: "short_description must be 200 characters or fewer" });
     }
     if (req.body?.association_id && !associationId) {
       return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
@@ -5587,13 +5598,14 @@ app.post("/news", requireAdmin, async (req, res) => {
           image,
           title,
           short_title,
+          short_description,
           description,
           created_by,
           updated_by,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
       [
         significance,
@@ -5605,6 +5617,7 @@ app.post("/news", requireAdmin, async (req, res) => {
         image,
         title,
         shortTitle || null,
+        shortDescription || null,
         description || null,
         actorPlayerId,
         actorPlayerId,
@@ -5655,6 +5668,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
     const image = normalizeNullableText(req.body?.image);
     const title = String(req.body?.title || "").trim();
     const shortTitle = String(req.body?.short_title || "").trim();
+    const shortDescription = String(req.body?.short_description || "").trim();
     const description = String(req.body?.description || "").trim();
 
     if (!title) {
@@ -5665,6 +5679,9 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
     }
     if (shortTitle.length > 40) {
       return res.status(400).json({ ok: false, message: "short_title must be 40 characters or fewer" });
+    }
+    if (shortDescription.length > 200) {
+      return res.status(400).json({ ok: false, message: "short_description must be 200 characters or fewer" });
     }
     if (req.body?.association_id && !associationId) {
       return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
@@ -5697,6 +5714,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
           image = ?,
           title = ?,
           short_title = ?,
+          short_description = ?,
           description = ?,
           updated_by = ?,
           updated_at = CURRENT_TIMESTAMP
@@ -5712,6 +5730,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
         image,
         title,
         shortTitle || null,
+        shortDescription || null,
         description || null,
         actorPlayerId,
         newsId,
