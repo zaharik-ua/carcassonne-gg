@@ -190,6 +190,20 @@ const ICON_AUDIT_FIELDS = [
   "association_id",
   "streamer_id",
 ];
+const ICON_CATEGORIES = [
+  "Players",
+  "GG",
+  "Local",
+  "WTCOC",
+  "ETCOC",
+  "Asian Cup",
+  "Copa America",
+  "CCL",
+  "MSO",
+  "KoC",
+  "World Championship",
+  "YouTube",
+];
 const MATCH_AUDIT_FIELDS = [
   "id",
   "tournament_id",
@@ -401,6 +415,13 @@ function normalizeNewsCategory(value) {
     ["world championship", "World Championship"],
   ]);
   return categories.get(normalized) || null;
+}
+
+function normalizeIconCategory(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const normalized = raw.toLowerCase();
+  return ICON_CATEGORIES.find((category) => category.toLowerCase() === normalized) || null;
 }
 
 function normalizeNewsAssociations(value) {
@@ -3071,9 +3092,14 @@ function ensureIconsSchema() {
           UPDATE icons
           SET
             category = NULLIF(trim(category), ''),
-            association_id = NULLIF(trim(association_id), ''),
+            association_id = CASE
+              WHEN trim(COALESCE(category, '')) = 'Local' THEN NULLIF(trim(association_id), '')
+              ELSE NULL
+            END,
             streamer_id = CASE
-              WHEN streamer_id IS NULL OR trim(CAST(streamer_id AS TEXT)) = '' THEN NULL
+              WHEN trim(COALESCE(category, '')) <> 'YouTube'
+                OR streamer_id IS NULL
+                OR trim(CAST(streamer_id AS TEXT)) = '' THEN NULL
               ELSE streamer_id
             END
         `,
@@ -5547,7 +5573,7 @@ app.post("/icons", requireAdmin, async (req, res) => {
   try {
     const name = normalizeNullableText(req.body?.name);
     const iconLink = normalizeNullableText(req.body?.icon_link ?? req.body?.iconLink);
-    const category = normalizeNullableText(req.body?.category);
+    const category = normalizeIconCategory(req.body?.category);
     const rawAssociationId = normalizeNullableText(req.body?.association_id ?? req.body?.associationId);
     const streamerId = normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId);
     const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
@@ -5558,13 +5584,19 @@ app.post("/icons", requireAdmin, async (req, res) => {
     if (!iconLink) {
       return res.status(400).json({ ok: false, message: "icon_link is required" });
     }
+    if (!category) {
+      return res.status(400).json({ ok: false, message: "category must be one of the allowed icon categories" });
+    }
 
-    const associationId = rawAssociationId ? await resolveAssociationId(rawAssociationId) : null;
-    if (rawAssociationId && !associationId) {
+    const associationId = category === "Local" && rawAssociationId
+      ? await resolveAssociationId(rawAssociationId)
+      : null;
+    if (category === "Local" && rawAssociationId && !associationId) {
       return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
     }
 
-    if (streamerId) {
+    const normalizedStreamerId = category === "YouTube" ? streamerId : null;
+    if (normalizedStreamerId) {
       const streamerRow = await dbGetAsync("SELECT id FROM streamers WHERE id = ? LIMIT 1", [streamerId]);
       if (!streamerRow) {
         return res.status(400).json({ ok: false, message: "streamer_id must reference an existing streamer" });
@@ -5586,7 +5618,7 @@ app.post("/icons", requireAdmin, async (req, res) => {
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
-      [name, iconLink, category, associationId, streamerId || null, actorPlayerId, actorPlayerId]
+      [name, iconLink, category, associationId, normalizedStreamerId || null, actorPlayerId, actorPlayerId]
     );
     const createdRow = await loadIconById(insertResult?.lastID);
     const auditActor = getAuditActor(req.user);
@@ -5613,7 +5645,7 @@ app.patch("/icons/:id", requireAdmin, async (req, res) => {
     const payloadId = normalizePositiveInteger(req.body?.id);
     const name = normalizeNullableText(req.body?.name);
     const iconLink = normalizeNullableText(req.body?.icon_link ?? req.body?.iconLink);
-    const category = normalizeNullableText(req.body?.category);
+    const category = normalizeIconCategory(req.body?.category);
     const rawAssociationId = normalizeNullableText(req.body?.association_id ?? req.body?.associationId);
     const streamerId = normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId);
     const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
@@ -5630,18 +5662,24 @@ app.patch("/icons/:id", requireAdmin, async (req, res) => {
     if (!iconLink) {
       return res.status(400).json({ ok: false, message: "icon_link is required" });
     }
+    if (!category) {
+      return res.status(400).json({ ok: false, message: "category must be one of the allowed icon categories" });
+    }
 
     const beforeRow = await loadIconById(iconId);
     if (!beforeRow) {
       return res.status(404).json({ ok: false, message: "Icon not found" });
     }
 
-    const associationId = rawAssociationId ? await resolveAssociationId(rawAssociationId) : null;
-    if (rawAssociationId && !associationId) {
+    const associationId = category === "Local" && rawAssociationId
+      ? await resolveAssociationId(rawAssociationId)
+      : null;
+    if (category === "Local" && rawAssociationId && !associationId) {
       return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
     }
 
-    if (streamerId) {
+    const normalizedStreamerId = category === "YouTube" ? streamerId : null;
+    if (normalizedStreamerId) {
       const streamerRow = await dbGetAsync("SELECT id FROM streamers WHERE id = ? LIMIT 1", [streamerId]);
       if (!streamerRow) {
         return res.status(400).json({ ok: false, message: "streamer_id must reference an existing streamer" });
@@ -5661,7 +5699,7 @@ app.patch("/icons/:id", requireAdmin, async (req, res) => {
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `,
-      [name, iconLink, category, associationId, streamerId || null, actorPlayerId, iconId]
+      [name, iconLink, category, associationId, normalizedStreamerId || null, actorPlayerId, iconId]
     );
     const updatedRow = await loadIconById(iconId);
     const changes = buildAuditChanges(beforeRow, updatedRow, ICON_AUDIT_FIELDS);

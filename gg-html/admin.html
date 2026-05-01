@@ -558,6 +558,20 @@
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const DUEL_FORMATS_URL = `${AUTH_BASE}/duel-formats`;
   const STREAMER_SCOREBOARD_STYLE_OPTIONS = ["Default", "Nallerheim"];
+  const ICON_CATEGORY_OPTIONS = [
+    "Players",
+    "GG",
+    "Local",
+    "WTCOC",
+    "ETCOC",
+    "Asian Cup",
+    "Copa America",
+    "CCL",
+    "MSO",
+    "KoC",
+    "World Championship",
+    "YouTube",
+  ];
 
   const SECTION_CONFIG = {
     associations: {
@@ -2414,7 +2428,12 @@
     const idField = createTextRow("id", item?.id || "", { readOnly: true });
     const nameField = createTextRow("name", item?.name || "");
     const iconLinkField = createTextRow("icon_link", item?.icon_link || "");
-    const categoryField = createTextRow("category", item?.category || "");
+    const categoryField = createSelectRow(
+      "category",
+      String(item?.category || "Players").trim() || "Players",
+      ICON_CATEGORY_OPTIONS,
+      false
+    );
     const associationField = createSelectOptionsRow(
       "association_id",
       String(item?.association_id || ""),
@@ -2450,6 +2469,20 @@
     form.appendChild(categoryField.row);
     form.appendChild(associationField.row);
     form.appendChild(streamerField.row);
+
+    const updateCategoryVisibility = () => {
+      const category = String(categoryField.select.value || "").trim();
+      const isLocal = category === "Local";
+      const isYouTube = category === "YouTube";
+      associationField.row.classList.toggle("hidden", !isLocal);
+      streamerField.row.classList.toggle("hidden", !isYouTube);
+      associationField.select.disabled = !isLocal;
+      streamerField.select.disabled = !isYouTube;
+      if (!isLocal) associationField.select.value = "";
+      if (!isYouTube) streamerField.select.value = "";
+    };
+    categoryField.select.addEventListener("change", updateCategoryVisibility);
+    updateCategoryVisibility();
 
     const actions = document.createElement("div");
     actions.className = "cp-edit-actions";
@@ -2503,7 +2536,7 @@
         id: Number.parseInt(String(idField.input.value || "").trim(), 10),
         name: String(nameField.input.value || "").trim(),
         icon_link: String(iconLinkField.input.value || "").trim(),
-        category: String(categoryField.input.value || "").trim(),
+        category: String(categoryField.select.value || "").trim(),
         association_id: String(associationField.select.value || "").trim(),
         streamer_id: Number.parseInt(String(streamerField.select.value || "").trim(), 10),
       };
@@ -2515,6 +2548,16 @@
       if (!payload.icon_link) {
         setStatus("icon_link is required.", true);
         return;
+      }
+      if (!ICON_CATEGORY_OPTIONS.includes(payload.category)) {
+        setStatus("Select a valid category.", true);
+        return;
+      }
+      if (payload.category !== "Local") {
+        payload.association_id = "";
+      }
+      if (payload.category !== "YouTube") {
+        payload.streamer_id = null;
       }
       if (!Number.isInteger(payload.streamer_id) || payload.streamer_id <= 0) {
         payload.streamer_id = null;
