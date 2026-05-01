@@ -182,6 +182,14 @@ const NEWS_AUDIT_FIELDS = [
   "short_description",
   "description",
 ];
+const ICON_AUDIT_FIELDS = [
+  "id",
+  "name",
+  "icon_link",
+  "category",
+  "association_id",
+  "streamer_id",
+];
 const MATCH_AUDIT_FIELDS = [
   "id",
   "tournament_id",
@@ -495,6 +503,38 @@ async function loadNewsById(newsId) {
     ...row,
     associations,
   };
+}
+
+async function loadIconById(iconId) {
+  const normalizedId = Number(iconId);
+  if (!Number.isInteger(normalizedId) || normalizedId <= 0) return null;
+  return dbGetAsync(
+    `
+      SELECT
+        i.id,
+        i.name,
+        i.icon_link,
+        i.category,
+        i.association_id,
+        i.streamer_id,
+        i.created_by,
+        i.updated_by,
+        i.created_at,
+        i.updated_at,
+        a.name AS association_name,
+        a.flag AS association_flag,
+        s.name AS streamer_name,
+        s.avatar AS streamer_avatar
+      FROM icons i
+      LEFT JOIN associations a
+        ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(i.association_id, '')))
+      LEFT JOIN streamers s
+        ON s.id = i.streamer_id
+      WHERE i.id = ?
+      LIMIT 1
+    `,
+    [normalizedId]
+  );
 }
 
 async function deleteNewsEditorsForProfile(profileId) {
@@ -2990,6 +3030,88 @@ function ensureNewsSchema() {
   });
 }
 
+function ensureIconsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS icons (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      icon_link TEXT NOT NULL,
+      category TEXT,
+      association_id TEXT,
+      streamer_id INTEGER,
+      created_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure icons schema", createErr);
+      return;
+    }
+
+    db.all("PRAGMA table_info(icons)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect icons schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "icons", "name", "TEXT");
+      addColumnIfMissing(columns, "icons", "icon_link", "TEXT");
+      addColumnIfMissing(columns, "icons", "category", "TEXT");
+      addColumnIfMissing(columns, "icons", "association_id", "TEXT");
+      addColumnIfMissing(columns, "icons", "streamer_id", "INTEGER");
+      addColumnIfMissing(columns, "icons", "created_by", "TEXT");
+      addColumnIfMissing(columns, "icons", "updated_by", "TEXT");
+      addColumnIfMissing(columns, "icons", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "icons", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+
+      db.run(
+        `
+          UPDATE icons
+          SET
+            category = NULLIF(trim(category), ''),
+            association_id = NULLIF(trim(association_id), ''),
+            streamer_id = CASE
+              WHEN streamer_id IS NULL OR trim(CAST(streamer_id AS TEXT)) = '' THEN NULL
+              ELSE streamer_id
+            END
+        `,
+        (normalizeErr) => {
+          if (normalizeErr) {
+            console.error("Failed to normalize icons schema data", normalizeErr);
+          }
+        }
+      );
+
+      db.run(
+        "CREATE INDEX IF NOT EXISTS idx_icons_category ON icons(category COLLATE NOCASE, name COLLATE NOCASE)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure index for icons.category", indexErr);
+          }
+        }
+      );
+      db.run(
+        "CREATE INDEX IF NOT EXISTS idx_icons_association_id ON icons(association_id COLLATE NOCASE)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure index for icons.association_id", indexErr);
+          }
+        }
+      );
+      db.run(
+        "CREATE INDEX IF NOT EXISTS idx_icons_streamer_id ON icons(streamer_id)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure index for icons.streamer_id", indexErr);
+          }
+        }
+      );
+    });
+  });
+}
+
 function ensureStreamsSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS streams (
@@ -3421,6 +3543,7 @@ db.serialize(() => {
           ensureStreamersSchema();
           ensureNewsEditorsSchema();
           ensureNewsSchema();
+          ensureIconsSchema();
           ensureStreamsSchema();
           ensureAuditTrailSchema();
         }
@@ -5383,6 +5506,213 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
       );
     }
   );
+});
+
+app.get("/icons", (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+  db.all(
+    `
+      SELECT
+        i.id,
+        i.name,
+        i.icon_link,
+        i.category,
+        i.association_id,
+        i.streamer_id,
+        i.created_by,
+        i.updated_by,
+        i.created_at,
+        i.updated_at,
+        a.name AS association_name,
+        a.flag AS association_flag,
+        s.name AS streamer_name,
+        s.avatar AS streamer_avatar
+      FROM icons i
+      LEFT JOIN associations a
+        ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(i.association_id, '')))
+      LEFT JOIN streamers s
+        ON s.id = i.streamer_id
+      ORDER BY COALESCE(i.category, '') COLLATE NOCASE ASC, i.name COLLATE NOCASE ASC, i.id ASC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, icons: rows || [] });
+    }
+  );
+});
+
+app.post("/icons", requireAdmin, async (req, res) => {
+  try {
+    const name = normalizeNullableText(req.body?.name);
+    const iconLink = normalizeNullableText(req.body?.icon_link ?? req.body?.iconLink);
+    const category = normalizeNullableText(req.body?.category);
+    const rawAssociationId = normalizeNullableText(req.body?.association_id ?? req.body?.associationId);
+    const streamerId = normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId);
+    const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
+
+    if (!name) {
+      return res.status(400).json({ ok: false, message: "name is required" });
+    }
+    if (!iconLink) {
+      return res.status(400).json({ ok: false, message: "icon_link is required" });
+    }
+
+    const associationId = rawAssociationId ? await resolveAssociationId(rawAssociationId) : null;
+    if (rawAssociationId && !associationId) {
+      return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
+    }
+
+    if (streamerId) {
+      const streamerRow = await dbGetAsync("SELECT id FROM streamers WHERE id = ? LIMIT 1", [streamerId]);
+      if (!streamerRow) {
+        return res.status(400).json({ ok: false, message: "streamer_id must reference an existing streamer" });
+      }
+    }
+
+    const insertResult = await dbRunAsync(
+      `
+        INSERT INTO icons (
+          name,
+          icon_link,
+          category,
+          association_id,
+          streamer_id,
+          created_by,
+          updated_by,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [name, iconLink, category, associationId, streamerId || null, actorPlayerId, actorPlayerId]
+    );
+    const createdRow = await loadIconById(insertResult?.lastID);
+    const auditActor = getAuditActor(req.user);
+    return logAuditEvent(
+      {
+        ...auditActor,
+        event_type: "icon.created",
+        entity_type: "icon",
+        action: "create",
+        record_id: String(createdRow?.id || insertResult?.lastID || ""),
+        changes: buildAuditCreationChanges(createdRow, ICON_AUDIT_FIELDS),
+      },
+      () => res.status(201).json({ ok: true, icon: createdRow || null })
+    );
+  } catch (error) {
+    console.error("Failed to create icon", error);
+    return res.status(500).json({ ok: false, message: "Failed to create icon" });
+  }
+});
+
+app.patch("/icons/:id", requireAdmin, async (req, res) => {
+  try {
+    const iconId = normalizePositiveInteger(req.params.id);
+    const payloadId = normalizePositiveInteger(req.body?.id);
+    const name = normalizeNullableText(req.body?.name);
+    const iconLink = normalizeNullableText(req.body?.icon_link ?? req.body?.iconLink);
+    const category = normalizeNullableText(req.body?.category);
+    const rawAssociationId = normalizeNullableText(req.body?.association_id ?? req.body?.associationId);
+    const streamerId = normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId);
+    const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
+
+    if (!iconId) {
+      return res.status(400).json({ ok: false, message: "Invalid icon id" });
+    }
+    if (payloadId && payloadId !== iconId) {
+      return res.status(400).json({ ok: false, message: "Icon id cannot be changed" });
+    }
+    if (!name) {
+      return res.status(400).json({ ok: false, message: "name is required" });
+    }
+    if (!iconLink) {
+      return res.status(400).json({ ok: false, message: "icon_link is required" });
+    }
+
+    const beforeRow = await loadIconById(iconId);
+    if (!beforeRow) {
+      return res.status(404).json({ ok: false, message: "Icon not found" });
+    }
+
+    const associationId = rawAssociationId ? await resolveAssociationId(rawAssociationId) : null;
+    if (rawAssociationId && !associationId) {
+      return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
+    }
+
+    if (streamerId) {
+      const streamerRow = await dbGetAsync("SELECT id FROM streamers WHERE id = ? LIMIT 1", [streamerId]);
+      if (!streamerRow) {
+        return res.status(400).json({ ok: false, message: "streamer_id must reference an existing streamer" });
+      }
+    }
+
+    await dbRunAsync(
+      `
+        UPDATE icons
+        SET
+          name = ?,
+          icon_link = ?,
+          category = ?,
+          association_id = ?,
+          streamer_id = ?,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [name, iconLink, category, associationId, streamerId || null, actorPlayerId, iconId]
+    );
+    const updatedRow = await loadIconById(iconId);
+    const changes = buildAuditChanges(beforeRow, updatedRow, ICON_AUDIT_FIELDS);
+    if (!Object.keys(changes).length) {
+      return res.json({ ok: true, icon: updatedRow || null });
+    }
+    return logAuditEvent(
+      {
+        ...getAuditActor(req.user),
+        event_type: "icon.updated",
+        entity_type: "icon",
+        action: "update",
+        record_id: String(iconId),
+        changes,
+      },
+      () => res.json({ ok: true, icon: updatedRow || null })
+    );
+  } catch (error) {
+    console.error("Failed to update icon", error);
+    return res.status(500).json({ ok: false, message: "Failed to update icon" });
+  }
+});
+
+app.delete("/icons/:id", requireAdmin, async (req, res) => {
+  try {
+    const iconId = normalizePositiveInteger(req.params.id);
+    if (!iconId) {
+      return res.status(400).json({ ok: false, message: "Invalid icon id" });
+    }
+
+    const beforeRow = await loadIconById(iconId);
+    if (!beforeRow) {
+      return res.status(404).json({ ok: false, message: "Icon not found" });
+    }
+
+    await dbRunAsync("DELETE FROM icons WHERE id = ?", [iconId]);
+    return logAuditEvent(
+      {
+        ...getAuditActor(req.user),
+        event_type: "icon.deleted",
+        entity_type: "icon",
+        action: "delete",
+        record_id: String(iconId),
+        changes: buildAuditDeletionChanges(beforeRow, ICON_AUDIT_FIELDS),
+      },
+      () => res.json({ ok: true })
+    );
+  } catch (error) {
+    console.error("Failed to delete icon", error);
+    return res.status(500).json({ ok: false, message: "Failed to delete icon" });
+  }
 });
 
 app.get("/news-editors", (req, res, next) => {

@@ -19,7 +19,7 @@
     background: white;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 7px;
     border-top: 1px solid #ccc;
     padding: 7px 5px;
     font-size: 13px;
@@ -27,6 +27,9 @@
   }
   .news-row:hover {
     background-color: #f9f9f9;
+  }
+  .news-row-high {
+    cursor: pointer;
   }
   .news-icon {
     height: auto;
@@ -40,8 +43,9 @@
     width: 40px;
   }
   .news-icon-high {
-    width: 60px;
-    cursor: zoom-in;
+    width: auto;
+    height: 100px;
+    cursor: pointer;
   }
   .news-content {
     flex: 1;
@@ -50,10 +54,11 @@
     min-width: 0;
   }
   .news-content-high .news-title {
-    font-size: 14px;
+    font-size: 16px;
+    line-height: 19px;
   }
   .news-title-high {
-    font-size: 14px;
+    font-size: 16px;
   }
   .news-title {
     flex-grow: 1;
@@ -67,6 +72,21 @@
   .news-title a:hover {
     color: #0e4f73;
     text-decoration: none;
+  }
+  .news-title-high a,
+  .news-title-high span {
+    color: #333;
+    font-weight: 600;
+  }
+  .news-title-high a:hover {
+    color: #333;
+  }
+  .news-short-description-high {
+    color: #777;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 17px;
+    margin-top: 2px;
   }
   .news-chevron {
     cursor: pointer;
@@ -98,6 +118,14 @@
   .news-description-content p:last-child {
     margin-bottom: 0;
   }
+  .news-description-content a {
+    color: #146997;
+    text-decoration: none;
+  }
+  .news-description-content a:hover {
+    color: #0e4f73;
+    text-decoration: none;
+  }
   .news-description-time {
     font-size: 11px;
     color: #545454;
@@ -108,7 +136,7 @@
   .news-description-date {
     font-size: 11px;
     color: #555;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
   .news-state {
     background: #fff;
@@ -146,18 +174,89 @@
     border-radius: 4px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
   }
+  .news-detail-card {
+    background: #fff;
+    padding: 18px 12px;
+  }
+  .news-detail-title {
+    color: #800020;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    line-height: 1.1em;
+    margin: 0 0 12px;
+    text-transform: uppercase;
+  }
+  .news-detail-meta {
+    align-items: center;
+    color: #555;
+    display: flex;
+    font-size: 13px;
+    gap: 12px;
+    justify-content: space-between;
+    line-height: 18px;
+    margin-bottom: 14px;
+  }
+  .news-detail-player,
+  .news-detail-date {
+    min-width: 0;
+  }
+  .news-detail-date {
+    margin-left: auto;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .news-detail-player-link {
+    color: #146997;
+    text-decoration: none;
+  }
+  .news-detail-player-link:hover {
+    color: #0e4f73;
+    text-decoration: none;
+  }
+  .news-detail-short-description {
+    color: #555;
+    font-size: 18px;
+    line-height: 1.3;
+    margin-bottom: 16px;
+  }
+  .news-detail-image {
+    cursor: zoom-in;
+    display: block;
+    height: auto;
+    margin-bottom: 16px;
+    width: 100%;
+  }
+  .news-detail-description {
+    color: #333;
+    font-size: 16px;
+    line-height: 1.35;
+  }
+  .news-detail-description p {
+    margin: 0 0 10px;
+  }
+  .news-detail-description p:last-child {
+    margin-bottom: 0;
+  }
+  .news-detail-description a {
+    color: #146997;
+    text-decoration: none;
+  }
+  .news-detail-description a:hover {
+    color: #0e4f73;
+    text-decoration: none;
+  }
 </style>
 
-<div class="news-header">
-  <span class="news-header-title">Carcassonne News</span>
-</div>
 <div id="news-container"></div>
 
 <script>
   const NEWS_PUBLIC_URL = "https://api.carcassonne.gg/public/news";
+  const PLAYERS_PUBLIC_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
   const newsContainer = document.getElementById("news-container");
   let imageModal;
   let allNewsItems = [];
+  let playersById = new Map();
   let hasNewsDataLoaded = false;
 
   const closeImageModal = () => {
@@ -195,6 +294,42 @@
     img.src = src;
     img.alt = alt || "News preview";
     modal.classList.add("open");
+  };
+
+  const getSelectedNewsId = () => {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("id") || params.get("news_id") || "").trim();
+  };
+
+  const getNewsDetailUrl = (newsItem) => {
+    const newsId = String(newsItem?.id || "").trim();
+    if (!newsId) return "";
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("id", newsId);
+    return url.toString();
+  };
+
+  const getNewsCreatorName = (newsItem) => {
+    const directName = String(
+      newsItem?.player_name ||
+      newsItem?.created_by_name ||
+      newsItem?.creator_name ||
+      newsItem?.author_name ||
+      newsItem?.author ||
+      newsItem?.user_name ||
+      newsItem?.username ||
+      ""
+    ).trim();
+
+    if (directName) return directName;
+
+    const creatorId = String(newsItem?.created_by || newsItem?.creator || "").trim();
+    return playersById.get(creatorId) || creatorId;
+  };
+
+  const getNewsCreatorId = (newsItem) => {
+    return String(newsItem?.created_by || newsItem?.creator || newsItem?.author_id || newsItem?.user_id || "").trim();
   };
 
   const normalizeImportance = (value) => {
@@ -279,6 +414,99 @@
     newsContainer.appendChild(state);
   };
 
+  function renderNewsDetail(newsItem) {
+    if (!newsContainer) return;
+
+    newsContainer.innerHTML = "";
+
+    const card = document.createElement("article");
+    card.className = "news-detail-card";
+
+    const titleText = String(newsItem.title || newsItem.short_title || "").trim() || "News";
+    const title = document.createElement("h1");
+    title.className = "news-detail-title";
+    title.textContent = titleText;
+    card.appendChild(title);
+
+    const meta = document.createElement("div");
+    meta.className = "news-detail-meta";
+
+    const creatorName = getNewsCreatorName(newsItem);
+    if (creatorName) {
+      const player = document.createElement("div");
+      player.className = "news-detail-player";
+      const creatorId = getNewsCreatorId(newsItem);
+      if (creatorId) {
+        const playerLink = document.createElement("a");
+        playerLink.className = "news-detail-player-link";
+        playerLink.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(creatorId)}`;
+        playerLink.textContent = creatorName;
+        player.appendChild(playerLink);
+      } else {
+        player.textContent = creatorName;
+      }
+      meta.appendChild(player);
+    }
+
+    const dateText = formatDisplayDate(getNewsTimestampValue(newsItem));
+    if (dateText) {
+      const date = document.createElement("div");
+      date.className = "news-detail-date";
+      date.textContent = dateText;
+      meta.appendChild(date);
+    }
+
+    if (meta.children.length) {
+      card.appendChild(meta);
+    }
+
+    const shortDescriptionText = String(newsItem.short_description || "").trim();
+    if (shortDescriptionText) {
+      const shortDescription = document.createElement("div");
+      shortDescription.className = "news-detail-short-description";
+      shortDescription.textContent = shortDescriptionText;
+      card.appendChild(shortDescription);
+    }
+
+    const imageUrl = String(newsItem.image || newsItem.icon || newsItem.icon1 || "").trim();
+    if (imageUrl) {
+      const image = document.createElement("img");
+      image.className = "news-detail-image";
+      image.src = imageUrl;
+      image.alt = titleText;
+      image.addEventListener("click", () => {
+        openImageModal(imageUrl, titleText);
+      });
+      card.appendChild(image);
+    }
+
+    const descriptionHtml = String(newsItem.description || "").trim();
+    if (descriptionHtml) {
+      const description = document.createElement("div");
+      description.className = "news-detail-description";
+      description.innerHTML = descriptionHtml;
+      card.appendChild(description);
+    }
+
+    newsContainer.appendChild(card);
+  }
+
+  function renderNewsView() {
+    const selectedNewsId = getSelectedNewsId();
+    if (!selectedNewsId) {
+      renderNewsList();
+      return;
+    }
+
+    const newsItem = allNewsItems.find(item => String(item?.id || "").trim() === selectedNewsId);
+    if (!newsItem) {
+      setNewsState("News not found.");
+      return;
+    }
+
+    renderNewsDetail(newsItem);
+  }
+
   function renderNewsList() {
     if (!newsContainer) return;
 
@@ -296,6 +524,9 @@
       row.className = "news-row";
 
       const normalizedImportance = normalizeImportance(newsItem.significance || newsItem.importance);
+      if (normalizedImportance === "high") {
+        row.classList.add("news-row-high");
+      }
       const dateValue = getNewsTimestampValue(newsItem);
       const displayDate = (normalizedImportance === "high" || normalizedImportance === "medium")
         ? formatDisplayDate(dateValue)
@@ -311,7 +542,10 @@
         if (normalizedImportance === "high") {
           icon.addEventListener("click", event => {
             event.stopPropagation();
-            openImageModal(iconUrl, icon.alt);
+            const detailUrl = getNewsDetailUrl(newsItem);
+            if (detailUrl) {
+              window.location.href = detailUrl;
+            }
           });
         }
         row.appendChild(icon);
@@ -338,7 +572,7 @@
 
       const titleText = String(newsItem.title || newsItem.short_title || "").trim() || "News";
       const linkValue = String(newsItem.link || "").trim();
-      if (linkValue) {
+      if (linkValue && normalizedImportance !== "high") {
         const link = document.createElement("a");
         link.textContent = titleText;
         link.href = linkValue;
@@ -357,7 +591,24 @@
       row.appendChild(contentWrapper);
 
       const descriptionHtml = String(newsItem.description || "").trim();
-      if (descriptionHtml) {
+      const shortDescriptionText = String(newsItem.short_description || "").trim();
+      if (shortDescriptionText && normalizedImportance === "high") {
+        const shortDescription = document.createElement("div");
+        shortDescription.className = "news-short-description-high";
+        shortDescription.textContent = shortDescriptionText;
+        contentWrapper.appendChild(shortDescription);
+      }
+
+      if (normalizedImportance === "high") {
+        row.addEventListener("click", () => {
+          const detailUrl = getNewsDetailUrl(newsItem);
+          if (detailUrl) {
+            window.location.href = detailUrl;
+          }
+        });
+      }
+
+      if (descriptionHtml && normalizedImportance !== "high") {
         const chevron = document.createElement("i");
         chevron.className = "fa fa-chevron-down news-chevron";
         row.appendChild(chevron);
@@ -375,9 +626,6 @@
 
         const descriptionContent = document.createElement("div");
         descriptionContent.className = "news-description-content";
-        if (normalizedImportance === "high") {
-          descriptionContent.classList.add("news-description-content-high");
-        }
         descriptionContent.innerHTML = descriptionHtml;
         descriptionBlock.appendChild(descriptionContent);
 
@@ -426,21 +674,40 @@
   function fetchNews() {
     setNewsState("Loading news...");
 
-    fetch(NEWS_PUBLIC_URL, { method: "GET" })
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`News request failed: ${res.status}`);
-        }
+    Promise.allSettled([
+      fetch(NEWS_PUBLIC_URL, { method: "GET" }).then(res => {
+        if (!res.ok) throw new Error(`News request failed: ${res.status}`);
+        return res.json();
+      }),
+      fetch(PLAYERS_PUBLIC_URL, { method: "GET" }).then(res => {
+        if (!res.ok) throw new Error(`Players request failed: ${res.status}`);
         return res.json();
       })
-      .then(data => {
-        allNewsItems = Array.isArray(data.news) ? [...data.news] : [];
+    ])
+      .then(([newsResult, playersResult]) => {
+        if (playersResult.status === "fulfilled") {
+          const playerEntries = Array.isArray(playersResult.value?.gg_profiles) ? playersResult.value.gg_profiles : [];
+          playersById = new Map();
+          playerEntries.forEach(player => {
+            const playerId = String(player?.id || player?.player_id || "").trim();
+            const playerName = String(player?.bga_nickname || player?.player || "").trim();
+            if (playerId && playerName) {
+              playersById.set(playerId, playerName);
+            }
+          });
+        }
+
+        if (newsResult.status !== "fulfilled") {
+          throw newsResult.reason || new Error("News request failed");
+        }
+
+        allNewsItems = Array.isArray(newsResult.value.news) ? [...newsResult.value.news] : [];
         allNewsItems.sort((a, b) => {
           const byTime = parseDateTime(getNewsTimestampValue(b)) - parseDateTime(getNewsTimestampValue(a));
           return byTime || Number(b?.id || 0) - Number(a?.id || 0);
         });
         hasNewsDataLoaded = true;
-        renderNewsList();
+        renderNewsView();
       })
       .catch(err => {
         hasNewsDataLoaded = true;

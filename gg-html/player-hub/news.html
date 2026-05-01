@@ -316,6 +316,35 @@
     color: #98a2b3;
   }
 
+  .cp-news-link-dialog-row {
+    display: grid;
+    gap: 4px;
+  }
+
+  .cp-news-link-dialog-row label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .cp-news-link-dialog-row input {
+    width: 100%;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    height: 30px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .cp-news-link-dialog-error {
+    min-height: 16px;
+    color: #c62828;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
   .cp-news-form .cp-edit-row--description textarea,
   .cp-news-form .cp-edit-row--description .cp-news-editor-area {
     min-height: 300px;
@@ -596,8 +625,7 @@
     "Local",
     "WTCOC",
     "ETCOC",
-    "Asian",
-    "Cup",
+    "Asian Cup",
     "Copa America",
     "CCL",
     "MSO",
@@ -840,6 +868,232 @@
       updateToolbarState();
     };
 
+    let savedEditorRange = null;
+    let isLinkDialogOpen = false;
+
+    const getSelectionRange = () => {
+      const selection = window.getSelection();
+      if (!selection || !selection.rangeCount) return null;
+      const range = selection.getRangeAt(0);
+      const container = range.commonAncestorContainer;
+      const containerEl = container.nodeType === Node.ELEMENT_NODE ? container : container.parentElement;
+      return containerEl && editor.contains(containerEl) ? range.cloneRange() : null;
+    };
+
+    const rememberEditorSelection = () => {
+      const range = getSelectionRange();
+      if (range) savedEditorRange = range.cloneRange();
+      return range;
+    };
+
+    const restoreSelectionRange = (range) => {
+      if (!range) return;
+      editor.focus();
+      const selection = window.getSelection();
+      if (!selection) return;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    };
+
+    const getLinkFromNode = (node) => {
+      const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+      const link = element?.closest?.("a") || null;
+      return link && editor.contains(link) ? link : null;
+    };
+
+    const getLinkFromRange = (range) => {
+      if (!range) return null;
+      const nodes = [
+        range.startContainer,
+        range.endContainer,
+        range.commonAncestorContainer,
+      ];
+      for (const node of nodes) {
+        const link = getLinkFromNode(node);
+        if (link) return link;
+      }
+      return null;
+    };
+
+    const normalizeLinkHref = (value) => {
+      const href = String(value || "").trim();
+      return /^(https?:\/\/|mailto:)/i.test(href) ? href : "";
+    };
+
+    const createLinkNode = (href) => {
+      const link = document.createElement("a");
+      link.href = href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      return link;
+    };
+
+    const placeCaretAfter = (node) => {
+      if (!node?.parentNode) return;
+      const range = document.createRange();
+      range.setStartAfter(node);
+      range.collapse(true);
+      restoreSelectionRange(range);
+      savedEditorRange = range.cloneRange();
+    };
+
+    const applyLinkToRange = (range, href) => {
+      let targetRange = range ? range.cloneRange() : null;
+      if (!targetRange || !editor.contains(targetRange.commonAncestorContainer)) {
+        targetRange = document.createRange();
+        targetRange.selectNodeContents(editor);
+        targetRange.collapse(false);
+      }
+      const link = createLinkNode(href);
+      if (targetRange.collapsed) {
+        link.textContent = href;
+        targetRange.insertNode(link);
+        placeCaretAfter(link);
+        updateToolbarState();
+        return;
+      }
+      const contents = targetRange.extractContents();
+      link.appendChild(contents);
+      targetRange.insertNode(link);
+      placeCaretAfter(link);
+      updateToolbarState();
+    };
+
+    const removeLinkNode = (link) => {
+      if (!link || !editor.contains(link)) return;
+      const fragment = document.createDocumentFragment();
+      while (link.firstChild) fragment.appendChild(link.firstChild);
+      const marker = fragment.lastChild || link.previousSibling || link.parentNode;
+      link.replaceWith(fragment);
+      if (marker?.parentNode) placeCaretAfter(marker);
+      updateToolbarState();
+    };
+
+    const showLinkDialog = () => {
+      const savedRange = rememberEditorSelection() || (savedEditorRange ? savedEditorRange.cloneRange() : null);
+      const selectedLink = getLinkFromRange(savedRange);
+      isLinkDialogOpen = true;
+
+      const overlay = document.createElement("div");
+      overlay.style.position = "fixed";
+      overlay.style.inset = "0";
+      overlay.style.background = "rgba(24, 31, 41, 0.42)";
+      overlay.style.display = "flex";
+      overlay.style.alignItems = "center";
+      overlay.style.justifyContent = "center";
+      overlay.style.padding = "16px";
+      overlay.style.zIndex = "1000";
+
+      const dialog = document.createElement("div");
+      dialog.style.width = "100%";
+      dialog.style.maxWidth = "420px";
+      dialog.style.background = "#fff";
+      dialog.style.border = "1px solid #d8dee8";
+      dialog.style.borderRadius = "8px";
+      dialog.style.boxShadow = "0 16px 36px rgba(15, 28, 48, 0.22)";
+      dialog.style.padding = "16px";
+      dialog.style.display = "grid";
+      dialog.style.gap = "12px";
+
+      const title = document.createElement("div");
+      title.textContent = selectedLink ? "Edit link" : "Add link";
+      title.style.fontSize = "16px";
+      title.style.fontWeight = "700";
+      title.style.color = "#222";
+
+      const row = document.createElement("div");
+      row.className = "cp-news-link-dialog-row";
+      const label = document.createElement("label");
+      label.textContent = "URL";
+      const input = document.createElement("input");
+      input.type = "url";
+      input.value = selectedLink ? String(selectedLink.getAttribute("href") || "") : "";
+      input.placeholder = "https://";
+      row.appendChild(label);
+      row.appendChild(input);
+
+      const error = document.createElement("div");
+      error.className = "cp-news-link-dialog-error";
+
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.justifyContent = "flex-end";
+      actions.style.gap = "8px";
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "cp-btn cp-btn-danger";
+      removeBtn.textContent = "Remove link";
+      removeBtn.style.marginLeft = "0";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "cp-btn cp-btn-secondary";
+      cancelBtn.textContent = "Cancel";
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "cp-btn cp-btn-primary";
+      saveBtn.textContent = "Save";
+
+      const closeModal = () => {
+        isLinkDialogOpen = false;
+        overlay.remove();
+        editor.focus();
+      };
+
+      cancelBtn.addEventListener("click", closeModal);
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) closeModal();
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeModal();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          saveBtn.click();
+        }
+      });
+
+      removeBtn.addEventListener("click", () => {
+        removeLinkNode(selectedLink);
+        closeModal();
+      });
+
+      saveBtn.addEventListener("click", () => {
+        error.textContent = "";
+        const href = normalizeLinkHref(input.value);
+        if (!href) {
+          error.textContent = "Use an https://, http://, or mailto: link.";
+          input.focus();
+          return;
+        }
+
+        if (selectedLink) {
+          selectedLink.href = href;
+          selectedLink.target = "_blank";
+          selectedLink.rel = "noopener noreferrer";
+          updateToolbarState();
+          closeModal();
+          return;
+        }
+
+        applyLinkToRange(savedRange, href);
+        closeModal();
+      });
+
+      if (selectedLink) actions.appendChild(removeBtn);
+      actions.appendChild(cancelBtn);
+      actions.appendChild(saveBtn);
+      dialog.appendChild(title);
+      dialog.appendChild(row);
+      dialog.appendChild(error);
+      dialog.appendChild(actions);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+      input.focus();
+      input.select();
+    };
+
     const makeButton = (label, iconClass, title, onClick) => {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -849,7 +1103,10 @@
       const icon = document.createElement("i");
       icon.className = iconClass;
       btn.appendChild(icon);
-      btn.addEventListener("mousedown", (event) => event.preventDefault());
+      btn.addEventListener("mousedown", (event) => {
+        rememberEditorSelection();
+        event.preventDefault();
+      });
       btn.addEventListener("click", onClick);
       toolbar.appendChild(btn);
       return btn;
@@ -861,24 +1118,7 @@
       ordered: makeButton("Numbered list", "fa-solid fa-list-ol", "Numbered list (Ctrl/Cmd+Shift+7)", () => runCommand("insertOrderedList")),
       unordered: makeButton("Bullet list", "fa-solid fa-list-ul", "Bullet list (Ctrl/Cmd+Shift+8)", () => runCommand("insertUnorderedList")),
       link: makeButton("Link", "fa-solid fa-link", "Add or edit link", () => {
-        const selectedText = String(window.getSelection()?.toString() || "").trim();
-        const currentHref = document.queryCommandValue("createLink") || "";
-        const href = window.prompt("Link URL", currentHref || "https://");
-        if (href === null) return;
-        const normalizedHref = String(href || "").trim();
-        if (!normalizedHref) {
-          runCommand("unlink");
-          return;
-        }
-        if (!/^https?:\/\//i.test(normalizedHref) && !/^mailto:/i.test(normalizedHref)) {
-          window.alert("Use an https://, http://, or mailto: link.");
-          return;
-        }
-        if (!selectedText) {
-          runCommand("insertHTML", `<a href="${escapeHtml(normalizedHref)}">${escapeHtml(normalizedHref)}</a>`);
-          return;
-        }
-        runCommand("createLink", normalizedHref);
+        showLinkDialog();
       }),
     };
 
@@ -940,9 +1180,18 @@
     });
 
     editor.addEventListener("keyup", updateToolbarState);
-    editor.addEventListener("mouseup", updateToolbarState);
-    editor.addEventListener("input", updateToolbarState);
-    editor.addEventListener("blur", normalizeEditorHtml);
+    editor.addEventListener("mouseup", () => {
+      rememberEditorSelection();
+      updateToolbarState();
+    });
+    editor.addEventListener("input", () => {
+      rememberEditorSelection();
+      updateToolbarState();
+    });
+    editor.addEventListener("click", rememberEditorSelection);
+    editor.addEventListener("blur", () => {
+      if (!isLinkDialogOpen) normalizeEditorHtml();
+    });
 
     root.appendChild(toolbar);
     root.appendChild(editor);
@@ -1194,6 +1443,7 @@
     const closeAllDropdowns = () => dropdowns.forEach((dropdown) => dropdown.close());
 
     const createSingleSelect = (initialValue, options, cfg = {}) => {
+      const isSearchable = cfg.searchable !== false;
       const normalizedOptions = (Array.isArray(options) ? options : [])
         .map((opt) => ({
           value: String(opt?.value ?? "").trim(),
@@ -1225,7 +1475,7 @@
       searchInput.type = "text";
       searchInput.placeholder = "Type to filter...";
       searchWrap.appendChild(searchInput);
-      menu.appendChild(searchWrap);
+      if (isSearchable) menu.appendChild(searchWrap);
 
       const renderButtonContent = () => {
         btnContent.innerHTML = "";
@@ -1319,7 +1569,7 @@
         menu.classList.add("open");
         menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
         btn.classList.add("open");
-        if (shouldAutoFocusSearch()) {
+        if (isSearchable && shouldAutoFocusSearch()) {
           try {
             searchInput.focus({ preventScroll: true });
           } catch (_error) {
@@ -1327,13 +1577,15 @@
           }
         }
       });
-      searchInput.addEventListener("click", (event) => event.stopPropagation());
-      searchInput.addEventListener("keydown", (event) => event.stopPropagation());
-      searchInput.addEventListener("input", () => {
-        filterQuery = String(searchInput.value || "");
-        renderMenu();
-        menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
-      });
+      if (isSearchable) {
+        searchInput.addEventListener("click", (event) => event.stopPropagation());
+        searchInput.addEventListener("keydown", (event) => event.stopPropagation());
+        searchInput.addEventListener("input", () => {
+          filterQuery = String(searchInput.value || "");
+          renderMenu();
+          menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
+        });
+      }
       document.addEventListener("click", (event) => {
         if (!root.contains(event.target)) api.close();
       });
@@ -1508,14 +1760,14 @@
     const significanceInput = createSingleSelect(
       String(source?.significance || "Regular").trim() || "Regular",
       NEWS_SIGNIFICANCE_OPTIONS.map((value) => ({ value, label: value })),
-      { placeholderLabel: "Select significance" }
+      { placeholderLabel: "Select significance", searchable: false }
     );
     addRow("Significance", significanceInput.root);
 
     const categoryInput = createSingleSelect(
       String(source?.category || "").trim(),
       [{ value: "", label: "Not selected" }].concat(NEWS_CATEGORY_OPTIONS.map((value) => ({ value, label: value }))),
-      { placeholderLabel: "Select category" }
+      { placeholderLabel: "Select category", searchable: false }
     );
     addRow("Category", categoryInput.root);
 
@@ -1529,7 +1781,7 @@
     const tournamentInput = createSingleSelect(
       String(source?.tournament_id || "").trim(),
       tournamentOptions,
-      { placeholderLabel: "Select tournament" }
+      { placeholderLabel: "Select tournament", searchable: false }
     );
     addRow("Tournament", tournamentInput.root);
 
@@ -1552,17 +1804,17 @@
     imageInput.value = String(source?.image || "").trim();
     addRow("Image", imageInput);
 
-    const titleInput = document.createElement("input");
-    titleInput.type = "text";
-    titleInput.maxLength = 100;
-    titleInput.value = String(source?.title || "").trim();
-    addRow("Title", titleInput);
-
     const shortTitleInput = document.createElement("input");
     shortTitleInput.type = "text";
     shortTitleInput.maxLength = 40;
     shortTitleInput.value = String(source?.short_title || "").trim();
     addRow("Short title", shortTitleInput);
+
+    const titleInput = document.createElement("input");
+    titleInput.type = "text";
+    titleInput.maxLength = 100;
+    titleInput.value = String(source?.title || "").trim();
+    addRow("Title", titleInput, "cp-edit-row--full");
 
     const shortDescriptionInput = document.createElement("input");
     shortDescriptionInput.type = "text";
