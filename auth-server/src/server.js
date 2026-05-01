@@ -203,6 +203,7 @@ const ICON_CATEGORIES = [
   "KoC",
   "World Championship",
   "YouTube",
+  "Arena",
 ];
 const MATCH_AUDIT_FIELDS = [
   "id",
