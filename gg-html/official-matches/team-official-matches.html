@@ -397,6 +397,21 @@ code {
     border-radius: 1px;
   }
 
+  .match-tournament-logo {
+    min-width: 34px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .match-tournament-logo img {
+    height: 25px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+  }
+
   .teams {
     flex-grow: 1;
     display: flex;
@@ -1058,7 +1073,8 @@ function readTeamOfficialMatchesFiltersFromUrl() {
   return {
     association: String(params.get("association") || "").trim().toUpperCase(),
     year: String(params.get("year") || "").trim(),
-    player: String(params.get("player") || "").trim()
+    player: String(params.get("player") || "").trim(),
+    tournament: String(params.get("tournament") || "").trim()
   };
 }
 
@@ -1078,6 +1094,7 @@ function buildMatchesUrl() {
   if (filters.association) url.searchParams.set("association", filters.association);
   if (filters.year) url.searchParams.set("year", filters.year);
   if (filters.player) url.searchParams.set("player", filters.player);
+  if (filters.tournament) url.searchParams.set("tournament", filters.tournament);
   return url.toString();
 }
 
@@ -1446,6 +1463,21 @@ function createMatchElement(match, lineups, options = {}) {
   divider.className = "divider-vertical";
   row.appendChild(divider);
 
+  const tournamentLogo = String(match?.tournament_logo || "").trim();
+  const tournamentLogoDiv = document.createElement("div");
+  tournamentLogoDiv.className = "match-tournament-logo";
+  if (tournamentLogo) {
+    const logo = document.createElement("img");
+    logo.src = tournamentLogo;
+    logo.alt = String(match?.tournament_name || match?.tournament_short_title || "").trim();
+    tournamentLogoDiv.appendChild(logo);
+  }
+  row.appendChild(tournamentLogoDiv);
+
+  const tournamentDivider = document.createElement("div");
+  tournamentDivider.className = "divider-vertical";
+  row.appendChild(tournamentDivider);
+
   const teamsDiv = document.createElement("div");
   teamsDiv.className = "teams";
 
@@ -1719,7 +1751,8 @@ function renderAllSectionsFromData(data) {
   if (!container) return;
   container.innerHTML = "";
 
-  const matches = Array.isArray(data?.matches) ? data.matches : [];
+  const matches = (Array.isArray(data?.matches) ? data.matches : [])
+    .filter((match) => parseUtc(match?.time_utc));
 
   const lineupMap = buildLineupMap(
     (Array.isArray(data?.duels) ? data.duels : [])

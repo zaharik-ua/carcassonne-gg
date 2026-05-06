@@ -9198,6 +9198,7 @@ app.get("/public/team-official-matches", async (req, res, next) => {
   const normalizeText = (value) => String(value ?? "").trim();
   const associationFilter = normalizeText(req?.query?.association).toUpperCase();
   const playerFilter = normalizeText(req?.query?.player);
+  const tournamentFilter = normalizeText(req?.query?.tournament);
   const rawYear = parseInt(normalizeText(req?.query?.year), 10);
   const yearFilter = Number.isInteger(rawYear) && rawYear >= 2000 && rawYear <= 3000
     ? String(rawYear)
@@ -9229,6 +9230,11 @@ app.get("/public/team-official-matches", async (req, res, next) => {
       )
     `);
     matchFilterParams.push(associationFilter, associationFilter);
+  }
+
+  if (tournamentFilter) {
+    matchFilterClauses.push("upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))");
+    matchFilterParams.push(tournamentFilter);
   }
 
   if (yearFilter) {
@@ -9513,6 +9519,63 @@ app.get("/public/team-official-matches", async (req, res, next) => {
         status: row.status,
         games: gamesByDuelId.get(String(row.id || "").trim()) || [],
       })),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/public/team-official-matches/filters", async (_req, res, next) => {
+  const officialTeamTournamentWhereSql = `
+    lower(trim(COALESCE(NULLIF(trim(t.tournament_type), ''), 'Teams'))) IN ('team', 'teams')
+    AND lower(trim(COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), 'Friendly'))) IN ('2', 'closed', 'official')
+  `;
+
+  try {
+    const [yearRows, tournamentRows] = await Promise.all([
+      dbAllAsync(
+        `
+          SELECT DISTINCT strftime('%Y', datetime(m.time_utc)) AS year
+          FROM matches m
+          JOIN tournaments t
+            ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(m.tournament_id, '')))
+          WHERE m.deleted_at IS NULL
+            AND ${officialTeamTournamentWhereSql}
+            AND trim(COALESCE(m.time_utc, '')) <> ''
+            AND strftime('%Y', datetime(m.time_utc)) IS NOT NULL
+          ORDER BY year DESC
+        `
+      ),
+      dbAllAsync(
+        `
+          SELECT DISTINCT
+            t.id,
+            t.name,
+            t.short_title,
+            t.logo
+          FROM tournaments t
+          JOIN matches m
+            ON upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(COALESCE(t.id, '')))
+          WHERE m.deleted_at IS NULL
+            AND ${officialTeamTournamentWhereSql}
+          ORDER BY lower(trim(COALESCE(NULLIF(t.short_title, ''), NULLIF(t.name, ''), t.id))) ASC
+        `
+      ),
+    ]);
+
+    return res.json({
+      ok: true,
+      years: yearRows
+        .map((row) => String(row?.year || "").trim())
+        .filter(Boolean),
+      tournaments: tournamentRows
+        .map((row) => ({
+          id: String(row?.id || "").trim(),
+          name: String(row?.name || "").trim(),
+          short_title: String(row?.short_title || "").trim(),
+          logo: String(row?.logo || "").trim(),
+        }))
+        .filter((row) => row.id),
     });
   } catch (error) {
     return next(error);
