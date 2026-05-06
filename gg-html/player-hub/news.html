@@ -620,17 +620,18 @@
   const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
   const NEWS_SIGNIFICANCE_OPTIONS = ["Regular", "Important", "Major"];
   const NEWS_CATEGORY_OPTIONS = [
-    "Players",
-    "GG",
-    "Local",
-    "WTCOC",
-    "ETCOC",
+    "Arena",
     "Asian Cup",
-    "Copa America",
     "CCL",
-    "MSO",
+    "Copa America",
+    "ETCOC",
+    "GG",
     "KoC",
+    "Local",
+    "MSO",
+    "Players",
     "World Championship",
+    "WTCOC",
   ];
   const CAPTAIN_VIEWS = {
     NEWS: "news",
@@ -759,6 +760,16 @@
     const hh = String(d.getUTCHours()).padStart(2, "0");
     const mi = String(d.getUTCMinutes()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  }
+
+  function getCurrentUtcHourDatetimeLocal() {
+    const d = new Date();
+    d.setUTCMinutes(0, 0, 0);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    const hh = String(d.getUTCHours()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}T${hh}:00`;
   }
 
   function toUtcIsoFromDatetimeLocal(raw) {
@@ -1796,7 +1807,10 @@
 
     const timeInput = document.createElement("input");
     timeInput.type = "datetime-local";
-    timeInput.value = toDatetimeLocalFromUtc(source?.time_utc);
+    timeInput.required = true;
+    timeInput.value = isCreateMode
+      ? getCurrentUtcHourDatetimeLocal()
+      : toDatetimeLocalFromUtc(source?.time_utc);
     addRow("Time, UTC", timeInput);
 
     const imageInput = document.createElement("input");
@@ -1844,6 +1858,7 @@
       if (payload.title.length > 100) return "Title must be 100 characters or fewer.";
       if (payload.short_title.length > 40) return "Short title must be 40 characters or fewer.";
       if (payload.short_description.length > 200) return "Short description must be 200 characters or fewer.";
+      if (!String(timeInput.value || "").trim()) return "Time, UTC is required.";
       if (String(timeInput.value || "").trim() && !payload.time_utc) return "Time, UTC is invalid.";
       return "";
     };
@@ -1888,7 +1903,6 @@
         setError(validationError);
         return;
       }
-      if (!payload.time_utc) delete payload.time_utc;
 
       setSaving(true, "Saving...");
       try {

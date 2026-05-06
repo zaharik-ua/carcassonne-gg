@@ -37,6 +37,168 @@
     overflow: hidden;
   }
 
+  .results-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #f7f8fa;
+    border-bottom: 1px solid #ccc;
+    border-radius: 4px 4px 0 0;
+    flex-wrap: wrap;
+  }
+
+  .results-pagesize {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 400;
+    color: #555;
+    margin-bottom: 0;
+  }
+
+  .results-pagesize-picker {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    min-width: 58px;
+  }
+
+  .results-pagesize-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 24px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    font-size: 12px;
+    line-height: 1;
+    padding: 4px 7px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    cursor: pointer;
+  }
+
+  .results-pagesize-btn:hover,
+  .results-pagesize-btn:focus-visible {
+    border-color: #9ea7b3;
+  }
+
+  .results-pagesize-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .results-pagesize-label {
+    font-weight: 600;
+    color: #2f3947;
+    white-space: nowrap;
+  }
+
+  .results-pagesize-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #6f7785;
+    font-size: 10px;
+  }
+
+  .results-pagesize-chevron i {
+    transition: transform 0.18s ease;
+  }
+
+  .results-pagesize-btn.open .results-pagesize-chevron i {
+    transform: rotate(180deg);
+  }
+
+  .results-pagesize-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    min-width: 100%;
+    width: max-content;
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+    z-index: 20;
+  }
+
+  .results-pagesize-menu.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .results-pagesize-option {
+    all: unset;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    border-top: 1px solid #edf1f6;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #2f3947;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .results-pagesize-option:first-child {
+    border-top: none;
+  }
+
+  .results-pagesize-option:hover {
+    background: #f5f5f5;
+  }
+
+  .results-pagesize-option.active {
+    background: #e4f0fb;
+  }
+
+  .results-pagination {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .results-pagebtn {
+    font: inherit;
+    font-size: 12px;
+    color: #333;
+    background: #fff;
+    border: 1px solid #cfcfcf;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+
+  .results-pagebtn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .results-pageinfo {
+    font-size: 12px;
+    color: #555;
+    min-width: 72px;
+    text-align: center;
+  }
+
   .player-flag {
     width: 20px;
     height: 20px;
@@ -161,6 +323,13 @@
 (function() {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
+  const PLAYERS_PAGE_SIZE_OPTIONS = [100, 200, 500];
+  const playersPaginationState = {
+    pageSize: 100,
+    currentPage: 1,
+    totalItems: 0,
+    totalPages: 1
+  };
 
   let allPlayers = [];
   let countriesByKey = new Map();
@@ -352,8 +521,77 @@
 
   function renderPlayersSection(container, players) {
     if (!players || players.length === 0) return;
+    playersPaginationState.totalItems = players.length;
+    playersPaginationState.totalPages = Math.max(1, Math.ceil(players.length / playersPaginationState.pageSize));
+    if (playersPaginationState.currentPage > playersPaginationState.totalPages) {
+      playersPaginationState.currentPage = playersPaginationState.totalPages;
+    }
+    if (playersPaginationState.currentPage < 1) playersPaginationState.currentPage = 1;
+
     const card = document.createElement("div");
     card.className = "tournament-card";
+    container.appendChild(card);
+
+    const controls = document.createElement("div");
+    controls.className = "results-controls";
+    card.appendChild(controls);
+
+    const pageSizeWrap = document.createElement("label");
+    pageSizeWrap.className = "results-pagesize";
+    pageSizeWrap.appendChild(document.createTextNode("Per page:"));
+
+    const pageSizePicker = document.createElement("div");
+    pageSizePicker.className = "results-pagesize-picker";
+    const pageSizeBtn = document.createElement("button");
+    pageSizeBtn.type = "button";
+    pageSizeBtn.className = "results-pagesize-btn";
+    const pageSizeBtnLabel = document.createElement("span");
+    pageSizeBtnLabel.className = "results-pagesize-label";
+    pageSizeBtnLabel.textContent = String(playersPaginationState.pageSize);
+    const pageSizeChevron = document.createElement("span");
+    pageSizeChevron.className = "results-pagesize-chevron";
+    pageSizeChevron.innerHTML = '<i class="fa fa-chevron-down"></i>';
+    pageSizeBtn.appendChild(pageSizeBtnLabel);
+    pageSizeBtn.appendChild(pageSizeChevron);
+
+    const pageSizeMenu = document.createElement("div");
+    pageSizeMenu.className = "results-pagesize-menu";
+    PLAYERS_PAGE_SIZE_OPTIONS.forEach((size) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "results-pagesize-option";
+      option.dataset.value = String(size);
+      option.textContent = String(size);
+      if (size === playersPaginationState.pageSize) option.classList.add("active");
+      pageSizeMenu.appendChild(option);
+    });
+
+    pageSizePicker.appendChild(pageSizeBtn);
+    pageSizePicker.appendChild(pageSizeMenu);
+    pageSizeWrap.appendChild(pageSizePicker);
+    controls.appendChild(pageSizeWrap);
+
+    const pagination = document.createElement("div");
+    pagination.className = "results-pagination";
+
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "results-pagebtn";
+    prevBtn.textContent = "Prev";
+
+    const pageInfo = document.createElement("span");
+    pageInfo.className = "results-pageinfo";
+    pageInfo.textContent = `Page ${playersPaginationState.currentPage} of ${playersPaginationState.totalPages}`;
+
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "results-pagebtn";
+    nextBtn.textContent = "Next";
+
+    pagination.appendChild(prevBtn);
+    pagination.appendChild(pageInfo);
+    pagination.appendChild(nextBtn);
+    controls.appendChild(pagination);
 
     const table = document.createElement("table");
     table.className = "masters-table";
@@ -379,8 +617,10 @@
     table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
-    players.forEach((player, index) => {
-      const tr = createPlayerElement(player, index);
+    const startIndex = (playersPaginationState.currentPage - 1) * playersPaginationState.pageSize;
+    const pagePlayers = players.slice(startIndex, startIndex + playersPaginationState.pageSize);
+    pagePlayers.forEach((player, index) => {
+      const tr = createPlayerElement(player, startIndex + index);
       tr.classList.add("player-row");
       tbody.appendChild(tr);
 
@@ -392,10 +632,66 @@
     table.appendChild(tbody);
 
     card.appendChild(table);
-    container.appendChild(card);
+
+    const pagingOff = playersPaginationState.totalItems <= playersPaginationState.pageSize;
+    prevBtn.disabled = pagingOff || playersPaginationState.currentPage <= 1;
+    nextBtn.disabled = pagingOff || playersPaginationState.currentPage >= playersPaginationState.totalPages;
+
+    function closePageSizeMenu() {
+      pageSizeMenu.classList.remove("open");
+      pageSizeMenu.style.maxHeight = "0px";
+      pageSizeBtn.classList.remove("open");
+    }
+
+    function setPageSize(nextSize) {
+      playersPaginationState.pageSize = PLAYERS_PAGE_SIZE_OPTIONS.includes(nextSize) ? nextSize : 100;
+      playersPaginationState.currentPage = 1;
+      renderFilteredPlayers();
+    }
+
+    pageSizeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = pageSizeMenu.classList.contains("open");
+      closePageSizeMenu();
+      if (!isOpen) {
+        pageSizeMenu.classList.add("open");
+        pageSizeMenu.style.maxHeight = `${pageSizeMenu.scrollHeight}px`;
+        pageSizeBtn.classList.add("open");
+      }
+    });
+
+    pageSizeMenu.querySelectorAll(".results-pagesize-option").forEach((optBtn) => {
+      optBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const nextSize = Number(optBtn.dataset.value) || 100;
+        setPageSize(nextSize);
+        closePageSizeMenu();
+      });
+    });
+
+    if (window.__playersResultsPageSizeHandler) {
+      document.removeEventListener("click", window.__playersResultsPageSizeHandler);
+    }
+    window.__playersResultsPageSizeHandler = (e) => {
+      if (!pageSizeWrap.contains(e.target)) closePageSizeMenu();
+    };
+    document.addEventListener("click", window.__playersResultsPageSizeHandler);
+
+    prevBtn.addEventListener("click", () => {
+      if (playersPaginationState.currentPage <= 1) return;
+      playersPaginationState.currentPage -= 1;
+      renderFilteredPlayers();
+    });
+
+    nextBtn.addEventListener("click", () => {
+      if (playersPaginationState.currentPage >= playersPaginationState.totalPages) return;
+      playersPaginationState.currentPage += 1;
+      renderFilteredPlayers();
+    });
   }
 
-  function renderFilteredPlayers() {
+  function renderFilteredPlayers(resetPage) {
+    if (resetPage) playersPaginationState.currentPage = 1;
     let filtered = [...allPlayers];
     activeAssociationFilter = readAssociationFilterFromUrl();
     const activePlayerFilter = readPlayerFilterFromUrl();
@@ -442,6 +738,12 @@
     const countEl = document.getElementById("players-count");
     if (countEl) countEl.textContent = `Count: ${filtered.length}`;
     container.innerHTML = "";
+    if (window.__playersResultsPageSizeHandler) {
+      document.removeEventListener("click", window.__playersResultsPageSizeHandler);
+      window.__playersResultsPageSizeHandler = null;
+    }
+    playersPaginationState.totalItems = filtered.length;
+    playersPaginationState.totalPages = Math.max(1, Math.ceil(filtered.length / playersPaginationState.pageSize));
     renderPlayersSection(container, filtered);
   }
 
@@ -529,13 +831,13 @@
   } else {
     initPlayers();
   }
-  window.addEventListener("popstate", () => renderFilteredPlayers());
-  window.addEventListener("association-filter-change", () => renderFilteredPlayers());
-  window.addEventListener("achievement-filter-change", () => renderFilteredPlayers());
-  window.addEventListener("player-filter-change", () => renderFilteredPlayers());
-  window.addEventListener("masters-filter-change", () => renderFilteredPlayers());
-  window.addEventListener("captains-filter-change", () => renderFilteredPlayers());
-  window.addEventListener("rating-change-filter-change", () => renderFilteredPlayers());
-  window.addEventListener("matches-filter-change", () => renderFilteredPlayers());
+  window.addEventListener("popstate", () => renderFilteredPlayers(true));
+  window.addEventListener("association-filter-change", () => renderFilteredPlayers(true));
+  window.addEventListener("achievement-filter-change", () => renderFilteredPlayers(true));
+  window.addEventListener("player-filter-change", () => renderFilteredPlayers(true));
+  window.addEventListener("masters-filter-change", () => renderFilteredPlayers(true));
+  window.addEventListener("captains-filter-change", () => renderFilteredPlayers(true));
+  window.addEventListener("rating-change-filter-change", () => renderFilteredPlayers(true));
+  window.addEventListener("matches-filter-change", () => renderFilteredPlayers(true));
 })();
 </script>

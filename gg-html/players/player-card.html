@@ -763,7 +763,7 @@
 </style>
 
 <div class="section-title">
-  <a class="back-link" href="https://carcassonne.gg/players/">Back to all players</a>
+  <a id="backToPlayersLink" class="back-link" href="https://carcassonne.gg/players/">Back to all players</a>
   <a id="playerEditLink" class="edit-link hidden" href="#">Edit</a>
 </div>
 <div id="player-container"></div>
@@ -781,6 +781,7 @@
     instagram: "https://carcassonne.gg/gallery/instagram.png",
     contact_email: "https://carcassonne.gg/gallery/mail.png",
   };
+  const PLAYERS_URL = "https://carcassonne.gg/players/";
 
   let duels = [];
   let matches = [];
@@ -876,6 +877,30 @@
     const params = new URLSearchParams(window.location.search);
     const raw = String(params.get("edit") || "").trim().toLowerCase();
     return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  function setupBackToPlayersLink() {
+    const backLink = document.getElementById("backToPlayersLink");
+    if (!backLink) return;
+    backLink.href = PLAYERS_URL;
+    backLink.addEventListener("click", (event) => {
+      let referrerUrl = null;
+      try {
+        referrerUrl = document.referrer ? new URL(document.referrer) : null;
+      } catch (_error) {
+        referrerUrl = null;
+      }
+
+      const allowedReferrerHosts = new Set([window.location.hostname, "carcassonne.gg"]);
+      const isPlayersReferrer =
+        referrerUrl &&
+        allowedReferrerHosts.has(referrerUrl.hostname) &&
+        referrerUrl.pathname.replace(/\/+$/, "") === "/players";
+
+      if (!isPlayersReferrer || window.history.length <= 1) return;
+      event.preventDefault();
+      window.history.back();
+    });
   }
 
   function buildPlayerPageUrl(playerId, editMode) {
@@ -2629,6 +2654,7 @@
   }
 
   const initSafe = () => initPlayerCard();
+  setupBackToPlayersLink();
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initSafe);
   } else {

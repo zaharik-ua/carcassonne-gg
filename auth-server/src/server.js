@@ -9194,6 +9194,331 @@ function publicMainPageMatchesHandler(_req, res, next) {
 
 app.get("/public/main-page-matches", publicMainPageMatchesHandler);
 
+app.get("/public/team-official-matches", async (req, res, next) => {
+  const normalizeText = (value) => String(value ?? "").trim();
+  const associationFilter = normalizeText(req?.query?.association).toUpperCase();
+  const playerFilter = normalizeText(req?.query?.player);
+  const rawYear = parseInt(normalizeText(req?.query?.year), 10);
+  const yearFilter = Number.isInteger(rawYear) && rawYear >= 2000 && rawYear <= 3000
+    ? String(rawYear)
+    : "";
+  const rawResultsPageSize = parseInt(String(req?.query?.results_page_size || "").trim(), 10);
+  const rawResultsPage = parseInt(String(req?.query?.results_page || "").trim(), 10);
+  const resultsPageSize = Number.isInteger(rawResultsPageSize) && rawResultsPageSize > 0
+    ? Math.min(rawResultsPageSize, 100)
+    : null;
+  const resultsPage = Number.isInteger(rawResultsPage) && rawResultsPage > 0
+    ? rawResultsPage
+    : 1;
+  const resultsBeforeValue = String(req?.query?.results_before || "").trim();
+  const resultsBeforeTs = Date.parse(resultsBeforeValue);
+  const hasResultsPagination = resultsPageSize && Number.isFinite(resultsBeforeTs);
+  const resultsBeforeIso = hasResultsPagination ? new Date(resultsBeforeTs).toISOString() : null;
+  const matchFilterClauses = [
+    "m.deleted_at IS NULL",
+    "lower(trim(COALESCE(NULLIF(trim(t.tournament_type), ''), 'Teams'))) IN ('team', 'teams')",
+    "lower(trim(COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), 'Friendly'))) IN ('2', 'closed', 'official')",
+  ];
+  const matchFilterParams = [];
+
+  if (associationFilter) {
+    matchFilterClauses.push(`
+      (
+        upper(trim(COALESCE(m.team_1, ''))) = upper(trim(?))
+        OR upper(trim(COALESCE(m.team_2, ''))) = upper(trim(?))
+      )
+    `);
+    matchFilterParams.push(associationFilter, associationFilter);
+  }
+
+  if (yearFilter) {
+    matchFilterClauses.push("trim(COALESCE(m.time_utc, '')) <> ''");
+    matchFilterClauses.push("strftime('%Y', datetime(m.time_utc)) = ?");
+    matchFilterParams.push(yearFilter);
+  }
+
+  if (playerFilter) {
+    matchFilterClauses.push(`
+      EXISTS (
+        SELECT 1
+        FROM duels fd
+        LEFT JOIN profiles fp1
+          ON trim(COALESCE(fp1.id, '')) = trim(COALESCE(fd.player_1_id, ''))
+        LEFT JOIN profiles fp2
+          ON trim(COALESCE(fp2.id, '')) = trim(COALESCE(fd.player_2_id, ''))
+        WHERE fd.deleted_at IS NULL
+          AND trim(COALESCE(fd.match_id, '')) = trim(COALESCE(m.id, ''))
+          AND (
+            lower(trim(COALESCE(fp1.bga_nickname, ''))) = lower(trim(?))
+            OR lower(trim(COALESCE(fp2.bga_nickname, ''))) = lower(trim(?))
+            OR trim(COALESCE(fd.player_1_id, '')) = trim(?)
+            OR trim(COALESCE(fd.player_2_id, '')) = trim(?)
+          )
+      )
+    `);
+    matchFilterParams.push(playerFilter, playerFilter, playerFilter, playerFilter);
+  }
+
+  const whereSql = matchFilterClauses.join("\n          AND ");
+  const selectMatchFields = `
+    SELECT
+      m.id,
+      m.tournament_id,
+      m.time_utc,
+      m.lineup_type,
+      m.lineup_deadline_h,
+      m.lineup_deadline_utc,
+      m.number_of_duels,
+      m.team_1,
+      m.team_2,
+      m.status,
+      m.dw1,
+      m.dw2,
+      m.gw1,
+      m.gw2,
+      m.rating,
+      team1.name AS team_1_name,
+      COALESCE(NULLIF(trim(team1.flag), ''), NULLIF(trim(team1.logo), '')) AS team_1_flag,
+      team2.name AS team_2_name,
+      COALESCE(NULLIF(trim(team2.flag), ''), NULLIF(trim(team2.logo), '')) AS team_2_flag,
+      t.name AS tournament_name,
+      t.short_title AS tournament_short_title,
+      t.logo AS tournament_logo,
+      t.link AS tournament_link,
+      COALESCE(NULLIF(trim(t.tournament_type), ''), 'Teams') AS tournament_type
+    FROM matches m
+    JOIN tournaments t
+      ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(m.tournament_id, '')))
+    LEFT JOIN teams team1
+      ON upper(trim(COALESCE(team1.id, ''))) = upper(trim(COALESCE(m.team_1, '')))
+    LEFT JOIN teams team2
+      ON upper(trim(COALESCE(team2.id, ''))) = upper(trim(COALESCE(m.team_2, '')))
+    WHERE ${whereSql}
+  `;
+
+  const loadMatchRows = async () => {
+    if (!hasResultsPagination) {
+      const rows = await dbAllAsync(
+        `
+          ${selectMatchFields}
+          ORDER BY datetime(COALESCE(m.time_utc, '1970-01-01 00:00:00')) DESC, m.id ASC
+        `,
+        matchFilterParams
+      );
+      return { rows, pagination: null };
+    }
+
+    const activeRows = await dbAllAsync(
+      `
+        ${selectMatchFields}
+          AND (
+            trim(COALESCE(m.time_utc, '')) = ''
+            OR datetime(m.time_utc) >= datetime(?)
+          )
+        ORDER BY datetime(COALESCE(m.time_utc, '9999-12-31 23:59:59')) ASC, m.id ASC
+      `,
+      [...matchFilterParams, resultsBeforeIso]
+    );
+    const countRow = await dbGetAsync(
+      `
+        SELECT COUNT(*) AS total
+        FROM matches m
+        JOIN tournaments t
+          ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(m.tournament_id, '')))
+        WHERE ${whereSql}
+          AND trim(COALESCE(m.time_utc, '')) <> ''
+          AND datetime(m.time_utc) < datetime(?)
+      `,
+      [...matchFilterParams, resultsBeforeIso]
+    );
+    const totalResults = Number(countRow?.total) || 0;
+    const totalPages = Math.max(1, Math.ceil(totalResults / resultsPageSize));
+    const safePage = Math.min(resultsPage, totalPages);
+    const offset = (safePage - 1) * resultsPageSize;
+    const resultRows = await dbAllAsync(
+      `
+        ${selectMatchFields}
+          AND trim(COALESCE(m.time_utc, '')) <> ''
+          AND datetime(m.time_utc) < datetime(?)
+        ORDER BY datetime(m.time_utc) DESC, m.id ASC
+        LIMIT ? OFFSET ?
+      `,
+      [...matchFilterParams, resultsBeforeIso, resultsPageSize, offset]
+    );
+
+    return {
+      rows: [...activeRows, ...resultRows],
+      pagination: {
+        results: {
+          before: resultsBeforeIso,
+          page: safePage,
+          page_size: resultsPageSize,
+          total: totalResults,
+          total_pages: totalPages,
+        },
+      },
+    };
+  };
+
+  try {
+    const { rows: matchRows, pagination } = await loadMatchRows();
+    const normalizedMatchIds = Array.from(new Set(
+      (matchRows || [])
+        .map((row) => String(row?.id || "").trim())
+        .filter(Boolean)
+    ));
+
+    let duelRows = [];
+    let gameRows = [];
+    if (normalizedMatchIds.length) {
+      const placeholders = normalizedMatchIds.map(() => "?").join(", ");
+      duelRows = await dbAllAsync(
+        `
+          SELECT
+            d.id,
+            d.tournament_id,
+            d.match_id,
+            d.duel_number,
+            d.duel_format,
+            d.time_utc,
+            d.player_1_id,
+            COALESCE(NULLIF(trim(p1.bga_nickname), ''), trim(d.player_1_id)) AS player_1_name,
+            p1.bga_elo AS player_1_elo,
+            d.player_2_id,
+            COALESCE(NULLIF(trim(p2.bga_nickname), ''), trim(d.player_2_id)) AS player_2_name,
+            p2.bga_elo AS player_2_elo,
+            d.dw1,
+            d.dw2,
+            d.rating,
+            d.status
+          FROM duels d
+          LEFT JOIN profiles p1
+            ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
+          LEFT JOIN profiles p2
+            ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
+          WHERE d.deleted_at IS NULL
+            AND trim(COALESCE(d.match_id, '')) IN (${placeholders})
+          ORDER BY
+            CASE WHEN d.duel_number IS NULL THEN 1 ELSE 0 END ASC,
+            d.duel_number ASC,
+            datetime(COALESCE(d.time_utc, '1970-01-01 00:00:00')) ASC,
+            d.id ASC
+        `,
+        normalizedMatchIds
+      );
+
+      const normalizedDuelIds = Array.from(new Set(
+        (duelRows || [])
+          .map((row) => String(row?.id || "").trim())
+          .filter(Boolean)
+      ));
+      if (normalizedDuelIds.length) {
+        gameRows = await new Promise((resolve, reject) => {
+          loadGamesByDuelIds(normalizedDuelIds, (gamesErr, rows) => {
+            if (gamesErr) {
+              reject(gamesErr);
+              return;
+            }
+            resolve(rows || []);
+          });
+        });
+      }
+    }
+
+    const gamesByDuelId = new Map();
+    (gameRows || []).forEach((row) => {
+      const duelId = String(row?.duel_id || "").trim();
+      if (!duelId) return;
+      if (!gamesByDuelId.has(duelId)) {
+        gamesByDuelId.set(duelId, []);
+      }
+      gamesByDuelId.get(duelId).push({
+        id: row.id,
+        duel_id: row.duel_id,
+        bga_table_id: row.bga_table_id,
+        game_number: row.game_number,
+        player_1_score: row.player_1_score,
+        player_2_score: row.player_2_score,
+        player_1_rank: row.player_1_rank,
+        player_2_rank: row.player_2_rank,
+        player_1_clock: row.player_1_clock,
+        player_2_clock: row.player_2_clock,
+        status: row.status,
+      });
+    });
+
+    const tournaments = Array.from(new Map(
+      (matchRows || [])
+        .map((row) => {
+          const tournamentId = String(row?.tournament_id || "").trim();
+          if (!tournamentId) return null;
+          return [tournamentId, {
+            id: tournamentId,
+            name: row.tournament_name,
+            short_title: row.tournament_short_title,
+            logo: row.tournament_logo,
+            link: row.tournament_link,
+            type: "TEAM",
+          }];
+        })
+        .filter(Boolean)
+    ).values());
+
+    return res.json({
+      ok: true,
+      tournaments,
+      pagination: pagination || null,
+      matches: (matchRows || []).map((row) => ({
+        id: row.id,
+        tournament_id: row.tournament_id,
+        time_utc: row.time_utc,
+        lineup_type: row.lineup_type,
+        lineup_deadline_h: row.lineup_deadline_h,
+        lineup_deadline_utc: row.lineup_deadline_utc,
+        number_of_duels: row.number_of_duels,
+        team_1: row.team_1,
+        team_2: row.team_2,
+        team_1_name: row.team_1_name,
+        team_1_flag: row.team_1_flag,
+        team_2_name: row.team_2_name,
+        team_2_flag: row.team_2_flag,
+        status: row.status,
+        dw1: row.dw1,
+        dw2: row.dw2,
+        gw1: row.gw1,
+        gw2: row.gw2,
+        rating: row.rating,
+        tournament_name: row.tournament_name,
+        tournament_short_title: row.tournament_short_title,
+        tournament_logo: row.tournament_logo,
+        tournament_link: row.tournament_link,
+        tournament_type: row.tournament_type,
+      })),
+      duels: (duelRows || []).map((row) => ({
+        id: row.id,
+        tournament_id: row.tournament_id,
+        match_id: row.match_id,
+        duel_number: row.duel_number,
+        duel_format: row.duel_format,
+        time_utc: row.time_utc,
+        player_1_id: row.player_1_id,
+        player_1_name: row.player_1_name,
+        player_1_elo: row.player_1_elo,
+        player_2_id: row.player_2_id,
+        player_2_name: row.player_2_name,
+        player_2_elo: row.player_2_elo,
+        dw1: row.dw1,
+        dw2: row.dw2,
+        rating: row.rating,
+        status: row.status,
+        games: gamesByDuelId.get(String(row.id || "").trim()) || [],
+      })),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.get("/public/friendly-matches", (req, res, next) => {
   const tournamentId = "Friendly-Matches";
   const normalizeText = (value) => String(value ?? "").trim();
