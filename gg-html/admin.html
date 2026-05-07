@@ -555,6 +555,7 @@
   const AUDIT_TRAIL_URL = `${AUTH_BASE}/audit-trail`;
   const MATCHES_URL = `${AUTH_BASE}/matches`;
   const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
+  const MOBILE_MENU_ITEMS_URL = `${AUTH_BASE}/mobile-menu-items`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const DUEL_FORMATS_URL = `${AUTH_BASE}/duel-formats`;
   const STREAMER_SCOREBOARD_STYLE_OPTIONS = ["Default", "Nallerheim"];
@@ -609,6 +610,13 @@
       buttonLabel: "Edit",
       createLabel: "Create",
       load: () => apiJson(NEWS_EDITORS_URL, { method: "GET" }).then((data) => data.news_editors || []),
+    },
+    mobileMenuItems: {
+      key: "mobileMenuItems",
+      title: "Mobile Menu",
+      buttonLabel: "Edit",
+      createLabel: "Create",
+      load: () => apiJson(MOBILE_MENU_ITEMS_URL, { method: "GET" }).then((data) => data.items || []),
     },
     tournaments: {
       key: "tournaments",
@@ -680,6 +688,7 @@
     streamers: [],
     icons: [],
     newsEditors: [],
+    mobileMenuItems: [],
     tournaments: [],
     duelFormats: [],
     matchesReference: [],
@@ -2599,6 +2608,236 @@
     }
   }
 
+  function getMobileMenuAreaLabel(area) {
+    return String(area || "").trim() === "top" ? "Top bar" : "Drawer";
+  }
+
+  function getMobileMenuItemTypeLabel(type) {
+    return String(type || "").trim() === "group" ? "Group" : "Link";
+  }
+
+  function getMobileMenuParentOptions(area, currentId) {
+    const normalizedArea = String(area || "drawer").trim() === "top" ? "top" : "drawer";
+    const current = Number(currentId) || 0;
+    return [{ value: "", label: "No group" }].concat(
+      state.mobileMenuItems
+        .filter((entry) => (
+          String(entry?.menu_area || "drawer").trim() === normalizedArea
+          && String(entry?.item_type || "link").trim() === "group"
+          && Number(entry?.id) !== current
+        ))
+        .slice()
+        .sort((left, right) => (
+          Number(left?.sort_order || 0) - Number(right?.sort_order || 0)
+          || Number(left?.id || 0) - Number(right?.id || 0)
+        ))
+        .map((entry) => ({
+          value: String(entry.id),
+          label: `${String(entry.label || `Group #${entry.id}`).trim()} (#${entry.id})`,
+        }))
+    );
+  }
+
+  function openMobileMenuItemForm(mode, item, anchorRow) {
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+
+    const idField = createTextRow("id", item?.id || "", { readOnly: true });
+    const areaField = createSelectOptionsRow(
+      "menu area",
+      item?.menu_area || "drawer",
+      [
+        { value: "top", label: "Top bar" },
+        { value: "drawer", label: "Drawer" },
+      ],
+      false
+    );
+    const typeField = createSelectOptionsRow(
+      "type",
+      item?.item_type || "link",
+      [
+        { value: "link", label: "Link" },
+        { value: "group", label: "Group" },
+      ],
+      false
+    );
+    const parentField = createSelectOptionsRow(
+      "group",
+      item?.parent_id || "",
+      getMobileMenuParentOptions(item?.menu_area || "drawer", item?.id),
+      false
+    );
+    const labelField = createTextRow("label", item?.label || "");
+    const urlField = createTextRow("url", item?.url || "");
+    const targetField = createSelectOptionsRow(
+      "open",
+      Number(item?.open_in_new_tab) === 1 ? "new" : "same",
+      [
+        { value: "same", label: "Same browser tab" },
+        { value: "new", label: "New browser tab" },
+      ],
+      false
+    );
+    const sortOrderField = createNumberRow("sort_order", item?.sort_order ?? 0);
+    sortOrderField.input.min = "0";
+    const visibilityField = createSelectOptionsRow(
+      "visibility",
+      Number(item?.is_visible) === 0 ? "0" : "1",
+      [
+        { value: "1", label: "Visible" },
+        { value: "0", label: "Hidden" },
+      ],
+      false
+    );
+
+    if (mode === "edit") form.appendChild(idField.row);
+    form.appendChild(areaField.row);
+    form.appendChild(typeField.row);
+    form.appendChild(parentField.row);
+    form.appendChild(labelField.row);
+    form.appendChild(urlField.row);
+    form.appendChild(targetField.row);
+    form.appendChild(sortOrderField.row);
+    form.appendChild(visibilityField.row);
+
+    const refreshParentOptions = () => {
+      const previousValue = String(parentField.select.value || "");
+      parentField.select.innerHTML = "";
+      getMobileMenuParentOptions(areaField.select.value, item?.id).forEach((entry) => {
+        const option = document.createElement("option");
+        option.value = String(entry.value);
+        option.textContent = String(entry.label);
+        parentField.select.appendChild(option);
+      });
+      parentField.select.value = previousValue;
+      if (parentField.select.value !== previousValue) parentField.select.value = "";
+    };
+
+    const updateVisibility = () => {
+      const isGroup = typeField.select.value === "group";
+      parentField.row.classList.toggle("hidden", isGroup);
+      parentField.select.disabled = isGroup;
+      if (isGroup) parentField.select.value = "";
+
+      urlField.row.classList.toggle("hidden", isGroup);
+      urlField.input.disabled = isGroup;
+      targetField.row.classList.toggle("hidden", isGroup);
+      targetField.select.disabled = isGroup;
+    };
+
+    areaField.select.addEventListener("change", () => {
+      refreshParentOptions();
+      updateVisibility();
+    });
+    typeField.select.addEventListener("change", updateVisibility);
+    refreshParentOptions();
+    updateVisibility();
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = mode === "create" ? "Create" : "Save";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => {
+      if (mode === "create") {
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+      } else {
+        closeInlineForm();
+      }
+      setStatus("", false);
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "cp-btn cp-btn-secondary";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.classList.toggle("hidden", mode !== "edit");
+    deleteBtn.addEventListener("click", async () => {
+      if (!item?.id) return;
+      if (!window.confirm("Delete this menu item? Groups are deleted with their children.")) return;
+      try {
+        await apiJson(`${MOBILE_MENU_ITEMS_URL}/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+        closeInlineForm();
+        setStatus("Menu item deleted.", false);
+        await loadSectionData("mobileMenuItems");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to delete menu item.", true);
+      }
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    if (mode === "edit") actions.appendChild(deleteBtn);
+    form.appendChild(actions);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const isGroup = typeField.select.value === "group";
+      const payload = {
+        menu_area: String(areaField.select.value || "drawer"),
+        item_type: isGroup ? "group" : "link",
+        parent_id: isGroup ? null : Number.parseInt(String(parentField.select.value || "").trim(), 10),
+        label: String(labelField.input.value || "").trim(),
+        url: isGroup ? "" : String(urlField.input.value || "").trim(),
+        open_in_new_tab: isGroup ? 0 : (targetField.select.value === "new" ? 1 : 0),
+        sort_order: Number.parseInt(String(sortOrderField.input.value || "0").trim(), 10) || 0,
+        is_visible: visibilityField.select.value === "1" ? 1 : 0,
+      };
+      if (!Number.isInteger(payload.parent_id) || payload.parent_id <= 0) payload.parent_id = null;
+
+      if (!payload.label) {
+        setStatus("Menu item label is required.", true);
+        return;
+      }
+      if (!isGroup && !payload.url) {
+        setStatus("URL is required for menu links.", true);
+        return;
+      }
+
+      try {
+        if (mode === "create") {
+          await apiJson(MOBILE_MENU_ITEMS_URL, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Menu item created.", false);
+        } else {
+          await apiJson(`${MOBILE_MENU_ITEMS_URL}/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Menu item updated.", false);
+        }
+        if (mode === "create") {
+          sectionForm.classList.add("hidden");
+          sectionForm.innerHTML = "";
+        } else {
+          closeInlineForm();
+        }
+        await loadSectionData("mobileMenuItems");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to save menu item.", true);
+      }
+    });
+
+    if (mode === "create") {
+      closeInlineForm();
+      showCreateForm(form);
+    } else if (anchorRow) {
+      mountDetailForm(form, anchorRow);
+    }
+  }
+
   async function openTournamentForm(mode, item, anchorRow) {
     try {
       await ensureUserOptionsLoaded();
@@ -3372,6 +3611,59 @@
     });
   }
 
+  function renderMobileMenuItems() {
+    sectionTitle.textContent = "Mobile Menu";
+    sectionCreateBtn.textContent = "Create";
+    sectionCreateBtn.classList.remove("hidden");
+    sectionCreateBtn.onclick = () => openMobileMenuItemForm("create", null, null);
+
+    if (!state.mobileMenuItems.length) {
+      renderListEmpty("No mobile menu items yet.");
+      return;
+    }
+
+    const byId = new Map();
+    state.mobileMenuItems.forEach((item) => byId.set(Number(item.id), item));
+    const sortedItems = state.mobileMenuItems.slice().sort((left, right) => {
+      const areaOrder = (String(left?.menu_area || "") === "top" ? 0 : 1)
+        - (String(right?.menu_area || "") === "top" ? 0 : 1);
+      if (areaOrder) return areaOrder;
+      const leftParent = Number(left?.parent_id || left?.id || 0);
+      const rightParent = Number(right?.parent_id || right?.id || 0);
+      if (leftParent !== rightParent) return leftParent - rightParent;
+      if (!!left?.parent_id !== !!right?.parent_id) return left?.parent_id ? 1 : -1;
+      return Number(left?.sort_order || 0) - Number(right?.sort_order || 0)
+        || Number(left?.id || 0) - Number(right?.id || 0);
+    });
+
+    sectionList.innerHTML = "";
+    sortedItems.forEach((item) => {
+      const parent = item?.parent_id ? byId.get(Number(item.parent_id)) : null;
+      const childCount = state.mobileMenuItems.filter((entry) => Number(entry?.parent_id) === Number(item?.id)).length;
+      const subtitleParts = [
+        getMobileMenuAreaLabel(item.menu_area),
+        getMobileMenuItemTypeLabel(item.item_type),
+      ];
+      if (parent) subtitleParts.push(`Group: ${String(parent.label || parent.id).trim()}`);
+      if (String(item?.item_type || "link") === "group") subtitleParts.push(`${childCount} item${childCount === 1 ? "" : "s"}`);
+      if (String(item?.item_type || "link") === "link") {
+        subtitleParts.push(Number(item?.open_in_new_tab) === 1 ? "New tab" : "Same tab");
+        if (item?.url) subtitleParts.push(String(item.url).trim());
+      }
+      if (Number(item?.is_visible) === 0) subtitleParts.push("Hidden");
+
+      sectionList.appendChild(createListRow({
+        imageSrc: "",
+        imageAlt: item.label,
+        imageRound: false,
+        title: `${parent ? "  " : ""}${item.label || `Menu item #${item.id}`}`,
+        subtitle: subtitleParts.join(" • "),
+        buttonLabel: "Edit",
+        onClick: (row) => openMobileMenuItemForm("edit", item, row),
+      }));
+    });
+  }
+
   function renderNewsEditors() {
     sectionTitle.textContent = "News Editors";
     sectionCreateBtn.textContent = "Create";
@@ -3570,6 +3862,7 @@
     if (state.activeSection === "teams") renderTeams();
     if (state.activeSection === "streamers") renderStreamers();
     if (state.activeSection === "icons") renderIcons();
+    if (state.activeSection === "mobileMenuItems") renderMobileMenuItems();
     if (state.activeSection === "newsEditors") renderNewsEditors();
     if (state.activeSection === "tournaments") renderTournaments();
     if (state.activeSection === "duelFormats") renderDuelFormats();

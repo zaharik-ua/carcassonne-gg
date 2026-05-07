@@ -564,15 +564,18 @@
 <script>
   (function () {
     const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+    const MOBILE_MENU_URL = AUTH_BASE + "/public/mobile-menu-items";
 
     const navRoot = document.getElementById("ggMobileNav");
+    const navBar = navRoot.querySelector(".gg-mobile-nav__bar");
+    const drawerBody = navRoot.querySelector(".gg-mobile-nav__drawer-body");
     const drawer = document.getElementById("ggMobileNavDrawer");
     const drawerOpenButton = document.getElementById("ggDrawerOpenButton");
     const drawerCloseButton = document.getElementById("ggDrawerCloseButton");
     const drawerBackdrop = document.getElementById("ggDrawerBackdrop");
-    const topEventsMenu = document.getElementById("ggTopEventsMenu");
-    const drawerAccordions = Array.from(navRoot.querySelectorAll(".gg-mobile-nav__drawer-details"));
-    const drawerLinks = Array.from(navRoot.querySelectorAll(".gg-mobile-nav__drawer a"));
+    let topMenus = Array.from(navRoot.querySelectorAll(".gg-mobile-nav__top-details"));
+    let drawerAccordions = Array.from(navRoot.querySelectorAll(".gg-mobile-nav__drawer-details"));
+    let drawerLinks = Array.from(navRoot.querySelectorAll(".gg-mobile-nav__drawer a"));
     const settingsButton = document.getElementById("ggSettingsButton");
     const settingsHint = document.getElementById("ggSettingsHint");
 
@@ -619,10 +622,10 @@
       }));
     }
 
-    function closeTopMenus(exceptId) {
-      if (topEventsMenu && exceptId !== "top-events") {
-        topEventsMenu.open = false;
-      }
+    function closeTopMenus(exceptMenu) {
+      topMenus.forEach(function (menu) {
+        if (menu !== exceptMenu) menu.open = false;
+      });
     }
 
     function openDrawer() {
@@ -780,30 +783,167 @@
       }
     });
 
-    if (topEventsMenu) {
-      topEventsMenu.addEventListener("toggle", function () {
-        if (topEventsMenu.open) {
-          closeUserMenu();
-        }
-      });
+    function setLinkAttributes(link, item) {
+      link.href = item && item.url ? item.url : "#";
+      if (Number(item && item.open_in_new_tab) === 1) {
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+      } else {
+        link.removeAttribute("target");
+        link.removeAttribute("rel");
+      }
+      link.textContent = item && item.label ? item.label : "";
     }
 
-    drawerAccordions.forEach(function (details) {
-      details.addEventListener("toggle", function () {
-        if (!details.open) return;
-        drawerAccordions.forEach(function (other) {
-          if (other !== details) {
-            other.open = false;
+    function createTopItem(item) {
+      const children = Array.isArray(item && item.children) ? item.children : [];
+      if (String(item && item.item_type) === "group") {
+        const details = document.createElement("details");
+        details.className = "gg-mobile-nav__top-details";
+        details.style.setProperty("--gg-grow", "6");
+
+        const summary = document.createElement("summary");
+        const label = document.createElement("span");
+        label.textContent = item && item.label ? item.label : "";
+        summary.appendChild(label);
+        details.appendChild(summary);
+
+        const panel = document.createElement("div");
+        panel.className = "gg-mobile-nav__top-panel";
+        children.forEach(function (child) {
+          if (String(child && child.item_type) !== "link") return;
+          const link = document.createElement("a");
+          link.className = "gg-mobile-nav__top-link";
+          setLinkAttributes(link, child);
+          panel.appendChild(link);
+        });
+        details.appendChild(panel);
+        return details;
+      }
+
+      const link = document.createElement("a");
+      link.className = "gg-mobile-nav__item";
+      link.style.setProperty("--gg-grow", String(item && item.label && item.label.length > 6 ? 7 : 4));
+      setLinkAttributes(link, item);
+      return link;
+    }
+
+    function createDrawerItem(item) {
+      const children = Array.isArray(item && item.children) ? item.children : [];
+      if (String(item && item.item_type) === "group") {
+        const details = document.createElement("details");
+        details.className = "gg-mobile-nav__drawer-details";
+
+        const summary = document.createElement("summary");
+        summary.className = "gg-mobile-nav__drawer-summary";
+        const label = document.createElement("span");
+        label.textContent = item && item.label ? item.label : "";
+        const icon = document.createElement("i");
+        icon.className = "fa-solid fa-chevron-down gg-mobile-nav__drawer-chevron";
+        icon.setAttribute("aria-hidden", "true");
+        summary.appendChild(label);
+        summary.appendChild(icon);
+        details.appendChild(summary);
+
+        const submenu = document.createElement("div");
+        submenu.className = "gg-mobile-nav__drawer-submenu";
+        children.forEach(function (child) {
+          if (String(child && child.item_type) !== "link") return;
+          const link = document.createElement("a");
+          link.className = "gg-mobile-nav__drawer-sublink";
+          setLinkAttributes(link, child);
+          submenu.appendChild(link);
+        });
+        details.appendChild(submenu);
+        return details;
+      }
+
+      const link = document.createElement("a");
+      link.className = "gg-mobile-nav__drawer-link";
+      setLinkAttributes(link, item);
+      return link;
+    }
+
+    function bindTopMenus() {
+      topMenus.forEach(function (menu) {
+        menu.addEventListener("toggle", function () {
+          if (menu.open) {
+            closeTopMenus(menu);
+            closeUserMenu();
           }
         });
       });
-    });
+    }
 
-    drawerLinks.forEach(function (link) {
-      link.addEventListener("click", function () {
-        closeDrawer();
+    function bindDrawerAccordions() {
+      drawerAccordions.forEach(function (details) {
+        details.addEventListener("toggle", function () {
+          if (!details.open) return;
+          drawerAccordions.forEach(function (other) {
+            if (other !== details) {
+              other.open = false;
+            }
+          });
+        });
       });
-    });
+    }
+
+    function bindDrawerLinks() {
+      drawerLinks.forEach(function (link) {
+        link.addEventListener("click", function () {
+          closeDrawer();
+        });
+      });
+    }
+
+    function renderMenuFromData(menu) {
+      const topItems = Array.isArray(menu && menu.top) ? menu.top : [];
+      const drawerItems = Array.isArray(menu && menu.drawer) ? menu.drawer : [];
+      if (!topItems.length && !drawerItems.length) return;
+
+      if (topItems.length && navBar) {
+        Array.from(navBar.querySelectorAll(".gg-mobile-nav__item, .gg-mobile-nav__top-details")).forEach(function (node) {
+          node.remove();
+        });
+        topItems.forEach(function (item) {
+          navBar.insertBefore(createTopItem(item), drawerOpenButton);
+        });
+      }
+
+      if (drawerItems.length && drawerBody) {
+        drawerBody.innerHTML = "";
+        drawerItems.forEach(function (item) {
+          drawerBody.appendChild(createDrawerItem(item));
+        });
+      }
+
+      topMenus = Array.from(navRoot.querySelectorAll(".gg-mobile-nav__top-details"));
+      drawerAccordions = Array.from(navRoot.querySelectorAll(".gg-mobile-nav__drawer-details"));
+      drawerLinks = Array.from(navRoot.querySelectorAll(".gg-mobile-nav__drawer a"));
+      bindTopMenus();
+      bindDrawerAccordions();
+      bindDrawerLinks();
+    }
+
+    async function fetchMenuItems() {
+      try {
+        const response = await fetch(MOBILE_MENU_URL, {
+          method: "GET",
+          credentials: "include"
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data && data.ok !== false) {
+          renderMenuFromData(data.menu || {});
+        }
+      } catch (error) {
+        // Keep the static fallback menu.
+      }
+    }
+
+    bindTopMenus();
+    bindDrawerAccordions();
+    bindDrawerLinks();
 
     document.addEventListener("click", function (event) {
       if (!navRoot.contains(event.target)) {
@@ -828,6 +968,7 @@
       }
     });
 
+    fetchMenuItems();
     fetchSession();
   })();
 </script>

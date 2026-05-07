@@ -182,6 +182,17 @@ const NEWS_AUDIT_FIELDS = [
   "short_description",
   "description",
 ];
+const MOBILE_MENU_ITEM_AUDIT_FIELDS = [
+  "id",
+  "parent_id",
+  "menu_area",
+  "item_type",
+  "label",
+  "url",
+  "open_in_new_tab",
+  "sort_order",
+  "is_visible",
+];
 const ICON_AUDIT_FIELDS = [
   "id",
   "name",
@@ -275,6 +286,14 @@ const NEWS_EDITOR_ACCESS_TYPES = {
   LOCAL: "local",
   TOURNAMENT: "tournament",
   GLOBAL: "global",
+};
+const MOBILE_MENU_AREAS = {
+  TOP: "top",
+  DRAWER: "drawer",
+};
+const MOBILE_MENU_ITEM_TYPES = {
+  LINK: "link",
+  GROUP: "group",
 };
 const TOURNAMENT_LINEUP_SIZE_TYPES = {
   FIXED: 1,
@@ -3190,6 +3209,134 @@ function ensureStreamsSchema() {
   });
 }
 
+const DEFAULT_MOBILE_MENU_ITEMS = [
+  { key: "top-main", menu_area: "top", item_type: "link", label: "Main", url: "https://carcassonne.gg", open_in_new_tab: 0, sort_order: 10 },
+  { key: "top-events", menu_area: "top", item_type: "group", label: "Events", sort_order: 20 },
+  { parent_key: "top-events", menu_area: "top", item_type: "link", label: "Individual Tournaments", url: "https://carcassonne.gg/individual-events/", open_in_new_tab: 0, sort_order: 10 },
+  { parent_key: "top-events", menu_area: "top", item_type: "link", label: "Team Tournaments", url: "https://carcassonne.gg/team-events/", open_in_new_tab: 0, sort_order: 20 },
+  { key: "top-nationals", menu_area: "top", item_type: "link", label: "Nationals", url: "https://carcassonne.gg/nationals/", open_in_new_tab: 0, sort_order: 30 },
+  { key: "top-players", menu_area: "top", item_type: "link", label: "Players", url: "https://carcassonne.gg/players/", open_in_new_tab: 0, sort_order: 40 },
+
+  { key: "drawer-main", menu_area: "drawer", item_type: "link", label: "Main", url: "https://carcassonne.gg", open_in_new_tab: 0, sort_order: 10 },
+  { key: "drawer-individual", menu_area: "drawer", item_type: "group", label: "Individual Events", sort_order: 20 },
+  { parent_key: "drawer-individual", menu_area: "drawer", item_type: "link", label: "Nationals", url: "https://carcassonne.gg/nationals/", open_in_new_tab: 0, sort_order: 10 },
+  { parent_key: "drawer-individual", menu_area: "drawer", item_type: "link", label: "CCL", url: "https://carcassonne.gg/CCL-2026/", open_in_new_tab: 0, sort_order: 20 },
+  { parent_key: "drawer-individual", menu_area: "drawer", item_type: "link", label: "MSO", url: "https://carcassonne.gg/MSO-2026/", open_in_new_tab: 0, sort_order: 30 },
+  { parent_key: "drawer-individual", menu_area: "drawer", item_type: "link", label: "King of Carcassonne", url: "https://carcassonne.gg/King-of-Carcassonne/", open_in_new_tab: 0, sort_order: 40 },
+  { parent_key: "drawer-individual", menu_area: "drawer", item_type: "link", label: "World Championship", url: "https://carcassonne.gg/WC-2025/", open_in_new_tab: 0, sort_order: 50 },
+  { key: "drawer-team", menu_area: "drawer", item_type: "group", label: "Team Events", sort_order: 30 },
+  { parent_key: "drawer-team", menu_area: "drawer", item_type: "link", label: "WTCOC", url: "https://www.carcassonne.cat/wtcoc/", open_in_new_tab: 1, sort_order: 10 },
+  { parent_key: "drawer-team", menu_area: "drawer", item_type: "link", label: "ETCOC", url: "https://www.carcassonne.cat/etcoc2025/", open_in_new_tab: 1, sort_order: 20 },
+  { parent_key: "drawer-team", menu_area: "drawer", item_type: "link", label: "Copa America", url: "https://carcassonnecolombia.com/copa-america2026/", open_in_new_tab: 0, sort_order: 30 },
+  { parent_key: "drawer-team", menu_area: "drawer", item_type: "link", label: "Asian Cup", url: "#", open_in_new_tab: 1, sort_order: 40 },
+  { parent_key: "drawer-team", menu_area: "drawer", item_type: "link", label: "Friendly Matches", url: "https://carcassonne.gg/friendly-matches/", open_in_new_tab: 0, sort_order: 50 },
+  { key: "drawer-players", menu_area: "drawer", item_type: "link", label: "Players", url: "https://carcassonne.gg/players/", open_in_new_tab: 0, sort_order: 40 },
+  { key: "drawer-golden-meeple", menu_area: "drawer", item_type: "link", label: "Golden Meeple", url: "https://carcassonne.gg/Golden-Meeple-2025/", open_in_new_tab: 0, sort_order: 50 },
+  { key: "drawer-rankings", menu_area: "drawer", item_type: "group", label: "Rankings", sort_order: 60 },
+  { parent_key: "drawer-rankings", menu_area: "drawer", item_type: "link", label: "Association Ranking", url: "https://carcassonne.gg/Association-Ranking-2025/", open_in_new_tab: 0, sort_order: 10 },
+  { parent_key: "drawer-rankings", menu_area: "drawer", item_type: "link", label: "National Teams Ranking", url: "https://carcassonne.gg/National-Teams-Ranking/", open_in_new_tab: 0, sort_order: 20 },
+  { key: "drawer-links", menu_area: "drawer", item_type: "link", label: "Links", url: "https://carcassonne.gg/Links/", open_in_new_tab: 0, sort_order: 70 },
+];
+
+async function seedDefaultMobileMenuItemsIfEmpty() {
+  const existing = await dbGetAsync("SELECT COUNT(*) AS count FROM mobile_menu_items");
+  if (Number(existing?.count) > 0) return;
+
+  const keyToId = new Map();
+  await dbRunAsync("BEGIN TRANSACTION");
+  try {
+    for (const item of DEFAULT_MOBILE_MENU_ITEMS) {
+      const parentId = item.parent_key ? keyToId.get(item.parent_key) || null : null;
+      const result = await dbRunAsync(
+        `
+          INSERT INTO mobile_menu_items (
+            parent_id,
+            menu_area,
+            item_type,
+            label,
+            url,
+            open_in_new_tab,
+            sort_order,
+            is_visible
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+        `,
+        [
+          parentId,
+          item.menu_area,
+          item.item_type,
+          item.label,
+          item.item_type === "link" ? normalizeNullableText(item.url) : null,
+          item.item_type === "link" ? Number(item.open_in_new_tab) || 0 : 0,
+          Number(item.sort_order) || 0,
+        ]
+      );
+      if (item.key) keyToId.set(item.key, result.lastID);
+    }
+    await dbRunAsync("COMMIT");
+  } catch (error) {
+    await dbRunAsync("ROLLBACK").catch(() => {});
+    throw error;
+  }
+}
+
+function ensureMobileMenuItemsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS mobile_menu_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      parent_id INTEGER,
+      menu_area TEXT NOT NULL DEFAULT 'drawer',
+      item_type TEXT NOT NULL DEFAULT 'link',
+      label TEXT NOT NULL,
+      url TEXT,
+      open_in_new_tab INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_visible INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure mobile_menu_items schema", createErr);
+      return;
+    }
+
+    db.all("PRAGMA table_info(mobile_menu_items)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect mobile_menu_items schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "mobile_menu_items", "parent_id", "INTEGER");
+      addColumnIfMissing(columns, "mobile_menu_items", "menu_area", "TEXT NOT NULL DEFAULT 'drawer'");
+      addColumnIfMissing(columns, "mobile_menu_items", "item_type", "TEXT NOT NULL DEFAULT 'link'");
+      addColumnIfMissing(columns, "mobile_menu_items", "label", "TEXT");
+      addColumnIfMissing(columns, "mobile_menu_items", "url", "TEXT");
+      addColumnIfMissing(columns, "mobile_menu_items", "open_in_new_tab", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "mobile_menu_items", "sort_order", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "mobile_menu_items", "is_visible", "INTEGER NOT NULL DEFAULT 1");
+      addColumnIfMissing(columns, "mobile_menu_items", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "mobile_menu_items", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    });
+
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_mobile_menu_items_parent ON mobile_menu_items(parent_id)",
+      (indexErr) => {
+        if (indexErr) console.error("Failed to ensure mobile menu parent index", indexErr);
+      }
+    );
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_mobile_menu_items_area_order ON mobile_menu_items(menu_area, parent_id, sort_order, id)",
+      (indexErr) => {
+        if (indexErr) console.error("Failed to ensure mobile menu order index", indexErr);
+      }
+    );
+    seedDefaultMobileMenuItemsIfEmpty().catch((seedErr) => {
+      console.error("Failed to seed default mobile menu items", seedErr);
+    });
+  });
+}
+
 function ensureAuditTrailSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS audit_trail (
@@ -3572,6 +3719,7 @@ db.serialize(() => {
           ensureNewsSchema();
           ensureIconsSchema();
           ensureStreamsSchema();
+          ensureMobileMenuItemsSchema();
           ensureAuditTrailSchema();
         }
       );
@@ -7197,6 +7345,376 @@ app.patch("/games/:id", requireAdmin, (req, res) => {
       );
     }
   );
+});
+
+function normalizeMobileMenuArea(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === MOBILE_MENU_AREAS.TOP) return MOBILE_MENU_AREAS.TOP;
+  return MOBILE_MENU_AREAS.DRAWER;
+}
+
+function normalizeMobileMenuItemType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === MOBILE_MENU_ITEM_TYPES.GROUP) return MOBILE_MENU_ITEM_TYPES.GROUP;
+  return MOBILE_MENU_ITEM_TYPES.LINK;
+}
+
+function normalizeBooleanInt(value) {
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (typeof value === "number") return value === 1 ? 1 : 0;
+  const normalized = String(value || "").trim().toLowerCase();
+  return ["1", "true", "yes", "on"].includes(normalized) ? 1 : 0;
+}
+
+function normalizeSortOrder(value) {
+  const normalized = Number.parseInt(String(value ?? "").trim(), 10);
+  return Number.isInteger(normalized) ? normalized : 0;
+}
+
+function serializeMobileMenuItem(row) {
+  return {
+    id: Number(row.id),
+    parent_id: row.parent_id === null || row.parent_id === undefined ? null : Number(row.parent_id),
+    menu_area: normalizeMobileMenuArea(row.menu_area),
+    item_type: normalizeMobileMenuItemType(row.item_type),
+    label: String(row.label || "").trim(),
+    url: normalizeNullableText(row.url),
+    open_in_new_tab: normalizeBooleanInt(row.open_in_new_tab),
+    sort_order: normalizeSortOrder(row.sort_order),
+    is_visible: normalizeBooleanInt(row.is_visible),
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || null,
+  };
+}
+
+async function fetchMobileMenuItemById(id) {
+  const normalizedId = normalizePositiveInteger(id);
+  if (!normalizedId) return null;
+  return dbGetAsync("SELECT * FROM mobile_menu_items WHERE id = ?", [normalizedId]);
+}
+
+async function normalizeMobileMenuPayload(body, currentId = null) {
+  const payload = body && typeof body === "object" ? body : {};
+  const id = normalizePositiveInteger(currentId);
+  const parentId = normalizePositiveInteger(payload.parent_id);
+  const menuArea = normalizeMobileMenuArea(payload.menu_area);
+  const itemType = normalizeMobileMenuItemType(payload.item_type);
+  const label = String(payload.label || "").trim();
+  const url = itemType === MOBILE_MENU_ITEM_TYPES.LINK ? String(payload.url || "").trim() : null;
+  const openInNewTab = itemType === MOBILE_MENU_ITEM_TYPES.LINK ? normalizeBooleanInt(payload.open_in_new_tab) : 0;
+  const sortOrder = normalizeSortOrder(payload.sort_order);
+  const isVisible = normalizeBooleanInt(payload.is_visible === undefined ? 1 : payload.is_visible);
+
+  if (!label) {
+    const error = new Error("Menu item label is required.");
+    error.status = 400;
+    throw error;
+  }
+  if (itemType === MOBILE_MENU_ITEM_TYPES.LINK && !url) {
+    const error = new Error("URL is required for menu links.");
+    error.status = 400;
+    throw error;
+  }
+  if (id && parentId === id) {
+    const error = new Error("Menu item cannot be its own parent.");
+    error.status = 400;
+    throw error;
+  }
+
+  if (parentId) {
+    let parent = await fetchMobileMenuItemById(parentId);
+    if (!parent) {
+      const error = new Error("Parent menu item does not exist.");
+      error.status = 400;
+      throw error;
+    }
+    parent = serializeMobileMenuItem(parent);
+    if (parent.item_type !== MOBILE_MENU_ITEM_TYPES.GROUP) {
+      const error = new Error("Parent menu item must be a group.");
+      error.status = 400;
+      throw error;
+    }
+    if (parent.menu_area !== menuArea) {
+      const error = new Error("Parent menu item must be in the same menu area.");
+      error.status = 400;
+      throw error;
+    }
+
+    let cursor = parent;
+    while (id && cursor?.parent_id) {
+      if (Number(cursor.parent_id) === id) {
+        const error = new Error("Menu item cannot be moved under its own child.");
+        error.status = 400;
+        throw error;
+      }
+      const nextParent = await fetchMobileMenuItemById(cursor.parent_id);
+      cursor = nextParent ? serializeMobileMenuItem(nextParent) : null;
+    }
+  }
+
+  if (id && itemType === MOBILE_MENU_ITEM_TYPES.LINK) {
+    const childCount = await dbGetAsync(
+      "SELECT COUNT(*) AS count FROM mobile_menu_items WHERE parent_id = ?",
+      [id]
+    );
+    if (Number(childCount?.count) > 0) {
+      const error = new Error("A group with children cannot be changed to a link.");
+      error.status = 400;
+      throw error;
+    }
+  }
+
+  return {
+    parent_id: parentId,
+    menu_area: menuArea,
+    item_type: itemType,
+    label,
+    url,
+    open_in_new_tab: openInNewTab,
+    sort_order: sortOrder,
+    is_visible: isVisible,
+  };
+}
+
+function buildMobileMenuTrees(rows) {
+  const items = (Array.isArray(rows) ? rows : []).map(serializeMobileMenuItem);
+  const byId = new Map();
+  items.forEach((item) => {
+    byId.set(Number(item.id), { ...item, children: [] });
+  });
+
+  const roots = { top: [], drawer: [] };
+  byId.forEach((item) => {
+    if (item.parent_id && byId.has(Number(item.parent_id))) {
+      byId.get(Number(item.parent_id)).children.push(item);
+      return;
+    }
+    roots[item.menu_area === MOBILE_MENU_AREAS.TOP ? "top" : "drawer"].push(item);
+  });
+
+  const sortItems = (entries) => {
+    entries.sort((left, right) => (
+      Number(left.sort_order) - Number(right.sort_order)
+      || Number(left.id) - Number(right.id)
+    ));
+    entries.forEach((entry) => sortItems(entry.children));
+  };
+  sortItems(roots.top);
+  sortItems(roots.drawer);
+  return roots;
+}
+
+async function fetchMobileMenuItems({ visibleOnly = false } = {}) {
+  const rows = await dbAllAsync(
+    `
+      SELECT *
+      FROM mobile_menu_items
+      ${visibleOnly ? "WHERE is_visible = 1" : ""}
+      ORDER BY
+        CASE menu_area WHEN 'top' THEN 0 ELSE 1 END ASC,
+        COALESCE(parent_id, id) ASC,
+        CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END ASC,
+        sort_order ASC,
+        id ASC
+    `
+  );
+  return rows.map(serializeMobileMenuItem);
+}
+
+app.get("/public/mobile-menu-items", async (_req, res) => {
+  try {
+    const items = await fetchMobileMenuItems({ visibleOnly: true });
+    res.json({ ok: true, menu: buildMobileMenuTrees(items) });
+  } catch (error) {
+    console.error("Failed to load public mobile menu items", error);
+    res.status(500).json({ ok: false, message: "Failed to load mobile menu items." });
+  }
+});
+
+app.get("/mobile-menu-items", requireAdmin, async (_req, res) => {
+  try {
+    const items = await fetchMobileMenuItems({ visibleOnly: false });
+    res.json({ ok: true, items, menu: buildMobileMenuTrees(items) });
+  } catch (error) {
+    console.error("Failed to load mobile menu items", error);
+    res.status(500).json({ ok: false, message: "Failed to load mobile menu items." });
+  }
+});
+
+app.post("/mobile-menu-items", requireAdmin, async (req, res) => {
+  try {
+    const payload = await normalizeMobileMenuPayload(req.body || {});
+    const result = await dbRunAsync(
+      `
+        INSERT INTO mobile_menu_items (
+          parent_id,
+          menu_area,
+          item_type,
+          label,
+          url,
+          open_in_new_tab,
+          sort_order,
+          is_visible
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        payload.parent_id,
+        payload.menu_area,
+        payload.item_type,
+        payload.label,
+        payload.url,
+        payload.open_in_new_tab,
+        payload.sort_order,
+        payload.is_visible,
+      ]
+    );
+    const created = serializeMobileMenuItem(await fetchMobileMenuItemById(result.lastID));
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "mobile_menu_item.created",
+      entity_type: "mobile_menu_item",
+      action: "create",
+      record_id: String(created.id),
+      changes: buildAuditCreationChanges(created, MOBILE_MENU_ITEM_AUDIT_FIELDS),
+    });
+    res.status(201).json({ ok: true, item: created });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    if (status >= 500) console.error("Failed to create mobile menu item", error);
+    res.status(status).json({ ok: false, message: error?.message || "Failed to create mobile menu item." });
+  }
+});
+
+app.patch("/mobile-menu-items/:id", requireAdmin, async (req, res) => {
+  const itemId = normalizePositiveInteger(req.params.id);
+  if (!itemId) {
+    res.status(400).json({ ok: false, message: "Invalid menu item id." });
+    return;
+  }
+
+  try {
+    const existingRow = await fetchMobileMenuItemById(itemId);
+    if (!existingRow) {
+      res.status(404).json({ ok: false, message: "Menu item not found." });
+      return;
+    }
+    const before = serializeMobileMenuItem(existingRow);
+    const payload = await normalizeMobileMenuPayload(req.body || {}, itemId);
+
+    await dbRunAsync(
+      `
+        UPDATE mobile_menu_items
+        SET
+          parent_id = ?,
+          menu_area = ?,
+          item_type = ?,
+          label = ?,
+          url = ?,
+          open_in_new_tab = ?,
+          sort_order = ?,
+          is_visible = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        payload.parent_id,
+        payload.menu_area,
+        payload.item_type,
+        payload.label,
+        payload.url,
+        payload.open_in_new_tab,
+        payload.sort_order,
+        payload.is_visible,
+        itemId,
+      ]
+    );
+
+    if (before.item_type === MOBILE_MENU_ITEM_TYPES.GROUP && before.menu_area !== payload.menu_area) {
+      await dbRunAsync(
+        `
+          WITH RECURSIVE descendants(id) AS (
+            SELECT id FROM mobile_menu_items WHERE parent_id = ?
+            UNION ALL
+            SELECT mobile_menu_items.id
+            FROM mobile_menu_items
+            INNER JOIN descendants ON mobile_menu_items.parent_id = descendants.id
+          )
+          UPDATE mobile_menu_items
+          SET menu_area = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id IN (SELECT id FROM descendants)
+        `,
+        [itemId, payload.menu_area]
+      );
+    }
+
+    const updated = serializeMobileMenuItem(await fetchMobileMenuItemById(itemId));
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "mobile_menu_item.updated",
+      entity_type: "mobile_menu_item",
+      action: "update",
+      record_id: String(updated.id),
+      changes: buildAuditChanges(before, updated, MOBILE_MENU_ITEM_AUDIT_FIELDS),
+    });
+    res.json({ ok: true, item: updated });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    if (status >= 500) console.error("Failed to update mobile menu item", error);
+    res.status(status).json({ ok: false, message: error?.message || "Failed to update mobile menu item." });
+  }
+});
+
+app.delete("/mobile-menu-items/:id", requireAdmin, async (req, res) => {
+  const itemId = normalizePositiveInteger(req.params.id);
+  if (!itemId) {
+    res.status(400).json({ ok: false, message: "Invalid menu item id." });
+    return;
+  }
+
+  try {
+    const existingRow = await fetchMobileMenuItemById(itemId);
+    if (!existingRow) {
+      res.status(404).json({ ok: false, message: "Menu item not found." });
+      return;
+    }
+    const before = serializeMobileMenuItem(existingRow);
+    const descendants = await dbAllAsync(
+      `
+        WITH RECURSIVE descendants(id) AS (
+          SELECT id FROM mobile_menu_items WHERE id = ?
+          UNION ALL
+          SELECT mobile_menu_items.id
+          FROM mobile_menu_items
+          INNER JOIN descendants ON mobile_menu_items.parent_id = descendants.id
+        )
+        SELECT id FROM descendants
+      `,
+      [itemId]
+    );
+    const ids = descendants.map((row) => normalizePositiveInteger(row.id)).filter(Boolean);
+    if (!ids.length) {
+      res.status(404).json({ ok: false, message: "Menu item not found." });
+      return;
+    }
+    await dbRunAsync(
+      `DELETE FROM mobile_menu_items WHERE id IN (${ids.map(() => "?").join(",")})`,
+      ids
+    );
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "mobile_menu_item.deleted",
+      entity_type: "mobile_menu_item",
+      action: "delete",
+      record_id: String(before.id),
+      changes: buildAuditDeletionChanges(before, MOBILE_MENU_ITEM_AUDIT_FIELDS),
+      metadata: { deleted_ids: ids },
+    });
+    res.json({ ok: true, deleted: ids.length });
+  } catch (error) {
+    console.error("Failed to delete mobile menu item", error);
+    res.status(500).json({ ok: false, message: "Failed to delete mobile menu item." });
+  }
 });
 
 app.get("/users", requireAdmin, (req, res, next) => {
