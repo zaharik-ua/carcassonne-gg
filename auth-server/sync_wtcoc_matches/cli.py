@@ -14,7 +14,7 @@ except ImportError:  # pragma: no cover
     def load_dotenv() -> None:
         return None
 
-from .client import DEFAULT_WTCOC_API_TOKEN, WtcocApiClient
+from .client import DEFAULT_WTCOC_API_BASE_URL, DEFAULT_WTCOC_API_TOKEN, WtcocApiClient
 from .service import WtcocSyncService
 from .sqlite_repository import SqliteWtcocRepository
 
@@ -71,7 +71,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--base-url",
-        default=os.getenv("WTCOC_API_BASE_URL"),
+        default=os.getenv("WTCOC_API_BASE_URL", DEFAULT_WTCOC_API_BASE_URL),
         help="Override WTCOC API base URL.",
     )
     parser.add_argument(
@@ -137,7 +137,7 @@ def main() -> int:
     repository = SqliteWtcocRepository(args.db_path)
     client = WtcocApiClient(
         token=args.token,
-        base_url=args.base_url or None or "https://www.carcassonne.cat/wtcoc/api",
+        base_url=args.base_url,
     )
     service = WtcocSyncService(repository=repository, client=client)
     summary = service.build_apply_payload(

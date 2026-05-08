@@ -2,7 +2,7 @@ function syncWTCOCMatches() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet();
   const matchesSheet = sheet.getSheetByName("Matches");
   const lineupsSheet = sheet.getSheetByName("Lineups");
-  const apiUrl = "https://www.carcassonne.cat/wtcoc/api/calendar/index.php?token=y8u93klm876wrfu45lrt";
+  const apiUrl = "https://www.wtcoc.net/api/calendar/index.php?token=y8u93klm876wrfu45lrt";
   
   const response = UrlFetchApp.fetch(apiUrl);
   const data = JSON.parse(response.getContentText());
@@ -121,7 +121,7 @@ function syncWTCOCPlayoff() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet();
   const matchesSheet = sheet.getSheetByName("Matches");
   const lineupsSheet = sheet.getSheetByName("Lineups");
-  const apiUrl = "https://www.carcassonne.cat/wtcoc/api/playoff/index.php?token=y8u93klm876wrfu45lrt";
+  const apiUrl = "https://www.wtcoc.net/api/playoff/index.php?token=y8u93klm876wrfu45lrt";
   
   const response = UrlFetchApp.fetch(apiUrl);
   let responseText = response.getContentText();

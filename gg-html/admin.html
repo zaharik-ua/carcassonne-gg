@@ -245,6 +245,7 @@
   .cp-edit-form {
     padding: 12px;
     display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px 12px;
   }
 
@@ -280,6 +281,7 @@
   }
 
   .cp-edit-actions {
+    grid-column: 1 / -1;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -488,6 +490,10 @@
   }
 
   @media (max-width: 640px) {
+    .cp-edit-form {
+      grid-template-columns: 1fr;
+    }
+
     .admin-section-head {
       flex-direction: column;
       align-items: stretch;
@@ -925,7 +931,15 @@
     actionBtn.type = "button";
     actionBtn.className = "cp-edit-btn";
     actionBtn.textContent = buttonLabel;
-    actionBtn.addEventListener("click", () => onClick(row));
+    actionBtn.addEventListener("click", () => {
+      const nextRow = row.nextElementSibling;
+      if (nextRow && nextRow.classList.contains("admin-inline-form")) {
+        nextRow.remove();
+        setStatus("", false);
+        return;
+      }
+      onClick(row);
+    });
 
     row.appendChild(main);
     row.appendChild(actionBtn);

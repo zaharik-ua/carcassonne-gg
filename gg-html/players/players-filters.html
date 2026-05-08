@@ -726,6 +726,84 @@
     });
   }
 
+  const pfEnsurePlayerSearchControl = () => {
+    if (pfSearchWrap) return;
+
+    pfSearchWrap = document.createElement("div");
+    pfSearchWrap.className = "pf-search-wrap";
+
+    pfSearchInput = document.createElement("input");
+    pfSearchInput.className = "pf-search-input";
+    pfSearchInput.type = "text";
+    pfSearchInput.placeholder = "Search player...";
+
+    pfSearchResults = document.createElement("div");
+    pfSearchResults.className = "pf-search-results";
+    const list = document.createElement("ul");
+    pfSearchResults.appendChild(list);
+
+    pfSearchClear = document.createElement("button");
+    pfSearchClear.type = "button";
+    pfSearchClear.className = "pf-search-clear";
+    pfSearchClear.setAttribute("aria-label", "Clear player filter");
+    pfSearchClear.textContent = "✕";
+    pfSearchClear.addEventListener("click", (e) => {
+      e.stopPropagation();
+      pfClearPlayerFilter();
+      pfSearchBtn.focus();
+    });
+
+    pfSearchWrap.appendChild(pfSearchInput);
+    pfSearchWrap.appendChild(pfSearchResults);
+    pfSearchWrap.appendChild(pfSearchClear);
+
+    pfSearchInput.addEventListener("input", () => {
+      if (pfSearchInput.readOnly) return;
+      const query = pfSearchInput.value.trim().toLowerCase();
+      const listEl = pfSearchResults.querySelector("ul");
+      listEl.innerHTML = "";
+      if (!query) {
+        pfSearchResults.style.display = "none";
+        return;
+      }
+      const matches = pfPlayers
+        .filter(p => p && p.toLowerCase().startsWith(query))
+        .slice(0, 20);
+      if (!matches.length) {
+        const li = document.createElement("li");
+        li.className = "no-results";
+        li.textContent = "No players found";
+        listEl.appendChild(li);
+        pfSearchResults.style.display = "block";
+        return;
+      }
+      matches.forEach(name => {
+        const li = document.createElement("li");
+        li.textContent = name;
+        li.addEventListener("click", () => pfActivatePlayerFilter(name));
+        listEl.appendChild(li);
+      });
+      pfSearchResults.style.display = "block";
+    });
+
+    pfSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        pfClearPlayerFilter();
+        pfSearchBtn.focus();
+      }
+    });
+  };
+
+  const pfShowPlayerSearchControl = () => {
+    pfEnsurePlayerSearchControl();
+    if (pfSearchHost.contains(pfSearchBtn)) {
+      pfSearchHost.replaceChild(pfSearchWrap, pfSearchBtn);
+    } else if (!pfSearchHost.contains(pfSearchWrap)) {
+      pfSearchHost.appendChild(pfSearchWrap);
+    }
+  };
+
   const pfClearPlayerFilter = () => {
     if (pfSearchInput) {
       pfSearchInput.value = "";
@@ -748,6 +826,7 @@
 
   const pfActivatePlayerFilter = (name) => {
     if (!name) return;
+    pfShowPlayerSearchControl();
     pfSetActivePlayer(name);
     if (pfSearchInput) {
       pfSearchInput.value = name;
@@ -763,78 +842,7 @@
   };
 
   pfSearchBtn.addEventListener("click", () => {
-    if (!pfSearchWrap) {
-      pfSearchWrap = document.createElement("div");
-      pfSearchWrap.className = "pf-search-wrap";
-
-      pfSearchInput = document.createElement("input");
-      pfSearchInput.className = "pf-search-input";
-      pfSearchInput.type = "text";
-      pfSearchInput.placeholder = "Search player...";
-
-      pfSearchResults = document.createElement("div");
-      pfSearchResults.className = "pf-search-results";
-      const list = document.createElement("ul");
-      pfSearchResults.appendChild(list);
-
-      pfSearchClear = document.createElement("button");
-      pfSearchClear.type = "button";
-      pfSearchClear.className = "pf-search-clear";
-      pfSearchClear.setAttribute("aria-label", "Clear player filter");
-      pfSearchClear.textContent = "✕";
-      pfSearchClear.addEventListener("click", (e) => {
-        e.stopPropagation();
-        pfClearPlayerFilter();
-        pfSearchBtn.focus();
-      });
-
-      pfSearchWrap.appendChild(pfSearchInput);
-      pfSearchWrap.appendChild(pfSearchResults);
-      pfSearchWrap.appendChild(pfSearchClear);
-
-      pfSearchInput.addEventListener("input", () => {
-        if (pfSearchInput.readOnly) return;
-        const query = pfSearchInput.value.trim().toLowerCase();
-        const listEl = pfSearchResults.querySelector("ul");
-        listEl.innerHTML = "";
-        if (!query) {
-          pfSearchResults.style.display = "none";
-          return;
-        }
-        const matches = pfPlayers
-          .filter(p => p && p.toLowerCase().startsWith(query))
-          .slice(0, 20);
-        if (!matches.length) {
-          const li = document.createElement("li");
-          li.className = "no-results";
-          li.textContent = "No players found";
-          listEl.appendChild(li);
-          pfSearchResults.style.display = "block";
-          return;
-        }
-        matches.forEach(name => {
-          const li = document.createElement("li");
-          li.textContent = name;
-          li.addEventListener("click", () => pfActivatePlayerFilter(name));
-          listEl.appendChild(li);
-        });
-        pfSearchResults.style.display = "block";
-      });
-
-      pfSearchInput.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          pfClearPlayerFilter();
-          pfSearchBtn.focus();
-        }
-      });
-    }
-
-    if (pfSearchWrap && pfSearchHost.contains(pfSearchBtn)) {
-      pfSearchHost.replaceChild(pfSearchWrap, pfSearchBtn);
-    } else if (pfSearchWrap && !pfSearchHost.contains(pfSearchWrap)) {
-      pfSearchHost.appendChild(pfSearchWrap);
-    }
+    pfShowPlayerSearchControl();
     if (pfSearchInput) {
       pfSearchInput.value = "";
       pfSearchInput.readOnly = false;
@@ -958,8 +966,9 @@
       pfUpdateMatchesToggle();
       const activePlayer = pfGetActivePlayer();
       if (activePlayer) {
-        if (pfPlayers.includes(activePlayer)) {
-          pfActivatePlayerFilter(activePlayer);
+        const matchedPlayer = pfPlayers.find(name => name.toLowerCase() === activePlayer.toLowerCase());
+        if (matchedPlayer) {
+          pfActivatePlayerFilter(matchedPlayer);
         } else {
           pfSetActivePlayer("");
         }
@@ -982,5 +991,11 @@
     pfUpdateCaptainsToggle();
     pfUpdateRatingChangeToggle();
     pfUpdateMatchesToggle();
+    const activePlayer = pfGetActivePlayer();
+    if (activePlayer) {
+      pfActivatePlayerFilter(activePlayer);
+    } else {
+      pfClearPlayerFilter();
+    }
   });
 </script>

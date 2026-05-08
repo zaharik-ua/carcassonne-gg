@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 
-DEFAULT_WTCOC_API_BASE_URL = "https://www.carcassonne.cat/wtcoc/api"
+DEFAULT_WTCOC_API_BASE_URL = "https://www.wtcoc.net/api"
 DEFAULT_WTCOC_API_TOKEN = "y8u93klm876wrfu45lrt"
 
 
