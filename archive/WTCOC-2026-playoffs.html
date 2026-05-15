@@ -3,34 +3,31 @@
 
 <style>
   :root {
-    --main-bg-color: #2C6DA3;
-    --hover-bg-color: #24598a;
-    --accent-text-color: #fff;
+    --wtcoc-main-bg-color: #2C6DA3;
+    --wtcoc-hover-bg-color: #24598a;
+    --wtcoc-accent-text-color: #fff;
   }
 
-  body {
-    font-family: 'Montserrat', sans-serif;
-  }
-
-  #stage2-content {
+  #wtcoc-stage2-content {
     width: 100%;
     padding: 0;
     background: transparent;
     box-sizing: border-box;
+    font-family: 'Montserrat', sans-serif;
   }
 
-  .playoff-scroll-wrapper {
+  .wtcoc-playoff-scroll-wrapper {
     overflow-x: auto;
     overflow-y: hidden;
     width: 100%;
     margin-bottom: 16px;
   }
 
-  .playoff-scroll-wrapper > div {
+  .wtcoc-playoff-scroll-wrapper > div {
     min-width: max-content;
   }
 
-  #playoff-bracket {
+  #wtcoc-playoff-bracket {
     display: flex;
     align-items: flex-start;
     flex-wrap: nowrap;
@@ -39,7 +36,7 @@
     background-color: #f2f4f7;
   }
 
-  .match-box {
+  .wtcoc-match-box {
     background-color: #fff;
     border: 1px solid #aaa;
     border-radius: 2px;
@@ -48,7 +45,7 @@
     box-sizing: border-box;
   }
 
-  .match-box div {
+  .wtcoc-match-box div {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -57,7 +54,7 @@
     padding: 0 7px;
   }
 
-  .match-box a {
+  .wtcoc-match-box a {
     color: #333;
     text-decoration: none;
     white-space: nowrap;
@@ -65,11 +62,11 @@
     text-overflow: ellipsis;
   }
 
-  .match-box a:hover {
+  .wtcoc-match-box a:hover {
     color: #0277BD;
   }
 
-  .player-logo {
+  .wtcoc-player-logo {
     height: 18px;
     width: 18px;
     border: 0.5px solid #444;
@@ -78,7 +75,7 @@
     margin: 2px 4px 2px 0;
   }
 
-  .team-logo {
+  .wtcoc-team-logo {
     height: 20px;
     width: 20px;
     object-fit: contain;
@@ -86,28 +83,28 @@
     margin: 0 4px 0 0;
   }
 
-  .match-row-winner {
+  .wtcoc-match-row-winner {
     font-weight: 500;
   }
 
-  .match-row-loser {
+  .wtcoc-match-row-loser {
     font-weight: 400;
   }
 
-  .round-label {
+  .wtcoc-round-label {
     font-weight: 600;
     font-size: 14px;
     text-align: center;
     color: #333;
   }
 
-  .match-meta-wrapper {
+  .wtcoc-match-meta-wrapper {
     position: absolute;
     font-size: 11px;
     line-height: 13px;
   }
 
-  .match-meta-chip {
+  .wtcoc-match-meta-chip {
     display: inline-block;
     padding: 1px 4px;
     border-radius: 1px;
@@ -115,32 +112,32 @@
     box-shadow: 0 0 0 1px rgba(0,0,0,0.05) inset;
   }
 
-  .match-meta-format {
+  .wtcoc-match-meta-format {
     background-color: #d7eaff;
     color: #073654;
     font-weight: 400;
   }
 
-  .match-meta-format.bo1 {
+  .wtcoc-match-meta-format.wtcoc-bo1 {
     background-color: #ffffff;
     color: #333333;
   }
 
-  .match-meta-format.bo3 {
+  .wtcoc-match-meta-format.wtcoc-bo3 {
     background-color: #d7eaff;
     color: #073654;
   }
 
-  .match-meta-format.bo5 {
+  .wtcoc-match-meta-format.wtcoc-bo5 {
     background-color: #fce0e0;
     color: #590f0f;
   }
 
-  .highlight-player {
+  .wtcoc-highlight-player {
     background-color: #eeeeee !important;
   }
 
-  .expand-bracket-btn {
+  .wtcoc-expand-bracket-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -149,8 +146,8 @@
     padding: 0;
     font-size: 13px;
     font-weight: 600;
-    color: var(--accent-text-color);
-    background-color: var(--main-bg-color);
+    color: var(--wtcoc-accent-text-color);
+    background-color: var(--wtcoc-main-bg-color);
     border: none;
     border-radius: 2px;
     cursor: pointer;
@@ -158,22 +155,22 @@
     opacity: 0.5;
   }
 
-  .expand-bracket-btn:hover {
-    background-color: var(--hover-bg-color);
+  .wtcoc-expand-bracket-btn:hover {
+    background-color: var(--wtcoc-hover-bg-color);
   }
 
-  .expand-bracket-btn i {
+  .wtcoc-expand-bracket-btn i {
     font-size: 12px;
   }
 
-  .expand-bracket-floating {
+  .wtcoc-expand-bracket-floating {
     position: absolute;
     top: 6px;
     left: 6px;
     z-index: 5;
   }
 
-  .fullscreen-overlay {
+  .wtcoc-fullscreen-overlay {
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.75);
@@ -182,9 +179,10 @@
     flex-direction: column;
     padding: 12px;
     box-sizing: border-box;
+    font-family: 'Montserrat', sans-serif;
   }
 
-  .fullscreen-close-btn {
+  .wtcoc-fullscreen-close-btn {
     position: absolute;
     top: 20px;
     left: 20px;
@@ -195,8 +193,8 @@
     height: 28px;
     padding: 0;
     font-size: 14px;
-    color: var(--accent-text-color);
-    background-color: var(--main-bg-color);
+    color: var(--wtcoc-accent-text-color);
+    background-color: var(--wtcoc-main-bg-color);
     border: none;
     border-radius: 2px;
     cursor: pointer;
@@ -204,11 +202,11 @@
     z-index: 10001;
   }
 
-  .fullscreen-close-btn:hover {
-    background-color: var(--hover-bg-color);
+  .wtcoc-fullscreen-close-btn:hover {
+    background-color: var(--wtcoc-hover-bg-color);
   }
 
-  .fullscreen-content {
+  .wtcoc-fullscreen-content {
     flex: 1 1 auto;
     overflow: auto;
     background: #f2f4f7;
@@ -216,16 +214,16 @@
     padding: 8px;
   }
 
-  .fullscreen-content .expand-bracket-floating {
+  .wtcoc-fullscreen-content .wtcoc-expand-bracket-floating {
     display: none;
   }
-  .accordion-toggle {
+  .wtcoc-accordion-toggle {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 8px;
-    background-color: var(--main-bg-color);
-    color: var(--accent-text-color);
+    background-color: var(--wtcoc-main-bg-color);
+    color: var(--wtcoc-accent-text-color);
     font-weight: 500;
     font-size: 15px;
     padding: 5px 12px;
@@ -235,52 +233,55 @@
     margin-bottom: 6px;
     width: 100%;
   }
-  .accordion-toggle:hover {
-    background-color: var(--hover-bg-color);
+  .wtcoc-accordion-toggle:hover {
+    background-color: var(--wtcoc-hover-bg-color);
   }
-  .accordion-toggle .chevron {
+  .wtcoc-accordion-toggle.wtcoc-open {
+    background-color: var(--wtcoc-main-bg-color);
+  }
+  .wtcoc-accordion-toggle .wtcoc-chevron {
     display: flex;
     align-items: center;
     justify-content: center;
     margin-left: auto;
   }
-  .accordion-toggle .chevron i {
+  .wtcoc-accordion-toggle .wtcoc-chevron i {
     font-size: 12px;
     transition: transform 0.3s ease;
   }
-  .accordion-toggle.open .chevron i {
+  .wtcoc-accordion-toggle.wtcoc-open .wtcoc-chevron i {
     transform: rotate(180deg);
   }
-  .accordion-content {
+  .wtcoc-accordion-content {
     overflow: hidden;
     max-height: 0;
     transition: max-height 0.3s ease;
     padding: 0 4px;
     width: 100%;
   }
-  .accordion-content-inner {
+  .wtcoc-accordion-content-inner {
     padding: 10px 0;
     width: 100%;
   }
 </style>
-<div id="stage2-content"></div>
+<div id="wtcoc-stage2-content"></div>
 
 <script>
-  const currentTournamentId = "ETCOC-2025";
+  const currentTournamentId = "WTCOC-2026";
   const TOURNAMENT_THEMES = {
     blue: { main: '#2C6DA3', hover: '#24598a' },
     red: { main: '#d85c5c', hover: '#c64a4b' },
     green: { main: '#197457', hover: '#145c44' },
     deepnavy: { main: '#0f3a5a', hover: '#072840' },
-    gold: { main: '#f3c11b', hover: '#ebb607', text: '#333' }
+    gold: { main: '#153b52', hover: '#0e2d40', text: '#fff' }
   };
 
   function applyTournamentTheme(styleName) {
     const normalized = (styleName || '').trim().toLowerCase();
     const theme = TOURNAMENT_THEMES[normalized] || TOURNAMENT_THEMES.blue;
-    document.documentElement.style.setProperty('--main-bg-color', theme.main);
-    document.documentElement.style.setProperty('--hover-bg-color', theme.hover);
-    document.documentElement.style.setProperty('--accent-text-color', theme.text || '#fff');
+    document.documentElement.style.setProperty('--wtcoc-main-bg-color', theme.main);
+    document.documentElement.style.setProperty('--wtcoc-hover-bg-color', theme.hover);
+    document.documentElement.style.setProperty('--wtcoc-accent-text-color', theme.text || '#fff');
   }
 
   applyTournamentTheme('gold');
@@ -457,7 +458,7 @@
       const baseLeft = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
 
       const label = document.createElement("div");
-      label.className = "round-label";
+      label.className = "wtcoc-round-label";
       label.textContent = roundTitle;
       label.style.position = "absolute";
       label.style.width = `${MATCH_WIDTH}px`;
@@ -468,7 +469,7 @@
 
       if (roundDates) {
         const dateLabel = document.createElement("div");
-        dateLabel.className = "round-label";
+        dateLabel.className = "wtcoc-round-label";
         dateLabel.textContent = roundDates;
         dateLabel.style.position = "absolute";
         dateLabel.style.width = `${MATCH_WIDTH}px`;
@@ -483,7 +484,7 @@
       // Додаємо матчі
       matches.forEach((m) => {
         const matchBox = document.createElement("div");
-        matchBox.className = "match-box";
+        matchBox.className = "wtcoc-match-box";
         matchBox.style.width = `${MATCH_WIDTH}px`;
         matchBox.style.height = `${MATCH_HEIGHT}px`;
         matchBox.style.position = "absolute";
@@ -492,7 +493,7 @@
         if (m.knockout_stage === "third_place") {
           // Назву раунду для матчу за 3-є місце додаємо окремо нижче
           const label = document.createElement("div");
-          label.className = "round-label";
+          label.className = "wtcoc-round-label";
           label.style.position = "absolute";
           label.style.width = `${MATCH_WIDTH}px`;
           label.style.textAlign = "center";
@@ -508,7 +509,7 @@
           container.appendChild(label);
           if (thirdDates) {
             const dateLabel = document.createElement("div");
-            dateLabel.className = "round-label";
+            dateLabel.className = "wtcoc-round-label";
             dateLabel.textContent = thirdDates;
             dateLabel.style.position = "absolute";
             dateLabel.style.width = `${MATCH_WIDTH}px`;
@@ -526,22 +527,22 @@
         const isCOC = tournamentType !== "TEAM"; // COC-type brackets use duels data
         if (hasTime || (isCOC && m.duel_format)) {
           const metaWrap = document.createElement("div");
-          metaWrap.className = "match-meta-wrapper";
+          metaWrap.className = "wtcoc-match-meta-wrapper";
           metaWrap.style.left = `${m.cord_left + 2}px`;
           metaWrap.style.top = `${Math.max(0, topOffset - 14)}px`;
           metaWrap.style.width = `${MATCH_WIDTH}px`;
 
           if (isCOC && m.duel_format) {
             const fmt = document.createElement("span");
-            fmt.className = "match-meta-chip match-meta-format";
+            fmt.className = "wtcoc-match-meta-chip wtcoc-match-meta-format";
             fmt.textContent = m.duel_format; // e.g., Bo1/Bo3/Bo5
             const dfmt = String(m.duel_format || '').toLowerCase();
             if (dfmt.includes('bo1')) {
-              fmt.classList.add('bo1');
+              fmt.classList.add('wtcoc-bo1');
             } else if (dfmt.includes('bo3')) {
-              fmt.classList.add('bo3');
+              fmt.classList.add('wtcoc-bo3');
             } else if (dfmt.includes('bo5') || dfmt.includes('b05')) {
-              fmt.classList.add('bo5');
+              fmt.classList.add('wtcoc-bo5');
             }
             metaWrap.appendChild(fmt);
           }
@@ -565,14 +566,14 @@
 
         if (tournamentType === "TEAM") {
           // додаємо плейофф матчі з командами
-          opponent1Div.className = m.duels_won1 > m.duels_won2 ? "match-row-winner" : "match-row-loser";
+          opponent1Div.className = m.duels_won1 > m.duels_won2 ? "wtcoc-match-row-winner" : "wtcoc-match-row-loser";
           // Team 1: logo + name
           let team1Logo = null;
           const team1Avatar = teams.find(tm => tm.team === m.team1)?.logo;
           if (team1Avatar) {
             team1Logo = document.createElement("img");
             team1Logo.src = team1Avatar;
-            team1Logo.className = "team-logo";
+            team1Logo.className = "wtcoc-team-logo";
           }
           const team1Info = document.createElement("div");
           team1Info.style.display = "flex";
@@ -592,14 +593,14 @@
           opponent1Div.appendChild(score1Span);
           // Add data-opponent-name attribute
           opponent1Div.setAttribute("data-opponent-name", m.team1);
-          opponent2Div.className = m.duels_won1 < m.duels_won2 ? "match-row-winner" : "match-row-loser";
+          opponent2Div.className = m.duels_won1 < m.duels_won2 ? "wtcoc-match-row-winner" : "wtcoc-match-row-loser";
           // Team 2: logo + name
           let team2Logo = null;
           const team2Avatar = teams.find(tm => tm.team === m.team2)?.logo;
           if (team2Avatar) {
             team2Logo = document.createElement("img");
             team2Logo.src = team2Avatar;
-            team2Logo.className = "team-logo";
+            team2Logo.className = "wtcoc-team-logo";
           }
           const team2Info = document.createElement("div");
           team2Info.style.display = "flex";
@@ -622,14 +623,14 @@
         } else {
 
           // додаємо плейофф матчі з гравцями
-          opponent1Div.className = m.score1 > m.score2 ? "match-row-winner" : "match-row-loser";
+          opponent1Div.className = m.score1 > m.score2 ? "wtcoc-match-row-winner" : "wtcoc-match-row-loser";
           // Player 1: logo + link
           let player1Logo = null;
           const player1Avatar = players.find(pl => pl.player_id === m.player1_id)?.avatar;
           if (player1Avatar) {
             player1Logo = document.createElement("img");
             player1Logo.src = player1Avatar;
-            player1Logo.className = "player-logo";
+            player1Logo.className = "wtcoc-player-logo";
           }
           const player1Link = document.createElement("a");
           if (m.player1_id) {
@@ -654,14 +655,14 @@
           // Add data-opponent-name attribute
           opponent1Div.setAttribute("data-opponent-name", m.player1);
           
-          opponent2Div.className = m.score1 < m.score2 ? "match-row-winner" : "match-row-loser";
+          opponent2Div.className = m.score1 < m.score2 ? "wtcoc-match-row-winner" : "wtcoc-match-row-loser";
           // Player 2: logo + link
           let player2Logo = null;
           const player2Avatar = players.find(pl => pl.player_id === m.player2_id)?.avatar;
           if (player2Avatar) {
             player2Logo = document.createElement("img");
             player2Logo.src = player2Avatar;
-            player2Logo.className = "player-logo";
+            player2Logo.className = "wtcoc-player-logo";
           }
           const player2Link = document.createElement("a");
           if (m.player2_id) {
@@ -785,6 +786,41 @@
     });
   }
 
+  function getHighlightOpponentName(row) {
+    const opponentName = (row.getAttribute("data-opponent-name") || "").trim();
+    const normalized = opponentName.toLowerCase();
+    if (!opponentName || normalized === "undefined" || normalized === "null") {
+      return "";
+    }
+    return opponentName;
+  }
+
+  function addOpponentHoverHighlight(playoffContainer) {
+    const rows = playoffContainer.querySelectorAll(".wtcoc-match-row-winner, .wtcoc-match-row-loser");
+    rows.forEach(row => {
+      const opponentName = getHighlightOpponentName(row);
+      if (!opponentName) {
+        return;
+      }
+
+      row.addEventListener("mouseenter", () => {
+        rows.forEach(el => {
+          if (getHighlightOpponentName(el) === opponentName) {
+            el.classList.add("wtcoc-highlight-player");
+          }
+        });
+      });
+
+      row.addEventListener("mouseleave", () => {
+        rows.forEach(el => {
+          if (getHighlightOpponentName(el) === opponentName) {
+            el.classList.remove("wtcoc-highlight-player");
+          }
+        });
+      });
+    });
+  }
+
   function renderSingleElimination(playoffMatches, containerOverride, tournamentType) {
     
     // Optionally override THIRD_PLACE_VERTICAL_OFFSET from currentTournament (ignore null/empty)
@@ -816,23 +852,23 @@
       container.innerHTML = '';
       // Add a scrollable wrapper
       const scrollWrapper = document.createElement("div");
-      scrollWrapper.className = "playoff-scroll-wrapper";
+      scrollWrapper.className = "wtcoc-playoff-scroll-wrapper";
       // Add a wrapper for the bracket
       bracketDiv = document.createElement("div");
-      bracketDiv.id = "playoff-bracket";
+      bracketDiv.id = "wtcoc-playoff-bracket";
       scrollWrapper.appendChild(bracketDiv);
       container.appendChild(scrollWrapper);
       container = bracketDiv;
       // Floating fullscreen button inside bracket
       const expandBtn = document.createElement("button");
-      expandBtn.className = "expand-bracket-btn expand-bracket-floating";
+      expandBtn.className = "wtcoc-expand-bracket-btn wtcoc-expand-bracket-floating";
       expandBtn.title = "Відкрити на весь екран";
       expandBtn.innerHTML = '<i class="fas fa-up-right-and-down-left-from-center"></i>';
       container.appendChild(expandBtn);
       expandBtn.addEventListener('click', () => openBracketFullscreen(scrollWrapper));
     } else {
       // fallback: legacy behavior
-      container = document.getElementById("playoff-bracket");
+      container = document.getElementById("wtcoc-playoff-bracket");
       container.innerHTML = '';
     }
     
@@ -851,7 +887,7 @@
     
     // Calculate playoff match coordinates
     calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, playoffMatches, currentTournamentId);
-    // Render matches with absolute positioning inside #playoff-bracket
+    // Render matches with absolute positioning inside #wtcoc-playoff-bracket
     renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, container);
     // --- DRAW LINES ---
     drawPlayoffLines(groupedByRound, sortedRounds, container);
@@ -863,25 +899,7 @@
     const maxCordLeft = Math.max(...allMatches.map(m => m.cord_left || 0));
     container.style.width = `${maxCordLeft + MATCH_WIDTH + BRACKET_MARGIN}px`;
 
-    // --- HOVER HIGHLIGHT LOGIC ---
-    // After rendering all matches, add hover event for .match-row-winner and .match-row-loser
-    const playoffContainer = container;
-    playoffContainer.querySelectorAll(".match-row-winner, .match-row-loser").forEach(row => {
-      const playerName = row.getAttribute("data-opponent-name");
-      if (playerName !== null && playerName !== "") {
-        row.addEventListener("mouseenter", () => {
-          playoffContainer.querySelectorAll(`[data-opponent-name="${playerName}"]`).forEach(el => {
-            el.classList.add("highlight-player");
-          });
-        });
-
-        row.addEventListener("mouseleave", () => {
-          playoffContainer.querySelectorAll(`[data-opponent-name="${playerName}"]`).forEach(el => {
-            el.classList.remove("highlight-player");
-          });
-        });
-      }
-    });
+    addOpponentHoverHighlight(container);
   }
 
   function renderDoubleElimination(playoffMatches, containerOverride, tournamentType) {
@@ -915,24 +933,24 @@
       container.innerHTML = '';
       // Add a scrollable wrapper
       const scrollWrapper = document.createElement("div");
-      scrollWrapper.className = "playoff-scroll-wrapper";
+      scrollWrapper.className = "wtcoc-playoff-scroll-wrapper";
       // Add a wrapper for the bracket
       bracketDiv = document.createElement("div");
-      bracketDiv.id = "playoff-bracket";
+      bracketDiv.id = "wtcoc-playoff-bracket";
       bracketDiv.style.position = "relative";
       scrollWrapper.appendChild(bracketDiv);
       container.appendChild(scrollWrapper);
       container = bracketDiv;
       // Floating fullscreen button inside bracket
       const expandBtn = document.createElement("button");
-      expandBtn.className = "expand-bracket-btn expand-bracket-floating";
+      expandBtn.className = "wtcoc-expand-bracket-btn wtcoc-expand-bracket-floating";
       expandBtn.title = "Відкрити на весь екран";
       expandBtn.innerHTML = '<i class="fas fa-up-right-and-down-left-from-center"></i>';
       container.appendChild(expandBtn);
       expandBtn.addEventListener('click', () => openBracketFullscreen(scrollWrapper));
     } else {
       // fallback: legacy behavior
-      container = document.getElementById("playoff-bracket");
+      container = document.getElementById("wtcoc-playoff-bracket");
       container.innerHTML = '';
       container.style.position = "relative";
     }
@@ -990,23 +1008,7 @@
     container.style.width = `${globalMaxLeft + MATCH_WIDTH + BRACKET_MARGIN}px`;
 
     // 5) Hover highlight across entire bracket container
-    const playoffContainer = container;
-    playoffContainer.querySelectorAll(".match-row-winner, .match-row-loser").forEach(row => {
-      const playerName = row.getAttribute("data-opponent-name");
-      if (playerName !== null && playerName !== "") {
-        row.addEventListener("mouseenter", () => {
-          playoffContainer.querySelectorAll(`[data-opponent-name="${playerName}"]`).forEach(el => {
-            el.classList.add("highlight-player");
-          });
-        });
-
-        row.addEventListener("mouseleave", () => {
-          playoffContainer.querySelectorAll(`[data-opponent-name="${playerName}"]`).forEach(el => {
-            el.classList.remove("highlight-player");
-          });
-        });
-      }
-    });
+    addOpponentHoverHighlight(container);
   }
 
 
@@ -1016,17 +1018,17 @@
   function openBracketFullscreen(sourceWrapper) {
     try {
       const overlay = document.createElement('div');
-      overlay.className = 'fullscreen-overlay';
+      overlay.className = 'wtcoc-fullscreen-overlay';
 
       // Close button (top-left, icon only)
       const closeBtn = document.createElement('button');
-      closeBtn.className = 'fullscreen-close-btn';
+      closeBtn.className = 'wtcoc-fullscreen-close-btn';
       closeBtn.title = 'Закрити (Esc)';
       closeBtn.innerHTML = '<i class="fas fa-xmark"></i>';
       overlay.appendChild(closeBtn);
 
       const content = document.createElement('div');
-      content.className = 'fullscreen-content';
+      content.className = 'wtcoc-fullscreen-content';
       // Clone the scrollable wrapper with the bracket inside
       const cloned = sourceWrapper.cloneNode(true);
       content.appendChild(cloned);
@@ -1055,7 +1057,7 @@
   }
 
   function renderStage2() {
-    const container = document.getElementById('stage2-content');
+    const container = document.getElementById('wtcoc-stage2-content');
     if (!container) {
       return;
     }
@@ -1063,21 +1065,21 @@
     container.innerHTML = '';
 
     const accordionToggle = document.createElement('div');
-    accordionToggle.className = 'accordion-toggle';
+    accordionToggle.className = 'wtcoc-accordion-toggle';
     const labelSpan = document.createElement('span');
-    labelSpan.textContent = 'ETCOC 2025 Playoffs';
-    const chevron = document.createElement('div');
-    chevron.className = 'chevron';
-    chevron.innerHTML = '<i class="fas fa-chevron-down"></i>';
+    labelSpan.textContent = 'WTCOC 2026 Playoffs';
+    const wtcocChevron = document.createElement('div');
+    wtcocChevron.className = 'wtcoc-chevron';
+    wtcocChevron.innerHTML = '<i class="fas fa-chevron-down"></i>';
     accordionToggle.appendChild(labelSpan);
-    accordionToggle.appendChild(chevron);
+    accordionToggle.appendChild(wtcocChevron);
 
     const accordionContent = document.createElement('div');
-    accordionContent.className = 'accordion-content';
+    accordionContent.className = 'wtcoc-accordion-content';
     accordionContent.style.maxHeight = '0px';
 
     const contentInner = document.createElement('div');
-    contentInner.className = 'accordion-content-inner';
+    contentInner.className = 'wtcoc-accordion-content-inner';
     const bracketContainer = document.createElement('div');
     contentInner.appendChild(bracketContainer);
     accordionContent.appendChild(contentInner);
@@ -1088,17 +1090,17 @@
     const collapseContent = () => {
       accordionContent.style.maxHeight = `${accordionContent.scrollHeight}px`;
       void accordionContent.offsetHeight;
-      accordionToggle.classList.remove('open');
+      accordionToggle.classList.remove('wtcoc-open');
       accordionContent.style.maxHeight = '0px';
     };
 
     const expandContent = () => {
-      accordionToggle.classList.add('open');
+      accordionToggle.classList.add('wtcoc-open');
       accordionContent.style.maxHeight = `${accordionContent.scrollHeight}px`;
     };
 
     accordionToggle.addEventListener('click', () => {
-      if (accordionToggle.classList.contains('open')) {
+      if (accordionToggle.classList.contains('wtcoc-open')) {
         collapseContent();
       } else {
         expandContent();
@@ -1106,7 +1108,7 @@
     });
 
     const ensureExpandedHeight = () => {
-      if (accordionToggle.classList.contains('open')) {
+      if (accordionToggle.classList.contains('wtcoc-open')) {
         accordionContent.style.maxHeight = `${accordionContent.scrollHeight}px`;
       }
     };
@@ -1156,7 +1158,7 @@
   }
 
   function handleData(data) {
-    const container = document.getElementById('stage2-content');
+    const container = document.getElementById('wtcoc-stage2-content');
     if (!container) {
       return;
     }
@@ -1182,7 +1184,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    const container = document.getElementById('stage2-content');
+    const container = document.getElementById('wtcoc-stage2-content');
     if (!container) {
       console.error('Stage 2 container not found.');
       return;

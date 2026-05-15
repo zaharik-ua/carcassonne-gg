@@ -50,6 +50,7 @@ const FRONTEND_ORIGINS = Array.from(
 );
 const PRIMARY_FRONTEND_ORIGIN = FRONTEND_ORIGINS[0];
 const DB_PATH = process.env.DB_PATH || "./data/auth.sqlite";
+const UPLOADS_DIR = process.env.UPLOADS_DIR || "./uploads";
 const isProd = process.env.NODE_ENV === "production";
 const SITE_BASE_URL = process.env.SITE_BASE_URL || "https://carcassonne.gg";
 const cookieSameSite = process.env.COOKIE_SAME_SITE || (isProd ? "none" : "lax");
@@ -64,6 +65,9 @@ if (cookieSameSite === "none" && !cookieSecure) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dbFullPath = path.resolve(__dirname, "..", DB_PATH);
+const uploadsRootDir = path.isAbsolute(UPLOADS_DIR)
+  ? UPLOADS_DIR
+  : path.resolve(__dirname, "..", UPLOADS_DIR);
 
 const db = new sqlite3.Database(dbFullPath);
 
@@ -5700,6 +5704,7 @@ registerImageRoutes(app, {
   buildAuditDeletionChanges,
   getAuditActor,
   logAuditEvent,
+  uploadsRootDir,
 });
 
 app.get("/icons", (req, res, next) => {

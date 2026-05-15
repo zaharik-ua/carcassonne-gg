@@ -1,7 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
+import multer from "multer";
+import sharp from "sharp";
 
 const IMAGE_AUDIT_FIELDS = [
   "id",
+  "image_key",
   "uuid",
   "owner_user_id",
   "uploaded_by_user_id",
@@ -43,6 +48,35 @@ const IMAGE_VARIANT_AUDIT_FIELDS = [
 ];
 const IMAGE_STATUSES = ["uploaded", "processing", "ready", "failed", "archived"];
 const IMAGE_VISIBILITIES = ["private", "unlisted", "public"];
+const IMAGE_KEY_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
+const IMAGE_KEY_FIRST_CHAR_ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+const IMAGE_KEY_LENGTH = 10;
+const IMAGE_STORAGE_ROOT = "uploads/images";
+const IMAGE_UPLOAD_MAX_BYTES = Number(process.env.IMAGE_UPLOAD_MAX_BYTES || 64 * 1024 * 1024);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: IMAGE_UPLOAD_MAX_BYTES,
+    files: 1,
+  },
+});
+const uploadImageFields = upload.fields([
+  { name: "image", maxCount: 1 },
+  { name: "file", maxCount: 1 },
+]);
+
+const IMAGE_VARIANTS = [
+  { variant: "thumb", filename: "thumb.webp", width: 240, height: 240, fit: "cover", quality: 75 },
+  { variant: "small", filename: "small.webp", width: 480, quality: 78 },
+  { variant: "medium", filename: "medium.webp", width: 960, quality: 80 },
+  { variant: "large", filename: "large.webp", width: 1600, quality: 82 },
+];
+const OPTIMIZED_ORIGINAL = {
+  variant: "original",
+  filename: "original.webp",
+  width: 2560,
+  quality: 82,
+};
 
 function requireAuthenticated(req, res, next) {
   if (!req.user) {
@@ -81,6 +115,54 @@ function normalizeImageVisibility(value, fallback = "private") {
   return fallback;
 }
 
+function generateImageKeyCandidate(length = IMAGE_KEY_LENGTH) {
+  const bytes = randomBytes(length);
+  let result = IMAGE_KEY_FIRST_CHAR_ALPHABET[bytes[0] % IMAGE_KEY_FIRST_CHAR_ALPHABET.length];
+  for (const byte of bytes.subarray(1)) {
+    result += IMAGE_KEY_ALPHABET[byte % IMAGE_KEY_ALPHABET.length];
+  }
+  return result;
+}
+
+function buildImageStorageDirectory(imageKey, date = new Date()) {
+  const year = String(date.getUTCFullYear());
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${IMAGE_STORAGE_ROOT}/${year}/${month}/${imageKey}`;
+}
+
+function extensionFromMimeType(mimeType) {
+  const normalized = String(mimeType || "").trim().toLowerCase();
+  if (normalized === "image/jpeg" || normalized === "image/jpg") return "jpg";
+  if (normalized === "image/png") return "png";
+  if (normalized === "image/webp") return "webp";
+  if (normalized === "image/gif") return "gif";
+  if (normalized === "image/avif") return "avif";
+  return "webp";
+}
+
+function parseBoolean(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function toPublicUrl(storagePath) {
+  return `/${String(storagePath || "").replace(/^\/+/, "")}`;
+}
+
+function handleImageUpload(req, res, next) {
+  uploadImageFields(req, res, (error) => {
+    if (!error) {
+      next();
+      return;
+    }
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      res.status(413).json({ ok: false, message: "Uploaded image is too large" });
+      return;
+    }
+    res.status(400).json({ ok: false, message: error.message || "Invalid image upload" });
+  });
+}
+
 function isImageVariantUniqueError(error) {
   const message = String(error?.message || "");
   return message.includes("idx_image_variants_unique")
@@ -99,6 +181,7 @@ function createImageService(deps) {
     normalizePositiveInteger,
     parseJsonOrNull,
     safeStringifyJson,
+    uploadsRootDir,
   } = deps;
 
   function normalizeJsonText(value, fieldName, fallback = null) {
@@ -140,6 +223,18 @@ function createImageService(deps) {
     };
   }
 
+  async function generateUniqueImageKey() {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const imageKey = generateImageKeyCandidate();
+      const existingRow = await dbGetAsync(
+        "SELECT id FROM images WHERE image_key = ? LIMIT 1",
+        [imageKey]
+      );
+      if (!existingRow) return imageKey;
+    }
+    throw new Error("Failed to generate unique image key");
+  }
+
   async function loadImageByIdentifier(identifier, { includeDeleted = false } = {}) {
     const raw = String(identifier || "").trim();
     if (!raw) return null;
@@ -149,6 +244,7 @@ function createImageService(deps) {
       `
         SELECT
           i.id,
+          i.image_key,
           i.uuid,
           i.owner_user_id,
           i.uploaded_by_user_id,
@@ -176,11 +272,17 @@ function createImageService(deps) {
           ON owner.id = i.owner_user_id
         LEFT JOIN users uploader
           ON uploader.id = i.uploaded_by_user_id
-        WHERE ${isNumericId ? "i.id = ?" : "i.uuid = ?"}
+        WHERE (i.image_key = ? OR i.uuid = ? OR i.id = ?)
           ${includeDeleted ? "" : "AND i.deleted_at IS NULL"}
+        ORDER BY
+          CASE
+            WHEN i.image_key = ? THEN 0
+            WHEN i.uuid = ? THEN 1
+            ELSE 2
+          END ASC
         LIMIT 1
       `,
-      [isNumericId ? numericId : raw]
+      [raw, raw, isNumericId ? numericId : -1, raw, raw]
     );
     return normalizeImageRow(row);
   }
@@ -234,6 +336,52 @@ function createImageService(deps) {
     );
   }
 
+  async function loadImageByStoragePath(storagePath) {
+    const normalizedPath = String(storagePath || "").trim().replace(/^\/+/, "");
+    if (!normalizedPath) return null;
+    const row = await dbGetAsync(
+      `
+        SELECT
+          i.id,
+          i.image_key,
+          i.uuid,
+          i.owner_user_id,
+          i.uploaded_by_user_id,
+          i.original_filename,
+          i.storage_path,
+          i.mime_type,
+          i.file_size_bytes,
+          i.width,
+          i.height,
+          i.title,
+          i.alt_text,
+          i.caption,
+          i.status,
+          i.visibility,
+          i.metadata_json,
+          i.created_at,
+          i.updated_at,
+          i.deleted_at,
+          owner.email AS owner_email,
+          owner.name AS owner_name,
+          uploader.email AS uploaded_by_email,
+          uploader.name AS uploaded_by_name
+        FROM images i
+        LEFT JOIN image_variants v
+          ON v.image_id = i.id
+        LEFT JOIN users owner
+          ON owner.id = i.owner_user_id
+        LEFT JOIN users uploader
+          ON uploader.id = i.uploaded_by_user_id
+        WHERE i.deleted_at IS NULL
+          AND (i.storage_path = ? OR v.storage_path = ?)
+        LIMIT 1
+      `,
+      [normalizedPath, normalizedPath]
+    );
+    return normalizeImageRow(row);
+  }
+
   function canAccessImage(user, image) {
     if (!user || !image) return false;
     if (Number(user.admin) === 1) return true;
@@ -250,6 +398,30 @@ function createImageService(deps) {
     return Number(image.owner_user_id) === userId || Number(image.uploaded_by_user_id) === userId;
   }
 
+  async function writeWebpVariant(fileBuffer, absolutePath, options) {
+    const pipeline = sharp(fileBuffer, { failOn: "none" })
+      .rotate()
+      .resize({
+        width: options.width,
+        height: options.height,
+        fit: options.fit || "inside",
+        withoutEnlargement: true,
+      })
+      .webp({
+        quality: options.quality,
+        effort: 4,
+      });
+    await pipeline.toFile(absolutePath);
+    const stats = await fs.stat(absolutePath);
+    const metadata = await sharp(absolutePath).metadata();
+    return {
+      file_size_bytes: stats.size,
+      width: metadata.width || null,
+      height: metadata.height || null,
+      mime_type: "image/webp",
+    };
+  }
+
   return {
     canAccessImage,
     canManageImage,
@@ -257,7 +429,9 @@ function createImageService(deps) {
     dbAllAsync,
     dbGetAsync,
     dbRunAsync,
+    generateUniqueImageKey,
     loadImageByIdentifier,
+    loadImageByStoragePath,
     loadImageableById,
     loadImageVariantById,
     normalizeImageDimension,
@@ -268,6 +442,8 @@ function createImageService(deps) {
     normalizeNullableText,
     normalizePositiveInteger,
     safeStringifyJson,
+    uploadsRootDir,
+    writeWebpVariant,
   };
 }
 
@@ -275,6 +451,7 @@ export function ensureImagesSchema({ db, addColumnIfMissing }) {
   db.run(`
     CREATE TABLE IF NOT EXISTS images (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      image_key TEXT NOT NULL UNIQUE,
       uuid TEXT NOT NULL UNIQUE,
       owner_user_id INTEGER,
       uploaded_by_user_id INTEGER,
@@ -306,6 +483,7 @@ export function ensureImagesSchema({ db, addColumnIfMissing }) {
         return;
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
+      const hasImageKeyColumn = columns.some((col) => col.name === "image_key");
       addColumnIfMissing(columns, "images", "uuid", "TEXT");
       addColumnIfMissing(columns, "images", "owner_user_id", "INTEGER");
       addColumnIfMissing(columns, "images", "uploaded_by_user_id", "INTEGER");
@@ -325,10 +503,29 @@ export function ensureImagesSchema({ db, addColumnIfMissing }) {
       addColumnIfMissing(columns, "images", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "images", "deleted_at", "TEXT");
 
-      db.run(
+      const ensureImagesIndexes = () => {
+        db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_images_image_key ON images(image_key)", (indexErr) => {
+          if (indexErr) console.error("Failed to ensure images.image_key index", indexErr);
+        });
+        db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_images_uuid ON images(uuid)", (indexErr) => {
+          if (indexErr) console.error("Failed to ensure images.uuid index", indexErr);
+        });
+        db.run("CREATE INDEX IF NOT EXISTS idx_images_owner ON images(owner_user_id, deleted_at)", (indexErr) => {
+          if (indexErr) console.error("Failed to ensure images.owner index", indexErr);
+        });
+        db.run("CREATE INDEX IF NOT EXISTS idx_images_visibility_status ON images(visibility, status, deleted_at)", (indexErr) => {
+          if (indexErr) console.error("Failed to ensure images visibility/status index", indexErr);
+        });
+      };
+
+      const normalizeImagesData = () => db.run(
         `
           UPDATE images
           SET
+            image_key = CASE
+              WHEN trim(COALESCE(image_key, '')) = '' THEN substr('abcdefghijklmnopqrstuvwxyz', 1 + (abs(random()) % 26), 1) || substr(lower(hex(randomblob(5))), 1, 9)
+              ELSE lower(trim(image_key))
+            END,
             uuid = CASE
               WHEN trim(COALESCE(uuid, '')) = '' THEN lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', 1 + (abs(random()) % 4), 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6)))
               ELSE uuid
@@ -354,18 +551,22 @@ export function ensureImagesSchema({ db, addColumnIfMissing }) {
         `,
         (normalizeErr) => {
           if (normalizeErr) console.error("Failed to normalize images schema data", normalizeErr);
+          ensureImagesIndexes();
         }
       );
 
-      db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_images_uuid ON images(uuid)", (indexErr) => {
-        if (indexErr) console.error("Failed to ensure images.uuid index", indexErr);
-      });
-      db.run("CREATE INDEX IF NOT EXISTS idx_images_owner ON images(owner_user_id, deleted_at)", (indexErr) => {
-        if (indexErr) console.error("Failed to ensure images.owner index", indexErr);
-      });
-      db.run("CREATE INDEX IF NOT EXISTS idx_images_visibility_status ON images(visibility, status, deleted_at)", (indexErr) => {
-        if (indexErr) console.error("Failed to ensure images visibility/status index", indexErr);
-      });
+      if (!hasImageKeyColumn) {
+        db.run("ALTER TABLE images ADD COLUMN image_key TEXT", (alterErr) => {
+          if (alterErr) {
+            console.error("Failed to add image_key column to images", alterErr);
+            return;
+          }
+          normalizeImagesData();
+        });
+        return;
+      }
+
+      normalizeImagesData();
     });
   });
 
@@ -471,6 +672,42 @@ export function registerImageRoutes(app, deps) {
   } = deps;
   const service = createImageService(deps);
 
+  app.get(/^\/uploads\/images\/.+/, async (req, res) => {
+    try {
+      const storagePath = decodeURIComponent(req.path).replace(/^\/+/, "");
+      if (!storagePath.startsWith(`${IMAGE_STORAGE_ROOT}/`) || storagePath.includes("..")) {
+        return res.status(404).json({ ok: false, message: "File not found" });
+      }
+
+      const image = await service.loadImageByStoragePath(storagePath);
+      if (!image) {
+        return res.status(404).json({ ok: false, message: "File not found" });
+      }
+      const visibility = String(image.visibility || "").trim().toLowerCase();
+      const isPubliclyServable = (visibility === "public" || visibility === "unlisted")
+        && String(image.status || "").trim().toLowerCase() === "ready";
+      if (!isPubliclyServable && !service.canManageImage(req.user, image)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+
+      const relativeFilePath = storagePath.replace(/^uploads\//, "");
+      const absoluteFilePath = path.resolve(service.uploadsRootDir, relativeFilePath);
+      const uploadsRootPath = path.resolve(service.uploadsRootDir);
+      if (!absoluteFilePath.startsWith(`${uploadsRootPath}${path.sep}`)) {
+        return res.status(404).json({ ok: false, message: "File not found" });
+      }
+
+      return res.sendFile(absoluteFilePath, (error) => {
+        if (error && !res.headersSent) {
+          res.status(error.statusCode || 404).json({ ok: false, message: "File not found" });
+        }
+      });
+    } catch (error) {
+      console.error("Failed to serve image file", error);
+      return res.status(500).json({ ok: false, message: "Failed to serve image file" });
+    }
+  });
+
   app.get("/public/images", async (req, res) => {
     try {
       const status = req.query?.status === undefined
@@ -483,6 +720,7 @@ export function registerImageRoutes(app, deps) {
         `
           SELECT
             id,
+            image_key,
             uuid,
             owner_user_id,
             uploaded_by_user_id,
@@ -555,6 +793,7 @@ export function registerImageRoutes(app, deps) {
         `
           SELECT
             i.id,
+            i.image_key,
             i.uuid,
             i.owner_user_id,
             i.uploaded_by_user_id,
@@ -616,8 +855,10 @@ export function registerImageRoutes(app, deps) {
         : Number(req.user.id);
       const uploadedByUserId = Number(req.user.id);
       const originalFilename = service.normalizeNullableText(req.body?.original_filename ?? req.body?.originalFilename);
-      const storagePath = service.normalizeNullableText(req.body?.storage_path ?? req.body?.storagePath);
       const mimeType = service.normalizeNullableText(req.body?.mime_type ?? req.body?.mimeType);
+      const imageKey = await service.generateUniqueImageKey();
+      const storagePath = service.normalizeNullableText(req.body?.storage_path ?? req.body?.storagePath)
+        || `${buildImageStorageDirectory(imageKey)}/original.${extensionFromMimeType(mimeType)}`;
       const fileSizeBytes = service.normalizeImageDimension(req.body?.file_size_bytes ?? req.body?.fileSizeBytes, "file_size_bytes");
       const width = service.normalizeImageDimension(req.body?.width, "width");
       const height = service.normalizeImageDimension(req.body?.height, "height");
@@ -650,6 +891,7 @@ export function registerImageRoutes(app, deps) {
       const insertResult = await service.dbRunAsync(
         `
           INSERT INTO images (
+            image_key,
             uuid,
             owner_user_id,
             uploaded_by_user_id,
@@ -668,9 +910,10 @@ export function registerImageRoutes(app, deps) {
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [
+          imageKey,
           randomUUID(),
           ownerUserId,
           uploadedByUserId,
@@ -707,6 +950,245 @@ export function registerImageRoutes(app, deps) {
     }
   });
 
+  app.post(
+    "/images/upload",
+    requireAuthenticated,
+    handleImageUpload,
+    async (req, res) => {
+      let absoluteImageDir = null;
+      try {
+        const file = req.files?.image?.[0] || req.files?.file?.[0] || null;
+        if (!file) {
+          return res.status(400).json({ ok: false, message: "image file is required" });
+        }
+
+        const inputMimeType = service.normalizeNullableText(file.mimetype);
+        if (!inputMimeType || !inputMimeType.toLowerCase().startsWith("image/")) {
+          return res.status(400).json({ ok: false, message: "Uploaded file must be an image" });
+        }
+
+        const isAdmin = Number(req.user?.admin) === 1;
+        const preserveOriginal = parseBoolean(req.body?.preserve_original ?? req.body?.preserveOriginal);
+        if (preserveOriginal && !isAdmin) {
+          return res.status(403).json({ ok: false, message: "Only admins can preserve source originals" });
+        }
+        const visibility = normalizeImageVisibility(req.body?.visibility, "private");
+        if (hasPayloadField(req.body, "visibility") && !IMAGE_VISIBILITIES.includes(String(req.body.visibility || "").trim().toLowerCase())) {
+          return res.status(400).json({ ok: false, message: "Invalid image visibility" });
+        }
+
+        const ownerUserId = isAdmin
+          ? (service.normalizePositiveInteger(req.body?.owner_user_id ?? req.body?.ownerUserId) || Number(req.user.id))
+          : Number(req.user.id);
+        const uploadedByUserId = Number(req.user.id);
+        if (ownerUserId) {
+          const ownerRow = await service.dbGetAsync("SELECT id FROM users WHERE id = ? LIMIT 1", [ownerUserId]);
+          if (!ownerRow) {
+            return res.status(400).json({ ok: false, message: "owner_user_id must reference an existing user" });
+          }
+        }
+
+        const sourceMetadata = await sharp(file.buffer, { failOn: "none" }).metadata();
+        const sourceWidth = sourceMetadata.width || null;
+        const sourceHeight = sourceMetadata.height || null;
+        if (!sourceWidth || !sourceHeight) {
+          return res.status(400).json({ ok: false, message: "Uploaded image dimensions could not be detected" });
+        }
+
+        const imageKey = await service.generateUniqueImageKey();
+        const storageDirectory = buildImageStorageDirectory(imageKey);
+        absoluteImageDir = path.join(service.uploadsRootDir, "images", storageDirectory.split("/").slice(2).join("/"));
+        await fs.mkdir(absoluteImageDir, { recursive: true });
+
+        const originalStoragePath = `${storageDirectory}/${OPTIMIZED_ORIGINAL.filename}`;
+        const originalAbsolutePath = path.join(absoluteImageDir, OPTIMIZED_ORIGINAL.filename);
+        const originalStats = await service.writeWebpVariant(file.buffer, originalAbsolutePath, OPTIMIZED_ORIGINAL);
+
+        const variantsToInsert = [];
+        if (preserveOriginal) {
+          const sourceExtension = extensionFromMimeType(inputMimeType);
+          const sourceFilename = `source.${sourceExtension}`;
+          const sourceAbsolutePath = path.join(absoluteImageDir, sourceFilename);
+          const sourceStoragePath = `${storageDirectory}/${sourceFilename}`;
+          await fs.writeFile(sourceAbsolutePath, file.buffer);
+          variantsToInsert.push({
+            variant: "source",
+            storage_path: sourceStoragePath,
+            public_url: toPublicUrl(sourceStoragePath),
+            mime_type: inputMimeType,
+            file_size_bytes: file.size,
+            width: sourceWidth,
+            height: sourceHeight,
+          });
+        }
+
+        variantsToInsert.push({
+          variant: OPTIMIZED_ORIGINAL.variant,
+          storage_path: originalStoragePath,
+          public_url: toPublicUrl(originalStoragePath),
+          ...originalStats,
+        });
+
+        for (const variantConfig of IMAGE_VARIANTS) {
+          const variantAbsolutePath = path.join(absoluteImageDir, variantConfig.filename);
+          const variantStoragePath = `${storageDirectory}/${variantConfig.filename}`;
+          const variantStats = await service.writeWebpVariant(file.buffer, variantAbsolutePath, variantConfig);
+          variantsToInsert.push({
+            variant: variantConfig.variant,
+            storage_path: variantStoragePath,
+            public_url: toPublicUrl(variantStoragePath),
+            ...variantStats,
+          });
+        }
+
+        const title = service.normalizeNullableText(req.body?.title);
+        const altText = service.normalizeNullableText(req.body?.alt_text ?? req.body?.altText);
+        const caption = service.normalizeNullableText(req.body?.caption);
+        const metadataJson = service.normalizeJsonText(req.body?.metadata_json ?? req.body?.metadataJson, "metadata_json", "{}");
+
+        await service.dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+        let imageId = null;
+        try {
+          const insertResult = await service.dbRunAsync(
+            `
+              INSERT INTO images (
+                image_key,
+                uuid,
+                owner_user_id,
+                uploaded_by_user_id,
+                original_filename,
+                storage_path,
+                mime_type,
+                file_size_bytes,
+                width,
+                height,
+                title,
+                alt_text,
+                caption,
+                status,
+                visibility,
+                metadata_json,
+                created_at,
+                updated_at
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `,
+            [
+              imageKey,
+              randomUUID(),
+              ownerUserId,
+              uploadedByUserId,
+              service.normalizeNullableText(file.originalname),
+              originalStoragePath,
+              originalStats.mime_type,
+              originalStats.file_size_bytes,
+              originalStats.width,
+              originalStats.height,
+              title,
+              altText,
+              caption,
+              visibility,
+              metadataJson,
+            ]
+          );
+          imageId = insertResult?.lastID;
+
+          for (const variantRow of variantsToInsert) {
+            await service.dbRunAsync(
+              `
+                INSERT INTO image_variants (
+                  image_id,
+                  variant,
+                  storage_path,
+                  public_url,
+                  mime_type,
+                  file_size_bytes,
+                  width,
+                  height,
+                  created_at,
+                  updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              `,
+              [
+                imageId,
+                variantRow.variant,
+                variantRow.storage_path,
+                variantRow.public_url,
+                variantRow.mime_type,
+                variantRow.file_size_bytes,
+                variantRow.width,
+                variantRow.height,
+              ]
+            );
+          }
+
+          await service.dbRunAsync("COMMIT");
+        } catch (dbError) {
+          await service.dbRunAsync("ROLLBACK").catch(() => {});
+          throw dbError;
+        }
+
+        const createdRow = await service.loadImageByIdentifier(imageId);
+        const createdVariants = await service.dbAllAsync(
+          `
+            SELECT
+              id,
+              image_id,
+              variant,
+              storage_path,
+              public_url,
+              mime_type,
+              file_size_bytes,
+              width,
+              height,
+              created_at,
+              updated_at
+            FROM image_variants
+            WHERE image_id = ?
+            ORDER BY
+              CASE variant
+                WHEN 'source' THEN 0
+                WHEN 'original' THEN 1
+                WHEN 'thumb' THEN 2
+                WHEN 'small' THEN 3
+                WHEN 'medium' THEN 4
+                WHEN 'large' THEN 5
+                ELSE 100
+              END ASC,
+              id ASC
+          `,
+          [imageId]
+        );
+
+        return logAuditEvent(
+          {
+            ...getAuditActor(req.user),
+            event_type: "image.uploaded",
+            entity_type: "image",
+            action: "create",
+            record_id: String(imageId || ""),
+            changes: buildAuditCreationChanges(createdRow || {}, IMAGE_AUDIT_FIELDS),
+            metadata: {
+              preserve_original: preserveOriginal,
+              variants: createdVariants.map((variant) => variant.variant),
+            },
+          },
+          () => res.status(201).json({ ok: true, image: createdRow || null, variants: createdVariants })
+        );
+      } catch (error) {
+        if (absoluteImageDir) {
+          await fs.rm(absoluteImageDir, { recursive: true, force: true }).catch(() => {});
+        }
+        if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+          return res.status(413).json({ ok: false, message: "Uploaded image is too large" });
+        }
+        console.error("Failed to upload image", error);
+        return res.status(error.status || 500).json({ ok: false, message: error.status ? error.message : "Failed to upload image" });
+      }
+    }
+  );
+
   app.patch("/images/:id", requireAuthenticated, async (req, res) => {
     try {
       const image = await service.loadImageByIdentifier(req.params.id, {
@@ -719,6 +1201,9 @@ export function registerImageRoutes(app, deps) {
       const payloadId = service.normalizePositiveInteger(req.body?.id);
       if (payloadId && payloadId !== Number(image.id)) {
         return res.status(400).json({ ok: false, message: "Image id cannot be changed" });
+      }
+      if (hasPayloadField(req.body, "image_key", "imageKey")) {
+        return res.status(400).json({ ok: false, message: "image_key cannot be changed" });
       }
 
       const ownerUserId = isAdmin && hasPayloadField(req.body, "owner_user_id", "ownerUserId")
