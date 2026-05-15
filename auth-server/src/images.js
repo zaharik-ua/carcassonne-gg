@@ -150,6 +150,19 @@ function toPublicUrl(storagePath) {
   return `/${String(storagePath || "").replace(/^\/+/, "")}`;
 }
 
+function encodeDownloadFilename(value) {
+  return encodeURIComponent(String(value || "download"))
+    .replace(/['()]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/\*/g, "%2A");
+}
+
+function sanitizeDownloadFilename(value, fallback = "download") {
+  const raw = path.basename(String(value || fallback || "download"))
+    .replace(/[\r\n"]/g, "")
+    .trim();
+  return raw || fallback || "download";
+}
+
 function handleImageUpload(req, res, next) {
   uploadImageFields(req, res, (error) => {
     if (!error) {
@@ -697,6 +710,19 @@ export function registerImageRoutes(app, deps) {
       );
       if (variant?.mime_type) {
         res.setHeader("Content-Type", variant.mime_type);
+      }
+      const downloadRaw = String(req.query?.download || "").trim().toLowerCase();
+      if (downloadRaw === "1" || downloadRaw === "true") {
+        const fallbackFilename = path.basename(storagePath) || "image";
+        const isSourceFile = /\/source\.[^/]+$/i.test(storagePath);
+        const downloadFilename = sanitizeDownloadFilename(
+          isSourceFile ? image.original_filename : fallbackFilename,
+          fallbackFilename
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${downloadFilename}"; filename*=UTF-8''${encodeDownloadFilename(downloadFilename)}`
+        );
       }
 
       const relativeFilePath = storagePath.replace(/^uploads\//, "");

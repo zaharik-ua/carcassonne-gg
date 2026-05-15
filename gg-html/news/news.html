@@ -393,11 +393,12 @@
     if (!sourceUrl) return;
 
     const fileSize = formatFileSize(sourceVariant.file_size_bytes);
+    const downloadUrl = new URL(sourceUrl, window.location.href);
+    downloadUrl.searchParams.set("download", "1");
     const link = document.createElement("a");
-    link.href = sourceUrl;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = fileSize ? `Open source image (${fileSize})` : "Open source image";
+    link.href = downloadUrl.toString();
+    link.download = "";
+    link.textContent = fileSize ? `Download source image (${fileSize})` : "Download source image";
     hostEl.innerHTML = "";
     hostEl.appendChild(link);
   };
