@@ -718,7 +718,7 @@ export function registerImageRoutes(app, deps) {
       }
 
       const variant = await service.dbGetAsync(
-        "SELECT mime_type FROM image_variants WHERE storage_path = ? LIMIT 1",
+        "SELECT variant, storage_path, mime_type FROM image_variants WHERE storage_path = ? LIMIT 1",
         [storagePath]
       );
       if (variant?.mime_type) {
@@ -735,6 +735,16 @@ export function registerImageRoutes(app, deps) {
         res.setHeader(
           "Content-Disposition",
           `attachment; filename="${downloadFilename}"; filename*=UTF-8''${encodeDownloadFilename(downloadFilename)}`
+        );
+      } else if (variant?.variant) {
+        const extension = path.extname(storagePath) || ".webp";
+        const variantFilename = sanitizeDownloadFilename(
+          `${image.image_key}-${variant.variant}${extension}`,
+          path.basename(storagePath) || "image"
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="${variantFilename}"; filename*=UTF-8''${encodeDownloadFilename(variantFilename)}`
         );
       }
 
