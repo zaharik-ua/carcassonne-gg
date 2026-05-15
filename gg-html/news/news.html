@@ -224,8 +224,24 @@
     cursor: zoom-in;
     display: block;
     height: auto;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
     width: 100%;
+  }
+  .news-detail-source {
+    font-size: 13px;
+    line-height: 18px;
+    margin: 0 0 16px;
+  }
+  .news-detail-source:empty {
+    display: none;
+  }
+  .news-detail-source a {
+    color: #146997;
+    text-decoration: none;
+  }
+  .news-detail-source a:hover {
+    color: #0e4f73;
+    text-decoration: none;
   }
   .news-detail-description {
     color: #333;
@@ -253,11 +269,13 @@
 <script>
   const NEWS_PUBLIC_URL = "https://api.carcassonne.gg/public/news";
   const PLAYERS_PUBLIC_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
+  const NEWS_API_ORIGIN = new URL(NEWS_PUBLIC_URL).origin;
   const newsContainer = document.getElementById("news-container");
   let imageModal;
   let allNewsItems = [];
   let playersById = new Map();
   let hasNewsDataLoaded = false;
+  const imageVariantsCache = new Map();
 
   const closeImageModal = () => {
     if (!imageModal) return;
@@ -299,6 +317,89 @@
   const getSelectedNewsId = () => {
     const params = new URLSearchParams(window.location.search);
     return String(params.get("id") || params.get("news_id") || "").trim();
+  };
+
+  const toNewsImageUrl = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+    return `${NEWS_API_ORIGIN}${raw.startsWith("/") ? "" : "/"}${raw}`;
+  };
+
+  const getNewsImageVariantUrl = (value, variant) => {
+    const imageUrl = toNewsImageUrl(value);
+    const variantName = String(variant || "").trim();
+    if (!imageUrl || !variantName) return imageUrl;
+    try {
+      const url = new URL(imageUrl, window.location.href);
+      if (!/\/uploads\/images\/\d{4}\/\d{2}\/[^/]+\/[^/]+$/i.test(url.pathname)) {
+        return imageUrl;
+      }
+      url.pathname = url.pathname.replace(/\/[^/]+$/, `/${variantName}.webp`);
+      return url.toString();
+    } catch (_error) {
+      return imageUrl.replace(/\/[^/]+$/, `/${variantName}.webp`);
+    }
+  };
+
+  const getNewsImageKeyFromUrl = (value) => {
+    const imageUrl = toNewsImageUrl(value);
+    if (!imageUrl) return "";
+    try {
+      const url = new URL(imageUrl, window.location.href);
+      const match = url.pathname.match(/\/uploads\/images\/\d{4}\/\d{2}\/([^/]+)\//i);
+      return match ? decodeURIComponent(match[1]) : "";
+    } catch (_error) {
+      return "";
+    }
+  };
+
+  const fetchNewsImageVariants = async (value) => {
+    const imageKey = getNewsImageKeyFromUrl(value);
+    if (!imageKey) return [];
+    if (imageVariantsCache.has(imageKey)) return imageVariantsCache.get(imageKey);
+
+    const variantsPromise = fetch(`${NEWS_API_ORIGIN}/public/images/${encodeURIComponent(imageKey)}/variants`, {
+      method: "GET",
+    })
+      .then(response => response.ok ? response.json() : null)
+      .then(result => result?.ok && Array.isArray(result.variants) ? result.variants : [])
+      .catch(() => []);
+    imageVariantsCache.set(imageKey, variantsPromise);
+    return variantsPromise;
+  };
+
+  const formatFileSize = (value) => {
+    const bytes = Number(value);
+    if (!Number.isFinite(bytes) || bytes <= 0) return "";
+    if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+    if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${Math.round(bytes)} B`;
+  };
+
+  const renderSourceImageLink = async (value, hostEl) => {
+    if (!hostEl) return;
+    const variants = await fetchNewsImageVariants(value);
+    if (!hostEl.isConnected) return;
+
+    const sourceVariant = variants.find(variant => String(variant?.variant || "") === "source" && (variant.public_url || variant.storage_path));
+    if (!sourceVariant) {
+      hostEl.innerHTML = "";
+      return;
+    }
+
+    const sourceUrl = toNewsImageUrl(sourceVariant.public_url || sourceVariant.storage_path || "");
+    if (!sourceUrl) return;
+
+    const fileSize = formatFileSize(sourceVariant.file_size_bytes);
+    const link = document.createElement("a");
+    link.href = sourceUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = fileSize ? `Open source image (${fileSize})` : "Open source image";
+    hostEl.innerHTML = "";
+    hostEl.appendChild(link);
   };
 
   const getNewsDetailUrl = (newsItem) => {
@@ -468,16 +569,23 @@
       card.appendChild(shortDescription);
     }
 
-    const imageUrl = String(newsItem.image || newsItem.icon || newsItem.icon1 || "").trim();
+    const baseImageUrl = newsItem.image || newsItem.icon || newsItem.icon1 || "";
+    const imageUrl = getNewsImageVariantUrl(baseImageUrl, "large");
+    const originalImageUrl = getNewsImageVariantUrl(baseImageUrl, "original");
     if (imageUrl) {
       const image = document.createElement("img");
       image.className = "news-detail-image";
       image.src = imageUrl;
       image.alt = titleText;
       image.addEventListener("click", () => {
-        openImageModal(imageUrl, titleText);
+        openImageModal(originalImageUrl || imageUrl, titleText);
       });
       card.appendChild(image);
+
+      const sourceLink = document.createElement("div");
+      sourceLink.className = "news-detail-source";
+      card.appendChild(sourceLink);
+      renderSourceImageLink(baseImageUrl, sourceLink);
     }
 
     const descriptionHtml = String(newsItem.description || "").trim();
@@ -532,7 +640,7 @@
         ? formatDisplayDate(dateValue)
         : "";
 
-      const iconUrl = String(newsItem.image || newsItem.icon || newsItem.icon1 || "").trim();
+      const iconUrl = getNewsImageVariantUrl(newsItem.image || newsItem.icon || newsItem.icon1 || "", "small");
       if (iconUrl) {
         const icon = document.createElement("img");
         icon.className = "news-icon";

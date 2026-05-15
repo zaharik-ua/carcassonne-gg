@@ -134,6 +134,54 @@
     cursor: not-allowed;
   }
 
+  .cp-image-upload {
+    display: grid;
+    gap: 6px;
+  }
+
+  .cp-image-upload input[type="file"] {
+    height: auto;
+    padding: 5px 8px;
+  }
+
+  .cp-image-preview {
+    display: block;
+    width: 100%;
+    max-width: 260px;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border: 1px solid #d7dbe2;
+    border-radius: 4px;
+    background: #f3f4f6;
+  }
+
+  .cp-image-upload-status {
+    min-height: 16px;
+    color: #667085;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .cp-edit-row.cp-edit-row-checkbox {
+    align-items: center;
+  }
+
+  .cp-edit-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #333;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .cp-edit-checkbox input {
+    width: auto;
+    height: auto;
+    margin: 0;
+  }
+
   .cp-news-list {
     background: #fff;
     border: 1px solid var(--border);
@@ -618,6 +666,7 @@
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
   const NEWS_URL = `${AUTH_BASE}/news`;
   const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
+  const IMAGE_UPLOAD_URL = `${AUTH_BASE}/images/upload`;
   const NEWS_SIGNIFICANCE_OPTIONS = ["Regular", "Important", "Major"];
   const NEWS_CATEGORY_OPTIONS = [
     "Arena",
@@ -647,6 +696,29 @@
 
   function normalizeCode(value) {
     return String(value || "").trim().toUpperCase();
+  }
+
+  function toApiAbsoluteUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+    return `${AUTH_BASE}${raw.startsWith("/") ? "" : "/"}${raw}`;
+  }
+
+  function toApiImageVariantUrl(value, variant) {
+    const absoluteUrl = toApiAbsoluteUrl(value);
+    const variantName = String(variant || "").trim();
+    if (!absoluteUrl || !variantName) return absoluteUrl;
+    try {
+      const url = new URL(absoluteUrl, window.location.href);
+      if (!/\/uploads\/images\/\d{4}\/\d{2}\/[^/]+\/[^/]+$/i.test(url.pathname)) {
+        return absoluteUrl;
+      }
+      url.pathname = url.pathname.replace(/\/[^/]+$/, `/${variantName}.webp`);
+      return url.toString();
+    } catch (_error) {
+      return absoluteUrl.replace(/\/[^/]+$/, `/${variantName}.webp`);
+    }
   }
 
   function readLegacyCaptainSubviewFromUrl() {
@@ -1307,7 +1379,7 @@
       const row = document.createElement("div");
       row.className = "cp-news-row";
 
-      const iconUrl = String(item?.image || "").trim();
+      const iconUrl = toApiImageVariantUrl(item?.image || "", "small");
       if (iconUrl) {
         const img = document.createElement("img");
         img.className = "cp-news-icon";
@@ -1436,16 +1508,37 @@
       return row;
     };
 
+    const addCheckboxRow = (labelText, checked = false) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row cp-edit-row-checkbox";
+      const label = document.createElement("label");
+      label.className = "cp-edit-checkbox";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = !!checked;
+      const text = document.createElement("span");
+      text.textContent = labelText;
+      label.appendChild(input);
+      label.appendChild(text);
+      row.appendChild(label);
+      form.appendChild(row);
+      return input;
+    };
+
     const setError = (message) => {
       const text = String(message || "").trim();
       errorEl.textContent = text;
       errorEl.classList.toggle("cp-hidden", !text);
     };
 
+    let imageFileInput = null;
+    let preserveSourceInput = null;
     const setSaving = (isSaving, actionLabel = "Saving...") => {
       saveBtn.disabled = !!isSaving;
       cancelBtn.disabled = !!isSaving;
       if (deleteBtn) deleteBtn.disabled = !!isSaving;
+      if (imageFileInput) imageFileInput.disabled = !!isSaving;
+      if (preserveSourceInput) preserveSourceInput.disabled = !!isSaving;
       saveBtn.textContent = isSaving ? actionLabel : "Save";
     };
 
@@ -1813,10 +1906,56 @@
       : toDatetimeLocalFromUtc(source?.time_utc);
     addRow("Time, UTC", timeInput);
 
-    const imageInput = document.createElement("input");
-    imageInput.type = "text";
-    imageInput.value = String(source?.image || "").trim();
-    addRow("Image", imageInput);
+    let currentImageUrl = toApiAbsoluteUrl(source?.image || "");
+    let selectedImageFile = null;
+    let previewObjectUrl = "";
+
+    const imageUploadWrap = document.createElement("div");
+    imageUploadWrap.className = "cp-image-upload";
+    imageFileInput = document.createElement("input");
+    imageFileInput.type = "file";
+    imageFileInput.accept = "image/*";
+    const imagePreview = document.createElement("img");
+    imagePreview.className = "cp-image-preview";
+    imagePreview.alt = "";
+    imagePreview.hidden = !currentImageUrl;
+    if (currentImageUrl) imagePreview.src = currentImageUrl;
+    const imageUploadStatus = document.createElement("div");
+    imageUploadStatus.className = "cp-image-upload-status";
+    imageUploadStatus.textContent = currentImageUrl ? "Current image will be kept unless a new file is selected." : "";
+    imageUploadWrap.appendChild(imageFileInput);
+    imageUploadWrap.appendChild(imagePreview);
+    imageUploadWrap.appendChild(imageUploadStatus);
+    addRow("Image", imageUploadWrap);
+
+    imageFileInput.addEventListener("change", () => {
+      const file = imageFileInput.files && imageFileInput.files[0] ? imageFileInput.files[0] : null;
+      if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = "";
+      }
+      selectedImageFile = null;
+      if (!file) {
+        imagePreview.hidden = !currentImageUrl;
+        imagePreview.src = currentImageUrl || "";
+        imageUploadStatus.textContent = currentImageUrl ? "Current image will be kept unless a new file is selected." : "";
+        return;
+      }
+      if (!String(file.type || "").startsWith("image/")) {
+        imageFileInput.value = "";
+        imagePreview.hidden = !currentImageUrl;
+        imagePreview.src = currentImageUrl || "";
+        imageUploadStatus.textContent = "Select an image file.";
+        return;
+      }
+      selectedImageFile = file;
+      previewObjectUrl = URL.createObjectURL(file);
+      imagePreview.src = previewObjectUrl;
+      imagePreview.hidden = false;
+      imageUploadStatus.textContent = file.name;
+    });
+
+    preserveSourceInput = addCheckboxRow("Save source image", false);
 
     const shortTitleInput = document.createElement("input");
     shortTitleInput.type = "text";
@@ -1846,7 +1985,7 @@
       tournament_id: tournamentInput.getValue() || "",
       associations: associationsInput.getValue(),
       time_utc: toUtcIsoFromDatetimeLocal(timeInput.value),
-      image: String(imageInput.value || "").trim(),
+      image: currentImageUrl,
       title: String(titleInput.value || "").trim(),
       short_title: String(shortTitleInput.value || "").trim(),
       short_description: String(shortDescriptionInput.value || "").trim(),
@@ -1861,6 +2000,58 @@
       if (!String(timeInput.value || "").trim()) return "Time, UTC is required.";
       if (String(timeInput.value || "").trim() && !payload.time_utc) return "Time, UTC is invalid.";
       return "";
+    };
+
+    const uploadSelectedNewsImage = async () => {
+      if (!selectedImageFile) return currentImageUrl;
+
+      const formData = new FormData();
+      formData.append("image", selectedImageFile);
+      formData.append("visibility", "public");
+      if (preserveSourceInput?.checked) {
+        formData.append("preserve_original", "true");
+      }
+
+      const titleText = String(titleInput.value || shortTitleInput.value || "").trim();
+      const captionText = String(shortDescriptionInput.value || "").trim();
+      if (titleText) {
+        formData.append("title", titleText);
+        formData.append("alt_text", titleText);
+      }
+      if (captionText) formData.append("caption", captionText);
+
+      const response = await fetch(IMAGE_UPLOAD_URL, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.message || "Failed to upload image.");
+      }
+
+      const variants = Array.isArray(result?.variants) ? result.variants : [];
+      const preferredVariant = variants.find((variant) => String(variant?.variant || "") === "large")
+        || variants.find((variant) => String(variant?.variant || "") === "medium")
+        || variants.find((variant) => String(variant?.variant || "") === "original")
+        || variants[0]
+        || null;
+      const uploadedUrl = toApiAbsoluteUrl(preferredVariant?.public_url || preferredVariant?.storage_path || "");
+      if (!uploadedUrl) {
+        throw new Error("Image uploaded, but no public URL was returned.");
+      }
+
+      currentImageUrl = uploadedUrl;
+      selectedImageFile = null;
+      imageFileInput.value = "";
+      if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = "";
+      }
+      imagePreview.src = currentImageUrl;
+      imagePreview.hidden = false;
+      imageUploadStatus.textContent = "Image uploaded.";
+      return currentImageUrl;
     };
 
     cancelBtn.addEventListener("click", () => {
@@ -1897,7 +2088,7 @@
       event.preventDefault();
       setError("");
       closeAllDropdowns();
-      const payload = buildPayload();
+      let payload = buildPayload();
       const validationError = validatePayload(payload);
       if (validationError) {
         setError(validationError);
@@ -1906,6 +2097,12 @@
 
       setSaving(true, "Saving...");
       try {
+        if (selectedImageFile) {
+          setSaving(true, "Uploading...");
+          const uploadedImageUrl = await uploadSelectedNewsImage();
+          payload = { ...payload, image: uploadedImageUrl };
+          setSaving(true, "Saving...");
+        }
         const isEdit = !isCreateMode;
         const response = await fetch(
           isEdit ? `${NEWS_URL}/${encodeURIComponent(String(source?.id || ""))}` : NEWS_URL,
@@ -1922,8 +2119,8 @@
           return;
         }
         resetCaptainSubview(CAPTAIN_VIEWS.NEWS);
-      } catch (_error) {
-        setError(`Failed to ${isCreateMode ? "create" : "update"} news.`);
+      } catch (error) {
+        setError(error?.message || `Failed to ${isCreateMode ? "create" : "update"} news.`);
       } finally {
         setSaving(false);
       }

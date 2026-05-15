@@ -137,6 +137,7 @@ function extensionFromMimeType(mimeType) {
   if (normalized === "image/webp") return "webp";
   if (normalized === "image/gif") return "gif";
   if (normalized === "image/avif") return "avif";
+  if (normalized === "image/tiff" || normalized === "image/tif" || normalized === "image/x-tiff") return "tif";
   return "webp";
 }
 
@@ -690,6 +691,14 @@ export function registerImageRoutes(app, deps) {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
 
+      const variant = await service.dbGetAsync(
+        "SELECT mime_type FROM image_variants WHERE storage_path = ? LIMIT 1",
+        [storagePath]
+      );
+      if (variant?.mime_type) {
+        res.setHeader("Content-Type", variant.mime_type);
+      }
+
       const relativeFilePath = storagePath.replace(/^uploads\//, "");
       const absoluteFilePath = path.resolve(service.uploadsRootDir, relativeFilePath);
       const uploadsRootPath = path.resolve(service.uploadsRootDir);
@@ -751,6 +760,54 @@ export function registerImageRoutes(app, deps) {
     } catch (error) {
       console.error("Failed to load public images", error);
       return res.status(500).json({ ok: false, message: "Failed to load images" });
+    }
+  });
+
+  app.get("/public/images/:id/variants", async (req, res) => {
+    try {
+      const image = await service.loadImageByIdentifier(req.params.id);
+      if (!image) return res.status(404).json({ ok: false, message: "Image not found" });
+
+      const visibility = String(image.visibility || "").trim().toLowerCase();
+      const status = String(image.status || "").trim().toLowerCase();
+      if ((visibility !== "public" && visibility !== "unlisted") || status !== "ready") {
+        return res.status(404).json({ ok: false, message: "Image not found" });
+      }
+
+      const rows = await service.dbAllAsync(
+        `
+          SELECT
+            id,
+            image_id,
+            variant,
+            storage_path,
+            public_url,
+            mime_type,
+            file_size_bytes,
+            width,
+            height,
+            created_at,
+            updated_at
+          FROM image_variants
+          WHERE image_id = ?
+          ORDER BY
+            CASE variant
+              WHEN 'source' THEN 0
+              WHEN 'original' THEN 1
+              WHEN 'thumb' THEN 2
+              WHEN 'small' THEN 3
+              WHEN 'medium' THEN 4
+              WHEN 'large' THEN 5
+              ELSE 100
+            END ASC,
+            id ASC
+        `,
+        [image.id]
+      );
+      return res.json({ ok: true, variants: rows || [] });
+    } catch (error) {
+      console.error("Failed to load public image variants", error);
+      return res.status(500).json({ ok: false, message: "Failed to load image variants" });
     }
   });
 
