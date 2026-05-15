@@ -667,6 +667,7 @@
   const NEWS_URL = `${AUTH_BASE}/news`;
   const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
   const IMAGE_UPLOAD_URL = `${AUTH_BASE}/images/upload`;
+  const IMAGE_UPLOAD_MAX_BYTES = 64 * 1024 * 1024;
   const NEWS_SIGNIFICANCE_OPTIONS = ["Regular", "Important", "Major"];
   const NEWS_CATEGORY_OPTIONS = [
     "Arena",
@@ -703,6 +704,21 @@
     if (!raw) return "";
     if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
     return `${AUTH_BASE}${raw.startsWith("/") ? "" : "/"}${raw}`;
+  }
+
+  function formatFileSize(value) {
+    const bytes = Number(value);
+    if (!Number.isFinite(bytes) || bytes <= 0) return "";
+    if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+    if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${Math.round(bytes)} B`;
+  }
+
+  function getImageUploadSizeError(file) {
+    const fileSize = Number(file?.size || 0);
+    if (!fileSize || fileSize <= IMAGE_UPLOAD_MAX_BYTES) return "";
+    return `Uploaded image is too large. Maximum allowed size is ${formatFileSize(IMAGE_UPLOAD_MAX_BYTES)}. Selected file size is ${formatFileSize(fileSize)}.`;
   }
 
   function toApiImageVariantUrl(value, variant) {
@@ -1941,6 +1957,15 @@
         imageUploadStatus.textContent = currentImageUrl ? "Current image will be kept unless a new file is selected." : "";
         return;
       }
+      const sizeError = getImageUploadSizeError(file);
+      if (sizeError) {
+        imageFileInput.value = "";
+        imagePreview.hidden = !currentImageUrl;
+        imagePreview.src = currentImageUrl || "";
+        imageUploadStatus.textContent = sizeError;
+        setError(sizeError);
+        return;
+      }
       if (!String(file.type || "").startsWith("image/")) {
         imageFileInput.value = "";
         imagePreview.hidden = !currentImageUrl;
@@ -1949,6 +1974,7 @@
         return;
       }
       selectedImageFile = file;
+      setError("");
       previewObjectUrl = URL.createObjectURL(file);
       imagePreview.src = previewObjectUrl;
       imagePreview.hidden = false;
@@ -2004,6 +2030,8 @@
 
     const uploadSelectedNewsImage = async () => {
       if (!selectedImageFile) return currentImageUrl;
+      const sizeError = getImageUploadSizeError(selectedImageFile);
+      if (sizeError) throw new Error(sizeError);
 
       const formData = new FormData();
       formData.append("image", selectedImageFile);
@@ -2020,13 +2048,22 @@
       }
       if (captionText) formData.append("caption", captionText);
 
-      const response = await fetch(IMAGE_UPLOAD_URL, {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      });
+      let response = null;
+      try {
+        response = await fetch(IMAGE_UPLOAD_URL, {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        });
+      } catch (error) {
+        const networkSizeError = getImageUploadSizeError(selectedImageFile);
+        throw new Error(networkSizeError || error?.message || "Failed to upload image.");
+      }
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result?.ok) {
+        if (response.status === 413) {
+          throw new Error(result?.message || `Uploaded image is too large. Maximum allowed size is ${formatFileSize(IMAGE_UPLOAD_MAX_BYTES)}.`);
+        }
         throw new Error(result?.message || "Failed to upload image.");
       }
 

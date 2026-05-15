@@ -146,6 +146,19 @@ function parseBoolean(value) {
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
+function formatFileSize(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${Math.round(bytes)} B`;
+}
+
+function getImageUploadTooLargeMessage() {
+  return `Uploaded image is too large. Maximum allowed size is ${formatFileSize(IMAGE_UPLOAD_MAX_BYTES)}.`;
+}
+
 function toPublicUrl(storagePath) {
   return `/${String(storagePath || "").replace(/^\/+/, "")}`;
 }
@@ -170,7 +183,7 @@ function handleImageUpload(req, res, next) {
       return;
     }
     if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
-      res.status(413).json({ ok: false, message: "Uploaded image is too large" });
+      res.status(413).json({ ok: false, message: getImageUploadTooLargeMessage() });
       return;
     }
     res.status(400).json({ ok: false, message: error.message || "Invalid image upload" });
@@ -1264,7 +1277,7 @@ export function registerImageRoutes(app, deps) {
           await fs.rm(absoluteImageDir, { recursive: true, force: true }).catch(() => {});
         }
         if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
-          return res.status(413).json({ ok: false, message: "Uploaded image is too large" });
+          return res.status(413).json({ ok: false, message: getImageUploadTooLargeMessage() });
         }
         console.error("Failed to upload image", error);
         return res.status(error.status || 500).json({ ok: false, message: error.status ? error.message : "Failed to upload image" });
