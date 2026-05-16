@@ -168,7 +168,6 @@
     return String(
       image?.title
       || image?.alt_text
-      || image?.caption
       || image?.original_filename
       || image?.image_key
       || (image?.id ? `Image #${image.id}` : "Image")

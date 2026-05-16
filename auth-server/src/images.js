@@ -18,7 +18,6 @@ const IMAGE_AUDIT_FIELDS = [
   "height",
   "title",
   "alt_text",
-  "caption",
   "status",
   "visibility",
   "metadata_json",
@@ -32,6 +31,7 @@ const IMAGEABLE_AUDIT_FIELDS = [
   "imageable_type",
   "imageable_id",
   "role",
+  "caption",
   "sort_order",
   "crop_json",
 ];
@@ -283,7 +283,6 @@ function createImageService(deps) {
           i.height,
           i.title,
           i.alt_text,
-          i.caption,
           i.status,
           i.visibility,
           i.metadata_json,
@@ -325,6 +324,7 @@ function createImageService(deps) {
           imageable_type,
           imageable_id,
           role,
+          caption,
           sort_order,
           crop_json,
           created_at,
@@ -382,7 +382,6 @@ function createImageService(deps) {
           i.height,
           i.title,
           i.alt_text,
-          i.caption,
           i.status,
           i.visibility,
           i.metadata_json,
@@ -490,7 +489,6 @@ export function ensureImagesSchema({ db, addColumnIfMissing }) {
       height INTEGER,
       title TEXT,
       alt_text TEXT,
-      caption TEXT,
       status TEXT NOT NULL DEFAULT 'uploaded',
       visibility TEXT NOT NULL DEFAULT 'private',
       metadata_json TEXT NOT NULL DEFAULT '{}',
@@ -511,6 +509,7 @@ export function ensureImagesSchema({ db, addColumnIfMissing }) {
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
       const hasImageKeyColumn = columns.some((col) => col.name === "image_key");
+      const hasCaptionColumn = columns.some((col) => col.name === "caption");
       addColumnIfMissing(columns, "images", "uuid", "TEXT");
       addColumnIfMissing(columns, "images", "owner_user_id", "INTEGER");
       addColumnIfMissing(columns, "images", "uploaded_by_user_id", "INTEGER");
@@ -522,7 +521,6 @@ export function ensureImagesSchema({ db, addColumnIfMissing }) {
       addColumnIfMissing(columns, "images", "height", "INTEGER");
       addColumnIfMissing(columns, "images", "title", "TEXT");
       addColumnIfMissing(columns, "images", "alt_text", "TEXT");
-      addColumnIfMissing(columns, "images", "caption", "TEXT");
       addColumnIfMissing(columns, "images", "status", "TEXT NOT NULL DEFAULT 'uploaded'");
       addColumnIfMissing(columns, "images", "visibility", "TEXT NOT NULL DEFAULT 'private'");
       addColumnIfMissing(columns, "images", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
@@ -562,7 +560,6 @@ export function ensureImagesSchema({ db, addColumnIfMissing }) {
             mime_type = trim(COALESCE(mime_type, '')),
             title = NULLIF(trim(title), ''),
             alt_text = NULLIF(trim(alt_text), ''),
-            caption = NULLIF(trim(caption), ''),
             status = CASE
               WHEN lower(trim(COALESCE(status, ''))) IN ('uploaded', 'processing', 'ready', 'failed', 'archived') THEN lower(trim(status))
               ELSE 'uploaded'
@@ -593,6 +590,16 @@ export function ensureImagesSchema({ db, addColumnIfMissing }) {
         return;
       }
 
+      if (hasCaptionColumn) {
+        db.run("ALTER TABLE images DROP COLUMN caption", (dropErr) => {
+          if (dropErr) {
+            console.error("Failed to drop images.caption column", dropErr);
+          }
+          normalizeImagesData();
+        });
+        return;
+      }
+
       normalizeImagesData();
     });
   });
@@ -604,6 +611,7 @@ export function ensureImagesSchema({ db, addColumnIfMissing }) {
       imageable_type TEXT NOT NULL,
       imageable_id TEXT NOT NULL,
       role TEXT,
+      caption TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
       crop_json TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -625,6 +633,7 @@ export function ensureImagesSchema({ db, addColumnIfMissing }) {
       addColumnIfMissing(columns, "imageables", "imageable_type", "TEXT");
       addColumnIfMissing(columns, "imageables", "imageable_id", "TEXT");
       addColumnIfMissing(columns, "imageables", "role", "TEXT");
+      addColumnIfMissing(columns, "imageables", "caption", "TEXT");
       addColumnIfMissing(columns, "imageables", "sort_order", "INTEGER NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "imageables", "crop_json", "TEXT");
       addColumnIfMissing(columns, "imageables", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
@@ -790,7 +799,6 @@ export function registerImageRoutes(app, deps) {
             height,
             title,
             alt_text,
-            caption,
             status,
             visibility,
             metadata_json,
@@ -911,7 +919,6 @@ export function registerImageRoutes(app, deps) {
             i.height,
             i.title,
             i.alt_text,
-            i.caption,
             i.status,
             i.visibility,
             i.metadata_json,
@@ -970,7 +977,6 @@ export function registerImageRoutes(app, deps) {
       const height = service.normalizeImageDimension(req.body?.height, "height");
       const title = service.normalizeNullableText(req.body?.title);
       const altText = service.normalizeNullableText(req.body?.alt_text ?? req.body?.altText);
-      const caption = service.normalizeNullableText(req.body?.caption);
       const status = normalizeImageStatus(req.body?.status, "uploaded");
       const visibility = normalizeImageVisibility(req.body?.visibility, "private");
       const metadataJson = service.normalizeJsonText(req.body?.metadata_json ?? req.body?.metadataJson, "metadata_json", "{}");
@@ -1009,14 +1015,13 @@ export function registerImageRoutes(app, deps) {
             height,
             title,
             alt_text,
-            caption,
             status,
             visibility,
             metadata_json,
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [
           imageKey,
@@ -1031,7 +1036,6 @@ export function registerImageRoutes(app, deps) {
           height,
           title,
           altText,
-          caption,
           status,
           visibility,
           metadataJson,
@@ -1149,7 +1153,6 @@ export function registerImageRoutes(app, deps) {
 
         const title = service.normalizeNullableText(req.body?.title);
         const altText = service.normalizeNullableText(req.body?.alt_text ?? req.body?.altText);
-        const caption = service.normalizeNullableText(req.body?.caption);
         const metadataJson = service.normalizeJsonText(req.body?.metadata_json ?? req.body?.metadataJson, "metadata_json", "{}");
 
         await service.dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
@@ -1170,14 +1173,13 @@ export function registerImageRoutes(app, deps) {
                 height,
                 title,
                 alt_text,
-                caption,
                 status,
                 visibility,
                 metadata_json,
                 created_at,
                 updated_at
               )
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `,
             [
               imageKey,
@@ -1192,7 +1194,6 @@ export function registerImageRoutes(app, deps) {
               originalStats.height,
               title,
               altText,
-              caption,
               visibility,
               metadataJson,
             ]
@@ -1339,9 +1340,6 @@ export function registerImageRoutes(app, deps) {
       const altText = hasPayloadField(req.body, "alt_text", "altText")
         ? service.normalizeNullableText(req.body?.alt_text ?? req.body?.altText)
         : image.alt_text;
-      const caption = hasPayloadField(req.body, "caption")
-        ? service.normalizeNullableText(req.body?.caption)
-        : image.caption;
       const status = hasPayloadField(req.body, "status")
         ? normalizeImageStatus(req.body?.status, null)
         : String(image.status || "uploaded");
@@ -1379,7 +1377,6 @@ export function registerImageRoutes(app, deps) {
             height = ?,
             title = ?,
             alt_text = ?,
-            caption = ?,
             status = ?,
             visibility = ?,
             metadata_json = ?,
@@ -1396,7 +1393,6 @@ export function registerImageRoutes(app, deps) {
           height,
           title,
           altText,
-          caption,
           status,
           visibility,
           metadataJson,
@@ -1471,6 +1467,7 @@ export function registerImageRoutes(app, deps) {
             imageable_type,
             imageable_id,
             role,
+            caption,
             sort_order,
             crop_json,
             created_at,
@@ -1494,6 +1491,7 @@ export function registerImageRoutes(app, deps) {
       const imageableType = service.normalizeNullableText(req.body?.imageable_type ?? req.body?.imageableType);
       const imageableId = service.normalizeNullableText(req.body?.imageable_id ?? req.body?.imageableId);
       const role = service.normalizeNullableText(req.body?.role);
+      const caption = service.normalizeNullableText(req.body?.caption);
       const sortOrder = service.normalizeIntegerOrNull(req.body?.sort_order ?? req.body?.sortOrder) ?? 0;
       const cropJson = service.normalizeJsonText(req.body?.crop_json ?? req.body?.cropJson, "crop_json", null);
 
@@ -1512,14 +1510,15 @@ export function registerImageRoutes(app, deps) {
             imageable_type,
             imageable_id,
             role,
+            caption,
             sort_order,
             crop_json,
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
-        [imageId, imageableType, imageableId, role, sortOrder, cropJson]
+        [imageId, imageableType, imageableId, role, caption, sortOrder, cropJson]
       );
       const createdRow = await service.loadImageableById(insertResult?.lastID);
       return logAuditEvent(
@@ -1579,6 +1578,9 @@ export function registerImageRoutes(app, deps) {
       const role = hasPayloadField(req.body, "role")
         ? service.normalizeNullableText(req.body?.role)
         : beforeRow.role;
+      const caption = hasPayloadField(req.body, "caption")
+        ? service.normalizeNullableText(req.body?.caption)
+        : beforeRow.caption;
       const sortOrder = hasPayloadField(req.body, "sort_order", "sortOrder")
         ? (service.normalizeIntegerOrNull(req.body?.sort_order ?? req.body?.sortOrder) ?? 0)
         : beforeRow.sort_order;
@@ -1595,12 +1597,13 @@ export function registerImageRoutes(app, deps) {
             imageable_type = ?,
             imageable_id = ?,
             role = ?,
+            caption = ?,
             sort_order = ?,
             crop_json = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `,
-        [imageableType, imageableId, role, sortOrder, cropJson, beforeRow.id]
+        [imageableType, imageableId, role, caption, sortOrder, cropJson, beforeRow.id]
       );
       const updatedRow = await service.loadImageableById(beforeRow.id);
       const changes = buildAuditChanges(beforeRow, updatedRow, IMAGEABLE_AUDIT_FIELDS);
@@ -1671,6 +1674,7 @@ export function registerImageRoutes(app, deps) {
             ia.imageable_type,
             ia.imageable_id,
             ia.role,
+            ia.caption,
             ia.sort_order,
             ia.crop_json,
             ia.created_at,

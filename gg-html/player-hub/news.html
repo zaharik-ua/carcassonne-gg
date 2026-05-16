@@ -896,7 +896,6 @@
     return String(
       image?.title
       || image?.alt_text
-      || image?.caption
       || image?.original_filename
       || image?.image_key
       || (image?.id ? `Image #${image.id}` : "News image")
@@ -2834,13 +2833,11 @@
         formData.append("preserve_original", "true");
       }
 
-      const titleText = String(titleInput.value || shortTitleInput.value || "").trim();
-      const captionText = String(shortDescriptionInput.value || "").trim();
+      const titleText = String(shortTitleInput.value || "").trim();
       if (titleText) {
         formData.append("title", titleText);
         formData.append("alt_text", titleText);
       }
-      if (captionText) formData.append("caption", captionText);
 
       let response = null;
       try {
