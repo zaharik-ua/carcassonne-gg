@@ -550,7 +550,7 @@ async function resolveNewsImageReference(ref) {
   return row?.id || null;
 }
 
-async function createNewsImageables(newsId, payload) {
+async function syncNewsImageables(newsId, payload) {
   const normalizedNewsId = normalizePositiveInteger(newsId);
   if (!normalizedNewsId) return;
 
@@ -587,6 +587,15 @@ async function createNewsImageables(newsId, payload) {
       sortOrder: index,
     });
   });
+
+  await dbRunAsync(
+    `
+      DELETE FROM imageables
+      WHERE imageable_type = ?
+        AND imageable_id = ?
+    `,
+    [NEWS_IMAGEABLE_TYPES.NEWS, String(normalizedNewsId)]
+  );
 
   for (const ref of refs) {
     const imageId = await resolveNewsImageReference(ref);
@@ -6302,7 +6311,7 @@ app.post("/news", requireAdmin, async (req, res) => {
           actorPlayerId,
         ]
       );
-      await createNewsImageables(insertResult?.lastID, {
+      await syncNewsImageables(insertResult?.lastID, {
         image,
         description,
         gallery_images: req.body?.gallery_images ?? req.body?.galleryImages ?? req.body?.gallery,
@@ -6390,41 +6399,53 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
       }
     }
 
-    await dbRunAsync(
-      `
-        UPDATE news
-        SET
-          significance = ?,
-          category = ?,
-          association_id = ?,
-          tournament_id = ?,
-          associations = ?,
-          time_utc = ?,
-          image = ?,
-          title = ?,
-          short_title = ?,
-          short_description = ?,
-          description = ?,
-          updated_by = ?,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `,
-      [
-        significance,
-        category,
-        associationId,
-        tournamentId,
-        JSON.stringify(associations),
-        timeUtc,
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await dbRunAsync(
+        `
+          UPDATE news
+          SET
+            significance = ?,
+            category = ?,
+            association_id = ?,
+            tournament_id = ?,
+            associations = ?,
+            time_utc = ?,
+            image = ?,
+            title = ?,
+            short_title = ?,
+            short_description = ?,
+            description = ?,
+            updated_by = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [
+          significance,
+          category,
+          associationId,
+          tournamentId,
+          JSON.stringify(associations),
+          timeUtc,
+          image,
+          title,
+          shortTitle || null,
+          shortDescription || null,
+          description || null,
+          actorPlayerId,
+          newsId,
+        ]
+      );
+      await syncNewsImageables(newsId, {
         image,
-        title,
-        shortTitle || null,
-        shortDescription || null,
-        description || null,
-        actorPlayerId,
-        newsId,
-      ]
-    );
+        description,
+        gallery_images: req.body?.gallery_images ?? req.body?.galleryImages ?? req.body?.gallery,
+      });
+      await dbRunAsync("COMMIT");
+    } catch (dbError) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw dbError;
+    }
 
     const updatedRow = await loadNewsById(newsId);
     const changes = buildAuditChanges(beforeRow || {}, updatedRow || {}, NEWS_AUDIT_FIELDS);
