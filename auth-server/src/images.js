@@ -363,6 +363,86 @@ function createImageService(deps) {
     );
   }
 
+  async function loadImageVariantsByImageId(imageId) {
+    const normalizedId = normalizePositiveInteger(imageId);
+    if (!normalizedId) return [];
+    return dbAllAsync(
+      `
+        SELECT
+          id,
+          image_id,
+          variant,
+          storage_path,
+          public_url,
+          mime_type,
+          file_size_bytes,
+          width,
+          height,
+          created_at,
+          updated_at
+        FROM image_variants
+        WHERE image_id = ?
+        ORDER BY id ASC
+      `,
+      [normalizedId]
+    );
+  }
+
+  async function countImageablesByImageId(imageId) {
+    const normalizedId = normalizePositiveInteger(imageId);
+    if (!normalizedId) return 0;
+    const row = await dbGetAsync(
+      "SELECT COUNT(*) AS count FROM imageables WHERE image_id = ?",
+      [normalizedId]
+    );
+    return Number(row?.count || 0);
+  }
+
+  function imageStoragePathToAbsoluteFilePath(storagePath) {
+    const normalizedPath = String(storagePath || "").trim().replace(/^\/+/, "");
+    if (!normalizedPath || !normalizedPath.startsWith(`${IMAGE_STORAGE_ROOT}/`) || normalizedPath.includes("..")) {
+      return null;
+    }
+    const relativeFilePath = normalizedPath.replace(/^uploads\//, "");
+    const absoluteFilePath = path.resolve(uploadsRootDir, relativeFilePath);
+    const uploadsRootPath = path.resolve(uploadsRootDir);
+    if (!absoluteFilePath.startsWith(`${uploadsRootPath}${path.sep}`)) {
+      return null;
+    }
+    return absoluteFilePath;
+  }
+
+  function getGeneratedImageDirectoryPath(image) {
+    const normalizedPath = String(image?.storage_path || "").trim().replace(/^\/+/, "");
+    const imageKey = String(image?.image_key || "").trim();
+    if (!imageKey) return null;
+    const match = normalizedPath.match(/^uploads\/images\/\d{4}\/\d{2}\/([^/]+)\//);
+    if (!match || match[1] !== imageKey) return null;
+    const absoluteFilePath = imageStoragePathToAbsoluteFilePath(normalizedPath);
+    return absoluteFilePath ? path.dirname(absoluteFilePath) : null;
+  }
+
+  async function deleteImageFiles(image, variants = []) {
+    const storagePaths = new Set(
+      [image?.storage_path]
+        .concat((Array.isArray(variants) ? variants : []).map((variant) => variant?.storage_path))
+        .map((storagePath) => String(storagePath || "").trim())
+        .filter(Boolean)
+    );
+    const generatedDirectoryPath = getGeneratedImageDirectoryPath(image);
+    if (generatedDirectoryPath) {
+      await fs.rm(generatedDirectoryPath, { recursive: true, force: true });
+    }
+
+    const generatedDirectoryPrefix = generatedDirectoryPath ? `${generatedDirectoryPath}${path.sep}` : "";
+    for (const storagePath of storagePaths) {
+      const absoluteFilePath = imageStoragePathToAbsoluteFilePath(storagePath);
+      if (!absoluteFilePath) continue;
+      if (generatedDirectoryPrefix && absoluteFilePath.startsWith(generatedDirectoryPrefix)) continue;
+      await fs.rm(absoluteFilePath, { force: true });
+    }
+  }
+
   async function loadImageByStoragePath(storagePath) {
     const normalizedPath = String(storagePath || "").trim().replace(/^\/+/, "");
     if (!normalizedPath) return null;
@@ -460,6 +540,9 @@ function createImageService(deps) {
     loadImageByStoragePath,
     loadImageableById,
     loadImageVariantById,
+    loadImageVariantsByImageId,
+    countImageablesByImageId,
+    deleteImageFiles,
     normalizeImageDimension,
     normalizeImageRow,
     normalizeImageableRow,
@@ -1426,17 +1509,26 @@ export function registerImageRoutes(app, deps) {
       if (!image) return res.status(404).json({ ok: false, message: "Image not found" });
       if (!service.canManageImage(req.user, image)) return res.status(403).json({ ok: false, message: "Forbidden" });
 
-      await service.dbRunAsync(
-        `
-          UPDATE images
-          SET
-            deleted_at = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `,
-        [image.id]
-      );
-      const deletedRow = await service.loadImageByIdentifier(image.id, { includeDeleted: true });
+      const variants = await service.loadImageVariantsByImageId(image.id);
+      await service.dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+      try {
+        const imageableCount = await service.countImageablesByImageId(image.id);
+        if (imageableCount > 0) {
+          await service.dbRunAsync("ROLLBACK");
+          return res.status(409).json({
+            ok: false,
+            message: "Cannot delete image because it is added to an object.",
+          });
+        }
+        await service.dbRunAsync("DELETE FROM image_variants WHERE image_id = ?", [image.id]);
+        await service.dbRunAsync("DELETE FROM images WHERE id = ?", [image.id]);
+        await service.dbRunAsync("COMMIT");
+      } catch (dbError) {
+        await service.dbRunAsync("ROLLBACK").catch(() => {});
+        throw dbError;
+      }
+      await service.deleteImageFiles(image, variants);
+
       return logAuditEvent(
         {
           ...getAuditActor(req.user),
@@ -1444,7 +1536,11 @@ export function registerImageRoutes(app, deps) {
           entity_type: "image",
           action: "delete",
           record_id: String(image.id),
-          changes: buildAuditChanges(image, deletedRow, IMAGE_AUDIT_FIELDS),
+          changes: buildAuditDeletionChanges(image, IMAGE_AUDIT_FIELDS),
+          metadata: {
+            hard_delete: true,
+            variants: variants.map((variant) => variant.variant),
+          },
         },
         () => res.json({ ok: true })
       );

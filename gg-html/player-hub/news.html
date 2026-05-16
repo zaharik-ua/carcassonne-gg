@@ -478,6 +478,24 @@
     gap: 8px;
   }
 
+  .cp-image-picker-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cp-image-picker-upload-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .cp-image-picker-actions-left {
+    margin-right: auto;
+  }
+
   .cp-image-picker-status {
     min-height: 16px;
     color: #667085;
@@ -765,6 +783,16 @@
       justify-self: end;
       margin-left: 0;
     }
+
+    .cp-image-picker-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .cp-image-picker-upload-actions {
+      justify-content: flex-start;
+    }
+
     .cp-edit-row input:not([type="checkbox"]) {
       font-size: 16px !important;
     }
@@ -920,12 +948,28 @@
     return Array.isArray(result?.images) ? result.images : [];
   }
 
+  async function deleteNewsImage(image) {
+    const imageId = String(image?.id || image?.image_key || "").trim();
+    if (!imageId) throw new Error("Select an image to delete.");
+    const response = await fetch(`${IMAGES_URL}/${encodeURIComponent(imageId)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.message || "Failed to delete image.");
+    }
+    return result;
+  }
+
   function showImagePickerDialog(options = {}) {
     const titleText = String(options.title || "Choose image").trim();
     const chooseLabel = String(options.chooseLabel || "Choose").trim();
     const uploadLabel = String(options.uploadLabel || "Upload new image").trim();
     const currentImageKey = getImageKeyFromUrl(options.currentUrl || "");
     let selectedImage = null;
+    let renderedImages = [];
+    let isDeleting = false;
     let isClosed = false;
 
     const overlay = document.createElement("div");
@@ -942,11 +986,20 @@
     status.className = "cp-image-picker-status";
     status.textContent = "Loading images...";
 
+    const toolbar = document.createElement("div");
+    toolbar.className = "cp-image-picker-toolbar";
+
+    const uploadActions = document.createElement("div");
+    uploadActions.className = "cp-image-picker-upload-actions";
+
     const grid = document.createElement("div");
     grid.className = "cp-image-picker-grid";
 
     const actions = document.createElement("div");
     actions.className = "cp-modal-actions";
+
+    const actionsLeft = document.createElement("div");
+    actionsLeft.className = "cp-image-picker-actions-left";
 
     const uploadBtn = document.createElement("button");
     uploadBtn.type = "button";
@@ -957,6 +1010,12 @@
     uploadSourceBtn.type = "button";
     uploadSourceBtn.className = "cp-btn cp-btn-secondary";
     uploadSourceBtn.textContent = String(options.sourceUploadLabel || "Upload source").trim() || "Upload source";
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "cp-btn cp-btn-danger";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.disabled = true;
 
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
@@ -983,12 +1042,28 @@
       if (event.key === "Escape") closeModal("cancel");
     }
 
+    const setPickerStatus = (message, isError = false) => {
+      status.textContent = message || "";
+      status.style.color = isError ? "#c62828" : "#667085";
+    };
+
+    const setDeleting = (value) => {
+      isDeleting = value === true;
+      uploadBtn.disabled = isDeleting;
+      uploadSourceBtn.disabled = isDeleting;
+      cancelBtn.disabled = isDeleting;
+      chooseBtn.disabled = isDeleting || !selectedImage;
+      deleteBtn.disabled = isDeleting || !selectedImage;
+      deleteBtn.textContent = isDeleting ? "Deleting..." : "Delete";
+    };
+
     const setSelectedImage = (image) => {
       selectedImage = image || null;
       grid.querySelectorAll(".cp-image-picker-option").forEach((node) => {
         node.classList.toggle("active", String(node.dataset.imageId || "") === String(selectedImage?.id || ""));
       });
-      chooseBtn.disabled = !selectedImage;
+      chooseBtn.disabled = isDeleting || !selectedImage;
+      deleteBtn.disabled = isDeleting || !selectedImage;
     };
 
     const renderImages = (images) => {
@@ -996,13 +1071,14 @@
       grid.innerHTML = "";
       const rows = (Array.isArray(images) ? images : [])
         .filter((image) => getImagePickerUrl(image, "thumb") || getImagePickerUrl(image, "original"));
+      renderedImages = rows;
       if (!rows.length) {
         const empty = document.createElement("div");
         empty.className = "cp-image-picker-empty";
         empty.textContent = "No uploaded images yet.";
         grid.appendChild(empty);
-        status.textContent = "";
-        chooseBtn.disabled = true;
+        setPickerStatus("");
+        setSelectedImage(null);
         return;
       }
 
@@ -1041,7 +1117,7 @@
       });
 
       setSelectedImage(selectedImage);
-      status.textContent = rows.length === 1 ? "1 image available." : `${rows.length} images available.`;
+      setPickerStatus(rows.length === 1 ? "1 image available." : `${rows.length} images available.`);
     };
 
     uploadBtn.addEventListener("click", () => {
@@ -1054,6 +1130,23 @@
       closeModal("upload-source");
       if (typeof options.onUploadSourceNew === "function") {
         options.onUploadSourceNew();
+      }
+    });
+    deleteBtn.addEventListener("click", async () => {
+      if (!selectedImage || isDeleting) return;
+      if (!window.confirm("Delete this image permanently?")) return;
+      setPickerStatus("Deleting image...");
+      setDeleting(true);
+      try {
+        await deleteNewsImage(selectedImage);
+        const deletedImageId = String(selectedImage?.id || "");
+        selectedImage = null;
+        renderImages(renderedImages.filter((image) => String(image?.id || "") !== deletedImageId));
+        setPickerStatus("Image deleted.");
+      } catch (error) {
+        setPickerStatus(error?.message || "Failed to delete image.", true);
+      } finally {
+        setDeleting(false);
       }
     });
     cancelBtn.addEventListener("click", () => closeModal("cancel"));
@@ -1072,14 +1165,18 @@
     });
     document.addEventListener("keydown", handleKeyDown);
 
-    actions.appendChild(uploadBtn);
+    uploadActions.appendChild(uploadBtn);
     if (options.canUploadSource === true && typeof options.onUploadSourceNew === "function") {
-      actions.appendChild(uploadSourceBtn);
+      uploadActions.appendChild(uploadSourceBtn);
     }
+    toolbar.appendChild(status);
+    toolbar.appendChild(uploadActions);
+    actionsLeft.appendChild(deleteBtn);
+    actions.appendChild(actionsLeft);
     actions.appendChild(cancelBtn);
     actions.appendChild(chooseBtn);
     dialog.appendChild(title);
-    dialog.appendChild(status);
+    dialog.appendChild(toolbar);
     dialog.appendChild(grid);
     dialog.appendChild(actions);
     overlay.appendChild(dialog);
@@ -1094,7 +1191,7 @@
         empty.className = "cp-image-picker-empty";
         empty.textContent = error?.message || "Failed to load images.";
         grid.appendChild(empty);
-        status.textContent = "";
+        setPickerStatus("");
       });
   }
 
