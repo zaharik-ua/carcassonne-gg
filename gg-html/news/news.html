@@ -126,6 +126,12 @@
     color: #0e4f73;
     text-decoration: none;
   }
+  .news-description-content img {
+    display: block;
+    height: auto;
+    margin: 8px 0;
+    width: 100%;
+  }
   .news-description-time {
     font-size: 11px;
     color: #545454;
@@ -243,6 +249,22 @@
     color: #0e4f73;
     text-decoration: none;
   }
+  .news-description-source {
+    font-size: 12px;
+    line-height: 1.3;
+    margin: -6px 0 10px;
+  }
+  .news-description-source:empty {
+    display: none;
+  }
+  .news-description-source a {
+    color: #146997;
+    text-decoration: none;
+  }
+  .news-description-source a:hover {
+    color: #0e4f73;
+    text-decoration: none;
+  }
   .news-detail-description {
     color: #333;
     font-size: 16px;
@@ -261,6 +283,13 @@
   .news-detail-description a:hover {
     color: #0e4f73;
     text-decoration: none;
+  }
+  .news-detail-description img {
+    cursor: zoom-in;
+    display: block;
+    height: auto;
+    margin: 12px 0;
+    width: 100%;
   }
 </style>
 
@@ -401,6 +430,27 @@
     link.textContent = fileSize ? `Download source image (${fileSize})` : "Download source image";
     hostEl.innerHTML = "";
     hostEl.appendChild(link);
+  };
+
+  const renderDescriptionImageSourceLinks = (hostEl) => {
+    if (!hostEl) return;
+    hostEl.querySelectorAll("img").forEach(image => {
+      const imageSrc = toNewsImageUrl(image.getAttribute("src") || "");
+      if (!imageSrc) return;
+
+      const sourceLink = document.createElement("div");
+      sourceLink.className = "news-description-source";
+      const imageRow = image.parentElement?.tagName?.toUpperCase() === "P"
+        && Array.from(image.parentElement.childNodes).every(child => (
+          child === image
+          || (child.nodeType === Node.TEXT_NODE && !child.textContent.trim())
+          || (child.nodeType === Node.ELEMENT_NODE && child.tagName.toUpperCase() === "BR")
+        ))
+        ? image.parentElement
+        : image;
+      imageRow.insertAdjacentElement("afterend", sourceLink);
+      renderSourceImageLink(imageSrc, sourceLink);
+    });
   };
 
   const getNewsDetailUrl = (newsItem) => {
@@ -594,6 +644,16 @@
       const description = document.createElement("div");
       description.className = "news-detail-description";
       description.innerHTML = descriptionHtml;
+      description.querySelectorAll("img").forEach(image => {
+        const imageSrc = toNewsImageUrl(image.getAttribute("src") || "");
+        if (!imageSrc) return;
+        image.src = imageSrc;
+        image.loading = "lazy";
+        image.addEventListener("click", () => {
+          openImageModal(getNewsImageVariantUrl(imageSrc, "original") || imageSrc, image.alt || titleText);
+        });
+      });
+      renderDescriptionImageSourceLinks(description);
       card.appendChild(description);
     }
 
@@ -736,6 +796,13 @@
         const descriptionContent = document.createElement("div");
         descriptionContent.className = "news-description-content";
         descriptionContent.innerHTML = descriptionHtml;
+        descriptionContent.querySelectorAll("img").forEach(image => {
+          const imageSrc = toNewsImageUrl(image.getAttribute("src") || "");
+          if (!imageSrc) return;
+          image.src = imageSrc;
+          image.loading = "lazy";
+        });
+        renderDescriptionImageSourceLinks(descriptionContent);
         descriptionBlock.appendChild(descriptionContent);
 
         const toggleDescription = () => {

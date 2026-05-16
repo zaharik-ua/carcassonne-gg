@@ -57,6 +57,9 @@ const cookieSameSite = process.env.COOKIE_SAME_SITE || (isProd ? "none" : "lax")
 const cookieSecure = process.env.COOKIE_SECURE
   ? process.env.COOKIE_SECURE === "true"
   : isProd;
+const NEWS_IMAGEABLE_TYPES = {
+  NEWS: "news",
+};
 
 if (cookieSameSite === "none" && !cookieSecure) {
   throw new Error("COOKIE_SAME_SITE=none requires COOKIE_SECURE=true");
@@ -478,6 +481,138 @@ async function resolveNewsAssociationValue(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
   return resolveAssociationId(raw);
+}
+
+function extractUploadedImageKeys(value) {
+  const raw = String(value || "");
+  if (!raw) return [];
+  const keys = [];
+  const pattern = /(?:^|[/"'(=\s])uploads\/images\/\d{4}\/\d{2}\/([^/?#"'()<>\s]+)\//gi;
+  let match = pattern.exec(raw);
+  while (match) {
+    const key = String(match[1] || "").trim();
+    if (key) {
+      try {
+        keys.push(decodeURIComponent(key));
+      } catch (_error) {
+        keys.push(key);
+      }
+    }
+    match = pattern.exec(raw);
+  }
+  return keys;
+}
+
+function normalizeNewsGalleryImageRefs(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string" || typeof item === "number") {
+        return { value: String(item || "").trim(), imageId: normalizePositiveInteger(item), imageKey: null };
+      }
+      if (!item || typeof item !== "object") return null;
+      const imageId = normalizePositiveInteger(item.image_id ?? item.imageId ?? item.id);
+      const imageKey = normalizeNullableText(item.image_key ?? item.imageKey);
+      const valueRef = normalizeNullableText(
+        item.url
+          ?? item.src
+          ?? item.image
+          ?? item.image_url
+          ?? item.imageUrl
+          ?? item.public_url
+          ?? item.publicUrl
+          ?? item.storage_path
+          ?? item.storagePath
+      );
+      return { value: valueRef, imageId, imageKey };
+    })
+    .filter(Boolean);
+}
+
+async function resolveNewsImageReference(ref) {
+  const imageId = normalizePositiveInteger(ref?.imageId);
+  if (imageId) {
+    const row = await dbGetAsync(
+      "SELECT id FROM images WHERE id = ? AND deleted_at IS NULL LIMIT 1",
+      [imageId]
+    );
+    if (row?.id) return row.id;
+  }
+
+  const imageKey = normalizeNullableText(ref?.imageKey)
+    || extractUploadedImageKeys(ref?.value)[0]
+    || null;
+  if (!imageKey) return null;
+  const row = await dbGetAsync(
+    "SELECT id FROM images WHERE image_key = ? AND deleted_at IS NULL LIMIT 1",
+    [imageKey]
+  );
+  return row?.id || null;
+}
+
+async function createNewsImageables(newsId, payload) {
+  const normalizedNewsId = normalizePositiveInteger(newsId);
+  if (!normalizedNewsId) return;
+
+  const refs = [];
+  const coverKeys = extractUploadedImageKeys(payload?.image);
+  coverKeys.slice(0, 1).forEach((imageKey) => {
+    refs.push({
+      imageKey,
+      type: NEWS_IMAGEABLE_TYPES.NEWS,
+      role: "cover",
+      sortOrder: 0,
+    });
+  });
+
+  extractUploadedImageKeys(payload?.description).forEach((imageKey, index) => {
+    refs.push({
+      imageKey,
+      type: NEWS_IMAGEABLE_TYPES.NEWS,
+      role: "body",
+      sortOrder: index,
+    });
+  });
+
+  const galleryRefs = normalizeNewsGalleryImageRefs(
+    payload?.gallery_images
+      ?? payload?.galleryImages
+      ?? payload?.gallery
+  );
+  galleryRefs.forEach((ref, index) => {
+    refs.push({
+      ...ref,
+      type: NEWS_IMAGEABLE_TYPES.NEWS,
+      role: "gallery",
+      sortOrder: index,
+    });
+  });
+
+  for (const ref of refs) {
+    const imageId = await resolveNewsImageReference(ref);
+    if (!imageId) continue;
+    await dbRunAsync(
+      `
+        INSERT INTO imageables (
+          image_id,
+          imageable_type,
+          imageable_id,
+          role,
+          sort_order,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [
+        imageId,
+        ref.type,
+        String(normalizedNewsId),
+        ref.role,
+        normalizeIntegerOrNull(ref.sortOrder) ?? 0,
+      ]
+    );
+  }
 }
 
 async function loadNewsById(newsId) {
@@ -6127,43 +6262,56 @@ app.post("/news", requireAdmin, async (req, res) => {
       }
     }
 
-    const insertResult = await dbRunAsync(
-      `
-        INSERT INTO news (
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    let insertResult = null;
+    try {
+      insertResult = await dbRunAsync(
+        `
+          INSERT INTO news (
+            significance,
+            category,
+            association_id,
+            tournament_id,
+            associations,
+            time_utc,
+            image,
+            title,
+            short_title,
+            short_description,
+            description,
+            created_by,
+            updated_by,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        [
           significance,
           category,
-          association_id,
-          tournament_id,
-          associations,
-          time_utc,
+          associationId,
+          tournamentId,
+          JSON.stringify(associations),
+          timeUtc,
           image,
           title,
-          short_title,
-          short_description,
-          description,
-          created_by,
-          updated_by,
-          created_at,
-          updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `,
-      [
-        significance,
-        category,
-        associationId,
-        tournamentId,
-        JSON.stringify(associations),
-        timeUtc,
+          shortTitle || null,
+          shortDescription || null,
+          description || null,
+          actorPlayerId,
+          actorPlayerId,
+        ]
+      );
+      await createNewsImageables(insertResult?.lastID, {
         image,
-        title,
-        shortTitle || null,
-        shortDescription || null,
-        description || null,
-        actorPlayerId,
-        actorPlayerId,
-      ]
-    );
+        description,
+        gallery_images: req.body?.gallery_images ?? req.body?.galleryImages ?? req.body?.gallery,
+      });
+      await dbRunAsync("COMMIT");
+    } catch (dbError) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw dbError;
+    }
 
     const createdRow = await loadNewsById(insertResult?.lastID);
     return logAuditEvent(
@@ -6313,13 +6461,31 @@ app.delete("/news/:id", requireAdmin, async (req, res) => {
       return res.status(404).json({ ok: false, message: "News not found" });
     }
 
-    await dbRunAsync(
-      `
-        DELETE FROM news
-        WHERE id = ?
-      `,
-      [newsId]
-    );
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await dbRunAsync(
+        `
+          DELETE FROM imageables
+          WHERE imageable_id = ?
+            AND imageable_type = ?
+        `,
+        [
+          String(newsId),
+          NEWS_IMAGEABLE_TYPES.NEWS,
+        ]
+      );
+      await dbRunAsync(
+        `
+          DELETE FROM news
+          WHERE id = ?
+        `,
+        [newsId]
+      );
+      await dbRunAsync("COMMIT");
+    } catch (dbError) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw dbError;
+    }
 
     return logAuditEvent(
       {

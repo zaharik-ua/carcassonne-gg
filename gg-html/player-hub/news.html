@@ -139,6 +139,11 @@
     gap: 6px;
   }
 
+  .cp-image-select-btn {
+    justify-self: start;
+    margin-left: 0;
+  }
+
   .cp-image-upload input[type="file"] {
     height: auto;
     padding: 5px 8px;
@@ -300,6 +305,10 @@
     text-decoration: underline;
   }
 
+  .cp-news-desc img {
+    display: none;
+  }
+
   .cp-news-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -347,6 +356,13 @@
     color: #1a73b7;
   }
 
+  .cp-news-editor-btn:disabled {
+    border-color: #c8ced8;
+    color: #8c96a4;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
   .cp-news-editor-area {
     min-height: 300px;
     padding: 10px 12px;
@@ -359,9 +375,41 @@
     word-break: break-word;
   }
 
+  .cp-news-editor-area img {
+    display: block;
+    width: 100%;
+    max-width: 260px;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border: 1px solid #d7dbe2;
+    border-radius: 4px;
+    background: #f3f4f6;
+    cursor: pointer;
+  }
+
+  .cp-news-editor-area img.cp-news-editor-image-selected {
+    outline: 2px solid #1a73b7;
+    outline-offset: 2px;
+  }
+
+  .cp-news-editor-image-marker {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+  }
+
   .cp-news-editor-area:empty::before {
     content: attr(data-placeholder);
     color: #98a2b3;
+  }
+
+  .cp-news-editor-status {
+    min-height: 16px;
+    padding: 0 8px 6px;
+    color: #667085;
+    font-size: 12px;
+    line-height: 16px;
   }
 
   .cp-news-link-dialog-row {
@@ -391,6 +439,99 @@
     color: #c62828;
     font-size: 12px;
     font-weight: 600;
+  }
+
+  .cp-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(24, 31, 41, 0.42);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 1000;
+  }
+
+  .cp-modal-dialog {
+    width: 100%;
+    max-width: 560px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
+    box-shadow: 0 16px 36px rgba(15, 28, 48, 0.22);
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .cp-modal-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #222;
+  }
+
+  .cp-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .cp-image-picker-status {
+    min-height: 16px;
+    color: #667085;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .cp-image-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 2px;
+  }
+
+  .cp-image-picker-option {
+    all: unset;
+    box-sizing: border-box;
+    aspect-ratio: 1;
+    border: 1px solid #d7dbe2;
+    border-radius: 6px;
+    background: #f3f4f6;
+    display: block;
+    cursor: pointer;
+    overflow: hidden;
+  }
+
+  .cp-image-picker-option:hover,
+  .cp-image-picker-option:focus-visible {
+    border-color: #1a73b7;
+    box-shadow: 0 0 0 2px rgba(26, 115, 183, 0.18);
+  }
+
+  .cp-image-picker-option.active {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.55), 0 0 0 6px rgba(26, 115, 183, 0.22);
+  }
+
+  .cp-image-picker-option img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+  }
+
+  .cp-image-picker-empty {
+    border: 1px dashed #d7dbe2;
+    border-radius: 6px;
+    padding: 14px;
+    color: #667085;
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: center;
   }
 
   .cp-news-form .cp-edit-row--description textarea,
@@ -666,6 +807,7 @@
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
   const NEWS_URL = `${AUTH_BASE}/news`;
   const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
+  const IMAGES_URL = `${AUTH_BASE}/images`;
   const IMAGE_UPLOAD_URL = `${AUTH_BASE}/images/upload`;
   const IMAGE_UPLOAD_MAX_BYTES = 64 * 1024 * 1024;
   const NEWS_SIGNIFICANCE_OPTIONS = ["Regular", "Important", "Major"];
@@ -735,6 +877,226 @@
     } catch (_error) {
       return absoluteUrl.replace(/\/[^/]+$/, `/${variantName}.webp`);
     }
+  }
+
+  function getImageKeyFromUrl(value) {
+    const imageUrl = toApiAbsoluteUrl(value);
+    if (!imageUrl) return "";
+    try {
+      const url = new URL(imageUrl, window.location.href);
+      const match = url.pathname.match(/\/uploads\/images\/\d{4}\/\d{2}\/([^/]+)\//i);
+      return match ? String(match[1] || "").trim().toLowerCase() : "";
+    } catch (_error) {
+      const match = imageUrl.match(/\/uploads\/images\/\d{4}\/\d{2}\/([^/]+)\//i);
+      return match ? String(match[1] || "").trim().toLowerCase() : "";
+    }
+  }
+
+  function getImageDisplayName(image) {
+    return String(
+      image?.title
+      || image?.alt_text
+      || image?.caption
+      || image?.original_filename
+      || image?.image_key
+      || (image?.id ? `Image #${image.id}` : "News image")
+    ).trim();
+  }
+
+  function getImagePickerUrl(image, variant = "large") {
+    const source = String(image?.storage_path || image?.public_url || "").trim();
+    if (!source) return "";
+    return toApiImageVariantUrl(source, variant) || toApiAbsoluteUrl(source);
+  }
+
+  async function fetchNewsImageLibrary() {
+    const url = new URL(IMAGES_URL, window.location.href);
+    url.searchParams.set("status", "ready");
+    url.searchParams.set("visibility", "public");
+    const response = await fetch(url.toString(), { credentials: "include" });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.message || "Failed to load images.");
+    }
+    return Array.isArray(result?.images) ? result.images : [];
+  }
+
+  function showImagePickerDialog(options = {}) {
+    const titleText = String(options.title || "Choose image").trim();
+    const chooseLabel = String(options.chooseLabel || "Choose").trim();
+    const uploadLabel = String(options.uploadLabel || "Upload new image").trim();
+    const currentImageKey = getImageKeyFromUrl(options.currentUrl || "");
+    let selectedImage = null;
+    let isClosed = false;
+
+    const overlay = document.createElement("div");
+    overlay.className = "cp-modal-overlay";
+
+    const dialog = document.createElement("div");
+    dialog.className = "cp-modal-dialog";
+
+    const title = document.createElement("div");
+    title.className = "cp-modal-title";
+    title.textContent = titleText || "Choose image";
+
+    const status = document.createElement("div");
+    status.className = "cp-image-picker-status";
+    status.textContent = "Loading images...";
+
+    const grid = document.createElement("div");
+    grid.className = "cp-image-picker-grid";
+
+    const actions = document.createElement("div");
+    actions.className = "cp-modal-actions";
+
+    const uploadBtn = document.createElement("button");
+    uploadBtn.type = "button";
+    uploadBtn.className = "cp-btn cp-btn-secondary";
+    uploadBtn.textContent = uploadLabel || "Upload new image";
+
+    const uploadSourceBtn = document.createElement("button");
+    uploadSourceBtn.type = "button";
+    uploadSourceBtn.className = "cp-btn cp-btn-secondary";
+    uploadSourceBtn.textContent = String(options.sourceUploadLabel || "Upload source").trim() || "Upload source";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+
+    const chooseBtn = document.createElement("button");
+    chooseBtn.type = "button";
+    chooseBtn.className = "cp-btn cp-btn-primary";
+    chooseBtn.textContent = chooseLabel || "Choose";
+    chooseBtn.disabled = true;
+
+    const closeModal = (reason = "cancel") => {
+      if (isClosed) return;
+      isClosed = true;
+      document.removeEventListener("keydown", handleKeyDown);
+      overlay.remove();
+      if (reason === "cancel" && typeof options.onCancel === "function") {
+        options.onCancel();
+      }
+    };
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") closeModal("cancel");
+    }
+
+    const setSelectedImage = (image) => {
+      selectedImage = image || null;
+      grid.querySelectorAll(".cp-image-picker-option").forEach((node) => {
+        node.classList.toggle("active", String(node.dataset.imageId || "") === String(selectedImage?.id || ""));
+      });
+      chooseBtn.disabled = !selectedImage;
+    };
+
+    const renderImages = (images) => {
+      if (isClosed) return;
+      grid.innerHTML = "";
+      const rows = (Array.isArray(images) ? images : [])
+        .filter((image) => getImagePickerUrl(image, "thumb") || getImagePickerUrl(image, "original"));
+      if (!rows.length) {
+        const empty = document.createElement("div");
+        empty.className = "cp-image-picker-empty";
+        empty.textContent = "No uploaded images yet.";
+        grid.appendChild(empty);
+        status.textContent = "";
+        chooseBtn.disabled = true;
+        return;
+      }
+
+      rows.forEach((image) => {
+        const optionBtn = document.createElement("button");
+        optionBtn.type = "button";
+        optionBtn.className = "cp-image-picker-option";
+        optionBtn.dataset.imageId = String(image?.id || "");
+        optionBtn.title = getImageDisplayName(image);
+
+        const imageEl = document.createElement("img");
+        const thumbUrl = getImagePickerUrl(image, "thumb");
+        const fallbackUrl = getImagePickerUrl(image, "small") || getImagePickerUrl(image, "original");
+        imageEl.src = thumbUrl || fallbackUrl;
+        imageEl.alt = getImageDisplayName(image);
+        imageEl.loading = "lazy";
+        imageEl.addEventListener("error", () => {
+          if (fallbackUrl && imageEl.src !== fallbackUrl) {
+            imageEl.src = fallbackUrl;
+          }
+        }, { once: true });
+        optionBtn.appendChild(imageEl);
+
+        optionBtn.addEventListener("click", () => {
+          setSelectedImage(image);
+        });
+        optionBtn.addEventListener("dblclick", () => {
+          setSelectedImage(image);
+          chooseBtn.click();
+        });
+        grid.appendChild(optionBtn);
+
+        if (!selectedImage && currentImageKey && currentImageKey === String(image?.image_key || "").trim().toLowerCase()) {
+          selectedImage = image;
+        }
+      });
+
+      setSelectedImage(selectedImage);
+      status.textContent = rows.length === 1 ? "1 image available." : `${rows.length} images available.`;
+    };
+
+    uploadBtn.addEventListener("click", () => {
+      closeModal("upload");
+      if (typeof options.onUploadNew === "function") {
+        options.onUploadNew();
+      }
+    });
+    uploadSourceBtn.addEventListener("click", () => {
+      closeModal("upload-source");
+      if (typeof options.onUploadSourceNew === "function") {
+        options.onUploadSourceNew();
+      }
+    });
+    cancelBtn.addEventListener("click", () => closeModal("cancel"));
+    chooseBtn.addEventListener("click", () => {
+      if (!selectedImage || typeof options.onChoose !== "function") return;
+      try {
+        options.onChoose(selectedImage);
+        closeModal("choose");
+      } catch (error) {
+        status.textContent = error?.message || "Failed to choose image.";
+        status.style.color = "#c62828";
+      }
+    });
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal("cancel");
+    });
+    document.addEventListener("keydown", handleKeyDown);
+
+    actions.appendChild(uploadBtn);
+    if (options.canUploadSource === true && typeof options.onUploadSourceNew === "function") {
+      actions.appendChild(uploadSourceBtn);
+    }
+    actions.appendChild(cancelBtn);
+    actions.appendChild(chooseBtn);
+    dialog.appendChild(title);
+    dialog.appendChild(status);
+    dialog.appendChild(grid);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    fetchNewsImageLibrary()
+      .then(renderImages)
+      .catch((error) => {
+        if (isClosed) return;
+        grid.innerHTML = "";
+        const empty = document.createElement("div");
+        empty.className = "cp-image-picker-empty";
+        empty.textContent = error?.message || "Failed to load images.";
+        grid.appendChild(empty);
+        status.textContent = "";
+      });
   }
 
   function readLegacyCaptainSubviewFromUrl() {
@@ -876,9 +1238,17 @@
   function sanitizeNewsDescriptionHtml(rawHtml) {
     const raw = String(rawHtml || "").trim();
     if (!raw) return "";
-    const allowedTags = new Set(["P", "BR", "STRONG", "EM", "A", "OL", "UL", "LI"]);
+    const allowedTags = new Set(["P", "BR", "STRONG", "EM", "A", "OL", "UL", "LI", "IMG"]);
     const template = document.createElement("template");
     template.innerHTML = raw;
+
+    const normalizeImageSrc = (value) => {
+      const src = String(value || "").trim();
+      if (!src) return "";
+      if (/^https?:\/\//i.test(src)) return src;
+      if (/^\/uploads\/images\//i.test(src)) return src;
+      return "";
+    };
 
     const sanitizeNode = (node) => {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -901,6 +1271,17 @@
           if (safeChild) fragment.appendChild(safeChild);
         });
         return fragment;
+      }
+
+      if (outputTag === "IMG") {
+        const src = normalizeImageSrc(node.getAttribute("src"));
+        if (!src) return null;
+        const safeImage = document.createElement("img");
+        safeImage.setAttribute("src", toApiAbsoluteUrl(src));
+        const alt = String(node.getAttribute("alt") || "").trim();
+        if (alt) safeImage.alt = alt;
+        safeImage.loading = "lazy";
+        return safeImage;
       }
 
       const safeNode = document.createElement(outputTag.toLowerCase());
@@ -926,12 +1307,34 @@
     });
     const output = document.createElement("div");
     output.appendChild(fragment);
-    output.querySelectorAll("p").forEach((paragraph) => {
-      if (!paragraph.textContent.trim() && !paragraph.querySelector("br")) paragraph.remove();
+
+    Array.from(output.querySelectorAll("img")).forEach((image) => {
+      const parent = image.parentElement;
+      const isAlreadyImageRow = parent?.tagName?.toUpperCase() === "P"
+        && Array.from(parent.childNodes).every((child) => (
+          child === image
+          || (child.nodeType === Node.TEXT_NODE && !child.textContent.trim())
+          || (child.nodeType === Node.ELEMENT_NODE && child.tagName.toUpperCase() === "BR")
+        ));
+      if (isAlreadyImageRow) return;
+
+      const row = document.createElement("p");
+      const anchor = image.closest("a");
+      const insertionTarget = (anchor && output.contains(anchor))
+        ? anchor.closest("p,li,ol,ul") || anchor
+        : image.closest("p,li,ol,ul") || image;
+      if (insertionTarget?.parentNode) {
+        insertionTarget.parentNode.insertBefore(row, insertionTarget.nextSibling);
+        row.appendChild(image);
+      }
     });
-    if (!output.textContent.trim()) return "";
+
+    output.querySelectorAll("p").forEach((paragraph) => {
+      if (!paragraph.textContent.trim() && !paragraph.querySelector("br,img")) paragraph.remove();
+    });
+    if (!output.textContent.trim() && !output.querySelector("img")) return "";
     if (
-      output.textContent.trim()
+      (output.textContent.trim() || output.querySelector("img"))
       && !Array.from(output.children).some((child) => ["P", "OL", "UL"].includes(child.tagName.toUpperCase()))
     ) {
       const paragraph = document.createElement("p");
@@ -941,7 +1344,7 @@
     return output.innerHTML.trim();
   }
 
-  function createNewsDescriptionEditor(initialHtml = "") {
+  function createNewsDescriptionEditor(initialHtml = "", options = {}) {
     const root = document.createElement("div");
     root.className = "cp-news-editor";
     const toolbar = document.createElement("div");
@@ -959,6 +1362,21 @@
       "\"": "&quot;",
       "'": "&#39;",
     }[ch]));
+    const imageFileInput = document.createElement("input");
+    imageFileInput.type = "file";
+    imageFileInput.accept = "image/*";
+    imageFileInput.className = "cp-hidden";
+    const editorStatus = document.createElement("div");
+    editorStatus.className = "cp-news-editor-status";
+    let selectedImageNode = null;
+    let pendingImageUploads = 0;
+    let pendingImageUploadPreserveSource = false;
+    let externallyDisabled = false;
+
+    const setEditorStatus = (message, isError = false) => {
+      editorStatus.textContent = String(message || "").trim();
+      editorStatus.style.color = isError ? "#c62828" : "#667085";
+    };
 
     const runCommand = (command, value = null, shouldNormalize = true) => {
       editor.focus();
@@ -968,7 +1386,10 @@
     };
 
     let savedEditorRange = null;
+    let pendingImageInsertMarkerId = "";
+    let pendingImageInsertRange = null;
     let isLinkDialogOpen = false;
+    let isImagePickerOpen = false;
 
     const getSelectionRange = () => {
       const selection = window.getSelection();
@@ -992,6 +1413,57 @@
       if (!selection) return;
       selection.removeAllRanges();
       selection.addRange(range);
+    };
+
+    const placeCaretAtEnd = () => {
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      restoreSelectionRange(range);
+      savedEditorRange = range.cloneRange();
+    };
+
+    const getImageFromNode = (node) => {
+      const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+      const image = element?.closest?.("img") || null;
+      return image && editor.contains(image) ? image : null;
+    };
+
+    const getImageFromRange = (range) => {
+      if (!range) return null;
+      const nodes = [
+        range.startContainer,
+        range.endContainer,
+        range.commonAncestorContainer,
+      ];
+      for (const node of nodes) {
+        const image = getImageFromNode(node);
+        if (image) return image;
+      }
+      return null;
+    };
+
+    const setSelectedImage = (image) => {
+      if (selectedImageNode && selectedImageNode !== image) {
+        selectedImageNode.classList.remove("cp-news-editor-image-selected");
+      }
+      selectedImageNode = image && editor.contains(image) ? image : null;
+      if (selectedImageNode) {
+        selectedImageNode.classList.add("cp-news-editor-image-selected");
+      }
+      updateToolbarState();
+    };
+
+    const selectImageNode = (image) => {
+      if (!image || !editor.contains(image)) {
+        setSelectedImage(null);
+        return;
+      }
+      const range = document.createRange();
+      range.selectNode(image);
+      restoreSelectionRange(range);
+      savedEditorRange = range.cloneRange();
+      setSelectedImage(image);
     };
 
     const getLinkFromNode = (node) => {
@@ -1034,6 +1506,54 @@
       range.collapse(true);
       restoreSelectionRange(range);
       savedEditorRange = range.cloneRange();
+    };
+
+    const removePendingImageMarker = () => {
+      if (pendingImageInsertMarkerId) {
+        const marker = editor.querySelector(`[data-news-image-marker="${pendingImageInsertMarkerId}"]`);
+        if (marker) marker.remove();
+      }
+      pendingImageInsertMarkerId = "";
+      pendingImageInsertRange = null;
+    };
+
+    const placeImageInsertMarker = () => {
+      removePendingImageMarker();
+      const targetRange = rememberEditorSelection()
+        || (savedEditorRange ? savedEditorRange.cloneRange() : null);
+      if (!targetRange || !editor.contains(targetRange.commonAncestorContainer)) return "";
+
+      pendingImageInsertRange = targetRange.cloneRange();
+      return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    };
+
+    const insertPendingImageMarker = () => {
+      const targetRange = pendingImageInsertRange ? pendingImageInsertRange.cloneRange() : null;
+      pendingImageInsertRange = null;
+      if (!targetRange || !editor.contains(targetRange.commonAncestorContainer)) return "";
+
+      const markerId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const marker = document.createElement("span");
+      marker.className = "cp-news-editor-image-marker";
+      marker.dataset.newsImageMarker = markerId;
+      marker.setAttribute("aria-hidden", "true");
+
+      const insertionRange = targetRange.cloneRange();
+      insertionRange.deleteContents();
+      insertionRange.insertNode(marker);
+      pendingImageInsertMarkerId = markerId;
+      return markerId;
+    };
+
+    const hasMeaningfulContent = (node) => {
+      if (!node) return false;
+      return Array.from(node.childNodes).some((child) => {
+        if (child.nodeType === Node.TEXT_NODE) return !!child.textContent.trim();
+        if (child.nodeType !== Node.ELEMENT_NODE) return false;
+        if (child.matches?.("[data-news-image-marker]")) return false;
+        if (child.tagName?.toUpperCase() === "BR") return false;
+        return true;
+      });
     };
 
     const applyLinkToRange = (range, href) => {
@@ -1193,6 +1713,147 @@
       input.select();
     };
 
+    const uploadDescriptionImageFile = async (file, preserveSource = false) => {
+      const sizeError = getImageUploadSizeError(file);
+      if (sizeError) throw new Error(sizeError);
+      if (!String(file?.type || "").startsWith("image/")) {
+        throw new Error("Select an image file.");
+      }
+
+      const formData = new FormData();
+      formData.append("image", file);
+      formData.append("visibility", "public");
+      if (preserveSource === true) {
+        formData.append("preserve_original", "true");
+      }
+
+      const response = await fetch(IMAGE_UPLOAD_URL, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.ok) {
+        if (response.status === 413) {
+          throw new Error(result?.message || `Uploaded image is too large. Maximum allowed size is ${formatFileSize(IMAGE_UPLOAD_MAX_BYTES)}.`);
+        }
+        throw new Error(result?.message || "Failed to upload image.");
+      }
+
+      const variants = Array.isArray(result?.variants) ? result.variants : [];
+      const preferredVariant = variants.find((variant) => String(variant?.variant || "") === "large")
+        || variants.find((variant) => String(variant?.variant || "") === "medium")
+        || variants.find((variant) => String(variant?.variant || "") === "original")
+        || variants[0]
+        || null;
+      const uploadedUrl = toApiAbsoluteUrl(preferredVariant?.public_url || preferredVariant?.storage_path || "");
+      if (!uploadedUrl) {
+        throw new Error("Image uploaded, but no public URL was returned.");
+      }
+      return uploadedUrl;
+    };
+
+    const insertDescriptionImage = (src, alt = "") => {
+      const imageRow = document.createElement("p");
+      const image = document.createElement("img");
+      image.src = src;
+      image.alt = alt;
+      image.loading = "lazy";
+      imageRow.appendChild(image);
+      const fragment = document.createDocumentFragment();
+      fragment.appendChild(imageRow);
+
+      if (!pendingImageInsertMarkerId && pendingImageInsertRange) {
+        insertPendingImageMarker();
+      }
+
+      const marker = pendingImageInsertMarkerId
+        ? editor.querySelector(`[data-news-image-marker="${pendingImageInsertMarkerId}"]`)
+        : null;
+      pendingImageInsertMarkerId = "";
+      pendingImageInsertRange = null;
+
+      if (marker) {
+        const paragraph = marker.closest("p");
+        if (paragraph && editor.contains(paragraph)) {
+          const parent = paragraph.parentNode;
+          const beforeHasContent = hasMeaningfulContent(paragraph);
+          const afterParagraph = paragraph.cloneNode(false);
+          while (marker.nextSibling) afterParagraph.appendChild(marker.nextSibling);
+          const afterHasContent = hasMeaningfulContent(afterParagraph);
+          marker.remove();
+
+          if (beforeHasContent) {
+            parent.insertBefore(fragment, paragraph.nextSibling);
+          } else {
+            parent.insertBefore(fragment, paragraph);
+            paragraph.remove();
+          }
+          if (afterHasContent) {
+            parent.insertBefore(afterParagraph, imageRow.nextSibling);
+          }
+        } else {
+          marker.replaceWith(fragment);
+        }
+      } else {
+        editor.appendChild(fragment);
+      }
+
+      placeCaretAfter(imageRow);
+      setSelectedImage(null);
+      updateToolbarState();
+      setEditorStatus("Image added.");
+    };
+
+    const openDescriptionImageFilePicker = (preserveSource = false) => {
+      isImagePickerOpen = true;
+      pendingImageUploadPreserveSource = preserveSource === true;
+      window.addEventListener("focus", () => {
+        setTimeout(() => {
+          if (pendingImageUploads === 0) {
+            removePendingImageMarker();
+            isImagePickerOpen = false;
+            pendingImageUploadPreserveSource = false;
+          }
+        }, 3000);
+      }, { once: true });
+      imageFileInput.value = "";
+      imageFileInput.click();
+    };
+
+    const insertExistingDescriptionImage = (image) => {
+      const imageUrl = getImagePickerUrl(image, "large")
+        || getImagePickerUrl(image, "medium")
+        || getImagePickerUrl(image, "original");
+      if (!imageUrl) {
+        throw new Error("Selected image has no public URL.");
+      }
+      insertDescriptionImage(imageUrl, getImageDisplayName(image));
+      isImagePickerOpen = false;
+    };
+
+    const removeSelectedImage = () => {
+      const image = selectedImageNode && editor.contains(selectedImageNode) ? selectedImageNode : null;
+      if (!image) return;
+      const parent = image.parentElement;
+      const isImageOnlyParagraph = parent?.tagName?.toUpperCase() === "P"
+        && Array.from(parent.childNodes).every((child) => (
+          child === image
+          || (child.nodeType === Node.TEXT_NODE && !child.textContent.trim())
+          || (child.nodeType === Node.ELEMENT_NODE && child.tagName.toUpperCase() === "BR")
+        ));
+      if (isImageOnlyParagraph) {
+        parent.remove();
+      } else {
+        image.remove();
+      }
+      selectedImageNode = null;
+      normalizeEditorHtml();
+      placeCaretAtEnd();
+      updateToolbarState();
+      setEditorStatus("Image removed.");
+    };
+
     const makeButton = (label, iconClass, title, onClick) => {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -1219,10 +1880,62 @@
       link: makeButton("Link", "fa-solid fa-link", "Add or edit link", () => {
         showLinkDialog();
       }),
+      image: makeButton("Image", "fa-solid fa-image", "Add image", () => {
+        placeImageInsertMarker();
+        isImagePickerOpen = true;
+        showImagePickerDialog({
+          title: "Add image",
+          chooseLabel: "Choose",
+          uploadLabel: "Upload new image",
+          canUploadSource: options.canUploadSource === true,
+          sourceUploadLabel: "Upload source",
+          onChoose: insertExistingDescriptionImage,
+          onUploadNew: openDescriptionImageFilePicker,
+          onUploadSourceNew: () => openDescriptionImageFilePicker(true),
+          onCancel: () => {
+            removePendingImageMarker();
+            isImagePickerOpen = false;
+            pendingImageUploadPreserveSource = false;
+            editor.focus();
+          },
+        });
+      }),
     };
+
+    imageFileInput.addEventListener("change", async () => {
+      const file = imageFileInput.files && imageFileInput.files[0] ? imageFileInput.files[0] : null;
+      imageFileInput.value = "";
+      if (!file) {
+        removePendingImageMarker();
+        isImagePickerOpen = false;
+        pendingImageUploadPreserveSource = false;
+        return;
+      }
+
+      pendingImageUploads += 1;
+      const preserveSource = pendingImageUploadPreserveSource;
+      pendingImageUploadPreserveSource = false;
+      setEditorStatus(preserveSource ? "Uploading image with source..." : "Uploading image...");
+      updateToolbarState();
+      let uploadedUrl = "";
+      try {
+        uploadedUrl = await uploadDescriptionImageFile(file, preserveSource);
+      } catch (error) {
+        removePendingImageMarker();
+        setEditorStatus(error?.message || "Failed to upload image.", true);
+      } finally {
+        pendingImageUploads = Math.max(0, pendingImageUploads - 1);
+        isImagePickerOpen = false;
+        updateToolbarState();
+      }
+      if (uploadedUrl) {
+        insertDescriptionImage(uploadedUrl, file.name || "News image");
+      }
+    });
 
     const normalizeEditorHtml = () => {
       editor.innerHTML = sanitizeNewsDescriptionHtml(editor.innerHTML) || "<p><br></p>";
+      selectedImageNode = null;
     };
 
     const updateToolbarState = () => {
@@ -1230,6 +1943,15 @@
       buttons.italic.classList.toggle("active", document.queryCommandState("italic"));
       buttons.ordered.classList.toggle("active", document.queryCommandState("insertOrderedList"));
       buttons.unordered.classList.toggle("active", document.queryCommandState("insertUnorderedList"));
+      const isBusy = externallyDisabled || pendingImageUploads > 0;
+      buttons.bold.disabled = isBusy;
+      buttons.italic.disabled = isBusy;
+      buttons.ordered.disabled = isBusy;
+      buttons.unordered.disabled = isBusy;
+      buttons.link.disabled = isBusy;
+      buttons.image.disabled = isBusy;
+      imageFileInput.disabled = isBusy;
+      editor.contentEditable = isBusy ? "false" : "true";
     };
 
     try {
@@ -1237,6 +1959,11 @@
     } catch (_error) {}
 
     editor.addEventListener("keydown", (event) => {
+      if ((event.key === "Backspace" || event.key === "Delete") && selectedImageNode && editor.contains(selectedImageNode)) {
+        event.preventDefault();
+        removeSelectedImage();
+        return;
+      }
       const modifier = event.ctrlKey || event.metaKey;
       if (event.key === "Enter" && event.shiftKey) {
         event.preventDefault();
@@ -1278,25 +2005,50 @@
       runCommand("insertHTML", safeHtml);
     });
 
-    editor.addEventListener("keyup", updateToolbarState);
+    editor.addEventListener("keyup", () => {
+      const range = rememberEditorSelection();
+      setSelectedImage(getImageFromRange(range));
+      updateToolbarState();
+    });
     editor.addEventListener("mouseup", () => {
-      rememberEditorSelection();
+      const range = rememberEditorSelection();
+      setSelectedImage(getImageFromRange(range));
       updateToolbarState();
     });
     editor.addEventListener("input", () => {
       rememberEditorSelection();
+      if (selectedImageNode && !editor.contains(selectedImageNode)) {
+        selectedImageNode = null;
+      }
       updateToolbarState();
     });
-    editor.addEventListener("click", rememberEditorSelection);
+    editor.addEventListener("click", (event) => {
+      const image = getImageFromNode(event.target);
+      if (image) {
+        event.preventDefault();
+        selectImageNode(image);
+        return;
+      }
+      rememberEditorSelection();
+      setSelectedImage(null);
+    });
     editor.addEventListener("blur", () => {
-      if (!isLinkDialogOpen) normalizeEditorHtml();
+      if (!isLinkDialogOpen && !isImagePickerOpen) normalizeEditorHtml();
     });
 
     root.appendChild(toolbar);
+    root.appendChild(imageFileInput);
     root.appendChild(editor);
+    root.appendChild(editorStatus);
+    updateToolbarState();
 
     return {
       root,
+      isUploading: () => pendingImageUploads > 0,
+      setDisabled: (isDisabled) => {
+        externallyDisabled = !!isDisabled;
+        updateToolbarState();
+      },
       getHtml: () => {
         normalizeEditorHtml();
         const html = sanitizeNewsDescriptionHtml(editor.innerHTML);
@@ -1471,9 +2223,10 @@
     contentEl.appendChild(list);
   }
 
-  function renderNewsEditForm(newsItem, associationsList, tournamentsList, formMode = "create") {
+  function renderNewsEditForm(newsItem, associationsList, tournamentsList, formMode = "create", options = {}) {
     const isCreateMode = formMode === "create";
     const source = newsItem && typeof newsItem === "object" ? newsItem : {};
+    const canUploadSourceImage = options.canUploadSource === true;
     const dropdowns = [];
     setPageHeading(isCreateMode ? "Create news" : "Edit news");
     countEl.textContent = isCreateMode ? "Creating news" : `Editing news: ${String(source?.id || "")}`;
@@ -1524,23 +2277,6 @@
       return row;
     };
 
-    const addCheckboxRow = (labelText, checked = false) => {
-      const row = document.createElement("div");
-      row.className = "cp-edit-row cp-edit-row-checkbox";
-      const label = document.createElement("label");
-      label.className = "cp-edit-checkbox";
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = !!checked;
-      const text = document.createElement("span");
-      text.textContent = labelText;
-      label.appendChild(input);
-      label.appendChild(text);
-      row.appendChild(label);
-      form.appendChild(row);
-      return input;
-    };
-
     const setError = (message) => {
       const text = String(message || "").trim();
       errorEl.textContent = text;
@@ -1548,13 +2284,15 @@
     };
 
     let imageFileInput = null;
-    let preserveSourceInput = null;
+    let imageChooseBtn = null;
+    let selectedImagePreserveSource = false;
     const setSaving = (isSaving, actionLabel = "Saving...") => {
       saveBtn.disabled = !!isSaving;
       cancelBtn.disabled = !!isSaving;
       if (deleteBtn) deleteBtn.disabled = !!isSaving;
       if (imageFileInput) imageFileInput.disabled = !!isSaving;
-      if (preserveSourceInput) preserveSourceInput.disabled = !!isSaving;
+      if (imageChooseBtn) imageChooseBtn.disabled = !!isSaving;
+      if (descriptionInput?.setDisabled) descriptionInput.setDisabled(!!isSaving);
       saveBtn.textContent = isSaving ? actionLabel : "Save";
     };
 
@@ -1928,9 +2666,14 @@
 
     const imageUploadWrap = document.createElement("div");
     imageUploadWrap.className = "cp-image-upload";
+    imageChooseBtn = document.createElement("button");
+    imageChooseBtn.type = "button";
+    imageChooseBtn.className = "cp-btn cp-btn-secondary cp-image-select-btn";
+    imageChooseBtn.textContent = currentImageUrl ? "Change image" : "Select image";
     imageFileInput = document.createElement("input");
     imageFileInput.type = "file";
     imageFileInput.accept = "image/*";
+    imageFileInput.className = "cp-hidden";
     const imagePreview = document.createElement("img");
     imagePreview.className = "cp-image-preview";
     imagePreview.alt = "";
@@ -1939,10 +2682,56 @@
     const imageUploadStatus = document.createElement("div");
     imageUploadStatus.className = "cp-image-upload-status";
     imageUploadStatus.textContent = currentImageUrl ? "Current image will be kept unless a new file is selected." : "";
+    imageUploadWrap.appendChild(imageChooseBtn);
     imageUploadWrap.appendChild(imageFileInput);
     imageUploadWrap.appendChild(imagePreview);
     imageUploadWrap.appendChild(imageUploadStatus);
     addRow("Image", imageUploadWrap);
+
+    const chooseExistingNewsImage = (image) => {
+      const imageUrl = getImagePickerUrl(image, "large")
+        || getImagePickerUrl(image, "medium")
+        || getImagePickerUrl(image, "original");
+      if (!imageUrl) {
+        throw new Error("Selected image has no public URL.");
+      }
+      if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = "";
+      }
+      selectedImageFile = null;
+      selectedImagePreserveSource = false;
+      imageFileInput.value = "";
+      currentImageUrl = imageUrl;
+      imagePreview.src = currentImageUrl;
+      imagePreview.hidden = false;
+      imageChooseBtn.textContent = "Change image";
+      imageUploadStatus.textContent = "Existing image selected.";
+      setError("");
+    };
+
+    imageChooseBtn.addEventListener("click", () => {
+      closeAllDropdowns();
+      showImagePickerDialog({
+        title: "Choose image",
+        currentUrl: currentImageUrl,
+        chooseLabel: "Choose",
+        uploadLabel: "Upload new image",
+        canUploadSource: canUploadSourceImage,
+        sourceUploadLabel: "Upload source",
+        onChoose: chooseExistingNewsImage,
+        onUploadNew: () => {
+          selectedImagePreserveSource = false;
+          imageFileInput.value = "";
+          imageFileInput.click();
+        },
+        onUploadSourceNew: () => {
+          selectedImagePreserveSource = true;
+          imageFileInput.value = "";
+          imageFileInput.click();
+        },
+      });
+    });
 
     imageFileInput.addEventListener("change", () => {
       const file = imageFileInput.files && imageFileInput.files[0] ? imageFileInput.files[0] : null;
@@ -1952,6 +2741,7 @@
       }
       selectedImageFile = null;
       if (!file) {
+        selectedImagePreserveSource = false;
         imagePreview.hidden = !currentImageUrl;
         imagePreview.src = currentImageUrl || "";
         imageUploadStatus.textContent = currentImageUrl ? "Current image will be kept unless a new file is selected." : "";
@@ -1960,6 +2750,7 @@
       const sizeError = getImageUploadSizeError(file);
       if (sizeError) {
         imageFileInput.value = "";
+        selectedImagePreserveSource = false;
         imagePreview.hidden = !currentImageUrl;
         imagePreview.src = currentImageUrl || "";
         imageUploadStatus.textContent = sizeError;
@@ -1968,6 +2759,7 @@
       }
       if (!String(file.type || "").startsWith("image/")) {
         imageFileInput.value = "";
+        selectedImagePreserveSource = false;
         imagePreview.hidden = !currentImageUrl;
         imagePreview.src = currentImageUrl || "";
         imageUploadStatus.textContent = "Select an image file.";
@@ -1978,10 +2770,9 @@
       previewObjectUrl = URL.createObjectURL(file);
       imagePreview.src = previewObjectUrl;
       imagePreview.hidden = false;
-      imageUploadStatus.textContent = file.name;
+      imageChooseBtn.textContent = "Change image";
+      imageUploadStatus.textContent = selectedImagePreserveSource ? `${file.name} (source saved)` : file.name;
     });
-
-    preserveSourceInput = addCheckboxRow("Save source image", false);
 
     const shortTitleInput = document.createElement("input");
     shortTitleInput.type = "text";
@@ -2001,7 +2792,9 @@
     shortDescriptionInput.value = String(source?.short_description || "").trim();
     addRow("Short description", shortDescriptionInput, "cp-edit-row--full");
 
-    const descriptionInput = createNewsDescriptionEditor(source?.description || "");
+    const descriptionInput = createNewsDescriptionEditor(source?.description || "", {
+      canUploadSource: canUploadSourceImage,
+    });
     addRow("Description", descriptionInput.root, "cp-edit-row--full cp-edit-row--description");
 
     const buildPayload = () => ({
@@ -2025,6 +2818,7 @@
       if (payload.short_description.length > 200) return "Short description must be 200 characters or fewer.";
       if (!String(timeInput.value || "").trim()) return "Time, UTC is required.";
       if (String(timeInput.value || "").trim() && !payload.time_utc) return "Time, UTC is invalid.";
+      if (descriptionInput?.isUploading?.()) return "Wait until the description image finishes uploading.";
       return "";
     };
 
@@ -2036,7 +2830,7 @@
       const formData = new FormData();
       formData.append("image", selectedImageFile);
       formData.append("visibility", "public");
-      if (preserveSourceInput?.checked) {
+      if (selectedImagePreserveSource) {
         formData.append("preserve_original", "true");
       }
 
@@ -2080,6 +2874,7 @@
 
       currentImageUrl = uploadedUrl;
       selectedImageFile = null;
+      selectedImagePreserveSource = false;
       imageFileInput.value = "";
       if (previewObjectUrl) {
         URL.revokeObjectURL(previewObjectUrl);
@@ -2087,6 +2882,7 @@
       }
       imagePreview.src = currentImageUrl;
       imagePreview.hidden = false;
+      if (imageChooseBtn) imageChooseBtn.textContent = "Change image";
       imageUploadStatus.textContent = "Image uploaded.";
       return currentImageUrl;
     };
@@ -2268,7 +3064,9 @@
       }
 
       if (isCreateMode) {
-        renderNewsEditForm(null, associations, tournaments, "create");
+        renderNewsEditForm(null, associations, tournaments, "create", {
+          canUploadSource: isAdminUser,
+        });
         return;
       }
 
@@ -2280,7 +3078,9 @@
           countEl.textContent = "";
           return;
         }
-        renderNewsEditForm(newsToEdit, associations, tournaments, "edit");
+        renderNewsEditForm(newsToEdit, associations, tournaments, "edit", {
+          canUploadSource: isAdminUser,
+        });
         return;
       }
 
