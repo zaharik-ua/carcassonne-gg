@@ -555,6 +555,7 @@
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
   const ICONS_URL = `${AUTH_BASE}/icons`;
+  const CATEGORIES_URL = `${AUTH_BASE}/categories`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const USERS_URL = `${AUTH_BASE}/users`;
   const USER_OPTIONS_URL = `${AUTH_BASE}/users/options`;
@@ -565,21 +566,6 @@
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const DUEL_FORMATS_URL = `${AUTH_BASE}/duel-formats`;
   const STREAMER_SCOREBOARD_STYLE_OPTIONS = ["Default", "Nallerheim"];
-  const ICON_CATEGORY_OPTIONS = [
-    "Players",
-    "GG",
-    "Local",
-    "WTCOC",
-    "ETCOC",
-    "Asian Cup",
-    "Copa America",
-    "CCL",
-    "MSO",
-    "KoC",
-    "World Championship",
-    "YouTube",
-    "Arena",
-  ];
 
   const SECTION_CONFIG = {
     associations: {
@@ -609,6 +595,13 @@
       buttonLabel: "Edit",
       createLabel: "Create",
       load: () => apiJson(ICONS_URL, { method: "GET" }).then((data) => data.icons || []),
+    },
+    categories: {
+      key: "categories",
+      title: "Categories",
+      buttonLabel: "Edit",
+      createLabel: "Create",
+      load: () => apiJson(CATEGORIES_URL, { method: "GET" }).then((data) => data.categories || []),
     },
     newsEditors: {
       key: "newsEditors",
@@ -693,6 +686,8 @@
     teams: [],
     streamers: [],
     icons: [],
+    categories: [],
+    categoriesLoaded: false,
     newsEditors: [],
     mobileMenuItems: [],
     tournaments: [],
@@ -1453,6 +1448,31 @@
     const data = await apiJson(USER_OPTIONS_URL, { method: "GET" });
     state.userOptions = Array.isArray(data?.users) ? data.users : [];
     state.userOptionsLoaded = true;
+  }
+
+  async function ensureCategoriesLoaded() {
+    if (state.categoriesLoaded) return;
+    const data = await apiJson(CATEGORIES_URL, { method: "GET" });
+    state.categories = Array.isArray(data?.categories) ? data.categories : [];
+    state.categoriesLoaded = true;
+  }
+
+  function getCategoryValues() {
+    return (Array.isArray(state.categories) ? state.categories : [])
+      .slice()
+      .sort((left, right) => {
+        const leftOrder = Number(left?.sort_order) || 0;
+        const rightOrder = Number(right?.sort_order) || 0;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return String(left?.name || "").localeCompare(String(right?.name || ""));
+      })
+      .map((category) => String(category?.name || "").trim())
+      .filter(Boolean);
+  }
+
+  function hasCategory(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    return !!normalized && getCategoryValues().some((category) => category.toLowerCase() === normalized);
   }
 
   function loadAuditReferenceData() {
@@ -2440,6 +2460,9 @@
           })
         );
       }
+      if (!state.categoriesLoaded) {
+        requests.push(ensureCategoriesLoaded());
+      }
       await Promise.all(requests);
     } catch (error) {
       setStatus(error?.message || "Failed to load icon references.", true);
@@ -2448,14 +2471,15 @@
 
     const form = document.createElement("form");
     form.className = "cp-edit-form";
+    const categoryValues = getCategoryValues();
 
     const idField = createTextRow("id", item?.id || "", { readOnly: true });
     const nameField = createTextRow("name", item?.name || "");
     const iconLinkField = createTextRow("icon_link", item?.icon_link || "");
     const categoryField = createSelectRow(
       "category",
-      String(item?.category || "Players").trim() || "Players",
-      ICON_CATEGORY_OPTIONS,
+      String(item?.category || "").trim() || categoryValues[0] || "",
+      categoryValues.length ? categoryValues : [""],
       false
     );
     const associationField = createSelectOptionsRow(
@@ -2573,7 +2597,7 @@
         setStatus("icon_link is required.", true);
         return;
       }
-      if (!ICON_CATEGORY_OPTIONS.includes(payload.category)) {
+      if (!hasCategory(payload.category)) {
         setStatus("Select a valid category.", true);
         return;
       }
@@ -2611,6 +2635,122 @@
         renderSection();
       } catch (error) {
         setStatus(error?.message || "Failed to save icon.", true);
+      }
+    });
+
+    if (mode === "create") {
+      closeInlineForm();
+      showCreateForm(form);
+    } else if (anchorRow) {
+      mountDetailForm(form, anchorRow);
+    }
+  }
+
+  function openCategoryForm(mode, item, anchorRow) {
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+
+    const idField = createTextRow("id", item?.id || "", { readOnly: true });
+    const nameField = createTextRow("name", item?.name || "");
+    const sortOrderField = createNumberRow("sort_order", item?.sort_order ?? 0);
+    sortOrderField.input.min = "0";
+
+    if (mode === "edit") form.appendChild(idField.row);
+    form.appendChild(nameField.row);
+    form.appendChild(sortOrderField.row);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = mode === "create" ? "Create" : "Save";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => {
+      if (mode === "create") {
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+      } else {
+        closeInlineForm();
+      }
+      setStatus("", false);
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "cp-btn cp-btn-secondary";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.classList.toggle("hidden", mode !== "edit");
+    deleteBtn.addEventListener("click", async () => {
+      if (!item?.id) return;
+      if (!window.confirm("Delete this category?")) return;
+      try {
+        await apiJson(`${CATEGORIES_URL}/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+        closeInlineForm();
+        setStatus("Category deleted.", false);
+        await loadSectionData("categories");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to delete category.", true);
+      }
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    if (mode === "edit") actions.appendChild(deleteBtn);
+    form.appendChild(actions);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = {
+        id: Number.parseInt(String(idField.input.value || "").trim(), 10),
+        name: String(nameField.input.value || "").trim().replace(/\s+/g, " "),
+        sort_order: Number.parseInt(String(sortOrderField.input.value || "0").trim(), 10) || 0,
+      };
+
+      if (!payload.name) {
+        setStatus("Category name is required.", true);
+        return;
+      }
+
+      const duplicate = state.categories.find((entry) => (
+        String(entry?.name || "").trim().toLowerCase() === payload.name.toLowerCase()
+        && Number(entry?.id) !== Number(item?.id)
+      ));
+      if (duplicate) {
+        setStatus("Category name already exists.", true);
+        return;
+      }
+
+      try {
+        if (mode === "create") {
+          await apiJson(CATEGORIES_URL, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Category created.", false);
+        } else {
+          await apiJson(`${CATEGORIES_URL}/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Category updated.", false);
+        }
+        if (mode === "create") {
+          sectionForm.classList.add("hidden");
+          sectionForm.innerHTML = "";
+        } else {
+          closeInlineForm();
+        }
+        await loadSectionData("categories");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to save category.", true);
       }
     });
 
@@ -2854,14 +2994,18 @@
 
   async function openTournamentForm(mode, item, anchorRow) {
     try {
-      await ensureUserOptionsLoaded();
+      await Promise.all([
+        ensureUserOptionsLoaded(),
+        ensureCategoriesLoaded(),
+      ]);
     } catch (error) {
-      setStatus(error?.message || "Failed to load users.", true);
+      setStatus(error?.message || "Failed to load references.", true);
       return;
     }
 
     const form = document.createElement("form");
     form.className = "cp-edit-form";
+    const categoryValues = getCategoryValues();
 
     const idField = createTextRow("id", item?.id || "", { readOnly: mode === "edit" });
     const nameField = createTextRow("name", item?.name || "");
@@ -2877,7 +3021,7 @@
     const categoryField = createSelectRow(
       "category",
       String(item?.category || ""),
-      ["", "WTCOC", "ETCOC", "Asian Cup", "Copa America", "CCL", "MSO", "KoC", "World Championship"],
+      [""].concat(categoryValues),
       false
     );
     if (categoryField.select.options[0]) categoryField.select.options[0].textContent = "No category";
@@ -3042,6 +3186,10 @@
       }
       if (payload.tournament_type !== "Individuals" && payload.tournament_type !== "Teams") {
         payload.category = null;
+      }
+      if (payload.category && !hasCategory(payload.category)) {
+        setStatus("Select a valid category.", true);
+        return;
       }
       if (payload.tournament_type !== "Teams" && payload.tournament_type !== "Clubs") {
         payload.lineup_size_type = 2;
@@ -3625,6 +3773,39 @@
     });
   }
 
+  function renderCategories() {
+    sectionTitle.textContent = "Categories";
+    sectionCreateBtn.textContent = "Create";
+    sectionCreateBtn.classList.remove("hidden");
+    sectionCreateBtn.onclick = () => openCategoryForm("create", null, null);
+
+    if (!state.categories.length) {
+      renderListEmpty("No categories yet.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    state.categories
+      .slice()
+      .sort((left, right) => {
+        const leftOrder = Number(left?.sort_order) || 0;
+        const rightOrder = Number(right?.sort_order) || 0;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return String(left?.name || "").localeCompare(String(right?.name || ""));
+      })
+      .forEach((item) => {
+        sectionList.appendChild(createListRow({
+          imageSrc: "",
+          imageAlt: item.name,
+          imageRound: false,
+          title: item.name || `Category #${item.id}`,
+          subtitle: `Sort order: ${Number(item?.sort_order) || 0}`,
+          buttonLabel: "Edit",
+          onClick: (row) => openCategoryForm("edit", item, row),
+        }));
+      });
+  }
+
   function renderMobileMenuItems() {
     sectionTitle.textContent = "Mobile Menu";
     sectionCreateBtn.textContent = "Create";
@@ -3858,6 +4039,7 @@
     if (!SECTION_CONFIG[section]) return;
     const items = await SECTION_CONFIG[section].load();
     state[section] = Array.isArray(items) ? items : [];
+    if (section === "categories") state.categoriesLoaded = true;
   }
 
   async function renderSection() {
@@ -3876,6 +4058,7 @@
     if (state.activeSection === "teams") renderTeams();
     if (state.activeSection === "streamers") renderStreamers();
     if (state.activeSection === "icons") renderIcons();
+    if (state.activeSection === "categories") renderCategories();
     if (state.activeSection === "mobileMenuItems") renderMobileMenuItems();
     if (state.activeSection === "newsEditors") renderNewsEditors();
     if (state.activeSection === "tournaments") renderTournaments();

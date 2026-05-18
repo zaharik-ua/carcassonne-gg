@@ -833,26 +833,13 @@
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
+  const CATEGORIES_URL = `${AUTH_BASE}/categories`;
   const NEWS_URL = `${AUTH_BASE}/news`;
   const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
   const IMAGES_URL = `${AUTH_BASE}/images`;
   const IMAGE_UPLOAD_URL = `${AUTH_BASE}/images/upload`;
   const IMAGE_UPLOAD_MAX_BYTES = 64 * 1024 * 1024;
   const NEWS_SIGNIFICANCE_OPTIONS = ["Regular", "Important", "Major"];
-  const NEWS_CATEGORY_OPTIONS = [
-    "Arena",
-    "Asian Cup",
-    "CCL",
-    "Copa America",
-    "ETCOC",
-    "GG",
-    "KoC",
-    "Local",
-    "MSO",
-    "Players",
-    "World Championship",
-    "WTCOC",
-  ];
   const CAPTAIN_VIEWS = {
     NEWS: "news",
   };
@@ -2319,7 +2306,7 @@
     contentEl.appendChild(list);
   }
 
-  function renderNewsEditForm(newsItem, associationsList, tournamentsList, formMode = "create", options = {}) {
+  function renderNewsEditForm(newsItem, associationsList, tournamentsList, categoriesList, formMode = "create", options = {}) {
     const isCreateMode = formMode === "create";
     const source = newsItem && typeof newsItem === "object" ? newsItem : {};
     const canUploadSourceImage = options.canUploadSource === true;
@@ -2710,6 +2697,19 @@
         logo: String(item?.logo || "").trim(),
       }))
       .filter((item) => item.label));
+    const categoryOptions = [{ value: "", label: "Not selected" }].concat((Array.isArray(categoriesList) ? categoriesList : [])
+      .slice()
+      .sort((left, right) => {
+        const leftOrder = Number(left?.sort_order) || 0;
+        const rightOrder = Number(right?.sort_order) || 0;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return String(left?.name || "").localeCompare(String(right?.name || ""));
+      })
+      .map((item) => {
+        const name = String(item?.name || "").trim();
+        return { value: name, label: name };
+      })
+      .filter((item) => item.value));
 
     const significanceInput = createSingleSelect(
       String(source?.significance || "Regular").trim() || "Regular",
@@ -2720,7 +2720,7 @@
 
     const categoryInput = createSingleSelect(
       String(source?.category || "").trim(),
-      [{ value: "", label: "Not selected" }].concat(NEWS_CATEGORY_OPTIONS.map((value) => ({ value, label: value }))),
+      categoryOptions,
       { placeholderLabel: "Select category", searchable: false }
     );
     addRow("Category", categoryInput.root);
@@ -3090,7 +3090,7 @@
         return;
       }
 
-      const [tournamentsRes, newsEditorsRes, newsRes, associationsRes] = await Promise.all([
+      const [tournamentsRes, newsEditorsRes, newsRes, associationsRes, categoriesRes] = await Promise.all([
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" }),
         isAdminUser
@@ -3098,6 +3098,9 @@
           : Promise.resolve(null),
         isAdminUser
           ? fetch(ASSOCIATIONS_URL, { method: "GET", credentials: "include" })
+          : Promise.resolve(null),
+        isAdminUser
+          ? fetch(CATEGORIES_URL, { method: "GET", credentials: "include" })
           : Promise.resolve(null),
       ]);
       const newsEditorsData = newsEditorsRes?.ok
@@ -3120,6 +3123,10 @@
         ? await associationsRes.json().catch(() => ({}))
         : {};
       const associations = Array.isArray(associationsData?.associations) ? associationsData.associations : [];
+      const categoriesData = categoriesRes?.ok
+        ? await categoriesRes.json().catch(() => ({}))
+        : {};
+      const categories = Array.isArray(categoriesData?.categories) ? categoriesData.categories : [];
       const associationsById = new Map();
       associations.forEach((item) => {
         const associationId = normalizeCode(item?.id || item?.code);
@@ -3158,7 +3165,7 @@
       }
 
       if (isCreateMode) {
-        renderNewsEditForm(null, associations, tournaments, "create", {
+        renderNewsEditForm(null, associations, tournaments, categories, "create", {
           canUploadSource: isAdminUser,
         });
         return;
@@ -3172,7 +3179,7 @@
           countEl.textContent = "";
           return;
         }
-        renderNewsEditForm(newsToEdit, associations, tournaments, "edit", {
+        renderNewsEditForm(newsToEdit, associations, tournaments, categories, "edit", {
           canUploadSource: isAdminUser,
         });
         return;

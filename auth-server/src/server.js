@@ -209,21 +209,6 @@ const ICON_AUDIT_FIELDS = [
   "association_id",
   "streamer_id",
 ];
-const ICON_CATEGORIES = [
-  "Players",
-  "GG",
-  "Local",
-  "WTCOC",
-  "ETCOC",
-  "Asian Cup",
-  "Copa America",
-  "CCL",
-  "MSO",
-  "KoC",
-  "World Championship",
-  "YouTube",
-  "Arena",
-];
 const MATCH_AUDIT_FIELDS = [
   "id",
   "tournament_id",
@@ -272,15 +257,20 @@ const TOURNAMENT_TYPES = {
   CLUBS: "Clubs",
   NATIONAL: "National",
 };
-const TOURNAMENT_CATEGORIES = [
-  "WTCOC",
-  "ETCOC",
-  "Asian Cup",
-  "Copa America",
-  "CCL",
-  "MSO",
-  "KoC",
-  "World Championship",
+const DEFAULT_CATEGORIES = [
+  { name: "Players", sort_order: 10 },
+  { name: "GG", sort_order: 20 },
+  { name: "Local", sort_order: 30 },
+  { name: "WTCOC", sort_order: 40 },
+  { name: "ETCOC", sort_order: 50 },
+  { name: "Asian Cup", sort_order: 60 },
+  { name: "Copa America", sort_order: 70 },
+  { name: "CCL", sort_order: 80 },
+  { name: "MSO", sort_order: 90 },
+  { name: "KoC", sort_order: 100 },
+  { name: "World Championship", sort_order: 110 },
+  { name: "YouTube", sort_order: 120 },
+  { name: "Arena", sort_order: 130 },
 ];
 const TOURNAMENT_ACCESS_ROLES = {
   ADMIN: "admin",
@@ -424,32 +414,33 @@ function normalizeNewsSignificance(value) {
   return "Regular";
 }
 
-function normalizeNewsCategory(value) {
+function normalizeCategoryName(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
-  const normalized = raw.toLowerCase();
-  const categories = new Map([
-    ["players", "Players"],
-    ["gg", "GG"],
-    ["local", "Local"],
-    ["wtcoc", "WTCOC"],
-    ["etcoc", "ETCOC"],
-    ["asian", "Asian"],
-    ["cup", "Cup"],
-    ["copa america", "Copa America"],
-    ["ccl", "CCL"],
-    ["mso", "MSO"],
-    ["koc", "KoC"],
-    ["world championship", "World Championship"],
-  ]);
-  return categories.get(normalized) || null;
+  return raw.replace(/\s+/g, " ");
 }
 
-function normalizeIconCategory(value) {
-  const raw = String(value || "").trim();
+async function resolveCategoryName(value) {
+  const raw = normalizeCategoryName(value);
   if (!raw) return null;
-  const normalized = raw.toLowerCase();
-  return ICON_CATEGORIES.find((category) => category.toLowerCase() === normalized) || null;
+  const row = await dbGetAsync(
+    `
+      SELECT name
+      FROM categories
+      WHERE lower(trim(COALESCE(name, ''))) = lower(trim(?))
+      LIMIT 1
+    `,
+    [raw]
+  );
+  return normalizeCategoryName(row?.name);
+}
+
+async function resolveNewsCategory(value) {
+  return resolveCategoryName(value);
+}
+
+async function resolveIconCategory(value) {
+  return resolveCategoryName(value);
 }
 
 function normalizeNewsAssociations(value) {
@@ -725,6 +716,43 @@ async function loadIconById(iconId) {
     `,
     [normalizedId]
   );
+}
+
+async function loadCategoryById(categoryId) {
+  const normalizedId = normalizePositiveInteger(categoryId);
+  if (!normalizedId) return null;
+  return dbGetAsync(
+    `
+      SELECT id, name, sort_order, created_at, updated_at
+      FROM categories
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [normalizedId]
+  );
+}
+
+async function countCategoryReferences(categoryName) {
+  const name = normalizeCategoryName(categoryName);
+  if (!name) return { icons: 0, news: 0, tournaments: 0, total: 0 };
+  const row = await dbGetAsync(
+    `
+      SELECT
+        (SELECT COUNT(*) FROM icons WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?))) AS icons,
+        (SELECT COUNT(*) FROM news WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?))) AS news,
+        (SELECT COUNT(*) FROM tournaments WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?))) AS tournaments
+    `,
+    [name, name, name]
+  );
+  const icons = Number(row?.icons) || 0;
+  const news = Number(row?.news) || 0;
+  const tournaments = Number(row?.tournaments) || 0;
+  return {
+    icons,
+    news,
+    tournaments,
+    total: icons + news + tournaments,
+  };
 }
 
 async function deleteNewsEditorsForProfile(profileId) {
@@ -1525,10 +1553,15 @@ function normalizeTournamentCategory(typeValue, categoryValue) {
   if (tournamentType !== TOURNAMENT_TYPES.INDIVIDUALS && tournamentType !== TOURNAMENT_TYPES.TEAMS) {
     return null;
   }
-  const raw = String(categoryValue ?? "").trim();
-  if (!raw) return null;
-  const matched = TOURNAMENT_CATEGORIES.find((entry) => entry.toLowerCase() === raw.toLowerCase());
-  return matched || null;
+  return normalizeCategoryName(categoryValue);
+}
+
+async function resolveTournamentCategory(typeValue, categoryValue) {
+  const tournamentType = normalizeTournamentType(typeValue);
+  if (tournamentType !== TOURNAMENT_TYPES.INDIVIDUALS && tournamentType !== TOURNAMENT_TYPES.TEAMS) {
+    return null;
+  }
+  return resolveCategoryName(categoryValue);
 }
 
 function normalizeTournamentAccessRole(value) {
@@ -3307,6 +3340,88 @@ function ensureIconsSchema() {
   });
 }
 
+async function seedDefaultCategoriesIfNeeded() {
+  for (const category of DEFAULT_CATEGORIES) {
+    await dbRunAsync(
+      `
+        INSERT OR IGNORE INTO categories (name, sort_order, created_at, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [category.name, category.sort_order]
+    );
+  }
+
+  const seedFromTable = async (tableName) => {
+    const tableRow = await dbGetAsync(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+      [tableName]
+    );
+    if (!tableRow) return;
+    await dbRunAsync(
+      `
+        INSERT OR IGNORE INTO categories (name, sort_order, created_at, updated_at)
+        SELECT DISTINCT trim(category), 1000, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM ${tableName}
+        WHERE trim(COALESCE(category, '')) <> ''
+      `
+    );
+  };
+
+  await seedFromTable("icons");
+  await seedFromTable("news");
+  await seedFromTable("tournaments");
+}
+
+function ensureCategoriesSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure categories schema", createErr);
+      return;
+    }
+
+    db.all("PRAGMA table_info(categories)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect categories schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "categories", "name", "TEXT");
+      addColumnIfMissing(columns, "categories", "sort_order", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "categories", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "categories", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+
+      db.run(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_unique ON categories(lower(trim(name)))",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure unique index for categories.name", indexErr);
+            return;
+          }
+          seedDefaultCategoriesIfNeeded().catch((seedErr) => {
+            console.error("Failed to seed default categories", seedErr);
+          });
+        }
+      );
+      db.run(
+        "CREATE INDEX IF NOT EXISTS idx_categories_order ON categories(sort_order ASC, name COLLATE NOCASE ASC)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure index for categories order", indexErr);
+          }
+        }
+      );
+    });
+  });
+}
+
 function ensureStreamsSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS streams (
@@ -3867,6 +3982,7 @@ db.serialize(() => {
           ensureNewsEditorsSchema();
           ensureNewsSchema();
           ensureIconsSchema();
+          ensureCategoriesSchema();
           ensureImagesSchema({ db, addColumnIfMissing });
           ensureStreamsSchema();
           ensureMobileMenuItemsSchema();
@@ -4875,6 +4991,136 @@ app.delete("/associations/:id", requireAdmin, (req, res) => {
   );
 });
 
+app.get("/categories", (_req, res, next) => {
+  db.all(
+    `
+      SELECT id, name, sort_order, created_at, updated_at
+      FROM categories
+      WHERE trim(COALESCE(name, '')) <> ''
+      ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC
+    `,
+    (err, rows) => {
+      if (err) return next(err);
+      return res.json({ ok: true, categories: rows || [] });
+    }
+  );
+});
+
+app.post("/categories", requireAdmin, async (req, res) => {
+  try {
+    const name = normalizeCategoryName(req.body?.name ?? req.body?.category);
+    const sortOrder = normalizeIntegerOrNull(req.body?.sort_order) ?? 0;
+    if (!name) {
+      return res.status(400).json({ ok: false, message: "name is required" });
+    }
+
+    const insertResult = await dbRunAsync(
+      `
+        INSERT INTO categories (name, sort_order, created_at, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [name, sortOrder]
+    );
+    const createdRow = await loadCategoryById(insertResult?.lastID);
+    return res.status(201).json({ ok: true, category: createdRow || null });
+  } catch (error) {
+    if (String(error?.message || "").includes("UNIQUE")) {
+      return res.status(409).json({ ok: false, message: "Category with this name already exists" });
+    }
+    console.error("Failed to create category", error);
+    return res.status(500).json({ ok: false, message: "Failed to create category" });
+  }
+});
+
+app.patch("/categories/:id", requireAdmin, async (req, res) => {
+  const categoryId = normalizePositiveInteger(req.params.id);
+  const payloadId = normalizePositiveInteger(req.body?.id);
+  const name = normalizeCategoryName(req.body?.name ?? req.body?.category);
+  const sortOrder = normalizeIntegerOrNull(req.body?.sort_order) ?? 0;
+
+  if (!categoryId) {
+    return res.status(400).json({ ok: false, message: "Invalid category id" });
+  }
+  if (payloadId && payloadId !== categoryId) {
+    return res.status(400).json({ ok: false, message: "Category id cannot be changed" });
+  }
+  if (!name) {
+    return res.status(400).json({ ok: false, message: "name is required" });
+  }
+
+  try {
+    const beforeRow = await loadCategoryById(categoryId);
+    if (!beforeRow) {
+      return res.status(404).json({ ok: false, message: "Category not found" });
+    }
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await dbRunAsync(
+        `
+          UPDATE categories
+          SET name = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [name, sortOrder, categoryId]
+      );
+      await dbRunAsync(
+        "UPDATE icons SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?))",
+        [name, beforeRow.name]
+      );
+      await dbRunAsync(
+        "UPDATE news SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?))",
+        [name, beforeRow.name]
+      );
+      await dbRunAsync(
+        "UPDATE tournaments SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?))",
+        [name, beforeRow.name]
+      );
+      await dbRunAsync("COMMIT");
+    } catch (txError) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw txError;
+    }
+
+    const updatedRow = await loadCategoryById(categoryId);
+    return res.json({ ok: true, category: updatedRow || null });
+  } catch (error) {
+    if (String(error?.message || "").includes("UNIQUE")) {
+      return res.status(409).json({ ok: false, message: "Category with this name already exists" });
+    }
+    console.error("Failed to update category", error);
+    return res.status(500).json({ ok: false, message: "Failed to update category" });
+  }
+});
+
+app.delete("/categories/:id", requireAdmin, async (req, res) => {
+  const categoryId = normalizePositiveInteger(req.params.id);
+  if (!categoryId) {
+    return res.status(400).json({ ok: false, message: "Invalid category id" });
+  }
+
+  try {
+    const category = await loadCategoryById(categoryId);
+    if (!category) {
+      return res.status(404).json({ ok: false, message: "Category not found" });
+    }
+    const usage = await countCategoryReferences(category.name);
+    if (usage.total > 0) {
+      return res.status(409).json({
+        ok: false,
+        message: `Category is used by ${usage.total} record(s). Remove or reassign it before deleting.`,
+        usage,
+      });
+    }
+
+    await dbRunAsync("DELETE FROM categories WHERE id = ?", [categoryId]);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("Failed to delete category", error);
+    return res.status(500).json({ ok: false, message: "Failed to delete category" });
+  }
+});
+
 app.get("/duel-formats", requireAdmin, (_req, res, next) => {
   db.all(
     `
@@ -5145,14 +5391,14 @@ app.get("/tournaments", (req, res, next) => {
   );
 });
 
-app.post("/tournaments", requireAdmin, (req, res) => {
+app.post("/tournaments", requireAdmin, async (req, res) => {
   const id = normalizeNullableText(req.body?.id);
   const name = String(req.body?.name || "").trim();
   const shortTitle = String(req.body?.short_title || "").trim() || null;
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
-  const category = normalizeTournamentCategory(tournamentType, req.body?.category);
+  const requestedCategory = normalizeCategoryName(req.body?.category);
   const subtype = normalizeTournamentSubtypeForType(tournamentType, req.body?.subtype ?? req.body?.access_type);
   const playerHubVisibility = normalizeTournamentPlayerHubVisibility(req.body?.player_hub_visibility);
   const accessType = subtype || TOURNAMENT_ACCESS_TYPES.FRIENDLY;
@@ -5161,6 +5407,14 @@ app.post("/tournaments", requireAdmin, (req, res) => {
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
     : null;
   const requestedAccessUsers = normalizeTournamentAccessUsers(req.body?.access_users, req.body?.access_user_ids);
+  let category = null;
+
+  try {
+    category = await resolveTournamentCategory(tournamentType, requestedCategory);
+  } catch (error) {
+    console.error("Failed to resolve tournament category", error);
+    return res.status(500).json({ ok: false, message: "Failed to validate category" });
+  }
 
   if (!id) {
     return res.status(400).json({ ok: false, message: "id is required" });
@@ -5170,6 +5424,13 @@ app.post("/tournaments", requireAdmin, (req, res) => {
   }
   if (lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED && !lineupSize) {
     return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
+  }
+  if (
+    requestedCategory
+    && (tournamentType === TOURNAMENT_TYPES.INDIVIDUALS || tournamentType === TOURNAMENT_TYPES.TEAMS)
+    && !category
+  ) {
+    return res.status(400).json({ ok: false, message: "category must reference an existing category" });
   }
 
   return db.get(
@@ -5256,7 +5517,7 @@ app.post("/tournaments", requireAdmin, (req, res) => {
   );
 });
 
-app.patch("/tournaments/:id", requireAdmin, (req, res) => {
+app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
   const tournamentId = normalizeNullableText(req.params.id);
   const payloadId = normalizeNullableText(req.body?.id);
   const name = String(req.body?.name || "").trim();
@@ -5264,7 +5525,7 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
-  const category = normalizeTournamentCategory(tournamentType, req.body?.category);
+  const requestedCategory = normalizeCategoryName(req.body?.category);
   const subtype = normalizeTournamentSubtypeForType(tournamentType, req.body?.subtype ?? req.body?.access_type);
   const playerHubVisibility = normalizeTournamentPlayerHubVisibility(req.body?.player_hub_visibility);
   const accessType = subtype || TOURNAMENT_ACCESS_TYPES.FRIENDLY;
@@ -5273,6 +5534,14 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
     : null;
   const requestedAccessUsers = normalizeTournamentAccessUsers(req.body?.access_users, req.body?.access_user_ids);
+  let category = null;
+
+  try {
+    category = await resolveTournamentCategory(tournamentType, requestedCategory);
+  } catch (error) {
+    console.error("Failed to resolve tournament category", error);
+    return res.status(500).json({ ok: false, message: "Failed to validate category" });
+  }
 
   if (!tournamentId) {
     return res.status(400).json({ ok: false, message: "Invalid tournament id" });
@@ -5285,6 +5554,13 @@ app.patch("/tournaments/:id", requireAdmin, (req, res) => {
   }
   if (lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED && !lineupSize) {
     return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
+  }
+  if (
+    requestedCategory
+    && (tournamentType === TOURNAMENT_TYPES.INDIVIDUALS || tournamentType === TOURNAMENT_TYPES.TEAMS)
+    && !category
+  ) {
+    return res.status(400).json({ ok: false, message: "category must reference an existing category" });
   }
 
   const [rawTournamentId, normalizedTournamentId] = getTournamentLookupVariants(tournamentId);
@@ -5890,7 +6166,7 @@ app.post("/icons", requireAdmin, async (req, res) => {
   try {
     const name = normalizeNullableText(req.body?.name);
     const iconLink = normalizeNullableText(req.body?.icon_link ?? req.body?.iconLink);
-    const category = normalizeIconCategory(req.body?.category);
+    const category = await resolveIconCategory(req.body?.category);
     const rawAssociationId = normalizeNullableText(req.body?.association_id ?? req.body?.associationId);
     const streamerId = normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId);
     const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
@@ -5902,7 +6178,7 @@ app.post("/icons", requireAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, message: "icon_link is required" });
     }
     if (!category) {
-      return res.status(400).json({ ok: false, message: "category must be one of the allowed icon categories" });
+      return res.status(400).json({ ok: false, message: "category must reference an existing category" });
     }
 
     const associationId = category === "Local" && rawAssociationId
@@ -5962,7 +6238,7 @@ app.patch("/icons/:id", requireAdmin, async (req, res) => {
     const payloadId = normalizePositiveInteger(req.body?.id);
     const name = normalizeNullableText(req.body?.name);
     const iconLink = normalizeNullableText(req.body?.icon_link ?? req.body?.iconLink);
-    const category = normalizeIconCategory(req.body?.category);
+    const category = await resolveIconCategory(req.body?.category);
     const rawAssociationId = normalizeNullableText(req.body?.association_id ?? req.body?.associationId);
     const streamerId = normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId);
     const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
@@ -5980,7 +6256,7 @@ app.patch("/icons/:id", requireAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, message: "icon_link is required" });
     }
     if (!category) {
-      return res.status(400).json({ ok: false, message: "category must be one of the allowed icon categories" });
+      return res.status(400).json({ ok: false, message: "category must reference an existing category" });
     }
 
     const beforeRow = await loadIconById(iconId);
@@ -6230,7 +6506,8 @@ app.post("/news", requireAdmin, async (req, res) => {
   try {
     const actorPlayerId = String(req.user?.player_id || "").trim() || null;
     const significance = normalizeNewsSignificance(req.body?.significance);
-    const category = normalizeNewsCategory(req.body?.category);
+    const requestedCategory = normalizeCategoryName(req.body?.category);
+    const category = await resolveNewsCategory(requestedCategory);
     const associationId = await resolveNewsAssociationValue(req.body?.association_id);
     const tournamentId = normalizeNullableText(req.body?.tournament_id);
     const associations = await resolveNewsAssociations(req.body?.associations);
@@ -6252,6 +6529,9 @@ app.post("/news", requireAdmin, async (req, res) => {
     }
     if (shortDescription.length > 200) {
       return res.status(400).json({ ok: false, message: "short_description must be 200 characters or fewer" });
+    }
+    if (requestedCategory && !category) {
+      return res.status(400).json({ ok: false, message: "category must reference an existing category" });
     }
     if (req.body?.association_id && !associationId) {
       return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
@@ -6358,7 +6638,8 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
     }
 
     const significance = normalizeNewsSignificance(req.body?.significance);
-    const category = normalizeNewsCategory(req.body?.category);
+    const requestedCategory = normalizeCategoryName(req.body?.category);
+    const category = await resolveNewsCategory(requestedCategory);
     const associationId = await resolveNewsAssociationValue(req.body?.association_id);
     const tournamentId = normalizeNullableText(req.body?.tournament_id);
     const associations = await resolveNewsAssociations(req.body?.associations);
@@ -6380,6 +6661,9 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
     }
     if (shortDescription.length > 200) {
       return res.status(400).json({ ok: false, message: "short_description must be 200 characters or fewer" });
+    }
+    if (requestedCategory && !category) {
+      return res.status(400).json({ ok: false, message: "category must reference an existing category" });
     }
     if (req.body?.association_id && !associationId) {
       return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
