@@ -382,6 +382,21 @@
     margin: 0;
   }
 
+  .admin-checkbox-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .admin-checkbox-field input {
+    width: auto;
+    height: auto;
+    margin: 0;
+  }
+
   .admin-list-filter {
     display: inline-flex;
     align-items: center;
@@ -1005,6 +1020,25 @@
     return { row, select };
   }
 
+  function createCheckboxRow(labelText, checked, text) {
+    const row = document.createElement("div");
+    row.className = "cp-edit-row";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const field = document.createElement("label");
+    field.className = "admin-checkbox-field";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = !!checked;
+    const fieldText = document.createElement("span");
+    fieldText.textContent = text || labelText;
+    field.appendChild(input);
+    field.appendChild(fieldText);
+    row.appendChild(label);
+    row.appendChild(field);
+    return { row, input };
+  }
+
   function createMultiSelectRow(labelText, options, selectedValues) {
     const selected = new Set((Array.isArray(selectedValues) ? selectedValues : []).map((value) => String(value)));
     const row = document.createElement("div");
@@ -1470,9 +1504,28 @@
       .filter(Boolean);
   }
 
+  function getTournamentCategoryValues() {
+    return (Array.isArray(state.categories) ? state.categories : [])
+      .filter((category) => Number(category?.is_tournament) === 1)
+      .slice()
+      .sort((left, right) => {
+        const leftOrder = Number(left?.sort_order) || 0;
+        const rightOrder = Number(right?.sort_order) || 0;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return String(left?.name || "").localeCompare(String(right?.name || ""));
+      })
+      .map((category) => String(category?.name || "").trim())
+      .filter(Boolean);
+  }
+
   function hasCategory(value) {
     const normalized = String(value || "").trim().toLowerCase();
     return !!normalized && getCategoryValues().some((category) => category.toLowerCase() === normalized);
+  }
+
+  function hasTournamentCategory(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    return !!normalized && getTournamentCategoryValues().some((category) => category.toLowerCase() === normalized);
   }
 
   function loadAuditReferenceData() {
@@ -2653,11 +2706,13 @@
     const idField = createTextRow("id", item?.id || "", { readOnly: true });
     const nameField = createTextRow("name", item?.name || "");
     const sortOrderField = createNumberRow("sort_order", item?.sort_order ?? 0);
+    const tournamentField = createCheckboxRow("Tournament", Number(item?.is_tournament) === 1, "Available in tournaments");
     sortOrderField.input.min = "0";
 
     if (mode === "edit") form.appendChild(idField.row);
     form.appendChild(nameField.row);
     form.appendChild(sortOrderField.row);
+    form.appendChild(tournamentField.row);
 
     const actions = document.createElement("div");
     actions.className = "cp-edit-actions";
@@ -2711,6 +2766,7 @@
         id: Number.parseInt(String(idField.input.value || "").trim(), 10),
         name: String(nameField.input.value || "").trim().replace(/\s+/g, " "),
         sort_order: Number.parseInt(String(sortOrderField.input.value || "0").trim(), 10) || 0,
+        is_tournament: tournamentField.input.checked ? 1 : 0,
       };
 
       if (!payload.name) {
@@ -3005,7 +3061,7 @@
 
     const form = document.createElement("form");
     form.className = "cp-edit-form";
-    const categoryValues = getCategoryValues();
+    const categoryValues = getTournamentCategoryValues();
 
     const idField = createTextRow("id", item?.id || "", { readOnly: mode === "edit" });
     const nameField = createTextRow("name", item?.name || "");
@@ -3187,8 +3243,8 @@
       if (payload.tournament_type !== "Individuals" && payload.tournament_type !== "Teams") {
         payload.category = null;
       }
-      if (payload.category && !hasCategory(payload.category)) {
-        setStatus("Select a valid category.", true);
+      if (payload.category && !hasTournamentCategory(payload.category)) {
+        setStatus("Select a valid tournament category.", true);
         return;
       }
       if (payload.tournament_type !== "Teams" && payload.tournament_type !== "Clubs") {
@@ -3799,7 +3855,10 @@
           imageAlt: item.name,
           imageRound: false,
           title: item.name || `Category #${item.id}`,
-          subtitle: `Sort order: ${Number(item?.sort_order) || 0}`,
+          subtitle: [
+            `Sort order: ${Number(item?.sort_order) || 0}`,
+            Number(item?.is_tournament) === 1 ? "Tournament" : "",
+          ].filter(Boolean).join(" • "),
           buttonLabel: "Edit",
           onClick: (row) => openCategoryForm("edit", item, row),
         }));

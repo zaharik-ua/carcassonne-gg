@@ -435,6 +435,22 @@ async function resolveCategoryName(value) {
   return normalizeCategoryName(row?.name);
 }
 
+async function resolveTournamentCategoryName(value) {
+  const raw = normalizeCategoryName(value);
+  if (!raw) return null;
+  const row = await dbGetAsync(
+    `
+      SELECT name
+      FROM categories
+      WHERE lower(trim(COALESCE(name, ''))) = lower(trim(?))
+        AND COALESCE(is_tournament, 0) = 1
+      LIMIT 1
+    `,
+    [raw]
+  );
+  return normalizeCategoryName(row?.name);
+}
+
 async function resolveNewsCategory(value) {
   return resolveCategoryName(value);
 }
@@ -723,7 +739,13 @@ async function loadCategoryById(categoryId) {
   if (!normalizedId) return null;
   return dbGetAsync(
     `
-      SELECT id, name, sort_order, created_at, updated_at
+      SELECT
+        id,
+        name,
+        sort_order,
+        COALESCE(is_tournament, 0) AS is_tournament,
+        created_at,
+        updated_at
       FROM categories
       WHERE id = ?
       LIMIT 1
@@ -1561,7 +1583,7 @@ async function resolveTournamentCategory(typeValue, categoryValue) {
   if (tournamentType !== TOURNAMENT_TYPES.INDIVIDUALS && tournamentType !== TOURNAMENT_TYPES.TEAMS) {
     return null;
   }
-  return resolveCategoryName(categoryValue);
+  return resolveTournamentCategoryName(categoryValue);
 }
 
 function normalizeTournamentAccessRole(value) {
@@ -3378,6 +3400,7 @@ function ensureCategoriesSchema() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       sort_order INTEGER NOT NULL DEFAULT 0,
+      is_tournament INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -3395,6 +3418,7 @@ function ensureCategoriesSchema() {
       if (!Array.isArray(columns) || columns.length === 0) return;
       addColumnIfMissing(columns, "categories", "name", "TEXT");
       addColumnIfMissing(columns, "categories", "sort_order", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "categories", "is_tournament", "INTEGER NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "categories", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "categories", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
 
@@ -4994,7 +5018,13 @@ app.delete("/associations/:id", requireAdmin, (req, res) => {
 app.get("/categories", (_req, res, next) => {
   db.all(
     `
-      SELECT id, name, sort_order, created_at, updated_at
+      SELECT
+        id,
+        name,
+        sort_order,
+        COALESCE(is_tournament, 0) AS is_tournament,
+        created_at,
+        updated_at
       FROM categories
       WHERE trim(COALESCE(name, '')) <> ''
       ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC
@@ -5010,16 +5040,17 @@ app.post("/categories", requireAdmin, async (req, res) => {
   try {
     const name = normalizeCategoryName(req.body?.name ?? req.body?.category);
     const sortOrder = normalizeIntegerOrNull(req.body?.sort_order) ?? 0;
+    const isTournament = Number(req.body?.is_tournament ?? req.body?.isTournament ?? req.body?.tournament) === 1 ? 1 : 0;
     if (!name) {
       return res.status(400).json({ ok: false, message: "name is required" });
     }
 
     const insertResult = await dbRunAsync(
       `
-        INSERT INTO categories (name, sort_order, created_at, updated_at)
-        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO categories (name, sort_order, is_tournament, created_at, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
-      [name, sortOrder]
+      [name, sortOrder, isTournament]
     );
     const createdRow = await loadCategoryById(insertResult?.lastID);
     return res.status(201).json({ ok: true, category: createdRow || null });
@@ -5037,6 +5068,7 @@ app.patch("/categories/:id", requireAdmin, async (req, res) => {
   const payloadId = normalizePositiveInteger(req.body?.id);
   const name = normalizeCategoryName(req.body?.name ?? req.body?.category);
   const sortOrder = normalizeIntegerOrNull(req.body?.sort_order) ?? 0;
+  const isTournament = Number(req.body?.is_tournament ?? req.body?.isTournament ?? req.body?.tournament) === 1 ? 1 : 0;
 
   if (!categoryId) {
     return res.status(400).json({ ok: false, message: "Invalid category id" });
@@ -5059,10 +5091,10 @@ app.patch("/categories/:id", requireAdmin, async (req, res) => {
       await dbRunAsync(
         `
           UPDATE categories
-          SET name = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP
+          SET name = ?, sort_order = ?, is_tournament = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `,
-        [name, sortOrder, categoryId]
+        [name, sortOrder, isTournament, categoryId]
       );
       await dbRunAsync(
         "UPDATE icons SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?))",
@@ -5430,7 +5462,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
     && (tournamentType === TOURNAMENT_TYPES.INDIVIDUALS || tournamentType === TOURNAMENT_TYPES.TEAMS)
     && !category
   ) {
-    return res.status(400).json({ ok: false, message: "category must reference an existing category" });
+    return res.status(400).json({ ok: false, message: "category must reference a tournament category" });
   }
 
   return db.get(
@@ -5560,7 +5592,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
     && (tournamentType === TOURNAMENT_TYPES.INDIVIDUALS || tournamentType === TOURNAMENT_TYPES.TEAMS)
     && !category
   ) {
-    return res.status(400).json({ ok: false, message: "category must reference an existing category" });
+    return res.status(400).json({ ok: false, message: "category must reference a tournament category" });
   }
 
   const [rawTournamentId, normalizedTournamentId] = getTournamentLookupVariants(tournamentId);
