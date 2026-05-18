@@ -189,6 +189,8 @@ const NEWS_AUDIT_FIELDS = [
   "short_title",
   "short_description",
   "description",
+  "deleted_at",
+  "deleted_by",
 ];
 const MOBILE_MENU_ITEM_AUDIT_FIELDS = [
   "id",
@@ -651,8 +653,10 @@ async function loadNewsById(newsId) {
         n.description,
         n.created_by,
         n.updated_by,
+        n.deleted_by,
         n.created_at,
         n.updated_at,
+        n.deleted_at,
         a.name AS association_name,
         a.flag AS association_flag,
         COALESCE(t.short_title, t.name) AS tournament_name,
@@ -663,6 +667,7 @@ async function loadNewsById(newsId) {
       LEFT JOIN tournaments t
         ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(n.tournament_id, '')))
       WHERE n.id = ?
+        AND n.deleted_at IS NULL
       LIMIT 1
     `,
     [normalizedId]
@@ -761,7 +766,7 @@ async function countCategoryReferences(categoryName) {
     `
       SELECT
         (SELECT COUNT(*) FROM icons WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?))) AS icons,
-        (SELECT COUNT(*) FROM news WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?))) AS news,
+        (SELECT COUNT(*) FROM news WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?)) AND deleted_at IS NULL) AS news,
         (SELECT COUNT(*) FROM tournaments WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?))) AS tournaments
     `,
     [name, name, name]
@@ -3184,8 +3189,10 @@ function ensureNewsSchema() {
       description TEXT,
       created_by TEXT,
       updated_by TEXT,
+      deleted_by TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TEXT
     )
   `, (createErr) => {
     if (createErr) {
@@ -3232,8 +3239,10 @@ function ensureNewsSchema() {
       addColumnIfMissing(columns, "news", "description", "TEXT");
       addColumnIfMissing(columns, "news", "created_by", "TEXT");
       addColumnIfMissing(columns, "news", "updated_by", "TEXT");
+      addColumnIfMissing(columns, "news", "deleted_by", "TEXT");
       addColumnIfMissing(columns, "news", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "news", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "news", "deleted_at", "TEXT");
 
       db.run(
         `
@@ -3264,7 +3273,7 @@ function ensureNewsSchema() {
       );
 
       db.run(
-        "CREATE INDEX IF NOT EXISTS idx_news_time_utc ON news(time_utc DESC, id DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_news_deleted_time_utc ON news(deleted_at, time_utc DESC, id DESC)",
         (indexErr) => {
           if (indexErr) {
             console.error("Failed to ensure index for news.time_utc", indexErr);
@@ -6462,10 +6471,13 @@ app.get("/public/news", async (_req, res) => {
           description,
           created_by,
           updated_by,
+          deleted_by,
           created_at,
-          updated_at
+          updated_at,
+          deleted_at
         FROM news
         WHERE trim(COALESCE(title, '')) <> ''
+          AND deleted_at IS NULL
         ORDER BY
           CASE
             WHEN time_utc IS NULL OR trim(time_utc) = '' THEN 1
@@ -6502,8 +6514,10 @@ app.get("/news", requireAdmin, async (_req, res) => {
           n.description,
           n.created_by,
           n.updated_by,
+          n.deleted_by,
           n.created_at,
           n.updated_at,
+          n.deleted_at,
           a.name AS association_name,
           a.flag AS association_flag,
           COALESCE(t.short_title, t.name) AS tournament_name,
@@ -6513,6 +6527,7 @@ app.get("/news", requireAdmin, async (_req, res) => {
           ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(n.association_id, '')))
         LEFT JOIN tournaments t
           ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(n.tournament_id, '')))
+        WHERE n.deleted_at IS NULL
         ORDER BY
           CASE
             WHEN n.time_utc IS NULL OR trim(n.time_utc) = '' THEN 1
@@ -6798,30 +6813,22 @@ app.delete("/news/:id", requireAdmin, async (req, res) => {
       return res.status(404).json({ ok: false, message: "News not found" });
     }
 
-    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
-    try {
-      await dbRunAsync(
-        `
-          DELETE FROM imageables
-          WHERE imageable_id = ?
-            AND imageable_type = ?
-        `,
-        [
-          String(newsId),
-          NEWS_IMAGEABLE_TYPES.NEWS,
-        ]
-      );
-      await dbRunAsync(
-        `
-          DELETE FROM news
-          WHERE id = ?
-        `,
-        [newsId]
-      );
-      await dbRunAsync("COMMIT");
-    } catch (dbError) {
-      await dbRunAsync("ROLLBACK").catch(() => {});
-      throw dbError;
+    const actorPlayerId = String(req.user?.player_id || "").trim() || null;
+    const updateResult = await dbRunAsync(
+      `
+        UPDATE news
+        SET
+          deleted_at = CURRENT_TIMESTAMP,
+          deleted_by = ?,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND deleted_at IS NULL
+      `,
+      [actorPlayerId, actorPlayerId, newsId]
+    );
+    if (!updateResult || updateResult.changes === 0) {
+      return res.status(404).json({ ok: false, message: "News not found" });
     }
 
     return logAuditEvent(
@@ -6832,6 +6839,7 @@ app.delete("/news/:id", requireAdmin, async (req, res) => {
         action: "delete",
         record_id: String(newsId),
         changes: buildAuditDeletionChanges(beforeRow || {}, NEWS_AUDIT_FIELDS),
+        metadata: { soft_delete: true },
       },
       () => res.json({ ok: true })
     );
