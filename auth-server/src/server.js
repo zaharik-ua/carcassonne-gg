@@ -226,6 +226,8 @@ const MATCH_AUDIT_FIELDS = [
   "dw2",
   "gw1",
   "gw2",
+  "stage",
+  "group",
   "round_name",
   "round_order",
   "round_dates",
@@ -312,10 +314,14 @@ const TOURNAMENT_LINEUP_SIZE_TYPES = {
   FLEXIBLE: 2,
 };
 
+function quoteSqlIdentifier(identifier) {
+  return `"${String(identifier || "").replaceAll('"', '""')}"`;
+}
+
 function addColumnIfMissing(columns, tableName, columnName, sqlDefinition) {
   if (columns.some((col) => col.name === columnName)) return;
 
-  db.run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${sqlDefinition}`, (alterErr) => {
+  db.run(`ALTER TABLE ${quoteSqlIdentifier(tableName)} ADD COLUMN ${quoteSqlIdentifier(columnName)} ${sqlDefinition}`, (alterErr) => {
     if (alterErr) {
       console.error(`Failed to add ${columnName} column to ${tableName}`, alterErr);
     }
@@ -2583,6 +2589,8 @@ function ensureMatchesSchema() {
       addColumnIfMissing(currentColumns, "matches", "dw2_import", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "gw1_import", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "gw2_import", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "stage", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "group", "TEXT");
       addColumnIfMissing(currentColumns, "matches", "round_name", "TEXT");
       addColumnIfMissing(currentColumns, "matches", "round_order", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "round_dates", "TEXT");
@@ -2606,7 +2614,7 @@ function ensureMatchesSchema() {
     }
 
     const columnNames = new Set(columns.map((col) => String(col?.name || "").trim()));
-    const selectExpr = (name, fallback = "NULL") => (columnNames.has(name) ? name : fallback);
+    const selectExpr = (name, fallback = "NULL") => (columnNames.has(name) ? quoteSqlIdentifier(name) : fallback);
     db.exec(
       `
         BEGIN TRANSACTION;
@@ -2637,6 +2645,8 @@ function ensureMatchesSchema() {
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           rating INTEGER,
+          stage TEXT,
+          "group" TEXT,
           round_name TEXT,
           round_order INTEGER,
           round_dates TEXT,
@@ -2677,6 +2687,8 @@ function ensureMatchesSchema() {
           created_at,
           updated_at,
           rating,
+          stage,
+          "group",
           round_name,
           round_order,
           round_dates,
@@ -2717,6 +2729,8 @@ function ensureMatchesSchema() {
           ${selectExpr("created_at", "CURRENT_TIMESTAMP")},
           ${selectExpr("updated_at", "CURRENT_TIMESTAMP")},
           ${selectExpr("rating")},
+          ${selectExpr("stage")},
+          ${selectExpr("group")},
           ${selectExpr("round_name")},
           ${selectExpr("round_order")},
           ${selectExpr("round_dates")},
@@ -9870,6 +9884,8 @@ app.get("/matches", (req, res, next) => {
         m.gw1,
         m.gw2,
         m.rating,
+        m.stage,
+        m."group",
         m.round_name,
         m.round_order,
         m.round_dates,
@@ -9984,6 +10000,8 @@ app.get("/matches", (req, res, next) => {
           gw1: row.gw1,
           gw2: row.gw2,
           rating: row.rating,
+          stage: row.stage,
+          group: row.group,
           round_name: row.round_name,
           round_order: row.round_order,
           round_dates: row.round_dates,
@@ -10019,6 +10037,8 @@ app.get("/matches", (req, res, next) => {
         m.gw1,
         m.gw2,
         m.rating,
+        m.stage,
+        m."group",
         m.round_name,
         m.round_order,
         m.round_dates,
@@ -10093,6 +10113,8 @@ app.get("/matches", (req, res, next) => {
         gw1: row.gw1,
         gw2: row.gw2,
         rating: row.rating,
+        stage: row.stage,
+        group: row.group,
         round_name: row.round_name,
         round_order: row.round_order,
         round_dates: row.round_dates,
@@ -11252,6 +11274,8 @@ app.post("/matches", (req, res) => {
     return res.status(400).json({ ok: false, message: "dw1/dw2/gw1/gw2 must be empty or non-negative integers" });
   }
   const normalizedMatchScores = normalizePlannedMatchScores(status, dw1, dw2, gw1, gw2);
+  const stage = normalizeText(payload.stage);
+  const group = normalizeText(payload.group);
   const roundName = normalizeText(payload.round_name);
   const roundOrder = parseIntOrNull(payload.round_order);
   const roundDates = normalizeText(payload.round_dates);
@@ -11335,6 +11359,8 @@ app.post("/matches", (req, res) => {
                 dw2 = ?,
                 gw1 = ?,
                 gw2 = ?,
+                stage = ?,
+                "group" = ?,
                 round_name = ?,
                 round_order = ?,
                 round_dates = ?,
@@ -11367,6 +11393,8 @@ app.post("/matches", (req, res) => {
               normalizedMatchScores.dw2,
               normalizedMatchScores.gw1,
               normalizedMatchScores.gw2,
+              stage,
+              group,
               roundName,
               roundOrder,
               roundDates,
@@ -11416,6 +11444,8 @@ app.post("/matches", (req, res) => {
                       gw1,
                       gw2,
                       rating,
+                      stage,
+                      "group",
                       round_name,
                       round_order,
                       round_dates,
@@ -11476,6 +11506,8 @@ app.post("/matches", (req, res) => {
             dw2,
             gw1,
             gw2,
+            stage,
+            "group",
             round_name,
             round_order,
             round_dates,
@@ -11491,7 +11523,7 @@ app.post("/matches", (req, res) => {
             created_by,
             updated_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           matchId,
@@ -11508,6 +11540,8 @@ app.post("/matches", (req, res) => {
           normalizedMatchScores.dw2,
           normalizedMatchScores.gw1,
           normalizedMatchScores.gw2,
+          stage,
+          group,
           roundName,
           roundOrder,
           roundDates,
@@ -11549,6 +11583,8 @@ app.post("/matches", (req, res) => {
                 gw1,
                 gw2,
                 rating,
+                stage,
+                "group",
                 round_name,
                 round_order,
                 round_dates,
@@ -11660,6 +11696,8 @@ app.patch("/matches/:id", (req, res) => {
         gw1,
         gw2,
         rating,
+        stage,
+        "group",
         round_name,
         round_order,
         round_dates,
@@ -11775,6 +11813,8 @@ app.patch("/matches/:id", (req, res) => {
         return res.status(400).json({ ok: false, message: "dw1/dw2/gw1/gw2 must be empty or non-negative integers" });
       }
       const normalizedMatchScores = normalizePlannedMatchScores(status, dw1, dw2, gw1, gw2);
+      const stage = normalizeText(payload.stage);
+      const group = normalizeText(payload.group);
       const roundName = normalizeText(payload.round_name);
       const roundOrder = parseIntOrNull(payload.round_order);
       const roundDates = normalizeText(payload.round_dates);
@@ -11806,6 +11846,8 @@ app.patch("/matches/:id", (req, res) => {
             dw2 = ?,
             gw1 = ?,
             gw2 = ?,
+            stage = ?,
+            "group" = ?,
             round_name = ?,
             round_order = ?,
             round_dates = ?,
@@ -11837,6 +11879,8 @@ app.patch("/matches/:id", (req, res) => {
           normalizedMatchScores.dw2,
           normalizedMatchScores.gw1,
           normalizedMatchScores.gw2,
+          stage,
+          group,
           roundName,
           roundOrder,
           roundDates,
@@ -11881,6 +11925,8 @@ app.patch("/matches/:id", (req, res) => {
                   gw1,
                   gw2,
                   rating,
+                  stage,
+                  "group",
                   round_name,
                   round_order,
                   round_dates,

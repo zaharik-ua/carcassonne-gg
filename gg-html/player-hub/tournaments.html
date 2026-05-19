@@ -3191,6 +3191,8 @@
           dw2: null,
           gw1: null,
           gw2: null,
+          stage: "",
+          group: "",
           round_name: "",
           round_order: null,
           round_dates: "",
@@ -3609,6 +3611,8 @@
       return input;
     };
 
+    const stageInput = createTextInput("stage");
+    const groupInput = createTextInput("group");
     const roundNameInput = createTextInput("round_name");
     const roundOrderInput = createNumberInput("round_order");
     const roundDatesInput = createTextInput("round_dates");
@@ -3632,6 +3636,8 @@
     metadataInput.readOnly = true;
     metadataInput.classList.add("cp-readonly-input");
 
+    addRowTo(advancedFieldsWrap, "Stage", stageInput);
+    addRowTo(advancedFieldsWrap, "Group", groupInput);
     addRowTo(advancedFieldsWrap, "Round Name", roundNameInput);
     addRowTo(advancedFieldsWrap, "Round Order", roundOrderInput);
     addRowTo(advancedFieldsWrap, "Round Dates", roundDatesInput);
@@ -6055,6 +6061,8 @@
       setNativeControlDisabled(gw1Input, true);
       setNativeControlDisabled(gw2Input, true);
       [
+        stageInput,
+        groupInput,
         roundNameInput,
         roundOrderInput,
         roundDatesInput,
@@ -6088,6 +6096,8 @@
       setNativeControlDisabled(gw1Input, true, readOnlyMatchTooltip);
       setNativeControlDisabled(gw2Input, true, readOnlyMatchTooltip);
       [
+        stageInput,
+        groupInput,
         roundNameInput,
         roundOrderInput,
         roundDatesInput,
@@ -6293,6 +6303,8 @@
         dw2: parseNullableInt(dw2Input.value),
         gw1: parseNullableInt(gw1Input.value),
         gw2: parseNullableInt(gw2Input.value),
+        stage: String(stageInput.value || "").trim() || null,
+        group: String(groupInput.value || "").trim() || null,
         round_name: String(roundNameInput.value || "").trim() || null,
         round_order: parseNullableInt(roundOrderInput.value),
         round_dates: String(roundDatesInput.value || "").trim() || null,
