@@ -581,9 +581,48 @@
     cursor: not-allowed;
   }
 
-  .cp-edit-row input.cp-readonly-input {
+  .cp-edit-row input.cp-readonly-input,
+  .cp-edit-row textarea.cp-readonly-input {
     background: #f3f4f6;
     color: #444;
+  }
+
+  .cp-advanced-toggle {
+    all: unset;
+    box-sizing: border-box;
+    justify-self: start;
+    color: var(--primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .cp-advanced-toggle:hover,
+  .cp-advanced-toggle:focus-visible {
+    text-decoration: underline;
+  }
+
+  .cp-advanced-fields {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 8px 12px;
+  }
+
+  .cp-edit-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 30px;
+    color: #2f3947;
+    font-size: 13px;
+  }
+
+  .cp-edit-row .cp-edit-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    margin: 0;
+    flex-shrink: 0;
   }
 
   .cp-dd {
@@ -3143,6 +3182,19 @@
           dw2: null,
           gw1: null,
           gw2: null,
+          round_name: "",
+          round_order: null,
+          round_dates: "",
+          round_short_name: "",
+          match_short_name: "",
+          third_place_match: 0,
+          knockout_id: null,
+          next_game_win: null,
+          next_game_lose: null,
+          multiple_elimination_stage: "",
+          badge_name: "",
+          badge_color: "",
+          metadata: "",
         }
       : (match || {});
 
@@ -3207,6 +3259,17 @@
       row.appendChild(label);
       row.appendChild(control);
       form.appendChild(row);
+      return row;
+    };
+
+    const addRowTo = (parent, labelText, control) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      row.appendChild(label);
+      row.appendChild(control);
+      parent.appendChild(row);
       return row;
     };
 
@@ -3480,6 +3543,7 @@
 
     localTimeBox.appendChild(localTimeLine1);
     localTimeBox.appendChild(localTimeLine2);
+    form.appendChild(localTimeBox);
 
     const lineupTypeInitialRaw = String(source?.lineup_type || "").trim() || "Open";
     const lineupTypeInitial = lineupTypeInitialRaw === "Closed" ? "Secret" : lineupTypeInitialRaw;
@@ -3492,7 +3556,92 @@
     );
     addRow("Lineup Type", lineupTypeInput.root);
 
-    form.appendChild(localTimeBox);
+    const advancedToggleWrap = document.createElement("div");
+    advancedToggleWrap.style.gridColumn = "1 / -1";
+    const advancedToggleBtn = document.createElement("button");
+    advancedToggleBtn.type = "button";
+    advancedToggleBtn.className = "cp-advanced-toggle";
+    advancedToggleBtn.textContent = "Show advanced settings";
+    advancedToggleWrap.appendChild(advancedToggleBtn);
+    form.appendChild(advancedToggleWrap);
+
+    const advancedFieldsWrap = document.createElement("div");
+    advancedFieldsWrap.className = "cp-advanced-fields cp-hidden";
+    form.appendChild(advancedFieldsWrap);
+
+    const readSourceText = (key) => {
+      const value = source?.[key];
+      if (value && typeof value === "object") {
+        try {
+          return JSON.stringify(value, null, 2);
+        } catch (_error) {
+          return String(value || "");
+        }
+      }
+      return String(value ?? "").trim();
+    };
+
+    const readSourceNumber = (key) => (
+      hasValue(source?.[key]) ? String(parseNullableInt(source[key]) ?? "") : ""
+    );
+
+    const createTextInput = (key) => {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = readSourceText(key);
+      return input;
+    };
+
+    const createNumberInput = (key) => {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.step = "1";
+      input.value = readSourceNumber(key);
+      return input;
+    };
+
+    const roundNameInput = createTextInput("round_name");
+    const roundOrderInput = createNumberInput("round_order");
+    const roundDatesInput = createTextInput("round_dates");
+    const roundShortNameInput = createTextInput("round_short_name");
+    const matchShortNameInput = createTextInput("match_short_name");
+    const thirdPlaceMatchInput = document.createElement("input");
+    thirdPlaceMatchInput.type = "checkbox";
+    thirdPlaceMatchInput.checked = ["1", "true", "yes"].includes(String(source?.third_place_match ?? "").trim().toLowerCase());
+    const thirdPlaceMatchControl = document.createElement("label");
+    thirdPlaceMatchControl.className = "cp-edit-checkbox";
+    thirdPlaceMatchControl.appendChild(thirdPlaceMatchInput);
+    thirdPlaceMatchControl.appendChild(document.createTextNode("Third place match"));
+    const knockoutIdInput = createNumberInput("knockout_id");
+    const nextGameWinInput = createNumberInput("next_game_win");
+    const nextGameLoseInput = createNumberInput("next_game_lose");
+    const multipleEliminationStageInput = createTextInput("multiple_elimination_stage");
+    const badgeNameInput = createTextInput("badge_name");
+    const badgeColorInput = createTextInput("badge_color");
+    const metadataInput = document.createElement("textarea");
+    metadataInput.value = readSourceText("metadata");
+    metadataInput.readOnly = true;
+    metadataInput.classList.add("cp-readonly-input");
+
+    addRowTo(advancedFieldsWrap, "Round Name", roundNameInput);
+    addRowTo(advancedFieldsWrap, "Round Order", roundOrderInput);
+    addRowTo(advancedFieldsWrap, "Round Dates", roundDatesInput);
+    addRowTo(advancedFieldsWrap, "Round Short Name", roundShortNameInput);
+    addRowTo(advancedFieldsWrap, "Match Short Name", matchShortNameInput);
+    addRowTo(advancedFieldsWrap, "Third Place Match", thirdPlaceMatchControl);
+    addRowTo(advancedFieldsWrap, "Knockout ID", knockoutIdInput);
+    addRowTo(advancedFieldsWrap, "Next game win", nextGameWinInput);
+    addRowTo(advancedFieldsWrap, "Next game lose", nextGameLoseInput);
+    addRowTo(advancedFieldsWrap, "Multiple Elimination Stage", multipleEliminationStageInput);
+    addRowTo(advancedFieldsWrap, "Badge name", badgeNameInput);
+    addRowTo(advancedFieldsWrap, "Badge color", badgeColorInput);
+    addRowTo(advancedFieldsWrap, "Metadata", metadataInput);
+
+    advancedToggleBtn.addEventListener("click", () => {
+      const shouldShow = advancedFieldsWrap.classList.contains("cp-hidden");
+      advancedFieldsWrap.classList.toggle("cp-hidden", !shouldShow);
+      advancedToggleBtn.textContent = shouldShow ? "Hide advanced settings" : "Show advanced settings";
+    });
 
     const deadlineHoursInput = createDropdown(
       `${inferDeadlineHours(source)}h`,
@@ -5895,6 +6044,20 @@
       setNativeControlDisabled(dw2Input, true);
       setNativeControlDisabled(gw1Input, true);
       setNativeControlDisabled(gw2Input, true);
+      [
+        roundNameInput,
+        roundOrderInput,
+        roundDatesInput,
+        roundShortNameInput,
+        matchShortNameInput,
+        thirdPlaceMatchInput,
+        knockoutIdInput,
+        nextGameWinInput,
+        nextGameLoseInput,
+        multipleEliminationStageInput,
+        badgeNameInput,
+        badgeColorInput,
+      ].forEach((control) => setNativeControlDisabled(control, true));
     }
 
     if (isReadOnlyNonPlanned) {
@@ -5914,6 +6077,20 @@
       setNativeControlDisabled(dw2Input, true, readOnlyMatchTooltip);
       setNativeControlDisabled(gw1Input, true, readOnlyMatchTooltip);
       setNativeControlDisabled(gw2Input, true, readOnlyMatchTooltip);
+      [
+        roundNameInput,
+        roundOrderInput,
+        roundDatesInput,
+        roundShortNameInput,
+        matchShortNameInput,
+        thirdPlaceMatchInput,
+        knockoutIdInput,
+        nextGameWinInput,
+        nextGameLoseInput,
+        multipleEliminationStageInput,
+        badgeNameInput,
+        badgeColorInput,
+      ].forEach((control) => setNativeControlDisabled(control, true, readOnlyMatchTooltip));
       saveBtn.disabled = true;
       saveBtn.title = readOnlyMatchTooltip;
       if (deleteBtn) {
@@ -6106,6 +6283,18 @@
         dw2: parseNullableInt(dw2Input.value),
         gw1: parseNullableInt(gw1Input.value),
         gw2: parseNullableInt(gw2Input.value),
+        round_name: String(roundNameInput.value || "").trim() || null,
+        round_order: parseNullableInt(roundOrderInput.value),
+        round_dates: String(roundDatesInput.value || "").trim() || null,
+        round_short_name: String(roundShortNameInput.value || "").trim() || null,
+        match_short_name: String(matchShortNameInput.value || "").trim() || null,
+        third_place_match: thirdPlaceMatchInput.checked,
+        knockout_id: parseNullableInt(knockoutIdInput.value),
+        next_game_win: parseNullableInt(nextGameWinInput.value),
+        next_game_lose: parseNullableInt(nextGameLoseInput.value),
+        multiple_elimination_stage: String(multipleEliminationStageInput.value || "").trim() || null,
+        badge_name: String(badgeNameInput.value || "").trim() || null,
+        badge_color: String(badgeColorInput.value || "").trim() || null,
       };
 
       if (lineupsEnabled) {

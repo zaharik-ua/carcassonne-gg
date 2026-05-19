@@ -226,6 +226,18 @@ const MATCH_AUDIT_FIELDS = [
   "dw2",
   "gw1",
   "gw2",
+  "round_name",
+  "round_order",
+  "round_dates",
+  "round_short_name",
+  "match_short_name",
+  "third_place_match",
+  "knockout_id",
+  "next_game_win",
+  "next_game_lose",
+  "multiple_elimination_stage",
+  "badge_name",
+  "badge_color",
 ];
 const FRIENDLY_FIND_AUDIT_FIELDS = [
   "id",
@@ -2571,6 +2583,19 @@ function ensureMatchesSchema() {
       addColumnIfMissing(currentColumns, "matches", "dw2_import", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "gw1_import", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "gw2_import", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "round_name", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "round_order", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "round_dates", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "round_short_name", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "match_short_name", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "third_place_match", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "knockout_id", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "next_game_win", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "next_game_lose", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "multiple_elimination_stage", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "badge_name", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "badge_color", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "metadata", "TEXT");
     };
 
     const timeUtcColumn = columns.find((col) => col.name === "time_utc");
@@ -2611,7 +2636,20 @@ function ensureMatchesSchema() {
           deleted_at TEXT,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          rating INTEGER
+          rating INTEGER,
+          round_name TEXT,
+          round_order INTEGER,
+          round_dates TEXT,
+          round_short_name TEXT,
+          match_short_name TEXT,
+          third_place_match INTEGER,
+          knockout_id INTEGER,
+          next_game_win INTEGER,
+          next_game_lose INTEGER,
+          multiple_elimination_stage TEXT,
+          badge_name TEXT,
+          badge_color TEXT,
+          metadata TEXT
         );
         INSERT INTO matches (
           id,
@@ -2638,7 +2676,20 @@ function ensureMatchesSchema() {
           deleted_at,
           created_at,
           updated_at,
-          rating
+          rating,
+          round_name,
+          round_order,
+          round_dates,
+          round_short_name,
+          match_short_name,
+          third_place_match,
+          knockout_id,
+          next_game_win,
+          next_game_lose,
+          multiple_elimination_stage,
+          badge_name,
+          badge_color,
+          metadata
         )
         SELECT
           ${selectExpr("id")},
@@ -2665,7 +2716,20 @@ function ensureMatchesSchema() {
           ${selectExpr("deleted_at")},
           ${selectExpr("created_at", "CURRENT_TIMESTAMP")},
           ${selectExpr("updated_at", "CURRENT_TIMESTAMP")},
-          ${selectExpr("rating")}
+          ${selectExpr("rating")},
+          ${selectExpr("round_name")},
+          ${selectExpr("round_order")},
+          ${selectExpr("round_dates")},
+          ${selectExpr("round_short_name")},
+          ${selectExpr("match_short_name")},
+          ${selectExpr("third_place_match")},
+          ${selectExpr("knockout_id")},
+          ${selectExpr("next_game_win")},
+          ${selectExpr("next_game_lose")},
+          ${selectExpr("multiple_elimination_stage")},
+          ${selectExpr("badge_name")},
+          ${selectExpr("badge_color")},
+          ${selectExpr("metadata")}
         FROM matches_time_utc_legacy;
         DROP TABLE matches_time_utc_legacy;
         COMMIT;
@@ -9806,6 +9870,19 @@ app.get("/matches", (req, res, next) => {
         m.gw1,
         m.gw2,
         m.rating,
+        m.round_name,
+        m.round_order,
+        m.round_dates,
+        m.round_short_name,
+        m.match_short_name,
+        m.third_place_match,
+        m.knockout_id,
+        m.next_game_win,
+        m.next_game_lose,
+        m.multiple_elimination_stage,
+        m.badge_name,
+        m.badge_color,
+        m.metadata,
         (
           SELECT COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?)
           FROM tournaments t
@@ -9907,6 +9984,19 @@ app.get("/matches", (req, res, next) => {
           gw1: row.gw1,
           gw2: row.gw2,
           rating: row.rating,
+          round_name: row.round_name,
+          round_order: row.round_order,
+          round_dates: row.round_dates,
+          round_short_name: row.round_short_name,
+          match_short_name: row.match_short_name,
+          third_place_match: row.third_place_match,
+          knockout_id: row.knockout_id,
+          next_game_win: row.next_game_win,
+          next_game_lose: row.next_game_lose,
+          multiple_elimination_stage: row.multiple_elimination_stage,
+          badge_name: row.badge_name,
+          badge_color: row.badge_color,
+          metadata: row.metadata,
         })),
       });
     })().catch(next);
@@ -9929,6 +10019,19 @@ app.get("/matches", (req, res, next) => {
         m.gw1,
         m.gw2,
         m.rating,
+        m.round_name,
+        m.round_order,
+        m.round_dates,
+        m.round_short_name,
+        m.match_short_name,
+        m.third_place_match,
+        m.knockout_id,
+        m.next_game_win,
+        m.next_game_lose,
+        m.multiple_elimination_stage,
+        m.badge_name,
+        m.badge_color,
+        m.metadata,
         (
           SELECT COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?)
           FROM tournaments t
@@ -9990,6 +10093,19 @@ app.get("/matches", (req, res, next) => {
         gw1: row.gw1,
         gw2: row.gw2,
         rating: row.rating,
+        round_name: row.round_name,
+        round_order: row.round_order,
+        round_dates: row.round_dates,
+        round_short_name: row.round_short_name,
+        match_short_name: row.match_short_name,
+        third_place_match: row.third_place_match,
+        knockout_id: row.knockout_id,
+        next_game_win: row.next_game_win,
+        next_game_lose: row.next_game_lose,
+        multiple_elimination_stage: row.multiple_elimination_stage,
+        badge_name: row.badge_name,
+        badge_color: row.badge_color,
+        metadata: row.metadata,
       }));
       return res.json({ ok: true, matches: filteredRows });
     }
@@ -11063,6 +11179,14 @@ app.post("/matches", (req, res) => {
     if (!Number.isFinite(n)) return null;
     return Math.trunc(n);
   };
+  const parseBooleanInteger = (value) => {
+    if (value === true) return 1;
+    if (value === false) return 0;
+    const raw = String(value ?? "").trim().toLowerCase();
+    if (!raw) return 0;
+    if (raw === "1" || raw === "true" || raw === "yes") return 1;
+    return 0;
+  };
   const parseUtcIsoOrNull = (value) => {
     const raw = String(value ?? "").trim();
     if (!raw) return null;
@@ -11128,6 +11252,18 @@ app.post("/matches", (req, res) => {
     return res.status(400).json({ ok: false, message: "dw1/dw2/gw1/gw2 must be empty or non-negative integers" });
   }
   const normalizedMatchScores = normalizePlannedMatchScores(status, dw1, dw2, gw1, gw2);
+  const roundName = normalizeText(payload.round_name);
+  const roundOrder = parseIntOrNull(payload.round_order);
+  const roundDates = normalizeText(payload.round_dates);
+  const roundShortName = normalizeText(payload.round_short_name);
+  const matchShortName = normalizeText(payload.match_short_name);
+  const thirdPlaceMatch = parseBooleanInteger(payload.third_place_match);
+  const knockoutId = parseIntOrNull(payload.knockout_id);
+  const nextGameWin = parseIntOrNull(payload.next_game_win);
+  const nextGameLose = parseIntOrNull(payload.next_game_lose);
+  const multipleEliminationStage = normalizeText(payload.multiple_elimination_stage);
+  const badgeName = normalizeText(payload.badge_name);
+  const badgeColor = normalizeText(payload.badge_color);
 
   const idFromPayload = normalizeText(payload.id);
   const generatedId = buildGeneratedMatchId(
@@ -11199,6 +11335,18 @@ app.post("/matches", (req, res) => {
                 dw2 = ?,
                 gw1 = ?,
                 gw2 = ?,
+                round_name = ?,
+                round_order = ?,
+                round_dates = ?,
+                round_short_name = ?,
+                match_short_name = ?,
+                third_place_match = ?,
+                knockout_id = ?,
+                next_game_win = ?,
+                next_game_lose = ?,
+                multiple_elimination_stage = ?,
+                badge_name = ?,
+                badge_color = ?,
                 deleted_at = NULL,
                 deleted_by = NULL,
                 updated_by = ?,
@@ -11219,6 +11367,18 @@ app.post("/matches", (req, res) => {
               normalizedMatchScores.dw2,
               normalizedMatchScores.gw1,
               normalizedMatchScores.gw2,
+              roundName,
+              roundOrder,
+              roundDates,
+              roundShortName,
+              matchShortName,
+              thirdPlaceMatch,
+              knockoutId,
+              nextGameWin,
+              nextGameLose,
+              multipleEliminationStage,
+              badgeName,
+              badgeColor,
               actorPlayerId,
               matchId,
             ],
@@ -11255,7 +11415,20 @@ app.post("/matches", (req, res) => {
                       dw2,
                       gw1,
                       gw2,
-                      rating
+                      rating,
+                      round_name,
+                      round_order,
+                      round_dates,
+                      round_short_name,
+                      match_short_name,
+                      third_place_match,
+                      knockout_id,
+                      next_game_win,
+                      next_game_lose,
+                      multiple_elimination_stage,
+                      badge_name,
+                      badge_color,
+                      metadata
                     FROM matches
                     WHERE id = ?
                       AND deleted_at IS NULL
@@ -11303,10 +11476,22 @@ app.post("/matches", (req, res) => {
             dw2,
             gw1,
             gw2,
+            round_name,
+            round_order,
+            round_dates,
+            round_short_name,
+            match_short_name,
+            third_place_match,
+            knockout_id,
+            next_game_win,
+            next_game_lose,
+            multiple_elimination_stage,
+            badge_name,
+            badge_color,
             created_by,
             updated_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           matchId,
@@ -11323,6 +11508,18 @@ app.post("/matches", (req, res) => {
           normalizedMatchScores.dw2,
           normalizedMatchScores.gw1,
           normalizedMatchScores.gw2,
+          roundName,
+          roundOrder,
+          roundDates,
+          roundShortName,
+          matchShortName,
+          thirdPlaceMatch,
+          knockoutId,
+          nextGameWin,
+          nextGameLose,
+          multipleEliminationStage,
+          badgeName,
+          badgeColor,
           actorPlayerId,
           actorPlayerId,
         ],
@@ -11351,7 +11548,20 @@ app.post("/matches", (req, res) => {
                 dw2,
                 gw1,
                 gw2,
-                rating
+                rating,
+                round_name,
+                round_order,
+                round_dates,
+                round_short_name,
+                match_short_name,
+                third_place_match,
+                knockout_id,
+                next_game_win,
+                next_game_lose,
+                multiple_elimination_stage,
+                badge_name,
+                badge_color,
+                metadata
               FROM matches
               WHERE id = ?
               LIMIT 1
@@ -11409,6 +11619,14 @@ app.patch("/matches/:id", (req, res) => {
     if (!Number.isFinite(n)) return null;
     return Math.trunc(n);
   };
+  const parseBooleanInteger = (value) => {
+    if (value === true) return 1;
+    if (value === false) return 0;
+    const raw = String(value ?? "").trim().toLowerCase();
+    if (!raw) return 0;
+    if (raw === "1" || raw === "true" || raw === "yes") return 1;
+    return 0;
+  };
   const parseUtcIsoOrNull = (value) => {
     const raw = String(value ?? "").trim();
     if (!raw) return null;
@@ -11441,7 +11659,20 @@ app.patch("/matches/:id", (req, res) => {
         dw2,
         gw1,
         gw2,
-        rating
+        rating,
+        round_name,
+        round_order,
+        round_dates,
+        round_short_name,
+        match_short_name,
+        third_place_match,
+        knockout_id,
+        next_game_win,
+        next_game_lose,
+        multiple_elimination_stage,
+        badge_name,
+        badge_color,
+        metadata
       FROM matches
       WHERE id = ?
         AND deleted_at IS NULL
@@ -11544,6 +11775,18 @@ app.patch("/matches/:id", (req, res) => {
         return res.status(400).json({ ok: false, message: "dw1/dw2/gw1/gw2 must be empty or non-negative integers" });
       }
       const normalizedMatchScores = normalizePlannedMatchScores(status, dw1, dw2, gw1, gw2);
+      const roundName = normalizeText(payload.round_name);
+      const roundOrder = parseIntOrNull(payload.round_order);
+      const roundDates = normalizeText(payload.round_dates);
+      const roundShortName = normalizeText(payload.round_short_name);
+      const matchShortName = normalizeText(payload.match_short_name);
+      const thirdPlaceMatch = parseBooleanInteger(payload.third_place_match);
+      const knockoutId = parseIntOrNull(payload.knockout_id);
+      const nextGameWin = parseIntOrNull(payload.next_game_win);
+      const nextGameLose = parseIntOrNull(payload.next_game_lose);
+      const multipleEliminationStage = normalizeText(payload.multiple_elimination_stage);
+      const badgeName = normalizeText(payload.badge_name);
+      const badgeColor = normalizeText(payload.badge_color);
 
         return db.run(
         `
@@ -11563,6 +11806,18 @@ app.patch("/matches/:id", (req, res) => {
             dw2 = ?,
             gw1 = ?,
             gw2 = ?,
+            round_name = ?,
+            round_order = ?,
+            round_dates = ?,
+            round_short_name = ?,
+            match_short_name = ?,
+            third_place_match = ?,
+            knockout_id = ?,
+            next_game_win = ?,
+            next_game_lose = ?,
+            multiple_elimination_stage = ?,
+            badge_name = ?,
+            badge_color = ?,
             updated_by = ?
           WHERE id = ?
             AND deleted_at IS NULL
@@ -11582,6 +11837,18 @@ app.patch("/matches/:id", (req, res) => {
           normalizedMatchScores.dw2,
           normalizedMatchScores.gw1,
           normalizedMatchScores.gw2,
+          roundName,
+          roundOrder,
+          roundDates,
+          roundShortName,
+          matchShortName,
+          thirdPlaceMatch,
+          knockoutId,
+          nextGameWin,
+          nextGameLose,
+          multipleEliminationStage,
+          badgeName,
+          badgeColor,
           actorPlayerId,
           matchId,
         ],
@@ -11613,7 +11880,20 @@ app.patch("/matches/:id", (req, res) => {
                   dw2,
                   gw1,
                   gw2,
-                  rating
+                  rating,
+                  round_name,
+                  round_order,
+                  round_dates,
+                  round_short_name,
+                  match_short_name,
+                  third_place_match,
+                  knockout_id,
+                  next_game_win,
+                  next_game_lose,
+                  multiple_elimination_stage,
+                  badge_name,
+                  badge_color,
+                  metadata
                 FROM matches
                 WHERE id = ?
                 LIMIT 1

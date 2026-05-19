@@ -76,6 +76,7 @@
   .cp-edit-row {
     display: grid;
     gap: 1px;
+    align-content: start;
   }
 
   .cp-edit-row label {
@@ -132,6 +133,15 @@
     background: #f3f4f6;
     color: #444;
     cursor: not-allowed;
+  }
+
+  .cp-edit-row--line-start {
+    grid-column: 1;
+  }
+
+  .cp-edit-row--short-description textarea {
+    min-height: 48px;
+    height: 56px;
   }
 
   .cp-image-upload {
@@ -607,7 +617,7 @@
 
   .cp-dd-flag {
     width: 14px;
-    height: 10px;
+    height: auto;
     border-radius: 2px;
     object-fit: cover;
     flex-shrink: 0;
@@ -834,6 +844,7 @@
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
   const CATEGORIES_URL = `${AUTH_BASE}/categories`;
+  const ICONS_URL = `${AUTH_BASE}/icons`;
   const NEWS_URL = `${AUTH_BASE}/news`;
   const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
   const IMAGES_URL = `${AUTH_BASE}/images`;
@@ -2306,7 +2317,7 @@
     contentEl.appendChild(list);
   }
 
-  function renderNewsEditForm(newsItem, associationsList, tournamentsList, categoriesList, formMode = "create", options = {}) {
+  function renderNewsEditForm(newsItem, associationsList, tournamentsList, categoriesList, iconsList, formMode = "create", options = {}) {
     const isCreateMode = formMode === "create";
     const source = newsItem && typeof newsItem === "object" ? newsItem : {};
     const canUploadSourceImage = options.canUploadSource === true;
@@ -2385,13 +2396,14 @@
 
     const createSingleSelect = (initialValue, options, cfg = {}) => {
       const isSearchable = cfg.searchable !== false;
-      const normalizedOptions = (Array.isArray(options) ? options : [])
+      const normalizeOptions = (rawOptions) => (Array.isArray(rawOptions) ? rawOptions : [])
         .map((opt) => ({
           value: String(opt?.value ?? "").trim(),
           label: String(opt?.label ?? opt?.value ?? "").trim(),
           logo: String(opt?.logo || "").trim(),
         }))
         .filter((opt) => opt.label);
+      let normalizedOptions = normalizeOptions(options);
       let value = String(initialValue || "").trim();
       if (!normalizedOptions.some((opt) => opt.value === value)) value = "";
       let filterQuery = "";
@@ -2430,7 +2442,7 @@
         }
         if (selected.logo) {
           const img = document.createElement("img");
-          img.className = "cp-dd-flag";
+          img.className = cfg.logoClass || "cp-dd-flag";
           img.src = selected.logo;
           img.alt = "";
           btnContent.appendChild(img);
@@ -2442,6 +2454,7 @@
 
       const setValue = (nextValue, trigger = false) => {
         value = String(nextValue || "").trim();
+        if (!normalizedOptions.some((opt) => opt.value === value)) value = "";
         renderButtonContent();
         menu.querySelectorAll(".cp-dd-option").forEach((node) => {
           node.classList.toggle("active", String(node.dataset.value || "") === value);
@@ -2473,7 +2486,7 @@
           optionBtn.dataset.value = opt.value;
           if (opt.logo) {
             const img = document.createElement("img");
-            img.className = "cp-dd-flag";
+            img.className = cfg.logoClass || "cp-dd-flag";
             img.src = opt.logo;
             img.alt = "";
             optionBtn.appendChild(img);
@@ -2495,6 +2508,17 @@
           menu.classList.remove("open");
           menu.style.maxHeight = "0px";
           btn.classList.remove("open");
+        },
+        setValue,
+        setOptions: (nextOptions, ...nextValueArgs) => {
+          const hasNextValue = nextValueArgs.length > 0;
+          normalizedOptions = normalizeOptions(nextOptions);
+          if (hasNextValue) {
+            value = String(nextValueArgs[0] || "").trim();
+          }
+          if (!normalizedOptions.some((opt) => opt.value === value)) value = "";
+          renderButtonContent();
+          renderMenu();
         },
         getValue: () => value,
       };
@@ -2590,6 +2614,16 @@
         btnContent.appendChild(label);
       };
 
+      const setValue = (nextValues) => {
+        selectedValues = Array.from(new Set((Array.isArray(nextValues) ? nextValues : [])
+          .map((item) => String(item || "").trim())
+          .filter((value) => normalizedOptions.some((opt) => opt.value === value))));
+        renderButtonContent();
+        menu.querySelectorAll(".cp-dd-option").forEach((node) => {
+          node.classList.toggle("active", selectedValues.includes(String(node.dataset.value || "")));
+        });
+      };
+
       const renderMenu = () => {
         menu.querySelectorAll(".cp-dd-option,.cp-dd-empty").forEach((node) => node.remove());
         const query = String(filterQuery || "").trim().toLowerCase();
@@ -2642,6 +2676,7 @@
           menu.style.maxHeight = "0px";
           btn.classList.remove("open");
         },
+        setValue,
         getValue: () => selectedValues.slice(),
       };
 
@@ -2683,6 +2718,30 @@
       return api;
     };
 
+    let currentImageUrl = toApiAbsoluteUrl(source?.image || "");
+    const normalizeCategoryKey = (value) => String(value || "").trim().toLowerCase();
+    const categoriesByName = new Map((Array.isArray(categoriesList) ? categoriesList : [])
+      .map((item) => [normalizeCategoryKey(item?.name), item]));
+    const getCategoryKind = () => {
+      const selectedCategory = String(categoryInput?.getValue?.() || "").trim();
+      if (normalizeCategoryKey(selectedCategory) === "local") return "local";
+      const category = categoriesByName.get(normalizeCategoryKey(selectedCategory)) || null;
+      if (Number(category?.is_tournament) === 1) return "tournament";
+      return "other";
+    };
+    const iconOptions = [{ value: "", label: "Not selected", logo: "" }].concat((Array.isArray(iconsList) ? iconsList : [])
+      .map((item) => ({
+        value: toApiAbsoluteUrl(item?.icon_link || ""),
+        label: String(item?.name || item?.id || "").trim(),
+        logo: toApiAbsoluteUrl(item?.icon_link || ""),
+      }))
+      .filter((item) => item.value && item.label));
+    const getIconValueFromImageUrl = (imageUrl) => {
+      const normalizedImageUrl = toApiAbsoluteUrl(imageUrl);
+      if (!normalizedImageUrl) return "";
+      return iconOptions.some((item) => item.value === normalizedImageUrl) ? normalizedImageUrl : "";
+    };
+
     const associationOptions = [{ value: "", label: "Not selected", logo: "" }].concat((Array.isArray(associationsList) ? associationsList : [])
       .map((item) => ({
         value: normalizeCode(item?.id || item?.code),
@@ -2690,13 +2749,22 @@
         logo: String(item?.flag || "").trim(),
       }))
       .filter((item) => item.label));
-    const tournamentOptions = [{ value: "", label: "Not selected", logo: "" }].concat((Array.isArray(tournamentsList) ? tournamentsList : [])
-      .map((item) => ({
-        value: String(item?.id || "").trim(),
-        label: String(item?.short_title || item?.name || item?.id || "").trim(),
-        logo: String(item?.logo || "").trim(),
-      }))
-      .filter((item) => item.label));
+    const emptyTournamentOption = { value: "", label: "Not selected", logo: "" };
+    const getTournamentOptionsForCategory = (categoryName) => {
+      const categoryKey = normalizeCategoryKey(categoryName);
+      const rows = (Array.isArray(tournamentsList) ? tournamentsList : [])
+        .filter((item) => categoryKey && normalizeCategoryKey(item?.category) === categoryKey)
+        .map((item) => ({
+          value: String(item?.id || "").trim(),
+          label: String(item?.short_title || item?.name || item?.id || "").trim(),
+          logo: String(item?.logo || "").trim(),
+        }))
+        .filter((item) => item.value && item.label);
+      return [emptyTournamentOption].concat(rows);
+    };
+    const getSelectableTournamentOptionsForCategory = (categoryName) => getTournamentOptionsForCategory(categoryName)
+      .filter((item) => String(item?.value || "").trim());
+    const tournamentOptions = getTournamentOptionsForCategory(source?.category || "");
     const categoryOptions = [{ value: "", label: "Not selected" }].concat((Array.isArray(categoriesList) ? categoriesList : [])
       .slice()
       .sort((left, right) => {
@@ -2714,14 +2782,22 @@
     const significanceInput = createSingleSelect(
       String(source?.significance || "Regular").trim() || "Regular",
       NEWS_SIGNIFICANCE_OPTIONS.map((value) => ({ value, label: value })),
-      { placeholderLabel: "Select significance", searchable: false }
+      {
+        placeholderLabel: "Select significance",
+        searchable: false,
+        onChange: () => updateConditionalNewsFields(),
+      }
     );
     addRow("Significance", significanceInput.root);
 
     const categoryInput = createSingleSelect(
       String(source?.category || "").trim(),
       categoryOptions,
-      { placeholderLabel: "Select category", searchable: false }
+      {
+        placeholderLabel: "Select category",
+        searchable: false,
+        onChange: () => updateConditionalNewsFields(),
+      }
     );
     addRow("Category", categoryInput.root);
 
@@ -2730,14 +2806,14 @@
       associationOptions,
       { placeholderLabel: "Select association" }
     );
-    addRow("Association", associationInput.root);
+    const associationRow = addRow("Association", associationInput.root);
 
     const tournamentInput = createSingleSelect(
       String(source?.tournament_id || "").trim(),
       tournamentOptions,
       { placeholderLabel: "Select tournament", searchable: false }
     );
-    addRow("Tournament", tournamentInput.root);
+    const tournamentRow = addRow("Tournament", tournamentInput.root);
 
     const associationsInput = createMultiSelect(
       (Array.isArray(source?.associations) ? source.associations : [])
@@ -2746,7 +2822,7 @@
       associationOptions,
       { placeholderLabel: "Select associations" }
     );
-    addRow("Associations", associationsInput.root);
+    const associationsRow = addRow("Associations (for filtering)", associationsInput.root);
 
     const timeInput = document.createElement("input");
     timeInput.type = "datetime-local";
@@ -2756,9 +2832,56 @@
       : toDatetimeLocalFromUtc(source?.time_utc);
     addRow("Time, UTC", timeInput);
 
-    let currentImageUrl = toApiAbsoluteUrl(source?.image || "");
     let selectedImageFile = null;
     let previewObjectUrl = "";
+    const initialSignificance = String(source?.significance || "Regular").trim() || "Regular";
+    let newsMediaMode = initialSignificance === "Major"
+      ? "image"
+      : "icon";
+
+    const mediaTypeInput = createSingleSelect(
+      newsMediaMode,
+      [
+        { value: "icon", label: "Icon" },
+        { value: "image", label: "Image" },
+      ],
+      {
+        placeholderLabel: "Select type",
+        searchable: false,
+        onChange: (value) => {
+          newsMediaMode = value === "image" ? "image" : "icon";
+          updateConditionalNewsFields();
+        },
+      }
+    );
+    let mediaTypeRow = null;
+
+    const iconInput = createSingleSelect(
+      getIconValueFromImageUrl(currentImageUrl),
+      iconOptions,
+      {
+        placeholderLabel: "Select icon",
+        searchable: false,
+        onChange: (value) => {
+          currentImageUrl = String(value || "").trim();
+          selectedImageFile = null;
+          selectedImagePreserveSource = false;
+          if (imageFileInput) imageFileInput.value = "";
+          if (previewObjectUrl) {
+            URL.revokeObjectURL(previewObjectUrl);
+            previewObjectUrl = "";
+          }
+          if (imagePreview) {
+            imagePreview.src = currentImageUrl || "";
+            imagePreview.hidden = !currentImageUrl;
+          }
+          if (imageChooseBtn) imageChooseBtn.textContent = currentImageUrl ? "Change image" : "Select image";
+          if (imageUploadStatus) imageUploadStatus.textContent = currentImageUrl ? "Icon selected." : "";
+          setError("");
+        },
+      }
+    );
+    const iconRow = addRow("Icon", iconInput.root, "cp-edit-row--line-start");
 
     const imageUploadWrap = document.createElement("div");
     imageUploadWrap.className = "cp-image-upload";
@@ -2782,7 +2905,8 @@
     imageUploadWrap.appendChild(imageFileInput);
     imageUploadWrap.appendChild(imagePreview);
     imageUploadWrap.appendChild(imageUploadStatus);
-    addRow("Image", imageUploadWrap);
+    const imageRow = addRow("Image", imageUploadWrap, "cp-edit-row--line-start");
+    mediaTypeRow = addRow("Media type", mediaTypeInput.root);
 
     const chooseExistingNewsImage = (image) => {
       const imageUrl = getImagePickerUrl(image, "large")
@@ -2870,11 +2994,57 @@
       imageUploadStatus.textContent = selectedImagePreserveSource ? `${file.name} (source saved)` : file.name;
     });
 
+    let previousSignificance = initialSignificance;
+    function updateConditionalNewsFields() {
+      const significance = String(significanceInput.getValue() || "Regular").trim() || "Regular";
+      if (significance !== previousSignificance && significance === "Important") {
+        newsMediaMode = "icon";
+      }
+      previousSignificance = significance;
+
+      const categoryKind = getCategoryKind();
+      const selectedCategory = categoryInput.getValue() || "";
+      const showAssociation = categoryKind === "local";
+      const showTournament = categoryKind === "tournament";
+      const showAssociations = categoryKind !== "local";
+      associationRow.classList.toggle("cp-hidden", !showAssociation);
+      tournamentRow.classList.toggle("cp-hidden", !showTournament);
+      associationsRow.classList.toggle("cp-hidden", !showAssociations);
+      if (!showAssociation) associationInput.setValue("");
+      if (showTournament) {
+        const nextTournamentOptions = getTournamentOptionsForCategory(selectedCategory);
+        const selectableTournamentOptions = getSelectableTournamentOptionsForCategory(selectedCategory);
+        const currentTournamentId = tournamentInput.getValue();
+        const nextTournamentId = selectableTournamentOptions.length === 1
+          ? selectableTournamentOptions[0].value
+          : selectableTournamentOptions.some((item) => item.value === currentTournamentId)
+            ? currentTournamentId
+            : "";
+        tournamentInput.setOptions(nextTournamentOptions, nextTournamentId);
+      } else {
+        tournamentInput.setOptions([emptyTournamentOption], "");
+      }
+      if (!showAssociations) associationsInput.setValue([]);
+
+      const isImportant = significance === "Important";
+      const useImage = significance === "Major" || (isImportant && newsMediaMode === "image");
+      const useIcon = !useImage;
+      if (significance === "Regular") {
+        newsMediaMode = "icon";
+      } else if (significance === "Major") {
+        newsMediaMode = "image";
+      }
+      mediaTypeInput.setValue(newsMediaMode);
+      mediaTypeRow.classList.toggle("cp-hidden", !isImportant);
+      iconRow.classList.toggle("cp-hidden", !useIcon);
+      imageRow.classList.toggle("cp-hidden", !useImage);
+      if (shortDescriptionRow) shortDescriptionRow.classList.toggle("cp-hidden", !useImage);
+    }
     const shortTitleInput = document.createElement("input");
     shortTitleInput.type = "text";
     shortTitleInput.maxLength = 40;
     shortTitleInput.value = String(source?.short_title || "").trim();
-    addRow("Short title", shortTitleInput);
+    addRow("Short title", shortTitleInput, "cp-edit-row--line-start");
 
     const titleInput = document.createElement("input");
     titleInput.type = "text";
@@ -2882,30 +3052,40 @@
     titleInput.value = String(source?.title || "").trim();
     addRow("Title", titleInput, "cp-edit-row--full");
 
-    const shortDescriptionInput = document.createElement("input");
-    shortDescriptionInput.type = "text";
+    const shortDescriptionInput = document.createElement("textarea");
     shortDescriptionInput.maxLength = 200;
+    shortDescriptionInput.rows = 2;
     shortDescriptionInput.value = String(source?.short_description || "").trim();
-    addRow("Short description", shortDescriptionInput, "cp-edit-row--full");
+    const shortDescriptionRow = addRow("Short description", shortDescriptionInput, "cp-edit-row--full cp-edit-row--short-description");
+    updateConditionalNewsFields();
 
     const descriptionInput = createNewsDescriptionEditor(source?.description || "", {
       canUploadSource: canUploadSourceImage,
     });
     addRow("Description", descriptionInput.root, "cp-edit-row--full cp-edit-row--description");
 
-    const buildPayload = () => ({
-      significance: significanceInput.getValue() || "Regular",
-      category: categoryInput.getValue() || "",
-      association_id: associationInput.getValue() || "",
-      tournament_id: tournamentInput.getValue() || "",
-      associations: associationsInput.getValue(),
-      time_utc: toUtcIsoFromDatetimeLocal(timeInput.value),
-      image: currentImageUrl,
-      title: String(titleInput.value || "").trim(),
-      short_title: String(shortTitleInput.value || "").trim(),
-      short_description: String(shortDescriptionInput.value || "").trim(),
-      description: descriptionInput.getHtml(),
-    });
+    const shouldUseNewsImageUpload = () => {
+      const significance = String(significanceInput.getValue() || "Regular").trim() || "Regular";
+      return significance === "Major" || (significance === "Important" && newsMediaMode === "image");
+    };
+
+    const buildPayload = () => {
+      const categoryKind = getCategoryKind();
+      const useImageUpload = shouldUseNewsImageUpload();
+      return {
+        significance: significanceInput.getValue() || "Regular",
+        category: categoryInput.getValue() || "",
+        association_id: categoryKind === "local" ? associationInput.getValue() || "" : "",
+        tournament_id: categoryKind === "tournament" ? tournamentInput.getValue() || "" : "",
+        associations: categoryKind === "local" ? [] : associationsInput.getValue(),
+        time_utc: toUtcIsoFromDatetimeLocal(timeInput.value),
+        image: useImageUpload ? currentImageUrl : iconInput.getValue() || currentImageUrl,
+        title: String(titleInput.value || "").trim(),
+        short_title: String(shortTitleInput.value || "").trim(),
+        short_description: useImageUpload ? String(shortDescriptionInput.value || "").trim() : "",
+        description: descriptionInput.getHtml(),
+      };
+    };
 
     const validatePayload = (payload) => {
       if (!payload.title) return "Title is required.";
@@ -2914,6 +3094,13 @@
       if (payload.short_description.length > 200) return "Short description must be 200 characters or fewer.";
       if (!String(timeInput.value || "").trim()) return "Time, UTC is required.";
       if (String(timeInput.value || "").trim() && !payload.time_utc) return "Time, UTC is invalid.";
+      if (
+        getCategoryKind() === "tournament"
+        && getSelectableTournamentOptionsForCategory(categoryInput.getValue()).length > 1
+        && !payload.tournament_id
+      ) {
+        return "Tournament is required.";
+      }
       if (descriptionInput?.isUploading?.()) return "Wait until the description image finishes uploading.";
       return "";
     };
@@ -3024,7 +3211,7 @@
 
       setSaving(true, "Saving...");
       try {
-        if (selectedImageFile) {
+        if (selectedImageFile && shouldUseNewsImageUpload()) {
           setSaving(true, "Uploading...");
           const uploadedImageUrl = await uploadSelectedNewsImage();
           payload = { ...payload, image: uploadedImageUrl };
@@ -3090,7 +3277,7 @@
         return;
       }
 
-      const [tournamentsRes, newsEditorsRes, newsRes, associationsRes, categoriesRes] = await Promise.all([
+      const [tournamentsRes, newsEditorsRes, newsRes, associationsRes, categoriesRes, iconsRes] = await Promise.all([
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" }),
         isAdminUser
@@ -3101,6 +3288,9 @@
           : Promise.resolve(null),
         isAdminUser
           ? fetch(CATEGORIES_URL, { method: "GET", credentials: "include" })
+          : Promise.resolve(null),
+        isAdminUser
+          ? fetch(ICONS_URL, { method: "GET", credentials: "include" })
           : Promise.resolve(null),
       ]);
       const newsEditorsData = newsEditorsRes?.ok
@@ -3127,6 +3317,10 @@
         ? await categoriesRes.json().catch(() => ({}))
         : {};
       const categories = Array.isArray(categoriesData?.categories) ? categoriesData.categories : [];
+      const iconsData = iconsRes?.ok
+        ? await iconsRes.json().catch(() => ({}))
+        : {};
+      const icons = Array.isArray(iconsData?.icons) ? iconsData.icons : [];
       const associationsById = new Map();
       associations.forEach((item) => {
         const associationId = normalizeCode(item?.id || item?.code);
@@ -3165,7 +3359,7 @@
       }
 
       if (isCreateMode) {
-        renderNewsEditForm(null, associations, tournaments, categories, "create", {
+        renderNewsEditForm(null, associations, tournaments, categories, icons, "create", {
           canUploadSource: isAdminUser,
         });
         return;
@@ -3179,7 +3373,7 @@
           countEl.textContent = "";
           return;
         }
-        renderNewsEditForm(newsToEdit, associations, tournaments, categories, "edit", {
+        renderNewsEditForm(newsToEdit, associations, tournaments, categories, icons, "edit", {
           canUploadSource: isAdminUser,
         });
         return;
