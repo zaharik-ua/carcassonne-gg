@@ -3589,8 +3589,9 @@
       label: team.name,
       logo: team.logo,
     }));
+    const team1Options = [{ value: "", label: "Select team", logo: "" }].concat(teamOptions);
     const team2Options = [{ value: "", label: "Select team", logo: "" }].concat(teamOptions);
-    const team1Input = createDropdown(readMatchTeam1(source), teamOptions, { showLogo: true, searchable: true });
+    const team1Input = createDropdown(readMatchTeam1(source), team1Options, { showLogo: true, allowEmpty: true, searchable: true });
     const team2Input = createDropdown(readMatchTeam2(source), team2Options, { showLogo: true, allowEmpty: true, searchable: true });
     const lockedTeamField = String(editContext?.lockedTeamField || "").trim();
     if (lockedTeamField === "team_1") {
@@ -6343,11 +6344,14 @@
       setError("");
       setActionStatus("");
       const validationErrors = [];
+      const team1Value = team1Input.getValue();
+      const team2Value = team2Input.getValue();
+      const canSaveMatchWithMissingTeams = isGlobalAdmin && !isCreateMode;
 
-      if (!team1Input.getValue() || !team2Input.getValue()) {
+      if ((!team1Value || !team2Value) && !canSaveMatchWithMissingTeams) {
         validationErrors.push("Team 1 and Team 2 are required.");
       }
-      if (team1Input.getValue() === team2Input.getValue()) {
+      if (team1Value && team2Value && team1Value === team2Value) {
         validationErrors.push("Team 1 and Team 2 must be different.");
       }
       const timeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
@@ -6372,13 +6376,13 @@
 
       const payload = {
         id: String(
-          timeUtc
-            ? buildMatchIdFromUtcAndTeams(timeUtc, team1Input.getValue(), team2Input.getValue())
-            : (source?.id || buildMatchIdFromUtcAndTeams(timeUtc, team1Input.getValue(), team2Input.getValue()))
+          timeUtc && team1Value && team2Value
+            ? buildMatchIdFromUtcAndTeams(timeUtc, team1Value, team2Value)
+            : (source?.id || buildMatchIdFromUtcAndTeams(timeUtc, team1Value, team2Value))
         ).trim(),
         tournament_id: String(source?.tournament_id || currentTournamentId),
-        team_1: normalizeCode(team1Input.getValue()),
-        team_2: normalizeCode(team2Input.getValue()),
+        team_1: normalizeCode(team1Value),
+        team_2: normalizeCode(team2Value),
         time_utc: timeUtc,
         lineup_type: lineupType,
         lineup_deadline_h: lineupType === "Open" ? null : (timeUtc ? deadlineHours : null),

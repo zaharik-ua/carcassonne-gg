@@ -11750,10 +11750,11 @@ app.patch("/matches/:id", (req, res) => {
 
       const team1 = normalizeCode(payload.team_1);
       const team2 = normalizeCode(payload.team_2);
-      if (!team1 || !team2) {
+      const canSaveMatchWithMissingTeams = isAdmin;
+      if ((!team1 || !team2) && !canSaveMatchWithMissingTeams) {
         return res.status(400).json({ ok: false, message: "team_1 and team_2 are required" });
       }
-      if (team1 === team2) {
+      if (team1 && team2 && team1 === team2) {
         return res.status(400).json({ ok: false, message: "team_1 and team_2 must be different" });
       }
 
@@ -11797,9 +11798,11 @@ app.patch("/matches/:id", (req, res) => {
         team2,
         existingRow?.created_at || "",
       );
-      const nextMatchId = (!idFromPayload || idFromPayload === matchId)
-        ? generatedId
-        : idFromPayload;
+      const nextMatchId = (canSaveMatchWithMissingTeams && (!team1 || !team2))
+        ? matchId
+        : (!idFromPayload || idFromPayload === matchId)
+          ? generatedId
+          : idFromPayload;
       if (!nextMatchId) {
         return res.status(400).json({ ok: false, message: "id is required" });
       }
