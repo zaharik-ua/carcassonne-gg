@@ -10170,8 +10170,9 @@ function publicMainPageMatchesHandler(_req, res, next) {
         t.logo AS tournament_logo,
         t.link AS tournament_link,
         CASE
-          WHEN team1.id IS NOT NULL AND team2.id IS NOT NULL THEN 'TEAM'
-          ELSE 'Individual'
+          WHEN lower(trim(COALESCE(t.tournament_type, ''))) IN ('team', 'teams') THEN 'TEAM'
+          WHEN lower(trim(COALESCE(t.tournament_type, ''))) IN ('individual', 'individuals') THEN 'Individual'
+          ELSE COALESCE(NULLIF(trim(t.tournament_type), ''), 'TEAM')
         END AS tournament_type
       FROM matches m
       LEFT JOIN tournaments t
