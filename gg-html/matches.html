@@ -912,6 +912,12 @@ function normalizeStage2RoundName(roundName) {
   return trimmed.slice(0, colonIndex).trim();
 }
 
+function normalizeBadgeColor(value) {
+  if (value === null || value === undefined) return "";
+  const normalized = String(value).trim().replace(/^#/, "");
+  return /^[0-9a-fA-F]{6}$/.test(normalized) ? `#${normalized}` : "";
+}
+
 // Build rating stars element (1-5 grey stars, 6 = 5 gold stars)
 function createRatingElement(rating) {
   const rNum = (rating === null || rating === undefined || rating === "") ? null : parseInt(rating, 10);
@@ -947,12 +953,14 @@ function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
   if (!match || !container) return;
   const typeValue = tournamentType || match.tournament_type;
   const stageValue = typeof match.stage === "string" ? match.stage.trim() : "";
+  const dbBadgeValue = typeof match.badge_name === "string" ? match.badge_name.trim() : "";
   const roundBadgeValue = typeof match.round_badge === "string" ? match.round_badge.trim() : "";
+  const badgeColor = normalizeBadgeColor(match.badge_color);
   const typeLower = typeof typeValue === "string" ? typeValue.trim().toLowerCase() : "";
 
-  let badgeText = null;
+  let badgeText = dbBadgeValue || null;
 
-  if (typeLower === "coc" || typeLower === "league" || typeLower === "team" || typeLower === "individual") {
+  if (!badgeText && (typeLower === "coc" || typeLower === "league" || typeLower === "team" || typeLower === "individual")) {
     if (stageValue === "Stage 2" && match.round) {
       const roundLabel = normalizeStage2RoundName(match.round);
       badgeText = roundLabel || match.round;
@@ -965,6 +973,9 @@ function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
 
   const badge = document.createElement("div");
   badge.className = "playoff-round-badge";
+  if (badgeColor) {
+    badge.style.backgroundColor = badgeColor;
+  }
   badge.textContent = badgeText;
   container.appendChild(badge);
   if (rightDiv) {
@@ -2472,6 +2483,8 @@ function adaptDbMainPageMatchesData(data) {
       gw1: match?.gw1,
       gw2: match?.gw2,
       rating: match?.rating,
+      badge_name: String(match?.badge_name || "").trim(),
+      badge_color: String(match?.badge_color || "").trim(),
       streams: Array.isArray(match?.streams)
         ? match.streams.map((value) => String(value || "").trim()).filter(Boolean)
         : [],
