@@ -505,6 +505,7 @@
     font-size: 12px;
     font-weight: 600;
     color: #333;
+    margin-bottom: 0;
   }
 
   .cp-edit-row input,
@@ -606,6 +607,10 @@
     grid-column: 1 / -1;
     display: grid;
     gap: 8px 12px;
+  }
+
+  .cp-advanced-row-full {
+    grid-column: 1 / -1;
   }
 
   .cp-edit-checkbox {
@@ -1472,6 +1477,10 @@
 
   @media (min-width: 600px) {
     .cp-edit-form {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .cp-advanced-fields {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
@@ -3543,7 +3552,6 @@
 
     localTimeBox.appendChild(localTimeLine1);
     localTimeBox.appendChild(localTimeLine2);
-    form.appendChild(localTimeBox);
 
     const lineupTypeInitialRaw = String(source?.lineup_type || "").trim() || "Open";
     const lineupTypeInitial = lineupTypeInitialRaw === "Closed" ? "Secret" : lineupTypeInitialRaw;
@@ -3555,6 +3563,7 @@
       ]
     );
     addRow("Lineup Type", lineupTypeInput.root);
+    form.appendChild(localTimeBox);
 
     const advancedToggleWrap = document.createElement("div");
     advancedToggleWrap.style.gridColumn = "1 / -1";
@@ -3635,7 +3644,8 @@
     addRowTo(advancedFieldsWrap, "Multiple Elimination Stage", multipleEliminationStageInput);
     addRowTo(advancedFieldsWrap, "Badge name", badgeNameInput);
     addRowTo(advancedFieldsWrap, "Badge color", badgeColorInput);
-    addRowTo(advancedFieldsWrap, "Metadata", metadataInput);
+    const metadataRow = addRowTo(advancedFieldsWrap, "Metadata", metadataInput);
+    metadataRow.classList.add("cp-advanced-row-full");
 
     advancedToggleBtn.addEventListener("click", () => {
       const shouldShow = advancedFieldsWrap.classList.contains("cp-hidden");

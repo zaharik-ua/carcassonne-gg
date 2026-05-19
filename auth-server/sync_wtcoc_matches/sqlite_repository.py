@@ -123,6 +123,7 @@ class SqliteWtcocRepository:
             if missing_tables:
                 raise RuntimeError(f"SQLite DB is missing required tables: {', '.join(missing_tables)}")
             self._ensure_import_result_columns(conn)
+            self._ensure_match_metadata_columns(conn)
             self._ensure_wtcoc_match_links_table(conn)
             link_map = self._load_wtcoc_match_link_map(conn, tournament_id)
 
@@ -200,6 +201,11 @@ class SqliteWtcocRepository:
                           dw2_import,
                           gw1_import,
                           gw2_import,
+                          trim(COALESCE(round_name, '')) AS round_name,
+                          round_order,
+                          knockout_id,
+                          trim(COALESCE(badge_name, '')) AS badge_name,
+                          trim(COALESCE(metadata, '')) AS metadata,
                           trim(COALESCE(deleted_at, '')) AS deleted_at
                         FROM matches
                         WHERE trim(COALESCE(id, '')) = trim(?)
@@ -231,6 +237,11 @@ class SqliteWtcocRepository:
                               dw2_import,
                               gw1_import,
                               gw2_import,
+                              round_name,
+                              round_order,
+                              knockout_id,
+                              badge_name,
+                              metadata,
                               created_by,
                               updated_by,
                               deleted_by,
@@ -238,7 +249,7 @@ class SqliteWtcocRepository:
                               created_at,
                               updated_at
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Planned', NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Planned', NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                             """,
                             (
                                 item["id"],
@@ -254,6 +265,11 @@ class SqliteWtcocRepository:
                                 item.get("dw2_import") if item.get("import_results_ready") else None,
                                 item.get("gw1_import") if item.get("import_results_ready") else None,
                                 item.get("gw2_import") if item.get("import_results_ready") else None,
+                                item.get("round_name"),
+                                item.get("round_order"),
+                                item.get("knockout_id"),
+                                item.get("badge_name"),
+                                item.get("metadata"),
                                 normalized_actor_id,
                                 normalized_actor_id,
                             ),
@@ -269,6 +285,11 @@ class SqliteWtcocRepository:
                         "number_of_duels": self._normalize_nullable_number(existing["number_of_duels"]),
                         "team_1": self._normalize_db_value(existing["team_1"]),
                         "team_2": self._normalize_db_value(existing["team_2"]),
+                        "round_name": self._normalize_db_value(existing["round_name"]),
+                        "round_order": self._normalize_nullable_number(existing["round_order"]),
+                        "knockout_id": self._normalize_nullable_number(existing["knockout_id"]),
+                        "badge_name": self._normalize_db_value(existing["badge_name"]),
+                        "metadata": self._normalize_db_value(existing["metadata"]),
                         "deleted_at": self._normalize_db_value(existing["deleted_at"]),
                     }
                     normalized_incoming_match = {
@@ -280,6 +301,11 @@ class SqliteWtcocRepository:
                         "number_of_duels": self._normalize_nullable_number(item["number_of_duels"]),
                         "team_1": self._normalize_db_value(item["team_1"]),
                         "team_2": self._normalize_db_value(item["team_2"]),
+                        "round_name": self._normalize_db_value(item.get("round_name")),
+                        "round_order": self._normalize_nullable_number(item.get("round_order")),
+                        "knockout_id": self._normalize_nullable_number(item.get("knockout_id")),
+                        "badge_name": self._normalize_db_value(item.get("badge_name")),
+                        "metadata": self._normalize_db_value(item.get("metadata")),
                         "deleted_at": None,
                     }
                     if item.get("import_results_ready"):
@@ -322,6 +348,11 @@ class SqliteWtcocRepository:
                               dw2_import = ?,
                               gw1_import = ?,
                               gw2_import = ?,
+                              round_name = ?,
+                              round_order = ?,
+                              knockout_id = ?,
+                              badge_name = ?,
+                              metadata = ?,
                               updated_by = ?,
                               deleted_by = NULL,
                               deleted_at = NULL,
@@ -341,6 +372,11 @@ class SqliteWtcocRepository:
                                 item.get("dw2_import"),
                                 item.get("gw1_import"),
                                 item.get("gw2_import"),
+                                item.get("round_name"),
+                                item.get("round_order"),
+                                item.get("knockout_id"),
+                                item.get("badge_name"),
+                                item.get("metadata"),
                                 normalized_actor_id,
                                 item["id"],
                             ),
@@ -358,6 +394,11 @@ class SqliteWtcocRepository:
                               number_of_duels = ?,
                               team_1 = ?,
                               team_2 = ?,
+                              round_name = ?,
+                              round_order = ?,
+                              knockout_id = ?,
+                              badge_name = ?,
+                              metadata = ?,
                               updated_by = ?,
                               deleted_by = NULL,
                               deleted_at = NULL,
@@ -373,6 +414,11 @@ class SqliteWtcocRepository:
                                 item["number_of_duels"],
                                 item["team_1"],
                                 item["team_2"],
+                                item.get("round_name"),
+                                item.get("round_order"),
+                                item.get("knockout_id"),
+                                item.get("badge_name"),
+                                item.get("metadata"),
                                 normalized_actor_id,
                                 item["id"],
                             ),
@@ -605,6 +651,27 @@ class SqliteWtcocRepository:
         for column_name in ("dw1_import", "dw2_import"):
             if column_name not in duel_columns:
                 conn.execute(f"ALTER TABLE duels ADD COLUMN {column_name} INTEGER")
+                changed = True
+        if changed:
+            conn.commit()
+
+    @staticmethod
+    def _ensure_match_metadata_columns(conn: sqlite3.Connection) -> None:
+        match_columns = {
+            str(row["name"] or "").strip().lower()
+            for row in conn.execute("PRAGMA table_info(matches)").fetchall()
+            if row["name"] is not None
+        }
+        changed = False
+        for column_name, column_type in (
+            ("round_name", "TEXT"),
+            ("round_order", "INTEGER"),
+            ("knockout_id", "INTEGER"),
+            ("badge_name", "TEXT"),
+            ("metadata", "TEXT"),
+        ):
+            if column_name not in match_columns:
+                conn.execute(f"ALTER TABLE matches ADD COLUMN {column_name} {column_type}")
                 changed = True
         if changed:
             conn.commit()

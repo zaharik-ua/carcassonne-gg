@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -105,7 +106,8 @@ class WtcocSyncService:
         source_summaries: list[dict[str, Any]] = []
         matches_payload: list[dict[str, Any]] = []
         duels_payload: list[dict[str, Any]] = []
-        unresolved_matches: list[dict[str, Any]] = []
+        skipped_unresolved_matches: list[dict[str, Any]] = []
+        blank_team_matches: list[dict[str, Any]] = []
 
         for response in responses:
             payload = response.payload
@@ -142,15 +144,19 @@ class WtcocSyncService:
                     resolver=resolver,
                     fallback_date_iso=stored_link.fallback_date_iso if stored_link else default_fallback_date_iso,
                 )
-                if not match_preview["team_1"] or not match_preview["team_2"]:
-                    unresolved_matches.append(
-                        {
-                            "match_id": match_preview["match_id"],
-                            "team_1_name": match_preview["team_1_name"],
-                            "team_2_name": match_preview["team_2_name"],
-                        }
-                    )
-                    continue
+                has_unresolved_teams = not match_preview["team_1"] or not match_preview["team_2"]
+                if has_unresolved_teams:
+                    unresolved_summary = {
+                        "source": response.source,
+                        "match_id": match_preview["match_id"],
+                        "team_1_name": match_preview["team_1_name"],
+                        "team_2_name": match_preview["team_2_name"],
+                    }
+                    if response.source == "playoff":
+                        blank_team_matches.append(unresolved_summary)
+                    else:
+                        skipped_unresolved_matches.append(unresolved_summary)
+                        continue
                 matches_payload.append(
                     {
                         "id": match_preview["match_id"],
@@ -170,6 +176,11 @@ class WtcocSyncService:
                         "gw1_import": match_preview["gw1_import"],
                         "gw2_import": match_preview["gw2_import"],
                         "import_results_ready": match_preview["import_results_ready"],
+                        "round_name": match_preview["round_name"],
+                        "round_order": match_preview["round_order"],
+                        "knockout_id": match_preview["knockout_id"],
+                        "badge_name": match_preview["badge_name"],
+                        "metadata": match_preview["metadata"],
                     }
                 )
                 duels = match.get("duels")
@@ -211,7 +222,8 @@ class WtcocSyncService:
             "apply_preview": {
                 "matches_ready": len(matches_payload),
                 "duels_ready": len(duels_payload),
-                "matches_skipped_without_team_mapping": unresolved_matches,
+                "matches_skipped_without_team_mapping": skipped_unresolved_matches,
+                "matches_created_with_blank_teams": blank_team_matches,
             },
             "apply_payload": {
                 "matches": matches_payload,
@@ -266,6 +278,11 @@ class WtcocSyncService:
             "gw1_import": _sum_duel_results(duels, "localResult") if is_closed else None,
             "gw2_import": _sum_duel_results(duels, "visitorResult") if is_closed else None,
             "import_results_ready": is_closed,
+            "round_name": _normalize_text_or_none(match.get("nameRound")),
+            "round_order": _normalize_int_result(match.get("numberRound")),
+            "knockout_id": _normalize_int_result(match.get("idMatch")),
+            "badge_name": _normalize_text_or_none(match.get("nameRound")),
+            "metadata": _build_match_metadata(match),
         }
 
     def _normalize_duel_preview(
@@ -330,6 +347,22 @@ def _normalize_int_result(value: Any) -> int | None:
         return int(text)
     except ValueError:
         return None
+
+
+def _normalize_text_or_none(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _build_match_metadata(match: dict[str, Any]) -> str:
+    return json.dumps(
+        {
+            "titleMatch": str(match.get("titleMatch") or "").strip(),
+            "status": str(match.get("status") or "").strip(),
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
 
 def _sum_duel_results(duels: Any, key: str) -> int | None:
