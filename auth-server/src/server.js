@@ -9923,7 +9923,7 @@ app.get("/matches", (req, res, next) => {
     },
     calendar: {
       filter: "trim(COALESCE(m.time_utc, '')) = ''",
-      order: "m.id ASC",
+      order: "CASE WHEN m.knockout_id IS NULL THEN 1 ELSE 0 END ASC, m.knockout_id ASC, lower(trim(COALESCE(m.round_name, ''))) ASC, m.id ASC",
       params: [],
     },
     finished: {

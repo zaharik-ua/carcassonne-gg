@@ -423,6 +423,36 @@
     gap: 0px;
   }
 
+  .cp-match-extra {
+    display: grid;
+    gap: 2px;
+    margin: 0 8px;
+    min-width: 140px;
+    max-width: 260px;
+    font-size: 11px;
+    line-height: 1.25;
+    color: #475467;
+  }
+
+  .cp-match-extra-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .cp-match-extra-item {
+    white-space: nowrap;
+  }
+
+  .cp-match-extra-label {
+    font-weight: 400;
+  }
+
+  .cp-match-extra-value {
+    font-weight: 500;
+  }
+
   .cp-score-box.cp-match-score {
     width: 15px;
     text-align: center;
@@ -1350,6 +1380,17 @@
 
     .cp-team-row {
       font-size: 14px;
+    }
+
+    .cp-match-row {
+      flex-wrap: wrap;
+    }
+
+    .cp-match-extra {
+      order: 3;
+      width: 100%;
+      max-width: none;
+      margin: 4px 0 0 58px;
     }
 
     .cp-edit-row input[type="date"] {
@@ -2765,7 +2806,16 @@
     if (sectionKey === "calendar") {
       return rows
         .filter((match) => !String(match?.time_utc || match?.time || "").trim())
-        .sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+        .sort((a, b) => {
+          const knockoutA = parseNullableInt(a?.knockout_id);
+          const knockoutB = parseNullableInt(b?.knockout_id);
+          if (knockoutA !== null && knockoutB !== null && knockoutA !== knockoutB) return knockoutA - knockoutB;
+          if (knockoutA !== null && knockoutB === null) return -1;
+          if (knockoutA === null && knockoutB !== null) return 1;
+          const roundCompare = String(a?.round_name || "").localeCompare(String(b?.round_name || ""));
+          if (roundCompare !== 0) return roundCompare;
+          return String(a?.id || "").localeCompare(String(b?.id || ""));
+        });
     }
     if (sectionKey === "ongoing") {
       return rows
@@ -2901,6 +2951,42 @@
     teamsWrap.appendChild(team2Row);
 
     row.appendChild(teamsWrap);
+
+    const createMatchExtraItem = (labelText, value) => {
+      if (!hasValue(value)) return null;
+      const item = document.createElement("span");
+      item.className = "cp-match-extra-item";
+      const label = document.createElement("span");
+      label.className = "cp-match-extra-label";
+      label.textContent = `${labelText}: `;
+      const valueEl = document.createElement("span");
+      valueEl.className = "cp-match-extra-value";
+      valueEl.textContent = String(value).trim();
+      item.appendChild(label);
+      item.appendChild(valueEl);
+      return item;
+    };
+
+    const matchExtraLine1Items = [
+      createMatchExtraItem("Group", match?.group),
+      createMatchExtraItem("Round", match?.round_name),
+    ].filter(Boolean);
+    const matchExtraLine2Items = [
+      createMatchExtraItem("ID", match?.knockout_id),
+      createMatchExtraItem("Next win", match?.next_game_win),
+    ].filter(Boolean);
+    if (matchExtraLine1Items.length || matchExtraLine2Items.length) {
+      const extraWrap = document.createElement("div");
+      extraWrap.className = "cp-match-extra";
+      [matchExtraLine1Items, matchExtraLine2Items].forEach((items) => {
+        if (!items.length) return;
+        const line = document.createElement("div");
+        line.className = "cp-match-extra-line";
+        items.forEach((item) => line.appendChild(item));
+        extraWrap.appendChild(line);
+      });
+      row.appendChild(extraWrap);
+    }
 
     const right = document.createElement("div");
     right.className = "cp-match-right";
