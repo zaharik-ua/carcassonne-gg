@@ -303,6 +303,18 @@
   function formatMatchTime(raw) {
     if (!raw || typeof raw !== "string") return "";
     const s = raw.trim();
+    // ISO timestamp from API: 2026-05-18T12:00:00.000Z or 2026-05-18 12:00:00
+    if (/^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.test(s)) {
+      const d = new Date(s.includes("T") ? s : s.replace(" ", "T") + "Z");
+      if (!Number.isNaN(d.getTime())) {
+        const dayMon = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+          return dayMon;
+        }
+        const hm = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+        return `${dayMon} ${hm}`;
+      }
+    }
     // With time: DD.MM.YYYY HH:MM:SS
     if (/^\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}:\d{2}$/.test(s)) {
       const [datePart, timePart] = s.split(/\s+/);
@@ -446,7 +458,7 @@
   function renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, container){
     sortedRounds.forEach((roundNum, colIndex) => {
       const matches = groupedByRound[roundNum];
-      matches.sort((a, b) => Number(a.game_id) - Number(b.game_id));
+      matches.sort((a, b) => Number(a.game_id ?? a.knockout_id ?? a.id) - Number(b.game_id ?? b.knockout_id ?? b.id));
 
       // Додаємо назву раунду (label) і, якщо є, дати (після двокрапки)
       const rawRound = matches.find(m => m.knockout_stage !== "third_place")?.round || `Round ${roundNum}`;
@@ -1119,9 +1131,8 @@
       return;
     }
 
-    const stage2FormatRaw = (currentTournament.stage2_format || '').trim();
-    const stage2Format = stage2FormatRaw.toLowerCase();
-    const isTeamTournament = currentTournament.type === 'TEAM';
+    const tournamentType = String(currentTournament.type || currentTournament.tournament_type || '').trim().toUpperCase();
+    const isTeamTournament = tournamentType === 'TEAM' || tournamentType === 'TEAMS';
     const stageNameSet = new Set(['stage 2', 'playoffs', 'final stage']);
     const source = isTeamTournament ? matches : duels;
 
@@ -1133,17 +1144,27 @@
         return false;
       }
       const stageName = String(item.stage || '').trim().toLowerCase();
-      return stageNameSet.has(stageName);
+      const hasKnockoutId = item.knockout_id !== null && item.knockout_id !== undefined && String(item.knockout_id).trim() !== '';
+      return stageNameSet.has(stageName) || hasKnockoutId;
     });
+    const inferredStage2Format = stage2Items.some(item => (
+      item.next_game_lose !== null && item.next_game_lose !== undefined && String(item.next_game_lose).trim() !== ''
+    ) || (
+      item.multiple_elimination_stage !== null
+      && item.multiple_elimination_stage !== undefined
+      && String(item.multiple_elimination_stage).trim() !== ''
+    )) ? 'double elimination' : 'single elimination';
+    const stage2FormatRaw = (currentTournament.stage2_format || inferredStage2Format || '').trim();
+    const stage2Format = stage2FormatRaw.toLowerCase();
 
     if (stage2Format === 'single elimination' && stage2Items.length) {
-      renderSingleElimination(stage2Items, bracketContainer, currentTournament.type);
+      renderSingleElimination(stage2Items, bracketContainer, isTeamTournament ? 'TEAM' : currentTournament.type);
       ensureExpandedHeight();
       return;
     }
 
     if (stage2Format === 'double elimination' && stage2Items.length) {
-      renderDoubleElimination(stage2Items, bracketContainer, currentTournament.type);
+      renderDoubleElimination(stage2Items, bracketContainer, isTeamTournament ? 'TEAM' : currentTournament.type);
       ensureExpandedHeight();
       return;
     }
@@ -1158,6 +1179,71 @@
     ensureExpandedHeight();
   }
 
+  function getTournamentId(tournament) {
+    return String(tournament?.tournament_id || tournament?.id || '').trim();
+  }
+
+  function buildRoundLabel(item) {
+    const existing = String(item?.round || '').trim();
+    if (existing) return existing;
+    const title = String(item?.round_name || item?.round_short_name || item?.badge_name || item?.match_short_name || '').trim();
+    const dates = String(item?.round_dates || '').trim();
+    if (title && dates) return `${title}: ${dates}`;
+    return title || dates;
+  }
+
+  function normalizeTournament(item) {
+    const tournamentId = getTournamentId(item);
+    return {
+      ...item,
+      tournament_id: tournamentId,
+      type: item?.type || item?.tournament_type || '',
+      stage2_format: item?.stage2_format || '',
+      match_width: item?.match_width ?? null,
+      third_place_vertical_offset: item?.third_place_vertical_offset ?? null,
+    };
+  }
+
+  function normalizeBracketItem(item) {
+    const thirdPlace = Number(item?.third_place_match) === 1 || String(item?.knockout_stage || '').trim() === 'third_place';
+    return {
+      ...item,
+      match_id: item?.match_id ?? item?.id ?? '',
+      tournament_id: String(item?.tournament_id || '').trim(),
+      time: item?.time ?? item?.time_utc ?? '',
+      round: buildRoundLabel(item),
+      knockout_stage: thirdPlace ? 'third_place' : (item?.knockout_stage || ''),
+      team1: item?.team1 ?? item?.team_1_name ?? item?.team_1 ?? '',
+      team2: item?.team2 ?? item?.team_2_name ?? item?.team_2 ?? '',
+      duels_won1: item?.duels_won1 ?? item?.dw1 ?? '',
+      duels_won2: item?.duels_won2 ?? item?.dw2 ?? '',
+      games_won1: item?.games_won1 ?? item?.gw1 ?? '',
+      games_won2: item?.games_won2 ?? item?.gw2 ?? '',
+      player1_id: item?.player1_id ?? item?.player_1_id ?? '',
+      player2_id: item?.player2_id ?? item?.player_2_id ?? '',
+      player1: item?.player1 ?? item?.player_1_name ?? '',
+      player2: item?.player2 ?? item?.player_2_name ?? '',
+      score1: item?.score1 ?? item?.dw1 ?? '',
+      score2: item?.score2 ?? item?.dw2 ?? '',
+    };
+  }
+
+  function buildTeamsFromMatches(items) {
+    const byName = new Map();
+    (items || []).forEach(item => {
+      [
+        [item.team1, item.team_1, item.team_1_flag],
+        [item.team2, item.team_2, item.team_2_flag],
+      ].forEach(([name, iso, logo]) => {
+        const teamName = String(name || '').trim();
+        if (teamName && !byName.has(teamName)) {
+          byName.set(teamName, { iso: iso || '', team: teamName, logo: logo || null });
+        }
+      });
+    });
+    return Array.from(byName.values());
+  }
+
   function handleData(data) {
     const container = document.getElementById('wtcoc-stage2-content');
     if (!container) {
@@ -1169,13 +1255,13 @@
       return;
     }
 
-    const tournaments = Array.isArray(data.tournaments) ? data.tournaments : [];
+    const tournaments = (Array.isArray(data.tournaments) ? data.tournaments : []).map(normalizeTournament);
     currentTournament = tournaments.find(t => t.tournament_id === currentTournamentId) || null;
 
-    matches = Array.isArray(data.matches) ? data.matches : [];
-    duels = Array.isArray(data.duels) ? data.duels : [];
+    matches = (Array.isArray(data.matches) ? data.matches : []).map(normalizeBracketItem);
+    duels = (Array.isArray(data.duels) ? data.duels : []).map(normalizeBracketItem);
     players = Array.isArray(data.players) ? data.players : [];
-    teams = Array.isArray(data.teams) ? data.teams : [];
+    teams = Array.isArray(data.teams) && data.teams.length ? data.teams : buildTeamsFromMatches(matches);
 
     if (currentTournament && currentTournament.style) {
       applyTournamentTheme(currentTournament.style);
@@ -1191,7 +1277,7 @@
       return;
     }
 
-    fetch('https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json')
+    fetch(`https://api.carcassonne.gg/public/main-page-matches?tournament_id=${encodeURIComponent(currentTournamentId)}&include_bracket=1`)
       .then(res => {
         if (!res.ok) {
           throw new Error('Failed to fetch tournament data');

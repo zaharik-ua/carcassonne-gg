@@ -10134,14 +10134,52 @@ app.get("/matches", (req, res, next) => {
   );
 });
 
-function publicMainPageMatchesHandler(_req, res, next) {
-  const recentStartedFilterSql = `
-    AND (
-      trim(COALESCE(m.time_utc, '')) = ''
-      OR datetime(m.time_utc) IS NULL
-      OR datetime(m.time_utc) >= datetime('now', '-7 days')
-    )
-  `;
+function publicMainPageMatchesHandler(req, res, next) {
+  const normalizeText = (value) => String(value ?? "").trim();
+  const tournamentFilter = normalizeText(req?.query?.tournament_id || req?.query?.tournament);
+  const includeBracket = ["1", "true", "yes"].includes(
+    normalizeText(req?.query?.include_bracket || req?.query?.include_playoff).toLowerCase()
+  );
+  const stage2Names = new Set(["stage 2", "playoffs", "final stage"]);
+  const hasValue = (value) => normalizeText(value) !== "";
+  const isStage2Row = (row) => {
+    const stageName = normalizeText(row?.stage).toLowerCase();
+    return stage2Names.has(stageName) || hasValue(row?.knockout_id);
+  };
+  const buildRoundLabel = (row) => {
+    const title = normalizeText(row?.round_name || row?.round_short_name || row?.badge_name || row?.match_short_name);
+    const dates = normalizeText(row?.round_dates);
+    if (title && dates) return `${title}: ${dates}`;
+    return title || dates;
+  };
+  const inferStage2Format = (rows) => {
+    const stage2Rows = (rows || []).filter(isStage2Row);
+    if (!stage2Rows.length) return null;
+    const hasLoserPath = stage2Rows.some((row) => (
+      hasValue(row?.next_game_lose)
+      || hasValue(row?.multiple_elimination_stage)
+    ));
+    return hasLoserPath ? "Double Elimination" : "Single Elimination";
+  };
+  const matchWhereClauses = ["m.deleted_at IS NULL"];
+  const matchWhereParams = [];
+
+  if (tournamentFilter) {
+    matchWhereClauses.push("upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))");
+    matchWhereParams.push(tournamentFilter);
+  }
+
+  if (!includeBracket || !tournamentFilter) {
+    matchWhereClauses.push(`
+      (
+        trim(COALESCE(m.time_utc, '')) = ''
+        OR datetime(m.time_utc) IS NULL
+        OR datetime(m.time_utc) >= datetime('now', '-7 days')
+      )
+    `);
+  }
+
+  const matchWhereSql = matchWhereClauses.join("\n        AND ");
 
   return db.all(
     `
@@ -10161,8 +10199,21 @@ function publicMainPageMatchesHandler(_req, res, next) {
         m.gw1,
         m.gw2,
         m.rating,
+        m.stage,
+        m."group" AS "group",
+        m.round_name,
+        m.round_order,
+        m.round_dates,
+        m.round_short_name,
+        m.match_short_name,
+        m.third_place_match,
+        m.knockout_id,
+        m.next_game_win,
+        m.next_game_lose,
+        m.multiple_elimination_stage,
         m.badge_name,
         m.badge_color,
+        m.metadata,
         team1.name AS team_1_name,
         COALESCE(NULLIF(trim(team1.flag), ''), NULLIF(trim(team1.logo), '')) AS team_1_flag,
         team2.name AS team_2_name,
@@ -10183,11 +10234,10 @@ function publicMainPageMatchesHandler(_req, res, next) {
         ON upper(trim(COALESCE(team1.id, ''))) = upper(trim(COALESCE(m.team_1, '')))
       LEFT JOIN teams team2
         ON upper(trim(COALESCE(team2.id, ''))) = upper(trim(COALESCE(m.team_2, '')))
-      WHERE m.deleted_at IS NULL
-      ${recentStartedFilterSql}
+      WHERE ${matchWhereSql}
       ORDER BY datetime(COALESCE(m.time_utc, '1970-01-01 00:00:00')) DESC, m.id ASC
     `,
-    [],
+    matchWhereParams,
     (matchesErr, matchRows) => {
       if (matchesErr) return next(matchesErr);
 
@@ -10241,13 +10291,54 @@ function publicMainPageMatchesHandler(_req, res, next) {
             .map((row) => {
               const tournamentId = String(row?.tournament_id || "").trim();
               if (!tournamentId) return null;
+              const tournamentRows = (matchRows || []).filter((matchRow) => (
+                String(matchRow?.tournament_id || "").trim() === tournamentId
+              ));
               return [tournamentId, {
+                tournament_id: tournamentId,
                 id: tournamentId,
                 name: row.tournament_name,
                 short_title: row.tournament_short_title,
+                logo_image: row.tournament_logo,
                 logo: row.tournament_logo,
+                external_link: row.tournament_link,
                 link: row.tournament_link,
                 type: row.tournament_type,
+                stage2_format: inferStage2Format(tournamentRows),
+                tournament_format: tournamentRows.some(isStage2Row) ? "2 Stages" : null,
+                match_width: null,
+                third_place_vertical_offset: null,
+              }];
+            })
+            .filter(Boolean)
+        ).values());
+
+        const teams = Array.from(new Map(
+          (matchRows || []).flatMap((row) => ([
+            [row.team_1, row.team_1_name, row.team_1_flag],
+            [row.team_2, row.team_2_name, row.team_2_flag],
+          ]))
+            .map(([id, name, logo]) => {
+              const teamName = normalizeText(name || id);
+              if (!teamName) return null;
+              return [teamName, { iso: id, team: teamName, logo }];
+            })
+            .filter(Boolean)
+        ).values());
+
+        const players = Array.from(new Map(
+          (duelRows || []).flatMap((row) => ([
+            [row.player_1_id, row.player_1_name, row.player_1_avatar, row.player_1_elo],
+            [row.player_2_id, row.player_2_name, row.player_2_avatar, row.player_2_elo],
+          ]))
+            .map(([id, name, avatar, elo]) => {
+              const playerId = normalizeText(id);
+              if (!playerId) return null;
+              return [playerId, {
+                player_id: playerId,
+                player: name,
+                avatar,
+                elo,
               }];
             })
             .filter(Boolean)
@@ -10267,10 +10358,14 @@ function publicMainPageMatchesHandler(_req, res, next) {
               ok: true,
               elo_updated_at: jobRunRow?.last_success_at || null,
               tournaments,
+              teams,
+              players,
               matches: (matchRows || []).map((row) => ({
                 id: row.id,
+                match_id: row.id,
                 tournament_id: row.tournament_id,
                 time_utc: row.time_utc,
+                time: row.time_utc,
                 lineup_type: row.lineup_type,
                 lineup_deadline_h: row.lineup_deadline_h,
                 lineup_deadline_utc: row.lineup_deadline_utc,
@@ -10287,8 +10382,29 @@ function publicMainPageMatchesHandler(_req, res, next) {
                 gw1: row.gw1,
                 gw2: row.gw2,
                 rating: row.rating,
+                stage: row.stage,
+                group: row.group,
+                round_name: row.round_name,
+                round_order: row.round_order,
+                round_dates: row.round_dates,
+                round_short_name: row.round_short_name,
+                match_short_name: row.match_short_name,
+                round: buildRoundLabel(row),
+                third_place_match: row.third_place_match,
+                knockout_stage: Number(row.third_place_match) ? "third_place" : "",
+                knockout_id: row.knockout_id,
+                next_game_win: row.next_game_win,
+                next_game_lose: row.next_game_lose,
+                multiple_elimination_stage: row.multiple_elimination_stage,
+                team1: row.team_1_name || row.team_1,
+                team2: row.team_2_name || row.team_2,
+                duels_won1: row.dw1 ?? "",
+                duels_won2: row.dw2 ?? "",
+                games_won1: row.gw1 ?? "",
+                games_won2: row.gw2 ?? "",
                 badge_name: row.badge_name,
                 badge_color: row.badge_color,
+                metadata: row.metadata,
                 streams: (streamsByMatchId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
                 streamers: (streamsByMatchId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_avatar),
                 tournament_name: row.tournament_name,
@@ -10304,12 +10420,21 @@ function publicMainPageMatchesHandler(_req, res, next) {
                 duel_number: row.duel_number,
                 duel_format: row.duel_format,
                 time_utc: row.time_utc,
+                time: row.time_utc,
                 player_1_id: row.player_1_id,
                 player_1_name: row.player_1_name,
+                player_1_avatar: row.player_1_avatar,
                 player_1_elo: row.player_1_elo,
                 player_2_id: row.player_2_id,
                 player_2_name: row.player_2_name,
+                player_2_avatar: row.player_2_avatar,
                 player_2_elo: row.player_2_elo,
+                player1_id: row.player_1_id,
+                player1: row.player_1_name,
+                player2_id: row.player_2_id,
+                player2: row.player_2_name,
+                score1: row.dw1 ?? "",
+                score2: row.dw2 ?? "",
                 dw1: row.dw1,
                 dw2: row.dw2,
                 rating: row.rating,
@@ -10340,9 +10465,11 @@ function publicMainPageMatchesHandler(_req, res, next) {
               d.time_utc,
               d.player_1_id,
               COALESCE(NULLIF(trim(p1.bga_nickname), ''), trim(d.player_1_id)) AS player_1_name,
+              p1.avatar AS player_1_avatar,
               p1.bga_elo AS player_1_elo,
               d.player_2_id,
               COALESCE(NULLIF(trim(p2.bga_nickname), ''), trim(d.player_2_id)) AS player_2_name,
+              p2.avatar AS player_2_avatar,
               p2.bga_elo AS player_2_elo,
               d.dw1,
               d.dw2,
@@ -10355,11 +10482,13 @@ function publicMainPageMatchesHandler(_req, res, next) {
               ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
             WHERE d.deleted_at IS NULL
               AND trim(COALESCE(d.match_id, '')) IN (${placeholders})
+              ${includeBracket && tournamentFilter ? "" : `
               AND (
                 trim(COALESCE(d.time_utc, '')) = ''
                 OR datetime(d.time_utc) IS NULL
                 OR datetime(d.time_utc) >= datetime('now', '-7 days')
               )
+              `}
             ORDER BY
               CASE WHEN d.duel_number IS NULL THEN 1 ELSE 0 END ASC,
               d.duel_number ASC,
