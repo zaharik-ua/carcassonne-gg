@@ -201,6 +201,8 @@ class SqliteWtcocRepository:
                           dw2_import,
                           gw1_import,
                           gw2_import,
+                          trim(COALESCE(stage, '')) AS stage,
+                          trim(COALESCE("group", '')) AS "group",
                           trim(COALESCE(round_name, '')) AS round_name,
                           round_order,
                           knockout_id,
@@ -237,6 +239,8 @@ class SqliteWtcocRepository:
                               dw2_import,
                               gw1_import,
                               gw2_import,
+                              stage,
+                              "group",
                               round_name,
                               round_order,
                               knockout_id,
@@ -249,7 +253,7 @@ class SqliteWtcocRepository:
                               created_at,
                               updated_at
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Planned', NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Planned', NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                             """,
                             (
                                 item["id"],
@@ -265,6 +269,8 @@ class SqliteWtcocRepository:
                                 item.get("dw2_import") if item.get("import_results_ready") else None,
                                 item.get("gw1_import") if item.get("import_results_ready") else None,
                                 item.get("gw2_import") if item.get("import_results_ready") else None,
+                                item.get("stage"),
+                                item.get("group"),
                                 item.get("round_name"),
                                 item.get("round_order"),
                                 item.get("knockout_id"),
@@ -285,6 +291,8 @@ class SqliteWtcocRepository:
                         "number_of_duels": self._normalize_nullable_number(existing["number_of_duels"]),
                         "team_1": self._normalize_db_value(existing["team_1"]),
                         "team_2": self._normalize_db_value(existing["team_2"]),
+                        "stage": self._normalize_db_value(existing["stage"]),
+                        "group": self._normalize_db_value(existing["group"]),
                         "round_name": self._normalize_db_value(existing["round_name"]),
                         "round_order": self._normalize_nullable_number(existing["round_order"]),
                         "knockout_id": self._normalize_nullable_number(existing["knockout_id"]),
@@ -301,6 +309,8 @@ class SqliteWtcocRepository:
                         "number_of_duels": self._normalize_nullable_number(item["number_of_duels"]),
                         "team_1": self._normalize_db_value(item["team_1"]),
                         "team_2": self._normalize_db_value(item["team_2"]),
+                        "stage": self._normalize_db_value(item.get("stage")),
+                        "group": self._normalize_db_value(item.get("group")),
                         "round_name": self._normalize_db_value(item.get("round_name")),
                         "round_order": self._normalize_nullable_number(item.get("round_order")),
                         "knockout_id": self._normalize_nullable_number(item.get("knockout_id")),
@@ -348,6 +358,8 @@ class SqliteWtcocRepository:
                               dw2_import = ?,
                               gw1_import = ?,
                               gw2_import = ?,
+                              stage = ?,
+                              "group" = ?,
                               round_name = ?,
                               round_order = ?,
                               knockout_id = ?,
@@ -372,6 +384,8 @@ class SqliteWtcocRepository:
                                 item.get("dw2_import"),
                                 item.get("gw1_import"),
                                 item.get("gw2_import"),
+                                item.get("stage"),
+                                item.get("group"),
                                 item.get("round_name"),
                                 item.get("round_order"),
                                 item.get("knockout_id"),
@@ -394,6 +408,8 @@ class SqliteWtcocRepository:
                               number_of_duels = ?,
                               team_1 = ?,
                               team_2 = ?,
+                              stage = ?,
+                              "group" = ?,
                               round_name = ?,
                               round_order = ?,
                               knockout_id = ?,
@@ -414,6 +430,8 @@ class SqliteWtcocRepository:
                                 item["number_of_duels"],
                                 item["team_1"],
                                 item["team_2"],
+                                item.get("stage"),
+                                item.get("group"),
                                 item.get("round_name"),
                                 item.get("round_order"),
                                 item.get("knockout_id"),
@@ -664,6 +682,8 @@ class SqliteWtcocRepository:
         }
         changed = False
         for column_name, column_type in (
+            ("stage", "TEXT"),
+            ("group", "TEXT"),
             ("round_name", "TEXT"),
             ("round_order", "INTEGER"),
             ("knockout_id", "INTEGER"),
@@ -671,7 +691,8 @@ class SqliteWtcocRepository:
             ("metadata", "TEXT"),
         ):
             if column_name not in match_columns:
-                conn.execute(f"ALTER TABLE matches ADD COLUMN {column_name} {column_type}")
+                quoted_column_name = f'"{column_name}"' if column_name == "group" else column_name
+                conn.execute(f"ALTER TABLE matches ADD COLUMN {quoted_column_name} {column_type}")
                 changed = True
         if changed:
             conn.commit()

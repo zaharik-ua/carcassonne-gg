@@ -176,6 +176,8 @@ class WtcocSyncService:
                         "gw1_import": match_preview["gw1_import"],
                         "gw2_import": match_preview["gw2_import"],
                         "import_results_ready": match_preview["import_results_ready"],
+                        "stage": match_preview["stage"],
+                        "group": match_preview["group"],
                         "round_name": match_preview["round_name"],
                         "round_order": match_preview["round_order"],
                         "knockout_id": match_preview["knockout_id"],
@@ -240,6 +242,7 @@ class WtcocSyncService:
         resolver: _AssociationResolver,
         fallback_date_iso: str | None,
     ) -> dict[str, Any]:
+        normalized_source = str(source or "").strip().lower()
         raw_match_id = str(match.get("idMatch") or "").strip()
         match_status = str(match.get("status") or "").strip() or None
         local_team_name = str(match.get("nameLocalTeam") or "").strip()
@@ -278,9 +281,11 @@ class WtcocSyncService:
             "gw1_import": _sum_duel_results(duels, "localResult") if is_closed else None,
             "gw2_import": _sum_duel_results(duels, "visitorResult") if is_closed else None,
             "import_results_ready": is_closed,
-            "round_name": _normalize_text_or_none(match.get("nameRound")),
+            "stage": "Playoffs" if normalized_source == "playoff" else "Group Stage",
+            "group": _normalize_text_or_none(match.get("nameGroup")),
+            "round_name": _build_round_name(source=normalized_source, number_round=match.get("numberRound"), name_round=match.get("nameRound")),
             "round_order": _normalize_int_result(match.get("numberRound")),
-            "knockout_id": _normalize_int_result(match.get("idMatch")),
+            "knockout_id": _normalize_int_result(match.get("idMatch")) if normalized_source == "playoff" else None,
             "badge_name": _normalize_text_or_none(match.get("nameRound")),
             "metadata": _build_match_metadata(match),
         }
@@ -363,6 +368,13 @@ def _build_match_metadata(match: dict[str, Any]) -> str:
         ensure_ascii=False,
         separators=(",", ":"),
     )
+
+
+def _build_round_name(*, source: str, number_round: Any, name_round: Any) -> str | None:
+    if str(source or "").strip().lower() == "calendar":
+        round_number = _normalize_int_result(number_round)
+        return f"Round {round_number}" if round_number is not None else None
+    return _normalize_text_or_none(name_round)
 
 
 def _sum_duel_results(duels: Any, key: str) -> int | None:
