@@ -47,6 +47,11 @@
     height: 100px;
     cursor: pointer;
   }
+  .news-icon-important-image {
+    width: auto;
+    height: 80px;
+    cursor: pointer;
+  }
   .news-content {
     flex: 1;
     display: flex;
@@ -130,6 +135,7 @@
     display: block;
     height: auto;
     margin: 8px 0;
+    max-width: 400px;
     width: 100%;
   }
   .news-description-time {
@@ -184,6 +190,17 @@
     background: #fff;
     padding: 18px 12px;
   }
+  .news-detail-title-row {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    margin: 0 0 12px;
+  }
+  .news-detail-title-icon {
+    flex: 0 0 auto;
+    height: auto;
+    width: 40px;
+  }
   .news-detail-title {
     color: #800020;
     font-size: 30px;
@@ -192,6 +209,9 @@
     line-height: 1.1em;
     margin: 0 0 12px;
     text-transform: uppercase;
+  }
+  .news-detail-title-row .news-detail-title {
+    margin: 0;
   }
   .news-detail-meta {
     align-items: center;
@@ -491,6 +511,11 @@
     return "low";
   };
 
+  const normalizeMediaType = (value) => {
+    const normalized = String(value ?? "").trim().toLowerCase();
+    return normalized === "image" ? "image" : "icon";
+  };
+
   const getNewsTimestampValue = (item) => {
     return item?.time_utc || item?.updated_at || item?.created_at || item?.time || "";
   };
@@ -575,10 +600,29 @@
     card.className = "news-detail-card";
 
     const titleText = String(newsItem.title || newsItem.short_title || "").trim() || "News";
+    const rawMediaType = newsItem.media_type ?? newsItem.mediaType;
+    const isIconMedia = String(rawMediaType ?? "").trim().toLowerCase() === "icon";
+    const baseImageUrl = newsItem.image || newsItem.icon || newsItem.icon1 || "";
+    const iconUrl = getNewsImageVariantUrl(baseImageUrl, "small");
+
     const title = document.createElement("h1");
     title.className = "news-detail-title";
     title.textContent = titleText;
-    card.appendChild(title);
+
+    if (isIconMedia && iconUrl) {
+      const titleRow = document.createElement("div");
+      titleRow.className = "news-detail-title-row";
+
+      const icon = document.createElement("img");
+      icon.className = "news-detail-title-icon";
+      icon.src = iconUrl;
+      icon.alt = newsItem.short_title || titleText;
+      titleRow.appendChild(icon);
+      titleRow.appendChild(title);
+      card.appendChild(titleRow);
+    } else {
+      card.appendChild(title);
+    }
 
     const meta = document.createElement("div");
     meta.className = "news-detail-meta";
@@ -620,10 +664,9 @@
       card.appendChild(shortDescription);
     }
 
-    const baseImageUrl = newsItem.image || newsItem.icon || newsItem.icon1 || "";
     const imageUrl = getNewsImageVariantUrl(baseImageUrl, "large");
     const originalImageUrl = getNewsImageVariantUrl(baseImageUrl, "original");
-    if (imageUrl) {
+    if (imageUrl && !isIconMedia) {
       const image = document.createElement("img");
       image.className = "news-detail-image";
       image.src = imageUrl;
@@ -693,7 +736,10 @@
       row.className = "news-row";
 
       const normalizedImportance = normalizeImportance(newsItem.significance || newsItem.importance);
-      if (normalizedImportance === "high") {
+      const mediaType = normalizeMediaType(newsItem.media_type ?? newsItem.mediaType);
+      const isImportantImage = normalizedImportance === "medium" && mediaType === "image";
+      const displayAsMajor = normalizedImportance === "high" || isImportantImage;
+      if (displayAsMajor) {
         row.classList.add("news-row-high");
       }
       const dateValue = getNewsTimestampValue(newsItem);
@@ -707,8 +753,8 @@
         icon.className = "news-icon";
         icon.src = iconUrl;
         icon.alt = newsItem.title || newsItem.short_title || "News icon";
-        icon.classList.add(`news-icon-${normalizedImportance}`);
-        if (normalizedImportance === "high") {
+        icon.classList.add(isImportantImage ? "news-icon-important-image" : `news-icon-${normalizedImportance}`);
+        if (displayAsMajor) {
           icon.addEventListener("click", event => {
             event.stopPropagation();
             const detailUrl = getNewsDetailUrl(newsItem);
@@ -722,7 +768,7 @@
 
       const contentWrapper = document.createElement("div");
       contentWrapper.className = "news-content";
-      if (normalizedImportance === "high") {
+      if (displayAsMajor) {
         contentWrapper.classList.add("news-content-high");
       }
 
@@ -735,13 +781,13 @@
 
       const title = document.createElement("div");
       title.className = "news-title";
-      if (normalizedImportance === "high") {
+      if (displayAsMajor) {
         title.classList.add("news-title-high");
       }
 
       const titleText = String(newsItem.title || newsItem.short_title || "").trim() || "News";
       const linkValue = String(newsItem.link || "").trim();
-      if (linkValue && normalizedImportance !== "high") {
+      if (linkValue && !displayAsMajor) {
         const link = document.createElement("a");
         link.textContent = titleText;
         link.href = linkValue;
@@ -761,14 +807,14 @@
 
       const descriptionHtml = String(newsItem.description || "").trim();
       const shortDescriptionText = String(newsItem.short_description || "").trim();
-      if (shortDescriptionText && normalizedImportance === "high") {
+      if (shortDescriptionText && displayAsMajor) {
         const shortDescription = document.createElement("div");
         shortDescription.className = "news-short-description-high";
         shortDescription.textContent = shortDescriptionText;
         contentWrapper.appendChild(shortDescription);
       }
 
-      if (normalizedImportance === "high") {
+      if (displayAsMajor) {
         row.addEventListener("click", () => {
           const detailUrl = getNewsDetailUrl(newsItem);
           if (detailUrl) {
@@ -777,7 +823,7 @@
         });
       }
 
-      if (descriptionHtml && normalizedImportance !== "high") {
+      if (descriptionHtml && !displayAsMajor) {
         const chevron = document.createElement("i");
         chevron.className = "fa fa-chevron-down news-chevron";
         row.appendChild(chevron);

@@ -178,6 +178,7 @@ const NEWS_EDITOR_AUDIT_FIELDS = [
 ];
 const NEWS_AUDIT_FIELDS = [
   "id",
+  "status",
   "significance",
   "media_type",
   "category",
@@ -435,6 +436,11 @@ function normalizeNewsSignificance(value) {
   return "Regular";
 }
 
+function normalizeNewsStatus(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  return raw === "published" ? "Published" : "Draft";
+}
+
 function normalizeNewsMediaType(value, significance = "Regular") {
   const normalizedSignificance = normalizeNewsSignificance(significance);
   if (normalizedSignificance === "Major") return "image";
@@ -667,6 +673,7 @@ async function loadNewsById(newsId) {
     `
       SELECT
         n.id,
+        n.status,
         n.significance,
         n.media_type,
         n.category,
@@ -3264,6 +3271,7 @@ function ensureNewsSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS news (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      status TEXT NOT NULL DEFAULT 'Draft',
       significance TEXT NOT NULL DEFAULT 'Regular',
       media_type TEXT NOT NULL DEFAULT 'icon',
       category TEXT,
@@ -3295,6 +3303,7 @@ function ensureNewsSchema() {
         return;
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "news", "status", "TEXT");
       addColumnIfMissing(columns, "news", "significance", "TEXT NOT NULL DEFAULT 'Regular'");
       addColumnIfMissing(columns, "news", "media_type", "TEXT NOT NULL DEFAULT 'icon'");
       addColumnIfMissing(columns, "news", "category", "TEXT");
@@ -6554,6 +6563,7 @@ app.get("/public/news", async (_req, res) => {
       `
         SELECT
           id,
+          status,
           significance,
           media_type,
           category,
@@ -6574,6 +6584,7 @@ app.get("/public/news", async (_req, res) => {
           deleted_at
         FROM news
         WHERE trim(COALESCE(title, '')) <> ''
+          AND lower(trim(COALESCE(status, ''))) = 'published'
           AND deleted_at IS NULL
         ORDER BY
           CASE
@@ -6598,6 +6609,7 @@ app.get("/news", requireAdmin, async (_req, res) => {
       `
         SELECT
           n.id,
+          n.status,
           n.significance,
           n.media_type,
           n.category,
@@ -6650,6 +6662,7 @@ app.get("/news", requireAdmin, async (_req, res) => {
 app.post("/news", requireAdmin, async (req, res) => {
   try {
     const actorPlayerId = String(req.user?.player_id || "").trim() || null;
+    const status = normalizeNewsStatus(req.body?.status);
     const significance = normalizeNewsSignificance(req.body?.significance);
     const mediaType = normalizeNewsMediaType(req.body?.media_type ?? req.body?.mediaType, significance);
     const requestedCategory = normalizeCategoryName(req.body?.category);
@@ -6703,6 +6716,7 @@ app.post("/news", requireAdmin, async (req, res) => {
       insertResult = await dbRunAsync(
         `
           INSERT INTO news (
+            status,
             significance,
             media_type,
             category,
@@ -6720,9 +6734,10 @@ app.post("/news", requireAdmin, async (req, res) => {
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [
+          status,
           significance,
           mediaType,
           category,
@@ -6785,6 +6800,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
       return res.status(404).json({ ok: false, message: "News not found" });
     }
 
+    const status = normalizeNewsStatus(req.body?.status);
     const significance = normalizeNewsSignificance(req.body?.significance);
     const mediaType = normalizeNewsMediaType(req.body?.media_type ?? req.body?.mediaType, significance);
     const requestedCategory = normalizeCategoryName(req.body?.category);
@@ -6838,6 +6854,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
         `
           UPDATE news
           SET
+            status = ?,
             significance = ?,
             media_type = ?,
             category = ?,
@@ -6855,6 +6872,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
           WHERE id = ?
         `,
         [
+          status,
           significance,
           mediaType,
           category,

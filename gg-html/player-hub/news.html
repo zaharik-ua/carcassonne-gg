@@ -863,6 +863,7 @@
   const IMAGES_URL = `${AUTH_BASE}/images`;
   const IMAGE_UPLOAD_URL = `${AUTH_BASE}/images/upload`;
   const IMAGE_UPLOAD_MAX_BYTES = 64 * 1024 * 1024;
+  const NEWS_STATUS_OPTIONS = ["Draft", "Published"];
   const NEWS_SIGNIFICANCE_OPTIONS = ["Regular", "Important", "Major"];
   const CAPTAIN_VIEWS = {
     NEWS: "news",
@@ -2296,6 +2297,7 @@
         chip.appendChild(label);
         meta.appendChild(chip);
       };
+      addChip(String(item?.status || "Draft").trim() || "Draft");
       addChip(String(item?.significance || "Regular").trim() || "Regular");
       if (item?.category) addChip(String(item.category).trim());
       const associationId = normalizeCode(item?.association_id);
@@ -2821,6 +2823,15 @@
         onChange: () => updateConditionalNewsFields(),
       }
     );
+    const statusInput = createSingleSelect(
+      String(source?.status || "Draft").trim() || "Draft",
+      NEWS_STATUS_OPTIONS.map((value) => ({ value, label: value })),
+      {
+        placeholderLabel: "Select status",
+        searchable: false,
+      }
+    );
+    addRow("Status", statusInput.root);
     addRow("Significance", significanceInput.root);
 
     const categoryInput = createSingleSelect(
@@ -3114,6 +3125,7 @@
       const categoryKind = getCategoryKind();
       const useImageUpload = shouldUseNewsImageUpload();
       return {
+        status: statusInput.getValue() || "Draft",
         significance: significanceInput.getValue() || "Regular",
         category: categoryInput.getValue() || "",
         association_id: categoryKind === "local" ? associationInput.getValue() || "" : "",
