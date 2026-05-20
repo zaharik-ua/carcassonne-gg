@@ -276,7 +276,7 @@
 
   .cp-news-chip img {
     width: 14px;
-    height: 10px;
+    height: auto;
     border-radius: 2px;
     object-fit: cover;
   }
@@ -317,6 +317,16 @@
 
   .cp-news-desc img {
     display: none;
+  }
+
+  .cp-news-actions {
+    display: grid;
+    gap: 6px;
+    justify-items: end;
+  }
+
+  .cp-news-actions .cp-edit-btn {
+    margin-left: 0;
   }
 
   .cp-news-form {
@@ -788,9 +798,12 @@
       grid-template-columns: 44px minmax(0, 1fr);
     }
 
-    .cp-news-row .cp-edit-btn {
+    .cp-news-row .cp-news-actions {
       grid-column: 1 / -1;
       justify-self: end;
+    }
+
+    .cp-news-row .cp-edit-btn {
       margin-left: 0;
     }
 
@@ -865,6 +878,10 @@
 
   function normalizeCode(value) {
     return String(value || "").trim().toUpperCase();
+  }
+
+  function normalizeNewsMediaType(value) {
+    return String(value || "").trim().toLowerCase() === "image" ? "image" : "icon";
   }
 
   function toApiAbsoluteUrl(value) {
@@ -2302,6 +2319,9 @@
 
       row.appendChild(main);
 
+      const actions = document.createElement("div");
+      actions.className = "cp-news-actions";
+
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "cp-edit-btn";
@@ -2309,7 +2329,20 @@
       editBtn.addEventListener("click", () => {
         openCaptainEdit(CAPTAIN_VIEWS.NEWS, { newsId: String(item?.id || "") });
       });
-      row.appendChild(editBtn);
+      actions.appendChild(editBtn);
+
+      const viewBtn = document.createElement("button");
+      viewBtn.type = "button";
+      viewBtn.className = "cp-edit-btn";
+      viewBtn.textContent = "View";
+      viewBtn.addEventListener("click", () => {
+        const newsId = String(item?.id || "").trim();
+        if (!newsId) return;
+        window.location.href = `https://carcassonne.gg/news/?id=${encodeURIComponent(newsId)}`;
+      });
+      actions.appendChild(viewBtn);
+
+      row.appendChild(actions);
 
       list.appendChild(row);
     });
@@ -2835,9 +2868,17 @@
     let selectedImageFile = null;
     let previewObjectUrl = "";
     const initialSignificance = String(source?.significance || "Regular").trim() || "Regular";
-    let newsMediaMode = initialSignificance === "Major"
-      ? "image"
-      : "icon";
+    const getInitialNewsMediaMode = () => {
+      if (initialSignificance === "Major") return "image";
+      if (initialSignificance !== "Important") return "icon";
+      const storedMediaType = String(source?.media_type ?? source?.mediaType ?? "").trim().toLowerCase();
+      if (storedMediaType === "image" || storedMediaType === "icon") return normalizeNewsMediaType(storedMediaType);
+      const hasImage = !!currentImageUrl;
+      const hasKnownIcon = !!getIconValueFromImageUrl(currentImageUrl);
+      const hasShortDescription = !!String(source?.short_description || "").trim();
+      return hasShortDescription || (hasImage && !hasKnownIcon) ? "image" : "icon";
+    };
+    let newsMediaMode = getInitialNewsMediaMode();
 
     const mediaTypeInput = createSingleSelect(
       newsMediaMode,
@@ -3080,6 +3121,7 @@
         associations: categoryKind === "local" ? [] : associationsInput.getValue(),
         time_utc: toUtcIsoFromDatetimeLocal(timeInput.value),
         image: useImageUpload ? currentImageUrl : iconInput.getValue() || currentImageUrl,
+        media_type: useImageUpload ? "image" : "icon",
         title: String(titleInput.value || "").trim(),
         short_title: String(shortTitleInput.value || "").trim(),
         short_description: useImageUpload ? String(shortDescriptionInput.value || "").trim() : "",

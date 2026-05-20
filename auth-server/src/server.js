@@ -179,6 +179,7 @@ const NEWS_EDITOR_AUDIT_FIELDS = [
 const NEWS_AUDIT_FIELDS = [
   "id",
   "significance",
+  "media_type",
   "category",
   "association_id",
   "tournament_id",
@@ -434,6 +435,14 @@ function normalizeNewsSignificance(value) {
   return "Regular";
 }
 
+function normalizeNewsMediaType(value, significance = "Regular") {
+  const normalizedSignificance = normalizeNewsSignificance(significance);
+  if (normalizedSignificance === "Major") return "image";
+  if (normalizedSignificance === "Regular") return "icon";
+  const raw = String(value || "").trim().toLowerCase();
+  return raw === "image" ? "image" : "icon";
+}
+
 function normalizeCategoryName(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -659,6 +668,7 @@ async function loadNewsById(newsId) {
       SELECT
         n.id,
         n.significance,
+        n.media_type,
         n.category,
         n.association_id,
         n.tournament_id,
@@ -3255,6 +3265,7 @@ function ensureNewsSchema() {
     CREATE TABLE IF NOT EXISTS news (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       significance TEXT NOT NULL DEFAULT 'Regular',
+      media_type TEXT NOT NULL DEFAULT 'icon',
       category TEXT,
       association_id TEXT,
       tournament_id TEXT,
@@ -3285,6 +3296,7 @@ function ensureNewsSchema() {
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
       addColumnIfMissing(columns, "news", "significance", "TEXT NOT NULL DEFAULT 'Regular'");
+      addColumnIfMissing(columns, "news", "media_type", "TEXT NOT NULL DEFAULT 'icon'");
       addColumnIfMissing(columns, "news", "category", "TEXT");
       addColumnIfMissing(columns, "news", "association_id", "TEXT");
       addColumnIfMissing(columns, "news", "tournament_id", "TEXT");
@@ -3330,6 +3342,12 @@ function ensureNewsSchema() {
               WHEN lower(trim(COALESCE(significance, ''))) = 'important' THEN 'Important'
               WHEN lower(trim(COALESCE(significance, ''))) = 'major' THEN 'Major'
               ELSE 'Regular'
+            END,
+            media_type = CASE
+              WHEN lower(trim(COALESCE(significance, ''))) = 'major' THEN 'image'
+              WHEN lower(trim(COALESCE(significance, ''))) = 'regular' THEN 'icon'
+              WHEN lower(trim(COALESCE(media_type, ''))) = 'image' THEN 'image'
+              ELSE 'icon'
             END,
             category = NULLIF(trim(category), ''),
             association_id = NULLIF(trim(association_id), ''),
@@ -6537,6 +6555,7 @@ app.get("/public/news", async (_req, res) => {
         SELECT
           id,
           significance,
+          media_type,
           category,
           association_id,
           tournament_id,
@@ -6580,6 +6599,7 @@ app.get("/news", requireAdmin, async (_req, res) => {
         SELECT
           n.id,
           n.significance,
+          n.media_type,
           n.category,
           n.association_id,
           n.tournament_id,
@@ -6631,6 +6651,7 @@ app.post("/news", requireAdmin, async (req, res) => {
   try {
     const actorPlayerId = String(req.user?.player_id || "").trim() || null;
     const significance = normalizeNewsSignificance(req.body?.significance);
+    const mediaType = normalizeNewsMediaType(req.body?.media_type ?? req.body?.mediaType, significance);
     const requestedCategory = normalizeCategoryName(req.body?.category);
     const category = await resolveNewsCategory(requestedCategory);
     const associationId = await resolveNewsAssociationValue(req.body?.association_id);
@@ -6683,6 +6704,7 @@ app.post("/news", requireAdmin, async (req, res) => {
         `
           INSERT INTO news (
             significance,
+            media_type,
             category,
             association_id,
             tournament_id,
@@ -6698,10 +6720,11 @@ app.post("/news", requireAdmin, async (req, res) => {
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [
           significance,
+          mediaType,
           category,
           associationId,
           tournamentId,
@@ -6763,6 +6786,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
     }
 
     const significance = normalizeNewsSignificance(req.body?.significance);
+    const mediaType = normalizeNewsMediaType(req.body?.media_type ?? req.body?.mediaType, significance);
     const requestedCategory = normalizeCategoryName(req.body?.category);
     const category = await resolveNewsCategory(requestedCategory);
     const associationId = await resolveNewsAssociationValue(req.body?.association_id);
@@ -6815,6 +6839,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
           UPDATE news
           SET
             significance = ?,
+            media_type = ?,
             category = ?,
             association_id = ?,
             tournament_id = ?,
@@ -6831,6 +6856,7 @@ app.patch("/news/:id", requireAdmin, async (req, res) => {
         `,
         [
           significance,
+          mediaType,
           category,
           associationId,
           tournamentId,
