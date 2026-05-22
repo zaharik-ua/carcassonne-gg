@@ -101,8 +101,6 @@
     min-height: 120px;
     height: auto;
     resize: vertical;
-    padding-top: 8px;
-    padding-bottom: 8px;
     line-height: 1.4;
   }
 
@@ -142,6 +140,34 @@
   .cp-edit-row--short-description textarea {
     min-height: 48px;
     height: 56px;
+  }
+
+  .cp-char-count-field {
+    position: relative;
+  }
+
+  .cp-char-count-field input,
+  .cp-char-count-field textarea {
+    padding-right: 16px;
+  }
+
+  .cp-char-count-field textarea {
+    padding-bottom: 18px;
+  }
+
+  .cp-char-count {
+    bottom: 5px;
+    color: #8c96a4;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    pointer-events: none;
+    position: absolute;
+    right: 8px;
+  }
+
+  .cp-char-count-field textarea + .cp-char-count {
+    bottom: 6px;
   }
 
   .cp-image-upload {
@@ -330,7 +356,7 @@
   }
 
   .cp-news-form {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .cp-news-form .cp-edit-actions,
@@ -606,6 +632,17 @@
   .cp-dd-btn:focus-visible,
   .cp-dd-btn.open {
     border-color: #9ea7b3;
+  }
+
+  .cp-dd.disabled .cp-dd-btn,
+  .cp-dd-btn:disabled {
+    background: #f3f4f6;
+    color: #8c96a4;
+    cursor: not-allowed;
+  }
+
+  .cp-dd.disabled .cp-dd-chevron {
+    color: #a0a7b3;
   }
 
   .cp-dd-btn-content {
@@ -2406,6 +2443,23 @@
       return row;
     };
 
+    const withRemainingCounter = (control) => {
+      const wrap = document.createElement("div");
+      wrap.className = "cp-char-count-field";
+      const counter = document.createElement("span");
+      counter.className = "cp-char-count";
+      const maxLength = Number(control?.maxLength || 0);
+      const updateCounter = () => {
+        const currentLength = String(control?.value || "").length;
+        counter.textContent = maxLength > 0 ? String(Math.max(0, maxLength - currentLength)) : "";
+      };
+      control.addEventListener("input", updateCounter);
+      wrap.appendChild(control);
+      wrap.appendChild(counter);
+      updateCounter();
+      return wrap;
+    };
+
     const setError = (message) => {
       const text = String(message || "").trim();
       errorEl.textContent = text;
@@ -2442,6 +2496,7 @@
       let value = String(initialValue || "").trim();
       if (!normalizedOptions.some((opt) => opt.value === value)) value = "";
       let filterQuery = "";
+      let isDisabled = cfg.disabled === true;
 
       const root = document.createElement("div");
       root.className = "cp-dd";
@@ -2555,11 +2610,18 @@
           renderButtonContent();
           renderMenu();
         },
+        setDisabled: (nextDisabled) => {
+          isDisabled = nextDisabled === true;
+          root.classList.toggle("disabled", isDisabled);
+          btn.disabled = isDisabled;
+          if (isDisabled) api.close();
+        },
         getValue: () => value,
       };
 
       btn.addEventListener("click", (event) => {
         event.stopPropagation();
+        if (isDisabled) return;
         const isOpen = menu.classList.contains("open");
         closeAllDropdowns();
         if (isOpen) return;
@@ -2595,6 +2657,7 @@
       root.appendChild(btn);
       root.appendChild(menu);
       dropdowns.push(api);
+      api.setDisabled(isDisabled);
       return api;
     };
 
@@ -2764,17 +2827,32 @@
       if (Number(category?.is_tournament) === 1) return "tournament";
       return "other";
     };
-    const iconOptions = [{ value: "", label: "Not selected", logo: "" }].concat((Array.isArray(iconsList) ? iconsList : [])
+    const emptyIconOption = { value: "", label: "Not selected", logo: "" };
+    const allIconOptions = (Array.isArray(iconsList) ? iconsList : [])
       .map((item) => ({
         value: toApiAbsoluteUrl(item?.icon_link || ""),
         label: String(item?.name || item?.id || "").trim(),
         logo: toApiAbsoluteUrl(item?.icon_link || ""),
+        category: normalizeCategoryKey(item?.category || item?.category_id || item?.categoryId),
+        associationId: normalizeCode(item?.association_id ?? item?.associationId),
       }))
-      .filter((item) => item.value && item.label));
-    const getIconValueFromImageUrl = (imageUrl) => {
+      .filter((item) => item.value && item.label);
+    const getIconOptionsForCategory = (categoryName, associationId = "") => {
+      const categoryKey = normalizeCategoryKey(categoryName);
+      const selectedAssociationId = normalizeCode(associationId);
+      const rows = allIconOptions.filter((item) => {
+        if (!categoryKey || item.category !== categoryKey) return false;
+        if (categoryKey === "local") {
+          return !!selectedAssociationId && item.associationId === selectedAssociationId;
+        }
+        return true;
+      });
+      return [emptyIconOption].concat(rows);
+    };
+    const getIconValueFromImageUrl = (imageUrl, options = allIconOptions) => {
       const normalizedImageUrl = toApiAbsoluteUrl(imageUrl);
       if (!normalizedImageUrl) return "";
-      return iconOptions.some((item) => item.value === normalizedImageUrl) ? normalizedImageUrl : "";
+      return (Array.isArray(options) ? options : []).some((item) => item.value === normalizedImageUrl) ? normalizedImageUrl : "";
     };
 
     const associationOptions = [{ value: "", label: "Not selected", logo: "" }].concat((Array.isArray(associationsList) ? associationsList : [])
@@ -2848,9 +2926,11 @@
     const associationInput = createSingleSelect(
       normalizeCode(source?.association_id),
       associationOptions,
-      { placeholderLabel: "Select association" }
+      {
+        placeholderLabel: "Select association",
+        onChange: () => updateConditionalNewsFields(),
+      }
     );
-    const associationRow = addRow("Association", associationInput.root);
 
     const tournamentInput = createSingleSelect(
       String(source?.tournament_id || "").trim(),
@@ -2858,6 +2938,16 @@
       { placeholderLabel: "Select tournament", searchable: false }
     );
     const tournamentRow = addRow("Tournament", tournamentInput.root);
+
+    const associationRow = addRow("Association", associationInput.root);
+
+    const timeInput = document.createElement("input");
+    timeInput.type = "datetime-local";
+    timeInput.required = true;
+    timeInput.value = isCreateMode
+      ? getCurrentUtcHourDatetimeLocal()
+      : toDatetimeLocalFromUtc(source?.time_utc);
+    addRow("Time, UTC", timeInput, "cp-edit-row--line-start");
 
     const associationsInput = createMultiSelect(
       (Array.isArray(source?.associations) ? source.associations : [])
@@ -2867,14 +2957,6 @@
       { placeholderLabel: "Select associations" }
     );
     const associationsRow = addRow("Associations (for filtering)", associationsInput.root);
-
-    const timeInput = document.createElement("input");
-    timeInput.type = "datetime-local";
-    timeInput.required = true;
-    timeInput.value = isCreateMode
-      ? getCurrentUtcHourDatetimeLocal()
-      : toDatetimeLocalFromUtc(source?.time_utc);
-    addRow("Time, UTC", timeInput);
 
     let selectedImageFile = null;
     let previewObjectUrl = "";
@@ -2907,10 +2989,11 @@
       }
     );
     let mediaTypeRow = null;
+    const initialIconOptions = getIconOptionsForCategory(categoryInput.getValue(), associationInput.getValue());
 
     const iconInput = createSingleSelect(
-      getIconValueFromImageUrl(currentImageUrl),
-      iconOptions,
+      getIconValueFromImageUrl(currentImageUrl, initialIconOptions),
+      initialIconOptions,
       {
         placeholderLabel: "Select icon",
         searchable: false,
@@ -3046,6 +3129,45 @@
       imageUploadStatus.textContent = selectedImagePreserveSource ? `${file.name} (source saved)` : file.name;
     });
 
+    const setCurrentIconImage = (nextValue, statusText = "") => {
+      currentImageUrl = String(nextValue || "").trim();
+      selectedImageFile = null;
+      selectedImagePreserveSource = false;
+      if (imageFileInput) imageFileInput.value = "";
+      if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = "";
+      }
+      imagePreview.src = currentImageUrl || "";
+      imagePreview.hidden = !currentImageUrl;
+      imageChooseBtn.textContent = currentImageUrl ? "Change image" : "Select image";
+      imageUploadStatus.textContent = statusText || "";
+    };
+
+    function updateIconOptionsForContext(useIcon) {
+      const selectedCategory = categoryInput.getValue() || "";
+      const categoryKey = normalizeCategoryKey(selectedCategory);
+      const selectedAssociationId = associationInput.getValue() || "";
+      const needsAssociation = categoryKey === "local";
+      const isMissingIconContext = !categoryKey || (needsAssociation && !selectedAssociationId);
+      const nextIconOptions = getIconOptionsForCategory(selectedCategory, selectedAssociationId);
+      const availableIcons = nextIconOptions.filter((item) => String(item?.value || "").trim());
+      const currentIconValue = iconInput.getValue() || getIconValueFromImageUrl(currentImageUrl, nextIconOptions);
+      let nextIconValue = nextIconOptions.some((item) => item.value && item.value === currentIconValue)
+        ? currentIconValue
+        : "";
+
+      if (!nextIconValue && availableIcons.length === 1) {
+        nextIconValue = availableIcons[0].value;
+      }
+
+      iconInput.setOptions(nextIconOptions, useIcon && !isMissingIconContext ? nextIconValue : "");
+      iconInput.setDisabled(!useIcon || isMissingIconContext);
+      if (!useIcon) return;
+
+      setCurrentIconImage(nextIconValue, nextIconValue ? "Icon selected." : "");
+    }
+
     let previousSignificance = initialSignificance;
     function updateConditionalNewsFields() {
       const significance = String(significanceInput.getValue() || "Regular").trim() || "Regular";
@@ -3087,6 +3209,7 @@
         newsMediaMode = "image";
       }
       mediaTypeInput.setValue(newsMediaMode);
+      updateIconOptionsForContext(useIcon);
       mediaTypeRow.classList.toggle("cp-hidden", !isImportant);
       iconRow.classList.toggle("cp-hidden", !useIcon);
       imageRow.classList.toggle("cp-hidden", !useImage);
@@ -3096,19 +3219,19 @@
     shortTitleInput.type = "text";
     shortTitleInput.maxLength = 40;
     shortTitleInput.value = String(source?.short_title || "").trim();
-    addRow("Short title", shortTitleInput, "cp-edit-row--line-start");
+    addRow("Short title", withRemainingCounter(shortTitleInput), "cp-edit-row--line-start");
 
     const titleInput = document.createElement("input");
     titleInput.type = "text";
     titleInput.maxLength = 100;
     titleInput.value = String(source?.title || "").trim();
-    addRow("Title", titleInput, "cp-edit-row--full");
+    addRow("Title", withRemainingCounter(titleInput), "cp-edit-row--full");
 
     const shortDescriptionInput = document.createElement("textarea");
     shortDescriptionInput.maxLength = 200;
     shortDescriptionInput.rows = 2;
     shortDescriptionInput.value = String(source?.short_description || "").trim();
-    const shortDescriptionRow = addRow("Short description", shortDescriptionInput, "cp-edit-row--full cp-edit-row--short-description");
+    const shortDescriptionRow = addRow("Short description", withRemainingCounter(shortDescriptionInput), "cp-edit-row--full cp-edit-row--short-description");
     updateConditionalNewsFields();
 
     const descriptionInput = createNewsDescriptionEditor(source?.description || "", {
@@ -3148,6 +3271,7 @@
       if (payload.short_description.length > 200) return "Short description must be 200 characters or fewer.";
       if (!String(timeInput.value || "").trim()) return "Time, UTC is required.";
       if (String(timeInput.value || "").trim() && !payload.time_utc) return "Time, UTC is invalid.";
+      if (getCategoryKind() === "local" && !payload.association_id) return "Association is required.";
       if (
         getCategoryKind() === "tournament"
         && getSelectableTournamentOptionsForCategory(categoryInput.getValue()).length > 1

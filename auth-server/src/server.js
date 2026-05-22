@@ -6603,6 +6603,20 @@ app.get("/public/news", async (_req, res) => {
   }
 });
 
+app.get("/public/news/:id", async (req, res) => {
+  try {
+    const row = await loadNewsById(req.params.id);
+    if (!row || !String(row?.title || "").trim()) {
+      return res.status(404).json({ ok: false, message: "News not found" });
+    }
+
+    return res.json({ ok: true, news: row });
+  } catch (error) {
+    console.error("Failed to load public news item", error);
+    return res.status(500).json({ ok: false, message: "Failed to load news" });
+  }
+});
+
 app.get("/news", requireAdmin, async (_req, res) => {
   try {
     const rows = await dbAllAsync(

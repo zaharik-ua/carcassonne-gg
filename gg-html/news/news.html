@@ -322,6 +322,7 @@
   const newsContainer = document.getElementById("news-container");
   let imageModal;
   let allNewsItems = [];
+  let selectedNewsItem = null;
   let playersById = new Map();
   let hasNewsDataLoaded = false;
   const imageVariantsCache = new Map();
@@ -480,6 +481,17 @@
     const url = new URL(window.location.href);
     url.searchParams.set("id", newsId);
     return url.toString();
+  };
+
+  const fetchPublicNewsItem = (newsId) => {
+    const normalizedNewsId = String(newsId || "").trim();
+    if (!normalizedNewsId) return Promise.resolve(null);
+
+    return fetch(`${NEWS_PUBLIC_URL}/${encodeURIComponent(normalizedNewsId)}`, { method: "GET" }).then(res => {
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`News item request failed: ${res.status}`);
+      return res.json();
+    }).then(result => result?.news || null);
   };
 
   const getNewsCreatorName = (newsItem) => {
@@ -710,7 +722,8 @@
       return;
     }
 
-    const newsItem = allNewsItems.find(item => String(item?.id || "").trim() === selectedNewsId);
+    const newsItem = allNewsItems.find(item => String(item?.id || "").trim() === selectedNewsId)
+      || (String(selectedNewsItem?.id || "").trim() === selectedNewsId ? selectedNewsItem : null);
     if (!newsItem) {
       setNewsState("News not found.");
       return;
@@ -896,6 +909,9 @@
   function fetchNews() {
     setNewsState("Loading news...");
 
+    const selectedNewsId = getSelectedNewsId();
+    selectedNewsItem = null;
+
     Promise.allSettled([
       fetch(NEWS_PUBLIC_URL, { method: "GET" }).then(res => {
         if (!res.ok) throw new Error(`News request failed: ${res.status}`);
@@ -904,9 +920,10 @@
       fetch(PLAYERS_PUBLIC_URL, { method: "GET" }).then(res => {
         if (!res.ok) throw new Error(`Players request failed: ${res.status}`);
         return res.json();
-      })
+      }),
+      selectedNewsId ? fetchPublicNewsItem(selectedNewsId) : Promise.resolve(null)
     ])
-      .then(([newsResult, playersResult]) => {
+      .then(([newsResult, playersResult, selectedNewsResult]) => {
         if (playersResult.status === "fulfilled") {
           const playerEntries = Array.isArray(playersResult.value?.gg_profiles) ? playersResult.value.gg_profiles : [];
           playersById = new Map();
@@ -917,6 +934,12 @@
               playersById.set(playerId, playerName);
             }
           });
+        }
+
+        if (selectedNewsResult.status === "fulfilled") {
+          selectedNewsItem = selectedNewsResult.value || null;
+        } else {
+          console.error(selectedNewsResult.reason || new Error("News item request failed"));
         }
 
         if (newsResult.status !== "fulfilled") {
