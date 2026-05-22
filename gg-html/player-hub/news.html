@@ -3455,21 +3455,9 @@
         return;
       }
 
-      const [tournamentsRes, newsEditorsRes, newsRes, associationsRes, categoriesRes, iconsRes] = await Promise.all([
+      const [tournamentsRes, newsEditorsRes] = await Promise.all([
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" }),
-        isAdminUser
-          ? fetch(NEWS_URL, { method: "GET", credentials: "include" })
-          : Promise.resolve(null),
-        isAdminUser
-          ? fetch(ASSOCIATIONS_URL, { method: "GET", credentials: "include" })
-          : Promise.resolve(null),
-        isAdminUser
-          ? fetch(CATEGORIES_URL, { method: "GET", credentials: "include" })
-          : Promise.resolve(null),
-        isAdminUser
-          ? fetch(ICONS_URL, { method: "GET", credentials: "include" })
-          : Promise.resolve(null),
       ]);
       const newsEditorsData = newsEditorsRes?.ok
         ? await newsEditorsRes.json().catch(() => ({}))
@@ -3478,11 +3466,27 @@
       isNewsEditorUser = !!currentUserProfileId && newsEditors.some((entry) => (
         String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserProfileId
       ));
+      const canUseNewsSection = isAdminUser || isNewsEditorUser;
       let tournaments = [];
       if (tournamentsRes?.ok) {
         const tournamentsData = await tournamentsRes.json().catch(() => ({}));
         tournaments = Array.isArray(tournamentsData?.tournaments) ? tournamentsData.tournaments : [];
       }
+      setPageHeading(getImmediatePageHeading());
+
+      if (!canUseNewsSection) {
+        renderStaticInfoSection("My News", [
+          "This section is available only to users added to news editors.",
+        ]);
+        return;
+      }
+
+      const [newsRes, associationsRes, categoriesRes, iconsRes] = await Promise.all([
+        fetch(NEWS_URL, { method: "GET", credentials: "include" }),
+        fetch(ASSOCIATIONS_URL, { method: "GET", credentials: "include" }),
+        fetch(CATEGORIES_URL, { method: "GET", credentials: "include" }),
+        fetch(ICONS_URL, { method: "GET", credentials: "include" }),
+      ]);
       const newsData = newsRes?.ok
         ? await newsRes.json().catch(() => ({}))
         : {};
@@ -3516,16 +3520,6 @@
         if (!tournamentId) return;
         tournamentsById.set(tournamentId, tournament);
       });
-      setPageHeading(getImmediatePageHeading());
-
-      if (!isAdminUser) {
-        renderStaticInfoSection("My News", [
-          isNewsEditorUser
-            ? "This section is under development."
-            : "This section is available only to users added to news editors.",
-        ]);
-        return;
-      }
 
       addButtonEl.classList.remove("cp-hidden");
       addButtonEl.textContent = "Create";
