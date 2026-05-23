@@ -892,6 +892,7 @@
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const NEWS_TOURNAMENTS_URL = `${TOURNAMENTS_URL}?scope=news`;
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
   const CATEGORIES_URL = `${AUTH_BASE}/categories`;
   const ICONS_URL = `${AUTH_BASE}/icons`;
@@ -2818,14 +2819,59 @@
 
     let currentImageUrl = toApiAbsoluteUrl(source?.image || "");
     const normalizeCategoryKey = (value) => String(value || "").trim().toLowerCase();
+    const normalizeTournamentAccessKey = (value) => String(value || "").trim().toLowerCase();
+    const normalizeNewsEditorAccessType = (value) => {
+      const raw = String(value || "").trim().toLowerCase();
+      if (raw === "global" || raw === "local" || raw === "tournament") return raw;
+      return "";
+    };
+    const isAdminNewsUser = options.isAdmin === true;
+    const currentProfileId = String(options.currentUserProfileId || "").trim();
+    const currentUserNewsEditors = isAdminNewsUser ? [] : (Array.isArray(options.newsEditors) ? options.newsEditors : [])
+      .filter((entry) => String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentProfileId);
+    const hasGlobalNewsEditorAccess = isAdminNewsUser || currentUserNewsEditors.some((entry) => (
+      normalizeNewsEditorAccessType(entry?.access_type) === "global"
+    ));
+    const restrictNewsEditorAccess = !isAdminNewsUser && !hasGlobalNewsEditorAccess;
+    const allowedLocalAssociationIds = new Set(currentUserNewsEditors
+      .filter((entry) => normalizeNewsEditorAccessType(entry?.access_type) === "local")
+      .map((entry) => normalizeCode(entry?.country_id ?? entry?.countryId))
+      .filter(Boolean));
+    const allowedTournamentIds = new Set(currentUserNewsEditors
+      .filter((entry) => normalizeNewsEditorAccessType(entry?.access_type) === "tournament")
+      .map((entry) => normalizeTournamentAccessKey(entry?.tournament_id ?? entry?.tournamentId))
+      .filter(Boolean));
+    const tournamentRows = (Array.isArray(tournamentsList) ? tournamentsList : [])
+      .map((item) => ({
+        value: String(item?.id || "").trim(),
+        label: String(item?.short_title || item?.name || item?.id || "").trim(),
+        logo: String(item?.logo || "").trim(),
+        category: normalizeCategoryKey(item?.category),
+      }))
+      .filter((item) => item.value && item.label);
+    const allowedTournamentCategoryKeys = new Set(tournamentRows
+      .filter((item) => allowedTournamentIds.has(normalizeTournamentAccessKey(item.value)))
+      .map((item) => item.category)
+      .filter(Boolean));
+    const categoryHasTournaments = new Set(tournamentRows
+      .map((item) => item.category)
+      .filter(Boolean));
     const categoriesByName = new Map((Array.isArray(categoriesList) ? categoriesList : [])
       .map((item) => [normalizeCategoryKey(item?.name), item]));
-    const getCategoryKind = () => {
-      const selectedCategory = String(categoryInput?.getValue?.() || "").trim();
+    const getCategoryKindForName = (categoryName) => {
+      const selectedCategory = String(categoryName || "").trim();
       if (normalizeCategoryKey(selectedCategory) === "local") return "local";
       const category = categoriesByName.get(normalizeCategoryKey(selectedCategory)) || null;
-      if (Number(category?.is_tournament) === 1) return "tournament";
+      if (Number(category?.is_tournament) === 1 || categoryHasTournaments.has(normalizeCategoryKey(selectedCategory))) return "tournament";
       return "other";
+    };
+    const getCategoryKind = () => getCategoryKindForName(categoryInput?.getValue?.() || "");
+    const isCategoryAllowedForCurrentUser = (categoryName) => {
+      if (!restrictNewsEditorAccess) return true;
+      const categoryKey = normalizeCategoryKey(categoryName);
+      if (!categoryKey) return false;
+      if (categoryKey === "local") return allowedLocalAssociationIds.size > 0;
+      return allowedTournamentCategoryKeys.has(categoryKey);
     };
     const emptyIconOption = { value: "", label: "Not selected", logo: "" };
     const allIconOptions = (Array.isArray(iconsList) ? iconsList : [])
@@ -2855,30 +2901,27 @@
       return (Array.isArray(options) ? options : []).some((item) => item.value === normalizedImageUrl) ? normalizedImageUrl : "";
     };
 
-    const associationOptions = [{ value: "", label: "Not selected", logo: "" }].concat((Array.isArray(associationsList) ? associationsList : [])
+    const associationOptionRows = (Array.isArray(associationsList) ? associationsList : [])
       .map((item) => ({
         value: normalizeCode(item?.id || item?.code),
         label: String(item?.name || item?.id || item?.code || "").trim(),
         logo: String(item?.flag || "").trim(),
       }))
-      .filter((item) => item.label));
+      .filter((item) => item.value && item.label);
+    const associationOptions = [{ value: "", label: "Not selected", logo: "" }].concat(associationOptionRows);
+    const localAssociationOptions = [{ value: "", label: "Not selected", logo: "" }].concat(associationOptionRows
+      .filter((item) => !restrictNewsEditorAccess || allowedLocalAssociationIds.has(normalizeCode(item.value))));
     const emptyTournamentOption = { value: "", label: "Not selected", logo: "" };
     const getTournamentOptionsForCategory = (categoryName) => {
       const categoryKey = normalizeCategoryKey(categoryName);
-      const rows = (Array.isArray(tournamentsList) ? tournamentsList : [])
-        .filter((item) => categoryKey && normalizeCategoryKey(item?.category) === categoryKey)
-        .map((item) => ({
-          value: String(item?.id || "").trim(),
-          label: String(item?.short_title || item?.name || item?.id || "").trim(),
-          logo: String(item?.logo || "").trim(),
-        }))
-        .filter((item) => item.value && item.label);
+      const rows = tournamentRows
+        .filter((item) => categoryKey && item.category === categoryKey)
+        .filter((item) => !restrictNewsEditorAccess || allowedTournamentIds.has(normalizeTournamentAccessKey(item.value)));
       return [emptyTournamentOption].concat(rows);
     };
     const getSelectableTournamentOptionsForCategory = (categoryName) => getTournamentOptionsForCategory(categoryName)
       .filter((item) => String(item?.value || "").trim());
-    const tournamentOptions = getTournamentOptionsForCategory(source?.category || "");
-    const categoryOptions = [{ value: "", label: "Not selected" }].concat((Array.isArray(categoriesList) ? categoriesList : [])
+    const rawCategoryOptions = (Array.isArray(categoriesList) ? categoriesList : [])
       .slice()
       .sort((left, right) => {
         const leftOrder = Number(left?.sort_order) || 0;
@@ -2890,11 +2933,29 @@
         const name = String(item?.name || "").trim();
         return { value: name, label: name };
       })
-      .filter((item) => item.value));
+      .filter((item) => item.value && isCategoryAllowedForCurrentUser(item.value));
+    const categoryOptions = [{ value: "", label: "Not selected" }].concat(rawCategoryOptions);
+    const selectableCategoryOptions = categoryOptions.filter((item) => String(item?.value || "").trim());
+    const requestedInitialCategory = String(source?.category || "").trim();
+    const sourceCategoryValue = categoryOptions.some((item) => item.value === requestedInitialCategory)
+      ? requestedInitialCategory
+      : "";
+    const initialCategoryValue = isCreateMode && !sourceCategoryValue && selectableCategoryOptions.length === 1
+      ? selectableCategoryOptions[0].value
+      : sourceCategoryValue;
+    const tournamentOptions = getTournamentOptionsForCategory(initialCategoryValue || source?.category || "");
+    const significanceOptions = (hasGlobalNewsEditorAccess
+      ? NEWS_SIGNIFICANCE_OPTIONS
+      : NEWS_SIGNIFICANCE_OPTIONS.filter((value) => value !== "Major"))
+      .map((value) => ({ value, label: value }));
+    const requestedInitialSignificance = String(source?.significance || "Regular").trim() || "Regular";
+    const initialSignificance = significanceOptions.some((item) => item.value === requestedInitialSignificance)
+      ? requestedInitialSignificance
+      : "Regular";
 
     const significanceInput = createSingleSelect(
-      String(source?.significance || "Regular").trim() || "Regular",
-      NEWS_SIGNIFICANCE_OPTIONS.map((value) => ({ value, label: value })),
+      initialSignificance,
+      significanceOptions,
       {
         placeholderLabel: "Select significance",
         searchable: false,
@@ -2913,7 +2974,7 @@
     addRow("Significance", significanceInput.root);
 
     const categoryInput = createSingleSelect(
-      String(source?.category || "").trim(),
+      initialCategoryValue,
       categoryOptions,
       {
         placeholderLabel: "Select category",
@@ -2925,7 +2986,7 @@
 
     const associationInput = createSingleSelect(
       normalizeCode(source?.association_id),
-      associationOptions,
+      localAssociationOptions,
       {
         placeholderLabel: "Select association",
         onChange: () => updateConditionalNewsFields(),
@@ -2960,7 +3021,6 @@
 
     let selectedImageFile = null;
     let previewObjectUrl = "";
-    const initialSignificance = String(source?.significance || "Regular").trim() || "Regular";
     const getInitialNewsMediaMode = () => {
       if (initialSignificance === "Major") return "image";
       if (initialSignificance !== "Important") return "icon";
@@ -3184,7 +3244,18 @@
       associationRow.classList.toggle("cp-hidden", !showAssociation);
       tournamentRow.classList.toggle("cp-hidden", !showTournament);
       associationsRow.classList.toggle("cp-hidden", !showAssociations);
-      if (!showAssociation) associationInput.setValue("");
+      if (showAssociation) {
+        const selectableAssociationOptions = localAssociationOptions.filter((item) => String(item?.value || "").trim());
+        const currentAssociationId = associationInput.getValue();
+        const nextAssociationId = selectableAssociationOptions.length === 1
+          ? selectableAssociationOptions[0].value
+          : selectableAssociationOptions.some((item) => normalizeCode(item.value) === normalizeCode(currentAssociationId))
+            ? currentAssociationId
+            : "";
+        associationInput.setOptions(localAssociationOptions, nextAssociationId);
+      } else {
+        associationInput.setOptions(localAssociationOptions, "");
+      }
       if (showTournament) {
         const nextTournamentOptions = getTournamentOptionsForCategory(selectedCategory);
         const selectableTournamentOptions = getSelectableTournamentOptionsForCategory(selectedCategory);
@@ -3271,10 +3342,12 @@
       if (payload.short_description.length > 200) return "Short description must be 200 characters or fewer.";
       if (!String(timeInput.value || "").trim()) return "Time, UTC is required.";
       if (String(timeInput.value || "").trim() && !payload.time_utc) return "Time, UTC is invalid.";
+      if (!isAdminNewsUser && !payload.category) return "Category is required.";
       if (getCategoryKind() === "local" && !payload.association_id) return "Association is required.";
+      const selectableTournamentOptions = getSelectableTournamentOptionsForCategory(categoryInput.getValue());
       if (
         getCategoryKind() === "tournament"
-        && getSelectableTournamentOptionsForCategory(categoryInput.getValue()).length > 1
+        && (restrictNewsEditorAccess ? selectableTournamentOptions.length > 0 : selectableTournamentOptions.length > 1)
         && !payload.tournament_id
       ) {
         return "Tournament is required.";
@@ -3456,7 +3529,7 @@
       }
 
       const [tournamentsRes, newsEditorsRes] = await Promise.all([
-        fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
+        fetch(NEWS_TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" }),
       ]);
       const newsEditorsData = newsEditorsRes?.ok
@@ -3533,6 +3606,9 @@
       if (isCreateMode) {
         renderNewsEditForm(null, associations, tournaments, categories, icons, "create", {
           canUploadSource: isAdminUser,
+          currentUserProfileId,
+          isAdmin: isAdminUser,
+          newsEditors,
         });
         return;
       }
@@ -3547,6 +3623,9 @@
         }
         renderNewsEditForm(newsToEdit, associations, tournaments, categories, icons, "edit", {
           canUploadSource: isAdminUser,
+          currentUserProfileId,
+          isAdmin: isAdminUser,
+          newsEditors,
         });
         return;
       }

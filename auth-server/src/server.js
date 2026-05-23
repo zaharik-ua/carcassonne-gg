@@ -433,22 +433,77 @@ async function getNewsEditorAccessForUser(user) {
   const isAdmin = Number(user?.admin) === 1;
   const profileId = String(user?.player_id || "").trim();
   if (isAdmin) {
-    return { isAdmin, isNewsEditor: true, profileId };
+    return {
+      isAdmin,
+      isNewsEditor: true,
+      profileId,
+      entries: [],
+      hasGlobalAccess: true,
+      localCountryIds: [],
+      tournamentIds: [],
+      tournamentCategories: [],
+    };
   }
   if (!profileId) {
-    return { isAdmin, isNewsEditor: false, profileId };
+    return {
+      isAdmin,
+      isNewsEditor: false,
+      profileId,
+      entries: [],
+      hasGlobalAccess: false,
+      localCountryIds: [],
+      tournamentIds: [],
+      tournamentCategories: [],
+    };
   }
 
-  const row = await dbGetAsync(
+  const rows = await dbAllAsync(
     `
-      SELECT id
-      FROM news_editors
-      WHERE trim(COALESCE(profile_id, '')) = trim(?)
-      LIMIT 1
+      SELECT
+        ne.id,
+        ne.access_type,
+        ne.tournament_id,
+        ne.country_id,
+        NULLIF(trim(t.category), '') AS tournament_category
+      FROM news_editors ne
+      LEFT JOIN tournaments t
+        ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(ne.tournament_id, '')))
+      WHERE trim(COALESCE(ne.profile_id, '')) = trim(?)
     `,
     [profileId]
   );
-  return { isAdmin, isNewsEditor: !!row, profileId };
+  const entries = (rows || [])
+    .map((row) => ({
+      id: row?.id,
+      access_type: normalizeNewsEditorAccessType(row?.access_type),
+      tournament_id: normalizeNullableText(row?.tournament_id),
+      country_id: normalizeNullableText(row?.country_id),
+      tournament_category: normalizeCategoryName(row?.tournament_category),
+    }))
+    .filter((entry) => entry.access_type);
+  const hasGlobalAccess = entries.some((entry) => entry.access_type === NEWS_EDITOR_ACCESS_TYPES.GLOBAL);
+  const localCountryIds = Array.from(new Set(entries
+    .filter((entry) => entry.access_type === NEWS_EDITOR_ACCESS_TYPES.LOCAL)
+    .map((entry) => String(entry.country_id || "").trim().toUpperCase())
+    .filter(Boolean)));
+  const tournamentIds = Array.from(new Set(entries
+    .filter((entry) => entry.access_type === NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT)
+    .map((entry) => String(entry.tournament_id || "").trim())
+    .filter(Boolean)));
+  const tournamentCategories = Array.from(new Set(entries
+    .filter((entry) => entry.access_type === NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT)
+    .map((entry) => normalizeCategoryName(entry.tournament_category))
+    .filter(Boolean)));
+  return {
+    isAdmin,
+    isNewsEditor: entries.length > 0,
+    profileId,
+    entries,
+    hasGlobalAccess,
+    localCountryIds,
+    tournamentIds,
+    tournamentCategories,
+  };
 }
 
 function canManageNewsItem(access, newsItem) {
@@ -463,6 +518,112 @@ function sendNewsEditorAccessDenied(res) {
     ok: false,
     message: "This section is available only to users added to news editors.",
   });
+}
+
+function newsAccessListIncludes(values, value) {
+  const normalizedValue = String(value || "").trim().toLowerCase();
+  if (!normalizedValue) return false;
+  return (Array.isArray(values) ? values : []).some((entry) => (
+    String(entry || "").trim().toLowerCase() === normalizedValue
+  ));
+}
+
+async function getNewsCategoryKind(categoryName) {
+  const name = normalizeCategoryName(categoryName);
+  if (!name) return "none";
+  if (name.toLowerCase() === "local") return "local";
+
+  const row = await dbGetAsync(
+    `
+      SELECT
+        COALESCE((
+          SELECT COALESCE(is_tournament, 0)
+          FROM categories
+          WHERE lower(trim(COALESCE(name, ''))) = lower(trim(?))
+          LIMIT 1
+        ), 0) AS is_tournament,
+        EXISTS (
+          SELECT 1
+          FROM tournaments
+          WHERE lower(trim(COALESCE(category, ''))) = lower(trim(?))
+          LIMIT 1
+        ) AS has_tournaments
+    `,
+    [name, name]
+  );
+  return Number(row?.is_tournament) === 1 || Number(row?.has_tournaments) === 1
+    ? "tournament"
+    : "other";
+}
+
+async function loadNewsTournamentMeta(tournamentId) {
+  const normalizedTournamentId = normalizeNullableText(tournamentId);
+  if (!normalizedTournamentId) return null;
+  return dbGetAsync(
+    `
+      SELECT
+        id,
+        NULLIF(trim(category), '') AS category
+      FROM tournaments
+      WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
+      LIMIT 1
+    `,
+    [normalizedTournamentId]
+  );
+}
+
+async function validateNewsPayloadAccess(access, payload) {
+  if (!access || access.isAdmin) return null;
+
+  const significance = normalizeNewsSignificance(payload?.significance);
+  const category = normalizeCategoryName(payload?.category);
+  const associationId = normalizeNullableText(payload?.association_id);
+  const tournamentId = normalizeNullableText(payload?.tournament_id);
+
+  if (significance === "Major" && !access.hasGlobalAccess) {
+    return "Major news requires global news editor access.";
+  }
+  if (!category) {
+    return "category is required for your news editor access.";
+  }
+
+  const categoryKind = await getNewsCategoryKind(category);
+  if (access.hasGlobalAccess) {
+    if (categoryKind === "local" && !associationId) {
+      return "association_id is required for local news.";
+    }
+    if (categoryKind === "tournament" && tournamentId) {
+      const tournament = await loadNewsTournamentMeta(tournamentId);
+      if (!tournament) return "tournament_id must reference an existing tournament.";
+      if (!newsAccessListIncludes([tournament.category], category)) {
+        return "tournament_id must match the selected news category.";
+      }
+    }
+    return null;
+  }
+
+  if (categoryKind === "local") {
+    if (!associationId) return "association_id is required for local news.";
+    if (!newsAccessListIncludes(access.localCountryIds, associationId)) {
+      return "association_id is not allowed for your news editor access.";
+    }
+    return null;
+  }
+
+  if (categoryKind === "tournament") {
+    if (!tournamentId) return "tournament_id is required for tournament news.";
+    if (!newsAccessListIncludes(access.tournamentIds, tournamentId)) {
+      return "tournament_id is not allowed for your news editor access.";
+    }
+    const tournament = await loadNewsTournamentMeta(tournamentId);
+    if (!tournament) return "tournament_id must reference an existing tournament.";
+    if (!newsAccessListIncludes([tournament.category], category)) {
+      return "tournament_id must match the selected news category.";
+    }
+    return null;
+  }
+
+  return "category is not allowed for your news editor access.";
 }
 
 function normalizeNewsSignificance(value) {
@@ -5439,20 +5600,40 @@ app.patch("/duel-formats/:format", requireAdmin, (req, res) => {
 app.get("/tournaments", (req, res, next) => {
   const includeAccessUsers = Number(req.user?.admin) === 1;
   const userId = getTournamentAccessUserId(req.user);
+  const currentProfileId = String(req.user?.player_id || "").trim();
+  const includeNewsEditorScope = !includeAccessUsers
+    && String(req.query?.scope || "").trim().toLowerCase() === "news"
+    && !!currentProfileId;
   const visibilitySql = includeAccessUsers
     ? ""
     : `
       WHERE
-        COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) = ?
-        AND (
-          COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) = ?
-        OR (? > 0 AND EXISTS (
-          SELECT 1
-          FROM tournament_access_users tau_filter
-          WHERE upper(trim(tau_filter.tournament_id)) = upper(trim(t.id))
-            AND tau_filter.user_id = ?
-        ))
+        (
+          COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) = ?
+          AND (
+            COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) = ?
+          OR (? > 0 AND EXISTS (
+            SELECT 1
+            FROM tournament_access_users tau_filter
+            WHERE upper(trim(tau_filter.tournament_id)) = upper(trim(t.id))
+              AND tau_filter.user_id = ?
+          ))
+          )
         )
+        ${includeNewsEditorScope ? `
+          OR EXISTS (
+            SELECT 1
+            FROM news_editors ne_filter
+            WHERE trim(COALESCE(ne_filter.profile_id, '')) = trim(?)
+              AND (
+                lower(trim(COALESCE(ne_filter.access_type, ''))) = ?
+                OR (
+                  lower(trim(COALESCE(ne_filter.access_type, ''))) = ?
+                  AND upper(trim(COALESCE(ne_filter.tournament_id, ''))) = upper(trim(COALESCE(t.id, '')))
+                )
+              )
+          )
+        ` : ""}
     `;
   db.all(
     `
@@ -5527,7 +5708,9 @@ app.get("/tournaments", (req, res, next) => {
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
           userId,
           userId,
-        ],
+        ].concat(includeNewsEditorScope
+          ? [currentProfileId, NEWS_EDITOR_ACCESS_TYPES.GLOBAL, NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT]
+          : []),
     (err, rows) => {
       if (err) return next(err);
       return res.json({
@@ -6788,6 +6971,15 @@ app.post("/news", async (req, res) => {
         return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
       }
     }
+    const accessError = await validateNewsPayloadAccess(access, {
+      significance,
+      category,
+      association_id: associationId,
+      tournament_id: tournamentId,
+    });
+    if (accessError) {
+      return res.status(403).json({ ok: false, message: accessError });
+    }
 
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
     let insertResult = null;
@@ -6937,6 +7129,15 @@ app.patch("/news/:id", async (req, res) => {
       if (!tournamentRow) {
         return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
       }
+    }
+    const accessError = await validateNewsPayloadAccess(access, {
+      significance,
+      category,
+      association_id: associationId,
+      tournament_id: tournamentId,
+    });
+    if (accessError) {
+      return res.status(403).json({ ok: false, message: accessError });
     }
 
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");

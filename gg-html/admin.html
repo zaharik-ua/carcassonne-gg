@@ -704,6 +704,7 @@
     categories: [],
     categoriesLoaded: false,
     newsEditors: [],
+    newsEditorsHideAuto: false,
     mobileMenuItems: [],
     tournaments: [],
     duelFormats: [],
@@ -1869,6 +1870,29 @@
     });
     const text = document.createElement("span");
     text.textContent = "Hide admins";
+    label.appendChild(input);
+    label.appendChild(text);
+    return label;
+  }
+
+  function isNewsEditorAuto(item) {
+    return Number(item?.is_captain) === 1;
+  }
+
+  function createNewsEditorsFilterControl() {
+    const label = document.createElement("label");
+    label.className = "admin-list-filter";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = !!state.newsEditorsHideAuto;
+    input.addEventListener("change", () => {
+      state.newsEditorsHideAuto = input.checked;
+      closeInlineForm();
+      setStatus("", false);
+      renderNewsEditors();
+    });
+    const text = document.createElement("span");
+    text.textContent = "Hide auto";
     label.appendChild(input);
     label.appendChild(text);
     return label;
@@ -3924,13 +3948,24 @@
     sectionCreateBtn.classList.remove("hidden");
     sectionCreateBtn.onclick = () => openNewsEditorForm("create", null, null);
 
-    if (!state.newsEditors.length) {
-      renderListEmpty("No news editor access records yet.");
+    const visibleNewsEditors = state.newsEditorsHideAuto
+      ? state.newsEditors.filter((item) => !isNewsEditorAuto(item))
+      : state.newsEditors;
+
+    sectionList.innerHTML = "";
+    sectionList.appendChild(createNewsEditorsFilterControl());
+
+    if (!visibleNewsEditors.length) {
+      const empty = document.createElement("div");
+      empty.className = "admin-empty";
+      empty.textContent = state.newsEditors.length
+        ? "No manual news editor access records."
+        : "No news editor access records yet.";
+      sectionList.appendChild(empty);
       return;
     }
 
-    sectionList.innerHTML = "";
-    state.newsEditors.forEach((item) => {
+    visibleNewsEditors.forEach((item) => {
       const titleParts = [
         String(item?.profile_bga_nickname || "").trim(),
         String(item?.profile_name || "").trim(),
@@ -3952,7 +3987,7 @@
       if (item?.tournament_name || item?.tournament_id) {
         subtitleParts.push(`Tournament: ${String(item.tournament_name || item.tournament_id).trim()}`);
       }
-      subtitleParts.push(Number(item?.is_captain) === 1 ? "Captain • auto" : "Manual");
+      subtitleParts.push(isNewsEditorAuto(item) ? "Captain • auto" : "Manual");
 
       sectionList.appendChild(createListRow({
         imageSrc: item.profile_avatar,
