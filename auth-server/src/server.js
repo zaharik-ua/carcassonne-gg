@@ -7380,8 +7380,9 @@ app.post("/news", async (req, res) => {
     const streamerId = categoryKind === "youtube"
       ? normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId)
       : null;
+    const youtubeVideoValue = normalizeNullableText(req.body?.youtube_video_id ?? req.body?.youtubeVideoId);
     const youtubeVideoId = categoryKind === "youtube"
-      ? normalizeYouTubeVideoId(req.body?.youtube_video_id ?? req.body?.youtubeVideoId)
+      ? normalizeYouTubeVideoId(youtubeVideoValue)
       : null;
     const associations = await resolveNewsAssociations(req.body?.associations);
     const timeUtc = normalizeNullableText(req.body?.time_utc);
@@ -7431,8 +7432,11 @@ app.post("/news", async (req, res) => {
       if (!streamerRow) {
         return res.status(400).json({ ok: false, message: "streamer_id must reference an existing active streamer" });
       }
-      if (!youtubeVideoId) {
+      if (!youtubeVideoValue) {
         return res.status(400).json({ ok: false, message: "youtube_video_id is required for YouTube news" });
+      }
+      if (!youtubeVideoId) {
+        return res.status(400).json({ ok: false, message: "youtube_video_id must be a valid YouTube URL or video ID" });
       }
     }
     const accessError = await validateNewsPayloadAccess(access, {
@@ -7568,8 +7572,9 @@ app.patch("/news/:id", async (req, res) => {
     const streamerId = categoryKind === "youtube"
       ? normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId)
       : null;
+    const youtubeVideoValue = normalizeNullableText(req.body?.youtube_video_id ?? req.body?.youtubeVideoId);
     const youtubeVideoId = categoryKind === "youtube"
-      ? normalizeYouTubeVideoId(req.body?.youtube_video_id ?? req.body?.youtubeVideoId)
+      ? normalizeYouTubeVideoId(youtubeVideoValue)
       : null;
     const associations = await resolveNewsAssociations(req.body?.associations);
     const timeUtc = normalizeNullableText(req.body?.time_utc);
@@ -7619,8 +7624,11 @@ app.patch("/news/:id", async (req, res) => {
       if (!streamerRow) {
         return res.status(400).json({ ok: false, message: "streamer_id must reference an existing active streamer" });
       }
-      if (!youtubeVideoId) {
+      if (!youtubeVideoValue) {
         return res.status(400).json({ ok: false, message: "youtube_video_id is required for YouTube news" });
+      }
+      if (!youtubeVideoId) {
+        return res.status(400).json({ ok: false, message: "youtube_video_id must be a valid YouTube URL or video ID" });
       }
     }
     const accessError = await validateNewsPayloadAccess(access, {

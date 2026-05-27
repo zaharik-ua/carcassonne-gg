@@ -204,11 +204,13 @@
   }
 
   .cp-youtube-preview {
+    aspect-ratio: 16 / 9;
     background: #111;
     border: 1px solid #d7dbe2;
     display: inline-block;
     line-height: 0;
     max-width: 100%;
+    overflow: hidden;
     position: relative;
     width: 200px;
   }
@@ -219,9 +221,9 @@
 
   .cp-youtube-preview img {
     display: block;
-    height: auto;
-    max-width: 100%;
-    width: 200px;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
   }
 
   .cp-youtube-preview-play {
@@ -4313,9 +4315,23 @@
       imageUploadStatus.textContent = statusText || "";
     };
 
-    const getYoutubeThumbnailUrl = (videoId) => (
-      videoId ? `https://img.youtube.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg` : ""
-    );
+    const getYoutubeThumbnailUrls = (videoId) => {
+      if (!videoId) return [];
+      const encodedVideoId = encodeURIComponent(videoId);
+      return [
+        `https://img.youtube.com/vi/${encodedVideoId}/maxresdefault.jpg`,
+        `https://img.youtube.com/vi/${encodedVideoId}/hqdefault.jpg`,
+      ];
+    };
+
+    youtubePreviewImage.addEventListener("error", () => {
+      const thumbnailUrls = getYoutubeThumbnailUrls(youtubePreviewImage.dataset.videoId || "");
+      const nextIndex = Number(youtubePreviewImage.dataset.thumbnailIndex || 0) + 1;
+      const nextUrl = thumbnailUrls[nextIndex] || "";
+      if (!nextUrl) return;
+      youtubePreviewImage.dataset.thumbnailIndex = String(nextIndex);
+      youtubePreviewImage.src = nextUrl;
+    });
 
     const updateYoutubeVideoPreview = () => {
       const videoId = normalizeYouTubeVideoId(youtubeVideoInput.value);
@@ -4323,11 +4339,15 @@
       youtubePreviewRow.classList.toggle("cp-hidden", !shouldShowPreview);
       youtubePreviewWrap.hidden = !shouldShowPreview;
       if (!shouldShowPreview) {
+        youtubePreviewImage.dataset.videoId = "";
+        youtubePreviewImage.dataset.thumbnailIndex = "0";
         youtubePreviewImage.removeAttribute("src");
         return;
       }
-      const previewUrl = getYoutubeThumbnailUrl(videoId);
+      const previewUrl = getYoutubeThumbnailUrls(videoId)[0] || "";
       if (youtubePreviewImage.src !== previewUrl) {
+        youtubePreviewImage.dataset.videoId = videoId;
+        youtubePreviewImage.dataset.thumbnailIndex = "0";
         youtubePreviewImage.src = previewUrl;
       }
     };
@@ -4509,6 +4529,7 @@
 
     const validatePayload = (payload) => {
       const useImageUpload = shouldUseNewsImageUpload();
+      const categoryKind = getCategoryKind();
       if (!payload.title) return "Title is required.";
       if (payload.title.length > 100) return "Title must be 100 characters or fewer.";
       if (!payload.short_title) return "Short title is required.";
@@ -4518,15 +4539,19 @@
       if (!String(timeInput.value || "").trim()) return "Time, UTC is required.";
       if (String(timeInput.value || "").trim() && !payload.time_utc) return "Time, UTC is invalid.";
       if (!isAdminNewsUser && !payload.category) return "Category is required.";
-      if (getCategoryKind() === "local" && !payload.association_id) return "Association is required.";
-      if (getCategoryKind() === "youtube" && (!Number.isInteger(payload.streamer_id) || payload.streamer_id <= 0)) return "YouTube Channel is required.";
-      if (getCategoryKind() === "youtube" && !payload.youtube_video_id) return "YouTube URL or ID is required.";
+      if (categoryKind === "local" && !payload.association_id) return "Association is required.";
+      if (categoryKind === "youtube" && (!Number.isInteger(payload.streamer_id) || payload.streamer_id <= 0)) return "YouTube Channel is required.";
+      if (categoryKind === "youtube") {
+        const youtubeVideoRaw = String(youtubeVideoInput.value || "").trim();
+        if (!youtubeVideoRaw) return "YouTube URL or ID is required.";
+        if (!payload.youtube_video_id) return "YouTube URL or ID is invalid.";
+      }
       if (useImageUpload && !payload.image && !selectedImageFile) return "Image is required.";
-      if (getCategoryKind() !== "youtube" && !useImageUpload && !iconInput.getValue()) return "Icon is required.";
+      if (categoryKind !== "youtube" && !useImageUpload && !iconInput.getValue()) return "Icon is required.";
       if (!payload.description) return "Description is required.";
       const selectableTournamentOptions = getSelectableTournamentOptionsForCategory(categoryInput.getValue());
       if (
-        getCategoryKind() === "tournament"
+        categoryKind === "tournament"
         && (restrictNewsEditorAccess ? selectableTournamentOptions.length > 0 : selectableTournamentOptions.length > 1)
         && !payload.tournament_id
       ) {
