@@ -317,6 +317,32 @@
     letter-spacing: 0.04em;
   }
 
+  .cp-news-youtube-thumb {
+    display: block;
+    line-height: 0;
+    overflow: hidden;
+    padding: 0;
+    position: relative;
+  }
+
+  .cp-news-youtube-thumb img {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+  }
+
+  .cp-news-youtube-thumb .cp-youtube-preview-play {
+    border-radius: 4px;
+    height: 18px;
+    width: 26px;
+  }
+
+  .cp-news-youtube-thumb .cp-youtube-preview-play::before {
+    border-width: 5px 0 5px 8px;
+    margin-left: 2px;
+  }
+
   .cp-news-main {
     min-width: 0;
     display: grid;
@@ -1198,6 +1224,15 @@
 
     const fallbackMatch = raw.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?[^#\s]*v=|embed\/|live\/|shorts\/|v\/|video\/))([A-Za-z0-9_-]{11})(?:[^A-Za-z0-9_-]|$)/i);
     return fallbackMatch ? fallbackMatch[1] : "";
+  }
+
+  function getYoutubeThumbnailUrls(videoId) {
+    if (!videoId) return [];
+    const encodedVideoId = encodeURIComponent(videoId);
+    return [
+      `https://img.youtube.com/vi/${encodedVideoId}/maxresdefault.jpg`,
+      `https://img.youtube.com/vi/${encodedVideoId}/hqdefault.jpg`,
+    ];
   }
 
   function toApiAbsoluteUrl(value) {
@@ -3316,12 +3351,37 @@
       row.className = "cp-news-row";
 
       const iconUrl = toApiImageVariantUrl(item?.image || "", "small");
+      const youtubeVideoId = normalizeYouTubeVideoId(item?.youtube_video_id ?? item?.youtubeVideoId ?? "");
       if (iconUrl) {
         const img = document.createElement("img");
         img.className = "cp-news-icon";
         img.src = iconUrl;
         img.alt = "";
         row.appendChild(img);
+      } else if (youtubeVideoId) {
+        const thumbnailUrls = getYoutubeThumbnailUrls(youtubeVideoId);
+        const thumbnail = document.createElement("div");
+        thumbnail.className = "cp-news-icon cp-news-youtube-thumb";
+        const img = document.createElement("img");
+        img.src = thumbnailUrls[0] || "";
+        img.alt = "";
+        img.loading = "lazy";
+        img.dataset.videoId = youtubeVideoId;
+        img.dataset.thumbnailIndex = "0";
+        img.addEventListener("error", () => {
+          const urls = getYoutubeThumbnailUrls(img.dataset.videoId || "");
+          const nextIndex = Number(img.dataset.thumbnailIndex || 0) + 1;
+          const nextUrl = urls[nextIndex] || "";
+          if (!nextUrl) return;
+          img.dataset.thumbnailIndex = String(nextIndex);
+          img.src = nextUrl;
+        });
+        const play = document.createElement("span");
+        play.className = "cp-youtube-preview-play";
+        play.setAttribute("aria-hidden", "true");
+        thumbnail.appendChild(img);
+        thumbnail.appendChild(play);
+        row.appendChild(thumbnail);
       } else {
         const placeholder = document.createElement("div");
         placeholder.className = "cp-news-icon cp-news-icon--placeholder";
@@ -3371,10 +3431,14 @@
       addChip(formatNewsDateTime(item?.time_utc));
       main.appendChild(meta);
 
-      if (item?.description) {
+      if (item?.description || item?.short_description) {
         const desc = document.createElement("div");
         desc.className = "cp-news-desc";
-        desc.innerHTML = sanitizeNewsDescriptionHtml(item.description);
+        if (item?.description) {
+          desc.innerHTML = sanitizeNewsDescriptionHtml(item.description);
+        } else {
+          desc.textContent = String(item?.short_description || "").trim();
+        }
         main.appendChild(desc);
       }
 
@@ -4315,15 +4379,6 @@
       imageUploadStatus.textContent = statusText || "";
     };
 
-    const getYoutubeThumbnailUrls = (videoId) => {
-      if (!videoId) return [];
-      const encodedVideoId = encodeURIComponent(videoId);
-      return [
-        `https://img.youtube.com/vi/${encodedVideoId}/maxresdefault.jpg`,
-        `https://img.youtube.com/vi/${encodedVideoId}/hqdefault.jpg`,
-      ];
-    };
-
     youtubePreviewImage.addEventListener("error", () => {
       const thumbnailUrls = getYoutubeThumbnailUrls(youtubePreviewImage.dataset.videoId || "");
       const nextIndex = Number(youtubePreviewImage.dataset.thumbnailIndex || 0) + 1;
@@ -4472,7 +4527,8 @@
       mediaTypeRow.classList.toggle("cp-hidden", !isImportant || isYouTubeCategory);
       iconRow.classList.toggle("cp-hidden", !useIcon);
       imageRow.classList.toggle("cp-hidden", !useImage);
-      if (shortDescriptionRow) shortDescriptionRow.classList.toggle("cp-hidden", !useImage);
+      if (shortDescriptionRow) shortDescriptionRow.classList.toggle("cp-hidden", !(useImage || isYouTubeCategory));
+      if (descriptionRow) descriptionRow.classList.toggle("cp-hidden", isYouTubeCategory);
     }
     const shortTitleInput = document.createElement("input");
     shortTitleInput.type = "text";
@@ -4491,14 +4547,14 @@
     shortDescriptionInput.rows = 2;
     shortDescriptionInput.value = String(source?.short_description || "").trim();
     const shortDescriptionRow = addRow("Short description", withRemainingCounter(shortDescriptionInput), "cp-edit-row--full cp-edit-row--short-description");
-    updateConditionalNewsFields();
 
     const descriptionInput = createNewsDescriptionEditor(source?.description || "", {
       canUploadSource: canUploadSourceImage,
       currentUserAuthId,
       isAdmin: isAdminNewsUser,
     });
-    addRow("Description", descriptionInput.root, "cp-edit-row--full cp-edit-row--description");
+    const descriptionRow = addRow("Description", descriptionInput.root, "cp-edit-row--full cp-edit-row--description");
+    updateConditionalNewsFields();
 
     const shouldUseNewsImageUpload = () => {
       const significance = String(significanceInput.getValue() || "Regular").trim() || "Regular";
@@ -4507,23 +4563,25 @@
 
     const buildPayload = () => {
       const categoryKind = getCategoryKind();
+      const isYouTubeCategory = categoryKind === "youtube";
       const useImageUpload = shouldUseNewsImageUpload();
+      const useShortDescription = isYouTubeCategory || useImageUpload;
       return {
         status: statusInput.getValue() || "Draft",
         significance: significanceInput.getValue() || "Regular",
         category: categoryInput.getValue() || "",
         association_id: categoryKind === "local" ? associationInput.getValue() || "" : "",
         tournament_id: categoryKind === "tournament" ? tournamentInput.getValue() || "" : "",
-        streamer_id: categoryKind === "youtube" ? Number.parseInt(String(youtubeStreamerInput.getValue() || "").trim(), 10) : null,
-        youtube_video_id: categoryKind === "youtube" ? normalizeYouTubeVideoId(youtubeVideoInput.value) : null,
+        streamer_id: isYouTubeCategory ? Number.parseInt(String(youtubeStreamerInput.getValue() || "").trim(), 10) : null,
+        youtube_video_id: isYouTubeCategory ? normalizeYouTubeVideoId(youtubeVideoInput.value) : null,
         associations: categoryKind === "local" ? [] : associationsInput.getValue(),
         time_utc: toUtcIsoFromDatetimeLocal(timeInput.value),
-        image: categoryKind === "youtube" ? "" : useImageUpload ? currentImageUrl : iconInput.getValue() || currentImageUrl,
-        media_type: categoryKind === "youtube" ? "icon" : useImageUpload ? "image" : "icon",
+        image: isYouTubeCategory ? "" : useImageUpload ? currentImageUrl : iconInput.getValue() || currentImageUrl,
+        media_type: isYouTubeCategory ? "icon" : useImageUpload ? "image" : "icon",
         title: String(titleInput.value || "").trim(),
         short_title: String(shortTitleInput.value || "").trim(),
-        short_description: useImageUpload ? String(shortDescriptionInput.value || "").trim() : "",
-        description: descriptionInput.getHtml(),
+        short_description: useShortDescription ? String(shortDescriptionInput.value || "").trim() : "",
+        description: isYouTubeCategory ? "" : descriptionInput.getHtml(),
       };
     };
 
@@ -4548,7 +4606,7 @@
       }
       if (useImageUpload && !payload.image && !selectedImageFile) return "Image is required.";
       if (categoryKind !== "youtube" && !useImageUpload && !iconInput.getValue()) return "Icon is required.";
-      if (!payload.description) return "Description is required.";
+      if (categoryKind !== "youtube" && !payload.description) return "Description is required.";
       const selectableTournamentOptions = getSelectableTournamentOptionsForCategory(categoryInput.getValue());
       if (
         categoryKind === "tournament"

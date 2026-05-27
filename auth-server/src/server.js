@@ -7219,39 +7219,45 @@ app.get("/public/news", async (_req, res) => {
     const rows = await dbAllAsync(
       `
         SELECT
-          id,
-          status,
-          significance,
-          media_type,
-          category,
-          association_id,
-          tournament_id,
-          streamer_id,
-          youtube_video_id,
-          associations,
-          time_utc,
-          image,
-          title,
-          short_title,
-          short_description,
-          description,
-          created_by,
-          updated_by,
-          deleted_by,
-          created_at,
-          updated_at,
-          deleted_at
-        FROM news
-        WHERE trim(COALESCE(title, '')) <> ''
-          AND lower(trim(COALESCE(status, ''))) = 'published'
-          AND deleted_at IS NULL
+          n.id,
+          n.status,
+          n.significance,
+          n.media_type,
+          n.category,
+          n.association_id,
+          n.tournament_id,
+          n.streamer_id,
+          n.youtube_video_id,
+          n.associations,
+          n.time_utc,
+          n.image,
+          n.title,
+          n.short_title,
+          n.short_description,
+          n.description,
+          n.created_by,
+          n.updated_by,
+          n.deleted_by,
+          n.created_at,
+          n.updated_at,
+          n.deleted_at,
+          s.name AS streamer_name,
+          COALESCE(NULLIF(trim(s.short_name), ''), s.name) AS streamer_short_name,
+          s.avatar AS streamer_avatar
+        FROM news n
+        LEFT JOIN streamers s
+          ON s.id = n.streamer_id
+         AND s.deleted_at IS NULL
+        WHERE trim(COALESCE(n.title, '')) <> ''
+          AND lower(trim(COALESCE(n.status, ''))) = 'published'
+          AND n.deleted_at IS NULL
         ORDER BY
           CASE
-            WHEN time_utc IS NULL OR trim(time_utc) = '' THEN 1
+            WHEN n.time_utc IS NULL OR trim(n.time_utc) = '' THEN 1
             ELSE 0
           END ASC,
-          datetime(time_utc) DESC,
-          id DESC
+          datetime(n.time_utc) DESC,
+          n.id DESC
       `
     );
 

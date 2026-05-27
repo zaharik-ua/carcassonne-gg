@@ -93,11 +93,51 @@
   .gg-rp-news-icon-important-image {
     background: #f3f4f6;
     border: 1px solid #e5e7eb;
-    border-radius: 6px;
+    border-radius: 2px;
     box-sizing: border-box;
     height: 42px;
     object-fit: cover;
     width: 42px;
+  }
+  .gg-rp-news-youtube-preview {
+    background: #111;
+    border: 1px solid #e5e7eb;
+    border-radius: 2px;
+    box-sizing: border-box;
+    cursor: pointer;
+    display: block;
+    flex: 0 0 auto;
+    line-height: 0;
+    overflow: hidden;
+    position: relative;
+    width: 60px;
+  }
+  .gg-rp-news-youtube-preview img {
+    display: block;
+    height: auto;
+    width: 60px;
+  }
+  .gg-rp-news-youtube-play {
+    align-items: center;
+    background: rgba(0, 0, 0, 0.78);
+    border-radius: 4px;
+    display: flex;
+    height: 18px;
+    justify-content: center;
+    left: 50%;
+    pointer-events: none;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 26px;
+  }
+  .gg-rp-news-youtube-play::before {
+    border-color: transparent transparent transparent #fff;
+    border-style: solid;
+    border-width: 5px 0 5px 8px;
+    content: "";
+    display: block;
+    margin-left: 2px;
   }
   .gg-rp-news-content {
     flex: 1;
@@ -121,6 +161,14 @@
   .gg-rp-news-title-major {
     font-size: 14px;
     line-height: 17px;
+  }
+  .gg-rp-news-streamer-name {
+    color: #333;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 15px;
+    margin-bottom: 1px;
+    overflow-wrap: anywhere;
   }
   .gg-rp-news-title a,
   .gg-rp-news-title span {
@@ -791,6 +839,98 @@
     return normalized === "image" ? "image" : "icon";
   };
 
+  const normalizeYouTubeVideoId = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    const getCandidateId = (candidate) => {
+      const text = String(candidate || "").trim();
+      const match = text.match(/^([A-Za-z0-9_-]{11})(?:[^A-Za-z0-9_-]|$)/);
+      return match ? match[1] : "";
+    };
+
+    const directId = getCandidateId(raw);
+    if (directId && raw === directId) return directId;
+
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+      const host = String(url.hostname || "").toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+      const isShortHost = host === "youtu.be";
+      const isYouTubeHost = host === "youtube.com"
+        || host.endsWith(".youtube.com")
+        || host === "youtube-nocookie.com"
+        || host.endsWith(".youtube-nocookie.com");
+      if (!isShortHost && !isYouTubeHost) return "";
+
+      const queryVideoId = getCandidateId(url.searchParams.get("v"))
+        || getCandidateId(url.searchParams.get("vi"));
+      if (queryVideoId) return queryVideoId;
+
+      const pathParts = url.pathname.split("/").filter(Boolean);
+      if (isShortHost) return getCandidateId(pathParts[0]);
+
+      const videoPathKeys = new Set(["embed", "live", "shorts", "v", "video"]);
+      for (let index = 0; index < pathParts.length; index += 1) {
+        if (videoPathKeys.has(String(pathParts[index] || "").toLowerCase())) {
+          const pathVideoId = getCandidateId(pathParts[index + 1]);
+          if (pathVideoId) return pathVideoId;
+        }
+      }
+    } catch (_error) {
+      // Fall through to regex fallback.
+    }
+
+    const fallbackMatch = raw.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?[^#\s]*v=|embed\/|live\/|shorts\/|v\/|video\/))([A-Za-z0-9_-]{11})(?:[^A-Za-z0-9_-]|$)/i);
+    return fallbackMatch ? fallbackMatch[1] : "";
+  };
+
+  const getYoutubeVideoId = (newsItem) => {
+    return normalizeYouTubeVideoId(newsItem?.youtube_video_id ?? newsItem?.youtubeVideoId ?? "");
+  };
+
+  const getYoutubeWatchUrl = (videoId) => {
+    const normalizedVideoId = normalizeYouTubeVideoId(videoId);
+    return normalizedVideoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(normalizedVideoId)}` : "";
+  };
+
+  const getYoutubeThumbnailUrls = (videoId) => {
+    const normalizedVideoId = normalizeYouTubeVideoId(videoId);
+    if (!normalizedVideoId) return [];
+    const encodedVideoId = encodeURIComponent(normalizedVideoId);
+    return [
+      `https://img.youtube.com/vi/${encodedVideoId}/maxresdefault.jpg`,
+      `https://img.youtube.com/vi/${encodedVideoId}/hqdefault.jpg`,
+    ];
+  };
+
+  const createYoutubePreview = (videoId, altText) => {
+    const thumbnailUrls = getYoutubeThumbnailUrls(videoId);
+    const preview = document.createElement("div");
+    preview.className = "gg-rp-news-youtube-preview";
+
+    const image = document.createElement("img");
+    image.src = thumbnailUrls[0] || "";
+    image.alt = altText || "YouTube video preview";
+    image.loading = "lazy";
+    image.dataset.videoId = normalizeYouTubeVideoId(videoId);
+    image.dataset.thumbnailIndex = "0";
+    image.addEventListener("error", () => {
+      const urls = getYoutubeThumbnailUrls(image.dataset.videoId || "");
+      const nextIndex = Number(image.dataset.thumbnailIndex || 0) + 1;
+      const nextUrl = urls[nextIndex] || "";
+      if (!nextUrl) return;
+      image.dataset.thumbnailIndex = String(nextIndex);
+      image.src = nextUrl;
+    });
+
+    const play = document.createElement("span");
+    play.className = "gg-rp-news-youtube-play";
+    play.setAttribute("aria-hidden", "true");
+    preview.appendChild(image);
+    preview.appendChild(play);
+    return preview;
+  };
+
   const getNewsTimestampValue = (item) => {
     return item?.time_utc || item?.updated_at || item?.created_at || item?.time || "";
   };
@@ -1004,6 +1144,9 @@
       const normalizedImportance = normalizeImportance(newsItem.significance || newsItem.importance);
       const mediaType = normalizeMediaType(newsItem.media_type ?? newsItem.mediaType);
       const isImageMedia = mediaType === "image";
+      const youtubeVideoId = getYoutubeVideoId(newsItem);
+      const youtubeWatchUrl = getYoutubeWatchUrl(youtubeVideoId);
+      const isYouTubeNews = !!youtubeVideoId;
       const isMajor = normalizedImportance === "high";
       const isImportant = normalizedImportance === "medium";
       const isImportantImage = isImportant && isImageMedia;
@@ -1014,18 +1157,20 @@
       const shouldShowInlinePreview = (
         !!descriptionHtml
         && !displayAsMajor
+        && !isYouTubeNews
         && !isImageMedia
         && descriptionTextLength <= LONG_NEWS_DESCRIPTION_LIMIT
       );
       const shouldLinkDetailInsteadOfPreview = (
         !!detailUrl
+        && !isYouTubeNews
         && !displayAsMajor
         && (
           isImageMedia
           || (!!descriptionHtml && descriptionTextLength > LONG_NEWS_DESCRIPTION_LIMIT)
         )
       );
-      if (displayAsMajor || shouldLinkDetailInsteadOfPreview) {
+      if (displayAsMajor || shouldLinkDetailInsteadOfPreview || isYouTubeNews) {
         row.classList.add("gg-rp-news-row-link");
       }
       if (isMajor) {
@@ -1034,7 +1179,16 @@
 
       const iconSource = newsItem.image || newsItem.icon || newsItem.icon1 || "";
       const iconUrl = getNewsImageVariantUrl(iconSource, isMajor ? "medium" : "small");
-      if (iconUrl) {
+      if (isYouTubeNews) {
+        const youtubePreview = createYoutubePreview(youtubeVideoId, getNewsListTitle(newsItem));
+        youtubePreview.addEventListener("click", event => {
+          event.stopPropagation();
+          if (youtubeWatchUrl) {
+            window.open(youtubeWatchUrl, "_blank", "noopener,noreferrer");
+          }
+        });
+        row.appendChild(youtubePreview);
+      } else if (iconUrl) {
         const icon = document.createElement("img");
         icon.className = "gg-rp-news-icon";
         icon.src = iconUrl;
@@ -1068,11 +1222,19 @@
       title.className = "gg-rp-news-title";
       if (isMajor) {
         title.classList.add("gg-rp-news-title-major");
-      } else if (isImportant) {
+      } else if (isImportant || isYouTubeNews) {
         title.classList.add("gg-rp-news-title-important");
       }
 
       const titleText = getNewsListTitle(newsItem);
+      const streamerNameText = String(newsItem.streamer_short_name || newsItem.streamerShortName || newsItem.streamer_name || "").trim();
+      if (streamerNameText) {
+        const streamerName = document.createElement("div");
+        streamerName.className = "gg-rp-news-streamer-name";
+        streamerName.textContent = streamerNameText;
+        contentWrapper.appendChild(streamerName);
+      }
+
       const linkValue = String(newsItem.link || "").trim();
       if (shouldLinkDetailInsteadOfPreview) {
         const link = document.createElement("a");
@@ -1097,9 +1259,13 @@
       contentWrapper.appendChild(title);
       row.appendChild(contentWrapper);
 
-      if (displayAsMajor || shouldLinkDetailInsteadOfPreview) {
+      if (displayAsMajor || shouldLinkDetailInsteadOfPreview || isYouTubeNews) {
         row.addEventListener("click", event => {
           if (event.target?.closest?.("a")) return;
+          if (youtubeWatchUrl) {
+            window.open(youtubeWatchUrl, "_blank", "noopener,noreferrer");
+            return;
+          }
           if (detailUrl) {
             window.location.href = detailUrl;
           }
