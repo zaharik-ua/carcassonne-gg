@@ -174,7 +174,9 @@ const NEWS_EDITOR_AUDIT_FIELDS = [
   "access_type",
   "tournament_id",
   "country_id",
+  "streamer_id",
   "is_captain",
+  "is_streamer",
 ];
 const NEWS_AUDIT_FIELDS = [
   "id",
@@ -302,6 +304,7 @@ const NEWS_EDITOR_ACCESS_TYPES = {
   LOCAL: "local",
   TOURNAMENT: "tournament",
   GLOBAL: "global",
+  YOUTUBE: "youtube",
 };
 const MOBILE_MENU_AREAS = {
   TOP: "top",
@@ -372,6 +375,7 @@ function normalizeNewsEditorAccessType(value) {
   if (normalized === NEWS_EDITOR_ACCESS_TYPES.LOCAL) return NEWS_EDITOR_ACCESS_TYPES.LOCAL;
   if (normalized === NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT) return NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT;
   if (normalized === NEWS_EDITOR_ACCESS_TYPES.GLOBAL) return NEWS_EDITOR_ACCESS_TYPES.GLOBAL;
+  if (normalized === NEWS_EDITOR_ACCESS_TYPES.YOUTUBE) return NEWS_EDITOR_ACCESS_TYPES.YOUTUBE;
   return null;
 }
 
@@ -403,7 +407,9 @@ async function loadNewsEditorById(newsEditorId) {
         ne.access_type,
         ne.tournament_id,
         ne.country_id,
+        ne.streamer_id,
         COALESCE(ne.is_captain, 0) AS is_captain,
+        COALESCE(ne.is_streamer, 0) AS is_streamer,
         ne.created_by,
         ne.updated_by,
         ne.created_at,
@@ -413,7 +419,8 @@ async function loadNewsEditorById(newsEditorId) {
         p.avatar AS profile_avatar,
         a.name AS country_name,
         a.flag AS country_flag,
-        COALESCE(t.short_title, t.name) AS tournament_name
+        COALESCE(t.short_title, t.name) AS tournament_name,
+        s.name AS streamer_name
       FROM news_editors ne
       LEFT JOIN profiles p
         ON trim(COALESCE(p.id, '')) = trim(COALESCE(ne.profile_id, ''))
@@ -422,6 +429,9 @@ async function loadNewsEditorById(newsEditorId) {
         ON upper(trim(COALESCE(a.code, ''))) = upper(trim(COALESCE(ne.country_id, '')))
       LEFT JOIN tournaments t
         ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(ne.tournament_id, '')))
+      LEFT JOIN streamers s
+        ON s.id = ne.streamer_id
+       AND s.deleted_at IS NULL
       WHERE ne.id = ?
       LIMIT 1
     `,
@@ -464,6 +474,7 @@ async function getNewsEditorAccessForUser(user) {
         ne.access_type,
         ne.tournament_id,
         ne.country_id,
+        ne.streamer_id,
         NULLIF(trim(t.category), '') AS tournament_category
       FROM news_editors ne
       LEFT JOIN tournaments t
@@ -478,25 +489,27 @@ async function getNewsEditorAccessForUser(user) {
       access_type: normalizeNewsEditorAccessType(row?.access_type),
       tournament_id: normalizeNullableText(row?.tournament_id),
       country_id: normalizeNullableText(row?.country_id),
+      streamer_id: normalizePositiveInteger(row?.streamer_id),
       tournament_category: normalizeCategoryName(row?.tournament_category),
     }))
     .filter((entry) => entry.access_type);
-  const hasGlobalAccess = entries.some((entry) => entry.access_type === NEWS_EDITOR_ACCESS_TYPES.GLOBAL);
-  const localCountryIds = Array.from(new Set(entries
+  const editableEntries = entries.filter((entry) => entry.access_type !== NEWS_EDITOR_ACCESS_TYPES.YOUTUBE);
+  const hasGlobalAccess = editableEntries.some((entry) => entry.access_type === NEWS_EDITOR_ACCESS_TYPES.GLOBAL);
+  const localCountryIds = Array.from(new Set(editableEntries
     .filter((entry) => entry.access_type === NEWS_EDITOR_ACCESS_TYPES.LOCAL)
     .map((entry) => String(entry.country_id || "").trim().toUpperCase())
     .filter(Boolean)));
-  const tournamentIds = Array.from(new Set(entries
+  const tournamentIds = Array.from(new Set(editableEntries
     .filter((entry) => entry.access_type === NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT)
     .map((entry) => String(entry.tournament_id || "").trim())
     .filter(Boolean)));
-  const tournamentCategories = Array.from(new Set(entries
+  const tournamentCategories = Array.from(new Set(editableEntries
     .filter((entry) => entry.access_type === NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT)
     .map((entry) => normalizeCategoryName(entry.tournament_category))
     .filter(Boolean)));
   return {
     isAdmin,
-    isNewsEditor: entries.length > 0,
+    isNewsEditor: editableEntries.length > 0,
     profileId,
     entries,
     hasGlobalAccess,
@@ -1164,6 +1177,157 @@ async function syncCaptainNewsEditorsFromProfiles() {
       || String(row?.tournament_id || "").trim() !== "";
     const hasUnexpectedCountry = String(row?.country_id || "").trim() !== String(expectedCountryId || "").trim();
     if (!expectedCountryId || hasUnexpectedShape || hasUnexpectedCountry) {
+      await dbRunAsync("DELETE FROM news_editors WHERE id = ?", [row.id]);
+    }
+  }
+}
+
+async function deleteStreamerNewsEditorsForStreamer(streamerId) {
+  const normalizedStreamerId = normalizePositiveInteger(streamerId);
+  if (!normalizedStreamerId) return;
+
+  await dbRunAsync(
+    `
+      DELETE FROM news_editors
+      WHERE streamer_id = ?
+        AND access_type = ?
+        AND COALESCE(is_streamer, 0) = 1
+    `,
+    [normalizedStreamerId, NEWS_EDITOR_ACCESS_TYPES.YOUTUBE]
+  );
+}
+
+async function syncStreamerNewsEditorForStreamer(streamerId, actorPlayerId = null) {
+  const normalizedStreamerId = normalizePositiveInteger(streamerId);
+  if (!normalizedStreamerId) return;
+
+  const streamerRow = await dbGetAsync(
+    `
+      SELECT
+        s.id,
+        s.profile_id,
+        s.deleted_at,
+        p.id AS profile_active_id
+      FROM streamers s
+      LEFT JOIN profiles p
+        ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.profile_id, ''))
+       AND p.deleted_at IS NULL
+      WHERE s.id = ?
+      LIMIT 1
+    `,
+    [normalizedStreamerId]
+  );
+
+  const profileId = String(streamerRow?.profile_id || "").trim();
+  const shouldHaveStreamerEditor = !!streamerRow
+    && !String(streamerRow.deleted_at || "").trim()
+    && !!String(streamerRow.profile_active_id || "").trim()
+    && !!profileId;
+
+  if (!shouldHaveStreamerEditor) {
+    await deleteStreamerNewsEditorsForStreamer(normalizedStreamerId);
+    return;
+  }
+
+  const existingRow = await dbGetAsync(
+    `
+      SELECT id
+      FROM news_editors
+      WHERE streamer_id = ?
+        AND access_type = ?
+      ORDER BY COALESCE(is_streamer, 0) DESC, id ASC
+      LIMIT 1
+    `,
+    [normalizedStreamerId, NEWS_EDITOR_ACCESS_TYPES.YOUTUBE]
+  );
+
+  if (existingRow) {
+    await dbRunAsync(
+      `
+        UPDATE news_editors
+        SET
+          profile_id = ?,
+          access_type = ?,
+          tournament_id = NULL,
+          country_id = NULL,
+          streamer_id = ?,
+          is_captain = 0,
+          is_streamer = 1,
+          updated_by = COALESCE(?, updated_by),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [profileId, NEWS_EDITOR_ACCESS_TYPES.YOUTUBE, normalizedStreamerId, actorPlayerId, existingRow.id]
+    );
+
+    await dbRunAsync(
+      `
+        DELETE FROM news_editors
+        WHERE streamer_id = ?
+          AND access_type = ?
+          AND COALESCE(is_streamer, 0) = 1
+          AND id <> ?
+      `,
+      [normalizedStreamerId, NEWS_EDITOR_ACCESS_TYPES.YOUTUBE, existingRow.id]
+    );
+    return;
+  }
+
+  await dbRunAsync(
+    `
+      INSERT INTO news_editors (
+        profile_id,
+        access_type,
+        tournament_id,
+        country_id,
+        streamer_id,
+        is_captain,
+        is_streamer,
+        created_by,
+        updated_by,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, NULL, NULL, ?, 0, 1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `,
+    [profileId, NEWS_EDITOR_ACCESS_TYPES.YOUTUBE, normalizedStreamerId, actorPlayerId, actorPlayerId]
+  );
+}
+
+async function syncStreamerNewsEditorsFromStreamers() {
+  const streamerRows = await dbAllAsync(
+    `
+      SELECT s.id
+      FROM streamers s
+      INNER JOIN profiles p
+        ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.profile_id, ''))
+       AND p.deleted_at IS NULL
+      WHERE s.deleted_at IS NULL
+        AND trim(COALESCE(s.profile_id, '')) <> ''
+    `
+  );
+
+  const expectedStreamerIds = new Set();
+  for (const streamerRow of streamerRows || []) {
+    const streamerId = normalizePositiveInteger(streamerRow?.id);
+    if (!streamerId) continue;
+    expectedStreamerIds.add(streamerId);
+    await syncStreamerNewsEditorForStreamer(streamerId, null);
+  }
+
+  const autoRows = await dbAllAsync(
+    `
+      SELECT id, access_type, streamer_id
+      FROM news_editors
+      WHERE COALESCE(is_streamer, 0) = 1
+    `
+  );
+
+  for (const row of autoRows || []) {
+    const streamerId = normalizePositiveInteger(row?.streamer_id);
+    if (String(row?.access_type || "").trim().toLowerCase() !== NEWS_EDITOR_ACCESS_TYPES.YOUTUBE
+      || !streamerId
+      || !expectedStreamerIds.has(streamerId)) {
       await dbRunAsync("DELETE FROM news_editors WHERE id = ?", [row.id]);
     }
   }
@@ -3456,7 +3620,9 @@ function ensureNewsEditorsSchema() {
       access_type TEXT NOT NULL,
       tournament_id TEXT,
       country_id TEXT,
+      streamer_id INTEGER,
       is_captain INTEGER NOT NULL DEFAULT 0,
+      is_streamer INTEGER NOT NULL DEFAULT 0,
       created_by TEXT,
       updated_by TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -3474,34 +3640,59 @@ function ensureNewsEditorsSchema() {
         return;
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
-      addColumnIfMissing(columns, "news_editors", "tournament_id", "TEXT");
-      addColumnIfMissing(columns, "news_editors", "country_id", "TEXT");
-      addColumnIfMissing(columns, "news_editors", "is_captain", "INTEGER NOT NULL DEFAULT 0");
-      addColumnIfMissing(columns, "news_editors", "created_by", "TEXT");
-      addColumnIfMissing(columns, "news_editors", "updated_by", "TEXT");
-      addColumnIfMissing(columns, "news_editors", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-      addColumnIfMissing(columns, "news_editors", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
 
-      db.run(
-        `
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_news_editors_unique
-          ON news_editors (
-            profile_id,
-            access_type,
-            COALESCE(tournament_id, ''),
-            COALESCE(country_id, ''),
-            is_captain
-          )
-        `,
-        (indexErr) => {
-          if (indexErr) {
-            console.error("Failed to ensure unique index for news_editors", indexErr);
+      db.serialize(() => {
+        addColumnIfMissing(columns, "news_editors", "tournament_id", "TEXT");
+        addColumnIfMissing(columns, "news_editors", "country_id", "TEXT");
+        addColumnIfMissing(columns, "news_editors", "streamer_id", "INTEGER");
+        addColumnIfMissing(columns, "news_editors", "is_captain", "INTEGER NOT NULL DEFAULT 0");
+        addColumnIfMissing(columns, "news_editors", "is_streamer", "INTEGER NOT NULL DEFAULT 0");
+        addColumnIfMissing(columns, "news_editors", "created_by", "TEXT");
+        addColumnIfMissing(columns, "news_editors", "updated_by", "TEXT");
+        addColumnIfMissing(columns, "news_editors", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+        addColumnIfMissing(columns, "news_editors", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+
+        db.run("DROP INDEX IF EXISTS idx_news_editors_unique", (dropErr) => {
+          if (dropErr) {
+            console.error("Failed to drop old unique index for news_editors", dropErr);
           }
-        }
-      );
+        });
 
-      syncCaptainNewsEditorsFromProfiles().catch((syncErr) => {
-        console.error("Failed to sync captain news editors", syncErr);
+        db.run(
+          `
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_news_editors_unique
+            ON news_editors (
+              profile_id,
+              access_type,
+              COALESCE(tournament_id, ''),
+              COALESCE(country_id, ''),
+              COALESCE(streamer_id, 0),
+              COALESCE(is_captain, 0),
+              COALESCE(is_streamer, 0)
+            )
+          `,
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure unique index for news_editors", indexErr);
+            }
+          }
+        );
+
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_news_editors_streamer_id ON news_editors(streamer_id)",
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure streamer index for news_editors", indexErr);
+            }
+          }
+        );
+
+        Promise.resolve()
+          .then(() => syncCaptainNewsEditorsFromProfiles())
+          .then(() => syncStreamerNewsEditorsFromStreamers())
+          .catch((syncErr) => {
+            console.error("Failed to sync automatic news editors", syncErr);
+          });
       });
     });
   });
@@ -6314,6 +6505,7 @@ app.get("/streamers", (req, res, next) => {
 });
 
 app.post("/streamers", requireAdmin, (req, res) => {
+  const actorPlayerId = String(req.user?.player_id || "").trim() || null;
   const name = String(req.body?.name || "").trim();
   const shortName = String(req.body?.short_name || "").trim() || name;
   const avatar = String(req.body?.avatar || "").trim() || null;
@@ -6372,32 +6564,39 @@ app.post("/streamers", requireAdmin, (req, res) => {
                 return res.status(500).json({ ok: false, message: "Failed to create streamer" });
               }
 
-              return db.get(
-                `
-                  SELECT
-                    s.id,
-                    s.name,
-                    COALESCE(NULLIF(trim(s.short_name), ''), s.name) AS short_name,
-                    s.avatar,
-                    s.scoreboard_style,
-                    s.profile_id,
-                    p.bga_nickname AS profile_bga_nickname,
-                    p.name AS profile_name
-                  FROM streamers s
-                  LEFT JOIN profiles p
-                    ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.profile_id, ''))
-                   AND p.deleted_at IS NULL
-                  WHERE s.id = ?
-                  LIMIT 1
-                `,
-                [this?.lastID],
-                (selectErr, row) => {
-                  if (selectErr) {
-                    return res.status(500).json({ ok: false, message: "Failed to load streamer" });
+              const createdStreamerId = this?.lastID;
+              return syncStreamerNewsEditorForStreamer(createdStreamerId, actorPlayerId)
+                .then(() => db.get(
+                  `
+                    SELECT
+                      s.id,
+                      s.name,
+                      COALESCE(NULLIF(trim(s.short_name), ''), s.name) AS short_name,
+                      s.avatar,
+                      s.scoreboard_style,
+                      s.profile_id,
+                      p.bga_nickname AS profile_bga_nickname,
+                      p.name AS profile_name
+                    FROM streamers s
+                    LEFT JOIN profiles p
+                      ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.profile_id, ''))
+                     AND p.deleted_at IS NULL
+                    WHERE s.id = ?
+                    LIMIT 1
+                  `,
+                  [createdStreamerId],
+                  (selectErr, row) => {
+                    if (selectErr) {
+                      return res.status(500).json({ ok: false, message: "Failed to load streamer" });
+                    }
+                    return res.json({ ok: true, streamer: row || null });
                   }
-                  return res.json({ ok: true, streamer: row || null });
-                }
-              );
+                ))
+                .catch((syncErr) => {
+                  console.error("Failed to sync streamer news editor", syncErr);
+                  return res.status(500).json({ ok: false, message: "Failed to sync streamer news editor access" });
+                });
+
             }
           );
         }
@@ -6407,6 +6606,7 @@ app.post("/streamers", requireAdmin, (req, res) => {
 });
 
 app.patch("/streamers/:id", requireAdmin, (req, res) => {
+  const actorPlayerId = String(req.user?.player_id || "").trim() || null;
   const streamerId = normalizePositiveInteger(req.params.id);
   const payloadId = normalizePositiveInteger(req.body?.id);
   const name = String(req.body?.name || "").trim();
@@ -6495,33 +6695,38 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
                     return res.status(404).json({ ok: false, message: "Streamer not found" });
                   }
 
-                  return db.get(
-                    `
-                      SELECT
-                        s.id,
-                        s.name,
-                        COALESCE(NULLIF(trim(s.short_name), ''), s.name) AS short_name,
-                        s.avatar,
-                        s.scoreboard_style,
-                        s.profile_id,
-                        p.bga_nickname AS profile_bga_nickname,
-                        p.name AS profile_name
-                      FROM streamers s
-                      LEFT JOIN profiles p
-                        ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.profile_id, ''))
-                       AND p.deleted_at IS NULL
-                      WHERE s.id = ?
-                        AND s.deleted_at IS NULL
-                      LIMIT 1
-                    `,
-                    [streamerId],
-                    (selectErr, row) => {
-                      if (selectErr) {
-                        return res.status(500).json({ ok: false, message: "Failed to load streamer" });
+                  return syncStreamerNewsEditorForStreamer(streamerId, actorPlayerId)
+                    .then(() => db.get(
+                      `
+                        SELECT
+                          s.id,
+                          s.name,
+                          COALESCE(NULLIF(trim(s.short_name), ''), s.name) AS short_name,
+                          s.avatar,
+                          s.scoreboard_style,
+                          s.profile_id,
+                          p.bga_nickname AS profile_bga_nickname,
+                          p.name AS profile_name
+                        FROM streamers s
+                        LEFT JOIN profiles p
+                          ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.profile_id, ''))
+                         AND p.deleted_at IS NULL
+                        WHERE s.id = ?
+                          AND s.deleted_at IS NULL
+                        LIMIT 1
+                      `,
+                      [streamerId],
+                      (selectErr, row) => {
+                        if (selectErr) {
+                          return res.status(500).json({ ok: false, message: "Failed to load streamer" });
+                        }
+                        return res.json({ ok: true, streamer: row || null });
                       }
-                      return res.json({ ok: true, streamer: row || null });
-                    }
-                  );
+                    ))
+                    .catch((syncErr) => {
+                      console.error("Failed to sync streamer news editor", syncErr);
+                      return res.status(500).json({ ok: false, message: "Failed to sync streamer news editor access" });
+                    });
                 }
               );
             }
@@ -6557,7 +6762,12 @@ app.delete("/streamers/:id", requireAdmin, (req, res) => {
       if (!this || this.changes === 0) {
         return res.status(404).json({ ok: false, message: "Streamer not found" });
       }
-      return res.json({ ok: true });
+      return deleteStreamerNewsEditorsForStreamer(streamerId)
+        .then(() => res.json({ ok: true }))
+        .catch((syncErr) => {
+          console.error("Failed to delete streamer news editor", syncErr);
+          return res.status(500).json({ ok: false, message: "Failed to delete streamer news editor access" });
+        });
     }
   );
 });
@@ -6829,7 +7039,9 @@ app.get("/news-editors", (req, res, next) => {
         ne.access_type,
         ne.tournament_id,
         ne.country_id,
+        ne.streamer_id,
         COALESCE(ne.is_captain, 0) AS is_captain,
+        COALESCE(ne.is_streamer, 0) AS is_streamer,
         ne.created_by,
         ne.updated_by,
         ne.created_at,
@@ -6839,7 +7051,8 @@ app.get("/news-editors", (req, res, next) => {
         p.avatar AS profile_avatar,
         a.name AS country_name,
         a.flag AS country_flag,
-        COALESCE(t.short_title, t.name) AS tournament_name
+        COALESCE(t.short_title, t.name) AS tournament_name,
+        s.name AS streamer_name
       FROM news_editors ne
       LEFT JOIN profiles p
         ON trim(COALESCE(p.id, '')) = trim(COALESCE(ne.profile_id, ''))
@@ -6848,12 +7061,17 @@ app.get("/news-editors", (req, res, next) => {
         ON upper(trim(COALESCE(a.code, ''))) = upper(trim(COALESCE(ne.country_id, '')))
       LEFT JOIN tournaments t
         ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(ne.tournament_id, '')))
+      LEFT JOIN streamers s
+        ON s.id = ne.streamer_id
+       AND s.deleted_at IS NULL
       ${whereClause}
       ORDER BY
         COALESCE(ne.is_captain, 0) DESC,
+        COALESCE(ne.is_streamer, 0) DESC,
         lower(COALESCE(ne.access_type, '')) ASC,
         lower(COALESCE(a.name, ne.country_id, '')) ASC,
         lower(COALESCE(t.short_title, t.name, ne.tournament_id, '')) ASC,
+        lower(COALESCE(s.name, CAST(ne.streamer_id AS TEXT), '')) ASC,
         lower(COALESCE(p.bga_nickname, p.name, ne.profile_id, '')) ASC,
         ne.id ASC
     `,
@@ -7371,12 +7589,13 @@ app.post("/news-editors", requireAdmin, async (req, res) => {
     const accessType = normalizeNewsEditorAccessType(req.body?.access_type);
     const tournamentIdRaw = String(req.body?.tournament_id || "").trim();
     const countryIdRaw = String(req.body?.country_id || "").trim();
+    let streamerId = normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId);
 
     if (!profileId) {
       return res.status(400).json({ ok: false, message: "profile_id is required" });
     }
     if (!accessType) {
-      return res.status(400).json({ ok: false, message: "access_type must be local, tournament or global" });
+      return res.status(400).json({ ok: false, message: "access_type must be local, tournament, global or youtube" });
     }
 
     const profileRow = await dbGetAsync(
@@ -7396,11 +7615,13 @@ app.post("/news-editors", requireAdmin, async (req, res) => {
     let tournamentId = null;
     let countryId = null;
     if (accessType === NEWS_EDITOR_ACCESS_TYPES.LOCAL) {
+      streamerId = null;
       countryId = await resolveAssociationId(countryIdRaw);
       if (!countryId) {
         return res.status(400).json({ ok: false, message: "country_id is required for local access" });
       }
     } else if (accessType === NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT) {
+      streamerId = null;
       tournamentId = normalizeNullableText(tournamentIdRaw);
       if (!tournamentId) {
         return res.status(400).json({ ok: false, message: "tournament_id is required for tournament access" });
@@ -7417,8 +7638,33 @@ app.post("/news-editors", requireAdmin, async (req, res) => {
       if (!tournamentRow) {
         return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
       }
+    } else if (accessType === NEWS_EDITOR_ACCESS_TYPES.YOUTUBE) {
+      if (!streamerId) {
+        return res.status(400).json({ ok: false, message: "streamer_id is required for YouTube access" });
+      }
+      const streamerRow = await dbGetAsync(
+        `
+          SELECT id, profile_id
+          FROM streamers
+          WHERE id = ?
+            AND deleted_at IS NULL
+          LIMIT 1
+        `,
+        [streamerId]
+      );
+      if (!streamerRow) {
+        return res.status(400).json({ ok: false, message: "streamer_id must reference an existing active streamer" });
+      }
+      if (String(streamerRow.profile_id || "").trim() !== profileId) {
+        return res.status(400).json({ ok: false, message: "profile_id must match the selected streamer's profile_id" });
+      }
+    } else {
+      streamerId = null;
     }
 
+    const duplicateAutoFilter = accessType === NEWS_EDITOR_ACCESS_TYPES.YOUTUBE
+      ? ""
+      : "AND COALESCE(is_captain, 0) = 0 AND COALESCE(is_streamer, 0) = 0";
     const duplicateRow = await dbGetAsync(
       `
         SELECT id
@@ -7427,10 +7673,11 @@ app.post("/news-editors", requireAdmin, async (req, res) => {
           AND access_type = ?
           AND trim(COALESCE(tournament_id, '')) = trim(COALESCE(?, ''))
           AND trim(COALESCE(country_id, '')) = trim(COALESCE(?, ''))
-          AND COALESCE(is_captain, 0) = 0
+          AND COALESCE(streamer_id, 0) = COALESCE(?, 0)
+          ${duplicateAutoFilter}
         LIMIT 1
       `,
-      [profileId, accessType, tournamentId, countryId]
+      [profileId, accessType, tournamentId, countryId, streamerId]
     );
     if (duplicateRow) {
       return res.status(409).json({ ok: false, message: "This news editor access already exists" });
@@ -7443,15 +7690,17 @@ app.post("/news-editors", requireAdmin, async (req, res) => {
           access_type,
           tournament_id,
           country_id,
+          streamer_id,
           is_captain,
+          is_streamer,
           created_by,
           updated_by,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, 0, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
-      [profileId, accessType, tournamentId, countryId, actorPlayerId, actorPlayerId]
+      [profileId, accessType, tournamentId, countryId, streamerId, actorPlayerId, actorPlayerId]
     );
 
     const createdRow = await loadNewsEditorById(insertResult?.lastID);
@@ -7484,6 +7733,7 @@ app.patch("/news-editors/:id", requireAdmin, async (req, res) => {
     const accessType = normalizeNewsEditorAccessType(req.body?.access_type);
     const tournamentIdRaw = String(req.body?.tournament_id || "").trim();
     const countryIdRaw = String(req.body?.country_id || "").trim();
+    let streamerId = normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId);
 
     if (!newsEditorId) {
       return res.status(400).json({ ok: false, message: "Invalid news editor id" });
@@ -7495,7 +7745,7 @@ app.patch("/news-editors/:id", requireAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, message: "profile_id is required" });
     }
     if (!accessType) {
-      return res.status(400).json({ ok: false, message: "access_type must be local, tournament or global" });
+      return res.status(400).json({ ok: false, message: "access_type must be local, tournament, global or youtube" });
     }
 
     const beforeRow = await loadNewsEditorById(newsEditorId);
@@ -7504,6 +7754,9 @@ app.patch("/news-editors/:id", requireAdmin, async (req, res) => {
     }
     if (Number(beforeRow.is_captain) === 1) {
       return res.status(403).json({ ok: false, message: "Captain news editor access is managed automatically" });
+    }
+    if (Number(beforeRow.is_streamer) === 1) {
+      return res.status(403).json({ ok: false, message: "Streamer news editor access is managed automatically" });
     }
 
     const profileRow = await dbGetAsync(
@@ -7523,11 +7776,13 @@ app.patch("/news-editors/:id", requireAdmin, async (req, res) => {
     let tournamentId = null;
     let countryId = null;
     if (accessType === NEWS_EDITOR_ACCESS_TYPES.LOCAL) {
+      streamerId = null;
       countryId = await resolveAssociationId(countryIdRaw);
       if (!countryId) {
         return res.status(400).json({ ok: false, message: "country_id is required for local access" });
       }
     } else if (accessType === NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT) {
+      streamerId = null;
       tournamentId = normalizeNullableText(tournamentIdRaw);
       if (!tournamentId) {
         return res.status(400).json({ ok: false, message: "tournament_id is required for tournament access" });
@@ -7544,8 +7799,33 @@ app.patch("/news-editors/:id", requireAdmin, async (req, res) => {
       if (!tournamentRow) {
         return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
       }
+    } else if (accessType === NEWS_EDITOR_ACCESS_TYPES.YOUTUBE) {
+      if (!streamerId) {
+        return res.status(400).json({ ok: false, message: "streamer_id is required for YouTube access" });
+      }
+      const streamerRow = await dbGetAsync(
+        `
+          SELECT id, profile_id
+          FROM streamers
+          WHERE id = ?
+            AND deleted_at IS NULL
+          LIMIT 1
+        `,
+        [streamerId]
+      );
+      if (!streamerRow) {
+        return res.status(400).json({ ok: false, message: "streamer_id must reference an existing active streamer" });
+      }
+      if (String(streamerRow.profile_id || "").trim() !== profileId) {
+        return res.status(400).json({ ok: false, message: "profile_id must match the selected streamer's profile_id" });
+      }
+    } else {
+      streamerId = null;
     }
 
+    const duplicateAutoFilter = accessType === NEWS_EDITOR_ACCESS_TYPES.YOUTUBE
+      ? ""
+      : "AND COALESCE(is_captain, 0) = 0 AND COALESCE(is_streamer, 0) = 0";
     const duplicateRow = await dbGetAsync(
       `
         SELECT id
@@ -7554,11 +7834,12 @@ app.patch("/news-editors/:id", requireAdmin, async (req, res) => {
           AND access_type = ?
           AND trim(COALESCE(tournament_id, '')) = trim(COALESCE(?, ''))
           AND trim(COALESCE(country_id, '')) = trim(COALESCE(?, ''))
-          AND COALESCE(is_captain, 0) = 0
+          AND COALESCE(streamer_id, 0) = COALESCE(?, 0)
+          ${duplicateAutoFilter}
           AND id <> ?
         LIMIT 1
       `,
-      [profileId, accessType, tournamentId, countryId, newsEditorId]
+      [profileId, accessType, tournamentId, countryId, streamerId, newsEditorId]
     );
     if (duplicateRow) {
       return res.status(409).json({ ok: false, message: "This news editor access already exists" });
@@ -7572,12 +7853,14 @@ app.patch("/news-editors/:id", requireAdmin, async (req, res) => {
           access_type = ?,
           tournament_id = ?,
           country_id = ?,
+          streamer_id = ?,
           updated_by = ?,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
           AND COALESCE(is_captain, 0) = 0
+          AND COALESCE(is_streamer, 0) = 0
       `,
-      [profileId, accessType, tournamentId, countryId, actorPlayerId, newsEditorId]
+      [profileId, accessType, tournamentId, countryId, streamerId, actorPlayerId, newsEditorId]
     );
 
     const updatedRow = await loadNewsEditorById(newsEditorId);
@@ -7620,12 +7903,16 @@ app.delete("/news-editors/:id", requireAdmin, async (req, res) => {
     if (Number(beforeRow.is_captain) === 1) {
       return res.status(403).json({ ok: false, message: "Captain news editor access is managed automatically" });
     }
+    if (Number(beforeRow.is_streamer) === 1) {
+      return res.status(403).json({ ok: false, message: "Streamer news editor access is managed automatically" });
+    }
 
     await dbRunAsync(
       `
         DELETE FROM news_editors
         WHERE id = ?
           AND COALESCE(is_captain, 0) = 0
+          AND COALESCE(is_streamer, 0) = 0
       `,
       [newsEditorId]
     );

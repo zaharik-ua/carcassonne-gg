@@ -1594,6 +1594,14 @@
       );
     }
 
+    if (!Array.isArray(state.streamers) || !state.streamers.length) {
+      requests.push(
+        apiJson(STREAMERS_URL, { method: "GET" }).then((data) => {
+          state.streamers = Array.isArray(data?.streamers) ? data.streamers : [];
+        })
+      );
+    }
+
     return requests.length ? Promise.all(requests) : Promise.resolve();
   }
 
@@ -1876,7 +1884,7 @@
   }
 
   function isNewsEditorAuto(item) {
-    return Number(item?.is_captain) === 1;
+    return Number(item?.is_captain) === 1 || Number(item?.is_streamer) === 1;
   }
 
   function createNewsEditorsFilterControl() {
@@ -3390,11 +3398,12 @@
     const profileField = createSelectOptionsRow("profile_id", String(item?.profile_id || ""), profileOptions, false);
     const accessTypeField = createSelectOptionsRow(
       "access_type",
-      String(item?.access_type || "local"),
+      String(item?.access_type || "local").trim().toLowerCase(),
       [
         { value: "local", label: "Local" },
         { value: "tournament", label: "Tournament" },
         { value: "global", label: "Global" },
+        { value: "youtube", label: "YouTube" },
       ],
       false
     );
@@ -3428,18 +3437,57 @@
       ),
       false
     );
+    const streamerField = createSelectOptionsRow(
+      "streamer_id",
+      String(item?.streamer_id || ""),
+      [{ value: "", label: "Select streamer..." }].concat(
+        state.streamers
+          .slice()
+          .sort((left, right) => String(left?.name || left?.id || "").localeCompare(String(right?.name || right?.id || "")))
+          .map((streamer) => ({
+            value: String(streamer?.id || ""),
+            label: [
+              String(streamer?.id || "").trim(),
+              String(streamer?.name || "").trim(),
+              String(streamer?.profile_bga_nickname || streamer?.profile_name || streamer?.profile_id || "").trim(),
+            ].filter(Boolean).join(" • "),
+          }))
+      ),
+      false
+    );
     const captainRow = createInlineValueRow("captain", Number(item?.is_captain) === 1 ? "Yes" : "No");
     const managedRow = createInlineValueRow(
       "management",
       Number(item?.is_captain) === 1
         ? "Automatic. Created and removed when the profile is assigned as captain."
+        : Number(item?.is_streamer) === 1
+          ? "Automatic. Created and removed when the profile is assigned as streamer."
         : "Manual. Can be changed here by admin."
     );
 
     const updateVisibility = () => {
       const accessType = String(accessTypeField.select.value || "").trim().toLowerCase();
-      tournamentField.row.classList.toggle("hidden", accessType !== "tournament");
-      countryField.row.classList.toggle("hidden", accessType !== "local");
+      const isTournament = accessType === "tournament";
+      const isLocal = accessType === "local";
+      const isYouTube = accessType === "youtube";
+      tournamentField.row.classList.toggle("hidden", !isTournament);
+      countryField.row.classList.toggle("hidden", !isLocal);
+      streamerField.row.classList.toggle("hidden", !isYouTube);
+      tournamentField.select.disabled = !isTournament;
+      countryField.select.disabled = !isLocal;
+      streamerField.select.disabled = !isYouTube;
+      if (!isTournament) tournamentField.select.value = "";
+      if (!isLocal) countryField.select.value = "";
+      if (!isYouTube) streamerField.select.value = "";
+    };
+
+    const syncProfileFromStreamer = () => {
+      if (String(accessTypeField.select.value || "").trim().toLowerCase() !== "youtube") return;
+      const streamerId = String(streamerField.select.value || "").trim();
+      if (!streamerId) return;
+      const streamer = state.streamers.find((entry) => String(entry?.id || "").trim() === streamerId);
+      const profileId = String(streamer?.profile_id || "").trim();
+      if (profileId) profileField.select.value = profileId;
     };
 
     if (mode === "edit") form.appendChild(idField.row);
@@ -3447,6 +3495,7 @@
     form.appendChild(accessTypeField.row);
     form.appendChild(tournamentField.row);
     form.appendChild(countryField.row);
+    form.appendChild(streamerField.row);
     if (mode === "edit") {
       form.appendChild(captainRow.row);
       form.appendChild(managedRow.row);
@@ -3479,9 +3528,9 @@
     deleteBtn.className = "cp-btn cp-btn-secondary";
     deleteBtn.textContent = "Delete";
     deleteBtn.classList.toggle("hidden", mode !== "edit");
-    deleteBtn.disabled = Number(item?.is_captain) === 1;
+    deleteBtn.disabled = isNewsEditorAuto(item);
     deleteBtn.addEventListener("click", async () => {
-      if (!item?.id || Number(item?.is_captain) === 1) return;
+      if (!item?.id || isNewsEditorAuto(item)) return;
       if (!window.confirm("Delete this news editor access?")) return;
       try {
         await apiJson(`${NEWS_EDITORS_URL}/${encodeURIComponent(item.id)}`, { method: "DELETE" });
@@ -3499,14 +3548,19 @@
     if (mode === "edit") actions.appendChild(deleteBtn);
     form.appendChild(actions);
 
-    accessTypeField.select.addEventListener("change", updateVisibility);
+    accessTypeField.select.addEventListener("change", () => {
+      updateVisibility();
+      syncProfileFromStreamer();
+    });
+    streamerField.select.addEventListener("change", syncProfileFromStreamer);
     updateVisibility();
 
-    if (Number(item?.is_captain) === 1) {
+    if (isNewsEditorAuto(item)) {
       profileField.select.disabled = true;
       accessTypeField.select.disabled = true;
       tournamentField.select.disabled = true;
       countryField.select.disabled = true;
+      streamerField.select.disabled = true;
       saveBtn.disabled = true;
     }
 
@@ -3519,6 +3573,7 @@
         access_type: String(accessTypeField.select.value || "").trim().toLowerCase(),
         tournament_id: String(tournamentField.select.value || "").trim(),
         country_id: String(countryField.select.value || "").trim(),
+        streamer_id: Number.parseInt(String(streamerField.select.value || "").trim(), 10),
       };
 
       if (!payload.profile_id) {
@@ -3536,6 +3591,19 @@
       if (payload.access_type === "tournament" && !payload.tournament_id) {
         setStatus("tournament_id is required for tournament access.", true);
         return;
+      }
+      if (payload.access_type === "youtube" && (!Number.isInteger(payload.streamer_id) || payload.streamer_id <= 0)) {
+        setStatus("streamer_id is required for YouTube access.", true);
+        return;
+      }
+      if (payload.access_type !== "local") {
+        payload.country_id = "";
+      }
+      if (payload.access_type !== "tournament") {
+        payload.tournament_id = "";
+      }
+      if (payload.access_type !== "youtube") {
+        payload.streamer_id = null;
       }
 
       try {
@@ -4008,7 +4076,9 @@
           ? "Local"
           : accessType === "tournament"
             ? "Tournament"
-            : "Global");
+            : accessType === "youtube"
+              ? "YouTube"
+              : "Global");
       }
       if (item?.country_name || item?.country_id) {
         subtitleParts.push(`Country: ${String(item.country_name || item.country_id).trim()}`);
@@ -4016,7 +4086,14 @@
       if (item?.tournament_name || item?.tournament_id) {
         subtitleParts.push(`Tournament: ${String(item.tournament_name || item.tournament_id).trim()}`);
       }
-      subtitleParts.push(isNewsEditorAuto(item) ? "Captain • auto" : "Manual");
+      if (item?.streamer_name || item?.streamer_id) {
+        subtitleParts.push(`Streamer: ${String(item.streamer_name || item.streamer_id).trim()}`);
+      }
+      subtitleParts.push(isNewsEditorAuto(item)
+        ? Number(item?.is_streamer) === 1
+          ? "Streamer • auto"
+          : "Captain • auto"
+        : "Manual");
 
       sectionList.appendChild(createListRow({
         imageSrc: item.profile_avatar,
