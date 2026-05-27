@@ -186,6 +186,8 @@ const NEWS_AUDIT_FIELDS = [
   "category",
   "association_id",
   "tournament_id",
+  "streamer_id",
+  "youtube_video_id",
   "associations",
   "time_utc",
   "image",
@@ -358,6 +360,69 @@ function normalizeNullableText(value) {
   return normalized || null;
 }
 
+function normalizeYouTubeVideoId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const getCandidateId = (candidate) => {
+    const text = String(candidate || "").trim();
+    const match = text.match(/^([A-Za-z0-9_-]{11})(?:[^A-Za-z0-9_-]|$)/);
+    return match ? match[1] : null;
+  };
+
+  const directId = getCandidateId(raw);
+  if (directId && raw === directId) return directId;
+
+  const parseUrl = (valueToParse) => {
+    const input = String(valueToParse || "").trim();
+    if (!input) return null;
+    const urlSource = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+    let url = null;
+    try {
+      url = new URL(urlSource);
+    } catch (_error) {
+      return null;
+    }
+
+    const host = String(url.hostname || "").toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+    const isShortHost = host === "youtu.be";
+    const isYouTubeHost = host === "youtube.com"
+      || host.endsWith(".youtube.com")
+      || host === "youtube-nocookie.com"
+      || host.endsWith(".youtube-nocookie.com");
+    if (!isShortHost && !isYouTubeHost) return null;
+
+    const queryVideoId = getCandidateId(url.searchParams.get("v"))
+      || getCandidateId(url.searchParams.get("vi"));
+    if (queryVideoId) return queryVideoId;
+
+    const nestedUrl = url.searchParams.get("u") || url.searchParams.get("url");
+    if (nestedUrl) {
+      const nestedVideoId = normalizeYouTubeVideoId(nestedUrl)
+        || (String(nestedUrl).startsWith("/") ? normalizeYouTubeVideoId(`https://youtube.com${nestedUrl}`) : null);
+      if (nestedVideoId) return nestedVideoId;
+    }
+
+    const pathParts = url.pathname.split("/").filter(Boolean);
+    if (isShortHost) return getCandidateId(pathParts[0]);
+
+    const videoPathKeys = new Set(["embed", "live", "shorts", "v", "video"]);
+    for (let index = 0; index < pathParts.length; index += 1) {
+      if (videoPathKeys.has(String(pathParts[index] || "").toLowerCase())) {
+        const pathVideoId = getCandidateId(pathParts[index + 1]);
+        if (pathVideoId) return pathVideoId;
+      }
+    }
+    return null;
+  };
+
+  const urlVideoId = parseUrl(raw);
+  if (urlVideoId) return urlVideoId;
+
+  const fallbackMatch = raw.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?[^#\s]*v=|embed\/|live\/|shorts\/|v\/|video\/))([A-Za-z0-9_-]{11})(?:[^A-Za-z0-9_-]|$)/i);
+  return fallbackMatch ? fallbackMatch[1] : null;
+}
+
 function normalizePositiveInteger(value) {
   const normalized = Number.parseInt(String(value ?? "").trim(), 10);
   return Number.isInteger(normalized) && normalized > 0 ? normalized : null;
@@ -452,6 +517,7 @@ async function getNewsEditorAccessForUser(user) {
       localCountryIds: [],
       tournamentIds: [],
       tournamentCategories: [],
+      youtubeStreamerIds: [],
     };
   }
   if (!profileId) {
@@ -464,6 +530,7 @@ async function getNewsEditorAccessForUser(user) {
       localCountryIds: [],
       tournamentIds: [],
       tournamentCategories: [],
+      youtubeStreamerIds: [],
     };
   }
 
@@ -507,15 +574,20 @@ async function getNewsEditorAccessForUser(user) {
     .filter((entry) => entry.access_type === NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT)
     .map((entry) => normalizeCategoryName(entry.tournament_category))
     .filter(Boolean)));
+  const youtubeStreamerIds = Array.from(new Set(entries
+    .filter((entry) => entry.access_type === NEWS_EDITOR_ACCESS_TYPES.YOUTUBE)
+    .map((entry) => normalizePositiveInteger(entry.streamer_id))
+    .filter(Boolean)));
   return {
     isAdmin,
-    isNewsEditor: editableEntries.length > 0,
+    isNewsEditor: entries.length > 0,
     profileId,
     entries,
     hasGlobalAccess,
     localCountryIds,
     tournamentIds,
     tournamentCategories,
+    youtubeStreamerIds,
   };
 }
 
@@ -545,6 +617,7 @@ async function getNewsCategoryKind(categoryName) {
   const name = normalizeCategoryName(categoryName);
   if (!name) return "none";
   if (name.toLowerCase() === "local") return "local";
+  if (name.toLowerCase() === "youtube") return "youtube";
 
   const row = await dbGetAsync(
     `
@@ -585,6 +658,26 @@ async function loadNewsTournamentMeta(tournamentId) {
   );
 }
 
+async function loadActiveStreamerById(streamerId) {
+  const normalizedStreamerId = normalizePositiveInteger(streamerId);
+  if (!normalizedStreamerId) return null;
+  return dbGetAsync(
+    `
+      SELECT
+        s.id,
+        s.name,
+        COALESCE(NULLIF(trim(s.short_name), ''), s.name) AS short_name,
+        s.avatar,
+        s.profile_id
+      FROM streamers s
+      WHERE s.id = ?
+        AND s.deleted_at IS NULL
+      LIMIT 1
+    `,
+    [normalizedStreamerId]
+  );
+}
+
 async function validateNewsPayloadAccess(access, payload) {
   if (!access || access.isAdmin) return null;
 
@@ -592,6 +685,7 @@ async function validateNewsPayloadAccess(access, payload) {
   const category = normalizeCategoryName(payload?.category);
   const associationId = normalizeNullableText(payload?.association_id);
   const tournamentId = normalizeNullableText(payload?.tournament_id);
+  const streamerId = normalizePositiveInteger(payload?.streamer_id ?? payload?.streamerId);
 
   if (significance === "Major" && !access.hasGlobalAccess) {
     return "Major news requires global news editor access.";
@@ -601,6 +695,17 @@ async function validateNewsPayloadAccess(access, payload) {
   }
 
   const categoryKind = await getNewsCategoryKind(category);
+  if (categoryKind === "youtube") {
+    if (significance !== "Regular") {
+      return "YouTube news requires Regular significance.";
+    }
+    if (!streamerId) return "streamer_id is required for YouTube news.";
+    if (!newsAccessListIncludes(access.youtubeStreamerIds, String(streamerId))) {
+      return "streamer_id is not allowed for your news editor access.";
+    }
+    return null;
+  }
+
   if (access.hasGlobalAccess) {
     if (categoryKind === "local" && !associationId) {
       return "association_id is required for local news.";
@@ -889,6 +994,8 @@ async function loadNewsById(newsId) {
         n.category,
         n.association_id,
         n.tournament_id,
+        n.streamer_id,
+        n.youtube_video_id,
         n.associations,
         n.time_utc,
         n.image,
@@ -905,12 +1012,18 @@ async function loadNewsById(newsId) {
         a.name AS association_name,
         a.flag AS association_flag,
         COALESCE(t.short_title, t.name) AS tournament_name,
-        t.logo AS tournament_logo
+        t.logo AS tournament_logo,
+        s.name AS streamer_name,
+        COALESCE(NULLIF(trim(s.short_name), ''), s.name) AS streamer_short_name,
+        s.avatar AS streamer_avatar
       FROM news n
       LEFT JOIN associations a
         ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(n.association_id, '')))
       LEFT JOIN tournaments t
         ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(n.tournament_id, '')))
+      LEFT JOIN streamers s
+        ON s.id = n.streamer_id
+       AND s.deleted_at IS NULL
       WHERE n.id = ?
         AND n.deleted_at IS NULL
       LIMIT 1
@@ -3708,6 +3821,8 @@ function ensureNewsSchema() {
       category TEXT,
       association_id TEXT,
       tournament_id TEXT,
+      streamer_id INTEGER,
+      youtube_video_id TEXT,
       associations TEXT NOT NULL DEFAULT '[]',
       time_utc TEXT,
       image TEXT,
@@ -3740,6 +3855,8 @@ function ensureNewsSchema() {
       addColumnIfMissing(columns, "news", "category", "TEXT");
       addColumnIfMissing(columns, "news", "association_id", "TEXT");
       addColumnIfMissing(columns, "news", "tournament_id", "TEXT");
+      addColumnIfMissing(columns, "news", "streamer_id", "INTEGER");
+      addColumnIfMissing(columns, "news", "youtube_video_id", "TEXT");
       addColumnIfMissing(columns, "news", "associations", "TEXT NOT NULL DEFAULT '[]'");
       addColumnIfMissing(columns, "news", "time_utc", "TEXT");
       const hasIconColumn = columns.some((col) => col.name === "icon");
@@ -3792,6 +3909,12 @@ function ensureNewsSchema() {
             category = NULLIF(trim(category), ''),
             association_id = NULLIF(trim(association_id), ''),
             tournament_id = NULLIF(trim(tournament_id), ''),
+            streamer_id = CASE
+              WHEN lower(trim(COALESCE(category, ''))) = 'youtube'
+                AND streamer_id IS NOT NULL
+                AND trim(CAST(streamer_id AS TEXT)) <> '' THEN streamer_id
+              ELSE NULL
+            END,
             associations = CASE
               WHEN trim(COALESCE(associations, '')) = '' THEN '[]'
               ELSE associations
@@ -3813,6 +3936,14 @@ function ensureNewsSchema() {
         (indexErr) => {
           if (indexErr) {
             console.error("Failed to ensure index for news.time_utc", indexErr);
+          }
+        }
+      );
+      db.run(
+        "CREATE INDEX IF NOT EXISTS idx_news_streamer_id ON news(streamer_id)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure index for news.streamer_id", indexErr);
           }
         }
       );
@@ -7095,6 +7226,8 @@ app.get("/public/news", async (_req, res) => {
           category,
           association_id,
           tournament_id,
+          streamer_id,
+          youtube_video_id,
           associations,
           time_utc,
           image,
@@ -7232,12 +7365,24 @@ app.post("/news", async (req, res) => {
 
     const actorPlayerId = String(req.user?.player_id || "").trim() || null;
     const status = normalizeNewsStatus(req.body?.status);
-    const significance = normalizeNewsSignificance(req.body?.significance);
-    const mediaType = normalizeNewsMediaType(req.body?.media_type ?? req.body?.mediaType, significance);
     const requestedCategory = normalizeCategoryName(req.body?.category);
     const category = await resolveNewsCategory(requestedCategory);
-    const associationId = await resolveNewsAssociationValue(req.body?.association_id);
-    const tournamentId = normalizeNullableText(req.body?.tournament_id);
+    const categoryKind = await getNewsCategoryKind(category);
+    let significance = normalizeNewsSignificance(req.body?.significance);
+    if (categoryKind === "youtube") significance = "Regular";
+    const mediaType = normalizeNewsMediaType(req.body?.media_type ?? req.body?.mediaType, significance);
+    const associationId = categoryKind === "local"
+      ? await resolveNewsAssociationValue(req.body?.association_id)
+      : null;
+    const tournamentId = categoryKind === "tournament"
+      ? normalizeNullableText(req.body?.tournament_id)
+      : null;
+    const streamerId = categoryKind === "youtube"
+      ? normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId)
+      : null;
+    const youtubeVideoId = categoryKind === "youtube"
+      ? normalizeYouTubeVideoId(req.body?.youtube_video_id ?? req.body?.youtubeVideoId)
+      : null;
     const associations = await resolveNewsAssociations(req.body?.associations);
     const timeUtc = normalizeNullableText(req.body?.time_utc);
     const image = normalizeNullableText(req.body?.image);
@@ -7261,10 +7406,10 @@ app.post("/news", async (req, res) => {
     if (requestedCategory && !category) {
       return res.status(400).json({ ok: false, message: "category must reference an existing category" });
     }
-    if (req.body?.association_id && !associationId) {
+    if (categoryKind === "local" && req.body?.association_id && !associationId) {
       return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
     }
-    if (tournamentId) {
+    if (categoryKind === "tournament" && tournamentId) {
       const tournamentRow = await dbGetAsync(
         `
           SELECT id
@@ -7278,11 +7423,24 @@ app.post("/news", async (req, res) => {
         return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
       }
     }
+    if (categoryKind === "youtube") {
+      if (!streamerId) {
+        return res.status(400).json({ ok: false, message: "streamer_id is required for YouTube news" });
+      }
+      const streamerRow = await loadActiveStreamerById(streamerId);
+      if (!streamerRow) {
+        return res.status(400).json({ ok: false, message: "streamer_id must reference an existing active streamer" });
+      }
+      if (!youtubeVideoId) {
+        return res.status(400).json({ ok: false, message: "youtube_video_id is required for YouTube news" });
+      }
+    }
     const accessError = await validateNewsPayloadAccess(access, {
       significance,
       category,
       association_id: associationId,
       tournament_id: tournamentId,
+      streamer_id: streamerId,
     });
     if (accessError) {
       return res.status(403).json({ ok: false, message: accessError });
@@ -7300,6 +7458,8 @@ app.post("/news", async (req, res) => {
             category,
             association_id,
             tournament_id,
+            streamer_id,
+            youtube_video_id,
             associations,
             time_utc,
             image,
@@ -7312,7 +7472,7 @@ app.post("/news", async (req, res) => {
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [
           status,
@@ -7321,6 +7481,8 @@ app.post("/news", async (req, res) => {
           category,
           associationId,
           tournamentId,
+          streamerId,
+          youtubeVideoId,
           JSON.stringify(associations),
           timeUtc,
           image,
@@ -7391,12 +7553,24 @@ app.patch("/news/:id", async (req, res) => {
     }
 
     const status = normalizeNewsStatus(req.body?.status);
-    const significance = normalizeNewsSignificance(req.body?.significance);
-    const mediaType = normalizeNewsMediaType(req.body?.media_type ?? req.body?.mediaType, significance);
     const requestedCategory = normalizeCategoryName(req.body?.category);
     const category = await resolveNewsCategory(requestedCategory);
-    const associationId = await resolveNewsAssociationValue(req.body?.association_id);
-    const tournamentId = normalizeNullableText(req.body?.tournament_id);
+    const categoryKind = await getNewsCategoryKind(category);
+    let significance = normalizeNewsSignificance(req.body?.significance);
+    if (categoryKind === "youtube") significance = "Regular";
+    const mediaType = normalizeNewsMediaType(req.body?.media_type ?? req.body?.mediaType, significance);
+    const associationId = categoryKind === "local"
+      ? await resolveNewsAssociationValue(req.body?.association_id)
+      : null;
+    const tournamentId = categoryKind === "tournament"
+      ? normalizeNullableText(req.body?.tournament_id)
+      : null;
+    const streamerId = categoryKind === "youtube"
+      ? normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId)
+      : null;
+    const youtubeVideoId = categoryKind === "youtube"
+      ? normalizeYouTubeVideoId(req.body?.youtube_video_id ?? req.body?.youtubeVideoId)
+      : null;
     const associations = await resolveNewsAssociations(req.body?.associations);
     const timeUtc = normalizeNullableText(req.body?.time_utc);
     const image = normalizeNullableText(req.body?.image);
@@ -7420,10 +7594,10 @@ app.patch("/news/:id", async (req, res) => {
     if (requestedCategory && !category) {
       return res.status(400).json({ ok: false, message: "category must reference an existing category" });
     }
-    if (req.body?.association_id && !associationId) {
+    if (categoryKind === "local" && req.body?.association_id && !associationId) {
       return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
     }
-    if (tournamentId) {
+    if (categoryKind === "tournament" && tournamentId) {
       const tournamentRow = await dbGetAsync(
         `
           SELECT id
@@ -7437,11 +7611,24 @@ app.patch("/news/:id", async (req, res) => {
         return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
       }
     }
+    if (categoryKind === "youtube") {
+      if (!streamerId) {
+        return res.status(400).json({ ok: false, message: "streamer_id is required for YouTube news" });
+      }
+      const streamerRow = await loadActiveStreamerById(streamerId);
+      if (!streamerRow) {
+        return res.status(400).json({ ok: false, message: "streamer_id must reference an existing active streamer" });
+      }
+      if (!youtubeVideoId) {
+        return res.status(400).json({ ok: false, message: "youtube_video_id is required for YouTube news" });
+      }
+    }
     const accessError = await validateNewsPayloadAccess(access, {
       significance,
       category,
       association_id: associationId,
       tournament_id: tournamentId,
+      streamer_id: streamerId,
     });
     if (accessError) {
       return res.status(403).json({ ok: false, message: accessError });
@@ -7459,6 +7646,8 @@ app.patch("/news/:id", async (req, res) => {
             category = ?,
             association_id = ?,
             tournament_id = ?,
+            streamer_id = ?,
+            youtube_video_id = ?,
             associations = ?,
             time_utc = ?,
             image = ?,
@@ -7477,6 +7666,8 @@ app.patch("/news/:id", async (req, res) => {
           category,
           associationId,
           tournamentId,
+          streamerId,
+          youtubeVideoId,
           JSON.stringify(associations),
           timeUtc,
           image,
