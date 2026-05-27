@@ -2,25 +2,28 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
 <style>
-  body {
+  .gg-rp-news-widget {
     font-family: 'Montserrat', sans-serif;
+    max-width: 100%;
+    overflow: hidden;
+    width: 100%;
   }
-  b,
-  strong {
+  .gg-rp-news-widget b,
+  .gg-rp-news-widget strong {
     font-weight: 600;
   }
-  p,
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6,
-  ul,
-  ol {
+  .gg-rp-news-widget p,
+  .gg-rp-news-widget h1,
+  .gg-rp-news-widget h2,
+  .gg-rp-news-widget h3,
+  .gg-rp-news-widget h4,
+  .gg-rp-news-widget h5,
+  .gg-rp-news-widget h6,
+  .gg-rp-news-widget ul,
+  .gg-rp-news-widget ol {
     margin: 0 0 10px;
   }
-  .news-header {
+  .gg-rp-news-header {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -30,142 +33,163 @@
     font-size: 13px;
     padding: 6px 5px;
   }
-  .news-row {
-    background: white;
+  .gg-rp-news-header-title {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
+  }
+  .gg-rp-news-row {
+    background: white;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     border-top: 1px solid #ccc;
     padding: 7px 5px;
     font-size: 13px;
-    line-height: 15px;
+    line-height: 1.25;
   }
-  .news-row:hover {
+  .gg-rp-news-row:hover {
     background-color: #f9f9f9;
   }
-  .news-row-high {
+  .gg-rp-news-row-major {
+    display: block;
+    padding: 7px 5px 8px;
+  }
+  .gg-rp-news-row-link {
     cursor: pointer;
   }
-  .news-row-important-toggle {
-    font-size: 14px;
-    line-height: 17px;
-  }
-  .news-icon {
+  .gg-rp-news-icon {
+    flex: 0 0 auto;
     height: auto;
     object-fit: contain;
     cursor: default;
   }
-  .news-icon-low {
-    width: 28px;
+  .gg-rp-news-icon-low {
+    max-height: 22px;
+    width: 22px;
   }
-  .news-icon-medium {
-    width: 45px;
+  .gg-rp-news-icon-medium {
+    max-height: 32px;
+    width: 32px;
   }
-  .news-icon-high {
-    width: auto;
-    height: 100px;
+  .gg-rp-news-major-image-frame {
+    aspect-ratio: 16 / 9;
+    background: #f3f4f6;
+    border: 1px solid #d7dbe2;
+    border-radius: 4px;
+    box-sizing: border-box;
+    overflow: hidden;
+    width: 100%;
+  }
+  .gg-rp-news-icon-high {
     cursor: pointer;
+    display: block;
+    height: 100%;
+    max-width: none;
+    object-fit: cover;
+    width: 100%;
   }
-  .news-icon-important-image {
-    width: auto;
-    height: 60px;
-    cursor: pointer;
+  .gg-rp-news-icon-important-image {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    box-sizing: border-box;
+    height: 42px;
+    object-fit: cover;
+    width: 42px;
   }
-  .news-content {
+  .gg-rp-news-content {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;
   }
-  .news-content-high .news-title {
-    font-size: 16px;
-    line-height: 19px;
+  .gg-rp-news-content-major {
+    margin-top: 5px;
   }
-  .news-title-high {
-    font-size: 16px;
+  .gg-rp-news-title {
+    flex-grow: 1;
+    font-size: 13px;
+    line-height: 16px;
+    overflow-wrap: anywhere;
   }
-  .news-content-important-image .news-title {
-    font-size: 15px;
-    line-height: 18px;
-  }
-  .news-title-long-description {
+  .gg-rp-news-title-important {
     font-size: 14px;
     line-height: 17px;
   }
-  .news-title {
-    flex-grow: 1;
+  .gg-rp-news-title-major {
+    font-size: 14px;
+    line-height: 17px;
   }
-  .news-title a,
-  .news-title span {
+  .gg-rp-news-title a,
+  .gg-rp-news-title span {
     color: #333;
+    font-weight: 400;
     text-decoration: none;
-    font-weight: 600;
   }
-  .news-title a:hover {
+  .gg-rp-news-title a:hover {
     color: #0e4f73;
     text-decoration: none;
   }
-  .news-title-high a,
-  .news-title-high span {
-    color: #333;
-    font-weight: 600;
-  }
-  .news-title-high a:hover {
-    color: #333;
-  }
-  .news-short-description-high {
-    color: #777;
-    font-size: 13px;
-    font-weight: 400;
-    line-height: 17px;
-    margin-top: 2px;
-  }
-  .news-chevron {
+  .gg-rp-news-chevron {
     cursor: pointer;
+    flex: 0 0 auto;
     font-size: 14px;
-    padding: 0 5px 0 2px;
     transition: transform 0.3s ease;
   }
-  .news-description {
+  .gg-rp-news-description {
+    box-sizing: border-box;
     height: 0;
     overflow: hidden;
-    transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+    transition: height 0.3s ease, opacity 0.3s ease;
     background-color: #f5f5f5;
-    padding: 0 7px;
+    padding: 0 5px;
   }
-  .news-description.open {
+  .gg-rp-news-description.gg-rp-news-is-open {
     padding-top: 0;
     padding-bottom: 0;
   }
-  .news-description-content {
+  .gg-rp-news-description-content {
     font-size: 13px;
     line-height: 1.5;
   }
-  .news-description-content-high {
-    font-size: 13px;
-  }
-  .news-description-content p {
+  .gg-rp-news-description-content p {
     margin: 0 0 8px;
   }
-  .news-description-content p:last-child {
+  .gg-rp-news-description-content p:last-child {
     margin-bottom: 0;
   }
-  .news-description-content a {
+  .gg-rp-news-description-content a {
     color: #146997;
     text-decoration: none;
   }
-  .news-description-content a:hover {
+  .gg-rp-news-description-content a:hover {
     color: #0e4f73;
     text-decoration: none;
   }
-  .news-description-content img {
+  .gg-rp-news-description-content img {
+    background: #f3f4f6;
+    border-radius: 4px;
     display: block;
     height: auto;
     margin: 8px 0;
-    max-width: 400px;
+    max-width: none;
     width: 100%;
   }
-  .news-section-title {
+  .gg-rp-news-read-more-row {
+    margin: 4px 0 0;
+  }
+  .gg-rp-news-read-more {
+    color: #146997;
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .gg-rp-news-read-more:hover {
+    color: #0e4f73;
+    text-decoration: none;
+  }
+  .gg-rp-news-section-title {
     color: #800020;
     display: block;
     font-size: 18px;
@@ -175,25 +199,25 @@
     margin: 10px 0 6px;
     text-transform: uppercase;
   }
-  .news-description-content .news-section-title {
+  .gg-rp-news-description-content .gg-rp-news-section-title {
     font-size: 13px;
     margin: 6px 0 4px;
   }
-  .news-quote-block {
+  .gg-rp-news-quote-block {
     margin: 8px 0;
     position: relative;
   }
-  .news-quote-author {
+  .gg-rp-news-quote-author {
     color: #4b5563;
     display: block;
     font-size: 0.85em;
     font-weight: 600;
     line-height: 1.35;
   }
-  .news-quote-author:not(:empty)::after {
+  .gg-rp-news-quote-author:not(:empty)::after {
     content: ":";
   }
-  .news-quote-text {
+  .gg-rp-news-quote-text {
     border-left: 0 !important;
     color: #146997;
     display: block;
@@ -205,7 +229,7 @@
     position: relative;
     white-space: pre-wrap;
   }
-  .news-quote-text::before {
+  .gg-rp-news-quote-text::before {
     color: #146997;
     content: "\f10d";
     font-family: "Font Awesome 6 Free";
@@ -218,48 +242,14 @@
     position: absolute;
     top: 6px;
   }
-  .news-description-meta {
-    align-items: center;
-    color: #555;
-    display: flex;
-    font-size: 13px;
-    gap: 12px;
-    justify-content: space-between;
-    line-height: 18px;
-    margin-bottom: 4px;
-    padding: 7px 0 0;
-    word-break: break-word;
-  }
-  .news-description-player,
-  .news-description-meta-date {
-    min-width: 0;
-  }
-  .news-description-meta-date {
-    margin-left: auto;
-    text-align: right;
-    white-space: nowrap;
-  }
-  .news-description-player-link {
-    color: #146997;
-    text-decoration: none;
-  }
-  .news-description-player-link:hover {
-    color: #0e4f73;
-    text-decoration: none;
-  }
-  .news-description-date {
-    font-size: 11px;
-    color: #555;
-    margin-bottom: 2px;
-  }
-  .news-state {
+  .gg-rp-news-state {
     background: #fff;
     border-top: 1px solid #ccc;
     color: #555;
     font-size: 13px;
     padding: 10px 7px;
   }
-  .news-modal {
+  .gg-rp-news-modal {
     position: fixed;
     inset: 0;
     display: none;
@@ -269,10 +259,10 @@
     z-index: 9999;
     padding: 20px;
   }
-  .news-modal.open {
+  .gg-rp-news-modal.gg-rp-news-is-open {
     display: flex;
   }
-  .news-modal-content {
+  .gg-rp-news-modal-content {
     position: relative;
     max-width: 90vw;
     max-height: 90vh;
@@ -280,7 +270,7 @@
     align-items: center;
     justify-content: center;
   }
-  .news-modal-content img {
+  .gg-rp-news-modal-content img {
     width: auto;
     height: auto;
     max-width: calc(90vw - 40px);
@@ -288,22 +278,22 @@
     border-radius: 4px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
   }
-  .news-detail-card {
+  .gg-rp-news-detail-card {
     background: #fff;
     padding: 18px 12px;
   }
-  .news-detail-title-row {
+  .gg-rp-news-detail-title-row {
     align-items: center;
     display: flex;
     gap: 10px;
     margin: 0 0 12px;
   }
-  .news-detail-title-icon {
+  .gg-rp-news-detail-title-icon {
     flex: 0 0 auto;
     height: auto;
     width: 40px;
   }
-  .news-detail-title {
+  .gg-rp-news-detail-title {
     color: #800020;
     font-size: 30px;
     font-weight: 700;
@@ -312,10 +302,10 @@
     margin: 0 0 12px;
     text-transform: uppercase;
   }
-  .news-detail-title-row .news-detail-title {
+  .gg-rp-news-detail-title-row .gg-rp-news-detail-title {
     margin: 0;
   }
-  .news-detail-meta {
+  .gg-rp-news-detail-meta {
     align-items: center;
     color: #555;
     display: flex;
@@ -325,108 +315,114 @@
     line-height: 18px;
     margin-bottom: 14px;
   }
-  .news-detail-player,
-  .news-detail-date {
+  .gg-rp-news-detail-player,
+  .gg-rp-news-detail-date {
     min-width: 0;
   }
-  .news-detail-date {
+  .gg-rp-news-detail-date {
     margin-left: auto;
     text-align: right;
     white-space: nowrap;
   }
-  .news-detail-player-link {
+  .gg-rp-news-detail-player-link {
     color: #146997;
     text-decoration: none;
   }
-  .news-detail-player-link:hover {
+  .gg-rp-news-detail-player-link:hover {
     color: #0e4f73;
     text-decoration: none;
   }
-  .news-detail-short-description {
+  .gg-rp-news-detail-short-description {
     color: #555;
     font-size: 18px;
     line-height: 1.3;
     margin-bottom: 16px;
   }
-  .news-detail-image {
+  .gg-rp-news-detail-image {
     cursor: zoom-in;
     display: block;
     height: auto;
     margin-bottom: 8px;
     width: 100%;
   }
-  .news-detail-source {
+  .gg-rp-news-detail-source {
     font-size: 13px;
     line-height: 18px;
     margin: 0 0 16px;
   }
-  .news-detail-source:empty {
+  .gg-rp-news-detail-source:empty {
     display: none;
   }
-  .news-detail-source a {
+  .gg-rp-news-detail-source a {
     color: #146997;
     text-decoration: none;
   }
-  .news-detail-source a:hover {
+  .gg-rp-news-detail-source a:hover {
     color: #0e4f73;
     text-decoration: none;
   }
-  .news-description-source {
+  .gg-rp-news-description-source {
     font-size: 12px;
     line-height: 1.3;
     margin: -6px 0 10px;
   }
-  .news-description-source:empty {
+  .gg-rp-news-description-source:empty {
     display: none;
   }
-  .news-description-source a {
+  .gg-rp-news-description-source a {
     color: #146997;
     text-decoration: none;
   }
-  .news-description-source a:hover {
+  .gg-rp-news-description-source a:hover {
     color: #0e4f73;
     text-decoration: none;
   }
-  .news-detail-description {
+  .gg-rp-news-detail-description {
     color: #333;
     font-size: 16px;
     line-height: 1.35;
   }
-  .news-detail-description p:last-child {
+  .gg-rp-news-detail-description p:last-child {
     margin-bottom: 0;
   }
-  .news-detail-description a {
+  .gg-rp-news-detail-description a {
     color: #146997;
     text-decoration: none;
   }
-  .news-detail-description a:hover {
+  .gg-rp-news-detail-description a:hover {
     color: #0e4f73;
     text-decoration: none;
   }
-  .news-detail-description img {
+  .gg-rp-news-detail-description img {
     cursor: zoom-in;
     display: block;
     height: auto;
     margin: 10px 0;
     width: 100%;
   }
-  .news-detail-description .news-section-title {
+  .gg-rp-news-detail-description .gg-rp-news-section-title {
     font-size: 20px;
     margin: 12px 0 6px;
   }
-  .news-detail-description .news-quote-block {
+  .gg-rp-news-detail-description .gg-rp-news-quote-block {
     margin: 8px 0;
   }
 </style>
 
-<div id="news-container"></div>
+<div class="gg-rp-news-widget">
+  <div class="gg-rp-news-header">
+    <span class="gg-rp-news-header-title">Carcassonne News</span>
+  </div>
+  <div id="gg-rp-news-container"></div>
+</div>
 
 <script>
   const NEWS_PUBLIC_URL = "https://api.carcassonne.gg/public/news";
   const PLAYERS_PUBLIC_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
   const NEWS_API_ORIGIN = new URL(NEWS_PUBLIC_URL).origin;
   const LONG_NEWS_DESCRIPTION_LIMIT = 1000;
-  const newsContainer = document.getElementById("news-container");
+  const NEWS_DESCRIPTION_PREVIEW_LIMIT = 200;
+  const newsContainer = document.getElementById("gg-rp-news-container");
   let imageModal;
   let allNewsItems = [];
   let selectedNewsItem = null;
@@ -436,7 +432,7 @@
 
   const closeImageModal = () => {
     if (!imageModal) return;
-    imageModal.classList.remove("open");
+    imageModal.classList.remove("gg-rp-news-is-open");
     const img = imageModal.querySelector("img");
     if (img) img.src = "";
   };
@@ -445,16 +441,16 @@
     if (imageModal) return imageModal;
 
     imageModal = document.createElement("div");
-    imageModal.className = "news-modal";
+    imageModal.className = "gg-rp-news-modal";
     imageModal.innerHTML = `
-      <div class="news-modal-content">
+      <div class="gg-rp-news-modal-content">
         <img src="" alt="News preview">
       </div>
     `;
 
     imageModal.addEventListener("click", closeImageModal);
     document.addEventListener("keydown", event => {
-      if (event.key === "Escape" && imageModal.classList.contains("open")) {
+      if (event.key === "Escape" && imageModal.classList.contains("gg-rp-news-is-open")) {
         closeImageModal();
       }
     });
@@ -468,7 +464,7 @@
     const img = modal.querySelector("img");
     img.src = src;
     img.alt = alt || "News preview";
-    modal.classList.add("open");
+    modal.classList.add("gg-rp-news-is-open");
   };
 
   const getSelectedNewsId = () => {
@@ -576,7 +572,7 @@
       if (!imageSrc) return;
 
       const sourceLink = document.createElement("div");
-      sourceLink.className = "news-description-source";
+      sourceLink.className = "gg-rp-news-description-source";
       const imageRow = image.parentElement?.tagName?.toUpperCase() === "P"
         && Array.from(image.parentElement.childNodes).every(child => (
           child === image
@@ -587,6 +583,23 @@
         : image;
       imageRow.insertAdjacentElement("afterend", sourceLink);
       renderSourceImageLink(imageSrc, sourceLink);
+    });
+  };
+
+  const namespaceNewsContentClasses = (hostEl) => {
+    if (!hostEl) return;
+    const classMap = {
+      "news-section-title": "gg-rp-news-section-title",
+      "news-quote-block": "gg-rp-news-quote-block",
+      "news-quote-author": "gg-rp-news-quote-author",
+      "news-quote-text": "gg-rp-news-quote-text",
+    };
+
+    Object.entries(classMap).forEach(([sourceClass, scopedClass]) => {
+      hostEl.querySelectorAll(`.${sourceClass}`).forEach(element => {
+        element.classList.remove(sourceClass);
+        element.classList.add(scopedClass);
+      });
     });
   };
 
@@ -621,6 +634,116 @@
       .replace(/\s+/g, " ")
       .trim()
       .length;
+  };
+
+  const hasPreviewContent = (node) => {
+    if (!node) return false;
+    if (node.nodeType === Node.TEXT_NODE) {
+      return !!String(node.textContent || "").trim();
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) {
+      return false;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE && node.tagName?.toUpperCase() === "IMG") {
+      return true;
+    }
+    return Array.from(node.childNodes || []).some(hasPreviewContent);
+  };
+
+  const createDescriptionPreviewFragment = (html, limit) => {
+    const template = document.createElement("template");
+    template.innerHTML = String(html || "");
+
+    const fragment = document.createDocumentFragment();
+    const maxCharacters = Math.max(0, Number(limit) || 0);
+    let remainingCharacters = maxCharacters;
+    let isTruncated = false;
+    let omittedContent = false;
+
+    const copyPreviewNodes = (sourceParent, targetParent) => {
+      for (const node of Array.from(sourceParent.childNodes || [])) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const text = String(node.textContent || "");
+          if (!text) continue;
+          if (!text.trim()) {
+            targetParent.appendChild(document.createTextNode(text));
+            continue;
+          }
+
+          if (remainingCharacters <= 0) {
+            isTruncated = true;
+            omittedContent = true;
+            return;
+          }
+
+          const characters = Array.from(text);
+          if (characters.length <= remainingCharacters) {
+            targetParent.appendChild(document.createTextNode(text));
+            remainingCharacters -= characters.length;
+            continue;
+          }
+
+          const previewText = characters.slice(0, remainingCharacters).join("").replace(/\s+$/, "");
+          if (previewText) {
+            targetParent.appendChild(document.createTextNode(previewText));
+          }
+          remainingCharacters = 0;
+          isTruncated = true;
+          omittedContent = true;
+          return;
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          continue;
+        }
+
+        const tagName = node.tagName.toUpperCase();
+        if (tagName === "SCRIPT" || tagName === "STYLE") {
+          continue;
+        }
+
+        if (tagName === "IMG") {
+          if (remainingCharacters > 0) {
+            targetParent.appendChild(node.cloneNode(false));
+          } else {
+            omittedContent = true;
+          }
+          continue;
+        }
+
+        if (remainingCharacters <= 0) {
+          if (hasPreviewContent(node)) {
+            isTruncated = true;
+            omittedContent = true;
+            return;
+          }
+          continue;
+        }
+
+        const clone = node.cloneNode(false);
+        targetParent.appendChild(clone);
+        copyPreviewNodes(node, clone);
+
+        if (!clone.childNodes.length && !["BR", "HR"].includes(tagName)) {
+          clone.remove();
+        }
+
+        if (isTruncated) {
+          return;
+        }
+      }
+    };
+
+    copyPreviewNodes(template.content, fragment);
+
+    return {
+      fragment,
+      isTruncated: isTruncated || omittedContent || getNewsDescriptionTextLength(html) > maxCharacters,
+    };
+  };
+
+  const getNewsListTitle = (newsItem) => {
+    return String(newsItem?.short_title || newsItem?.title || "").trim() || "News";
   };
 
   const fetchPublicNewsItem = (newsId) => {
@@ -724,7 +847,7 @@
     if (!newsContainer) return;
     newsContainer.innerHTML = "";
     const state = document.createElement("div");
-    state.className = "news-state";
+    state.className = "gg-rp-news-state";
     state.textContent = message;
     newsContainer.appendChild(state);
   };
@@ -735,7 +858,7 @@
     newsContainer.innerHTML = "";
 
     const card = document.createElement("article");
-    card.className = "news-detail-card";
+    card.className = "gg-rp-news-detail-card";
 
     const titleText = String(newsItem.title || newsItem.short_title || "").trim() || "News";
     const rawMediaType = newsItem.media_type ?? newsItem.mediaType;
@@ -744,15 +867,15 @@
     const iconUrl = getNewsImageVariantUrl(baseImageUrl, "small");
 
     const title = document.createElement("h1");
-    title.className = "news-detail-title";
+    title.className = "gg-rp-news-detail-title";
     title.textContent = titleText;
 
     if (isIconMedia && iconUrl) {
       const titleRow = document.createElement("div");
-      titleRow.className = "news-detail-title-row";
+      titleRow.className = "gg-rp-news-detail-title-row";
 
       const icon = document.createElement("img");
-      icon.className = "news-detail-title-icon";
+      icon.className = "gg-rp-news-detail-title-icon";
       icon.src = iconUrl;
       icon.alt = newsItem.short_title || titleText;
       titleRow.appendChild(icon);
@@ -763,16 +886,16 @@
     }
 
     const meta = document.createElement("div");
-    meta.className = "news-detail-meta";
+    meta.className = "gg-rp-news-detail-meta";
 
     const creatorName = getNewsCreatorName(newsItem);
     if (creatorName) {
       const player = document.createElement("div");
-      player.className = "news-detail-player";
+      player.className = "gg-rp-news-detail-player";
       const creatorId = getNewsCreatorId(newsItem);
       if (creatorId) {
         const playerLink = document.createElement("a");
-        playerLink.className = "news-detail-player-link";
+        playerLink.className = "gg-rp-news-detail-player-link";
         playerLink.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(creatorId)}`;
         playerLink.textContent = creatorName;
         player.appendChild(playerLink);
@@ -785,7 +908,7 @@
     const dateText = formatDisplayDate(getNewsTimestampValue(newsItem));
     if (dateText) {
       const date = document.createElement("div");
-      date.className = "news-detail-date";
+      date.className = "gg-rp-news-detail-date";
       date.textContent = dateText;
       meta.appendChild(date);
     }
@@ -797,7 +920,7 @@
     const shortDescriptionText = String(newsItem.short_description || "").trim();
     if (shortDescriptionText) {
       const shortDescription = document.createElement("div");
-      shortDescription.className = "news-detail-short-description";
+      shortDescription.className = "gg-rp-news-detail-short-description";
       shortDescription.textContent = shortDescriptionText;
       card.appendChild(shortDescription);
     }
@@ -806,7 +929,7 @@
     const originalImageUrl = getNewsImageVariantUrl(baseImageUrl, "original");
     if (imageUrl && !isIconMedia) {
       const image = document.createElement("img");
-      image.className = "news-detail-image";
+      image.className = "gg-rp-news-detail-image";
       image.src = imageUrl;
       image.alt = titleText;
       image.addEventListener("click", () => {
@@ -815,7 +938,7 @@
       card.appendChild(image);
 
       const sourceLink = document.createElement("div");
-      sourceLink.className = "news-detail-source";
+      sourceLink.className = "gg-rp-news-detail-source";
       card.appendChild(sourceLink);
       renderSourceImageLink(baseImageUrl, sourceLink);
     }
@@ -823,8 +946,9 @@
     const descriptionHtml = String(newsItem.description || "").trim();
     if (descriptionHtml) {
       const description = document.createElement("div");
-      description.className = "news-detail-description";
+      description.className = "gg-rp-news-detail-description";
       description.innerHTML = descriptionHtml;
+      namespaceNewsContentClasses(description);
       description.querySelectorAll("img").forEach(image => {
         const imageSrc = toNewsImageUrl(image.getAttribute("src") || "");
         if (!imageSrc) return;
@@ -875,36 +999,48 @@
 
     allNewsItems.forEach(newsItem => {
       const row = document.createElement("div");
-      row.className = "news-row";
+      row.className = "gg-rp-news-row";
 
       const normalizedImportance = normalizeImportance(newsItem.significance || newsItem.importance);
       const mediaType = normalizeMediaType(newsItem.media_type ?? newsItem.mediaType);
       const isImageMedia = mediaType === "image";
       const isMajor = normalizedImportance === "high";
-      const isImportantImage = normalizedImportance === "medium" && isImageMedia;
-      const displayAsMajor = isMajor || isImportantImage;
+      const isImportant = normalizedImportance === "medium";
+      const isImportantImage = isImportant && isImageMedia;
+      const displayAsMajor = isMajor;
       const descriptionHtml = String(newsItem.description || "").trim();
+      const descriptionTextLength = getNewsDescriptionTextLength(descriptionHtml);
       const detailUrl = getNewsDetailUrl(newsItem);
-      const shouldLinkDetailInsteadOfPreview = (
-        !displayAsMajor
+      const shouldShowInlinePreview = (
+        !!descriptionHtml
+        && !displayAsMajor
         && !isImageMedia
-        && getNewsDescriptionTextLength(descriptionHtml) > LONG_NEWS_DESCRIPTION_LIMIT
-        && !!detailUrl
+        && descriptionTextLength <= LONG_NEWS_DESCRIPTION_LIMIT
+      );
+      const shouldLinkDetailInsteadOfPreview = (
+        !!detailUrl
+        && !displayAsMajor
+        && (
+          isImageMedia
+          || (!!descriptionHtml && descriptionTextLength > LONG_NEWS_DESCRIPTION_LIMIT)
+        )
       );
       if (displayAsMajor || shouldLinkDetailInsteadOfPreview) {
-        row.classList.add("news-row-high");
+        row.classList.add("gg-rp-news-row-link");
       }
-      const dateValue = getNewsTimestampValue(newsItem);
-      const displayDate = formatDisplayDate(dateValue);
+      if (isMajor) {
+        row.classList.add("gg-rp-news-row-major");
+      }
 
-      const iconUrl = getNewsImageVariantUrl(newsItem.image || newsItem.icon || newsItem.icon1 || "", "small");
+      const iconSource = newsItem.image || newsItem.icon || newsItem.icon1 || "";
+      const iconUrl = getNewsImageVariantUrl(iconSource, isMajor ? "medium" : "small");
       if (iconUrl) {
         const icon = document.createElement("img");
-        icon.className = "news-icon";
+        icon.className = "gg-rp-news-icon";
         icon.src = iconUrl;
-        icon.alt = newsItem.title || newsItem.short_title || "News icon";
-        icon.classList.add(isImportantImage ? "news-icon-important-image" : `news-icon-${normalizedImportance}`);
-        if (displayAsMajor) {
+        icon.alt = getNewsListTitle(newsItem);
+        icon.classList.add(isImportantImage ? "gg-rp-news-icon-important-image" : `gg-rp-news-icon-${normalizedImportance}`);
+        if (displayAsMajor || shouldLinkDetailInsteadOfPreview) {
           icon.addEventListener("click", event => {
             event.stopPropagation();
             if (detailUrl) {
@@ -912,35 +1048,31 @@
             }
           });
         }
-        row.appendChild(icon);
+        if (isMajor) {
+          const imageFrame = document.createElement("div");
+          imageFrame.className = "gg-rp-news-major-image-frame";
+          imageFrame.appendChild(icon);
+          row.appendChild(imageFrame);
+        } else {
+          row.appendChild(icon);
+        }
       }
 
       const contentWrapper = document.createElement("div");
-      contentWrapper.className = "news-content";
-      if (displayAsMajor) {
-        contentWrapper.classList.add("news-content-high");
-      }
-      if (isImportantImage) {
-        contentWrapper.classList.add("news-content-important-image");
-      }
-
-      if (displayDate) {
-        const dateLabel = document.createElement("div");
-        dateLabel.className = "news-description-date";
-        dateLabel.textContent = displayDate;
-        contentWrapper.appendChild(dateLabel);
+      contentWrapper.className = "gg-rp-news-content";
+      if (isMajor) {
+        contentWrapper.classList.add("gg-rp-news-content-major");
       }
 
       const title = document.createElement("div");
-      title.className = "news-title";
-      if (displayAsMajor || shouldLinkDetailInsteadOfPreview) {
-        title.classList.add("news-title-high");
-      }
-      if (shouldLinkDetailInsteadOfPreview) {
-        title.classList.add("news-title-long-description");
+      title.className = "gg-rp-news-title";
+      if (isMajor) {
+        title.classList.add("gg-rp-news-title-major");
+      } else if (isImportant) {
+        title.classList.add("gg-rp-news-title-important");
       }
 
-      const titleText = String(newsItem.title || newsItem.short_title || "").trim() || "News";
+      const titleText = getNewsListTitle(newsItem);
       const linkValue = String(newsItem.link || "").trim();
       if (shouldLinkDetailInsteadOfPreview) {
         const link = document.createElement("a");
@@ -965,14 +1097,6 @@
       contentWrapper.appendChild(title);
       row.appendChild(contentWrapper);
 
-      const shortDescriptionText = String(newsItem.short_description || "").trim();
-      if (shortDescriptionText && displayAsMajor) {
-        const shortDescription = document.createElement("div");
-        shortDescription.className = "news-short-description-high";
-        shortDescription.textContent = shortDescriptionText;
-        contentWrapper.appendChild(shortDescription);
-      }
-
       if (displayAsMajor || shouldLinkDetailInsteadOfPreview) {
         row.addEventListener("click", event => {
           if (event.target?.closest?.("a")) return;
@@ -982,74 +1106,55 @@
         });
       }
 
-      if (descriptionHtml && !displayAsMajor && !shouldLinkDetailInsteadOfPreview) {
-        if (normalizedImportance === "medium") {
-          row.classList.add("news-row-important-toggle");
-        }
-
+      if (shouldShowInlinePreview) {
         const chevron = document.createElement("i");
-        chevron.className = "fa fa-chevron-down news-chevron";
+        chevron.className = "fa fa-chevron-down gg-rp-news-chevron";
         row.appendChild(chevron);
 
         const descriptionBlock = document.createElement("div");
-        descriptionBlock.className = "news-description";
-
-        const descriptionMeta = document.createElement("div");
-        descriptionMeta.className = "news-description-meta";
-
-        const creatorName = getNewsCreatorName(newsItem);
-        if (creatorName) {
-          const player = document.createElement("div");
-          player.className = "news-description-player";
-          const creatorId = getNewsCreatorId(newsItem);
-          if (creatorId) {
-            const playerLink = document.createElement("a");
-            playerLink.className = "news-description-player-link";
-            playerLink.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(creatorId)}`;
-            playerLink.textContent = creatorName;
-            player.appendChild(playerLink);
-          } else {
-            player.textContent = creatorName;
-          }
-          descriptionMeta.appendChild(player);
-        }
-
-        const descriptionDateText = formatDisplayDate(dateValue);
-        if (descriptionDateText) {
-          const descriptionDate = document.createElement("div");
-          descriptionDate.className = "news-description-meta-date";
-          descriptionDate.textContent = descriptionDateText;
-          descriptionMeta.appendChild(descriptionDate);
-        }
-
-        if (descriptionMeta.children.length) {
-          descriptionBlock.appendChild(descriptionMeta);
-        }
+        descriptionBlock.className = "gg-rp-news-description";
 
         const descriptionContent = document.createElement("div");
-        descriptionContent.className = "news-description-content";
-        descriptionContent.innerHTML = descriptionHtml;
+        descriptionContent.className = "gg-rp-news-description-content";
+        const preview = createDescriptionPreviewFragment(descriptionHtml, NEWS_DESCRIPTION_PREVIEW_LIMIT);
+        descriptionContent.appendChild(preview.fragment);
+        namespaceNewsContentClasses(descriptionContent);
         descriptionContent.querySelectorAll("img").forEach(image => {
           const imageSrc = toNewsImageUrl(image.getAttribute("src") || "");
           if (!imageSrc) return;
           image.src = imageSrc;
           image.loading = "lazy";
         });
-        renderDescriptionImageSourceLinks(descriptionContent);
+        if (preview.isTruncated) {
+          const readMoreRow = document.createElement("p");
+          readMoreRow.className = "gg-rp-news-read-more-row";
+          readMoreRow.appendChild(document.createTextNode("... "));
+          if (detailUrl) {
+            const readMore = document.createElement("a");
+            readMore.className = "gg-rp-news-read-more";
+            readMore.href = detailUrl;
+            readMore.textContent = "Read more";
+            readMore.addEventListener("click", event => {
+              event.stopPropagation();
+            });
+            readMoreRow.appendChild(readMore);
+          }
+          descriptionContent.appendChild(readMoreRow);
+        }
         descriptionBlock.appendChild(descriptionContent);
 
         const toggleDescription = () => {
-          const isOpen = descriptionBlock.classList.contains("open");
+          const isOpen = descriptionBlock.classList.contains("gg-rp-news-is-open");
           if (isOpen) {
             descriptionBlock.style.height = `${descriptionBlock.scrollHeight}px`;
             requestAnimationFrame(() => {
               descriptionBlock.style.height = "0px";
-              descriptionBlock.classList.remove("open");
+              descriptionBlock.classList.remove("gg-rp-news-is-open");
               chevron.style.transform = "rotate(0deg)";
             });
           } else {
             descriptionBlock.style.height = "0px";
-            descriptionBlock.classList.add("open");
+            descriptionBlock.classList.add("gg-rp-news-is-open");
             chevron.style.transform = "rotate(180deg)";
             requestAnimationFrame(() => {
               descriptionBlock.style.height = `${descriptionBlock.scrollHeight}px`;
@@ -1058,7 +1163,7 @@
         };
 
         descriptionBlock.addEventListener("transitionend", event => {
-          if (event.propertyName === "height" && descriptionBlock.classList.contains("open")) {
+          if (event.propertyName === "height" && descriptionBlock.classList.contains("gg-rp-news-is-open")) {
             descriptionBlock.style.height = "auto";
           }
         });

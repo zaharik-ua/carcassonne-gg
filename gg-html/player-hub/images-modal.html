@@ -83,6 +83,10 @@
   .cp-image-picker-status {
     min-height: 16px;
     color: #667085;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
     font-size: 12px;
     line-height: 16px;
   }
@@ -221,6 +225,33 @@
     return toApiImageVariantUrl(source, variant, authBase) || toApiAbsoluteUrl(source, authBase);
   }
 
+  function normalizeUserId(value) {
+    const raw = String(value ?? "").trim();
+    return /^\d+$/.test(raw) ? String(Number(raw)) : raw;
+  }
+
+  function getAuthUserId(user) {
+    return normalizeUserId(user?.id ?? user?.user_id ?? user?.userId ?? "");
+  }
+
+  function imageWasAddedByUser(image, userId) {
+    const normalizedUserId = normalizeUserId(userId);
+    if (!normalizedUserId) return false;
+    return normalizeUserId(image?.owner_user_id ?? image?.ownerUserId ?? "") === normalizedUserId
+      || normalizeUserId(image?.uploaded_by_user_id ?? image?.uploadedByUserId ?? "") === normalizedUserId;
+  }
+
+  async function fetchCurrentUser(options = {}) {
+    const authBase = getAuthBase(options.authBase);
+    try {
+      const response = await fetch(`${authBase}/auth/me`, { credentials: "include" });
+      const result = await response.json().catch(() => ({}));
+      return response.ok && result?.authenticated ? result.user || null : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
   async function fetchImages(options = {}) {
     const authBase = getAuthBase(options.authBase);
     const url = new URL(`${authBase}/images`, window.location.href);
@@ -255,8 +286,13 @@
     const chooseLabel = String(options.chooseLabel || "Choose").trim();
     const uploadLabel = String(options.uploadLabel || "Upload new image").trim();
     const currentImageKey = getImageKeyFromUrl(options.currentUrl || "", authBase);
+    const hasAdminOption = Object.prototype.hasOwnProperty.call(options, "isAdmin")
+      || Object.prototype.hasOwnProperty.call(options, "isGlobalAdmin");
+    let imagePickerUserId = normalizeUserId(options.currentUserId ?? options.currentUserAuthId ?? options.userId ?? "");
+    let isGlobalAdmin = options.isAdmin === true || options.isGlobalAdmin === true;
+    let imagePickerScope = "mine";
     let selectedImage = null;
-    let renderedImages = [];
+    let loadedImages = [];
     let isDeleting = false;
     let isClosed = false;
 
@@ -299,6 +335,11 @@
     uploadSourceBtn.className = "cp-btn cp-btn-secondary";
     uploadSourceBtn.textContent = String(options.sourceUploadLabel || "Upload source").trim() || "Upload source";
 
+    const allImagesBtn = document.createElement("button");
+    allImagesBtn.type = "button";
+    allImagesBtn.className = "cp-btn cp-btn-secondary";
+    allImagesBtn.textContent = "All Images";
+
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "cp-btn cp-btn-danger";
@@ -330,9 +371,19 @@
       if (event.key === "Escape") closeModal("cancel");
     }
 
-    const setPickerStatus = (message, isError = false) => {
-      status.textContent = message || "";
+    const setPickerStatus = (message, isError = false, statusOptions = {}) => {
+      const text = String(message || "").trim();
+      status.innerHTML = "";
       status.style.color = isError ? "#c62828" : "#667085";
+      if (text) {
+        const label = document.createElement("span");
+        label.textContent = text;
+        status.appendChild(label);
+        return;
+      }
+      if (statusOptions.showAdminButton !== false && isGlobalAdmin && imagePickerScope !== "all") {
+        status.appendChild(allImagesBtn);
+      }
     };
 
     const setDeleting = (value) => {
@@ -357,9 +408,12 @@
     const renderImages = (images) => {
       if (isClosed) return;
       grid.innerHTML = "";
-      const rows = (Array.isArray(images) ? images : [])
+      loadedImages = Array.isArray(images) ? images : [];
+      const scopedImages = isGlobalAdmin && imagePickerScope === "all"
+        ? loadedImages
+        : loadedImages.filter((image) => imageWasAddedByUser(image, imagePickerUserId));
+      const rows = scopedImages
         .filter((image) => getImagePickerUrl(image, "thumb", authBase) || getImagePickerUrl(image, "original", authBase));
-      renderedImages = rows;
       if (!rows.length) {
         const empty = document.createElement("div");
         empty.className = "cp-image-picker-empty";
@@ -405,7 +459,7 @@
       });
 
       setSelectedImage(selectedImage);
-      setPickerStatus(rows.length === 1 ? "1 image available." : `${rows.length} images available.`);
+      setPickerStatus("");
     };
 
     uploadBtn.addEventListener("click", () => {
@@ -420,6 +474,11 @@
         options.onUploadSourceNew();
       }
     });
+    allImagesBtn.addEventListener("click", () => {
+      imagePickerScope = "all";
+      setPickerStatus("");
+      renderImages(loadedImages);
+    });
     deleteBtn.addEventListener("click", async () => {
       if (!selectedImage || isDeleting) return;
       if (!window.confirm("Delete this image permanently?")) return;
@@ -432,7 +491,7 @@
         await imageDeleter(selectedImage);
         const deletedImageId = String(selectedImage?.id || "");
         selectedImage = null;
-        renderImages(renderedImages.filter((image) => String(image?.id || "") !== deletedImageId));
+        renderImages(loadedImages.filter((image) => String(image?.id || "") !== deletedImageId));
         setPickerStatus("Image deleted.");
       } catch (error) {
         setPickerStatus(error?.message || "Failed to delete image.", true);
@@ -484,8 +543,17 @@
         visibility: options.visibility,
       });
 
-    Promise.resolve(imageLoader())
-      .then(renderImages)
+    Promise.all([
+      Promise.resolve((imagePickerUserId && hasAdminOption) ? null : fetchCurrentUser({ authBase })),
+      Promise.resolve(imageLoader()),
+    ])
+      .then(([currentUser, images]) => {
+        if (currentUser) {
+          imagePickerUserId = getAuthUserId(currentUser);
+          isGlobalAdmin = isGlobalAdmin || currentUser?.isAdmin === true || Number(currentUser?.admin) === 1;
+        }
+        renderImages(images);
+      })
       .catch((error) => {
         if (isClosed) return;
         grid.innerHTML = "";
@@ -493,7 +561,7 @@
         empty.className = "cp-image-picker-empty";
         empty.textContent = error?.message || "Failed to load images.";
         grid.appendChild(empty);
-        setPickerStatus("");
+        setPickerStatus("", false, { showAdminButton: false });
       });
   }
 

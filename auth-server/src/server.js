@@ -964,6 +964,7 @@ async function loadIconById(iconId) {
         ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(i.association_id, '')))
       LEFT JOIN streamers s
         ON s.id = i.streamer_id
+       AND s.deleted_at IS NULL
       WHERE i.id = ?
       LIMIT 1
     `,
@@ -3369,11 +3370,14 @@ function ensureStreamersSchema() {
     CREATE TABLE IF NOT EXISTS streamers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
+      short_name TEXT,
       avatar TEXT,
       scoreboard_style TEXT NOT NULL DEFAULT 'Default',
       profile_id TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      deleted_by TEXT,
+      deleted_at TEXT
     )
   `, (createErr) => {
     if (createErr) {
@@ -3386,22 +3390,61 @@ function ensureStreamersSchema() {
         return;
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
-      addColumnIfMissing(columns, "streamers", "name", "TEXT");
-      addColumnIfMissing(columns, "streamers", "avatar", "TEXT");
-      addColumnIfMissing(columns, "streamers", "scoreboard_style", "TEXT NOT NULL DEFAULT 'Default'");
-      addColumnIfMissing(columns, "streamers", "profile_id", "TEXT");
-      addColumnIfMissing(columns, "streamers", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-      addColumnIfMissing(columns, "streamers", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-    });
+      const columnNames = new Set(columns.map((column) => column.name));
+      const addStreamerColumnIfMissing = (columnName, sqlDefinition) => {
+        if (columnNames.has(columnName)) return;
+        db.run(
+          `ALTER TABLE streamers ADD COLUMN ${quoteSqlIdentifier(columnName)} ${sqlDefinition}`,
+          (alterErr) => {
+            if (alterErr) {
+              console.error(`Failed to add ${columnName} column to streamers`, alterErr);
+            }
+          }
+        );
+      };
 
-    db.run(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_streamers_profile_id ON streamers(profile_id)",
-      (indexErr) => {
-        if (indexErr) {
-          console.error("Failed to ensure unique index for streamers.profile_id", indexErr);
-        }
-      }
-    );
+      db.serialize(() => {
+        addStreamerColumnIfMissing("name", "TEXT");
+        addStreamerColumnIfMissing("short_name", "TEXT");
+        addStreamerColumnIfMissing("avatar", "TEXT");
+        addStreamerColumnIfMissing("scoreboard_style", "TEXT NOT NULL DEFAULT 'Default'");
+        addStreamerColumnIfMissing("profile_id", "TEXT");
+        addStreamerColumnIfMissing("created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+        addStreamerColumnIfMissing("updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+        addStreamerColumnIfMissing("deleted_by", "TEXT");
+        addStreamerColumnIfMissing("deleted_at", "TEXT");
+        db.run(
+          `
+            UPDATE streamers
+            SET short_name = name
+            WHERE trim(COALESCE(short_name, '')) = ''
+              AND trim(COALESCE(name, '')) <> ''
+          `,
+          (backfillErr) => {
+            if (backfillErr) {
+              console.error("Failed to backfill streamers.short_name", backfillErr);
+            }
+          }
+        );
+        db.run("DROP INDEX IF EXISTS idx_streamers_profile_id", (dropErr) => {
+          if (dropErr) {
+            console.error("Failed to drop old streamers.profile_id index", dropErr);
+          }
+        });
+        db.run(
+          `
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_streamers_profile_id_active
+            ON streamers(profile_id)
+            WHERE deleted_at IS NULL
+          `,
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure active unique index for streamers.profile_id", indexErr);
+            }
+          }
+        );
+      });
+    });
   });
 }
 
@@ -4552,11 +4595,13 @@ function getUserStreamerByProfileId(profileId, done) {
       SELECT
         s.id,
         s.name,
+        COALESCE(NULLIF(trim(s.short_name), ''), s.name) AS short_name,
         s.avatar,
         s.scoreboard_style,
         s.profile_id
       FROM streamers s
       WHERE trim(COALESCE(s.profile_id, '')) = trim(?)
+        AND s.deleted_at IS NULL
       LIMIT 1
     `,
     [normalizedProfileId],
@@ -4576,6 +4621,7 @@ function getStreamById(streamId, done) {
         s.created_at,
         s.updated_at,
         sr.name AS streamer_name,
+        COALESCE(NULLIF(trim(sr.short_name), ''), sr.name) AS streamer_short_name,
         sr.avatar AS streamer_avatar,
         sr.scoreboard_style AS streamer_scoreboard_style,
         sr.profile_id AS streamer_profile_id,
@@ -4588,6 +4634,7 @@ function getStreamById(streamId, done) {
       FROM streams s
       INNER JOIN streamers sr
         ON sr.id = s.streamer_id
+       AND sr.deleted_at IS NULL
       LEFT JOIN matches m
         ON s.entity_type = 'match'
        AND m.id = s.entity_id
@@ -4648,12 +4695,14 @@ function loadStreamsByMatchIds(matchIds, done) {
         s.created_at,
         s.updated_at,
         sr.name AS streamer_name,
+        COALESCE(NULLIF(trim(sr.short_name), ''), sr.name) AS streamer_short_name,
         sr.avatar AS streamer_avatar,
         sr.scoreboard_style AS streamer_scoreboard_style,
         sr.profile_id AS streamer_profile_id
       FROM streams s
       INNER JOIN streamers sr
         ON sr.id = s.streamer_id
+       AND sr.deleted_at IS NULL
       WHERE s.deleted_at IS NULL
         AND s.entity_type = 'match'
         AND trim(COALESCE(s.entity_id, '')) IN (${placeholders})
@@ -6244,6 +6293,7 @@ app.get("/streamers", (req, res, next) => {
       SELECT
         s.id,
         s.name,
+        COALESCE(NULLIF(trim(s.short_name), ''), s.name) AS short_name,
         s.avatar,
         s.scoreboard_style,
         s.profile_id,
@@ -6253,6 +6303,7 @@ app.get("/streamers", (req, res, next) => {
       LEFT JOIN profiles p
         ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.profile_id, ''))
        AND p.deleted_at IS NULL
+      WHERE s.deleted_at IS NULL
       ORDER BY s.name COLLATE NOCASE ASC, s.id ASC
     `,
     (err, rows) => {
@@ -6264,6 +6315,7 @@ app.get("/streamers", (req, res, next) => {
 
 app.post("/streamers", requireAdmin, (req, res) => {
   const name = String(req.body?.name || "").trim();
+  const shortName = String(req.body?.short_name || "").trim() || name;
   const avatar = String(req.body?.avatar || "").trim() || null;
   const scoreboardStyle = String(req.body?.scoreboard_style || "Default").trim() || "Default";
   const profileId = String(req.body?.profile_id || "").trim();
@@ -6296,7 +6348,7 @@ app.post("/streamers", requireAdmin, (req, res) => {
       }
 
       return db.get(
-        "SELECT id FROM streamers WHERE trim(COALESCE(profile_id, '')) = trim(?) LIMIT 1",
+        "SELECT id FROM streamers WHERE trim(COALESCE(profile_id, '')) = trim(?) AND deleted_at IS NULL LIMIT 1",
         [profileId],
         (dupErr, dupRow) => {
           if (dupErr) {
@@ -6308,10 +6360,10 @@ app.post("/streamers", requireAdmin, (req, res) => {
 
           return db.run(
             `
-              INSERT INTO streamers (name, avatar, scoreboard_style, profile_id, created_at, updated_at)
-              VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              INSERT INTO streamers (name, short_name, avatar, scoreboard_style, profile_id, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `,
-            [name, avatar, scoreboardStyle, profileId],
+            [name, shortName, avatar, scoreboardStyle, profileId],
             function onInsert(insertErr) {
               if (insertErr) {
                 if (String(insertErr.message || "").includes("UNIQUE")) {
@@ -6325,6 +6377,7 @@ app.post("/streamers", requireAdmin, (req, res) => {
                   SELECT
                     s.id,
                     s.name,
+                    COALESCE(NULLIF(trim(s.short_name), ''), s.name) AS short_name,
                     s.avatar,
                     s.scoreboard_style,
                     s.profile_id,
@@ -6357,6 +6410,7 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
   const streamerId = normalizePositiveInteger(req.params.id);
   const payloadId = normalizePositiveInteger(req.body?.id);
   const name = String(req.body?.name || "").trim();
+  const shortName = String(req.body?.short_name || "").trim() || name;
   const avatar = String(req.body?.avatar || "").trim() || null;
   const scoreboardStyle = String(req.body?.scoreboard_style || "Default").trim() || "Default";
   const profileId = String(req.body?.profile_id || "").trim();
@@ -6379,7 +6433,7 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
   }
 
   return db.get(
-    "SELECT id FROM streamers WHERE id = ? LIMIT 1",
+    "SELECT id FROM streamers WHERE id = ? AND deleted_at IS NULL LIMIT 1",
     [streamerId],
     (streamerErr, currentRow) => {
       if (streamerErr) {
@@ -6406,7 +6460,7 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
           }
 
           return db.get(
-            "SELECT id FROM streamers WHERE trim(COALESCE(profile_id, '')) = trim(?) AND id <> ? LIMIT 1",
+            "SELECT id FROM streamers WHERE trim(COALESCE(profile_id, '')) = trim(?) AND id <> ? AND deleted_at IS NULL LIMIT 1",
             [profileId, streamerId],
             (dupErr, dupRow) => {
               if (dupErr) {
@@ -6421,13 +6475,15 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
                   UPDATE streamers
                   SET
                     name = ?,
+                    short_name = ?,
                     avatar = ?,
                     scoreboard_style = ?,
                     profile_id = ?,
                     updated_at = CURRENT_TIMESTAMP
                   WHERE id = ?
+                    AND deleted_at IS NULL
                 `,
-                [name, avatar, scoreboardStyle, profileId, streamerId],
+                [name, shortName, avatar, scoreboardStyle, profileId, streamerId],
                 function onUpdate(err) {
                   if (err) {
                     if (String(err.message || "").includes("UNIQUE")) {
@@ -6444,6 +6500,7 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
                       SELECT
                         s.id,
                         s.name,
+                        COALESCE(NULLIF(trim(s.short_name), ''), s.name) AS short_name,
                         s.avatar,
                         s.scoreboard_style,
                         s.profile_id,
@@ -6454,6 +6511,7 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
                         ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.profile_id, ''))
                        AND p.deleted_at IS NULL
                       WHERE s.id = ?
+                        AND s.deleted_at IS NULL
                       LIMIT 1
                     `,
                     [streamerId],
@@ -6470,6 +6528,36 @@ app.patch("/streamers/:id", requireAdmin, (req, res) => {
           );
         }
       );
+    }
+  );
+});
+
+app.delete("/streamers/:id", requireAdmin, (req, res) => {
+  const streamerId = normalizePositiveInteger(req.params.id);
+  if (!streamerId) {
+    return res.status(400).json({ ok: false, message: "Invalid streamer id" });
+  }
+
+  const actorPlayerId = String(req.user?.player_id || "").trim() || null;
+  return db.run(
+    `
+      UPDATE streamers
+      SET
+        deleted_at = CURRENT_TIMESTAMP,
+        deleted_by = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+        AND deleted_at IS NULL
+    `,
+    [actorPlayerId, streamerId],
+    function onDelete(err) {
+      if (err) {
+        return res.status(500).json({ ok: false, message: "Failed to delete streamer" });
+      }
+      if (!this || this.changes === 0) {
+        return res.status(404).json({ ok: false, message: "Streamer not found" });
+      }
+      return res.json({ ok: true });
     }
   );
 });
@@ -6518,6 +6606,7 @@ app.get("/icons", (req, res, next) => {
         ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(i.association_id, '')))
       LEFT JOIN streamers s
         ON s.id = i.streamer_id
+       AND s.deleted_at IS NULL
       ORDER BY COALESCE(i.category, '') COLLATE NOCASE ASC, i.name COLLATE NOCASE ASC, i.id ASC
     `,
     (err, rows) => {
@@ -6555,7 +6644,7 @@ app.post("/icons", requireAdmin, async (req, res) => {
 
     const normalizedStreamerId = category === "YouTube" ? streamerId : null;
     if (normalizedStreamerId) {
-      const streamerRow = await dbGetAsync("SELECT id FROM streamers WHERE id = ? LIMIT 1", [streamerId]);
+      const streamerRow = await dbGetAsync("SELECT id FROM streamers WHERE id = ? AND deleted_at IS NULL LIMIT 1", [streamerId]);
       if (!streamerRow) {
         return res.status(400).json({ ok: false, message: "streamer_id must reference an existing streamer" });
       }
@@ -6638,7 +6727,7 @@ app.patch("/icons/:id", requireAdmin, async (req, res) => {
 
     const normalizedStreamerId = category === "YouTube" ? streamerId : null;
     if (normalizedStreamerId) {
-      const streamerRow = await dbGetAsync("SELECT id FROM streamers WHERE id = ? LIMIT 1", [streamerId]);
+      const streamerRow = await dbGetAsync("SELECT id FROM streamers WHERE id = ? AND deleted_at IS NULL LIMIT 1", [streamerId]);
       if (!streamerRow) {
         return res.status(400).json({ ok: false, message: "streamer_id must reference an existing streamer" });
       }
@@ -7632,6 +7721,7 @@ app.get("/streams", (req, res, next) => {
             s.created_at,
             s.updated_at,
             sr.name AS streamer_name,
+            COALESCE(NULLIF(trim(sr.short_name), ''), sr.name) AS streamer_short_name,
             sr.avatar AS streamer_avatar,
             sr.scoreboard_style AS streamer_scoreboard_style,
             sr.profile_id AS streamer_profile_id,
@@ -7644,6 +7734,7 @@ app.get("/streams", (req, res, next) => {
           FROM streams s
           INNER JOIN streamers sr
             ON sr.id = s.streamer_id
+           AND sr.deleted_at IS NULL
           LEFT JOIN matches m
             ON s.entity_type = 'match'
            AND m.id = s.entity_id
@@ -7672,6 +7763,7 @@ app.get("/streams", (req, res, next) => {
         FROM streams s
         INNER JOIN streamers sr
           ON sr.id = s.streamer_id
+         AND sr.deleted_at IS NULL
         LEFT JOIN matches m
           ON s.entity_type = 'match'
          AND m.id = s.entity_id
@@ -7783,6 +7875,7 @@ app.post("/streams", (req, res, next) => {
                           s.created_at,
                           s.updated_at,
                           sr.name AS streamer_name,
+                          COALESCE(NULLIF(trim(sr.short_name), ''), sr.name) AS streamer_short_name,
                           sr.avatar AS streamer_avatar,
                           sr.scoreboard_style AS streamer_scoreboard_style,
                           sr.profile_id AS streamer_profile_id,
@@ -7795,6 +7888,7 @@ app.post("/streams", (req, res, next) => {
                         FROM streams s
                         INNER JOIN streamers sr
                           ON sr.id = s.streamer_id
+                         AND sr.deleted_at IS NULL
                         LEFT JOIN matches m
                           ON s.entity_type = 'match'
                          AND m.id = s.entity_id
@@ -7854,7 +7948,7 @@ app.post("/streams", (req, res, next) => {
     const requestedStreamerId = normalizePositiveInteger(req.body?.streamer_id);
     if (requestedStreamerId) {
       return db.get(
-        "SELECT id, name, avatar, profile_id FROM streamers WHERE id = ? LIMIT 1",
+        "SELECT id, name, short_name, avatar, profile_id FROM streamers WHERE id = ? AND deleted_at IS NULL LIMIT 1",
         [requestedStreamerId],
         (streamerErr, streamerRow) => {
           if (streamerErr) return next(streamerErr);
@@ -10629,6 +10723,7 @@ function publicMainPageMatchesHandler(req, res, next) {
             id: row.id,
             link: row.link,
             streamer_name: row.streamer_name,
+            streamer_short_name: row.streamer_short_name,
             streamer_avatar: row.streamer_avatar,
             streamer_profile_id: row.streamer_profile_id,
           });

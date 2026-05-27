@@ -199,7 +199,6 @@
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
-  const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
   const STATIC_SECTION_ITEMS = [
     {
       type: "view",
@@ -485,13 +484,11 @@
     let currentUserProfileId = "";
     let hasLinkedBgaId = false;
     let isStreamerUser = false;
-    let isNewsEditorUser = false;
     try {
-      const [meRes, tournamentsRes, streamersRes, newsEditorsRes] = await Promise.all([
+      const [meRes, tournamentsRes, streamersRes] = await Promise.all([
         fetch(ME_URL, { method: "GET", credentials: "include" }),
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
-        fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" }),
       ]);
       if (meRes.ok) {
         const meData = await meRes.json().catch(() => ({}));
@@ -520,13 +517,6 @@
           String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserProfileId
         ));
       }
-      if (newsEditorsRes.ok) {
-        const newsEditorsData = await newsEditorsRes.json().catch(() => ({}));
-        const newsEditors = Array.isArray(newsEditorsData?.news_editors) ? newsEditorsData.news_editors : [];
-        isNewsEditorUser = !!currentUserProfileId && newsEditors.some((entry) => (
-          String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserProfileId
-        ));
-      }
     } catch (_error) {
       tournaments = [];
     }
@@ -545,7 +535,7 @@
         if (isAdminUser) return true;
         if (item.view === "players" || item.view === "friendly-find") return isCaptainUser;
         if (item.view === "streams") return isStreamerUser;
-        if (item.view === "news") return isNewsEditorUser;
+        if (item.view === "news") return isAuthenticatedUser;
         if (item.view === "nationals" || item.view === "challenges") {
           return isAuthenticatedUser && hasLinkedBgaId;
         }

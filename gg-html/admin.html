@@ -2393,6 +2393,7 @@
 
     const idField = createTextRow("id", item?.id || "", { readOnly: true });
     const nameField = createTextRow("name", item?.name || "");
+    const shortNameField = createTextRow("short_name", item?.short_name || item?.name || "");
     const avatarField = createTextRow("avatar", item?.avatar || "");
     const scoreboardStyleField = createSelectRow(
       "scoreboard style",
@@ -2427,6 +2428,7 @@
 
     if (mode === "edit") form.appendChild(idField.row);
     form.appendChild(nameField.row);
+    form.appendChild(shortNameField.row);
     form.appendChild(avatarField.row);
     form.appendChild(scoreboardStyleField.row);
     form.appendChild(profileField.row);
@@ -2455,6 +2457,25 @@
 
     actions.appendChild(saveBtn);
     actions.appendChild(cancelBtn);
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "cp-btn cp-btn-secondary";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.classList.toggle("hidden", mode !== "edit");
+    deleteBtn.addEventListener("click", async () => {
+      if (!item?.id) return;
+      if (!window.confirm("Delete this streamer?")) return;
+      try {
+        await apiJson(`${STREAMERS_URL}/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+        closeInlineForm();
+        setStatus("Streamer deleted.", false);
+        await loadSectionData("streamers");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to delete streamer.", true);
+      }
+    });
+    if (mode === "edit") actions.appendChild(deleteBtn);
     form.appendChild(actions);
 
     form.addEventListener("submit", async (event) => {
@@ -2462,6 +2483,7 @@
       const payload = {
         id: Number.parseInt(String(idField.input.value || "").trim(), 10),
         name: String(nameField.input.value || "").trim(),
+        short_name: String(shortNameField.input.value || "").trim(),
         avatar: String(avatarField.input.value || "").trim(),
         scoreboard_style: String(scoreboardStyleField.select.value || "Default").trim() || "Default",
         profile_id: String(profileField.select.value || "").trim(),
@@ -2470,6 +2492,9 @@
       if (!payload.name) {
         setStatus("Streamer name is required.", true);
         return;
+      }
+      if (!payload.short_name) {
+        payload.short_name = payload.name;
       }
       if (!payload.profile_id) {
         setStatus("profile_id is required.", true);
@@ -3808,12 +3833,16 @@
 
     sectionList.innerHTML = "";
     state.streamers.forEach((item) => {
+      const shortName = String(item?.short_name || item?.name || "").trim();
+      const subtitleParts = [];
+      if (shortName) subtitleParts.push(`Short: ${shortName}`);
+      subtitleParts.push(String(item?.scoreboard_style || "Default").trim() || "Default");
       sectionList.appendChild(createListRow({
         imageSrc: item.avatar,
         imageAlt: item.name,
         imageRound: false,
         title: item.name || `Streamer #${item.id}`,
-        subtitle: String(item?.scoreboard_style || "Default").trim() || "Default",
+        subtitle: subtitleParts.join(" • "),
         buttonLabel: "Edit",
         onClick: (row) => openStreamerForm("edit", item, row),
       }));

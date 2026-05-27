@@ -11,6 +11,11 @@
     font-family: "Montserrat", sans-serif;
   }
 
+  b,
+  strong {
+    font-weight: 600;
+  }
+
   .captain-wrap {
     display: grid;
     gap: 10px;
@@ -77,6 +82,7 @@
     display: grid;
     gap: 1px;
     align-content: start;
+    min-width: 0;
   }
 
   .cp-edit-row label {
@@ -144,6 +150,7 @@
 
   .cp-char-count-field {
     position: relative;
+    min-width: 0;
   }
 
   .cp-char-count-field input,
@@ -341,6 +348,66 @@
     text-decoration: underline;
   }
 
+  .news-section-title {
+    color: #800020;
+    display: block;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.15;
+    margin: 10px 0 6px;
+    text-transform: uppercase;
+  }
+
+  .cp-news-desc .news-section-title {
+    font-size: 13px;
+    margin: 4px 0 5px;
+  }
+
+  .news-quote-block {
+    margin: 8px 0;
+    position: relative;
+  }
+
+  .news-quote-author {
+    color: #4b5563;
+    display: block;
+    font-size: 0.85em;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .news-quote-author:not(:empty)::after {
+    content: ":";
+  }
+
+  .news-quote-text {
+    border-left: 0 !important;
+    color: #1a73b7;
+    display: block;
+    font-size: 14px;
+    font-style: italic;
+    line-height: 1.25;
+    margin: 3px 0 0 18px;
+    padding: 5px 10px;
+    position: relative;
+    white-space: pre-wrap;
+  }
+
+  .news-quote-text::before {
+    color: #1a73b7;
+    content: "\f10d";
+    font-family: "Font Awesome 6 Free";
+    font-size: 14px;
+    font-style: normal;
+    font-weight: 900;
+    left: -10px;
+    line-height: 1;
+    pointer-events: none;
+    position: absolute;
+    top: 6px;
+  }
+
   .cp-news-desc img {
     display: none;
   }
@@ -370,6 +437,7 @@
     border-radius: 4px;
     background: #fff;
     overflow: hidden;
+    position: relative;
   }
 
   .cp-news-editor-toolbar {
@@ -379,6 +447,27 @@
     padding: 6px;
     border-bottom: 1px solid #dbe2ea;
     background: #f8fafc;
+  }
+
+  .cp-news-editor-floating-toolbar {
+    background: #fff;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    box-shadow: 0 8px 22px rgba(15, 28, 48, 0.18);
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 4px;
+    left: 6px;
+    max-width: calc(100% - 12px);
+    overflow-x: auto;
+    padding: 4px;
+    position: absolute;
+    top: 6px;
+    z-index: 6;
+  }
+
+  .cp-news-editor-floating-toolbar[hidden] {
+    display: none;
   }
 
   .cp-news-editor-btn {
@@ -436,6 +525,60 @@
   .cp-news-editor-area img.cp-news-editor-image-selected {
     outline: 2px solid #1a73b7;
     outline-offset: 2px;
+  }
+
+  .cp-news-editor-area .news-section-title {
+    font-size: 18px;
+    margin: 10px 0 6px;
+    outline: none;
+  }
+
+  .cp-news-editor-area .news-quote-block {
+    background: #f8fbff;
+    border-radius: 4px;
+    padding: 8px 34px 8px 10px;
+    position: relative;
+  }
+
+  .cp-news-editor-area .news-quote-author,
+  .cp-news-editor-area .news-quote-text {
+    min-height: 20px;
+    outline: none;
+  }
+
+  .cp-news-editor-area .news-quote-author:empty::before,
+  .cp-news-editor-area .news-quote-text:empty::before {
+    color: #98a2b3;
+    content: attr(data-placeholder);
+    font-style: normal;
+  }
+
+  .cp-news-editor-area .cp-news-quote-remove {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    color: #667085;
+    cursor: pointer;
+    display: inline-flex;
+    height: 24px;
+    justify-content: center;
+    position: absolute;
+    right: 7px;
+    top: 7px;
+    width: 24px;
+  }
+
+  .cp-news-editor-area .cp-news-quote-remove:hover,
+  .cp-news-editor-area .cp-news-quote-remove:focus-visible {
+    border-color: #b42318;
+    color: #b42318;
+  }
+
+  .cp-news-editor-area .cp-news-quote-remove:disabled {
+    color: #98a2b3;
+    cursor: not-allowed;
+    opacity: 0.7;
   }
 
   .cp-news-editor-image-marker {
@@ -545,6 +688,10 @@
   .cp-image-picker-status {
     min-height: 16px;
     color: #667085;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
     font-size: 12px;
     line-height: 16px;
   }
@@ -608,12 +755,15 @@
     display: inline-flex;
     flex-direction: column;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .cp-dd-btn {
     all: unset;
     box-sizing: border-box;
     width: 100%;
+    min-width: 0;
     height: 30px;
     border: 1px solid #c8ced8;
     border-radius: 4px;
@@ -648,8 +798,10 @@
   .cp-dd-btn-content {
     display: inline-flex;
     align-items: center;
+    flex: 1 1 auto;
     gap: 6px;
     min-width: 0;
+    max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -687,8 +839,9 @@
     position: absolute;
     left: 0;
     top: calc(100% + 4px);
-    min-width: 100%;
-    width: max-content;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
     max-height: 0;
     overflow: hidden;
     display: flex;
@@ -713,6 +866,7 @@
   }
 
   .cp-dd-search {
+    flex: 0 0 auto;
     padding: 6px 8px;
     border-bottom: 1px solid #edf1f6;
     background: #fff;
@@ -732,6 +886,9 @@
   .cp-dd-option {
     all: unset;
     box-sizing: border-box;
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
     padding: 5px 8px;
     border-top: 1px solid #edf1f6;
     display: inline-flex;
@@ -741,7 +898,16 @@
     color: #2f3947;
     line-height: 1.2;
     white-space: nowrap;
+    overflow: hidden;
     cursor: pointer;
+  }
+
+  .cp-dd-option-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .cp-dd-option:first-child {
@@ -990,6 +1156,32 @@
     return toApiImageVariantUrl(source, variant) || toApiAbsoluteUrl(source);
   }
 
+  function normalizeUserId(value) {
+    const raw = String(value ?? "").trim();
+    return /^\d+$/.test(raw) ? String(Number(raw)) : raw;
+  }
+
+  function getAuthUserId(user) {
+    return normalizeUserId(user?.id ?? user?.user_id ?? user?.userId ?? "");
+  }
+
+  function imageWasAddedByUser(image, userId) {
+    const normalizedUserId = normalizeUserId(userId);
+    if (!normalizedUserId) return false;
+    return normalizeUserId(image?.owner_user_id ?? image?.ownerUserId ?? "") === normalizedUserId
+      || normalizeUserId(image?.uploaded_by_user_id ?? image?.uploadedByUserId ?? "") === normalizedUserId;
+  }
+
+  async function fetchCurrentNewsImageUser() {
+    try {
+      const response = await fetch(ME_URL, { method: "GET", credentials: "include" });
+      const result = await response.json().catch(() => ({}));
+      return response.ok && result?.authenticated ? result.user || null : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
   async function fetchNewsImageLibrary() {
     const url = new URL(IMAGES_URL, window.location.href);
     url.searchParams.set("status", "ready");
@@ -1021,8 +1213,13 @@
     const chooseLabel = String(options.chooseLabel || "Choose").trim();
     const uploadLabel = String(options.uploadLabel || "Upload new image").trim();
     const currentImageKey = getImageKeyFromUrl(options.currentUrl || "");
+    const hasAdminOption = Object.prototype.hasOwnProperty.call(options, "isAdmin")
+      || Object.prototype.hasOwnProperty.call(options, "isGlobalAdmin");
+    let imagePickerUserId = normalizeUserId(options.currentUserId ?? options.currentUserAuthId ?? options.userId ?? "");
+    let isGlobalAdmin = options.isAdmin === true || options.isGlobalAdmin === true;
+    let imagePickerScope = "mine";
     let selectedImage = null;
-    let renderedImages = [];
+    let loadedImages = [];
     let isDeleting = false;
     let isClosed = false;
 
@@ -1065,6 +1262,11 @@
     uploadSourceBtn.className = "cp-btn cp-btn-secondary";
     uploadSourceBtn.textContent = String(options.sourceUploadLabel || "Upload source").trim() || "Upload source";
 
+    const allImagesBtn = document.createElement("button");
+    allImagesBtn.type = "button";
+    allImagesBtn.className = "cp-btn cp-btn-secondary";
+    allImagesBtn.textContent = "All Images";
+
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "cp-btn cp-btn-danger";
@@ -1096,9 +1298,19 @@
       if (event.key === "Escape") closeModal("cancel");
     }
 
-    const setPickerStatus = (message, isError = false) => {
-      status.textContent = message || "";
+    const setPickerStatus = (message, isError = false, statusOptions = {}) => {
+      const text = String(message || "").trim();
+      status.innerHTML = "";
       status.style.color = isError ? "#c62828" : "#667085";
+      if (text) {
+        const label = document.createElement("span");
+        label.textContent = text;
+        status.appendChild(label);
+        return;
+      }
+      if (statusOptions.showAdminButton !== false && isGlobalAdmin && imagePickerScope !== "all") {
+        status.appendChild(allImagesBtn);
+      }
     };
 
     const setDeleting = (value) => {
@@ -1123,9 +1335,12 @@
     const renderImages = (images) => {
       if (isClosed) return;
       grid.innerHTML = "";
-      const rows = (Array.isArray(images) ? images : [])
+      loadedImages = Array.isArray(images) ? images : [];
+      const scopedImages = isGlobalAdmin && imagePickerScope === "all"
+        ? loadedImages
+        : loadedImages.filter((image) => imageWasAddedByUser(image, imagePickerUserId));
+      const rows = scopedImages
         .filter((image) => getImagePickerUrl(image, "thumb") || getImagePickerUrl(image, "original"));
-      renderedImages = rows;
       if (!rows.length) {
         const empty = document.createElement("div");
         empty.className = "cp-image-picker-empty";
@@ -1171,7 +1386,7 @@
       });
 
       setSelectedImage(selectedImage);
-      setPickerStatus(rows.length === 1 ? "1 image available." : `${rows.length} images available.`);
+      setPickerStatus("");
     };
 
     uploadBtn.addEventListener("click", () => {
@@ -1186,6 +1401,11 @@
         options.onUploadSourceNew();
       }
     });
+    allImagesBtn.addEventListener("click", () => {
+      imagePickerScope = "all";
+      setPickerStatus("");
+      renderImages(loadedImages);
+    });
     deleteBtn.addEventListener("click", async () => {
       if (!selectedImage || isDeleting) return;
       if (!window.confirm("Delete this image permanently?")) return;
@@ -1195,7 +1415,7 @@
         await deleteNewsImage(selectedImage);
         const deletedImageId = String(selectedImage?.id || "");
         selectedImage = null;
-        renderImages(renderedImages.filter((image) => String(image?.id || "") !== deletedImageId));
+        renderImages(loadedImages.filter((image) => String(image?.id || "") !== deletedImageId));
         setPickerStatus("Image deleted.");
       } catch (error) {
         setPickerStatus(error?.message || "Failed to delete image.", true);
@@ -1236,8 +1456,17 @@
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
 
-    fetchNewsImageLibrary()
-      .then(renderImages)
+    Promise.all([
+      Promise.resolve((imagePickerUserId && hasAdminOption) ? null : fetchCurrentNewsImageUser()),
+      fetchNewsImageLibrary(),
+    ])
+      .then(([currentUser, images]) => {
+        if (currentUser) {
+          imagePickerUserId = getAuthUserId(currentUser);
+          isGlobalAdmin = isGlobalAdmin || currentUser?.isAdmin === true || Number(currentUser?.admin) === 1;
+        }
+        renderImages(images);
+      })
       .catch((error) => {
         if (isClosed) return;
         grid.innerHTML = "";
@@ -1245,7 +1474,7 @@
         empty.className = "cp-image-picker-empty";
         empty.textContent = error?.message || "Failed to load images.";
         grid.appendChild(empty);
-        setPickerStatus("");
+        setPickerStatus("", false, { showAdminButton: false });
       });
   }
 
@@ -1385,9 +1614,10 @@
     return new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi, 0)).toISOString();
   } 
 
-  function sanitizeNewsDescriptionHtml(rawHtml) {
+  function sanitizeNewsDescriptionHtml(rawHtml, options = {}) {
     const raw = String(rawHtml || "").trim();
     if (!raw) return "";
+    const preserveEmptyQuotes = options.preserveEmptyQuotes === true;
     const allowedTags = new Set(["P", "BR", "STRONG", "EM", "A", "OL", "UL", "LI", "IMG"]);
     const template = document.createElement("template");
     template.innerHTML = raw;
@@ -1400,6 +1630,111 @@
       return "";
     };
 
+    const isNewsQuoteBlockElement = (node) => (
+      node?.nodeType === Node.ELEMENT_NODE
+      && (
+        node.classList?.contains("news-quote-block")
+        || String(node.getAttribute?.("data-news-quote") || "").trim().toLowerCase() === "true"
+      )
+    );
+
+    const isNewsQuoteAuthorElement = (node) => (
+      node?.nodeType === Node.ELEMENT_NODE
+      && node.classList?.contains("news-quote-author")
+    );
+
+    const isNewsQuoteTextElement = (node) => (
+      node?.nodeType === Node.ELEMENT_NODE
+      && node.classList?.contains("news-quote-text")
+    );
+
+    const isNewsSectionTitleElement = (node) => (
+      node?.nodeType === Node.ELEMENT_NODE
+      && (
+        node.classList?.contains("news-section-title")
+        || /^H[1-6]$/i.test(node.tagName || "")
+      )
+    );
+
+    const getTextWithLineBreaks = (node) => {
+      const blockTags = new Set(["DIV", "P", "LI", "BLOCKQUOTE"]);
+      const collect = (currentNode, parts = []) => {
+        Array.from(currentNode?.childNodes || []).forEach((child) => {
+          if (child.nodeType === Node.TEXT_NODE) {
+            parts.push(child.textContent || "");
+            return;
+          }
+          if (child.nodeType !== Node.ELEMENT_NODE) return;
+          if (child.matches?.(".cp-news-quote-remove")) return;
+          if (child.tagName?.toUpperCase() === "BR") {
+            parts.push("\n");
+            return;
+          }
+          const lengthBefore = parts.length;
+          collect(child, parts);
+          if (blockTags.has(child.tagName.toUpperCase()) && parts.length > lengthBefore) {
+            parts.push("\n");
+          }
+        });
+        return parts;
+      };
+
+      return collect(node)
+        .join("")
+        .replace(/\u00a0/g, " ")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n[ \t]+/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    };
+
+    const appendTextWithLineBreaks = (node, text) => {
+      String(text || "").split(/\n/).forEach((line, index) => {
+        if (index > 0) node.appendChild(document.createElement("br"));
+        if (line) node.appendChild(document.createTextNode(line));
+      });
+    };
+
+    const sanitizeNewsQuoteBlock = (node) => {
+      const tagName = node.tagName?.toUpperCase() || "";
+      const isStandaloneBlockquote = tagName === "BLOCKQUOTE" && !isNewsQuoteTextElement(node);
+      const authorNode = isStandaloneBlockquote
+        ? null
+        : isNewsQuoteAuthorElement(node)
+          ? node
+          : node.querySelector?.(".news-quote-author") || null;
+      const textNode = isStandaloneBlockquote
+        ? node
+        : isNewsQuoteTextElement(node)
+          ? node
+          : node.querySelector?.(".news-quote-text, blockquote") || null;
+      const authorText = getTextWithLineBreaks(authorNode)
+        .replace(/\s+/g, " ")
+        .replace(/:+$/g, "")
+        .trim();
+      let quoteText = getTextWithLineBreaks(textNode);
+      if (!quoteText && !authorNode && !textNode) {
+        quoteText = getTextWithLineBreaks(node);
+      }
+      if (!preserveEmptyQuotes && !authorText && !quoteText) return null;
+
+      const quoteBlock = document.createElement("div");
+      quoteBlock.className = "news-quote-block";
+      quoteBlock.dataset.newsQuote = "true";
+
+      const author = document.createElement("div");
+      author.className = "news-quote-author";
+      author.textContent = authorText;
+
+      const quote = document.createElement("blockquote");
+      quote.className = "news-quote-text";
+      appendTextWithLineBreaks(quote, quoteText);
+
+      quoteBlock.appendChild(author);
+      quoteBlock.appendChild(quote);
+      return quoteBlock;
+    };
+
     const sanitizeNode = (node) => {
       if (node.nodeType === Node.TEXT_NODE) {
         return document.createTextNode(node.textContent || "");
@@ -1407,6 +1742,33 @@
       if (node.nodeType !== Node.ELEMENT_NODE) return null;
 
       const tagName = node.tagName.toUpperCase();
+      if (
+        isNewsQuoteBlockElement(node)
+        || isNewsQuoteAuthorElement(node)
+        || isNewsQuoteTextElement(node)
+        || tagName === "BLOCKQUOTE"
+      ) {
+        return sanitizeNewsQuoteBlock(node);
+      }
+
+      if (isNewsSectionTitleElement(node)) {
+        const sectionTitle = document.createElement("h2");
+        sectionTitle.className = "news-section-title";
+        Array.from(node.childNodes).forEach((child) => {
+          const safeChild = sanitizeNode(child);
+          if (!safeChild) return;
+          if (
+            safeChild.nodeType === Node.ELEMENT_NODE
+            && ["P", "OL", "UL", "LI", "IMG", "DIV", "BLOCKQUOTE", "H1", "H2", "H3", "H4", "H5", "H6"].includes(safeChild.tagName.toUpperCase())
+          ) {
+            sectionTitle.appendChild(document.createTextNode(safeChild.textContent || ""));
+            return;
+          }
+          sectionTitle.appendChild(safeChild);
+        });
+        return sectionTitle.textContent.trim() ? sectionTitle : null;
+      }
+
       const outputTag = tagName === "B"
         ? "STRONG"
         : tagName === "I"
@@ -1482,10 +1844,16 @@
     output.querySelectorAll("p").forEach((paragraph) => {
       if (!paragraph.textContent.trim() && !paragraph.querySelector("br,img")) paragraph.remove();
     });
-    if (!output.textContent.trim() && !output.querySelector("img")) return "";
+    const hasQuoteBlock = !!output.querySelector(".news-quote-block");
+    const hasSectionTitle = !!output.querySelector(".news-section-title");
+    if (!output.textContent.trim() && !output.querySelector("img") && !hasQuoteBlock && !hasSectionTitle) return "";
     if (
-      (output.textContent.trim() || output.querySelector("img"))
-      && !Array.from(output.children).some((child) => ["P", "OL", "UL"].includes(child.tagName.toUpperCase()))
+      (output.textContent.trim() || output.querySelector("img") || hasQuoteBlock || hasSectionTitle)
+      && !Array.from(output.children).some((child) => (
+        ["P", "OL", "UL", "H2"].includes(child.tagName.toUpperCase())
+        || child.classList?.contains("news-quote-block")
+        || child.classList?.contains("news-section-title")
+      ))
     ) {
       const paragraph = document.createElement("p");
       while (output.firstChild) paragraph.appendChild(output.firstChild);
@@ -1499,12 +1867,15 @@
     root.className = "cp-news-editor";
     const toolbar = document.createElement("div");
     toolbar.className = "cp-news-editor-toolbar";
+    const floatingToolbar = document.createElement("div");
+    floatingToolbar.className = "cp-news-editor-floating-toolbar";
+    floatingToolbar.hidden = true;
     const editor = document.createElement("div");
     editor.className = "cp-news-editor-area";
     editor.contentEditable = "true";
     editor.spellcheck = true;
     editor.dataset.placeholder = "Write formatted news description...";
-    editor.innerHTML = sanitizeNewsDescriptionHtml(initialHtml) || "<p><br></p>";
+    editor.innerHTML = sanitizeNewsDescriptionHtml(initialHtml, { preserveEmptyQuotes: true }) || "<p><br></p>";
     const escapeHtml = (value) => String(value || "").replace(/[&<>"']/g, (ch) => ({
       "&": "&amp;",
       "<": "&lt;",
@@ -1529,7 +1900,7 @@
     };
 
     const runCommand = (command, value = null, shouldNormalize = true) => {
-      editor.focus();
+      focusEditor();
       document.execCommand(command, false, value);
       if (shouldNormalize) normalizeEditorHtml();
       updateToolbarState();
@@ -1540,6 +1911,37 @@
     let pendingImageInsertRange = null;
     let isLinkDialogOpen = false;
     let isImagePickerOpen = false;
+
+    const focusEditor = () => {
+      const windowScrollX = window.scrollX;
+      const windowScrollY = window.scrollY;
+      const editorScrollTop = editor.scrollTop;
+      const editorScrollLeft = editor.scrollLeft;
+      try {
+        editor.focus({ preventScroll: true });
+      } catch (_error) {
+        editor.focus();
+      }
+      editor.scrollTop = editorScrollTop;
+      editor.scrollLeft = editorScrollLeft;
+      window.scrollTo(windowScrollX, windowScrollY);
+    };
+
+    const preserveEditorScroll = (callback) => {
+      const windowScrollX = window.scrollX;
+      const windowScrollY = window.scrollY;
+      const editorScrollTop = editor.scrollTop;
+      const editorScrollLeft = editor.scrollLeft;
+      const restoreScroll = () => {
+        editor.scrollTop = editorScrollTop;
+        editor.scrollLeft = editorScrollLeft;
+        window.scrollTo(windowScrollX, windowScrollY);
+      };
+      const result = callback();
+      restoreScroll();
+      requestAnimationFrame(restoreScroll);
+      return result;
+    };
 
     const getSelectionRange = () => {
       const selection = window.getSelection();
@@ -1558,7 +1960,7 @@
 
     const restoreSelectionRange = (range) => {
       if (!range) return;
-      editor.focus();
+      focusEditor();
       const selection = window.getSelection();
       if (!selection) return;
       selection.removeAllRanges();
@@ -1701,9 +2103,356 @@
         if (child.nodeType === Node.TEXT_NODE) return !!child.textContent.trim();
         if (child.nodeType !== Node.ELEMENT_NODE) return false;
         if (child.matches?.("[data-news-image-marker]")) return false;
+        if (child.matches?.("[data-news-block-marker]")) return false;
         if (child.tagName?.toUpperCase() === "BR") return false;
         return true;
       });
+    };
+
+    const getQuoteBlockFromNode = (node) => {
+      const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+      const quoteBlock = element?.closest?.(".news-quote-block") || null;
+      return quoteBlock && editor.contains(quoteBlock) ? quoteBlock : null;
+    };
+
+    const getQuoteFieldFromRange = (range, selector) => {
+      if (!range) return null;
+      const element = range.startContainer.nodeType === Node.ELEMENT_NODE
+        ? range.startContainer
+        : range.startContainer.parentElement;
+      const field = element?.closest?.(selector) || null;
+      return field && editor.contains(field) ? field : null;
+    };
+
+    const getQuoteBlockFromRange = (range) => {
+      if (!range) return null;
+      const nodes = [
+        range.startContainer,
+        range.endContainer,
+        range.commonAncestorContainer,
+      ];
+      for (const node of nodes) {
+        const quoteBlock = getQuoteBlockFromNode(node);
+        if (quoteBlock) return quoteBlock;
+      }
+      return null;
+    };
+
+    const createQuoteRemoveButton = () => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "cp-news-quote-remove";
+      button.contentEditable = "false";
+      button.title = "Remove quote";
+      button.setAttribute("aria-label", "Remove quote");
+      const icon = document.createElement("i");
+      icon.className = "fa-solid fa-xmark";
+      button.appendChild(icon);
+      return button;
+    };
+
+    const enhanceQuoteBlock = (quoteBlock) => {
+      if (!quoteBlock) return;
+      quoteBlock.classList.add("news-quote-block");
+      quoteBlock.dataset.newsQuote = "true";
+
+      let author = Array.from(quoteBlock.children).find((child) => child.classList?.contains("news-quote-author")) || null;
+      let quote = Array.from(quoteBlock.children).find((child) => child.classList?.contains("news-quote-text")) || null;
+      if (!author) {
+        author = document.createElement("div");
+        author.className = "news-quote-author";
+        quoteBlock.insertBefore(author, quoteBlock.firstChild);
+      }
+      if (!quote) {
+        quote = document.createElement("blockquote");
+        quote.className = "news-quote-text";
+        quoteBlock.appendChild(quote);
+      }
+
+      author.dataset.placeholder = "Quote author";
+      quote.dataset.placeholder = "Quote text";
+
+      let removeButton = Array.from(quoteBlock.children).find((child) => child.classList?.contains("cp-news-quote-remove")) || null;
+      if (!removeButton) {
+        removeButton = createQuoteRemoveButton();
+        quoteBlock.insertBefore(removeButton, quoteBlock.firstChild);
+      }
+      removeButton.disabled = externallyDisabled || pendingImageUploads > 0;
+    };
+
+    const enhanceQuoteBlocksInEditor = () => {
+      editor.querySelectorAll(".news-quote-block").forEach(enhanceQuoteBlock);
+    };
+
+    const appendTextWithLineBreaksToNode = (node, text) => {
+      String(text || "").split(/\n/).forEach((line, index) => {
+        if (index > 0) node.appendChild(document.createElement("br"));
+        if (line) node.appendChild(document.createTextNode(line));
+      });
+    };
+
+    const getSelectedTextFromRange = (range) => String(range?.toString() || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n[ \t]+/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
+    const getTextWithLineBreaksFromNode = (node) => {
+      const blockTags = new Set(["DIV", "P", "LI", "BLOCKQUOTE"]);
+      const collect = (currentNode, parts = []) => {
+        Array.from(currentNode?.childNodes || []).forEach((child) => {
+          if (child.nodeType === Node.TEXT_NODE) {
+            parts.push(child.textContent || "");
+            return;
+          }
+          if (child.nodeType !== Node.ELEMENT_NODE) return;
+          if (child.matches?.(".cp-news-quote-remove")) return;
+          if (child.tagName?.toUpperCase() === "BR") {
+            parts.push("\n");
+            return;
+          }
+          const lengthBefore = parts.length;
+          collect(child, parts);
+          if (blockTags.has(child.tagName.toUpperCase()) && parts.length > lengthBefore) {
+            parts.push("\n");
+          }
+        });
+        return parts;
+      };
+
+      return collect(node)
+        .join("")
+        .replace(/\u00a0/g, " ")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n[ \t]+/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    };
+
+    const createParagraphFromText = (text) => {
+      const paragraph = document.createElement("p");
+      appendTextWithLineBreaksToNode(paragraph, text);
+      if (!paragraph.childNodes.length) paragraph.appendChild(document.createElement("br"));
+      return paragraph;
+    };
+
+    const createEditableQuoteBlock = (quoteText = "") => {
+      const quoteBlock = document.createElement("div");
+      quoteBlock.className = "news-quote-block";
+      quoteBlock.dataset.newsQuote = "true";
+
+      const author = document.createElement("div");
+      author.className = "news-quote-author";
+      const quote = document.createElement("blockquote");
+      quote.className = "news-quote-text";
+      appendTextWithLineBreaksToNode(quote, quoteText);
+
+      quoteBlock.appendChild(author);
+      quoteBlock.appendChild(quote);
+      enhanceQuoteBlock(quoteBlock);
+      return quoteBlock;
+    };
+
+    const focusQuoteField = (quoteBlock, selector = ".news-quote-author") => {
+      const target = quoteBlock?.querySelector?.(selector);
+      if (!target) return;
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      range.collapse(false);
+      restoreSelectionRange(range);
+      savedEditorRange = range.cloneRange();
+    };
+
+    const insertBlockAtCurrentSelection = (blockNode) => {
+      const targetRange = rememberEditorSelection()
+        || (savedEditorRange ? savedEditorRange.cloneRange() : null);
+      if (!targetRange || !editor.contains(targetRange.commonAncestorContainer)) {
+        editor.appendChild(blockNode);
+        return;
+      }
+
+      const currentQuoteBlock = getQuoteBlockFromNode(targetRange.commonAncestorContainer);
+      if (currentQuoteBlock) {
+        currentQuoteBlock.insertAdjacentElement("afterend", blockNode);
+        return;
+      }
+
+      const marker = document.createElement("span");
+      marker.className = "cp-news-editor-image-marker";
+      marker.dataset.newsBlockMarker = "true";
+      marker.setAttribute("aria-hidden", "true");
+
+      const insertionRange = targetRange.cloneRange();
+      insertionRange.deleteContents();
+      insertionRange.insertNode(marker);
+
+      const paragraph = marker.closest("p");
+      if (paragraph && editor.contains(paragraph)) {
+        const parent = paragraph.parentNode;
+        const beforeHasContent = hasMeaningfulContent(paragraph);
+        const afterParagraph = paragraph.cloneNode(false);
+        while (marker.nextSibling) afterParagraph.appendChild(marker.nextSibling);
+        const afterHasContent = hasMeaningfulContent(afterParagraph);
+        marker.remove();
+
+        if (beforeHasContent) {
+          parent.insertBefore(blockNode, paragraph.nextSibling);
+        } else {
+          parent.insertBefore(blockNode, paragraph);
+          paragraph.remove();
+        }
+        if (afterHasContent) {
+          parent.insertBefore(afterParagraph, blockNode.nextSibling);
+        }
+      } else {
+        marker.replaceWith(blockNode);
+      }
+    };
+
+    const removeQuoteBlock = (quoteBlock) => {
+      const targetBlock = quoteBlock && editor.contains(quoteBlock) ? quoteBlock : null;
+      if (!targetBlock) return;
+      targetBlock.remove();
+      normalizeEditorHtml();
+      placeCaretAtEnd();
+      updateToolbarState();
+      setEditorStatus("Quote removed.");
+    };
+
+    const convertQuoteBlockToText = (quoteBlock) => {
+      const targetBlock = quoteBlock && editor.contains(quoteBlock) ? quoteBlock : null;
+      if (!targetBlock) return;
+
+      const authorText = getTextWithLineBreaksFromNode(targetBlock.querySelector(".news-quote-author"))
+        .replace(/\s+/g, " ")
+        .replace(/:+$/g, "")
+        .trim();
+      const quoteText = getTextWithLineBreaksFromNode(targetBlock.querySelector(".news-quote-text"));
+      const fragment = document.createDocumentFragment();
+      let focusTarget = null;
+
+      if (authorText) {
+        focusTarget = createParagraphFromText(authorText);
+        fragment.appendChild(focusTarget);
+      }
+      if (quoteText) {
+        focusTarget = createParagraphFromText(quoteText);
+        fragment.appendChild(focusTarget);
+      }
+      if (!focusTarget) {
+        focusTarget = createParagraphFromText("");
+        fragment.appendChild(focusTarget);
+      }
+
+      targetBlock.replaceWith(fragment);
+      focusBlockEnd(focusTarget);
+      setSelectedImage(null);
+      updateToolbarState();
+      setEditorStatus("Quote converted to text.");
+    };
+
+    const insertDescriptionQuote = () => {
+      const targetRange = rememberEditorSelection()
+        || (savedEditorRange ? savedEditorRange.cloneRange() : null);
+      const activeQuoteBlock = getQuoteBlockFromRange(targetRange);
+      if (activeQuoteBlock) {
+        preserveEditorScroll(() => convertQuoteBlockToText(activeQuoteBlock));
+        return;
+      }
+      const selectedQuoteText = targetRange && !targetRange.collapsed
+        ? getSelectedTextFromRange(targetRange)
+        : "";
+      const quoteBlock = createEditableQuoteBlock(selectedQuoteText);
+      insertBlockAtCurrentSelection(quoteBlock);
+      focusQuoteField(quoteBlock, selectedQuoteText ? ".news-quote-text" : ".news-quote-author");
+      setSelectedImage(null);
+      updateToolbarState();
+      setEditorStatus("Quote added.");
+    };
+
+    const isSectionTitleElement = (node) => (
+      node?.nodeType === Node.ELEMENT_NODE
+      && (
+        node.classList?.contains("news-section-title")
+        || /^H[1-6]$/i.test(node.tagName || "")
+      )
+    );
+
+    const getSectionTitleFromNode = (node) => {
+      const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+      const sectionTitle = element?.closest?.(".news-section-title,h1,h2,h3,h4,h5,h6") || null;
+      return sectionTitle && editor.contains(sectionTitle) ? sectionTitle : null;
+    };
+
+    const getSectionTitleFromRange = (range) => {
+      if (!range) return null;
+      const nodes = [
+        range.startContainer,
+        range.endContainer,
+        range.commonAncestorContainer,
+      ];
+      for (const node of nodes) {
+        const sectionTitle = getSectionTitleFromNode(node);
+        if (sectionTitle) return sectionTitle;
+      }
+      return null;
+    };
+
+    const getEditableTextBlockFromRange = (range) => {
+      if (!range) return null;
+      const element = range.startContainer.nodeType === Node.ELEMENT_NODE
+        ? range.startContainer
+        : range.startContainer.parentElement;
+      const block = element?.closest?.(".news-section-title,h1,h2,h3,h4,h5,h6,p,div") || null;
+      if (!block || block === editor || !editor.contains(block)) return null;
+      if (getQuoteBlockFromNode(block)) return null;
+      if (block.querySelector?.("img")) return null;
+      return block;
+    };
+
+    const focusBlockEnd = (block) => {
+      if (!block || !editor.contains(block)) return;
+      const range = document.createRange();
+      range.selectNodeContents(block);
+      range.collapse(false);
+      restoreSelectionRange(range);
+      savedEditorRange = range.cloneRange();
+    };
+
+    const replaceEditableBlock = (block, useSectionTitle) => {
+      const replacement = document.createElement(useSectionTitle ? "h2" : "p");
+      if (useSectionTitle) replacement.className = "news-section-title";
+      while (block.firstChild) replacement.appendChild(block.firstChild);
+      if (!replacement.childNodes.length) replacement.appendChild(document.createElement("br"));
+      block.replaceWith(replacement);
+      return replacement;
+    };
+
+    const toggleDescriptionSectionTitle = () => {
+      const targetRange = rememberEditorSelection()
+        || (savedEditorRange ? savedEditorRange.cloneRange() : null);
+      const block = getEditableTextBlockFromRange(targetRange);
+      if (!block) {
+        setEditorStatus("Place the cursor in a text row.");
+        return;
+      }
+
+      const shouldUseSectionTitle = !isSectionTitleElement(block);
+      const replacement = replaceEditableBlock(block, shouldUseSectionTitle);
+      focusBlockEnd(replacement);
+      setSelectedImage(null);
+      updateToolbarState();
+      setEditorStatus(shouldUseSectionTitle ? "Section title applied." : "Section title removed.");
+    };
+
+    const insertParagraphAfterSectionTitle = (sectionTitle) => {
+      if (!sectionTitle || !editor.contains(sectionTitle)) return;
+      const paragraph = document.createElement("p");
+      paragraph.appendChild(document.createElement("br"));
+      sectionTitle.insertAdjacentElement("afterend", paragraph);
+      focusBlockEnd(paragraph);
+      updateToolbarState();
     };
 
     const applyLinkToRange = (range, href) => {
@@ -1742,6 +2491,7 @@
       const savedRange = rememberEditorSelection() || (savedEditorRange ? savedEditorRange.cloneRange() : null);
       const selectedLink = getLinkFromRange(savedRange);
       isLinkDialogOpen = true;
+      hideFloatingToolbar();
 
       const overlay = document.createElement("div");
       overlay.style.position = "fixed";
@@ -1808,7 +2558,7 @@
       const closeModal = () => {
         isLinkDialogOpen = false;
         overlay.remove();
-        editor.focus();
+        focusEditor();
       };
 
       cancelBtn.addEventListener("click", closeModal);
@@ -1824,7 +2574,7 @@
       });
 
       removeBtn.addEventListener("click", () => {
-        removeLinkNode(selectedLink);
+        preserveEditorScroll(() => removeLinkNode(selectedLink));
         closeModal();
       });
 
@@ -1837,16 +2587,17 @@
           return;
         }
 
-        if (selectedLink) {
-          selectedLink.href = href;
-          selectedLink.target = "_blank";
-          selectedLink.rel = "noopener noreferrer";
-          updateToolbarState();
-          closeModal();
-          return;
-        }
+        preserveEditorScroll(() => {
+          if (selectedLink) {
+            selectedLink.href = href;
+            selectedLink.target = "_blank";
+            selectedLink.rel = "noopener noreferrer";
+            updateToolbarState();
+            return;
+          }
 
-        applyLinkToRange(savedRange, href);
+          applyLinkToRange(savedRange, href);
+        });
         closeModal();
       });
 
@@ -2004,7 +2755,31 @@
       setEditorStatus("Image removed.");
     };
 
-    const makeButton = (label, iconClass, title, onClick) => {
+    const showDescriptionImagePicker = () => {
+      placeImageInsertMarker();
+      isImagePickerOpen = true;
+      hideFloatingToolbar();
+      showImagePickerDialog({
+        title: "Add image",
+        chooseLabel: "Choose",
+        uploadLabel: "Upload new image",
+        canUploadSource: options.canUploadSource === true,
+        currentUserId: options.currentUserAuthId,
+        isAdmin: options.isAdmin === true,
+        sourceUploadLabel: "Upload source",
+        onChoose: insertExistingDescriptionImage,
+        onUploadNew: openDescriptionImageFilePicker,
+        onUploadSourceNew: () => openDescriptionImageFilePicker(true),
+        onCancel: () => {
+          removePendingImageMarker();
+          isImagePickerOpen = false;
+          pendingImageUploadPreserveSource = false;
+          focusEditor();
+        },
+      });
+    };
+
+    const makeButton = (label, iconClass, title, onClick, parent) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "cp-news-editor-btn";
@@ -2018,39 +2793,74 @@
         event.preventDefault();
       });
       btn.addEventListener("click", onClick);
-      toolbar.appendChild(btn);
+      parent.appendChild(btn);
       return btn;
     };
 
-    const buttons = {
-      bold: makeButton("Bold", "fa-solid fa-bold", "Bold (Ctrl/Cmd+B)", () => runCommand("bold")),
-      italic: makeButton("Italic", "fa-solid fa-italic", "Italic (Ctrl/Cmd+I)", () => runCommand("italic")),
-      ordered: makeButton("Numbered list", "fa-solid fa-list-ol", "Numbered list (Ctrl/Cmd+Shift+7)", () => runCommand("insertOrderedList")),
-      unordered: makeButton("Bullet list", "fa-solid fa-list-ul", "Bullet list (Ctrl/Cmd+Shift+8)", () => runCommand("insertUnorderedList")),
-      link: makeButton("Link", "fa-solid fa-link", "Add or edit link", () => {
-        showLinkDialog();
-      }),
-      image: makeButton("Image", "fa-solid fa-image", "Add image", () => {
-        placeImageInsertMarker();
-        isImagePickerOpen = true;
-        showImagePickerDialog({
-          title: "Add image",
-          chooseLabel: "Choose",
-          uploadLabel: "Upload new image",
-          canUploadSource: options.canUploadSource === true,
-          sourceUploadLabel: "Upload source",
-          onChoose: insertExistingDescriptionImage,
-          onUploadNew: openDescriptionImageFilePicker,
-          onUploadSourceNew: () => openDescriptionImageFilePicker(true),
-          onCancel: () => {
-            removePendingImageMarker();
-            isImagePickerOpen = false;
-            pendingImageUploadPreserveSource = false;
-            editor.focus();
-          },
-        });
-      }),
-    };
+    const buttonConfigs = [
+      {
+        key: "sectionTitle",
+        label: "Section title",
+        iconClass: "fa-solid fa-heading",
+        title: "Section title",
+        onClick: () => toggleDescriptionSectionTitle(),
+      },
+      {
+        key: "bold",
+        label: "Bold",
+        iconClass: "fa-solid fa-bold",
+        title: "Bold (Ctrl/Cmd+B)",
+        onClick: () => runCommand("bold"),
+      },
+      {
+        key: "italic",
+        label: "Italic",
+        iconClass: "fa-solid fa-italic",
+        title: "Italic (Ctrl/Cmd+I)",
+        onClick: () => runCommand("italic"),
+      },
+      {
+        key: "ordered",
+        label: "Numbered list",
+        iconClass: "fa-solid fa-list-ol",
+        title: "Numbered list (Ctrl/Cmd+Shift+7)",
+        onClick: () => runCommand("insertOrderedList"),
+      },
+      {
+        key: "unordered",
+        label: "Bullet list",
+        iconClass: "fa-solid fa-list-ul",
+        title: "Bullet list (Ctrl/Cmd+Shift+8)",
+        onClick: () => runCommand("insertUnorderedList"),
+      },
+      {
+        key: "link",
+        label: "Link",
+        iconClass: "fa-solid fa-link",
+        title: "Add or edit link",
+        onClick: () => showLinkDialog(),
+      },
+      {
+        key: "quote",
+        label: "Quote",
+        iconClass: "fa-solid fa-quote-left",
+        title: "Add quote",
+        onClick: () => insertDescriptionQuote(),
+      },
+      {
+        key: "image",
+        label: "Image",
+        iconClass: "fa-solid fa-image",
+        title: "Add image",
+        onClick: () => showDescriptionImagePicker(),
+      },
+    ];
+    const buttons = {};
+    const floatingButtons = {};
+    buttonConfigs.forEach((config) => {
+      buttons[config.key] = makeButton(config.label, config.iconClass, config.title, config.onClick, toolbar);
+      floatingButtons[config.key] = makeButton(config.label, config.iconClass, config.title, config.onClick, floatingToolbar);
+    });
 
     imageFileInput.addEventListener("change", async () => {
       const file = imageFileInput.files && imageFileInput.files[0] ? imageFileInput.files[0] : null;
@@ -2084,24 +2894,77 @@
     });
 
     const normalizeEditorHtml = () => {
-      editor.innerHTML = sanitizeNewsDescriptionHtml(editor.innerHTML) || "<p><br></p>";
+      editor.innerHTML = sanitizeNewsDescriptionHtml(editor.innerHTML, { preserveEmptyQuotes: true }) || "<p><br></p>";
       selectedImageNode = null;
+      enhanceQuoteBlocksInEditor();
+    };
+
+    const forButtonPair = (key, callback) => {
+      [buttons[key], floatingButtons[key]].filter(Boolean).forEach(callback);
+    };
+
+    const hideFloatingToolbar = () => {
+      floatingToolbar.hidden = true;
+    };
+
+    const updateFloatingToolbarPosition = (range) => {
+      if (!range || range.collapsed || !getSelectedTextFromRange(range)) {
+        hideFloatingToolbar();
+        return;
+      }
+
+      const rect = Array.from(range.getClientRects()).find((item) => item.width > 0 || item.height > 0)
+        || range.getBoundingClientRect();
+      if (!rect || (!rect.width && !rect.height)) {
+        hideFloatingToolbar();
+        return;
+      }
+
+      floatingToolbar.hidden = false;
+      const rootRect = root.getBoundingClientRect();
+      const toolbarWidth = floatingToolbar.offsetWidth || 0;
+      const toolbarHeight = floatingToolbar.offsetHeight || 0;
+      const maxLeft = Math.max(6, root.clientWidth - toolbarWidth - 6);
+      const maxTop = Math.max(6, root.clientHeight - toolbarHeight - 6);
+      let left = rect.left - rootRect.left + (rect.width / 2) - (toolbarWidth / 2);
+      let top = rect.top - rootRect.top - toolbarHeight - 8;
+
+      if (top < 6) top = rect.bottom - rootRect.top + 8;
+      left = Math.min(Math.max(6, left), maxLeft);
+      top = Math.min(Math.max(6, top), maxTop);
+
+      floatingToolbar.style.left = `${Math.round(left)}px`;
+      floatingToolbar.style.top = `${Math.round(top)}px`;
+    };
+
+    const updateFloatingToolbarState = (range) => {
+      const isBusy = externallyDisabled || pendingImageUploads > 0;
+      if (isBusy || isLinkDialogOpen || isImagePickerOpen) {
+        hideFloatingToolbar();
+        return;
+      }
+      updateFloatingToolbarPosition(range);
     };
 
     const updateToolbarState = () => {
-      buttons.bold.classList.toggle("active", document.queryCommandState("bold"));
-      buttons.italic.classList.toggle("active", document.queryCommandState("italic"));
-      buttons.ordered.classList.toggle("active", document.queryCommandState("insertOrderedList"));
-      buttons.unordered.classList.toggle("active", document.queryCommandState("insertUnorderedList"));
+      const activeRange = getSelectionRange() || (savedEditorRange ? savedEditorRange.cloneRange() : null);
+      forButtonPair("bold", (button) => button.classList.toggle("active", document.queryCommandState("bold")));
+      forButtonPair("italic", (button) => button.classList.toggle("active", document.queryCommandState("italic")));
+      forButtonPair("sectionTitle", (button) => button.classList.toggle("active", !!getSectionTitleFromRange(activeRange)));
+      forButtonPair("ordered", (button) => button.classList.toggle("active", document.queryCommandState("insertOrderedList")));
+      forButtonPair("unordered", (button) => button.classList.toggle("active", document.queryCommandState("insertUnorderedList")));
       const isBusy = externallyDisabled || pendingImageUploads > 0;
-      buttons.bold.disabled = isBusy;
-      buttons.italic.disabled = isBusy;
-      buttons.ordered.disabled = isBusy;
-      buttons.unordered.disabled = isBusy;
-      buttons.link.disabled = isBusy;
-      buttons.image.disabled = isBusy;
+      buttonConfigs.forEach((config) => {
+        forButtonPair(config.key, (button) => {
+          button.disabled = isBusy;
+        });
+      });
+      editor.querySelectorAll(".cp-news-quote-remove").forEach((button) => {
+        button.disabled = isBusy;
+      });
       imageFileInput.disabled = isBusy;
       editor.contentEditable = isBusy ? "false" : "true";
+      updateFloatingToolbarState(activeRange);
     };
 
     try {
@@ -2112,6 +2975,25 @@
       if ((event.key === "Backspace" || event.key === "Delete") && selectedImageNode && editor.contains(selectedImageNode)) {
         event.preventDefault();
         removeSelectedImage();
+        return;
+      }
+      const activeRange = getSelectionRange();
+      const activeQuoteAuthor = getQuoteFieldFromRange(activeRange, ".news-quote-author");
+      const activeQuoteText = getQuoteFieldFromRange(activeRange, ".news-quote-text");
+      if (event.key === "Enter" && activeQuoteAuthor) {
+        event.preventDefault();
+        focusQuoteField(getQuoteBlockFromNode(activeQuoteAuthor), ".news-quote-text");
+        return;
+      }
+      if (event.key === "Enter" && activeQuoteText) {
+        event.preventDefault();
+        runCommand("insertLineBreak", null, false);
+        return;
+      }
+      const activeSectionTitle = getSectionTitleFromRange(activeRange);
+      if (event.key === "Enter" && activeSectionTitle) {
+        event.preventDefault();
+        insertParagraphAfterSectionTitle(activeSectionTitle);
         return;
       }
       const modifier = event.ctrlKey || event.metaKey;
@@ -2172,7 +3054,20 @@
       }
       updateToolbarState();
     });
+    editor.addEventListener("mousedown", (event) => {
+      const quoteRemoveButton = event.target?.closest?.(".cp-news-quote-remove") || null;
+      if (quoteRemoveButton && editor.contains(quoteRemoveButton)) {
+        event.preventDefault();
+        removeQuoteBlock(getQuoteBlockFromNode(quoteRemoveButton));
+      }
+    });
     editor.addEventListener("click", (event) => {
+      const quoteRemoveButton = event.target?.closest?.(".cp-news-quote-remove") || null;
+      if (quoteRemoveButton && editor.contains(quoteRemoveButton)) {
+        event.preventDefault();
+        removeQuoteBlock(getQuoteBlockFromNode(quoteRemoveButton));
+        return;
+      }
       const image = getImageFromNode(event.target);
       if (image) {
         event.preventDefault();
@@ -2183,10 +3078,22 @@
       setSelectedImage(null);
     });
     editor.addEventListener("blur", () => {
-      if (!isLinkDialogOpen && !isImagePickerOpen) normalizeEditorHtml();
+      if (!isLinkDialogOpen && !isImagePickerOpen) {
+        normalizeEditorHtml();
+        hideFloatingToolbar();
+      }
+    });
+    editor.addEventListener("scroll", () => {
+      updateFloatingToolbarState(getSelectionRange() || (savedEditorRange ? savedEditorRange.cloneRange() : null));
+    });
+    floatingToolbar.addEventListener("mousedown", (event) => {
+      rememberEditorSelection();
+      event.preventDefault();
     });
 
+    enhanceQuoteBlocksInEditor();
     root.appendChild(toolbar);
+    root.appendChild(floatingToolbar);
     root.appendChild(imageFileInput);
     root.appendChild(editor);
     root.appendChild(editorStatus);
@@ -2582,7 +3489,10 @@
             img.alt = "";
             optionBtn.appendChild(img);
           }
-          optionBtn.appendChild(document.createTextNode(opt.label));
+          const optionLabel = document.createElement("span");
+          optionLabel.className = "cp-dd-option-label";
+          optionLabel.textContent = opt.label;
+          optionBtn.appendChild(optionLabel);
           optionBtn.classList.toggle("active", opt.value === value);
           optionBtn.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -2752,7 +3662,10 @@
             img.alt = "";
             optionBtn.appendChild(img);
           }
-          optionBtn.appendChild(document.createTextNode(opt.label));
+          const optionLabel = document.createElement("span");
+          optionLabel.className = "cp-dd-option-label";
+          optionLabel.textContent = opt.label;
+          optionBtn.appendChild(optionLabel);
           optionBtn.classList.toggle("active", selectedValues.includes(opt.value));
           optionBtn.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -2826,6 +3739,7 @@
       return "";
     };
     const isAdminNewsUser = options.isAdmin === true;
+    const currentUserAuthId = normalizeUserId(options.currentUserAuthId || "");
     const currentProfileId = String(options.currentUserProfileId || "").trim();
     const currentUserNewsEditors = isAdminNewsUser ? [] : (Array.isArray(options.newsEditors) ? options.newsEditors : [])
       .filter((entry) => String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentProfileId);
@@ -3043,7 +3957,27 @@
         placeholderLabel: "Select type",
         searchable: false,
         onChange: (value) => {
+          const previousMode = newsMediaMode;
           newsMediaMode = value === "image" ? "image" : "icon";
+          if (previousMode === "icon" && newsMediaMode === "image") {
+            const selectedIconValue = iconInput?.getValue?.() || getIconValueFromImageUrl(currentImageUrl);
+            if (selectedIconValue && currentImageUrl === selectedIconValue) {
+              currentImageUrl = "";
+              selectedImageFile = null;
+              selectedImagePreserveSource = false;
+              if (imageFileInput) imageFileInput.value = "";
+              if (previewObjectUrl) {
+                URL.revokeObjectURL(previewObjectUrl);
+                previewObjectUrl = "";
+              }
+              if (imagePreview) {
+                imagePreview.src = "";
+                imagePreview.hidden = true;
+              }
+              if (imageChooseBtn) imageChooseBtn.textContent = "Select image";
+              if (imageUploadStatus) imageUploadStatus.textContent = "";
+            }
+          }
           updateConditionalNewsFields();
         },
       }
@@ -3133,6 +4067,8 @@
         chooseLabel: "Choose",
         uploadLabel: "Upload new image",
         canUploadSource: canUploadSourceImage,
+        currentUserId: currentUserAuthId,
+        isAdmin: isAdminNewsUser,
         sourceUploadLabel: "Upload source",
         onChoose: chooseExistingNewsImage,
         onUploadNew: () => {
@@ -3307,6 +4243,8 @@
 
     const descriptionInput = createNewsDescriptionEditor(source?.description || "", {
       canUploadSource: canUploadSourceImage,
+      currentUserAuthId,
+      isAdmin: isAdminNewsUser,
     });
     addRow("Description", descriptionInput.root, "cp-edit-row--full cp-edit-row--description");
 
@@ -3336,14 +4274,20 @@
     };
 
     const validatePayload = (payload) => {
+      const useImageUpload = shouldUseNewsImageUpload();
       if (!payload.title) return "Title is required.";
       if (payload.title.length > 100) return "Title must be 100 characters or fewer.";
+      if (!payload.short_title) return "Short title is required.";
       if (payload.short_title.length > 40) return "Short title must be 40 characters or fewer.";
+      if (useImageUpload && !payload.short_description) return "Short description is required.";
       if (payload.short_description.length > 200) return "Short description must be 200 characters or fewer.";
       if (!String(timeInput.value || "").trim()) return "Time, UTC is required.";
       if (String(timeInput.value || "").trim() && !payload.time_utc) return "Time, UTC is invalid.";
       if (!isAdminNewsUser && !payload.category) return "Category is required.";
       if (getCategoryKind() === "local" && !payload.association_id) return "Association is required.";
+      if (useImageUpload && !payload.image && !selectedImageFile) return "Image is required.";
+      if (!useImageUpload && !iconInput.getValue()) return "Icon is required.";
+      if (!payload.description) return "Description is required.";
       const selectableTournamentOptions = getSelectableTournamentOptionsForCategory(categoryInput.getValue());
       if (
         getCategoryKind() === "tournament"
@@ -3507,6 +4451,7 @@
       const editNewsId = String(captainPageState.newsId || "").trim();
       let isAdminUser = false;
       let isAuthenticatedUser = false;
+      let currentUserAuthId = "";
       let currentUserProfileId = "";
       let isNewsEditorUser = false;
 
@@ -3517,6 +4462,7 @@
           const meUser = meData?.authenticated ? meData?.user : null;
           isAuthenticatedUser = !!meData?.authenticated;
           isAdminUser = meUser?.isAdmin === true || Number(meUser?.admin) === 1;
+          currentUserAuthId = getAuthUserId(meUser);
           currentUserProfileId = getCurrentUserProfileId(meUser);
         }
       } catch (_error) {
@@ -3549,7 +4495,8 @@
 
       if (!canUseNewsSection) {
         renderStaticInfoSection("My News", [
-          "This section is available only to users added to news editors.",
+          "In this section, you can create local news for your association or news for a tournament you organize.",
+          "To get permission to create publications, contact your association captain or email us at carcassonne.gg@gmail.com.",
         ]);
         return;
       }
@@ -3606,6 +4553,7 @@
       if (isCreateMode) {
         renderNewsEditForm(null, associations, tournaments, categories, icons, "create", {
           canUploadSource: isAdminUser,
+          currentUserAuthId,
           currentUserProfileId,
           isAdmin: isAdminUser,
           newsEditors,
@@ -3623,6 +4571,7 @@
         }
         renderNewsEditForm(newsToEdit, associations, tournaments, categories, icons, "edit", {
           canUploadSource: isAdminUser,
+          currentUserAuthId,
           currentUserProfileId,
           isAdmin: isAdminUser,
           newsEditors,
