@@ -364,6 +364,9 @@
   <div class="pf-toggle-line" id="pf-captains-toggle" role="button" tabindex="0" aria-pressed="false">
     <span class="pf-toggle-label">Captains</span>
   </div>
+  <div class="pf-toggle-line" id="pf-with-photo-toggle" role="button" tabindex="0" aria-pressed="false">
+    <span class="pf-toggle-label">With photo</span>
+  </div>
   <div class="pf-toggle-line" id="pf-rating-change-toggle" role="button" tabindex="0" aria-pressed="false">
     <span class="pf-toggle-label">Rating Changed</span>
   </div>
@@ -393,6 +396,7 @@
   const pfSearchBtn = document.getElementById("pf-search-btn");
   const pfMastersToggle = document.getElementById("pf-masters-toggle");
   const pfCaptainsToggle = document.getElementById("pf-captains-toggle");
+  const pfWithPhotoToggle = document.getElementById("pf-with-photo-toggle");
   const pfRatingChangeToggle = document.getElementById("pf-rating-change-toggle");
   let pfOptions = [];
   let pfAchievementTypes = [];
@@ -536,6 +540,28 @@
     const enabled = pfGetCaptainsOnly();
     pfCaptainsToggle.classList.toggle("active", enabled);
     pfCaptainsToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
+  }
+
+  function pfGetWithPhotoOnly() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("with_photo") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  function pfSetWithPhotoOnly(enabled) {
+    const params = new URLSearchParams(window.location.search);
+    if (enabled) params.set("with_photo", "1");
+    else params.delete("with_photo");
+    const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", newUrl);
+    window.dispatchEvent(new Event("with-photo-filter-change"));
+  }
+
+  function pfUpdateWithPhotoToggle() {
+    if (!pfWithPhotoToggle) return;
+    const enabled = pfGetWithPhotoOnly();
+    pfWithPhotoToggle.classList.toggle("active", enabled);
+    pfWithPhotoToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
   }
 
   function pfGetRatingChangedOnly() {
@@ -689,6 +715,21 @@
       }
     });
   }
+  if (pfWithPhotoToggle) {
+    pfWithPhotoToggle.addEventListener("click", () => {
+      const next = !pfGetWithPhotoOnly();
+      pfSetWithPhotoOnly(next);
+      pfUpdateWithPhotoToggle();
+    });
+    pfWithPhotoToggle.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        const next = !pfGetWithPhotoOnly();
+        pfSetWithPhotoOnly(next);
+        pfUpdateWithPhotoToggle();
+      }
+    });
+  }
   if (pfRatingChangeToggle) {
     pfRatingChangeToggle.addEventListener("click", () => {
       const next = !pfGetRatingChangedOnly();
@@ -711,12 +752,14 @@
       pfSetActivePlayer("");
       pfSetMastersOnly(false);
       pfSetCaptainsOnly(false);
+      pfSetWithPhotoOnly(false);
       pfSetRatingChangedOnly(false);
       pfSetMatchesMin(0);
       pfUpdateToggle();
       pfUpdateAchievementToggle();
       pfUpdateMastersToggle();
       pfUpdateCaptainsToggle();
+      pfUpdateWithPhotoToggle();
       pfUpdateRatingChangeToggle();
       pfUpdateMatchesToggle();
       pfRow.querySelectorAll(".pf-flag-btn").forEach(b => b.classList.remove("active"));
@@ -962,6 +1005,7 @@
       pfUpdateAchievementToggle();
       pfUpdateMastersToggle();
       pfUpdateCaptainsToggle();
+      pfUpdateWithPhotoToggle();
       pfUpdateRatingChangeToggle();
       pfUpdateMatchesToggle();
       const activePlayer = pfGetActivePlayer();
@@ -989,6 +1033,7 @@
     pfUpdateAchievementToggle();
     pfUpdateMastersToggle();
     pfUpdateCaptainsToggle();
+    pfUpdateWithPhotoToggle();
     pfUpdateRatingChangeToggle();
     pfUpdateMatchesToggle();
     const activePlayer = pfGetActivePlayer();

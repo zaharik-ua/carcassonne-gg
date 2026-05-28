@@ -5081,21 +5081,37 @@ app.get("/profiles/public", (_req, res, next) => {
   db.all(
     `
       SELECT
-        id,
-        bga_nickname,
-        avatar,
-        bga_elo,
-        bga_elo_updated_at,
-        name,
-        association,
-        COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
-        created_by,
-        COALESCE(master_title, 0) AS master_title,
-        master_title_date,
-        COALESCE(team_captain, 0) AS team_captain
-      FROM profiles
-      WHERE trim(COALESCE(id, '')) <> ''
-        AND deleted_at IS NULL
+        p.id,
+        p.bga_nickname,
+        p.avatar,
+        p.bga_elo,
+        p.bga_elo_updated_at,
+        p.name,
+        p.association,
+        COALESCE(NULLIF(trim(p.status), ''), 'Active') AS status,
+        p.created_by,
+        COALESCE(p.master_title, 0) AS master_title,
+        p.master_title_date,
+        COALESCE(p.team_captain, 0) AS team_captain,
+        COALESCE(pp.photo_count, 0) AS photo_count
+      FROM profiles p
+      LEFT JOIN (
+        SELECT
+          ia.imageable_id,
+          COUNT(*) AS photo_count
+        FROM imageables ia
+        INNER JOIN images i
+          ON i.id = ia.image_id
+        WHERE ia.imageable_type = 'player'
+          AND COALESCE(ia.role, '') = 'photo'
+          AND i.deleted_at IS NULL
+          AND i.status = 'ready'
+          AND i.visibility = 'public'
+        GROUP BY ia.imageable_id
+      ) pp
+        ON pp.imageable_id = p.id
+      WHERE trim(COALESCE(p.id, '')) <> ''
+        AND p.deleted_at IS NULL
     `,
     (err, rows) => {
       if (err) return next(err);

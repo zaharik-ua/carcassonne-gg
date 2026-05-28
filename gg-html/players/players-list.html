@@ -363,6 +363,12 @@
     return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
   }
 
+  function readWithPhotoFilterFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("with_photo") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
   function readRatingChangedFilterFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const raw = String(params.get("rating_changed") || "").trim().toLowerCase();
@@ -697,6 +703,7 @@
     const activePlayerFilter = readPlayerFilterFromUrl();
     const mastersOnly = readMastersFilterFromUrl();
     const captainsOnly = readCaptainsFilterFromUrl();
+    const withPhotoOnly = readWithPhotoFilterFromUrl();
     const ratingChangedOnly = readRatingChangedFilterFromUrl();
     const achievementType = readAchievementTypeFilterFromUrl();
     const matchesMin = readMatchesMinFilterFromUrl();
@@ -713,6 +720,12 @@
     }
     if (captainsOnly) {
       filtered = filtered.filter(p => toBool(p.team_captain));
+    }
+    if (withPhotoOnly) {
+      filtered = filtered.filter(p => {
+        const val = Number(String(p.photo_count ?? "").trim());
+        return Number.isFinite(val) && val > 0;
+      });
     }
     if (ratingChangedOnly) {
       filtered = filtered.filter(p => hasRatingChange(p));
@@ -796,6 +809,7 @@
           achievements: Array.isArray(jsonProfile?.achievements) ? jsonProfile.achievements : [],
           master_title: Number(dbProfile?.master_title || 0),
           team_captain: Number(dbProfile?.team_captain || 0),
+          photo_count: Number(dbProfile?.photo_count || 0),
           matches: jsonProfile?.matches || "",
           association: assocKey,
           flag: country?.flag || "",
@@ -837,6 +851,7 @@
   window.addEventListener("player-filter-change", () => renderFilteredPlayers(true));
   window.addEventListener("masters-filter-change", () => renderFilteredPlayers(true));
   window.addEventListener("captains-filter-change", () => renderFilteredPlayers(true));
+  window.addEventListener("with-photo-filter-change", () => renderFilteredPlayers(true));
   window.addEventListener("rating-change-filter-change", () => renderFilteredPlayers(true));
   window.addEventListener("matches-filter-change", () => renderFilteredPlayers(true));
 })();
