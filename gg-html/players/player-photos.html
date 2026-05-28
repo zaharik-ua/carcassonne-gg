@@ -1,13 +1,598 @@
 <style>
+  .cp-btn {
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .cp-btn-primary {
+    background: #1a73b7;
+    color: #fff;
+    border-color: #1a73b7;
+  }
+
+  .cp-btn-secondary {
+    background: #eef2f6;
+    color: #333;
+  }
+
+  .cp-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+  }
+
+  .cp-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(24, 31, 41, 0.42);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 1000;
+  }
+
+  .cp-modal-dialog {
+    width: 100%;
+    max-width: 560px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
+    box-shadow: 0 16px 36px rgba(15, 28, 48, 0.22);
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .cp-modal-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #222;
+  }
+
+  .cp-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .cp-image-picker-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cp-image-picker-upload-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .cp-image-picker-actions-left {
+    margin-right: auto;
+  }
+
+  .cp-image-picker-status {
+    min-height: 16px;
+    color: #667085;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .cp-image-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 2px;
+  }
+
+  .cp-image-picker-option {
+    all: unset;
+    box-sizing: border-box;
+    aspect-ratio: 1;
+    border: 1px solid #d7dbe2;
+    border-radius: 6px;
+    background: #f3f4f6;
+    display: block;
+    cursor: pointer;
+    overflow: hidden;
+  }
+
+  .cp-image-picker-option:hover,
+  .cp-image-picker-option:focus-visible {
+    border-color: #1a73b7;
+    box-shadow: 0 0 0 2px rgba(26, 115, 183, 0.18);
+  }
+
+  .cp-image-picker-option.active {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.55), 0 0 0 6px rgba(26, 115, 183, 0.22);
+  }
+
+  .cp-image-picker-option img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+  }
+
+  .cp-image-picker-empty {
+    border: 1px dashed #d7dbe2;
+    border-radius: 6px;
+    padding: 14px;
+    color: #667085;
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: center;
+  }
+
+  .cp-btn-danger {
+    background: #fff3f3;
+    border-color: #e6b4b4;
+    color: #a12a2a;
+  }
+
+  .cp-btn-danger:disabled {
+    background: #f3f4f6;
+    border-color: #d7dbe2;
+    color: #8c96a4;
+  }
+
+  @media (max-width: 599px) {
+    .cp-image-picker-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .cp-image-picker-upload-actions {
+      justify-content: flex-start;
+    }
+  }
+</style>
+
+<script>
+(function () {
+  const DEFAULT_AUTH_BASE = "https://api.carcassonne.gg";
+
+  function getAuthBase(authBase) {
+    return String(authBase || window.AUTH_BASE_URL || DEFAULT_AUTH_BASE).replace(/\/+$/, "");
+  }
+
+  function toApiAbsoluteUrl(value, authBase) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+    const base = getAuthBase(authBase);
+    return `${base}${raw.startsWith("/") ? "" : "/"}${raw}`;
+  }
+
+  function toApiImageVariantUrl(value, variant, authBase) {
+    const absoluteUrl = toApiAbsoluteUrl(value, authBase);
+    const variantName = String(variant || "").trim();
+    if (!absoluteUrl || !variantName) return absoluteUrl;
+    try {
+      const url = new URL(absoluteUrl, window.location.href);
+      if (!/\/uploads\/images\/\d{4}\/\d{2}\/[^/]+\/[^/]+$/i.test(url.pathname)) {
+        return absoluteUrl;
+      }
+      url.pathname = url.pathname.replace(/\/[^/]+$/, `/${variantName}.webp`);
+      return url.toString();
+    } catch (_error) {
+      return absoluteUrl.replace(/\/[^/]+$/, `/${variantName}.webp`);
+    }
+  }
+
+  function getImageKeyFromUrl(value, authBase) {
+    const imageUrl = toApiAbsoluteUrl(value, authBase);
+    if (!imageUrl) return "";
+    try {
+      const url = new URL(imageUrl, window.location.href);
+      const match = url.pathname.match(/\/uploads\/images\/\d{4}\/\d{2}\/([^/]+)\//i);
+      return match ? String(match[1] || "").trim().toLowerCase() : "";
+    } catch (_error) {
+      const match = imageUrl.match(/\/uploads\/images\/\d{4}\/\d{2}\/([^/]+)\//i);
+      return match ? String(match[1] || "").trim().toLowerCase() : "";
+    }
+  }
+
+  function getImageDisplayName(image) {
+    return String(
+      image?.title
+      || image?.alt_text
+      || image?.original_filename
+      || image?.image_key
+      || (image?.id ? `Image #${image.id}` : "Image")
+    ).trim();
+  }
+
+  function getImagePickerUrl(image, variant = "large", authBase) {
+    const source = String(image?.storage_path || image?.public_url || "").trim();
+    if (!source) return "";
+    return toApiImageVariantUrl(source, variant, authBase) || toApiAbsoluteUrl(source, authBase);
+  }
+
+  function normalizeUserId(value) {
+    const raw = String(value ?? "").trim();
+    return /^\d+$/.test(raw) ? String(Number(raw)) : raw;
+  }
+
+  function getAuthUserId(user) {
+    return normalizeUserId(user?.id ?? user?.user_id ?? user?.userId ?? "");
+  }
+
+  function imageWasAddedByUser(image, userId) {
+    const normalizedUserId = normalizeUserId(userId);
+    if (!normalizedUserId) return false;
+    return normalizeUserId(image?.owner_user_id ?? image?.ownerUserId ?? "") === normalizedUserId
+      || normalizeUserId(image?.uploaded_by_user_id ?? image?.uploadedByUserId ?? "") === normalizedUserId;
+  }
+
+  async function fetchCurrentUser(options = {}) {
+    const authBase = getAuthBase(options.authBase);
+    try {
+      const response = await fetch(`${authBase}/auth/me`, { credentials: "include" });
+      const result = await response.json().catch(() => ({}));
+      return response.ok && result?.authenticated ? result.user || null : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async function fetchImages(options = {}) {
+    const authBase = getAuthBase(options.authBase);
+    const url = new URL(`${authBase}/images`, window.location.href);
+    url.searchParams.set("status", String(options.status || "ready"));
+    url.searchParams.set("visibility", String(options.visibility || "public"));
+    const response = await fetch(url.toString(), { credentials: "include" });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.message || "Failed to load images.");
+    }
+    return Array.isArray(result?.images) ? result.images : [];
+  }
+
+  async function deleteImage(image, options = {}) {
+    const authBase = getAuthBase(options.authBase);
+    const imageId = String(image?.id || image?.image_key || "").trim();
+    if (!imageId) throw new Error("Select an image to delete.");
+    const response = await fetch(`${authBase}/images/${encodeURIComponent(imageId)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.message || "Failed to delete image.");
+    }
+    return result;
+  }
+
+  function showImagePickerDialog(options = {}) {
+    const authBase = getAuthBase(options.authBase);
+    const titleText = String(options.title || "Choose image").trim();
+    const chooseLabel = String(options.chooseLabel || "Choose").trim();
+    const uploadLabel = String(options.uploadLabel || "Upload new image").trim();
+    const currentImageKey = getImageKeyFromUrl(options.currentUrl || "", authBase);
+    const hasAdminOption = Object.prototype.hasOwnProperty.call(options, "isAdmin")
+      || Object.prototype.hasOwnProperty.call(options, "isGlobalAdmin");
+    let imagePickerUserId = normalizeUserId(options.currentUserId ?? options.currentUserAuthId ?? options.userId ?? "");
+    let isGlobalAdmin = options.isAdmin === true || options.isGlobalAdmin === true;
+    let imagePickerScope = "mine";
+    let selectedImage = null;
+    let loadedImages = [];
+    let isDeleting = false;
+    let isClosed = false;
+
+    const overlay = document.createElement("div");
+    overlay.className = "cp-modal-overlay";
+
+    const dialog = document.createElement("div");
+    dialog.className = "cp-modal-dialog";
+
+    const title = document.createElement("div");
+    title.className = "cp-modal-title";
+    title.textContent = titleText || "Choose image";
+
+    const status = document.createElement("div");
+    status.className = "cp-image-picker-status";
+    status.textContent = "Loading images...";
+
+    const toolbar = document.createElement("div");
+    toolbar.className = "cp-image-picker-toolbar";
+
+    const uploadActions = document.createElement("div");
+    uploadActions.className = "cp-image-picker-upload-actions";
+
+    const grid = document.createElement("div");
+    grid.className = "cp-image-picker-grid";
+
+    const actions = document.createElement("div");
+    actions.className = "cp-modal-actions";
+
+    const actionsLeft = document.createElement("div");
+    actionsLeft.className = "cp-image-picker-actions-left";
+
+    const uploadBtn = document.createElement("button");
+    uploadBtn.type = "button";
+    uploadBtn.className = "cp-btn cp-btn-secondary";
+    uploadBtn.textContent = uploadLabel || "Upload new image";
+
+    const uploadSourceBtn = document.createElement("button");
+    uploadSourceBtn.type = "button";
+    uploadSourceBtn.className = "cp-btn cp-btn-secondary";
+    uploadSourceBtn.textContent = String(options.sourceUploadLabel || "Upload source").trim() || "Upload source";
+
+    const allImagesBtn = document.createElement("button");
+    allImagesBtn.type = "button";
+    allImagesBtn.className = "cp-btn cp-btn-secondary";
+    allImagesBtn.textContent = "All Images";
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "cp-btn cp-btn-danger";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.disabled = true;
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+
+    const chooseBtn = document.createElement("button");
+    chooseBtn.type = "button";
+    chooseBtn.className = "cp-btn cp-btn-primary";
+    chooseBtn.textContent = chooseLabel || "Choose";
+    chooseBtn.disabled = true;
+
+    const closeModal = (reason = "cancel") => {
+      if (isClosed) return;
+      isClosed = true;
+      document.removeEventListener("keydown", handleKeyDown);
+      overlay.remove();
+      if (reason === "cancel" && typeof options.onCancel === "function") {
+        options.onCancel();
+      }
+    };
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") closeModal("cancel");
+    }
+
+    const setPickerStatus = (message, isError = false, statusOptions = {}) => {
+      const text = String(message || "").trim();
+      status.innerHTML = "";
+      status.style.color = isError ? "#c62828" : "#667085";
+      if (text) {
+        const label = document.createElement("span");
+        label.textContent = text;
+        status.appendChild(label);
+        return;
+      }
+      if (statusOptions.showAdminButton !== false && isGlobalAdmin && imagePickerScope !== "all") {
+        status.appendChild(allImagesBtn);
+      }
+    };
+
+    const setDeleting = (value) => {
+      isDeleting = value === true;
+      uploadBtn.disabled = isDeleting;
+      uploadSourceBtn.disabled = isDeleting;
+      cancelBtn.disabled = isDeleting;
+      chooseBtn.disabled = isDeleting || !selectedImage;
+      deleteBtn.disabled = isDeleting || !selectedImage;
+      deleteBtn.textContent = isDeleting ? "Deleting..." : "Delete";
+    };
+
+    const setSelectedImage = (image) => {
+      selectedImage = image || null;
+      grid.querySelectorAll(".cp-image-picker-option").forEach((node) => {
+        node.classList.toggle("active", String(node.dataset.imageId || "") === String(selectedImage?.id || ""));
+      });
+      chooseBtn.disabled = isDeleting || !selectedImage;
+      deleteBtn.disabled = isDeleting || !selectedImage;
+    };
+
+    const renderImages = (images) => {
+      if (isClosed) return;
+      grid.innerHTML = "";
+      loadedImages = Array.isArray(images) ? images : [];
+      const scopedImages = isGlobalAdmin && imagePickerScope === "all"
+        ? loadedImages
+        : loadedImages.filter((image) => imageWasAddedByUser(image, imagePickerUserId));
+      const rows = scopedImages
+        .filter((image) => getImagePickerUrl(image, "thumb", authBase) || getImagePickerUrl(image, "original", authBase));
+      if (!rows.length) {
+        const empty = document.createElement("div");
+        empty.className = "cp-image-picker-empty";
+        empty.textContent = "No uploaded images yet.";
+        grid.appendChild(empty);
+        setPickerStatus("");
+        setSelectedImage(null);
+        return;
+      }
+
+      rows.forEach((image) => {
+        const optionBtn = document.createElement("button");
+        optionBtn.type = "button";
+        optionBtn.className = "cp-image-picker-option";
+        optionBtn.dataset.imageId = String(image?.id || "");
+        optionBtn.title = getImageDisplayName(image);
+
+        const imageEl = document.createElement("img");
+        const thumbUrl = getImagePickerUrl(image, "thumb", authBase);
+        const fallbackUrl = getImagePickerUrl(image, "small", authBase) || getImagePickerUrl(image, "original", authBase);
+        imageEl.src = thumbUrl || fallbackUrl;
+        imageEl.alt = getImageDisplayName(image);
+        imageEl.loading = "lazy";
+        imageEl.addEventListener("error", () => {
+          if (fallbackUrl && imageEl.src !== fallbackUrl) {
+            imageEl.src = fallbackUrl;
+          }
+        }, { once: true });
+        optionBtn.appendChild(imageEl);
+
+        optionBtn.addEventListener("click", () => {
+          setSelectedImage(image);
+        });
+        optionBtn.addEventListener("dblclick", () => {
+          setSelectedImage(image);
+          chooseBtn.click();
+        });
+        grid.appendChild(optionBtn);
+
+        if (!selectedImage && currentImageKey && currentImageKey === String(image?.image_key || "").trim().toLowerCase()) {
+          selectedImage = image;
+        }
+      });
+
+      setSelectedImage(selectedImage);
+      setPickerStatus("");
+    };
+
+    uploadBtn.addEventListener("click", () => {
+      closeModal("upload");
+      if (typeof options.onUploadNew === "function") {
+        options.onUploadNew();
+      }
+    });
+    uploadSourceBtn.addEventListener("click", () => {
+      closeModal("upload-source");
+      if (typeof options.onUploadSourceNew === "function") {
+        options.onUploadSourceNew();
+      }
+    });
+    allImagesBtn.addEventListener("click", () => {
+      imagePickerScope = "all";
+      setPickerStatus("");
+      renderImages(loadedImages);
+    });
+    deleteBtn.addEventListener("click", async () => {
+      if (!selectedImage || isDeleting) return;
+      if (!window.confirm("Delete this image permanently?")) return;
+      setPickerStatus("Deleting image...");
+      setDeleting(true);
+      try {
+        const imageDeleter = typeof options.deleteImage === "function"
+          ? options.deleteImage
+          : (image) => deleteImage(image, { authBase });
+        await imageDeleter(selectedImage);
+        const deletedImageId = String(selectedImage?.id || "");
+        selectedImage = null;
+        renderImages(loadedImages.filter((image) => String(image?.id || "") !== deletedImageId));
+        setPickerStatus("Image deleted.");
+      } catch (error) {
+        setPickerStatus(error?.message || "Failed to delete image.", true);
+      } finally {
+        setDeleting(false);
+      }
+    });
+    cancelBtn.addEventListener("click", () => closeModal("cancel"));
+    chooseBtn.addEventListener("click", () => {
+      if (!selectedImage || typeof options.onChoose !== "function") return;
+      try {
+        options.onChoose(selectedImage, {
+          displayName: getImageDisplayName(selectedImage),
+          getUrl: (variant = "large") => getImagePickerUrl(selectedImage, variant, authBase),
+        });
+        closeModal("choose");
+      } catch (error) {
+        status.textContent = error?.message || "Failed to choose image.";
+        status.style.color = "#c62828";
+      }
+    });
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal("cancel");
+    });
+    document.addEventListener("keydown", handleKeyDown);
+
+    uploadActions.appendChild(uploadBtn);
+    if (options.canUploadSource === true && typeof options.onUploadSourceNew === "function") {
+      uploadActions.appendChild(uploadSourceBtn);
+    }
+    toolbar.appendChild(status);
+    toolbar.appendChild(uploadActions);
+    actionsLeft.appendChild(deleteBtn);
+    actions.appendChild(actionsLeft);
+    actions.appendChild(cancelBtn);
+    actions.appendChild(chooseBtn);
+    dialog.appendChild(title);
+    dialog.appendChild(toolbar);
+    dialog.appendChild(grid);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    const imageLoader = typeof options.fetchImages === "function"
+      ? options.fetchImages
+      : () => fetchImages({
+        authBase,
+        status: options.status,
+        visibility: options.visibility,
+      });
+
+    Promise.all([
+      Promise.resolve((imagePickerUserId && hasAdminOption) ? null : fetchCurrentUser({ authBase })),
+      Promise.resolve(imageLoader()),
+    ])
+      .then(([currentUser, images]) => {
+        if (currentUser) {
+          imagePickerUserId = getAuthUserId(currentUser);
+          isGlobalAdmin = isGlobalAdmin || currentUser?.isAdmin === true || Number(currentUser?.admin) === 1;
+        }
+        renderImages(images);
+      })
+      .catch((error) => {
+        if (isClosed) return;
+        grid.innerHTML = "";
+        const empty = document.createElement("div");
+        empty.className = "cp-image-picker-empty";
+        empty.textContent = error?.message || "Failed to load images.";
+        grid.appendChild(empty);
+        setPickerStatus("", false, { showAdminButton: false });
+      });
+  }
+
+  window.CarcassonneImagesModal = {
+    deleteImage,
+    fetchImages,
+    getImageDisplayName,
+    getImageKeyFromUrl,
+    getImagePickerUrl,
+    show: showImagePickerDialog,
+    showImagePickerDialog,
+    toApiAbsoluteUrl,
+    toApiImageVariantUrl,
+  };
+
+  if (!window.showImagePickerDialog) {
+    window.showImagePickerDialog = showImagePickerDialog;
+  }
+})();
+</script>
+
+<style>
   .player-photos-panel {
-    width: 200px;
+    width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    background: #fff;
+    background: transparent;
     border-radius: 4px;
-    box-shadow: 1.4px 1.4px 2px #b2b2b2;
-    padding: 10px;
-    margin: 0 8px 12px;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
     font-family: inherit;
   }
 
@@ -24,8 +609,8 @@
   }
 
   .player-photos-title {
-    font-size: 15px;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 600;
     color: #222;
     line-height: 1.2;
   }
@@ -36,16 +621,25 @@
   }
 
   .player-photo-view,
-  .player-photo-preview-btn {
+  .player-photo-preview-btn,
+  .player-photo-placeholder {
     all: unset;
     box-sizing: border-box;
     width: 100%;
     display: block;
-    cursor: pointer;
     border-radius: 4px;
     overflow: hidden;
     background: #f1f3f5;
     border: 1px solid #e0e4ea;
+  }
+
+  .player-photo-view,
+  .player-photo-preview-btn {
+    cursor: pointer;
+  }
+
+  .player-photo-placeholder {
+    cursor: default;
   }
 
   .player-photo-view:hover,
@@ -57,7 +651,8 @@
   }
 
   .player-photo-view img,
-  .player-photo-preview-btn img {
+  .player-photo-preview-btn img,
+  .player-photo-placeholder img {
     display: block;
     width: 100%;
     height: auto;
@@ -143,13 +738,30 @@
 
   .player-photos-empty,
   .player-photos-status,
-  .player-photos-limit {
+  .player-photos-limit,
+  .player-photos-access-note {
     font-size: 12px;
     line-height: 1.35;
   }
 
   .player-photos-empty {
     color: #667085;
+  }
+
+  .player-photos-access-note {
+    color: #4b5563;
+  }
+
+  .player-photos-access-note a {
+    color: #1a73b7;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .player-photos-access-note a:hover,
+  .player-photos-access-note a:focus-visible {
+    color: #165e93;
+    text-decoration: underline;
   }
 
   .player-photos-status {
@@ -202,8 +814,8 @@
   @media (max-width: 640px) {
     .player-photos-panel {
       width: auto;
-      margin-right: 8px;
-      margin-left: 8px;
+      margin-right: 0;
+      margin-left: 0;
     }
   }
 </style>
@@ -214,6 +826,8 @@
 (function () {
   const DEFAULT_AUTH_BASE = "https://api.carcassonne.gg";
   const PLAYER_PHOTOS_MAX_DEFAULT = 5;
+  const PLAYER_PHOTOS_PLACEHOLDER_URL = "https://carcassonne.gg/gallery/photo_placeholder.png";
+  const PLAYER_PHOTOS_ACCESS_HELP_URL = "https://carcassonne.gg/player/?id=noprofile";
   const root = document.getElementById("player-photos-root");
   if (!root) return;
 
@@ -222,6 +836,8 @@
     editMode: false,
     currentUser: null,
     canManage: false,
+    canViewPhotos: false,
+    photosRestricted: false,
     photos: [],
     maxPhotos: PLAYER_PHOTOS_MAX_DEFAULT,
     isBusy: false,
@@ -233,6 +849,17 @@
 
   function getAuthBase() {
     return String(window.AUTH_BASE_URL || DEFAULT_AUTH_BASE).replace(/\/+$/, "");
+  }
+
+  function getImagePickerDialog() {
+    const modalApi = window.CarcassonneImagesModal || null;
+    return modalApi?.show || modalApi?.showImagePickerDialog || window.showImagePickerDialog || null;
+  }
+
+  async function ensureImagePickerDialog() {
+    const existingDialog = getImagePickerDialog();
+    if (typeof existingDialog === "function") return existingDialog;
+    throw new Error("Image picker is not available.");
   }
 
   function toApiAbsoluteUrl(value) {
@@ -285,6 +912,10 @@
     return String(user?.player_id || user?.playerId || user?.profile?.player_id || "").trim();
   }
 
+  function userCanViewPhotos(user) {
+    return !!normalizeUserPlayerId(user);
+  }
+
   function userIsAdmin(user) {
     return user?.isAdmin === true || Number(user?.admin) === 1;
   }
@@ -300,6 +931,16 @@
 
   function getPhotoImage(photo) {
     return photo?.image && typeof photo.image === "object" ? photo.image : {};
+  }
+
+  function photoIsRestricted(photo) {
+    return photo?.restricted === true;
+  }
+
+  function shouldShowRestrictedPhotos() {
+    return !state.editMode
+      && state.photos.length > 0
+      && (!state.canViewPhotos || state.photosRestricted || state.photos.some(photoIsRestricted));
   }
 
   function getPhotoDisplayName(photo) {
@@ -438,6 +1079,34 @@
     return button;
   }
 
+  function createPhotoPlaceholder() {
+    const placeholder = document.createElement("div");
+    placeholder.className = "player-photo-placeholder";
+
+    const image = document.createElement("img");
+    image.src = PLAYER_PHOTOS_PLACEHOLDER_URL;
+    image.alt = "Photo hidden";
+    image.loading = "lazy";
+    placeholder.appendChild(image);
+    return placeholder;
+  }
+
+  function createPhotosAccessNote() {
+    const note = document.createElement("div");
+    note.className = "player-photos-access-note";
+    note.appendChild(document.createTextNode(
+      "To view player photos, log in to the site and link your email to your BGA account. Instructions are "
+    ));
+
+    const link = document.createElement("a");
+    link.href = PLAYER_PHOTOS_ACCESS_HELP_URL;
+    link.target = "_top";
+    link.textContent = "here";
+    note.appendChild(link);
+    note.appendChild(document.createTextNode("."));
+    return note;
+  }
+
   function createManageLink() {
     const link = document.createElement("a");
     link.className = "player-photos-link";
@@ -453,6 +1122,17 @@
         empty.className = "player-photos-empty";
         empty.textContent = "No photos yet.";
         body.appendChild(empty);
+        body.appendChild(createManageLink());
+      }
+      return;
+    }
+
+    if (shouldShowRestrictedPhotos()) {
+      body.appendChild(createPhotosAccessNote());
+      state.photos.forEach(() => {
+        body.appendChild(createPhotoPlaceholder());
+      });
+      if (state.canManage) {
         body.appendChild(createManageLink());
       }
       return;
@@ -570,6 +1250,11 @@
 
   function render() {
     if (!state.playerId || state.playerId === "noprofile") {
+      root.hidden = true;
+      return;
+    }
+
+    if (!state.editMode && state.isLoading && !state.canManage) {
       root.hidden = true;
       return;
     }
@@ -709,17 +1394,20 @@
     input.click();
   }
 
-  function openAddPhotoDialog() {
+  async function openAddPhotoDialog() {
     if (state.photos.length >= state.maxPhotos) {
       setStatus(`Maximum ${state.maxPhotos} photos. Remove a photo before adding another.`, true);
       return;
     }
-    const modalApi = window.CarcassonneImagesModal || null;
-    const showDialog = modalApi?.show || modalApi?.showImagePickerDialog || window.showImagePickerDialog;
-    if (typeof showDialog !== "function") {
-      chooseUploadFile();
+    let showDialog = null;
+    try {
+      setStatus("Loading image picker...");
+      showDialog = await ensureImagePickerDialog();
+    } catch (error) {
+      setStatus(error?.message || "Failed to load image picker popup.", true);
       return;
     }
+    setStatus("");
 
     showDialog({
       title: "Add player photo",
@@ -815,14 +1503,18 @@
       ]);
       state.currentUser = currentUser;
       state.canManage = computeCanManage(currentUser);
+      state.canViewPhotos = userCanViewPhotos(currentUser) || publicResult.can_view_photos === true;
       state.maxPhotos = Number(publicResult.max_photos || state.maxPhotos);
 
       if (state.editMode && state.canManage) {
         const managedResult = await loadManagedPhotos();
         state.photos = Array.isArray(managedResult.photos) ? managedResult.photos : [];
         state.maxPhotos = Number(managedResult.max_photos || state.maxPhotos);
+        state.photosRestricted = false;
       } else {
         state.photos = Array.isArray(publicResult.photos) ? publicResult.photos : [];
+        state.photosRestricted = !!publicResult.photos_restricted
+          || (!state.canViewPhotos && state.photos.length > 0);
       }
       state.statusMessage = "";
       state.statusIsError = false;

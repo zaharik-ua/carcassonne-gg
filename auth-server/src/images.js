@@ -807,6 +807,21 @@ export function registerImageRoutes(app, deps) {
     return !!linkedPlayerId && linkedPlayerId === String(playerId || "").trim();
   }
 
+  function canViewPlayerPhotos(user) {
+    return !!String(user?.player_id || "").trim();
+  }
+
+  function normalizeRestrictedPlayerPhoto(photo) {
+    if (!photo) return null;
+    return {
+      id: photo.id,
+      photo_id: photo.photo_id,
+      imageable_record_id: photo.imageable_record_id,
+      sort_order: photo.sort_order,
+      restricted: true,
+    };
+  }
+
   function normalizePlayerPhotoRow(row) {
     if (!row) return null;
     const image = service.normalizeImageRow({
@@ -1002,11 +1017,15 @@ export function registerImageRoutes(app, deps) {
       const playerId = normalizePlayerPhotoPlayerId(req.params.playerId);
       if (!playerId) return res.status(400).json({ ok: false, message: "playerId is required" });
       const photos = await loadPlayerPhotos(playerId, { publicOnly: true });
+      const canViewPhotos = canViewPlayerPhotos(req.user);
       return res.json({
         ok: true,
         player_id: playerId,
+        can_view_photos: canViewPhotos,
+        photos_restricted: !canViewPhotos && photos.length > 0,
+        photo_count: photos.length,
         max_photos: PLAYER_PHOTOS_MAX_COUNT,
-        photos,
+        photos: canViewPhotos ? photos : photos.map(normalizeRestrictedPlayerPhoto).filter(Boolean),
       });
     } catch (error) {
       console.error("Failed to load public player photos", error);
