@@ -52,6 +52,9 @@ const IMAGE_KEY_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
 const IMAGE_KEY_FIRST_CHAR_ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 const IMAGE_KEY_LENGTH = 10;
 const IMAGE_STORAGE_ROOT = "uploads/images";
+const PLAYER_PHOTO_IMAGEABLE_TYPE = "player";
+const PLAYER_PHOTO_IMAGEABLE_ROLE = "photo";
+const PLAYER_PHOTOS_MAX_COUNT = 5;
 const IMAGE_UPLOAD_MAX_BYTES = Number(process.env.IMAGE_UPLOAD_MAX_BYTES || 64 * 1024 * 1024);
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -790,6 +793,541 @@ export function registerImageRoutes(app, deps) {
     logAuditEvent,
   } = deps;
   const service = createImageService(deps);
+
+  function normalizePlayerPhotoPlayerId(value) {
+    const normalized = service.normalizeNullableText(value);
+    if (!normalized || !/^\d{1,20}$/.test(normalized)) return "";
+    return normalized;
+  }
+
+  function canManagePlayerPhotos(user, playerId) {
+    if (!user || !playerId) return false;
+    if (Number(user.admin) === 1) return true;
+    const linkedPlayerId = String(user.player_id || "").trim();
+    return !!linkedPlayerId && linkedPlayerId === String(playerId || "").trim();
+  }
+
+  function normalizePlayerPhotoRow(row) {
+    if (!row) return null;
+    const image = service.normalizeImageRow({
+      id: row.image_id,
+      image_key: row.image_key,
+      uuid: row.uuid,
+      owner_user_id: row.owner_user_id,
+      uploaded_by_user_id: row.uploaded_by_user_id,
+      original_filename: row.original_filename,
+      storage_path: row.storage_path,
+      mime_type: row.mime_type,
+      file_size_bytes: row.file_size_bytes,
+      width: row.width,
+      height: row.height,
+      title: row.title,
+      alt_text: row.alt_text,
+      status: row.status,
+      visibility: row.visibility,
+      metadata_json: row.metadata_json,
+      created_at: row.image_created_at,
+      updated_at: row.image_updated_at,
+      deleted_at: row.deleted_at,
+    });
+    const urls = {
+      thumb: row.thumb_public_url || row.thumb_storage_path || "",
+      small: row.small_public_url || row.small_storage_path || "",
+      medium: row.medium_public_url || row.medium_storage_path || "",
+      large: row.large_public_url || row.large_storage_path || "",
+      original: row.original_public_url || row.original_storage_path || row.storage_path || "",
+    };
+    return {
+      id: row.id,
+      photo_id: row.id,
+      imageable_record_id: row.id,
+      image_id: row.image_id,
+      imageable_type: row.imageable_type,
+      imageable_id: row.imageable_id,
+      role: row.role,
+      caption: row.caption,
+      sort_order: row.sort_order,
+      crop_json: service.normalizeImageableRow(row)?.crop_json ?? null,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      urls,
+      image,
+    };
+  }
+
+  async function loadPlayerPhotos(playerId, { publicOnly = false } = {}) {
+    const filters = [
+      "ia.imageable_type = ?",
+      "ia.imageable_id = ?",
+      "COALESCE(ia.role, '') = ?",
+      "i.deleted_at IS NULL",
+    ];
+    const params = [
+      PLAYER_PHOTO_IMAGEABLE_TYPE,
+      String(playerId),
+      PLAYER_PHOTO_IMAGEABLE_ROLE,
+    ];
+    if (publicOnly) {
+      filters.push("i.status = 'ready'");
+      filters.push("i.visibility = 'public'");
+    }
+    const rows = await service.dbAllAsync(
+      `
+        SELECT
+          ia.id,
+          ia.image_id,
+          ia.imageable_type,
+          ia.imageable_id,
+          ia.role,
+          ia.caption,
+          ia.sort_order,
+          ia.crop_json,
+          ia.created_at,
+          ia.updated_at,
+          i.image_key,
+          i.uuid,
+          i.owner_user_id,
+          i.uploaded_by_user_id,
+          i.original_filename,
+          i.storage_path,
+          i.mime_type,
+          i.file_size_bytes,
+          i.width,
+          i.height,
+          i.title,
+          i.alt_text,
+          i.status,
+          i.visibility,
+          i.metadata_json,
+          i.created_at AS image_created_at,
+          i.updated_at AS image_updated_at,
+          i.deleted_at,
+          thumb.storage_path AS thumb_storage_path,
+          thumb.public_url AS thumb_public_url,
+          small.storage_path AS small_storage_path,
+          small.public_url AS small_public_url,
+          medium.storage_path AS medium_storage_path,
+          medium.public_url AS medium_public_url,
+          large.storage_path AS large_storage_path,
+          large.public_url AS large_public_url,
+          original.storage_path AS original_storage_path,
+          original.public_url AS original_public_url
+        FROM imageables ia
+        INNER JOIN images i
+          ON i.id = ia.image_id
+        LEFT JOIN image_variants thumb
+          ON thumb.image_id = i.id
+         AND thumb.variant = 'thumb'
+        LEFT JOIN image_variants small
+          ON small.image_id = i.id
+         AND small.variant = 'small'
+        LEFT JOIN image_variants medium
+          ON medium.image_id = i.id
+         AND medium.variant = 'medium'
+        LEFT JOIN image_variants large
+          ON large.image_id = i.id
+         AND large.variant = 'large'
+        LEFT JOIN image_variants original
+          ON original.image_id = i.id
+         AND original.variant = 'original'
+        WHERE ${filters.join(" AND ")}
+        ORDER BY ia.sort_order ASC, ia.id ASC
+      `,
+      params
+    );
+    return (rows || []).map(normalizePlayerPhotoRow).filter(Boolean);
+  }
+
+  async function loadPlayerPhotoLinkById(playerId, photoId) {
+    const normalizedPhotoId = service.normalizePositiveInteger(photoId);
+    if (!normalizedPhotoId) return null;
+    const row = await service.dbGetAsync(
+      `
+        SELECT
+          id,
+          image_id,
+          imageable_type,
+          imageable_id,
+          role,
+          caption,
+          sort_order,
+          crop_json,
+          created_at,
+          updated_at
+        FROM imageables
+        WHERE id = ?
+          AND imageable_type = ?
+          AND imageable_id = ?
+          AND COALESCE(role, '') = ?
+        LIMIT 1
+      `,
+      [
+        normalizedPhotoId,
+        PLAYER_PHOTO_IMAGEABLE_TYPE,
+        String(playerId),
+        PLAYER_PHOTO_IMAGEABLE_ROLE,
+      ]
+    );
+    return service.normalizeImageableRow(row);
+  }
+
+  async function renumberPlayerPhotos(playerId) {
+    const rows = await service.dbAllAsync(
+      `
+        SELECT id
+        FROM imageables
+        WHERE imageable_type = ?
+          AND imageable_id = ?
+          AND COALESCE(role, '') = ?
+        ORDER BY sort_order ASC, id ASC
+      `,
+      [PLAYER_PHOTO_IMAGEABLE_TYPE, String(playerId), PLAYER_PHOTO_IMAGEABLE_ROLE]
+    );
+    for (let index = 0; index < rows.length; index += 1) {
+      await service.dbRunAsync(
+        "UPDATE imageables SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [index, rows[index].id]
+      );
+    }
+  }
+
+  function writeAuditEvent(entry) {
+    return new Promise((resolve) => {
+      logAuditEvent(entry, () => resolve());
+    });
+  }
+
+  app.get("/public/players/:playerId/photos", async (req, res) => {
+    try {
+      const playerId = normalizePlayerPhotoPlayerId(req.params.playerId);
+      if (!playerId) return res.status(400).json({ ok: false, message: "playerId is required" });
+      const photos = await loadPlayerPhotos(playerId, { publicOnly: true });
+      return res.json({
+        ok: true,
+        player_id: playerId,
+        max_photos: PLAYER_PHOTOS_MAX_COUNT,
+        photos,
+      });
+    } catch (error) {
+      console.error("Failed to load public player photos", error);
+      return res.status(500).json({ ok: false, message: "Failed to load player photos" });
+    }
+  });
+
+  app.get("/players/:playerId/photos", requireAuthenticated, async (req, res) => {
+    try {
+      const playerId = normalizePlayerPhotoPlayerId(req.params.playerId);
+      if (!playerId) return res.status(400).json({ ok: false, message: "playerId is required" });
+      if (!canManagePlayerPhotos(req.user, playerId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+      const photos = await loadPlayerPhotos(playerId);
+      return res.json({
+        ok: true,
+        player_id: playerId,
+        can_manage: true,
+        max_photos: PLAYER_PHOTOS_MAX_COUNT,
+        photos,
+      });
+    } catch (error) {
+      console.error("Failed to load player photos", error);
+      return res.status(500).json({ ok: false, message: "Failed to load player photos" });
+    }
+  });
+
+  app.post("/players/:playerId/photos", requireAuthenticated, async (req, res) => {
+    try {
+      const playerId = normalizePlayerPhotoPlayerId(req.params.playerId);
+      if (!playerId) return res.status(400).json({ ok: false, message: "playerId is required" });
+      if (!canManagePlayerPhotos(req.user, playerId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+
+      const imageIdentifier = service.normalizeNullableText(
+        req.body?.image_id
+        ?? req.body?.imageId
+        ?? req.body?.image_key
+        ?? req.body?.imageKey
+        ?? req.body?.id
+      );
+      if (!imageIdentifier) return res.status(400).json({ ok: false, message: "image_id is required" });
+
+      const image = await service.loadImageByIdentifier(imageIdentifier);
+      if (!image) return res.status(400).json({ ok: false, message: "image_id must reference an existing image" });
+      if (Number(req.user?.admin) !== 1 && !service.canManageImage(req.user, image)) {
+        return res.status(403).json({ ok: false, message: "You can add only images you uploaded." });
+      }
+      if (String(image.status || "").trim().toLowerCase() !== "ready") {
+        return res.status(400).json({ ok: false, message: "Image must be ready before it can be added." });
+      }
+      if (String(image.visibility || "").trim().toLowerCase() !== "public") {
+        return res.status(400).json({ ok: false, message: "Player photos must use public images." });
+      }
+
+      let createdRow = null;
+      await service.dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+      try {
+        const countRow = await service.dbGetAsync(
+          `
+            SELECT COUNT(*) AS count
+            FROM imageables
+            WHERE imageable_type = ?
+              AND imageable_id = ?
+              AND COALESCE(role, '') = ?
+          `,
+          [PLAYER_PHOTO_IMAGEABLE_TYPE, String(playerId), PLAYER_PHOTO_IMAGEABLE_ROLE]
+        );
+        if (Number(countRow?.count || 0) >= PLAYER_PHOTOS_MAX_COUNT) {
+          await service.dbRunAsync("ROLLBACK");
+          return res.status(409).json({
+            ok: false,
+            message: `A player profile can have up to ${PLAYER_PHOTOS_MAX_COUNT} photos.`,
+          });
+        }
+
+        const existingRow = await service.dbGetAsync(
+          `
+            SELECT id
+            FROM imageables
+            WHERE image_id = ?
+              AND imageable_type = ?
+              AND imageable_id = ?
+              AND COALESCE(role, '') = ?
+            LIMIT 1
+          `,
+          [image.id, PLAYER_PHOTO_IMAGEABLE_TYPE, String(playerId), PLAYER_PHOTO_IMAGEABLE_ROLE]
+        );
+        if (existingRow?.id) {
+          await service.dbRunAsync("ROLLBACK");
+          return res.status(409).json({ ok: false, message: "This photo is already added to the profile." });
+        }
+
+        const sortRow = await service.dbGetAsync(
+          `
+            SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_sort_order
+            FROM imageables
+            WHERE imageable_type = ?
+              AND imageable_id = ?
+              AND COALESCE(role, '') = ?
+          `,
+          [PLAYER_PHOTO_IMAGEABLE_TYPE, String(playerId), PLAYER_PHOTO_IMAGEABLE_ROLE]
+        );
+        const insertResult = await service.dbRunAsync(
+          `
+            INSERT INTO imageables (
+              image_id,
+              imageable_type,
+              imageable_id,
+              role,
+              sort_order,
+              created_at,
+              updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `,
+          [
+            image.id,
+            PLAYER_PHOTO_IMAGEABLE_TYPE,
+            String(playerId),
+            PLAYER_PHOTO_IMAGEABLE_ROLE,
+            Number(sortRow?.next_sort_order || 0),
+          ]
+        );
+        createdRow = await service.loadImageableById(insertResult?.lastID);
+        await service.dbRunAsync("COMMIT");
+      } catch (dbError) {
+        await service.dbRunAsync("ROLLBACK").catch(() => {});
+        throw dbError;
+      }
+
+      const photos = await loadPlayerPhotos(playerId);
+      await writeAuditEvent({
+        ...getAuditActor(req.user),
+        event_type: "player_photo.created",
+        entity_type: "imageable",
+        action: "create",
+        record_id: String(createdRow?.id || ""),
+        changes: buildAuditCreationChanges(createdRow || {}, IMAGEABLE_AUDIT_FIELDS),
+        metadata: { player_id: playerId },
+      });
+      return res.status(201).json({
+        ok: true,
+        player_id: playerId,
+        max_photos: PLAYER_PHOTOS_MAX_COUNT,
+        photo: createdRow || null,
+        photos,
+      });
+    } catch (error) {
+      console.error("Failed to add player photo", error);
+      return res.status(error.status || 500).json({ ok: false, message: error.status ? error.message : "Failed to add player photo" });
+    }
+  });
+
+  app.patch("/players/:playerId/photos/order", requireAuthenticated, async (req, res) => {
+    try {
+      const playerId = normalizePlayerPhotoPlayerId(req.params.playerId);
+      if (!playerId) return res.status(400).json({ ok: false, message: "playerId is required" });
+      if (!canManagePlayerPhotos(req.user, playerId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+
+      const rawIds = Array.isArray(req.body?.photo_ids)
+        ? req.body.photo_ids
+        : Array.isArray(req.body?.photoIds)
+          ? req.body.photoIds
+          : [];
+      const photoIds = rawIds.map((value) => service.normalizePositiveInteger(value));
+      if (!rawIds.length || photoIds.some((value) => !value)) {
+        return res.status(400).json({ ok: false, message: "photo_ids must be a list of player photo ids" });
+      }
+      if (new Set(photoIds).size !== photoIds.length) {
+        return res.status(400).json({ ok: false, message: "photo_ids must not contain duplicates" });
+      }
+
+      const existingRows = await service.dbAllAsync(
+        `
+          SELECT id
+          FROM imageables
+          WHERE imageable_type = ?
+            AND imageable_id = ?
+            AND COALESCE(role, '') = ?
+          ORDER BY sort_order ASC, id ASC
+        `,
+        [PLAYER_PHOTO_IMAGEABLE_TYPE, String(playerId), PLAYER_PHOTO_IMAGEABLE_ROLE]
+      );
+      const existingIds = existingRows.map((row) => Number(row.id));
+      const existingIdSet = new Set(existingIds);
+      if (existingIds.length !== photoIds.length || photoIds.some((id) => !existingIdSet.has(id))) {
+        return res.status(400).json({ ok: false, message: "photo_ids must include all current player photos" });
+      }
+
+      await service.dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+      try {
+        for (let index = 0; index < photoIds.length; index += 1) {
+          await service.dbRunAsync(
+            `
+              UPDATE imageables
+              SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+                AND imageable_type = ?
+                AND imageable_id = ?
+                AND COALESCE(role, '') = ?
+            `,
+            [
+              index,
+              photoIds[index],
+              PLAYER_PHOTO_IMAGEABLE_TYPE,
+              String(playerId),
+              PLAYER_PHOTO_IMAGEABLE_ROLE,
+            ]
+          );
+        }
+        await service.dbRunAsync("COMMIT");
+      } catch (dbError) {
+        await service.dbRunAsync("ROLLBACK").catch(() => {});
+        throw dbError;
+      }
+
+      const photos = await loadPlayerPhotos(playerId);
+      await writeAuditEvent({
+        ...getAuditActor(req.user),
+        event_type: "player_photos.reordered",
+        entity_type: "player",
+        action: "update",
+        record_id: playerId,
+        changes: {
+          photo_order: {
+            old: existingIds,
+            new: photoIds,
+          },
+        },
+      });
+      return res.json({
+        ok: true,
+        player_id: playerId,
+        max_photos: PLAYER_PHOTOS_MAX_COUNT,
+        photos,
+      });
+    } catch (error) {
+      console.error("Failed to reorder player photos", error);
+      return res.status(500).json({ ok: false, message: "Failed to reorder player photos" });
+    }
+  });
+
+  app.delete("/players/:playerId/photos/:photoId", requireAuthenticated, async (req, res) => {
+    try {
+      const playerId = normalizePlayerPhotoPlayerId(req.params.playerId);
+      if (!playerId) return res.status(400).json({ ok: false, message: "playerId is required" });
+      if (!canManagePlayerPhotos(req.user, playerId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+
+      const beforeRow = await loadPlayerPhotoLinkById(playerId, req.params.photoId);
+      if (!beforeRow) return res.status(404).json({ ok: false, message: "Player photo not found" });
+      const image = await service.loadImageByIdentifier(beforeRow.image_id, { includeDeleted: Number(req.user?.admin) === 1 });
+      if (!image) return res.status(404).json({ ok: false, message: "Image not found" });
+      const variants = await service.loadImageVariantsByImageId(image.id);
+      let hardDeletedImage = false;
+
+      await service.dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+      try {
+        await service.dbRunAsync("DELETE FROM imageables WHERE id = ?", [beforeRow.id]);
+        await renumberPlayerPhotos(playerId);
+        const remainingImageableCount = await service.countImageablesByImageId(image.id);
+        if (remainingImageableCount === 0) {
+          await service.dbRunAsync("DELETE FROM image_variants WHERE image_id = ?", [image.id]);
+          await service.dbRunAsync("DELETE FROM images WHERE id = ?", [image.id]);
+          hardDeletedImage = true;
+        }
+        await service.dbRunAsync("COMMIT");
+      } catch (dbError) {
+        await service.dbRunAsync("ROLLBACK").catch(() => {});
+        throw dbError;
+      }
+
+      if (hardDeletedImage) {
+        await service.deleteImageFiles(image, variants);
+      }
+
+      const photos = await loadPlayerPhotos(playerId);
+      await writeAuditEvent({
+        ...getAuditActor(req.user),
+        event_type: "player_photo.deleted",
+        entity_type: "imageable",
+        action: "delete",
+        record_id: String(beforeRow.id),
+        changes: buildAuditDeletionChanges(beforeRow || {}, IMAGEABLE_AUDIT_FIELDS),
+        metadata: { player_id: playerId, hard_deleted_image: hardDeletedImage },
+      });
+      if (hardDeletedImage) {
+        await writeAuditEvent({
+          ...getAuditActor(req.user),
+          event_type: "image.deleted",
+          entity_type: "image",
+          action: "delete",
+          record_id: String(image.id),
+          changes: buildAuditDeletionChanges(image, IMAGE_AUDIT_FIELDS),
+          metadata: {
+            hard_delete: true,
+            deleted_after_player_photo_unlink: true,
+            player_id: playerId,
+            variants: variants.map((variant) => variant.variant),
+          },
+        });
+      }
+
+      return res.json({
+        ok: true,
+        player_id: playerId,
+        max_photos: PLAYER_PHOTOS_MAX_COUNT,
+        hard_deleted_image: hardDeletedImage,
+        photos,
+      });
+    } catch (error) {
+      console.error("Failed to delete player photo", error);
+      return res.status(500).json({ ok: false, message: "Failed to delete player photo" });
+    }
+  });
 
   app.get(/^\/uploads\/images\/.+/, async (req, res) => {
     try {

@@ -1,0 +1,845 @@
+<style>
+  .player-photos-panel {
+    width: 200px;
+    max-width: 100%;
+    box-sizing: border-box;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    padding: 10px;
+    margin: 0 8px 12px;
+    font-family: inherit;
+  }
+
+  .player-photos-panel[hidden] {
+    display: none;
+  }
+
+  .player-photos-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .player-photos-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #222;
+    line-height: 1.2;
+  }
+
+  .player-photos-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .player-photo-view,
+  .player-photo-preview-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    display: block;
+    cursor: pointer;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #f1f3f5;
+    border: 1px solid #e0e4ea;
+  }
+
+  .player-photo-view:hover,
+  .player-photo-view:focus-visible,
+  .player-photo-preview-btn:hover,
+  .player-photo-preview-btn:focus-visible {
+    border-color: #1a73b7;
+    box-shadow: 0 0 0 2px rgba(26, 115, 183, 0.16);
+  }
+
+  .player-photo-view img,
+  .player-photo-preview-btn img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .player-photo-edit-item {
+    display: grid;
+    gap: 6px;
+  }
+
+  .player-photo-edit-item.drag-over {
+    outline: 2px solid rgba(26, 115, 183, 0.35);
+    outline-offset: 2px;
+  }
+
+  .player-photo-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .player-photo-order-actions,
+  .player-photo-main-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .player-photo-btn {
+    border: 1px solid #c8ced8;
+    background: #fff;
+    color: #2f3947;
+    border-radius: 4px;
+    min-width: 28px;
+    min-height: 26px;
+    padding: 4px 7px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .player-photo-btn:hover:not(:disabled),
+  .player-photo-btn:focus-visible {
+    border-color: #9ea7b3;
+  }
+
+  .player-photo-btn:disabled {
+    opacity: 0.48;
+    cursor: default;
+  }
+
+  .player-photo-btn-primary {
+    border-color: #1a73b7;
+    background: #1a73b7;
+    color: #fff;
+  }
+
+  .player-photo-btn-danger {
+    border-color: #e6b4b4;
+    background: #fff3f3;
+    color: #a12a2a;
+  }
+
+  .player-photos-link {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    color: #1a73b7;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+
+  .player-photos-link:hover,
+  .player-photos-link:focus-visible {
+    color: #165e93;
+    text-decoration: underline;
+  }
+
+  .player-photos-empty,
+  .player-photos-status,
+  .player-photos-limit {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .player-photos-empty {
+    color: #667085;
+  }
+
+  .player-photos-status {
+    min-height: 16px;
+    color: #667085;
+    margin-top: 8px;
+  }
+
+  .player-photos-status.error,
+  .player-photos-limit {
+    color: #c62828;
+    font-weight: 600;
+  }
+
+  .player-photos-limit {
+    margin: 0 0 8px;
+  }
+
+  .player-photos-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(18, 25, 34, 0.72);
+    box-sizing: border-box;
+  }
+
+  .player-photos-modal.open {
+    display: flex;
+  }
+
+  .player-photos-modal-content {
+    max-width: min(96vw, 1100px);
+    max-height: 92vh;
+  }
+
+  .player-photos-modal-content img {
+    display: block;
+    max-width: 100%;
+    max-height: 92vh;
+    width: auto;
+    height: auto;
+    border-radius: 4px;
+    background: #fff;
+  }
+
+  @media (max-width: 640px) {
+    .player-photos-panel {
+      width: auto;
+      margin-right: 8px;
+      margin-left: 8px;
+    }
+  }
+</style>
+
+<div id="player-photos-root" class="player-photos-panel" hidden></div>
+
+<script>
+(function () {
+  const DEFAULT_AUTH_BASE = "https://api.carcassonne.gg";
+  const PLAYER_PHOTOS_MAX_DEFAULT = 5;
+  const root = document.getElementById("player-photos-root");
+  if (!root) return;
+
+  const state = {
+    playerId: "",
+    editMode: false,
+    currentUser: null,
+    canManage: false,
+    photos: [],
+    maxPhotos: PLAYER_PHOTOS_MAX_DEFAULT,
+    isBusy: false,
+    isLoading: true,
+    statusMessage: "",
+    statusIsError: false,
+    draggedPhotoId: "",
+  };
+
+  function getAuthBase() {
+    return String(window.AUTH_BASE_URL || DEFAULT_AUTH_BASE).replace(/\/+$/, "");
+  }
+
+  function toApiAbsoluteUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+    const base = getAuthBase();
+    return `${base}${raw.startsWith("/") ? "" : "/"}${raw}`;
+  }
+
+  function toApiImageVariantUrl(value, variant) {
+    const imageUrl = toApiAbsoluteUrl(value);
+    const variantName = String(variant || "").trim();
+    if (!imageUrl || !variantName) return imageUrl;
+    try {
+      const url = new URL(imageUrl, window.location.href);
+      if (!/\/uploads\/images\/\d{4}\/\d{2}\/[^/]+\/[^/]+$/i.test(url.pathname)) {
+        return imageUrl;
+      }
+      url.pathname = url.pathname.replace(/\/[^/]+$/, `/${variantName}.webp`);
+      return url.toString();
+    } catch (_error) {
+      return imageUrl.replace(/\/[^/]+$/, `/${variantName}.webp`);
+    }
+  }
+
+  function getPlayerIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("id") || "").trim();
+  }
+
+  function isEditModeFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("edit") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  function buildPlayerPageUrl(editMode) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("id", state.playerId);
+    if (editMode) {
+      url.searchParams.set("edit", "1");
+    } else {
+      url.searchParams.delete("edit");
+    }
+    return url.toString();
+  }
+
+  function normalizeUserPlayerId(user) {
+    return String(user?.player_id || user?.playerId || user?.profile?.player_id || "").trim();
+  }
+
+  function userIsAdmin(user) {
+    return user?.isAdmin === true || Number(user?.admin) === 1;
+  }
+
+  function computeCanManage(user) {
+    if (!user || !state.playerId) return false;
+    return userIsAdmin(user) || normalizeUserPlayerId(user) === state.playerId;
+  }
+
+  function getPhotoId(photo) {
+    return String(photo?.id || photo?.photo_id || photo?.imageable_record_id || "").trim();
+  }
+
+  function getPhotoImage(photo) {
+    return photo?.image && typeof photo.image === "object" ? photo.image : {};
+  }
+
+  function getPhotoDisplayName(photo) {
+    const image = getPhotoImage(photo);
+    return String(
+      image.title
+      || image.alt_text
+      || image.original_filename
+      || image.image_key
+      || "Player photo"
+    ).trim();
+  }
+
+  function getPhotoUrl(photo, variant) {
+    const urls = photo?.urls && typeof photo.urls === "object" ? photo.urls : {};
+    const image = getPhotoImage(photo);
+    const direct = String(urls[variant] || "").trim();
+    if (direct) return toApiAbsoluteUrl(direct);
+    const source = String(image.storage_path || image.public_url || "").trim();
+    if (!source) return "";
+    return toApiImageVariantUrl(source, variant);
+  }
+
+  async function fetchJson(url, options = {}) {
+    const response = await fetch(url, {
+      credentials: "include",
+      ...options,
+      headers: {
+        ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+        ...(options.headers || {}),
+      },
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.message || "Request failed.");
+    }
+    return result;
+  }
+
+  async function fetchCurrentUser() {
+    try {
+      const response = await fetch(`${getAuthBase()}/auth/me`, {
+        method: "GET",
+        credentials: "include",
+      });
+      const result = await response.json().catch(() => ({}));
+      return response.ok && result?.authenticated ? result.user || null : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async function loadPublicPhotos() {
+    return fetchJson(`${getAuthBase()}/public/players/${encodeURIComponent(state.playerId)}/photos`, {
+      method: "GET",
+    });
+  }
+
+  async function loadManagedPhotos() {
+    return fetchJson(`${getAuthBase()}/players/${encodeURIComponent(state.playerId)}/photos`, {
+      method: "GET",
+    });
+  }
+
+  function setStatus(message, isError = false) {
+    state.statusMessage = String(message || "").trim();
+    state.statusIsError = !!isError;
+    const statusEl = root.querySelector(".player-photos-status");
+    if (statusEl) {
+      statusEl.textContent = state.statusMessage;
+      statusEl.classList.toggle("error", state.statusIsError);
+    }
+  }
+
+  function closePreviewModal() {
+    const modal = document.querySelector(".player-photos-modal");
+    if (!modal) return;
+    modal.classList.remove("open");
+    const image = modal.querySelector("img");
+    if (image) image.src = "";
+  }
+
+  function ensurePreviewModal() {
+    let modal = document.querySelector(".player-photos-modal");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.className = "player-photos-modal";
+
+    const content = document.createElement("div");
+    content.className = "player-photos-modal-content";
+
+    const image = document.createElement("img");
+    image.alt = "Player photo preview";
+    content.appendChild(image);
+    modal.appendChild(content);
+
+    modal.addEventListener("click", closePreviewModal);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && modal.classList.contains("open")) {
+        closePreviewModal();
+      }
+    });
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openPreview(photo) {
+    const originalUrl = getPhotoUrl(photo, "original") || getPhotoUrl(photo, "large") || getPhotoUrl(photo, "medium");
+    if (!originalUrl) return;
+    const modal = ensurePreviewModal();
+    const image = modal.querySelector("img");
+    image.src = originalUrl;
+    image.alt = getPhotoDisplayName(photo);
+    modal.classList.add("open");
+  }
+
+  function createPhotoButton(photo, className) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.title = "Preview photo";
+    button.addEventListener("click", () => openPreview(photo));
+
+    const image = document.createElement("img");
+    image.src = getPhotoUrl(photo, "medium") || getPhotoUrl(photo, "large") || getPhotoUrl(photo, "original");
+    image.alt = getPhotoDisplayName(photo);
+    image.loading = "lazy";
+    image.addEventListener("error", () => {
+      const fallbackUrl = getPhotoUrl(photo, "original");
+      if (fallbackUrl && image.src !== fallbackUrl) {
+        image.src = fallbackUrl;
+      }
+    }, { once: true });
+    button.appendChild(image);
+    return button;
+  }
+
+  function createManageLink() {
+    const link = document.createElement("a");
+    link.className = "player-photos-link";
+    link.href = buildPlayerPageUrl(true);
+    link.textContent = state.photos.length ? "Edit photos" : "Add photo";
+    return link;
+  }
+
+  function renderViewMode(body) {
+    if (!state.photos.length) {
+      if (state.canManage) {
+        const empty = document.createElement("div");
+        empty.className = "player-photos-empty";
+        empty.textContent = "No photos yet.";
+        body.appendChild(empty);
+        body.appendChild(createManageLink());
+      }
+      return;
+    }
+
+    state.photos.forEach((photo, index) => {
+      body.appendChild(createPhotoButton(photo, "player-photo-view"));
+      if (state.canManage && index === state.photos.length - 1) {
+        body.appendChild(createManageLink());
+      }
+    });
+  }
+
+  function createIconButton(label, html, onClick, options = {}) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `player-photo-btn${options.className ? ` ${options.className}` : ""}`;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.innerHTML = html;
+    button.disabled = !!options.disabled;
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  function handleDropOnPhoto(targetPhotoId) {
+    if (!state.draggedPhotoId || state.draggedPhotoId === targetPhotoId || state.isBusy) return;
+    const currentIndex = state.photos.findIndex((photo) => getPhotoId(photo) === state.draggedPhotoId);
+    const targetIndex = state.photos.findIndex((photo) => getPhotoId(photo) === targetPhotoId);
+    if (currentIndex < 0 || targetIndex < 0) return;
+    const nextPhotos = state.photos.slice();
+    const [moved] = nextPhotos.splice(currentIndex, 1);
+    nextPhotos.splice(targetIndex, 0, moved);
+    savePhotoOrder(nextPhotos);
+  }
+
+  function renderEditMode(body) {
+    if (state.photos.length >= state.maxPhotos) {
+      const limit = document.createElement("div");
+      limit.className = "player-photos-limit";
+      limit.textContent = `Maximum ${state.maxPhotos} photos. Remove a photo before adding another.`;
+      body.appendChild(limit);
+    }
+
+    if (!state.photos.length) {
+      const empty = document.createElement("div");
+      empty.className = "player-photos-empty";
+      empty.textContent = "No photos yet.";
+      body.appendChild(empty);
+      return;
+    }
+
+    state.photos.forEach((photo, index) => {
+      const photoId = getPhotoId(photo);
+      const item = document.createElement("div");
+      item.className = "player-photo-edit-item";
+      item.draggable = !state.isBusy;
+      item.dataset.photoId = photoId;
+      item.addEventListener("dragstart", (event) => {
+        state.draggedPhotoId = photoId;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", photoId);
+      });
+      item.addEventListener("dragover", (event) => {
+        if (!state.draggedPhotoId || state.draggedPhotoId === photoId || state.isBusy) return;
+        event.preventDefault();
+        item.classList.add("drag-over");
+      });
+      item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
+      item.addEventListener("drop", (event) => {
+        event.preventDefault();
+        item.classList.remove("drag-over");
+        handleDropOnPhoto(photoId);
+      });
+      item.addEventListener("dragend", () => {
+        state.draggedPhotoId = "";
+        root.querySelectorAll(".drag-over").forEach((node) => node.classList.remove("drag-over"));
+      });
+
+      item.appendChild(createPhotoButton(photo, "player-photo-preview-btn"));
+
+      const actions = document.createElement("div");
+      actions.className = "player-photo-actions";
+
+      const orderActions = document.createElement("div");
+      orderActions.className = "player-photo-order-actions";
+      orderActions.appendChild(createIconButton(
+        "Move up",
+        "&#8593;",
+        () => movePhoto(index, -1),
+        { disabled: state.isBusy || index === 0 }
+      ));
+      orderActions.appendChild(createIconButton(
+        "Move down",
+        "&#8595;",
+        () => movePhoto(index, 1),
+        { disabled: state.isBusy || index === state.photos.length - 1 }
+      ));
+
+      const mainActions = document.createElement("div");
+      mainActions.className = "player-photo-main-actions";
+      mainActions.appendChild(createIconButton(
+        "Remove photo",
+        "&times;",
+        () => deletePhoto(photo),
+        { className: "player-photo-btn-danger", disabled: state.isBusy }
+      ));
+
+      actions.appendChild(orderActions);
+      actions.appendChild(mainActions);
+      item.appendChild(actions);
+      body.appendChild(item);
+    });
+  }
+
+  function render() {
+    if (!state.playerId || state.playerId === "noprofile") {
+      root.hidden = true;
+      return;
+    }
+
+    if (!state.editMode && !state.isLoading && !state.photos.length && !state.canManage) {
+      root.hidden = true;
+      return;
+    }
+
+    root.hidden = false;
+    root.innerHTML = "";
+
+    const header = document.createElement("div");
+    header.className = "player-photos-header";
+
+    const title = document.createElement("div");
+    title.className = "player-photos-title";
+    title.textContent = "Photos";
+    header.appendChild(title);
+
+    if (state.editMode && state.canManage) {
+      const addButton = document.createElement("button");
+      addButton.type = "button";
+      addButton.className = "player-photo-btn player-photo-btn-primary";
+      addButton.textContent = "Add";
+      addButton.disabled = state.isBusy || state.photos.length >= state.maxPhotos;
+      addButton.addEventListener("click", openAddPhotoDialog);
+      header.appendChild(addButton);
+    }
+
+    root.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "player-photos-list";
+
+    if (state.isLoading) {
+      const loading = document.createElement("div");
+      loading.className = "player-photos-empty";
+      loading.textContent = "Loading photos...";
+      body.appendChild(loading);
+    } else if (state.editMode && !state.canManage) {
+      const denied = document.createElement("div");
+      denied.className = "player-photos-status error";
+      denied.textContent = "You do not have permission to edit these photos.";
+      body.appendChild(denied);
+    } else if (state.editMode) {
+      renderEditMode(body);
+    } else {
+      renderViewMode(body);
+    }
+
+    root.appendChild(body);
+
+    const status = document.createElement("div");
+    status.className = `player-photos-status${state.statusIsError ? " error" : ""}`;
+    status.textContent = state.statusMessage;
+    root.appendChild(status);
+  }
+
+  async function addImageToPlayer(image) {
+    if (state.photos.length >= state.maxPhotos) {
+      setStatus(`Maximum ${state.maxPhotos} photos. Remove a photo before adding another.`, true);
+      return;
+    }
+    const imageId = String(image?.id || image?.image_id || image?.image_key || "").trim();
+    if (!imageId) {
+      setStatus("Choose an image first.", true);
+      return;
+    }
+
+    state.isBusy = true;
+    state.statusMessage = "Adding photo...";
+    state.statusIsError = false;
+    render();
+    try {
+      const result = await fetchJson(`${getAuthBase()}/players/${encodeURIComponent(state.playerId)}/photos`, {
+        method: "POST",
+        body: JSON.stringify({ image_id: imageId }),
+      });
+      state.photos = Array.isArray(result.photos) ? result.photos : state.photos;
+      state.maxPhotos = Number(result.max_photos || state.maxPhotos);
+      state.statusMessage = "Photo added.";
+      state.statusIsError = false;
+    } catch (error) {
+      state.statusMessage = error?.message || "Failed to add photo.";
+      state.statusIsError = true;
+    } finally {
+      state.isBusy = false;
+      render();
+    }
+  }
+
+  async function uploadAndAddPhoto(file) {
+    if (!file) return;
+    state.isBusy = true;
+    state.statusMessage = "Uploading photo...";
+    state.statusIsError = false;
+    render();
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      formData.append("visibility", "public");
+      const response = await fetch(`${getAuthBase()}/images/upload`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.ok || !result?.image) {
+        throw new Error(result?.message || "Failed to upload photo.");
+      }
+      state.isBusy = false;
+      await addImageToPlayer(result.image);
+    } catch (error) {
+      state.statusMessage = error?.message || "Failed to upload photo.";
+      state.statusIsError = true;
+      state.isBusy = false;
+      render();
+    }
+  }
+
+  function chooseUploadFile() {
+    if (state.photos.length >= state.maxPhotos) {
+      setStatus(`Maximum ${state.maxPhotos} photos. Remove a photo before adding another.`, true);
+      return;
+    }
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.hidden = true;
+    input.addEventListener("change", () => {
+      const file = input.files && input.files[0] ? input.files[0] : null;
+      input.remove();
+      if (file) uploadAndAddPhoto(file);
+    }, { once: true });
+    document.body.appendChild(input);
+    input.click();
+  }
+
+  function openAddPhotoDialog() {
+    if (state.photos.length >= state.maxPhotos) {
+      setStatus(`Maximum ${state.maxPhotos} photos. Remove a photo before adding another.`, true);
+      return;
+    }
+    const modalApi = window.CarcassonneImagesModal || null;
+    const showDialog = modalApi?.show || modalApi?.showImagePickerDialog || window.showImagePickerDialog;
+    if (typeof showDialog !== "function") {
+      chooseUploadFile();
+      return;
+    }
+
+    showDialog({
+      title: "Add player photo",
+      chooseLabel: "Add photo",
+      uploadLabel: "Upload photo",
+      currentUserId: state.currentUser?.id || state.currentUser?.user_id || "",
+      isAdmin: userIsAdmin(state.currentUser),
+      onChoose: (image) => {
+        addImageToPlayer(image);
+      },
+      onUploadNew: chooseUploadFile,
+    });
+  }
+
+  async function savePhotoOrder(nextPhotos) {
+    const previousPhotos = state.photos.slice();
+    state.photos = nextPhotos;
+    state.isBusy = true;
+    state.statusMessage = "Saving order...";
+    state.statusIsError = false;
+    render();
+    try {
+      const result = await fetchJson(`${getAuthBase()}/players/${encodeURIComponent(state.playerId)}/photos/order`, {
+        method: "PATCH",
+        body: JSON.stringify({ photo_ids: nextPhotos.map(getPhotoId) }),
+      });
+      state.photos = Array.isArray(result.photos) ? result.photos : nextPhotos;
+      state.maxPhotos = Number(result.max_photos || state.maxPhotos);
+      state.statusMessage = "Order saved.";
+      state.statusIsError = false;
+    } catch (error) {
+      state.photos = previousPhotos;
+      state.statusMessage = error?.message || "Failed to save order.";
+      state.statusIsError = true;
+    } finally {
+      state.isBusy = false;
+      render();
+    }
+  }
+
+  function movePhoto(index, direction) {
+    if (state.isBusy) return;
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= state.photos.length) return;
+    const nextPhotos = state.photos.slice();
+    const temp = nextPhotos[index];
+    nextPhotos[index] = nextPhotos[targetIndex];
+    nextPhotos[targetIndex] = temp;
+    savePhotoOrder(nextPhotos);
+  }
+
+  async function deletePhoto(photo) {
+    const photoId = getPhotoId(photo);
+    if (!photoId || state.isBusy) return;
+    if (!window.confirm("Remove this photo from the profile?")) return;
+
+    state.isBusy = true;
+    state.statusMessage = "Removing photo...";
+    state.statusIsError = false;
+    render();
+    try {
+      const result = await fetchJson(`${getAuthBase()}/players/${encodeURIComponent(state.playerId)}/photos/${encodeURIComponent(photoId)}`, {
+        method: "DELETE",
+      });
+      state.photos = Array.isArray(result.photos) ? result.photos : state.photos.filter((item) => getPhotoId(item) !== photoId);
+      state.maxPhotos = Number(result.max_photos || state.maxPhotos);
+      state.statusMessage = result.hard_deleted_image
+        ? "Photo removed. The unused image was deleted."
+        : "Photo removed.";
+      state.statusIsError = false;
+    } catch (error) {
+      state.statusMessage = error?.message || "Failed to remove photo.";
+      state.statusIsError = true;
+    } finally {
+      state.isBusy = false;
+      render();
+    }
+  }
+
+  async function init() {
+    state.playerId = getPlayerIdFromUrl();
+    state.editMode = isEditModeFromUrl();
+    if (!state.playerId || state.playerId === "noprofile") {
+      render();
+      return;
+    }
+
+    render();
+    try {
+      const [publicResult, currentUser] = await Promise.all([
+        loadPublicPhotos(),
+        fetchCurrentUser(),
+      ]);
+      state.currentUser = currentUser;
+      state.canManage = computeCanManage(currentUser);
+      state.maxPhotos = Number(publicResult.max_photos || state.maxPhotos);
+
+      if (state.editMode && state.canManage) {
+        const managedResult = await loadManagedPhotos();
+        state.photos = Array.isArray(managedResult.photos) ? managedResult.photos : [];
+        state.maxPhotos = Number(managedResult.max_photos || state.maxPhotos);
+      } else {
+        state.photos = Array.isArray(publicResult.photos) ? publicResult.photos : [];
+      }
+      state.statusMessage = "";
+      state.statusIsError = false;
+    } catch (error) {
+      state.photos = [];
+      state.statusMessage = error?.message || "Failed to load player photos.";
+      state.statusIsError = true;
+    } finally {
+      state.isLoading = false;
+      render();
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>

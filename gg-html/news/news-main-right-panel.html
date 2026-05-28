@@ -164,7 +164,7 @@
   }
   .gg-rp-news-streamer-name {
     color: #333;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     line-height: 15px;
     margin-bottom: 1px;
@@ -224,18 +224,6 @@
     margin: 8px 0;
     max-width: none;
     width: 100%;
-  }
-  .gg-rp-news-read-more-row {
-    margin: 4px 0 0;
-  }
-  .gg-rp-news-read-more {
-    color: #146997;
-    font-weight: 500;
-    text-decoration: none;
-  }
-  .gg-rp-news-read-more:hover {
-    color: #0e4f73;
-    text-decoration: none;
   }
   .gg-rp-news-section-title {
     color: #800020;
@@ -468,7 +456,6 @@
   const NEWS_PUBLIC_URL = "https://api.carcassonne.gg/public/news";
   const PLAYERS_PUBLIC_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
   const NEWS_API_ORIGIN = new URL(NEWS_PUBLIC_URL).origin;
-  const LONG_NEWS_DESCRIPTION_LIMIT = 1000;
   const NEWS_DESCRIPTION_PREVIEW_LIMIT = 200;
   const newsContainer = document.getElementById("gg-rp-news-container");
   let imageModal;
@@ -684,110 +671,10 @@
       .length;
   };
 
-  const hasPreviewContent = (node) => {
-    if (!node) return false;
-    if (node.nodeType === Node.TEXT_NODE) {
-      return !!String(node.textContent || "").trim();
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) {
-      return false;
-    }
-    if (node.nodeType === Node.ELEMENT_NODE && node.tagName?.toUpperCase() === "IMG") {
-      return true;
-    }
-    return Array.from(node.childNodes || []).some(hasPreviewContent);
-  };
-
-  const createDescriptionPreviewFragment = (html, limit) => {
+  const hasNewsDescriptionImages = (html) => {
     const template = document.createElement("template");
     template.innerHTML = String(html || "");
-
-    const fragment = document.createDocumentFragment();
-    const maxCharacters = Math.max(0, Number(limit) || 0);
-    let remainingCharacters = maxCharacters;
-    let isTruncated = false;
-    let omittedContent = false;
-
-    const copyPreviewNodes = (sourceParent, targetParent) => {
-      for (const node of Array.from(sourceParent.childNodes || [])) {
-        if (node.nodeType === Node.TEXT_NODE) {
-          const text = String(node.textContent || "");
-          if (!text) continue;
-          if (!text.trim()) {
-            targetParent.appendChild(document.createTextNode(text));
-            continue;
-          }
-
-          if (remainingCharacters <= 0) {
-            isTruncated = true;
-            omittedContent = true;
-            return;
-          }
-
-          const characters = Array.from(text);
-          if (characters.length <= remainingCharacters) {
-            targetParent.appendChild(document.createTextNode(text));
-            remainingCharacters -= characters.length;
-            continue;
-          }
-
-          const previewText = characters.slice(0, remainingCharacters).join("").replace(/\s+$/, "");
-          if (previewText) {
-            targetParent.appendChild(document.createTextNode(previewText));
-          }
-          remainingCharacters = 0;
-          isTruncated = true;
-          omittedContent = true;
-          return;
-        }
-
-        if (node.nodeType !== Node.ELEMENT_NODE) {
-          continue;
-        }
-
-        const tagName = node.tagName.toUpperCase();
-        if (tagName === "SCRIPT" || tagName === "STYLE") {
-          continue;
-        }
-
-        if (tagName === "IMG") {
-          if (remainingCharacters > 0) {
-            targetParent.appendChild(node.cloneNode(false));
-          } else {
-            omittedContent = true;
-          }
-          continue;
-        }
-
-        if (remainingCharacters <= 0) {
-          if (hasPreviewContent(node)) {
-            isTruncated = true;
-            omittedContent = true;
-            return;
-          }
-          continue;
-        }
-
-        const clone = node.cloneNode(false);
-        targetParent.appendChild(clone);
-        copyPreviewNodes(node, clone);
-
-        if (!clone.childNodes.length && !["BR", "HR"].includes(tagName)) {
-          clone.remove();
-        }
-
-        if (isTruncated) {
-          return;
-        }
-      }
-    };
-
-    copyPreviewNodes(template.content, fragment);
-
-    return {
-      fragment,
-      isTruncated: isTruncated || omittedContent || getNewsDescriptionTextLength(html) > maxCharacters,
-    };
+    return !!template.content.querySelector("img");
   };
 
   const getNewsListTitle = (newsItem) => {
@@ -1153,21 +1040,23 @@
       const displayAsMajor = isMajor;
       const descriptionHtml = String(newsItem.description || "").trim();
       const descriptionTextLength = getNewsDescriptionTextLength(descriptionHtml);
+      const hasDescriptionImages = hasNewsDescriptionImages(descriptionHtml);
+      const hasNewsImages = isImageMedia || hasDescriptionImages;
       const detailUrl = getNewsDetailUrl(newsItem);
       const shouldShowInlinePreview = (
         !!descriptionHtml
         && !displayAsMajor
         && !isYouTubeNews
-        && !isImageMedia
-        && descriptionTextLength <= LONG_NEWS_DESCRIPTION_LIMIT
+        && !hasNewsImages
+        && descriptionTextLength <= NEWS_DESCRIPTION_PREVIEW_LIMIT
       );
       const shouldLinkDetailInsteadOfPreview = (
         !!detailUrl
         && !isYouTubeNews
         && !displayAsMajor
         && (
-          isImageMedia
-          || (!!descriptionHtml && descriptionTextLength > LONG_NEWS_DESCRIPTION_LIMIT)
+          hasNewsImages
+          || (!!descriptionHtml && descriptionTextLength > NEWS_DESCRIPTION_PREVIEW_LIMIT)
         )
       );
       if (displayAsMajor || shouldLinkDetailInsteadOfPreview || isYouTubeNews) {
@@ -1282,8 +1171,9 @@
 
         const descriptionContent = document.createElement("div");
         descriptionContent.className = "gg-rp-news-description-content";
-        const preview = createDescriptionPreviewFragment(descriptionHtml, NEWS_DESCRIPTION_PREVIEW_LIMIT);
-        descriptionContent.appendChild(preview.fragment);
+        const descriptionTemplate = document.createElement("template");
+        descriptionTemplate.innerHTML = descriptionHtml;
+        descriptionContent.appendChild(descriptionTemplate.content);
         namespaceNewsContentClasses(descriptionContent);
         descriptionContent.querySelectorAll("img").forEach(image => {
           const imageSrc = toNewsImageUrl(image.getAttribute("src") || "");
@@ -1291,22 +1181,6 @@
           image.src = imageSrc;
           image.loading = "lazy";
         });
-        if (preview.isTruncated) {
-          const readMoreRow = document.createElement("p");
-          readMoreRow.className = "gg-rp-news-read-more-row";
-          readMoreRow.appendChild(document.createTextNode("... "));
-          if (detailUrl) {
-            const readMore = document.createElement("a");
-            readMore.className = "gg-rp-news-read-more";
-            readMore.href = detailUrl;
-            readMore.textContent = "Read more";
-            readMore.addEventListener("click", event => {
-              event.stopPropagation();
-            });
-            readMoreRow.appendChild(readMore);
-          }
-          descriptionContent.appendChild(readMoreRow);
-        }
         descriptionBlock.appendChild(descriptionContent);
 
         const toggleDescription = () => {
