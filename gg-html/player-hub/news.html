@@ -1133,6 +1133,7 @@
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const NEWS_TOURNAMENTS_URL = `${TOURNAMENTS_URL}?scope=news`;
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
+  const LOCAL_WEBSITES_URL = `${AUTH_BASE}/local-websites`;
   const CATEGORIES_URL = `${AUTH_BASE}/categories`;
   const ICONS_URL = `${AUTH_BASE}/icons`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
@@ -3327,7 +3328,7 @@
     return `${dd}.${mm}.${yyyy} ${hh}:${mi} UTC`;
   }
 
-  function renderNewsList(newsItems, associationsById, tournamentsById) {
+  function renderNewsList(newsItems, associationsById, tournamentsById, localWebsitesById) {
     const rows = Array.isArray(newsItems) ? newsItems : [];
     setPageHeading("My News");
     countEl.textContent = `${rows.length} news`;
@@ -3422,6 +3423,9 @@
       const tournamentId = String(item?.tournament_id || "").trim();
       const tournamentMeta = tournamentsById.get(tournamentId) || null;
       if (tournamentMeta) addChip(tournamentMeta.short_title || tournamentMeta.name || tournamentId, tournamentMeta.logo || "");
+      const localWebsiteId = String(item?.local_website_id || "").trim();
+      const localWebsiteMeta = localWebsitesById.get(localWebsiteId) || null;
+      if (localWebsiteMeta) addChip(localWebsiteMeta.url || `Website #${localWebsiteId}`, localWebsiteMeta.country_flag || "");
       if (item?.streamer_name || item?.streamer_id) {
         addChip(String(item?.streamer_name || item?.streamer_id).trim(), toApiAbsoluteUrl(item?.streamer_avatar || ""));
       }
@@ -3475,7 +3479,7 @@
     contentEl.appendChild(list);
   }
 
-  function renderNewsEditForm(newsItem, associationsList, tournamentsList, categoriesList, iconsList, streamersList, formMode = "create", options = {}) {
+  function renderNewsEditForm(newsItem, associationsList, tournamentsList, categoriesList, iconsList, streamersList, localWebsitesList, formMode = "create", options = {}) {
     const isCreateMode = formMode === "create";
     const source = newsItem && typeof newsItem === "object" ? newsItem : {};
     const canUploadSourceImage = options.canUploadSource === true;
@@ -3911,11 +3915,12 @@
     let currentImageUrl = toApiAbsoluteUrl(source?.image || "");
     const normalizeCategoryKey = (value) => String(value || "").trim().toLowerCase();
     const normalizeTournamentAccessKey = (value) => String(value || "").trim().toLowerCase();
-    const normalizeNewsEditorAccessType = (value) => {
-      const raw = String(value || "").trim().toLowerCase();
-      if (raw === "global" || raw === "local" || raw === "tournament" || raw === "youtube") return raw;
-      return "";
-    };
+      const normalizeNewsEditorAccessType = (value) => {
+        const raw = String(value || "").trim().toLowerCase();
+        if (raw === "local website" || raw === "local-website") return "local_website";
+        if (raw === "global" || raw === "local" || raw === "local_website" || raw === "tournament" || raw === "youtube") return raw;
+        return "";
+      };
     const isAdminNewsUser = options.isAdmin === true;
     const currentUserAuthId = normalizeUserId(options.currentUserAuthId || "");
     const currentProfileId = String(options.currentUserProfileId || "").trim();
@@ -3925,11 +3930,15 @@
       normalizeNewsEditorAccessType(entry?.access_type) === "global"
     ));
     const restrictNewsEditorAccess = !isAdminNewsUser && !hasGlobalNewsEditorAccess;
-    const allowedLocalAssociationIds = new Set(currentUserNewsEditors
-      .filter((entry) => normalizeNewsEditorAccessType(entry?.access_type) === "local")
-      .map((entry) => normalizeCode(entry?.country_id ?? entry?.countryId))
-      .filter(Boolean));
-    const allowedTournamentIds = new Set(currentUserNewsEditors
+      const allowedLocalAssociationIds = new Set(currentUserNewsEditors
+        .filter((entry) => normalizeNewsEditorAccessType(entry?.access_type) === "local")
+        .map((entry) => normalizeCode(entry?.country_id ?? entry?.countryId))
+        .filter(Boolean));
+      const allowedLocalWebsiteIds = new Set(currentUserNewsEditors
+        .filter((entry) => normalizeNewsEditorAccessType(entry?.access_type) === "local_website")
+        .map((entry) => String(entry?.local_website_id ?? entry?.localWebsiteId ?? "").trim())
+        .filter(Boolean));
+      const allowedTournamentIds = new Set(currentUserNewsEditors
       .filter((entry) => normalizeNewsEditorAccessType(entry?.access_type) === "tournament")
       .map((entry) => normalizeTournamentAccessKey(entry?.tournament_id ?? entry?.tournamentId))
       .filter(Boolean));
@@ -3945,17 +3954,34 @@
         category: normalizeCategoryKey(item?.category),
       }))
       .filter((item) => item.value && item.label);
-    const streamerRows = (Array.isArray(streamersList) ? streamersList : [])
-      .map((item) => ({
-        value: String(item?.id || "").trim(),
-        label: String(item?.name || item?.short_name || (item?.id ? `Streamer #${item.id}` : "")).trim(),
-        logo: toApiAbsoluteUrl(item?.avatar || ""),
-      }))
-      .filter((item) => item.value && item.label)
-      .sort((left, right) => left.label.localeCompare(right.label));
-    const emptyStreamerOption = { value: "", label: "Not selected", logo: "" };
-    const youtubeStreamerOptions = [emptyStreamerOption].concat(streamerRows
-      .filter((item) => isAdminNewsUser || allowedYoutubeStreamerIds.has(String(item.value || "").trim())));
+      const streamerRows = (Array.isArray(streamersList) ? streamersList : [])
+        .map((item) => ({
+          value: String(item?.id || "").trim(),
+          label: String(item?.name || item?.short_name || (item?.id ? `Streamer #${item.id}` : "")).trim(),
+          logo: toApiAbsoluteUrl(item?.avatar || ""),
+        }))
+        .filter((item) => item.value && item.label)
+        .sort((left, right) => left.label.localeCompare(right.label));
+      const localWebsiteRows = (Array.isArray(localWebsitesList) ? localWebsitesList : [])
+        .map((item) => ({
+          value: String(item?.id || "").trim(),
+          label: String(item?.url || (item?.id ? `Website #${item.id}` : "")).trim(),
+          logo: String(item?.country_flag || "").trim(),
+          countryId: normalizeCode(item?.country_id ?? item?.countryId),
+          countryName: String(item?.country_name || item?.countryName || item?.country_id || "").trim(),
+        }))
+        .filter((item) => item.value && item.label)
+        .sort((left, right) => left.label.localeCompare(right.label));
+      const emptyStreamerOption = { value: "", label: "Not selected", logo: "" };
+      const youtubeStreamerOptions = [emptyStreamerOption].concat(streamerRows
+        .filter((item) => isAdminNewsUser || allowedYoutubeStreamerIds.has(String(item.value || "").trim())));
+      const emptyLocalWebsiteOption = { value: "", label: "Not selected", logo: "" };
+      const localWebsiteOptions = [emptyLocalWebsiteOption].concat(localWebsiteRows
+        .filter((item) => isAdminNewsUser || !restrictNewsEditorAccess || allowedLocalWebsiteIds.has(String(item.value || "").trim()))
+        .map((item) => ({
+          ...item,
+          label: [item.label, item.countryName].filter(Boolean).join(" • "),
+        })));
     const allowedTournamentCategoryKeys = new Set(tournamentRows
       .filter((item) => allowedTournamentIds.has(normalizeTournamentAccessKey(item.value)))
       .map((item) => item.category)
@@ -3965,10 +3991,11 @@
       .filter(Boolean));
     const categoriesByName = new Map((Array.isArray(categoriesList) ? categoriesList : [])
       .map((item) => [normalizeCategoryKey(item?.name), item]));
-    const getCategoryKindForName = (categoryName) => {
-      const selectedCategory = String(categoryName || "").trim();
-      if (normalizeCategoryKey(selectedCategory) === "local") return "local";
-      if (normalizeCategoryKey(selectedCategory) === "youtube") return "youtube";
+      const getCategoryKindForName = (categoryName) => {
+        const selectedCategory = String(categoryName || "").trim();
+        if (normalizeCategoryKey(selectedCategory) === "local") return "local";
+        if (normalizeCategoryKey(selectedCategory) === "local website") return "local_website";
+        if (normalizeCategoryKey(selectedCategory) === "youtube") return "youtube";
       const category = categoriesByName.get(normalizeCategoryKey(selectedCategory)) || null;
       if (Number(category?.is_tournament) === 1 || categoryHasTournaments.has(normalizeCategoryKey(selectedCategory))) return "tournament";
       return "other";
@@ -3977,11 +4004,12 @@
     const isCategoryAllowedForCurrentUser = (categoryName) => {
       const categoryKey = normalizeCategoryKey(categoryName);
       if (!categoryKey) return false;
-      if (categoryKey === "youtube") return isAdminNewsUser || allowedYoutubeStreamerIds.size > 0;
-      if (!restrictNewsEditorAccess) return true;
-      if (categoryKey === "local") return allowedLocalAssociationIds.size > 0;
-      return allowedTournamentCategoryKeys.has(categoryKey);
-    };
+        if (categoryKey === "youtube") return isAdminNewsUser || allowedYoutubeStreamerIds.size > 0;
+        if (!restrictNewsEditorAccess) return true;
+        if (categoryKey === "local") return allowedLocalAssociationIds.size > 0;
+        if (categoryKey === "local website") return allowedLocalWebsiteIds.size > 0;
+        return allowedTournamentCategoryKeys.has(categoryKey);
+      };
     const emptyIconOption = { value: "", label: "Not selected", logo: "" };
     const allIconOptions = (Array.isArray(iconsList) ? iconsList : [])
       .map((item) => ({
@@ -4117,18 +4145,36 @@
     );
     const youtubeStreamerRow = addRow("YouTube Channel", youtubeStreamerInput.root);
 
-    const associationInput = createSingleSelect(
-      normalizeCode(source?.association_id),
-      localAssociationOptions,
+      const associationInput = createSingleSelect(
+        normalizeCode(source?.association_id),
+        localAssociationOptions,
       {
         placeholderLabel: "Select association",
         onChange: () => updateConditionalNewsFields(),
       }
-    );
+      );
 
-    const tournamentInput = createSingleSelect(
-      String(source?.tournament_id || "").trim(),
-      tournamentOptions,
+      const selectableLocalWebsiteOptions = localWebsiteOptions
+        .filter((item) => String(item?.value || "").trim());
+      const requestedInitialLocalWebsiteId = String(source?.local_website_id || source?.localWebsiteId || "").trim();
+      const initialLocalWebsiteId = localWebsiteOptions.some((item) => item.value === requestedInitialLocalWebsiteId)
+        ? requestedInitialLocalWebsiteId
+        : !isAdminNewsUser && selectableLocalWebsiteOptions.length === 1
+          ? selectableLocalWebsiteOptions[0].value
+          : "";
+      const localWebsiteInput = createSingleSelect(
+        initialLocalWebsiteId,
+        localWebsiteOptions,
+        {
+          placeholderLabel: "Select website",
+          searchable: false,
+        }
+      );
+      const localWebsiteRow = addRow("Website", localWebsiteInput.root);
+
+      const tournamentInput = createSingleSelect(
+        String(source?.tournament_id || "").trim(),
+        tournamentOptions,
       { placeholderLabel: "Select tournament", searchable: false }
     );
     const tournamentRow = addRow("Tournament", tournamentInput.root);
@@ -4461,14 +4507,16 @@
       }
       previousSignificance = significance;
 
-      const selectedCategory = categoryInput.getValue() || "";
-      const showAssociation = categoryKind === "local";
-      const showTournament = categoryKind === "tournament";
-      const showYouTubeChannel = isYouTubeCategory;
-      const showAssociations = categoryKind !== "local";
-      associationRow.classList.toggle("cp-hidden", !showAssociation);
-      tournamentRow.classList.toggle("cp-hidden", !showTournament);
-      youtubeStreamerRow.classList.toggle("cp-hidden", !showYouTubeChannel);
+        const selectedCategory = categoryInput.getValue() || "";
+        const showAssociation = categoryKind === "local";
+        const showLocalWebsite = categoryKind === "local_website";
+        const showTournament = categoryKind === "tournament";
+        const showYouTubeChannel = isYouTubeCategory;
+        const showAssociations = categoryKind !== "local" && categoryKind !== "local_website";
+        associationRow.classList.toggle("cp-hidden", !showAssociation);
+        localWebsiteRow.classList.toggle("cp-hidden", !showLocalWebsite);
+        tournamentRow.classList.toggle("cp-hidden", !showTournament);
+        youtubeStreamerRow.classList.toggle("cp-hidden", !showYouTubeChannel);
       youtubeVideoRow.classList.toggle("cp-hidden", !isYouTubeCategory);
       associationsRow.classList.toggle("cp-hidden", !showAssociations);
       if (showAssociation) {
@@ -4480,10 +4528,21 @@
             ? currentAssociationId
             : "";
         associationInput.setOptions(localAssociationOptions, nextAssociationId);
-      } else {
-        associationInput.setOptions(localAssociationOptions, "");
-      }
-      if (showTournament) {
+        } else {
+          associationInput.setOptions(localAssociationOptions, "");
+        }
+        if (showLocalWebsite) {
+          const currentLocalWebsiteId = localWebsiteInput.getValue();
+          const nextLocalWebsiteId = selectableLocalWebsiteOptions.length === 1
+            ? selectableLocalWebsiteOptions[0].value
+            : selectableLocalWebsiteOptions.some((item) => item.value === currentLocalWebsiteId)
+              ? currentLocalWebsiteId
+              : "";
+          localWebsiteInput.setOptions(localWebsiteOptions, nextLocalWebsiteId);
+        } else {
+          localWebsiteInput.setOptions(localWebsiteOptions, "");
+        }
+        if (showTournament) {
         const nextTournamentOptions = getTournamentOptionsForCategory(selectedCategory);
         const selectableTournamentOptions = getSelectableTournamentOptionsForCategory(selectedCategory);
         const currentTournamentId = tournamentInput.getValue();
@@ -4568,13 +4627,14 @@
       const useShortDescription = isYouTubeCategory || useImageUpload;
       return {
         status: statusInput.getValue() || "Draft",
-        significance: significanceInput.getValue() || "Regular",
-        category: categoryInput.getValue() || "",
-        association_id: categoryKind === "local" ? associationInput.getValue() || "" : "",
-        tournament_id: categoryKind === "tournament" ? tournamentInput.getValue() || "" : "",
-        streamer_id: isYouTubeCategory ? Number.parseInt(String(youtubeStreamerInput.getValue() || "").trim(), 10) : null,
-        youtube_video_id: isYouTubeCategory ? normalizeYouTubeVideoId(youtubeVideoInput.value) : null,
-        associations: categoryKind === "local" ? [] : associationsInput.getValue(),
+          significance: significanceInput.getValue() || "Regular",
+          category: categoryInput.getValue() || "",
+          association_id: categoryKind === "local" ? associationInput.getValue() || "" : "",
+          local_website_id: categoryKind === "local_website" ? Number.parseInt(String(localWebsiteInput.getValue() || "").trim(), 10) : null,
+          tournament_id: categoryKind === "tournament" ? tournamentInput.getValue() || "" : "",
+          streamer_id: isYouTubeCategory ? Number.parseInt(String(youtubeStreamerInput.getValue() || "").trim(), 10) : null,
+          youtube_video_id: isYouTubeCategory ? normalizeYouTubeVideoId(youtubeVideoInput.value) : null,
+          associations: categoryKind === "local" || categoryKind === "local_website" ? [] : associationsInput.getValue(),
         time_utc: toUtcIsoFromDatetimeLocal(timeInput.value),
         image: isYouTubeCategory ? "" : useImageUpload ? currentImageUrl : iconInput.getValue() || currentImageUrl,
         media_type: isYouTubeCategory ? "icon" : useImageUpload ? "image" : "icon",
@@ -4596,9 +4656,10 @@
       if (payload.short_description.length > 200) return "Short description must be 200 characters or fewer.";
       if (!String(timeInput.value || "").trim()) return "Time, UTC is required.";
       if (String(timeInput.value || "").trim() && !payload.time_utc) return "Time, UTC is invalid.";
-      if (!isAdminNewsUser && !payload.category) return "Category is required.";
-      if (categoryKind === "local" && !payload.association_id) return "Association is required.";
-      if (categoryKind === "youtube" && (!Number.isInteger(payload.streamer_id) || payload.streamer_id <= 0)) return "YouTube Channel is required.";
+        if (!isAdminNewsUser && !payload.category) return "Category is required.";
+        if (categoryKind === "local" && !payload.association_id) return "Association is required.";
+        if (categoryKind === "local_website" && (!Number.isInteger(payload.local_website_id) || payload.local_website_id <= 0)) return "Website is required.";
+        if (categoryKind === "youtube" && (!Number.isInteger(payload.streamer_id) || payload.streamer_id <= 0)) return "YouTube Channel is required.";
       if (categoryKind === "youtube") {
         const youtubeVideoRaw = String(youtubeVideoInput.value || "").trim();
         if (!youtubeVideoRaw) return "YouTube URL or ID is required.";
@@ -4820,13 +4881,14 @@
         return;
       }
 
-      const [newsRes, associationsRes, categoriesRes, iconsRes, streamersRes] = await Promise.all([
-        fetch(NEWS_URL, { method: "GET", credentials: "include" }),
-        fetch(ASSOCIATIONS_URL, { method: "GET", credentials: "include" }),
-        fetch(CATEGORIES_URL, { method: "GET", credentials: "include" }),
-        fetch(ICONS_URL, { method: "GET", credentials: "include" }),
-        fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
-      ]);
+        const [newsRes, associationsRes, categoriesRes, iconsRes, streamersRes, localWebsitesRes] = await Promise.all([
+          fetch(NEWS_URL, { method: "GET", credentials: "include" }),
+          fetch(ASSOCIATIONS_URL, { method: "GET", credentials: "include" }),
+          fetch(CATEGORIES_URL, { method: "GET", credentials: "include" }),
+          fetch(ICONS_URL, { method: "GET", credentials: "include" }),
+          fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
+          fetch(LOCAL_WEBSITES_URL, { method: "GET", credentials: "include" }),
+        ]);
       const newsData = newsRes?.ok
         ? await newsRes.json().catch(() => ({}))
         : {};
@@ -4843,10 +4905,14 @@
         ? await iconsRes.json().catch(() => ({}))
         : {};
       const icons = Array.isArray(iconsData?.icons) ? iconsData.icons : [];
-      const streamersData = streamersRes?.ok
-        ? await streamersRes.json().catch(() => ({}))
-        : {};
-      const streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
+        const streamersData = streamersRes?.ok
+          ? await streamersRes.json().catch(() => ({}))
+          : {};
+        const streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
+        const localWebsitesData = localWebsitesRes?.ok
+          ? await localWebsitesRes.json().catch(() => ({}))
+          : {};
+        const localWebsites = Array.isArray(localWebsitesData?.local_websites) ? localWebsitesData.local_websites : [];
       const associationsById = new Map();
       associations.forEach((item) => {
         const associationId = normalizeCode(item?.id || item?.code);
@@ -4858,12 +4924,25 @@
         });
       });
 
-      const tournamentsById = new Map();
-      tournaments.forEach((tournament) => {
-        const tournamentId = String(tournament?.id || "").trim();
-        if (!tournamentId) return;
-        tournamentsById.set(tournamentId, tournament);
-      });
+        const tournamentsById = new Map();
+        tournaments.forEach((tournament) => {
+          const tournamentId = String(tournament?.id || "").trim();
+          if (!tournamentId) return;
+          tournamentsById.set(tournamentId, tournament);
+        });
+
+        const localWebsitesById = new Map();
+        localWebsites.forEach((website) => {
+          const websiteId = String(website?.id || "").trim();
+          if (!websiteId) return;
+          localWebsitesById.set(websiteId, {
+            id: websiteId,
+            url: String(website?.url || `Website #${websiteId}`).trim(),
+            country_id: normalizeCode(website?.country_id),
+            country_name: String(website?.country_name || website?.country_id || "").trim(),
+            country_flag: String(website?.country_flag || "").trim(),
+          });
+        });
 
       addButtonEl.classList.remove("cp-hidden");
       addButtonEl.textContent = "Create";
@@ -4875,8 +4954,8 @@
       }
 
       if (isCreateMode) {
-        renderNewsEditForm(null, associations, tournaments, categories, icons, streamers, "create", {
-          canUploadSource: isAdminUser,
+          renderNewsEditForm(null, associations, tournaments, categories, icons, streamers, localWebsites, "create", {
+            canUploadSource: isAdminUser,
           currentUserAuthId,
           currentUserProfileId,
           isAdmin: isAdminUser,
@@ -4893,8 +4972,8 @@
           countEl.textContent = "";
           return;
         }
-        renderNewsEditForm(newsToEdit, associations, tournaments, categories, icons, streamers, "edit", {
-          canUploadSource: isAdminUser,
+          renderNewsEditForm(newsToEdit, associations, tournaments, categories, icons, streamers, localWebsites, "edit", {
+            canUploadSource: isAdminUser,
           currentUserAuthId,
           currentUserProfileId,
           isAdmin: isAdminUser,
@@ -4903,7 +4982,7 @@
         return;
       }
 
-      renderNewsList(newsItems, associationsById, tournamentsById);
+        renderNewsList(newsItems, associationsById, tournamentsById, localWebsitesById);
     } catch (_error) {
       contentEl.className = "captain-alert";
       contentEl.textContent = "Failed to load data.";

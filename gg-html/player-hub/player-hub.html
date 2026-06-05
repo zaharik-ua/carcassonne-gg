@@ -45,6 +45,42 @@
     font-size: 14px;
   }
 
+  .player-card {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    padding: 10px 12px;
+  }
+
+  .player-stats-line {
+    font-size: 14px;
+    line-height: 1.45;
+    color: #333;
+  }
+
+  .player-stats-line.compact {
+    line-height: 1.35;
+  }
+
+  .player-stats-line a {
+    color: #1a73b7;
+    text-decoration: none;
+  }
+
+  .player-stats-line a:hover {
+    text-decoration: underline;
+  }
+
+  .noprofile-warning {
+    font-size: 16px;
+    font-weight: 600;
+    color: #b23a48;
+  }
+
+  .noprofile-gap {
+    margin-top: 10px;
+  }
+
   .hub-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -214,6 +250,7 @@
 
   function canSeeTournament(tournament, authState) {
     if (isTournamentHiddenInPlayerHub(tournament)) return false;
+    if (!authState?.isAuthenticatedUser) return false;
     const accessType = getTournamentSubtype(tournament);
     if (authState.isAdminUser) return true;
     if (accessType === "Friendly") return !!authState.isCaptainUser;
@@ -285,6 +322,95 @@
     contentEl.appendChild(grid);
   }
 
+  function renderNoProfileInfoCard() {
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+
+    const infoCard = document.createElement("div");
+    infoCard.className = "player-card";
+
+    const warning = document.createElement("div");
+    warning.className = "player-stats-line noprofile-warning";
+    warning.textContent = "The email address you used to log in to GG is not linked to a BGA account.";
+    infoCard.appendChild(warning);
+
+    const gap1 = document.createElement("div");
+    gap1.className = "noprofile-gap";
+    infoCard.appendChild(gap1);
+
+    const intro = document.createElement("div");
+    intro.className = "player-stats-line";
+    intro.textContent = "What to do:";
+    infoCard.appendChild(intro);
+
+    const gapIntroToStep1 = document.createElement("div");
+    gapIntroToStep1.className = "noprofile-gap";
+    infoCard.appendChild(gapIntroToStep1);
+
+    const step1 = document.createElement("div");
+    step1.className = "player-stats-line compact";
+    step1.textContent = "1. Contact your association captain.";
+    infoCard.appendChild(step1);
+
+    const step1Hint = document.createElement("div");
+    step1Hint.className = "player-stats-line compact";
+    step1Hint.innerHTML = 'If you don\'t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=1" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/players/?captains=1</a>';
+    infoCard.appendChild(step1Hint);
+
+    const gapStep1ToStep2 = document.createElement("div");
+    gapStep1ToStep2.className = "noprofile-gap";
+    infoCard.appendChild(gapStep1ToStep2);
+
+    const step2 = document.createElement("div");
+    step2.className = "player-stats-line compact";
+    step2.textContent = "2. Send your captain the email you used to log in to carcassonne.gg.";
+    infoCard.appendChild(step2);
+
+    const gapStep2ToStep3 = document.createElement("div");
+    gapStep2ToStep3.className = "noprofile-gap";
+    infoCard.appendChild(gapStep2ToStep3);
+
+    const step3 = document.createElement("div");
+    step3.className = "player-stats-line compact";
+    step3.textContent = "3. Your captain will:";
+    infoCard.appendChild(step3);
+
+    const step3a = document.createElement("div");
+    step3a.className = "player-stats-line compact";
+    step3a.innerHTML = '• Open User Menu → Player Hub → Players <a href="https://carcassonne.gg/player-hub/players/" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/player-hub/players/</a>';
+    infoCard.appendChild(step3a);
+
+    const step3b = document.createElement("div");
+    step3b.className = "player-stats-line compact";
+    step3b.textContent = "• Edit your profile (or create one if needed)";
+    infoCard.appendChild(step3b);
+
+    const step3c = document.createElement("div");
+    step3c.className = "player-stats-line compact";
+    step3c.textContent = "• Add your email to Login Email";
+    infoCard.appendChild(step3c);
+
+    const gapStep3ToOutro = document.createElement("div");
+    gapStep3ToOutro.className = "noprofile-gap";
+    infoCard.appendChild(gapStep3ToOutro);
+
+    const outro = document.createElement("div");
+    outro.className = "player-stats-line compact";
+    outro.textContent = "After that, you will get access to edit your profile.";
+    infoCard.appendChild(outro);
+
+    const contactGap = document.createElement("div");
+    contactGap.className = "noprofile-gap";
+    infoCard.appendChild(contactGap);
+
+    const contact = document.createElement("div");
+    contact.className = "player-stats-line compact";
+    contact.textContent = "If you cannot find a captain, contact us at carcassonne.gg@gmail.com.";
+    infoCard.appendChild(contact);
+
+    contentEl.appendChild(infoCard);
+  }
+
   async function init() {
     let tournaments = [];
     let isAuthenticatedUser = false;
@@ -334,8 +460,18 @@
       tournaments = [];
     }
 
+    if (!isAuthenticatedUser || !hasLinkedBgaId) {
+      renderNoProfileInfoCard();
+      return;
+    }
+
     const items = tournaments
-      .filter((tournament) => canSeeTournament(tournament, { currentUserAuthId, isCaptainUser, isAdminUser }))
+      .filter((tournament) => canSeeTournament(tournament, {
+        currentUserAuthId,
+        isAuthenticatedUser,
+        isCaptainUser,
+        isAdminUser,
+      }))
       .map((tournament) => ({
         type: "tournament",
         id: String(tournament?.id || "").trim(),

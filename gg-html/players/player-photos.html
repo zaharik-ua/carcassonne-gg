@@ -814,13 +814,14 @@
   @media (max-width: 640px) {
     .player-photos-panel {
       width: auto;
+      padding: 6px 8px;
       margin-right: 0;
       margin-left: 0;
     }
   }
 </style>
 
-<div id="player-photos-root" class="player-photos-panel" hidden></div>
+<div class="player-photos-panel" data-player-photos-root hidden></div>
 
 <script>
 (function () {
@@ -828,8 +829,9 @@
   const PLAYER_PHOTOS_MAX_DEFAULT = 5;
   const PLAYER_PHOTOS_PLACEHOLDER_URL = "https://carcassonne.gg/gallery/photo_placeholder.png";
   const PLAYER_PHOTOS_ACCESS_HELP_URL = "https://carcassonne.gg/player/?id=noprofile";
-  const root = document.getElementById("player-photos-root");
+  const root = getInstanceRoot(document.currentScript);
   if (!root) return;
+  root.dataset.playerPhotosInitialized = "1";
 
   const state = {
     playerId: "",
@@ -846,6 +848,17 @@
     statusIsError: false,
     draggedPhotoId: "",
   };
+
+  function getInstanceRoot(script) {
+    let node = script ? script.previousElementSibling : null;
+    while (node) {
+      if (node.matches?.("[data-player-photos-root]")) {
+        return node.dataset.playerPhotosInitialized === "1" ? null : node;
+      }
+      node = node.previousElementSibling;
+    }
+    return document.querySelector("[data-player-photos-root]:not([data-player-photos-initialized='1'])");
+  }
 
   function getAuthBase() {
     return String(window.AUTH_BASE_URL || DEFAULT_AUTH_BASE).replace(/\/+$/, "");

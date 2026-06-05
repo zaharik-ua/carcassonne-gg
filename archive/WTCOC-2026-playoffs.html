@@ -92,6 +92,16 @@
     padding: 0 7px;
   }
 
+  .wtcoc-match-box-compact .wtcoc-match-row-winner,
+  .wtcoc-match-box-compact .wtcoc-match-row-loser {
+    padding: 0 6px;
+  }
+
+  .wtcoc-match-box-compact .wtcoc-team-logo,
+  .wtcoc-match-box-compact .wtcoc-player-logo {
+    margin-right: 0;
+  }
+
   .wtcoc-round-label {
     font-weight: 600;
     font-size: 14px;
@@ -296,10 +306,96 @@
   const BRACKET_MARGIN = 15;
   const MATCH_HEIGHT = 60;
   let MATCH_WIDTH = 250;
+  const COMPACT_MATCH_WIDTH = 80;
   const ROUND_TITLE_TO_MATCH_SPACING = 60;
   const VERTICAL_SPACING = 25;
   const HORIZONTAL_SPACING = 20;
   let THIRD_PLACE_VERTICAL_OFFSET = 140;
+
+  function hasMatchValue(value) {
+    return value !== null && value !== undefined && String(value).trim() !== "";
+  }
+
+  function isMatchPlayed(match) {
+    const status = hasMatchValue(match?.status) ? String(match.status).trim().toLowerCase() : "";
+    if (status) {
+      if (["done", "finished", "complete", "completed", "played"].includes(status)) {
+        return true;
+      }
+      if (["planned", "scheduled", "pending", "not started", "in progress", "live"].includes(status)) {
+        return false;
+      }
+    }
+
+    const hasTeamScore = hasMatchValue(match?.duels_won1) && hasMatchValue(match?.duels_won2);
+    const hasPlayerScore = hasMatchValue(match?.score1) && hasMatchValue(match?.score2);
+    return hasTeamScore || hasPlayerScore;
+  }
+
+  function isRoundPlayed(roundMatches) {
+    return Array.isArray(roundMatches) && roundMatches.length > 0 && roundMatches.every(isMatchPlayed);
+  }
+
+  function splitRoundLabel(rawRound) {
+    const label = String(rawRound || "").trim();
+    const idx = label.indexOf(":");
+    if (idx === -1) return [label, ""];
+    return [label.slice(0, idx).trim(), label.slice(idx + 1).trim()];
+  }
+
+  function getRoundLabelParts(matches, roundNum, compactRound) {
+    const labelMatch = matches.find(m => m.knockout_stage !== "third_place") || matches[0] || {};
+    const rawRound = labelMatch.round || `Round ${roundNum}`;
+    const [fullTitle, parsedDates] = splitRoundLabel(rawRound);
+    const shortTitle = String(labelMatch.round_short_name || "").trim();
+    const dates = String(labelMatch.round_dates || "").trim() || parsedDates;
+    return [compactRound && shortTitle ? shortTitle : fullTitle, dates];
+  }
+
+  function getMatchRoundLabelParts(match, fallbackTitle, compactRound) {
+    const rawRound = match?.round || fallbackTitle;
+    const [fullTitle, parsedDates] = splitRoundLabel(rawRound);
+    const shortTitle = String(match?.round_short_name || "").trim();
+    const dates = String(match?.round_dates || "").trim() || parsedDates;
+    return [compactRound && shortTitle ? shortTitle : fullTitle, dates];
+  }
+
+  function buildRoundLayout(groupedByRound, sortedRounds, options = {}) {
+    const layout = { compact: {}, left: {}, width: {}, totalWidth: BRACKET_MARGIN };
+    let nextLeft = BRACKET_MARGIN;
+    sortedRounds.forEach(roundNum => {
+      const compactRound = !options.forceFullWidthRounds && isRoundPlayed(groupedByRound[roundNum]);
+      const roundWidth = compactRound ? COMPACT_MATCH_WIDTH : MATCH_WIDTH;
+      layout.compact[roundNum] = compactRound;
+      layout.left[roundNum] = nextLeft;
+      layout.width[roundNum] = roundWidth;
+      nextLeft += roundWidth + HORIZONTAL_SPACING;
+    });
+    layout.totalWidth = sortedRounds.length ? nextLeft - HORIZONTAL_SPACING + BRACKET_MARGIN : BRACKET_MARGIN;
+    return layout;
+  }
+
+  function getRoundLeft(roundLayout, roundNum) {
+    return roundLayout?.left?.[roundNum] ?? BRACKET_MARGIN;
+  }
+
+  function getRoundWidth(roundLayout, roundNum) {
+    return roundLayout?.width?.[roundNum] ?? MATCH_WIDTH;
+  }
+
+  function isCompactRound(roundLayout, roundNum) {
+    return Boolean(roundLayout?.compact?.[roundNum]);
+  }
+
+  function getMatchWidth(match, roundLayout) {
+    return getRoundWidth(roundLayout, Number(match?.round_order));
+  }
+
+  function getBracketRight(matches, roundLayout) {
+    if (!matches.length) return BRACKET_MARGIN;
+    return Math.max(...matches.map(m => (m.cord_left || 0) + getMatchWidth(m, roundLayout)));
+  }
+
   function formatMatchTime(raw) {
     if (!raw || typeof raw !== "string") return "";
     const s = raw.trim();
@@ -338,7 +434,7 @@
     return s;
   }
 
-  function calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, playoffMatches, currentTournamentId) {
+  function calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundLayout, playoffMatches, currentTournamentId) {
     const sortByKnockoutId = (a, b) => Number(a.knockout_id ?? a.game_id ?? a.id) - Number(b.knockout_id ?? b.game_id ?? b.id);
 
     Object.values(groupedByRound).forEach(roundMatches => {
@@ -355,7 +451,7 @@
       .filter(m => m.knockout_stage !== "third_place")
       .forEach((m, index) => {
         const cord_top = BRACKET_MARGIN + ROUND_TITLE_TO_MATCH_SPACING + index * (MATCH_HEIGHT + VERTICAL_SPACING);
-        const cord_left = BRACKET_MARGIN + roundIndexMap[maxMatchRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+        const cord_left = getRoundLeft(roundLayout, maxMatchRound);
         const cord_bottom = cord_top + MATCH_HEIGHT;
         m.cord_top = cord_top;
         m.cord_left = cord_left;
@@ -391,7 +487,7 @@
             }
           }
           
-          const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+          const cord_left = getRoundLeft(roundLayout, roundNum);
           const cord_bottom = cord_top + MATCH_HEIGHT;
           m.cord_top = cord_top;
           m.cord_left = cord_left;
@@ -409,7 +505,7 @@
           const predecessors = groupedByRound[roundNum]?.filter(m => m.next_game_win === s.knockout_id) || [];
           if (predecessors.length === 1) {
             const cord_top = groupedByRound[nextRound].find(m => m.knockout_id === s.knockout_id).cord_top;
-            const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+            const cord_left = getRoundLeft(roundLayout, roundNum);
             const cord_bottom = cord_top + MATCH_HEIGHT;
             const match = groupedByRound[roundNum].find(m => m.knockout_id === predecessors[0].knockout_id);
             if (match) {
@@ -421,7 +517,7 @@
             const cord_topCenter = groupedByRound[nextRound].find(m => m.knockout_id === s.knockout_id).cord_top + MATCH_HEIGHT / 2;
             const cord_top1 = cord_topCenter - VERTICAL_SPACING / 2 - MATCH_HEIGHT;
             const cord_top2 = cord_topCenter + VERTICAL_SPACING / 2;
-            const cord_left = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+            const cord_left = getRoundLeft(roundLayout, roundNum);
             const cord_bottom1 = cord_top1 + MATCH_HEIGHT;
             const cord_bottom2 = cord_top2 + MATCH_HEIGHT;
             const match1 = groupedByRound[roundNum].find(m => m.knockout_id === predecessors[0].knockout_id);
@@ -453,33 +549,29 @@
           startTop = lastMatch.cord_bottom + THIRD_PLACE_VERTICAL_OFFSET;
         }
         existingMatch.cord_top = startTop;
-        existingMatch.cord_left = BRACKET_MARGIN + roundIndexMap[thirdPlaceRound] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+        existingMatch.cord_left = getRoundLeft(roundLayout, thirdPlaceRound);
         existingMatch.cord_bottom = startTop + ROUND_TITLE_TO_MATCH_SPACING + MATCH_HEIGHT;
         existingMatch.knockout_stage = "third_place";
       }
     }
   }
 
-  function renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, container){
+  function renderPlayoffMatches(groupedByRound, sortedRounds, roundLayout, tournamentType, container){
     sortedRounds.forEach((roundNum, colIndex) => {
       const matches = groupedByRound[roundNum];
       matches.sort((a, b) => Number(a.knockout_id ?? a.game_id ?? a.id) - Number(b.knockout_id ?? b.game_id ?? b.id));
 
       // Додаємо назву раунду (label) і, якщо є, дати (після двокрапки)
-      const rawRound = matches.find(m => m.knockout_stage !== "third_place")?.round || `Round ${roundNum}`;
-      const [roundTitle, roundDates] = (() => {
-        const idx = rawRound.indexOf(":");
-        if (idx === -1) return [rawRound.trim(), ""];
-        return [rawRound.slice(0, idx).trim(), rawRound.slice(idx + 1).trim()];
-      })();
-
-      const baseLeft = BRACKET_MARGIN + roundIndexMap[roundNum] * (MATCH_WIDTH + HORIZONTAL_SPACING);
+      const roundIsCompact = isCompactRound(roundLayout, roundNum);
+      const roundWidth = getRoundWidth(roundLayout, roundNum);
+      const [roundTitle, roundDates] = getRoundLabelParts(matches, roundNum, roundIsCompact);
+      const baseLeft = getRoundLeft(roundLayout, roundNum);
 
       const label = document.createElement("div");
       label.className = "wtcoc-round-label";
       label.textContent = roundTitle;
       label.style.position = "absolute";
-      label.style.width = `${MATCH_WIDTH}px`;
+      label.style.width = `${roundWidth}px`;
       label.style.textAlign = "center";
       label.style.left = `${baseLeft}px`;
       label.style.top = `${BRACKET_MARGIN}px`;
@@ -490,7 +582,7 @@
         dateLabel.className = "wtcoc-round-label";
         dateLabel.textContent = roundDates;
         dateLabel.style.position = "absolute";
-        dateLabel.style.width = `${MATCH_WIDTH}px`;
+        dateLabel.style.width = `${roundWidth}px`;
         dateLabel.style.textAlign = "center";
         dateLabel.style.left = `${baseLeft}px`;
         // Place just under the title, within ROUND_TITLE_TO_MATCH_SPACING space
@@ -501,9 +593,11 @@
       
       // Додаємо матчі
       matches.forEach((m) => {
+        const matchWidth = getMatchWidth(m, roundLayout);
+        const matchIsCompact = isCompactRound(roundLayout, Number(m.round_order));
         const matchBox = document.createElement("div");
-        matchBox.className = "wtcoc-match-box";
-        matchBox.style.width = `${MATCH_WIDTH}px`;
+        matchBox.className = `wtcoc-match-box${matchIsCompact ? " wtcoc-match-box-compact" : ""}`;
+        matchBox.style.width = `${matchWidth}px`;
         matchBox.style.height = `${MATCH_HEIGHT}px`;
         matchBox.style.position = "absolute";
 
@@ -513,16 +607,11 @@
           const label = document.createElement("div");
           label.className = "wtcoc-round-label";
           label.style.position = "absolute";
-          label.style.width = `${MATCH_WIDTH}px`;
+          label.style.width = `${matchWidth}px`;
           label.style.textAlign = "center";
           label.style.left = `${m.cord_left}px`;
           label.style.top = `${topOffset}px`;
-          const rawThird = m.round || "3rd place";
-          const [thirdTitle, thirdDates] = (() => {
-            const idx = rawThird.indexOf(":");
-            if (idx === -1) return [rawThird.trim(), ""];
-            return [rawThird.slice(0, idx).trim(), rawThird.slice(idx + 1).trim()];
-          })();
+          const [thirdTitle, thirdDates] = getMatchRoundLabelParts(m, "3rd place", matchIsCompact);
           label.textContent = thirdTitle;
           container.appendChild(label);
           if (thirdDates) {
@@ -530,7 +619,7 @@
             dateLabel.className = "wtcoc-round-label";
             dateLabel.textContent = thirdDates;
             dateLabel.style.position = "absolute";
-            dateLabel.style.width = `${MATCH_WIDTH}px`;
+            dateLabel.style.width = `${matchWidth}px`;
             dateLabel.style.textAlign = "center";
             dateLabel.style.left = `${m.cord_left}px`;
             dateLabel.style.top = `${topOffset + 16}px`;
@@ -548,7 +637,7 @@
           metaWrap.className = "wtcoc-match-meta-wrapper";
           metaWrap.style.left = `${m.cord_left + 2}px`;
           metaWrap.style.top = `${Math.max(0, topOffset - 14)}px`;
-          metaWrap.style.width = `${MATCH_WIDTH}px`;
+          metaWrap.style.width = `${matchWidth}px`;
 
           if (isCOC && m.duel_format) {
             const fmt = document.createElement("span");
@@ -599,12 +688,12 @@
           if (team1Logo) team1Info.appendChild(team1Logo);
           const team1Name = document.createElement("span");
           team1Name.textContent = m.team1;
-          team1Name.style.maxWidth = `${MATCH_WIDTH - 60}px`;
+          team1Name.style.maxWidth = `${matchWidth - 60}px`;
           team1Name.style.display = "inline-block";
           team1Name.style.whiteSpace = "nowrap";
           team1Name.style.overflow = "hidden";
           team1Name.style.textOverflow = "ellipsis";
-          team1Info.appendChild(team1Name);
+          if (!matchIsCompact) team1Info.appendChild(team1Name);
           const score1Span = document.createElement("span");
           score1Span.textContent = m.duels_won1;
           opponent1Div.appendChild(team1Info);
@@ -626,12 +715,12 @@
           if (team2Logo) team2Info.appendChild(team2Logo);
           const team2Name = document.createElement("span");
           team2Name.textContent = m.team2;
-          team2Name.style.maxWidth = `${MATCH_WIDTH - 60}px`;
+          team2Name.style.maxWidth = `${matchWidth - 60}px`;
           team2Name.style.display = "inline-block";
           team2Name.style.whiteSpace = "nowrap";
           team2Name.style.overflow = "hidden";
           team2Name.style.textOverflow = "ellipsis";
-          team2Info.appendChild(team2Name);
+          if (!matchIsCompact) team2Info.appendChild(team2Name);
           const score2Span = document.createElement("span");
           score2Span.textContent = m.duels_won2;
           opponent2Div.appendChild(team2Info);
@@ -659,13 +748,13 @@
           }
           player1Link.textContent = m.player1;
           // Add maxWidth and display for truncation
-          player1Link.style.maxWidth = `${MATCH_WIDTH - 60}px`;
+          player1Link.style.maxWidth = `${matchWidth - 60}px`;
           player1Link.style.display = "inline-block";
           const player1Info = document.createElement("div");
           player1Info.style.display = "flex";
           player1Info.style.alignItems = "center";
           if (player1Logo) player1Info.appendChild(player1Logo);
-          player1Info.appendChild(player1Link);
+          if (!matchIsCompact) player1Info.appendChild(player1Link);
           const score1Span = document.createElement("span");
           score1Span.textContent = m.score1;
           opponent1Div.appendChild(player1Info);
@@ -691,13 +780,13 @@
           }
           player2Link.textContent = m.player2;
           // Add maxWidth and display for truncation
-          player2Link.style.maxWidth = `${MATCH_WIDTH - 60}px`;
+          player2Link.style.maxWidth = `${matchWidth - 60}px`;
           player2Link.style.display = "inline-block";
           const player2Info = document.createElement("div");
           player2Info.style.display = "flex";
           player2Info.style.alignItems = "center";
           if (player2Logo) player2Info.appendChild(player2Logo);
-          player2Info.appendChild(player2Link);
+          if (!matchIsCompact) player2Info.appendChild(player2Link);
           const score2Span = document.createElement("span");
           score2Span.textContent = m.score2;
           opponent2Div.appendChild(player2Info);
@@ -713,7 +802,7 @@
     });
   }
 
-  function drawPlayoffLines(groupedByRound, sortedRounds, container) {
+  function drawPlayoffLines(groupedByRound, sortedRounds, roundLayout, container) {
     const matchById = {};
     Object.values(groupedByRound).flat().forEach(m => {
       matchById[m.knockout_id] = m;
@@ -731,10 +820,11 @@
         const fromTop = from.cord_top;
         const toLeft = to.cord_left;
         const toTop = to.cord_top;
+        const fromWidth = getMatchWidth(from, roundLayout);
 
         const yFrom = fromTop + MATCH_HEIGHT / 2 - 1;
         const yTo = toTop + MATCH_HEIGHT / 2 - 1;
-        const xFrom = fromLeft + MATCH_WIDTH;
+        const xFrom = fromLeft + fromWidth;
         const xTo = toLeft;
 
         const connector = {
@@ -751,7 +841,7 @@
             y2: yTo
           });
         } else {
-          const midX = fromLeft + MATCH_WIDTH + HORIZONTAL_SPACING / 2;
+          const midX = fromLeft + fromWidth + HORIZONTAL_SPACING / 2;
           const preX = toLeft - HORIZONTAL_SPACING / 2;
           const adjustedY2 = fromTop > toTop ? yTo + 5 : yTo - 5;
 
@@ -839,7 +929,7 @@
     });
   }
 
-  function renderSingleElimination(playoffMatches, containerOverride, tournamentType) {
+  function renderSingleElimination(playoffMatches, containerOverride, tournamentType, options = {}) {
     
     // Optionally override THIRD_PLACE_VERTICAL_OFFSET from currentTournament (ignore null/empty)
     if (currentTournament && currentTournament.hasOwnProperty('third_place_vertical_offset')) {
@@ -877,13 +967,22 @@
       scrollWrapper.appendChild(bracketDiv);
       container.appendChild(scrollWrapper);
       container = bracketDiv;
-      // Floating fullscreen button inside bracket
-      const expandBtn = document.createElement("button");
-      expandBtn.className = "wtcoc-expand-bracket-btn wtcoc-expand-bracket-floating";
-      expandBtn.title = "Відкрити на весь екран";
-      expandBtn.innerHTML = '<i class="fas fa-up-right-and-down-left-from-center"></i>';
-      container.appendChild(expandBtn);
-      expandBtn.addEventListener('click', () => openBracketFullscreen(scrollWrapper));
+      if (!options.hideExpandButton) {
+        // Floating fullscreen button inside bracket
+        const expandBtn = document.createElement("button");
+        expandBtn.className = "wtcoc-expand-bracket-btn wtcoc-expand-bracket-floating";
+        expandBtn.title = "Open full-screen bracket";
+        expandBtn.setAttribute("aria-label", "Open full-screen bracket");
+        expandBtn.innerHTML = '<i class="fas fa-up-right-and-down-left-from-center"></i>';
+        container.appendChild(expandBtn);
+        expandBtn.addEventListener('click', () => openBracketFullscreen(fullscreenContainer => {
+          const fullscreenMatches = (playoffMatches || []).map(match => ({ ...match }));
+          renderSingleElimination(fullscreenMatches, fullscreenContainer, tournamentType, {
+            forceFullWidthRounds: true,
+            hideExpandButton: true
+          });
+        }));
+      }
     } else {
       // fallback: legacy behavior
       container = document.getElementById("wtcoc-playoff-bracket");
@@ -900,27 +999,25 @@
 
     // Sort rounds numerically ascending
     const sortedRounds = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
-    const roundIndexMap = {};
-    sortedRounds.forEach((r, i) => roundIndexMap[r] = i);
+    const roundLayout = buildRoundLayout(groupedByRound, sortedRounds, options);
     
     // Calculate playoff match coordinates
-    calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, playoffMatches, currentTournamentId);
+    calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundLayout, playoffMatches, currentTournamentId);
     // Render matches with absolute positioning inside #wtcoc-playoff-bracket
-    renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, container);
+    renderPlayoffMatches(groupedByRound, sortedRounds, roundLayout, tournamentType, container);
     // --- DRAW LINES ---
-    drawPlayoffLines(groupedByRound, sortedRounds, container);
+    drawPlayoffLines(groupedByRound, sortedRounds, roundLayout, container);
     // Set container's fixed height based on the maximum cord_bottom plus BRACKET_MARGIN
     const allMatches = Object.values(groupedByRound).flat();
     const maxCordBottom = Math.max(...allMatches.map(m => m.cord_bottom || 0));
     container.style.height = `${maxCordBottom + BRACKET_MARGIN}px`;
-    // Set container's fixed width based on the maximum cord_left plus MATCH_WIDTH + BRACKET_MARGIN
-    const maxCordLeft = Math.max(...allMatches.map(m => m.cord_left || 0));
-    container.style.width = `${maxCordLeft + MATCH_WIDTH + BRACKET_MARGIN}px`;
+    // Set container's fixed width based on variable round widths
+    container.style.width = `${getBracketRight(allMatches, roundLayout) + BRACKET_MARGIN}px`;
 
     addOpponentHoverHighlight(container);
   }
 
-  function renderDoubleElimination(playoffMatches, containerOverride, tournamentType) {
+  function renderDoubleElimination(playoffMatches, containerOverride, tournamentType, options = {}) {
     
     // Optionally override THIRD_PLACE_VERTICAL_OFFSET from currentTournament (ignore null/empty)
     if (currentTournament && currentTournament.hasOwnProperty('third_place_vertical_offset')) {
@@ -959,13 +1056,22 @@
       scrollWrapper.appendChild(bracketDiv);
       container.appendChild(scrollWrapper);
       container = bracketDiv;
-      // Floating fullscreen button inside bracket
-      const expandBtn = document.createElement("button");
-      expandBtn.className = "wtcoc-expand-bracket-btn wtcoc-expand-bracket-floating";
-      expandBtn.title = "Відкрити на весь екран";
-      expandBtn.innerHTML = '<i class="fas fa-up-right-and-down-left-from-center"></i>';
-      container.appendChild(expandBtn);
-      expandBtn.addEventListener('click', () => openBracketFullscreen(scrollWrapper));
+      if (!options.hideExpandButton) {
+        // Floating fullscreen button inside bracket
+        const expandBtn = document.createElement("button");
+        expandBtn.className = "wtcoc-expand-bracket-btn wtcoc-expand-bracket-floating";
+        expandBtn.title = "Open full-screen bracket";
+        expandBtn.setAttribute("aria-label", "Open full-screen bracket");
+        expandBtn.innerHTML = '<i class="fas fa-up-right-and-down-left-from-center"></i>';
+        container.appendChild(expandBtn);
+        expandBtn.addEventListener('click', () => openBracketFullscreen(fullscreenContainer => {
+          const fullscreenMatches = (playoffMatches || []).map(match => ({ ...match }));
+          renderDoubleElimination(fullscreenMatches, fullscreenContainer, tournamentType, {
+            forceFullWidthRounds: true,
+            hideExpandButton: true
+          });
+        }));
+      }
     } else {
       // fallback: legacy behavior
       container = document.getElementById("wtcoc-playoff-bracket");
@@ -984,7 +1090,7 @@
     const stageOrder = Object.keys(stageGroups).sort((a, b) => a.localeCompare(b));
     // Track global sizing across all groups
     let cumulativeTopOffset = 0;
-    let globalMaxLeft = 0;
+    let globalMaxRight = 0;
     // 3) Process each group sequentially
     stageOrder.forEach(stageKey => {
       const stageMatches = stageGroups[stageKey];
@@ -997,11 +1103,10 @@
         groupedByRound[roundNum].push(match);
       });
       const sortedRounds = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
-      const roundIndexMap = {};
-      sortedRounds.forEach((r, i) => roundIndexMap[r] = i);
+      const roundLayout = buildRoundLayout(groupedByRound, sortedRounds, options);
 
       // Compute coordinates for this stage
-      calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, stageMatches, currentTournamentId);
+      calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundLayout, stageMatches, currentTournamentId);
       // Create a sub-container for this stage to apply vertical offset cleanly
       const stageContainer = document.createElement("div");
       stageContainer.style.position = "absolute";
@@ -1010,20 +1115,20 @@
       stageContainer.style.width = "max-content";
       container.appendChild(stageContainer);
       // Render matches and lines for this stage inside the sub-container
-      renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, stageContainer);
-      drawPlayoffLines(groupedByRound, sortedRounds, stageContainer);
+      renderPlayoffMatches(groupedByRound, sortedRounds, roundLayout, tournamentType, stageContainer);
+      drawPlayoffLines(groupedByRound, sortedRounds, roundLayout, stageContainer);
       // Update global sizing info
       const allStageMatches = Object.values(groupedByRound).flat();
       const stageMaxBottom = Math.max(...allStageMatches.map(m => m.cord_bottom || 0));
-      const stageMaxLeft = Math.max(...allStageMatches.map(m => m.cord_left || 0));
+      const stageMaxRight = getBracketRight(allStageMatches, roundLayout);
 
-      globalMaxLeft = Math.max(globalMaxLeft, stageMaxLeft);
+      globalMaxRight = Math.max(globalMaxRight, stageMaxRight);
       cumulativeTopOffset += stageMaxBottom + BRACKET_MARGIN; // space between stages
     });
 
     // 4) After all groups, set container dimensions
     container.style.height = `${cumulativeTopOffset}px`;
-    container.style.width = `${globalMaxLeft + MATCH_WIDTH + BRACKET_MARGIN}px`;
+    container.style.width = `${globalMaxRight + BRACKET_MARGIN}px`;
 
     // 5) Hover highlight across entire bracket container
     addOpponentHoverHighlight(container);
@@ -1033,7 +1138,7 @@
 
   // Opens a fullscreen overlay that shows only the bracket block
 
-  function openBracketFullscreen(sourceWrapper) {
+  function openBracketFullscreen(renderFullscreenContent) {
     try {
       const overlay = document.createElement('div');
       overlay.className = 'wtcoc-fullscreen-overlay';
@@ -1047,12 +1152,13 @@
 
       const content = document.createElement('div');
       content.className = 'wtcoc-fullscreen-content';
-      // Clone the scrollable wrapper with the bracket inside
-      const cloned = sourceWrapper.cloneNode(true);
-      content.appendChild(cloned);
       overlay.appendChild(content);
 
       document.body.appendChild(overlay);
+
+      if (typeof renderFullscreenContent === 'function') {
+        renderFullscreenContent(content);
+      }
 
       const onClose = () => {
         if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);

@@ -571,6 +571,7 @@
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
   const ICONS_URL = `${AUTH_BASE}/icons`;
   const CATEGORIES_URL = `${AUTH_BASE}/categories`;
+  const LOCAL_WEBSITES_URL = `${AUTH_BASE}/local-websites`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const USERS_URL = `${AUTH_BASE}/users`;
   const USER_OPTIONS_URL = `${AUTH_BASE}/users/options`;
@@ -617,6 +618,13 @@
       buttonLabel: "Edit",
       createLabel: "Create",
       load: () => apiJson(CATEGORIES_URL, { method: "GET" }).then((data) => data.categories || []),
+    },
+    localWebsites: {
+      key: "localWebsites",
+      title: "Local Websites",
+      buttonLabel: "Edit",
+      createLabel: "Create",
+      load: () => apiJson(LOCAL_WEBSITES_URL, { method: "GET" }).then((data) => data.local_websites || []),
     },
     newsEditors: {
       key: "newsEditors",
@@ -703,6 +711,7 @@
     icons: [],
     categories: [],
     categoriesLoaded: false,
+    localWebsites: [],
     newsEditors: [],
     newsEditorsHideAuto: false,
     mobileMenuItems: [],
@@ -1590,6 +1599,14 @@
       requests.push(
         apiJson(TOURNAMENTS_URL, { method: "GET" }).then((data) => {
           state.tournaments = Array.isArray(data?.tournaments) ? data.tournaments : [];
+        })
+      );
+    }
+
+    if (!Array.isArray(state.localWebsites) || !state.localWebsites.length) {
+      requests.push(
+        apiJson(LOCAL_WEBSITES_URL, { method: "GET" }).then((data) => {
+          state.localWebsites = Array.isArray(data?.local_websites) ? data.local_websites : [];
         })
       );
     }
@@ -2875,6 +2892,155 @@
     }
   }
 
+  async function openLocalWebsiteForm(mode, item, anchorRow) {
+    try {
+      if (!Array.isArray(state.associations) || !state.associations.length) {
+        const data = await apiJson(ASSOCIATIONS_URL, { method: "GET" });
+        state.associations = Array.isArray(data?.associations) ? data.associations : [];
+      }
+    } catch (error) {
+      setStatus(error?.message || "Failed to load associations.", true);
+      return;
+    }
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+
+    const idField = createTextRow("id", item?.id || "", { readOnly: true });
+    const urlField = createTextRow("url", item?.url || "");
+    const countryField = createSelectOptionsRow(
+      "country_id",
+      String(item?.country_id || ""),
+      [{ value: "", label: "Select country..." }].concat(
+        state.associations
+          .slice()
+          .sort((left, right) => String(left?.name || left?.id || "").localeCompare(String(right?.name || right?.id || "")))
+          .map((association) => ({
+            value: String(association?.id || ""),
+            label: [String(association?.id || "").trim(), String(association?.name || "").trim()].filter(Boolean).join(" • "),
+          }))
+      ),
+      false
+    );
+
+    if (mode === "edit") form.appendChild(idField.row);
+    form.appendChild(urlField.row);
+    form.appendChild(countryField.row);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = mode === "create" ? "Create" : "Save";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => {
+      if (mode === "create") {
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+      } else {
+        closeInlineForm();
+      }
+      setStatus("", false);
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "cp-btn cp-btn-secondary";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.classList.toggle("hidden", mode !== "edit");
+    deleteBtn.addEventListener("click", async () => {
+      if (!item?.id) return;
+      if (!window.confirm("Delete this local website?")) return;
+      try {
+        await apiJson(`${LOCAL_WEBSITES_URL}/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+        closeInlineForm();
+        setStatus("Local website deleted.", false);
+        await loadSectionData("localWebsites");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to delete local website.", true);
+      }
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    if (mode === "edit") actions.appendChild(deleteBtn);
+    form.appendChild(actions);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      let normalizedUrl = "";
+      try {
+        const parsedUrl = new URL(String(urlField.input.value || "").trim());
+        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+          throw new Error("Invalid protocol");
+        }
+        normalizedUrl = parsedUrl.href;
+      } catch (_error) {
+        setStatus("URL must be a valid http(s) URL.", true);
+        return;
+      }
+
+      const payload = {
+        id: Number.parseInt(String(idField.input.value || "").trim(), 10),
+        url: normalizedUrl,
+        country_id: String(countryField.select.value || "").trim(),
+      };
+      if (!payload.country_id) {
+        setStatus("country_id is required.", true);
+        return;
+      }
+
+      const duplicate = state.localWebsites.find((entry) => (
+        String(entry?.url || "").trim().toLowerCase() === payload.url.toLowerCase()
+        && Number(entry?.id) !== Number(item?.id)
+      ));
+      if (duplicate) {
+        setStatus("Local website URL already exists.", true);
+        return;
+      }
+
+      try {
+        if (mode === "create") {
+          await apiJson(LOCAL_WEBSITES_URL, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Local website created.", false);
+        } else {
+          await apiJson(`${LOCAL_WEBSITES_URL}/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Local website updated.", false);
+        }
+        if (mode === "create") {
+          sectionForm.classList.add("hidden");
+          sectionForm.innerHTML = "";
+        } else {
+          closeInlineForm();
+        }
+        await loadSectionData("localWebsites");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to save local website.", true);
+      }
+    });
+
+    if (mode === "create") {
+      closeInlineForm();
+      showCreateForm(form);
+    } else if (anchorRow) {
+      mountDetailForm(form, anchorRow);
+    }
+  }
+
   function getMobileMenuAreaLabel(area) {
     return String(area || "").trim() === "top" ? "Top bar" : "Drawer";
   }
@@ -3396,17 +3562,18 @@
         })
     );
     const profileField = createSelectOptionsRow("profile_id", String(item?.profile_id || ""), profileOptions, false);
-    const accessTypeField = createSelectOptionsRow(
-      "access_type",
-      String(item?.access_type || "local").trim().toLowerCase(),
-      [
-        { value: "local", label: "Local" },
-        { value: "tournament", label: "Tournament" },
-        { value: "global", label: "Global" },
-        { value: "youtube", label: "YouTube" },
-      ],
-      false
-    );
+      const accessTypeField = createSelectOptionsRow(
+        "access_type",
+        String(item?.access_type || "local").trim().toLowerCase(),
+        [
+          { value: "local", label: "Local" },
+          { value: "local_website", label: "Local Website" },
+          { value: "tournament", label: "Tournament" },
+          { value: "global", label: "Global" },
+          { value: "youtube", label: "YouTube" },
+        ],
+        false
+      );
     const tournamentField = createSelectOptionsRow(
       "tournament_id",
       String(item?.tournament_id || ""),
@@ -3423,9 +3590,9 @@
       ),
       false
     );
-    const countryField = createSelectOptionsRow(
-      "country_id",
-      String(item?.country_id || ""),
+      const countryField = createSelectOptionsRow(
+        "country_id",
+        String(item?.country_id || ""),
       [{ value: "", label: "Select country..." }].concat(
         state.associations
           .slice()
@@ -3435,9 +3602,27 @@
             label: [String(association?.id || "").trim(), String(association?.name || "").trim()].filter(Boolean).join(" • "),
           }))
       ),
-      false
-    );
-    const streamerField = createSelectOptionsRow(
+        false
+      );
+      const localWebsiteField = createSelectOptionsRow(
+        "local_website_id",
+        String(item?.local_website_id || ""),
+        [{ value: "", label: "Select website..." }].concat(
+          state.localWebsites
+            .slice()
+            .sort((left, right) => String(left?.url || left?.id || "").localeCompare(String(right?.url || right?.id || "")))
+            .map((website) => ({
+              value: String(website?.id || ""),
+              label: [
+                String(website?.id || "").trim(),
+                String(website?.url || "").trim(),
+                String(website?.country_name || website?.country_id || "").trim(),
+              ].filter(Boolean).join(" • "),
+            }))
+        ),
+        false
+      );
+      const streamerField = createSelectOptionsRow(
       "streamer_id",
       String(item?.streamer_id || ""),
       [{ value: "", label: "Select streamer..." }].concat(
@@ -3463,23 +3648,27 @@
         : Number(item?.is_streamer) === 1
           ? "Automatic. Created and removed when the profile is assigned as streamer."
         : "Manual. Can be changed here by admin."
-    );
+      );
 
-    const updateVisibility = () => {
-      const accessType = String(accessTypeField.select.value || "").trim().toLowerCase();
-      const isTournament = accessType === "tournament";
-      const isLocal = accessType === "local";
-      const isYouTube = accessType === "youtube";
-      tournamentField.row.classList.toggle("hidden", !isTournament);
-      countryField.row.classList.toggle("hidden", !isLocal);
-      streamerField.row.classList.toggle("hidden", !isYouTube);
-      tournamentField.select.disabled = !isTournament;
-      countryField.select.disabled = !isLocal;
-      streamerField.select.disabled = !isYouTube;
-      if (!isTournament) tournamentField.select.value = "";
-      if (!isLocal) countryField.select.value = "";
-      if (!isYouTube) streamerField.select.value = "";
-    };
+      const updateVisibility = () => {
+        const accessType = String(accessTypeField.select.value || "").trim().toLowerCase();
+        const isTournament = accessType === "tournament";
+        const isLocal = accessType === "local";
+        const isLocalWebsite = accessType === "local_website";
+        const isYouTube = accessType === "youtube";
+        tournamentField.row.classList.toggle("hidden", !isTournament);
+        countryField.row.classList.toggle("hidden", !isLocal);
+        localWebsiteField.row.classList.toggle("hidden", !isLocalWebsite);
+        streamerField.row.classList.toggle("hidden", !isYouTube);
+        tournamentField.select.disabled = !isTournament;
+        countryField.select.disabled = !isLocal;
+        localWebsiteField.select.disabled = !isLocalWebsite;
+        streamerField.select.disabled = !isYouTube;
+        if (!isTournament) tournamentField.select.value = "";
+        if (!isLocal) countryField.select.value = "";
+        if (!isLocalWebsite) localWebsiteField.select.value = "";
+        if (!isYouTube) streamerField.select.value = "";
+      };
 
     const syncProfileFromStreamer = () => {
       if (String(accessTypeField.select.value || "").trim().toLowerCase() !== "youtube") return;
@@ -3490,12 +3679,13 @@
       if (profileId) profileField.select.value = profileId;
     };
 
-    if (mode === "edit") form.appendChild(idField.row);
-    form.appendChild(profileField.row);
-    form.appendChild(accessTypeField.row);
-    form.appendChild(tournamentField.row);
-    form.appendChild(countryField.row);
-    form.appendChild(streamerField.row);
+      if (mode === "edit") form.appendChild(idField.row);
+      form.appendChild(profileField.row);
+      form.appendChild(accessTypeField.row);
+      form.appendChild(tournamentField.row);
+      form.appendChild(countryField.row);
+      form.appendChild(localWebsiteField.row);
+      form.appendChild(streamerField.row);
     if (mode === "edit") {
       form.appendChild(captainRow.row);
       form.appendChild(managedRow.row);
@@ -3555,26 +3745,28 @@
     streamerField.select.addEventListener("change", syncProfileFromStreamer);
     updateVisibility();
 
-    if (isNewsEditorAuto(item)) {
-      profileField.select.disabled = true;
-      accessTypeField.select.disabled = true;
-      tournamentField.select.disabled = true;
-      countryField.select.disabled = true;
-      streamerField.select.disabled = true;
-      saveBtn.disabled = true;
-    }
+      if (isNewsEditorAuto(item)) {
+        profileField.select.disabled = true;
+        accessTypeField.select.disabled = true;
+        tournamentField.select.disabled = true;
+        countryField.select.disabled = true;
+        localWebsiteField.select.disabled = true;
+        streamerField.select.disabled = true;
+        saveBtn.disabled = true;
+      }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
 
-      const payload = {
-        id: Number.parseInt(String(idField.input.value || "").trim(), 10),
-        profile_id: String(profileField.select.value || "").trim(),
-        access_type: String(accessTypeField.select.value || "").trim().toLowerCase(),
-        tournament_id: String(tournamentField.select.value || "").trim(),
-        country_id: String(countryField.select.value || "").trim(),
-        streamer_id: Number.parseInt(String(streamerField.select.value || "").trim(), 10),
-      };
+        const payload = {
+          id: Number.parseInt(String(idField.input.value || "").trim(), 10),
+          profile_id: String(profileField.select.value || "").trim(),
+          access_type: String(accessTypeField.select.value || "").trim().toLowerCase(),
+          tournament_id: String(tournamentField.select.value || "").trim(),
+          country_id: String(countryField.select.value || "").trim(),
+          local_website_id: Number.parseInt(String(localWebsiteField.select.value || "").trim(), 10),
+          streamer_id: Number.parseInt(String(streamerField.select.value || "").trim(), 10),
+        };
 
       if (!payload.profile_id) {
         setStatus("profile_id is required.", true);
@@ -3584,24 +3776,31 @@
         setStatus("access_type is required.", true);
         return;
       }
-      if (payload.access_type === "local" && !payload.country_id) {
-        setStatus("country_id is required for local access.", true);
-        return;
-      }
-      if (payload.access_type === "tournament" && !payload.tournament_id) {
-        setStatus("tournament_id is required for tournament access.", true);
-        return;
-      }
+        if (payload.access_type === "local" && !payload.country_id) {
+          setStatus("country_id is required for local access.", true);
+          return;
+        }
+        if (payload.access_type === "local_website" && (!Number.isInteger(payload.local_website_id) || payload.local_website_id <= 0)) {
+          setStatus("local_website_id is required for Local Website access.", true);
+          return;
+        }
+        if (payload.access_type === "tournament" && !payload.tournament_id) {
+          setStatus("tournament_id is required for tournament access.", true);
+          return;
+        }
       if (payload.access_type === "youtube" && (!Number.isInteger(payload.streamer_id) || payload.streamer_id <= 0)) {
         setStatus("streamer_id is required for YouTube access.", true);
         return;
       }
-      if (payload.access_type !== "local") {
-        payload.country_id = "";
-      }
-      if (payload.access_type !== "tournament") {
-        payload.tournament_id = "";
-      }
+        if (payload.access_type !== "local") {
+          payload.country_id = "";
+        }
+        if (payload.access_type !== "local_website") {
+          payload.local_website_id = null;
+        }
+        if (payload.access_type !== "tournament") {
+          payload.tournament_id = "";
+        }
       if (payload.access_type !== "youtube") {
         payload.streamer_id = null;
       }
@@ -3986,6 +4185,40 @@
       });
   }
 
+  function renderLocalWebsites() {
+    sectionTitle.textContent = "Local Websites";
+    sectionCreateBtn.textContent = "Create";
+    sectionCreateBtn.classList.remove("hidden");
+    sectionCreateBtn.onclick = () => openLocalWebsiteForm("create", null, null);
+
+    if (!state.localWebsites.length) {
+      renderListEmpty("No local websites yet.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    state.localWebsites
+      .slice()
+      .sort((left, right) => (
+        String(left?.country_name || left?.country_id || "").localeCompare(String(right?.country_name || right?.country_id || ""))
+        || String(left?.url || "").localeCompare(String(right?.url || ""))
+      ))
+      .forEach((item) => {
+        sectionList.appendChild(createListRow({
+          imageSrc: item.country_flag,
+          imageAlt: item.country_name || item.country_id || "Local website",
+          imageRound: false,
+          title: item.url || `Local website #${item.id}`,
+          subtitle: [
+            item.country_name || item.country_id ? `Country: ${String(item.country_name || item.country_id).trim()}` : "",
+            item.id ? `ID: ${item.id}` : "",
+          ].filter(Boolean).join(" • "),
+          buttonLabel: "Edit",
+          onClick: (row) => openLocalWebsiteForm("edit", item, row),
+        }));
+      });
+  }
+
   function renderMobileMenuItems() {
     sectionTitle.textContent = "Mobile Menu";
     sectionCreateBtn.textContent = "Create";
@@ -4069,23 +4302,28 @@
         String(item?.profile_id || "").trim(),
       ].filter(Boolean);
 
-      const subtitleParts = [];
-      const accessType = String(item?.access_type || "").trim().toLowerCase();
-      if (accessType) {
-        subtitleParts.push(accessType === "local"
-          ? "Local"
-          : accessType === "tournament"
-            ? "Tournament"
-            : accessType === "youtube"
-              ? "YouTube"
-              : "Global");
-      }
-      if (item?.country_name || item?.country_id) {
-        subtitleParts.push(`Country: ${String(item.country_name || item.country_id).trim()}`);
-      }
-      if (item?.tournament_name || item?.tournament_id) {
-        subtitleParts.push(`Tournament: ${String(item.tournament_name || item.tournament_id).trim()}`);
-      }
+        const subtitleParts = [];
+        const accessType = String(item?.access_type || "").trim().toLowerCase();
+        if (accessType) {
+          subtitleParts.push(accessType === "local"
+            ? "Local"
+            : accessType === "local_website"
+              ? "Local Website"
+              : accessType === "tournament"
+                ? "Tournament"
+                : accessType === "youtube"
+                  ? "YouTube"
+                  : "Global");
+        }
+        if (item?.country_name || item?.country_id) {
+          subtitleParts.push(`Country: ${String(item.country_name || item.country_id).trim()}`);
+        }
+        if (item?.local_website_url || item?.local_website_id) {
+          subtitleParts.push(`Website: ${String(item.local_website_url || item.local_website_id).trim()}`);
+        }
+        if (item?.tournament_name || item?.tournament_id) {
+          subtitleParts.push(`Tournament: ${String(item.tournament_name || item.tournament_id).trim()}`);
+        }
       if (item?.streamer_name || item?.streamer_id) {
         subtitleParts.push(`Streamer: ${String(item.streamer_name || item.streamer_id).trim()}`);
       }
@@ -4259,6 +4497,7 @@
     if (state.activeSection === "streamers") renderStreamers();
     if (state.activeSection === "icons") renderIcons();
     if (state.activeSection === "categories") renderCategories();
+    if (state.activeSection === "localWebsites") renderLocalWebsites();
     if (state.activeSection === "mobileMenuItems") renderMobileMenuItems();
     if (state.activeSection === "newsEditors") renderNewsEditors();
     if (state.activeSection === "tournaments") renderTournaments();

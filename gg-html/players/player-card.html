@@ -176,6 +176,123 @@
   .noprofile-gap {
     margin-top: 10px;
   }
+  .noprofile-auth-message {
+    font-size: 14px;
+    line-height: 1.45;
+    color: #333;
+  }
+  .noprofile-step-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .noprofile-login-email {
+    font-weight: 600;
+  }
+  .noprofile-auth {
+    margin-top: 10px;
+  }
+  .noprofile-auth .lp-auth {
+    --lp-auth-bg: #ffffff;
+    --lp-auth-text: #222;
+    --lp-auth-muted: #666;
+    --lp-auth-border: #d8d8d8;
+    --lp-auth-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
+    --lp-auth-btn: #1f5d99;
+    --lp-auth-btn-hover: #174775;
+    --lp-auth-btn-text: #fff;
+    --lp-auth-google: #fff;
+    --lp-auth-google-border: #dadce0;
+    --lp-auth-google-text: #3c4043;
+    position: relative;
+    display: block;
+    width: 100%;
+    font-family: "Montserrat", sans-serif;
+    color: var(--lp-auth-text);
+    background: transparent;
+  }
+  .noprofile-auth .lp-auth,
+  .noprofile-auth .lp-auth * {
+    box-sizing: border-box;
+  }
+  .noprofile-auth .lp-auth__bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+  }
+  .noprofile-auth .lp-auth__button {
+    appearance: none;
+    border: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0;
+    border-radius: 3px;
+    cursor: pointer;
+    background: var(--lp-auth-btn);
+    color: var(--lp-auth-btn-text);
+    transition: background 0.15s ease;
+  }
+  .noprofile-auth .lp-auth__button:hover {
+    background: var(--lp-auth-btn-hover);
+  }
+  .noprofile-auth .lp-auth__dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 1001;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-6px);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+  }
+  .noprofile-auth .lp-auth__row {
+    padding: 8px;
+    border: 1px solid var(--lp-auth-border);
+    border-radius: 6px;
+    background: var(--lp-auth-bg);
+    box-shadow: var(--lp-auth-shadow);
+    min-width: 240px;
+  }
+  .noprofile-auth .lp-auth__dropdown--open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+    transition-delay: 0s;
+  }
+  .noprofile-auth .lp-auth__google-btn {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--lp-auth-google);
+    border: 1px solid var(--lp-auth-google-border);
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--lp-auth-google-text);
+    cursor: pointer;
+    transition: box-shadow 0.15s ease;
+    text-decoration: none;
+  }
+  .noprofile-auth .lp-auth__google-btn:hover {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  }
+  .noprofile-auth .lp-auth__google-icon {
+    width: 18px;
+    height: 18px;
+    display: inline-block;
+  }
+  .noprofile-auth .lp-auth__hidden {
+    display: none !important;
+  }
 
   .player-card {
     background: #fff;
@@ -791,6 +908,7 @@
   let tournamentsById = new Map();
   let associations = [];
   let associationNamesById = new Map();
+  let noProfileAuthCleanup = null;
 
   function normalizeAssocKey(value) {
     return String(value || "").trim().toUpperCase();
@@ -2152,6 +2270,461 @@
     container.appendChild(form);
   }
 
+  function cleanupNoProfileAuth() {
+    if (typeof noProfileAuthCleanup === "function") {
+      noProfileAuthCleanup();
+      noProfileAuthCleanup = null;
+    }
+  }
+
+  function getLinkedPlayerId(user) {
+    return String(
+      user?.player_id ??
+      user?.playerId ??
+      user?.profile?.player_id ??
+      user?.profile?.playerId ??
+      ""
+    ).trim();
+  }
+
+  function isNoProfileUrl(url) {
+    return /[?&]id=noprofile(?:&|$)/.test(String(url || ""));
+  }
+
+  function getLinkedProfileUrl(user) {
+    const url = String(user?.myProfileUrl || "").trim();
+    if (url && !isNoProfileUrl(url)) return url;
+
+    const linkedPlayerId = getLinkedPlayerId(user);
+    return linkedPlayerId ? buildPlayerPageUrl(linkedPlayerId, false) : "";
+  }
+
+  async function fetchCurrentSession() {
+    try {
+      const response = await fetch(`${AUTH_BASE}/auth/me`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!response.ok) return { authenticated: false, user: null };
+      const data = await response.json();
+      return {
+        authenticated: !!data?.authenticated,
+        user: data?.authenticated ? data?.user || null : null,
+      };
+    } catch (_error) {
+      return { authenticated: false, user: null };
+    }
+  }
+
+  function renderNoProfileInfoCard(container, user) {
+    cleanupNoProfileAuth();
+
+    const infoCard = document.createElement("div");
+    infoCard.className = "player-card";
+
+    const warning = document.createElement("div");
+    warning.className = "player-stats-line noprofile-warning";
+    warning.textContent = "The email address you used to log in to GG is not linked to a BGA account.";
+    infoCard.appendChild(warning);
+
+    const gap1 = document.createElement("div");
+    gap1.className = "noprofile-gap";
+    infoCard.appendChild(gap1);
+
+    const intro = document.createElement("div");
+    intro.className = "player-stats-line";
+    intro.textContent = "What to do:";
+    infoCard.appendChild(intro);
+
+    const gapIntroToStep1 = document.createElement("div");
+    gapIntroToStep1.className = "noprofile-gap";
+    infoCard.appendChild(gapIntroToStep1);
+
+    const step1 = document.createElement("div");
+    step1.className = "player-stats-line compact";
+    step1.textContent = "1. Contact your association captain.";
+    infoCard.appendChild(step1);
+
+    const step1Hint = document.createElement("div");
+    step1Hint.className = "player-stats-line compact";
+    step1Hint.innerHTML = 'If you don\'t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=1" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/players/?captains=1</a>';
+    infoCard.appendChild(step1Hint);
+
+    const gapStep1ToStep2 = document.createElement("div");
+    gapStep1ToStep2.className = "noprofile-gap";
+    infoCard.appendChild(gapStep1ToStep2);
+
+    const step2 = document.createElement("div");
+    step2.className = "player-stats-line compact";
+    const loginEmail = String(user?.email || "").trim();
+    if (loginEmail) {
+      const step2Text = document.createElement("span");
+      step2Text.className = "noprofile-step-text";
+      step2Text.appendChild(document.createTextNode("2. Send your captain the email you used to log in to carcassonne.gg: "));
+      const emailSpan = document.createElement("span");
+      emailSpan.className = "noprofile-login-email";
+      emailSpan.textContent = loginEmail;
+      step2Text.appendChild(emailSpan);
+      step2Text.appendChild(document.createTextNode("."));
+      step2.appendChild(step2Text);
+    } else {
+      step2.textContent = "2. Send your captain the email you used to log in to carcassonne.gg.";
+    }
+    infoCard.appendChild(step2);
+
+    const gapStep2ToStep3 = document.createElement("div");
+    gapStep2ToStep3.className = "noprofile-gap";
+    infoCard.appendChild(gapStep2ToStep3);
+
+    const step3 = document.createElement("div");
+    step3.className = "player-stats-line compact";
+    step3.textContent = "3. Your captain will:";
+    infoCard.appendChild(step3);
+
+    const step3a = document.createElement("div");
+    step3a.className = "player-stats-line compact";
+    step3a.innerHTML = '• Open User Menu → Player Hub → Players <a href="https://carcassonne.gg/player-hub/players/" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/player-hub/players/</a>';
+    infoCard.appendChild(step3a);
+
+    const step3b = document.createElement("div");
+    step3b.className = "player-stats-line compact";
+    step3b.textContent = "• Edit your profile (or create one if needed)";
+    infoCard.appendChild(step3b);
+
+    const step3c = document.createElement("div");
+    step3c.className = "player-stats-line compact";
+    step3c.textContent = "• Add your email to Login Email";
+    infoCard.appendChild(step3c);
+
+    const gapStep3ToOutro = document.createElement("div");
+    gapStep3ToOutro.className = "noprofile-gap";
+    infoCard.appendChild(gapStep3ToOutro);
+
+    const outro = document.createElement("div");
+    outro.className = "player-stats-line compact";
+    outro.textContent = "After that, you will get access to edit your profile.";
+    infoCard.appendChild(outro);
+
+    const contactGap = document.createElement("div");
+    contactGap.className = "noprofile-gap";
+    infoCard.appendChild(contactGap);
+
+    const contact = document.createElement("div");
+    contact.className = "player-stats-line compact";
+    contact.textContent = "If you cannot find a captain, contact us at carcassonne.gg@gmail.com.";
+    infoCard.appendChild(contact);
+
+    container.innerHTML = "";
+    container.appendChild(infoCard);
+  }
+
+  function setupNoProfileAuth(authRoot, onAuthSuccess) {
+    const portalState = {
+      container: null,
+      cleanup: [],
+    };
+
+    const signInLabel = authRoot.querySelector("[data-pc-auth-sign-in]");
+    const signInDropdown = authRoot.querySelector("[data-pc-auth-dropdown]");
+    const googleAuthLink = authRoot.querySelector("[data-pc-auth-google]");
+    if (!signInLabel || !signInDropdown || !googleAuthLink) return () => {};
+    googleAuthLink.href = `${AUTH_BASE}/auth/google`;
+
+    function canUseParentDocument() {
+      try {
+        return !!(window.parent && window.parent !== window && window.parent.document && window.frameElement);
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    function ensurePortalStyles(parentDocument) {
+      if (parentDocument.getElementById("pcNoProfileAuthPortalStyles")) return;
+      const style = parentDocument.createElement("style");
+      style.id = "pcNoProfileAuthPortalStyles";
+      style.textContent = `
+        .lp-auth__portal {
+          position: fixed;
+          z-index: 2147483647;
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+          transform: translateY(-6px);
+          transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+          font-family: "Montserrat", sans-serif;
+        }
+        .lp-auth__portal--open {
+          opacity: 1;
+          visibility: visible;
+          pointer-events: auto;
+          transform: translateY(0);
+          transition-delay: 0s;
+        }
+        .lp-auth__portal-row {
+          padding: 8px;
+          border: 1px solid #d8d8d8;
+          border-radius: 6px;
+          background: #fff;
+          box-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
+          min-width: 240px;
+        }
+        .lp-auth__portal-link {
+          width: 100%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          padding: 10px 12px;
+          background: #fff;
+          border: 1px solid #dadce0;
+          border-radius: 4px;
+          font-weight: 600;
+          font-size: 13px;
+          color: #3c4043;
+          cursor: pointer;
+          transition: box-shadow 0.15s ease;
+          text-decoration: none;
+          white-space: nowrap;
+        }
+        .lp-auth__portal-link:hover {
+          box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+        }
+        .lp-auth__portal-icon {
+          width: 18px;
+          height: 18px;
+          display: inline-block;
+        }
+      `;
+      parentDocument.head.appendChild(style);
+    }
+
+    function positionPortal(container) {
+      const iframeRect = window.frameElement.getBoundingClientRect();
+      const buttonRect = signInLabel.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      const top = iframeRect.top + buttonRect.bottom + 8;
+      const leftEdge = iframeRect.left + buttonRect.left;
+      const left = Math.max(8, leftEdge);
+      const maxLeft = Math.max(8, window.parent.innerWidth - containerRect.width - 8);
+      container.style.top = `${Math.max(8, top)}px`;
+      container.style.left = `${Math.min(left, maxLeft)}px`;
+    }
+
+    function teardownPortal() {
+      while (portalState.cleanup.length) {
+        const dispose = portalState.cleanup.pop();
+        dispose();
+      }
+      if (portalState.container) {
+        portalState.container.remove();
+        portalState.container = null;
+      }
+    }
+
+    function moveFocusOutOfSignInDropdown() {
+      const activeElement = document.activeElement;
+      if (activeElement && signInDropdown.contains(activeElement)) {
+        signInLabel.focus();
+      }
+    }
+
+    function closeSignInDropdown() {
+      moveFocusOutOfSignInDropdown();
+      signInDropdown.classList.remove("lp-auth__dropdown--open");
+      signInDropdown.setAttribute("aria-hidden", "true");
+      signInDropdown.setAttribute("inert", "");
+      signInLabel.setAttribute("aria-expanded", "false");
+      teardownPortal();
+    }
+
+    function openGoogleAuthPopup() {
+      const popup = window.open(
+        `${AUTH_BASE}/auth/google`,
+        "googleAuth",
+        "width=520,height=640,left=100,top=100"
+      );
+
+      if (!popup) {
+        window.location.href = `${AUTH_BASE}/auth/google`;
+        return;
+      }
+
+      closeSignInDropdown();
+    }
+
+    function openPortalDropdown() {
+      const parentDocument = window.parent.document;
+      ensurePortalStyles(parentDocument);
+      teardownPortal();
+
+      const container = parentDocument.createElement("div");
+      container.className = "lp-auth__portal";
+      container.setAttribute("role", "dialog");
+      container.setAttribute("aria-label", "Sign in");
+      container.innerHTML = `
+        <div class="lp-auth__portal-row">
+          <a class="lp-auth__portal-link" href="/auth/google">
+            <img class="lp-auth__portal-icon" alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />
+            Sign in with Google
+          </a>
+        </div>
+      `;
+
+      parentDocument.body.appendChild(container);
+      positionPortal(container);
+      container.classList.add("lp-auth__portal--open");
+
+      const portalLink = container.querySelector(".lp-auth__portal-link");
+      portalLink.href = `${AUTH_BASE}/auth/google`;
+      const closeOnOutside = (event) => {
+        if (!container.contains(event.target)) {
+          closeSignInDropdown();
+        }
+      };
+      const closeOnEscape = (event) => {
+        if (event.key === "Escape") {
+          closeSignInDropdown();
+        }
+      };
+      const reposition = () => {
+        if (portalState.container) {
+          positionPortal(portalState.container);
+        }
+      };
+
+      portalLink.addEventListener("click", (event) => {
+        event.preventDefault();
+        openGoogleAuthPopup();
+      });
+      parentDocument.addEventListener("mousedown", closeOnOutside);
+      window.parent.addEventListener("scroll", reposition, true);
+      window.addEventListener("resize", reposition);
+      window.parent.addEventListener("resize", reposition);
+      parentDocument.addEventListener("keydown", closeOnEscape);
+
+      portalState.container = container;
+      portalState.cleanup.push(() => parentDocument.removeEventListener("mousedown", closeOnOutside));
+      portalState.cleanup.push(() => window.parent.removeEventListener("scroll", reposition, true));
+      portalState.cleanup.push(() => window.removeEventListener("resize", reposition));
+      portalState.cleanup.push(() => window.parent.removeEventListener("resize", reposition));
+      portalState.cleanup.push(() => parentDocument.removeEventListener("keydown", closeOnEscape));
+    }
+
+    function openSignInDropdown() {
+      signInDropdown.classList.add("lp-auth__dropdown--open");
+      signInDropdown.setAttribute("aria-hidden", "false");
+      signInDropdown.removeAttribute("inert");
+      signInLabel.setAttribute("aria-expanded", "true");
+      if (canUseParentDocument()) {
+        moveFocusOutOfSignInDropdown();
+        signInDropdown.classList.remove("lp-auth__dropdown--open");
+        signInDropdown.setAttribute("aria-hidden", "true");
+        signInDropdown.setAttribute("inert", "");
+        openPortalDropdown();
+      }
+    }
+
+    function toggleSignInDropdown() {
+      if (portalState.container || signInDropdown.classList.contains("lp-auth__dropdown--open")) {
+        closeSignInDropdown();
+      } else {
+        openSignInDropdown();
+      }
+    }
+
+    const onDocumentClick = (event) => {
+      if (!signInDropdown.contains(event.target) && !signInLabel.contains(event.target)) {
+        closeSignInDropdown();
+      }
+    };
+    const onDocumentKeydown = (event) => {
+      if (event.key === "Escape") {
+        closeSignInDropdown();
+      }
+    };
+    const onMessage = (event) => {
+      if (event.origin !== new URL(AUTH_BASE).origin) return;
+      if (event.data && event.data.type === "google-auth-success") {
+        onAuthSuccess();
+      }
+    };
+    const onGoogleAuthClick = (event) => {
+      event.preventDefault();
+      openGoogleAuthPopup();
+    };
+
+    signInLabel.addEventListener("click", toggleSignInDropdown);
+    googleAuthLink.addEventListener("click", onGoogleAuthClick);
+    document.addEventListener("click", onDocumentClick);
+    document.addEventListener("keydown", onDocumentKeydown);
+    window.addEventListener("message", onMessage);
+
+    return () => {
+      signInLabel.removeEventListener("click", toggleSignInDropdown);
+      googleAuthLink.removeEventListener("click", onGoogleAuthClick);
+      document.removeEventListener("click", onDocumentClick);
+      document.removeEventListener("keydown", onDocumentKeydown);
+      window.removeEventListener("message", onMessage);
+      teardownPortal();
+    };
+  }
+
+  function renderNoProfileSignInCard(container) {
+    cleanupNoProfileAuth();
+
+    const infoCard = document.createElement("div");
+    infoCard.className = "player-card";
+
+    const message = document.createElement("div");
+    message.className = "noprofile-auth-message";
+    message.textContent = "To continue, please sign in to the site.";
+    infoCard.appendChild(message);
+
+    const authWrap = document.createElement("div");
+    authWrap.className = "noprofile-auth";
+    authWrap.innerHTML = `
+      <div class="lp-auth">
+        <div class="lp-auth__bar">
+          <button class="lp-auth__button" type="button" aria-expanded="false" aria-controls="pcNoProfileAuthDropdown" data-pc-auth-sign-in>Sign in</button>
+          <div id="pcNoProfileAuthDropdown" class="lp-auth__dropdown" aria-hidden="true" inert data-pc-auth-dropdown>
+            <div class="lp-auth__row">
+              <a class="lp-auth__google-btn" href="/auth/google" data-pc-auth-google>
+                <img class="lp-auth__google-icon" alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />
+                Sign in with Google
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    infoCard.appendChild(authWrap);
+
+    container.innerHTML = "";
+    container.appendChild(infoCard);
+
+    noProfileAuthCleanup = setupNoProfileAuth(authWrap, () => {
+      renderNoProfileRoute(container);
+    });
+  }
+
+  async function renderNoProfileRoute(container) {
+    cleanupNoProfileAuth();
+    container.textContent = "Loading...";
+
+    const session = await fetchCurrentSession();
+    if (session.authenticated && session.user) {
+      const linkedProfileUrl = getLinkedProfileUrl(session.user);
+      if (linkedProfileUrl) {
+        window.location.href = linkedProfileUrl;
+        return;
+      }
+      renderNoProfileInfoCard(container, session.user);
+      return;
+    }
+
+    renderNoProfileSignInCard(container);
+  }
+
   async function initPlayerCard() {
     const playerId = getPlayerIdFromUrl();
     const editMode = isEditModeFromUrl();
@@ -2161,90 +2734,7 @@
       return;
     }
     if (playerId === "noprofile") {
-      const infoCard = document.createElement("div");
-      infoCard.className = "player-card";
-
-      const warning = document.createElement("div");
-      warning.className = "player-stats-line noprofile-warning";
-      warning.textContent = "The email address you used to log in to GG is not linked to a BGA account.";
-      infoCard.appendChild(warning);
-
-      const gap1 = document.createElement("div");
-      gap1.className = "noprofile-gap";
-      infoCard.appendChild(gap1);
-
-      const intro = document.createElement("div");
-      intro.className = "player-stats-line";
-      intro.textContent = "What to do:";
-      infoCard.appendChild(intro);
-
-      const gapIntroToStep1 = document.createElement("div");
-      gapIntroToStep1.className = "noprofile-gap";
-      infoCard.appendChild(gapIntroToStep1);
-
-      const step1 = document.createElement("div");
-      step1.className = "player-stats-line compact";
-      step1.textContent = "1. Contact your association captain.";
-      infoCard.appendChild(step1);
-
-      const step1Hint = document.createElement("div");
-      step1Hint.className = "player-stats-line compact";
-      step1Hint.innerHTML = 'If you don\'t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=1" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/players/?captains=1</a>';
-      infoCard.appendChild(step1Hint);
-
-      const gapStep1ToStep2 = document.createElement("div");
-      gapStep1ToStep2.className = "noprofile-gap";
-      infoCard.appendChild(gapStep1ToStep2);
-
-      const step2 = document.createElement("div");
-      step2.className = "player-stats-line compact";
-      step2.textContent = "2. Send your captain the email you used to log in to carcassonne.gg.";
-      infoCard.appendChild(step2);
-
-      const gapStep2ToStep3 = document.createElement("div");
-      gapStep2ToStep3.className = "noprofile-gap";
-      infoCard.appendChild(gapStep2ToStep3);
-
-      const step3 = document.createElement("div");
-      step3.className = "player-stats-line compact";
-      step3.textContent = "3. Your captain will:";
-      infoCard.appendChild(step3);
-
-      const step3a = document.createElement("div");
-      step3a.className = "player-stats-line compact";
-      step3a.innerHTML = '• Open User Menu → Player Hub → Players <a href="https://carcassonne.gg/player-hub/players/" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/player-hub/players/</a>';
-      infoCard.appendChild(step3a);
-
-      const step3b = document.createElement("div");
-      step3b.className = "player-stats-line compact";
-      step3b.textContent = "• Edit your profile (or create one if needed)";
-      infoCard.appendChild(step3b);
-
-      const step3c = document.createElement("div");
-      step3c.className = "player-stats-line compact";
-      step3c.textContent = "• Add your email to Login Email";
-      infoCard.appendChild(step3c);
-
-      const gapStep3ToOutro = document.createElement("div");
-      gapStep3ToOutro.className = "noprofile-gap";
-      infoCard.appendChild(gapStep3ToOutro);
-
-      const outro = document.createElement("div");
-      outro.className = "player-stats-line compact";
-      outro.textContent = "After that, you will get access to edit your profile.";
-      infoCard.appendChild(outro);
-
-      const contactGap = document.createElement("div");
-      contactGap.className = "noprofile-gap";
-      infoCard.appendChild(contactGap);
-
-      const contact = document.createElement("div");
-      contact.className = "player-stats-line compact";
-      contact.textContent = "If you cannot find a captain, contact us at carcassonne.gg@gmail.com.";
-      infoCard.appendChild(contact);
-
-      container.innerHTML = "";
-      container.appendChild(infoCard);
+      await renderNoProfileRoute(container);
       return;
     }
 

@@ -305,6 +305,8 @@
 
   function canSeeTournament(tournament, authState = {}) {
     if (isTournamentHiddenInPlayerHub(tournament)) return false;
+    if (!authState.isAuthenticatedUser) return false;
+    if (!authState.hasLinkedBgaId) return false;
     const accessType = getTournamentSubtype(tournament);
     if (authState.isAdminUser) return true;
     if (accessType === "Friendly") return !!authState.isCaptainUser;
@@ -521,8 +523,20 @@
       tournaments = [];
     }
 
+    if (!isAuthenticatedUser || !hasLinkedBgaId) {
+      renderDesktop([]);
+      renderMobile([]);
+      return;
+    }
+
     const items = tournaments
-      .filter((tournament) => canSeeTournament(tournament, { currentUserAuthId, isCaptainUser, isAdminUser }))
+      .filter((tournament) => canSeeTournament(tournament, {
+        currentUserAuthId,
+        isAuthenticatedUser,
+        hasLinkedBgaId,
+        isCaptainUser,
+        isAdminUser,
+      }))
       .map((tournament) => ({
       type: "tournament",
       key: `tournament:${String(tournament?.id || "").trim()}`,
@@ -551,6 +565,7 @@
 
   window.addEventListener("popstate", init);
   window.addEventListener("captain-url-change", init);
+  window.addEventListener("gg-auth-state-change", init);
 
   init();
 })();
