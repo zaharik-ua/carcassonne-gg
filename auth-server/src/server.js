@@ -217,6 +217,7 @@ const ICON_AUDIT_FIELDS = [
   "icon_link",
   "category",
   "association_id",
+  "local_website_id",
   "streamer_id",
 ];
 const MATCH_AUDIT_FIELDS = [
@@ -472,16 +473,9 @@ async function resolveAssociationId(value) {
   return String(row?.id || "").trim() || null;
 }
 
-function normalizeLocalWebsiteUrl(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    return url.href;
-  } catch (_error) {
-    return null;
-  }
+function normalizeLocalWebsiteName(value) {
+  const raw = String(value || "").trim().replace(/\s+/g, " ");
+  return raw || null;
 }
 
 async function loadLocalWebsiteById(localWebsiteId) {
@@ -491,7 +485,8 @@ async function loadLocalWebsiteById(localWebsiteId) {
     `
       SELECT
         lw.id,
-        lw.url,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS name,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS url,
         lw.country_id,
         lw.created_by,
         lw.updated_by,
@@ -534,7 +529,8 @@ async function loadNewsEditorById(newsEditorId) {
         a.name AS country_name,
         a.flag AS country_flag,
         COALESCE(t.short_title, t.name) AS tournament_name,
-        lw.url AS local_website_url,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_name,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_url,
         lw.country_id AS local_website_country_id,
         lwa.name AS local_website_country_name,
         lwa.flag AS local_website_country_flag,
@@ -1093,7 +1089,8 @@ async function loadNewsById(newsId) {
         a.flag AS association_flag,
         COALESCE(t.short_title, t.name) AS tournament_name,
         t.logo AS tournament_logo,
-        lw.url AS local_website_url,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_name,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_url,
         lw.country_id AS local_website_country_id,
         lwa.name AS local_website_country_name,
         lwa.flag AS local_website_country_flag,
@@ -1164,6 +1161,7 @@ async function loadIconById(iconId) {
         i.icon_link,
         i.category,
         i.association_id,
+        i.local_website_id,
         i.streamer_id,
         i.created_by,
         i.updated_by,
@@ -1171,11 +1169,19 @@ async function loadIconById(iconId) {
         i.updated_at,
         a.name AS association_name,
         a.flag AS association_flag,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_name,
+        lw.country_id AS local_website_country_id,
+        lwa.name AS local_website_country_name,
+        lwa.flag AS local_website_country_flag,
         s.name AS streamer_name,
         s.avatar AS streamer_avatar
       FROM icons i
       LEFT JOIN associations a
         ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(i.association_id, '')))
+      LEFT JOIN local_websites lw
+        ON lw.id = i.local_website_id
+      LEFT JOIN associations lwa
+        ON upper(trim(COALESCE(lwa.code, ''))) = upper(trim(COALESCE(lw.country_id, '')))
       LEFT JOIN streamers s
         ON s.id = i.streamer_id
        AND s.deleted_at IS NULL
@@ -1231,21 +1237,24 @@ async function countCategoryReferences(categoryName) {
 
 async function countLocalWebsiteReferences(localWebsiteId) {
   const normalizedId = normalizePositiveInteger(localWebsiteId);
-  if (!normalizedId) return { news: 0, news_editors: 0, total: 0 };
+  if (!normalizedId) return { icons: 0, news: 0, news_editors: 0, total: 0 };
   const row = await dbGetAsync(
     `
       SELECT
+        (SELECT COUNT(*) FROM icons WHERE local_website_id = ?) AS icons,
         (SELECT COUNT(*) FROM news WHERE local_website_id = ? AND deleted_at IS NULL) AS news,
         (SELECT COUNT(*) FROM news_editors WHERE local_website_id = ?) AS news_editors
     `,
-    [normalizedId, normalizedId]
+    [normalizedId, normalizedId, normalizedId]
   );
+  const icons = Number(row?.icons) || 0;
   const news = Number(row?.news) || 0;
   const newsEditors = Number(row?.news_editors) || 0;
   return {
+    icons,
     news,
     news_editors: newsEditors,
-    total: news + newsEditors,
+    total: icons + news + newsEditors,
   };
 }
 
@@ -3840,7 +3849,8 @@ function ensureLocalWebsitesSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS local_websites (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      url TEXT NOT NULL,
+      name TEXT NOT NULL,
+      url TEXT,
       country_id TEXT NOT NULL,
       created_by TEXT,
       updated_by TEXT,
@@ -3861,6 +3871,7 @@ function ensureLocalWebsitesSchema() {
       if (!Array.isArray(columns) || columns.length === 0) return;
 
       db.serialize(() => {
+        addColumnIfMissing(columns, "local_websites", "name", "TEXT");
         addColumnIfMissing(columns, "local_websites", "url", "TEXT");
         addColumnIfMissing(columns, "local_websites", "country_id", "TEXT");
         addColumnIfMissing(columns, "local_websites", "created_by", "TEXT");
@@ -3872,7 +3883,8 @@ function ensureLocalWebsitesSchema() {
           `
             UPDATE local_websites
             SET
-              url = NULLIF(trim(url), ''),
+              name = COALESCE(NULLIF(trim(name), ''), NULLIF(trim(url), '')),
+              url = COALESCE(NULLIF(trim(url), ''), NULLIF(trim(name), '')),
               country_id = upper(NULLIF(trim(country_id), ''))
           `,
           (normalizeErr) => {
@@ -3882,11 +3894,16 @@ function ensureLocalWebsitesSchema() {
           }
         );
 
+        db.run("DROP INDEX IF EXISTS idx_local_websites_url_unique", (dropErr) => {
+          if (dropErr) {
+            console.error("Failed to drop old unique index for local_websites.url", dropErr);
+          }
+        });
         db.run(
-          "CREATE UNIQUE INDEX IF NOT EXISTS idx_local_websites_url_unique ON local_websites(lower(trim(url)))",
+          "CREATE UNIQUE INDEX IF NOT EXISTS idx_local_websites_name_unique ON local_websites(lower(trim(name)))",
           (indexErr) => {
             if (indexErr) {
-              console.error("Failed to ensure unique index for local_websites.url", indexErr);
+              console.error("Failed to ensure unique index for local_websites.name", indexErr);
             }
           }
         );
@@ -4165,6 +4182,7 @@ function ensureIconsSchema() {
       icon_link TEXT NOT NULL,
       category TEXT,
       association_id TEXT,
+      local_website_id INTEGER,
       streamer_id INTEGER,
       created_by TEXT,
       updated_by TEXT,
@@ -4187,6 +4205,7 @@ function ensureIconsSchema() {
       addColumnIfMissing(columns, "icons", "icon_link", "TEXT");
       addColumnIfMissing(columns, "icons", "category", "TEXT");
       addColumnIfMissing(columns, "icons", "association_id", "TEXT");
+      addColumnIfMissing(columns, "icons", "local_website_id", "INTEGER");
       addColumnIfMissing(columns, "icons", "streamer_id", "INTEGER");
       addColumnIfMissing(columns, "icons", "created_by", "TEXT");
       addColumnIfMissing(columns, "icons", "updated_by", "TEXT");
@@ -4200,6 +4219,12 @@ function ensureIconsSchema() {
             category = NULLIF(trim(category), ''),
             association_id = CASE
               WHEN trim(COALESCE(category, '')) = 'Local' THEN NULLIF(trim(association_id), '')
+              ELSE NULL
+            END,
+            local_website_id = CASE
+              WHEN lower(trim(COALESCE(category, ''))) = 'local website'
+                AND local_website_id IS NOT NULL
+                AND trim(CAST(local_website_id AS TEXT)) <> '' THEN local_website_id
               ELSE NULL
             END,
             streamer_id = CASE
@@ -4229,6 +4254,14 @@ function ensureIconsSchema() {
         (indexErr) => {
           if (indexErr) {
             console.error("Failed to ensure index for icons.association_id", indexErr);
+          }
+        }
+      );
+      db.run(
+        "CREATE INDEX IF NOT EXISTS idx_icons_local_website_id ON icons(local_website_id)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure index for icons.local_website_id", indexErr);
           }
         }
       );
@@ -6063,7 +6096,8 @@ app.get("/local-websites", (_req, res, next) => {
     `
       SELECT
         lw.id,
-        lw.url,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS name,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS url,
         lw.country_id,
         lw.created_by,
         lw.updated_by,
@@ -6074,8 +6108,8 @@ app.get("/local-websites", (_req, res, next) => {
       FROM local_websites lw
       LEFT JOIN associations a
         ON upper(trim(COALESCE(a.code, ''))) = upper(trim(COALESCE(lw.country_id, '')))
-      WHERE trim(COALESCE(lw.url, '')) <> ''
-      ORDER BY lower(COALESCE(a.name, lw.country_id, '')) ASC, lower(lw.url) ASC, lw.id ASC
+      WHERE trim(COALESCE(lw.name, lw.url, '')) <> ''
+      ORDER BY lower(COALESCE(a.name, lw.country_id, '')) ASC, lower(COALESCE(lw.name, lw.url, '')) ASC, lw.id ASC
     `,
     (err, rows) => {
       if (err) return next(err);
@@ -6087,11 +6121,11 @@ app.get("/local-websites", (_req, res, next) => {
 app.post("/local-websites", requireAdmin, async (req, res) => {
   try {
     const actorPlayerId = String(req.user?.player_id || "").trim() || null;
-    const url = normalizeLocalWebsiteUrl(req.body?.url);
+    const name = normalizeLocalWebsiteName(req.body?.name ?? req.body?.url);
     const countryId = await resolveAssociationId(req.body?.country_id ?? req.body?.countryId ?? req.body?.country);
 
-    if (!url) {
-      return res.status(400).json({ ok: false, message: "url must be a valid http(s) URL" });
+    if (!name) {
+      return res.status(400).json({ ok: false, message: "name is required" });
     }
     if (!countryId) {
       return res.status(400).json({ ok: false, message: "country_id must reference an existing association" });
@@ -6099,16 +6133,16 @@ app.post("/local-websites", requireAdmin, async (req, res) => {
 
     const insertResult = await dbRunAsync(
       `
-        INSERT INTO local_websites (url, country_id, created_by, updated_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO local_websites (name, url, country_id, created_by, updated_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
-      [url, countryId, actorPlayerId, actorPlayerId]
+      [name, name, countryId, actorPlayerId, actorPlayerId]
     );
     const createdRow = await loadLocalWebsiteById(insertResult?.lastID);
     return res.status(201).json({ ok: true, local_website: createdRow || null });
   } catch (error) {
     if (String(error?.message || "").includes("UNIQUE")) {
-      return res.status(409).json({ ok: false, message: "Local website with this URL already exists" });
+      return res.status(409).json({ ok: false, message: "Local website with this name already exists" });
     }
     console.error("Failed to create local website", error);
     return res.status(500).json({ ok: false, message: "Failed to create local website" });
@@ -6120,7 +6154,7 @@ app.patch("/local-websites/:id", requireAdmin, async (req, res) => {
     const localWebsiteId = normalizePositiveInteger(req.params.id);
     const payloadId = normalizePositiveInteger(req.body?.id);
     const actorPlayerId = String(req.user?.player_id || "").trim() || null;
-    const url = normalizeLocalWebsiteUrl(req.body?.url);
+    const name = normalizeLocalWebsiteName(req.body?.name ?? req.body?.url);
     const countryId = await resolveAssociationId(req.body?.country_id ?? req.body?.countryId ?? req.body?.country);
 
     if (!localWebsiteId) {
@@ -6129,8 +6163,8 @@ app.patch("/local-websites/:id", requireAdmin, async (req, res) => {
     if (payloadId && payloadId !== localWebsiteId) {
       return res.status(400).json({ ok: false, message: "Local website id cannot be changed" });
     }
-    if (!url) {
-      return res.status(400).json({ ok: false, message: "url must be a valid http(s) URL" });
+    if (!name) {
+      return res.status(400).json({ ok: false, message: "name is required" });
     }
     if (!countryId) {
       return res.status(400).json({ ok: false, message: "country_id must reference an existing association" });
@@ -6145,19 +6179,20 @@ app.patch("/local-websites/:id", requireAdmin, async (req, res) => {
       `
         UPDATE local_websites
         SET
+          name = ?,
           url = ?,
           country_id = ?,
           updated_by = ?,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `,
-      [url, countryId, actorPlayerId, localWebsiteId]
+      [name, name, countryId, actorPlayerId, localWebsiteId]
     );
     const updatedRow = await loadLocalWebsiteById(localWebsiteId);
     return res.json({ ok: true, local_website: updatedRow || null });
   } catch (error) {
     if (String(error?.message || "").includes("UNIQUE")) {
-      return res.status(409).json({ ok: false, message: "Local website with this URL already exists" });
+      return res.status(409).json({ ok: false, message: "Local website with this name already exists" });
     }
     console.error("Failed to update local website", error);
     return res.status(500).json({ ok: false, message: "Failed to update local website" });
@@ -7290,6 +7325,7 @@ app.get("/icons", (req, res, next) => {
         i.icon_link,
         i.category,
         i.association_id,
+        i.local_website_id,
         i.streamer_id,
         i.created_by,
         i.updated_by,
@@ -7297,11 +7333,19 @@ app.get("/icons", (req, res, next) => {
         i.updated_at,
         a.name AS association_name,
         a.flag AS association_flag,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_name,
+        lw.country_id AS local_website_country_id,
+        lwa.name AS local_website_country_name,
+        lwa.flag AS local_website_country_flag,
         s.name AS streamer_name,
         s.avatar AS streamer_avatar
       FROM icons i
       LEFT JOIN associations a
         ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(i.association_id, '')))
+      LEFT JOIN local_websites lw
+        ON lw.id = i.local_website_id
+      LEFT JOIN associations lwa
+        ON upper(trim(COALESCE(lwa.code, ''))) = upper(trim(COALESCE(lw.country_id, '')))
       LEFT JOIN streamers s
         ON s.id = i.streamer_id
        AND s.deleted_at IS NULL
@@ -7320,6 +7364,9 @@ app.post("/icons", requireAdmin, async (req, res) => {
     const iconLink = normalizeNullableText(req.body?.icon_link ?? req.body?.iconLink);
     const category = await resolveIconCategory(req.body?.category);
     const rawAssociationId = normalizeNullableText(req.body?.association_id ?? req.body?.associationId);
+    const localWebsiteId = category === "Local Website"
+      ? normalizePositiveInteger(req.body?.local_website_id ?? req.body?.localWebsiteId)
+      : null;
     const streamerId = normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId);
     const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
 
@@ -7340,6 +7387,16 @@ app.post("/icons", requireAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
     }
 
+    if (category === "Local Website") {
+      if (!localWebsiteId) {
+        return res.status(400).json({ ok: false, message: "local_website_id is required for Local Website icon" });
+      }
+      const localWebsiteRow = await loadLocalWebsiteById(localWebsiteId);
+      if (!localWebsiteRow) {
+        return res.status(400).json({ ok: false, message: "local_website_id must reference an existing local website" });
+      }
+    }
+
     const normalizedStreamerId = category === "YouTube" ? streamerId : null;
     if (normalizedStreamerId) {
       const streamerRow = await dbGetAsync("SELECT id FROM streamers WHERE id = ? AND deleted_at IS NULL LIMIT 1", [streamerId]);
@@ -7355,15 +7412,16 @@ app.post("/icons", requireAdmin, async (req, res) => {
           icon_link,
           category,
           association_id,
+          local_website_id,
           streamer_id,
           created_by,
           updated_by,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
-      [name, iconLink, category, associationId, normalizedStreamerId || null, actorPlayerId, actorPlayerId]
+      [name, iconLink, category, associationId, localWebsiteId, normalizedStreamerId || null, actorPlayerId, actorPlayerId]
     );
     const createdRow = await loadIconById(insertResult?.lastID);
     const auditActor = getAuditActor(req.user);
@@ -7392,6 +7450,9 @@ app.patch("/icons/:id", requireAdmin, async (req, res) => {
     const iconLink = normalizeNullableText(req.body?.icon_link ?? req.body?.iconLink);
     const category = await resolveIconCategory(req.body?.category);
     const rawAssociationId = normalizeNullableText(req.body?.association_id ?? req.body?.associationId);
+    const localWebsiteId = category === "Local Website"
+      ? normalizePositiveInteger(req.body?.local_website_id ?? req.body?.localWebsiteId)
+      : null;
     const streamerId = normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId);
     const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
 
@@ -7423,6 +7484,16 @@ app.patch("/icons/:id", requireAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, message: "association_id must reference an existing association" });
     }
 
+    if (category === "Local Website") {
+      if (!localWebsiteId) {
+        return res.status(400).json({ ok: false, message: "local_website_id is required for Local Website icon" });
+      }
+      const localWebsiteRow = await loadLocalWebsiteById(localWebsiteId);
+      if (!localWebsiteRow) {
+        return res.status(400).json({ ok: false, message: "local_website_id must reference an existing local website" });
+      }
+    }
+
     const normalizedStreamerId = category === "YouTube" ? streamerId : null;
     if (normalizedStreamerId) {
       const streamerRow = await dbGetAsync("SELECT id FROM streamers WHERE id = ? AND deleted_at IS NULL LIMIT 1", [streamerId]);
@@ -7439,12 +7510,13 @@ app.patch("/icons/:id", requireAdmin, async (req, res) => {
           icon_link = ?,
           category = ?,
           association_id = ?,
+          local_website_id = ?,
           streamer_id = ?,
           updated_by = ?,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `,
-      [name, iconLink, category, associationId, normalizedStreamerId || null, actorPlayerId, iconId]
+      [name, iconLink, category, associationId, localWebsiteId, normalizedStreamerId || null, actorPlayerId, iconId]
     );
     const updatedRow = await loadIconById(iconId);
     const changes = buildAuditChanges(beforeRow, updatedRow, ICON_AUDIT_FIELDS);
@@ -7541,7 +7613,8 @@ app.get("/news-editors", (req, res, next) => {
         a.name AS country_name,
         a.flag AS country_flag,
         COALESCE(t.short_title, t.name) AS tournament_name,
-        lw.url AS local_website_url,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_name,
+        COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_url,
         lw.country_id AS local_website_country_id,
         lwa.name AS local_website_country_name,
         lwa.flag AS local_website_country_flag,
@@ -7568,7 +7641,7 @@ app.get("/news-editors", (req, res, next) => {
         lower(COALESCE(ne.access_type, '')) ASC,
         lower(COALESCE(a.name, ne.country_id, '')) ASC,
         lower(COALESCE(t.short_title, t.name, ne.tournament_id, '')) ASC,
-        lower(COALESCE(lw.url, CAST(ne.local_website_id AS TEXT), '')) ASC,
+        lower(COALESCE(lw.name, lw.url, CAST(ne.local_website_id AS TEXT), '')) ASC,
         lower(COALESCE(s.name, CAST(ne.streamer_id AS TEXT), '')) ASC,
         lower(COALESCE(p.bga_nickname, p.name, ne.profile_id, '')) ASC,
         ne.id ASC
@@ -7609,7 +7682,8 @@ app.get("/public/news", async (_req, res) => {
           n.created_at,
           n.updated_at,
           n.deleted_at,
-          lw.url AS local_website_url,
+          COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_name,
+          COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_url,
           lw.country_id AS local_website_country_id,
           lwa.name AS local_website_country_name,
           lwa.flag AS local_website_country_flag,
@@ -7626,7 +7700,6 @@ app.get("/public/news", async (_req, res) => {
          AND s.deleted_at IS NULL
         WHERE trim(COALESCE(n.title, '')) <> ''
           AND lower(trim(COALESCE(n.status, ''))) = 'published'
-          AND lower(trim(COALESCE(n.category, ''))) <> 'local website'
           AND n.deleted_at IS NULL
         ORDER BY
           CASE

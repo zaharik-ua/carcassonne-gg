@@ -465,6 +465,10 @@
   let hasNewsDataLoaded = false;
   const imageVariantsCache = new Map();
 
+  function isLocalWebsiteNews(newsItem) {
+    return String(newsItem?.category || "").trim().toLowerCase() === "local website";
+  }
+
   const closeImageModal = () => {
     if (!imageModal) return;
     imageModal.classList.remove("gg-rp-news-is-open");
@@ -1265,7 +1269,9 @@
           throw newsResult.reason || new Error("News request failed");
         }
 
-        allNewsItems = Array.isArray(newsResult.value.news) ? [...newsResult.value.news] : [];
+        allNewsItems = Array.isArray(newsResult.value.news)
+          ? newsResult.value.news.filter(newsItem => !isLocalWebsiteNews(newsItem))
+          : [];
         allNewsItems.sort((a, b) => {
           const byTime = parseDateTime(getNewsTimestampValue(b)) - parseDateTime(getNewsTimestampValue(a));
           return byTime || Number(b?.id || 0) - Number(a?.id || 0);

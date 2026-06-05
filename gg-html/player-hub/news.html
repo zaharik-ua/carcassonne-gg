@@ -3425,7 +3425,7 @@
       if (tournamentMeta) addChip(tournamentMeta.short_title || tournamentMeta.name || tournamentId, tournamentMeta.logo || "");
       const localWebsiteId = String(item?.local_website_id || "").trim();
       const localWebsiteMeta = localWebsitesById.get(localWebsiteId) || null;
-      if (localWebsiteMeta) addChip(localWebsiteMeta.url || `Website #${localWebsiteId}`, localWebsiteMeta.country_flag || "");
+      if (localWebsiteMeta) addChip(localWebsiteMeta.name || `Website #${localWebsiteId}`, localWebsiteMeta.country_flag || "");
       if (item?.streamer_name || item?.streamer_id) {
         addChip(String(item?.streamer_name || item?.streamer_id).trim(), toApiAbsoluteUrl(item?.streamer_avatar || ""));
       }
@@ -3965,7 +3965,7 @@
       const localWebsiteRows = (Array.isArray(localWebsitesList) ? localWebsitesList : [])
         .map((item) => ({
           value: String(item?.id || "").trim(),
-          label: String(item?.url || (item?.id ? `Website #${item.id}` : "")).trim(),
+          label: String(item?.name || item?.url || (item?.id ? `Website #${item.id}` : "")).trim(),
           logo: String(item?.country_flag || "").trim(),
           countryId: normalizeCode(item?.country_id ?? item?.countryId),
           countryName: String(item?.country_name || item?.countryName || item?.country_id || "").trim(),
@@ -4018,15 +4018,20 @@
         logo: toApiAbsoluteUrl(item?.icon_link || ""),
         category: normalizeCategoryKey(item?.category || item?.category_id || item?.categoryId),
         associationId: normalizeCode(item?.association_id ?? item?.associationId),
+        localWebsiteId: String(item?.local_website_id ?? item?.localWebsiteId ?? "").trim(),
       }))
       .filter((item) => item.value && item.label);
-    const getIconOptionsForCategory = (categoryName, associationId = "") => {
+    const getIconOptionsForCategory = (categoryName, associationId = "", localWebsiteId = "") => {
       const categoryKey = normalizeCategoryKey(categoryName);
       const selectedAssociationId = normalizeCode(associationId);
+      const selectedLocalWebsiteId = String(localWebsiteId || "").trim();
       const rows = allIconOptions.filter((item) => {
         if (!categoryKey || item.category !== categoryKey) return false;
         if (categoryKey === "local") {
           return !!selectedAssociationId && item.associationId === selectedAssociationId;
+        }
+        if (categoryKey === "local website") {
+          return !!selectedLocalWebsiteId && item.localWebsiteId === selectedLocalWebsiteId;
         }
         return true;
       });
@@ -4168,6 +4173,7 @@
         {
           placeholderLabel: "Select website",
           searchable: false,
+          onChange: () => updateConditionalNewsFields(),
         }
       );
       const localWebsiteRow = addRow("Website", localWebsiteInput.root);
@@ -4248,7 +4254,7 @@
       }
     );
     let mediaTypeRow = null;
-    const initialIconOptions = getIconOptionsForCategory(categoryInput.getValue(), associationInput.getValue());
+    const initialIconOptions = getIconOptionsForCategory(categoryInput.getValue(), associationInput.getValue(), localWebsiteInput.getValue());
 
     const iconInput = createSingleSelect(
       getIconValueFromImageUrl(currentImageUrl, initialIconOptions),
@@ -4472,9 +4478,13 @@
       const selectedCategory = categoryInput.getValue() || "";
       const categoryKey = normalizeCategoryKey(selectedCategory);
       const selectedAssociationId = associationInput.getValue() || "";
+      const selectedLocalWebsiteId = localWebsiteInput.getValue() || "";
       const needsAssociation = categoryKey === "local";
-      const isMissingIconContext = !categoryKey || (needsAssociation && !selectedAssociationId);
-      const nextIconOptions = getIconOptionsForCategory(selectedCategory, selectedAssociationId);
+      const needsLocalWebsite = categoryKey === "local website";
+      const isMissingIconContext = !categoryKey
+        || (needsAssociation && !selectedAssociationId)
+        || (needsLocalWebsite && !selectedLocalWebsiteId);
+      const nextIconOptions = getIconOptionsForCategory(selectedCategory, selectedAssociationId, selectedLocalWebsiteId);
       const availableIcons = nextIconOptions.filter((item) => String(item?.value || "").trim());
       const currentIconValue = iconInput.getValue() || getIconValueFromImageUrl(currentImageUrl, nextIconOptions);
       let nextIconValue = nextIconOptions.some((item) => item.value && item.value === currentIconValue)
@@ -4937,7 +4947,7 @@
           if (!websiteId) return;
           localWebsitesById.set(websiteId, {
             id: websiteId,
-            url: String(website?.url || `Website #${websiteId}`).trim(),
+            name: String(website?.name || website?.url || `Website #${websiteId}`).trim(),
             country_id: normalizeCode(website?.country_id),
             country_name: String(website?.country_name || website?.country_id || "").trim(),
             country_flag: String(website?.country_flag || "").trim(),

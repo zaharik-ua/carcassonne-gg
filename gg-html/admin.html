@@ -2587,6 +2587,13 @@
           })
         );
       }
+      if (!Array.isArray(state.localWebsites) || !state.localWebsites.length) {
+        requests.push(
+          apiJson(LOCAL_WEBSITES_URL, { method: "GET" }).then((data) => {
+            state.localWebsites = Array.isArray(data?.local_websites) ? data.local_websites : [];
+          })
+        );
+      }
       if (!state.categoriesLoaded) {
         requests.push(ensureCategoriesLoaded());
       }
@@ -2623,6 +2630,24 @@
       ),
       false
     );
+    const localWebsiteField = createSelectOptionsRow(
+      "local_website_id",
+      String(item?.local_website_id || ""),
+      [{ value: "", label: "Select website..." }].concat(
+        state.localWebsites
+          .slice()
+          .sort((left, right) => String(left?.name || left?.url || left?.id || "").localeCompare(String(right?.name || right?.url || right?.id || "")))
+          .map((website) => ({
+            value: String(website?.id || ""),
+            label: [
+              String(website?.id || "").trim(),
+              String(website?.name || website?.url || "").trim(),
+              String(website?.country_name || website?.country_id || "").trim(),
+            ].filter(Boolean).join(" • "),
+          }))
+      ),
+      false
+    );
     const streamerField = createSelectOptionsRow(
       "streamer_id",
       String(item?.streamer_id || ""),
@@ -2643,17 +2668,22 @@
     form.appendChild(iconLinkField.row);
     form.appendChild(categoryField.row);
     form.appendChild(associationField.row);
+    form.appendChild(localWebsiteField.row);
     form.appendChild(streamerField.row);
 
     const updateCategoryVisibility = () => {
       const category = String(categoryField.select.value || "").trim();
       const isLocal = category === "Local";
+      const isLocalWebsite = category === "Local Website";
       const isYouTube = category === "YouTube";
       associationField.row.classList.toggle("hidden", !isLocal);
+      localWebsiteField.row.classList.toggle("hidden", !isLocalWebsite);
       streamerField.row.classList.toggle("hidden", !isYouTube);
       associationField.select.disabled = !isLocal;
+      localWebsiteField.select.disabled = !isLocalWebsite;
       streamerField.select.disabled = !isYouTube;
       if (!isLocal) associationField.select.value = "";
+      if (!isLocalWebsite) localWebsiteField.select.value = "";
       if (!isYouTube) streamerField.select.value = "";
     };
     categoryField.select.addEventListener("change", updateCategoryVisibility);
@@ -2713,6 +2743,7 @@
         icon_link: String(iconLinkField.input.value || "").trim(),
         category: String(categoryField.select.value || "").trim(),
         association_id: String(associationField.select.value || "").trim(),
+        local_website_id: Number.parseInt(String(localWebsiteField.select.value || "").trim(), 10),
         streamer_id: Number.parseInt(String(streamerField.select.value || "").trim(), 10),
       };
 
@@ -2730,6 +2761,14 @@
       }
       if (payload.category !== "Local") {
         payload.association_id = "";
+      }
+      if (payload.category === "Local Website") {
+        if (!Number.isInteger(payload.local_website_id) || payload.local_website_id <= 0) {
+          setStatus("local_website_id is required for Local Website icon.", true);
+          return;
+        }
+      } else {
+        payload.local_website_id = null;
       }
       if (payload.category !== "YouTube") {
         payload.streamer_id = null;
@@ -2907,7 +2946,7 @@
     form.className = "cp-edit-form";
 
     const idField = createTextRow("id", item?.id || "", { readOnly: true });
-    const urlField = createTextRow("url", item?.url || "");
+    const nameField = createTextRow("name", item?.name || item?.url || "");
     const countryField = createSelectOptionsRow(
       "country_id",
       String(item?.country_id || ""),
@@ -2924,7 +2963,7 @@
     );
 
     if (mode === "edit") form.appendChild(idField.row);
-    form.appendChild(urlField.row);
+    form.appendChild(nameField.row);
     form.appendChild(countryField.row);
 
     const actions = document.createElement("div");
@@ -2975,34 +3014,26 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      let normalizedUrl = "";
-      try {
-        const parsedUrl = new URL(String(urlField.input.value || "").trim());
-        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-          throw new Error("Invalid protocol");
-        }
-        normalizedUrl = parsedUrl.href;
-      } catch (_error) {
-        setStatus("URL must be a valid http(s) URL.", true);
-        return;
-      }
-
       const payload = {
         id: Number.parseInt(String(idField.input.value || "").trim(), 10),
-        url: normalizedUrl,
+        name: String(nameField.input.value || "").trim(),
         country_id: String(countryField.select.value || "").trim(),
       };
+      if (!payload.name) {
+        setStatus("name is required.", true);
+        return;
+      }
       if (!payload.country_id) {
         setStatus("country_id is required.", true);
         return;
       }
 
       const duplicate = state.localWebsites.find((entry) => (
-        String(entry?.url || "").trim().toLowerCase() === payload.url.toLowerCase()
+        String(entry?.name || entry?.url || "").trim().toLowerCase() === payload.name.toLowerCase()
         && Number(entry?.id) !== Number(item?.id)
       ));
       if (duplicate) {
-        setStatus("Local website URL already exists.", true);
+        setStatus("Local website name already exists.", true);
         return;
       }
 
@@ -3610,12 +3641,12 @@
         [{ value: "", label: "Select website..." }].concat(
           state.localWebsites
             .slice()
-            .sort((left, right) => String(left?.url || left?.id || "").localeCompare(String(right?.url || right?.id || "")))
+            .sort((left, right) => String(left?.name || left?.url || left?.id || "").localeCompare(String(right?.name || right?.url || right?.id || "")))
             .map((website) => ({
               value: String(website?.id || ""),
               label: [
                 String(website?.id || "").trim(),
-                String(website?.url || "").trim(),
+                String(website?.name || website?.url || "").trim(),
                 String(website?.country_name || website?.country_id || "").trim(),
               ].filter(Boolean).join(" • "),
             }))
@@ -4137,6 +4168,9 @@
       if (item.streamer_name || item.streamer_id) {
         subtitleParts.push(`Streamer: ${String(item.streamer_name || item.streamer_id).trim()}`);
       }
+      if (item.local_website_name || item.local_website_id) {
+        subtitleParts.push(`Website: ${String(item.local_website_name || item.local_website_id).trim()}`);
+      }
       sectionList.appendChild(createListRow({
         imageSrc: item.icon_link,
         imageAlt: item.name,
@@ -4201,14 +4235,14 @@
       .slice()
       .sort((left, right) => (
         String(left?.country_name || left?.country_id || "").localeCompare(String(right?.country_name || right?.country_id || ""))
-        || String(left?.url || "").localeCompare(String(right?.url || ""))
+        || String(left?.name || left?.url || "").localeCompare(String(right?.name || right?.url || ""))
       ))
       .forEach((item) => {
         sectionList.appendChild(createListRow({
           imageSrc: item.country_flag,
           imageAlt: item.country_name || item.country_id || "Local website",
           imageRound: false,
-          title: item.url || `Local website #${item.id}`,
+          title: item.name || item.url || `Local website #${item.id}`,
           subtitle: [
             item.country_name || item.country_id ? `Country: ${String(item.country_name || item.country_id).trim()}` : "",
             item.id ? `ID: ${item.id}` : "",
@@ -4318,8 +4352,8 @@
         if (item?.country_name || item?.country_id) {
           subtitleParts.push(`Country: ${String(item.country_name || item.country_id).trim()}`);
         }
-        if (item?.local_website_url || item?.local_website_id) {
-          subtitleParts.push(`Website: ${String(item.local_website_url || item.local_website_id).trim()}`);
+        if (item?.local_website_name || item?.local_website_url || item?.local_website_id) {
+          subtitleParts.push(`Website: ${String(item.local_website_name || item.local_website_url || item.local_website_id).trim()}`);
         }
         if (item?.tournament_name || item?.tournament_id) {
           subtitleParts.push(`Tournament: ${String(item.tournament_name || item.tournament_id).trim()}`);
