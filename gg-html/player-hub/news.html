@@ -467,6 +467,19 @@
     white-space: pre-wrap;
   }
 
+  .news-quote-text.news-quote-text-no-italic {
+    font-style: normal;
+  }
+
+  .news-quote-text.news-quote-text-bold {
+    font-weight: 600;
+  }
+
+  .news-quote-text em,
+  .news-quote-text i {
+    font-style: normal;
+  }
+
   .news-quote-text::before {
     color: #1a73b7;
     content: "\f10d";
@@ -1795,6 +1808,14 @@
       && node.classList?.contains("news-quote-text")
     );
 
+    const getNewsQuoteTextStyleClasses = (node) => {
+      if (node?.nodeType !== Node.ELEMENT_NODE) return [];
+      return [
+        "news-quote-text-no-italic",
+        "news-quote-text-bold",
+      ].filter((className) => node.classList?.contains(className));
+    };
+
     const isNewsSectionTitleElement = (node) => (
       node?.nodeType === Node.ELEMENT_NODE
       && (
@@ -1842,6 +1863,96 @@
       });
     };
 
+    const hasQuoteInlineContent = (node) => {
+      if (!node) return false;
+      return !!String(node.textContent || "").trim() || !!node.querySelector?.("br");
+    };
+
+    const trimQuoteInlineContent = (node) => {
+      const trimEdge = (edge) => {
+        while (node.firstChild || node.lastChild) {
+          const child = edge === "start" ? node.firstChild : node.lastChild;
+          if (!child) return;
+          if (child.nodeType === Node.ELEMENT_NODE && child.tagName?.toUpperCase() === "BR") {
+            child.remove();
+            continue;
+          }
+          if (child.nodeType === Node.TEXT_NODE) {
+            const nextValue = edge === "start"
+              ? String(child.textContent || "").replace(/^\s+/, "")
+              : String(child.textContent || "").replace(/\s+$/, "");
+            if (nextValue) {
+              child.textContent = nextValue;
+              return;
+            }
+            child.remove();
+            continue;
+          }
+          return;
+        }
+      };
+
+      trimEdge("start");
+      trimEdge("end");
+    };
+
+    const sanitizeQuoteInlineNode = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return document.createTextNode(node.textContent || "");
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return null;
+      if (node.matches?.(".cp-news-quote-remove")) return null;
+
+      const tagName = node.tagName.toUpperCase();
+      if (tagName === "BR") return document.createElement("br");
+
+      const sanitizeChildren = (target) => {
+        Array.from(node.childNodes).forEach((child) => {
+          const safeChild = sanitizeQuoteInlineNode(child);
+          if (safeChild) target.appendChild(safeChild);
+        });
+      };
+
+      const outputTag = tagName === "B"
+        ? "STRONG"
+        : tagName === "I"
+          ? "EM"
+          : tagName;
+
+      if (outputTag === "STRONG" || outputTag === "EM") {
+        const safeNode = document.createElement(outputTag.toLowerCase());
+        sanitizeChildren(safeNode);
+        return hasQuoteInlineContent(safeNode) ? safeNode : null;
+      }
+
+      if (outputTag === "A") {
+        const href = String(node.getAttribute("href") || "").trim();
+        const safeLink = /^(https?:|mailto:)/i.test(href) ? document.createElement("a") : document.createDocumentFragment();
+        if (safeLink.nodeType === Node.ELEMENT_NODE) {
+          safeLink.setAttribute("href", href);
+          safeLink.setAttribute("target", "_blank");
+          safeLink.setAttribute("rel", "noopener noreferrer");
+        }
+        sanitizeChildren(safeLink);
+        return hasQuoteInlineContent(safeLink) ? safeLink : null;
+      }
+
+      const fragment = document.createDocumentFragment();
+      sanitizeChildren(fragment);
+      if (["DIV", "P", "LI", "BLOCKQUOTE"].includes(tagName) && hasQuoteInlineContent(fragment)) {
+        fragment.appendChild(document.createElement("br"));
+      }
+      return hasQuoteInlineContent(fragment) ? fragment : null;
+    };
+
+    const appendSanitizedQuoteInlineContent = (target, source) => {
+      Array.from(source?.childNodes || []).forEach((child) => {
+        const safeChild = sanitizeQuoteInlineNode(child);
+        if (safeChild) target.appendChild(safeChild);
+      });
+      trimQuoteInlineContent(target);
+    };
+
     const sanitizeNewsQuoteBlock = (node) => {
       const tagName = node.tagName?.toUpperCase() || "";
       const isStandaloneBlockquote = tagName === "BLOCKQUOTE" && !isNewsQuoteTextElement(node);
@@ -1875,7 +1986,12 @@
 
       const quote = document.createElement("blockquote");
       quote.className = "news-quote-text";
-      appendTextWithLineBreaks(quote, quoteText);
+      getNewsQuoteTextStyleClasses(textNode).forEach((className) => {
+        quote.classList.add(className);
+      });
+      const quoteContentNode = textNode || (!authorNode && !textNode ? node : null);
+      if (quoteContentNode) appendSanitizedQuoteInlineContent(quote, quoteContentNode);
+      if (!quote.childNodes.length && quoteText) appendTextWithLineBreaks(quote, quoteText);
 
       quoteBlock.appendChild(author);
       quoteBlock.appendChild(quote);
@@ -2285,6 +2401,14 @@
       return null;
     };
 
+    const getQuoteTextFromRange = (range) => {
+      const directField = getQuoteFieldFromRange(range, ".news-quote-text");
+      if (directField) return directField;
+      const quoteBlock = getQuoteBlockFromRange(range);
+      const quoteText = quoteBlock?.querySelector?.(".news-quote-text") || null;
+      return quoteText && editor.contains(quoteText) ? quoteText : null;
+    };
+
     const createQuoteRemoveButton = () => {
       const button = document.createElement("button");
       button.type = "button";
@@ -2375,6 +2499,13 @@
         .replace(/\n[ \t]+/g, "\n")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
+    };
+
+    const getSelectedTextWithLineBreaksFromRange = (range) => {
+      if (!range) return "";
+      const fragment = range.cloneContents();
+      const text = getTextWithLineBreaksFromNode(fragment);
+      return text || getSelectedTextFromRange(range);
     };
 
     const createParagraphFromText = (text) => {
@@ -2508,7 +2639,7 @@
         return;
       }
       const selectedQuoteText = targetRange && !targetRange.collapsed
-        ? getSelectedTextFromRange(targetRange)
+        ? getSelectedTextWithLineBreaksFromRange(targetRange)
         : "";
       const quoteBlock = createEditableQuoteBlock(selectedQuoteText);
       insertBlockAtCurrentSelection(quoteBlock);
@@ -3095,8 +3226,13 @@
 
     const updateToolbarState = () => {
       const activeRange = getSelectionRange() || (savedEditorRange ? savedEditorRange.cloneRange() : null);
+      const activeQuoteText = getQuoteTextFromRange(activeRange);
       forButtonPair("bold", (button) => button.classList.toggle("active", document.queryCommandState("bold")));
-      forButtonPair("italic", (button) => button.classList.toggle("active", document.queryCommandState("italic")));
+      forButtonPair("italic", (button) => {
+        button.classList.toggle("active", activeQuoteText
+          ? !document.queryCommandState("italic")
+          : document.queryCommandState("italic"));
+      });
       forButtonPair("sectionTitle", (button) => button.classList.toggle("active", !!getSectionTitleFromRange(activeRange)));
       forButtonPair("ordered", (button) => button.classList.toggle("active", document.queryCommandState("insertOrderedList")));
       forButtonPair("unordered", (button) => button.classList.toggle("active", document.queryCommandState("insertUnorderedList")));

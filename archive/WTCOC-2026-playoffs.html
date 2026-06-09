@@ -306,7 +306,7 @@
   const BRACKET_MARGIN = 15;
   const MATCH_HEIGHT = 60;
   let MATCH_WIDTH = 250;
-  const COMPACT_MATCH_WIDTH = 80;
+  const COMPACT_MATCH_WIDTH = 60;
   const ROUND_TITLE_TO_MATCH_SPACING = 60;
   const VERTICAL_SPACING = 25;
   const HORIZONTAL_SPACING = 20;
@@ -432,6 +432,13 @@
     }
     // Fallback: return as-is
     return s;
+  }
+
+  function formatMatchDate(raw) {
+    const formatted = formatMatchTime(raw);
+    const match = formatted.match(/^(\d{1,2}\s+[A-Za-z]{3})/);
+    if (match) return match[1];
+    return formatted;
   }
 
   function calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundLayout, playoffMatches, currentTournamentId) {
@@ -577,7 +584,7 @@
       label.style.top = `${BRACKET_MARGIN}px`;
       container.appendChild(label);
 
-      if (roundDates) {
+      if (roundDates && !roundIsCompact) {
         const dateLabel = document.createElement("div");
         dateLabel.className = "wtcoc-round-label";
         dateLabel.textContent = roundDates;
@@ -614,7 +621,7 @@
           const [thirdTitle, thirdDates] = getMatchRoundLabelParts(m, "3rd place", matchIsCompact);
           label.textContent = thirdTitle;
           container.appendChild(label);
-          if (thirdDates) {
+          if (thirdDates && !matchIsCompact) {
             const dateLabel = document.createElement("div");
             dateLabel.className = "wtcoc-round-label";
             dateLabel.textContent = thirdDates;
@@ -632,14 +639,18 @@
         // Add meta labels above match box
         const hasTime = m.time !== null && m.time !== undefined && String(m.time).trim() !== "";
         const isCOC = tournamentType !== "TEAM"; // COC-type brackets use duels data
-        if (hasTime || (isCOC && m.duel_format)) {
+        if (hasTime || (!matchIsCompact && isCOC && m.duel_format)) {
           const metaWrap = document.createElement("div");
           metaWrap.className = "wtcoc-match-meta-wrapper";
           metaWrap.style.left = `${m.cord_left + 2}px`;
           metaWrap.style.top = `${Math.max(0, topOffset - 14)}px`;
           metaWrap.style.width = `${matchWidth}px`;
 
-          if (isCOC && m.duel_format) {
+          if (matchIsCompact && hasTime) {
+            const timeText = document.createElement("span");
+            timeText.textContent = formatMatchDate(m.time);
+            metaWrap.appendChild(timeText);
+          } else if (isCOC && m.duel_format) {
             const fmt = document.createElement("span");
             fmt.className = "wtcoc-match-meta-chip wtcoc-match-meta-format";
             fmt.textContent = m.duel_format; // e.g., Bo1/Bo3/Bo5
@@ -652,13 +663,17 @@
               fmt.classList.add('wtcoc-bo5');
             }
             metaWrap.appendChild(fmt);
-          }
 
-          if (hasTime) {
-            // Plain text time (no chip background), like earlier behavior
+            if (hasTime) {
+              // Plain text time (no chip background), like earlier behavior
+              const timeText = document.createElement("span");
+              timeText.textContent = formatMatchTime(m.time);
+              timeText.style.marginLeft = "6px";
+              metaWrap.appendChild(timeText);
+            }
+          } else if (hasTime) {
             const timeText = document.createElement("span");
             timeText.textContent = formatMatchTime(m.time);
-            if (isCOC && m.duel_format) timeText.style.marginLeft = "6px";
             metaWrap.appendChild(timeText);
           }
 

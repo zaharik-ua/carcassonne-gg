@@ -265,6 +265,16 @@
     position: relative;
     white-space: pre-wrap;
   }
+  .gg-rp-news-quote-text.gg-rp-news-quote-text-no-italic {
+    font-style: normal;
+  }
+  .gg-rp-news-quote-text.gg-rp-news-quote-text-bold {
+    font-weight: 600;
+  }
+  .gg-rp-news-quote-text em,
+  .gg-rp-news-quote-text i {
+    font-style: normal;
+  }
   .gg-rp-news-quote-text::before {
     color: #146997;
     content: "\f10d";
@@ -632,6 +642,8 @@
       "news-quote-block": "gg-rp-news-quote-block",
       "news-quote-author": "gg-rp-news-quote-author",
       "news-quote-text": "gg-rp-news-quote-text",
+      "news-quote-text-no-italic": "gg-rp-news-quote-text-no-italic",
+      "news-quote-text-bold": "gg-rp-news-quote-text-bold",
     };
 
     Object.entries(classMap).forEach(([sourceClass, scopedClass]) => {

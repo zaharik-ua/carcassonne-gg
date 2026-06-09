@@ -653,11 +653,18 @@ async function getNewsEditorAccessForUser(user) {
   };
 }
 
-function canManageNewsItem(access, newsItem) {
+async function canManageNewsItem(access, newsItem) {
   if (access?.isAdmin) return true;
-  const profileId = String(access?.profileId || "").trim();
-  if (!access?.isNewsEditor || !profileId) return false;
-  return String(newsItem?.created_by || "").trim() === profileId;
+  if (!access?.isNewsEditor || !String(access?.profileId || "").trim()) return false;
+  const accessError = await validateNewsPayloadAccess(access, {
+    significance: newsItem?.significance,
+    category: newsItem?.category,
+    association_id: newsItem?.association_id,
+    local_website_id: newsItem?.local_website_id,
+    tournament_id: newsItem?.tournament_id,
+    streamer_id: newsItem?.streamer_id,
+  });
+  return !accessError;
 }
 
 function sendNewsEditorAccessDenied(res) {
@@ -7743,13 +7750,6 @@ app.get("/news", async (req, res) => {
       return sendNewsEditorAccessDenied(res);
     }
 
-    const params = [];
-    let whereSql = "WHERE n.deleted_at IS NULL";
-    if (!access.isAdmin) {
-      whereSql += " AND trim(COALESCE(n.created_by, '')) = trim(?)";
-      params.push(access.profileId);
-    }
-
     const rows = await dbAllAsync(
       `
         SELECT
@@ -7782,7 +7782,7 @@ app.get("/news", async (req, res) => {
           ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(n.association_id, '')))
         LEFT JOIN tournaments t
           ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(n.tournament_id, '')))
-        ${whereSql}
+        WHERE n.deleted_at IS NULL
         ORDER BY
           CASE
             WHEN n.time_utc IS NULL OR trim(n.time_utc) = '' THEN 1
@@ -7790,13 +7790,14 @@ app.get("/news", async (req, res) => {
           END ASC,
           datetime(n.time_utc) DESC,
           n.id DESC
-      `,
-      params
+      `
     );
     const newsItems = [];
     for (const row of rows || []) {
       const fullRow = await loadNewsById(row?.id);
-      if (fullRow) newsItems.push(fullRow);
+      if (fullRow && (await canManageNewsItem(access, fullRow))) {
+        newsItems.push(fullRow);
+      }
     }
     return res.json({ ok: true, news: newsItems });
   } catch (error) {
@@ -8023,8 +8024,8 @@ app.patch("/news/:id", async (req, res) => {
     if (!beforeRow) {
       return res.status(404).json({ ok: false, message: "News not found" });
     }
-    if (!canManageNewsItem(access, beforeRow)) {
-      return res.status(403).json({ ok: false, message: "You can edit only news created by you." });
+    if (!(await canManageNewsItem(access, beforeRow))) {
+      return res.status(403).json({ ok: false, message: "You can edit only news within your news editor access." });
     }
 
     const status = normalizeNewsStatus(req.body?.status);
@@ -8227,8 +8228,8 @@ app.delete("/news/:id", async (req, res) => {
     if (!beforeRow) {
       return res.status(404).json({ ok: false, message: "News not found" });
     }
-    if (!canManageNewsItem(access, beforeRow)) {
-      return res.status(403).json({ ok: false, message: "You can delete only news created by you." });
+    if (!(await canManageNewsItem(access, beforeRow))) {
+      return res.status(403).json({ ok: false, message: "You can delete only news within your news editor access." });
     }
 
     const actorPlayerId = String(req.user?.player_id || "").trim() || null;

@@ -43,6 +43,19 @@
   .news-row:hover {
     background-color: #f9f9f9;
   }
+  .news-row-large {
+    align-items: flex-start;
+    border: 1px solid #e1e1e1;
+    cursor: pointer;
+    gap: 28px;
+    line-height: 1.35;
+    margin: 0 0 28px;
+    padding: 22px 28px;
+  }
+  .news-row-large:hover {
+    background-color: #fff;
+    border-color: #d2d2d2;
+  }
   .news-row-high {
     cursor: pointer;
   }
@@ -90,6 +103,73 @@
     aspect-ratio: 16 / 9;
     flex: 0 0 auto;
     width: 107px;
+  }
+  .news-row-large .news-list-image,
+  .news-row-large .news-icon-low,
+  .news-row-large .news-icon-medium,
+  .news-row-large .news-icon-high,
+  .news-row-large .news-icon-important-image {
+    flex: 0 0 180px;
+    height: auto;
+    max-height: none;
+    max-width: 180px;
+    object-fit: contain;
+    width: 180px;
+  }
+  .news-row-large .news-list-image.news-youtube-preview {
+    aspect-ratio: 16 / 9;
+  }
+  .news-row-large .news-content {
+    gap: 4px;
+  }
+  .news-row-large .news-description-date {
+    color: #747edb;
+    font-size: 16px;
+    line-height: 1.2;
+    margin: 0 0 2px;
+  }
+  .news-row-large .news-title a,
+  .news-row-large .news-title span {
+    color: #333;
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 1.12;
+  }
+  .news-row-large .news-title a:hover {
+    color: #0e4f73;
+  }
+  .news-list-summary {
+    color: #333;
+    font-size: 16px;
+    line-height: 1.35;
+    margin-top: 6px;
+  }
+  .news-list-description {
+    color: #333;
+    font-size: 24px;
+    line-height: 1.35;
+    margin-top: 8px;
+  }
+  .news-list-description p {
+    margin: 0 0 7px;
+  }
+  .news-list-description p:last-child {
+    margin-bottom: 0;
+  }
+  .news-list-description a {
+    color: #333;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .news-list-description a:hover {
+    color: #0e4f73;
+    text-decoration: none;
+  }
+  .news-list-description img {
+    display: block;
+    height: auto;
+    margin: 10px 0;
+    max-width: 100%;
   }
   .news-youtube-play {
     align-items: center;
@@ -482,6 +562,35 @@
   .news-detail-description .news-quote-block {
     margin: 8px 0;
   }
+  @media (max-width: 700px) {
+    .news-row-large {
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding: 14px;
+    }
+    .news-row-large .news-list-image,
+    .news-row-large .news-icon-low,
+    .news-row-large .news-icon-medium,
+    .news-row-large .news-icon-high,
+    .news-row-large .news-icon-important-image {
+      flex-basis: auto;
+      max-width: 180px;
+      width: 180px;
+    }
+    .news-row-large .news-description-date {
+      font-size: 16px;
+    }
+    .news-row-large .news-title a,
+    .news-row-large .news-title span {
+      font-size: 20px;
+      line-height: 1.18;
+    }
+    .news-list-summary,
+    .news-list-description {
+      font-size: 16px;
+    }
+  }
 </style>
 
 <div id="news-container"></div>
@@ -501,6 +610,30 @@
 
   function isLocalWebsiteNews(newsItem) {
     return String(newsItem?.category || "").trim().toLowerCase() === "local website";
+  }
+
+  function normalizeWebsiteHost(value) {
+    const raw = String(value || "").trim().toLowerCase();
+    if (!raw) return "";
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+      return String(url.hostname || "").replace(/^www\./, "");
+    } catch (_error) {
+      return raw.replace(/^https?:\/\//i, "").replace(/^www\./, "").replace(/\/.*$/, "");
+    }
+  }
+
+  function isCarcassonneUaLocalWebsiteNews(newsItem) {
+    if (!isLocalWebsiteNews(newsItem)) return false;
+
+    return [
+      newsItem?.local_website_url,
+      newsItem?.localWebsiteUrl,
+      newsItem?.local_website_name,
+      newsItem?.localWebsiteName,
+      newsItem?.local_website,
+      newsItem?.localWebsite,
+    ].some(value => normalizeWebsiteHost(value) === "carcassonne.com.ua");
   }
 
   const closeImageModal = () => {
@@ -670,7 +803,7 @@
 
   const getNewsDetailUrl = (newsItem) => {
     const newsSlug = getNewsSlug(newsItem);
-    const url = new URL("/news/", window.location.href);
+    const url = new URL("/Новини/", window.location.href);
     if (newsSlug) {
       url.searchParams.set("news", newsSlug);
       return url.toString();
@@ -1040,6 +1173,85 @@
     renderNewsDetail(newsItem);
   }
 
+  function createLargeNewsListRow(newsItem) {
+    const row = document.createElement("article");
+    row.className = "news-row news-row-large";
+
+    const dateValue = getNewsTimestampValue(newsItem);
+    const displayDate = formatDisplayDate(dateValue);
+    const titleText = String(newsItem.title || newsItem.short_title || "").trim() || "News";
+    const detailUrl = getNewsDetailUrl(newsItem);
+    const linkValue = String(newsItem.link || "").trim();
+    const baseImageUrl = newsItem.image || newsItem.icon || newsItem.icon1 || "";
+    const imageUrl = getNewsImageVariantUrl(baseImageUrl, "medium") || getNewsImageVariantUrl(baseImageUrl, "small");
+    const youtubeVideoId = getYoutubeVideoId(newsItem);
+    const youtubeWatchUrl = getYoutubeWatchUrl(youtubeVideoId);
+
+    if (youtubeVideoId) {
+      const youtubePreview = createYoutubePreview(
+        youtubeVideoId,
+        "news-list-image news-youtube-preview",
+        titleText
+      );
+      row.appendChild(youtubePreview);
+    } else if (imageUrl) {
+      const image = document.createElement("img");
+      image.className = "news-icon news-list-image";
+      image.src = imageUrl;
+      image.alt = titleText;
+      image.loading = "lazy";
+      row.appendChild(image);
+    }
+
+    const contentWrapper = document.createElement("div");
+    contentWrapper.className = "news-content";
+
+    if (displayDate) {
+      const dateLabel = document.createElement("div");
+      dateLabel.className = "news-description-date";
+      dateLabel.textContent = displayDate;
+      contentWrapper.appendChild(dateLabel);
+    }
+
+    const title = document.createElement("div");
+    title.className = "news-title";
+    const link = document.createElement("a");
+    link.textContent = titleText;
+    link.href = detailUrl || linkValue || "#";
+    if (!detailUrl && linkValue && !link.href.toLowerCase().includes("carcassonne.com.ua")) {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    }
+    title.appendChild(link);
+    contentWrapper.appendChild(title);
+
+    const shortDescriptionText = String(newsItem.short_description || "").trim();
+    if (shortDescriptionText) {
+      const shortDescription = document.createElement("div");
+      shortDescription.className = "news-list-summary";
+      shortDescription.textContent = shortDescriptionText;
+      contentWrapper.appendChild(shortDescription);
+    }
+
+    row.appendChild(contentWrapper);
+    row.addEventListener("click", event => {
+      if (event.target?.closest?.("a")) return;
+      if (detailUrl) {
+        window.location.href = detailUrl;
+        return;
+      }
+      if (youtubeWatchUrl) {
+        window.open(youtubeWatchUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (linkValue) {
+        window.location.href = linkValue;
+      }
+    });
+
+    return row;
+  }
+
   function renderNewsList() {
     if (!newsContainer) return;
 
@@ -1051,6 +1263,11 @@
       }
       return;
     }
+
+    allNewsItems.forEach(newsItem => {
+      newsContainer.appendChild(createLargeNewsListRow(newsItem));
+    });
+    return;
 
     allNewsItems.forEach(newsItem => {
       const row = document.createElement("div");
@@ -1311,7 +1528,9 @@
         }
 
         if (selectedNewsResult.status === "fulfilled") {
-          selectedNewsItem = selectedNewsResult.value || null;
+          selectedNewsItem = isCarcassonneUaLocalWebsiteNews(selectedNewsResult.value)
+            ? selectedNewsResult.value
+            : null;
         } else {
           console.error(selectedNewsResult.reason || new Error("News item request failed"));
         }
@@ -1321,7 +1540,7 @@
         }
 
         allNewsItems = Array.isArray(newsResult.value.news)
-          ? newsResult.value.news.filter(newsItem => !isLocalWebsiteNews(newsItem))
+          ? newsResult.value.news.filter(isCarcassonneUaLocalWebsiteNews)
           : [];
         allNewsItems.sort((a, b) => {
           const byTime = parseDateTime(getNewsTimestampValue(b)) - parseDateTime(getNewsTimestampValue(a));

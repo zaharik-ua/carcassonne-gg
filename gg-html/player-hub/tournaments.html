@@ -3907,6 +3907,34 @@
     }));
     if (!lineupsState.length && isCreateMode) lineupsState = [];
 
+    const normalizeLineupSnapshot = (entry, fallbackIndex = null) => ({
+      id: String(entry?.id || "").trim(),
+      duelNumber: readLineupDuelNumber(entry) ?? parseNullableInt(entry?.duelNumber) ?? fallbackIndex,
+      duelFormat: String(entry?.duel_format ?? entry?.duelFormat ?? "Bo3").trim() || "Bo3",
+      player1Id: String(entry?.player_1_id ?? entry?.player1Id ?? "").trim(),
+      player2Id: String(entry?.player_2_id ?? entry?.player2Id ?? "").trim(),
+      status: String(entry?.status || "").trim(),
+    });
+    const initialLineupsById = new Map(
+      lineupsState.map((entry, index) => {
+        const snapshot = normalizeLineupSnapshot(entry, index + 1);
+        return [snapshot.id, snapshot];
+      }).filter(([id]) => id)
+    );
+    const hasLineupChangedFromInitial = (entry, index) => {
+      const current = normalizeLineupSnapshot(entry, index + 1);
+      const initial = initialLineupsById.get(current.id);
+      if (!initial) return true;
+      return current.duelNumber !== initial.duelNumber
+        || current.duelFormat !== initial.duelFormat
+        || current.player1Id !== initial.player1Id
+        || current.player2Id !== initial.player2Id;
+    };
+    const resolveLineupPayloadStatus = (entry, index) => {
+      if (hasLineupChangedFromInitial(entry, index)) return "Planned";
+      return String(entry?.status || "").trim() || "Planned";
+    };
+
     const createEmptyLineupEntry = () => ({
       id: buildLineupIdFromMatch(source?.time_utc ?? source?.time, "", ""),
       duelNumber: null,
@@ -6484,7 +6512,7 @@
             dw2: parseNullableInt(row.dw2),
             gw1: null,
             gw2: null,
-            status: "Planned",
+            status: resolveLineupPayloadStatus(row, index),
           }));
           if (lineupRowsPayload.some((r) => !r.id)) {
             setError("Failed to generate lineup IDs.");
