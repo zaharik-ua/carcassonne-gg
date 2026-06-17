@@ -11912,13 +11912,20 @@ function publicMainPageMatchesHandler(req, res, next) {
               id: null,
               title: "",
               url: "",
+              items: [],
             });
           }
           const entry = publishedNewsByMatchId.get(matchId);
+          const title = normalizeText(row?.title);
           entry.count += 1;
+          entry.items.push({
+            id: newsId,
+            title,
+            url: `https://carcassonne.gg/news/?id=${encodeURIComponent(String(newsId))}`,
+          });
           if (entry.count === 1) {
             entry.id = newsId;
-            entry.title = normalizeText(row?.title);
+            entry.title = title;
             entry.url = `https://carcassonne.gg/news/?id=${encodeURIComponent(String(newsId))}`;
           } else {
             entry.id = null;
@@ -12054,6 +12061,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 news_url: publishedNews?.url || "",
                 news_title: publishedNews?.title || "",
                 news_count: publishedNews?.count || 0,
+                news_items: publishedNews?.items || [],
                 tournament_name: row.tournament_name,
                 tournament_short_title: row.tournament_short_title,
                 tournament_logo: row.tournament_logo,

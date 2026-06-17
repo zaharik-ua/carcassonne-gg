@@ -660,6 +660,43 @@ code {
     flex-wrap: wrap;
   }
 
+  .lineup__news {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+  }
+
+  .lineup__news-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: #333333;
+    font-size: 13px;
+    line-height: 18px;
+    text-decoration: none;
+  }
+
+  .lineup__news-link:hover {
+    color: #146997;
+    text-decoration: none;
+  }
+
+  .lineup__news-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .lineup__news-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .lineup__game-link {
     display: inline-flex;
     text-decoration: none;
@@ -745,6 +782,9 @@ code {
       .lineup__overview {
         font-size: 13px;
         line-height: 18px;
+      }
+      .lineup__news-title {
+        white-space: normal;
       }
     }
     
@@ -1021,6 +1061,40 @@ function createMatchNewsLink(match) {
   return link;
 }
 
+function getMatchNewsItems(match) {
+  const sourceItems = Array.isArray(match?.newsItems)
+    ? match.newsItems
+    : (Array.isArray(match?.news_items) ? match.news_items : []);
+  const seen = new Set();
+  const items = sourceItems.map((item) => {
+    const id = String(item?.id || item?.news_id || "").trim();
+    const title = String(item?.title || item?.news_title || "").trim();
+    const rawUrl = String(item?.url || item?.news_url || "").trim();
+    const url = rawUrl || (id ? `https://carcassonne.gg/news/?id=${encodeURIComponent(id)}` : "");
+    if (!url || !title) return null;
+    const key = id || url;
+    if (seen.has(key)) return null;
+    seen.add(key);
+    return { id, title, url };
+  }).filter(Boolean);
+
+  if (items.length > 0) return items;
+
+  const fallbackTitle = String(match?.news_title || "").trim();
+  const fallbackUrl = String(match?.news_url || "").trim();
+  const fallbackId = String(match?.news_id || "").trim();
+  const fallbackNewsCount = Number(match?.news_count || 0);
+  if (fallbackNewsCount <= 1 && fallbackTitle && (fallbackUrl || fallbackId)) {
+    return [{
+      id: fallbackId,
+      title: fallbackTitle,
+      url: fallbackUrl || `https://carcassonne.gg/news/?id=${encodeURIComponent(fallbackId)}`,
+    }];
+  }
+
+  return [];
+}
+
 function createMatchElement(match, options = {}) {
   const { showRating = false, isToday = false } = options;
   // Only for TEAM tournaments
@@ -1045,7 +1119,7 @@ function createMatchElement(match, options = {}) {
   const matchLineups = Array.isArray(match?.lineupsData) ? match.lineupsData.filter(Boolean) : [];
   let lineupDiv = null;
   if (matchId && matchLineups.length > 0) {
-    lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon, match.status, match.elo_updated_at);
+    lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon, match.status, match.elo_updated_at, getMatchNewsItems(match));
     bindLineupToggle(matchId, lineupDiv, chevronIcon, toggleBtn);
   }
   
@@ -2316,7 +2390,7 @@ function createGameBadgesWrap(duel) {
   return wrap.childNodes.length ? wrap : null;
 }
 
-function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloUpdatedAt = "") {
+function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloUpdatedAt = "", newsItems = []) {
   const lineupPanel = document.createElement("div");
   lineupPanel.className = "lineup";
 
@@ -2384,6 +2458,41 @@ function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloU
     }
     lineupBody.appendChild(row);
   });
+
+  const normalizedNewsItems = Array.isArray(newsItems) ? newsItems.filter(Boolean) : [];
+  if (normalizedNewsItems.length > 0) {
+    const newsWrap = document.createElement("div");
+    newsWrap.className = "lineup__news";
+
+    normalizedNewsItems.forEach((newsItem) => {
+      const title = String(newsItem?.title || "").trim();
+      const url = String(newsItem?.url || "").trim();
+      if (!title || !url) return;
+
+      const link = document.createElement("a");
+      link.className = "lineup__news-link";
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+
+      const icon = document.createElement("img");
+      icon.className = "lineup__news-icon";
+      icon.src = "https://carcassonne.gg/gallery/writing.png";
+      icon.alt = "News";
+
+      const titleEl = document.createElement("span");
+      titleEl.className = "lineup__news-title";
+      titleEl.textContent = title;
+
+      link.appendChild(icon);
+      link.appendChild(titleEl);
+      newsWrap.appendChild(link);
+    });
+
+    if (newsWrap.childNodes.length > 0) {
+      lineupBody.appendChild(newsWrap);
+    }
+  }
 
   const eloUpdatedLabel = formatEloUpdatedAtLabel(eloUpdatedAt);
   if (String(matchStatus || "").trim().toLowerCase() !== "done" && eloUpdatedLabel) {
@@ -2538,6 +2647,14 @@ function adaptDbMainPageMatchesData(data) {
       news_id: match?.news_id ?? null,
       news_url: String(match?.news_url || "").trim(),
       news_title: String(match?.news_title || "").trim(),
+      news_count: match?.news_count ?? 0,
+      newsItems: Array.isArray(match?.news_items)
+        ? match.news_items.map((item) => ({
+            id: String(item?.id || "").trim(),
+            title: String(item?.title || "").trim(),
+            url: String(item?.url || "").trim(),
+          })).filter(item => item.title && item.url)
+        : [],
       elo_updated_at: result.elo_updated_at,
       lineupsData: sortLineups(duelsByMatchId.get(String(match?.id || "").trim()) || []),
     };
