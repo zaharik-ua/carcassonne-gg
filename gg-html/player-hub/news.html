@@ -480,6 +480,13 @@
     font-style: normal;
   }
 
+  .news-quote-text .news-quote-emoji {
+    display: inline;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", emoji, sans-serif;
+    font-style: normal !important;
+    font-synthesis-style: none;
+  }
+
   .news-quote-text::before {
     color: #1a73b7;
     content: "\f10d";
@@ -996,6 +1003,14 @@
     white-space: nowrap;
   }
 
+  .cp-dd-option-prefix {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .cp-dd-option:first-child {
     border-top: none;
   }
@@ -1151,6 +1166,7 @@
   const ICONS_URL = `${AUTH_BASE}/icons`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
   const NEWS_URL = `${AUTH_BASE}/news`;
+  const NEWS_MATCH_OPTIONS_URL = `${AUTH_BASE}/news-match-options`;
   const NEWS_EDITORS_URL = `${AUTH_BASE}/news-editors`;
   const IMAGES_URL = `${AUTH_BASE}/images`;
   const IMAGE_UPLOAD_URL = `${AUTH_BASE}/images/upload`;
@@ -1263,6 +1279,11 @@
     if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
     if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
     return `${Math.round(bytes)} B`;
+  }
+
+  function parseUtcTimestamp(value) {
+    const ts = Date.parse(String(value || "").trim());
+    return Number.isFinite(ts) ? ts : 0;
   }
 
   function getImageUploadSizeError(file) {
@@ -1774,10 +1795,39 @@
     return new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi, 0)).toISOString();
   } 
 
+  const NEWS_QUOTE_EMOJI_PATTERN = /(?:[\u{1F1E6}-\u{1F1FF}]{2}|[#*0-9]\uFE0F?\u20E3|[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]\uFE0F?(?:[\u{1F3FB}-\u{1F3FF}])?(?:\u200D[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]\uFE0F?(?:[\u{1F3FB}-\u{1F3FF}])?)*)/gu;
+
+  function createNewsQuoteEmojiNode(value) {
+    const emoji = document.createElement("span");
+    emoji.className = "news-quote-emoji";
+    emoji.textContent = value;
+    return emoji;
+  }
+
+  function appendNewsQuoteTextWithEmoji(target, text) {
+    const value = String(text || "");
+    if (!value) return;
+    NEWS_QUOTE_EMOJI_PATTERN.lastIndex = 0;
+    let lastIndex = 0;
+    let match = NEWS_QUOTE_EMOJI_PATTERN.exec(value);
+    while (match) {
+      if (match.index > lastIndex) {
+        target.appendChild(document.createTextNode(value.slice(lastIndex, match.index)));
+      }
+      target.appendChild(createNewsQuoteEmojiNode(match[0]));
+      lastIndex = match.index + match[0].length;
+      match = NEWS_QUOTE_EMOJI_PATTERN.exec(value);
+    }
+    if (lastIndex < value.length) {
+      target.appendChild(document.createTextNode(value.slice(lastIndex)));
+    }
+  }
+
   function sanitizeNewsDescriptionHtml(rawHtml, options = {}) {
     const raw = String(rawHtml || "").trim();
     if (!raw) return "";
     const preserveEmptyQuotes = options.preserveEmptyQuotes === true;
+    const preserveSelectionMarkers = options.preserveSelectionMarkers === true;
     const allowedTags = new Set(["P", "BR", "STRONG", "EM", "A", "OL", "UL", "LI", "IMG"]);
     const template = document.createElement("template");
     template.innerHTML = raw;
@@ -1859,13 +1909,14 @@
     const appendTextWithLineBreaks = (node, text) => {
       String(text || "").split(/\n/).forEach((line, index) => {
         if (index > 0) node.appendChild(document.createElement("br"));
-        if (line) node.appendChild(document.createTextNode(line));
+        if (line) appendNewsQuoteTextWithEmoji(node, line);
       });
     };
 
     const hasQuoteInlineContent = (node) => {
       if (!node) return false;
-      return !!String(node.textContent || "").trim() || !!node.querySelector?.("br");
+      return !!String(node.textContent || "").trim()
+        || !!node.querySelector?.("br,[data-news-selection-marker]");
     };
 
     const trimQuoteInlineContent = (node) => {
@@ -1898,12 +1949,20 @@
 
     const sanitizeQuoteInlineNode = (node) => {
       if (node.nodeType === Node.TEXT_NODE) {
-        return document.createTextNode(node.textContent || "");
+        const fragment = document.createDocumentFragment();
+        appendNewsQuoteTextWithEmoji(fragment, node.textContent || "");
+        return fragment;
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return null;
       if (node.matches?.(".cp-news-quote-remove")) return null;
 
       const tagName = node.tagName.toUpperCase();
+      if (preserveSelectionMarkers && tagName === "SPAN" && node.hasAttribute("data-news-selection-marker")) {
+        const marker = document.createElement("span");
+        marker.dataset.newsSelectionMarker = String(node.getAttribute("data-news-selection-marker") || "");
+        marker.setAttribute("aria-hidden", "true");
+        return marker;
+      }
       if (tagName === "BR") return document.createElement("br");
 
       const sanitizeChildren = (target) => {
@@ -1923,6 +1982,12 @@
         const safeNode = document.createElement(outputTag.toLowerCase());
         sanitizeChildren(safeNode);
         return hasQuoteInlineContent(safeNode) ? safeNode : null;
+      }
+
+      if (tagName === "SPAN" && node.classList?.contains("news-quote-emoji")) {
+        const fragment = document.createDocumentFragment();
+        appendNewsQuoteTextWithEmoji(fragment, node.textContent || "");
+        return hasQuoteInlineContent(fragment) ? fragment : null;
       }
 
       if (outputTag === "A") {
@@ -2005,6 +2070,13 @@
       if (node.nodeType !== Node.ELEMENT_NODE) return null;
 
       const tagName = node.tagName.toUpperCase();
+      if (["STYLE", "SCRIPT", "META", "LINK", "TITLE", "HEAD"].includes(tagName)) return null;
+      if (preserveSelectionMarkers && tagName === "SPAN" && node.hasAttribute("data-news-selection-marker")) {
+        const marker = document.createElement("span");
+        marker.dataset.newsSelectionMarker = String(node.getAttribute("data-news-selection-marker") || "");
+        marker.setAttribute("aria-hidden", "true");
+        return marker;
+      }
       if (
         isNewsQuoteBlockElement(node)
         || isNewsQuoteAuthorElement(node)
@@ -2083,6 +2155,57 @@
     const output = document.createElement("div");
     output.appendChild(fragment);
 
+    const isTopLevelBlock = (node) => {
+      if (node?.nodeType !== Node.ELEMENT_NODE) return false;
+      const tagName = node.tagName.toUpperCase();
+      return ["P", "OL", "UL", "H2"].includes(tagName)
+        || node.classList?.contains("news-quote-block")
+        || node.classList?.contains("news-section-title");
+    };
+
+    const hasParagraphContent = (paragraph) => !!(
+      paragraph.textContent.trim()
+      || paragraph.querySelector("br,img,[data-news-selection-marker]")
+    );
+
+    const wrapLooseTopLevelInlineContent = () => {
+      let paragraph = null;
+      const flushParagraph = (beforeNode = null) => {
+        if (!paragraph) return;
+        if (hasParagraphContent(paragraph)) {
+          output.insertBefore(paragraph, beforeNode);
+        }
+        paragraph = null;
+      };
+
+      Array.from(output.childNodes).forEach((child) => {
+        if (child.nodeType === Node.TEXT_NODE && !child.textContent.trim()) {
+          child.remove();
+          return;
+        }
+
+        if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toUpperCase() === "LI") {
+          const convertedParagraph = document.createElement("p");
+          while (child.firstChild) convertedParagraph.appendChild(child.firstChild);
+          if (!convertedParagraph.childNodes.length) convertedParagraph.appendChild(document.createElement("br"));
+          flushParagraph(child);
+          child.replaceWith(convertedParagraph);
+          return;
+        }
+
+        if (isTopLevelBlock(child)) {
+          flushParagraph(child);
+          return;
+        }
+
+        if (!paragraph) paragraph = document.createElement("p");
+        paragraph.appendChild(child);
+      });
+      flushParagraph();
+    };
+
+    wrapLooseTopLevelInlineContent();
+
     Array.from(output.querySelectorAll("img")).forEach((image) => {
       const parent = image.parentElement;
       const isAlreadyImageRow = parent?.tagName?.toUpperCase() === "P"
@@ -2105,13 +2228,14 @@
     });
 
     output.querySelectorAll("p").forEach((paragraph) => {
-      if (!paragraph.textContent.trim() && !paragraph.querySelector("br,img")) paragraph.remove();
+      if (!paragraph.textContent.trim() && !paragraph.querySelector("br,img,[data-news-selection-marker]")) paragraph.remove();
     });
     const hasQuoteBlock = !!output.querySelector(".news-quote-block");
     const hasSectionTitle = !!output.querySelector(".news-section-title");
-    if (!output.textContent.trim() && !output.querySelector("img") && !hasQuoteBlock && !hasSectionTitle) return "";
+    const hasSelectionMarker = preserveSelectionMarkers && !!output.querySelector("[data-news-selection-marker]");
+    if (!output.textContent.trim() && !output.querySelector("img") && !hasQuoteBlock && !hasSectionTitle && !hasSelectionMarker) return "";
     if (
-      (output.textContent.trim() || output.querySelector("img") || hasQuoteBlock || hasSectionTitle)
+      (output.textContent.trim() || output.querySelector("img") || hasQuoteBlock || hasSectionTitle || hasSelectionMarker)
       && !Array.from(output.children).some((child) => (
         ["P", "OL", "UL", "H2"].includes(child.tagName.toUpperCase())
         || child.classList?.contains("news-quote-block")
@@ -2163,9 +2287,20 @@
     };
 
     const runCommand = (command, value = null, shouldNormalize = true) => {
-      focusEditor();
-      document.execCommand(command, false, value);
-      if (shouldNormalize) normalizeEditorHtml();
+      const targetRange = getSelectionRange() || (savedEditorRange ? savedEditorRange.cloneRange() : null);
+      preserveEditorScroll(() => {
+        if (targetRange) {
+          restoreSelectionRange(targetRange);
+        } else {
+          focusEditor();
+        }
+        document.execCommand(command, false, value);
+        if (shouldNormalize) {
+          normalizeEditorHtml({ preserveSelection: true });
+        } else {
+          rememberEditorSelection();
+        }
+      });
       updateToolbarState();
     };
 
@@ -2228,6 +2363,66 @@
       if (!selection) return;
       selection.removeAllRanges();
       selection.addRange(range);
+    };
+
+    const createSelectionMarker = (name) => {
+      const marker = document.createElement("span");
+      marker.dataset.newsSelectionMarker = name;
+      marker.setAttribute("aria-hidden", "true");
+      return marker;
+    };
+
+    const insertSelectionMarkers = () => {
+      const range = getSelectionRange();
+      if (!range || !editor.contains(range.commonAncestorContainer)) return null;
+      const markerId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      if (range.collapsed) {
+        const caretMarker = createSelectionMarker(`caret-${markerId}`);
+        const markerRange = range.cloneRange();
+        markerRange.insertNode(caretMarker);
+        return { markerId, collapsed: true };
+      }
+
+      const startMarker = createSelectionMarker(`start-${markerId}`);
+      const endMarker = createSelectionMarker(`end-${markerId}`);
+      const endRange = range.cloneRange();
+      endRange.collapse(false);
+      endRange.insertNode(endMarker);
+      const startRange = range.cloneRange();
+      startRange.collapse(true);
+      startRange.insertNode(startMarker);
+      return { markerId, collapsed: false };
+    };
+
+    const restoreSelectionFromMarkers = (markerState) => {
+      if (!markerState?.markerId) return false;
+      const caretMarker = editor.querySelector(`[data-news-selection-marker="caret-${markerState.markerId}"]`);
+      const startMarker = editor.querySelector(`[data-news-selection-marker="start-${markerState.markerId}"]`);
+      const endMarker = editor.querySelector(`[data-news-selection-marker="end-${markerState.markerId}"]`);
+      const range = document.createRange();
+
+      if (markerState.collapsed && caretMarker) {
+        range.setStartBefore(caretMarker);
+        range.collapse(true);
+        caretMarker.remove();
+        restoreSelectionRange(range);
+        savedEditorRange = range.cloneRange();
+        return true;
+      }
+
+      if (!markerState.collapsed && startMarker && endMarker) {
+        range.setStartAfter(startMarker);
+        range.setEndBefore(endMarker);
+        restoreSelectionRange(range);
+        savedEditorRange = range.cloneRange();
+        startMarker.remove();
+        endMarker.remove();
+        return true;
+      }
+
+      [caretMarker, startMarker, endMarker].filter(Boolean).forEach((marker) => marker.remove());
+      return false;
     };
 
     const placeCaretAtEnd = () => {
@@ -2367,6 +2562,7 @@
         if (child.nodeType !== Node.ELEMENT_NODE) return false;
         if (child.matches?.("[data-news-image-marker]")) return false;
         if (child.matches?.("[data-news-block-marker]")) return false;
+        if (child.matches?.("[data-news-selection-marker]")) return false;
         if (child.tagName?.toUpperCase() === "BR") return false;
         return true;
       });
@@ -2462,6 +2658,48 @@
       });
     };
 
+    const appendQuoteTextWithLineBreaksToNode = (node, text) => {
+      String(text || "").split(/\n/).forEach((line, index) => {
+        if (index > 0) node.appendChild(document.createElement("br"));
+        if (line) appendNewsQuoteTextWithEmoji(node, line);
+      });
+    };
+
+    const getElementFromRangeNode = (node) => (
+      node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement || null
+    );
+
+    const isRangeInsideElement = (range, element) => {
+      if (!range || !element || !editor.contains(element)) return false;
+      const startElement = getElementFromRangeNode(range.startContainer);
+      const endElement = getElementFromRangeNode(range.endContainer);
+      return !!startElement && !!endElement && element.contains(startElement) && element.contains(endElement);
+    };
+
+    const insertTextIntoQuoteAtRange = (range, quoteText, text) => {
+      const normalizedText = String(text || "").replace(/\r\n?/g, "\n");
+      if (!normalizedText || !isRangeInsideElement(range, quoteText)) return false;
+
+      const fragment = document.createDocumentFragment();
+      appendQuoteTextWithLineBreaksToNode(fragment, normalizedText);
+      const caretMarker = createSelectionMarker(`quote-paste-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      fragment.appendChild(caretMarker);
+
+      const targetRange = range.cloneRange();
+      targetRange.deleteContents();
+      targetRange.insertNode(fragment);
+
+      const caretRange = document.createRange();
+      caretRange.setStartBefore(caretMarker);
+      caretRange.collapse(true);
+      caretMarker.remove();
+      restoreSelectionRange(caretRange);
+      savedEditorRange = caretRange.cloneRange();
+      setSelectedImage(null);
+      updateToolbarState();
+      return true;
+    };
+
     const getSelectedTextFromRange = (range) => String(range?.toString() || "")
       .replace(/\u00a0/g, " ")
       .replace(/[ \t]+\n/g, "\n")
@@ -2501,6 +2739,40 @@
         .trim();
     };
 
+    const getRawTextWithLineBreaksFromNode = (node) => {
+      const blockTags = new Set(["DIV", "P", "LI", "BLOCKQUOTE"]);
+      const collect = (currentNode, parts = []) => {
+        Array.from(currentNode?.childNodes || []).forEach((child) => {
+          if (child.nodeType === Node.TEXT_NODE) {
+            parts.push(child.textContent || "");
+            return;
+          }
+          if (child.nodeType !== Node.ELEMENT_NODE) return;
+          if (child.matches?.(".cp-news-quote-remove")) return;
+          if (child.tagName?.toUpperCase() === "BR") {
+            parts.push("\n");
+            return;
+          }
+          const lengthBefore = parts.length;
+          collect(child, parts);
+          if (blockTags.has(child.tagName.toUpperCase()) && parts.length > lengthBefore) {
+            parts.push("\n");
+          }
+        });
+        return parts;
+      };
+
+      return collect(node)
+        .join("")
+        .replace(/\u00a0/g, " ")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n[ \t]+/g, "\n");
+    };
+
+    const getRangeTextWithLineBreaks = (range) => (
+      range ? getRawTextWithLineBreaksFromNode(range.cloneContents()) : ""
+    );
+
     const getSelectedTextWithLineBreaksFromRange = (range) => {
       if (!range) return "";
       const fragment = range.cloneContents();
@@ -2524,7 +2796,7 @@
       author.className = "news-quote-author";
       const quote = document.createElement("blockquote");
       quote.className = "news-quote-text";
-      appendTextWithLineBreaksToNode(quote, quoteText);
+      appendQuoteTextWithLineBreaksToNode(quote, quoteText);
 
       quoteBlock.appendChild(author);
       quoteBlock.appendChild(quote);
@@ -2696,6 +2968,33 @@
       range.collapse(false);
       restoreSelectionRange(range);
       savedEditorRange = range.cloneRange();
+    };
+
+    const isCaretOnTrailingEmptyQuoteLine = (range, quoteText) => {
+      if (!range || !range.collapsed || !quoteText || !editor.contains(quoteText)) return false;
+      const beforeRange = document.createRange();
+      beforeRange.selectNodeContents(quoteText);
+      beforeRange.setEnd(range.startContainer, range.startOffset);
+
+      const afterRange = document.createRange();
+      afterRange.selectNodeContents(quoteText);
+      afterRange.setStart(range.endContainer, range.endOffset);
+
+      const beforeText = getRangeTextWithLineBreaks(beforeRange);
+      const afterText = getRangeTextWithLineBreaks(afterRange);
+      return beforeText.endsWith("\n") && !afterText.replace(/\n/g, "").trim();
+    };
+
+    const insertParagraphAfterQuoteBlock = (quoteText) => {
+      const quoteBlock = getQuoteBlockFromNode(quoteText);
+      if (!quoteBlock) return false;
+      const paragraph = document.createElement("p");
+      paragraph.appendChild(document.createElement("br"));
+      quoteBlock.insertAdjacentElement("afterend", paragraph);
+      focusBlockEnd(paragraph);
+      setSelectedImage(null);
+      updateToolbarState();
+      return true;
     };
 
     const replaceEditableBlock = (block, useSectionTitle) => {
@@ -3171,10 +3470,18 @@
       }
     });
 
-    const normalizeEditorHtml = () => {
-      editor.innerHTML = sanitizeNewsDescriptionHtml(editor.innerHTML, { preserveEmptyQuotes: true }) || "<p><br></p>";
+    const normalizeEditorHtml = (normalizeOptions = {}) => {
+      const shouldPreserveSelection = normalizeOptions.preserveSelection === true;
+      const markerState = shouldPreserveSelection ? insertSelectionMarkers() : null;
+      editor.innerHTML = sanitizeNewsDescriptionHtml(editor.innerHTML, {
+        preserveEmptyQuotes: true,
+        preserveSelectionMarkers: !!markerState,
+      }) || "<p><br></p>";
       selectedImageNode = null;
       enhanceQuoteBlocksInEditor();
+      if (markerState && !restoreSelectionFromMarkers(markerState)) {
+        placeCaretAtEnd();
+      }
     };
 
     const forButtonPair = (key, callback) => {
@@ -3185,8 +3492,22 @@
       floatingToolbar.hidden = true;
     };
 
+    const isRangeInFirstEditorRows = (range) => {
+      if (!range || range.collapsed) return false;
+      const rects = Array.from(range.getClientRects()).filter((item) => item.width > 0 || item.height > 0);
+      if (!rects.length) return false;
+      const firstTop = Math.min(...rects.map((item) => item.top));
+      const editorRect = editor.getBoundingClientRect();
+      const styles = window.getComputedStyle(editor);
+      const fontSize = parseFloat(styles.fontSize) || 16;
+      const lineHeight = parseFloat(styles.lineHeight) || (fontSize * 1.4);
+      const paddingTop = parseFloat(styles.paddingTop) || 0;
+      const topInEditor = firstTop - editorRect.top + editor.scrollTop - paddingTop;
+      return topInEditor < (lineHeight * 5);
+    };
+
     const updateFloatingToolbarPosition = (range) => {
-      if (!range || range.collapsed || !getSelectedTextFromRange(range)) {
+      if (!range || range.collapsed || !getSelectedTextFromRange(range) || isRangeInFirstEditorRows(range)) {
         hideFloatingToolbar();
         return;
       }
@@ -3270,6 +3591,9 @@
       }
       if (event.key === "Enter" && activeQuoteText) {
         event.preventDefault();
+        if (isCaretOnTrailingEmptyQuoteLine(activeRange, activeQuoteText) && insertParagraphAfterQuoteBlock(activeQuoteText)) {
+          return;
+        }
         runCommand("insertLineBreak", null, false);
         return;
       }
@@ -3287,7 +3611,7 @@
       }
       if (event.key === "Enter") {
         event.preventDefault();
-        runCommand("insertParagraph", null, false);
+        runCommand("insertParagraph");
         return;
       }
       if (!modifier) return;
@@ -3311,9 +3635,37 @@
       event.preventDefault();
       const html = event.clipboardData?.getData("text/html") || "";
       const text = event.clipboardData?.getData("text/plain") || "";
+      const stripPastedCssPrefix = (value) => String(value || "").replace(
+        /^(?:\s*[a-z][\w-]*(?:\.[\w-]+)?(?:\s*,\s*[a-z][\w-]*(?:\.[\w-]+)?)*\s*\{[^}]*?(?:margin|font|color)[^}]*\}\s*)+/i,
+        ""
+      );
+      const stripPastedCssPrefixFromHtml = (value) => {
+        const template = document.createElement("template");
+        template.innerHTML = String(value || "");
+        const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
+        let textNode = walker.nextNode();
+        while (textNode && !String(textNode.textContent || "").trim()) {
+          textNode = walker.nextNode();
+        }
+        if (textNode) textNode.textContent = stripPastedCssPrefix(textNode.textContent);
+        return template.innerHTML;
+      };
+      const getPastedTextWithLineBreaksFromHtml = (value) => {
+        const template = document.createElement("template");
+        template.innerHTML = sanitizeNewsDescriptionHtml(stripPastedCssPrefixFromHtml(value));
+        return getRawTextWithLineBreaksFromNode(template.content).trim();
+      };
+      const activeRange = getSelectionRange();
+      const activeQuoteText = getQuoteTextFromRange(activeRange);
+      if (activeQuoteText && isRangeInsideElement(activeRange, activeQuoteText)) {
+        const quotePasteText = stripPastedCssPrefix(text) || getPastedTextWithLineBreaksFromHtml(html);
+        if (insertTextIntoQuoteAtRange(activeRange, activeQuoteText, quotePasteText)) {
+          return;
+        }
+      }
       const safeHtml = html
-        ? sanitizeNewsDescriptionHtml(html)
-        : String(text || "")
+        ? sanitizeNewsDescriptionHtml(stripPastedCssPrefixFromHtml(sanitizeNewsDescriptionHtml(html)))
+        : stripPastedCssPrefix(text)
           .split(/\n{2,}/)
           .map((paragraph) => `<p>${paragraph.split(/\n/).map(escapeHtml).join("<br>")}</p>`)
           .join("");
@@ -3615,7 +3967,7 @@
     contentEl.appendChild(list);
   }
 
-  function renderNewsEditForm(newsItem, associationsList, tournamentsList, categoriesList, iconsList, streamersList, localWebsitesList, formMode = "create", options = {}) {
+  function renderNewsEditForm(newsItem, associationsList, tournamentsList, matchOptionsList, categoriesList, iconsList, streamersList, localWebsitesList, formMode = "create", options = {}) {
     const isCreateMode = formMode === "create";
     const source = newsItem && typeof newsItem === "object" ? newsItem : {};
     const canUploadSourceImage = options.canUploadSource === true;
@@ -3715,7 +4067,9 @@
         .map((opt) => ({
           value: String(opt?.value ?? "").trim(),
           label: String(opt?.label ?? opt?.value ?? "").trim(),
+          prefixLabel: String(opt?.prefixLabel || opt?.prefix_label || "").trim(),
           logo: String(opt?.logo || "").trim(),
+          logoAfter: String(opt?.logoAfter || opt?.logo_after || "").trim(),
         }))
         .filter((opt) => opt.label);
       let normalizedOptions = normalizeOptions(options);
@@ -3756,6 +4110,11 @@
           btnContent.appendChild(placeholder);
           return;
         }
+        if (selected.prefixLabel) {
+          const prefix = document.createElement("span");
+          prefix.textContent = selected.prefixLabel;
+          btnContent.appendChild(prefix);
+        }
         if (selected.logo) {
           const img = document.createElement("img");
           img.className = cfg.logoClass || "cp-dd-flag";
@@ -3766,6 +4125,13 @@
         const label = document.createElement("span");
         label.textContent = selected.label;
         btnContent.appendChild(label);
+        if (selected.logoAfter) {
+          const imgAfter = document.createElement("img");
+          imgAfter.className = cfg.logoClass || "cp-dd-flag";
+          imgAfter.src = selected.logoAfter;
+          imgAfter.alt = "";
+          btnContent.appendChild(imgAfter);
+        }
       };
 
       const setValue = (nextValue, trigger = false) => {
@@ -3783,7 +4149,7 @@
         const query = String(filterQuery || "").trim().toLowerCase();
         const visible = normalizedOptions.filter((opt) => {
           if (!query) return true;
-          return `${opt.label} ${opt.value}`.toLowerCase().includes(query);
+          return `${opt.prefixLabel} ${opt.label} ${opt.value}`.toLowerCase().includes(query);
         });
         if (!visible.length) {
           const empty = document.createElement("div");
@@ -3800,6 +4166,12 @@
           optionBtn.type = "button";
           optionBtn.className = "cp-dd-option";
           optionBtn.dataset.value = opt.value;
+          if (opt.prefixLabel) {
+            const prefix = document.createElement("span");
+            prefix.className = "cp-dd-option-prefix";
+            prefix.textContent = opt.prefixLabel;
+            optionBtn.appendChild(prefix);
+          }
           if (opt.logo) {
             const img = document.createElement("img");
             img.className = cfg.logoClass || "cp-dd-flag";
@@ -3811,6 +4183,13 @@
           optionLabel.className = "cp-dd-option-label";
           optionLabel.textContent = opt.label;
           optionBtn.appendChild(optionLabel);
+          if (opt.logoAfter) {
+            const imgAfter = document.createElement("img");
+            imgAfter.className = cfg.logoClass || "cp-dd-flag";
+            imgAfter.src = opt.logoAfter;
+            imgAfter.alt = "";
+            optionBtn.appendChild(imgAfter);
+          }
           optionBtn.classList.toggle("active", opt.value === value);
           optionBtn.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -4090,6 +4469,35 @@
         category: normalizeCategoryKey(item?.category),
       }))
       .filter((item) => item.value && item.label);
+    const matchRows = (Array.isArray(matchOptionsList) ? matchOptionsList : [])
+      .map((item) => {
+        const roundLabel = String(
+          item?.round_name
+          || item?.round_short_name
+          || item?.match_short_name
+          || item?.stage
+          || item?.group_name
+          || "Match"
+        ).trim();
+        const team1 = normalizeCode(item?.team_1);
+        const team2 = normalizeCode(item?.team_2);
+        const teamsLabel = `${team1 || "TBD"} - ${team2 || "TBD"}`;
+        return {
+          value: String(item?.id || item?.match_id || "").trim(),
+          label: teamsLabel,
+          prefixLabel: `${roundLabel}:`,
+          logo: String(item?.team_1_flag || "").trim(),
+          logoAfter: String(item?.team_2_flag || "").trim(),
+          tournamentId: String(item?.tournament_id || "").trim(),
+          timeUtc: String(item?.time_utc || "").trim(),
+        };
+      })
+      .filter((item) => item.value && item.label && item.tournamentId)
+      .sort((left, right) => {
+        const timeDiff = parseUtcTimestamp(right.timeUtc) - parseUtcTimestamp(left.timeUtc);
+        if (timeDiff !== 0) return timeDiff;
+        return left.value.localeCompare(right.value);
+      });
       const streamerRows = (Array.isArray(streamersList) ? streamersList : [])
         .map((item) => ({
           value: String(item?.id || "").trim(),
@@ -4190,6 +4598,7 @@
     const localAssociationOptions = [{ value: "", label: "Not selected", logo: "" }].concat(associationOptionRows
       .filter((item) => !restrictNewsEditorAccess || allowedLocalAssociationIds.has(normalizeCode(item.value))));
     const emptyTournamentOption = { value: "", label: "Not selected", logo: "" };
+    const emptyMatchOption = { value: "", label: "Not selected", logo: "", logoAfter: "" };
     const getTournamentOptionsForCategory = (categoryName) => {
       const categoryKey = normalizeCategoryKey(categoryName);
       const rows = tournamentRows
@@ -4199,6 +4608,11 @@
     };
     const getSelectableTournamentOptionsForCategory = (categoryName) => getTournamentOptionsForCategory(categoryName)
       .filter((item) => String(item?.value || "").trim());
+    const getMatchOptionsForTournament = (tournamentId) => {
+      const selectedTournamentId = String(tournamentId || "").trim().toLowerCase();
+      const rows = matchRows.filter((item) => selectedTournamentId && String(item.tournamentId || "").trim().toLowerCase() === selectedTournamentId);
+      return [emptyMatchOption].concat(rows);
+    };
     const rawCategoryOptions = (Array.isArray(categoriesList) ? categoriesList : [])
       .slice()
       .sort((left, right) => {
@@ -4317,9 +4731,20 @@
       const tournamentInput = createSingleSelect(
         String(source?.tournament_id || "").trim(),
         tournamentOptions,
-      { placeholderLabel: "Select tournament", searchable: false }
+      {
+        placeholderLabel: "Select tournament",
+        searchable: false,
+        onChange: () => updateConditionalNewsFields(),
+      }
     );
     const tournamentRow = addRow("Tournament", tournamentInput.root);
+
+    const matchInput = createSingleSelect(
+      String(source?.match_id || source?.matchId || "").trim(),
+      getMatchOptionsForTournament(String(source?.tournament_id || "").trim()),
+      { placeholderLabel: "Select match" }
+    );
+    const matchRow = addRow("Match", matchInput.root, "cp-edit-row--full");
 
     const associationRow = addRow("Association", associationInput.root);
 
@@ -4662,6 +5087,7 @@
         associationRow.classList.toggle("cp-hidden", !showAssociation);
         localWebsiteRow.classList.toggle("cp-hidden", !showLocalWebsite);
         tournamentRow.classList.toggle("cp-hidden", !showTournament);
+        matchRow.classList.toggle("cp-hidden", !showTournament);
         youtubeStreamerRow.classList.toggle("cp-hidden", !showYouTubeChannel);
       youtubeVideoRow.classList.toggle("cp-hidden", !isYouTubeCategory);
       associationsRow.classList.toggle("cp-hidden", !showAssociations);
@@ -4698,8 +5124,17 @@
             ? currentTournamentId
             : "";
         tournamentInput.setOptions(nextTournamentOptions, nextTournamentId);
+        const nextMatchOptions = getMatchOptionsForTournament(nextTournamentId);
+        const currentMatchId = matchInput.getValue();
+        const nextMatchId = nextMatchOptions.some((item) => item.value === currentMatchId)
+          ? currentMatchId
+          : "";
+        matchInput.setOptions(nextMatchOptions, nextMatchId);
+        matchInput.setDisabled(!nextTournamentId || nextMatchOptions.length <= 1);
       } else {
         tournamentInput.setOptions([emptyTournamentOption], "");
+        matchInput.setOptions([emptyMatchOption], "");
+        matchInput.setDisabled(true);
       }
       if (showYouTubeChannel) {
         const currentStreamerId = youtubeStreamerInput.getValue();
@@ -4778,6 +5213,7 @@
           association_id: categoryKind === "local" ? associationInput.getValue() || "" : "",
           local_website_id: categoryKind === "local_website" ? Number.parseInt(String(localWebsiteInput.getValue() || "").trim(), 10) : null,
           tournament_id: categoryKind === "tournament" ? tournamentInput.getValue() || "" : "",
+          match_id: categoryKind === "tournament" ? matchInput.getValue() || "" : "",
           streamer_id: isYouTubeCategory ? Number.parseInt(String(youtubeStreamerInput.getValue() || "").trim(), 10) : null,
           youtube_video_id: isYouTubeCategory ? normalizeYouTubeVideoId(youtubeVideoInput.value) : null,
           associations: categoryKind === "local" || categoryKind === "local_website" ? [] : associationsInput.getValue(),
@@ -5027,13 +5463,14 @@
         return;
       }
 
-        const [newsRes, associationsRes, categoriesRes, iconsRes, streamersRes, localWebsitesRes] = await Promise.all([
+        const [newsRes, associationsRes, categoriesRes, iconsRes, streamersRes, localWebsitesRes, matchOptionsRes] = await Promise.all([
           fetch(NEWS_URL, { method: "GET", credentials: "include" }),
           fetch(ASSOCIATIONS_URL, { method: "GET", credentials: "include" }),
           fetch(CATEGORIES_URL, { method: "GET", credentials: "include" }),
           fetch(ICONS_URL, { method: "GET", credentials: "include" }),
           fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
           fetch(LOCAL_WEBSITES_URL, { method: "GET", credentials: "include" }),
+          fetch(NEWS_MATCH_OPTIONS_URL, { method: "GET", credentials: "include" }),
         ]);
       const newsData = newsRes?.ok
         ? await newsRes.json().catch(() => ({}))
@@ -5059,6 +5496,10 @@
           ? await localWebsitesRes.json().catch(() => ({}))
           : {};
         const localWebsites = Array.isArray(localWebsitesData?.local_websites) ? localWebsitesData.local_websites : [];
+        const matchOptionsData = matchOptionsRes?.ok
+          ? await matchOptionsRes.json().catch(() => ({}))
+          : {};
+        const matchOptions = Array.isArray(matchOptionsData?.matches) ? matchOptionsData.matches : [];
       const associationsById = new Map();
       associations.forEach((item) => {
         const associationId = normalizeCode(item?.id || item?.code);
@@ -5100,7 +5541,7 @@
       }
 
       if (isCreateMode) {
-          renderNewsEditForm(null, associations, tournaments, categories, icons, streamers, localWebsites, "create", {
+          renderNewsEditForm(null, associations, tournaments, matchOptions, categories, icons, streamers, localWebsites, "create", {
             canUploadSource: isAdminUser,
           currentUserAuthId,
           currentUserProfileId,
@@ -5118,7 +5559,7 @@
           countEl.textContent = "";
           return;
         }
-          renderNewsEditForm(newsToEdit, associations, tournaments, categories, icons, streamers, localWebsites, "edit", {
+          renderNewsEditForm(newsToEdit, associations, tournaments, matchOptions, categories, icons, streamers, localWebsites, "edit", {
             canUploadSource: isAdminUser,
           currentUserAuthId,
           currentUserProfileId,

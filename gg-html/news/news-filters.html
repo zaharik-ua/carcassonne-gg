@@ -1,0 +1,671 @@
+<!-- FILTERS: News -->
+<style>
+  .nf-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 6px 8px 10px;
+  }
+  .nf-country-toggle,
+  .nf-select-toggle {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 13px;
+    gap: 6px;
+    justify-content: space-between;
+    min-height: 28px;
+    padding: 4px 8px;
+    width: 100%;
+  }
+  .nf-country-toggle.active,
+  .nf-select-toggle.active,
+  .nf-select-toggle.has-value {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.3);
+  }
+  .nf-title-wrap {
+    align-items: flex-start;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .nf-label {
+    color: #333;
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nf-selected-label {
+    color: #333;
+    display: none;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nf-selected-wrap {
+    align-items: center;
+    display: none;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .nf-selected-flag {
+    align-items: center;
+    display: inline-flex;
+    gap: 6px;
+  }
+  .nf-selected-flag img {
+    height: auto;
+    object-fit: contain;
+    width: 18px;
+  }
+  .nf-clear {
+    align-items: center;
+    color: #d32f2f;
+    cursor: pointer;
+    display: none;
+    font-size: 14px;
+    font-weight: 700;
+    justify-content: center;
+    line-height: 1;
+    margin-left: 2px;
+  }
+  .nf-selected-wrap .nf-clear {
+    display: inline-flex;
+  }
+  .nf-country-row,
+  .nf-select-menu {
+    display: none;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding-top: 7px;
+  }
+  .nf-country-row.open,
+  .nf-select-menu.open {
+    display: flex;
+  }
+  .nf-flag-btn {
+    align-items: center;
+    background: transparent;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    justify-content: center;
+    padding: 2px;
+  }
+  .nf-flag-btn.active {
+    border-color: #0277BD;
+  }
+  .nf-flag-btn img {
+    height: 18px;
+    object-fit: contain;
+    width: 18px;
+  }
+  .nf-option-btn {
+    background-color: #fffde5;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    color: #333;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 6px;
+    transition: all 0.2s ease;
+  }
+  .nf-option-btn.active {
+    background-color: #fbf092;
+    border-color: #0277BD;
+  }
+  .nf-filter-row.is-hidden {
+    display: none;
+  }
+  .nf-clear-filters-btn {
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    height: 20px;
+    line-height: 16px;
+    padding: 2px 6px;
+    transition: all 0.2s ease;
+    width: fit-content;
+  }
+  .nf-clear-filters-btn:hover {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.4);
+  }
+  .nf-back-btn {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    display: none;
+    font-size: 13px;
+    gap: 6px;
+    justify-content: center;
+    min-height: 28px;
+    padding: 4px 8px;
+    width: fit-content;
+  }
+  .nf-back-btn:hover {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.4);
+  }
+  .nf-filters.detail-mode .nf-back-btn {
+    display: inline-flex;
+  }
+  .nf-filters.detail-mode .nf-filter-row,
+  .nf-filters.detail-mode .nf-clear-filters-btn {
+    display: none;
+  }
+</style>
+
+<div class="nf-filters">
+  <button class="nf-back-btn" id="nf-back-btn" type="button">All News</button>
+
+  <div class="nf-filter-row">
+    <button class="nf-country-toggle" id="nf-country-toggle" type="button">
+      <span class="nf-label">Country</span>
+      <span class="nf-selected-wrap" id="nf-country-selected-wrap">
+        <span class="nf-selected-flag" id="nf-country-selected-flag"></span>
+        <span class="nf-clear" id="nf-country-clear">x</span>
+      </span>
+    </button>
+    <div class="nf-country-row" id="nf-country-row"></div>
+  </div>
+
+  <div class="nf-filter-row">
+    <button class="nf-select-toggle" id="nf-significance-toggle" type="button">
+      <span class="nf-title-wrap">
+        <span class="nf-label">Significance</span>
+        <span class="nf-selected-label" id="nf-significance-selected"></span>
+      </span>
+      <span class="nf-clear" id="nf-significance-clear">x</span>
+    </button>
+    <div class="nf-select-menu" id="nf-significance-menu"></div>
+  </div>
+
+  <div class="nf-filter-row">
+    <button class="nf-select-toggle" id="nf-category-toggle" type="button">
+      <span class="nf-title-wrap">
+        <span class="nf-label">Category</span>
+        <span class="nf-selected-label" id="nf-category-selected"></span>
+      </span>
+      <span class="nf-clear" id="nf-category-clear">x</span>
+    </button>
+    <div class="nf-select-menu" id="nf-category-menu"></div>
+  </div>
+
+  <div class="nf-filter-row is-hidden" id="nf-tournament-filter">
+    <button class="nf-select-toggle" id="nf-tournament-toggle" type="button">
+      <span class="nf-title-wrap">
+        <span class="nf-label">Tournament</span>
+        <span class="nf-selected-label" id="nf-tournament-selected"></span>
+      </span>
+      <span class="nf-clear" id="nf-tournament-clear">x</span>
+    </button>
+    <div class="nf-select-menu" id="nf-tournament-menu"></div>
+  </div>
+
+  <div class="nf-filter-row is-hidden" id="nf-youtube-filter">
+    <button class="nf-select-toggle" id="nf-youtube-toggle" type="button">
+      <span class="nf-title-wrap">
+        <span class="nf-label">YouTube Channel</span>
+        <span class="nf-selected-label" id="nf-youtube-selected"></span>
+      </span>
+      <span class="nf-clear" id="nf-youtube-clear">x</span>
+    </button>
+    <div class="nf-select-menu" id="nf-youtube-menu"></div>
+  </div>
+
+  <button class="nf-clear-filters-btn" id="nf-clear-filters-btn" type="button">Clear filters</button>
+</div>
+
+<script>
+  (() => {
+    const nfAuthBase = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+    const nfNewsURL = `${nfAuthBase}/public/news`;
+    const nfAssociationsURL = `${nfAuthBase}/associations`;
+    const nfTournamentsURL = `${nfAuthBase}/tournaments`;
+    const nfFilterParams = ["association", "significance", "category", "tournament", "youtube_channel", "streamer"];
+    const nfNewsDetailParams = ["news", "id", "news_id"];
+
+    const nfRoot = document.querySelector(".nf-filters");
+    const nfBackBtn = document.getElementById("nf-back-btn");
+    const nfCountryToggle = document.getElementById("nf-country-toggle");
+    const nfCountryRow = document.getElementById("nf-country-row");
+    const nfCountrySelectedWrap = document.getElementById("nf-country-selected-wrap");
+    const nfCountrySelectedFlag = document.getElementById("nf-country-selected-flag");
+    const nfCountryClear = document.getElementById("nf-country-clear");
+    const nfClearFiltersBtn = document.getElementById("nf-clear-filters-btn");
+    const nfTournamentFilter = document.getElementById("nf-tournament-filter");
+    const nfYoutubeFilter = document.getElementById("nf-youtube-filter");
+
+    const nfControls = {
+      significance: {
+        param: "significance",
+        toggle: document.getElementById("nf-significance-toggle"),
+        menu: document.getElementById("nf-significance-menu"),
+        selected: document.getElementById("nf-significance-selected"),
+        clear: document.getElementById("nf-significance-clear"),
+        options: [],
+      },
+      category: {
+        param: "category",
+        toggle: document.getElementById("nf-category-toggle"),
+        menu: document.getElementById("nf-category-menu"),
+        selected: document.getElementById("nf-category-selected"),
+        clear: document.getElementById("nf-category-clear"),
+        options: [],
+      },
+      tournament: {
+        param: "tournament",
+        toggle: document.getElementById("nf-tournament-toggle"),
+        menu: document.getElementById("nf-tournament-menu"),
+        selected: document.getElementById("nf-tournament-selected"),
+        clear: document.getElementById("nf-tournament-clear"),
+        options: [],
+      },
+      youtube: {
+        param: "youtube_channel",
+        toggle: document.getElementById("nf-youtube-toggle"),
+        menu: document.getElementById("nf-youtube-menu"),
+        selected: document.getElementById("nf-youtube-selected"),
+        clear: document.getElementById("nf-youtube-clear"),
+        options: [],
+      },
+    };
+
+    let nfCountryOptions = [];
+    let nfNewsItems = [];
+    let nfTournamentOptionsByCategory = new Map();
+    let nfYoutubeOptions = [];
+
+    const nfNormalizeCode = (value) => String(value || "").trim().toUpperCase();
+    const nfNormalizeText = (value) => String(value || "").trim().replace(/\s+/g, " ");
+    const nfNormalizeLookup = (value) => nfNormalizeText(value).toLowerCase();
+    const nfIsLocalWebsiteCategory = (value) => nfNormalizeLookup(value) === "local website";
+    const nfIsYoutubeCategory = (value) => nfNormalizeLookup(value) === "youtube";
+
+    function nfParseJsonArray(value) {
+      if (Array.isArray(value)) return value;
+      const raw = String(value || "").trim();
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (_error) {
+        return [];
+      }
+    }
+
+    function nfGetNewsAssociationIds(newsItem) {
+      const ids = [];
+      const directId = nfNormalizeCode(newsItem?.association_id ?? newsItem?.associationId ?? newsItem?.association);
+      if (directId) ids.push(directId);
+      nfParseJsonArray(newsItem?.associations).forEach((item) => {
+        const id = nfNormalizeCode(item?.id ?? item?.code ?? item);
+        if (id) ids.push(id);
+      });
+      return Array.from(new Set(ids));
+    }
+
+    function nfGetParam(name) {
+      const params = new URLSearchParams(window.location.search);
+      if (name === "youtube_channel") {
+        return String(params.get("youtube_channel") || params.get("streamer") || "").trim();
+      }
+      return String(params.get(name) || "").trim();
+    }
+
+    function nfReplaceUrl(params, pathname = window.location.pathname) {
+      const query = params.toString();
+      const nextUrl = `${pathname}${query ? `?${query}` : ""}${window.location.hash || ""}`;
+      window.history.replaceState({}, "", nextUrl);
+    }
+
+    function nfDispatchFilterChange() {
+      window.dispatchEvent(new Event("news-filter-change"));
+    }
+
+    function nfSetParam(name, value, options = {}) {
+      const params = new URLSearchParams(window.location.search);
+      const normalizedValue = String(value || "").trim();
+      if (name === "youtube_channel") params.delete("streamer");
+      if (normalizedValue) params.set(name, normalizedValue);
+      else params.delete(name);
+      if (options.clearTournament) params.delete("tournament");
+      if (options.clearYoutube) {
+        params.delete("youtube_channel");
+        params.delete("streamer");
+      }
+      nfReplaceUrl(params);
+      nfDispatchFilterChange();
+    }
+
+    function nfClearAllParams() {
+      const params = new URLSearchParams(window.location.search);
+      nfFilterParams.forEach((param) => params.delete(param));
+      nfReplaceUrl(params);
+      nfDispatchFilterChange();
+    }
+
+    function nfHasSelectedNews() {
+      const params = new URLSearchParams(window.location.search);
+      const hasDetailParam = nfNewsDetailParams.some((param) => String(params.get(param) || "").trim());
+      return hasDetailParam || /\/news\/[^/?#]+\/?$/i.test(window.location.pathname);
+    }
+
+    function nfUpdateMode() {
+      const isDetailMode = nfHasSelectedNews();
+      if (nfRoot) nfRoot.classList.toggle("detail-mode", isDetailMode);
+      if (isDetailMode) nfCloseOtherMenus(null);
+      return isDetailMode;
+    }
+
+    function nfBackToAllNews() {
+      const params = new URLSearchParams(window.location.search);
+      nfNewsDetailParams.forEach((param) => params.delete(param));
+      nfFilterParams.forEach((param) => params.delete(param));
+      const detailPathMatch = window.location.pathname.match(/^(.*\/news\/)[^/?#]+\/?$/i);
+      nfReplaceUrl(params, detailPathMatch ? detailPathMatch[1] : window.location.pathname);
+      nfRenderState();
+      nfDispatchFilterChange();
+    }
+
+    async function nfFetchJson(url) {
+      try {
+        const response = await fetch(url, { method: "GET" });
+        if (!response.ok) return null;
+        return response.json();
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    function nfToggleMenu(menu, toggle, forceOpen) {
+      if (!menu || !toggle) return;
+      const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !menu.classList.contains("open");
+      menu.classList.toggle("open", shouldOpen);
+      toggle.classList.toggle("active", shouldOpen);
+    }
+
+    function nfCloseOtherMenus(openMenu) {
+      [nfCountryRow, ...Object.values(nfControls).map((control) => control.menu)].forEach((menu) => {
+        if (!menu || menu === openMenu) return;
+        menu.classList.remove("open");
+      });
+      [nfCountryToggle, ...Object.values(nfControls).map((control) => control.toggle)].forEach((toggle) => {
+        if (!toggle) return;
+        toggle.classList.remove("active");
+      });
+    }
+
+    function nfSetControlOptions(key, options) {
+      const control = nfControls[key];
+      if (!control) return;
+      control.options = Array.isArray(options) ? options : [];
+      control.menu.innerHTML = "";
+      control.options.forEach((option) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "nf-option-btn";
+        btn.dataset.value = option.value;
+        btn.textContent = option.label;
+        btn.addEventListener("click", () => {
+          const current = nfGetParam(control.param);
+          const next = current === option.value ? "" : option.value;
+          const clearDependents = key === "category";
+          nfSetParam(control.param, next, {
+            clearTournament: clearDependents,
+            clearYoutube: clearDependents,
+          });
+          nfRenderState();
+          nfToggleMenu(control.menu, control.toggle, true);
+        });
+        control.menu.appendChild(btn);
+      });
+    }
+
+    function nfUpdateControlState(key) {
+      const control = nfControls[key];
+      if (!control) return;
+      const active = nfGetParam(control.param);
+      const option = control.options.find((item) => item.value === active);
+      const hasActive = Boolean(option);
+      control.toggle.classList.toggle("has-value", hasActive);
+      control.selected.textContent = hasActive ? option.label : "";
+      control.selected.style.display = hasActive ? "inline" : "none";
+      control.clear.style.display = hasActive ? "inline-flex" : "none";
+      control.menu.querySelectorAll(".nf-option-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.value === active);
+      });
+    }
+
+    function nfUpdateCountryState() {
+      const active = nfNormalizeCode(nfGetParam("association"));
+      const option = nfCountryOptions.find((item) => item.value === active);
+      if (option) {
+        nfCountrySelectedFlag.innerHTML = "";
+        const img = document.createElement("img");
+        img.src = option.flag;
+        img.alt = option.label || "Country flag";
+        img.title = option.label || "";
+        nfCountrySelectedFlag.appendChild(img);
+        nfCountrySelectedWrap.style.display = "inline-flex";
+      } else {
+        nfCountrySelectedFlag.innerHTML = "";
+        nfCountrySelectedWrap.style.display = "none";
+      }
+      nfCountryRow.querySelectorAll(".nf-flag-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.value === active);
+      });
+    }
+
+    function nfGetTournamentOptionsForCategory(category) {
+      return nfTournamentOptionsByCategory.get(nfNormalizeLookup(category)) || [];
+    }
+
+    function nfUpdateDependentFilters() {
+      const selectedCategory = nfGetParam("category");
+      const tournamentOptions = nfGetTournamentOptionsForCategory(selectedCategory);
+      const showTournament = Boolean(selectedCategory) && tournamentOptions.length > 0 && !nfIsYoutubeCategory(selectedCategory);
+      const showYoutube = Boolean(selectedCategory) && nfIsYoutubeCategory(selectedCategory) && nfYoutubeOptions.length > 0;
+
+      nfSetControlOptions("tournament", showTournament ? tournamentOptions : []);
+      nfSetControlOptions("youtube", showYoutube ? nfYoutubeOptions : []);
+      nfTournamentFilter.classList.toggle("is-hidden", !showTournament);
+      nfYoutubeFilter.classList.toggle("is-hidden", !showYoutube);
+
+      const activeTournament = nfGetParam("tournament");
+      if (activeTournament && (!showTournament || !tournamentOptions.some((item) => item.value === activeTournament))) {
+        nfSetParam("tournament", "");
+      }
+      const activeYoutube = nfGetParam("youtube_channel");
+      if (activeYoutube && (!showYoutube || !nfYoutubeOptions.some((item) => item.value === activeYoutube))) {
+        nfSetParam("youtube_channel", "");
+      }
+    }
+
+    function nfRenderState() {
+      if (nfUpdateMode()) return;
+      nfUpdateDependentFilters();
+      nfUpdateCountryState();
+      Object.keys(nfControls).forEach(nfUpdateControlState);
+    }
+
+    function nfBuildCountryOptions(associations) {
+      const newsAssociationIds = new Set();
+      nfNewsItems.forEach((newsItem) => {
+        nfGetNewsAssociationIds(newsItem).forEach((id) => newsAssociationIds.add(id));
+      });
+      const byId = new Map((Array.isArray(associations) ? associations : []).map((item) => {
+        const id = nfNormalizeCode(item?.id || item?.code);
+        return [id, {
+          value: id,
+          label: String(item?.name || id).trim(),
+          flag: String(item?.flag || "").trim(),
+        }];
+      }).filter(([id, item]) => id && item.flag));
+      nfCountryOptions = Array.from(newsAssociationIds)
+        .map((id) => byId.get(id))
+        .filter(Boolean)
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+      nfCountryRow.innerHTML = "";
+      nfCountryOptions.forEach((option) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "nf-flag-btn";
+        btn.dataset.value = option.value;
+        const img = document.createElement("img");
+        img.src = option.flag;
+        img.alt = option.label || "Country flag";
+        img.title = option.label || "";
+        btn.appendChild(img);
+        btn.addEventListener("click", () => {
+          const current = nfNormalizeCode(nfGetParam("association"));
+          const next = current === option.value ? "" : option.value;
+          nfSetParam("association", next);
+          nfRenderState();
+          nfToggleMenu(nfCountryRow, nfCountryToggle, true);
+        });
+        nfCountryRow.appendChild(btn);
+      });
+    }
+
+    function nfBuildSelectOptions(tournaments) {
+      const significanceOrder = ["Regular", "Important", "Major"];
+      const significanceSet = new Set();
+      const categoryMap = new Map();
+      const tournamentMeta = new Map();
+      const tournamentByCategory = new Map();
+      const youtubeMap = new Map();
+
+      (Array.isArray(tournaments) ? tournaments : []).forEach((item) => {
+        const id = String(item?.id || "").trim();
+        if (!id) return;
+        tournamentMeta.set(id.toLowerCase(), {
+          value: id,
+          label: String(item?.short_title || item?.name || id).trim(),
+          category: nfNormalizeText(item?.category || ""),
+        });
+      });
+
+      nfNewsItems.forEach((newsItem) => {
+        const significance = nfNormalizeText(newsItem?.significance || "");
+        if (significance) significanceSet.add(significance);
+
+        const category = nfNormalizeText(newsItem?.category || "");
+        const categoryKey = nfNormalizeLookup(category);
+        if (category && !nfIsLocalWebsiteCategory(category) && !categoryMap.has(categoryKey)) {
+          categoryMap.set(categoryKey, { value: category, label: category });
+        }
+
+        const tournamentId = String(newsItem?.tournament_id ?? newsItem?.tournamentId ?? newsItem?.tournament ?? "").trim();
+        if (category && tournamentId) {
+          const meta = tournamentMeta.get(tournamentId.toLowerCase()) || null;
+          const option = {
+            value: tournamentId,
+            label: String(meta?.label || newsItem?.tournament_name || newsItem?.tournamentName || tournamentId).trim(),
+          };
+          if (!tournamentByCategory.has(categoryKey)) tournamentByCategory.set(categoryKey, new Map());
+          tournamentByCategory.get(categoryKey).set(tournamentId, option);
+        }
+
+        const streamerId = String(newsItem?.streamer_id ?? newsItem?.streamerId ?? newsItem?.youtube_channel ?? newsItem?.youtubeChannel ?? "").trim();
+        if (streamerId && nfIsYoutubeCategory(category)) {
+          youtubeMap.set(streamerId, {
+            value: streamerId,
+            label: String(newsItem?.streamer_short_name || newsItem?.streamer_name || `Channel ${streamerId}`).trim(),
+          });
+        }
+      });
+
+      nfTournamentOptionsByCategory = new Map(Array.from(tournamentByCategory.entries()).map(([category, optionsMap]) => [
+        category,
+        Array.from(optionsMap.values()).sort((a, b) => a.label.localeCompare(b.label)),
+      ]));
+      nfYoutubeOptions = Array.from(youtubeMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+
+      nfSetControlOptions("significance", Array.from(significanceSet)
+        .sort((a, b) => {
+          const aIndex = significanceOrder.findIndex((item) => item.toLowerCase() === a.toLowerCase());
+          const bIndex = significanceOrder.findIndex((item) => item.toLowerCase() === b.toLowerCase());
+          return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex) || a.localeCompare(b);
+        })
+        .map((value) => ({ value, label: value })));
+      nfSetControlOptions("category", Array.from(categoryMap.values()).sort((a, b) => a.label.localeCompare(b.label)));
+    }
+
+    async function nfInit() {
+      const [newsPayload, associationsPayload, tournamentsPayload] = await Promise.all([
+        nfFetchJson(nfNewsURL),
+        nfFetchJson(nfAssociationsURL),
+        nfFetchJson(nfTournamentsURL),
+      ]);
+      nfNewsItems = Array.isArray(newsPayload?.news)
+        ? newsPayload.news.filter((newsItem) => !nfIsLocalWebsiteCategory(newsItem?.category))
+        : [];
+
+      nfBuildCountryOptions(associationsPayload?.associations || []);
+      nfBuildSelectOptions(tournamentsPayload?.tournaments || []);
+      nfRenderState();
+    }
+
+    nfCountryToggle.addEventListener("click", () => {
+      nfCloseOtherMenus(nfCountryRow);
+      nfToggleMenu(nfCountryRow, nfCountryToggle);
+    });
+    nfCountryClear.addEventListener("click", (event) => {
+      event.stopPropagation();
+      nfSetParam("association", "");
+      nfRenderState();
+    });
+
+    Object.entries(nfControls).forEach(([key, control]) => {
+      control.toggle.addEventListener("click", () => {
+        nfCloseOtherMenus(control.menu);
+        nfToggleMenu(control.menu, control.toggle);
+      });
+      control.clear.addEventListener("click", (event) => {
+        event.stopPropagation();
+        nfSetParam(control.param, "", {
+          clearTournament: key === "category",
+          clearYoutube: key === "category",
+        });
+        nfRenderState();
+      });
+    });
+
+    nfClearFiltersBtn.addEventListener("click", () => {
+      nfClearAllParams();
+      nfRenderState();
+    });
+    nfBackBtn.addEventListener("click", nfBackToAllNews);
+
+    window.addEventListener("popstate", nfRenderState);
+
+    nfUpdateMode();
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", nfInit);
+    } else {
+      nfInit();
+    }
+  })();
+</script>

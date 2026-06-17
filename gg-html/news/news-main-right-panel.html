@@ -59,6 +59,25 @@
   .gg-rp-news-row-link {
     cursor: pointer;
   }
+  .gg-rp-news-more-link {
+    background: white;
+    border-top: 1px solid #ccc;
+    box-sizing: border-box;
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.25;
+    padding: 8px 5px;
+    text-align: center;
+  }
+  .gg-rp-news-more-link a {
+    color: #146997;
+    text-decoration: none;
+  }
+  .gg-rp-news-more-link a:hover {
+    color: #0e4f73;
+    text-decoration: none;
+  }
   .gg-rp-news-icon {
     flex: 0 0 auto;
     height: auto;
@@ -457,7 +476,7 @@
 
 <div class="gg-rp-news-widget">
   <div class="gg-rp-news-header">
-    <span class="gg-rp-news-header-title">Carcassonne News</span>
+    <span class="gg-rp-news-header-title">Recent News</span>
   </div>
   <div id="gg-rp-news-container"></div>
 </div>
@@ -467,6 +486,7 @@
   const PLAYERS_PUBLIC_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
   const NEWS_API_ORIGIN = new URL(NEWS_PUBLIC_URL).origin;
   const NEWS_DESCRIPTION_PREVIEW_LIMIT = 200;
+  const NEWS_LIST_LIMIT = 10;
   const newsContainer = document.getElementById("gg-rp-news-container");
   let imageModal;
   let allNewsItems = [];
@@ -1040,7 +1060,9 @@
       return;
     }
 
-    allNewsItems.forEach(newsItem => {
+    const displayedNewsItems = allNewsItems.slice(0, NEWS_LIST_LIMIT);
+
+    displayedNewsItems.forEach(newsItem => {
       const row = document.createElement("div");
       row.className = "gg-rp-news-row";
 
@@ -1239,6 +1261,17 @@
         newsContainer.appendChild(row);
       }
     });
+
+    if (displayedNewsItems.length >= NEWS_LIST_LIMIT) {
+      const moreLinkRow = document.createElement("div");
+      moreLinkRow.className = "gg-rp-news-more-link";
+
+      const moreLink = document.createElement("a");
+      moreLink.href = "https://carcassonne.gg/news/";
+      moreLink.textContent = "More news";
+      moreLinkRow.appendChild(moreLink);
+      newsContainer.appendChild(moreLinkRow);
+    }
   }
 
   function fetchNews() {

@@ -362,9 +362,11 @@
 
   function buildRoundLayout(groupedByRound, sortedRounds, options = {}) {
     const layout = { compact: {}, left: {}, width: {}, totalWidth: BRACKET_MARGIN };
+    const fullWidthRoundStartIndex = Math.max(sortedRounds.length - 2, 0);
     let nextLeft = BRACKET_MARGIN;
-    sortedRounds.forEach(roundNum => {
-      const compactRound = !options.forceFullWidthRounds && isRoundPlayed(groupedByRound[roundNum]);
+    sortedRounds.forEach((roundNum, index) => {
+      const isLastTwoRounds = index >= fullWidthRoundStartIndex;
+      const compactRound = !options.forceFullWidthRounds && !isLastTwoRounds && isRoundPlayed(groupedByRound[roundNum]);
       const roundWidth = compactRound ? COMPACT_MATCH_WIDTH : MATCH_WIDTH;
       layout.compact[roundNum] = compactRound;
       layout.left[roundNum] = nextLeft;

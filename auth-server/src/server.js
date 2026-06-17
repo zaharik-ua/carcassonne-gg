@@ -187,6 +187,7 @@ const NEWS_AUDIT_FIELDS = [
   "category",
   "association_id",
   "tournament_id",
+  "match_id",
   "local_website_id",
   "streamer_id",
   "youtube_video_id",
@@ -728,6 +729,23 @@ async function loadNewsTournamentMeta(tournamentId) {
   );
 }
 
+async function loadNewsMatchMeta(matchId) {
+  const normalizedMatchId = normalizeNullableText(matchId);
+  if (!normalizedMatchId) return null;
+  return dbGetAsync(
+    `
+      SELECT
+        id,
+        tournament_id
+      FROM matches
+      WHERE trim(COALESCE(id, '')) = trim(?)
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
+    [normalizedMatchId]
+  );
+}
+
 async function loadActiveStreamerById(streamerId) {
   const normalizedStreamerId = normalizePositiveInteger(streamerId);
   if (!normalizedStreamerId) return null;
@@ -1076,6 +1094,7 @@ async function loadNewsById(newsId) {
         n.category,
         n.association_id,
         n.tournament_id,
+        n.match_id,
         n.local_website_id,
         n.streamer_id,
         n.youtube_video_id,
@@ -1096,6 +1115,13 @@ async function loadNewsById(newsId) {
         a.flag AS association_flag,
         COALESCE(t.short_title, t.name) AS tournament_name,
         t.logo AS tournament_logo,
+        m.round_name AS match_round_name,
+        m.team_1 AS match_team_1,
+        m.team_2 AS match_team_2,
+        m.time_utc AS match_time_utc,
+        m.status AS match_status,
+        a1.flag AS match_team_1_flag,
+        a2.flag AS match_team_2_flag,
         COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_name,
         COALESCE(NULLIF(trim(lw.name), ''), NULLIF(trim(lw.url), '')) AS local_website_url,
         lw.country_id AS local_website_country_id,
@@ -1109,6 +1135,13 @@ async function loadNewsById(newsId) {
         ON upper(trim(COALESCE(NULLIF(a.code, ''), printf('ASSOCIATION_%s', a.rowid)))) = upper(trim(COALESCE(n.association_id, '')))
       LEFT JOIN tournaments t
         ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(n.tournament_id, '')))
+      LEFT JOIN matches m
+        ON trim(COALESCE(m.id, '')) = trim(COALESCE(n.match_id, ''))
+       AND m.deleted_at IS NULL
+      LEFT JOIN associations a1
+        ON upper(trim(COALESCE(a1.code, ''))) = upper(trim(COALESCE(m.team_1, '')))
+      LEFT JOIN associations a2
+        ON upper(trim(COALESCE(a2.code, ''))) = upper(trim(COALESCE(m.team_2, '')))
       LEFT JOIN local_websites lw
         ON lw.id = n.local_website_id
       LEFT JOIN associations lwa
@@ -4035,6 +4068,7 @@ function ensureNewsSchema() {
       category TEXT,
       association_id TEXT,
       tournament_id TEXT,
+      match_id TEXT,
       local_website_id INTEGER,
       streamer_id INTEGER,
       youtube_video_id TEXT,
@@ -4070,6 +4104,7 @@ function ensureNewsSchema() {
       addColumnIfMissing(columns, "news", "category", "TEXT");
       addColumnIfMissing(columns, "news", "association_id", "TEXT");
       addColumnIfMissing(columns, "news", "tournament_id", "TEXT");
+      addColumnIfMissing(columns, "news", "match_id", "TEXT");
       addColumnIfMissing(columns, "news", "local_website_id", "INTEGER");
       addColumnIfMissing(columns, "news", "streamer_id", "INTEGER");
       addColumnIfMissing(columns, "news", "youtube_video_id", "TEXT");
@@ -4125,6 +4160,11 @@ function ensureNewsSchema() {
             category = NULLIF(trim(category), ''),
             association_id = NULLIF(trim(association_id), ''),
             tournament_id = NULLIF(trim(tournament_id), ''),
+            match_id = CASE
+              WHEN lower(trim(COALESCE(category, ''))) <> 'youtube'
+                AND NULLIF(trim(tournament_id), '') IS NOT NULL THEN NULLIF(trim(match_id), '')
+              ELSE NULL
+            END,
             local_website_id = CASE
               WHEN lower(trim(COALESCE(category, ''))) = 'local website'
                 AND local_website_id IS NOT NULL
@@ -7732,10 +7772,93 @@ app.get("/public/news/:id", async (req, res) => {
       return res.status(404).json({ ok: false, message: "News not found" });
     }
 
-    return res.json({ ok: true, news: row });
+    const {
+      match_id: _matchId,
+      match_round_name: _matchRoundName,
+      match_team_1: _matchTeam1,
+      match_team_2: _matchTeam2,
+      match_time_utc: _matchTimeUtc,
+      match_status: _matchStatus,
+      match_team_1_flag: _matchTeam1Flag,
+      match_team_2_flag: _matchTeam2Flag,
+      ...publicRow
+    } = row;
+
+    return res.json({ ok: true, news: publicRow });
   } catch (error) {
     console.error("Failed to load public news item", error);
     return res.status(500).json({ ok: false, message: "Failed to load news" });
+  }
+});
+
+app.get("/news-match-options", async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  try {
+    const access = await getNewsEditorAccessForUser(req.user);
+    if (!access.isAdmin && !access.isNewsEditor) {
+      return sendNewsEditorAccessDenied(res);
+    }
+
+    const requestedTournamentId = normalizeNullableText(req.query?.tournament_id ?? req.query?.tournament);
+    const whereClauses = ["m.deleted_at IS NULL"];
+    const params = [];
+
+    if (requestedTournamentId) {
+      whereClauses.push("upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))");
+      params.push(requestedTournamentId);
+    }
+
+    if (!access.isAdmin && !access.hasGlobalAccess) {
+      const tournamentIds = (Array.isArray(access.tournamentIds) ? access.tournamentIds : [])
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+      if (!tournamentIds.length) {
+        return res.json({ ok: true, matches: [] });
+      }
+      const placeholders = tournamentIds.map(() => "?").join(", ");
+      whereClauses.push(`lower(trim(COALESCE(m.tournament_id, ''))) IN (${placeholders})`);
+      params.push(...tournamentIds.map((item) => item.toLowerCase()));
+    }
+
+    const rows = await dbAllAsync(
+      `
+        SELECT
+          m.id,
+          m.tournament_id,
+          m.time_utc,
+          m.round_name,
+          m.round_short_name,
+          m.match_short_name,
+          m.stage,
+          m."group" AS group_name,
+          m.team_1,
+          m.team_2,
+          a1.flag AS team_1_flag,
+          a2.flag AS team_2_flag
+        FROM matches m
+        LEFT JOIN associations a1
+          ON upper(trim(COALESCE(a1.code, ''))) = upper(trim(COALESCE(m.team_1, '')))
+        LEFT JOIN associations a2
+          ON upper(trim(COALESCE(a2.code, ''))) = upper(trim(COALESCE(m.team_2, '')))
+        WHERE ${whereClauses.join("\n          AND ")}
+        ORDER BY
+          CASE
+            WHEN m.time_utc IS NULL OR trim(m.time_utc) = '' OR datetime(m.time_utc) IS NULL THEN 1
+            ELSE 0
+          END ASC,
+          datetime(m.time_utc) DESC,
+          m.id ASC
+      `,
+      params
+    );
+
+    return res.json({ ok: true, matches: rows || [] });
+  } catch (error) {
+    console.error("Failed to load news match options", error);
+    return res.status(500).json({ ok: false, message: "Failed to load match options" });
   }
 });
 
@@ -7760,6 +7883,7 @@ app.get("/news", async (req, res) => {
           n.category,
           n.association_id,
           n.tournament_id,
+          n.match_id,
           n.associations,
           n.time_utc,
           n.image,
@@ -7837,6 +7961,9 @@ app.post("/news", async (req, res) => {
     const tournamentId = categoryKind === "tournament"
       ? normalizeNullableText(req.body?.tournament_id)
       : null;
+    const matchId = categoryKind === "tournament"
+      ? normalizeNullableText(req.body?.match_id ?? req.body?.matchId)
+      : null;
     const streamerId = categoryKind === "youtube"
       ? normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId)
       : null;
@@ -7893,6 +8020,18 @@ app.post("/news", async (req, res) => {
         return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
       }
     }
+    if (categoryKind === "tournament" && matchId) {
+      if (!tournamentId) {
+        return res.status(400).json({ ok: false, message: "tournament_id is required when match_id is set" });
+      }
+      const matchRow = await loadNewsMatchMeta(matchId);
+      if (!matchRow) {
+        return res.status(400).json({ ok: false, message: "match_id must reference an existing match" });
+      }
+      if (String(matchRow.tournament_id || "").trim().toLowerCase() !== String(tournamentId || "").trim().toLowerCase()) {
+        return res.status(400).json({ ok: false, message: "match_id must belong to the selected tournament" });
+      }
+    }
     if (categoryKind === "youtube") {
       if (!streamerId) {
         return res.status(400).json({ ok: false, message: "streamer_id is required for YouTube news" });
@@ -7932,6 +8071,7 @@ app.post("/news", async (req, res) => {
             category,
             association_id,
             tournament_id,
+            match_id,
             local_website_id,
             streamer_id,
             youtube_video_id,
@@ -7947,7 +8087,7 @@ app.post("/news", async (req, res) => {
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [
           status,
@@ -7956,6 +8096,7 @@ app.post("/news", async (req, res) => {
           category,
           associationId,
           tournamentId,
+          matchId,
           localWebsiteId,
           streamerId,
           youtubeVideoId,
@@ -8044,6 +8185,9 @@ app.patch("/news/:id", async (req, res) => {
     const tournamentId = categoryKind === "tournament"
       ? normalizeNullableText(req.body?.tournament_id)
       : null;
+    const matchId = categoryKind === "tournament"
+      ? normalizeNullableText(req.body?.match_id ?? req.body?.matchId)
+      : null;
     const streamerId = categoryKind === "youtube"
       ? normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId)
       : null;
@@ -8100,6 +8244,18 @@ app.patch("/news/:id", async (req, res) => {
         return res.status(400).json({ ok: false, message: "tournament_id must reference an existing tournament" });
       }
     }
+    if (categoryKind === "tournament" && matchId) {
+      if (!tournamentId) {
+        return res.status(400).json({ ok: false, message: "tournament_id is required when match_id is set" });
+      }
+      const matchRow = await loadNewsMatchMeta(matchId);
+      if (!matchRow) {
+        return res.status(400).json({ ok: false, message: "match_id must reference an existing match" });
+      }
+      if (String(matchRow.tournament_id || "").trim().toLowerCase() !== String(tournamentId || "").trim().toLowerCase()) {
+        return res.status(400).json({ ok: false, message: "match_id must belong to the selected tournament" });
+      }
+    }
     if (categoryKind === "youtube") {
       if (!streamerId) {
         return res.status(400).json({ ok: false, message: "streamer_id is required for YouTube news" });
@@ -8139,6 +8295,7 @@ app.patch("/news/:id", async (req, res) => {
             category = ?,
             association_id = ?,
             tournament_id = ?,
+            match_id = ?,
             local_website_id = ?,
             streamer_id = ?,
             youtube_video_id = ?,
@@ -8160,6 +8317,7 @@ app.patch("/news/:id", async (req, res) => {
           category,
           associationId,
           tournamentId,
+          matchId,
           localWebsiteId,
           streamerId,
           youtubeVideoId,
@@ -13492,7 +13650,7 @@ app.patch("/matches/:id", (req, res) => {
             return res.status(404).json({ ok: false, message: "Match not found" });
           }
 
-            return db.get(
+          const loadUpdatedMatch = () => db.get(
               `
                 SELECT
                   id,
@@ -13552,6 +13710,28 @@ app.patch("/matches/:id", (req, res) => {
                 );
               }
             );
+
+          if (matchId !== nextMatchId) {
+            return db.run(
+              `
+                UPDATE news
+                SET
+                  match_id = ?,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE trim(COALESCE(match_id, '')) = trim(?)
+                  AND deleted_at IS NULL
+              `,
+              [nextMatchId, matchId],
+              (newsSyncErr) => {
+                if (newsSyncErr) {
+                  return res.status(500).json({ ok: false, message: "Match updated, but failed to sync linked news" });
+                }
+                return loadUpdatedMatch();
+              }
+            );
+          }
+
+          return loadUpdatedMatch();
         }
       );
       });

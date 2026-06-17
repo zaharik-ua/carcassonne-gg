@@ -2,22 +2,22 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
 <style>
-  body {
+  .gg-nmc-news-widget {
     font-family: 'Montserrat', sans-serif;
   }
-  b,
-  strong {
+  .gg-nmc-news-widget b,
+  .gg-nmc-news-widget strong {
     font-weight: 600;
   }
-  p,
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6,
-  ul,
-  ol {
+  .gg-nmc-news-widget p,
+  .gg-nmc-news-widget h1,
+  .gg-nmc-news-widget h2,
+  .gg-nmc-news-widget h3,
+  .gg-nmc-news-widget h4,
+  .gg-nmc-news-widget h5,
+  .gg-nmc-news-widget h6,
+  .gg-nmc-news-widget ul,
+  .gg-nmc-news-widget ol {
     margin: 0 0 10px;
   }
   .news-header {
@@ -29,6 +29,187 @@
     font-weight: 600;
     font-size: 13px;
     padding: 6px 5px;
+    justify-content: space-between;
+  }
+  .news-header-title {
+    align-items: center;
+    display: flex;
+    gap: 6px;
+  }
+  .news-filter-toggle {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: #fff;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 16px;
+    justify-content: center;
+    padding: 4px;
+    transition: color 0.2s ease, transform 0.2s ease;
+  }
+  .news-filter-toggle:hover,
+  .news-filter-toggle:focus-visible {
+    color: #dbe7f4;
+    outline: none;
+    transform: scale(1.05);
+  }
+  .nmc-filter-panel {
+    background-color: #f0f6fb;
+    border-bottom: 1px solid #c5d8e6;
+    height: 0;
+    overflow: hidden;
+    padding: 0 7px;
+    transition: height 0.3s ease;
+  }
+  .nmc-filters {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 7px 0 9px;
+  }
+  .nmc-filter-row {
+    align-items: flex-start;
+    display: inline-flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    max-width: 100%;
+  }
+  .nmc-filter-values {
+    flex: 0 0 100%;
+    display: none;
+    width: 100%;
+  }
+  .nmc-filter-values.has-open {
+    display: block;
+  }
+  .nmc-country-toggle,
+  .nmc-select-toggle {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    font-family: inherit;
+    font-size: 13px;
+    gap: 6px;
+    justify-content: space-between;
+    min-height: 28px;
+    padding: 4px 8px;
+    width: auto;
+  }
+  .nmc-country-toggle.active,
+  .nmc-select-toggle.active,
+  .nmc-select-toggle.has-value {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.3);
+  }
+  .nmc-title-wrap {
+    align-items: flex-start;
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .nmc-label {
+    color: #333;
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nmc-selected-label {
+    color: #333;
+    display: none;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nmc-selected-wrap {
+    align-items: center;
+    display: none;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .nmc-selected-flag {
+    align-items: center;
+    display: inline-flex;
+    gap: 6px;
+  }
+  .nmc-selected-flag img {
+    height: auto;
+    object-fit: contain;
+    width: 18px;
+  }
+  .nmc-clear {
+    align-items: center;
+    color: #d32f2f;
+    cursor: pointer;
+    display: none;
+    font-size: 14px;
+    font-weight: 700;
+    justify-content: center;
+    line-height: 1;
+    margin-left: 2px;
+  }
+  .nmc-selected-wrap .nmc-clear {
+    display: inline-flex;
+  }
+  .nmc-country-row,
+  .nmc-select-menu {
+    display: none;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 100%;
+    padding-top: 2px;
+    width: 100%;
+  }
+  .nmc-country-row.open,
+  .nmc-select-menu.open {
+    display: flex;
+  }
+  .nmc-flag-btn {
+    align-items: center;
+    background: transparent;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    justify-content: center;
+    padding: 2px;
+  }
+  .nmc-flag-btn.active {
+    border-color: #0277BD;
+  }
+  .nmc-flag-btn img {
+    height: 18px;
+    object-fit: contain;
+    width: 18px;
+  }
+  .nmc-option-btn {
+    background-color: #fffde5;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    color: #333;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 2px 6px;
+    transition: all 0.2s ease;
+  }
+  .nmc-option-btn.active {
+    background-color: #fbf092;
+    border-color: #0277BD;
   }
   .news-row {
     background: white;
@@ -484,19 +665,96 @@
   }
 </style>
 
-<div id="news-container"></div>
+<div class="gg-nmc-news-widget">
+  <div class="news-header">
+    <span class="news-header-title">Carcassonne News</span>
+    <button class="news-filter-toggle" id="gg-nmc-filter-toggle" type="button" aria-label="Toggle filters" aria-expanded="false">
+      <i class="fa fa-sliders-h" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="nmc-filter-panel" id="gg-nmc-filter-panel">
+    <div class="nmc-filters">
+      <div class="nmc-filter-row">
+        <button class="nmc-select-toggle" id="gg-nmc-significance-toggle" type="button">
+          <span class="nmc-title-wrap">
+            <span class="nmc-label">Significance</span>
+            <span class="nmc-selected-label" id="gg-nmc-significance-selected"></span>
+          </span>
+          <span class="nmc-clear" id="gg-nmc-significance-clear">x</span>
+        </button>
+      </div>
+
+      <div class="nmc-filter-row">
+        <button class="nmc-country-toggle" id="gg-nmc-country-toggle" type="button">
+          <span class="nmc-label">Country</span>
+          <span class="nmc-selected-wrap" id="gg-nmc-country-selected-wrap">
+            <span class="nmc-selected-flag" id="gg-nmc-country-selected-flag"></span>
+            <span class="nmc-clear" id="gg-nmc-country-clear">x</span>
+          </span>
+        </button>
+      </div>
+
+      <div class="nmc-filter-row">
+        <button class="nmc-select-toggle" id="gg-nmc-category-toggle" type="button">
+          <span class="nmc-title-wrap">
+            <span class="nmc-label">Category</span>
+            <span class="nmc-selected-label" id="gg-nmc-category-selected"></span>
+          </span>
+          <span class="nmc-clear" id="gg-nmc-category-clear">x</span>
+        </button>
+      </div>
+
+      <div class="nmc-filter-values" id="gg-nmc-filter-values">
+        <div class="nmc-select-menu" id="gg-nmc-significance-menu"></div>
+        <div class="nmc-country-row" id="gg-nmc-country-row"></div>
+        <div class="nmc-select-menu" id="gg-nmc-category-menu"></div>
+      </div>
+    </div>
+  </div>
+  <div id="gg-nmc-news-container"></div>
+</div>
 
 <script>
+(() => {
   const NEWS_PUBLIC_URL = "https://api.carcassonne.gg/public/news";
   const PLAYERS_PUBLIC_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
   const NEWS_API_ORIGIN = new URL(NEWS_PUBLIC_URL).origin;
+  const ASSOCIATIONS_PUBLIC_URL = `${NEWS_API_ORIGIN}/associations`;
   const LONG_NEWS_DESCRIPTION_LIMIT = 1000;
-  const newsContainer = document.getElementById("news-container");
+  const ENABLE_NEWS_DETAIL_VIEW = false;
+  const NMC_SIGNIFICANCE_OPTIONS = [
+    { value: "important", label: "Important" },
+    { value: "major", label: "Major" },
+  ];
+  const nmcUseMobileDefaults = window.matchMedia && window.matchMedia("(max-width: 767px)").matches;
+  const newsContainer = document.getElementById("gg-nmc-news-container");
+  const nmcFilterToggle = document.getElementById("gg-nmc-filter-toggle");
+  const nmcFilterPanel = document.getElementById("gg-nmc-filter-panel");
+  const nmcFilterValues = document.getElementById("gg-nmc-filter-values");
+  const nmcCountryToggle = document.getElementById("gg-nmc-country-toggle");
+  const nmcCountryRow = document.getElementById("gg-nmc-country-row");
+  const nmcCountrySelectedWrap = document.getElementById("gg-nmc-country-selected-wrap");
+  const nmcCountrySelectedFlag = document.getElementById("gg-nmc-country-selected-flag");
+  const nmcCountryClear = document.getElementById("gg-nmc-country-clear");
+  const nmcSignificanceToggle = document.getElementById("gg-nmc-significance-toggle");
+  const nmcSignificanceMenu = document.getElementById("gg-nmc-significance-menu");
+  const nmcSignificanceSelected = document.getElementById("gg-nmc-significance-selected");
+  const nmcSignificanceClear = document.getElementById("gg-nmc-significance-clear");
+  const nmcCategoryToggle = document.getElementById("gg-nmc-category-toggle");
+  const nmcCategoryMenu = document.getElementById("gg-nmc-category-menu");
+  const nmcCategorySelected = document.getElementById("gg-nmc-category-selected");
+  const nmcCategoryClear = document.getElementById("gg-nmc-category-clear");
   let imageModal;
   let allNewsItems = [];
   let selectedNewsItem = null;
   let playersById = new Map();
   let hasNewsDataLoaded = false;
+  let nmcIsFilterPanelOpen = false;
+  let nmcSelectedSignificance = nmcUseMobileDefaults ? "" : "important";
+  let nmcSelectedAssociation = "";
+  let nmcSelectedCategory = "";
+  let nmcCountryOptions = [];
+  let nmcCategoryOptions = [];
   const imageVariantsCache = new Map();
 
   function isLocalWebsiteNews(newsItem) {
@@ -541,11 +799,13 @@
   };
 
   const getSelectedNewsId = () => {
+    if (!ENABLE_NEWS_DETAIL_VIEW) return "";
     const params = new URLSearchParams(window.location.search);
     return String(params.get("id") || params.get("news_id") || "").trim();
   };
 
   const getSelectedNewsSlug = () => {
+    if (!ENABLE_NEWS_DETAIL_VIEW) return "";
     const params = new URLSearchParams(window.location.search);
     const querySlug = String(params.get("news") || "").trim();
     if (querySlug) return querySlug;
@@ -581,41 +841,286 @@
     return Array.from(new Set(ids));
   };
 
-  const getActiveNewsFilters = () => {
-    const params = new URLSearchParams(window.location.search);
-    return {
-      association: normalizeNewsFilterCode(params.get("association") || ""),
-      significance: normalizeNewsFilterLookup(params.get("significance") || ""),
-      category: normalizeNewsFilterLookup(params.get("category") || ""),
-      tournament: String(params.get("tournament") || "").trim().toLowerCase(),
-      youtubeChannel: String(params.get("youtube_channel") || params.get("streamer") || "").trim(),
-    };
-  };
-
-  const newsItemMatchesActiveFilters = (newsItem, filters) => {
-    if (filters.association && !getNewsFilterAssociationIds(newsItem).includes(filters.association)) {
+  const newsItemMatchesActiveFilters = (newsItem) => {
+    if (nmcSelectedSignificance) {
+      const importance = normalizeImportance(newsItem?.significance || newsItem?.importance);
+      if (nmcSelectedSignificance === "important" && importance !== "high" && importance !== "medium") {
+        return false;
+      }
+      if (nmcSelectedSignificance === "major" && importance !== "high") {
+        return false;
+      }
+    }
+    if (nmcSelectedAssociation && !getNewsFilterAssociationIds(newsItem).includes(nmcSelectedAssociation)) {
       return false;
     }
-    if (filters.significance && normalizeNewsFilterLookup(newsItem?.significance || "") !== filters.significance) {
+    if (nmcSelectedCategory && normalizeNewsFilterLookup(newsItem?.category || "") !== normalizeNewsFilterLookup(nmcSelectedCategory)) {
       return false;
-    }
-    if (filters.category && normalizeNewsFilterLookup(newsItem?.category || "") !== filters.category) {
-      return false;
-    }
-    if (filters.tournament) {
-      const tournamentId = String(newsItem?.tournament_id ?? newsItem?.tournamentId ?? newsItem?.tournament ?? "").trim().toLowerCase();
-      if (tournamentId !== filters.tournament) return false;
-    }
-    if (filters.youtubeChannel) {
-      const streamerId = String(newsItem?.streamer_id ?? newsItem?.streamerId ?? newsItem?.youtube_channel ?? newsItem?.youtubeChannel ?? "").trim();
-      if (streamerId !== filters.youtubeChannel) return false;
     }
     return true;
   };
 
   const getFilteredNewsItems = () => {
-    const filters = getActiveNewsFilters();
-    return allNewsItems.filter(newsItem => newsItemMatchesActiveFilters(newsItem, filters));
+    return allNewsItems.filter(newsItemMatchesActiveFilters);
+  };
+
+  const nmcUpdatePanelHeight = () => {
+    if (!nmcFilterPanel || !nmcIsFilterPanelOpen) return;
+    nmcFilterPanel.style.height = "auto";
+  };
+
+  const nmcUpdateValuesRowState = () => {
+    if (!nmcFilterValues) return;
+    const hasOpenMenu = [nmcCountryRow, nmcSignificanceMenu, nmcCategoryMenu].some(menu => menu?.classList.contains("open"));
+    nmcFilterValues.classList.toggle("has-open", hasOpenMenu);
+  };
+
+  const nmcCloseOtherMenus = (openMenu) => {
+    [nmcCountryRow, nmcSignificanceMenu, nmcCategoryMenu].forEach(menu => {
+      if (!menu || menu === openMenu) return;
+      menu.classList.remove("open");
+    });
+    [nmcCountryToggle, nmcSignificanceToggle, nmcCategoryToggle].forEach(toggle => {
+      if (!toggle) return;
+      toggle.classList.remove("active");
+    });
+    nmcUpdateValuesRowState();
+  };
+
+  const nmcToggleMenu = (menu, toggle, forceOpen) => {
+    if (!menu || !toggle) return;
+    const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !menu.classList.contains("open");
+    menu.classList.toggle("open", shouldOpen);
+    toggle.classList.toggle("active", shouldOpen);
+    nmcUpdateValuesRowState();
+    nmcUpdatePanelHeight();
+  };
+
+  const nmcRenderSignificanceState = () => {
+    if (!nmcSignificanceToggle || !nmcSignificanceSelected || !nmcSignificanceClear || !nmcSignificanceMenu) return;
+    const option = NMC_SIGNIFICANCE_OPTIONS.find(item => item.value === nmcSelectedSignificance);
+    const hasActive = Boolean(option);
+    nmcSignificanceToggle.classList.toggle("has-value", hasActive);
+    nmcSignificanceToggle.title = hasActive ? `Significance: ${option.label}` : "Significance";
+    nmcSignificanceSelected.textContent = hasActive ? option.label : "";
+    nmcSignificanceSelected.style.display = "none";
+    nmcSignificanceClear.style.display = hasActive ? "inline-flex" : "none";
+    nmcSignificanceMenu.querySelectorAll(".nmc-option-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.value === nmcSelectedSignificance);
+    });
+  };
+
+  const nmcRenderCountryState = () => {
+    if (!nmcCountrySelectedFlag || !nmcCountrySelectedWrap || !nmcCountryRow) return;
+    const option = nmcCountryOptions.find(item => item.value === nmcSelectedAssociation);
+    if (option) {
+      nmcCountrySelectedFlag.innerHTML = "";
+      const img = document.createElement("img");
+      img.src = option.flag;
+      img.alt = option.label || "Country flag";
+      img.title = option.label || "";
+      nmcCountrySelectedFlag.appendChild(img);
+      nmcCountrySelectedWrap.style.display = "inline-flex";
+    } else {
+      nmcCountrySelectedFlag.innerHTML = "";
+      nmcCountrySelectedWrap.style.display = "none";
+    }
+    nmcCountryRow.querySelectorAll(".nmc-flag-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.value === nmcSelectedAssociation);
+    });
+  };
+
+  const nmcRenderCategoryState = () => {
+    if (!nmcCategoryToggle || !nmcCategorySelected || !nmcCategoryClear || !nmcCategoryMenu) return;
+    const option = nmcCategoryOptions.find(item => item.value === nmcSelectedCategory);
+    const hasActive = Boolean(option);
+    nmcCategoryToggle.classList.toggle("has-value", hasActive);
+    nmcCategoryToggle.title = hasActive ? `Category: ${option.label}` : "Category";
+    nmcCategorySelected.textContent = hasActive ? option.label : "";
+    nmcCategorySelected.style.display = "none";
+    nmcCategoryClear.style.display = hasActive ? "inline-flex" : "none";
+    nmcCategoryMenu.querySelectorAll(".nmc-option-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.value === nmcSelectedCategory);
+    });
+  };
+
+  const nmcRenderFilterState = () => {
+    nmcRenderSignificanceState();
+    nmcRenderCountryState();
+    nmcRenderCategoryState();
+  };
+
+  const nmcApplyFilters = () => {
+    nmcRenderFilterState();
+    renderNewsView();
+    nmcUpdatePanelHeight();
+  };
+
+  const nmcBuildCountryOptions = (associations) => {
+    const newsAssociationIds = new Set();
+    allNewsItems.forEach(newsItem => {
+      getNewsFilterAssociationIds(newsItem).forEach(id => newsAssociationIds.add(id));
+    });
+
+    const byId = new Map((Array.isArray(associations) ? associations : []).map(item => {
+      const id = normalizeNewsFilterCode(item?.id || item?.code);
+      return [id, {
+        value: id,
+        label: String(item?.name || id).trim(),
+        flag: String(item?.flag || "").trim(),
+      }];
+    }).filter(([id, item]) => id && item.flag));
+
+    nmcCountryOptions = Array.from(newsAssociationIds)
+      .map(id => byId.get(id))
+      .filter(Boolean)
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    if (nmcSelectedAssociation && !nmcCountryOptions.some(item => item.value === nmcSelectedAssociation)) {
+      nmcSelectedAssociation = "";
+    }
+
+    if (!nmcCountryRow) return;
+    nmcCountryRow.innerHTML = "";
+    nmcCountryOptions.forEach(option => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "nmc-flag-btn";
+      btn.dataset.value = option.value;
+      const img = document.createElement("img");
+      img.src = option.flag;
+      img.alt = option.label || "Country flag";
+      img.title = option.label || "";
+      btn.appendChild(img);
+      btn.addEventListener("click", () => {
+        nmcSelectedAssociation = nmcSelectedAssociation === option.value ? "" : option.value;
+        nmcApplyFilters();
+        nmcToggleMenu(nmcCountryRow, nmcCountryToggle, true);
+      });
+      nmcCountryRow.appendChild(btn);
+    });
+  };
+
+  const nmcBuildCategoryOptions = () => {
+    const categoryMap = new Map();
+    allNewsItems.forEach(newsItem => {
+      const category = normalizeNewsFilterText(newsItem?.category || "");
+      const categoryKey = normalizeNewsFilterLookup(category);
+      if (category && !isLocalWebsiteNews(newsItem) && !categoryMap.has(categoryKey)) {
+        categoryMap.set(categoryKey, { value: category, label: category });
+      }
+    });
+    nmcCategoryOptions = Array.from(categoryMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+
+    if (nmcSelectedCategory && !nmcCategoryOptions.some(item => item.value === nmcSelectedCategory)) {
+      nmcSelectedCategory = "";
+    }
+
+    if (!nmcCategoryMenu) return;
+    nmcCategoryMenu.innerHTML = "";
+    nmcCategoryOptions.forEach(option => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "nmc-option-btn";
+      btn.dataset.value = option.value;
+      btn.textContent = option.label;
+      btn.addEventListener("click", () => {
+        nmcSelectedCategory = nmcSelectedCategory === option.value ? "" : option.value;
+        nmcApplyFilters();
+        nmcToggleMenu(nmcCategoryMenu, nmcCategoryToggle, true);
+      });
+      nmcCategoryMenu.appendChild(btn);
+    });
+  };
+
+  const nmcSetupStaticFilters = () => {
+    if (nmcSignificanceMenu) {
+      nmcSignificanceMenu.innerHTML = "";
+      NMC_SIGNIFICANCE_OPTIONS.forEach(option => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "nmc-option-btn";
+        btn.dataset.value = option.value;
+        btn.textContent = option.label;
+        btn.addEventListener("click", () => {
+          nmcSelectedSignificance = nmcSelectedSignificance === option.value ? "" : option.value;
+          nmcApplyFilters();
+          nmcToggleMenu(nmcSignificanceMenu, nmcSignificanceToggle, true);
+        });
+        nmcSignificanceMenu.appendChild(btn);
+      });
+    }
+    nmcRenderFilterState();
+  };
+
+  const nmcSetupFilterEvents = () => {
+    if (nmcFilterToggle && nmcFilterPanel) {
+      nmcFilterToggle.addEventListener("click", () => {
+        nmcIsFilterPanelOpen = !nmcIsFilterPanelOpen;
+        nmcFilterToggle.setAttribute("aria-expanded", nmcIsFilterPanelOpen ? "true" : "false");
+        if (nmcIsFilterPanelOpen) {
+          nmcFilterPanel.style.height = "0px";
+          requestAnimationFrame(() => {
+            nmcFilterPanel.style.height = `${nmcFilterPanel.scrollHeight}px`;
+          });
+        } else {
+          nmcCloseOtherMenus(null);
+          nmcFilterPanel.style.height = `${nmcFilterPanel.scrollHeight}px`;
+          requestAnimationFrame(() => {
+            nmcFilterPanel.style.height = "0px";
+          });
+        }
+      });
+
+      nmcFilterPanel.addEventListener("transitionend", event => {
+        if (event.propertyName !== "height") return;
+        if (nmcIsFilterPanelOpen) {
+          nmcFilterPanel.style.height = "auto";
+        }
+      });
+    }
+
+    if (nmcCountryToggle) {
+      nmcCountryToggle.addEventListener("click", () => {
+        nmcCloseOtherMenus(nmcCountryRow);
+        nmcToggleMenu(nmcCountryRow, nmcCountryToggle);
+      });
+    }
+    if (nmcCountryClear) {
+      nmcCountryClear.addEventListener("click", event => {
+        event.stopPropagation();
+        nmcSelectedAssociation = "";
+        nmcApplyFilters();
+      });
+    }
+
+    if (nmcSignificanceToggle) {
+      nmcSignificanceToggle.addEventListener("click", () => {
+        nmcCloseOtherMenus(nmcSignificanceMenu);
+        nmcToggleMenu(nmcSignificanceMenu, nmcSignificanceToggle);
+      });
+    }
+    if (nmcSignificanceClear) {
+      nmcSignificanceClear.addEventListener("click", event => {
+        event.stopPropagation();
+        nmcSelectedSignificance = "";
+        nmcApplyFilters();
+      });
+    }
+
+    if (nmcCategoryToggle) {
+      nmcCategoryToggle.addEventListener("click", () => {
+        nmcCloseOtherMenus(nmcCategoryMenu);
+        nmcToggleMenu(nmcCategoryMenu, nmcCategoryToggle);
+      });
+    }
+    if (nmcCategoryClear) {
+      nmcCategoryClear.addEventListener("click", event => {
+        event.stopPropagation();
+        nmcSelectedCategory = "";
+        nmcApplyFilters();
+      });
+    }
   };
 
   const toNewsImageUrl = (value) => {
@@ -1365,9 +1870,13 @@
         if (!res.ok) throw new Error(`Players request failed: ${res.status}`);
         return res.json();
       }),
-      selectedNewsId ? fetchPublicNewsItem(selectedNewsId) : Promise.resolve(null)
+      selectedNewsId ? fetchPublicNewsItem(selectedNewsId) : Promise.resolve(null),
+      fetch(ASSOCIATIONS_PUBLIC_URL, { method: "GET" }).then(res => {
+        if (!res.ok) throw new Error(`Associations request failed: ${res.status}`);
+        return res.json();
+      })
     ])
-      .then(([newsResult, playersResult, selectedNewsResult]) => {
+      .then(([newsResult, playersResult, selectedNewsResult, associationsResult]) => {
         if (playersResult.status === "fulfilled") {
           const playerEntries = Array.isArray(playersResult.value?.gg_profiles) ? playersResult.value.gg_profiles : [];
           playersById = new Map();
@@ -1397,23 +1906,25 @@
           const byTime = parseDateTime(getNewsTimestampValue(b)) - parseDateTime(getNewsTimestampValue(a));
           return byTime || Number(b?.id || 0) - Number(a?.id || 0);
         });
+        nmcBuildCountryOptions(associationsResult.status === "fulfilled" ? associationsResult.value?.associations || [] : []);
+        nmcBuildCategoryOptions();
+        nmcRenderFilterState();
         hasNewsDataLoaded = true;
         renderNewsView();
       })
       .catch(err => {
         hasNewsDataLoaded = true;
         allNewsItems = [];
+        nmcBuildCountryOptions([]);
+        nmcBuildCategoryOptions();
+        nmcRenderFilterState();
         setNewsState("❌ Failed to load news.");
         console.error(err);
       });
   }
 
-  window.addEventListener("news-filter-change", () => {
-    if (hasNewsDataLoaded) renderNewsView();
-  });
-  window.addEventListener("popstate", () => {
-    if (hasNewsDataLoaded) renderNewsView();
-  });
-
+  nmcSetupStaticFilters();
+  nmcSetupFilterEvents();
   fetchNews();
+})();
 </script>
