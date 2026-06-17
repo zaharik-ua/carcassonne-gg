@@ -545,6 +545,20 @@
     return String(params.get("id") || params.get("news_id") || "").trim();
   };
 
+  const getSelectedMatchId = () => {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("match") || params.get("match_id") || "").trim();
+  };
+
+  const getNewsListUrl = () => {
+    const url = new URL(NEWS_PUBLIC_URL);
+    const selectedMatchId = getSelectedMatchId();
+    if (selectedMatchId) {
+      url.searchParams.set("match", selectedMatchId);
+    }
+    return url.toString();
+  };
+
   const getSelectedNewsSlug = () => {
     const params = new URLSearchParams(window.location.search);
     const querySlug = String(params.get("news") || "").trim();
@@ -1357,7 +1371,7 @@
     selectedNewsItem = null;
 
     Promise.allSettled([
-      fetch(NEWS_PUBLIC_URL, { method: "GET" }).then(res => {
+      fetch(getNewsListUrl(), { method: "GET" }).then(res => {
         if (!res.ok) throw new Error(`News request failed: ${res.status}`);
         return res.json();
       }),

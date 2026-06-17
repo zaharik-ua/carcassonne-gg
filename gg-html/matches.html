@@ -201,16 +201,16 @@ code {
 
   .match-news-link {
     width: 20px;
-    height: 28px;
+    height: 20px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    margin: 0 4px;
+    margin: 2px 0 0;
     text-decoration: none;
   }
 
   .match-news-icon {
-    width: 22px;
+    width: 20px;
     height: auto;
     display: block;
     object-fit: contain;
@@ -1076,17 +1076,12 @@ function createMatchElement(match, options = {}) {
       timeTextEl.className = "match-time-text";
       timeTextEl.textContent = timeLabel;
       timeDiv.appendChild(timeTextEl);
+      const newsLink = createMatchNewsLink(match);
+      if (newsLink) timeDiv.appendChild(newsLink);
       container.appendChild(timeDiv);
       const divider = document.createElement("div");
       divider.className = "divider-vertical";
       container.appendChild(divider);
-      const newsLink = createMatchNewsLink(match);
-      if (newsLink) {
-        container.appendChild(newsLink);
-        const newsDivider = document.createElement("div");
-        newsDivider.className = "divider-vertical";
-        container.appendChild(newsDivider);
-      }
   }
 
   const teamsDiv = document.createElement("div");
@@ -1187,6 +1182,8 @@ function createMatchElement(match, options = {}) {
       timeTextEl.className = "match-time-text";
       timeTextEl.textContent = timeLabel;
       timeDiv.appendChild(timeTextEl);
+      const newsLink = createMatchNewsLink(match);
+      if (newsLink) timeDiv.appendChild(newsLink);
       rightDiv.appendChild(timeDiv); 
   } else {
       if (match.dw1 || match.dw2 || match.gw1 || match.gw2) {
@@ -1265,17 +1262,12 @@ function createDuelElement(match, options = {}) {
       timeDiv.appendChild(badge);
     }
   }
+  const newsLink = createMatchNewsLink(match);
+  if (newsLink) timeDiv.appendChild(newsLink);
   container.appendChild(timeDiv);
   const divider = document.createElement("div");
   divider.className = "divider-vertical";
   container.appendChild(divider);
-  const newsLink = createMatchNewsLink(match);
-  if (newsLink) {
-    container.appendChild(newsLink);
-    const newsDivider = document.createElement("div");
-    newsDivider.className = "divider-vertical";
-    container.appendChild(newsDivider);
-  }
 
   // Players (always from team1/team2 in JSON)
   const playersDiv = document.createElement("div");

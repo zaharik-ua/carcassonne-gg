@@ -7701,8 +7701,14 @@ app.get("/news-editors", (req, res, next) => {
   );
 });
 
-app.get("/public/news", async (_req, res) => {
+app.get("/public/news", async (req, res) => {
   try {
+    const matchFilter = normalizeNullableText(req.query?.match ?? req.query?.match_id);
+    const matchWhereSql = matchFilter
+      ? "AND trim(COALESCE(n.match_id, '')) = trim(?)"
+      : "";
+    const params = matchFilter ? [matchFilter] : [];
+
     const rows = await dbAllAsync(
       `
         SELECT
@@ -7748,6 +7754,7 @@ app.get("/public/news", async (_req, res) => {
         WHERE trim(COALESCE(n.title, '')) <> ''
           AND lower(trim(COALESCE(n.status, ''))) = 'published'
           AND n.deleted_at IS NULL
+          ${matchWhereSql}
         ORDER BY
           CASE
             WHEN n.time_utc IS NULL OR trim(n.time_utc) = '' THEN 1
@@ -7755,7 +7762,8 @@ app.get("/public/news", async (_req, res) => {
           END ASC,
           datetime(n.time_utc) DESC,
           n.id DESC
-      `
+      `,
+      params
     );
 
     return res.json({ ok: true, news: rows || [] });
