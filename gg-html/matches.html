@@ -199,6 +199,24 @@ code {
     color: #333; /* keep time color independent from rating color */
   }
 
+  .match-news-link {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 4px;
+    text-decoration: none;
+  }
+
+  .match-news-icon {
+    width: 24px;
+    height: 24px;
+    display: block;
+    object-fit: contain;
+  }
+
   .match-format-badge {
     margin-top: 2px;
     padding: 2px 4px;
@@ -983,6 +1001,27 @@ function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
   }
 }
 
+function createMatchNewsLink(match) {
+  const rawUrl = String(match?.news_url || "").trim();
+  const rawId = String(match?.news_id || "").trim();
+  const url = rawUrl || (rawId ? `https://carcassonne.gg/news/?id=${encodeURIComponent(rawId)}` : "");
+  if (!url) return null;
+
+  const link = document.createElement("a");
+  link.className = "match-news-link";
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.title = String(match?.news_title || "").trim() || "Read news";
+
+  const icon = document.createElement("img");
+  icon.className = "match-news-icon";
+  icon.src = "https://carcassonne.gg/gallery/writing.png";
+  icon.alt = "News";
+  link.appendChild(icon);
+  return link;
+}
+
 function createMatchElement(match, options = {}) {
   const { showRating = false, isToday = false } = options;
   // Only for TEAM tournaments
@@ -1042,6 +1081,13 @@ function createMatchElement(match, options = {}) {
       const divider = document.createElement("div");
       divider.className = "divider-vertical";
       container.appendChild(divider);
+      const newsLink = createMatchNewsLink(match);
+      if (newsLink) {
+        container.appendChild(newsLink);
+        const newsDivider = document.createElement("div");
+        newsDivider.className = "divider-vertical";
+        container.appendChild(newsDivider);
+      }
   }
 
   const teamsDiv = document.createElement("div");
@@ -1224,6 +1270,13 @@ function createDuelElement(match, options = {}) {
   const divider = document.createElement("div");
   divider.className = "divider-vertical";
   container.appendChild(divider);
+  const newsLink = createMatchNewsLink(match);
+  if (newsLink) {
+    container.appendChild(newsLink);
+    const newsDivider = document.createElement("div");
+    newsDivider.className = "divider-vertical";
+    container.appendChild(newsDivider);
+  }
 
   // Players (always from team1/team2 in JSON)
   const playersDiv = document.createElement("div");
@@ -2491,6 +2544,9 @@ function adaptDbMainPageMatchesData(data) {
       streamers: Array.isArray(match?.streamers)
         ? match.streamers.map((value) => String(value || "").trim()).filter(Boolean)
         : [],
+      news_id: match?.news_id ?? null,
+      news_url: String(match?.news_url || "").trim(),
+      news_title: String(match?.news_title || "").trim(),
       elo_updated_at: result.elo_updated_at,
       lineupsData: sortLineups(duelsByMatchId.get(String(match?.id || "").trim()) || []),
     };

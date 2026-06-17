@@ -11852,7 +11852,7 @@ function publicMainPageMatchesHandler(req, res, next) {
           .filter(Boolean)
       ));
 
-      const finalize = (duelRows, gameRows = [], streamRows = []) => {
+      const finalize = (duelRows, gameRows = [], streamRows = [], newsRows = []) => {
         const gamesByDuelId = new Map();
         (gameRows || []).forEach((row) => {
           const duelId = String(row?.duel_id || "").trim();
@@ -11889,6 +11889,19 @@ function publicMainPageMatchesHandler(req, res, next) {
             streamer_short_name: row.streamer_short_name,
             streamer_avatar: row.streamer_avatar,
             streamer_profile_id: row.streamer_profile_id,
+          });
+        });
+
+        const publishedNewsByMatchId = new Map();
+        (newsRows || []).forEach((row) => {
+          const matchId = String(row?.match_id || "").trim();
+          if (!matchId || publishedNewsByMatchId.has(matchId)) return;
+          const newsId = Number(row?.id);
+          if (!Number.isInteger(newsId) || newsId <= 0) return;
+          publishedNewsByMatchId.set(matchId, {
+            id: newsId,
+            title: normalizeText(row?.title),
+            url: `https://carcassonne.gg/news/?id=${encodeURIComponent(String(newsId))}`,
           });
         });
 
@@ -11966,7 +11979,9 @@ function publicMainPageMatchesHandler(req, res, next) {
               tournaments,
               teams,
               players,
-              matches: (matchRows || []).map((row) => ({
+              matches: (matchRows || []).map((row) => {
+                const publishedNews = publishedNewsByMatchId.get(String(row.id || "").trim()) || null;
+                return {
                 id: row.id,
                 match_id: row.id,
                 tournament_id: row.tournament_id,
@@ -12013,12 +12028,16 @@ function publicMainPageMatchesHandler(req, res, next) {
                 metadata: row.metadata,
                 streams: (streamsByMatchId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
                 streamers: (streamsByMatchId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_avatar),
+                news_id: publishedNews?.id || null,
+                news_url: publishedNews?.url || "",
+                news_title: publishedNews?.title || "",
                 tournament_name: row.tournament_name,
                 tournament_short_title: row.tournament_short_title,
                 tournament_logo: row.tournament_logo,
                 tournament_link: row.tournament_link,
                 tournament_type: row.tournament_type,
-              })),
+                };
+              }),
               duels: (duelRows || []).map((row) => ({
                 id: row.id,
                 tournament_id: row.tournament_id,
@@ -12061,6 +12080,30 @@ function publicMainPageMatchesHandler(req, res, next) {
         if (streamsErr) return next(streamsErr);
 
         return db.all(
+          `
+            SELECT
+              id,
+              match_id,
+              title,
+              time_utc
+            FROM news
+            WHERE deleted_at IS NULL
+              AND lower(trim(COALESCE(status, ''))) = 'published'
+              AND trim(COALESCE(title, '')) <> ''
+              AND trim(COALESCE(match_id, '')) IN (${placeholders})
+            ORDER BY
+              CASE
+                WHEN time_utc IS NULL OR trim(time_utc) = '' OR datetime(time_utc) IS NULL THEN 1
+                ELSE 0
+              END ASC,
+              datetime(time_utc) DESC,
+              id DESC
+          `,
+          normalizedMatchIds,
+          (newsErr, newsRows) => {
+            if (newsErr) return next(newsErr);
+
+            return db.all(
           `
             SELECT
               d.id,
@@ -12110,12 +12153,14 @@ function publicMainPageMatchesHandler(req, res, next) {
                 .filter(Boolean)
             ));
             if (!normalizedDuelIds.length) {
-              return finalize(duelRows || [], [], streamRows || []);
+              return finalize(duelRows || [], [], streamRows || [], newsRows || []);
             }
             return loadGamesByDuelIds(normalizedDuelIds, (gamesErr, gameRows) => {
               if (gamesErr) return next(gamesErr);
-              return finalize(duelRows || [], gameRows || [], streamRows || []);
+              return finalize(duelRows || [], gameRows || [], streamRows || [], newsRows || []);
             });
+          }
+        );
           }
         );
       });
