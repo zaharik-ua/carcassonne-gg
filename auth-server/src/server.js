@@ -11895,14 +11895,28 @@ function publicMainPageMatchesHandler(req, res, next) {
         const publishedNewsByMatchId = new Map();
         (newsRows || []).forEach((row) => {
           const matchId = String(row?.match_id || "").trim();
-          if (!matchId || publishedNewsByMatchId.has(matchId)) return;
+          if (!matchId) return;
           const newsId = Number(row?.id);
           if (!Number.isInteger(newsId) || newsId <= 0) return;
-          publishedNewsByMatchId.set(matchId, {
-            id: newsId,
-            title: normalizeText(row?.title),
-            url: `https://carcassonne.gg/news/?id=${encodeURIComponent(String(newsId))}`,
-          });
+          if (!publishedNewsByMatchId.has(matchId)) {
+            publishedNewsByMatchId.set(matchId, {
+              count: 0,
+              id: null,
+              title: "",
+              url: "",
+            });
+          }
+          const entry = publishedNewsByMatchId.get(matchId);
+          entry.count += 1;
+          if (entry.count === 1) {
+            entry.id = newsId;
+            entry.title = normalizeText(row?.title);
+            entry.url = `https://carcassonne.gg/news/?id=${encodeURIComponent(String(newsId))}`;
+          } else {
+            entry.id = null;
+            entry.title = `${entry.count} news`;
+            entry.url = `https://carcassonne.gg/news/?match=${encodeURIComponent(matchId)}`;
+          }
         });
 
         const tournaments = Array.from(new Map(
@@ -12031,6 +12045,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 news_id: publishedNews?.id || null,
                 news_url: publishedNews?.url || "",
                 news_title: publishedNews?.title || "",
+                news_count: publishedNews?.count || 0,
                 tournament_name: row.tournament_name,
                 tournament_short_title: row.tournament_short_title,
                 tournament_logo: row.tournament_logo,
