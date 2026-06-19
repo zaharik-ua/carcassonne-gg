@@ -2800,6 +2800,11 @@ function syncUsersBgaIdForProfile(profileId, email, options, done) {
           return;
         }
 
+        if (oldBgaId === normalizedProfileId) {
+          callback(null, targetUserId);
+          return;
+        }
+
         db.run(
           `
             UPDATE users
@@ -4850,14 +4855,16 @@ function loadAuditUserProfileInfo(userId, done) {
 
 function logUserBgaLinkAudit({ actor, userId, oldBgaId, source }, done = () => {}) {
   loadAuditUserProfileInfo(userId, (loadErr, userRow) => {
-    if (loadErr || !userRow || !normalizeNullableText(userRow.bga_id)) {
+    const previousBgaId = normalizeNullableText(oldBgaId);
+    const linkedBgaId = normalizeNullableText(userRow?.bga_id);
+    if (loadErr || !userRow || !linkedBgaId || previousBgaId === linkedBgaId) {
       done(loadErr || null);
       return;
     }
 
     const changes = buildAuditChanges(
-      { bga_id: oldBgaId || null },
-      { bga_id: userRow.bga_id, bga_nickname: userRow.bga_nickname || null },
+      { bga_id: previousBgaId },
+      { bga_id: linkedBgaId, bga_nickname: userRow.bga_nickname || null },
       ["bga_id", "bga_nickname"]
     );
 
