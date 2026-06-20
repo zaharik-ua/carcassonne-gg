@@ -1040,10 +1040,27 @@ function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
   }
 }
 
+function buildMatchNewsUrl(shortTitleValue, idValue, urlValue) {
+  const shortTitle = String(shortTitleValue || "").trim();
+  const newsSlug = shortTitle
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+  if (newsSlug) return `https://carcassonne.gg/news/?news=${encodeURIComponent(newsSlug)}`;
+
+  const rawUrl = String(urlValue || "").trim();
+  if (rawUrl) return rawUrl;
+
+  const id = String(idValue || "").trim();
+  return id ? `https://carcassonne.gg/news/?id=${encodeURIComponent(id)}` : "";
+}
+
 function createMatchNewsLink(match) {
   const rawUrl = String(match?.news_url || "").trim();
+  const rawShortTitle = String(match?.news_short_title || "").trim();
   const rawId = String(match?.news_id || "").trim();
-  const url = rawUrl || (rawId ? `https://carcassonne.gg/news/?id=${encodeURIComponent(rawId)}` : "");
+  const url = buildMatchNewsUrl(rawShortTitle, rawId, rawUrl);
   if (!url) return null;
 
   const link = document.createElement("a");
@@ -1069,26 +1086,29 @@ function getMatchNewsItems(match) {
   const items = sourceItems.map((item) => {
     const id = String(item?.id || item?.news_id || "").trim();
     const title = String(item?.title || item?.news_title || "").trim();
+    const shortTitle = String(item?.short_title || item?.news_short_title || "").trim();
     const rawUrl = String(item?.url || item?.news_url || "").trim();
-    const url = rawUrl || (id ? `https://carcassonne.gg/news/?id=${encodeURIComponent(id)}` : "");
+    const url = buildMatchNewsUrl(shortTitle, id, rawUrl);
     if (!url || !title) return null;
     const key = id || url;
     if (seen.has(key)) return null;
     seen.add(key);
-    return { id, title, url };
+    return { id, title, short_title: shortTitle, url };
   }).filter(Boolean);
 
   if (items.length > 0) return items;
 
   const fallbackTitle = String(match?.news_title || "").trim();
   const fallbackUrl = String(match?.news_url || "").trim();
+  const fallbackShortTitle = String(match?.news_short_title || "").trim();
   const fallbackId = String(match?.news_id || "").trim();
   const fallbackNewsCount = Number(match?.news_count || 0);
-  if (fallbackNewsCount <= 1 && fallbackTitle && (fallbackUrl || fallbackId)) {
+  if (fallbackNewsCount <= 1 && fallbackTitle && (fallbackShortTitle || fallbackUrl || fallbackId)) {
     return [{
       id: fallbackId,
       title: fallbackTitle,
-      url: fallbackUrl || `https://carcassonne.gg/news/?id=${encodeURIComponent(fallbackId)}`,
+      short_title: fallbackShortTitle,
+      url: buildMatchNewsUrl(fallbackShortTitle, fallbackId, fallbackUrl),
     }];
   }
 
@@ -2647,11 +2667,13 @@ function adaptDbMainPageMatchesData(data) {
       news_id: match?.news_id ?? null,
       news_url: String(match?.news_url || "").trim(),
       news_title: String(match?.news_title || "").trim(),
+      news_short_title: String(match?.news_short_title || "").trim(),
       news_count: match?.news_count ?? 0,
       newsItems: Array.isArray(match?.news_items)
         ? match.news_items.map((item) => ({
             id: String(item?.id || "").trim(),
             title: String(item?.title || "").trim(),
+            short_title: String(item?.short_title || "").trim(),
             url: String(item?.url || "").trim(),
           })).filter(item => item.title && item.url)
         : [],

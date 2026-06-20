@@ -11908,6 +11908,17 @@ function publicMainPageMatchesHandler(req, res, next) {
         });
 
         const publishedNewsByMatchId = new Map();
+        const buildPublishedNewsUrl = (row) => {
+          const newsSlug = normalizeText(row?.short_title)
+            .normalize("NFKD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^\p{L}\p{N}]+/gu, "-")
+            .replace(/^-+|-+$/g, "");
+          if (newsSlug) {
+            return `https://carcassonne.gg/news/?news=${encodeURIComponent(newsSlug)}`;
+          }
+          return `https://carcassonne.gg/news/?id=${encodeURIComponent(String(row.id))}`;
+        };
         (newsRows || []).forEach((row) => {
           const matchId = String(row?.match_id || "").trim();
           if (!matchId) return;
@@ -11918,25 +11929,31 @@ function publicMainPageMatchesHandler(req, res, next) {
               count: 0,
               id: null,
               title: "",
+              short_title: "",
               url: "",
               items: [],
             });
           }
           const entry = publishedNewsByMatchId.get(matchId);
           const title = normalizeText(row?.title);
+          const shortTitle = normalizeText(row?.short_title);
+          const url = buildPublishedNewsUrl(row);
           entry.count += 1;
           entry.items.push({
             id: newsId,
             title,
-            url: `https://carcassonne.gg/news/?id=${encodeURIComponent(String(newsId))}`,
+            short_title: shortTitle,
+            url,
           });
           if (entry.count === 1) {
             entry.id = newsId;
             entry.title = title;
-            entry.url = `https://carcassonne.gg/news/?id=${encodeURIComponent(String(newsId))}`;
+            entry.short_title = shortTitle;
+            entry.url = url;
           } else {
             entry.id = null;
             entry.title = `${entry.count} news`;
+            entry.short_title = "";
             entry.url = `https://carcassonne.gg/news/?match=${encodeURIComponent(matchId)}`;
           }
         });
@@ -12067,6 +12084,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 news_id: publishedNews?.id || null,
                 news_url: publishedNews?.url || "",
                 news_title: publishedNews?.title || "",
+                news_short_title: publishedNews?.short_title || "",
                 news_count: publishedNews?.count || 0,
                 news_items: publishedNews?.items || [],
                 tournament_name: row.tournament_name,
@@ -12123,6 +12141,7 @@ function publicMainPageMatchesHandler(req, res, next) {
               id,
               match_id,
               title,
+              short_title,
               time_utc
             FROM news
             WHERE deleted_at IS NULL
