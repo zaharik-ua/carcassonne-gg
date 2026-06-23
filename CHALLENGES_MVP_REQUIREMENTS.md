@@ -229,6 +229,22 @@ Terminal-статуси для повторного запрошення:
 - [ ] **CH-ACC-015** DB-level constraint не дозволяє одному гравцю мати більше одного активного Challenge-duel в одному періоді.
 - [ ] **CH-ACC-016** Повторний однаковий accept не створює дубль duel.
 
+### 11.1. Створення матчу «по факту»
+
+Цей flow використовується, якщо гравці вже зіграли матч, але не створили заявку заздалегідь, або створили її, проте не встигли підтвердити до початку матчу. Отримання та імпорт фактичних результатів виконується наявним окремим функціоналом і не є частиною цього flow.
+
+- [ ] **CH-RET-001** Під час статусу періоду `active` гравець може створити заявку з часом матчу в минулому, якщо цей час знаходиться в межах `play_starts_at..play_ends_at` відповідного періоду.
+- [ ] **CH-RET-002** Заявка з часом у минулому явно позначається в UI як заявка на вже зіграний матч.
+- [ ] **CH-RET-003** Інший гравець може прийняти заявку на вже зіграний матч, якщо обидва гравці ще не мають іншого підтвердженого Challenge-матчу в цьому періоді.
+- [ ] **CH-RET-004** Якщо заявка була створена до матчу, але не прийнята вчасно, гравець з `awaiting_player_id` може підтвердити її після запропонованого часу як вже зіграний матч, навіть якщо заявка перейшла у статус `expired`.
+- [ ] **CH-RET-005** Створення та підтвердження заявки «по факту» доступне до `play_ends_at`, а також під час `result_review`; у `archived` та `cancelled` створювати або підтверджувати такий матч не можна.
+- [ ] **CH-RET-006** При підтвердженні «по факту» заявка переходить у `accepted`, а Challenge-duel створюється однією DB-транзакцією з погодженими учасниками, форматом і фактичним часом матчу в минулому.
+- [ ] **CH-RET-007** До підтвердження backend повторно перевіряє статус періоду, межі фактичного часу матчу, actor, eligibility обох гравців і обмеження «не більше одного Challenge-матчу за період».
+- [ ] **CH-RET-008** Після створення Challenge-duel запускається або застосовується наявний механізм отримання фактичних результатів; окрема логіка пошуку чи імпорту результатів у межах цього flow не реалізується.
+- [ ] **CH-RET-009** Якщо наявний механізм одразу знаходить коректний результат, duel переходить у `Done`, а обидва гравці — у `played`; якщо результат ще не отримано, подальший статус визначається загальними правилами Challenge-duel та отримання результатів.
+- [ ] **CH-RET-010** Підтвердження «по факту» автоматично закриває інші pending-заявки обох гравців за загальними правилами прийняття заявки.
+- [ ] **CH-RET-011** Повторне підтвердження тієї самої заявки «по факту» не створює дубль duel і не запускає дубльоване отримання результатів.
+
 ## 12. Challenge-матч як duel
 
 - [ ] **CH-MAT-001** Challenge-матч використовує наявну сутність `duels` і не створює запис у командній сутності `matches`.
@@ -244,8 +260,7 @@ Terminal-статуси для повторного запрошення:
 
 ## 13. Перенесення матчу
 
-- [ ] **CH-RSC-001** Будь-який учасник може ініціювати зміну часу до запланованого часу початку матчу.
-- [ ] **CH-RSC-002** Після часу початку перенесення гравцем заборонене.
+- [ ] **CH-RSC-001** Будь-який учасник може ініціювати зміну часу як до, так і після запланованого часу початку матчу.
 - [ ] **CH-RSC-003** При перенесенні пов'язана заявка повертається в `pending`.
 - [ ] **CH-RSC-005** `awaiting_player_id` стає іншим учасником матчу.
 - [ ] **CH-RSC-006** Матч переходить у `Draft`.
@@ -260,8 +275,8 @@ Terminal-статуси для повторного запрошення:
 
 ## 14. Скасування матчу
 
-- [ ] **CH-CAN-001** Будь-який учасник може скасувати `Planned` матч до часу його початку.
-- [ ] **CH-CAN-002** Після часу початку самостійне скасування недоступне.
+- [ ] **CH-CAN-001** Будь-який учасник може скасувати `Planned` матч як до, так і після запланованого часу його початку, якщо матч не був зіграний і результат не зафіксовано.
+- [ ] **CH-CAN-002** Після запланованого часу початку скасування незіграного `Planned` матчу залишається доступним через player flow.
 - [ ] **CH-CAN-003** При скасуванні матч переходить у `Cancelled` або еквівалентно soft-deleted із зафіксованою причиною скасування.
 - [ ] **CH-CAN-004** При скасуванні статус обох гравців стає `not_selected`.
 - [ ] **CH-CAN-005** Після скасування гравці можуть повторно перейти в `available`.
@@ -345,17 +360,187 @@ Terminal-статуси для повторного запрошення:
 - [ ] **CH-E2E-008** Перенесення переводить матч у Draft, заявку в pending, а гравців у available.
 - [ ] **CH-E2E-009** Відхилення перенесення видаляє Draft матч і залишає обох гравців available.
 - [ ] **CH-E2E-010** Прийняття іншого матчу автоматично закриває заявку на перенесення та видаляє її Draft матч.
-- [ ] **CH-E2E-011** Матч можна скасувати до старту, але не можна скасувати через player flow після старту.
+- [ ] **CH-E2E-011** Незіграний `Planned` матч без зафіксованого результату можна скасувати через player flow як до, так і після запланованого часу старту.
 - [ ] **CH-E2E-012** Ручна зміна результату одразу видима обом гравцям і створює сповіщення та audit event.
 - [ ] **CH-E2E-013** Після `result_review_ends_at` гравець не може змінити результат, а адміністратор може.
 - [ ] **CH-E2E-014** Запропонований час поза межами ігрового періоду відхиляється backend.
 - [ ] **CH-E2E-015** Заявка expire лише після проходження останньої запропонованої часової опції.
+- [ ] **CH-E2E-016** Під час `active` гравець створює заявку з часом уже зіграного матчу в межах періоду, суперник приймає її, duel створюється та отримує результати через наявний функціонал.
+- [ ] **CH-E2E-017** Заявку, яку не прийняли до запропонованого часу, можна підтвердити «по факту» до `play_ends_at`; при цьому створюється лише один duel, а результат отримується через наявний функціонал.
 
-## 21. Implementation tracker
+## 21. Схема даних нових DB-об'єктів
+
+Схема нижче є цільовою для SQLite. Усі ідентифікатори нових сутностей мають тип `TEXT`, усі timestamps зберігаються як UTC ISO 8601 у полях типу `TEXT`, а boolean-значення — як `INTEGER` зі значенням `0` або `1`.
+
+### 21.1. `challenge_periods`
+
+Один запис описує один період Challenges.
+
+| Поле | Тип | Null | Default | Призначення |
+|---|---|---:|---|---|
+| `id` | `TEXT` | ні | — | Primary key. |
+| `name` | `TEXT` | ні | — | Назва періоду. |
+| `description` | `TEXT` | так | `NULL` | Короткий опис. |
+| `status` | `TEXT` | ні | `'draft'` | `draft`, `planning_open`, `active`, `result_review`, `archived` або `cancelled`. |
+| `planning_starts_at` | `TEXT` | ні | — | Початок планування в UTC. |
+| `play_starts_at` | `TEXT` | ні | — | Початок ігрового періоду в UTC. |
+| `play_ends_at` | `TEXT` | ні | — | Завершення ігрового періоду в UTC. |
+| `result_review_ends_at` | `TEXT` | ні | — | Завершення перевірки результатів у UTC. |
+| `created_by` | `TEXT` | так | `NULL` | Ідентифікатор адміністратора, який створив запис. |
+| `updated_by` | `TEXT` | так | `NULL` | Ідентифікатор адміністратора, який востаннє змінив запис. |
+| `created_at` | `TEXT` | ні | `CURRENT_TIMESTAMP` | Час створення. |
+| `updated_at` | `TEXT` | ні | `CURRENT_TIMESTAMP` | Час останньої зміни. |
+
+Обов'язкові constraints та індекси:
+
+- `CHECK (planning_starts_at <= play_starts_at AND play_starts_at < play_ends_at AND play_ends_at <= result_review_ends_at)`;
+- `CHECK` для дозволених значень `status`;
+- індекс `(status, planning_starts_at, play_ends_at, result_review_ends_at)` для пошуку відкритих періодів.
+
+### 21.2. `challenge_period_players`
+
+Один запис зберігає стан одного гравця в одному періоді.
+
+| Поле | Тип | Null | Default | Призначення |
+|---|---|---:|---|---|
+| `period_id` | `TEXT` | ні | — | FK → `challenge_periods.id`. |
+| `player_id` | `TEXT` | ні | — | FK → `profiles.id`. |
+| `status` | `TEXT` | ні | `'not_selected'` | `not_selected`, `available`, `unavailable`, `match_scheduled` або `played`. |
+| `challenge_duel_id` | `TEXT` | так | `NULL` | FK → `duels.id`; поточний підтверджений або зіграний Challenge-duel гравця. Для `Draft` і після скасування — `NULL`. |
+| `created_at` | `TEXT` | ні | `CURRENT_TIMESTAMP` | Час створення. |
+| `updated_at` | `TEXT` | ні | `CURRENT_TIMESTAMP` | Час останньої зміни. |
+
+Обов'язкові constraints та індекси:
+
+- `PRIMARY KEY (period_id, player_id)`;
+- `CHECK` для дозволених значень `status`;
+- `CHECK`, що для `match_scheduled` і `played` задано `challenge_duel_id`, а для інших статусів воно дорівнює `NULL`;
+- індекс `(period_id, status)` для списку доступних гравців;
+- прийняття матчу атомарно встановлює `challenge_duel_id` обом гравцям лише якщо воно ще `NULL`; це поле є DB-рівнем блокування другого підтвердженого матчу в тому самому періоді.
+
+### 21.3. `challenge_requests`
+
+Один запис зберігає заявку або поточну контрпропозицію між двома гравцями.
+
+| Поле | Тип | Null | Default | Призначення |
+|---|---|---:|---|---|
+| `id` | `TEXT` | ні | — | Primary key. |
+| `period_id` | `TEXT` | ні | — | FK → `challenge_periods.id`. |
+| `player_1_id` | `TEXT` | ні | — | FK → `profiles.id`; перший учасник. |
+| `player_2_id` | `TEXT` | ні | — | FK → `profiles.id`; другий учасник. |
+| `created_by_player_id` | `TEXT` | ні | — | FK → `profiles.id`; початковий автор, не змінюється при контрпропозиціях. |
+| `awaiting_player_id` | `TEXT` | ні | — | FK → `profiles.id`; учасник, від якого очікується наступна дія. |
+| `status` | `TEXT` | ні | `'pending'` | `pending`, `accepted`, `declined`, `cancelled_by_sender`, `auto_cancelled` або `expired`. |
+| `time_option_1_utc` | `TEXT` | ні | — | Перший запропонований час у UTC. |
+| `time_option_2_utc` | `TEXT` | так | `NULL` | Другий запропонований час у UTC. |
+| `time_option_3_utc` | `TEXT` | так | `NULL` | Третій запропонований час у UTC. |
+| `allows_bo3` | `INTEGER` | ні | `0` | Чи доступний формат Bo3. |
+| `allows_bo5` | `INTEGER` | ні | `0` | Чи доступний формат Bo5. |
+| `accepted_time_utc` | `TEXT` | так | `NULL` | Обраний або фактичний час після прийняття. |
+| `accepted_format` | `TEXT` | так | `NULL` | Погоджений формат: `Bo3` або `Bo5`. |
+| `hidden_by_creator_at` | `TEXT` | так | `NULL` | Приховує terminal-заявку зі списку автора без фізичного видалення. |
+| `created_at` | `TEXT` | ні | `CURRENT_TIMESTAMP` | Час створення. |
+| `updated_at` | `TEXT` | ні | `CURRENT_TIMESTAMP` | Час останньої зміни або контрпропозиції. |
+
+Обов'язкові constraints та індекси:
+
+- `CHECK (player_1_id <> player_2_id)`;
+- `CHECK`, що `created_by_player_id` і `awaiting_player_id` є одним із двох учасників;
+- `CHECK (allows_bo3 = 1 OR allows_bo5 = 1)` та перевірка boolean-полів на `0/1`;
+- `CHECK` для дозволених статусів і форматів;
+- `CHECK`, що `time_option_1_utc` заданий, `time_option_3_utc` не може бути заданий без `time_option_2_utc`, а всі задані часові опції унікальні;
+- для `accepted` обидва поля `accepted_time_utc` та `accepted_format` обов'язкові;
+- backend перевіряє, що `accepted_time_utc` дорівнює одній із поточних часових опцій заявки;
+- при контрпропозиції `time_option_1_utc`, `time_option_2_utc` і `time_option_3_utc` замінюються транзакційно, а попереднє значення залишається в `audit_trail`;
+- межі `play_starts_at..play_ends_at` для часових опцій перевіряються backend у транзакції, оскільки залежать від `challenge_periods`;
+- partial unique index для однієї `pending`-заявки на нормалізовану пару `(period_id, min(player_1_id, player_2_id), max(player_1_id, player_2_id))`;
+- індекси `(awaiting_player_id, status)`, `(created_by_player_id, status)` і `(period_id, status)`;
+- backend рахує ліміт із трьох заявок через `(created_by_player_id, status = 'pending')` у транзакції створення.
+
+### 21.4. `notifications`
+
+Універсальна таблиця є outbox та сховищем in-app сповіщень для всіх майбутніх доменів сайту. Один логічний event може створити окремі записи для каналів `in_app` та `email`. Для Challenges доменний контекст зберігається через `domain`, `event_type`, `source_entity_type`, `source_entity_id` і `payload`, без окремих Challenge-specific колонок.
+
+| Поле | Тип | Null | Default | Призначення |
+|---|---|---:|---|---|
+| `id` | `TEXT` | ні | — | Primary key. |
+| `recipient_user_id` | `INTEGER` | ні | — | FK → `users.id`; користувач, якому адресоване сповіщення. |
+| `domain` | `TEXT` | ні | — | Домен події: `challenge`, `tournament`, `news`, `system` тощо. |
+| `event_type` | `TEXT` | ні | — | Namespaced тип події, наприклад `challenge.request.created` або `challenge.duel.cancelled`. |
+| `source_entity_type` | `TEXT` | так | `NULL` | Тип об'єкта-джерела: `challenge_request`, `challenge_duel`, `tournament`, `news_post` тощо. |
+| `source_entity_id` | `TEXT` | так | `NULL` | ID об'єкта-джерела. |
+| `channel` | `TEXT` | ні | `'in_app'` | `in_app` або `email`. |
+| `payload` | `TEXT` | ні | `'{}'` | JSON-дані для відображення, email template та доменного контексту. |
+| `deduplication_key` | `TEXT` | ні | — | Стабільний ключ ідемпотентності події, отримувача та каналу. |
+| `delivery_status` | `TEXT` | ні | `'pending'` | `pending`, `sent` або `failed`. |
+| `sent_at` | `TEXT` | так | `NULL` | Час успішної доставки. |
+| `read_at` | `TEXT` | так | `NULL` | Час прочитання in-app сповіщення. |
+| `last_error` | `TEXT` | так | `NULL` | Остання помилка доставки. |
+| `created_at` | `TEXT` | ні | `CURRENT_TIMESTAMP` | Час створення. |
+| `updated_at` | `TEXT` | ні | `CURRENT_TIMESTAMP` | Час останньої зміни. |
+
+Обов'язкові constraints та індекси:
+
+- `UNIQUE (deduplication_key)` для захисту від дубльованих сповіщень;
+- `CHECK` для `domain`, `event_type`, `channel` і `delivery_status`;
+- `CHECK`, що `source_entity_type` і `source_entity_id` або обидва задані, або обидва `NULL`;
+- індекси `(recipient_user_id, channel, read_at, created_at)`, `(delivery_status, channel, created_at)` та `(domain, source_entity_type, source_entity_id)`.
+
+### 21.5. Розширення наявної таблиці `duels`
+
+Для Challenge-матчів до `duels` додаються поля:
+
+| Поле | Тип | Null | Default | Призначення |
+|---|---|---:|---|---|
+| `challenge_period_id` | `TEXT` | так | `NULL` | FK → `challenge_periods.id`; заданий лише для Challenge-duel. |
+| `challenge_request_id` | `TEXT` | так | `NULL` | FK → `challenge_requests.id`; `NULL` для матчу, створеного адміністратором без заявки. |
+| `source_type` | `TEXT` | так | `NULL` | Для Challenge-duel дорівнює `challenge`. |
+| `cancelled_by_player_id` | `TEXT` | так | `NULL` | ID гравця, який скасував матч; `NULL`, якщо матч не скасовано. Для admin cancellation використовується sentinel-значення `'1'`. |
+| `cancellation_reason` | `TEXT` | так | `NULL` | Зафіксована причина скасування. |
+| `cancelled_at` | `TEXT` | так | `NULL` | Час скасування в UTC. |
+
+Для Challenge-duel наявні поля використовуються так:
+
+- `match_id = NULL`;
+- `player_1_id` і `player_2_id` містять учасників;
+- `time_utc` містить погоджений, а після коригування — фактичний час матчу;
+- `duel_format` містить `Bo3` або `Bo5` відповідно до запису в `duel_formats`;
+- `status` містить `Draft`, `Planned`, `In progress`, `Done`, `Error` або `Cancelled`;
+- `deleted_at` не використовується для звичайного Challenge-cancel, якщо зберігається статус `Cancelled`.
+
+Обов'язкові constraints та індекси:
+
+- unique partial index на `challenge_request_id`, коли він не `NULL`, щоб одна заявка не створила два duels;
+- індекси `(challenge_period_id, status)` та `(source_type, player_1_id, player_2_id)`;
+- `CHECK`, що при `source_type = 'challenge'` задані `challenge_period_id`, обидва різні гравці, `match_id IS NULL` і дозволений Challenge-статус;
+- `cancelled_by_player_id` посилається на `profiles.id` для player cancellation; значення `'1'` зарезервоване для admin cancellation;
+- DB trigger або еквівалентна транзакційна перевірка узгоджує `challenge_period_players.challenge_duel_id` з учасниками duel і не дозволяє другий активний/зіграний Challenge-duel у періоді.
+
+### 21.6. Розширення наявної таблиці `audit_trail`
+
+Нова таблиця audit log не створюється. До наявної `audit_trail` додаються:
+
+| Поле | Тип | Null | Default | Призначення |
+|---|---|---:|---|---|
+| `actor_player_id` | `TEXT` | так | `NULL` | FK → `profiles.id`; Challenge-гравець, який виконав дію. |
+| `idempotency_key` | `TEXT` | так | `NULL` | Стабільний ключ для недопущення дубля audit event при повторному API-запиті. |
+
+Для Challenge-подій `entity_type` містить `challenge_period`, `challenge_request` або `challenge_duel`, `record_id` — ID відповідного об'єкта, `changes` — JSON із previous/next state, а `metadata` — пов'язані `period_id`, `request_id`, `duel_id` та технічний контекст операції. Для `idempotency_key IS NOT NULL` створюється unique partial index.
+
+### 21.7. Об'єкти, які не створюються
+
+- Окрема таблиця результатів не потрібна: результат зберігається в наявних `duels` і `games`.
+- Окремий Challenge-об'єкт матчу не потрібний: матч зберігається як `duels` із `source_type = 'challenge'`.
+- Окрема таблиця `challenge_request_time_options` для MVP не створюється: три поточні часові опції зберігаються полями `time_option_1_utc`, `time_option_2_utc` і `time_option_3_utc` у `challenge_requests`.
+- Окрема таблиця `challenge_notifications` не створюється: Challenge-сповіщення зберігаються в універсальній таблиці `notifications` із `domain = 'challenge'`.
+- `games` не потребує нових Challenge-полів і пов'язується через наявний `games.duel_id`.
+- Командна таблиця `matches` для Challenges не використовується.
+
+## 22. Implementation tracker
 
 Ця секція відстежує великі технічні блоки. Детальна готовність визначається чекбоксами вимог вище.
 
-- [ ] **CH-IMP-001** Схема БД та міграції.
+- [x] **CH-IMP-001** Схема БД та міграції.
 - [ ] **CH-IMP-002** Period API та admin UI.
 - [ ] **CH-IMP-003** Player-period status API та UI.
 - [ ] **CH-IMP-004** Eligibility та список доступних суперників.
@@ -371,7 +556,7 @@ Terminal-статуси для повторного запрошення:
 - [ ] **CH-IMP-014** Automated tests критичних state transitions і race conditions.
 - [ ] **CH-IMP-015** End-to-end перевірка MVP.
 
-## 22. Поза межами MVP
+## 23. Поза межами MVP
 
 - Розрахунок та оновлення рейтингу.
 - Реалізація або зміна механізму автоматичного імпорту BGA-результатів.
@@ -383,7 +568,7 @@ Terminal-статуси для повторного запрошення:
 - Нагадування перед матчем.
 - Нагадування перед завершенням result review period.
 
-## 23. Після MVP
+## 24. Після MVP
 
 Наступні функції можуть використовувати збережені Challenge-матчі та audit history, але потребують окремого scope:
 

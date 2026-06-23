@@ -3469,8 +3469,26 @@ function ensureDuelsSchema() {
       updated_by TEXT,
       deleted_by TEXT,
       deleted_at TEXT,
+      challenge_period_id TEXT,
+      challenge_request_id TEXT,
+      source_type TEXT,
+      cancelled_by_player_id TEXT,
+      cancellation_reason TEXT,
+      cancelled_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK (
+        source_type IS NULL
+        OR source_type <> 'challenge'
+        OR (
+          challenge_period_id IS NOT NULL
+          AND player_1_id IS NOT NULL
+          AND player_2_id IS NOT NULL
+          AND player_1_id <> player_2_id
+          AND match_id IS NULL
+          AND status IN ('Draft', 'Planned', 'In progress', 'Done', 'Error', 'Cancelled')
+        )
+      )
     )
   `, (createErr) => {
     if (createErr) {
@@ -3483,17 +3501,49 @@ function ensureDuelsSchema() {
         return;
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
-      addColumnIfMissing(columns, "duels", "duel_number", "INTEGER");
-      addColumnIfMissing(columns, "duels", "results_last_error", "TEXT");
-      addColumnIfMissing(columns, "duels", "results_checked_at", "TEXT");
-      addColumnIfMissing(columns, "duels", "rating_full", "REAL");
-      addColumnIfMissing(columns, "duels", "rating", "INTEGER");
-      addColumnIfMissing(columns, "duels", "dw1_import", "INTEGER");
-      addColumnIfMissing(columns, "duels", "dw2_import", "INTEGER");
-      addColumnIfMissing(columns, "duels", "created_by", "TEXT");
-      addColumnIfMissing(columns, "duels", "updated_by", "TEXT");
-      addColumnIfMissing(columns, "duels", "deleted_by", "TEXT");
-      addColumnIfMissing(columns, "duels", "deleted_at", "TEXT");
+      db.serialize(() => {
+        addColumnIfMissing(columns, "duels", "duel_number", "INTEGER");
+        addColumnIfMissing(columns, "duels", "results_last_error", "TEXT");
+        addColumnIfMissing(columns, "duels", "results_checked_at", "TEXT");
+        addColumnIfMissing(columns, "duels", "rating_full", "REAL");
+        addColumnIfMissing(columns, "duels", "rating", "INTEGER");
+        addColumnIfMissing(columns, "duels", "dw1_import", "INTEGER");
+        addColumnIfMissing(columns, "duels", "dw2_import", "INTEGER");
+        addColumnIfMissing(columns, "duels", "created_by", "TEXT");
+        addColumnIfMissing(columns, "duels", "updated_by", "TEXT");
+        addColumnIfMissing(columns, "duels", "deleted_by", "TEXT");
+        addColumnIfMissing(columns, "duels", "deleted_at", "TEXT");
+        addColumnIfMissing(columns, "duels", "challenge_period_id", "TEXT");
+        addColumnIfMissing(columns, "duels", "challenge_request_id", "TEXT");
+        addColumnIfMissing(columns, "duels", "source_type", "TEXT");
+        addColumnIfMissing(columns, "duels", "cancelled_by_player_id", "TEXT");
+        addColumnIfMissing(columns, "duels", "cancellation_reason", "TEXT");
+        addColumnIfMissing(columns, "duels", "cancelled_at", "TEXT");
+        db.run(
+          "CREATE UNIQUE INDEX IF NOT EXISTS idx_duels_challenge_request_id ON duels(challenge_request_id) WHERE challenge_request_id IS NOT NULL",
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure duels challenge_request_id index", indexErr);
+            }
+          }
+        );
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_duels_challenge_period_status ON duels(challenge_period_id, status)",
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure duels challenge_period_id/status index", indexErr);
+            }
+          }
+        );
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_duels_source_players ON duels(source_type, player_1_id, player_2_id)",
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure duels source/player index", indexErr);
+            }
+          }
+        );
+      });
     });
   });
       if (tableNames.has("lineups") && !tableNames.has("duels")) {
@@ -3600,6 +3650,191 @@ function ensureGamesSchema() {
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_games_bga_table_id ON games(bga_table_id)",
       (indexErr) => {
         if (indexErr) console.error("Failed to ensure idx_games_bga_table_id", indexErr);
+      }
+    );
+  });
+}
+
+function ensureChallengesSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS challenge_periods (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      planning_starts_at TEXT NOT NULL,
+      play_starts_at TEXT NOT NULL,
+      play_ends_at TEXT NOT NULL,
+      result_review_ends_at TEXT NOT NULL,
+      created_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK (status IN ('draft', 'planning_open', 'active', 'result_review', 'archived', 'cancelled')),
+      CHECK (
+        planning_starts_at <= play_starts_at
+        AND play_starts_at < play_ends_at
+        AND play_ends_at <= result_review_ends_at
+      )
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure challenge_periods schema", createErr);
+      return;
+    }
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_challenge_periods_status_dates ON challenge_periods(status, planning_starts_at, play_ends_at, result_review_ends_at)",
+      (indexErr) => {
+        if (indexErr) {
+          console.error("Failed to ensure challenge_periods status/dates index", indexErr);
+        }
+      }
+    );
+  });
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS challenge_period_players (
+      period_id TEXT NOT NULL,
+      player_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'not_selected',
+      challenge_duel_id TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (period_id, player_id),
+      FOREIGN KEY (period_id) REFERENCES challenge_periods(id) ON DELETE CASCADE,
+      FOREIGN KEY (player_id) REFERENCES profiles(id),
+      FOREIGN KEY (challenge_duel_id) REFERENCES duels(id),
+      CHECK (status IN ('not_selected', 'available', 'unavailable', 'match_scheduled', 'played')),
+      CHECK (
+        (
+          status IN ('match_scheduled', 'played')
+          AND challenge_duel_id IS NOT NULL
+        )
+        OR (
+          status NOT IN ('match_scheduled', 'played')
+          AND challenge_duel_id IS NULL
+        )
+      )
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure challenge_period_players schema", createErr);
+      return;
+    }
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_challenge_period_players_status ON challenge_period_players(period_id, status)",
+      (indexErr) => {
+        if (indexErr) {
+          console.error("Failed to ensure challenge_period_players status index", indexErr);
+        }
+      }
+    );
+  });
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS challenge_requests (
+      id TEXT PRIMARY KEY,
+      period_id TEXT NOT NULL,
+      player_1_id TEXT NOT NULL,
+      player_2_id TEXT NOT NULL,
+      created_by_player_id TEXT NOT NULL,
+      awaiting_player_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      time_option_1_utc TEXT NOT NULL,
+      time_option_2_utc TEXT,
+      time_option_3_utc TEXT,
+      allows_bo3 INTEGER NOT NULL DEFAULT 0,
+      allows_bo5 INTEGER NOT NULL DEFAULT 0,
+      accepted_time_utc TEXT,
+      accepted_format TEXT,
+      hidden_by_creator_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (period_id) REFERENCES challenge_periods(id) ON DELETE CASCADE,
+      FOREIGN KEY (player_1_id) REFERENCES profiles(id),
+      FOREIGN KEY (player_2_id) REFERENCES profiles(id),
+      FOREIGN KEY (created_by_player_id) REFERENCES profiles(id),
+      FOREIGN KEY (awaiting_player_id) REFERENCES profiles(id),
+      CHECK (player_1_id <> player_2_id),
+      CHECK (created_by_player_id IN (player_1_id, player_2_id)),
+      CHECK (awaiting_player_id IN (player_1_id, player_2_id)),
+      CHECK (status IN ('pending', 'accepted', 'declined', 'cancelled_by_sender', 'auto_cancelled', 'expired')),
+      CHECK (allows_bo3 IN (0, 1)),
+      CHECK (allows_bo5 IN (0, 1)),
+      CHECK (allows_bo3 = 1 OR allows_bo5 = 1),
+      CHECK (accepted_format IS NULL OR accepted_format IN ('Bo3', 'Bo5')),
+      CHECK (time_option_3_utc IS NULL OR time_option_2_utc IS NOT NULL),
+      CHECK (time_option_2_utc IS NULL OR time_option_2_utc <> time_option_1_utc),
+      CHECK (
+        time_option_3_utc IS NULL
+        OR (
+          time_option_3_utc <> time_option_1_utc
+          AND time_option_3_utc <> time_option_2_utc
+        )
+      ),
+      CHECK (
+        accepted_time_utc IS NULL
+        OR accepted_time_utc = time_option_1_utc
+        OR (
+          time_option_2_utc IS NOT NULL
+          AND accepted_time_utc = time_option_2_utc
+        )
+        OR (
+          time_option_3_utc IS NOT NULL
+          AND accepted_time_utc = time_option_3_utc
+        )
+      ),
+      CHECK (
+        status <> 'accepted'
+        OR (
+          accepted_time_utc IS NOT NULL
+          AND accepted_format IS NOT NULL
+        )
+      )
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure challenge_requests schema", createErr);
+      return;
+    }
+    db.run(
+      `
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_challenge_requests_pending_pair
+        ON challenge_requests(
+          period_id,
+          CASE WHEN player_1_id < player_2_id THEN player_1_id ELSE player_2_id END,
+          CASE WHEN player_1_id < player_2_id THEN player_2_id ELSE player_1_id END
+        )
+        WHERE status = 'pending'
+      `,
+      (indexErr) => {
+        if (indexErr) {
+          console.error("Failed to ensure challenge_requests pending pair index", indexErr);
+        }
+      }
+    );
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_challenge_requests_awaiting_status ON challenge_requests(awaiting_player_id, status)",
+      (indexErr) => {
+        if (indexErr) {
+          console.error("Failed to ensure challenge_requests awaiting/status index", indexErr);
+        }
+      }
+    );
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_challenge_requests_creator_status ON challenge_requests(created_by_player_id, status)",
+      (indexErr) => {
+        if (indexErr) {
+          console.error("Failed to ensure challenge_requests creator/status index", indexErr);
+        }
+      }
+    );
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_challenge_requests_period_status ON challenge_requests(period_id, status)",
+      (indexErr) => {
+        if (indexErr) {
+          console.error("Failed to ensure challenge_requests period/status index", indexErr);
+        }
       }
     );
   });
@@ -4601,9 +4836,11 @@ function ensureAuditTrailSchema() {
       action TEXT NOT NULL,
       record_id TEXT NOT NULL,
       actor_user_id INTEGER,
+      actor_player_id TEXT,
       actor_bga_id TEXT,
       actor_bga_nickname TEXT,
       actor_email TEXT,
+      idempotency_key TEXT,
       changes TEXT,
       metadata TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -4613,6 +4850,25 @@ function ensureAuditTrailSchema() {
       console.error("Failed to ensure audit_trail schema", createErr);
       return;
     }
+    db.all("PRAGMA table_info(audit_trail)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect audit_trail schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      db.serialize(() => {
+        addColumnIfMissing(columns, "audit_trail", "actor_player_id", "TEXT");
+        addColumnIfMissing(columns, "audit_trail", "idempotency_key", "TEXT");
+        db.run(
+          "CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_trail_idempotency_key ON audit_trail(idempotency_key) WHERE idempotency_key IS NOT NULL",
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure audit trail idempotency_key index", indexErr);
+            }
+          }
+        );
+      });
+    });
     db.run(
       "CREATE INDEX IF NOT EXISTS idx_audit_trail_created_at ON audit_trail(created_at DESC, id DESC)",
       (indexErr) => {
@@ -4780,6 +5036,7 @@ function buildLineupsAuditChanges(previousLineups, nextLineups) {
 function getAuditActor(user) {
   return {
     actor_user_id: Number.isInteger(Number(user?.id)) ? Number(user.id) : null,
+    actor_player_id: normalizeNullableText(user?.player_id ?? user?.bga_id),
     actor_bga_id: normalizeNullableText(user?.player_id ?? user?.bga_id),
     actor_bga_nickname: normalizeNullableText(user?.bga_nickname),
     actor_email: normalizeNullableText(user?.email),
@@ -4796,13 +5053,15 @@ function logAuditEvent(entry, done = () => {}) {
         action,
         record_id,
         actor_user_id,
+        actor_player_id,
         actor_bga_id,
         actor_bga_nickname,
         actor_email,
+        idempotency_key,
         changes,
         metadata
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       normalizeNullableText(actor.event_type) || "unknown",
@@ -4810,9 +5069,11 @@ function logAuditEvent(entry, done = () => {}) {
       normalizeNullableText(actor.action) || "unknown",
       String(actor.record_id ?? ""),
       Number.isInteger(Number(actor.actor_user_id)) ? Number(actor.actor_user_id) : null,
+      normalizeNullableText(actor.actor_player_id),
       normalizeNullableText(actor.actor_bga_id),
       normalizeNullableText(actor.actor_bga_nickname),
       normalizeNullableText(actor.actor_email),
+      normalizeNullableText(actor.idempotency_key),
       safeStringifyJson(actor.changes ?? null),
       safeStringifyJson(actor.metadata ?? null),
     ],
@@ -4967,6 +5228,7 @@ db.serialize(() => {
           ensureDuelsSchema();
           ensureDuelFormatsSchema();
           ensureGamesSchema();
+          ensureChallengesSchema();
           ensureTeamsSchema();
           ensureTournamentsSchema();
           ensureTournamentAccessUsersSchema();
@@ -10087,9 +10349,11 @@ app.get("/audit-trail", requireAdmin, (req, res, next) => {
             action,
             record_id,
             actor_user_id,
+            actor_player_id,
             actor_bga_id,
             actor_bga_nickname,
             actor_email,
+            idempotency_key,
             changes,
             metadata,
             created_at
