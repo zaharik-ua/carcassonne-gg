@@ -1066,8 +1066,6 @@ function createMatchNewsLink(match) {
   const link = document.createElement("a");
   link.className = "match-news-link";
   link.href = url;
-  link.target = "_blank";
-  link.rel = "noopener noreferrer";
   link.title = String(match?.news_title || "").trim() || "Read news";
 
   const icon = document.createElement("img");
@@ -2492,8 +2490,6 @@ function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloU
       const link = document.createElement("a");
       link.className = "lineup__news-link";
       link.href = url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
 
       const icon = document.createElement("img");
       icon.className = "lineup__news-icon";
