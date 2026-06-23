@@ -326,6 +326,14 @@ const TOURNAMENT_LINEUP_SIZE_TYPES = {
   FIXED: 1,
   FLEXIBLE: 2,
 };
+const CHALLENGE_PERIOD_STATUSES = new Set([
+  "draft",
+  "planning_open",
+  "active",
+  "result_review",
+  "archived",
+  "cancelled",
+]);
 
 function quoteSqlIdentifier(identifier) {
   return `"${String(identifier || "").replaceAll('"', '""')}"`;
@@ -439,6 +447,30 @@ function normalizeIntegerOrNull(value) {
   if (!raw) return null;
   const normalized = Number.parseInt(raw, 10);
   return Number.isInteger(normalized) ? normalized : null;
+}
+
+function normalizeChallengePeriodStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return CHALLENGE_PERIOD_STATUSES.has(normalized) ? normalized : "draft";
+}
+
+function normalizeUtcTimestamp(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(raw)
+    ? raw.replace(" ", "T") + (raw.endsWith("Z") ? "" : "Z")
+    : raw;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function buildChallengePeriodId(name, playStartsAt) {
+  const namePart = normalizeEntityId(name).toLowerCase() || "challenge_period";
+  const datePart = String(playStartsAt || "")
+    .slice(0, 10)
+    .replace(/[^0-9]/g, "");
+  return `${namePart}${datePart ? `_${datePart}` : ""}_${Date.now().toString(36)}`;
 }
 
 function normalizeNewsEditorAccessType(value) {
@@ -6540,6 +6572,224 @@ app.delete("/local-websites/:id", requireAdmin, async (req, res) => {
   } catch (error) {
     console.error("Failed to delete local website", error);
     return res.status(500).json({ ok: false, message: "Failed to delete local website" });
+  }
+});
+
+async function loadChallengePeriodById(periodId) {
+  const id = normalizeNullableText(periodId);
+  if (!id) return null;
+  return dbGetAsync(
+    `
+      SELECT
+        id,
+        name,
+        description,
+        status,
+        planning_starts_at,
+        play_starts_at,
+        play_ends_at,
+        result_review_ends_at,
+        created_by,
+        updated_by,
+        created_at,
+        updated_at
+      FROM challenge_periods
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [id]
+  );
+}
+
+function normalizeChallengePeriodPayload(payload) {
+  const name = normalizeNullableText(payload?.name);
+  const description = normalizeNullableText(payload?.description);
+  const status = normalizeChallengePeriodStatus(payload?.status);
+  const planningStartsAt = normalizeUtcTimestamp(payload?.planning_starts_at ?? payload?.planningStartsAt);
+  const playStartsAt = normalizeUtcTimestamp(payload?.play_starts_at ?? payload?.playStartsAt);
+  const playEndsAt = normalizeUtcTimestamp(payload?.play_ends_at ?? payload?.playEndsAt);
+  const resultReviewEndsAt = normalizeUtcTimestamp(payload?.result_review_ends_at ?? payload?.resultReviewEndsAt);
+
+  return {
+    name,
+    description,
+    status,
+    planning_starts_at: planningStartsAt,
+    play_starts_at: playStartsAt,
+    play_ends_at: playEndsAt,
+    result_review_ends_at: resultReviewEndsAt,
+  };
+}
+
+function validateChallengePeriodPayload(period) {
+  if (!period.name) return "name is required";
+  if (!period.planning_starts_at) return "planning_starts_at is required";
+  if (!period.play_starts_at) return "play_starts_at is required";
+  if (!period.play_ends_at) return "play_ends_at is required";
+  if (!period.result_review_ends_at) return "result_review_ends_at is required";
+  if (
+    period.planning_starts_at > period.play_starts_at
+    || period.play_starts_at >= period.play_ends_at
+    || period.play_ends_at > period.result_review_ends_at
+  ) {
+    return "Dates must satisfy planning_starts_at <= play_starts_at < play_ends_at <= result_review_ends_at";
+  }
+  return "";
+}
+
+app.get("/challenge-periods", requireAdmin, async (_req, res) => {
+  try {
+    const rows = await dbAllAsync(`
+      SELECT
+        id,
+        name,
+        description,
+        status,
+        planning_starts_at,
+        play_starts_at,
+        play_ends_at,
+        result_review_ends_at,
+        created_by,
+        updated_by,
+        created_at,
+        updated_at
+      FROM challenge_periods
+      ORDER BY datetime(planning_starts_at) DESC, datetime(play_starts_at) DESC, id ASC
+    `);
+    return res.json({ ok: true, challenge_periods: rows || [] });
+  } catch (error) {
+    console.error("Failed to load challenge periods", error);
+    return res.status(500).json({ ok: false, message: "Failed to load challenge periods" });
+  }
+});
+
+app.post("/challenge-periods", requireAdmin, async (req, res) => {
+  const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
+  const period = normalizeChallengePeriodPayload(req.body);
+  const validationError = validateChallengePeriodPayload(period);
+  if (validationError) {
+    return res.status(400).json({ ok: false, message: validationError });
+  }
+
+  const requestedId = normalizeNullableText(req.body?.id);
+  const periodId = requestedId || buildChallengePeriodId(period.name, period.play_starts_at);
+
+  try {
+    await dbRunAsync(
+      `
+        INSERT INTO challenge_periods (
+          id,
+          name,
+          description,
+          status,
+          planning_starts_at,
+          play_starts_at,
+          play_ends_at,
+          result_review_ends_at,
+          created_by,
+          updated_by,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [
+        periodId,
+        period.name,
+        period.description,
+        period.status,
+        period.planning_starts_at,
+        period.play_starts_at,
+        period.play_ends_at,
+        period.result_review_ends_at,
+        actorPlayerId,
+        actorPlayerId,
+      ]
+    );
+    const createdRow = await loadChallengePeriodById(periodId);
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_period.created",
+      entity_type: "challenge_period",
+      action: "create",
+      record_id: periodId,
+      changes: { before: null, after: createdRow },
+      metadata: { period_id: periodId },
+    });
+    return res.status(201).json({ ok: true, challenge_period: createdRow || null });
+  } catch (error) {
+    if (String(error?.message || "").includes("UNIQUE")) {
+      return res.status(409).json({ ok: false, message: "Challenge period with this id already exists" });
+    }
+    console.error("Failed to create challenge period", error);
+    return res.status(500).json({ ok: false, message: "Failed to create challenge period" });
+  }
+});
+
+app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const payloadId = normalizeNullableText(req.body?.id);
+  const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
+  const period = normalizeChallengePeriodPayload(req.body);
+  const validationError = validateChallengePeriodPayload(period);
+
+  if (!periodId) {
+    return res.status(400).json({ ok: false, message: "Invalid challenge period id" });
+  }
+  if (payloadId && payloadId !== periodId) {
+    return res.status(400).json({ ok: false, message: "Challenge period id cannot be changed" });
+  }
+  if (validationError) {
+    return res.status(400).json({ ok: false, message: validationError });
+  }
+
+  try {
+    const beforeRow = await loadChallengePeriodById(periodId);
+    if (!beforeRow) {
+      return res.status(404).json({ ok: false, message: "Challenge period not found" });
+    }
+
+    await dbRunAsync(
+      `
+        UPDATE challenge_periods
+        SET
+          name = ?,
+          description = ?,
+          status = ?,
+          planning_starts_at = ?,
+          play_starts_at = ?,
+          play_ends_at = ?,
+          result_review_ends_at = ?,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        period.name,
+        period.description,
+        period.status,
+        period.planning_starts_at,
+        period.play_starts_at,
+        period.play_ends_at,
+        period.result_review_ends_at,
+        actorPlayerId,
+        periodId,
+      ]
+    );
+    const updatedRow = await loadChallengePeriodById(periodId);
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_period.updated",
+      entity_type: "challenge_period",
+      action: "update",
+      record_id: periodId,
+      changes: buildAuditChanges(beforeRow, updatedRow),
+      metadata: { period_id: periodId },
+    });
+    return res.json({ ok: true, challenge_period: updatedRow || null });
+  } catch (error) {
+    console.error("Failed to update challenge period", error);
+    return res.status(500).json({ ok: false, message: "Failed to update challenge period" });
   }
 });
 

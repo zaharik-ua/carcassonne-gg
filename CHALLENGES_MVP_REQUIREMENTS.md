@@ -541,7 +541,7 @@ Terminal-статуси для повторного запрошення:
 Ця секція відстежує великі технічні блоки. Детальна готовність визначається чекбоксами вимог вище.
 
 - [x] **CH-IMP-001** Схема БД та міграції.
-- [ ] **CH-IMP-002** Period API та admin UI.
+- [x] **CH-IMP-002** Period API та admin UI.
 - [ ] **CH-IMP-003** Player-period status API та UI.
 - [ ] **CH-IMP-004** Eligibility та список доступних суперників.
 - [ ] **CH-IMP-005** Request API та player UI.

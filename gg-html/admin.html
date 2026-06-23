@@ -573,6 +573,7 @@
   const CATEGORIES_URL = `${AUTH_BASE}/categories`;
   const LOCAL_WEBSITES_URL = `${AUTH_BASE}/local-websites`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const CHALLENGE_PERIODS_URL = `${AUTH_BASE}/challenge-periods`;
   const USERS_URL = `${AUTH_BASE}/users`;
   const USER_OPTIONS_URL = `${AUTH_BASE}/users/options`;
   const AUDIT_TRAIL_URL = `${AUTH_BASE}/audit-trail`;
@@ -647,6 +648,13 @@
       createLabel: "Create",
       load: () => apiJson(TOURNAMENTS_URL, { method: "GET" }).then((data) => data.tournaments || []),
     },
+    challengePeriods: {
+      key: "challengePeriods",
+      title: "Challenge Periods",
+      buttonLabel: "Edit",
+      createLabel: "Create",
+      load: () => apiJson(CHALLENGE_PERIODS_URL, { method: "GET" }).then((data) => data.challenge_periods || []),
+    },
     duelFormats: {
       key: "duelFormats",
       title: "Duel Formats",
@@ -716,6 +724,7 @@
     newsEditorsHideAuto: false,
     mobileMenuItems: [],
     tournaments: [],
+    challengePeriods: [],
     duelFormats: [],
     matchesReference: [],
     profilesPublic: [],
@@ -981,6 +990,12 @@
     row.appendChild(label);
     row.appendChild(input);
     return { row, input };
+  }
+
+  function createDateTimeRow(labelText, value) {
+    const field = createTextRow(labelText, formatDateTimeLocalInput(value));
+    field.input.type = "datetime-local";
+    return field;
   }
 
   function createNumberRow(labelText, value, options) {
@@ -1433,6 +1448,23 @@
     const date = new Date(raw);
     if (Number.isNaN(date.getTime())) return raw;
     return date.toLocaleString();
+  }
+
+  function formatDateTimeLocalInput(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const date = parseUtcDate(raw);
+    if (!date) return "";
+    const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+  }
+
+  function dateTimeLocalInputToIso(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString();
   }
 
   function parseUtcDate(value) {
@@ -3556,6 +3588,133 @@
     }
   }
 
+  function openChallengePeriodForm(mode, item, anchorRow) {
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+
+    const idField = createTextRow("id", item?.id || "", { readOnly: true });
+    const nameField = createTextRow("name", item?.name || "");
+    const descriptionField = createTextRow("description", item?.description || "");
+    const statusField = createSelectOptionsRow(
+      "status",
+      String(item?.status || "draft"),
+      [
+        { value: "draft", label: "draft" },
+        { value: "planning_open", label: "planning_open" },
+        { value: "active", label: "active" },
+        { value: "result_review", label: "result_review" },
+        { value: "archived", label: "archived" },
+        { value: "cancelled", label: "cancelled" },
+      ],
+      false
+    );
+    const planningStartsField = createDateTimeRow("planning_starts_at", item?.planning_starts_at || "");
+    const playStartsField = createDateTimeRow("play_starts_at", item?.play_starts_at || "");
+    const playEndsField = createDateTimeRow("play_ends_at", item?.play_ends_at || "");
+    const resultReviewEndsField = createDateTimeRow("result_review_ends_at", item?.result_review_ends_at || "");
+
+    if (mode === "edit") form.appendChild(idField.row);
+    form.appendChild(nameField.row);
+    form.appendChild(descriptionField.row);
+    form.appendChild(statusField.row);
+    form.appendChild(planningStartsField.row);
+    form.appendChild(playStartsField.row);
+    form.appendChild(playEndsField.row);
+    form.appendChild(resultReviewEndsField.row);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = mode === "create" ? "Create" : "Save";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => {
+      if (mode === "create") {
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+      } else {
+        closeInlineForm();
+      }
+      setStatus("", false);
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = {
+        name: String(nameField.input.value || "").trim(),
+        description: String(descriptionField.input.value || "").trim(),
+        status: String(statusField.select.value || "draft").trim(),
+        planning_starts_at: dateTimeLocalInputToIso(planningStartsField.input.value),
+        play_starts_at: dateTimeLocalInputToIso(playStartsField.input.value),
+        play_ends_at: dateTimeLocalInputToIso(playEndsField.input.value),
+        result_review_ends_at: dateTimeLocalInputToIso(resultReviewEndsField.input.value),
+      };
+
+      if (mode === "edit") {
+        payload.id = String(item?.id || "").trim();
+      }
+      if (!payload.name) {
+        setStatus("Challenge period name is required.", true);
+        return;
+      }
+      if (!payload.planning_starts_at || !payload.play_starts_at || !payload.play_ends_at || !payload.result_review_ends_at) {
+        setStatus("All Challenge period dates are required.", true);
+        return;
+      }
+      if (
+        payload.planning_starts_at > payload.play_starts_at
+        || payload.play_starts_at >= payload.play_ends_at
+        || payload.play_ends_at > payload.result_review_ends_at
+      ) {
+        setStatus("Dates must satisfy planning <= play start < play end <= result review end.", true);
+        return;
+      }
+
+      try {
+        if (mode === "create") {
+          await apiJson(CHALLENGE_PERIODS_URL, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Challenge period created.", false);
+        } else {
+          await apiJson(`${CHALLENGE_PERIODS_URL}/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Challenge period updated.", false);
+        }
+        if (mode === "create") {
+          sectionForm.classList.add("hidden");
+          sectionForm.innerHTML = "";
+        } else {
+          closeInlineForm();
+        }
+        await loadSectionData("challengePeriods");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to save Challenge period.", true);
+      }
+    });
+
+    if (mode === "create") {
+      closeInlineForm();
+      showCreateForm(form);
+    } else if (anchorRow) {
+      mountDetailForm(form, anchorRow);
+    }
+  }
+
   async function openNewsEditorForm(mode, item, anchorRow) {
     try {
       await loadNewsEditorReferenceData();
@@ -4414,6 +4573,39 @@
     });
   }
 
+  function renderChallengePeriods() {
+    sectionTitle.textContent = "Challenge Periods";
+    sectionCreateBtn.textContent = "Create";
+    sectionCreateBtn.classList.remove("hidden");
+    sectionCreateBtn.onclick = () => openChallengePeriodForm("create", null, null);
+
+    if (!state.challengePeriods.length) {
+      renderListEmpty("No Challenge periods yet.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    state.challengePeriods.forEach((item) => {
+      const subtitleParts = [];
+      if (item.status) subtitleParts.push(String(item.status).trim());
+      if (item.planning_starts_at) subtitleParts.push(`Planning: ${formatDate(item.planning_starts_at)}`);
+      if (item.play_starts_at || item.play_ends_at) {
+        subtitleParts.push(`Play: ${formatDate(item.play_starts_at)} - ${formatDate(item.play_ends_at)}`);
+      }
+      if (item.result_review_ends_at) subtitleParts.push(`Review until: ${formatDate(item.result_review_ends_at)}`);
+
+      sectionList.appendChild(createListRow({
+        imageSrc: "",
+        imageAlt: item.name || item.id,
+        imageRound: false,
+        title: item.name || item.id,
+        subtitle: subtitleParts.join(" • "),
+        buttonLabel: "Edit",
+        onClick: (row) => openChallengePeriodForm("edit", item, row),
+      }));
+    });
+  }
+
   function renderDuelFormats() {
     sectionTitle.textContent = "Duel Formats";
     sectionCreateBtn.textContent = "Create";
@@ -4535,6 +4727,7 @@
     if (state.activeSection === "mobileMenuItems") renderMobileMenuItems();
     if (state.activeSection === "newsEditors") renderNewsEditors();
     if (state.activeSection === "tournaments") renderTournaments();
+    if (state.activeSection === "challengePeriods") renderChallengePeriods();
     if (state.activeSection === "duelFormats") renderDuelFormats();
     if (state.activeSection === "users") renderUsers();
     if (state.activeSection === "auditTrail") renderAuditTrail();
