@@ -240,7 +240,7 @@ id,tournament_id,time_utc,lineup_type,lineup_deadline_h,lineup_deadline_utc,numb
 20240408ESPRCP,Friendly-Matches,2024-04-08T20:00:00Z,Open,,,6,ESP,RCP,Done,3,3,8,8,1,1,,,"2026-04-15 08:23:32","2026-05-04 10:02:54",,,,,,,,,,,,,,,,,,,,
 20240407ESPTWN,Friendly-Matches,2024-04-07T08:00:00Z,Open,,,5,ESP,TWN,Done,4,1,9,4,1,1,,,"2026-04-15 08:23:32","2026-05-04 10:02:54",,,,,,,,,,,,,,,,,,,,
 20240406CHNBEL,Friendly-Matches,2024-04-06T12:00:00Z,Open,,,7,CHN,BEL,Error,5,1,11,2,1,1,,,"2026-04-15 08:23:32","2026-05-04 10:02:54",,,,,,,,,,,,,,,,,,,,
-20240405CHLARG,Friendly-Matches,2024-04-05T00:00:00Z,Open,,,10,CHL,ARG,Error,6,3,14,11,1,1,,,"2026-04-15 08:23:32","2026-05-04 10:01:09",,,,,,,,,,,,,,,,,,,,
+20240405CHLARG,Friendly-Matches,2024-04-05T00:00:00Z,Open,,,10,CHL,ARG,Done,6,4,14,13,1,84291236,,,"2026-04-15 08:23:32","2026-06-20 23:03:28",2,,,,,,,,,,,,,,,,,,,
 20240404ESPROU,Friendly-Matches,2024-04-04T19:00:00Z,Open,,,5,ESP,ROU,Done,2,3,5,8,1,1,,,"2026-04-15 08:23:32","2026-05-04 10:01:09",,,,,,,,,,,,,,,,,,,,
 20240404FINLVA,Friendly-Matches,2024-04-04T18:00:00Z,Open,,,5,FIN,LVA,Error,0,4,0,8,1,1,,,"2026-04-15 08:23:32","2026-05-04 09:59:25",,,,,,,,,,,,,,,,,,,,
 20240403UKRESP,Friendly-Matches,2024-04-03T19:00:00Z,Open,,,5,UKR,ESP,Done,4,1,9,5,1,1,,,"2026-04-15 08:23:32","2026-05-04 09:59:25",,,,,,,,,,,,,,,,,,,,
@@ -292,8 +292,9 @@ id,tournament_id,time_utc,lineup_type,lineup_deadline_h,lineup_deadline_utc,numb
 20260607DEUARG,WTCOC-2026,2026-06-07T16:00:00Z,Open,,,5,DEU,ARG,Done,4,1,8,4,1,1,,,"2026-05-19 09:36:51","2026-06-08 12:35:02",4,4,1,8,4,QUARTER-FINALS,22,,,QUARTER-FINALS,,"{""titleMatch"":""QF5-QF6 (SF3)"",""status"":""tancat""}",,,,3,0,19,,Playoffs
 20260607CHNJPN,WTCOC-2026,2026-06-07T13:00:00Z,Open,,,5,CHN,JPN,Done,3,2,7,4,1,1,,,"2026-05-19 09:36:51","2026-06-07 22:31:56",5,3,2,7,4,QUARTER-FINALS,22,,,QUARTER-FINALS,,"{""titleMatch"":""QF7-QF8 (SF4)"",""status"":""tancat""}",,,,3,0,20,,Playoffs
 20260613UKRHKG,WTCOC-2026,2026-06-13T14:00:00Z,Open,,,5,UKR,HKG,Done,3,2,6,7,1,1,,,"2026-05-19 09:36:51","2026-06-13 15:38:35",5,3,2,6,7,SEMI-FINALS,23,,,SEMI-FINALS,,"{""titleMatch"":""SF1-SF2 (F1/TF1)"",""status"":""tancat""}",,,"June 8-14",4,0,21,,Playoffs
-20260614DEUCHN,WTCOC-2026,2026-06-14T11:00:00Z,Open,,,5,DEU,CHN,Done,0,5,3,10,1,1,,,"2026-05-19 09:36:51","2026-06-15 02:15:40",5,,,,,SEMI-FINALS,23,,,SEMI-FINALS,,"{""titleMatch"":""SF3-SF4 (F2/TF2)"",""status"":""23""}",,,,4,0,22,,Playoffs
-20260519UKRCHN,WTCOC-2026,,Open,,,5,UKR,CHN,Planned,,,,,1,1,,,"2026-05-19 09:36:51","2026-06-15 01:04:54",,,,,,FINAL,,,,FINAL,,"{""titleMatch"":""F1-F2"",""status"":""""}",,,"June 15-21",5,0,23,,Playoffs
-20260519HKGDEU,WTCOC-2026,,Open,,,5,HKG,DEU,Planned,,,,,1,1,,,"2026-05-19 09:36:51","2026-06-15 01:04:54",,,,,,"3rd-4th PLACE",,,,"3rd-4th PLACE",,"{""titleMatch"":""TF1-TF2"",""status"":""""}",,,"June 15-21",5,1,24,,Playoffs
+20260614DEUCHN,WTCOC-2026,2026-06-14T11:00:00Z,Open,,,5,DEU,CHN,Done,0,5,3,10,1,1,,,"2026-05-19 09:36:51","2026-06-15 11:18:00",5,0,5,3,10,SEMI-FINALS,23,,,SEMI-FINALS,,"{""titleMatch"":""SF3-SF4 (F2/TF2)"",""status"":""tancat""}",,,,4,0,22,,Playoffs
+20260621UKRCHN,WTCOC-2026,2026-06-21T13:00:00Z,Open,,,5,UKR,CHN,Done,2,3,6,7,1,1,,,"2026-05-19 09:36:51","2026-06-21 18:27:32",6,2,3,6,7,FINAL,,,,FINAL,,"{""titleMatch"":""F1-F2"",""status"":""tancat""}",,,"June 15-21",5,0,23,,Playoffs
+20260621HKGDEU,WTCOC-2026,2026-06-21T11:00:00Z,Open,,,5,HKG,DEU,Done,3,2,6,6,1,1,,,"2026-05-19 09:36:51","2026-06-22 16:35:51",4,3,2,6,6,"3rd-4th PLACE",,,,"3rd-4th PLACE",,"{""titleMatch"":""TF1-TF2"",""status"":""tancat""}",,,"June 15-21",5,1,24,,Playoffs
 20260524CHNBRA,Friendly-Matches,2026-05-24T12:30:00.000Z,Open,,,5,CHN,BRA,Done,3,4,7,9,90943003,86345496,,,"2026-05-22 05:07:07","2026-05-26 13:02:18",4,,,,,,,,,,,,,,,,0,,,
 20260528ECUGTM,Friendly-Matches,2026-05-28T02:00:00.000Z,Open,,,5,ECU,GTM,Done,1,3,3,6,92435433,92435433,,,"2026-05-27 09:32:35","2026-05-28 03:09:18",0,,,,,,,,,,,,,,,,0,,,
+20260620ARGECU,Friendly-Matches,2026-06-20T19:00:00.000Z,Open,,,5,ARG,ECU,Done,4,1,8,3,84291236,84291236,,,"2026-06-18 18:29:14","2026-06-20 20:54:52",0,,,,,,,,,,,,,,,,0,,,
