@@ -139,6 +139,20 @@
     font-weight: 700;
   }
 
+  .challenge-time-context {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .challenge-time-flag {
+    width: 18px;
+    height: 12px;
+    object-fit: cover;
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+  }
+
   .challenge-status-card {
     display: grid;
     gap: 6px;
@@ -386,9 +400,77 @@
     return STATUS_COPY[normalized] ? normalized : "not_selected";
   }
 
+  function parseUtcDate(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)
+      ? raw.replace(" ", "T")
+      : `${raw.replace(" ", "T")}Z`;
+    const date = new Date(normalized);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function getDateParts(value, timezone) {
+    const date = parseUtcDate(value);
+    if (!date) return null;
+    const parts = new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: timezone || "UTC",
+    }).formatToParts(date);
+    const part = (type) => parts.find((item) => item.type === type)?.value || "";
+    return {
+      weekday: part("weekday"),
+      month: part("month"),
+      day: part("day"),
+      hour: part("hour").replace(/^0(?=\d)/, ""),
+      minute: part("minute"),
+    };
+  }
+
+  function formatLocalDate(value, timezone) {
+    const date = getDateParts(value, timezone);
+    if (!date) return "-";
+    return `${date.weekday}, ${date.month} ${date.day}`;
+  }
+
+  function formatLocalDateTime(value, timezone) {
+    const date = getDateParts(value, timezone);
+    if (!date) return "-";
+    return `${date.weekday}, ${date.month} ${date.day}, ${date.hour}:${date.minute}`;
+  }
+
+  function createMetaLine(label, text) {
+    const line = document.createElement("span");
+    const labelEl = document.createElement("strong");
+    labelEl.textContent = label;
+    line.appendChild(labelEl);
+    line.appendChild(document.createTextNode(` ${text}`));
+    return line;
+  }
+
+  function createTimeContextMeta(timeContext) {
+    const line = document.createElement("span");
+    line.className = "challenge-time-context";
+    line.appendChild(document.createTextNode("("));
+    if (timeContext?.association_flag) {
+      const flag = document.createElement("img");
+      flag.className = "challenge-time-flag";
+      flag.src = String(timeContext.association_flag || "");
+      flag.alt = String(timeContext.association_name || timeContext.association_id || "");
+      line.appendChild(flag);
+    }
+    line.appendChild(document.createTextNode(" time)"));
+    return line;
+  }
+
   function formatDate(value) {
-    const date = new Date(String(value || ""));
-    if (Number.isNaN(date.getTime())) return "";
+    const date = parseUtcDate(value);
+    if (!date) return "";
     return new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",
@@ -577,7 +659,7 @@
     return card;
   }
 
-  function createPeriodBand(period) {
+  function createPeriodBand(period, timeContext) {
     const band = document.createElement("section");
     band.className = "challenge-period-band";
     band.dataset.challengePeriodId = String(period?.id || "");
@@ -608,10 +690,13 @@
 
     const meta = document.createElement("div");
     meta.className = "challenge-period-meta";
-    meta.innerHTML = `
-      <span><strong>planning open:</strong> ${formatDateRange(period?.planning_starts_at, period?.play_starts_at)}</span>
-      <span><strong>playing days:</strong> ${formatDateRange(period?.play_starts_at, period?.play_ends_at)}</span>
-    `;
+    const timezone = String(timeContext?.timezone || "UTC").trim() || "UTC";
+    meta.appendChild(createMetaLine("Registration from:", formatLocalDate(period?.planning_starts_at, timezone)));
+    meta.appendChild(createMetaLine(
+      "Playing days:",
+      `${formatLocalDateTime(period?.play_starts_at, timezone)}  - ${formatLocalDateTime(period?.play_ends_at, timezone)}`
+    ));
+    meta.appendChild(createTimeContextMeta(timeContext));
     main.appendChild(meta);
 
     band.appendChild(createStatusDropdown(period, period?.player_status));
@@ -625,6 +710,7 @@
     try {
       const data = await apiJson(PLAYER_CHALLENGE_PERIODS_URL, { method: "GET" });
       const periods = Array.isArray(data?.challenge_periods) ? data.challenge_periods : [];
+      const timeContext = data?.player_time_context || { timezone: "UTC" };
       if (!periods.length) {
         setAlert("No open Challenge periods right now.", false);
         return;
@@ -632,7 +718,7 @@
       contentEl.className = "challenges-list";
       contentEl.innerHTML = "";
       periods.forEach((period) => {
-        contentEl.appendChild(createPeriodBand(period));
+        contentEl.appendChild(createPeriodBand(period, timeContext));
       });
     } catch (error) {
       setAlert(error?.message || "Failed to load Challenge periods.", true);

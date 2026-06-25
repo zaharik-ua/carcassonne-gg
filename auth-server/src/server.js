@@ -6708,6 +6708,42 @@ function mapChallengePeriodForPlayer(row) {
   };
 }
 
+async function loadChallengePlayerTimeContext(playerId) {
+  const normalizedPlayerId = normalizeNullableText(playerId);
+  if (!normalizedPlayerId) {
+    return {
+      association_id: null,
+      association_name: null,
+      association_flag: null,
+      timezone: "UTC",
+    };
+  }
+
+  const row = await dbGetAsync(
+    `
+      SELECT
+        COALESCE(NULLIF(trim(a.code), ''), NULLIF(trim(p.association), '')) AS association_id,
+        COALESCE(NULLIF(trim(a.name), ''), NULLIF(trim(p.association), '')) AS association_name,
+        a.flag AS association_flag
+      FROM profiles p
+      LEFT JOIN associations a
+        ON upper(trim(COALESCE(a.code, ''))) = upper(trim(COALESCE(p.association, '')))
+        OR lower(trim(COALESCE(a.name, ''))) = lower(trim(COALESCE(p.association, '')))
+      WHERE trim(COALESCE(p.id, '')) = trim(?)
+        AND p.deleted_at IS NULL
+      LIMIT 1
+    `,
+    [normalizedPlayerId]
+  );
+  const associationId = normalizeNullableText(row?.association_id);
+  return {
+    association_id: associationId,
+    association_name: normalizeNullableText(row?.association_name),
+    association_flag: normalizeNullableText(row?.association_flag),
+    timezone: DEFAULT_TEAM_TIMEZONES[normalizeEntityId(associationId)] || "UTC",
+  };
+}
+
 app.get("/challenge-periods/player", requireAuthenticated, async (req, res) => {
   const playerId = normalizeNullableText(req.user?.player_id);
   if (!playerId) {
@@ -6719,6 +6755,7 @@ app.get("/challenge-periods/player", requireAuthenticated, async (req, res) => {
   }
 
   try {
+    const timeContext = await loadChallengePlayerTimeContext(playerId);
     const rows = await dbAllAsync(
       `
         SELECT
@@ -6747,6 +6784,7 @@ app.get("/challenge-periods/player", requireAuthenticated, async (req, res) => {
     return res.json({
       ok: true,
       player_id: playerId,
+      player_time_context: timeContext,
       challenge_periods: (rows || []).map(mapChallengePeriodForPlayer),
     });
   } catch (error) {
