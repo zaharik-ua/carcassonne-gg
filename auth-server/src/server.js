@@ -334,6 +334,13 @@ const CHALLENGE_PERIOD_STATUSES = new Set([
   "archived",
   "cancelled",
 ]);
+const CHALLENGE_PLAYER_PERIOD_STATUSES = new Set([
+  "not_selected",
+  "available",
+  "unavailable",
+  "match_scheduled",
+  "played",
+]);
 
 function quoteSqlIdentifier(identifier) {
   return `"${String(identifier || "").replaceAll('"', '""')}"`;
@@ -5487,6 +5494,13 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
+function requireAuthenticated(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+  return next();
+}
+
 function normalizeStreamEntityType(value) {
   const raw = String(value || "").trim().toLowerCase();
   if (raw === "match" || raw === "matches") return "match";
@@ -6621,6 +6635,16 @@ function normalizeChallengePeriodPayload(payload) {
   };
 }
 
+function normalizeChallengePlayerPeriodStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return CHALLENGE_PLAYER_PERIOD_STATUSES.has(normalized) ? normalized : "not_selected";
+}
+
+function getManualChallengePlayerPeriodStatus(value) {
+  const status = normalizeChallengePlayerPeriodStatus(value);
+  return status === "available" || status === "unavailable" ? status : null;
+}
+
 function validateChallengePeriodPayload(period) {
   if (!period.name) return "name is required";
   if (!period.planning_starts_at) return "planning_starts_at is required";
@@ -6636,6 +6660,197 @@ function validateChallengePeriodPayload(period) {
   }
   return "";
 }
+
+async function loadChallengePeriodPlayerStatus(periodId, playerId) {
+  const normalizedPeriodId = normalizeNullableText(periodId);
+  const normalizedPlayerId = normalizeNullableText(playerId);
+  if (!normalizedPeriodId || !normalizedPlayerId) return null;
+  return dbGetAsync(
+    `
+      SELECT
+        period_id,
+        player_id,
+        status,
+        challenge_duel_id,
+        created_at,
+        updated_at
+      FROM challenge_period_players
+      WHERE period_id = ?
+        AND player_id = ?
+      LIMIT 1
+    `,
+    [normalizedPeriodId, normalizedPlayerId]
+  );
+}
+
+function mapChallengePeriodForPlayer(row) {
+  const duelStatus = normalizeNullableText(row?.duel_status);
+  const storedStatus = normalizeChallengePlayerPeriodStatus(row?.player_status);
+  let playerStatus = storedStatus;
+  if (duelStatus === "Done") {
+    playerStatus = "played";
+  } else if (row?.challenge_duel_id && ["Draft", "Planned", "In progress", "Error"].includes(duelStatus)) {
+    playerStatus = "match_scheduled";
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    status: row.status,
+    planning_starts_at: row.planning_starts_at,
+    play_starts_at: row.play_starts_at,
+    play_ends_at: row.play_ends_at,
+    result_review_ends_at: row.result_review_ends_at,
+    player_status: playerStatus,
+    challenge_duel_id: row.challenge_duel_id || null,
+    challenge_duel_status: duelStatus || null,
+  };
+}
+
+app.get("/challenges/periods", requireAuthenticated, async (req, res) => {
+  const playerId = normalizeNullableText(req.user?.player_id);
+  if (!playerId) {
+    return res.status(403).json({
+      ok: false,
+      code: "profile_required",
+      message: "Linked player profile is required",
+    });
+  }
+
+  try {
+    const rows = await dbAllAsync(
+      `
+        SELECT
+          cp.id,
+          cp.name,
+          cp.description,
+          cp.status,
+          cp.planning_starts_at,
+          cp.play_starts_at,
+          cp.play_ends_at,
+          cp.result_review_ends_at,
+          COALESCE(cpp.status, 'not_selected') AS player_status,
+          cpp.challenge_duel_id,
+          d.status AS duel_status
+        FROM challenge_periods cp
+        LEFT JOIN challenge_period_players cpp
+          ON cpp.period_id = cp.id
+         AND cpp.player_id = ?
+        LEFT JOIN duels d
+          ON d.id = cpp.challenge_duel_id
+        WHERE cp.status IN ('planning_open', 'active', 'result_review')
+        ORDER BY datetime(cp.planning_starts_at) DESC, datetime(cp.play_starts_at) DESC, cp.id ASC
+      `,
+      [playerId]
+    );
+    return res.json({
+      ok: true,
+      player_id: playerId,
+      challenge_periods: (rows || []).map(mapChallengePeriodForPlayer),
+    });
+  } catch (error) {
+    console.error("Failed to load player challenge periods", error);
+    return res.status(500).json({ ok: false, message: "Failed to load Challenge periods" });
+  }
+});
+
+app.patch("/challenges/periods/:id/status", requireAuthenticated, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const playerId = normalizeNullableText(req.user?.player_id);
+  const nextStatus = getManualChallengePlayerPeriodStatus(req.body?.status);
+
+  if (!playerId) {
+    return res.status(403).json({
+      ok: false,
+      code: "profile_required",
+      message: "Linked player profile is required",
+    });
+  }
+  if (!periodId) {
+    return res.status(400).json({ ok: false, message: "Invalid Challenge period id" });
+  }
+  if (!nextStatus) {
+    return res.status(400).json({ ok: false, message: "Status must be available or unavailable" });
+  }
+
+  try {
+    const period = await loadChallengePeriodById(periodId);
+    if (!period || !["planning_open", "active"].includes(period.status)) {
+      return res.status(404).json({ ok: false, message: "Editable Challenge period not found" });
+    }
+
+    const beforeRow = await loadChallengePeriodPlayerStatus(periodId, playerId);
+    if (["match_scheduled", "played"].includes(normalizeChallengePlayerPeriodStatus(beforeRow?.status)) || beforeRow?.challenge_duel_id) {
+      return res.status(409).json({ ok: false, message: "Status is locked because a Challenge match exists" });
+    }
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      if (nextStatus === "unavailable") {
+        await dbRunAsync(
+          `
+            UPDATE challenge_requests
+            SET
+              status = 'auto_cancelled',
+              updated_at = CURRENT_TIMESTAMP
+            WHERE period_id = ?
+              AND status = 'pending'
+              AND (player_1_id = ? OR player_2_id = ?)
+          `,
+          [periodId, playerId, playerId]
+        );
+      }
+
+      await dbRunAsync(
+        `
+          INSERT INTO challenge_period_players (
+            period_id,
+            player_id,
+            status,
+            challenge_duel_id,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(period_id, player_id) DO UPDATE SET
+            status = excluded.status,
+            challenge_duel_id = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        `,
+        [periodId, playerId, nextStatus]
+      );
+      await dbRunAsync("COMMIT");
+    } catch (error) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw error;
+    }
+
+    const afterRow = await loadChallengePeriodPlayerStatus(periodId, playerId);
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_period_player.status_updated",
+      entity_type: "challenge_period_player",
+      action: "update",
+      record_id: `${periodId}:${playerId}`,
+      changes: buildAuditChanges(beforeRow, afterRow),
+      metadata: { period_id: periodId, player_id: playerId },
+    });
+
+    return res.json({
+      ok: true,
+      period_player: afterRow || {
+        period_id: periodId,
+        player_id: playerId,
+        status: nextStatus,
+        challenge_duel_id: null,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to update Challenge player period status", error);
+    return res.status(500).json({ ok: false, message: "Failed to update Challenge status" });
+  }
+});
 
 app.get("/challenge-periods", requireAdmin, async (_req, res) => {
   try {

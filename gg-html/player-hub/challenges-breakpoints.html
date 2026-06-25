@@ -1,0 +1,1022 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --text: #222;
+    --muted: #666;
+    --border: #e0e0e0;
+    --card: #fff;
+    --blue: #1a73b7;
+    --blue-hover: #165e93;
+    --green: #21a366;
+    --soft: #f6f8fb;
+  }
+
+  body {
+    font-family: "Montserrat", sans-serif;
+  }
+
+  .challenges-wrap {
+    display: grid;
+    gap: 10px;
+    margin: 0 8px 12px;
+  }
+
+  .challenges-card {
+    display: grid;
+    gap: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .challenges-card p {
+    margin: 0;
+  }
+
+  .challenges-status {
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .challenge-checklist {
+    display: grid;
+    gap: 12px;
+  }
+
+  .challenge-step {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+  }
+
+  .challenge-check {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #b8c0cc;
+    border-radius: 50%;
+    box-sizing: border-box;
+    margin-top: 1px;
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  .challenge-step.done .challenge-check {
+    border-color: var(--green);
+    background: var(--green);
+  }
+
+  .challenge-step.done .challenge-check::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 5px;
+    height: 9px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  .challenge-step-main {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .challenge-step-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .challenge-step-title {
+    font-weight: 600;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .challenge-hint {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .challenge-email-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 4px 6px;
+    border: 1px solid #d6e2f0;
+    border-radius: 4px;
+    background: #fff;
+    color: #222;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .challenge-email-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .challenge-btn,
+  .challenge-link-btn {
+    appearance: none;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .challenge-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 26px;
+    padding: 5px 9px;
+    background: var(--blue);
+    color: #fff;
+    text-transform: uppercase;
+  }
+
+  .challenge-btn:hover,
+  .challenge-btn:focus-visible {
+    background: var(--blue-hover);
+    color: #fff;
+    text-decoration: none;
+  }
+
+  .challenge-copy-btn {
+    width: 26px;
+    height: 24px;
+    min-height: 24px;
+    padding: 0;
+    text-transform: none;
+    position: relative;
+  }
+
+  .challenge-copy-btn::before,
+  .challenge-copy-btn::after {
+    content: "";
+    position: absolute;
+    width: 9px;
+    height: 11px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    box-sizing: border-box;
+  }
+
+  .challenge-copy-btn::before {
+    left: 8px;
+    top: 5px;
+    opacity: 0.75;
+  }
+
+  .challenge-copy-btn::after {
+    left: 11px;
+    top: 8px;
+    background: var(--blue);
+  }
+
+  .challenge-copy-btn:hover::after {
+    background: var(--blue-hover);
+  }
+
+  .challenge-copy-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .challenge-copy-tip {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 6px);
+    transform: translateX(-50%) translateY(4px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    padding: 4px 7px;
+    border-radius: 4px;
+    background: #222;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
+    z-index: 2;
+  }
+
+  .challenge-copy-tip.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+    transition-delay: 0s;
+  }
+
+  .challenge-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    background: transparent;
+    color: var(--blue);
+    font-size: 13px;
+  }
+
+  .challenge-link-btn:hover,
+  .challenge-link-btn:focus-visible {
+    color: var(--blue-hover);
+    text-decoration: underline;
+  }
+
+  .challenge-link-btn .challenge-chevron {
+    width: 7px;
+    height: 7px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform 0.18s ease;
+    margin-top: -3px;
+  }
+
+  .challenge-link-btn.open .challenge-chevron {
+    transform: rotate(225deg);
+    margin-top: 3px;
+  }
+
+  .challenge-details-panel {
+    height: 0;
+    opacity: 0;
+    overflow: hidden;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: var(--soft);
+    transition: height 0.2s ease, opacity 0.2s ease, border-color 0.2s ease, padding 0.2s ease;
+  }
+
+  .challenge-details-panel.open {
+    opacity: 1;
+    border-color: #d6e2f0;
+  }
+
+  .challenge-details-inner {
+    display: grid;
+    gap: 7px;
+    padding: 10px;
+    color: #334155;
+    font-size: 13px;
+  }
+
+  .challenge-details-inner p {
+    margin: 0;
+  }
+
+  .challenge-details-inner a {
+    color: var(--blue);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+
+  .challenge-details-inner a:hover {
+    color: var(--blue-hover);
+    text-decoration: underline;
+  }
+
+  .challenge-details-list {
+    display: grid;
+    gap: 5px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .challenge-details-list li {
+    padding-left: 13px;
+    position: relative;
+  }
+
+  .challenge-details-list li::before {
+    content: "";
+    position: absolute;
+    left: 1px;
+    top: 9px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #334155;
+  }
+
+  .challenge-auth {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .challenge-auth-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 1001;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-6px);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+  }
+
+  .challenge-auth-dropdown.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+    transition-delay: 0s;
+  }
+
+  .challenge-auth-row {
+    display: block;
+    padding: 8px;
+    border: 1px solid #d8d8d8;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
+    min-width: 240px;
+    box-sizing: border-box;
+  }
+
+  .challenge-google-btn {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: #fff;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 13px;
+    color: #3c4043;
+    cursor: pointer;
+    transition: box-shadow 0.15s ease;
+    text-decoration: none;
+    white-space: nowrap;
+    box-sizing: border-box;
+  }
+
+  .challenge-google-btn:hover {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  }
+
+  .challenge-google-icon {
+    width: 18px;
+    height: 18px;
+    display: inline-block;
+  }
+
+  .challenge-hidden {
+    display: none !important;
+  }
+
+  @media (max-width: 520px) {
+    .challenge-step-line {
+      align-items: flex-start;
+    }
+
+    .challenge-email-chip {
+      width: 100%;
+      justify-content: space-between;
+    }
+  }
+</style>
+
+<div class="challenges-wrap">
+  <div class="challenges-card">
+    <p>Here you will be able to challenge other players to a rated Bo3 or Bo5 match.</p>
+    <div id="challengesContent" class="challenges-status">Loading...</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const ME_URL = `${AUTH_BASE}/auth/me`;
+  const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
+  const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
+  const contentEl = document.getElementById("challengesContent");
+  let authCleanup = null;
+
+  function getCurrentUserProfileId(user) {
+    return String(
+      user?.profile?.id ??
+      user?.profile?.player_id ??
+      user?.profile?.bga_id ??
+      user?.bga_id ??
+      user?.player_id ??
+      user?.playerId ??
+      ""
+    ).trim();
+  }
+
+  function getLoginEmail(user) {
+    return String(user?.email || user?.login_email || "").trim();
+  }
+
+  function getProfileEmail(user, profile) {
+    return String(
+      profile?.email ??
+      profile?.login_email ??
+      user?.profile?.email ??
+      user?.profile?.login_email ??
+      ""
+    ).trim();
+  }
+
+  function getProfileName(profile, user) {
+    return String(
+      profile?.name ??
+      profile?.full_name ??
+      user?.profile?.name ??
+      user?.profile?.full_name ??
+      ""
+    ).trim();
+  }
+
+  function getPhotoCount(profile, user) {
+    const raw = profile?.photo_count ?? user?.profile?.photo_count ?? "";
+    const count = Number(String(raw).trim());
+    return Number.isFinite(count) ? count : 0;
+  }
+
+  function cleanupAuth() {
+    if (typeof authCleanup === "function") {
+      authCleanup();
+    }
+    authCleanup = null;
+  }
+
+  async function fetchSession() {
+    try {
+      const response = await fetch(ME_URL, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!response.ok) return { authenticated: false, user: null };
+      const data = await response.json().catch(() => ({}));
+      return {
+        authenticated: !!data?.authenticated,
+        user: data?.authenticated ? data?.user || null : null,
+      };
+    } catch (_error) {
+      return { authenticated: false, user: null };
+    }
+  }
+
+  async function fetchProfiles() {
+    try {
+      const response = await fetch(PROFILES_PUBLIC_URL, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!response.ok) return [];
+      const data = await response.json().catch(() => ({}));
+      return Array.isArray(data?.profiles) ? data.profiles : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function findProfileById(profiles, playerId) {
+    const normalizedId = String(playerId || "").trim();
+    if (!normalizedId) return null;
+    return (Array.isArray(profiles) ? profiles : []).find((profile) => {
+      const profileId = String(profile?.id ?? profile?.player_id ?? profile?.profile_id ?? "").trim();
+      return profileId === normalizedId;
+    }) || null;
+  }
+
+  function buildStep(title, done) {
+    const step = document.createElement("div");
+    step.className = `challenge-step${done ? " done" : ""}`;
+
+    const check = document.createElement("div");
+    check.className = "challenge-check";
+    check.setAttribute("aria-hidden", "true");
+    step.appendChild(check);
+
+    const main = document.createElement("div");
+    main.className = "challenge-step-main";
+    step.appendChild(main);
+
+    const line = document.createElement("div");
+    line.className = "challenge-step-line";
+    main.appendChild(line);
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "challenge-step-title";
+    titleEl.textContent = title;
+    line.appendChild(titleEl);
+
+    return { step, main, line };
+  }
+
+  function createHint(text) {
+    const hint = document.createElement("div");
+    hint.className = "challenge-hint";
+    hint.textContent = text;
+    return hint;
+  }
+
+  function createPrimaryLink(text, href) {
+    const link = document.createElement("a");
+    link.className = "challenge-btn";
+    link.href = href;
+    link.textContent = text;
+    return link;
+  }
+
+  function setupAuth(authRoot, onAuthSuccess) {
+    const portalState = {
+      container: null,
+      cleanup: [],
+    };
+    const signInButton = authRoot.querySelector("[data-challenge-auth-sign-in]");
+    const dropdown = authRoot.querySelector("[data-challenge-auth-dropdown]");
+    const googleLink = authRoot.querySelector("[data-challenge-auth-google]");
+    if (!signInButton || !dropdown || !googleLink) return () => {};
+    googleLink.href = `${AUTH_BASE}/auth/google`;
+
+    function canUseParentDocument() {
+      try {
+        return !!(window.parent && window.parent !== window && window.parent.document && window.frameElement);
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    function ensurePortalStyles(parentDocument) {
+      if (parentDocument.getElementById("challengeAuthPortalStyles")) return;
+      const style = parentDocument.createElement("style");
+      style.id = "challengeAuthPortalStyles";
+      style.textContent = `
+        .challenge-auth-portal {
+          position: fixed;
+          z-index: 2147483647;
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+          transform: translateY(-6px);
+          transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+          font-family: "Montserrat", sans-serif;
+        }
+        .challenge-auth-portal.open {
+          opacity: 1;
+          visibility: visible;
+          pointer-events: auto;
+          transform: translateY(0);
+          transition-delay: 0s;
+        }
+        .challenge-auth-portal-row {
+          padding: 8px;
+          border: 1px solid #d8d8d8;
+          border-radius: 6px;
+          background: #fff;
+          box-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
+          min-width: 240px;
+        }
+        .challenge-auth-portal-link {
+          width: 100%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          padding: 10px 12px;
+          background: #fff;
+          border: 1px solid #dadce0;
+          border-radius: 4px;
+          font-weight: 600;
+          font-size: 13px;
+          color: #3c4043;
+          cursor: pointer;
+          transition: box-shadow 0.15s ease;
+          text-decoration: none;
+          white-space: nowrap;
+          box-sizing: border-box;
+        }
+        .challenge-auth-portal-link:hover {
+          box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+        }
+        .challenge-auth-portal-icon {
+          width: 18px;
+          height: 18px;
+          display: inline-block;
+        }
+      `;
+      parentDocument.head.appendChild(style);
+    }
+
+    function positionPortal(container) {
+      const iframeRect = window.frameElement.getBoundingClientRect();
+      const buttonRect = signInButton.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      const top = iframeRect.top + buttonRect.bottom + 8;
+      const leftEdge = iframeRect.left + buttonRect.left;
+      const left = Math.max(8, leftEdge);
+      const maxLeft = Math.max(8, window.parent.innerWidth - containerRect.width - 8);
+      container.style.top = `${Math.max(8, top)}px`;
+      container.style.left = `${Math.min(left, maxLeft)}px`;
+    }
+
+    function teardownPortal() {
+      while (portalState.cleanup.length) {
+        const dispose = portalState.cleanup.pop();
+        dispose();
+      }
+      if (portalState.container) {
+        portalState.container.remove();
+        portalState.container = null;
+      }
+    }
+
+    function closeDropdown() {
+      dropdown.classList.remove("open");
+      dropdown.setAttribute("aria-hidden", "true");
+      dropdown.setAttribute("inert", "");
+      signInButton.setAttribute("aria-expanded", "false");
+      teardownPortal();
+    }
+
+    function openGoogleAuthPopup() {
+      const popup = window.open(
+        `${AUTH_BASE}/auth/google`,
+        "googleAuth",
+        "width=520,height=640,left=100,top=100"
+      );
+      if (!popup) {
+        window.location.href = `${AUTH_BASE}/auth/google`;
+        return;
+      }
+      closeDropdown();
+    }
+
+    function openPortalDropdown() {
+      const parentDocument = window.parent.document;
+      ensurePortalStyles(parentDocument);
+      teardownPortal();
+
+      const container = parentDocument.createElement("div");
+      container.className = "challenge-auth-portal";
+      container.setAttribute("role", "dialog");
+      container.setAttribute("aria-label", "Sign in");
+      container.innerHTML = `
+        <div class="challenge-auth-portal-row">
+          <a class="challenge-auth-portal-link" href="${AUTH_BASE}/auth/google">
+            <img class="challenge-auth-portal-icon" alt="Google" src="${GOOGLE_ICON_URL}" />
+            Sign in with Google
+          </a>
+        </div>
+      `;
+
+      parentDocument.body.appendChild(container);
+      positionPortal(container);
+      container.classList.add("open");
+
+      const portalLink = container.querySelector(".challenge-auth-portal-link");
+      const closeOnOutside = (event) => {
+        if (!container.contains(event.target)) {
+          closeDropdown();
+        }
+      };
+      const closeOnEscape = (event) => {
+        if (event.key === "Escape") {
+          closeDropdown();
+        }
+      };
+      const reposition = () => {
+        if (portalState.container) {
+          positionPortal(portalState.container);
+        }
+      };
+
+      portalLink.addEventListener("click", (event) => {
+        event.preventDefault();
+        openGoogleAuthPopup();
+      });
+      parentDocument.addEventListener("mousedown", closeOnOutside);
+      parentDocument.addEventListener("keydown", closeOnEscape);
+      window.parent.addEventListener("scroll", reposition, true);
+      window.addEventListener("resize", reposition);
+      window.parent.addEventListener("resize", reposition);
+
+      portalState.container = container;
+      portalState.cleanup.push(() => parentDocument.removeEventListener("mousedown", closeOnOutside));
+      portalState.cleanup.push(() => parentDocument.removeEventListener("keydown", closeOnEscape));
+      portalState.cleanup.push(() => window.parent.removeEventListener("scroll", reposition, true));
+      portalState.cleanup.push(() => window.removeEventListener("resize", reposition));
+      portalState.cleanup.push(() => window.parent.removeEventListener("resize", reposition));
+    }
+
+    function openDropdown() {
+      dropdown.classList.add("open");
+      dropdown.setAttribute("aria-hidden", "false");
+      dropdown.removeAttribute("inert");
+      signInButton.setAttribute("aria-expanded", "true");
+      if (canUseParentDocument()) {
+        dropdown.classList.remove("open");
+        dropdown.setAttribute("aria-hidden", "true");
+        dropdown.setAttribute("inert", "");
+        openPortalDropdown();
+      }
+    }
+
+    function toggleDropdown() {
+      if (portalState.container || dropdown.classList.contains("open")) {
+        closeDropdown();
+      } else {
+        openDropdown();
+      }
+    }
+
+    const onDocumentClick = (event) => {
+      if (!dropdown.contains(event.target) && !signInButton.contains(event.target)) {
+        closeDropdown();
+      }
+    };
+    const onDocumentKeydown = (event) => {
+      if (event.key === "Escape") {
+        closeDropdown();
+      }
+    };
+    const onMessage = (event) => {
+      if (event.origin !== new URL(AUTH_BASE).origin) return;
+      if (event.data && event.data.type === "google-auth-success") {
+        onAuthSuccess();
+      }
+    };
+    const onGoogleAuthClick = (event) => {
+      event.preventDefault();
+      openGoogleAuthPopup();
+    };
+
+    signInButton.addEventListener("click", toggleDropdown);
+    googleLink.addEventListener("click", onGoogleAuthClick);
+    document.addEventListener("click", onDocumentClick);
+    document.addEventListener("keydown", onDocumentKeydown);
+    window.addEventListener("message", onMessage);
+
+    return () => {
+      signInButton.removeEventListener("click", toggleDropdown);
+      googleLink.removeEventListener("click", onGoogleAuthClick);
+      document.removeEventListener("click", onDocumentClick);
+      document.removeEventListener("keydown", onDocumentKeydown);
+      window.removeEventListener("message", onMessage);
+      teardownPortal();
+    };
+  }
+
+  function appendSignInControl(line) {
+    const authRoot = document.createElement("span");
+    authRoot.className = "challenge-auth";
+    authRoot.innerHTML = `
+      <button class="challenge-btn" type="button" aria-expanded="false" data-challenge-auth-sign-in>Sign in</button>
+      <span class="challenge-auth-dropdown" aria-hidden="true" inert data-challenge-auth-dropdown>
+        <span class="challenge-auth-row">
+          <a class="challenge-google-btn" href="/auth/google" data-challenge-auth-google>
+            <img class="challenge-google-icon" alt="Google" src="${GOOGLE_ICON_URL}" />
+            Sign in with Google
+          </a>
+        </span>
+      </span>
+    `;
+    line.appendChild(authRoot);
+    authCleanup = setupAuth(authRoot, renderChallenges);
+  }
+
+  function appendEmailCopy(main, email) {
+    const hint = document.createElement("div");
+    hint.className = "challenge-hint";
+    hint.appendChild(document.createTextNode("Send your email "));
+
+    const chip = document.createElement("span");
+    chip.className = "challenge-email-chip";
+    const emailText = document.createElement("span");
+    emailText.className = "challenge-email-text";
+    emailText.textContent = email;
+    chip.appendChild(emailText);
+
+    const copyWrap = document.createElement("span");
+    copyWrap.className = "challenge-copy-wrap";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "challenge-btn challenge-copy-btn";
+    copyBtn.type = "button";
+    copyBtn.setAttribute("aria-label", "Copy email");
+    copyBtn.title = "Copy email";
+    const copyTip = document.createElement("span");
+    copyTip.className = "challenge-copy-tip";
+    copyTip.textContent = "Copied";
+    let copyTipTimer = null;
+    const showCopyTip = () => {
+      copyTip.classList.add("show");
+      if (copyTipTimer) {
+        window.clearTimeout(copyTipTimer);
+      }
+      copyTipTimer = window.setTimeout(() => {
+        copyTip.classList.remove("show");
+        copyTipTimer = null;
+      }, 2000);
+    };
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(email);
+        copyBtn.title = "Copied";
+        showCopyTip();
+        window.setTimeout(() => {
+          copyBtn.title = "Copy email";
+        }, 1400);
+      } catch (_error) {
+        copyBtn.title = "Select and copy email";
+        window.setTimeout(() => {
+          copyBtn.title = "Copy email";
+        }, 1400);
+      }
+    });
+    copyWrap.appendChild(copyBtn);
+    copyWrap.appendChild(copyTip);
+    chip.appendChild(copyWrap);
+    hint.appendChild(chip);
+    hint.appendChild(document.createTextNode(" to your association captain."));
+    main.appendChild(hint);
+  }
+
+  function appendDetails(main) {
+    const toggle = document.createElement("button");
+    toggle.className = "challenge-link-btn";
+    toggle.type = "button";
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.innerHTML = '<span>Details</span><span class="challenge-chevron" aria-hidden="true"></span>';
+    main.appendChild(toggle);
+
+    const panel = document.createElement("div");
+    panel.className = "challenge-details-panel";
+    panel.setAttribute("aria-hidden", "true");
+
+    const inner = document.createElement("div");
+    inner.className = "challenge-details-inner";
+
+    const captainsText = document.createElement("p");
+    captainsText.appendChild(document.createTextNode("If you don't know who your captain is, check here: "));
+    const captainsLink = document.createElement("a");
+    captainsLink.href = "https://carcassonne.gg/players/?captains=1";
+    captainsLink.target = "_blank";
+    captainsLink.rel = "noopener noreferrer";
+    captainsLink.textContent = "https://carcassonne.gg/players/?captains=1";
+    captainsText.appendChild(captainsLink);
+    inner.appendChild(captainsText);
+
+    const captainIntro = document.createElement("p");
+    captainIntro.textContent = "Your captain needs to do the following:";
+    inner.appendChild(captainIntro);
+
+    const list = document.createElement("ul");
+    list.className = "challenge-details-list";
+
+    const openPlayersItem = document.createElement("li");
+    openPlayersItem.appendChild(document.createTextNode("Open User Menu -> Player Hub -> Players "));
+    const playersLink = document.createElement("a");
+    playersLink.href = "https://carcassonne.gg/player-hub/players/";
+    playersLink.target = "_blank";
+    playersLink.rel = "noopener noreferrer";
+    playersLink.textContent = "https://carcassonne.gg/player-hub/players/";
+    openPlayersItem.appendChild(playersLink);
+    list.appendChild(openPlayersItem);
+
+    const editProfileItem = document.createElement("li");
+    editProfileItem.textContent = "Edit your profile (or create one if needed)";
+    list.appendChild(editProfileItem);
+
+    const addEmailItem = document.createElement("li");
+    addEmailItem.textContent = "Add your email to Login Email";
+    list.appendChild(addEmailItem);
+
+    inner.appendChild(list);
+
+    const contactText = document.createElement("p");
+    contactText.textContent = "If you cannot find a captain, contact us at carcassonne.gg@gmail.com.";
+    inner.appendChild(contactText);
+
+    panel.appendChild(inner);
+    main.appendChild(panel);
+
+    function setOpen(open) {
+      toggle.classList.toggle("open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      panel.classList.toggle("open", open);
+      panel.setAttribute("aria-hidden", open ? "false" : "true");
+      if (open) {
+        panel.style.height = "0px";
+        panel.offsetHeight;
+        panel.style.height = `${panel.scrollHeight}px`;
+      } else {
+        panel.style.height = `${panel.scrollHeight}px`;
+        panel.offsetHeight;
+        panel.style.height = "0px";
+      }
+    }
+
+    toggle.addEventListener("click", () => {
+      setOpen(!panel.classList.contains("open"));
+    });
+    panel.addEventListener("transitionend", () => {
+      if (panel.classList.contains("open")) {
+        panel.style.height = "auto";
+      }
+    });
+  }
+
+  function renderChecklist(session, profile) {
+    cleanupAuth();
+
+    const user = session.user || null;
+    const authenticated = !!session.authenticated;
+    const profileId = getCurrentUserProfileId(user);
+    const loginEmail = getLoginEmail(user);
+    const profileEmail = getProfileEmail(user, profile);
+    const bgaVerified = authenticated && !!profileId && !!profileEmail;
+    const hasRealName = !!getProfileName(profile, user);
+    const hasPhoto = getPhotoCount(profile, user) > 0;
+    const profileReady = authenticated && !!profileId && hasRealName && hasPhoto;
+
+    const checklist = document.createElement("div");
+    checklist.className = "challenge-checklist";
+
+    const signInStep = buildStep("Sign in to the site", authenticated);
+    if (!authenticated) {
+      appendSignInControl(signInStep.line);
+    }
+    checklist.appendChild(signInStep.step);
+
+    const bgaStep = buildStep("Verify your BGA account", bgaVerified);
+    if (!authenticated) {
+      bgaStep.main.appendChild(createHint("Sign in first to verify your BGA account."));
+    } else if (!bgaVerified) {
+      if (loginEmail) {
+        appendEmailCopy(bgaStep.main, loginEmail);
+      } else {
+        bgaStep.main.appendChild(createHint("Send the email you used to log in to carcassonne.gg to your association captain."));
+      }
+      appendDetails(bgaStep.main);
+    }
+    checklist.appendChild(bgaStep.step);
+
+    const photoStep = buildStep("Add your real name and photo (optional)", profileReady);
+    if (!authenticated) {
+      photoStep.main.appendChild(createHint("Sign in first to edit your player profile."));
+    } else if (!profileId) {
+      photoStep.main.appendChild(createHint("Verify your BGA account first to edit your player profile."));
+    } else if (!profileReady) {
+      photoStep.line.appendChild(createPrimaryLink("Edit profile", `https://carcassonne.gg/player/?id=${encodeURIComponent(profileId)}&edit=1`));
+    }
+    checklist.appendChild(photoStep.step);
+
+    const inviteStep = buildStep("Send an invitation to your opponent - opens on June 29", false);
+    checklist.appendChild(inviteStep.step);
+
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.appendChild(checklist);
+  }
+
+  async function renderChallenges() {
+    cleanupAuth();
+    contentEl.className = "challenges-status";
+    contentEl.textContent = "Loading...";
+
+    const session = await fetchSession();
+    let profile = null;
+    if (session.authenticated && session.user) {
+      const profileId = getCurrentUserProfileId(session.user);
+      if (profileId) {
+        const profiles = await fetchProfiles();
+        profile = findProfileById(profiles, profileId);
+      }
+    }
+
+    renderChecklist(session, profile);
+  }
+
+  renderChallenges();
+})();
+</script>

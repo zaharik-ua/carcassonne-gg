@@ -6,14 +6,21 @@
     --muted: #666;
     --border: #e0e0e0;
     --card: #fff;
+    --soft: #f6f8fb;
     --blue: #1a73b7;
     --blue-hover: #165e93;
     --green: #21a366;
-    --soft: #f6f8fb;
+    --green-soft: #e8f6ef;
+    --red: #b23a48;
+    --red-soft: #fff0f2;
   }
 
   body {
     font-family: "Montserrat", sans-serif;
+  }
+
+  button {
+    font: inherit;
   }
 
   .challenges-wrap {
@@ -22,74 +29,66 @@
     margin: 0 8px 12px;
   }
 
-  .challenges-card {
+  .challenges-head {
     display: grid;
-    gap: 12px;
-    background: var(--card);
+    gap: 4px;
+  }
+
+  .challenges-title {
+    color: #223040;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .challenges-subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .challenge-period-band {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(230px, 320px);
+    gap: 14px;
+    align-items: center;
+    width: 100%;
+    padding: 12px;
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 12px;
+    background: var(--card);
     color: var(--text);
+    box-sizing: border-box;
+  }
+
+  .challenges-alert {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--muted);
+    padding: 12px;
     font-size: 14px;
     line-height: 1.45;
   }
 
-  .challenges-card p {
-    margin: 0;
+  .challenges-alert.is-error {
+    border-color: #f0b8c1;
+    background: var(--red-soft);
+    color: var(--red);
   }
 
-  .challenges-status {
-    color: var(--muted);
-    font-size: 14px;
-  }
-
-  .challenge-checklist {
+  .challenges-list {
     display: grid;
-    gap: 12px;
+    gap: 10px;
   }
 
-  .challenge-step {
-    display: grid;
-    grid-template-columns: 22px minmax(0, 1fr);
-    gap: 8px;
-    align-items: start;
-  }
-
-  .challenge-check {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #b8c0cc;
-    border-radius: 50%;
-    box-sizing: border-box;
-    margin-top: 1px;
-    position: relative;
-    flex: 0 0 auto;
-  }
-
-  .challenge-step.done .challenge-check {
-    border-color: var(--green);
-    background: var(--green);
-  }
-
-  .challenge-step.done .challenge-check::after {
-    content: "";
-    position: absolute;
-    left: 4px;
-    top: 1px;
-    width: 5px;
-    height: 9px;
-    border: solid #fff;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-  }
-
-  .challenge-step-main {
+  .challenge-period-main {
     display: grid;
     gap: 7px;
     min-width: 0;
   }
 
-  .challenge-step-line {
+  .challenge-period-title-row {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -97,925 +96,553 @@
     min-width: 0;
   }
 
-  .challenge-step-title {
-    font-weight: 600;
-    color: var(--text);
-    overflow-wrap: anywhere;
-  }
-
-  .challenge-hint {
-    color: var(--muted);
-    font-size: 13px;
-  }
-
-  .challenge-email-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 100%;
-    padding: 4px 6px;
-    border: 1px solid #d6e2f0;
-    border-radius: 4px;
-    background: #fff;
-    color: #222;
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .challenge-email-text {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .challenge-btn,
-  .challenge-link-btn {
-    appearance: none;
-    border: 0;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 12px;
+  .challenge-period-title {
+    color: #172232;
+    font-size: 18px;
     font-weight: 700;
-    letter-spacing: 0;
-    text-decoration: none;
-    white-space: nowrap;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
   }
 
-  .challenge-btn {
+  .challenge-period-badge {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-height: 26px;
-    padding: 5px 9px;
-    background: var(--blue);
-    color: #fff;
-    text-transform: uppercase;
-  }
-
-  .challenge-btn:hover,
-  .challenge-btn:focus-visible {
-    background: var(--blue-hover);
-    color: #fff;
-    text-decoration: none;
-  }
-
-  .challenge-copy-btn {
-    width: 26px;
-    height: 24px;
-    min-height: 24px;
-    padding: 0;
-    text-transform: none;
-    position: relative;
-  }
-
-  .challenge-copy-btn::before,
-  .challenge-copy-btn::after {
-    content: "";
-    position: absolute;
-    width: 9px;
-    height: 11px;
-    border: 1.5px solid currentColor;
-    border-radius: 2px;
-    box-sizing: border-box;
-  }
-
-  .challenge-copy-btn::before {
-    left: 8px;
-    top: 5px;
-    opacity: 0.75;
-  }
-
-  .challenge-copy-btn::after {
-    left: 11px;
-    top: 8px;
-    background: var(--blue);
-  }
-
-  .challenge-copy-btn:hover::after {
-    background: var(--blue-hover);
-  }
-
-  .challenge-copy-wrap {
-    position: relative;
-    display: inline-flex;
-  }
-
-  .challenge-copy-tip {
-    position: absolute;
-    left: 50%;
-    bottom: calc(100% + 6px);
-    transform: translateX(-50%) translateY(4px);
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    padding: 4px 7px;
-    border-radius: 4px;
-    background: #222;
-    color: #fff;
+    min-height: 21px;
+    padding: 3px 8px;
+    border: 1px solid #cfe1f3;
+    border-radius: 999px;
+    background: #edf6ff;
+    color: #155d95;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
     line-height: 1.2;
     white-space: nowrap;
-    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
-    z-index: 2;
   }
 
-  .challenge-copy-tip.show {
-    opacity: 1;
-    visibility: visible;
-    transform: translateX(-50%) translateY(0);
-    transition-delay: 0s;
-  }
-
-  .challenge-link-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0;
-    background: transparent;
-    color: var(--blue);
-    font-size: 13px;
-  }
-
-  .challenge-link-btn:hover,
-  .challenge-link-btn:focus-visible {
-    color: var(--blue-hover);
-    text-decoration: underline;
-  }
-
-  .challenge-link-btn .challenge-chevron {
-    width: 7px;
-    height: 7px;
-    border-right: 2px solid currentColor;
-    border-bottom: 2px solid currentColor;
-    transform: rotate(45deg);
-    transition: transform 0.18s ease;
-    margin-top: -3px;
-  }
-
-  .challenge-link-btn.open .challenge-chevron {
-    transform: rotate(225deg);
-    margin-top: 3px;
-  }
-
-  .challenge-details-panel {
-    height: 0;
-    opacity: 0;
-    overflow: hidden;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    background: var(--soft);
-    transition: height 0.2s ease, opacity 0.2s ease, border-color 0.2s ease, padding 0.2s ease;
-  }
-
-  .challenge-details-panel.open {
-    opacity: 1;
-    border-color: #d6e2f0;
-  }
-
-  .challenge-details-inner {
-    display: grid;
-    gap: 7px;
-    padding: 10px;
+  .challenge-period-description {
     color: #334155;
     font-size: 13px;
+    line-height: 1.45;
   }
 
-  .challenge-details-inner p {
-    margin: 0;
+  .challenge-period-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
   }
 
-  .challenge-details-inner a {
-    color: var(--blue);
-    text-decoration: none;
-    overflow-wrap: anywhere;
+  .challenge-period-meta strong {
+    color: #475467;
+    font-weight: 700;
   }
 
-  .challenge-details-inner a:hover {
-    color: var(--blue-hover);
-    text-decoration: underline;
-  }
-
-  .challenge-details-list {
+  .challenge-status-card {
     display: grid;
-    gap: 5px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .challenge-details-list li {
-    padding-left: 13px;
-    position: relative;
-  }
-
-  .challenge-details-list li::before {
-    content: "";
-    position: absolute;
-    left: 1px;
-    top: 9px;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: #334155;
-  }
-
-  .challenge-auth {
-    position: relative;
-    display: inline-flex;
-  }
-
-  .challenge-auth-dropdown {
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 0;
-    z-index: 1001;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transform: translateY(-6px);
-    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
-  }
-
-  .challenge-auth-dropdown.open {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-    transform: translateY(0);
-    transition-delay: 0s;
-  }
-
-  .challenge-auth-row {
-    display: block;
-    padding: 8px;
-    border: 1px solid #d8d8d8;
+    gap: 6px;
+    width: min(100%, 320px);
+    justify-self: end;
+    padding: 10px;
+    border: 1px solid #d8dee8;
     border-radius: 6px;
-    background: #fff;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
-    min-width: 240px;
+    background: var(--soft);
     box-sizing: border-box;
   }
 
-  .challenge-google-btn {
+  .challenge-status-label {
+    color: #333;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  .challenge-status-dd {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
     width: 100%;
+  }
+
+  .challenge-status-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 34px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    padding: 6px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .challenge-status-btn:hover,
+  .challenge-status-btn:focus-visible,
+  .challenge-status-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .challenge-status-btn.is-placeholder,
+  .challenge-status-btn.is-not_selected {
+    color: #7a8492;
+    font-weight: 600;
+  }
+
+  .challenge-status-btn.is-available {
+    border-color: #9dd7b9;
+    background: var(--green-soft);
+    color: #12633e;
+  }
+
+  .challenge-status-btn.is-unavailable {
+    border-color: #f0b8c1;
+    background: var(--red-soft);
+    color: var(--red);
+  }
+
+  .challenge-status-btn.is-scheduled {
+    border-color: #cfe1f3;
+    background: #edf6ff;
+    color: #155d95;
+  }
+
+  .challenge-status-btn.is-played {
+    border-color: #9dd7b9;
+    background: var(--green-soft);
+    color: #12633e;
+  }
+
+  .challenge-status-btn.disabled {
+    cursor: not-allowed;
+  }
+
+  .challenge-status-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .challenge-status-chevron {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding: 10px 12px;
-    background: #fff;
-    border: 1px solid #dadce0;
+    color: #6f7785;
+    font-size: 10px;
+    transition: transform 0.18s ease;
+  }
+
+  .challenge-status-btn.open .challenge-status-chevron {
+    transform: rotate(180deg);
+  }
+
+  .challenge-status-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-height: 0;
+    overflow: hidden;
+    border: 1px solid #d5dbe4;
     border-radius: 4px;
-    font-weight: 600;
-    font-size: 13px;
-    color: #3c4043;
-    cursor: pointer;
-    transition: box-shadow 0.15s ease;
-    text-decoration: none;
-    white-space: nowrap;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+  }
+
+  .challenge-status-menu.open {
+    max-height: 180px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .challenge-status-option {
+    all: unset;
     box-sizing: border-box;
+    min-height: 34px;
+    padding: 7px 9px;
+    border-top: 1px solid #edf1f6;
+    color: #2f3947;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
   }
 
-  .challenge-google-btn:hover {
-    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  .challenge-status-option:first-child {
+    border-top: none;
   }
 
-  .challenge-google-icon {
-    width: 18px;
-    height: 18px;
-    display: inline-block;
+  .challenge-status-option:hover,
+  .challenge-status-option:focus-visible {
+    background: #f5f7fa;
   }
 
-  .challenge-hidden {
-    display: none !important;
+  .challenge-status-option.active {
+    background: #e4f0fb;
   }
 
-  @media (max-width: 520px) {
-    .challenge-step-line {
-      align-items: flex-start;
+  .challenge-status-option.is-available.active {
+    background: var(--green-soft);
+    color: #12633e;
+  }
+
+  .challenge-status-option.is-unavailable.active {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+
+  .challenge-status-note {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  @media (max-width: 720px) {
+    .challenge-period-band {
+      grid-template-columns: minmax(0, 1fr);
     }
 
-    .challenge-email-chip {
+    .challenge-status-card {
       width: 100%;
-      justify-content: space-between;
+      justify-self: stretch;
     }
   }
 </style>
 
 <div class="challenges-wrap">
-  <div class="challenges-card">
-    <p>Here you will be able to challenge other players to a rated Bo3 or Bo5 match.</p>
-    <div id="challengesContent" class="challenges-status">Loading...</div>
+  <div class="challenges-head">
+    <div class="challenges-title">Challenges</div>
+    <div class="challenges-subtitle">Player Hub</div>
   </div>
+
+  <div id="challengesContent" class="challenges-alert">Loading...</div>
 </div>
 
 <script>
 (function () {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
-  const ME_URL = `${AUTH_BASE}/auth/me`;
-  const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
-  const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
+  const CHALLENGE_PERIODS_URL = `${AUTH_BASE}/challenges/periods`;
+  const STATUS_COPY = {
+    not_selected: {
+      label: "Not selected",
+      tone: "placeholder",
+      note: "Choose your availability for this period.",
+      editable: true,
+    },
+    available: {
+      label: "Open to match",
+      tone: "available",
+      note: "You are open to Challenge match requests.",
+      editable: true,
+    },
+    unavailable: {
+      label: "Not playing this period",
+      tone: "unavailable",
+      note: "You are not participating in this period.",
+      editable: true,
+    },
+    match_scheduled: {
+      label: "Match scheduled",
+      tone: "scheduled",
+      note: "Status is locked because your match is already scheduled.",
+      editable: false,
+    },
+    played: {
+      label: "Match played",
+      tone: "played",
+      note: "Status is locked because your match has been played.",
+      editable: false,
+    },
+  };
+  const PERIOD_STATUS_LABELS = {
+    planning_open: "Planning open",
+    active: "Active",
+    result_review: "Result review",
+  };
+
   const contentEl = document.getElementById("challengesContent");
-  let authCleanup = null;
+  const dropdowns = [];
 
-  function getCurrentUserProfileId(user) {
-    return String(
-      user?.profile?.id ??
-      user?.profile?.player_id ??
-      user?.profile?.bga_id ??
-      user?.bga_id ??
-      user?.player_id ??
-      user?.playerId ??
-      ""
-    ).trim();
+  function normalizeStatus(value) {
+    const normalized = String(value || "").trim();
+    return STATUS_COPY[normalized] ? normalized : "not_selected";
   }
 
-  function getLoginEmail(user) {
-    return String(user?.email || user?.login_email || "").trim();
+  function formatDate(value) {
+    const date = new Date(String(value || ""));
+    if (Number.isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(date);
   }
 
-  function getProfileEmail(user, profile) {
-    return String(
-      profile?.email ??
-      profile?.login_email ??
-      user?.profile?.email ??
-      user?.profile?.login_email ??
-      ""
-    ).trim();
+  function formatDateRange(startValue, endValue) {
+    const start = formatDate(startValue);
+    const end = formatDate(endValue);
+    if (start && end) return `${start} - ${end}`;
+    return start || end || "-";
   }
 
-  function getProfileName(profile, user) {
-    return String(
-      profile?.name ??
-      profile?.full_name ??
-      user?.profile?.name ??
-      user?.profile?.full_name ??
-      ""
-    ).trim();
+  function closeAllDropdowns() {
+    dropdowns.forEach((dropdown) => dropdown.close());
   }
 
-  function getPhotoCount(profile, user) {
-    const raw = profile?.photo_count ?? user?.profile?.photo_count ?? "";
-    const count = Number(String(raw).trim());
-    return Number.isFinite(count) ? count : 0;
+  function setAlert(text, isError) {
+    contentEl.className = `challenges-alert${isError ? " is-error" : ""}`;
+    contentEl.textContent = text;
   }
 
-  function cleanupAuth() {
-    if (typeof authCleanup === "function") {
-      authCleanup();
+  async function apiJson(url, options) {
+    const response = await fetch(url, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      ...(options || {}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.ok === false) {
+      throw new Error(data?.message || "Request failed");
     }
-    authCleanup = null;
+    return data;
   }
 
-  async function fetchSession() {
-    try {
-      const response = await fetch(ME_URL, {
-        method: "GET",
-        credentials: "include",
+  function createStatusDropdown(period, initialStatus) {
+    let currentStatus = normalizeStatus(initialStatus);
+    const periodAllowsManualStatus = ["planning_open", "active"].includes(String(period?.status || "").trim());
+    const labelId = `challengeStatusLabel-${String(period.id || "").replace(/[^A-Za-z0-9_-]/g, "-")}`;
+
+    const card = document.createElement("div");
+    card.className = "challenge-status-card";
+
+    const label = document.createElement("div");
+    label.className = "challenge-status-label";
+    label.id = labelId;
+    label.textContent = "Your period status";
+    card.appendChild(label);
+
+    const dropdownEl = document.createElement("div");
+    dropdownEl.className = "challenge-status-dd";
+    card.appendChild(dropdownEl);
+
+    const btnEl = document.createElement("button");
+    btnEl.className = "challenge-status-btn";
+    btnEl.type = "button";
+    btnEl.setAttribute("aria-haspopup", "listbox");
+    btnEl.setAttribute("aria-expanded", "false");
+    btnEl.setAttribute("aria-labelledby", labelId);
+    dropdownEl.appendChild(btnEl);
+
+    const textEl = document.createElement("span");
+    textEl.className = "challenge-status-text";
+    btnEl.appendChild(textEl);
+
+    const chevronEl = document.createElement("span");
+    chevronEl.className = "challenge-status-chevron";
+    chevronEl.setAttribute("aria-hidden", "true");
+    chevronEl.textContent = "▾";
+    btnEl.appendChild(chevronEl);
+
+    const menuEl = document.createElement("div");
+    menuEl.className = "challenge-status-menu";
+    menuEl.setAttribute("role", "listbox");
+    menuEl.setAttribute("aria-labelledby", labelId);
+    dropdownEl.appendChild(menuEl);
+
+    const options = [
+      { value: "available", label: "Open to match" },
+      { value: "unavailable", label: "Not playing this period" },
+    ];
+    const optionEls = options.map((option) => {
+      const optionEl = document.createElement("button");
+      optionEl.className = `challenge-status-option is-${option.value}`;
+      optionEl.type = "button";
+      optionEl.setAttribute("role", "option");
+      optionEl.dataset.value = option.value;
+      optionEl.textContent = option.label;
+      menuEl.appendChild(optionEl);
+      return optionEl;
+    });
+
+    const noteEl = document.createElement("div");
+    noteEl.className = "challenge-status-note";
+    card.appendChild(noteEl);
+
+    const close = () => {
+      btnEl.classList.remove("open");
+      btnEl.setAttribute("aria-expanded", "false");
+      menuEl.classList.remove("open");
+    };
+    const open = () => {
+      const status = STATUS_COPY[currentStatus] || STATUS_COPY.not_selected;
+      if (!status.editable || !periodAllowsManualStatus) return;
+      closeAllDropdowns();
+      btnEl.classList.add("open");
+      btnEl.setAttribute("aria-expanded", "true");
+      menuEl.classList.add("open");
+    };
+    const setStatus = (nextStatus, noteOverride) => {
+      const statusValue = normalizeStatus(nextStatus);
+      const status = STATUS_COPY[statusValue] || STATUS_COPY.not_selected;
+      const editable = status.editable && periodAllowsManualStatus;
+      currentStatus = statusValue;
+      btnEl.classList.remove(
+        "is-placeholder",
+        "is-not_selected",
+        "is-available",
+        "is-unavailable",
+        "is-scheduled",
+        "is-played",
+        "disabled"
+      );
+      btnEl.classList.add(`is-${status.tone}`);
+      btnEl.classList.toggle("disabled", !editable);
+      btnEl.disabled = !editable;
+      btnEl.setAttribute("aria-disabled", editable ? "false" : "true");
+      textEl.textContent = status.label;
+      noteEl.textContent = noteOverride || (periodAllowsManualStatus ? status.note : "Status changes are closed for this period.");
+      optionEls.forEach((optionEl) => {
+        const active = String(optionEl.dataset.value || "") === statusValue;
+        optionEl.classList.toggle("active", active);
+        optionEl.setAttribute("aria-selected", active ? "true" : "false");
       });
-      if (!response.ok) return { authenticated: false, user: null };
-      const data = await response.json().catch(() => ({}));
-      return {
-        authenticated: !!data?.authenticated,
-        user: data?.authenticated ? data?.user || null : null,
-      };
-    } catch (_error) {
-      return { authenticated: false, user: null };
-    }
-  }
+      if (!editable) close();
+    };
 
-  async function fetchProfiles() {
-    try {
-      const response = await fetch(PROFILES_PUBLIC_URL, {
-        method: "GET",
-        credentials: "include",
+    btnEl.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menuEl.classList.contains("open")) close();
+      else open();
+    });
+
+    optionEls.forEach((optionEl) => {
+      optionEl.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const previousStatus = currentStatus;
+        const nextStatus = String(optionEl.dataset.value || "");
+        if (nextStatus === previousStatus) {
+          close();
+          return;
+        }
+        if (
+          nextStatus === "unavailable"
+          && !window.confirm("Switch to Not playing this period? Pending Challenge requests for this period will be closed.")
+        ) {
+          close();
+          return;
+        }
+        setStatus(nextStatus, "Saving...");
+        close();
+        try {
+          const data = await apiJson(`${CHALLENGE_PERIODS_URL}/${encodeURIComponent(period.id)}/status`, {
+            method: "PATCH",
+            body: JSON.stringify({ status: nextStatus }),
+          });
+          setStatus(data?.period_player?.status || nextStatus);
+        } catch (error) {
+          setStatus(previousStatus, error?.message || "Failed to update status.");
+        }
       });
-      if (!response.ok) return [];
-      const data = await response.json().catch(() => ({}));
-      return Array.isArray(data?.profiles) ? data.profiles : [];
-    } catch (_error) {
-      return [];
-    }
+    });
+
+    setStatus(currentStatus);
+    dropdowns.push({ close, setStatus });
+    return card;
   }
 
-  function findProfileById(profiles, playerId) {
-    const normalizedId = String(playerId || "").trim();
-    if (!normalizedId) return null;
-    return (Array.isArray(profiles) ? profiles : []).find((profile) => {
-      const profileId = String(profile?.id ?? profile?.player_id ?? profile?.profile_id ?? "").trim();
-      return profileId === normalizedId;
-    }) || null;
-  }
-
-  function buildStep(title, done) {
-    const step = document.createElement("div");
-    step.className = `challenge-step${done ? " done" : ""}`;
-
-    const check = document.createElement("div");
-    check.className = "challenge-check";
-    check.setAttribute("aria-hidden", "true");
-    step.appendChild(check);
+  function createPeriodBand(period) {
+    const band = document.createElement("section");
+    band.className = "challenge-period-band";
+    band.dataset.challengePeriodId = String(period?.id || "");
+    band.dataset.playerStatus = normalizeStatus(period?.player_status);
 
     const main = document.createElement("div");
-    main.className = "challenge-step-main";
-    step.appendChild(main);
+    main.className = "challenge-period-main";
+    band.appendChild(main);
 
-    const line = document.createElement("div");
-    line.className = "challenge-step-line";
-    main.appendChild(line);
+    const titleRow = document.createElement("div");
+    titleRow.className = "challenge-period-title-row";
+    main.appendChild(titleRow);
 
-    const titleEl = document.createElement("div");
-    titleEl.className = "challenge-step-title";
-    titleEl.textContent = title;
-    line.appendChild(titleEl);
+    const title = document.createElement("div");
+    title.className = "challenge-period-title";
+    title.textContent = String(period?.name || period?.id || "Challenge period");
+    titleRow.appendChild(title);
 
-    return { step, main, line };
-  }
+    const badge = document.createElement("span");
+    badge.className = "challenge-period-badge";
+    badge.textContent = PERIOD_STATUS_LABELS[period?.status] || String(period?.status || "");
+    titleRow.appendChild(badge);
 
-  function createHint(text) {
-    const hint = document.createElement("div");
-    hint.className = "challenge-hint";
-    hint.textContent = text;
-    return hint;
-  }
+    const description = document.createElement("div");
+    description.className = "challenge-period-description";
+    description.textContent = String(period?.description || "Open rated challenge matches for players from different associations.");
+    main.appendChild(description);
 
-  function createPrimaryLink(text, href) {
-    const link = document.createElement("a");
-    link.className = "challenge-btn";
-    link.href = href;
-    link.textContent = text;
-    return link;
-  }
-
-  function setupAuth(authRoot, onAuthSuccess) {
-    const portalState = {
-      container: null,
-      cleanup: [],
-    };
-    const signInButton = authRoot.querySelector("[data-challenge-auth-sign-in]");
-    const dropdown = authRoot.querySelector("[data-challenge-auth-dropdown]");
-    const googleLink = authRoot.querySelector("[data-challenge-auth-google]");
-    if (!signInButton || !dropdown || !googleLink) return () => {};
-    googleLink.href = `${AUTH_BASE}/auth/google`;
-
-    function canUseParentDocument() {
-      try {
-        return !!(window.parent && window.parent !== window && window.parent.document && window.frameElement);
-      } catch (_error) {
-        return false;
-      }
-    }
-
-    function ensurePortalStyles(parentDocument) {
-      if (parentDocument.getElementById("challengeAuthPortalStyles")) return;
-      const style = parentDocument.createElement("style");
-      style.id = "challengeAuthPortalStyles";
-      style.textContent = `
-        .challenge-auth-portal {
-          position: fixed;
-          z-index: 2147483647;
-          opacity: 0;
-          visibility: hidden;
-          pointer-events: none;
-          transform: translateY(-6px);
-          transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
-          font-family: "Montserrat", sans-serif;
-        }
-        .challenge-auth-portal.open {
-          opacity: 1;
-          visibility: visible;
-          pointer-events: auto;
-          transform: translateY(0);
-          transition-delay: 0s;
-        }
-        .challenge-auth-portal-row {
-          padding: 8px;
-          border: 1px solid #d8d8d8;
-          border-radius: 6px;
-          background: #fff;
-          box-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
-          min-width: 240px;
-        }
-        .challenge-auth-portal-link {
-          width: 100%;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          padding: 10px 12px;
-          background: #fff;
-          border: 1px solid #dadce0;
-          border-radius: 4px;
-          font-weight: 600;
-          font-size: 13px;
-          color: #3c4043;
-          cursor: pointer;
-          transition: box-shadow 0.15s ease;
-          text-decoration: none;
-          white-space: nowrap;
-          box-sizing: border-box;
-        }
-        .challenge-auth-portal-link:hover {
-          box-shadow: 0 1px 2px rgba(0,0,0,0.12);
-        }
-        .challenge-auth-portal-icon {
-          width: 18px;
-          height: 18px;
-          display: inline-block;
-        }
-      `;
-      parentDocument.head.appendChild(style);
-    }
-
-    function positionPortal(container) {
-      const iframeRect = window.frameElement.getBoundingClientRect();
-      const buttonRect = signInButton.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      const top = iframeRect.top + buttonRect.bottom + 8;
-      const leftEdge = iframeRect.left + buttonRect.left;
-      const left = Math.max(8, leftEdge);
-      const maxLeft = Math.max(8, window.parent.innerWidth - containerRect.width - 8);
-      container.style.top = `${Math.max(8, top)}px`;
-      container.style.left = `${Math.min(left, maxLeft)}px`;
-    }
-
-    function teardownPortal() {
-      while (portalState.cleanup.length) {
-        const dispose = portalState.cleanup.pop();
-        dispose();
-      }
-      if (portalState.container) {
-        portalState.container.remove();
-        portalState.container = null;
-      }
-    }
-
-    function closeDropdown() {
-      dropdown.classList.remove("open");
-      dropdown.setAttribute("aria-hidden", "true");
-      dropdown.setAttribute("inert", "");
-      signInButton.setAttribute("aria-expanded", "false");
-      teardownPortal();
-    }
-
-    function openGoogleAuthPopup() {
-      const popup = window.open(
-        `${AUTH_BASE}/auth/google`,
-        "googleAuth",
-        "width=520,height=640,left=100,top=100"
-      );
-      if (!popup) {
-        window.location.href = `${AUTH_BASE}/auth/google`;
-        return;
-      }
-      closeDropdown();
-    }
-
-    function openPortalDropdown() {
-      const parentDocument = window.parent.document;
-      ensurePortalStyles(parentDocument);
-      teardownPortal();
-
-      const container = parentDocument.createElement("div");
-      container.className = "challenge-auth-portal";
-      container.setAttribute("role", "dialog");
-      container.setAttribute("aria-label", "Sign in");
-      container.innerHTML = `
-        <div class="challenge-auth-portal-row">
-          <a class="challenge-auth-portal-link" href="${AUTH_BASE}/auth/google">
-            <img class="challenge-auth-portal-icon" alt="Google" src="${GOOGLE_ICON_URL}" />
-            Sign in with Google
-          </a>
-        </div>
-      `;
-
-      parentDocument.body.appendChild(container);
-      positionPortal(container);
-      container.classList.add("open");
-
-      const portalLink = container.querySelector(".challenge-auth-portal-link");
-      const closeOnOutside = (event) => {
-        if (!container.contains(event.target)) {
-          closeDropdown();
-        }
-      };
-      const closeOnEscape = (event) => {
-        if (event.key === "Escape") {
-          closeDropdown();
-        }
-      };
-      const reposition = () => {
-        if (portalState.container) {
-          positionPortal(portalState.container);
-        }
-      };
-
-      portalLink.addEventListener("click", (event) => {
-        event.preventDefault();
-        openGoogleAuthPopup();
-      });
-      parentDocument.addEventListener("mousedown", closeOnOutside);
-      parentDocument.addEventListener("keydown", closeOnEscape);
-      window.parent.addEventListener("scroll", reposition, true);
-      window.addEventListener("resize", reposition);
-      window.parent.addEventListener("resize", reposition);
-
-      portalState.container = container;
-      portalState.cleanup.push(() => parentDocument.removeEventListener("mousedown", closeOnOutside));
-      portalState.cleanup.push(() => parentDocument.removeEventListener("keydown", closeOnEscape));
-      portalState.cleanup.push(() => window.parent.removeEventListener("scroll", reposition, true));
-      portalState.cleanup.push(() => window.removeEventListener("resize", reposition));
-      portalState.cleanup.push(() => window.parent.removeEventListener("resize", reposition));
-    }
-
-    function openDropdown() {
-      dropdown.classList.add("open");
-      dropdown.setAttribute("aria-hidden", "false");
-      dropdown.removeAttribute("inert");
-      signInButton.setAttribute("aria-expanded", "true");
-      if (canUseParentDocument()) {
-        dropdown.classList.remove("open");
-        dropdown.setAttribute("aria-hidden", "true");
-        dropdown.setAttribute("inert", "");
-        openPortalDropdown();
-      }
-    }
-
-    function toggleDropdown() {
-      if (portalState.container || dropdown.classList.contains("open")) {
-        closeDropdown();
-      } else {
-        openDropdown();
-      }
-    }
-
-    const onDocumentClick = (event) => {
-      if (!dropdown.contains(event.target) && !signInButton.contains(event.target)) {
-        closeDropdown();
-      }
-    };
-    const onDocumentKeydown = (event) => {
-      if (event.key === "Escape") {
-        closeDropdown();
-      }
-    };
-    const onMessage = (event) => {
-      if (event.origin !== new URL(AUTH_BASE).origin) return;
-      if (event.data && event.data.type === "google-auth-success") {
-        onAuthSuccess();
-      }
-    };
-    const onGoogleAuthClick = (event) => {
-      event.preventDefault();
-      openGoogleAuthPopup();
-    };
-
-    signInButton.addEventListener("click", toggleDropdown);
-    googleLink.addEventListener("click", onGoogleAuthClick);
-    document.addEventListener("click", onDocumentClick);
-    document.addEventListener("keydown", onDocumentKeydown);
-    window.addEventListener("message", onMessage);
-
-    return () => {
-      signInButton.removeEventListener("click", toggleDropdown);
-      googleLink.removeEventListener("click", onGoogleAuthClick);
-      document.removeEventListener("click", onDocumentClick);
-      document.removeEventListener("keydown", onDocumentKeydown);
-      window.removeEventListener("message", onMessage);
-      teardownPortal();
-    };
-  }
-
-  function appendSignInControl(line) {
-    const authRoot = document.createElement("span");
-    authRoot.className = "challenge-auth";
-    authRoot.innerHTML = `
-      <button class="challenge-btn" type="button" aria-expanded="false" data-challenge-auth-sign-in>Sign in</button>
-      <span class="challenge-auth-dropdown" aria-hidden="true" inert data-challenge-auth-dropdown>
-        <span class="challenge-auth-row">
-          <a class="challenge-google-btn" href="/auth/google" data-challenge-auth-google>
-            <img class="challenge-google-icon" alt="Google" src="${GOOGLE_ICON_URL}" />
-            Sign in with Google
-          </a>
-        </span>
-      </span>
+    const meta = document.createElement("div");
+    meta.className = "challenge-period-meta";
+    meta.innerHTML = `
+      <span><strong>planning open:</strong> ${formatDateRange(period?.planning_starts_at, period?.play_starts_at)}</span>
+      <span><strong>playing days:</strong> ${formatDateRange(period?.play_starts_at, period?.play_ends_at)}</span>
     `;
-    line.appendChild(authRoot);
-    authCleanup = setupAuth(authRoot, renderChallenges);
-  }
+    main.appendChild(meta);
 
-  function appendEmailCopy(main, email) {
-    const hint = document.createElement("div");
-    hint.className = "challenge-hint";
-    hint.appendChild(document.createTextNode("Send your email "));
-
-    const chip = document.createElement("span");
-    chip.className = "challenge-email-chip";
-    const emailText = document.createElement("span");
-    emailText.className = "challenge-email-text";
-    emailText.textContent = email;
-    chip.appendChild(emailText);
-
-    const copyWrap = document.createElement("span");
-    copyWrap.className = "challenge-copy-wrap";
-
-    const copyBtn = document.createElement("button");
-    copyBtn.className = "challenge-btn challenge-copy-btn";
-    copyBtn.type = "button";
-    copyBtn.setAttribute("aria-label", "Copy email");
-    copyBtn.title = "Copy email";
-    const copyTip = document.createElement("span");
-    copyTip.className = "challenge-copy-tip";
-    copyTip.textContent = "Copied";
-    let copyTipTimer = null;
-    const showCopyTip = () => {
-      copyTip.classList.add("show");
-      if (copyTipTimer) {
-        window.clearTimeout(copyTipTimer);
-      }
-      copyTipTimer = window.setTimeout(() => {
-        copyTip.classList.remove("show");
-        copyTipTimer = null;
-      }, 2000);
-    };
-    copyBtn.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(email);
-        copyBtn.title = "Copied";
-        showCopyTip();
-        window.setTimeout(() => {
-          copyBtn.title = "Copy email";
-        }, 1400);
-      } catch (_error) {
-        copyBtn.title = "Select and copy email";
-        window.setTimeout(() => {
-          copyBtn.title = "Copy email";
-        }, 1400);
-      }
-    });
-    copyWrap.appendChild(copyBtn);
-    copyWrap.appendChild(copyTip);
-    chip.appendChild(copyWrap);
-    hint.appendChild(chip);
-    hint.appendChild(document.createTextNode(" to your association captain."));
-    main.appendChild(hint);
-  }
-
-  function appendDetails(main) {
-    const toggle = document.createElement("button");
-    toggle.className = "challenge-link-btn";
-    toggle.type = "button";
-    toggle.setAttribute("aria-expanded", "false");
-    toggle.innerHTML = '<span>Details</span><span class="challenge-chevron" aria-hidden="true"></span>';
-    main.appendChild(toggle);
-
-    const panel = document.createElement("div");
-    panel.className = "challenge-details-panel";
-    panel.setAttribute("aria-hidden", "true");
-
-    const inner = document.createElement("div");
-    inner.className = "challenge-details-inner";
-
-    const captainsText = document.createElement("p");
-    captainsText.appendChild(document.createTextNode("If you don't know who your captain is, check here: "));
-    const captainsLink = document.createElement("a");
-    captainsLink.href = "https://carcassonne.gg/players/?captains=1";
-    captainsLink.target = "_blank";
-    captainsLink.rel = "noopener noreferrer";
-    captainsLink.textContent = "https://carcassonne.gg/players/?captains=1";
-    captainsText.appendChild(captainsLink);
-    inner.appendChild(captainsText);
-
-    const captainIntro = document.createElement("p");
-    captainIntro.textContent = "Your captain needs to do the following:";
-    inner.appendChild(captainIntro);
-
-    const list = document.createElement("ul");
-    list.className = "challenge-details-list";
-
-    const openPlayersItem = document.createElement("li");
-    openPlayersItem.appendChild(document.createTextNode("Open User Menu -> Player Hub -> Players "));
-    const playersLink = document.createElement("a");
-    playersLink.href = "https://carcassonne.gg/player-hub/players/";
-    playersLink.target = "_blank";
-    playersLink.rel = "noopener noreferrer";
-    playersLink.textContent = "https://carcassonne.gg/player-hub/players/";
-    openPlayersItem.appendChild(playersLink);
-    list.appendChild(openPlayersItem);
-
-    const editProfileItem = document.createElement("li");
-    editProfileItem.textContent = "Edit your profile (or create one if needed)";
-    list.appendChild(editProfileItem);
-
-    const addEmailItem = document.createElement("li");
-    addEmailItem.textContent = "Add your email to Login Email";
-    list.appendChild(addEmailItem);
-
-    inner.appendChild(list);
-
-    const contactText = document.createElement("p");
-    contactText.textContent = "If you cannot find a captain, contact us at carcassonne.gg@gmail.com.";
-    inner.appendChild(contactText);
-
-    panel.appendChild(inner);
-    main.appendChild(panel);
-
-    function setOpen(open) {
-      toggle.classList.toggle("open", open);
-      toggle.setAttribute("aria-expanded", open ? "true" : "false");
-      panel.classList.toggle("open", open);
-      panel.setAttribute("aria-hidden", open ? "false" : "true");
-      if (open) {
-        panel.style.height = "0px";
-        panel.offsetHeight;
-        panel.style.height = `${panel.scrollHeight}px`;
-      } else {
-        panel.style.height = `${panel.scrollHeight}px`;
-        panel.offsetHeight;
-        panel.style.height = "0px";
-      }
-    }
-
-    toggle.addEventListener("click", () => {
-      setOpen(!panel.classList.contains("open"));
-    });
-    panel.addEventListener("transitionend", () => {
-      if (panel.classList.contains("open")) {
-        panel.style.height = "auto";
-      }
-    });
-  }
-
-  function renderChecklist(session, profile) {
-    cleanupAuth();
-
-    const user = session.user || null;
-    const authenticated = !!session.authenticated;
-    const profileId = getCurrentUserProfileId(user);
-    const loginEmail = getLoginEmail(user);
-    const profileEmail = getProfileEmail(user, profile);
-    const bgaVerified = authenticated && !!profileId && !!profileEmail;
-    const hasRealName = !!getProfileName(profile, user);
-    const hasPhoto = getPhotoCount(profile, user) > 0;
-    const profileReady = authenticated && !!profileId && hasRealName && hasPhoto;
-
-    const checklist = document.createElement("div");
-    checklist.className = "challenge-checklist";
-
-    const signInStep = buildStep("Sign in to the site", authenticated);
-    if (!authenticated) {
-      appendSignInControl(signInStep.line);
-    }
-    checklist.appendChild(signInStep.step);
-
-    const bgaStep = buildStep("Verify your BGA account", bgaVerified);
-    if (!authenticated) {
-      bgaStep.main.appendChild(createHint("Sign in first to verify your BGA account."));
-    } else if (!bgaVerified) {
-      if (loginEmail) {
-        appendEmailCopy(bgaStep.main, loginEmail);
-      } else {
-        bgaStep.main.appendChild(createHint("Send the email you used to log in to carcassonne.gg to your association captain."));
-      }
-      appendDetails(bgaStep.main);
-    }
-    checklist.appendChild(bgaStep.step);
-
-    const photoStep = buildStep("Add your real name and photo (optional)", profileReady);
-    if (!authenticated) {
-      photoStep.main.appendChild(createHint("Sign in first to edit your player profile."));
-    } else if (!profileId) {
-      photoStep.main.appendChild(createHint("Verify your BGA account first to edit your player profile."));
-    } else if (!profileReady) {
-      photoStep.line.appendChild(createPrimaryLink("Edit profile", `https://carcassonne.gg/player/?id=${encodeURIComponent(profileId)}&edit=1`));
-    }
-    checklist.appendChild(photoStep.step);
-
-    const inviteStep = buildStep("Send an invitation to your opponent - opens on June 29", false);
-    checklist.appendChild(inviteStep.step);
-
-    contentEl.className = "";
-    contentEl.innerHTML = "";
-    contentEl.appendChild(checklist);
+    band.appendChild(createStatusDropdown(period, period?.player_status));
+    return band;
   }
 
   async function renderChallenges() {
-    cleanupAuth();
-    contentEl.className = "challenges-status";
-    contentEl.textContent = "Loading...";
+    setAlert("Loading...", false);
+    dropdowns.splice(0, dropdowns.length);
 
-    const session = await fetchSession();
-    let profile = null;
-    if (session.authenticated && session.user) {
-      const profileId = getCurrentUserProfileId(session.user);
-      if (profileId) {
-        const profiles = await fetchProfiles();
-        profile = findProfileById(profiles, profileId);
+    try {
+      const data = await apiJson(CHALLENGE_PERIODS_URL, { method: "GET" });
+      const periods = Array.isArray(data?.challenge_periods) ? data.challenge_periods : [];
+      if (!periods.length) {
+        setAlert("No open Challenge periods right now.", false);
+        return;
       }
+      contentEl.className = "challenges-list";
+      contentEl.innerHTML = "";
+      periods.forEach((period) => {
+        contentEl.appendChild(createPeriodBand(period));
+      });
+    } catch (error) {
+      setAlert(error?.message || "Failed to load Challenge periods.", true);
     }
-
-    renderChecklist(session, profile);
   }
+
+  document.addEventListener("click", closeAllDropdowns);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeAllDropdowns();
+  });
+
+  window.setChallengePeriodStatus = function (status) {
+    const firstDropdown = dropdowns[0];
+    if (!firstDropdown) return;
+    const firstBand = contentEl.querySelector("[data-challenge-period-id]");
+    if (firstBand) firstBand.dataset.playerStatus = normalizeStatus(status);
+    firstDropdown.setStatus(status);
+  };
 
   renderChallenges();
 })();

@@ -1,0 +1,1101 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Challenges Player UI Preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --surface: #fff;
+      --surface-soft: #f8fafc;
+      --text: #222;
+      --muted: #637083;
+      --border: #dce2ea;
+      --border-strong: #b9c4d2;
+      --blue: #1a73b7;
+      --blue-dark: #155d95;
+      --green: #1d8f5a;
+      --green-soft: #e8f6ef;
+      --amber: #a16207;
+      --amber-soft: #fff6df;
+      --red: #b23a48;
+      --red-soft: #fff0f2;
+      --ink-soft: #edf1f5;
+      --shadow: 0 10px 26px rgba(30, 42, 64, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Montserrat", Arial, sans-serif;
+      line-height: 1.45;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 24px));
+      margin: 0 auto;
+      padding: 18px 0 28px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .title-block {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .title {
+      margin: 0;
+      color: #1f2c3b;
+      font-size: 25px;
+      font-weight: 700;
+      letter-spacing: 0;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .preview-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      white-space: nowrap;
+    }
+
+    .switch-btn {
+      min-height: 30px;
+      border: 0;
+      border-radius: 4px;
+      padding: 5px 9px;
+      background: transparent;
+      color: #344154;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .switch-btn.is-active {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .period-band {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+      gap: 14px;
+      align-items: center;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .period-main {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .period-name-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .period-name {
+      color: #172232;
+      font-size: 19px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .badge-blue {
+      border-color: #cfe1f3;
+      background: #edf6ff;
+      color: var(--blue-dark);
+    }
+
+    .badge-green {
+      border-color: #b9e5cd;
+      background: var(--green-soft);
+      color: #12633e;
+    }
+
+    .badge-amber {
+      border-color: #f1d28d;
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .badge-red {
+      border-color: #f4c5cc;
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    .badge-gray {
+      border-color: #d1d8e2;
+      background: #f3f5f8;
+      color: #4c596a;
+    }
+
+    .period-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .period-status-card {
+      display: grid;
+      gap: 8px;
+      justify-self: end;
+      width: min(100%, 320px);
+      padding: 11px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-soft);
+    }
+
+    .status-title {
+      color: #172232;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .status-select {
+      width: 100%;
+      height: 34px;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      background: #fff;
+      color: #263241;
+      padding: 0 9px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 14px;
+      margin-top: 14px;
+      align-items: start;
+    }
+
+    .main-stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 48px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-soft);
+    }
+
+    .panel-title {
+      color: #223040;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .panel-sub {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .panel-body {
+      padding: 14px;
+    }
+
+    .status-copy {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .status-name {
+      color: #172232;
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      padding: 7px 11px;
+      color: #fff;
+      background: var(--blue);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      background: var(--blue-dark);
+    }
+
+    .btn-secondary {
+      border-color: var(--border-strong);
+      background: #fff;
+      color: #2f3b4c;
+    }
+
+    .btn-secondary:hover {
+      background: #f4f7fa;
+    }
+
+    .btn-danger {
+      border-color: #e7b0b9;
+      background: #fff;
+      color: var(--red);
+    }
+
+    .btn-danger:hover {
+      background: var(--red-soft);
+    }
+
+    .match-card {
+      display: grid;
+      gap: 14px;
+    }
+
+    .match-players {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+    }
+
+    .player-side {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .player-side.right {
+      text-align: right;
+    }
+
+    .player-name {
+      overflow: hidden;
+      color: #172232;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .association {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .versus {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      background: var(--ink-soft);
+      color: #536174;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .match-facts {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .fact {
+      display: grid;
+      gap: 3px;
+      min-height: 68px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-soft);
+    }
+
+    .fact-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .fact-value {
+      color: #1e2b3a;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .request-list,
+    .opponent-list,
+    .history-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .request-item,
+    .opponent-row,
+    .history-row {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      padding: 11px;
+    }
+
+    .request-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .request-content {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .request-top,
+    .opponent-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .request-person,
+    .opponent-main,
+    .history-main {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .person-name,
+    .opponent-name,
+    .history-name {
+      overflow: hidden;
+      color: #172232;
+      font-size: 14px;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .time-options {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+
+    .time-options li {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 26px;
+      padding: 4px 7px;
+      border-radius: 5px;
+      background: #f3f6fa;
+      color: #2d3848;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .opponents-toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 170px;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .field {
+      width: 100%;
+      height: 36px;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      background: #fff;
+      color: #1f2b38;
+      padding: 0 10px;
+      font-size: 13px;
+    }
+
+    .opponent-meta {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .score {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 6px;
+      background: #f3f7fb;
+      color: #172232;
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .score span {
+      min-width: 42px;
+      text-align: center;
+    }
+
+    .games {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .game {
+      padding: 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      color: #293649;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .notice {
+      border: 1px solid #f0cf83;
+      border-radius: 6px;
+      background: var(--amber-soft);
+      color: var(--amber);
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .empty {
+      border: 1px dashed var(--border-strong);
+      border-radius: 6px;
+      padding: 18px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .empty-action {
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+    }
+
+    .request-actions-vertical {
+      display: grid;
+      gap: 6px;
+      align-self: stretch;
+      align-content: center;
+      min-width: 132px;
+    }
+
+    .request-actions-vertical .btn {
+      min-height: 28px;
+      padding: 4px 9px;
+    }
+
+    .is-hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 900px) {
+      .topbar,
+      .period-band,
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .topbar {
+        display: grid;
+      }
+
+      .preview-switch {
+        width: 100%;
+        overflow-x: auto;
+      }
+
+      .period-status-card {
+        width: 100%;
+        justify-self: stretch;
+      }
+
+      .layout {
+        display: grid;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .page {
+        width: min(100% - 16px, 1180px);
+        padding-top: 10px;
+      }
+
+      .period-band,
+      .panel-body {
+        padding: 12px;
+      }
+
+      .match-players,
+      .match-facts,
+      .games,
+      .opponents-toolbar {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .player-side.right {
+        text-align: left;
+      }
+
+      .versus {
+        width: 34px;
+        height: 34px;
+      }
+
+      .opponent-row,
+      .request-top,
+      .request-item {
+        align-items: stretch;
+      }
+
+      .opponent-row,
+      .request-top,
+      .request-item {
+        flex-direction: column;
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .actions,
+      .btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="topbar">
+      <div class="title-block">
+        <h1 class="title">Challenges</h1>
+        <div class="subtitle">Player Hub</div>
+      </div>
+
+      <div class="preview-switch" aria-label="Preview state">
+        <button class="switch-btn is-active" type="button" data-view="open">Без матчу</button>
+        <button class="switch-btn" type="button" data-view="scheduled">Матч</button>
+        <button class="switch-btn" type="button" data-view="review">Review</button>
+        <button class="switch-btn" type="button" data-view="history">Історія</button>
+      </div>
+    </div>
+
+    <section class="period-band">
+      <div class="period-main">
+        <div class="period-name-row">
+          <div class="period-name" id="periodName">Summer Challenge #1</div>
+          <span class="badge badge-blue" id="periodStatus">Active</span>
+        </div>
+        <div class="period-meta" id="periodMeta">
+          <span>Planning: Jun 20 - Jun 24</span>
+          <span>Play: Jun 24 - Jul 7</span>
+        </div>
+      </div>
+
+      <div class="period-status-card">
+        <div class="status-title">Оберіть свій статус</div>
+        <select class="status-select" id="playerStatusSelect" aria-label="Статус гравця">
+          <option value="open">Відкритий до матчу</option>
+          <option value="skip">Не граю в цьому періоді</option>
+        </select>
+      </div>
+    </section>
+
+    <div class="layout">
+      <div class="main-stack">
+        <section class="panel" id="matchPanel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title" id="matchTitle">Запланований матч</div>
+              <div class="panel-sub" id="matchSub">Один матч на період</div>
+            </div>
+            <span class="badge badge-green" id="matchBadge">Planned</span>
+          </div>
+          <div class="panel-body">
+            <div class="match-card" id="scheduledMatch">
+              <div class="match-players">
+                <div class="player-side">
+                  <div class="player-name">Sergey Zakharenko</div>
+                  <div class="association">Ukraine</div>
+                </div>
+                <div class="versus">VS</div>
+                <div class="player-side right">
+                  <div class="player-name">Marta Novak</div>
+                  <div class="association">Poland</div>
+                </div>
+              </div>
+
+              <div class="match-facts">
+                <div class="fact">
+                  <div class="fact-label">Час</div>
+                  <div class="fact-value">Fri, Jun 28, 19:00</div>
+                </div>
+                <div class="fact">
+                  <div class="fact-label">Формат</div>
+                  <div class="fact-value">Bo3</div>
+                </div>
+                <div class="fact">
+                  <div class="fact-label">Статус</div>
+                  <div class="fact-value">Planned</div>
+                </div>
+              </div>
+
+              <div class="actions">
+                <button class="btn btn-secondary" type="button">Перенести</button>
+                <button class="btn btn-danger" type="button">Скасувати матч</button>
+              </div>
+            </div>
+
+            <div class="match-card is-hidden" id="reviewMatch">
+              <div class="match-players">
+                <div class="player-side">
+                  <div class="player-name">Sergey Zakharenko</div>
+                  <div class="association">Ukraine</div>
+                </div>
+                <div class="versus">VS</div>
+                <div class="player-side right">
+                  <div class="player-name">Nina Petrova</div>
+                  <div class="association">Bulgaria</div>
+                </div>
+              </div>
+
+              <div class="score">
+                <span>2</span>
+                <span>-</span>
+                <span>1</span>
+              </div>
+
+              <div class="games">
+                <div class="game">Game 1 · W</div>
+                <div class="game">Game 2 · L</div>
+                <div class="game">Game 3 · W</div>
+              </div>
+
+              <div class="notice">Редагування результату доступне до Jul 10, 23:59.</div>
+
+              <div class="actions">
+                <button class="btn" type="button">Редагувати результат</button>
+                <button class="btn btn-secondary" type="button">Додати BGA table ID</button>
+              </div>
+            </div>
+
+            <div class="history-list is-hidden" id="historyMatch">
+              <div class="history-row">
+                <div class="history-main">
+                  <div class="history-name">Spring Challenge 2026</div>
+                  <div class="muted">Sergey Zakharenko vs Tomas Keller · Bo5 · 3-2</div>
+                </div>
+              </div>
+              <div class="history-row">
+                <div class="history-main">
+                  <div class="history-name">Winter Challenge 2026</div>
+                  <div class="muted">Sergey Zakharenko vs Luca Bianchi · Bo3 · 1-2</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="receivedRequestsPanel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Отримані заявки</div>
+              <div class="panel-sub">Потребують твоєї відповіді</div>
+            </div>
+            <span class="badge badge-amber">2 чекають дії</span>
+          </div>
+          <div class="panel-body">
+            <div class="request-list">
+              <div class="request-item">
+                <div class="request-content">
+                  <div class="request-top">
+                    <div class="request-person">
+                      <div class="person-name">Anna Kowalska</div>
+                      <div class="muted">Poland</div>
+                    </div>
+                    <span class="badge badge-amber">Твоя відповідь</span>
+                  </div>
+                  <ul class="time-options">
+                    <li>Thu, Jun 27, 18:00</li>
+                    <li>Fri, Jun 28, 20:00</li>
+                    <li>Sat, Jun 29, 16:00</li>
+                  </ul>
+                </div>
+                <div class="request-actions-vertical">
+                  <button class="btn" type="button">Прийняти</button>
+                  <button class="btn btn-secondary" type="button">Інший час</button>
+                  <button class="btn btn-danger" type="button">Відхилити</button>
+                </div>
+              </div>
+
+              <div class="request-item">
+                <div class="request-content">
+                  <div class="request-top">
+                    <div class="request-person">
+                      <div class="person-name">Nina Petrova</div>
+                      <div class="muted">Bulgaria</div>
+                    </div>
+                    <span class="badge badge-amber">Твоя відповідь</span>
+                  </div>
+                  <ul class="time-options">
+                    <li>Sun, Jun 30, 17:30</li>
+                  </ul>
+                </div>
+                <div class="request-actions-vertical">
+                  <button class="btn" type="button">Прийняти</button>
+                  <button class="btn btn-secondary" type="button">Інший час</button>
+                  <button class="btn btn-danger" type="button">Відхилити</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="sentRequestsPanel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Відправлені заявки</div>
+              <div class="panel-sub">Очікують відповіді суперника</div>
+            </div>
+            <span class="badge badge-gray">1 active</span>
+          </div>
+          <div class="panel-body">
+            <div class="request-list">
+              <div class="request-item">
+                <div class="request-content">
+                  <div class="request-top">
+                    <div class="request-person">
+                      <div class="person-name">Marta Novak</div>
+                      <div class="muted">Poland · очікується відповідь суперника</div>
+                    </div>
+                    <span class="badge badge-gray">1 / 3 active</span>
+                  </div>
+                  <ul class="time-options">
+                    <li>Fri, Jun 28, 19:00</li>
+                    <li>Sat, Jun 29, 15:00</li>
+                  </ul>
+                </div>
+                <div class="actions">
+                  <button class="btn btn-secondary" type="button">Відкликати</button>
+                </div>
+              </div>
+
+              <div class="empty empty-action">
+                <div>Немає інших відправлених заявок.</div>
+                <button class="btn" type="button">Створити запрошення на матч</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="opponentsPanel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Доступні суперники</div>
+              <div class="panel-sub">Гравці з інших асоціацій</div>
+            </div>
+            <span class="badge badge-green">24 available</span>
+          </div>
+          <div class="panel-body">
+            <div class="opponents-toolbar">
+              <input class="field" type="search" value="" placeholder="Пошук гравця">
+              <select class="field" aria-label="Association">
+                <option>Усі асоціації</option>
+                <option>Poland</option>
+                <option>Germany</option>
+                <option>Bulgaria</option>
+              </select>
+            </div>
+
+            <div class="opponent-list">
+              <div class="opponent-row">
+                <div class="opponent-main">
+                  <div class="opponent-name">Tomas Keller</div>
+                  <div class="opponent-meta"><span>Germany</span><span>Rating 1842</span></div>
+                </div>
+                <button class="btn" type="button">Запросити</button>
+              </div>
+
+              <div class="opponent-row">
+                <div class="opponent-main">
+                  <div class="opponent-name">Luca Bianchi</div>
+                  <div class="opponent-meta"><span>Italy</span><span>Rating 1775</span></div>
+                </div>
+                <button class="btn" type="button">Запросити</button>
+              </div>
+
+              <div class="opponent-row">
+                <div class="opponent-main">
+                  <div class="opponent-name">Sofia Marinova</div>
+                  <div class="opponent-meta"><span>Bulgaria</span><span>Rating 1698</span></div>
+                </div>
+                <button class="btn" type="button">Запросити</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const views = {
+        open: {
+          periodName: "Summer Challenge #1",
+          periodStatus: "Active",
+          periodBadgeClass: "badge-blue",
+          playerStatusValue: "open",
+          playerStatusDisabled: false,
+          showMatch: false,
+          showRequests: true,
+          showOpponents: true,
+          matchMode: "scheduled"
+        },
+        scheduled: {
+          periodName: "Summer Challenge #1",
+          periodStatus: "Active",
+          periodBadgeClass: "badge-blue",
+          playerStatusValue: "scheduled",
+          playerStatusDisabled: true,
+          showMatch: true,
+          showRequests: false,
+          showOpponents: false,
+          matchMode: "scheduled"
+        },
+        review: {
+          periodName: "Summer Challenge #1",
+          periodStatus: "Result review",
+          periodBadgeClass: "badge-amber",
+          playerStatusValue: "played",
+          playerStatusDisabled: true,
+          showMatch: true,
+          showRequests: false,
+          showOpponents: false,
+          matchMode: "review"
+        },
+        history: {
+          periodName: "Spring Challenge 2026",
+          periodStatus: "Archived",
+          periodBadgeClass: "badge-gray",
+          playerStatusValue: "played",
+          playerStatusDisabled: true,
+          showMatch: true,
+          showRequests: false,
+          showOpponents: false,
+          matchMode: "history"
+        }
+      };
+
+      const buttons = Array.from(document.querySelectorAll(".switch-btn"));
+      const periodName = document.getElementById("periodName");
+      const periodStatus = document.getElementById("periodStatus");
+      const playerStatusSelect = document.getElementById("playerStatusSelect");
+      const matchPanel = document.getElementById("matchPanel");
+      const receivedRequestsPanel = document.getElementById("receivedRequestsPanel");
+      const sentRequestsPanel = document.getElementById("sentRequestsPanel");
+      const opponentsPanel = document.getElementById("opponentsPanel");
+      const scheduledMatch = document.getElementById("scheduledMatch");
+      const reviewMatch = document.getElementById("reviewMatch");
+      const historyMatch = document.getElementById("historyMatch");
+      const matchTitle = document.getElementById("matchTitle");
+      const matchSub = document.getElementById("matchSub");
+      const matchBadge = document.getElementById("matchBadge");
+
+      function setBadgeClass(el, badgeClass) {
+        el.className = `badge ${badgeClass}`;
+      }
+
+      let activePlayerStatus = "open";
+
+      function ensureStatusOption(value, label) {
+        let option = playerStatusSelect.querySelector(`option[value="${value}"]`);
+        if (!option) {
+          option = document.createElement("option");
+          option.value = value;
+          playerStatusSelect.appendChild(option);
+        }
+        option.textContent = label;
+      }
+
+      function removeLockedStatusOptions() {
+        playerStatusSelect.querySelectorAll('option[value="scheduled"], option[value="played"]').forEach((option) => {
+          option.remove();
+        });
+      }
+
+      function setView(viewName) {
+        const view = views[viewName] || views.open;
+
+        buttons.forEach((button) => {
+          button.classList.toggle("is-active", button.dataset.view === viewName);
+        });
+
+        periodName.textContent = view.periodName;
+        periodStatus.textContent = view.periodStatus;
+        setBadgeClass(periodStatus, view.periodBadgeClass);
+
+        if (viewName === "open") {
+          removeLockedStatusOptions();
+          playerStatusSelect.value = activePlayerStatus;
+        } else if (view.playerStatusValue === "scheduled") {
+          ensureStatusOption("scheduled", "Запланований матч");
+          playerStatusSelect.value = view.playerStatusValue;
+        } else if (view.playerStatusValue === "played") {
+          ensureStatusOption("played", "Зіграний матч");
+          playerStatusSelect.value = view.playerStatusValue;
+        }
+        playerStatusSelect.disabled = view.playerStatusDisabled;
+
+        matchPanel.classList.toggle("is-hidden", !view.showMatch);
+        receivedRequestsPanel.classList.toggle("is-hidden", !view.showRequests);
+        sentRequestsPanel.classList.toggle("is-hidden", !view.showRequests);
+        opponentsPanel.classList.toggle("is-hidden", !view.showOpponents);
+
+        scheduledMatch.classList.toggle("is-hidden", view.matchMode !== "scheduled");
+        reviewMatch.classList.toggle("is-hidden", view.matchMode !== "review");
+        historyMatch.classList.toggle("is-hidden", view.matchMode !== "history");
+
+        if (view.matchMode === "scheduled") {
+          matchTitle.textContent = "Запланований матч";
+          matchSub.textContent = "Один матч на період";
+          matchBadge.textContent = "Planned";
+          setBadgeClass(matchBadge, "badge-green");
+        } else if (view.matchMode === "review") {
+          matchTitle.textContent = "Результат матчу";
+          matchSub.textContent = "Review period";
+          matchBadge.textContent = "Played";
+          setBadgeClass(matchBadge, "badge-green");
+        } else {
+          matchTitle.textContent = "Історія матчів";
+          matchSub.textContent = "Минулі періоди";
+          matchBadge.textContent = "Archived";
+          setBadgeClass(matchBadge, "badge-gray");
+        }
+      }
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => setView(button.dataset.view));
+      });
+
+      playerStatusSelect.addEventListener("change", () => {
+        if (playerStatusSelect.value === "open" || playerStatusSelect.value === "skip") {
+          activePlayerStatus = playerStatusSelect.value;
+        }
+      });
+
+      setView("open");
+    })();
+  </script>
+</body>
+</html>
