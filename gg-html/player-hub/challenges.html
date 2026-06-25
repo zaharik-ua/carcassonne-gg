@@ -338,7 +338,8 @@
 <script>
 (function () {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
-  const CHALLENGE_PERIODS_URL = `${AUTH_BASE}/challenges/periods`;
+  const CHALLENGE_PERIODS_URL = `${AUTH_BASE}/challenge-periods`;
+  const PLAYER_CHALLENGE_PERIODS_URL = `${CHALLENGE_PERIODS_URL}/player`;
   const STATUS_COPY = {
     not_selected: {
       label: "Not selected",
@@ -413,10 +414,18 @@
   }
 
   async function apiJson(url, options) {
+    const requestOptions = options || {};
+    const headers = {};
+    if (requestOptions.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+    }
     const response = await fetch(url, {
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      ...(options || {}),
+      ...requestOptions,
+      headers: {
+        ...headers,
+        ...(requestOptions.headers || {}),
+      },
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data?.ok === false) {
@@ -552,7 +561,7 @@
         setStatus(nextStatus, "Saving...");
         close();
         try {
-          const data = await apiJson(`${CHALLENGE_PERIODS_URL}/${encodeURIComponent(period.id)}/status`, {
+          const data = await apiJson(`${CHALLENGE_PERIODS_URL}/${encodeURIComponent(period.id)}/player-status`, {
             method: "PATCH",
             body: JSON.stringify({ status: nextStatus }),
           });
@@ -614,7 +623,7 @@
     dropdowns.splice(0, dropdowns.length);
 
     try {
-      const data = await apiJson(CHALLENGE_PERIODS_URL, { method: "GET" });
+      const data = await apiJson(PLAYER_CHALLENGE_PERIODS_URL, { method: "GET" });
       const periods = Array.isArray(data?.challenge_periods) ? data.challenge_periods : [];
       if (!periods.length) {
         setAlert("No open Challenge periods right now.", false);

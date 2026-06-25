@@ -6708,7 +6708,7 @@ function mapChallengePeriodForPlayer(row) {
   };
 }
 
-app.get("/challenges/periods", requireAuthenticated, async (req, res) => {
+app.get("/challenge-periods/player", requireAuthenticated, async (req, res) => {
   const playerId = normalizeNullableText(req.user?.player_id);
   if (!playerId) {
     return res.status(403).json({
@@ -6755,7 +6755,7 @@ app.get("/challenges/periods", requireAuthenticated, async (req, res) => {
   }
 });
 
-app.patch("/challenges/periods/:id/status", requireAuthenticated, async (req, res) => {
+app.patch("/challenge-periods/:id/player-status", requireAuthenticated, async (req, res) => {
   const periodId = normalizeNullableText(req.params.id);
   const playerId = normalizeNullableText(req.user?.player_id);
   const nextStatus = getManualChallengePlayerPeriodStatus(req.body?.status);
