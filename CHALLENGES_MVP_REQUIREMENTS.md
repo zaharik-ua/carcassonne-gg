@@ -381,6 +381,7 @@ Terminal-статуси для повторного запрошення:
 | `id` | `TEXT` | ні | — | Primary key. |
 | `name` | `TEXT` | ні | — | Назва періоду. |
 | `description` | `TEXT` | так | `NULL` | Короткий опис. |
+| `logo` | `TEXT` | так | `NULL` | Посилання на картинку логотипа періоду. |
 | `status` | `TEXT` | ні | `'draft'` | `draft`, `planning_open`, `active`, `result_review`, `archived` або `cancelled`. |
 | `planning_starts_at` | `TEXT` | ні | — | Початок планування в UTC. |
 | `play_starts_at` | `TEXT` | ні | — | Початок ігрового періоду в UTC. |

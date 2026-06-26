@@ -3637,6 +3637,9 @@
     const idField = createTextRow("id", item?.id || "", { readOnly: true });
     const nameField = createTextRow("name", item?.name || "");
     const descriptionField = createTextRow("description", item?.description || "");
+    const logoField = createTextRow("logo", item?.logo || "");
+    logoField.input.type = "url";
+    logoField.input.placeholder = "https://carcassonne.gg/gallery/asian-cup.png";
     const statusField = createSelectOptionsRow(
       "status",
       String(item?.status || "draft"),
@@ -3658,6 +3661,7 @@
     if (mode === "edit") form.appendChild(idField.row);
     form.appendChild(nameField.row);
     form.appendChild(descriptionField.row);
+    form.appendChild(logoField.row);
     form.appendChild(statusField.row);
     form.appendChild(planningStartsField.row);
     form.appendChild(playStartsField.row);
@@ -3695,6 +3699,7 @@
       const payload = {
         name: String(nameField.input.value || "").trim(),
         description: String(descriptionField.input.value || "").trim(),
+        logo: String(logoField.input.value || "").trim(),
         status: String(statusField.select.value || "draft").trim(),
         planning_starts_at: dateTimeUtcInputToIso(planningStartsField.input.value),
         play_starts_at: dateTimeUtcInputToIso(playStartsField.input.value),
@@ -4637,7 +4642,7 @@
       if (item.result_review_ends_at) subtitleParts.push(`Review until: ${formatDateUtc(item.result_review_ends_at)}`);
 
       sectionList.appendChild(createListRow({
-        imageSrc: "",
+        imageSrc: item.logo,
         imageAlt: item.name || item.id,
         imageRound: false,
         title: item.name || item.id,

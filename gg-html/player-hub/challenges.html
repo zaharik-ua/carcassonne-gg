@@ -398,10 +398,17 @@
   }
 
   .challenge-request-list-count {
-    margin-right: 7px;
     color: var(--muted);
     font-size: 12px;
     font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .challenge-request-title-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-right: 7px;
     white-space: nowrap;
   }
 
@@ -933,6 +940,24 @@
 
   .challenge-request-message.is-success {
     color: #12633e;
+  }
+
+  .challenge-info-dialog {
+    width: min(100%, 420px);
+    display: grid;
+    gap: 12px;
+  }
+
+  .challenge-info-text {
+    color: #4b5563;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .challenge-info-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
   }
 
   .cp-dd {
@@ -1745,6 +1770,42 @@
     return btn;
   }
 
+  function showChallengeInfoDialog(titleText, messageText) {
+    const overlay = document.createElement("div");
+    overlay.className = "challenge-modal-overlay";
+
+    const dialog = document.createElement("div");
+    dialog.className = "challenge-modal challenge-info-dialog";
+
+    const title = document.createElement("div");
+    title.className = "challenge-request-title";
+    title.textContent = titleText;
+    dialog.appendChild(title);
+
+    const text = document.createElement("div");
+    text.className = "challenge-info-text";
+    text.textContent = messageText;
+    dialog.appendChild(text);
+
+    const actions = document.createElement("div");
+    actions.className = "challenge-info-actions";
+    const okBtn = document.createElement("button");
+    okBtn.type = "button";
+    okBtn.className = "challenge-btn challenge-btn-primary";
+    okBtn.textContent = "OK";
+    actions.appendChild(okBtn);
+    dialog.appendChild(actions);
+
+    const closeModal = () => overlay.remove();
+    okBtn.addEventListener("click", closeModal);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal();
+    });
+
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+  }
+
   function getOpponentInitials(opponent) {
     const name = String(opponent?.bga_nickname || opponent?.name || "?").trim();
     return (name.slice(0, 2) || "?").toUpperCase();
@@ -2143,23 +2204,24 @@
       const profileById = new Map(profiles.map((profile) => [String(profile.id || "").trim(), profile]));
       const currentPlayerId = String(currentPlayer?.player_id || "").trim();
       const opponentId = String(opponent?.player_id || "").trim();
+      const hasInitialOpponent = Boolean(opponentId);
       const currentOption = profileById.get(currentPlayerId) || {
         id: currentPlayerId,
         label: getOpponentDisplayName(currentPlayer),
-        flag: String(currentPlayer?.association?.flag || "").trim(),
+        flag: String(currentPlayer?.association?.flag || period?.player_time_context?.association_flag || "").trim(),
         timezone: String(currentPlayer?.association?.timezone || period?.player_time_context?.timezone || "UTC").trim(),
       };
-      const opponentOption = profileById.get(opponentId) || {
+      const opponentOption = hasInitialOpponent ? (profileById.get(opponentId) || {
         id: opponentId,
         value: opponentId,
         label: getOpponentDisplayName(opponent),
         flag: String(opponent?.association?.flag || "").trim(),
         timezone: String(opponent?.association?.timezone || "UTC").trim(),
-      };
-      const playerOptions = profiles.some((profile) => profile.id === opponentId)
+      }) : null;
+      const playerOptions = !hasInitialOpponent || profiles.some((profile) => profile.id === opponentId)
         ? profiles
         : profiles.concat(opponentOption);
-      let selectedOpponent = profileById.get(opponentId) || opponentOption;
+      let selectedOpponent = opponentOption;
 
       dialog.innerHTML = "";
       const form = document.createElement("form");
@@ -2175,7 +2237,7 @@
       const opponentDropdown = createPlayerSearchDropdown(opponentId, playerOptions, {
         placeholderLabel: "Select player",
         onChange: (nextValue) => {
-          selectedOpponent = profileById.get(String(nextValue || "").trim()) || opponentOption;
+          selectedOpponent = profileById.get(String(nextValue || "").trim()) || null;
           updateAllLocalTimes();
         },
       });
@@ -2204,7 +2266,9 @@
         const timeUtc = toUtcIsoFromDatetimeLocal(input.value);
         if (!timeUtc) return;
         local.appendChild(createLocalLine(currentOption, timeUtc));
-        local.appendChild(createLocalLine(selectedOpponent, timeUtc));
+        if (selectedOpponent) {
+          local.appendChild(createLocalLine(selectedOpponent, timeUtc));
+        }
       };
       const updateAllLocalTimes = () => {
         timeLocalRows.forEach(({ input, local }) => refreshLocalRow(input, local));
@@ -2928,7 +2992,7 @@
     return card;
   }
 
-  function createRequestListSection(titleText, requests, period, currentPlayerId, kind, emptyText, countText) {
+  function createRequestListSection(titleText, requests, period, currentPlayerId, kind, emptyText, countText, options = {}) {
     const section = document.createElement("div");
     section.className = "challenge-requests-section";
 
@@ -2937,11 +3001,17 @@
     const titleLabel = document.createElement("span");
     titleLabel.textContent = titleText;
     title.appendChild(titleLabel);
-    if (countText) {
+    if (countText || options.actionButton) {
+      const titleActions = document.createElement("span");
+      titleActions.className = "challenge-request-title-actions";
       const count = document.createElement("span");
       count.className = "challenge-request-list-count";
-      count.textContent = countText;
-      title.appendChild(count);
+      count.textContent = countText || "";
+      titleActions.appendChild(count);
+      if (options.actionButton) {
+        titleActions.appendChild(options.actionButton);
+      }
+      title.appendChild(titleActions);
     }
     section.appendChild(title);
 
@@ -2989,9 +3059,28 @@
       const sent = (Array.isArray(data?.sent_requests) ? data.sent_requests : []).map(enrichRequest);
       const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;
       const currentPlayerId = String(data?.player_id || "").trim();
+      const createRequestBtn = createActionButton("Create request", "challenge-btn-secondary", () => {
+        if (pendingSentCount >= 3) {
+          showChallengeInfoDialog(
+            "Request limit reached",
+            "You can send up to 3 match requests. Remove an already sent request to create a new one."
+          );
+          return;
+        }
+        openChallengeRequestForm(period, null, { player_id: currentPlayerId });
+      });
       bodyEl.innerHTML = "";
       bodyEl.appendChild(createRequestListSection("Incoming", incoming, period, currentPlayerId, "incoming", "No incoming invites.", ""));
-      bodyEl.appendChild(createRequestListSection("Sent", sent, period, currentPlayerId, "sent", "No sent invites.", `${pendingSentCount} / 3 requests`));
+      bodyEl.appendChild(createRequestListSection(
+        "Sent",
+        sent,
+        period,
+        currentPlayerId,
+        "sent",
+        "No sent invites.",
+        `${pendingSentCount} / 3 requests`,
+        { actionButton: createRequestBtn }
+      ));
     } catch (error) {
       setRequestsState(panel, error?.message || "Failed to load requests.", true);
     }

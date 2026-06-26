@@ -3706,6 +3706,7 @@ function ensureChallengesSchema() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       description TEXT,
+      logo TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
       planning_starts_at TEXT NOT NULL,
       play_starts_at TEXT NOT NULL,
@@ -3727,6 +3728,13 @@ function ensureChallengesSchema() {
       console.error("Failed to ensure challenge_periods schema", createErr);
       return;
     }
+    db.all("PRAGMA table_info(challenge_periods)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect challenge_periods schema", pragmaErr);
+        return;
+      }
+      addColumnIfMissing(columns || [], "challenge_periods", "logo", "TEXT");
+    });
     db.run(
       "CREATE INDEX IF NOT EXISTS idx_challenge_periods_status_dates ON challenge_periods(status, planning_starts_at, play_ends_at, result_review_ends_at)",
       (indexErr) => {
@@ -6611,6 +6619,7 @@ async function loadChallengePeriodById(periodId) {
         id,
         name,
         description,
+        logo,
         status,
         planning_starts_at,
         play_starts_at,
@@ -6631,6 +6640,7 @@ async function loadChallengePeriodById(periodId) {
 function normalizeChallengePeriodPayload(payload) {
   const name = normalizeNullableText(payload?.name);
   const description = normalizeNullableText(payload?.description);
+  const logo = normalizeNullableText(payload?.logo);
   const status = normalizeChallengePeriodStatus(payload?.status);
   const planningStartsAt = normalizeUtcTimestamp(payload?.planning_starts_at ?? payload?.planningStartsAt);
   const playStartsAt = normalizeUtcTimestamp(payload?.play_starts_at ?? payload?.playStartsAt);
@@ -6640,6 +6650,7 @@ function normalizeChallengePeriodPayload(payload) {
   return {
     name,
     description,
+    logo,
     status,
     planning_starts_at: planningStartsAt,
     play_starts_at: playStartsAt,
@@ -6932,6 +6943,7 @@ function mapChallengePeriodForPlayer(row) {
     id: row.id,
     name: row.name,
     description: row.description,
+    logo: row.logo,
     status: row.status,
     planning_starts_at: row.planning_starts_at,
     play_starts_at: row.play_starts_at,
@@ -7004,6 +7016,7 @@ app.get("/challenge-periods/player", requireAuthenticated, async (req, res) => {
           cp.id,
           cp.name,
           cp.description,
+          cp.logo,
           cp.status,
           cp.planning_starts_at,
           cp.play_starts_at,
@@ -8051,6 +8064,7 @@ app.get("/challenge-periods", requireAdmin, async (_req, res) => {
         id,
         name,
         description,
+        logo,
         status,
         planning_starts_at,
         play_starts_at,
@@ -8088,6 +8102,7 @@ app.post("/challenge-periods", requireAdmin, async (req, res) => {
           id,
           name,
           description,
+          logo,
           status,
           planning_starts_at,
           play_starts_at,
@@ -8098,12 +8113,13 @@ app.post("/challenge-periods", requireAdmin, async (req, res) => {
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
       [
         periodId,
         period.name,
         period.description,
+        period.logo,
         period.status,
         period.planning_starts_at,
         period.play_starts_at,
@@ -8162,6 +8178,7 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
         SET
           name = ?,
           description = ?,
+          logo = ?,
           status = ?,
           planning_starts_at = ?,
           play_starts_at = ?,
@@ -8174,6 +8191,7 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
       [
         period.name,
         period.description,
+        period.logo,
         period.status,
         period.planning_starts_at,
         period.play_starts_at,
