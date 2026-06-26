@@ -536,6 +536,29 @@
     color: var(--blue);
   }
 
+  .challenge-duel-status {
+    width: max-content;
+    max-width: 100%;
+    margin-top: 4px;
+    border-radius: 4px;
+    background: var(--green-soft);
+    color: #12633e;
+    padding: 3px 7px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .challenge-duel-status.is-draft {
+    background: #f4efff;
+    color: #6042a6;
+  }
+
+  .challenge-duel-status.is-cancelled {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+
   .challenge-duel-player-flag {
     width: 18px;
     height: auto;
@@ -2108,6 +2131,26 @@
     return row;
   }
 
+  function createChallengeDuelStatusNode(status) {
+    const label = String(status || "").trim();
+    if (!label) return null;
+    const normalized = label.toLowerCase().replace(/\s+/g, "_");
+    const node = document.createElement("div");
+    node.className = `challenge-duel-status is-${normalized}`;
+    node.textContent = label;
+    return node;
+  }
+
+  function canCurrentPlayerRemoveChallengeDuel(request, currentPlayerId) {
+    const duel = request?.duel || null;
+    const playerId = String(currentPlayerId || "").trim();
+    if (!duel || String(duel.status || "") !== "Cancelled" || !playerId) return false;
+    const participantIds = [request?.player_1_id, request?.player_2_id].map((value) => String(value || "").trim());
+    if (!participantIds.includes(playerId)) return false;
+    const cancelledByPlayerId = String(duel.cancelled_by_player_id || "").trim();
+    return !!cancelledByPlayerId && cancelledByPlayerId !== playerId;
+  }
+
   function createChallengeDuelBlock(request, period, currentPlayerId) {
     const duel = request?.duel || null;
     if (!duel?.id) return null;
@@ -2151,12 +2194,18 @@
     players.className = "challenge-duel-players";
     players.appendChild(createChallengeDuelPlayerRow(player1));
     players.appendChild(createChallengeDuelPlayerRow(player2));
+    const statusNode = createChallengeDuelStatusNode(duel?.status);
+    if (statusNode) players.appendChild(statusNode);
     row.appendChild(players);
 
     const actions = document.createElement("div");
     actions.className = "challenge-duel-actions";
     if (String(duel?.status || "") === "Planned") {
       actions.appendChild(createChallengeDuelEditDropdown(period, request, currentPlayerId));
+    } else if (canCurrentPlayerRemoveChallengeDuel(request, currentPlayerId)) {
+      actions.appendChild(createActionButton("Remove", "challenge-btn-danger", (event) => {
+        runChallengeRequestAction(period, request, "remove", "", event.currentTarget);
+      }));
     }
     if (actions.childNodes.length) row.appendChild(actions);
 
@@ -3660,14 +3709,14 @@
     const isRequestParticipant = [request?.player_1_id, request?.player_2_id]
       .map((value) => String(value || ""))
       .includes(String(currentPlayerId || ""));
-    const canRemoveClosedRequest = ["declined", "cancelled_by_sender", "auto_cancelled", "expired"].includes(statusKey)
-      && (
+    const isCancelledChallengeMatch = statusKey === "cancelled_by_sender"
+      && isRequestParticipant
+      && String(request?.duel?.status || "") === "Cancelled";
+    const canRemoveClosedRequest = isCancelledChallengeMatch
+      ? canCurrentPlayerRemoveChallengeDuel(request, currentPlayerId)
+      : (
         String(request?.created_by_player_id || "") === String(currentPlayerId || "")
-        || (
-          statusKey === "cancelled_by_sender"
-          && isRequestParticipant
-          && String(request?.duel?.status || "") === "Cancelled"
-        )
+        && ["declined", "cancelled_by_sender", "auto_cancelled", "expired"].includes(statusKey)
       );
     if (canRemoveClosedRequest) {
       actions.appendChild(createActionButton("Remove", "challenge-btn-danger", (event) => {
@@ -3762,9 +3811,10 @@
       const sent = (Array.isArray(data?.sent_requests) ? data.sent_requests : [])
         .map(enrichRequest)
         .filter((request) => String(request?.created_by_player_id || "") === currentPlayerId);
+      const visibleChallengeDuelStatuses = new Set(["Draft", "Planned", "Cancelled"]);
       const challengeDuelRequest = incoming.concat(sent).find((request) => (
         request?.duel?.id
-        && String(request?.duel?.status || "") === "Planned"
+        && visibleChallengeDuelStatuses.has(String(request?.duel?.status || ""))
       )) || null;
       renderChallengeMatchPanel(period, currentPlayerId, challengeDuelRequest);
       const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;

@@ -7658,9 +7658,13 @@ app.patch("/challenge-periods/:id/requests/:requestId/remove", requireAuthentica
     const isParticipant = [beforeRow.player_1_id, beforeRow.player_2_id].includes(playerId);
     const canRemoveCancelledMatch = beforeRow.status === "cancelled_by_sender"
       && isParticipant
-      && beforeDuel?.status === "Cancelled";
-    if (beforeRow.created_by_player_id !== playerId && !canRemoveCancelledMatch) {
-      return res.status(403).json({ ok: false, message: "Only the sender can remove this request" });
+      && beforeDuel?.status === "Cancelled"
+      && normalizeNullableText(beforeDuel.cancelled_by_player_id)
+      && normalizeNullableText(beforeDuel.cancelled_by_player_id) !== playerId;
+    const canRemoveRegularClosedRequest = beforeRow.created_by_player_id === playerId
+      && beforeDuel?.status !== "Cancelled";
+    if (!canRemoveRegularClosedRequest && !canRemoveCancelledMatch) {
+      return res.status(403).json({ ok: false, message: "You cannot remove this request" });
     }
     if (!["declined", "cancelled_by_sender", "auto_cancelled", "expired"].includes(String(beforeRow.status || ""))) {
       return res.status(409).json({ ok: false, message: "Only closed requests can be removed" });
