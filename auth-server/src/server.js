@@ -6646,6 +6646,59 @@ function normalizeChallengePlayerPeriodStatus(value) {
   return CHALLENGE_PLAYER_PERIOD_STATUSES.has(normalized) ? normalized : "not_selected";
 }
 
+function normalizeChallengeRequestTimeOptions(payload) {
+  const rawValues = [
+    payload?.time_option_1_utc ?? payload?.timeOption1Utc,
+    payload?.time_option_2_utc ?? payload?.timeOption2Utc,
+    payload?.time_option_3_utc ?? payload?.timeOption3Utc,
+  ];
+  const values = rawValues.map((value) => normalizeUtcTimestamp(value));
+  const invalidIndex = rawValues.findIndex((value, index) => String(value || "").trim() && !values[index]);
+  if (invalidIndex >= 0) {
+    return { options: values, error: `Time option ${invalidIndex + 1} is invalid` };
+  }
+  if (!values[0]) {
+    return { options: [], error: "First time option is required" };
+  }
+  if (values[2] && !values[1]) {
+    return { options: values, error: "Second time option is required before adding a third option" };
+  }
+  const filled = values.filter(Boolean);
+  if (new Set(filled).size !== filled.length) {
+    return { options: values, error: "Time options must be unique" };
+  }
+  return { options: values, error: "" };
+}
+
+function normalizeChallengeRequestFormatPayload(payload) {
+  const allowsBo3 = payload?.allows_bo3 ?? payload?.allowsBo3;
+  const allowsBo5 = payload?.allows_bo5 ?? payload?.allowsBo5;
+  const normalizedBo3 = allowsBo3 === true || allowsBo3 === 1 || allowsBo3 === "1" || String(allowsBo3).toLowerCase() === "true";
+  const normalizedBo5 = allowsBo5 === true || allowsBo5 === 1 || allowsBo5 === "1" || String(allowsBo5).toLowerCase() === "true";
+  return {
+    allows_bo3: normalizedBo3 ? 1 : 0,
+    allows_bo5: normalizedBo5 ? 1 : 0,
+  };
+}
+
+function buildChallengeRequestId(periodId, player1Id, player2Id) {
+  const periodPart = normalizeEntityId(periodId).toLowerCase() || "period";
+  const p1Part = normalizeEntityId(player1Id).toLowerCase() || "p1";
+  const p2Part = normalizeEntityId(player2Id).toLowerCase() || "p2";
+  return `challenge_request_${periodPart}_${p1Part}_${p2Part}_${Date.now().toString(36)}`;
+}
+
+function isChallengeTimeWithinPeriod(timeUtc, period) {
+  const time = Date.parse(String(timeUtc || ""));
+  const start = Date.parse(String(period?.play_starts_at || ""));
+  const end = Date.parse(String(period?.play_ends_at || ""));
+  return Number.isFinite(time)
+    && Number.isFinite(start)
+    && Number.isFinite(end)
+    && time >= start
+    && time <= end;
+}
+
 function normalizeChallengeAssociationKey(value) {
   return normalizeEntityId(value);
 }
@@ -6720,6 +6773,48 @@ async function loadChallengePeriodPlayerStatus(periodId, playerId) {
     `,
     [normalizedPeriodId, normalizedPlayerId]
   );
+}
+
+async function loadChallengeBlockingDuelForPlayer(periodId, playerId) {
+  const normalizedPeriodId = normalizeNullableText(periodId);
+  const normalizedPlayerId = normalizeNullableText(playerId);
+  if (!normalizedPeriodId || !normalizedPlayerId) return null;
+  const blockingStatuses = Array.from(new Set([...CHALLENGE_ACTIVE_DUEL_STATUSES, "Done"]));
+  return dbGetAsync(
+    `
+      SELECT id, status
+      FROM duels
+      WHERE challenge_period_id = ?
+        AND deleted_at IS NULL
+        AND status IN (${blockingStatuses.map(() => "?").join(", ")})
+        AND (player_1_id = ? OR player_2_id = ?)
+      LIMIT 1
+    `,
+    [normalizedPeriodId, ...blockingStatuses, normalizedPlayerId, normalizedPlayerId]
+  );
+}
+
+function mapChallengeRequest(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    period_id: row.period_id,
+    player_1_id: row.player_1_id,
+    player_2_id: row.player_2_id,
+    created_by_player_id: row.created_by_player_id,
+    awaiting_player_id: row.awaiting_player_id,
+    status: row.status,
+    time_option_1_utc: row.time_option_1_utc,
+    time_option_2_utc: row.time_option_2_utc,
+    time_option_3_utc: row.time_option_3_utc,
+    allows_bo3: Number(row.allows_bo3) === 1,
+    allows_bo5: Number(row.allows_bo5) === 1,
+    accepted_time_utc: row.accepted_time_utc || null,
+    accepted_format: row.accepted_format || null,
+    hidden_by_creator_at: row.hidden_by_creator_at || null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
 }
 
 async function loadChallengePlayerProfileContext(playerId) {
@@ -7041,6 +7136,191 @@ app.get("/challenge-periods/:id/eligible-opponents", requireAuthenticated, async
   } catch (error) {
     console.error("Failed to load Challenge eligible opponents", error);
     return res.status(500).json({ ok: false, message: "Failed to load available opponents" });
+  }
+});
+
+app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const player1Id = normalizeNullableText(req.user?.player_id);
+  const player2Id = normalizeNullableText(req.body?.player_2_id ?? req.body?.player2Id);
+  const requestedId = normalizeNullableText(req.body?.id);
+  const { options: timeOptions, error: timeOptionsError } = normalizeChallengeRequestTimeOptions(req.body || {});
+  const formatPayload = normalizeChallengeRequestFormatPayload(req.body || {});
+
+  if (!player1Id) {
+    return res.status(403).json({
+      ok: false,
+      code: "profile_required",
+      message: "Linked player profile is required",
+    });
+  }
+  if (!periodId) {
+    return res.status(400).json({ ok: false, message: "Invalid Challenge period id" });
+  }
+  if (!player2Id) {
+    return res.status(400).json({ ok: false, message: "Opponent is required" });
+  }
+  if (player1Id === player2Id) {
+    return res.status(400).json({ ok: false, message: "Choose a different opponent" });
+  }
+  if (timeOptionsError) {
+    return res.status(400).json({ ok: false, message: timeOptionsError });
+  }
+  if (!formatPayload.allows_bo3 && !formatPayload.allows_bo5) {
+    return res.status(400).json({ ok: false, message: "Choose at least one match format" });
+  }
+
+  try {
+    const [period, currentProfile, opponentProfile] = await Promise.all([
+      loadChallengePeriodById(periodId),
+      loadChallengePlayerProfileContext(player1Id),
+      loadChallengePlayerProfileContext(player2Id),
+    ]);
+
+    if (!period || !["planning_open", "active"].includes(period.status)) {
+      return res.status(404).json({ ok: false, message: "Editable Challenge period not found" });
+    }
+    if (!currentProfile) {
+      return res.status(403).json({
+        ok: false,
+        code: "profile_required",
+        message: "Linked player profile is required",
+      });
+    }
+    if (!opponentProfile) {
+      return res.status(404).json({ ok: false, message: "Opponent profile not found" });
+    }
+
+    const currentAssociation = currentProfile.association_id || currentProfile.association_name;
+    const opponentAssociation = opponentProfile.association_id || opponentProfile.association_name;
+    if (challengeAssociationsMatch(currentAssociation, opponentAssociation)) {
+      return res.status(409).json({ ok: false, message: "Players from the same association cannot play a Challenge match" });
+    }
+
+    const outOfRangeOption = timeOptions.find((timeOption) => timeOption && !isChallengeTimeWithinPeriod(timeOption, period));
+    if (outOfRangeOption) {
+      return res.status(400).json({ ok: false, message: "Time options must be within the Challenge playing window" });
+    }
+
+    const requestId = requestedId || buildChallengeRequestId(periodId, player1Id, player2Id);
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    let insertedRow = null;
+    try {
+      const [
+        currentPeriodStatus,
+        opponentPeriodStatus,
+        currentActiveDuel,
+        opponentActiveDuel,
+        pendingCreatedCount,
+      ] = await Promise.all([
+        loadChallengePeriodPlayerStatus(periodId, player1Id),
+        loadChallengePeriodPlayerStatus(periodId, player2Id),
+        loadChallengeBlockingDuelForPlayer(periodId, player1Id),
+        loadChallengeBlockingDuelForPlayer(periodId, player2Id),
+        dbGetAsync(
+          `
+            SELECT COUNT(*) AS count
+            FROM challenge_requests
+            WHERE created_by_player_id = ?
+              AND status = 'pending'
+          `,
+          [player1Id]
+        ),
+      ]);
+
+      const currentStatus = normalizeChallengePlayerPeriodStatus(currentPeriodStatus?.status);
+      const opponentStatus = normalizeChallengePlayerPeriodStatus(opponentPeriodStatus?.status);
+      if (currentStatus === "unavailable") {
+        const error = new Error("You are not playing in this Challenge period");
+        error.httpStatus = 409;
+        throw error;
+      }
+      if (["match_scheduled", "played"].includes(currentStatus) || currentPeriodStatus?.challenge_duel_id || currentActiveDuel) {
+        const error = new Error("You already have a Challenge match in this period");
+        error.httpStatus = 409;
+        throw error;
+      }
+      if (opponentStatus !== "available") {
+        const error = new Error("Opponent is not open to match in this period");
+        error.httpStatus = 409;
+        throw error;
+      }
+      if (opponentPeriodStatus?.challenge_duel_id || opponentActiveDuel) {
+        const error = new Error("Opponent already has a Challenge match in this period");
+        error.httpStatus = 409;
+        throw error;
+      }
+      if (Number(pendingCreatedCount?.count || 0) >= 3) {
+        const error = new Error("You can have no more than three pending Challenge requests");
+        error.httpStatus = 409;
+        throw error;
+      }
+
+      await dbRunAsync(
+        `
+          INSERT INTO challenge_requests (
+            id,
+            period_id,
+            player_1_id,
+            player_2_id,
+            created_by_player_id,
+            awaiting_player_id,
+            status,
+            time_option_1_utc,
+            time_option_2_utc,
+            time_option_3_utc,
+            allows_bo3,
+            allows_bo5,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        [
+          requestId,
+          periodId,
+          player1Id,
+          player2Id,
+          player1Id,
+          player2Id,
+          timeOptions[0],
+          timeOptions[1] || null,
+          timeOptions[2] || null,
+          formatPayload.allows_bo3,
+          formatPayload.allows_bo5,
+        ]
+      );
+      insertedRow = await dbGetAsync("SELECT * FROM challenge_requests WHERE id = ? LIMIT 1", [requestId]);
+      await dbRunAsync("COMMIT");
+    } catch (error) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw error;
+    }
+
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_request.created",
+      entity_type: "challenge_request",
+      action: "create",
+      record_id: requestId,
+      changes: buildAuditChanges(null, insertedRow),
+      metadata: { period_id: periodId, request_id: requestId, player_1_id: player1Id, player_2_id: player2Id },
+    });
+
+    return res.status(201).json({
+      ok: true,
+      challenge_request: mapChallengeRequest(insertedRow),
+    });
+  } catch (error) {
+    if (error?.code === "SQLITE_CONSTRAINT") {
+      return res.status(409).json({ ok: false, message: "A pending Challenge request already exists for this pair" });
+    }
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({ ok: false, message: error.message || "Failed to create Challenge request" });
+    }
+    console.error("Failed to create Challenge request", error);
+    return res.status(500).json({ ok: false, message: "Failed to create Challenge request" });
   }
 });
 
