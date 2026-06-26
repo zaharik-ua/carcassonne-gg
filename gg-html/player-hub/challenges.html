@@ -142,12 +142,12 @@
   .challenge-time-context {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
   }
 
   .challenge-time-flag {
     width: 12px;
     height: auto;
+    margin: 0 4px 0 1px;
   }
 
   .challenge-status-card {
@@ -324,6 +324,11 @@
     gap: 8px;
   }
 
+  .challenge-panel-wrap {
+    display: grid;
+    gap: 5px;
+  }
+
   .challenge-opponents-panel {
     display: grid;
     gap: 9px;
@@ -349,7 +354,6 @@
   }
 
   .challenge-opponents-count {
-    color: var(--muted);
     font-size: 12px;
     font-weight: 600;
     white-space: nowrap;
@@ -371,7 +375,6 @@
 
   .challenge-requests-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
 
@@ -395,6 +398,7 @@
   }
 
   .challenge-request-list-count {
+    margin-right: 7px;
     color: var(--muted);
     font-size: 12px;
     font-weight: 600;
@@ -409,16 +413,22 @@
   .challenge-request-card {
     display: grid;
     gap: 8px;
+    align-items: start;
     padding: 9px;
     border: 1px solid #edf1f6;
     border-radius: 6px;
     background: #fbfcfe;
   }
 
+  .challenge-request-card.has-actions {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+  }
+
   .challenge-request-card-head {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
+    align-items: center;
+    justify-content: flex-start;
     gap: 10px;
     min-width: 0;
   }
@@ -432,6 +442,13 @@
     font-size: 14px;
     font-weight: 700;
     line-height: 1.25;
+    text-decoration: none;
+  }
+
+  .challenge-request-opponent:hover,
+  .challenge-request-opponent:focus-visible {
+    color: var(--blue);
+    text-decoration: underline;
   }
 
   .challenge-request-opponent span {
@@ -472,10 +489,37 @@
 
   .challenge-request-meta {
     display: grid;
-    gap: 4px;
+    gap: 5px;
     color: #475467;
     font-size: 12px;
     line-height: 1.35;
+  }
+
+  .challenge-request-meta b {
+    color: #333;
+    font-weight: 500;
+  }
+
+  .challenge-request-options-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    min-width: 0;
+  }
+
+  .challenge-request-meta-group {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .challenge-request-meta-label {
+    display: inline-flex;
+    align-items: center;
+    color: #475467;
+    font-weight: 400;
   }
 
   .challenge-request-time-list {
@@ -500,15 +544,19 @@
   }
 
   .challenge-request-actions-inline {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
+    display: grid;
+    gap: 5px;
+    justify-items: stretch;
+    min-width: 90px;
+  }
+
+  .challenge-request-card.has-actions .challenge-request-actions-inline {
+    grid-column: 2;
+    grid-row: 1 / span 2;
   }
 
   .challenge-btn-small {
-    min-height: 28px;
-    padding: 5px 9px;
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .challenge-btn-danger {
@@ -839,10 +887,10 @@
 
   .challenge-btn {
     appearance: none;
-    min-height: 32px;
+    min-height: 28px;
     border: 1px solid #c8ced8;
     border-radius: 4px;
-    padding: 7px 12px;
+    padding: 3px 8px;
     font-size: 13px;
     font-weight: 700;
     line-height: 1.2;
@@ -1065,8 +1113,15 @@
       margin-left: 58px;
     }
 
-    .challenge-requests-grid {
+    .challenge-request-card.has-actions {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    .challenge-request-card.has-actions .challenge-request-actions-inline {
+      grid-column: 1;
+      grid-row: auto;
+      justify-items: start;
+      min-width: 0;
     }
 
     .challenge-modal {
@@ -1393,6 +1448,28 @@
     return `${date.weekday}, ${date.month} ${date.day}, ${date.hour}:${date.minute}`;
   }
 
+  function formatRequestOptionTime(value, timezone) {
+    const date = parseUtcDate(value);
+    if (!date) return "";
+    try {
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: timezone || "UTC",
+      }).formatToParts(date);
+      const part = (type) => parts.find((item) => item.type === type)?.value || "";
+      const day = part("day").replace(/^0(?=\d)/, "");
+      const hour = part("hour").replace(/^0(?=\d)/, "");
+      return `${day} ${part("month")} (${part("weekday")}) ${hour}:${part("minute")}`;
+    } catch (_error) {
+      return formatLocalDateTime(value, timezone);
+    }
+  }
+
   function createBoldText(text) {
     const bold = document.createElement("b");
     bold.textContent = text;
@@ -1464,7 +1541,7 @@
       flag.title = String(timeContext.association_name || timeContext.association_id || "");
       line.appendChild(flag);
     }
-    line.appendChild(document.createTextNode(" time)"));
+    line.appendChild(document.createTextNode("time)"));
     return line;
   }
 
@@ -1529,13 +1606,6 @@
     return REQUEST_STATUS_LABELS[key] || key || "-";
   }
 
-  function formatRequestFormats(request) {
-    const formats = [];
-    if (request?.allows_bo3) formats.push("Bo3");
-    if (request?.allows_bo5) formats.push("Bo5");
-    return formats.join(" / ") || "-";
-  }
-
   function getRequestPlayer(request, playerId) {
     const id = String(playerId || "").trim();
     if (String(request?.player_1_id || "").trim() === id) return request?.player_1 || { player_id: id };
@@ -1561,8 +1631,12 @@
   }
 
   function createRequestPlayerInline(player) {
-    const wrap = document.createElement("span");
+    const playerId = String(player?.player_id || player?.id || "").trim();
+    const wrap = document.createElement(playerId ? "a" : "span");
     wrap.className = "challenge-request-opponent";
+    if (playerId) {
+      wrap.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(playerId)}`;
+    }
     const flag = createFlagImg(player?.association?.flag || player?.flag, "cp-dd-flag");
     if (flag) wrap.appendChild(flag);
     const text = document.createElement("span");
@@ -1572,24 +1646,70 @@
     return wrap;
   }
 
-  function createRequestTimePills(request, timezone) {
+  function createRequestPills(values) {
     const wrap = document.createElement("div");
     wrap.className = "challenge-request-time-list";
-    const times = getRequestTimeOptions(request);
-    if (!times.length) {
+    const items = Array.isArray(values) ? values.filter(Boolean) : [];
+    if (!items.length) {
       const pill = document.createElement("span");
       pill.className = "challenge-request-time-pill";
       pill.textContent = "-";
       wrap.appendChild(pill);
       return wrap;
     }
-    times.forEach((timeUtc) => {
+    items.forEach((value) => {
       const pill = document.createElement("span");
       pill.className = "challenge-request-time-pill";
-      pill.textContent = formatLocalDateTime(timeUtc, timezone || "UTC");
+      pill.textContent = String(value);
       wrap.appendChild(pill);
     });
     return wrap;
+  }
+
+  function createRequestTimePills(request, timezone) {
+    return createRequestPills(getRequestTimeOptions(request).map((timeUtc) => formatRequestOptionTime(timeUtc, timezone || "UTC")));
+  }
+
+  function createRequestFormatPills(request) {
+    const formats = [];
+    if (request?.allows_bo3) formats.push("Bo3");
+    if (request?.allows_bo5) formats.push("Bo5");
+    return createRequestPills(formats);
+  }
+
+  function createRequestOptionsLabel(flagSrc) {
+    const label = document.createElement("span");
+    label.className = "challenge-request-meta-label";
+    label.appendChild(document.createTextNode("Options ("));
+    const flag = createFlagImg(flagSrc, "challenge-time-flag");
+    if (flag) {
+      label.appendChild(flag);
+    }
+    label.appendChild(document.createTextNode("time):"));
+    return label;
+  }
+
+  function createRequestOptionsRow(request, timezone, timeFlagSrc) {
+    const row = document.createElement("div");
+    row.className = "challenge-request-options-row";
+    [
+      { labelNode: createRequestOptionsLabel(timeFlagSrc), node: createRequestTimePills(request, timezone) },
+      { label: "Format:", node: createRequestFormatPills(request) },
+    ].forEach((item) => {
+      const group = document.createElement("div");
+      group.className = "challenge-request-meta-group";
+      if (item.labelNode) {
+        group.appendChild(item.labelNode);
+      } else {
+        const label = document.createElement("span");
+        label.className = "challenge-request-meta-label";
+        label.textContent = item.label;
+        group.appendChild(label);
+      }
+      group.appendChild(item.node);
+      row.appendChild(group);
+    });
+    return row;
   }
 
   function createRequestMetaLine(label, valueNodeOrText) {
@@ -1767,6 +1887,7 @@
     const bgaPlayer = bgaPlayersById instanceof Map ? bgaPlayersById.get(playerId) : null;
     return {
       ...opponent,
+      bga_elo: bgaPlayer?.bga_elo ?? opponent?.bga_elo ?? null,
       avatar: getUsableAvatarUrl(bgaPlayer?.avatar, playerId) || getUsableAvatarUrl(opponent?.avatar, playerId),
     };
   }
@@ -2042,11 +2163,6 @@
       title.textContent = "Invite to match";
       form.appendChild(title);
 
-      const currentPlayerBox = document.createElement("div");
-      currentPlayerBox.className = "challenge-request-readonly";
-      currentPlayerBox.appendChild(createPlayerInline(currentOption));
-      addChallengeFormRow(form, "Player 1", currentPlayerBox, { required: true });
-
       const opponentDropdown = createPlayerSearchDropdown(opponentId, playerOptions, {
         placeholderLabel: "Select player",
         onChange: (nextValue) => {
@@ -2054,7 +2170,7 @@
           updateAllLocalTimes();
         },
       });
-      addChallengeFormRow(form, "Player 2", opponentDropdown.root, { required: true });
+      addChallengeFormRow(form, "Opponent", opponentDropdown.root, { required: true });
 
       const minTime = toDatetimeLocalFromUtc(period?.play_starts_at);
       const maxTime = toDatetimeLocalFromUtc(period?.play_ends_at);
@@ -2396,7 +2512,7 @@
 
     const title = document.createElement("div");
     title.className = "challenge-request-title";
-    title.textContent = "Propose time";
+    title.textContent = "Propose new time";
     form.appendChild(title);
 
     const opponentBox = document.createElement("div");
@@ -2742,9 +2858,9 @@
     card.dataset.challengeRequestId = String(request?.id || "");
 
     const otherPlayer = getRequestOtherPlayer(request, currentPlayerId);
-    const awaitingPlayer = getRequestPlayer(request, request?.awaiting_player_id);
     const currentPlayer = getRequestPlayer(request, currentPlayerId);
     const timezone = currentPlayer?.association?.timezone || period?.player_time_context?.timezone || "UTC";
+    const timeFlagSrc = currentPlayer?.association?.flag || period?.player_time_context?.association_flag || "";
 
     const head = document.createElement("div");
     head.className = "challenge-request-card-head";
@@ -2758,9 +2874,9 @@
 
     const meta = document.createElement("div");
     meta.className = "challenge-request-meta";
-    meta.appendChild(createRequestMetaLine("Times", createRequestTimePills(request, timezone)));
-    meta.appendChild(createRequestMetaLine("Format", formatRequestFormats(request)));
-    meta.appendChild(createRequestMetaLine("Awaiting", getOpponentDisplayName(awaitingPlayer)));
+    meta.appendChild(createRequestOptionsRow(request, timezone, timeFlagSrc));
+    meta.appendChild(createRequestMetaLine("GG Elo", formatGgEloLine(otherPlayer)));
+    meta.appendChild(createRequestMetaLine("BGA Elo", formatEloValue(otherPlayer?.bga_elo)));
     if (request?.accepted_time_utc) {
       meta.appendChild(createRequestMetaLine("Accepted time", formatLocalDateTime(request.accepted_time_utc, timezone)));
     }
@@ -2776,7 +2892,7 @@
       actions.appendChild(createActionButton("Accept", "challenge-btn-primary", () => {
         openAcceptRequestForm(period, request, currentPlayerId);
       }));
-      actions.appendChild(createActionButton("Propose time", "challenge-btn-secondary", () => {
+      actions.appendChild(createActionButton("New time", "challenge-btn-secondary", () => {
         openCounterRequestForm(period, request, currentPlayerId);
       }));
       actions.appendChild(createActionButton("Decline", "challenge-btn-danger", (event) => {
@@ -2788,11 +2904,22 @@
         runChallengeRequestAction(period, request, "cancel", "Cancel this invite?", event.currentTarget);
       }));
     }
-    if (actions.childNodes.length) card.appendChild(actions);
+    if (
+      String(request?.created_by_player_id || "") === String(currentPlayerId || "")
+      && ["declined", "cancelled_by_sender"].includes(statusKey)
+    ) {
+      actions.appendChild(createActionButton("Remove", "challenge-btn-danger", (event) => {
+        runChallengeRequestAction(period, request, "remove", "Remove this request from your list?", event.currentTarget);
+      }));
+    }
+    if (actions.childNodes.length) {
+      card.classList.add("has-actions");
+      card.appendChild(actions);
+    }
     return card;
   }
 
-  function createRequestListSection(titleText, requests, period, currentPlayerId, kind, emptyText) {
+  function createRequestListSection(titleText, requests, period, currentPlayerId, kind, emptyText, countText) {
     const section = document.createElement("div");
     section.className = "challenge-requests-section";
 
@@ -2800,11 +2927,13 @@
     title.className = "challenge-request-list-title";
     const titleLabel = document.createElement("span");
     titleLabel.textContent = titleText;
-    const count = document.createElement("span");
-    count.className = "challenge-request-list-count";
-    count.textContent = `${requests.length}`;
     title.appendChild(titleLabel);
-    title.appendChild(count);
+    if (countText) {
+      const count = document.createElement("span");
+      count.className = "challenge-request-list-count";
+      count.textContent = countText;
+      title.appendChild(count);
+    }
     section.appendChild(title);
 
     const list = document.createElement("div");
@@ -2832,14 +2961,28 @@
     setRequestsState(panel, "Loading requests...", false);
     try {
       const data = await apiJson(`${CHALLENGE_PERIODS_URL}/${encodeURIComponent(periodId)}/requests`, { method: "GET" });
+      const [ratingsById, bgaPlayersById] = await Promise.all([
+        fetchGgRatingsById(),
+        fetchBgaPlayersById(),
+      ]);
       const bodyEl = panel.querySelector("[data-requests-body]");
       if (!bodyEl) return;
-      const incoming = Array.isArray(data?.incoming_requests) ? data.incoming_requests : [];
-      const sent = Array.isArray(data?.sent_requests) ? data.sent_requests : [];
+      const enrichRequestPlayer = (player, playerId) => mergeOpponentBgaPlayer(
+        mergeOpponentRating({ player_id: playerId, ...(player || {}) }, ratingsById),
+        bgaPlayersById
+      );
+      const enrichRequest = (request) => ({
+        ...request,
+        player_1: enrichRequestPlayer(request?.player_1, request?.player_1_id),
+        player_2: enrichRequestPlayer(request?.player_2, request?.player_2_id),
+      });
+      const incoming = (Array.isArray(data?.incoming_requests) ? data.incoming_requests : []).map(enrichRequest);
+      const sent = (Array.isArray(data?.sent_requests) ? data.sent_requests : []).map(enrichRequest);
+      const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;
       const currentPlayerId = String(data?.player_id || "").trim();
       bodyEl.innerHTML = "";
-      bodyEl.appendChild(createRequestListSection("Incoming", incoming, period, currentPlayerId, "incoming", "No incoming invites."));
-      bodyEl.appendChild(createRequestListSection("Sent", sent, period, currentPlayerId, "sent", "No sent invites."));
+      bodyEl.appendChild(createRequestListSection("Incoming", incoming, period, currentPlayerId, "incoming", "No incoming invites.", ""));
+      bodyEl.appendChild(createRequestListSection("Sent", sent, period, currentPlayerId, "sent", "No sent invites.", `${pendingSentCount} / 3 requests`));
     } catch (error) {
       setRequestsState(panel, error?.message || "Failed to load requests.", true);
     }
@@ -3046,13 +3189,13 @@
   }
 
   function createOpponentsPanel(period) {
-    const panel = document.createElement("section");
-    panel.className = "challenge-opponents-panel";
-    panel.dataset.challengePeriodOpponents = String(period?.id || "");
+    const wrap = document.createElement("div");
+    wrap.className = "challenge-panel-wrap";
+    wrap.dataset.challengePeriodOpponents = String(period?.id || "");
 
     const head = document.createElement("div");
     head.className = "challenge-opponents-head";
-    panel.appendChild(head);
+    wrap.appendChild(head);
 
     const title = document.createElement("div");
     title.className = "challenge-opponents-title";
@@ -3064,38 +3207,46 @@
     count.dataset.opponentsCount = "true";
     head.appendChild(count);
 
+    const panel = document.createElement("section");
+    panel.className = "challenge-opponents-panel";
+    wrap.appendChild(panel);
+
     const body = document.createElement("div");
     body.className = "challenge-opponents-body";
     body.dataset.opponentsBody = "true";
     panel.appendChild(body);
 
-    opponentPanels.set(String(period?.id || ""), { period, panel });
-    loadOpponentsForPeriod(period, panel);
-    return panel;
+    opponentPanels.set(String(period?.id || ""), { period, panel: wrap });
+    loadOpponentsForPeriod(period, wrap);
+    return wrap;
   }
 
   function createRequestsPanel(period) {
-    const panel = document.createElement("section");
-    panel.className = "challenge-requests-panel";
-    panel.dataset.challengePeriodRequests = String(period?.id || "");
+    const wrap = document.createElement("div");
+    wrap.className = "challenge-panel-wrap";
+    wrap.dataset.challengePeriodRequests = String(period?.id || "");
 
     const head = document.createElement("div");
     head.className = "challenge-opponents-head";
-    panel.appendChild(head);
+    wrap.appendChild(head);
 
     const title = document.createElement("div");
     title.className = "challenge-opponents-title";
     title.textContent = "Requests";
     head.appendChild(title);
 
+    const panel = document.createElement("section");
+    panel.className = "challenge-requests-panel";
+    wrap.appendChild(panel);
+
     const body = document.createElement("div");
     body.className = "challenge-requests-grid";
     body.dataset.requestsBody = "true";
     panel.appendChild(body);
 
-    requestPanels.set(String(period?.id || ""), { period, panel });
-    loadRequestsForPeriod(period, panel);
-    return panel;
+    requestPanels.set(String(period?.id || ""), { period, panel: wrap });
+    loadRequestsForPeriod(period, wrap);
+    return wrap;
   }
 
   async function renderChallenges() {

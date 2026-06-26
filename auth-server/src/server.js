@@ -3842,6 +3842,13 @@ function ensureChallengesSchema() {
       console.error("Failed to ensure challenge_requests schema", createErr);
       return;
     }
+    db.all("PRAGMA table_info(challenge_requests)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect challenge_requests schema", pragmaErr);
+        return;
+      }
+      addColumnIfMissing(columns || [], "challenge_requests", "hidden_by_creator_at", "TEXT");
+    });
     db.run(
       `
         CREATE UNIQUE INDEX IF NOT EXISTS idx_challenge_requests_pending_pair
@@ -7581,6 +7588,59 @@ app.patch("/challenge-periods/:id/requests/:requestId/decline", requireAuthentic
   } catch (error) {
     console.error("Failed to decline Challenge request", error);
     return res.status(500).json({ ok: false, message: "Failed to decline Challenge request" });
+  }
+});
+
+app.patch("/challenge-periods/:id/requests/:requestId/remove", requireAuthenticated, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const requestId = normalizeNullableText(req.params.requestId);
+  const playerId = normalizeNullableText(req.user?.player_id);
+
+  if (!playerId) return res.status(403).json({ ok: false, code: "profile_required", message: "Linked player profile is required" });
+  if (!periodId || !requestId) return res.status(400).json({ ok: false, message: "Invalid Challenge request id" });
+
+  try {
+    const beforeRow = await loadChallengeRequestById(periodId, requestId);
+    if (!beforeRow || ![beforeRow.player_1_id, beforeRow.player_2_id].includes(playerId)) {
+      return res.status(404).json({ ok: false, message: "Challenge request not found" });
+    }
+    if (beforeRow.created_by_player_id !== playerId) {
+      return res.status(403).json({ ok: false, message: "Only the sender can remove this request" });
+    }
+    if (!["declined", "cancelled_by_sender"].includes(String(beforeRow.status || ""))) {
+      return res.status(409).json({ ok: false, message: "Only declined or cancelled requests can be removed" });
+    }
+    if (beforeRow.hidden_by_creator_at) {
+      return res.json({ ok: true, challenge_request: mapChallengeRequest(beforeRow) });
+    }
+
+    await dbRunAsync(
+      `
+        UPDATE challenge_requests
+        SET hidden_by_creator_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE period_id = ?
+          AND id = ?
+          AND created_by_player_id = ?
+          AND status IN ('declined', 'cancelled_by_sender')
+          AND hidden_by_creator_at IS NULL
+      `,
+      [periodId, requestId, playerId]
+    );
+    const afterRow = await loadChallengeRequestById(periodId, requestId);
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_request.removed_by_creator",
+      entity_type: "challenge_request",
+      action: "update",
+      record_id: requestId,
+      changes: buildAuditChanges(beforeRow, afterRow),
+      metadata: { period_id: periodId, request_id: requestId, soft_delete: true },
+    });
+    return res.json({ ok: true, challenge_request: mapChallengeRequest(afterRow) });
+  } catch (error) {
+    console.error("Failed to remove Challenge request", error);
+    return res.status(500).json({ ok: false, message: "Failed to remove Challenge request" });
   }
 });
 
