@@ -372,11 +372,11 @@
 
   .challenge-opponent-row {
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) minmax(120px, auto);
-    gap: 9px;
+    grid-template-columns: minmax(0, 1fr) minmax(138px, auto) auto;
+    gap: 12px;
     align-items: center;
     min-height: 46px;
-    padding: 7px 0;
+    padding: 9px 0;
     border-top: 1px solid #edf1f6;
   }
 
@@ -386,11 +386,12 @@
   }
 
   .challenge-opponent-avatar {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    background: #eef2f6;
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    background: #f2f2f2;
     object-fit: cover;
+    flex: 0 0 auto;
   }
 
   .challenge-opponent-avatar-fallback {
@@ -402,48 +403,103 @@
     font-weight: 700;
   }
 
+  .challenge-opponent-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
   .challenge-opponent-main {
     display: grid;
-    gap: 3px;
+    gap: 4px;
     min-width: 0;
   }
 
   .challenge-opponent-name {
+    display: block;
+    min-width: 0;
     color: #172232;
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 16px;
+    font-weight: 600;
     line-height: 1.25;
+    text-decoration: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .challenge-opponent-sub {
-    color: var(--muted);
-    font-size: 11px;
-    line-height: 1.3;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .challenge-opponent-name:hover,
+  .challenge-opponent-name:focus-visible {
+    color: var(--blue);
+    text-decoration: underline;
   }
 
-  .challenge-opponent-meta {
-    display: flex;
-    justify-content: flex-end;
+  .challenge-opponent-country {
+    display: inline-flex;
     align-items: center;
     gap: 6px;
     min-width: 0;
-    color: #475467;
+    color: #333;
+    font-size: 13px;
+    line-height: 1.25;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .challenge-opponent-country-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .challenge-opponent-flag {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    flex: 0 0 auto;
+  }
+
+  .challenge-opponent-ratings {
+    display: grid;
+    gap: 4px;
+    justify-items: end;
+    color: #333;
     font-size: 12px;
-    font-weight: 600;
     line-height: 1.25;
     white-space: nowrap;
   }
 
-  .challenge-opponent-flag {
-    width: 16px;
-    height: auto;
-    flex: 0 0 auto;
+  .challenge-opponent-rating-line {
+    font-weight: 400;
+  }
+
+  .challenge-opponent-rating-label {
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  .challenge-opponent-rating-value {
+    color: #333;
+    font-weight: 500;
+  }
+
+  .challenge-opponent-action {
+    appearance: none;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #f3f5f8;
+    color: #8a94a3;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: not-allowed;
+  }
+
+  .challenge-opponent-action:disabled {
+    opacity: 1;
   }
 
   @media (max-width: 720px) {
@@ -457,12 +513,18 @@
     }
 
     .challenge-opponent-row {
-      grid-template-columns: 34px minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
+      align-items: stretch;
     }
 
-    .challenge-opponent-meta {
-      grid-column: 2;
-      justify-content: flex-start;
+    .challenge-opponent-ratings {
+      justify-items: start;
+      padding-left: 58px;
+    }
+
+    .challenge-opponent-action {
+      justify-self: start;
+      margin-left: 58px;
     }
   }
 </style>
@@ -481,6 +543,8 @@
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const TEAMS_URL = `${AUTH_BASE}/teams`;
+  const GG_PLAYERS_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
+  const OFFICIAL_MATCHES_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/official_matches.json";
   const CHALLENGE_PERIODS_URL = `${AUTH_BASE}/challenge-periods`;
   const PLAYER_CHALLENGE_PERIODS_URL = `${CHALLENGE_PERIODS_URL}/player`;
   const ELIGIBLE_OPPONENTS_PATH = "eligible-opponents";
@@ -528,6 +592,8 @@
   const contentEl = document.getElementById("challengesContent");
   const dropdowns = [];
   const opponentPanels = new Map();
+  let ggRatingsPromise = null;
+  let bgaPlayersPromise = null;
 
   function normalizeStatus(value) {
     const normalized = String(value || "").trim();
@@ -772,8 +838,154 @@
     return String(opponent?.bga_nickname || opponent?.name || opponent?.player_id || "Unknown player").trim();
   }
 
+  function parseFiniteNumber(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+    const number = Number(raw);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function formatEloValue(value) {
+    const number = parseFiniteNumber(value);
+    return number === null ? "-" : String(Math.trunc(number));
+  }
+
+  function formatGgEloLine(opponent) {
+    const ggEloNumber = parseFiniteNumber(opponent?.gg_elo);
+    if (ggEloNumber === null) return "-";
+    const ggElo = String(Math.trunc(ggEloNumber));
+    const rank = parseFiniteNumber(opponent?.gg_rank);
+    return rank === null ? ggElo : `${ggElo} (#${Math.trunc(rank)})`;
+  }
+
+  function compareOpponentsByRating(a, b) {
+    const aRank = parseFiniteNumber(a?.gg_rank);
+    const bRank = parseFiniteNumber(b?.gg_rank);
+    if (aRank !== null && bRank !== null) return aRank - bRank;
+    if (aRank !== null) return -1;
+    if (bRank !== null) return 1;
+
+    const aBgaElo = parseFiniteNumber(a?.bga_elo);
+    const bBgaElo = parseFiniteNumber(b?.bga_elo);
+    if (aBgaElo !== null && bBgaElo !== null) return bBgaElo - aBgaElo;
+    if (aBgaElo !== null) return -1;
+    if (bBgaElo !== null) return 1;
+    return getOpponentDisplayName(a).localeCompare(getOpponentDisplayName(b));
+  }
+
+  function createRatingLabel(text) {
+    const label = document.createElement("span");
+    label.className = "challenge-opponent-rating-label";
+    label.textContent = text;
+    return label;
+  }
+
+  function createRatingValue(text) {
+    const value = document.createElement("span");
+    value.className = "challenge-opponent-rating-value";
+    value.textContent = text;
+    return value;
+  }
+
+  async function fetchGgRatingsById() {
+    if (ggRatingsPromise) return ggRatingsPromise;
+    ggRatingsPromise = (async () => {
+      try {
+        const response = await fetch(GG_PLAYERS_URL);
+        if (!response.ok) return new Map();
+        const data = await response.json().catch(() => ({}));
+        const profiles = Array.isArray(data?.gg_profiles) ? data.gg_profiles : [];
+        const sorted = [...profiles].sort((a, b) => {
+          const aElo = parseFiniteNumber(a?.gg_elo);
+          const bElo = parseFiniteNumber(b?.gg_elo);
+          if (aElo !== null && bElo !== null) return bElo - aElo;
+          if (aElo !== null) return -1;
+          if (bElo !== null) return 1;
+          return String(a?.bga_nickname || "").localeCompare(String(b?.bga_nickname || ""));
+        });
+        const rankById = new Map();
+        sorted.forEach((profile, index) => {
+          const id = String(profile?.id ?? profile?.profile_id ?? "").trim();
+          if (id) rankById.set(id, index + 1);
+        });
+        const ratingsById = new Map();
+        profiles.forEach((profile) => {
+          const id = String(profile?.id ?? profile?.profile_id ?? "").trim();
+          if (!id) return;
+          ratingsById.set(id, {
+            gg_elo: profile?.gg_elo ?? null,
+            gg_rank: rankById.get(id) || null,
+          });
+        });
+        return ratingsById;
+      } catch (_error) {
+        return new Map();
+      }
+    })();
+    return ggRatingsPromise;
+  }
+
+  async function fetchBgaPlayersById() {
+    if (bgaPlayersPromise) return bgaPlayersPromise;
+    bgaPlayersPromise = (async () => {
+      try {
+        const response = await fetch(OFFICIAL_MATCHES_URL);
+        if (!response.ok) return new Map();
+        const data = await response.json().catch(() => ({}));
+        const players = Array.isArray(data?.bga_players) ? data.bga_players : [];
+        return new Map(
+          players
+            .map((player) => [String(player?.player_id || "").trim(), player])
+            .filter(([playerId]) => Boolean(playerId))
+        );
+      } catch (_error) {
+        return new Map();
+      }
+    })();
+    return bgaPlayersPromise;
+  }
+
+  function buildBgaAvatarUrl(playerId) {
+    const id = String(playerId || "").trim();
+    if (!/^\d+$/.test(id)) return "";
+    const numericId = Number(id);
+    if (!Number.isFinite(numericId)) return "";
+    const billionBucket = Math.floor(numericId / 1000000000);
+    const millionBucket = Math.floor(numericId / 1000000);
+    const thousandBucket = Math.floor(numericId / 1000);
+    return `https://x.boardgamearena.net/data/avatar/${billionBucket}/${millionBucket}/${thousandBucket}/${id}_184.jpg`;
+  }
+
+  function getUsableAvatarUrl(value, playerId) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    if (raw.startsWith("//")) return `https:${raw}`;
+    if (raw.startsWith("/")) return "";
+    return buildBgaAvatarUrl(playerId);
+  }
+
+  function mergeOpponentRating(opponent, ratingsById) {
+    const playerId = String(opponent?.player_id || "").trim();
+    const rating = ratingsById instanceof Map ? ratingsById.get(playerId) : null;
+    return {
+      ...opponent,
+      gg_elo: rating?.gg_elo ?? opponent?.gg_elo ?? null,
+      gg_rank: rating?.gg_rank ?? opponent?.gg_rank ?? null,
+    };
+  }
+
+  function mergeOpponentBgaPlayer(opponent, bgaPlayersById) {
+    const playerId = String(opponent?.player_id || "").trim();
+    const bgaPlayer = bgaPlayersById instanceof Map ? bgaPlayersById.get(playerId) : null;
+    return {
+      ...opponent,
+      avatar: getUsableAvatarUrl(bgaPlayer?.avatar, playerId) || getUsableAvatarUrl(opponent?.avatar, playerId),
+    };
+  }
+
   function createOpponentAvatar(opponent) {
-    const avatarUrl = String(opponent?.avatar || "").trim();
+    const avatarUrl = getUsableAvatarUrl(opponent?.avatar, opponent?.player_id);
     if (avatarUrl) {
       const img = document.createElement("img");
       img.className = "challenge-opponent-avatar";
@@ -794,30 +1006,26 @@
     row.dataset.playerId = String(opponent?.player_id || "");
     row.dataset.associationId = String(opponent?.association?.id || "");
 
-    row.appendChild(createOpponentAvatar(opponent));
+    const left = document.createElement("div");
+    left.className = "challenge-opponent-left";
+    row.appendChild(left);
+
+    left.appendChild(createOpponentAvatar(opponent));
 
     const main = document.createElement("div");
     main.className = "challenge-opponent-main";
-    row.appendChild(main);
+    left.appendChild(main);
 
-    const name = document.createElement("div");
+    const name = document.createElement("a");
     name.className = "challenge-opponent-name";
     name.textContent = getOpponentDisplayName(opponent);
     name.title = name.textContent;
+    name.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(String(opponent?.player_id || ""))}`;
     main.appendChild(name);
 
-    const sub = document.createElement("div");
-    sub.className = "challenge-opponent-sub";
-    const realName = String(opponent?.name || "").trim();
-    const idText = String(opponent?.player_id || "").trim();
-    sub.textContent = [realName && realName !== name.textContent ? realName : "", idText ? `BGA #${idText}` : ""]
-      .filter(Boolean)
-      .join(" / ");
-    main.appendChild(sub);
-
-    const meta = document.createElement("div");
-    meta.className = "challenge-opponent-meta";
-    row.appendChild(meta);
+    const country = document.createElement("div");
+    country.className = "challenge-opponent-country";
+    main.appendChild(country);
 
     if (opponent?.association?.flag) {
       const flag = document.createElement("img");
@@ -825,18 +1033,36 @@
       flag.src = String(opponent.association.flag || "");
       flag.alt = "";
       flag.title = String(opponent?.association?.name || opponent?.association?.id || "");
-      meta.appendChild(flag);
+      country.appendChild(flag);
     }
 
     const association = document.createElement("span");
+    association.className = "challenge-opponent-country-name";
     association.textContent = String(opponent?.association?.name || opponent?.association?.id || "No association");
-    meta.appendChild(association);
+    country.appendChild(association);
 
-    if (opponent?.bga_elo !== null && opponent?.bga_elo !== undefined) {
-      const elo = document.createElement("span");
-      elo.textContent = `Elo ${opponent.bga_elo}`;
-      meta.appendChild(elo);
-    }
+    const ratings = document.createElement("div");
+    ratings.className = "challenge-opponent-ratings";
+    row.appendChild(ratings);
+
+    const ggLine = document.createElement("div");
+    ggLine.className = "challenge-opponent-rating-line";
+    ggLine.appendChild(createRatingLabel("GG Elo: "));
+    ggLine.appendChild(createRatingValue(formatGgEloLine(opponent)));
+    ratings.appendChild(ggLine);
+
+    const bgaLine = document.createElement("div");
+    bgaLine.className = "challenge-opponent-rating-line";
+    bgaLine.appendChild(createRatingLabel("BGA Elo: "));
+    bgaLine.appendChild(createRatingValue(formatEloValue(opponent?.bga_elo)));
+    ratings.appendChild(bgaLine);
+
+    const inviteBtn = document.createElement("button");
+    inviteBtn.className = "challenge-opponent-action";
+    inviteBtn.type = "button";
+    inviteBtn.disabled = true;
+    inviteBtn.textContent = "Invite to match";
+    row.appendChild(inviteBtn);
 
     return row;
   }
@@ -844,7 +1070,6 @@
   function getEligibilityStateText(eligibility) {
     const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
     if (reasons.includes("period_closed")) return "Requests closed for this period.";
-    if (reasons.includes("current_player_unavailable")) return "Your status is Not playing this period.";
     if (reasons.includes("current_player_has_match")) return "You already have a Challenge match in this period.";
     return "";
   }
@@ -874,7 +1099,14 @@
         `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(periodId)}/${ELIGIBLE_OPPONENTS_PATH}`,
         { method: "GET" }
       );
-      const opponents = Array.isArray(data?.available_opponents) ? data.available_opponents : [];
+      const [ratingsById, bgaPlayersById] = await Promise.all([
+        fetchGgRatingsById(),
+        fetchBgaPlayersById(),
+      ]);
+      const opponents = (Array.isArray(data?.available_opponents) ? data.available_opponents : [])
+        .map((opponent) => mergeOpponentRating(opponent, ratingsById))
+        .map((opponent) => mergeOpponentBgaPlayer(opponent, bgaPlayersById))
+        .sort(compareOpponentsByRating);
       const countEl = panel.querySelector("[data-opponents-count]");
       const bodyEl = panel.querySelector("[data-opponents-body]");
       if (countEl) {
@@ -1085,10 +1317,13 @@
     badge.textContent = PERIOD_STATUS_LABELS[period?.status] || String(period?.status || "");
     titleRow.appendChild(badge);
 
-    const description = document.createElement("div");
-    description.className = "challenge-period-description";
-    description.textContent = String(period?.description || "Open rated challenge matches for players from different associations.");
-    main.appendChild(description);
+    const descriptionText = String(period?.description || "").trim();
+    if (descriptionText) {
+      const description = document.createElement("div");
+      description.className = "challenge-period-description";
+      description.textContent = descriptionText;
+      main.appendChild(description);
+    }
 
     const meta = document.createElement("div");
     meta.className = "challenge-period-meta";
