@@ -442,8 +442,8 @@
   }
 
   .challenge-duel-time {
-    width: 52px;
-    min-width: 52px;
+    width: 75px;
+    min-width: 75px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -550,6 +550,59 @@
     align-items: center;
     gap: 6px;
     margin-left: 8px;
+  }
+
+  .challenge-duel-edit {
+    position: relative;
+  }
+
+  .challenge-duel-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .challenge-duel-edit-chevron {
+    color: #6f7785;
+    font-size: 10px;
+    transition: transform 0.16s ease;
+  }
+
+  .challenge-duel-edit-btn.open .challenge-duel-edit-chevron {
+    transform: rotate(180deg);
+  }
+
+  .challenge-duel-edit-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 30;
+    display: grid;
+    gap: 4px;
+    min-width: 128px;
+    max-height: 0;
+    overflow: hidden;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+  }
+
+  .challenge-duel-edit-menu.open {
+    max-height: 96px;
+    padding: 5px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .challenge-duel-edit-menu .challenge-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .challenge-request-card {
@@ -1108,6 +1161,12 @@
     line-height: 1.4;
   }
 
+  .challenge-info-note {
+    color: #6f7785;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
   .challenge-info-actions {
     display: flex;
     justify-content: flex-end;
@@ -1300,7 +1359,7 @@
     }
 
     .challenge-duel-players {
-      min-width: calc(100% - 70px);
+      min-width: calc(100% - 95px);
     }
 
     .challenge-duel-actions {
@@ -1401,7 +1460,7 @@
   };
   const REQUEST_STATUS_LABELS = {
     pending: "Pending",
-    new_time_requested: "New time requested",
+    new_time_requested: "Requested new time",
     accepted: "Accepted",
     declined: "Declined",
     cancelled_by_sender: "Cancelled",
@@ -1974,6 +2033,65 @@
     return btn;
   }
 
+  function createChallengeDuelEditDropdown(period, request, currentPlayerId) {
+    const root = document.createElement("div");
+    root.className = "challenge-duel-edit";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "challenge-btn challenge-btn-small challenge-btn-secondary challenge-duel-edit-btn";
+    const text = document.createElement("span");
+    text.textContent = "Edit";
+    const chevron = document.createElement("span");
+    chevron.className = "challenge-duel-edit-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "▾";
+    btn.appendChild(text);
+    btn.appendChild(chevron);
+    root.appendChild(btn);
+
+    const menu = document.createElement("div");
+    menu.className = "challenge-duel-edit-menu";
+    root.appendChild(menu);
+
+    const close = () => {
+      menu.classList.remove("open");
+      btn.classList.remove("open");
+      btn.setAttribute("aria-expanded", "false");
+    };
+    const open = () => {
+      closeAllDropdowns();
+      menu.classList.add("open");
+      btn.classList.add("open");
+      btn.setAttribute("aria-expanded", "true");
+    };
+    const toggle = () => {
+      if (menu.classList.contains("open")) close();
+      else open();
+    };
+
+    btn.setAttribute("aria-haspopup", "menu");
+    btn.setAttribute("aria-expanded", "false");
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggle();
+    });
+
+    menu.appendChild(createActionButton("Change time", "challenge-btn-secondary", (event) => {
+      event.stopPropagation();
+      close();
+      openRescheduleRequestForm(period, request, currentPlayerId);
+    }));
+    menu.appendChild(createActionButton("Cancel match", "challenge-btn-danger", async (event) => {
+      event.stopPropagation();
+      close();
+      await openCancelChallengeMatchDialog(period, request);
+    }));
+
+    dropdowns.push({ close });
+    return root;
+  }
+
   function createChallengeDuelPlayerRow(player) {
     const row = document.createElement("div");
     row.className = "challenge-duel-player-row";
@@ -2037,13 +2155,10 @@
 
     const actions = document.createElement("div");
     actions.className = "challenge-duel-actions";
-    actions.appendChild(createActionButton("Change time", "challenge-btn-secondary", () => {
-      showChallengeInfoDialog("Change time", "Changing Challenge match time is not available yet.");
-    }));
-    actions.appendChild(createActionButton("Cancel match", "challenge-btn-danger", () => {
-      showChallengeInfoDialog("Cancel match", "Cancelling Challenge matches is not available yet.");
-    }));
-    row.appendChild(actions);
+    if (String(duel?.status || "") === "Planned") {
+      actions.appendChild(createChallengeDuelEditDropdown(period, request, currentPlayerId));
+    }
+    if (actions.childNodes.length) row.appendChild(actions);
 
     return section;
   }
@@ -2147,6 +2262,60 @@
 
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
+  }
+
+  function showChallengeConfirmDialog(titleText, messageText, options = {}) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.className = "challenge-modal-overlay";
+
+      const dialog = document.createElement("div");
+      dialog.className = "challenge-modal challenge-info-dialog";
+
+      const title = document.createElement("div");
+      title.className = "challenge-request-title";
+      title.textContent = titleText;
+      dialog.appendChild(title);
+
+      const text = document.createElement("div");
+      text.className = "challenge-info-text";
+      text.textContent = messageText;
+      dialog.appendChild(text);
+
+      if (options.note) {
+        const note = document.createElement("div");
+        note.className = "challenge-info-note";
+        note.textContent = String(options.note || "");
+        dialog.appendChild(note);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "challenge-info-actions";
+      const backBtn = document.createElement("button");
+      backBtn.type = "button";
+      backBtn.className = "challenge-btn challenge-btn-secondary";
+      backBtn.textContent = options.cancelText || "Back";
+      const confirmBtn = document.createElement("button");
+      confirmBtn.type = "button";
+      confirmBtn.className = `challenge-btn ${options.confirmClassName || "challenge-btn-primary"}`;
+      confirmBtn.textContent = options.confirmText || "Confirm";
+      actions.appendChild(backBtn);
+      actions.appendChild(confirmBtn);
+      dialog.appendChild(actions);
+
+      const closeModal = (value) => {
+        overlay.remove();
+        resolve(!!value);
+      };
+      backBtn.addEventListener("click", () => closeModal(false));
+      confirmBtn.addEventListener("click", () => closeModal(true));
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) closeModal(false);
+      });
+
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+    });
   }
 
   function getOpponentInitials(opponent) {
@@ -2956,7 +3125,7 @@
     });
   }
 
-  function openCounterRequestForm(period, request, currentPlayerId) {
+  function openCounterRequestForm(period, request, currentPlayerId, options = {}) {
     const overlay = document.createElement("div");
     overlay.className = "challenge-modal-overlay";
     const dialog = document.createElement("div");
@@ -2981,7 +3150,7 @@
 
     const title = document.createElement("div");
     title.className = "challenge-request-title";
-    title.textContent = "Propose new time";
+    title.textContent = options.titleText || "Propose new time";
     form.appendChild(title);
 
     const opponentBox = document.createElement("div");
@@ -3056,7 +3225,7 @@
     const submitBtn = document.createElement("button");
     submitBtn.type = "submit";
     submitBtn.className = "challenge-btn challenge-btn-primary";
-    submitBtn.textContent = "Send";
+    submitBtn.textContent = options.submitText || "Send";
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.className = "challenge-btn challenge-btn-secondary";
@@ -3108,11 +3277,15 @@
         setMessage("Choose at least one match format.", "error");
         return;
       }
+      if (typeof options.confirmBeforeSubmit === "function") {
+        const confirmed = await options.confirmBeforeSubmit();
+        if (!confirmed) return;
+      }
       setSaving(true);
-      setMessage("Sending...", "");
+      setMessage(options.savingText || "Sending...", "");
       try {
         await apiJson(
-          `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(String(period?.id || ""))}/requests/${encodeURIComponent(String(request?.id || ""))}/counter`,
+          `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(String(period?.id || ""))}/requests/${encodeURIComponent(String(request?.id || ""))}/${options.action || "counter"}`,
           {
             method: "PATCH",
             body: JSON.stringify({
@@ -3124,14 +3297,39 @@
             }),
           }
         );
-        setMessage("Sent.", "success");
-        refreshRequestPanel(period?.id);
-        refreshOpponentPanel(period?.id);
+        setMessage(options.successText || "Sent.", "success");
+        if (typeof options.onSuccess === "function") {
+          options.onSuccess();
+        } else {
+          refreshRequestPanel(period?.id);
+          refreshOpponentPanel(period?.id);
+        }
         window.setTimeout(closeModal, 500);
       } catch (error) {
         setSaving(false);
         setMessage(formatRequestErrorMessage(error), "error");
       }
+    });
+  }
+
+  function openRescheduleRequestForm(period, request, currentPlayerId) {
+    openCounterRequestForm(period, request, currentPlayerId, {
+      titleText: "Change match time",
+      submitText: "Request change",
+      action: "reschedule",
+      savingText: "Requesting change...",
+      successText: "Change requested.",
+      confirmBeforeSubmit: () => showChallengeConfirmDialog(
+        "Request time change",
+        "Request a new match time? This will cancel the current scheduled time and ask your opponent to confirm one of your new options.",
+        {
+          confirmText: "Request change",
+          cancelText: "Back",
+        }
+      ),
+      onSuccess: () => {
+        renderChallenges();
+      },
     });
   }
 
@@ -3349,6 +3547,26 @@
     }
   }
 
+  async function openCancelChallengeMatchDialog(period, request) {
+    const confirmed = await showChallengeConfirmDialog(
+      "Cancel match",
+      "Cancel this scheduled Challenge match?",
+      {
+        note: "If you have not agreed this with your opponent, they may file a complaint. This can result in a warning and may affect your future Challenge participation.",
+        confirmText: "Cancel match",
+        confirmClassName: "challenge-btn-danger",
+        cancelText: "Back",
+      }
+    );
+    if (!confirmed) return;
+    try {
+      await patchChallengeRequestAction(period, request, "cancel-match");
+      renderChallenges();
+    } catch (error) {
+      showChallengeInfoDialog("Cancel match", error?.message || "Failed to cancel match.");
+    }
+  }
+
   function openCancelRequestDialog(period, request, options = {}) {
     const allowRemove = !!options.allowRemove;
     const refreshPanels = () => {
@@ -3439,10 +3657,19 @@
         });
       }));
     }
-    if (
-      String(request?.created_by_player_id || "") === String(currentPlayerId || "")
-      && ["declined", "cancelled_by_sender", "auto_cancelled", "expired"].includes(statusKey)
-    ) {
+    const isRequestParticipant = [request?.player_1_id, request?.player_2_id]
+      .map((value) => String(value || ""))
+      .includes(String(currentPlayerId || ""));
+    const canRemoveClosedRequest = ["declined", "cancelled_by_sender", "auto_cancelled", "expired"].includes(statusKey)
+      && (
+        String(request?.created_by_player_id || "") === String(currentPlayerId || "")
+        || (
+          statusKey === "cancelled_by_sender"
+          && isRequestParticipant
+          && String(request?.duel?.status || "") === "Cancelled"
+        )
+      );
+    if (canRemoveClosedRequest) {
       actions.appendChild(createActionButton("Remove", "challenge-btn-danger", (event) => {
         runChallengeRequestAction(period, request, "remove", "", event.currentTarget);
       }));
@@ -3535,7 +3762,10 @@
       const sent = (Array.isArray(data?.sent_requests) ? data.sent_requests : [])
         .map(enrichRequest)
         .filter((request) => String(request?.created_by_player_id || "") === currentPlayerId);
-      const challengeDuelRequest = incoming.concat(sent).find((request) => request?.duel?.id) || null;
+      const challengeDuelRequest = incoming.concat(sent).find((request) => (
+        request?.duel?.id
+        && String(request?.duel?.status || "") === "Planned"
+      )) || null;
       renderChallengeMatchPanel(period, currentPlayerId, challengeDuelRequest);
       const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;
       const createRequestBtn = createActionButton("Create request", "challenge-btn-primary", () => {
