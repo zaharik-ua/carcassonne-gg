@@ -425,6 +425,133 @@
     gap: 8px;
   }
 
+  .challenge-duel-block {
+    display: grid;
+    gap: 8px;
+  }
+
+  .challenge-duel-row {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 4px 8px;
+    border: 1px solid #edf1f6;
+    border-radius: 6px;
+    background: #fff;
+    box-sizing: border-box;
+  }
+
+  .challenge-duel-time {
+    width: 52px;
+    min-width: 52px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    font-size: 12px;
+    line-height: 14px;
+    font-weight: 700;
+  }
+
+  .challenge-duel-rating {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 10px;
+    margin-bottom: 2px;
+    color: #8a94a3;
+    font-size: 9.5px;
+    line-height: 9px;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+
+  .challenge-duel-rating.is-gold {
+    color: #DAA520;
+    font-size: 10.5px;
+  }
+
+  .challenge-duel-time-text {
+    color: #333;
+    font-size: 12px;
+    line-height: 14px;
+  }
+
+  .challenge-duel-format {
+    margin-top: 2px;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-size: 10px;
+    line-height: 10px;
+    font-weight: 600;
+  }
+
+  .challenge-duel-format.bo3 {
+    background: #d7eaff;
+    color: #073654;
+  }
+
+  .challenge-duel-format.bo5 {
+    background: #fce0e0;
+    color: #590f0f;
+  }
+
+  .challenge-duel-divider {
+    width: 2px;
+    align-self: stretch;
+    margin: 0 8px;
+    background: #dfdfdf;
+  }
+
+  .challenge-duel-players {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.2;
+  }
+
+  .challenge-duel-player-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 16px;
+  }
+
+  .challenge-duel-player-row a,
+  .challenge-duel-player-row span {
+    min-width: 0;
+    overflow: hidden;
+    color: inherit;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .challenge-duel-player-row a:hover,
+  .challenge-duel-player-row a:focus-visible {
+    color: var(--blue);
+  }
+
+  .challenge-duel-player-flag {
+    width: 18px;
+    height: auto;
+    border: none;
+    border-radius: 2px;
+    object-fit: contain;
+    flex: 0 0 auto;
+  }
+
+  .challenge-duel-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+  }
+
   .challenge-request-card {
     display: grid;
     gap: 8px;
@@ -1166,6 +1293,22 @@
       margin-left: 58px;
     }
 
+    .challenge-duel-row {
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 8px 0;
+    }
+
+    .challenge-duel-players {
+      min-width: calc(100% - 70px);
+    }
+
+    .challenge-duel-actions {
+      width: 100%;
+      margin-left: 0;
+      flex-wrap: wrap;
+    }
+
     .challenge-request-card.has-actions {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -1830,6 +1973,84 @@
     return btn;
   }
 
+  function createChallengeDuelPlayerRow(player) {
+    const row = document.createElement("div");
+    row.className = "challenge-duel-player-row";
+    const flag = createFlagImg(player?.association?.flag || player?.flag, "challenge-duel-player-flag");
+    if (flag) row.appendChild(flag);
+    const playerId = String(player?.player_id || player?.id || "").trim();
+    const link = document.createElement(playerId ? "a" : "span");
+    if (playerId) {
+      link.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(playerId)}`;
+    }
+    link.textContent = getOpponentDisplayName(player);
+    link.title = link.textContent;
+    row.appendChild(link);
+    return row;
+  }
+
+  function createChallengeDuelBlock(request, period, currentPlayerId) {
+    const duel = request?.duel || null;
+    if (!duel?.id) return null;
+
+    const currentPlayer = getRequestPlayer(request, currentPlayerId);
+    const timezone = currentPlayer?.association?.timezone || period?.player_time_context?.timezone || "UTC";
+    const player1 = request?.player_1 || { player_id: request?.player_1_id };
+    const player2 = request?.player_2 || { player_id: request?.player_2_id };
+
+    const section = document.createElement("div");
+    section.className = "challenge-duel-block";
+
+    const title = document.createElement("div");
+    title.className = "challenge-request-list-title";
+    title.textContent = "Match";
+    section.appendChild(title);
+
+    const row = document.createElement("div");
+    row.className = "challenge-duel-row";
+    row.dataset.challengeDuelId = String(duel.id || "");
+    section.appendChild(row);
+
+    const time = document.createElement("div");
+    time.className = "challenge-duel-time";
+    time.appendChild(createChallengeDuelRatingNode(calculateChallengeDuelRating(player1, player2, duel)));
+    const timeText = document.createElement("div");
+    timeText.className = "challenge-duel-time-text";
+    timeText.textContent = formatChallengeDuelDateTime(duel?.time_utc || request?.accepted_time_utc, timezone);
+    time.appendChild(timeText);
+    const rawFormat = String(duel?.duel_format || request?.accepted_format || "").trim();
+    const formatKey = rawFormat.toLowerCase();
+    if (rawFormat) {
+      const format = document.createElement("div");
+      format.className = `challenge-duel-format ${formatKey}`;
+      format.textContent = rawFormat;
+      time.appendChild(format);
+    }
+    row.appendChild(time);
+
+    const divider = document.createElement("div");
+    divider.className = "challenge-duel-divider";
+    row.appendChild(divider);
+
+    const players = document.createElement("div");
+    players.className = "challenge-duel-players";
+    players.appendChild(createChallengeDuelPlayerRow(player1));
+    players.appendChild(createChallengeDuelPlayerRow(player2));
+    row.appendChild(players);
+
+    const actions = document.createElement("div");
+    actions.className = "challenge-duel-actions";
+    actions.appendChild(createActionButton("Change time", "challenge-btn-secondary", () => {
+      showChallengeInfoDialog("Change time", "Changing Challenge match time is not available yet.");
+    }));
+    actions.appendChild(createActionButton("Cancel match", "challenge-btn-danger", () => {
+      showChallengeInfoDialog("Cancel match", "Cancelling Challenge matches is not available yet.");
+    }));
+    row.appendChild(actions);
+
+    return section;
+  }
+
   function showChallengeInfoDialog(titleText, messageText) {
     const overlay = document.createElement("div");
     overlay.className = "challenge-modal-overlay";
@@ -1951,6 +2172,60 @@
     const ggElo = String(Math.trunc(ggEloNumber));
     const rank = parseFiniteNumber(opponent?.gg_rank);
     return rank === null ? ggElo : `${ggElo} (#${Math.trunc(rank)})`;
+  }
+
+  function calculateChallengeDuelRating(player1, player2, duel) {
+    const storedRating = parseFiniteNumber(duel?.rating);
+    if (storedRating !== null) return Math.trunc(storedRating);
+    const elo1 = parseFiniteNumber(player1?.gg_elo);
+    const elo2 = parseFiniteNumber(player2?.gg_elo);
+    if (elo1 === null || elo2 === null) return null;
+    if (elo1 >= 700 && elo2 >= 700) return 6;
+    const powValue = 1.5;
+    const maxRating = 5.49;
+    const maxElo = 700;
+    const minElo = 300;
+    const avg = (elo1 + elo2) / 2;
+    const normalizedAverage = Math.min(Math.max((avg - minElo) / (maxElo - minElo), 0), 1);
+    const delta = Math.abs(elo1 - elo2) / 175;
+    const score = Math.min(
+      maxRating,
+      (normalizedAverage ** powValue) * maxRating
+        + normalizedAverage * ((1 - Math.min(1, delta)) ** powValue)
+    );
+    return Math.round(score);
+  }
+
+  function createChallengeDuelRatingNode(rating) {
+    const wrap = document.createElement("div");
+    const normalized = Number.isFinite(Number(rating)) ? Math.trunc(Number(rating)) : null;
+    wrap.className = `challenge-duel-rating${normalized === 6 ? " is-gold" : ""}`;
+    if (normalized === null || normalized <= 0) {
+      wrap.textContent = "-";
+      return wrap;
+    }
+    wrap.textContent = "★".repeat(Math.min(normalized, 5));
+    wrap.title = `Match rating: ${normalized}`;
+    return wrap;
+  }
+
+  function formatChallengeDuelDateTime(value, timezone) {
+    const date = parseUtcDate(value);
+    if (!date) return "-";
+    try {
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: timezone || "UTC",
+      }).formatToParts(date);
+      const part = (type) => parts.find((item) => item.type === type)?.value || "";
+      return `${part("day")} ${part("month")} ${part("hour")}:${part("minute")}`;
+    } catch (_error) {
+      return formatLocalDateTime(value, timezone);
+    }
   }
 
   function compareOpponentsByRating(a, b) {
@@ -3242,6 +3517,7 @@
       const sent = (Array.isArray(data?.sent_requests) ? data.sent_requests : [])
         .map(enrichRequest)
         .filter((request) => String(request?.created_by_player_id || "") === currentPlayerId);
+      const challengeDuelRequest = incoming.concat(sent).find((request) => request?.duel?.id) || null;
       const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;
       const createRequestBtn = createActionButton("Create request", "challenge-btn-primary", () => {
         if (pendingSentCount >= 3) {
@@ -3254,6 +3530,8 @@
         openChallengeRequestForm(period, null, { player_id: currentPlayerId });
       });
       bodyEl.innerHTML = "";
+      const duelBlock = createChallengeDuelBlock(challengeDuelRequest, period, currentPlayerId);
+      if (duelBlock) bodyEl.appendChild(duelBlock);
       bodyEl.appendChild(createRequestListSection("Incoming", incoming, period, currentPlayerId, "incoming", "No incoming invites.", ""));
       bodyEl.appendChild(createRequestListSection(
         "Sent",

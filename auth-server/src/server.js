@@ -6895,6 +6895,7 @@ function mapChallengeRequestWithPlayers(row) {
       status: row.duel_status,
       time_utc: row.duel_time_utc,
       duel_format: row.duel_format,
+      rating: row.duel_rating,
     } : null,
   };
 }
@@ -7471,7 +7472,8 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
           d.id AS duel_id,
           d.status AS duel_status,
           d.time_utc AS duel_time_utc,
-          d.duel_format
+          d.duel_format,
+          d.rating AS duel_rating
         FROM challenge_requests cr
         LEFT JOIN profiles p1
           ON trim(COALESCE(p1.id, '')) = trim(COALESCE(cr.player_1_id, ''))
