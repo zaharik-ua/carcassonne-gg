@@ -110,7 +110,7 @@
     min-height: 21px;
     padding: 3px 8px;
     border: 1px solid #cfe1f3;
-    border-radius: 999px;
+    border-radius: 4px;
     background: #edf6ff;
     color: #155d95;
     font-size: 11px;
@@ -146,8 +146,8 @@
   }
 
   .challenge-time-flag {
-    width: 18px;
-    height: 12px;
+    width: 14px;
+    height: 9px;
     object-fit: cover;
     border-radius: 2px;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
@@ -156,12 +156,8 @@
   .challenge-status-card {
     display: grid;
     gap: 6px;
-    width: min(100%, 320px);
+    width: min(100%, 200px);
     justify-self: end;
-    padding: 10px;
-    border: 1px solid #d8dee8;
-    border-radius: 6px;
-    background: var(--soft);
     box-sizing: border-box;
   }
 
@@ -385,9 +381,12 @@
     },
   };
   const PERIOD_STATUS_LABELS = {
-    planning_open: "Planning open",
-    active: "Active",
-    result_review: "Result review",
+    draft: "Draft",
+    planning_open: "Open",
+    active: "Open",
+    result_review: "Closed",
+    archived: "Closed",
+    cancelled: "Closed",
   };
 
   const contentEl = document.getElementById("challengesContent");
@@ -396,6 +395,10 @@
   function normalizeStatus(value) {
     const normalized = String(value || "").trim();
     return STATUS_COPY[normalized] ? normalized : "not_selected";
+  }
+
+  function getPlayerTimezone(timeContext) {
+    return String(timeContext?.timezone || "UTC").trim() || "UTC";
   }
 
   function parseUtcDate(value) {
@@ -463,7 +466,8 @@
       const flag = document.createElement("img");
       flag.className = "challenge-time-flag";
       flag.src = String(timeContext.association_flag || "");
-      flag.alt = String(timeContext.association_name || timeContext.association_id || "");
+      flag.alt = "";
+      flag.title = String(timeContext.association_name || timeContext.association_id || "");
       line.appendChild(flag);
     }
     line.appendChild(document.createTextNode(" time)"));
@@ -693,7 +697,7 @@
 
     const meta = document.createElement("div");
     meta.className = "challenge-period-meta";
-    const timezone = String(timeContext?.timezone || "UTC").trim() || "UTC";
+    const timezone = getPlayerTimezone(timeContext);
     meta.appendChild(createMetaLine("Registration from:", formatLocalDate(period?.planning_starts_at, timezone)));
     meta.appendChild(createMetaLine(
       "Playing days:",

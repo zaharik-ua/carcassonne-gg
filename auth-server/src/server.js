@@ -6722,9 +6722,9 @@ async function loadChallengePlayerTimeContext(playerId) {
   const row = await dbGetAsync(
     `
       SELECT
-        COALESCE(NULLIF(trim(a.code), ''), NULLIF(trim(p.association), '')) AS association_id,
-        COALESCE(NULLIF(trim(a.name), ''), NULLIF(trim(p.association), '')) AS association_name,
-        COALESCE(NULLIF(trim(a.flag), ''), NULLIF(trim(t.flag), ''), NULLIF(trim(t.logo), '')) AS association_flag,
+        COALESCE(NULLIF(trim(t.id), ''), NULLIF(trim(a.code), ''), NULLIF(trim(p.association), '')) AS association_id,
+        COALESCE(NULLIF(trim(t.name), ''), NULLIF(trim(a.name), ''), NULLIF(trim(p.association), '')) AS association_name,
+        COALESCE(NULLIF(trim(t.flag), ''), NULLIF(trim(t.logo), ''), NULLIF(trim(a.flag), '')) AS association_flag,
         NULLIF(trim(t.timezone), '') AS team_timezone
       FROM profiles p
       LEFT JOIN associations a
@@ -6742,9 +6742,10 @@ async function loadChallengePlayerTimeContext(playerId) {
     [normalizedPlayerId]
   );
   const associationId = normalizeNullableText(row?.association_id);
+  const associationName = normalizeNullableText(row?.association_name);
   return {
     association_id: associationId,
-    association_name: normalizeNullableText(row?.association_name),
+    association_name: associationName,
     association_flag: normalizeNullableText(row?.association_flag),
     timezone: normalizeNullableText(row?.team_timezone) || DEFAULT_TEAM_TIMEZONES[normalizeEntityId(associationId)] || "UTC",
   };
