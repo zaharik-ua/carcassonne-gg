@@ -6753,6 +6753,8 @@ function mapChallengeOpponent(row) {
         || "UTC",
     },
     pending_request_id: normalizeNullableText(row?.pending_request_id),
+    is_current_player: Number(row?.is_current_player) === 1,
+    is_same_association: Number(row?.is_same_association) === 1,
   };
 }
 
@@ -6852,6 +6854,7 @@ function mapChallengeRequest(row) {
     accepted_time_utc: row.accepted_time_utc || null,
     accepted_format: row.accepted_format || null,
     hidden_by_creator_at: row.hidden_by_creator_at || null,
+    has_counter_offer: Number(row.has_counter_offer) === 1,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -7156,10 +7159,9 @@ app.get("/challenge-periods/:id/eligible-opponents", requireAuthenticated, async
          )
         WHERE cpp.period_id = ?
           AND cpp.status = 'available'
-          AND trim(COALESCE(cpp.player_id, '')) <> trim(?)
         ORDER BY p.bga_nickname COLLATE NOCASE ASC, p.id COLLATE NOCASE ASC
       `,
-      [periodId, ...activeStatuses, periodId, playerId, playerId, periodId, playerId]
+      [periodId, ...activeStatuses, periodId, playerId, playerId, periodId]
     );
 
     const blockedCounts = {
@@ -7177,9 +7179,10 @@ app.get("/challenge-periods/:id/eligible-opponents", requireAuthenticated, async
       if (!opponentId || seenOpponentIds.has(opponentId)) continue;
       seenOpponentIds.add(opponentId);
       const opponentAssociation = row?.association_id || row?.association_name;
-      if (challengeAssociationsMatch(currentAssociation, opponentAssociation)) {
+      const isCurrentPlayer = opponentId === playerId;
+      const isSameAssociation = !isCurrentPlayer && challengeAssociationsMatch(currentAssociation, opponentAssociation);
+      if (isSameAssociation) {
         blockedCounts.same_association += 1;
-        continue;
       }
       if (normalizeNullableText(row?.active_challenge_duel_id) || normalizeNullableText(row?.challenge_duel_id)) {
         blockedCounts.scheduled_match += 1;
@@ -7190,7 +7193,11 @@ app.get("/challenge-periods/:id/eligible-opponents", requireAuthenticated, async
         continue;
       }
       if (!canListOpponents) continue;
-      availableOpponents.push(mapChallengeOpponent(row));
+      availableOpponents.push(mapChallengeOpponent({
+        ...row,
+        is_current_player: isCurrentPlayer ? 1 : 0,
+        is_same_association: isSameAssociation ? 1 : 0,
+      }));
     }
 
     return res.json({
@@ -7435,6 +7442,14 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
       `
         SELECT
           cr.*,
+          EXISTS (
+            SELECT 1
+            FROM audit_trail audit
+            WHERE audit.entity_type = 'challenge_request'
+              AND audit.event_type = 'challenge_request.countered'
+              AND audit.record_id = cr.id
+            LIMIT 1
+          ) AS has_counter_offer,
           p1.id AS p1_player_id,
           p1.bga_nickname AS p1_bga_nickname,
           p1.name AS p1_name,
@@ -7498,10 +7513,7 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
       ok: true,
       player_id: playerId,
       period,
-      incoming_requests: requests.filter((request) => (
-        request.created_by_player_id !== playerId
-        || (request.status === "pending" && request.awaiting_player_id === playerId)
-      )),
+      incoming_requests: requests.filter((request) => request.created_by_player_id !== playerId),
       sent_requests: requests.filter((request) => request.created_by_player_id === playerId),
     });
   } catch (error) {
@@ -7523,11 +7535,12 @@ app.patch("/challenge-periods/:id/requests/:requestId/cancel", requireAuthentica
     if (!beforeRow || ![beforeRow.player_1_id, beforeRow.player_2_id].includes(playerId)) {
       return res.status(404).json({ ok: false, message: "Challenge request not found" });
     }
-    if (beforeRow.created_by_player_id !== playerId) {
-      return res.status(403).json({ ok: false, message: "Only the sender can cancel this request" });
-    }
     if (beforeRow.status !== "pending") {
       return res.status(409).json({ ok: false, message: "Only pending requests can be cancelled" });
+    }
+    const canCancelRequest = beforeRow.created_by_player_id === playerId || beforeRow.awaiting_player_id !== playerId;
+    if (!canCancelRequest) {
+      return res.status(403).json({ ok: false, message: "Only the player waiting for a response can cancel this request" });
     }
 
     await dbRunAsync(

@@ -104,6 +104,14 @@
     overflow-wrap: anywhere;
   }
 
+  .challenge-period-icon {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    object-fit: cover;
+  }
+
   .challenge-period-badge {
     display: inline-flex;
     align-items: center;
@@ -479,6 +487,11 @@
   .challenge-request-status.is-pending {
     background: #edf6ff;
     color: #155d95;
+  }
+
+  .challenge-request-status.is-new_time_requested {
+    background: #f4efff;
+    color: #6042a6;
   }
 
   .challenge-request-status.is-accepted {
@@ -958,6 +971,7 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    flex-wrap: wrap;
   }
 
   .cp-dd {
@@ -1230,6 +1244,7 @@
   };
   const REQUEST_STATUS_LABELS = {
     pending: "Pending",
+    new_time_requested: "New time requested",
     accepted: "Accepted",
     declined: "Declined",
     cancelled_by_sender: "Cancelled",
@@ -1253,6 +1268,14 @@
 
   function normalizeCode(value) {
     return String(value || "").trim().toUpperCase();
+  }
+
+  function normalizeAssociationKey(value) {
+    return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  }
+
+  function getPlayerAssociationKey(player) {
+    return normalizeAssociationKey(player?.association?.id || player?.association?.name || player?.association || "");
   }
 
   function getPlayerTimezone(timeContext) {
@@ -1631,6 +1654,12 @@
     return REQUEST_STATUS_LABELS[key] || key || "-";
   }
 
+  function getRequestDisplayStatusKey(request) {
+    const status = String(request?.status || "").trim();
+    if (status === "pending" && request?.has_counter_offer) return "new_time_requested";
+    return status;
+  }
+
   function getRequestPlayer(request, playerId) {
     const id = String(playerId || "").trim();
     if (String(request?.player_1_id || "").trim() === id) return request?.player_1 || { player_id: id };
@@ -1798,6 +1827,64 @@
 
     const closeModal = () => overlay.remove();
     okBtn.addEventListener("click", closeModal);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal();
+    });
+
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+  }
+
+  function showChallengeChoiceDialog(titleText, messageText, choices) {
+    const overlay = document.createElement("div");
+    overlay.className = "challenge-modal-overlay";
+
+    const dialog = document.createElement("div");
+    dialog.className = "challenge-modal challenge-info-dialog";
+
+    const title = document.createElement("div");
+    title.className = "challenge-request-title";
+    title.textContent = titleText;
+    dialog.appendChild(title);
+
+    const text = document.createElement("div");
+    text.className = "challenge-info-text";
+    text.textContent = messageText;
+    dialog.appendChild(text);
+
+    const actions = document.createElement("div");
+    actions.className = "challenge-info-actions";
+    dialog.appendChild(actions);
+
+    const closeModal = () => overlay.remove();
+    const buttons = [];
+    (Array.isArray(choices) ? choices : []).forEach((choice) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `challenge-btn ${choice?.className || "challenge-btn-secondary"}`;
+      btn.textContent = String(choice?.text || "");
+      buttons.push(btn);
+      actions.appendChild(btn);
+      btn.addEventListener("click", async () => {
+        if (choice?.role === "close") {
+          closeModal();
+          return;
+        }
+        buttons.forEach((button) => {
+          button.disabled = true;
+        });
+        try {
+          if (typeof choice?.onClick === "function") await choice.onClick();
+          closeModal();
+        } catch (error) {
+          text.textContent = error?.message || "Request failed.";
+          buttons.forEach((button) => {
+            button.disabled = false;
+          });
+        }
+      });
+    });
+
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) closeModal();
     });
@@ -2744,6 +2831,13 @@
     row.className = "challenge-opponent-row";
     row.dataset.playerId = String(opponent?.player_id || "");
     row.dataset.associationId = String(opponent?.association?.id || "");
+    const opponentId = String(opponent?.player_id || "").trim();
+    const currentPlayerId = String(currentPlayer?.player_id || "").trim();
+    const isCurrentPlayer = !!opponent?.is_current_player || (!!opponentId && opponentId === currentPlayerId);
+    const isSameAssociation = !isCurrentPlayer && (
+      !!opponent?.is_same_association
+      || (!!getPlayerAssociationKey(opponent) && getPlayerAssociationKey(opponent) === getPlayerAssociationKey(currentPlayer))
+    );
 
     const left = document.createElement("div");
     left.className = "challenge-opponent-left";
@@ -2796,6 +2890,10 @@
     bgaLine.appendChild(createRatingValue(formatEloValue(opponent?.bga_elo)));
     ratings.appendChild(bgaLine);
 
+    if (isCurrentPlayer) {
+      return row;
+    }
+
     const inviteBtn = document.createElement("button");
     inviteBtn.className = "challenge-opponent-action";
     inviteBtn.type = "button";
@@ -2806,6 +2904,13 @@
     }
     inviteBtn.addEventListener("click", () => {
       if (inviteBtn.disabled) return;
+      if (isSameAssociation) {
+        showChallengeInfoDialog(
+          "Invite unavailable",
+          "Players from the same association cannot play a Challenge match."
+        );
+        return;
+      }
       openChallengeRequestForm(period, opponent, currentPlayer);
     });
     row.appendChild(inviteBtn);
@@ -2902,6 +3007,13 @@
     bodyEl.appendChild(state);
   }
 
+  async function patchChallengeRequestAction(period, request, action) {
+    return apiJson(
+      `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(String(period?.id || ""))}/requests/${encodeURIComponent(String(request?.id || ""))}/${action}`,
+      { method: "PATCH" }
+    );
+  }
+
   async function runChallengeRequestAction(period, request, action, confirmText, button) {
     if (confirmText && !window.confirm(confirmText)) return;
     const previousText = button?.textContent || "";
@@ -2910,10 +3022,7 @@
       button.textContent = "Saving...";
     }
     try {
-      await apiJson(
-        `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(String(period?.id || ""))}/requests/${encodeURIComponent(String(request?.id || ""))}/${action}`,
-        { method: "PATCH" }
-      );
+      await patchChallengeRequestAction(period, request, action);
       refreshRequestPanel(period?.id);
       refreshOpponentPanel(period?.id);
     } catch (error) {
@@ -2923,6 +3032,47 @@
         button.textContent = previousText;
       }
     }
+  }
+
+  function openCancelRequestDialog(period, request, options = {}) {
+    const allowRemove = !!options.allowRemove;
+    const refreshPanels = () => {
+      refreshRequestPanel(period?.id);
+      refreshOpponentPanel(period?.id);
+    };
+    const choices = [
+      {
+        text: "Cancel",
+        className: "challenge-btn-danger",
+        onClick: async () => {
+          await patchChallengeRequestAction(period, request, "cancel");
+          refreshPanels();
+        },
+      },
+    ];
+    if (allowRemove) {
+      choices.push({
+        text: "Cancel and Remove",
+        className: "challenge-btn-danger",
+        onClick: async () => {
+          await patchChallengeRequestAction(period, request, "cancel");
+          await patchChallengeRequestAction(period, request, "remove");
+          refreshPanels();
+        },
+      });
+    }
+    choices.push({
+      text: "Back",
+      className: "challenge-btn-secondary",
+      role: "close",
+    });
+    showChallengeChoiceDialog(
+      "Cancel request",
+      allowRemove
+        ? "Cancel this request or cancel it and remove it from your Sent list."
+        : "Cancel this request?",
+      choices
+    );
   }
 
   function createChallengeRequestCard(request, period, currentPlayerId, kind) {
@@ -2940,8 +3090,9 @@
     head.appendChild(createRequestPlayerInline(otherPlayer));
     const status = document.createElement("span");
     const statusKey = String(request?.status || "").trim();
-    status.className = `challenge-request-status is-${statusKey}`;
-    status.textContent = getRequestStatusLabel(statusKey);
+    const displayStatusKey = getRequestDisplayStatusKey(request);
+    status.className = `challenge-request-status is-${displayStatusKey}`;
+    status.textContent = getRequestStatusLabel(displayStatusKey);
     head.appendChild(status);
     card.appendChild(head);
 
@@ -2959,9 +3110,10 @@
     card.appendChild(meta);
 
     const canAct = String(request?.status || "") === "pending" && ["planning_open", "active"].includes(String(period?.status || ""));
+    const isAwaitingCurrentPlayer = String(request?.awaiting_player_id || "") === String(currentPlayerId || "");
     const actions = document.createElement("div");
     actions.className = "challenge-request-actions-inline";
-    if (kind === "incoming" && canAct && String(request?.awaiting_player_id || "") === String(currentPlayerId || "")) {
+    if (canAct && isAwaitingCurrentPlayer) {
       actions.appendChild(createActionButton("Accept", "challenge-btn-primary", () => {
         openAcceptRequestForm(period, request, currentPlayerId);
       }));
@@ -2972,9 +3124,11 @@
         runChallengeRequestAction(period, request, "decline", "Decline this invite?", event.currentTarget);
       }));
     }
-    if (kind === "sent" && canAct && String(request?.created_by_player_id || "") === String(currentPlayerId || "")) {
-      actions.appendChild(createActionButton("Cancel", "challenge-btn-danger", (event) => {
-        runChallengeRequestAction(period, request, "cancel", "Cancel this invite?", event.currentTarget);
+    if (canAct && !isAwaitingCurrentPlayer) {
+      actions.appendChild(createActionButton("Cancel", "challenge-btn-danger", () => {
+        openCancelRequestDialog(period, request, {
+          allowRemove: kind === "sent" && String(request?.created_by_player_id || "") === String(currentPlayerId || ""),
+        });
       }));
     }
     if (
@@ -3055,11 +3209,15 @@
         player_1: enrichRequestPlayer(request?.player_1, request?.player_1_id),
         player_2: enrichRequestPlayer(request?.player_2, request?.player_2_id),
       });
-      const incoming = (Array.isArray(data?.incoming_requests) ? data.incoming_requests : []).map(enrichRequest);
-      const sent = (Array.isArray(data?.sent_requests) ? data.sent_requests : []).map(enrichRequest);
-      const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;
       const currentPlayerId = String(data?.player_id || "").trim();
-      const createRequestBtn = createActionButton("Create request", "challenge-btn-secondary", () => {
+      const incoming = (Array.isArray(data?.incoming_requests) ? data.incoming_requests : [])
+        .map(enrichRequest)
+        .filter((request) => String(request?.created_by_player_id || "") !== currentPlayerId);
+      const sent = (Array.isArray(data?.sent_requests) ? data.sent_requests : [])
+        .map(enrichRequest)
+        .filter((request) => String(request?.created_by_player_id || "") === currentPlayerId);
+      const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;
+      const createRequestBtn = createActionButton("Create request", "challenge-btn-primary", () => {
         if (pendingSentCount >= 3) {
           showChallengeInfoDialog(
             "Request limit reached",
@@ -3252,6 +3410,15 @@
     const titleRow = document.createElement("div");
     titleRow.className = "challenge-period-title-row";
     main.appendChild(titleRow);
+
+    const iconSrc = String(period?.logo || "").trim();
+    if (iconSrc) {
+      const icon = document.createElement("img");
+      icon.className = "challenge-period-icon";
+      icon.src = iconSrc;
+      icon.alt = "";
+      titleRow.appendChild(icon);
+    }
 
     const title = document.createElement("div");
     title.className = "challenge-period-title";
