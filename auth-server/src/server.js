@@ -6642,7 +6642,7 @@ function normalizeChallengePlayerPeriodStatus(value) {
 
 function getManualChallengePlayerPeriodStatus(value) {
   const status = normalizeChallengePlayerPeriodStatus(value);
-  return status === "available" || status === "unavailable" ? status : null;
+  return ["not_selected", "available", "unavailable"].includes(status) ? status : null;
 }
 
 function validateChallengePeriodPayload(period) {
@@ -6724,11 +6724,17 @@ async function loadChallengePlayerTimeContext(playerId) {
       SELECT
         COALESCE(NULLIF(trim(a.code), ''), NULLIF(trim(p.association), '')) AS association_id,
         COALESCE(NULLIF(trim(a.name), ''), NULLIF(trim(p.association), '')) AS association_name,
-        a.flag AS association_flag
+        COALESCE(NULLIF(trim(a.flag), ''), NULLIF(trim(t.flag), ''), NULLIF(trim(t.logo), '')) AS association_flag,
+        NULLIF(trim(t.timezone), '') AS team_timezone
       FROM profiles p
       LEFT JOIN associations a
         ON upper(trim(COALESCE(a.code, ''))) = upper(trim(COALESCE(p.association, '')))
         OR lower(trim(COALESCE(a.name, ''))) = lower(trim(COALESCE(p.association, '')))
+      LEFT JOIN teams t
+        ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(p.association, '')))
+        OR lower(trim(COALESCE(t.name, ''))) = lower(trim(COALESCE(p.association, '')))
+        OR upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(a.code, '')))
+        OR lower(trim(COALESCE(t.name, ''))) = lower(trim(COALESCE(a.name, '')))
       WHERE trim(COALESCE(p.id, '')) = trim(?)
         AND p.deleted_at IS NULL
       LIMIT 1
@@ -6740,7 +6746,7 @@ async function loadChallengePlayerTimeContext(playerId) {
     association_id: associationId,
     association_name: normalizeNullableText(row?.association_name),
     association_flag: normalizeNullableText(row?.association_flag),
-    timezone: DEFAULT_TEAM_TIMEZONES[normalizeEntityId(associationId)] || "UTC",
+    timezone: normalizeNullableText(row?.team_timezone) || DEFAULT_TEAM_TIMEZONES[normalizeEntityId(associationId)] || "UTC",
   };
 }
 
@@ -6809,7 +6815,7 @@ app.patch("/challenge-periods/:id/player-status", requireAuthenticated, async (r
     return res.status(400).json({ ok: false, message: "Invalid Challenge period id" });
   }
   if (!nextStatus) {
-    return res.status(400).json({ ok: false, message: "Status must be available or unavailable" });
+    return res.status(400).json({ ok: false, message: "Status must be not_selected, available, or unavailable" });
   }
 
   try {

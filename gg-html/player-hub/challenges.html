@@ -214,13 +214,11 @@
   .challenge-status-btn.is-available {
     border-color: #9dd7b9;
     background: var(--green-soft);
-    color: #12633e;
   }
 
   .challenge-status-btn.is-unavailable {
     border-color: #f0b8c1;
     background: var(--red-soft);
-    color: var(--red);
   }
 
   .challenge-status-btn.is-scheduled {
@@ -444,12 +442,16 @@
     return `${date.weekday}, ${date.month} ${date.day}, ${date.hour}:${date.minute}`;
   }
 
-  function createMetaLine(label, text) {
+  function createMetaLine(label, text, suffixNode) {
     const line = document.createElement("span");
     const labelEl = document.createElement("strong");
     labelEl.textContent = label;
     line.appendChild(labelEl);
     line.appendChild(document.createTextNode(` ${text}`));
+    if (suffixNode) {
+      line.appendChild(document.createTextNode(" "));
+      line.appendChild(suffixNode);
+    }
     return line;
   }
 
@@ -559,6 +561,7 @@
     dropdownEl.appendChild(menuEl);
 
     const options = [
+      { value: "not_selected", label: "Not selected" },
       { value: "available", label: "Open to match" },
       { value: "unavailable", label: "Not playing this period" },
     ];
@@ -694,9 +697,9 @@
     meta.appendChild(createMetaLine("Registration from:", formatLocalDate(period?.planning_starts_at, timezone)));
     meta.appendChild(createMetaLine(
       "Playing days:",
-      `${formatLocalDateTime(period?.play_starts_at, timezone)}  - ${formatLocalDateTime(period?.play_ends_at, timezone)}`
+      `${formatLocalDateTime(period?.play_starts_at, timezone)}  - ${formatLocalDateTime(period?.play_ends_at, timezone)}`,
+      createTimeContextMeta(timeContext)
     ));
-    meta.appendChild(createTimeContextMeta(timeContext));
     main.appendChild(meta);
 
     band.appendChild(createStatusDropdown(period, period?.player_status));
