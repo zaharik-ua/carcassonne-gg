@@ -134,7 +134,7 @@
     line-height: 1.35;
   }
 
-  .challenge-period-meta strong {
+  .challenge-period-meta b {
     color: #475467;
     font-weight: 700;
   }
@@ -146,11 +146,8 @@
   }
 
   .challenge-time-flag {
-    width: 14px;
-    height: 9px;
-    object-fit: cover;
-    border-radius: 2px;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+    width: 12px;
+    height: auto;
   }
 
   .challenge-status-card {
@@ -322,6 +319,133 @@
     line-height: 1.35;
   }
 
+  .challenge-period-stack {
+    display: grid;
+    gap: 8px;
+  }
+
+  .challenge-opponents-panel {
+    display: grid;
+    gap: 9px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+  }
+
+  .challenge-opponents-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .challenge-opponents-title {
+    color: #223040;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  .challenge-opponents-count {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .challenge-opponents-body {
+    display: grid;
+    gap: 7px;
+  }
+
+  .challenge-opponents-state {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .challenge-opponents-state.is-error {
+    color: var(--red);
+  }
+
+  .challenge-opponent-row {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) minmax(120px, auto);
+    gap: 9px;
+    align-items: center;
+    min-height: 46px;
+    padding: 7px 0;
+    border-top: 1px solid #edf1f6;
+  }
+
+  .challenge-opponent-row:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .challenge-opponent-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #eef2f6;
+    object-fit: cover;
+  }
+
+  .challenge-opponent-avatar-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #526071;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .challenge-opponent-main {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .challenge-opponent-name {
+    color: #172232;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .challenge-opponent-sub {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .challenge-opponent-meta {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: #475467;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+
+  .challenge-opponent-flag {
+    width: 16px;
+    height: auto;
+    flex: 0 0 auto;
+  }
+
   @media (max-width: 720px) {
     .challenge-period-band {
       grid-template-columns: minmax(0, 1fr);
@@ -330,6 +454,15 @@
     .challenge-status-card {
       width: 100%;
       justify-self: stretch;
+    }
+
+    .challenge-opponent-row {
+      grid-template-columns: 34px minmax(0, 1fr);
+    }
+
+    .challenge-opponent-meta {
+      grid-column: 2;
+      justify-content: flex-start;
     }
   }
 </style>
@@ -346,8 +479,11 @@
 <script>
 (function () {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const ME_URL = `${AUTH_BASE}/auth/me`;
+  const TEAMS_URL = `${AUTH_BASE}/teams`;
   const CHALLENGE_PERIODS_URL = `${AUTH_BASE}/challenge-periods`;
   const PLAYER_CHALLENGE_PERIODS_URL = `${CHALLENGE_PERIODS_URL}/player`;
+  const ELIGIBLE_OPPONENTS_PATH = "eligible-opponents";
   const STATUS_COPY = {
     not_selected: {
       label: "Not selected",
@@ -391,14 +527,73 @@
 
   const contentEl = document.getElementById("challengesContent");
   const dropdowns = [];
+  const opponentPanels = new Map();
 
   function normalizeStatus(value) {
     const normalized = String(value || "").trim();
     return STATUS_COPY[normalized] ? normalized : "not_selected";
   }
 
+  function normalizeCode(value) {
+    return String(value || "").trim().toUpperCase();
+  }
+
   function getPlayerTimezone(timeContext) {
     return String(timeContext?.timezone || "UTC").trim() || "UTC";
+  }
+
+  function getCurrentUserAssociation(user) {
+    return normalizeCode(user?.profile?.association ?? user?.association ?? "");
+  }
+
+  async function fetchCurrentUserAssociation() {
+    try {
+      const response = await fetch(ME_URL, { method: "GET", credentials: "include" });
+      if (!response.ok) return "";
+      const data = await response.json().catch(() => ({}));
+      return data?.authenticated ? getCurrentUserAssociation(data?.user) : "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  async function fetchTeamsById() {
+    try {
+      const response = await fetch(TEAMS_URL, { method: "GET" });
+      if (!response.ok) return new Map();
+      const data = await response.json().catch(() => ({}));
+      const teams = Array.isArray(data?.teams) ? data.teams : [];
+      const teamsById = new Map();
+      teams.forEach((team) => {
+        const key = normalizeCode(team?.id);
+        if (!key) return;
+        teamsById.set(key, {
+          id: key,
+          name: String(team?.name || key).trim(),
+          flag: String(team?.flag || team?.logo || "").trim(),
+          timezone: String(team?.timezone || "").trim(),
+        });
+      });
+      return teamsById;
+    } catch (_error) {
+      return new Map();
+    }
+  }
+
+  async function enrichTimeContext(baseTimeContext) {
+    const [associationCode, teamsById] = await Promise.all([
+      fetchCurrentUserAssociation(),
+      fetchTeamsById(),
+    ]);
+    const teamMeta = teamsById.get(associationCode) || null;
+    if (!teamMeta) return baseTimeContext || { timezone: "UTC" };
+    return {
+      ...(baseTimeContext || {}),
+      association_id: teamMeta.id,
+      association_name: teamMeta.name,
+      association_flag: teamMeta.flag || baseTimeContext?.association_flag || "",
+      timezone: teamMeta.timezone || baseTimeContext?.timezone || "UTC",
+    };
   }
 
   function parseUtcDate(value) {
@@ -445,12 +640,58 @@
     return `${date.weekday}, ${date.month} ${date.day}, ${date.hour}:${date.minute}`;
   }
 
-  function createMetaLine(label, text, suffixNode) {
+  function createBoldText(text) {
+    const bold = document.createElement("b");
+    bold.textContent = text;
+    return bold;
+  }
+
+  function createLocalDateNode(value, timezone) {
+    const date = getDateParts(value, timezone);
+    if (!date) return document.createTextNode("-");
+    return createBoldText(`${date.weekday}, ${date.month} ${date.day}`);
+  }
+
+  function createLocalDateTimeRangeNode(startValue, endValue, timezone) {
+    const fragment = document.createDocumentFragment();
+    const startDate = getDateParts(startValue, timezone);
+    const endDate = getDateParts(endValue, timezone);
+
+    if (!startDate && !endDate) {
+      fragment.appendChild(document.createTextNode("-"));
+      return fragment;
+    }
+
+    if (startDate) {
+      fragment.appendChild(createBoldText(`${startDate.weekday}, ${startDate.month} ${startDate.day}`));
+      fragment.appendChild(document.createTextNode(`, ${startDate.hour}:${startDate.minute}`));
+    } else {
+      fragment.appendChild(document.createTextNode("-"));
+    }
+
+    fragment.appendChild(document.createTextNode(" - "));
+
+    if (endDate) {
+      fragment.appendChild(createBoldText(`${endDate.weekday}, ${endDate.month} ${endDate.day}`));
+      fragment.appendChild(document.createTextNode(`, ${endDate.hour}:${endDate.minute}`));
+    } else {
+      fragment.appendChild(document.createTextNode("-"));
+    }
+
+    return fragment;
+  }
+
+  function createMetaLine(label, content, suffixNode) {
     const line = document.createElement("span");
-    const labelEl = document.createElement("strong");
+    const labelEl = document.createElement("span");
     labelEl.textContent = label;
     line.appendChild(labelEl);
-    line.appendChild(document.createTextNode(` ${text}`));
+    line.appendChild(document.createTextNode(" "));
+    if (content instanceof Node) {
+      line.appendChild(content);
+    } else {
+      line.appendChild(document.createTextNode(String(content || "-")));
+    }
     if (suffixNode) {
       line.appendChild(document.createTextNode(" "));
       line.appendChild(suffixNode);
@@ -520,6 +761,157 @@
       throw new Error(data?.message || "Request failed");
     }
     return data;
+  }
+
+  function getOpponentInitials(opponent) {
+    const name = String(opponent?.bga_nickname || opponent?.name || "?").trim();
+    return (name.slice(0, 2) || "?").toUpperCase();
+  }
+
+  function getOpponentDisplayName(opponent) {
+    return String(opponent?.bga_nickname || opponent?.name || opponent?.player_id || "Unknown player").trim();
+  }
+
+  function createOpponentAvatar(opponent) {
+    const avatarUrl = String(opponent?.avatar || "").trim();
+    if (avatarUrl) {
+      const img = document.createElement("img");
+      img.className = "challenge-opponent-avatar";
+      img.src = avatarUrl;
+      img.alt = "";
+      img.loading = "lazy";
+      return img;
+    }
+    const fallback = document.createElement("div");
+    fallback.className = "challenge-opponent-avatar challenge-opponent-avatar-fallback";
+    fallback.textContent = getOpponentInitials(opponent);
+    return fallback;
+  }
+
+  function createOpponentRow(opponent) {
+    const row = document.createElement("div");
+    row.className = "challenge-opponent-row";
+    row.dataset.playerId = String(opponent?.player_id || "");
+    row.dataset.associationId = String(opponent?.association?.id || "");
+
+    row.appendChild(createOpponentAvatar(opponent));
+
+    const main = document.createElement("div");
+    main.className = "challenge-opponent-main";
+    row.appendChild(main);
+
+    const name = document.createElement("div");
+    name.className = "challenge-opponent-name";
+    name.textContent = getOpponentDisplayName(opponent);
+    name.title = name.textContent;
+    main.appendChild(name);
+
+    const sub = document.createElement("div");
+    sub.className = "challenge-opponent-sub";
+    const realName = String(opponent?.name || "").trim();
+    const idText = String(opponent?.player_id || "").trim();
+    sub.textContent = [realName && realName !== name.textContent ? realName : "", idText ? `BGA #${idText}` : ""]
+      .filter(Boolean)
+      .join(" / ");
+    main.appendChild(sub);
+
+    const meta = document.createElement("div");
+    meta.className = "challenge-opponent-meta";
+    row.appendChild(meta);
+
+    if (opponent?.association?.flag) {
+      const flag = document.createElement("img");
+      flag.className = "challenge-opponent-flag";
+      flag.src = String(opponent.association.flag || "");
+      flag.alt = "";
+      flag.title = String(opponent?.association?.name || opponent?.association?.id || "");
+      meta.appendChild(flag);
+    }
+
+    const association = document.createElement("span");
+    association.textContent = String(opponent?.association?.name || opponent?.association?.id || "No association");
+    meta.appendChild(association);
+
+    if (opponent?.bga_elo !== null && opponent?.bga_elo !== undefined) {
+      const elo = document.createElement("span");
+      elo.textContent = `Elo ${opponent.bga_elo}`;
+      meta.appendChild(elo);
+    }
+
+    return row;
+  }
+
+  function getEligibilityStateText(eligibility) {
+    const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
+    if (reasons.includes("period_closed")) return "Requests closed for this period.";
+    if (reasons.includes("current_player_unavailable")) return "Your status is Not playing this period.";
+    if (reasons.includes("current_player_has_match")) return "You already have a Challenge match in this period.";
+    return "";
+  }
+
+  function setOpponentsState(panel, text, isError) {
+    const countEl = panel.querySelector("[data-opponents-count]");
+    const bodyEl = panel.querySelector("[data-opponents-body]");
+    if (countEl) countEl.textContent = "";
+    if (!bodyEl) return;
+    bodyEl.innerHTML = "";
+    const state = document.createElement("div");
+    state.className = `challenge-opponents-state${isError ? " is-error" : ""}`;
+    state.textContent = text;
+    bodyEl.appendChild(state);
+  }
+
+  async function loadOpponentsForPeriod(period, panel) {
+    const periodId = String(period?.id || "").trim();
+    if (!periodId) {
+      setOpponentsState(panel, "Challenge period is unavailable.", true);
+      return;
+    }
+
+    setOpponentsState(panel, "Loading opponents...", false);
+    try {
+      const data = await apiJson(
+        `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(periodId)}/${ELIGIBLE_OPPONENTS_PATH}`,
+        { method: "GET" }
+      );
+      const opponents = Array.isArray(data?.available_opponents) ? data.available_opponents : [];
+      const countEl = panel.querySelector("[data-opponents-count]");
+      const bodyEl = panel.querySelector("[data-opponents-body]");
+      if (countEl) {
+        countEl.textContent = `${opponents.length} ${opponents.length === 1 ? "player" : "players"}`;
+      }
+      if (!bodyEl) return;
+      bodyEl.innerHTML = "";
+
+      const eligibilityText = getEligibilityStateText(data?.eligibility);
+      if (eligibilityText) {
+        const state = document.createElement("div");
+        state.className = "challenge-opponents-state";
+        state.textContent = eligibilityText;
+        bodyEl.appendChild(state);
+        return;
+      }
+
+      if (!opponents.length) {
+        const state = document.createElement("div");
+        state.className = "challenge-opponents-state";
+        state.textContent = "No available opponents right now.";
+        bodyEl.appendChild(state);
+        return;
+      }
+
+      opponents.forEach((opponent) => {
+        bodyEl.appendChild(createOpponentRow(opponent));
+      });
+    } catch (error) {
+      setOpponentsState(panel, error?.message || "Failed to load opponents.", true);
+    }
+  }
+
+  function refreshOpponentPanel(periodId) {
+    const item = opponentPanels.get(String(periodId || ""));
+    if (!item) return;
+    loadOpponentsForPeriod(item.period, item.panel);
   }
 
   function createStatusDropdown(period, initialStatus) {
@@ -654,7 +1046,10 @@
             method: "PATCH",
             body: JSON.stringify({ status: nextStatus }),
           });
-          setStatus(data?.period_player?.status || nextStatus);
+          const savedStatus = data?.period_player?.status || nextStatus;
+          period.player_status = savedStatus;
+          setStatus(savedStatus);
+          refreshOpponentPanel(period.id);
         } catch (error) {
           setStatus(previousStatus, error?.message || "Failed to update status.");
         }
@@ -698,10 +1093,10 @@
     const meta = document.createElement("div");
     meta.className = "challenge-period-meta";
     const timezone = getPlayerTimezone(timeContext);
-    meta.appendChild(createMetaLine("Registration from:", formatLocalDate(period?.planning_starts_at, timezone)));
+    meta.appendChild(createMetaLine("Registration from:", createLocalDateNode(period?.planning_starts_at, timezone)));
     meta.appendChild(createMetaLine(
       "Playing days:",
-      `${formatLocalDateTime(period?.play_starts_at, timezone)}  - ${formatLocalDateTime(period?.play_ends_at, timezone)}`,
+      createLocalDateTimeRangeNode(period?.play_starts_at, period?.play_ends_at, timezone),
       createTimeContextMeta(timeContext)
     ));
     main.appendChild(meta);
@@ -710,14 +1105,44 @@
     return band;
   }
 
+  function createOpponentsPanel(period) {
+    const panel = document.createElement("section");
+    panel.className = "challenge-opponents-panel";
+    panel.dataset.challengePeriodOpponents = String(period?.id || "");
+
+    const head = document.createElement("div");
+    head.className = "challenge-opponents-head";
+    panel.appendChild(head);
+
+    const title = document.createElement("div");
+    title.className = "challenge-opponents-title";
+    title.textContent = "Open to match";
+    head.appendChild(title);
+
+    const count = document.createElement("div");
+    count.className = "challenge-opponents-count";
+    count.dataset.opponentsCount = "true";
+    head.appendChild(count);
+
+    const body = document.createElement("div");
+    body.className = "challenge-opponents-body";
+    body.dataset.opponentsBody = "true";
+    panel.appendChild(body);
+
+    opponentPanels.set(String(period?.id || ""), { period, panel });
+    loadOpponentsForPeriod(period, panel);
+    return panel;
+  }
+
   async function renderChallenges() {
     setAlert("Loading...", false);
     dropdowns.splice(0, dropdowns.length);
+    opponentPanels.clear();
 
     try {
       const data = await apiJson(PLAYER_CHALLENGE_PERIODS_URL, { method: "GET" });
       const periods = Array.isArray(data?.challenge_periods) ? data.challenge_periods : [];
-      const timeContext = data?.player_time_context || { timezone: "UTC" };
+      const timeContext = await enrichTimeContext(data?.player_time_context || { timezone: "UTC" });
       if (!periods.length) {
         setAlert("No open Challenge periods right now.", false);
         return;
@@ -725,7 +1150,11 @@
       contentEl.className = "challenges-list";
       contentEl.innerHTML = "";
       periods.forEach((period) => {
-        contentEl.appendChild(createPeriodBand(period, timeContext));
+        const stack = document.createElement("div");
+        stack.className = "challenge-period-stack";
+        stack.appendChild(createPeriodBand(period, timeContext));
+        stack.appendChild(createOpponentsPanel(period));
+        contentEl.appendChild(stack);
       });
     } catch (error) {
       setAlert(error?.message || "Failed to load Challenge periods.", true);

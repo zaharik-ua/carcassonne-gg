@@ -341,6 +341,12 @@ const CHALLENGE_PLAYER_PERIOD_STATUSES = new Set([
   "match_scheduled",
   "played",
 ]);
+const CHALLENGE_ACTIVE_DUEL_STATUSES = new Set([
+  "Draft",
+  "Planned",
+  "In progress",
+  "Error",
+]);
 
 function quoteSqlIdentifier(identifier) {
   return `"${String(identifier || "").replaceAll('"', '""')}"`;
@@ -6640,6 +6646,39 @@ function normalizeChallengePlayerPeriodStatus(value) {
   return CHALLENGE_PLAYER_PERIOD_STATUSES.has(normalized) ? normalized : "not_selected";
 }
 
+function normalizeChallengeAssociationKey(value) {
+  return normalizeEntityId(value);
+}
+
+function challengeAssociationsMatch(leftValue, rightValue) {
+  const leftKey = normalizeChallengeAssociationKey(leftValue);
+  const rightKey = normalizeChallengeAssociationKey(rightValue);
+  return !!leftKey && !!rightKey && leftKey === rightKey;
+}
+
+function mapChallengeOpponent(row) {
+  const associationId = normalizeNullableText(row?.association_id);
+  const associationName = normalizeNullableText(row?.association_name);
+  return {
+    player_id: normalizeNullableText(row?.player_id),
+    bga_nickname: normalizeNullableText(row?.bga_nickname),
+    name: normalizeNullableText(row?.name),
+    avatar: normalizeNullableText(row?.avatar),
+    profile_status: normalizeNullableText(row?.profile_status),
+    bga_elo: normalizeIntegerOrNull(row?.bga_elo),
+    period_status: normalizeChallengePlayerPeriodStatus(row?.period_player_status),
+    association: {
+      id: associationId,
+      name: associationName,
+      flag: normalizeNullableText(row?.association_flag),
+      timezone: normalizeNullableText(row?.team_timezone)
+        || DEFAULT_TEAM_TIMEZONES[normalizeEntityId(associationId)]
+        || "UTC",
+    },
+    pending_request_id: normalizeNullableText(row?.pending_request_id),
+  };
+}
+
 function getManualChallengePlayerPeriodStatus(value) {
   const status = normalizeChallengePlayerPeriodStatus(value);
   return ["not_selected", "available", "unavailable"].includes(status) ? status : null;
@@ -6680,6 +6719,39 @@ async function loadChallengePeriodPlayerStatus(periodId, playerId) {
       LIMIT 1
     `,
     [normalizedPeriodId, normalizedPlayerId]
+  );
+}
+
+async function loadChallengePlayerProfileContext(playerId) {
+  const normalizedPlayerId = normalizeNullableText(playerId);
+  if (!normalizedPlayerId) return null;
+  return dbGetAsync(
+    `
+      SELECT
+        p.id AS player_id,
+        p.bga_nickname,
+        p.name,
+        p.avatar,
+        p.status AS profile_status,
+        p.bga_elo,
+        COALESCE(NULLIF(trim(t.id), ''), NULLIF(trim(a.code), ''), NULLIF(trim(p.association), '')) AS association_id,
+        COALESCE(NULLIF(trim(t.name), ''), NULLIF(trim(a.name), ''), NULLIF(trim(p.association), '')) AS association_name,
+        COALESCE(NULLIF(trim(t.flag), ''), NULLIF(trim(t.logo), ''), NULLIF(trim(a.flag), '')) AS association_flag,
+        NULLIF(trim(t.timezone), '') AS team_timezone
+      FROM profiles p
+      LEFT JOIN associations a
+        ON upper(trim(COALESCE(a.code, ''))) = upper(trim(COALESCE(p.association, '')))
+        OR lower(trim(COALESCE(a.name, ''))) = lower(trim(COALESCE(p.association, '')))
+      LEFT JOIN teams t
+        ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(p.association, '')))
+        OR lower(trim(COALESCE(t.name, ''))) = lower(trim(COALESCE(p.association, '')))
+        OR upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(a.code, '')))
+        OR lower(trim(COALESCE(t.name, ''))) = lower(trim(COALESCE(a.name, '')))
+      WHERE trim(COALESCE(p.id, '')) = trim(?)
+        AND p.deleted_at IS NULL
+      LIMIT 1
+    `,
+    [normalizedPlayerId]
   );
 }
 
@@ -6797,6 +6869,177 @@ app.get("/challenge-periods/player", requireAuthenticated, async (req, res) => {
   } catch (error) {
     console.error("Failed to load player challenge periods", error);
     return res.status(500).json({ ok: false, message: "Failed to load Challenge periods" });
+  }
+});
+
+app.get("/challenge-periods/:id/eligible-opponents", requireAuthenticated, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const playerId = normalizeNullableText(req.user?.player_id);
+
+  if (!playerId) {
+    return res.status(403).json({
+      ok: false,
+      code: "profile_required",
+      message: "Linked player profile is required",
+    });
+  }
+  if (!periodId) {
+    return res.status(400).json({ ok: false, message: "Invalid Challenge period id" });
+  }
+
+  try {
+    const [period, currentProfile, currentPeriodStatus, currentActiveDuel] = await Promise.all([
+      loadChallengePeriodById(periodId),
+      loadChallengePlayerProfileContext(playerId),
+      loadChallengePeriodPlayerStatus(periodId, playerId),
+      dbGetAsync(
+        `
+          SELECT id, status
+          FROM duels
+          WHERE challenge_period_id = ?
+            AND deleted_at IS NULL
+            AND status IN (${Array.from(CHALLENGE_ACTIVE_DUEL_STATUSES).map(() => "?").join(", ")})
+            AND (player_1_id = ? OR player_2_id = ?)
+          LIMIT 1
+        `,
+        [periodId, ...Array.from(CHALLENGE_ACTIVE_DUEL_STATUSES), playerId, playerId]
+      ),
+    ]);
+
+    if (!period || !["planning_open", "active", "result_review"].includes(period.status)) {
+      return res.status(404).json({ ok: false, message: "Open Challenge period not found" });
+    }
+    if (!currentProfile) {
+      return res.status(403).json({
+        ok: false,
+        code: "profile_required",
+        message: "Linked player profile is required",
+      });
+    }
+
+    const currentStatus = normalizeChallengePlayerPeriodStatus(currentPeriodStatus?.status);
+    const canCreateRequests = ["planning_open", "active"].includes(period.status)
+      && currentStatus !== "unavailable"
+      && !currentActiveDuel;
+    const eligibilityReasons = [];
+    if (!["planning_open", "active"].includes(period.status)) eligibilityReasons.push("period_closed");
+    if (currentStatus === "unavailable") eligibilityReasons.push("current_player_unavailable");
+    if (currentActiveDuel) eligibilityReasons.push("current_player_has_match");
+
+    const activeStatuses = Array.from(CHALLENGE_ACTIVE_DUEL_STATUSES);
+    const rows = await dbAllAsync(
+      `
+        SELECT
+          p.id AS player_id,
+          p.bga_nickname,
+          p.name,
+          p.avatar,
+          p.status AS profile_status,
+          p.bga_elo,
+          cpp.status AS period_player_status,
+          cpp.challenge_duel_id,
+          COALESCE(NULLIF(trim(t.id), ''), NULLIF(trim(a.code), ''), NULLIF(trim(p.association), '')) AS association_id,
+          COALESCE(NULLIF(trim(t.name), ''), NULLIF(trim(a.name), ''), NULLIF(trim(p.association), '')) AS association_name,
+          COALESCE(NULLIF(trim(t.flag), ''), NULLIF(trim(t.logo), ''), NULLIF(trim(a.flag), '')) AS association_flag,
+          NULLIF(trim(t.timezone), '') AS team_timezone,
+          active_d.id AS active_challenge_duel_id,
+          pending_req.id AS pending_request_id
+        FROM challenge_period_players cpp
+        INNER JOIN profiles p
+          ON trim(COALESCE(p.id, '')) = trim(COALESCE(cpp.player_id, ''))
+         AND p.deleted_at IS NULL
+        LEFT JOIN associations a
+          ON upper(trim(COALESCE(a.code, ''))) = upper(trim(COALESCE(p.association, '')))
+          OR lower(trim(COALESCE(a.name, ''))) = lower(trim(COALESCE(p.association, '')))
+        LEFT JOIN teams t
+          ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(p.association, '')))
+          OR lower(trim(COALESCE(t.name, ''))) = lower(trim(COALESCE(p.association, '')))
+          OR upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(a.code, '')))
+          OR lower(trim(COALESCE(t.name, ''))) = lower(trim(COALESCE(a.name, '')))
+        LEFT JOIN duels active_d
+          ON active_d.challenge_period_id = ?
+         AND active_d.deleted_at IS NULL
+         AND active_d.status IN (${activeStatuses.map(() => "?").join(", ")})
+         AND (
+           trim(COALESCE(active_d.player_1_id, '')) = trim(COALESCE(p.id, ''))
+           OR trim(COALESCE(active_d.player_2_id, '')) = trim(COALESCE(p.id, ''))
+         )
+        LEFT JOIN challenge_requests pending_req
+          ON pending_req.period_id = ?
+         AND pending_req.status = 'pending'
+         AND (
+           (
+             trim(COALESCE(pending_req.player_1_id, '')) = trim(?)
+             AND trim(COALESCE(pending_req.player_2_id, '')) = trim(COALESCE(p.id, ''))
+           )
+           OR (
+             trim(COALESCE(pending_req.player_2_id, '')) = trim(?)
+             AND trim(COALESCE(pending_req.player_1_id, '')) = trim(COALESCE(p.id, ''))
+           )
+         )
+        WHERE cpp.period_id = ?
+          AND cpp.status = 'available'
+          AND trim(COALESCE(cpp.player_id, '')) <> trim(?)
+        ORDER BY p.bga_nickname COLLATE NOCASE ASC, p.id COLLATE NOCASE ASC
+      `,
+      [periodId, ...activeStatuses, periodId, playerId, playerId, periodId, playerId]
+    );
+
+    const blockedCounts = {
+      same_association: 0,
+      scheduled_match: 0,
+      pending_request: 0,
+      current_player_ineligible: canCreateRequests ? 0 : rows.length,
+    };
+    const currentAssociation = currentProfile.association_id || currentProfile.association_name;
+    const availableOpponents = [];
+    const seenOpponentIds = new Set();
+
+    for (const row of rows || []) {
+      const opponentId = normalizeNullableText(row?.player_id);
+      if (!opponentId || seenOpponentIds.has(opponentId)) continue;
+      seenOpponentIds.add(opponentId);
+      const opponentAssociation = row?.association_id || row?.association_name;
+      if (challengeAssociationsMatch(currentAssociation, opponentAssociation)) {
+        blockedCounts.same_association += 1;
+        continue;
+      }
+      if (normalizeNullableText(row?.active_challenge_duel_id) || normalizeNullableText(row?.challenge_duel_id)) {
+        blockedCounts.scheduled_match += 1;
+        continue;
+      }
+      if (normalizeNullableText(row?.pending_request_id)) {
+        blockedCounts.pending_request += 1;
+        continue;
+      }
+      if (!canCreateRequests) continue;
+      availableOpponents.push(mapChallengeOpponent(row));
+    }
+
+    return res.json({
+      ok: true,
+      period: mapChallengePeriodForPlayer({
+        ...period,
+        player_status: currentStatus,
+        challenge_duel_id: currentPeriodStatus?.challenge_duel_id || null,
+        duel_status: currentActiveDuel?.status || null,
+      }),
+      current_player: mapChallengeOpponent({
+        ...currentProfile,
+        period_player_status: currentStatus,
+        pending_request_id: null,
+      }),
+      eligibility: {
+        can_use_challenges: true,
+        can_create_requests: canCreateRequests,
+        reasons: eligibilityReasons,
+      },
+      available_opponents: availableOpponents,
+      blocked_counts: blockedCounts,
+    });
+  } catch (error) {
+    console.error("Failed to load Challenge eligible opponents", error);
+    return res.status(500).json({ ok: false, message: "Failed to load available opponents" });
   }
 });
 

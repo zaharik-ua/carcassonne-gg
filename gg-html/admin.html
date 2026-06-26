@@ -998,6 +998,12 @@
     return field;
   }
 
+  function createDateTimeUtcRow(labelText, value) {
+    const field = createTextRow(labelText, formatDateTimeUtcInput(value));
+    field.input.type = "datetime-local";
+    return field;
+  }
+
   function createNumberRow(labelText, value, options) {
     const field = createTextRow(labelText, value, options);
     field.input.type = "number";
@@ -1459,10 +1465,32 @@
     return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
   }
 
+  function formatDateTimeUtcInput(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const date = parseUtcDate(raw);
+    if (!date) return "";
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    const hours = String(date.getUTCHours()).padStart(2, "0");
+    const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
   function dateTimeLocalInputToIso(value) {
     const raw = String(value || "").trim();
     if (!raw) return "";
     const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString();
+  }
+
+  function dateTimeUtcInputToIso(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw) ? raw : `${raw}Z`;
+    const date = new Date(normalized);
     if (Number.isNaN(date.getTime())) return "";
     return date.toISOString();
   }
@@ -1476,6 +1504,20 @@
     const date = new Date(normalized);
     if (Number.isNaN(date.getTime())) return null;
     return date;
+  }
+
+  function formatDateUtc(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const date = parseUtcDate(raw);
+    if (!date) return raw;
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const year = date.getUTCFullYear();
+    const hours = String(date.getUTCHours()).padStart(2, "0");
+    const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+    const seconds = String(date.getUTCSeconds()).padStart(2, "0");
+    return `${day}.${month}.${year}, ${hours}:${minutes}:${seconds} UTC`;
   }
 
   function formatAuditTrailDate(value) {
@@ -3608,10 +3650,10 @@
       ],
       false
     );
-    const planningStartsField = createDateTimeRow("planning_starts_at", item?.planning_starts_at || "");
-    const playStartsField = createDateTimeRow("play_starts_at", item?.play_starts_at || "");
-    const playEndsField = createDateTimeRow("play_ends_at", item?.play_ends_at || "");
-    const resultReviewEndsField = createDateTimeRow("result_review_ends_at", item?.result_review_ends_at || "");
+    const planningStartsField = createDateTimeUtcRow("planning_starts_at (UTC)", item?.planning_starts_at || "");
+    const playStartsField = createDateTimeUtcRow("play_starts_at (UTC)", item?.play_starts_at || "");
+    const playEndsField = createDateTimeUtcRow("play_ends_at (UTC)", item?.play_ends_at || "");
+    const resultReviewEndsField = createDateTimeUtcRow("result_review_ends_at (UTC)", item?.result_review_ends_at || "");
 
     if (mode === "edit") form.appendChild(idField.row);
     form.appendChild(nameField.row);
@@ -3654,10 +3696,10 @@
         name: String(nameField.input.value || "").trim(),
         description: String(descriptionField.input.value || "").trim(),
         status: String(statusField.select.value || "draft").trim(),
-        planning_starts_at: dateTimeLocalInputToIso(planningStartsField.input.value),
-        play_starts_at: dateTimeLocalInputToIso(playStartsField.input.value),
-        play_ends_at: dateTimeLocalInputToIso(playEndsField.input.value),
-        result_review_ends_at: dateTimeLocalInputToIso(resultReviewEndsField.input.value),
+        planning_starts_at: dateTimeUtcInputToIso(planningStartsField.input.value),
+        play_starts_at: dateTimeUtcInputToIso(playStartsField.input.value),
+        play_ends_at: dateTimeUtcInputToIso(playEndsField.input.value),
+        result_review_ends_at: dateTimeUtcInputToIso(resultReviewEndsField.input.value),
       };
 
       if (mode === "edit") {
@@ -4588,11 +4630,11 @@
     state.challengePeriods.forEach((item) => {
       const subtitleParts = [];
       if (item.status) subtitleParts.push(String(item.status).trim());
-      if (item.planning_starts_at) subtitleParts.push(`Planning: ${formatDate(item.planning_starts_at)}`);
+      if (item.planning_starts_at) subtitleParts.push(`Planning: ${formatDateUtc(item.planning_starts_at)}`);
       if (item.play_starts_at || item.play_ends_at) {
-        subtitleParts.push(`Play: ${formatDate(item.play_starts_at)} - ${formatDate(item.play_ends_at)}`);
+        subtitleParts.push(`Play: ${formatDateUtc(item.play_starts_at)} - ${formatDateUtc(item.play_ends_at)}`);
       }
-      if (item.result_review_ends_at) subtitleParts.push(`Review until: ${formatDate(item.result_review_ends_at)}`);
+      if (item.result_review_ends_at) subtitleParts.push(`Review until: ${formatDateUtc(item.result_review_ends_at)}`);
 
       sectionList.appendChild(createListRow({
         imageSrc: "",
