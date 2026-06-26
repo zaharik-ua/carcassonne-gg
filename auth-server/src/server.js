@@ -6688,6 +6688,12 @@ function buildChallengeRequestId(periodId, player1Id, player2Id) {
   return `challenge_request_${periodPart}_${p1Part}_${p2Part}_${Date.now().toString(36)}`;
 }
 
+function buildChallengeDuelId(periodId, requestId) {
+  const periodPart = normalizeEntityId(periodId).toLowerCase() || "period";
+  const requestPart = normalizeEntityId(requestId).toLowerCase() || "request";
+  return `challenge_duel_${periodPart}_${requestPart}_${Date.now().toString(36)}`;
+}
+
 function isChallengeTimeWithinPeriod(timeUtc, period) {
   const time = Date.parse(String(timeUtc || ""));
   const start = Date.parse(String(period?.play_starts_at || ""));
@@ -6794,6 +6800,22 @@ async function loadChallengeBlockingDuelForPlayer(periodId, playerId) {
   );
 }
 
+async function loadChallengeRequestById(periodId, requestId) {
+  const normalizedPeriodId = normalizeNullableText(periodId);
+  const normalizedRequestId = normalizeNullableText(requestId);
+  if (!normalizedPeriodId || !normalizedRequestId) return null;
+  return dbGetAsync(
+    `
+      SELECT *
+      FROM challenge_requests
+      WHERE period_id = ?
+        AND id = ?
+      LIMIT 1
+    `,
+    [normalizedPeriodId, normalizedRequestId]
+  );
+}
+
 function mapChallengeRequest(row) {
   if (!row) return null;
   return {
@@ -6814,6 +6836,45 @@ function mapChallengeRequest(row) {
     hidden_by_creator_at: row.hidden_by_creator_at || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
+  };
+}
+
+function mapChallengeRequestPlayer(row, prefix) {
+  if (!row) return null;
+  const playerId = normalizeNullableText(row[`${prefix}_player_id`]);
+  if (!playerId) return null;
+  const associationId = normalizeNullableText(row[`${prefix}_association_id`]);
+  const associationName = normalizeNullableText(row[`${prefix}_association_name`]);
+  return {
+    player_id: playerId,
+    bga_nickname: normalizeNullableText(row[`${prefix}_bga_nickname`]),
+    name: normalizeNullableText(row[`${prefix}_name`]),
+    avatar: normalizeNullableText(row[`${prefix}_avatar`]),
+    bga_elo: normalizeIntegerOrNull(row[`${prefix}_bga_elo`]),
+    association: {
+      id: associationId,
+      name: associationName,
+      flag: normalizeNullableText(row[`${prefix}_association_flag`]),
+      timezone: normalizeNullableText(row[`${prefix}_team_timezone`])
+        || DEFAULT_TEAM_TIMEZONES[normalizeEntityId(associationId)]
+        || "UTC",
+    },
+  };
+}
+
+function mapChallengeRequestWithPlayers(row) {
+  const request = mapChallengeRequest(row);
+  if (!request) return null;
+  return {
+    ...request,
+    player_1: mapChallengeRequestPlayer(row, "p1"),
+    player_2: mapChallengeRequestPlayer(row, "p2"),
+    duel: row?.duel_id ? {
+      id: row.duel_id,
+      status: row.duel_status,
+      time_utc: row.duel_time_utc,
+      duel_format: row.duel_format,
+    } : null,
   };
 }
 
@@ -7321,6 +7382,503 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
     }
     console.error("Failed to create Challenge request", error);
     return res.status(500).json({ ok: false, message: "Failed to create Challenge request" });
+  }
+});
+
+app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const playerId = normalizeNullableText(req.user?.player_id);
+
+  if (!playerId) {
+    return res.status(403).json({
+      ok: false,
+      code: "profile_required",
+      message: "Linked player profile is required",
+    });
+  }
+  if (!periodId) {
+    return res.status(400).json({ ok: false, message: "Invalid Challenge period id" });
+  }
+
+  try {
+    const period = await loadChallengePeriodById(periodId);
+    if (!period || !["planning_open", "active", "result_review"].includes(period.status)) {
+      return res.status(404).json({ ok: false, message: "Open Challenge period not found" });
+    }
+
+    const rows = await dbAllAsync(
+      `
+        SELECT
+          cr.*,
+          p1.id AS p1_player_id,
+          p1.bga_nickname AS p1_bga_nickname,
+          p1.name AS p1_name,
+          p1.avatar AS p1_avatar,
+          p1.bga_elo AS p1_bga_elo,
+          COALESCE(NULLIF(trim(t1.id), ''), NULLIF(trim(a1.code), ''), NULLIF(trim(p1.association), '')) AS p1_association_id,
+          COALESCE(NULLIF(trim(t1.name), ''), NULLIF(trim(a1.name), ''), NULLIF(trim(p1.association), '')) AS p1_association_name,
+          COALESCE(NULLIF(trim(t1.flag), ''), NULLIF(trim(t1.logo), ''), NULLIF(trim(a1.flag), '')) AS p1_association_flag,
+          NULLIF(trim(t1.timezone), '') AS p1_team_timezone,
+          p2.id AS p2_player_id,
+          p2.bga_nickname AS p2_bga_nickname,
+          p2.name AS p2_name,
+          p2.avatar AS p2_avatar,
+          p2.bga_elo AS p2_bga_elo,
+          COALESCE(NULLIF(trim(t2.id), ''), NULLIF(trim(a2.code), ''), NULLIF(trim(p2.association), '')) AS p2_association_id,
+          COALESCE(NULLIF(trim(t2.name), ''), NULLIF(trim(a2.name), ''), NULLIF(trim(p2.association), '')) AS p2_association_name,
+          COALESCE(NULLIF(trim(t2.flag), ''), NULLIF(trim(t2.logo), ''), NULLIF(trim(a2.flag), '')) AS p2_association_flag,
+          NULLIF(trim(t2.timezone), '') AS p2_team_timezone,
+          d.id AS duel_id,
+          d.status AS duel_status,
+          d.time_utc AS duel_time_utc,
+          d.duel_format
+        FROM challenge_requests cr
+        LEFT JOIN profiles p1
+          ON trim(COALESCE(p1.id, '')) = trim(COALESCE(cr.player_1_id, ''))
+         AND p1.deleted_at IS NULL
+        LEFT JOIN associations a1
+          ON upper(trim(COALESCE(a1.code, ''))) = upper(trim(COALESCE(p1.association, '')))
+          OR lower(trim(COALESCE(a1.name, ''))) = lower(trim(COALESCE(p1.association, '')))
+        LEFT JOIN teams t1
+          ON upper(trim(COALESCE(t1.id, ''))) = upper(trim(COALESCE(p1.association, '')))
+          OR lower(trim(COALESCE(t1.name, ''))) = lower(trim(COALESCE(p1.association, '')))
+          OR upper(trim(COALESCE(t1.id, ''))) = upper(trim(COALESCE(a1.code, '')))
+          OR lower(trim(COALESCE(t1.name, ''))) = lower(trim(COALESCE(a1.name, '')))
+        LEFT JOIN profiles p2
+          ON trim(COALESCE(p2.id, '')) = trim(COALESCE(cr.player_2_id, ''))
+         AND p2.deleted_at IS NULL
+        LEFT JOIN associations a2
+          ON upper(trim(COALESCE(a2.code, ''))) = upper(trim(COALESCE(p2.association, '')))
+          OR lower(trim(COALESCE(a2.name, ''))) = lower(trim(COALESCE(p2.association, '')))
+        LEFT JOIN teams t2
+          ON upper(trim(COALESCE(t2.id, ''))) = upper(trim(COALESCE(p2.association, '')))
+          OR lower(trim(COALESCE(t2.name, ''))) = lower(trim(COALESCE(p2.association, '')))
+          OR upper(trim(COALESCE(t2.id, ''))) = upper(trim(COALESCE(a2.code, '')))
+          OR lower(trim(COALESCE(t2.name, ''))) = lower(trim(COALESCE(a2.name, '')))
+        LEFT JOIN duels d
+          ON d.challenge_request_id = cr.id
+         AND d.deleted_at IS NULL
+        WHERE cr.period_id = ?
+          AND (cr.player_1_id = ? OR cr.player_2_id = ?)
+          AND NOT (cr.created_by_player_id = ? AND cr.hidden_by_creator_at IS NOT NULL)
+        ORDER BY
+          CASE WHEN cr.status = 'pending' THEN 0 ELSE 1 END ASC,
+          datetime(cr.updated_at) DESC,
+          cr.id ASC
+      `,
+      [periodId, playerId, playerId, playerId]
+    );
+    const requests = (rows || []).map(mapChallengeRequestWithPlayers).filter(Boolean);
+    return res.json({
+      ok: true,
+      player_id: playerId,
+      period,
+      incoming_requests: requests.filter((request) => (
+        request.created_by_player_id !== playerId
+        || (request.status === "pending" && request.awaiting_player_id === playerId)
+      )),
+      sent_requests: requests.filter((request) => request.created_by_player_id === playerId),
+    });
+  } catch (error) {
+    console.error("Failed to load Challenge requests", error);
+    return res.status(500).json({ ok: false, message: "Failed to load Challenge requests" });
+  }
+});
+
+app.patch("/challenge-periods/:id/requests/:requestId/cancel", requireAuthenticated, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const requestId = normalizeNullableText(req.params.requestId);
+  const playerId = normalizeNullableText(req.user?.player_id);
+
+  if (!playerId) return res.status(403).json({ ok: false, code: "profile_required", message: "Linked player profile is required" });
+  if (!periodId || !requestId) return res.status(400).json({ ok: false, message: "Invalid Challenge request id" });
+
+  try {
+    const beforeRow = await loadChallengeRequestById(periodId, requestId);
+    if (!beforeRow || ![beforeRow.player_1_id, beforeRow.player_2_id].includes(playerId)) {
+      return res.status(404).json({ ok: false, message: "Challenge request not found" });
+    }
+    if (beforeRow.created_by_player_id !== playerId) {
+      return res.status(403).json({ ok: false, message: "Only the sender can cancel this request" });
+    }
+    if (beforeRow.status !== "pending") {
+      return res.status(409).json({ ok: false, message: "Only pending requests can be cancelled" });
+    }
+
+    await dbRunAsync(
+      `
+        UPDATE challenge_requests
+        SET status = 'cancelled_by_sender', updated_at = CURRENT_TIMESTAMP
+        WHERE period_id = ?
+          AND id = ?
+          AND status = 'pending'
+      `,
+      [periodId, requestId]
+    );
+    const afterRow = await loadChallengeRequestById(periodId, requestId);
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_request.cancelled_by_sender",
+      entity_type: "challenge_request",
+      action: "update",
+      record_id: requestId,
+      changes: buildAuditChanges(beforeRow, afterRow),
+      metadata: { period_id: periodId, request_id: requestId },
+    });
+    return res.json({ ok: true, challenge_request: mapChallengeRequest(afterRow) });
+  } catch (error) {
+    console.error("Failed to cancel Challenge request", error);
+    return res.status(500).json({ ok: false, message: "Failed to cancel Challenge request" });
+  }
+});
+
+app.patch("/challenge-periods/:id/requests/:requestId/decline", requireAuthenticated, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const requestId = normalizeNullableText(req.params.requestId);
+  const playerId = normalizeNullableText(req.user?.player_id);
+
+  if (!playerId) return res.status(403).json({ ok: false, code: "profile_required", message: "Linked player profile is required" });
+  if (!periodId || !requestId) return res.status(400).json({ ok: false, message: "Invalid Challenge request id" });
+
+  try {
+    const beforeRow = await loadChallengeRequestById(periodId, requestId);
+    if (!beforeRow || ![beforeRow.player_1_id, beforeRow.player_2_id].includes(playerId)) {
+      return res.status(404).json({ ok: false, message: "Challenge request not found" });
+    }
+    if (beforeRow.awaiting_player_id !== playerId) {
+      return res.status(403).json({ ok: false, message: "Only the awaiting player can decline this request" });
+    }
+    if (beforeRow.status !== "pending") {
+      return res.status(409).json({ ok: false, message: "Only pending requests can be declined" });
+    }
+
+    await dbRunAsync(
+      `
+        UPDATE challenge_requests
+        SET status = 'declined', updated_at = CURRENT_TIMESTAMP
+        WHERE period_id = ?
+          AND id = ?
+          AND status = 'pending'
+      `,
+      [periodId, requestId]
+    );
+    const afterRow = await loadChallengeRequestById(periodId, requestId);
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_request.declined",
+      entity_type: "challenge_request",
+      action: "update",
+      record_id: requestId,
+      changes: buildAuditChanges(beforeRow, afterRow),
+      metadata: { period_id: periodId, request_id: requestId },
+    });
+    return res.json({ ok: true, challenge_request: mapChallengeRequest(afterRow) });
+  } catch (error) {
+    console.error("Failed to decline Challenge request", error);
+    return res.status(500).json({ ok: false, message: "Failed to decline Challenge request" });
+  }
+});
+
+app.patch("/challenge-periods/:id/requests/:requestId/counter", requireAuthenticated, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const requestId = normalizeNullableText(req.params.requestId);
+  const playerId = normalizeNullableText(req.user?.player_id);
+  const { options: timeOptions, error: timeOptionsError } = normalizeChallengeRequestTimeOptions(req.body || {});
+  const formatPayload = normalizeChallengeRequestFormatPayload(req.body || {});
+
+  if (!playerId) return res.status(403).json({ ok: false, code: "profile_required", message: "Linked player profile is required" });
+  if (!periodId || !requestId) return res.status(400).json({ ok: false, message: "Invalid Challenge request id" });
+  if (timeOptionsError) return res.status(400).json({ ok: false, message: timeOptionsError });
+  if (!formatPayload.allows_bo3 && !formatPayload.allows_bo5) {
+    return res.status(400).json({ ok: false, message: "Choose at least one match format" });
+  }
+
+  try {
+    const [period, beforeRow] = await Promise.all([
+      loadChallengePeriodById(periodId),
+      loadChallengeRequestById(periodId, requestId),
+    ]);
+    if (!period || !["planning_open", "active"].includes(period.status)) {
+      return res.status(404).json({ ok: false, message: "Editable Challenge period not found" });
+    }
+    if (!beforeRow || ![beforeRow.player_1_id, beforeRow.player_2_id].includes(playerId)) {
+      return res.status(404).json({ ok: false, message: "Challenge request not found" });
+    }
+    if (beforeRow.awaiting_player_id !== playerId) {
+      return res.status(403).json({ ok: false, message: "Only the awaiting player can propose another time" });
+    }
+    if (beforeRow.status !== "pending") {
+      return res.status(409).json({ ok: false, message: "Only pending requests can be changed" });
+    }
+    const outOfRangeOption = timeOptions.find((timeOption) => timeOption && !isChallengeTimeWithinPeriod(timeOption, period));
+    if (outOfRangeOption) {
+      return res.status(400).json({ ok: false, message: "Time options must be within the Challenge playing window" });
+    }
+    const nextAwaitingPlayerId = beforeRow.player_1_id === playerId ? beforeRow.player_2_id : beforeRow.player_1_id;
+
+    await dbRunAsync(
+      `
+        UPDATE challenge_requests
+        SET
+          awaiting_player_id = ?,
+          time_option_1_utc = ?,
+          time_option_2_utc = ?,
+          time_option_3_utc = ?,
+          allows_bo3 = ?,
+          allows_bo5 = ?,
+          accepted_time_utc = NULL,
+          accepted_format = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE period_id = ?
+          AND id = ?
+          AND status = 'pending'
+      `,
+      [
+        nextAwaitingPlayerId,
+        timeOptions[0],
+        timeOptions[1] || null,
+        timeOptions[2] || null,
+        formatPayload.allows_bo3,
+        formatPayload.allows_bo5,
+        periodId,
+        requestId,
+      ]
+    );
+    const afterRow = await loadChallengeRequestById(periodId, requestId);
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_request.countered",
+      entity_type: "challenge_request",
+      action: "update",
+      record_id: requestId,
+      changes: buildAuditChanges(beforeRow, afterRow),
+      metadata: { period_id: periodId, request_id: requestId },
+    });
+    return res.json({ ok: true, challenge_request: mapChallengeRequest(afterRow) });
+  } catch (error) {
+    console.error("Failed to update Challenge request", error);
+    return res.status(500).json({ ok: false, message: "Failed to update Challenge request" });
+  }
+});
+
+app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthenticated, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const requestId = normalizeNullableText(req.params.requestId);
+  const playerId = normalizeNullableText(req.user?.player_id);
+  const acceptedTimeUtc = normalizeUtcTimestamp(req.body?.accepted_time_utc ?? req.body?.acceptedTimeUtc);
+  const acceptedFormat = normalizeNullableText(req.body?.accepted_format ?? req.body?.acceptedFormat);
+  const acceptedFormatKey = String(acceptedFormat || "").toLowerCase();
+  const canonicalFormat = acceptedFormatKey === "bo3" ? "Bo3" : acceptedFormatKey === "bo5" ? "Bo5" : "";
+
+  if (!playerId) return res.status(403).json({ ok: false, code: "profile_required", message: "Linked player profile is required" });
+  if (!periodId || !requestId) return res.status(400).json({ ok: false, message: "Invalid Challenge request id" });
+  if (!acceptedTimeUtc) return res.status(400).json({ ok: false, message: "Choose a time option" });
+  if (!canonicalFormat) return res.status(400).json({ ok: false, message: "Choose a match format" });
+
+  try {
+    const [period, beforeRow] = await Promise.all([
+      loadChallengePeriodById(periodId),
+      loadChallengeRequestById(periodId, requestId),
+    ]);
+    if (!period || !["planning_open", "active"].includes(period.status)) {
+      return res.status(404).json({ ok: false, message: "Editable Challenge period not found" });
+    }
+    if (!beforeRow || ![beforeRow.player_1_id, beforeRow.player_2_id].includes(playerId)) {
+      return res.status(404).json({ ok: false, message: "Challenge request not found" });
+    }
+    if (beforeRow.awaiting_player_id !== playerId) {
+      return res.status(403).json({ ok: false, message: "Only the awaiting player can accept this request" });
+    }
+    if (beforeRow.status !== "pending") {
+      return res.status(409).json({ ok: false, message: "Only pending requests can be accepted" });
+    }
+    const requestTimes = [beforeRow.time_option_1_utc, beforeRow.time_option_2_utc, beforeRow.time_option_3_utc]
+      .map(normalizeUtcTimestamp)
+      .filter(Boolean);
+    if (!requestTimes.includes(acceptedTimeUtc)) {
+      return res.status(400).json({ ok: false, message: "Choose one of the proposed time options" });
+    }
+    if ((canonicalFormat === "Bo3" && Number(beforeRow.allows_bo3) !== 1) || (canonicalFormat === "Bo5" && Number(beforeRow.allows_bo5) !== 1)) {
+      return res.status(400).json({ ok: false, message: "Choose an allowed match format" });
+    }
+    if (!isChallengeTimeWithinPeriod(acceptedTimeUtc, period)) {
+      return res.status(400).json({ ok: false, message: "Accepted time must be within the Challenge playing window" });
+    }
+
+    const duelId = buildChallengeDuelId(periodId, requestId);
+    let afterRow = null;
+    let duelRow = null;
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const lockedRequest = await loadChallengeRequestById(periodId, requestId);
+      if (!lockedRequest || lockedRequest.status !== "pending" || lockedRequest.awaiting_player_id !== playerId) {
+        const error = new Error("Challenge request is no longer pending");
+        error.httpStatus = 409;
+        throw error;
+      }
+      const lockedRequestTimes = [lockedRequest.time_option_1_utc, lockedRequest.time_option_2_utc, lockedRequest.time_option_3_utc]
+        .map(normalizeUtcTimestamp)
+        .filter(Boolean);
+      if (!lockedRequestTimes.includes(acceptedTimeUtc)) {
+        const error = new Error("Choose one of the proposed time options");
+        error.httpStatus = 400;
+        throw error;
+      }
+      if ((canonicalFormat === "Bo3" && Number(lockedRequest.allows_bo3) !== 1) || (canonicalFormat === "Bo5" && Number(lockedRequest.allows_bo5) !== 1)) {
+        const error = new Error("Choose an allowed match format");
+        error.httpStatus = 400;
+        throw error;
+      }
+      const [player1ActiveDuel, player2ActiveDuel] = await Promise.all([
+        loadChallengeBlockingDuelForPlayer(periodId, lockedRequest.player_1_id),
+        loadChallengeBlockingDuelForPlayer(periodId, lockedRequest.player_2_id),
+      ]);
+      if (player1ActiveDuel || player2ActiveDuel) {
+        const error = new Error("One of the players already has a Challenge match in this period");
+        error.httpStatus = 409;
+        throw error;
+      }
+
+      await dbRunAsync(
+        `
+          UPDATE challenge_requests
+          SET
+            status = 'accepted',
+            accepted_time_utc = ?,
+            accepted_format = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE period_id = ?
+            AND id = ?
+            AND status = 'pending'
+        `,
+        [acceptedTimeUtc, canonicalFormat, periodId, requestId]
+      );
+      await dbRunAsync(
+        `
+          INSERT INTO duels (
+            id,
+            tournament_id,
+            match_id,
+            duel_number,
+            duel_format,
+            time_utc,
+            custom_time,
+            player_1_id,
+            player_2_id,
+            dw1,
+            dw2,
+            status,
+            created_by,
+            updated_by,
+            deleted_by,
+            deleted_at,
+            challenge_period_id,
+            challenge_request_id,
+            source_type,
+            created_at,
+            updated_at
+          )
+          VALUES (?, NULL, NULL, NULL, ?, ?, NULL, ?, ?, NULL, NULL, 'Planned', ?, ?, NULL, NULL, ?, ?, 'challenge', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        [
+          duelId,
+          canonicalFormat,
+          acceptedTimeUtc,
+          lockedRequest.player_1_id,
+          lockedRequest.player_2_id,
+          playerId,
+          playerId,
+          periodId,
+          requestId,
+        ]
+      );
+      await dbRunAsync(
+        `
+          INSERT INTO challenge_period_players (
+            period_id,
+            player_id,
+            status,
+            challenge_duel_id,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, 'match_scheduled', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(period_id, player_id) DO UPDATE SET
+            status = 'match_scheduled',
+            challenge_duel_id = excluded.challenge_duel_id,
+            updated_at = CURRENT_TIMESTAMP
+        `,
+        [periodId, lockedRequest.player_1_id, duelId]
+      );
+      await dbRunAsync(
+        `
+          INSERT INTO challenge_period_players (
+            period_id,
+            player_id,
+            status,
+            challenge_duel_id,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, 'match_scheduled', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(period_id, player_id) DO UPDATE SET
+            status = 'match_scheduled',
+            challenge_duel_id = excluded.challenge_duel_id,
+            updated_at = CURRENT_TIMESTAMP
+        `,
+        [periodId, lockedRequest.player_2_id, duelId]
+      );
+      await dbRunAsync(
+        `
+          UPDATE challenge_requests
+          SET status = 'auto_cancelled', updated_at = CURRENT_TIMESTAMP
+          WHERE period_id = ?
+            AND status = 'pending'
+            AND id <> ?
+            AND (
+              player_1_id IN (?, ?)
+              OR player_2_id IN (?, ?)
+            )
+        `,
+        [
+          periodId,
+          requestId,
+          lockedRequest.player_1_id,
+          lockedRequest.player_2_id,
+          lockedRequest.player_1_id,
+          lockedRequest.player_2_id,
+        ]
+      );
+
+      afterRow = await loadChallengeRequestById(periodId, requestId);
+      duelRow = await dbGetAsync("SELECT id, status, time_utc, duel_format FROM duels WHERE id = ? LIMIT 1", [duelId]);
+      await dbRunAsync("COMMIT");
+    } catch (error) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw error;
+    }
+
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_request.accepted",
+      entity_type: "challenge_request",
+      action: "update",
+      record_id: requestId,
+      changes: buildAuditChanges(beforeRow, afterRow),
+      metadata: { period_id: periodId, request_id: requestId, duel_id: duelId },
+    });
+    return res.json({
+      ok: true,
+      challenge_request: mapChallengeRequest(afterRow),
+      duel: duelRow || null,
+    });
+  } catch (error) {
+    if (error?.httpStatus) return res.status(error.httpStatus).json({ ok: false, message: error.message || "Failed to accept Challenge request" });
+    if (error?.code === "SQLITE_CONSTRAINT") {
+      return res.status(409).json({ ok: false, message: "Challenge match already exists for this request" });
+    }
+    console.error("Failed to accept Challenge request", error);
+    return res.status(500).json({ ok: false, message: "Failed to accept Challenge request" });
   }
 });
 
