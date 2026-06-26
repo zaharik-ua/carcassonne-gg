@@ -7633,8 +7633,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/remove", requireAuthentica
     if (beforeRow.created_by_player_id !== playerId) {
       return res.status(403).json({ ok: false, message: "Only the sender can remove this request" });
     }
-    if (!["declined", "cancelled_by_sender"].includes(String(beforeRow.status || ""))) {
-      return res.status(409).json({ ok: false, message: "Only declined or cancelled requests can be removed" });
+    if (!["declined", "cancelled_by_sender", "auto_cancelled", "expired"].includes(String(beforeRow.status || ""))) {
+      return res.status(409).json({ ok: false, message: "Only closed requests can be removed" });
     }
     if (beforeRow.hidden_by_creator_at) {
       return res.json({ ok: true, challenge_request: mapChallengeRequest(beforeRow) });
@@ -7648,7 +7648,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/remove", requireAuthentica
         WHERE period_id = ?
           AND id = ?
           AND created_by_player_id = ?
-          AND status IN ('declined', 'cancelled_by_sender')
+          AND status IN ('declined', 'cancelled_by_sender', 'auto_cancelled', 'expired')
           AND hidden_by_creator_at IS NULL
       `,
       [periodId, requestId, playerId]

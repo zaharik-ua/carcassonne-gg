@@ -520,6 +520,14 @@
     font-weight: 500;
   }
 
+  .challenge-request-ratings-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 28px;
+    min-width: 0;
+  }
+
   .challenge-request-options-row {
     display: flex;
     flex-wrap: wrap;
@@ -561,6 +569,12 @@
     font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
+  }
+
+  .challenge-request-time-pill.is-selected {
+    border-color: #9dd7b9;
+    background: var(--green-soft);
+    color: #12633e;
   }
 
   .challenge-request-actions-inline {
@@ -1711,9 +1725,10 @@
       wrap.appendChild(pill);
       return wrap;
     }
-    items.forEach((value) => {
+    items.forEach((item) => {
+      const value = item && typeof item === "object" ? item.label : item;
       const pill = document.createElement("span");
-      pill.className = "challenge-request-time-pill";
+      pill.className = `challenge-request-time-pill${item && typeof item === "object" && item.selected ? " is-selected" : ""}`;
       pill.textContent = String(value);
       wrap.appendChild(pill);
     });
@@ -1721,14 +1736,22 @@
   }
 
   function createRequestTimePills(request, timezone) {
-    return createRequestPills(getRequestTimeOptions(request).map((timeUtc) => formatRequestOptionTime(timeUtc, timezone || "UTC")));
+    const acceptedTime = parseUtcDate(request?.accepted_time_utc)?.toISOString() || "";
+    return createRequestPills(getRequestTimeOptions(request).map((timeUtc) => ({
+      label: formatRequestOptionTime(timeUtc, timezone || "UTC"),
+      selected: !!acceptedTime && parseUtcDate(timeUtc)?.toISOString() === acceptedTime,
+    })));
   }
 
   function createRequestFormatPills(request) {
     const formats = [];
     if (request?.allows_bo3) formats.push("Bo3");
     if (request?.allows_bo5) formats.push("Bo5");
-    return createRequestPills(formats);
+    const acceptedFormat = String(request?.accepted_format || "").trim().toLowerCase();
+    return createRequestPills(formats.map((format) => ({
+      label: format,
+      selected: !!acceptedFormat && String(format || "").trim().toLowerCase() === acceptedFormat,
+    })));
   }
 
   function createRequestOptionsLabel() {
@@ -1788,6 +1811,14 @@
       line.appendChild(value);
     }
     return line;
+  }
+
+  function createRequestRatingsRow(player) {
+    const row = document.createElement("div");
+    row.className = "challenge-request-ratings-row";
+    row.appendChild(createRequestMetaLine("GG Elo", formatGgEloLine(player)));
+    row.appendChild(createRequestMetaLine("BGA Elo", formatEloValue(player?.bga_elo)));
+    return row;
   }
 
   function createActionButton(text, className, onClick) {
@@ -2522,6 +2553,7 @@
     const currentPlayer = getRequestPlayer(request, currentPlayerId);
     const otherPlayer = getRequestOtherPlayer(request, currentPlayerId);
     const timezone = currentPlayer?.association?.timezone || period?.player_time_context?.timezone || "UTC";
+    const timeFlagSrc = currentPlayer?.association?.flag || period?.player_time_context?.association_flag || "";
     const form = document.createElement("form");
     form.className = "challenge-request-form";
     form.noValidate = true;
@@ -2555,7 +2587,8 @@
       timeWrap.appendChild(option);
       return input;
     });
-    addChallengeFormRow(form, "Time", timeWrap, { required: true });
+    const timeRow = addChallengeFormRow(form, "Time", timeWrap, { required: true });
+    timeRow.appendChild(createRequestTimeContext(timeFlagSrc));
 
     const formatWrap = document.createElement("div");
     formatWrap.className = "challenge-request-formats";
@@ -3099,14 +3132,7 @@
     const meta = document.createElement("div");
     meta.className = "challenge-request-meta";
     meta.appendChild(createRequestOptionsRow(request, timezone, timeFlagSrc));
-    meta.appendChild(createRequestMetaLine("GG Elo", formatGgEloLine(otherPlayer)));
-    meta.appendChild(createRequestMetaLine("BGA Elo", formatEloValue(otherPlayer?.bga_elo)));
-    if (request?.accepted_time_utc) {
-      meta.appendChild(createRequestMetaLine("Accepted time", formatLocalDateTime(request.accepted_time_utc, timezone)));
-    }
-    if (request?.accepted_format) {
-      meta.appendChild(createRequestMetaLine("Accepted format", request.accepted_format));
-    }
+    meta.appendChild(createRequestRatingsRow(otherPlayer));
     card.appendChild(meta);
 
     const canAct = String(request?.status || "") === "pending" && ["planning_open", "active"].includes(String(period?.status || ""));
@@ -3133,7 +3159,7 @@
     }
     if (
       String(request?.created_by_player_id || "") === String(currentPlayerId || "")
-      && ["declined", "cancelled_by_sender"].includes(statusKey)
+      && ["declined", "cancelled_by_sender", "auto_cancelled", "expired"].includes(statusKey)
     ) {
       actions.appendChild(createActionButton("Remove", "challenge-btn-danger", (event) => {
         runChallengeRequestAction(period, request, "remove", "", event.currentTarget);
