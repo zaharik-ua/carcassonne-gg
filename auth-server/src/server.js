@@ -7302,8 +7302,13 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
         error.httpStatus = 409;
         throw error;
       }
-      if (opponentStatus !== "available") {
-        const error = new Error("Opponent is not open to match in this period");
+      if (opponentStatus === "unavailable") {
+        const error = new Error("Opponent is not playing in this Challenge period");
+        error.httpStatus = 409;
+        throw error;
+      }
+      if (["match_scheduled", "played"].includes(opponentStatus)) {
+        const error = new Error("Opponent already has a Challenge match in this period");
         error.httpStatus = 409;
         throw error;
       }
