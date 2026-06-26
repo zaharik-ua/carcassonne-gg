@@ -7472,13 +7472,13 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
          AND d.deleted_at IS NULL
         WHERE cr.period_id = ?
           AND (cr.player_1_id = ? OR cr.player_2_id = ?)
-          AND NOT (cr.created_by_player_id = ? AND cr.hidden_by_creator_at IS NOT NULL)
+          AND cr.hidden_by_creator_at IS NULL
         ORDER BY
           CASE WHEN cr.status = 'pending' THEN 0 ELSE 1 END ASC,
           datetime(cr.updated_at) DESC,
           cr.id ASC
       `,
-      [periodId, playerId, playerId, playerId]
+      [periodId, playerId, playerId]
     );
     const requests = (rows || []).map(mapChallengeRequestWithPlayers).filter(Boolean);
     return res.json({

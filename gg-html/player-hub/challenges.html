@@ -1677,23 +1677,29 @@
     return createRequestPills(formats);
   }
 
-  function createRequestOptionsLabel(flagSrc) {
+  function createRequestOptionsLabel() {
     const label = document.createElement("span");
     label.className = "challenge-request-meta-label";
-    label.appendChild(document.createTextNode("Options ("));
+    label.textContent = "Options:";
+    return label;
+  }
+
+  function createRequestTimeContext(flagSrc) {
+    const context = document.createElement("span");
+    context.className = "challenge-time-context";
     const flag = createFlagImg(flagSrc, "challenge-time-flag");
     if (flag) {
-      label.appendChild(flag);
+      context.appendChild(flag);
     }
-    label.appendChild(document.createTextNode("time):"));
-    return label;
+    context.appendChild(document.createTextNode("time"));
+    return context;
   }
 
   function createRequestOptionsRow(request, timezone, timeFlagSrc) {
     const row = document.createElement("div");
     row.className = "challenge-request-options-row";
     [
-      { labelNode: createRequestOptionsLabel(timeFlagSrc), node: createRequestTimePills(request, timezone) },
+      { labelNode: createRequestOptionsLabel(), node: createRequestTimePills(request, timezone), suffixNode: createRequestTimeContext(timeFlagSrc) },
       { label: "Format:", node: createRequestFormatPills(request) },
     ].forEach((item) => {
       const group = document.createElement("div");
@@ -1707,6 +1713,9 @@
         group.appendChild(label);
       }
       group.appendChild(item.node);
+      if (item.suffixNode) {
+        group.appendChild(item.suffixNode);
+      }
       row.appendChild(group);
     });
     return row;
@@ -2909,7 +2918,7 @@
       && ["declined", "cancelled_by_sender"].includes(statusKey)
     ) {
       actions.appendChild(createActionButton("Remove", "challenge-btn-danger", (event) => {
-        runChallengeRequestAction(period, request, "remove", "Remove this request from your list?", event.currentTarget);
+        runChallengeRequestAction(period, request, "remove", "", event.currentTarget);
       }));
     }
     if (actions.childNodes.length) {
@@ -3176,7 +3185,7 @@
     const meta = document.createElement("div");
     meta.className = "challenge-period-meta";
     const timezone = getPlayerTimezone(timeContext);
-    meta.appendChild(createMetaLine("Registration from:", createLocalDateNode(period?.planning_starts_at, timezone)));
+    meta.appendChild(createMetaLine("Registration from:", createLocalDateNode(period?.planning_starts_at, "UTC")));
     meta.appendChild(createMetaLine(
       "Playing days:",
       createLocalDateTimeRangeNode(period?.play_starts_at, period?.play_ends_at, timezone),
