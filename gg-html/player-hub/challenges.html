@@ -1412,6 +1412,7 @@
   const contentEl = document.getElementById("challengesContent");
   const dropdowns = [];
   const opponentPanels = new Map();
+  const matchPanels = new Map();
   const requestPanels = new Map();
   let ggRatingsPromise = null;
   let bgaPlayersPromise = null;
@@ -2001,11 +2002,6 @@
     const section = document.createElement("div");
     section.className = "challenge-duel-block";
 
-    const title = document.createElement("div");
-    title.className = "challenge-request-list-title";
-    title.textContent = "Match";
-    section.appendChild(title);
-
     const row = document.createElement("div");
     row.className = "challenge-duel-row";
     row.dataset.challengeDuelId = String(duel.id || "");
@@ -2013,7 +2009,8 @@
 
     const time = document.createElement("div");
     time.className = "challenge-duel-time";
-    time.appendChild(createChallengeDuelRatingNode(calculateChallengeDuelRating(player1, player2, duel)));
+    const rating = createChallengeDuelRatingNode(calculateChallengeDuelRating(player1, player2, duel));
+    if (rating) time.appendChild(rating);
     const timeText = document.createElement("div");
     timeText.className = "challenge-duel-time-text";
     timeText.textContent = formatChallengeDuelDateTime(duel?.time_utc || request?.accepted_time_utc, timezone);
@@ -2085,6 +2082,13 @@
 
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
+  }
+
+  function showChallengeMatchScheduledDialog() {
+    showChallengeInfoDialog(
+      "Match already scheduled",
+      "You already have a scheduled Challenge match in this period. Each player can have only one Challenge match per period."
+    );
   }
 
   function showChallengeChoiceDialog(titleText, messageText, choices) {
@@ -2197,13 +2201,10 @@
   }
 
   function createChallengeDuelRatingNode(rating) {
-    const wrap = document.createElement("div");
     const normalized = Number.isFinite(Number(rating)) ? Math.trunc(Number(rating)) : null;
+    if (normalized === null || normalized <= 0) return null;
+    const wrap = document.createElement("div");
     wrap.className = `challenge-duel-rating${normalized === 6 ? " is-gold" : ""}`;
-    if (normalized === null || normalized <= 0) {
-      wrap.textContent = "-";
-      return wrap;
-    }
     wrap.textContent = "★".repeat(Math.min(normalized, 5));
     wrap.title = `Match rating: ${normalized}`;
     return wrap;
@@ -3134,11 +3135,14 @@
     });
   }
 
-  function createOpponentRow(opponent, period, currentPlayer, canCreateRequests) {
+  function createOpponentRow(opponent, period, currentPlayer, eligibility) {
     const row = document.createElement("div");
     row.className = "challenge-opponent-row";
     row.dataset.playerId = String(opponent?.player_id || "");
     row.dataset.associationId = String(opponent?.association?.id || "");
+    const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
+    const canCreateRequests = !!eligibility?.can_create_requests;
+    const hasScheduledMatch = reasons.includes("current_player_has_match") || normalizeStatus(period?.player_status) === "match_scheduled";
     const opponentId = String(opponent?.player_id || "").trim();
     const currentPlayerId = String(currentPlayer?.player_id || "").trim();
     const isCurrentPlayer = !!opponent?.is_current_player || (!!opponentId && opponentId === currentPlayerId);
@@ -3205,13 +3209,17 @@
     const inviteBtn = document.createElement("button");
     inviteBtn.className = "challenge-opponent-action";
     inviteBtn.type = "button";
-    inviteBtn.disabled = !canCreateRequests;
+    inviteBtn.disabled = !canCreateRequests && !hasScheduledMatch;
     inviteBtn.textContent = "Invite to match";
-    if (!canCreateRequests) {
+    if (!canCreateRequests && !hasScheduledMatch) {
       inviteBtn.title = "Challenge requests are not available right now.";
     }
     inviteBtn.addEventListener("click", () => {
       if (inviteBtn.disabled) return;
+      if (hasScheduledMatch) {
+        showChallengeMatchScheduledDialog();
+        return;
+      }
       if (isSameAssociation) {
         showChallengeInfoDialog(
           "Invite unavailable",
@@ -3229,7 +3237,6 @@
   function getEligibilityStateText(eligibility) {
     const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
     if (reasons.includes("period_closed")) return "Requests closed for this period.";
-    if (reasons.includes("current_player_has_match")) return "You already have a Challenge match in this period.";
     return "";
   }
 
@@ -3292,7 +3299,7 @@
       }
 
       opponents.forEach((opponent) => {
-        bodyEl.appendChild(createOpponentRow(opponent, period, data?.current_player || null, !!data?.eligibility?.can_create_requests));
+        bodyEl.appendChild(createOpponentRow(opponent, period, data?.current_player || null, data?.eligibility || {}));
       });
     } catch (error) {
       setOpponentsState(panel, error?.message || "Failed to load opponents.", true);
@@ -3486,6 +3493,17 @@
     return section;
   }
 
+  function renderChallengeMatchPanel(period, currentPlayerId, request) {
+    const item = matchPanels.get(String(period?.id || ""));
+    if (!item) return;
+    const bodyEl = item.panel.querySelector("[data-match-body]");
+    if (!bodyEl) return;
+    bodyEl.innerHTML = "";
+    const duelBlock = createChallengeDuelBlock(request, period, currentPlayerId);
+    item.panel.hidden = !duelBlock;
+    if (duelBlock) bodyEl.appendChild(duelBlock);
+  }
+
   async function loadRequestsForPeriod(period, panel) {
     const periodId = String(period?.id || "").trim();
     if (!periodId) {
@@ -3518,8 +3536,13 @@
         .map(enrichRequest)
         .filter((request) => String(request?.created_by_player_id || "") === currentPlayerId);
       const challengeDuelRequest = incoming.concat(sent).find((request) => request?.duel?.id) || null;
+      renderChallengeMatchPanel(period, currentPlayerId, challengeDuelRequest);
       const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;
       const createRequestBtn = createActionButton("Create request", "challenge-btn-primary", () => {
+        if (normalizeStatus(period?.player_status) === "match_scheduled" || period?.challenge_duel_id) {
+          showChallengeMatchScheduledDialog();
+          return;
+        }
         if (pendingSentCount >= 3) {
           showChallengeInfoDialog(
             "Request limit reached",
@@ -3530,8 +3553,6 @@
         openChallengeRequestForm(period, null, { player_id: currentPlayerId });
       });
       bodyEl.innerHTML = "";
-      const duelBlock = createChallengeDuelBlock(challengeDuelRequest, period, currentPlayerId);
-      if (duelBlock) bodyEl.appendChild(duelBlock);
       bodyEl.appendChild(createRequestListSection("Incoming", incoming, period, currentPlayerId, "incoming", "No incoming invites.", ""));
       bodyEl.appendChild(createRequestListSection(
         "Sent",
@@ -3544,6 +3565,7 @@
         { actionButton: createRequestBtn }
       ));
     } catch (error) {
+      renderChallengeMatchPanel(period, "", null);
       setRequestsState(panel, error?.message || "Failed to load requests.", true);
     }
   }
@@ -3790,6 +3812,34 @@
     return wrap;
   }
 
+  function createChallengeMatchPanel(period) {
+    const wrap = document.createElement("div");
+    wrap.className = "challenge-panel-wrap";
+    wrap.dataset.challengePeriodMatch = String(period?.id || "");
+    wrap.hidden = true;
+
+    const head = document.createElement("div");
+    head.className = "challenge-opponents-head";
+    wrap.appendChild(head);
+
+    const title = document.createElement("div");
+    title.className = "challenge-opponents-title";
+    title.textContent = "Match";
+    head.appendChild(title);
+
+    const panel = document.createElement("section");
+    panel.className = "challenge-requests-panel";
+    wrap.appendChild(panel);
+
+    const body = document.createElement("div");
+    body.className = "challenge-requests-grid";
+    body.dataset.matchBody = "true";
+    panel.appendChild(body);
+
+    matchPanels.set(String(period?.id || ""), { period, panel: wrap });
+    return wrap;
+  }
+
   function createRequestsPanel(period) {
     const wrap = document.createElement("div");
     wrap.className = "challenge-panel-wrap";
@@ -3822,6 +3872,7 @@
     setAlert("Loading...", false);
     dropdowns.splice(0, dropdowns.length);
     opponentPanels.clear();
+    matchPanels.clear();
     requestPanels.clear();
 
     try {
@@ -3839,6 +3890,7 @@
         const stack = document.createElement("div");
         stack.className = "challenge-period-stack";
         stack.appendChild(createPeriodBand(period, timeContext));
+        stack.appendChild(createChallengeMatchPanel(period));
         stack.appendChild(createRequestsPanel(period));
         stack.appendChild(createOpponentsPanel(period));
         contentEl.appendChild(stack);

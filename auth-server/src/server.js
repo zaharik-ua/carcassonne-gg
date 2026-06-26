@@ -7101,8 +7101,7 @@ app.get("/challenge-periods/:id/eligible-opponents", requireAuthenticated, async
     const canCreateRequests = ["planning_open", "active"].includes(period.status)
       && currentStatus !== "unavailable"
       && !currentActiveDuel;
-    const canListOpponents = ["planning_open", "active"].includes(period.status)
-      && !currentActiveDuel;
+    const canListOpponents = ["planning_open", "active"].includes(period.status);
     const eligibilityReasons = [];
     if (!["planning_open", "active"].includes(period.status)) eligibilityReasons.push("period_closed");
     if (currentActiveDuel) eligibilityReasons.push("current_player_has_match");
@@ -7169,7 +7168,7 @@ app.get("/challenge-periods/:id/eligible-opponents", requireAuthenticated, async
       same_association: 0,
       scheduled_match: 0,
       pending_request: 0,
-      current_player_ineligible: canListOpponents ? 0 : rows.length,
+      current_player_ineligible: ["planning_open", "active"].includes(period.status) ? 0 : rows.length,
     };
     const currentAssociation = currentProfile.association_id || currentProfile.association_name;
     const availableOpponents = [];
