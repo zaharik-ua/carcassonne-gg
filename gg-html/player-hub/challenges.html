@@ -29,27 +29,9 @@
     margin: 0 8px 12px;
   }
 
-  .challenges-head {
-    display: grid;
-    gap: 4px;
-  }
-
-  .challenges-title {
-    color: #223040;
-    font-size: 22px;
-    font-weight: 700;
-    line-height: 1.2;
-  }
-
-  .challenges-subtitle {
-    color: var(--muted);
-    font-size: 13px;
-    line-height: 1.45;
-  }
-
   .challenge-period-band {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(230px, 320px);
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 200px);
     gap: 14px;
     align-items: center;
     width: 100%;
@@ -337,6 +319,10 @@
     gap: 5px;
   }
 
+  .challenge-panel-wrap[hidden] {
+    display: none;
+  }
+
   .challenge-opponents-panel {
     display: grid;
     gap: 9px;
@@ -442,8 +428,8 @@
   }
 
   .challenge-duel-time {
-    width: 75px;
-    min-width: 75px;
+    width: 45px;
+    min-width: 45px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -451,24 +437,6 @@
     font-size: 12px;
     line-height: 14px;
     font-weight: 700;
-  }
-
-  .challenge-duel-rating {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 10px;
-    margin-bottom: 2px;
-    color: #8a94a3;
-    font-size: 9.5px;
-    line-height: 9px;
-    letter-spacing: 0;
-    white-space: nowrap;
-  }
-
-  .challenge-duel-rating.is-gold {
-    color: #DAA520;
-    font-size: 10.5px;
   }
 
   .challenge-duel-time-text {
@@ -537,9 +505,6 @@
   }
 
   .challenge-duel-status {
-    width: max-content;
-    max-width: 100%;
-    margin-top: 4px;
     border-radius: 4px;
     background: var(--green-soft);
     color: #12633e;
@@ -549,7 +514,8 @@
     line-height: 1.2;
   }
 
-  .challenge-duel-status.is-draft {
+  .challenge-duel-status.is-draft,
+  .challenge-duel-status.is-requested_new_time {
     background: #f4efff;
     color: #6042a6;
   }
@@ -624,7 +590,10 @@
   }
 
   .challenge-duel-edit-menu .challenge-btn {
+    display: flex;
     width: 100%;
+    border: 0;
+    box-sizing: border-box;
     justify-content: center;
   }
 
@@ -640,13 +609,14 @@
 
   .challenge-request-card.has-actions {
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 12px;
+    gap: 5px 12px;
   }
 
   .challenge-request-card-head {
     display: flex;
     align-items: center;
     justify-content: flex-start;
+    flex-wrap: wrap;
     gap: 10px;
     min-width: 0;
   }
@@ -676,7 +646,16 @@
     white-space: nowrap;
   }
 
+  .challenge-request-rank {
+    color: #333;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+
   .challenge-request-status {
+    border: 1px solid #d5dbe4;
     border-radius: 4px;
     background: #eef2f7;
     color: #475467;
@@ -688,16 +667,19 @@
   }
 
   .challenge-request-status.is-pending {
+    border-color: #cfe1f3;
     background: #edf6ff;
     color: #155d95;
   }
 
   .challenge-request-status.is-new_time_requested {
+    border-color: #d8cafa;
     background: #f4efff;
     color: #6042a6;
   }
 
   .challenge-request-status.is-accepted {
+    border-color: #9dd7b9;
     background: var(--green-soft);
     color: #12633e;
   }
@@ -712,7 +694,7 @@
 
   .challenge-request-meta {
     display: grid;
-    gap: 5px;
+    gap: 3px;
     color: #475467;
     font-size: 12px;
     line-height: 1.35;
@@ -724,17 +706,32 @@
   }
 
   .challenge-request-ratings-row {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px 28px;
+    gap: 6px 14px;
     min-width: 0;
+    color: #475467;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .challenge-request-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .challenge-request-rating-value {
+    color: #333;
+    font-weight: 600;
   }
 
   .challenge-request-options-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 18px;
+    gap: 3px 18px;
     min-width: 0;
   }
 
@@ -790,6 +787,7 @@
   .challenge-request-card.has-actions .challenge-request-actions-inline {
     grid-column: 2;
     grid-row: 1 / span 2;
+    align-self: center;
   }
 
   .challenge-btn-small {
@@ -1124,7 +1122,7 @@
 
   .challenge-btn {
     appearance: none;
-    min-height: 28px;
+    min-height: 23px;
     border: 1px solid #c8ced8;
     border-radius: 4px;
     padding: 3px 8px;
@@ -1398,6 +1396,7 @@
     .challenge-request-card.has-actions .challenge-request-actions-inline {
       grid-column: 1;
       grid-row: auto;
+      align-self: start;
       justify-items: start;
       min-width: 0;
     }
@@ -1422,11 +1421,6 @@
 </style>
 
 <div class="challenges-wrap">
-  <div class="challenges-head">
-    <div class="challenges-title">Challenges</div>
-    <div class="challenges-subtitle">Player Hub</div>
-  </div>
-
   <div id="challengesContent" class="challenges-alert">Loading...</div>
 </div>
 
@@ -1987,14 +1981,15 @@
     return label;
   }
 
-  function createRequestTimeContext(flagSrc) {
+  function createRequestTimeContext(flagSrc, timezone = "") {
     const context = document.createElement("span");
     context.className = "challenge-time-context";
     const flag = createFlagImg(flagSrc, "challenge-time-flag");
     if (flag) {
       context.appendChild(flag);
     }
-    context.appendChild(document.createTextNode("time"));
+    const timezoneLabel = String(timezone || "").trim();
+    context.appendChild(document.createTextNode(`time${timezoneLabel ? ` (${timezoneLabel})` : ""}`));
     return context;
   }
 
@@ -2024,26 +2019,31 @@
     return row;
   }
 
-  function createRequestMetaLine(label, valueNodeOrText) {
-    const line = document.createElement("div");
-    const labelEl = document.createElement("span");
-    labelEl.textContent = `${label}: `;
-    line.appendChild(labelEl);
-    if (valueNodeOrText instanceof Node) {
-      line.appendChild(valueNodeOrText);
-    } else {
-      const value = document.createElement("b");
-      value.textContent = String(valueNodeOrText || "-");
-      line.appendChild(value);
-    }
-    return line;
-  }
-
   function createRequestRatingsRow(player) {
     const row = document.createElement("div");
     row.className = "challenge-request-ratings-row";
-    row.appendChild(createRequestMetaLine("GG Elo", formatGgEloLine(player)));
-    row.appendChild(createRequestMetaLine("BGA Elo", formatEloValue(player?.bga_elo)));
+
+    const createValue = (text) => {
+      const value = document.createElement("span");
+      value.className = "challenge-request-rating-value";
+      value.textContent = text;
+      return value;
+    };
+    const createRating = (values, labelText) => {
+      const rating = document.createElement("span");
+      rating.className = "challenge-request-rating";
+      values.forEach((value) => rating.appendChild(createValue(value)));
+      const label = document.createElement("span");
+      label.textContent = labelText;
+      rating.appendChild(label);
+      return rating;
+    };
+
+    const ggElo = parseFiniteNumber(player?.gg_elo);
+    row.appendChild(createRating([ggElo === null ? "-" : String(Math.trunc(ggElo))], "GG Elo"));
+
+    const bgaElo = parseFiniteNumber(player?.bga_elo);
+    row.appendChild(createRating([bgaElo === null ? "-" : String(Math.trunc(bgaElo))], "BGA Elo"));
     return row;
   }
 
@@ -2131,9 +2131,15 @@
     return row;
   }
 
-  function createChallengeDuelStatusNode(status) {
-    const label = String(status || "").trim();
+  function createChallengeDuelStatusNode(status, request) {
+    const rawStatus = String(status || "").trim();
+    const label = rawStatus === "Draft"
+      && String(request?.status || "").trim() === "pending"
+      && request?.has_counter_offer
+      ? "Requested new time"
+      : rawStatus;
     if (!label) return null;
+    if (["Planned", "Played"].includes(label)) return null;
     const normalized = label.toLowerCase().replace(/\s+/g, "_");
     const node = document.createElement("div");
     node.className = `challenge-duel-status is-${normalized}`;
@@ -2170,8 +2176,6 @@
 
     const time = document.createElement("div");
     time.className = "challenge-duel-time";
-    const rating = createChallengeDuelRatingNode(calculateChallengeDuelRating(player1, player2, duel));
-    if (rating) time.appendChild(rating);
     const timeText = document.createElement("div");
     timeText.className = "challenge-duel-time-text";
     timeText.textContent = formatChallengeDuelDateTime(duel?.time_utc || request?.accepted_time_utc, timezone);
@@ -2194,20 +2198,20 @@
     players.className = "challenge-duel-players";
     players.appendChild(createChallengeDuelPlayerRow(player1));
     players.appendChild(createChallengeDuelPlayerRow(player2));
-    const statusNode = createChallengeDuelStatusNode(duel?.status);
-    if (statusNode) players.appendChild(statusNode);
     row.appendChild(players);
 
     const actions = document.createElement("div");
     actions.className = "challenge-duel-actions";
+    const statusNode = createChallengeDuelStatusNode(duel?.status, request);
+    if (statusNode) actions.appendChild(statusNode);
     if (String(duel?.status || "") === "Planned") {
       actions.appendChild(createChallengeDuelEditDropdown(period, request, currentPlayerId));
     } else if (canCurrentPlayerRemoveChallengeDuel(request, currentPlayerId)) {
       actions.appendChild(createActionButton("Remove", "challenge-btn-danger", (event) => {
-        runChallengeRequestAction(period, request, "remove", "", event.currentTarget);
+        runChallengeRequestAction(period, request, "remove", event.currentTarget);
       }));
     }
-    if (actions.childNodes.length) row.appendChild(actions);
+    row.appendChild(actions);
 
     return section;
   }
@@ -2394,38 +2398,6 @@
     const ggElo = String(Math.trunc(ggEloNumber));
     const rank = parseFiniteNumber(opponent?.gg_rank);
     return rank === null ? ggElo : `${ggElo} (#${Math.trunc(rank)})`;
-  }
-
-  function calculateChallengeDuelRating(player1, player2, duel) {
-    const storedRating = parseFiniteNumber(duel?.rating);
-    if (storedRating !== null) return Math.trunc(storedRating);
-    const elo1 = parseFiniteNumber(player1?.gg_elo);
-    const elo2 = parseFiniteNumber(player2?.gg_elo);
-    if (elo1 === null || elo2 === null) return null;
-    if (elo1 >= 700 && elo2 >= 700) return 6;
-    const powValue = 1.5;
-    const maxRating = 5.49;
-    const maxElo = 700;
-    const minElo = 300;
-    const avg = (elo1 + elo2) / 2;
-    const normalizedAverage = Math.min(Math.max((avg - minElo) / (maxElo - minElo), 0), 1);
-    const delta = Math.abs(elo1 - elo2) / 175;
-    const score = Math.min(
-      maxRating,
-      (normalizedAverage ** powValue) * maxRating
-        + normalizedAverage * ((1 - Math.min(1, delta)) ** powValue)
-    );
-    return Math.round(score);
-  }
-
-  function createChallengeDuelRatingNode(rating) {
-    const normalized = Number.isFinite(Number(rating)) ? Math.trunc(Number(rating)) : null;
-    if (normalized === null || normalized <= 0) return null;
-    const wrap = document.createElement("div");
-    wrap.className = `challenge-duel-rating${normalized === 6 ? " is-gold" : ""}`;
-    wrap.textContent = "★".repeat(Math.min(normalized, 5));
-    wrap.title = `Match rating: ${normalized}`;
-    return wrap;
   }
 
   function formatChallengeDuelDateTime(value, timezone) {
@@ -3082,7 +3054,7 @@
       return input;
     });
     const timeRow = addChallengeFormRow(form, "Time", timeWrap, { required: true });
-    timeRow.appendChild(createRequestTimeContext(timeFlagSrc));
+    timeRow.appendChild(createRequestTimeContext(timeFlagSrc, timezone));
 
     const formatWrap = document.createElement("div");
     formatWrap.className = "challenge-request-formats";
@@ -3370,8 +3342,9 @@
       successText: "Change requested.",
       confirmBeforeSubmit: () => showChallengeConfirmDialog(
         "Request time change",
-        "Request a new match time? This will cancel the current scheduled time and ask your opponent to confirm one of your new options.",
+        "This match is already scheduled. Are you sure you want to request a time change?",
         {
+          note: "This will cancel the previously created match and return the request to your opponent for review.",
           confirmText: "Request change",
           cancelText: "Back",
         }
@@ -3389,7 +3362,8 @@
     row.dataset.associationId = String(opponent?.association?.id || "");
     const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
     const canCreateRequests = !!eligibility?.can_create_requests;
-    const hasScheduledMatch = reasons.includes("current_player_has_match") || normalizeStatus(period?.player_status) === "match_scheduled";
+    const playerHasScheduledMatch = normalizeStatus(period?.player_status) === "match_scheduled";
+    const hasScheduledMatch = reasons.includes("current_player_has_match") || playerHasScheduledMatch;
     const opponentId = String(opponent?.player_id || "").trim();
     const currentPlayerId = String(currentPlayer?.player_id || "").trim();
     const isCurrentPlayer = !!opponent?.is_current_player || (!!opponentId && opponentId === currentPlayerId);
@@ -3450,6 +3424,10 @@
     ratings.appendChild(bgaLine);
 
     if (isCurrentPlayer) {
+      return row;
+    }
+
+    if (playerHasScheduledMatch) {
       return row;
     }
 
@@ -3555,8 +3533,8 @@
 
   function refreshOpponentPanel(periodId) {
     const item = opponentPanels.get(String(periodId || ""));
-    if (!item) return;
-    loadOpponentsForPeriod(item.period, item.panel);
+    if (!item) return Promise.resolve();
+    return loadOpponentsForPeriod(item.period, item.panel);
   }
 
   function setRequestsState(panel, text, isError) {
@@ -3576,8 +3554,7 @@
     );
   }
 
-  async function runChallengeRequestAction(period, request, action, confirmText, button) {
-    if (confirmText && !window.confirm(confirmText)) return;
+  async function runChallengeRequestAction(period, request, action, button) {
     const previousText = button?.textContent || "";
     if (button) {
       button.disabled = true;
@@ -3594,6 +3571,21 @@
         button.textContent = previousText;
       }
     }
+  }
+
+  async function openDeclineRequestDialog(period, request, button) {
+    const confirmed = await showChallengeConfirmDialog(
+      "Decline request",
+      "Are you sure you want to decline this Challenge request?",
+      {
+        note: "The request will be closed. Your opponent will need to send a new request if they still want to play.",
+        confirmText: "Decline",
+        confirmClassName: "challenge-btn-danger",
+        cancelText: "Back",
+      }
+    );
+    if (!confirmed) return;
+    await runChallengeRequestAction(period, request, "decline", button);
   }
 
   async function openCancelChallengeMatchDialog(period, request) {
@@ -3669,7 +3661,15 @@
 
     const head = document.createElement("div");
     head.className = "challenge-request-card-head";
+    const ggRank = parseFiniteNumber(otherPlayer?.gg_rank);
+    if (ggRank !== null) {
+      const rank = document.createElement("span");
+      rank.className = "challenge-request-rank";
+      rank.textContent = `#${Math.trunc(ggRank)}`;
+      head.appendChild(rank);
+    }
     head.appendChild(createRequestPlayerInline(otherPlayer));
+    head.appendChild(createRequestRatingsRow(otherPlayer));
     const status = document.createElement("span");
     const statusKey = String(request?.status || "").trim();
     const displayStatusKey = getRequestDisplayStatusKey(request);
@@ -3681,7 +3681,6 @@
     const meta = document.createElement("div");
     meta.className = "challenge-request-meta";
     meta.appendChild(createRequestOptionsRow(request, timezone, timeFlagSrc));
-    meta.appendChild(createRequestRatingsRow(otherPlayer));
     card.appendChild(meta);
 
     const canAct = String(request?.status || "") === "pending" && ["planning_open", "active"].includes(String(period?.status || ""));
@@ -3696,7 +3695,7 @@
         openCounterRequestForm(period, request, currentPlayerId);
       }));
       actions.appendChild(createActionButton("Decline", "challenge-btn-danger", (event) => {
-        runChallengeRequestAction(period, request, "decline", "Decline this invite?", event.currentTarget);
+        openDeclineRequestDialog(period, request, event.currentTarget);
       }));
     }
     if (canAct && !isAwaitingCurrentPlayer) {
@@ -3720,7 +3719,7 @@
       );
     if (canRemoveClosedRequest) {
       actions.appendChild(createActionButton("Remove", "challenge-btn-danger", (event) => {
-        runChallengeRequestAction(period, request, "remove", "", event.currentTarget);
+        runChallengeRequestAction(period, request, "remove", event.currentTarget);
       }));
     }
     if (actions.childNodes.length) {
@@ -3852,8 +3851,19 @@
 
   function refreshRequestPanel(periodId) {
     const item = requestPanels.get(String(periodId || ""));
-    if (!item) return;
-    loadRequestsForPeriod(item.period, item.panel);
+    if (!item) return Promise.resolve();
+    return loadRequestsForPeriod(item.period, item.panel);
+  }
+
+  async function periodHasOpenRequests(periodId) {
+    const data = await apiJson(
+      `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(String(periodId || ""))}/requests`,
+      { method: "GET" }
+    );
+    return [
+      ...(Array.isArray(data?.incoming_requests) ? data.incoming_requests : []),
+      ...(Array.isArray(data?.sent_requests) ? data.sent_requests : []),
+    ].some((request) => String(request?.status || "").trim() === "pending");
   }
 
   function createStatusDropdown(period, initialStatus) {
@@ -3950,7 +3960,11 @@
       btnEl.disabled = !editable;
       btnEl.setAttribute("aria-disabled", editable ? "false" : "true");
       textEl.textContent = status.label;
-      noteEl.textContent = noteOverride || (periodAllowsManualStatus ? status.note : "Status changes are closed for this period.");
+      noteEl.textContent = noteOverride || (periodAllowsManualStatus
+        ? status.note
+        : String(period?.status || "") === "draft"
+          ? "Status selection will open when the planning period starts."
+          : "Status changes are closed for this period.");
       optionEls.forEach((optionEl) => {
         const active = String(optionEl.dataset.value || "") === statusValue;
         optionEl.classList.toggle("active", active);
@@ -3974,15 +3988,34 @@
           close();
           return;
         }
-        if (
-          nextStatus === "unavailable"
-          && !window.confirm("Switch to Not playing this period? Pending Challenge requests for this period will be closed.")
-        ) {
-          close();
-          return;
+        close();
+        if (nextStatus === "unavailable") {
+          setStatus(previousStatus, "Checking open requests...");
+          let hasOpenRequests = false;
+          try {
+            hasOpenRequests = await periodHasOpenRequests(period.id);
+          } catch (error) {
+            setStatus(previousStatus, error?.message || "Failed to check open requests.");
+            return;
+          }
+          if (hasOpenRequests) {
+            const confirmed = await showChallengeConfirmDialog(
+              "Not playing this period",
+              "You have open Challenge requests in this period. Changing your status will close all of them.",
+              {
+                note: "This includes both incoming and sent requests.",
+                confirmText: "Change status",
+                confirmClassName: "challenge-btn-danger",
+                cancelText: "Back",
+              }
+            );
+            if (!confirmed) {
+              setStatus(previousStatus);
+              return;
+            }
+          }
         }
         setStatus(nextStatus, "Saving...");
-        close();
         try {
           const data = await apiJson(`${CHALLENGE_PERIODS_URL}/${encodeURIComponent(period.id)}/player-status`, {
             method: "PATCH",
@@ -3991,7 +4024,10 @@
           const savedStatus = data?.period_player?.status || nextStatus;
           period.player_status = savedStatus;
           setStatus(savedStatus);
-          refreshOpponentPanel(period.id);
+          await Promise.all([
+            refreshRequestPanel(period.id),
+            refreshOpponentPanel(period.id),
+          ]);
         } catch (error) {
           setStatus(previousStatus, error?.message || "Failed to update status.");
         }
@@ -4170,9 +4206,11 @@
         const stack = document.createElement("div");
         stack.className = "challenge-period-stack";
         stack.appendChild(createPeriodBand(period, timeContext));
-        stack.appendChild(createChallengeMatchPanel(period));
-        stack.appendChild(createRequestsPanel(period));
-        stack.appendChild(createOpponentsPanel(period));
+        if (String(period?.status || "") !== "draft") {
+          stack.appendChild(createChallengeMatchPanel(period));
+          stack.appendChild(createRequestsPanel(period));
+          stack.appendChild(createOpponentsPanel(period));
+        }
         contentEl.appendChild(stack);
       });
     } catch (error) {

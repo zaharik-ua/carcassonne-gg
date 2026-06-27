@@ -7055,7 +7055,7 @@ app.get("/challenge-periods/player", requireAuthenticated, async (req, res) => {
          AND cpp.player_id = ?
         LEFT JOIN duels d
           ON d.id = cpp.challenge_duel_id
-        WHERE cp.status IN ('planning_open', 'active', 'result_review')
+        WHERE cp.status IN ('draft', 'planning_open', 'active', 'result_review')
         ORDER BY datetime(cp.planning_starts_at) DESC, datetime(cp.play_starts_at) DESC, cp.id ASC
       `,
       [playerId]
@@ -7603,7 +7603,10 @@ app.patch("/challenge-periods/:id/requests/:requestId/decline", requireAuthentic
   if (!periodId || !requestId) return res.status(400).json({ ok: false, message: "Invalid Challenge request id" });
 
   try {
-    const beforeRow = await loadChallengeRequestById(periodId, requestId);
+    const [beforeRow, beforeDuel] = await Promise.all([
+      loadChallengeRequestById(periodId, requestId),
+      loadChallengeDuelByRequest(periodId, requestId),
+    ]);
     if (!beforeRow || ![beforeRow.player_1_id, beforeRow.player_2_id].includes(playerId)) {
       return res.status(404).json({ ok: false, message: "Challenge request not found" });
     }
@@ -7614,17 +7617,48 @@ app.patch("/challenge-periods/:id/requests/:requestId/decline", requireAuthentic
       return res.status(409).json({ ok: false, message: "Only pending requests can be declined" });
     }
 
-    await dbRunAsync(
-      `
-        UPDATE challenge_requests
-        SET status = 'declined', updated_at = CURRENT_TIMESTAMP
-        WHERE period_id = ?
-          AND id = ?
-          AND status = 'pending'
-      `,
-      [periodId, requestId]
-    );
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await dbRunAsync(
+        `
+          UPDATE challenge_requests
+          SET status = 'declined', updated_at = CURRENT_TIMESTAMP
+          WHERE period_id = ?
+            AND id = ?
+            AND status = 'pending'
+        `,
+        [periodId, requestId]
+      );
+      if (beforeDuel?.status === "Draft") {
+        await dbRunAsync(
+          `
+            UPDATE duels
+            SET
+              status = 'Cancelled',
+              cancelled_by_player_id = ?,
+              cancellation_reason = 'time_change_declined',
+              cancelled_at = CURRENT_TIMESTAMP,
+              updated_by = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND challenge_period_id = ?
+              AND challenge_request_id = ?
+              AND status = 'Draft'
+              AND source_type = 'challenge'
+              AND deleted_at IS NULL
+          `,
+          [playerId, playerId, beforeDuel.id, periodId, requestId]
+        );
+      }
+      await dbRunAsync("COMMIT");
+    } catch (error) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw error;
+    }
     const afterRow = await loadChallengeRequestById(periodId, requestId);
+    const afterDuel = beforeDuel?.id
+      ? await dbGetAsync("SELECT * FROM duels WHERE id = ? LIMIT 1", [beforeDuel.id])
+      : null;
     logAuditEvent({
       ...getAuditActor(req.user),
       event_type: "challenge_request.declined",
@@ -7634,7 +7668,22 @@ app.patch("/challenge-periods/:id/requests/:requestId/decline", requireAuthentic
       changes: buildAuditChanges(beforeRow, afterRow),
       metadata: { period_id: periodId, request_id: requestId },
     });
-    return res.json({ ok: true, challenge_request: mapChallengeRequest(afterRow) });
+    if (beforeDuel?.status === "Draft" && afterDuel?.status === "Cancelled") {
+      logAuditEvent({
+        ...getAuditActor(req.user),
+        event_type: "challenge_duel.time_change_declined",
+        entity_type: "duel",
+        action: "update",
+        record_id: beforeDuel.id,
+        changes: buildAuditChanges(beforeDuel, afterDuel),
+        metadata: { period_id: periodId, request_id: requestId, duel_id: beforeDuel.id },
+      });
+    }
+    return res.json({
+      ok: true,
+      challenge_request: mapChallengeRequest(afterRow),
+      duel: afterDuel,
+    });
   } catch (error) {
     console.error("Failed to decline Challenge request", error);
     return res.status(500).json({ ok: false, message: "Failed to decline Challenge request" });
@@ -7661,9 +7710,13 @@ app.patch("/challenge-periods/:id/requests/:requestId/remove", requireAuthentica
       && beforeDuel?.status === "Cancelled"
       && normalizeNullableText(beforeDuel.cancelled_by_player_id)
       && normalizeNullableText(beforeDuel.cancelled_by_player_id) !== playerId;
+    const canRemoveDeclinedTimeChangeMatch = beforeRow.status === "declined"
+      && beforeRow.created_by_player_id === playerId
+      && beforeDuel?.status === "Cancelled"
+      && beforeDuel.cancellation_reason === "time_change_declined";
     const canRemoveRegularClosedRequest = beforeRow.created_by_player_id === playerId
       && beforeDuel?.status !== "Cancelled";
-    if (!canRemoveRegularClosedRequest && !canRemoveCancelledMatch) {
+    if (!canRemoveRegularClosedRequest && !canRemoveCancelledMatch && !canRemoveDeclinedTimeChangeMatch) {
       return res.status(403).json({ ok: false, message: "You cannot remove this request" });
     }
     if (!["declined", "cancelled_by_sender", "auto_cancelled", "expired"].includes(String(beforeRow.status || ""))) {
@@ -7687,7 +7740,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/remove", requireAuthentica
         `,
         [periodId, requestId]
       );
-      if (canRemoveCancelledMatch && beforeDuel?.id) {
+      if ((canRemoveCancelledMatch || canRemoveDeclinedTimeChangeMatch) && beforeDuel?.id) {
         await dbRunAsync(
           `
             UPDATE duels
@@ -7715,14 +7768,16 @@ app.patch("/challenge-periods/:id/requests/:requestId/remove", requireAuthentica
     const afterDuel = beforeDuel?.id ? await dbGetAsync("SELECT * FROM duels WHERE id = ? LIMIT 1", [beforeDuel.id]) : null;
     logAuditEvent({
       ...getAuditActor(req.user),
-      event_type: canRemoveCancelledMatch ? "challenge_request.cancelled_match_removed" : "challenge_request.removed_by_creator",
+      event_type: canRemoveCancelledMatch || canRemoveDeclinedTimeChangeMatch
+        ? "challenge_request.cancelled_match_removed"
+        : "challenge_request.removed_by_creator",
       entity_type: "challenge_request",
       action: "update",
       record_id: requestId,
       changes: buildAuditChanges(beforeRow, afterRow),
       metadata: { period_id: periodId, request_id: requestId, duel_id: beforeDuel?.id || null, soft_delete: true },
     });
-    if (canRemoveCancelledMatch && beforeDuel?.id) {
+    if ((canRemoveCancelledMatch || canRemoveDeclinedTimeChangeMatch) && beforeDuel?.id) {
       logAuditEvent({
         ...getAuditActor(req.user),
         event_type: "challenge_duel.cancelled_match_removed",
