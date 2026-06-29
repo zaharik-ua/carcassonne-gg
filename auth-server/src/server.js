@@ -14430,6 +14430,45 @@ function publicMainPageMatchesHandler(req, res, next) {
   return db.all(
     `
       SELECT
+        d.id,
+        d.challenge_period_id,
+        d.time_utc,
+        d.duel_format,
+        d.player_1_id,
+        COALESCE(NULLIF(trim(p1.bga_nickname), ''), trim(d.player_1_id)) AS player_1_name,
+        p1.avatar AS player_1_avatar,
+        d.player_2_id,
+        COALESCE(NULLIF(trim(p2.bga_nickname), ''), trim(d.player_2_id)) AS player_2_name,
+        p2.avatar AS player_2_avatar,
+        d.dw1,
+        d.dw2,
+        d.status,
+        cp.name AS challenge_period_name,
+        cp.logo AS challenge_period_logo
+      FROM duels d
+      JOIN challenge_periods cp
+        ON trim(COALESCE(cp.id, '')) = trim(COALESCE(d.challenge_period_id, ''))
+      LEFT JOIN profiles p1
+        ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
+      LEFT JOIN profiles p2
+        ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
+      WHERE d.deleted_at IS NULL
+        AND d.source_type = 'challenge'
+        AND trim(COALESCE(d.match_id, '')) = ''
+        AND d.status IN ('Planned', 'In progress', 'Done', 'Error')
+        AND trim(COALESCE(d.time_utc, '')) <> ''
+        AND datetime(d.time_utc) IS NOT NULL
+        AND datetime(d.time_utc) >= datetime('now', '-7 days')
+        AND ? = ''
+      ORDER BY datetime(d.time_utc) DESC, d.id ASC
+    `,
+    [tournamentFilter],
+    (challengeDuelsErr, challengeDuelRows) => {
+      if (challengeDuelsErr) return next(challengeDuelsErr);
+
+      return db.all(
+    `
+      SELECT
         m.id,
         m.tournament_id,
         m.time_utc,
@@ -14720,6 +14759,23 @@ function publicMainPageMatchesHandler(req, res, next) {
                 tournament_type: row.tournament_type,
                 };
               }),
+              challenge_duels: (challengeDuelRows || []).map((row) => ({
+                id: row.id,
+                challenge_period_id: row.challenge_period_id,
+                challenge_period_name: row.challenge_period_name,
+                challenge_period_logo: row.challenge_period_logo,
+                time_utc: row.time_utc,
+                duel_format: row.duel_format,
+                player_1_id: row.player_1_id,
+                player_1_name: row.player_1_name,
+                player_1_avatar: row.player_1_avatar,
+                player_2_id: row.player_2_id,
+                player_2_name: row.player_2_name,
+                player_2_avatar: row.player_2_avatar,
+                dw1: row.dw1,
+                dw2: row.dw2,
+                status: row.status,
+              })),
               duels: (duelRows || []).map((row) => ({
                 id: row.id,
                 tournament_id: row.tournament_id,
@@ -14847,6 +14903,8 @@ function publicMainPageMatchesHandler(req, res, next) {
           }
         );
       });
+    }
+      );
     }
   );
 }

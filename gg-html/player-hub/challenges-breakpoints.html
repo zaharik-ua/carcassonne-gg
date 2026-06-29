@@ -448,8 +448,40 @@
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const PLAYER_CHALLENGE_PERIODS_URL = `${AUTH_BASE}/challenge-periods/player`;
   const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
+  const CHALLENGE_PROGRESS_EVENT = "gg-challenge-progress-change";
   const contentEl = document.getElementById("challengeBreakpointsContent");
   let authCleanup = null;
+  let invitationCompletionNotified = false;
+  let challengeProgressChannel = null;
+
+  function markInvitationDone() {
+    invitationCompletionNotified = true;
+    contentEl.querySelector("[data-cbp-invitation-step]")?.classList.add("done");
+  }
+
+  function onChallengeProgress(event) {
+    const detail = event?.detail || event?.data || {};
+    if (detail?.invitation_done) {
+      markInvitationDone();
+    }
+  }
+
+  window.addEventListener(CHALLENGE_PROGRESS_EVENT, onChallengeProgress);
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.addEventListener(CHALLENGE_PROGRESS_EVENT, onChallengeProgress);
+    }
+  } catch (_error) {
+    // BroadcastChannel still covers separate same-origin frames.
+  }
+  try {
+    if (typeof BroadcastChannel === "function") {
+      challengeProgressChannel = new BroadcastChannel(CHALLENGE_PROGRESS_EVENT);
+      challengeProgressChannel.addEventListener("message", onChallengeProgress);
+    }
+  } catch (_error) {
+    // The direct window event remains available as a fallback.
+  }
 
   function getCurrentUserProfileId(user) {
     return String(
@@ -1034,12 +1066,14 @@
     const hasRealName = !!getProfileName(profile, user);
     const hasPhoto = getPhotoCount(profile, user) > 0;
     const profileReady = authenticated && !!profileId && hasRealName && hasPhoto;
-    const invitationDone = authenticated && (Array.isArray(challengePeriods) ? challengePeriods : []).some((period) => (
-      period?.has_sent_request === true
-      || Number(period?.has_sent_request) === 1
-      || !!String(period?.challenge_duel_id || "").trim()
-      || ["match_scheduled", "played"].includes(String(period?.player_status || "").trim())
-    ));
+    const invitationDone = invitationCompletionNotified || (
+      authenticated && (Array.isArray(challengePeriods) ? challengePeriods : []).some((period) => (
+        period?.has_sent_request === true
+        || Number(period?.has_sent_request) === 1
+        || !!String(period?.challenge_duel_id || "").trim()
+        || ["match_scheduled", "played"].includes(String(period?.player_status || "").trim())
+      ))
+    );
 
     const checklist = document.createElement("div");
     checklist.className = "cbp-checklist";
@@ -1074,6 +1108,7 @@
     checklist.appendChild(photoStep.step);
 
     const inviteStep = buildStep("Send an invitation to your opponent", invitationDone);
+    inviteStep.step.setAttribute("data-cbp-invitation-step", "");
     checklist.appendChild(inviteStep.step);
 
     contentEl.className = "";

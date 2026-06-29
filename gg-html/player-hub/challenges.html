@@ -1752,6 +1752,30 @@
   const PLAYER_CHALLENGE_PERIODS_URL = `${CHALLENGE_PERIODS_URL}/player`;
   const ELIGIBLE_OPPONENTS_PATH = "eligible-opponents";
   const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
+  const CHALLENGE_PROGRESS_EVENT = "gg-challenge-progress-change";
+  const challengeProgressChannel = (() => {
+    try {
+      return typeof BroadcastChannel === "function"
+        ? new BroadcastChannel(CHALLENGE_PROGRESS_EVENT)
+        : null;
+    } catch (_error) {
+      return null;
+    }
+  })();
+
+  function notifyChallengeProgress(reason) {
+    const detail = { invitation_done: true, reason };
+    window.dispatchEvent(new CustomEvent(CHALLENGE_PROGRESS_EVENT, { detail }));
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.dispatchEvent(new CustomEvent(CHALLENGE_PROGRESS_EVENT, { detail }));
+      }
+    } catch (_error) {
+      // BroadcastChannel still covers separate same-origin frames.
+    }
+    challengeProgressChannel?.postMessage(detail);
+  }
+
   const STATUS_COPY = {
     not_selected: {
       label: "Not selected",
@@ -3635,6 +3659,7 @@
               allows_bo5: bo5Input.checked,
             }),
           });
+          notifyChallengeProgress("request_created");
           setMessage("Request sent.", "success");
           refreshRequestPanel(period?.id);
           refreshOpponentPanel(period?.id);
@@ -3787,6 +3812,7 @@
             }),
           }
         );
+        notifyChallengeProgress("match_accepted");
         setMessage("Accepted.", "success");
         window.setTimeout(() => {
           closeModal();

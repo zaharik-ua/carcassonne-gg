@@ -1546,15 +1546,18 @@ function createTournamentHeader(tournament) {
     titleEl.rel = "noopener noreferrer";
   }
 
-  const icon = document.createElement("img");
-  icon.className = "tournament-icon";
-  icon.src = tournament.logo;
-  icon.alt = tournament.name;
+  const logoValue = typeof tournament.logo === "string" ? tournament.logo.trim() : "";
+  if (logoValue) {
+    const icon = document.createElement("img");
+    icon.className = "tournament-icon";
+    icon.src = logoValue;
+    icon.alt = tournament.name;
+    titleEl.appendChild(icon);
+  }
 
   const span = document.createElement("span");
   span.textContent = tournament.name;
 
-  titleEl.appendChild(icon);
   titleEl.appendChild(span);
   header.appendChild(titleEl);
 
@@ -1876,7 +1879,7 @@ function renderSection(container, title, tournaments, matches, events, options =
       let el;
       if (isDuelTournament(tType)) {
         // Show rating for Today and Upcoming duel matches in Time mode
-        el = createDuelElement(match, { showRating: true, isToday });
+        el = createDuelElement(match, { showRating: match.source_type !== "challenge", isToday });
       } else {
         // TEAM: also show rating in Time mode
         el = createMatchElement(match, { showRating: true, isToday });
@@ -2139,7 +2142,10 @@ function renderSection(container, title, tournaments, matches, events, options =
         // For Today and Upcoming + duel tournaments add rating above time
         if (isDuelTournament(tType)) {
           const showRating = (title === "Today" || title === "Upcoming Matches");
-          const el = createDuelElement(match, { showRating, isToday });
+          const el = createDuelElement(match, {
+            showRating: showRating && match.source_type !== "challenge",
+            isToday,
+          });
           card.appendChild(el);
         } else {
           // TEAM: show rating on Today/Upcoming like duel tournaments
@@ -2606,6 +2612,56 @@ function adaptDbMainPageMatchesData(data) {
     if (!matchId) return;
     if (!duelsByMatchId.has(matchId)) duelsByMatchId.set(matchId, []);
     duelsByMatchId.get(matchId).push(duel);
+  });
+
+  (Array.isArray(data?.challenge_duels) ? data.challenge_duels : []).forEach((duel) => {
+    const timeUtc = String(duel?.time_utc || "").trim();
+    if (!timeUtc || !Number.isFinite(Date.parse(timeUtc))) return;
+
+    const sectionKey = getFriendlySectionKeyByLocalTime(timeUtc);
+    if (sectionKey === "finished" && !isFriendlyFinishedWithinLastDays(timeUtc, 7)) return;
+
+    const periodId = String(duel?.challenge_period_id || "").trim();
+    const periodName = String(duel?.challenge_period_name || periodId || "Challenges").trim();
+    const periodLogo = String(duel?.challenge_period_logo || "").trim();
+    const tournamentKey = `${periodName}||https://carcassonne.gg/player-hub/challenges/`;
+    if (!tournamentsByKey[sectionKey].has(tournamentKey)) {
+      tournamentsByKey[sectionKey].set(tournamentKey, {
+        id: periodId,
+        name: periodName,
+        short_title: periodName,
+        logo: periodLogo,
+        link: "https://carcassonne.gg/player-hub/challenges/",
+        type: "Individual",
+      });
+    }
+
+    const normalizedDuel = {
+      id: String(duel?.id || "").trim(),
+      tournament: periodName,
+      tournament_logo: periodLogo,
+      tournament_link: "https://carcassonne.gg/player-hub/challenges/",
+      tournament_type: "Individual",
+      time: formatUtcIsoAsLegacyTime(timeUtc),
+      team1: String(duel?.player_1_name || duel?.player_1_id || "").trim(),
+      team2: String(duel?.player_2_name || duel?.player_2_id || "").trim(),
+      opponent1_id: String(duel?.player_1_id || "").trim(),
+      opponent2_id: String(duel?.player_2_id || "").trim(),
+      flag1: String(duel?.player_1_avatar || "").trim(),
+      flag2: String(duel?.player_2_avatar || "").trim(),
+      format: String(duel?.duel_format || "").trim(),
+      status: String(duel?.status || "").trim(),
+      gw1: duel?.dw1,
+      gw2: duel?.dw2,
+      rating: null,
+      streams: [],
+      streamers: [],
+      source_type: "challenge",
+    };
+
+    if (sectionKey === "today") result.matches_today.push(normalizedDuel);
+    else if (sectionKey === "scheduled") result.matches_scheduled.push(normalizedDuel);
+    else result.matches_finished.push(normalizedDuel);
   });
 
   (Array.isArray(data?.matches) ? data.matches : []).forEach((match) => {
