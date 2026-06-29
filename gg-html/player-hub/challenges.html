@@ -64,6 +64,73 @@
     gap: 10px;
   }
 
+  .challenge-admin-controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 38px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    box-sizing: border-box;
+  }
+
+  .challenge-admin-controls[hidden] {
+    display: none;
+  }
+
+  .challenge-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .challenge-toggle input {
+    appearance: none;
+    position: relative;
+    width: 32px;
+    height: 18px;
+    margin: 0;
+    border: 1px solid #aab2bd;
+    border-radius: 999px;
+    background: #dfe3e8;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .challenge-toggle input::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.22);
+    transition: transform 0.15s ease;
+  }
+
+  .challenge-toggle input:checked {
+    border-color: var(--blue);
+    background: var(--blue);
+  }
+
+  .challenge-toggle input:checked::after {
+    transform: translateX(14px);
+  }
+
+  .challenge-toggle input:focus-visible {
+    outline: 2px solid rgba(26, 115, 183, 0.3);
+    outline-offset: 2px;
+  }
+
   .challenge-period-main {
     display: grid;
     gap: 7px;
@@ -523,6 +590,18 @@
   .challenge-duel-status.is-cancelled {
     background: var(--red-soft);
     color: var(--red);
+  }
+
+  .challenge-duel-status.is-removed,
+  .challenge-request-status.is-removed {
+    border-color: #f0b8c1;
+    background: var(--red-soft);
+    color: var(--red);
+  }
+
+  .challenge-duel-row.is-removed,
+  .challenge-request-card.is-removed {
+    background: #fff8f9;
   }
 
   .challenge-duel-player-flag {
@@ -1188,6 +1267,10 @@
     line-height: 1.4;
   }
 
+  .challenge-info-note.is-warning {
+    font-weight: 600;
+  }
+
   .challenge-info-actions {
     display: flex;
     justify-content: flex-end;
@@ -1421,6 +1504,16 @@
 </style>
 
 <div class="challenges-wrap">
+  <div id="challengeAdminControls" class="challenge-admin-controls" hidden>
+    <label class="challenge-toggle">
+      <input id="challengeAdminMode" type="checkbox" role="switch">
+      <span>Admin mode</span>
+    </label>
+    <label id="challengeRemovedItemsLabel" class="challenge-toggle" hidden>
+      <input id="challengeRemovedItems" type="checkbox" role="switch">
+      <span>Removed items</span>
+    </label>
+  </div>
   <div id="challengesContent" class="challenges-alert">Loading...</div>
 </div>
 
@@ -1483,9 +1576,14 @@
     cancelled_by_sender: "Cancelled",
     auto_cancelled: "Closed",
     expired: "Expired",
+    removed: "Removed",
   };
 
   const contentEl = document.getElementById("challengesContent");
+  const adminControlsEl = document.getElementById("challengeAdminControls");
+  const adminModeInput = document.getElementById("challengeAdminMode");
+  const removedItemsLabel = document.getElementById("challengeRemovedItemsLabel");
+  const removedItemsInput = document.getElementById("challengeRemovedItems");
   const dropdowns = [];
   const opponentPanels = new Map();
   const matchPanels = new Map();
@@ -1494,6 +1592,26 @@
   let bgaPlayersPromise = null;
   let teamsByIdPromise = null;
   let challengeProfilesPromise = null;
+  let currentUserPromise = null;
+  let isGlobalAdmin = false;
+  let adminMode = false;
+  let includeRemovedItems = false;
+  let renderGeneration = 0;
+
+  async function fetchCurrentUser() {
+    if (currentUserPromise) return currentUserPromise;
+    currentUserPromise = apiJson(ME_URL, { method: "GET" })
+      .then((data) => data?.authenticated ? data?.user || null : null)
+      .catch(() => null);
+    return currentUserPromise;
+  }
+
+  function syncAdminControls() {
+    adminControlsEl.hidden = !isGlobalAdmin;
+    adminModeInput.checked = adminMode;
+    removedItemsLabel.hidden = !adminMode;
+    removedItemsInput.checked = includeRemovedItems;
+  }
 
   function normalizeStatus(value) {
     const normalized = String(value || "").trim();
@@ -2131,7 +2249,13 @@
     return row;
   }
 
-  function createChallengeDuelStatusNode(status, request) {
+  function createChallengeDuelStatusNode(status, request, isRemoved = false) {
+    if (isRemoved) {
+      const removedNode = document.createElement("div");
+      removedNode.className = "challenge-duel-status is-removed";
+      removedNode.textContent = "Removed";
+      return removedNode;
+    }
     const rawStatus = String(status || "").trim();
     const label = rawStatus === "Draft"
       && String(request?.status || "").trim() === "pending"
@@ -2157,7 +2281,7 @@
     return !!cancelledByPlayerId && cancelledByPlayerId !== playerId;
   }
 
-  function createChallengeDuelBlock(request, period, currentPlayerId) {
+  function createChallengeDuelBlock(request, period, currentPlayerId, options = {}) {
     const duel = request?.duel || null;
     if (!duel?.id) return null;
 
@@ -2171,6 +2295,7 @@
 
     const row = document.createElement("div");
     row.className = "challenge-duel-row";
+    row.classList.toggle("is-removed", !!duel.deleted_at);
     row.dataset.challengeDuelId = String(duel.id || "");
     section.appendChild(row);
 
@@ -2202,14 +2327,10 @@
 
     const actions = document.createElement("div");
     actions.className = "challenge-duel-actions";
-    const statusNode = createChallengeDuelStatusNode(duel?.status, request);
+    const statusNode = createChallengeDuelStatusNode(duel?.status, request, !!duel?.deleted_at);
     if (statusNode) actions.appendChild(statusNode);
-    if (String(duel?.status || "") === "Planned") {
+    if (!options.readOnly && String(duel?.status || "") === "Planned") {
       actions.appendChild(createChallengeDuelEditDropdown(period, request, currentPlayerId));
-    } else if (canCurrentPlayerRemoveChallengeDuel(request, currentPlayerId)) {
-      actions.appendChild(createActionButton("Remove", "challenge-btn-danger", (event) => {
-        runChallengeRequestAction(period, request, "remove", event.currentTarget);
-      }));
     }
     row.appendChild(actions);
 
@@ -2337,7 +2458,7 @@
 
       if (options.note) {
         const note = document.createElement("div");
-        note.className = "challenge-info-note";
+        note.className = `challenge-info-note ${options.noteClassName || ""}`.trim();
         note.textContent = String(options.note || "");
         dialog.appendChild(note);
       }
@@ -3594,6 +3715,7 @@
       "Cancel this scheduled Challenge match?",
       {
         note: "If you have not agreed this with your opponent, they may file a complaint. This can result in a warning and may affect your future Challenge participation.",
+        noteClassName: "is-warning",
         confirmText: "Cancel match",
         confirmClassName: "challenge-btn-danger",
         cancelText: "Back",
@@ -3650,8 +3772,10 @@
   }
 
   function createChallengeRequestCard(request, period, currentPlayerId, kind) {
+    const adminView = kind === "admin";
     const card = document.createElement("div");
     card.className = "challenge-request-card";
+    card.classList.toggle("is-removed", !!request?.hidden_by_creator_at);
     card.dataset.challengeRequestId = String(request?.id || "");
 
     const otherPlayer = getRequestOtherPlayer(request, currentPlayerId);
@@ -3661,18 +3785,26 @@
 
     const head = document.createElement("div");
     head.className = "challenge-request-card-head";
-    const ggRank = parseFiniteNumber(otherPlayer?.gg_rank);
-    if (ggRank !== null) {
-      const rank = document.createElement("span");
-      rank.className = "challenge-request-rank";
-      rank.textContent = `#${Math.trunc(ggRank)}`;
-      head.appendChild(rank);
+    if (adminView) {
+      head.appendChild(createRequestPlayerInline(request?.player_1 || { player_id: request?.player_1_id }));
+      const separator = document.createElement("span");
+      separator.textContent = "vs";
+      head.appendChild(separator);
+      head.appendChild(createRequestPlayerInline(request?.player_2 || { player_id: request?.player_2_id }));
+    } else {
+      const ggRank = parseFiniteNumber(otherPlayer?.gg_rank);
+      if (ggRank !== null) {
+        const rank = document.createElement("span");
+        rank.className = "challenge-request-rank";
+        rank.textContent = `#${Math.trunc(ggRank)}`;
+        head.appendChild(rank);
+      }
+      head.appendChild(createRequestPlayerInline(otherPlayer));
+      head.appendChild(createRequestRatingsRow(otherPlayer));
     }
-    head.appendChild(createRequestPlayerInline(otherPlayer));
-    head.appendChild(createRequestRatingsRow(otherPlayer));
     const status = document.createElement("span");
     const statusKey = String(request?.status || "").trim();
-    const displayStatusKey = getRequestDisplayStatusKey(request);
+    const displayStatusKey = request?.hidden_by_creator_at ? "removed" : getRequestDisplayStatusKey(request);
     status.className = `challenge-request-status is-${displayStatusKey}`;
     status.textContent = getRequestStatusLabel(displayStatusKey);
     head.appendChild(status);
@@ -3682,6 +3814,8 @@
     meta.className = "challenge-request-meta";
     meta.appendChild(createRequestOptionsRow(request, timezone, timeFlagSrc));
     card.appendChild(meta);
+
+    if (adminView) return card;
 
     const canAct = String(request?.status || "") === "pending" && ["planning_open", "active"].includes(String(period?.status || ""));
     const isAwaitingCurrentPlayer = String(request?.awaiting_player_id || "") === String(currentPlayerId || "");
@@ -3768,30 +3902,43 @@
     return section;
   }
 
-  function renderChallengeMatchPanel(period, currentPlayerId, request) {
+  function renderChallengeMatchPanel(period, currentPlayerId, requestOrRequests, options = {}) {
     const item = matchPanels.get(String(period?.id || ""));
     if (!item) return;
     const bodyEl = item.panel.querySelector("[data-match-body]");
     if (!bodyEl) return;
+    const titleEl = item.panel.querySelector("[data-match-title]");
+    if (titleEl) titleEl.textContent = options.readOnly ? "Matches" : "Match";
     bodyEl.innerHTML = "";
-    const duelBlock = createChallengeDuelBlock(request, period, currentPlayerId);
-    item.panel.hidden = !duelBlock;
-    if (duelBlock) bodyEl.appendChild(duelBlock);
+    const requests = Array.isArray(requestOrRequests) ? requestOrRequests : [requestOrRequests];
+    const duelBlocks = requests
+      .map((request) => createChallengeDuelBlock(request, period, currentPlayerId, options))
+      .filter(Boolean);
+    item.panel.hidden = !duelBlocks.length;
+    duelBlocks.forEach((duelBlock) => bodyEl.appendChild(duelBlock));
   }
 
   async function loadRequestsForPeriod(period, panel) {
     const periodId = String(period?.id || "").trim();
+    const requestGeneration = Number(panel?.dataset?.challengeRenderGeneration || renderGeneration);
+    const requestAdminMode = adminMode;
+    const requestIncludeRemovedItems = includeRemovedItems;
     if (!periodId) {
       setRequestsState(panel, "Challenge period is unavailable.", true);
       return;
     }
     setRequestsState(panel, "Loading requests...", false);
     try {
-      const data = await apiJson(`${CHALLENGE_PERIODS_URL}/${encodeURIComponent(periodId)}/requests`, { method: "GET" });
+      const params = new URLSearchParams();
+      if (requestAdminMode) params.set("admin_mode", "1");
+      if (requestAdminMode && requestIncludeRemovedItems) params.set("include_removed", "1");
+      const requestsUrl = `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(periodId)}/requests${params.size ? `?${params}` : ""}`;
+      const data = await apiJson(requestsUrl, { method: "GET" });
       const [ratingsById, bgaPlayersById] = await Promise.all([
         fetchGgRatingsById(),
         fetchBgaPlayersById(),
       ]);
+      if (requestGeneration !== renderGeneration) return;
       const bodyEl = panel.querySelector("[data-requests-body]");
       if (!bodyEl) return;
       const enrichRequestPlayer = (player, playerId) => mergeOpponentBgaPlayer(
@@ -3804,6 +3951,22 @@
         player_2: enrichRequestPlayer(request?.player_2, request?.player_2_id),
       });
       const currentPlayerId = String(data?.player_id || "").trim();
+      if (requestAdminMode) {
+        const allRequests = (Array.isArray(data?.all_requests) ? data.all_requests : []).map(enrichRequest);
+        const matches = (Array.isArray(data?.matches) ? data.matches : []).map(enrichRequest);
+        renderChallengeMatchPanel(period, currentPlayerId, matches, { readOnly: true });
+        bodyEl.innerHTML = "";
+        bodyEl.appendChild(createRequestListSection(
+          "All requests",
+          allRequests,
+          period,
+          currentPlayerId,
+          "admin",
+          requestIncludeRemovedItems ? "No requests, including removed items." : "No requests.",
+          `${allRequests.length} total`
+        ));
+        return;
+      }
       const incoming = (Array.isArray(data?.incoming_requests) ? data.incoming_requests : [])
         .map(enrichRequest)
         .filter((request) => String(request?.created_by_player_id || "") !== currentPlayerId);
@@ -3844,6 +4007,7 @@
         { actionButton: createRequestBtn }
       ));
     } catch (error) {
+      if (requestGeneration !== renderGeneration) return;
       renderChallengeMatchPanel(period, "", null);
       setRequestsState(panel, error?.message || "Failed to load requests.", true);
     }
@@ -4140,6 +4304,7 @@
 
     const title = document.createElement("div");
     title.className = "challenge-opponents-title";
+    title.dataset.matchTitle = "true";
     title.textContent = "Match";
     head.appendChild(title);
 
@@ -4160,6 +4325,7 @@
     const wrap = document.createElement("div");
     wrap.className = "challenge-panel-wrap";
     wrap.dataset.challengePeriodRequests = String(period?.id || "");
+    wrap.dataset.challengeRenderGeneration = String(renderGeneration);
 
     const head = document.createElement("div");
     head.className = "challenge-opponents-head";
@@ -4185,6 +4351,7 @@
   }
 
   async function renderChallenges() {
+    const currentGeneration = ++renderGeneration;
     setAlert("Loading...", false);
     dropdowns.splice(0, dropdowns.length);
     opponentPanels.clear();
@@ -4192,9 +4359,20 @@
     requestPanels.clear();
 
     try {
-      const data = await apiJson(PLAYER_CHALLENGE_PERIODS_URL, { method: "GET" });
+      const [data, currentUser] = await Promise.all([
+        apiJson(PLAYER_CHALLENGE_PERIODS_URL, { method: "GET" }),
+        fetchCurrentUser(),
+      ]);
+      if (currentGeneration !== renderGeneration) return;
+      isGlobalAdmin = currentUser?.isAdmin === true || Number(currentUser?.admin) === 1;
+      if (!isGlobalAdmin) {
+        adminMode = false;
+        includeRemovedItems = false;
+      }
+      syncAdminControls();
       const periods = Array.isArray(data?.challenge_periods) ? data.challenge_periods : [];
       const timeContext = await enrichTimeContext(data?.player_time_context || { timezone: "UTC" });
+      if (currentGeneration !== renderGeneration) return;
       if (!periods.length) {
         setAlert("No open Challenge periods right now.", false);
         return;
@@ -4214,11 +4392,24 @@
         contentEl.appendChild(stack);
       });
     } catch (error) {
+      if (currentGeneration !== renderGeneration) return;
       setAlert(error?.message || "Failed to load Challenge periods.", true);
     }
   }
 
   document.addEventListener("click", closeAllDropdowns);
+
+  adminModeInput.addEventListener("change", () => {
+    adminMode = isGlobalAdmin && adminModeInput.checked;
+    if (!adminMode) includeRemovedItems = false;
+    syncAdminControls();
+    renderChallenges();
+  });
+
+  removedItemsInput.addEventListener("change", () => {
+    includeRemovedItems = adminMode && removedItemsInput.checked;
+    renderChallenges();
+  });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeAllDropdowns();
