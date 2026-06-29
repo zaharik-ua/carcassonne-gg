@@ -525,6 +525,18 @@
     height: 18px;
   }
 
+  .cp-stream-row .cp-duel-format {
+    margin-top: 3px;
+    border-radius: 3px;
+    padding: 1px 5px;
+    background: #eef2f6;
+    color: #475467;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
   .cp-stream-row .cp-match-right {
     margin-left: 8px;
   }
@@ -651,6 +663,28 @@
 
   function readMatchTeam2(match) {
     return normalizeCode(match?.team_2 ?? match?.team2_id ?? match?.team2);
+  }
+
+  function normalizeEntityType(value) {
+    const raw = String(value || "").trim().toLowerCase();
+    if (raw === "duel" || raw === "duels") return "duel";
+    return "match";
+  }
+
+  function isDuelStreamEntity(item) {
+    return normalizeEntityType(item?.entity_type) === "duel"
+      || String(item?.source_type || "").trim().toLowerCase() === "challenge"
+      || !!String(item?.duel_id || "").trim();
+  }
+
+  function readStreamEntityId(item) {
+    return String(
+      item?.entity_id
+      || item?.match_id
+      || item?.duel_id
+      || item?.id
+      || ""
+    ).trim();
   }
 
   function formatMatchTime(value) {
@@ -1006,6 +1040,7 @@
   function createStreamMatchRow(match, teamsById, tournamentsById, options = {}) {
     const row = document.createElement("div");
     row.className = "cp-match-row cp-stream-row";
+    const isDuel = isDuelStreamEntity(match);
 
     const streamerAvatar = String(options.streamerAvatar || "").trim();
     if (streamerAvatar) {
@@ -1024,7 +1059,11 @@
 
     const tournamentId = String(match?.tournament_id || "").trim();
     const tournament = tournamentsById?.get(tournamentId) || null;
-    const tournamentLogo = String(tournament?.logo || match?.tournament_logo || "").trim();
+    const tournamentLogo = String(
+      isDuel
+        ? (match?.challenge_period_logo || match?.tournament_logo || "")
+        : (tournament?.logo || match?.tournament_logo || "")
+    ).trim();
     if (tournamentLogo) {
       const logoWrap = document.createElement("div");
       logoWrap.className = "cp-match-time";
@@ -1048,6 +1087,13 @@
     timeText.className = "cp-match-time-text";
     timeText.innerHTML = esc(formatMatchTime(match?.time_utc ?? match?.time)).replaceAll("\n", "<br>");
     timeWrap.appendChild(timeText);
+    const rawFormat = String(match?.duel_format || match?.format || "").trim();
+    if (isDuel && rawFormat) {
+      const formatBadge = document.createElement("div");
+      formatBadge.className = "cp-duel-format";
+      formatBadge.textContent = rawFormat;
+      timeWrap.appendChild(formatBadge);
+    }
     row.appendChild(timeWrap);
 
     const timeDivider = document.createElement("div");
@@ -1061,16 +1107,29 @@
     const team1 = teamsById.get(team1Id) || null;
     const team2 = teamsById.get(team2Id) || null;
 
-    [
-      { team: team1, name: team1?.name || team1Id || "-", key: "team1" },
-      { team: team2, name: team2?.name || team2Id || "-", key: "team2" },
-    ].forEach((entry) => {
+    const competitors = isDuel
+      ? [
+        {
+          logo: String(match?.player_1_association_flag || match?.player_1_avatar || "").trim(),
+          name: String(match?.player_1_name || match?.player1 || match?.team1 || match?.player_1_id || "").trim() || "-",
+        },
+        {
+          logo: String(match?.player_2_association_flag || match?.player_2_avatar || "").trim(),
+          name: String(match?.player_2_name || match?.player2 || match?.team2 || match?.player_2_id || "").trim() || "-",
+        },
+      ]
+      : [
+        { logo: team1?.logo || "", name: team1?.name || team1Id || "-" },
+        { logo: team2?.logo || "", name: team2?.name || team2Id || "-" },
+      ];
+
+    competitors.forEach((entry) => {
       const teamRow = document.createElement("div");
       teamRow.className = "cp-team-row";
-      if (entry.team?.logo) {
+      if (entry.logo) {
         const img = document.createElement("img");
         img.className = "cp-team-flag";
-        img.src = entry.team.logo;
+        img.src = entry.logo;
         img.alt = "";
         teamRow.appendChild(img);
       }
@@ -1130,7 +1189,7 @@
       showEdit: true,
       streamId: String(stream?.id || ""),
       scoreboardLink: (() => {
-        const matchId = String(stream?.match_id || "").trim();
+        const matchId = readStreamEntityId(stream);
         if (!matchId) return "";
         const scoreboardStyle = String(stream?.streamer_scoreboard_style || "").trim() || "Default";
         return `https://carcassonne.gg/stream/?selected=${encodeURIComponent(matchId)}&style=${encodeURIComponent(scoreboardStyle)}`;
@@ -1278,6 +1337,7 @@
     const isCreateMode = formMode === "create";
     const source = formContext?.stream && typeof formContext.stream === "object" ? formContext.stream : {};
     const ongoingMatches = Array.isArray(formContext?.ongoingMatches) ? formContext.ongoingMatches : [];
+    const ongoingChallengeDuels = Array.isArray(formContext?.ongoingChallengeDuels) ? formContext.ongoingChallengeDuels : [];
     const availableStreamers = Array.isArray(formContext?.availableStreamers) ? formContext.availableStreamers : [];
     const allowStreamerSelect = isCreateMode && formContext?.allowStreamerSelect === true;
     let selectedStreamer = streamer || null;
@@ -1394,35 +1454,54 @@
       const matchesWrap = document.createElement("div");
       matchesWrap.className = "cp-stream-match-picker";
       const checkboxes = [];
-      ongoingMatches.forEach((match) => {
-        const option = document.createElement("label");
-        option.className = "cp-stream-match-option";
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = String(match?.id || "");
-        const syncSelectedState = () => {
-          option.classList.toggle("is-selected", checkbox.checked);
-        };
-        checkbox.addEventListener("change", syncSelectedState);
-        syncSelectedState();
-        option.appendChild(checkbox);
-        option.appendChild(createStreamMatchRow(match, teamsById, tournamentsById));
-        matchesWrap.appendChild(option);
-        checkboxes.push(checkbox);
-      });
-      if (!ongoingMatches.length) {
-        const empty = document.createElement("div");
-        empty.className = "cp-stream-empty";
-        empty.textContent = "No ongoing matches available.";
-        matchesWrap.appendChild(empty);
-      }
-      addRow("Matches", matchesWrap);
+
+      const appendEntryPickerSection = (titleText, rows, entityType, emptyText) => {
+        matchesWrap.appendChild(renderSectionTitle(titleText));
+        rows.forEach((match) => {
+          const option = document.createElement("label");
+          option.className = "cp-stream-match-option";
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.value = readStreamEntityId(match);
+          checkbox.dataset.entityType = entityType;
+          const syncSelectedState = () => {
+            option.classList.toggle("is-selected", checkbox.checked);
+          };
+          checkbox.addEventListener("change", syncSelectedState);
+          syncSelectedState();
+          option.appendChild(checkbox);
+          option.appendChild(createStreamMatchRow(match, teamsById, tournamentsById));
+          matchesWrap.appendChild(option);
+          checkboxes.push(checkbox);
+        });
+        if (!rows.length) {
+          const empty = document.createElement("div");
+          empty.className = "cp-stream-empty";
+          empty.textContent = emptyText;
+          matchesWrap.appendChild(empty);
+        }
+      };
+
+      appendEntryPickerSection("Matches", ongoingMatches, "matches", "No ongoing matches available.");
+      appendEntryPickerSection(
+        "Challenge duels",
+        ongoingChallengeDuels,
+        "duels",
+        "No upcoming Challenge duels available."
+      );
+
+      addRow("Stream target", matchesWrap);
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         setError("");
         const link = String(linkInput.value || "").trim();
-        const entityIds = checkboxes.map((input) => input.checked ? input.value : "").filter(Boolean);
+        const selectedEntries = checkboxes
+          .filter((input) => input.checked && input.value)
+          .map((input) => ({
+            entityType: String(input.dataset.entityType || "matches").trim(),
+            entityId: input.value,
+          }));
         if (!link) {
           setError("Link is required.");
           return;
@@ -1432,28 +1511,36 @@
           setError("Streamer is required.");
           return;
         }
-        if (!entityIds.length) {
-          setError("Select at least one match.");
+        if (!selectedEntries.length) {
+          setError("Select at least one match or Challenge duel.");
           return;
         }
 
         setSaving(true);
         try {
-          const response = await fetch(STREAMS_URL, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              entity_type: "matches",
-              entity_ids: entityIds,
-              streamer_id: selectedStreamerId,
-              link,
-            }),
-          });
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok || !result?.ok) {
-            setError(result?.message || "Failed to create streams.");
-            return;
+          const selectedByType = selectedEntries.reduce((acc, entry) => {
+            if (!acc.has(entry.entityType)) acc.set(entry.entityType, []);
+            acc.get(entry.entityType).push(entry.entityId);
+            return acc;
+          }, new Map());
+
+          for (const [entityType, entityIds] of selectedByType.entries()) {
+            const response = await fetch(STREAMS_URL, {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                entity_type: entityType,
+                entity_ids: entityIds,
+                streamer_id: selectedStreamerId,
+                link,
+              }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result?.ok) {
+              setError(result?.message || "Failed to create streams.");
+              return;
+            }
           }
           resetCaptainSubview();
         } catch (_error) {
@@ -1469,7 +1556,7 @@
       matchField.style.background = "#fff";
       matchField.style.borderColor = "#d6dbe3";
       matchField.appendChild(createStreamMatchRow(source, teamsById, tournamentsById));
-      addRow("Match", matchField);
+      addRow("Stream target", matchField);
 
       const showDeleteConfirmDialog = () => {
         const overlay = document.createElement("div");
@@ -1690,6 +1777,19 @@
 
       const matchesData = await matchesRes.json().catch(() => ({}));
       const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
+      const challengeDuels = (Array.isArray(matchesData?.challenge_duels) ? matchesData.challenge_duels : [])
+        .map((duel) => ({
+          ...duel,
+          entity_type: "duel",
+          entity_id: String(duel?.id || "").trim(),
+          duel_id: String(duel?.id || "").trim(),
+          source_type: "challenge",
+          tournament_logo: String(duel?.challenge_period_logo || "").trim(),
+          tournament_id: String(duel?.challenge_period_id || "").trim(),
+          team1: String(duel?.player_1_name || duel?.player_1_id || "").trim(),
+          team2: String(duel?.player_2_name || duel?.player_2_id || "").trim(),
+        }))
+        .filter((duel) => duel.entity_id);
       let tournaments = [];
       if (tournamentsRes?.ok) {
         const tournamentsData = await tournamentsRes.json().catch(() => ({}));
@@ -1746,6 +1846,10 @@
         .filter((match) => String(match?.time_utc || match?.time || "").trim())
         .filter((match) => !isPastMatch(match))
         .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
+      const ongoingChallengeDuels = challengeDuels
+        .filter((duel) => String(duel?.time_utc || duel?.time || "").trim())
+        .filter((duel) => !isPastMatch(duel))
+        .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
 
       if (isCreateMode) {
         if (!isAdminUser && !currentStreamer) {
@@ -1766,6 +1870,7 @@
           tournamentsById,
           {
             ongoingMatches,
+            ongoingChallengeDuels,
             availableStreamers: streamers,
             allowStreamerSelect: isAdminUser,
           },
@@ -1783,7 +1888,7 @@
           ? await streamRes.json().catch(() => ({}))
           : {};
         const visibleStreams = (Array.isArray(streamsData?.streams) ? streamsData.streams : []).filter((stream) => (
-          String(stream?.entity_type || "").trim().toLowerCase() === "match"
+          ["match", "duel"].includes(String(stream?.entity_type || "").trim().toLowerCase())
         ));
         const streamToEdit = visibleStreams.find((item) => String(item?.id || "") === editStreamId);
         if (!streamToEdit) {

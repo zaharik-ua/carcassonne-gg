@@ -5600,14 +5600,12 @@ function canManageStreamRow(row, user) {
 }
 
 function validateStreamMatchEntity(entityType, entityId, done) {
-  if (entityType !== "match") {
-    done(null, false);
-    return;
-  }
+  const tableName = entityType === "match" ? "matches" : entityType === "duel" ? "duels" : "";
+  if (!tableName) return done(null, false);
   db.get(
     `
       SELECT id
-      FROM matches
+      FROM ${tableName}
       WHERE id = ?
         AND deleted_at IS NULL
       LIMIT 1
@@ -5634,6 +5632,7 @@ function loadStreamsByMatchIds(matchIds, done) {
     `
       SELECT
         s.id,
+        s.entity_type,
         s.entity_id,
         s.link,
         s.created_at,
@@ -5655,6 +5654,49 @@ function loadStreamsByMatchIds(matchIds, done) {
         s.id ASC
     `,
     normalizedMatchIds,
+    done
+  );
+}
+
+function loadStreamsByDuelIds(duelIds, done) {
+  const normalizedDuelIds = Array.from(new Set(
+    (Array.isArray(duelIds) ? duelIds : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  ));
+
+  if (!normalizedDuelIds.length) {
+    done(null, []);
+    return;
+  }
+
+  const placeholders = normalizedDuelIds.map(() => "?").join(", ");
+  db.all(
+    `
+      SELECT
+        s.id,
+        s.entity_type,
+        s.entity_id,
+        s.link,
+        s.created_at,
+        s.updated_at,
+        sr.name AS streamer_name,
+        COALESCE(NULLIF(trim(sr.short_name), ''), sr.name) AS streamer_short_name,
+        sr.avatar AS streamer_avatar,
+        sr.scoreboard_style AS streamer_scoreboard_style,
+        sr.profile_id AS streamer_profile_id
+      FROM streams s
+      INNER JOIN streamers sr
+        ON sr.id = s.streamer_id
+       AND sr.deleted_at IS NULL
+      WHERE s.deleted_at IS NULL
+        AND s.entity_type = 'duel'
+        AND trim(COALESCE(s.entity_id, '')) IN (${placeholders})
+      ORDER BY
+        datetime(COALESCE(s.updated_at, s.created_at, '1970-01-01 00:00:00')) ASC,
+        s.id ASC
+    `,
+    normalizedDuelIds,
     done
   );
 }
@@ -11484,16 +11526,21 @@ app.get("/streams", (req, res, next) => {
       params.push(streamIdFilter);
     }
     if (sectionFilter === "ongoing" || sectionFilter === "finished") {
-      whereSql += " AND s.entity_type = 'match' AND m.id IS NOT NULL";
+      whereSql += `
+        AND (
+          (s.entity_type = 'match' AND m.id IS NOT NULL)
+          OR (s.entity_type = 'duel' AND d.id IS NOT NULL)
+        )
+      `;
       if (sectionFilter === "finished") {
-        whereSql += " AND trim(COALESCE(m.time_utc, '')) <> '' AND datetime(m.time_utc) < datetime(?)";
+        whereSql += " AND trim(COALESCE(m.time_utc, d.time_utc, '')) <> '' AND datetime(COALESCE(m.time_utc, d.time_utc)) < datetime(?)";
         params.push(todayStart);
       } else {
         whereSql += `
           AND (
-            trim(COALESCE(m.time_utc, '')) = ''
-            OR datetime(m.time_utc) IS NULL
-            OR datetime(m.time_utc) >= datetime(?)
+            trim(COALESCE(m.time_utc, d.time_utc, '')) = ''
+            OR datetime(COALESCE(m.time_utc, d.time_utc)) IS NULL
+            OR datetime(COALESCE(m.time_utc, d.time_utc)) >= datetime(?)
           )
         `;
         params.push(todayStart);
@@ -11501,8 +11548,8 @@ app.get("/streams", (req, res, next) => {
     }
 
     const orderSql = sectionFilter === "ongoing"
-      ? "ORDER BY datetime(COALESCE(m.time_utc, s.created_at)) ASC, s.id ASC"
-      : "ORDER BY datetime(COALESCE(m.time_utc, s.created_at)) DESC, s.id DESC";
+      ? "ORDER BY datetime(COALESCE(m.time_utc, d.time_utc, s.created_at)) ASC, s.id ASC"
+      : "ORDER BY datetime(COALESCE(m.time_utc, d.time_utc, s.created_at)) DESC, s.id DESC";
     const shouldPaginate = !streamIdFilter && sectionFilter === "finished";
     const selectStreams = (paginationPayload = null) => {
       const selectParams = params.slice();
@@ -11527,11 +11574,25 @@ app.get("/streams", (req, res, next) => {
             sr.avatar AS streamer_avatar,
             sr.scoreboard_style AS streamer_scoreboard_style,
             sr.profile_id AS streamer_profile_id,
-            m.id AS match_id,
+            COALESCE(m.id, d.id) AS match_id,
+            m.id AS team_match_id,
+            d.id AS duel_id,
             m.tournament_id,
-            m.time_utc,
+            d.challenge_period_id,
+            cp.name AS challenge_period_name,
+            cp.logo AS challenge_period_logo,
+            COALESCE(m.time_utc, d.time_utc) AS time_utc,
             m.team_1,
             m.team_2,
+            COALESCE(NULLIF(trim(p1.bga_nickname), ''), trim(d.player_1_id)) AS player_1_name,
+            d.player_1_id,
+            p1.avatar AS player_1_avatar,
+            COALESCE(NULLIF(trim(t1.flag), ''), NULLIF(trim(t1.logo), ''), NULLIF(trim(a1.flag), '')) AS player_1_association_flag,
+            COALESCE(NULLIF(trim(p2.bga_nickname), ''), trim(d.player_2_id)) AS player_2_name,
+            d.player_2_id,
+            p2.avatar AS player_2_avatar,
+            COALESCE(NULLIF(trim(t2.flag), ''), NULLIF(trim(t2.logo), ''), NULLIF(trim(a2.flag), '')) AS player_2_association_flag,
+            d.duel_format,
             m.status AS match_status
           FROM streams s
           INNER JOIN streamers sr
@@ -11541,6 +11602,28 @@ app.get("/streams", (req, res, next) => {
             ON s.entity_type = 'match'
            AND m.id = s.entity_id
            AND m.deleted_at IS NULL
+          LEFT JOIN duels d
+            ON s.entity_type = 'duel'
+           AND d.id = s.entity_id
+           AND d.deleted_at IS NULL
+          LEFT JOIN challenge_periods cp
+            ON trim(COALESCE(cp.id, '')) = trim(COALESCE(d.challenge_period_id, ''))
+          LEFT JOIN profiles p1
+            ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
+          LEFT JOIN profiles p2
+            ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
+          LEFT JOIN associations a1
+            ON upper(trim(COALESCE(a1.code, ''))) = upper(trim(COALESCE(p1.association, '')))
+            OR lower(trim(COALESCE(a1.name, ''))) = lower(trim(COALESCE(p1.association, '')))
+          LEFT JOIN associations a2
+            ON upper(trim(COALESCE(a2.code, ''))) = upper(trim(COALESCE(p2.association, '')))
+            OR lower(trim(COALESCE(a2.name, ''))) = lower(trim(COALESCE(p2.association, '')))
+          LEFT JOIN teams t1
+            ON upper(trim(COALESCE(t1.id, ''))) = upper(trim(COALESCE(p1.association, '')))
+            OR lower(trim(COALESCE(t1.name, ''))) = lower(trim(COALESCE(p1.association, '')))
+          LEFT JOIN teams t2
+            ON upper(trim(COALESCE(t2.id, ''))) = upper(trim(COALESCE(p2.association, '')))
+            OR lower(trim(COALESCE(t2.name, ''))) = lower(trim(COALESCE(p2.association, '')))
           ${whereSql}
           ${orderSql}
           ${limitSql}
@@ -11570,6 +11653,10 @@ app.get("/streams", (req, res, next) => {
           ON s.entity_type = 'match'
          AND m.id = s.entity_id
          AND m.deleted_at IS NULL
+        LEFT JOIN duels d
+          ON s.entity_type = 'duel'
+         AND d.id = s.entity_id
+         AND d.deleted_at IS NULL
         ${whereSql}
       `,
       params,
@@ -14570,13 +14657,16 @@ function publicMainPageMatchesHandler(req, res, next) {
         });
 
         const streamsByMatchId = new Map();
+        const streamsByDuelId = new Map();
         (streamRows || []).forEach((row) => {
-          const matchId = String(row?.entity_id || "").trim();
-          if (!matchId) return;
-          if (!streamsByMatchId.has(matchId)) {
-            streamsByMatchId.set(matchId, []);
+          const entityId = String(row?.entity_id || "").trim();
+          if (!entityId) return;
+          const entityType = String(row?.entity_type || "").trim().toLowerCase();
+          const targetMap = entityType === "duel" ? streamsByDuelId : streamsByMatchId;
+          if (!targetMap.has(entityId)) {
+            targetMap.set(entityId, []);
           }
-          streamsByMatchId.get(matchId).push({
+          targetMap.get(entityId).push({
             id: row.id,
             link: row.link,
             streamer_name: row.streamer_name,
@@ -14791,6 +14881,8 @@ function publicMainPageMatchesHandler(req, res, next) {
                 dw1: row.dw1,
                 dw2: row.dw2,
                 status: row.status,
+                streams: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
+                streamers: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_avatar),
               })),
               duels: (duelRows || []).map((row) => ({
                 id: row.id,
@@ -14825,15 +14917,31 @@ function publicMainPageMatchesHandler(req, res, next) {
         );
       };
 
+      const normalizedChallengeDuelIds = Array.from(new Set(
+        (challengeDuelRows || [])
+          .map((row) => String(row?.id || "").trim())
+          .filter(Boolean)
+      ));
+
       if (!normalizedMatchIds.length) {
-        return finalize([]);
+        return loadStreamsByDuelIds(normalizedChallengeDuelIds, (streamsErr, challengeStreamRows) => {
+          if (streamsErr) return next(streamsErr);
+          return finalize([], [], challengeStreamRows || [], []);
+        });
       }
 
       const placeholders = normalizedMatchIds.map(() => "?").join(", ");
-      return loadStreamsByMatchIds(normalizedMatchIds, (streamsErr, streamRows) => {
+      return loadStreamsByMatchIds(normalizedMatchIds, (streamsErr, matchStreamRows) => {
         if (streamsErr) return next(streamsErr);
 
-        return db.all(
+        return loadStreamsByDuelIds(normalizedChallengeDuelIds, (duelStreamsErr, challengeStreamRows) => {
+          if (duelStreamsErr) return next(duelStreamsErr);
+          const streamRows = [
+            ...(matchStreamRows || []),
+            ...(challengeStreamRows || []),
+          ];
+
+          return db.all(
           `
             SELECT
               id,
@@ -14918,6 +15026,7 @@ function publicMainPageMatchesHandler(req, res, next) {
         );
           }
         );
+        });
       });
     }
       );
