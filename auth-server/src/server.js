@@ -14437,9 +14437,11 @@ function publicMainPageMatchesHandler(req, res, next) {
         d.player_1_id,
         COALESCE(NULLIF(trim(p1.bga_nickname), ''), trim(d.player_1_id)) AS player_1_name,
         p1.avatar AS player_1_avatar,
+        COALESCE(NULLIF(trim(t1.flag), ''), NULLIF(trim(t1.logo), ''), NULLIF(trim(a1.flag), '')) AS player_1_association_flag,
         d.player_2_id,
         COALESCE(NULLIF(trim(p2.bga_nickname), ''), trim(d.player_2_id)) AS player_2_name,
         p2.avatar AS player_2_avatar,
+        COALESCE(NULLIF(trim(t2.flag), ''), NULLIF(trim(t2.logo), ''), NULLIF(trim(a2.flag), '')) AS player_2_association_flag,
         d.dw1,
         d.dw2,
         d.status,
@@ -14452,6 +14454,18 @@ function publicMainPageMatchesHandler(req, res, next) {
         ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
       LEFT JOIN profiles p2
         ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
+      LEFT JOIN associations a1
+        ON upper(trim(COALESCE(a1.code, ''))) = upper(trim(COALESCE(p1.association, '')))
+        OR lower(trim(COALESCE(a1.name, ''))) = lower(trim(COALESCE(p1.association, '')))
+      LEFT JOIN associations a2
+        ON upper(trim(COALESCE(a2.code, ''))) = upper(trim(COALESCE(p2.association, '')))
+        OR lower(trim(COALESCE(a2.name, ''))) = lower(trim(COALESCE(p2.association, '')))
+      LEFT JOIN teams t1
+        ON upper(trim(COALESCE(t1.id, ''))) = upper(trim(COALESCE(p1.association, '')))
+        OR lower(trim(COALESCE(t1.name, ''))) = lower(trim(COALESCE(p1.association, '')))
+      LEFT JOIN teams t2
+        ON upper(trim(COALESCE(t2.id, ''))) = upper(trim(COALESCE(p2.association, '')))
+        OR lower(trim(COALESCE(t2.name, ''))) = lower(trim(COALESCE(p2.association, '')))
       WHERE d.deleted_at IS NULL
         AND d.source_type = 'challenge'
         AND trim(COALESCE(d.match_id, '')) = ''
@@ -14769,9 +14783,11 @@ function publicMainPageMatchesHandler(req, res, next) {
                 player_1_id: row.player_1_id,
                 player_1_name: row.player_1_name,
                 player_1_avatar: row.player_1_avatar,
+                player_1_association_flag: row.player_1_association_flag,
                 player_2_id: row.player_2_id,
                 player_2_name: row.player_2_name,
                 player_2_avatar: row.player_2_avatar,
+                player_2_association_flag: row.player_2_association_flag,
                 dw1: row.dw1,
                 dw2: row.dw2,
                 status: row.status,

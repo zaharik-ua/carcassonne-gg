@@ -1344,7 +1344,7 @@ function createDuelElement(match, options = {}) {
   timeTextEl.textContent = timeLabel;
   timeDiv.appendChild(timeTextEl);
 
-  if (isToday) {
+  if (isToday || match.source_type === "challenge") {
     const rawFormat = typeof match.format === "string" ? match.format.trim() : "";
     const formatKey = rawFormat.toLowerCase();
     if (rawFormat && ["bo1", "bo3", "bo5"].includes(formatKey)) {
@@ -2647,8 +2647,8 @@ function adaptDbMainPageMatchesData(data) {
       team2: String(duel?.player_2_name || duel?.player_2_id || "").trim(),
       opponent1_id: String(duel?.player_1_id || "").trim(),
       opponent2_id: String(duel?.player_2_id || "").trim(),
-      flag1: String(duel?.player_1_avatar || "").trim(),
-      flag2: String(duel?.player_2_avatar || "").trim(),
+      flag1: String(duel?.player_1_association_flag || duel?.player_1_avatar || "").trim(),
+      flag2: String(duel?.player_2_association_flag || duel?.player_2_avatar || "").trim(),
       format: String(duel?.duel_format || "").trim(),
       status: String(duel?.status || "").trim(),
       gw1: duel?.dw1,
