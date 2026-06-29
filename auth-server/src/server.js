@@ -8445,6 +8445,43 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
       );
       await dbRunAsync(
         `
+          UPDATE duels
+          SET
+            status = 'Cancelled',
+            cancelled_by_player_id = NULL,
+            cancellation_reason = 'another_match_accepted',
+            cancelled_at = CURRENT_TIMESTAMP,
+            updated_by = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE challenge_period_id = ?
+            AND status = 'Draft'
+            AND source_type = 'challenge'
+            AND deleted_at IS NULL
+            AND challenge_request_id IN (
+              SELECT id
+              FROM challenge_requests
+              WHERE period_id = ?
+                AND status = 'pending'
+                AND id <> ?
+                AND (
+                  player_1_id IN (?, ?)
+                  OR player_2_id IN (?, ?)
+                )
+            )
+        `,
+        [
+          playerId,
+          periodId,
+          periodId,
+          requestId,
+          lockedRequest.player_1_id,
+          lockedRequest.player_2_id,
+          lockedRequest.player_1_id,
+          lockedRequest.player_2_id,
+        ]
+      );
+      await dbRunAsync(
+        `
           UPDATE challenge_requests
           SET status = 'auto_cancelled', updated_at = CURRENT_TIMESTAMP
           WHERE period_id = ?
