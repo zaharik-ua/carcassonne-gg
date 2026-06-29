@@ -1377,6 +1377,119 @@
     overflow-wrap: anywhere;
   }
 
+  .challenge-access-email-line {
+    color: #5f6b7a;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .challenge-access-email-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    margin: 2px 3px;
+    padding: 4px 6px;
+    border: 1px solid #d6e2f0;
+    border-radius: 4px;
+    background: #fff;
+    color: #222;
+    font-size: 13px;
+    font-weight: 600;
+    vertical-align: middle;
+  }
+
+  .challenge-access-email-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .challenge-access-copy-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .challenge-access-copy-btn {
+    position: relative;
+    width: 26px;
+    height: 24px;
+    min-height: 24px;
+    padding: 0;
+  }
+
+  .challenge-access-copy-btn::before,
+  .challenge-access-copy-btn::after {
+    content: "";
+    position: absolute;
+    width: 9px;
+    height: 11px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    box-sizing: border-box;
+  }
+
+  .challenge-access-copy-btn::before {
+    left: 8px;
+    top: 5px;
+    opacity: 0.75;
+  }
+
+  .challenge-access-copy-btn::after {
+    left: 11px;
+    top: 8px;
+    background: var(--blue);
+  }
+
+  .challenge-access-copy-btn:hover::after {
+    background: var(--blue-hover);
+  }
+
+  .challenge-access-copy-tip {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 6px);
+    z-index: 2;
+    padding: 4px 7px;
+    border-radius: 4px;
+    background: #222;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(4px);
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
+  }
+
+  .challenge-access-copy-tip.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+    transition-delay: 0s;
+  }
+
+  .challenge-access-verification-state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #667085;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .challenge-access-verification-state.is-not-linked {
+    color: var(--red);
+  }
+
+  .challenge-access-verification-spinner {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+  }
+
   .challenge-google-sign-in {
     display: inline-flex;
     align-items: center;
@@ -2530,16 +2643,29 @@
 
     let refreshTimer = null;
     let isRefreshing = false;
+    let verificationFeedback = "";
     const closeModal = () => {
       window.clearInterval(refreshTimer);
       window.removeEventListener("message", onAuthMessage);
       overlay.remove();
     };
 
-    const refreshAccess = async () => {
+    const refreshAccess = async (showFeedback = false) => {
       if (isRefreshing) return;
       isRefreshing = true;
-      await refreshChallengeAccess();
+      if (showFeedback) {
+        verificationFeedback = "loading";
+        renderDialog();
+      }
+      const minimumSpinnerTime = showFeedback
+        ? new Promise((resolve) => window.setTimeout(resolve, 650))
+        : Promise.resolve();
+      await Promise.all([refreshChallengeAccess(), minimumSpinnerTime]);
+      verificationFeedback = challengeAccess.bgaVerified
+        ? ""
+        : showFeedback
+          ? "not-linked"
+          : verificationFeedback;
       isRefreshing = false;
       if (overlay.isConnected) renderDialog();
     };
@@ -2579,15 +2705,64 @@
       return { step, main, line };
     }
 
+    function appendEmailCopy(main, email) {
+      const line = document.createElement("div");
+      line.className = "challenge-access-email-line";
+      line.appendChild(document.createTextNode("Send your email "));
+
+      const chip = document.createElement("span");
+      chip.className = "challenge-access-email-chip";
+      const emailText = document.createElement("span");
+      emailText.className = "challenge-access-email-text";
+      emailText.textContent = email;
+      chip.appendChild(emailText);
+
+      const copyWrap = document.createElement("span");
+      copyWrap.className = "challenge-access-copy-wrap";
+      const copyButton = document.createElement("button");
+      copyButton.type = "button";
+      copyButton.className = "challenge-btn challenge-btn-primary challenge-access-copy-btn";
+      copyButton.setAttribute("aria-label", "Copy email");
+      copyButton.title = "Copy email";
+      const copyTip = document.createElement("span");
+      copyTip.className = "challenge-access-copy-tip";
+      copyTip.textContent = "Copied";
+      let copyTipTimer = null;
+      const showCopyTip = () => {
+        copyTip.classList.add("show");
+        window.clearTimeout(copyTipTimer);
+        copyTipTimer = window.setTimeout(() => copyTip.classList.remove("show"), 2000);
+      };
+      copyButton.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(email);
+          showCopyTip();
+        } catch (_error) {
+          copyButton.title = "Select and copy email";
+          window.setTimeout(() => {
+            copyButton.title = "Copy email";
+          }, 1400);
+        }
+      });
+      copyWrap.appendChild(copyButton);
+      copyWrap.appendChild(copyTip);
+      chip.appendChild(copyWrap);
+      line.appendChild(chip);
+      line.appendChild(document.createTextNode(" to your association captain."));
+      main.appendChild(line);
+    }
+
     function appendVerificationDetails(main) {
       const details = document.createElement("div");
       details.className = "challenge-access-details";
       const loginEmail = String(challengeAccess.user?.email || "").trim();
-      const first = document.createElement("p");
-      first.textContent = loginEmail
-        ? `Ask your association captain to add ${loginEmail} to the Login Email field in your player profile.`
-        : "Ask your association captain to add the email you use on carcassonne.gg to the Login Email field in your player profile.";
-      details.appendChild(first);
+      if (loginEmail) {
+        appendEmailCopy(details, loginEmail);
+      } else {
+        const first = document.createElement("p");
+        first.textContent = "Send the email you use on carcassonne.gg to your association captain.";
+        details.appendChild(first);
+      }
 
       const captains = document.createElement("p");
       captains.appendChild(document.createTextNode("Not sure who your captain is? Find them in the "));
@@ -2604,8 +2779,17 @@
       captainIntro.textContent = "Your captain needs to:";
       details.appendChild(captainIntro);
       const list = document.createElement("ul");
+      const openPlayersItem = document.createElement("li");
+      openPlayersItem.appendChild(document.createTextNode("Open User Menu → Player Hub → "));
+      const playersLink = document.createElement("a");
+      playersLink.href = "https://carcassonne.gg/player-hub/players/";
+      playersLink.target = "_blank";
+      playersLink.rel = "noopener noreferrer";
+      playersLink.textContent = "Players";
+      openPlayersItem.appendChild(playersLink);
+      openPlayersItem.appendChild(document.createTextNode("."));
+      list.appendChild(openPlayersItem);
       [
-        "Open User Menu → Player Hub → Players.",
         "Open your player profile for editing (or create it if needed).",
         "Add your carcassonne.gg sign-in email to Login Email and save the profile.",
       ].forEach((text) => {
@@ -2653,34 +2837,49 @@
         bgaStep.main.appendChild(hint);
       } else if (!challengeAccess.bgaVerified) {
         appendVerificationDetails(bgaStep.main);
+        if (verificationFeedback) {
+          const state = document.createElement("div");
+          state.className = `challenge-access-verification-state${verificationFeedback === "not-linked" ? " is-not-linked" : ""}`;
+          if (verificationFeedback === "loading") {
+            const spinner = document.createElement("img");
+            spinner.className = "challenge-access-verification-spinner";
+            spinner.src = "https://carcassonne.gg/gallery/loading-red.gif";
+            spinner.alt = "";
+            state.appendChild(spinner);
+            state.appendChild(document.createTextNode("Checking verification..."));
+          } else {
+            state.textContent = "Your BGA account is not linked yet. Please contact your association captain.";
+          }
+          bgaStep.main.appendChild(state);
+        }
       }
       checklist.appendChild(bgaStep.step);
       dialog.appendChild(checklist);
 
       const actions = document.createElement("div");
       actions.className = "challenge-info-actions";
-      const closeButton = document.createElement("button");
-      closeButton.type = "button";
-      closeButton.className = "challenge-btn challenge-btn-secondary";
-      closeButton.textContent = "Close";
-      closeButton.addEventListener("click", closeModal);
-      actions.appendChild(closeButton);
       if (challengeAccess.bgaVerified) {
-        const createButton = document.createElement("button");
-        createButton.type = "button";
-        createButton.className = "challenge-btn challenge-btn-primary";
-        createButton.textContent = "Create match";
-        createButton.addEventListener("click", () => {
-          closeModal();
-          onReady();
-        });
-        actions.appendChild(createButton);
-      } else if (challengeAccess.authenticated) {
+        const startButton = document.createElement("button");
+        startButton.type = "button";
+        startButton.className = "challenge-btn challenge-btn-secondary";
+        startButton.textContent = "Start playing";
+        startButton.addEventListener("click", closeModal);
+        actions.appendChild(startButton);
+      } else {
+        const closeButton = document.createElement("button");
+        closeButton.type = "button";
+        closeButton.className = "challenge-btn challenge-btn-secondary";
+        closeButton.textContent = "Close";
+        closeButton.addEventListener("click", closeModal);
+        actions.appendChild(closeButton);
+      }
+      if (challengeAccess.authenticated && !challengeAccess.bgaVerified) {
         const checkButton = document.createElement("button");
         checkButton.type = "button";
         checkButton.className = "challenge-btn challenge-btn-primary";
-        checkButton.textContent = "Check verification";
-        checkButton.addEventListener("click", refreshAccess);
+        checkButton.textContent = isRefreshing ? "Checking..." : "Check verification";
+        checkButton.disabled = isRefreshing;
+        checkButton.addEventListener("click", () => refreshAccess(true));
         actions.appendChild(checkButton);
       }
       dialog.appendChild(actions);

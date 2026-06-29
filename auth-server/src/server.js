@@ -7007,6 +7007,7 @@ function mapChallengePeriodForPlayer(row) {
     play_ends_at: row.play_ends_at,
     result_review_ends_at: row.result_review_ends_at,
     player_status: playerStatus,
+    has_sent_request: Number(row.has_sent_request) === 1,
     challenge_duel_id: row.challenge_duel_id || null,
     challenge_duel_status: duelStatus || null,
   };
@@ -7073,6 +7074,13 @@ app.get("/challenge-periods/player", async (req, res) => {
           cp.play_ends_at,
           cp.result_review_ends_at,
           COALESCE(cpp.status, 'not_selected') AS player_status,
+          EXISTS (
+            SELECT 1
+            FROM challenge_requests cr
+            WHERE cr.period_id = cp.id
+              AND cr.created_by_player_id = ?
+            LIMIT 1
+          ) AS has_sent_request,
           cpp.challenge_duel_id,
           d.status AS duel_status
         FROM challenge_periods cp
@@ -7084,7 +7092,7 @@ app.get("/challenge-periods/player", async (req, res) => {
         WHERE cp.status IN ('draft', 'planning_open', 'active', 'result_review')
         ORDER BY datetime(cp.planning_starts_at) DESC, datetime(cp.play_starts_at) DESC, cp.id ASC
       `,
-      [playerId]
+      [playerId, playerId]
     );
     return res.json({
       ok: true,
