@@ -229,7 +229,9 @@ def fix_duels(conn: sqlite3.Connection, *, dry_run: bool) -> dict[str, object]:
 
     has_deleted_at = "deleted_at" in columns
     has_updated_at = "updated_at" in columns
+    has_source_type = "source_type" in columns
     deleted_filter = "AND d.deleted_at IS NULL" if has_deleted_at else ""
+    challenge_filter = "AND COALESCE(d.source_type, '') <> 'challenge'" if has_source_type else ""
     rows = conn.execute(
         f"""
         SELECT
@@ -245,6 +247,7 @@ def fix_duels(conn: sqlite3.Connection, *, dry_run: bool) -> dict[str, object]:
           ON lower(trim(df.format)) = lower(trim(d.duel_format))
         WHERE 1 = 1
           {deleted_filter}
+          {challenge_filter}
         """
     ).fetchall()
 

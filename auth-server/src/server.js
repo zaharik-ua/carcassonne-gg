@@ -3530,7 +3530,7 @@ function ensureDuelsSchema() {
           AND player_2_id IS NOT NULL
           AND player_1_id <> player_2_id
           AND match_id IS NULL
-          AND status IN ('Draft', 'Planned', 'In progress', 'Done', 'Error', 'Cancelled')
+          AND status IN ('Draft', 'Requested new time', 'Planned', 'In progress', 'Done', 'Error', 'Cancelled')
         )
       )
     )
@@ -6960,7 +6960,7 @@ function mapChallengePeriodForPlayer(row) {
   let playerStatus = storedStatus;
   if (duelStatus === "Done") {
     playerStatus = "played";
-  } else if (row?.challenge_duel_id && ["Draft", "Planned", "In progress", "Error"].includes(duelStatus)) {
+  } else if (row?.challenge_duel_id && ["Draft", "Requested new time", "Planned", "In progress", "Error"].includes(duelStatus)) {
     playerStatus = "match_scheduled";
   }
 
@@ -7633,7 +7633,10 @@ app.patch("/challenge-periods/:id/requests/:requestId/cancel", requireAuthentica
   if (!periodId || !requestId) return res.status(400).json({ ok: false, message: "Invalid Challenge request id" });
 
   try {
-    const beforeRow = await loadChallengeRequestById(periodId, requestId);
+    const [beforeRow, beforeDuel] = await Promise.all([
+      loadChallengeRequestById(periodId, requestId),
+      loadChallengeDuelByRequest(periodId, requestId),
+    ]);
     if (!beforeRow || ![beforeRow.player_1_id, beforeRow.player_2_id].includes(playerId)) {
       return res.status(404).json({ ok: false, message: "Challenge request not found" });
     }
@@ -7645,17 +7648,59 @@ app.patch("/challenge-periods/:id/requests/:requestId/cancel", requireAuthentica
       return res.status(403).json({ ok: false, message: "Only the player waiting for a response can cancel this request" });
     }
 
-    await dbRunAsync(
-      `
-        UPDATE challenge_requests
-        SET status = 'cancelled_by_sender', updated_at = CURRENT_TIMESTAMP
-        WHERE period_id = ?
-          AND id = ?
-          AND status = 'pending'
-      `,
-      [periodId, requestId]
-    );
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const lockedRequest = await loadChallengeRequestById(periodId, requestId);
+      if (!lockedRequest || lockedRequest.status !== "pending") {
+        const error = new Error("Challenge request is no longer pending");
+        error.httpStatus = 409;
+        throw error;
+      }
+      const lockedCanCancelRequest = lockedRequest.created_by_player_id === playerId
+        || lockedRequest.awaiting_player_id !== playerId;
+      if (!lockedCanCancelRequest) {
+        const error = new Error("Only the player waiting for a response can cancel this request");
+        error.httpStatus = 403;
+        throw error;
+      }
+
+      await dbRunAsync(
+        `
+          UPDATE challenge_requests
+          SET status = 'cancelled_by_sender', updated_at = CURRENT_TIMESTAMP
+          WHERE period_id = ?
+            AND id = ?
+            AND status = 'pending'
+        `,
+        [periodId, requestId]
+      );
+      await dbRunAsync(
+        `
+          UPDATE duels
+          SET
+            status = 'Cancelled',
+            cancelled_by_player_id = ?,
+            cancellation_reason = 'time_change_cancelled',
+            cancelled_at = CURRENT_TIMESTAMP,
+            updated_by = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE challenge_period_id = ?
+            AND challenge_request_id = ?
+            AND status IN ('Draft', 'Requested new time', 'Planned')
+            AND source_type = 'challenge'
+            AND deleted_at IS NULL
+        `,
+        [playerId, playerId, periodId, requestId]
+      );
+      await dbRunAsync("COMMIT");
+    } catch (error) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw error;
+    }
     const afterRow = await loadChallengeRequestById(periodId, requestId);
+    const afterDuel = beforeDuel?.id
+      ? await dbGetAsync("SELECT * FROM duels WHERE id = ? LIMIT 1", [beforeDuel.id])
+      : null;
     logAuditEvent({
       ...getAuditActor(req.user),
       event_type: "challenge_request.cancelled_by_sender",
@@ -7665,8 +7710,26 @@ app.patch("/challenge-periods/:id/requests/:requestId/cancel", requireAuthentica
       changes: buildAuditChanges(beforeRow, afterRow),
       metadata: { period_id: periodId, request_id: requestId },
     });
-    return res.json({ ok: true, challenge_request: mapChallengeRequest(afterRow) });
+    if (beforeDuel && afterDuel?.status === "Cancelled" && beforeDuel.status !== "Cancelled") {
+      logAuditEvent({
+        ...getAuditActor(req.user),
+        event_type: "challenge_duel.time_change_cancelled",
+        entity_type: "duel",
+        action: "update",
+        record_id: beforeDuel.id,
+        changes: buildAuditChanges(beforeDuel, afterDuel),
+        metadata: { period_id: periodId, request_id: requestId, duel_id: beforeDuel.id },
+      });
+    }
+    return res.json({
+      ok: true,
+      challenge_request: mapChallengeRequest(afterRow),
+      duel: afterDuel,
+    });
   } catch (error) {
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({ ok: false, message: error.message || "Failed to cancel Challenge request" });
+    }
     console.error("Failed to cancel Challenge request", error);
     return res.status(500).json({ ok: false, message: "Failed to cancel Challenge request" });
   }
@@ -7707,7 +7770,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/decline", requireAuthentic
         `,
         [periodId, requestId]
       );
-      if (beforeDuel?.status === "Draft") {
+      if (["Draft", "Requested new time"].includes(beforeDuel?.status)) {
         await dbRunAsync(
           `
             UPDATE duels
@@ -7721,7 +7784,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/decline", requireAuthentic
             WHERE id = ?
               AND challenge_period_id = ?
               AND challenge_request_id = ?
-              AND status = 'Draft'
+              AND status IN ('Draft', 'Requested new time')
               AND source_type = 'challenge'
               AND deleted_at IS NULL
           `,
@@ -7746,7 +7809,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/decline", requireAuthentic
       changes: buildAuditChanges(beforeRow, afterRow),
       metadata: { period_id: periodId, request_id: requestId },
     });
-    if (beforeDuel?.status === "Draft" && afterDuel?.status === "Cancelled") {
+    if (["Draft", "Requested new time"].includes(beforeDuel?.status) && afterDuel?.status === "Cancelled") {
       logAuditEvent({
         ...getAuditActor(req.user),
         event_type: "challenge_duel.time_change_declined",
@@ -8043,7 +8106,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/reschedule", requireAuthen
         `
           UPDATE duels
           SET
-            status = 'Draft',
+            status = 'Requested new time',
             time_utc = NULL,
             duel_format = NULL,
             dw1 = NULL,
@@ -8300,14 +8363,14 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
         error.httpStatus = 400;
         throw error;
       }
-      const existingDraftDuel = await loadChallengeDuelByRequest(periodId, requestId);
-      if (existingDraftDuel && existingDraftDuel.status !== "Draft") {
+      const existingRescheduleDuel = await loadChallengeDuelByRequest(periodId, requestId);
+      if (existingRescheduleDuel && !["Draft", "Requested new time"].includes(existingRescheduleDuel.status)) {
         const error = new Error("Challenge match already exists for this request");
         error.httpStatus = 409;
         throw error;
       }
-      if (existingDraftDuel) {
-        duelId = existingDraftDuel.id;
+      if (existingRescheduleDuel) {
+        duelId = existingRescheduleDuel.id;
       }
       const [player1ActiveDuel, player2ActiveDuel] = await Promise.all([
         loadChallengeBlockingDuelForPlayer(periodId, lockedRequest.player_1_id),
@@ -8333,7 +8396,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
         `,
         [acceptedTimeUtc, canonicalFormat, periodId, requestId]
       );
-      if (existingDraftDuel) {
+      if (existingRescheduleDuel) {
         await dbRunAsync(
           `
             UPDATE duels
@@ -8351,7 +8414,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
             WHERE id = ?
               AND challenge_period_id = ?
               AND challenge_request_id = ?
-              AND status = 'Draft'
+              AND status IN ('Draft', 'Requested new time')
               AND source_type = 'challenge'
               AND deleted_at IS NULL
           `,
@@ -8454,7 +8517,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
             updated_by = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE challenge_period_id = ?
-            AND status = 'Draft'
+            AND status IN ('Draft', 'Requested new time')
             AND source_type = 'challenge'
             AND deleted_at IS NULL
             AND challenge_request_id IN (

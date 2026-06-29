@@ -3973,7 +3973,7 @@
       const sent = (Array.isArray(data?.sent_requests) ? data.sent_requests : [])
         .map(enrichRequest)
         .filter((request) => String(request?.created_by_player_id || "") === currentPlayerId);
-      const visibleChallengeDuelStatuses = new Set(["Draft", "Planned", "Cancelled"]);
+      const visibleChallengeDuelStatuses = new Set(["Draft", "Requested new time", "Planned", "Cancelled"]);
       const challengeDuelRequest = incoming.concat(sent).find((request) => (
         request?.duel?.id
         && visibleChallengeDuelStatuses.has(String(request?.duel?.status || ""))
