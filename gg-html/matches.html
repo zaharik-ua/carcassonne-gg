@@ -2654,8 +2654,12 @@ function adaptDbMainPageMatchesData(data) {
       gw1: duel?.dw1,
       gw2: duel?.dw2,
       rating: null,
-      streams: [],
-      streamers: [],
+      streams: Array.isArray(duel?.streams)
+        ? duel.streams.map((value) => String(value || "").trim()).filter(Boolean)
+        : [],
+      streamers: Array.isArray(duel?.streamers)
+        ? duel.streamers.map((value) => String(value || "").trim()).filter(Boolean)
+        : [],
       source_type: "challenge",
     };
 

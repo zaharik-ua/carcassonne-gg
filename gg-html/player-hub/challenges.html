@@ -3096,18 +3096,24 @@
     }
   }
 
-  function compareOpponentsByRating(a, b) {
-    const aRank = parseFiniteNumber(a?.gg_rank);
-    const bRank = parseFiniteNumber(b?.gg_rank);
-    if (aRank !== null && bRank !== null) return aRank - bRank;
-    if (aRank !== null) return -1;
-    if (bRank !== null) return 1;
+  function getOpponentStatusUpdatedAt(opponent) {
+    return parseUtcDate(
+      opponent?.period_status_updated_at
+      || opponent?.period_player_updated_at
+      || opponent?.status_updated_at
+      || opponent?.updated_at
+    );
+  }
 
-    const aBgaElo = parseFiniteNumber(a?.bga_elo);
-    const bBgaElo = parseFiniteNumber(b?.bga_elo);
-    if (aBgaElo !== null && bBgaElo !== null) return bBgaElo - aBgaElo;
-    if (aBgaElo !== null) return -1;
-    if (bBgaElo !== null) return 1;
+  function compareOpponentsByStatusUpdatedAt(a, b) {
+    const aUpdatedAt = getOpponentStatusUpdatedAt(a);
+    const bUpdatedAt = getOpponentStatusUpdatedAt(b);
+    if (aUpdatedAt && bUpdatedAt) {
+      const diff = aUpdatedAt.getTime() - bUpdatedAt.getTime();
+      if (diff !== 0) return diff;
+    }
+    if (aUpdatedAt) return -1;
+    if (bUpdatedAt) return 1;
     return getOpponentDisplayName(a).localeCompare(getOpponentDisplayName(b));
   }
 
@@ -4182,7 +4188,7 @@
       const opponents = (Array.isArray(data?.available_opponents) ? data.available_opponents : [])
         .map((opponent) => mergeOpponentRating(opponent, ratingsById))
         .map((opponent) => mergeOpponentBgaPlayer(opponent, bgaPlayersById))
-        .sort(compareOpponentsByRating);
+        .sort(compareOpponentsByStatusUpdatedAt);
       const countEl = panel.querySelector("[data-opponents-count]");
       const bodyEl = panel.querySelector("[data-opponents-body]");
       if (countEl) {

@@ -6785,6 +6785,7 @@ function mapChallengeOpponent(row) {
     profile_status: normalizeNullableText(row?.profile_status),
     bga_elo: normalizeIntegerOrNull(row?.bga_elo),
     period_status: normalizeChallengePlayerPeriodStatus(row?.period_player_status),
+    period_status_updated_at: normalizeNullableText(row?.period_status_updated_at),
     association: {
       id: associationId,
       name: associationName,
@@ -7199,6 +7200,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
           p.status AS profile_status,
           p.bga_elo,
           cpp.status AS period_player_status,
+          cpp.updated_at AS period_status_updated_at,
           cpp.challenge_duel_id,
           COALESCE(NULLIF(trim(t.id), ''), NULLIF(trim(a.code), ''), NULLIF(trim(p.association), '')) AS association_id,
           COALESCE(NULLIF(trim(t.name), ''), NULLIF(trim(a.name), ''), NULLIF(trim(p.association), '')) AS association_name,
@@ -7241,7 +7243,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
          )
         WHERE cpp.period_id = ?
           AND cpp.status = 'available'
-        ORDER BY p.bga_nickname COLLATE NOCASE ASC, p.id COLLATE NOCASE ASC
+        ORDER BY cpp.updated_at ASC, p.bga_nickname COLLATE NOCASE ASC, p.id COLLATE NOCASE ASC
       `,
       [periodId, ...activeStatuses, periodId, playerId, playerId, periodId]
     );
