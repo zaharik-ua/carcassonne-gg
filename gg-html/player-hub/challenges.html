@@ -3842,7 +3842,7 @@
     const isRequestParticipant = [request?.player_1_id, request?.player_2_id]
       .map((value) => String(value || ""))
       .includes(String(currentPlayerId || ""));
-    const isCancelledChallengeMatch = statusKey === "cancelled_by_sender"
+    const isCancelledChallengeMatch = ["cancelled_by_sender", "auto_cancelled"].includes(statusKey)
       && isRequestParticipant
       && String(request?.duel?.status || "") === "Cancelled";
     const canRemoveClosedRequest = isCancelledChallengeMatch

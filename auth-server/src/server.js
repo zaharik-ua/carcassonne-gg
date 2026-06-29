@@ -6853,6 +6853,38 @@ async function loadChallengeDuelByRequest(periodId, requestId) {
   );
 }
 
+async function resolveChallengeDuelCancelledByPlayerId(duel) {
+  const explicitPlayerId = normalizeNullableText(duel?.cancelled_by_player_id);
+  if (explicitPlayerId) return explicitPlayerId;
+  if (duel?.status !== "Cancelled" || duel?.cancellation_reason !== "another_match_accepted") return null;
+
+  const periodId = normalizeNullableText(duel?.challenge_period_id);
+  const duelId = normalizeNullableText(duel?.id);
+  const participantIds = [duel?.player_1_id, duel?.player_2_id]
+    .map(normalizeNullableText)
+    .filter(Boolean);
+  if (!periodId || !duelId || participantIds.length !== 2) return null;
+
+  const rows = await dbAllAsync(
+    `
+      SELECT player_id
+      FROM challenge_period_players
+      WHERE period_id = ?
+        AND player_id IN (?, ?)
+        AND challenge_duel_id IS NOT NULL
+        AND challenge_duel_id <> ?
+    `,
+    [periodId, participantIds[0], participantIds[1], duelId]
+  );
+  const matchedPlayerIds = (rows || [])
+    .map((row) => normalizeNullableText(row?.player_id))
+    .filter(Boolean);
+  if (matchedPlayerIds.length === 1) return matchedPlayerIds[0];
+
+  const updatedByPlayerId = normalizeNullableText(duel?.updated_by);
+  return participantIds.includes(updatedByPlayerId) ? updatedByPlayerId : null;
+}
+
 function mapChallengeRequest(row) {
   if (!row) return null;
   return {
@@ -7503,6 +7535,7 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
           d.duel_format,
           d.rating AS duel_rating,
           d.cancelled_by_player_id AS duel_cancelled_by_player_id,
+          d.updated_by AS duel_updated_by,
           d.cancellation_reason AS duel_cancellation_reason,
           d.cancelled_at AS duel_cancelled_at,
           d.deleted_at AS duel_deleted_at
@@ -7542,7 +7575,19 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
       `,
       adminMode ? [periodId] : [periodId, playerId, playerId]
     );
+    const requestRowsById = new Map((rows || []).map((row) => [String(row?.id || ""), row]));
     const requests = (rows || []).map(mapChallengeRequestWithPlayers).filter(Boolean);
+    await Promise.all(requests.map(async (request) => {
+      if (!request?.duel || request.duel.cancelled_by_player_id) return;
+      const requestRow = requestRowsById.get(String(request.id || ""));
+      request.duel.cancelled_by_player_id = await resolveChallengeDuelCancelledByPlayerId({
+        ...request.duel,
+        challenge_period_id: request.period_id,
+        player_1_id: request.player_1_id,
+        player_2_id: request.player_2_id,
+        updated_by: requestRow?.duel_updated_by,
+      });
+    }));
     if (adminMode) {
       const matchRows = await dbAllAsync(
         `
@@ -7846,11 +7891,12 @@ app.patch("/challenge-periods/:id/requests/:requestId/remove", requireAuthentica
     }
     const beforeDuel = await loadChallengeDuelByRequest(periodId, requestId);
     const isParticipant = [beforeRow.player_1_id, beforeRow.player_2_id].includes(playerId);
-    const canRemoveCancelledMatch = beforeRow.status === "cancelled_by_sender"
+    const cancelledByPlayerId = await resolveChallengeDuelCancelledByPlayerId(beforeDuel);
+    const canRemoveCancelledMatch = ["cancelled_by_sender", "auto_cancelled"].includes(beforeRow.status)
       && isParticipant
       && beforeDuel?.status === "Cancelled"
-      && normalizeNullableText(beforeDuel.cancelled_by_player_id)
-      && normalizeNullableText(beforeDuel.cancelled_by_player_id) !== playerId;
+      && cancelledByPlayerId
+      && cancelledByPlayerId !== playerId;
     const canRemoveDeclinedTimeChangeMatch = beforeRow.status === "declined"
       && beforeRow.created_by_player_id === playerId
       && beforeDuel?.status === "Cancelled"
@@ -8511,7 +8557,15 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
           UPDATE duels
           SET
             status = 'Cancelled',
-            cancelled_by_player_id = NULL,
+            cancelled_by_player_id = CASE
+              WHEN player_1_id IN (?, ?)
+                AND player_2_id NOT IN (?, ?)
+                THEN player_1_id
+              WHEN player_2_id IN (?, ?)
+                AND player_1_id NOT IN (?, ?)
+                THEN player_2_id
+              ELSE ?
+            END,
             cancellation_reason = 'another_match_accepted',
             cancelled_at = CURRENT_TIMESTAMP,
             updated_by = ?,
@@ -8533,6 +8587,15 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
             )
         `,
         [
+          lockedRequest.player_1_id,
+          lockedRequest.player_2_id,
+          lockedRequest.player_1_id,
+          lockedRequest.player_2_id,
+          lockedRequest.player_1_id,
+          lockedRequest.player_2_id,
+          lockedRequest.player_1_id,
+          lockedRequest.player_2_id,
+          playerId,
           playerId,
           periodId,
           periodId,
