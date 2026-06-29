@@ -7055,15 +7055,8 @@ async function loadChallengePlayerTimeContext(playerId) {
   };
 }
 
-app.get("/challenge-periods/player", requireAuthenticated, async (req, res) => {
+app.get("/challenge-periods/player", async (req, res) => {
   const playerId = normalizeNullableText(req.user?.player_id);
-  if (!playerId) {
-    return res.status(403).json({
-      ok: false,
-      code: "profile_required",
-      message: "Linked player profile is required",
-    });
-  }
 
   try {
     const timeContext = await loadChallengePlayerTimeContext(playerId);
@@ -7105,17 +7098,10 @@ app.get("/challenge-periods/player", requireAuthenticated, async (req, res) => {
   }
 });
 
-app.get("/challenge-periods/:id/eligible-opponents", requireAuthenticated, async (req, res) => {
+app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
   const periodId = normalizeNullableText(req.params.id);
   const playerId = normalizeNullableText(req.user?.player_id);
 
-  if (!playerId) {
-    return res.status(403).json({
-      ok: false,
-      code: "profile_required",
-      message: "Linked player profile is required",
-    });
-  }
   if (!periodId) {
     return res.status(400).json({ ok: false, message: "Invalid Challenge period id" });
   }
@@ -7142,16 +7128,9 @@ app.get("/challenge-periods/:id/eligible-opponents", requireAuthenticated, async
     if (!period || !["planning_open", "active", "result_review"].includes(period.status)) {
       return res.status(404).json({ ok: false, message: "Open Challenge period not found" });
     }
-    if (!currentProfile) {
-      return res.status(403).json({
-        ok: false,
-        code: "profile_required",
-        message: "Linked player profile is required",
-      });
-    }
-
     const currentStatus = normalizeChallengePlayerPeriodStatus(currentPeriodStatus?.status);
     const canCreateRequests = ["planning_open", "active"].includes(period.status)
+      && !!currentProfile
       && currentStatus !== "unavailable"
       && !currentActiveDuel;
     const canListOpponents = ["planning_open", "active"].includes(period.status);
@@ -7223,7 +7202,7 @@ app.get("/challenge-periods/:id/eligible-opponents", requireAuthenticated, async
       pending_request: 0,
       current_player_ineligible: ["planning_open", "active"].includes(period.status) ? 0 : rows.length,
     };
-    const currentAssociation = currentProfile.association_id || currentProfile.association_name;
+    const currentAssociation = currentProfile?.association_id || currentProfile?.association_name || null;
     const availableOpponents = [];
     const seenOpponentIds = new Set();
 
@@ -7261,11 +7240,11 @@ app.get("/challenge-periods/:id/eligible-opponents", requireAuthenticated, async
         challenge_duel_id: currentPeriodStatus?.challenge_duel_id || null,
         duel_status: currentActiveDuel?.status || null,
       }),
-      current_player: mapChallengeOpponent({
+      current_player: currentProfile ? mapChallengeOpponent({
         ...currentProfile,
         period_player_status: currentStatus,
         pending_request_id: null,
-      }),
+      }) : null,
       eligibility: {
         can_use_challenges: true,
         can_create_requests: canCreateRequests,

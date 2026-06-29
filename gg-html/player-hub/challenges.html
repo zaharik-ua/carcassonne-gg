@@ -1278,6 +1278,116 @@
     flex-wrap: wrap;
   }
 
+  .challenge-access-dialog {
+    width: min(100%, 560px);
+    gap: 14px;
+  }
+
+  .challenge-access-intro {
+    margin: 0;
+    color: #4b5563;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .challenge-access-checklist {
+    display: grid;
+    gap: 10px;
+  }
+
+  .challenge-access-step {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 10px;
+    padding: 11px;
+    border: 1px solid #d8dee8;
+    border-radius: 6px;
+    background: #f8fafc;
+  }
+
+  .challenge-access-step.is-done {
+    border-color: #b9dfca;
+    background: var(--green-soft);
+  }
+
+  .challenge-access-check {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #aab2bd;
+    border-radius: 50%;
+    color: transparent;
+    font-size: 12px;
+    font-weight: 700;
+    box-sizing: border-box;
+  }
+
+  .challenge-access-step.is-done .challenge-access-check {
+    border-color: var(--green);
+    background: var(--green);
+    color: #fff;
+  }
+
+  .challenge-access-step-main {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .challenge-access-step-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .challenge-access-step-title {
+    color: #172232;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .challenge-access-hint,
+  .challenge-access-details {
+    color: #5f6b7a;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .challenge-access-details {
+    display: grid;
+    gap: 7px;
+  }
+
+  .challenge-access-details p,
+  .challenge-access-details ul {
+    margin: 0;
+  }
+
+  .challenge-access-details ul {
+    display: grid;
+    gap: 4px;
+    padding-left: 18px;
+  }
+
+  .challenge-access-details a {
+    color: var(--blue);
+    overflow-wrap: anywhere;
+  }
+
+  .challenge-google-sign-in {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .challenge-google-sign-in img {
+    width: 17px;
+    height: 17px;
+  }
+
   .cp-dd {
     position: relative;
     display: inline-flex;
@@ -1528,6 +1638,7 @@
   const CHALLENGE_PERIODS_URL = `${AUTH_BASE}/challenge-periods`;
   const PLAYER_CHALLENGE_PERIODS_URL = `${CHALLENGE_PERIODS_URL}/player`;
   const ELIGIBLE_OPPONENTS_PATH = "eligible-opponents";
+  const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
   const STATUS_COPY = {
     not_selected: {
       label: "Not selected",
@@ -1597,6 +1708,34 @@
   let adminMode = false;
   let includeRemovedItems = false;
   let renderGeneration = 0;
+  let challengeAccess = {
+    authenticated: false,
+    bgaVerified: false,
+    user: null,
+  };
+
+  function getCurrentUserProfileId(user) {
+    return String(
+      user?.profile?.id
+      ?? user?.profile?.player_id
+      ?? user?.profile?.bga_id
+      ?? user?.player_id
+      ?? user?.playerId
+      ?? user?.bga_id
+      ?? ""
+    ).trim();
+  }
+
+  function updateChallengeAccess(user) {
+    const profileId = getCurrentUserProfileId(user);
+    const profileEmail = String(user?.profile?.email ?? user?.profile?.login_email ?? "").trim();
+    challengeAccess = {
+      authenticated: !!user,
+      bgaVerified: !!user && !!profileId && !!profileEmail,
+      user: user || null,
+    };
+    return challengeAccess;
+  }
 
   async function fetchCurrentUser() {
     if (currentUserPromise) return currentUserPromise;
@@ -1604,6 +1743,11 @@
       .then((data) => data?.authenticated ? data?.user || null : null)
       .catch(() => null);
     return currentUserPromise;
+  }
+
+  async function refreshChallengeAccess() {
+    currentUserPromise = null;
+    return updateChallengeAccess(await fetchCurrentUser());
   }
 
   function syncAdminControls() {
@@ -2371,6 +2515,195 @@
 
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
+  }
+
+  function openChallengeAccessDialog(onReady) {
+    const overlay = document.createElement("div");
+    overlay.className = "challenge-modal-overlay";
+
+    const dialog = document.createElement("div");
+    dialog.className = "challenge-modal challenge-info-dialog challenge-access-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", "Get ready for Challenges");
+    overlay.appendChild(dialog);
+
+    let refreshTimer = null;
+    let isRefreshing = false;
+    const closeModal = () => {
+      window.clearInterval(refreshTimer);
+      window.removeEventListener("message", onAuthMessage);
+      overlay.remove();
+    };
+
+    const refreshAccess = async () => {
+      if (isRefreshing) return;
+      isRefreshing = true;
+      await refreshChallengeAccess();
+      isRefreshing = false;
+      if (overlay.isConnected) renderDialog();
+    };
+
+    const openGoogleAuth = () => {
+      const popup = window.open(
+        `${AUTH_BASE}/auth/google`,
+        "googleAuth",
+        "width=520,height=640,left=100,top=100"
+      );
+      if (!popup) window.location.href = `${AUTH_BASE}/auth/google`;
+    };
+
+    function onAuthMessage(event) {
+      if (event.origin !== new URL(AUTH_BASE).origin) return;
+      if (event.data?.type === "google-auth-success") refreshAccess();
+    }
+
+    function createStep(titleText, done) {
+      const step = document.createElement("div");
+      step.className = `challenge-access-step${done ? " is-done" : ""}`;
+      const check = document.createElement("div");
+      check.className = "challenge-access-check";
+      check.setAttribute("aria-hidden", "true");
+      check.textContent = "✓";
+      step.appendChild(check);
+      const main = document.createElement("div");
+      main.className = "challenge-access-step-main";
+      step.appendChild(main);
+      const line = document.createElement("div");
+      line.className = "challenge-access-step-line";
+      main.appendChild(line);
+      const title = document.createElement("div");
+      title.className = "challenge-access-step-title";
+      title.textContent = titleText;
+      line.appendChild(title);
+      return { step, main, line };
+    }
+
+    function appendVerificationDetails(main) {
+      const details = document.createElement("div");
+      details.className = "challenge-access-details";
+      const loginEmail = String(challengeAccess.user?.email || "").trim();
+      const first = document.createElement("p");
+      first.textContent = loginEmail
+        ? `Ask your association captain to add ${loginEmail} to the Login Email field in your player profile.`
+        : "Ask your association captain to add the email you use on carcassonne.gg to the Login Email field in your player profile.";
+      details.appendChild(first);
+
+      const captains = document.createElement("p");
+      captains.appendChild(document.createTextNode("Not sure who your captain is? Find them in the "));
+      const captainsLink = document.createElement("a");
+      captainsLink.href = "https://carcassonne.gg/players/?captains=1";
+      captainsLink.target = "_blank";
+      captainsLink.rel = "noopener noreferrer";
+      captainsLink.textContent = "captains list";
+      captains.appendChild(captainsLink);
+      captains.appendChild(document.createTextNode("."));
+      details.appendChild(captains);
+
+      const captainIntro = document.createElement("p");
+      captainIntro.textContent = "Your captain needs to:";
+      details.appendChild(captainIntro);
+      const list = document.createElement("ul");
+      [
+        "Open User Menu → Player Hub → Players.",
+        "Open your player profile for editing (or create it if needed).",
+        "Add your carcassonne.gg sign-in email to Login Email and save the profile.",
+      ].forEach((text) => {
+        const item = document.createElement("li");
+        item.textContent = text;
+        list.appendChild(item);
+      });
+      details.appendChild(list);
+      const contact = document.createElement("p");
+      contact.textContent = "If you cannot reach a captain, contact carcassonne.gg@gmail.com.";
+      details.appendChild(contact);
+      main.appendChild(details);
+    }
+
+    function renderDialog() {
+      dialog.innerHTML = "";
+      const title = document.createElement("div");
+      title.className = "challenge-request-title";
+      title.textContent = "Get ready for a Challenge match";
+      dialog.appendChild(title);
+
+      const intro = document.createElement("p");
+      intro.className = "challenge-access-intro";
+      intro.textContent = "To schedule a Challenge match, please sign in to carcassonne.gg and verify your BGA account.";
+      dialog.appendChild(intro);
+
+      const checklist = document.createElement("div");
+      checklist.className = "challenge-access-checklist";
+      const signInStep = createStep("Sign in to the site", challengeAccess.authenticated);
+      if (!challengeAccess.authenticated) {
+        const signInButton = document.createElement("button");
+        signInButton.type = "button";
+        signInButton.className = "challenge-btn challenge-btn-secondary challenge-google-sign-in";
+        signInButton.innerHTML = `<img src="${GOOGLE_ICON_URL}" alt="">Sign in with Google`;
+        signInButton.addEventListener("click", openGoogleAuth);
+        signInStep.line.appendChild(signInButton);
+      }
+      checklist.appendChild(signInStep.step);
+
+      const bgaStep = createStep("Verify your BGA account", challengeAccess.bgaVerified);
+      if (!challengeAccess.authenticated) {
+        const hint = document.createElement("div");
+        hint.className = "challenge-access-hint";
+        hint.textContent = "Sign in first, then continue here with BGA verification.";
+        bgaStep.main.appendChild(hint);
+      } else if (!challengeAccess.bgaVerified) {
+        appendVerificationDetails(bgaStep.main);
+      }
+      checklist.appendChild(bgaStep.step);
+      dialog.appendChild(checklist);
+
+      const actions = document.createElement("div");
+      actions.className = "challenge-info-actions";
+      const closeButton = document.createElement("button");
+      closeButton.type = "button";
+      closeButton.className = "challenge-btn challenge-btn-secondary";
+      closeButton.textContent = "Close";
+      closeButton.addEventListener("click", closeModal);
+      actions.appendChild(closeButton);
+      if (challengeAccess.bgaVerified) {
+        const createButton = document.createElement("button");
+        createButton.type = "button";
+        createButton.className = "challenge-btn challenge-btn-primary";
+        createButton.textContent = "Create match";
+        createButton.addEventListener("click", () => {
+          closeModal();
+          onReady();
+        });
+        actions.appendChild(createButton);
+      } else if (challengeAccess.authenticated) {
+        const checkButton = document.createElement("button");
+        checkButton.type = "button";
+        checkButton.className = "challenge-btn challenge-btn-primary";
+        checkButton.textContent = "Check verification";
+        checkButton.addEventListener("click", refreshAccess);
+        actions.appendChild(checkButton);
+      }
+      dialog.appendChild(actions);
+    }
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal();
+    });
+    window.addEventListener("message", onAuthMessage);
+    refreshTimer = window.setInterval(() => {
+      if (challengeAccess.authenticated && !challengeAccess.bgaVerified) refreshAccess();
+    }, 4000);
+    document.body.appendChild(overlay);
+    renderDialog();
+  }
+
+  function requireChallengeAccess(onReady) {
+    if (challengeAccess.bgaVerified) {
+      onReady();
+      return true;
+    }
+    openChallengeAccessDialog(onReady);
+    return false;
   }
 
   function showChallengeMatchScheduledDialog() {
@@ -3555,13 +3888,19 @@
     const inviteBtn = document.createElement("button");
     inviteBtn.className = "challenge-opponent-action";
     inviteBtn.type = "button";
-    inviteBtn.disabled = !canCreateRequests && !hasScheduledMatch;
+    inviteBtn.disabled = challengeAccess.bgaVerified && !canCreateRequests && !hasScheduledMatch;
     inviteBtn.textContent = "Invite to match";
-    if (!canCreateRequests && !hasScheduledMatch) {
+    if (challengeAccess.bgaVerified && !canCreateRequests && !hasScheduledMatch) {
       inviteBtn.title = "Challenge requests are not available right now.";
     }
     inviteBtn.addEventListener("click", () => {
       if (inviteBtn.disabled) return;
+      if (!challengeAccess.bgaVerified) {
+        requireChallengeAccess(() => openChallengeRequestForm(period, opponent, {
+          player_id: getCurrentUserProfileId(challengeAccess.user),
+        }));
+        return;
+      }
       if (hasScheduledMatch) {
         showChallengeMatchScheduledDialog();
         return;
@@ -3918,6 +4257,54 @@
     duelBlocks.forEach((duelBlock) => bodyEl.appendChild(duelBlock));
   }
 
+  function createNewChallengeRequestButton(period, currentPlayerId, pendingSentCount) {
+    return createActionButton("Create request", "challenge-btn-primary", () => {
+      const openRequest = () => {
+        if (normalizeStatus(period?.player_status) === "match_scheduled" || period?.challenge_duel_id) {
+          showChallengeMatchScheduledDialog();
+          return;
+        }
+        if (pendingSentCount >= 3) {
+          showChallengeInfoDialog(
+            "Request limit reached",
+            "You can send up to 3 match requests. Remove an already sent request to create a new one."
+          );
+          return;
+        }
+        openChallengeRequestForm(period, null, {
+          player_id: currentPlayerId || getCurrentUserProfileId(challengeAccess.user),
+        });
+      };
+      requireChallengeAccess(openRequest);
+    });
+  }
+
+  function renderLockedChallengeRequests(period, panel) {
+    const bodyEl = panel.querySelector("[data-requests-body]");
+    if (!bodyEl) return;
+    renderChallengeMatchPanel(period, "", null);
+    bodyEl.innerHTML = "";
+    bodyEl.appendChild(createRequestListSection(
+      "Incoming",
+      [],
+      period,
+      "",
+      "incoming",
+      "No incoming invites.",
+      ""
+    ));
+    bodyEl.appendChild(createRequestListSection(
+      "Sent",
+      [],
+      period,
+      "",
+      "sent",
+      "No sent invites.",
+      "0 / 3 requests",
+      { actionButton: createNewChallengeRequestButton(period, "", 0) }
+    ));
+  }
+
   async function loadRequestsForPeriod(period, panel) {
     const periodId = String(period?.id || "").trim();
     const requestGeneration = Number(panel?.dataset?.challengeRenderGeneration || renderGeneration);
@@ -3925,6 +4312,10 @@
     const requestIncludeRemovedItems = includeRemovedItems;
     if (!periodId) {
       setRequestsState(panel, "Challenge period is unavailable.", true);
+      return;
+    }
+    if (!challengeAccess.bgaVerified) {
+      renderLockedChallengeRequests(period, panel);
       return;
     }
     setRequestsState(panel, "Loading requests...", false);
@@ -3980,20 +4371,7 @@
       )) || null;
       renderChallengeMatchPanel(period, currentPlayerId, challengeDuelRequest);
       const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;
-      const createRequestBtn = createActionButton("Create request", "challenge-btn-primary", () => {
-        if (normalizeStatus(period?.player_status) === "match_scheduled" || period?.challenge_duel_id) {
-          showChallengeMatchScheduledDialog();
-          return;
-        }
-        if (pendingSentCount >= 3) {
-          showChallengeInfoDialog(
-            "Request limit reached",
-            "You can send up to 3 match requests. Remove an already sent request to create a new one."
-          );
-          return;
-        }
-        openChallengeRequestForm(period, null, { player_id: currentPlayerId });
-      });
+      const createRequestBtn = createNewChallengeRequestButton(period, currentPlayerId, pendingSentCount);
       bodyEl.innerHTML = "";
       bodyEl.appendChild(createRequestListSection("Incoming", incoming, period, currentPlayerId, "incoming", "No incoming invites.", ""));
       bodyEl.appendChild(createRequestListSection(
@@ -4153,6 +4531,10 @@
           return;
         }
         close();
+        if (!challengeAccess.bgaVerified) {
+          requireChallengeAccess(() => optionEl.click());
+          return;
+        }
         if (nextStatus === "unavailable") {
           setStatus(previousStatus, "Checking open requests...");
           let hasOpenRequests = false;
@@ -4364,6 +4746,7 @@
         fetchCurrentUser(),
       ]);
       if (currentGeneration !== renderGeneration) return;
+      updateChallengeAccess(currentUser);
       isGlobalAdmin = currentUser?.isAdmin === true || Number(currentUser?.admin) === 1;
       if (!isGlobalAdmin) {
         adminMode = false;

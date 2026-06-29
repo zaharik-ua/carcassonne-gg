@@ -1,61 +1,54 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
-  :root {
-    --text: #222;
-    --muted: #666;
-    --border: #e0e0e0;
-    --card: #fff;
-    --blue: #1a73b7;
-    --blue-hover: #165e93;
-    --green: #21a366;
-    --soft: #f6f8fb;
+  .cbp-wrap,
+  .cbp-modal-overlay {
+    --cbp-text: #222;
+    --cbp-muted: #666;
+    --cbp-border: #e0e0e0;
+    --cbp-card: #fff;
+    --cbp-blue: #1a73b7;
+    --cbp-blue-hover: #165e93;
+    --cbp-green: #21a366;
+    --cbp-soft: #f6f8fb;
   }
 
-  body {
+  .cbp-wrap {
     font-family: "Montserrat", sans-serif;
-  }
-
-  .challenges-wrap {
     display: grid;
     gap: 10px;
-    margin: 0 8px 12px;
   }
 
-  .challenges-card {
+  .cbp-card {
     display: grid;
     gap: 12px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 12px;
-    color: var(--text);
+    color: var(--cbp-text);
     font-size: 14px;
     line-height: 1.45;
   }
 
-  .challenges-card p {
+  .cbp-card p {
     margin: 0;
   }
 
-  .challenges-status {
-    color: var(--muted);
+  .cbp-status {
+    color: var(--cbp-muted);
     font-size: 14px;
   }
 
-  .challenge-checklist {
+  .cbp-checklist {
     display: grid;
     gap: 12px;
   }
 
-  .challenge-step {
+  .cbp-step {
     display: grid;
     grid-template-columns: 22px minmax(0, 1fr);
     gap: 8px;
     align-items: start;
   }
 
-  .challenge-check {
+  .cbp-check {
     width: 18px;
     height: 18px;
     border: 2px solid #b8c0cc;
@@ -66,12 +59,12 @@
     flex: 0 0 auto;
   }
 
-  .challenge-step.done .challenge-check {
-    border-color: var(--green);
-    background: var(--green);
+  .cbp-step.done .cbp-check {
+    border-color: var(--cbp-green);
+    background: var(--cbp-green);
   }
 
-  .challenge-step.done .challenge-check::after {
+  .cbp-step.done .cbp-check::after {
     content: "";
     position: absolute;
     left: 4px;
@@ -83,13 +76,13 @@
     transform: rotate(45deg);
   }
 
-  .challenge-step-main {
+  .cbp-step-main {
     display: grid;
     gap: 7px;
     min-width: 0;
   }
 
-  .challenge-step-line {
+  .cbp-step-line {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -97,18 +90,18 @@
     min-width: 0;
   }
 
-  .challenge-step-title {
+  .cbp-step-title {
     font-weight: 600;
-    color: var(--text);
+    color: var(--cbp-text);
     overflow-wrap: anywhere;
   }
 
-  .challenge-hint {
-    color: var(--muted);
+  .cbp-hint {
+    color: var(--cbp-muted);
     font-size: 13px;
   }
 
-  .challenge-email-chip {
+  .cbp-email-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -122,13 +115,13 @@
     font-weight: 600;
   }
 
-  .challenge-email-text {
+  .cbp-email-text {
     min-width: 0;
     overflow-wrap: anywhere;
   }
 
-  .challenge-btn,
-  .challenge-link-btn {
+  .cbp-btn,
+  .cbp-link-btn {
     appearance: none;
     border: 0;
     border-radius: 4px;
@@ -141,25 +134,25 @@
     white-space: nowrap;
   }
 
-  .challenge-btn {
+  .cbp-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     min-height: 26px;
     padding: 5px 9px;
-    background: var(--blue);
+    background: var(--cbp-blue);
     color: #fff;
     text-transform: uppercase;
   }
 
-  .challenge-btn:hover,
-  .challenge-btn:focus-visible {
-    background: var(--blue-hover);
+  .cbp-btn:hover,
+  .cbp-btn:focus-visible {
+    background: var(--cbp-blue-hover);
     color: #fff;
     text-decoration: none;
   }
 
-  .challenge-copy-btn {
+  .cbp-copy-btn {
     width: 26px;
     height: 24px;
     min-height: 24px;
@@ -168,8 +161,8 @@
     position: relative;
   }
 
-  .challenge-copy-btn::before,
-  .challenge-copy-btn::after {
+  .cbp-copy-btn::before,
+  .cbp-copy-btn::after {
     content: "";
     position: absolute;
     width: 9px;
@@ -179,28 +172,28 @@
     box-sizing: border-box;
   }
 
-  .challenge-copy-btn::before {
+  .cbp-copy-btn::before {
     left: 8px;
     top: 5px;
     opacity: 0.75;
   }
 
-  .challenge-copy-btn::after {
+  .cbp-copy-btn::after {
     left: 11px;
     top: 8px;
-    background: var(--blue);
+    background: var(--cbp-blue);
   }
 
-  .challenge-copy-btn:hover::after {
-    background: var(--blue-hover);
+  .cbp-copy-btn:hover::after {
+    background: var(--cbp-blue-hover);
   }
 
-  .challenge-copy-wrap {
+  .cbp-copy-wrap {
     position: relative;
     display: inline-flex;
   }
 
-  .challenge-copy-tip {
+  .cbp-copy-tip {
     position: absolute;
     left: 50%;
     bottom: calc(100% + 6px);
@@ -220,83 +213,122 @@
     z-index: 2;
   }
 
-  .challenge-copy-tip.show {
+  .cbp-copy-tip.show {
     opacity: 1;
     visibility: visible;
     transform: translateX(-50%) translateY(0);
     transition-delay: 0s;
   }
 
-  .challenge-link-btn {
+  .cbp-link-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     padding: 0;
     background: transparent;
-    color: var(--blue);
+    color: var(--cbp-blue);
     font-size: 13px;
   }
 
-  .challenge-link-btn:hover,
-  .challenge-link-btn:focus-visible {
-    color: var(--blue-hover);
+  .cbp-link-btn:hover,
+  .cbp-link-btn:focus-visible {
+    color: var(--cbp-blue-hover);
     text-decoration: underline;
   }
 
-  .challenge-link-btn .challenge-chevron {
-    width: 7px;
-    height: 7px;
-    border-right: 2px solid currentColor;
-    border-bottom: 2px solid currentColor;
-    transform: rotate(45deg);
-    transition: transform 0.18s ease;
-    margin-top: -3px;
+  .cbp-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(24, 31, 41, 0.42);
+    box-sizing: border-box;
+    font-family: "Montserrat", sans-serif;
   }
 
-  .challenge-link-btn.open .challenge-chevron {
-    transform: rotate(225deg);
-    margin-top: 3px;
+  .cbp-modal {
+    width: min(100%, 520px);
+    max-height: calc(100vh - 32px);
+    overflow: auto;
+    padding: 16px;
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 16px 36px rgba(15, 28, 48, 0.22);
+    box-sizing: border-box;
   }
 
-  .challenge-details-panel {
-    height: 0;
-    opacity: 0;
-    overflow: hidden;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    background: var(--soft);
-    transition: height 0.2s ease, opacity 0.2s ease, border-color 0.2s ease, padding 0.2s ease;
+  .cbp-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
   }
 
-  .challenge-details-panel.open {
-    opacity: 1;
-    border-color: #d6e2f0;
+  .cbp-modal-title {
+    color: #172232;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.25;
   }
 
-  .challenge-details-inner {
+  .cbp-modal-close {
+    appearance: none;
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    margin: -5px -5px 0 0;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #667085;
+    font: inherit;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .cbp-modal-close:hover,
+  .cbp-modal-close:focus-visible {
+    background: #f1f4f8;
+    color: #172232;
+  }
+
+  .cbp-modal-content {
     display: grid;
     gap: 7px;
-    padding: 10px;
     color: #334155;
     font-size: 13px;
+    line-height: 1.45;
   }
 
-  .challenge-details-inner p {
+  .cbp-modal-content p {
     margin: 0;
   }
 
-  .challenge-details-inner a {
-    color: var(--blue);
+  .cbp-modal-content a {
+    color: var(--cbp-blue);
     text-decoration: none;
     overflow-wrap: anywhere;
   }
 
-  .challenge-details-inner a:hover {
-    color: var(--blue-hover);
+  .cbp-modal-content a:hover {
+    color: var(--cbp-blue-hover);
     text-decoration: underline;
   }
 
-  .challenge-details-list {
+  .cbp-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  .cbp-details-list {
     display: grid;
     gap: 5px;
     margin: 0;
@@ -304,12 +336,12 @@
     list-style: none;
   }
 
-  .challenge-details-list li {
+  .cbp-details-list li {
     padding-left: 13px;
     position: relative;
   }
 
-  .challenge-details-list li::before {
+  .cbp-details-list li::before {
     content: "";
     position: absolute;
     left: 1px;
@@ -320,12 +352,12 @@
     background: #334155;
   }
 
-  .challenge-auth {
+  .cbp-auth {
     position: relative;
     display: inline-flex;
   }
 
-  .challenge-auth-dropdown {
+  .cbp-auth-dropdown {
     position: absolute;
     top: calc(100% + 8px);
     left: 0;
@@ -337,7 +369,7 @@
     transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
   }
 
-  .challenge-auth-dropdown.open {
+  .cbp-auth-dropdown.open {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
@@ -345,7 +377,7 @@
     transition-delay: 0s;
   }
 
-  .challenge-auth-row {
+  .cbp-auth-row {
     display: block;
     padding: 8px;
     border: 1px solid #d8d8d8;
@@ -356,7 +388,7 @@
     box-sizing: border-box;
   }
 
-  .challenge-google-btn {
+  .cbp-google-btn {
     width: 100%;
     display: inline-flex;
     align-items: center;
@@ -376,36 +408,36 @@
     box-sizing: border-box;
   }
 
-  .challenge-google-btn:hover {
+  .cbp-google-btn:hover {
     box-shadow: 0 1px 2px rgba(0,0,0,0.12);
   }
 
-  .challenge-google-icon {
+  .cbp-google-icon {
     width: 18px;
     height: 18px;
     display: inline-block;
   }
 
-  .challenge-hidden {
+  .cbp-hidden {
     display: none !important;
   }
 
   @media (max-width: 520px) {
-    .challenge-step-line {
+    .cbp-step-line {
       align-items: flex-start;
     }
 
-    .challenge-email-chip {
+    .cbp-email-chip {
       width: 100%;
       justify-content: space-between;
     }
   }
 </style>
 
-<div class="challenges-wrap">
-  <div class="challenges-card">
+<div class="cbp-wrap">
+  <div class="cbp-card">
     <p>Here you will be able to challenge other players to a rated Bo3 or Bo5 match.</p>
-    <div id="challengesContent" class="challenges-status">Loading...</div>
+    <div id="challengeBreakpointsContent" class="cbp-status">Loading...</div>
   </div>
 </div>
 
@@ -415,7 +447,7 @@
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
-  const contentEl = document.getElementById("challengesContent");
+  const contentEl = document.getElementById("challengeBreakpointsContent");
   let authCleanup = null;
 
   function getCurrentUserProfileId(user) {
@@ -509,23 +541,23 @@
 
   function buildStep(title, done) {
     const step = document.createElement("div");
-    step.className = `challenge-step${done ? " done" : ""}`;
+    step.className = `cbp-step${done ? " done" : ""}`;
 
     const check = document.createElement("div");
-    check.className = "challenge-check";
+    check.className = "cbp-check";
     check.setAttribute("aria-hidden", "true");
     step.appendChild(check);
 
     const main = document.createElement("div");
-    main.className = "challenge-step-main";
+    main.className = "cbp-step-main";
     step.appendChild(main);
 
     const line = document.createElement("div");
-    line.className = "challenge-step-line";
+    line.className = "cbp-step-line";
     main.appendChild(line);
 
     const titleEl = document.createElement("div");
-    titleEl.className = "challenge-step-title";
+    titleEl.className = "cbp-step-title";
     titleEl.textContent = title;
     line.appendChild(titleEl);
 
@@ -534,14 +566,14 @@
 
   function createHint(text) {
     const hint = document.createElement("div");
-    hint.className = "challenge-hint";
+    hint.className = "cbp-hint";
     hint.textContent = text;
     return hint;
   }
 
   function createPrimaryLink(text, href) {
     const link = document.createElement("a");
-    link.className = "challenge-btn";
+    link.className = "cbp-btn";
     link.href = href;
     link.textContent = text;
     return link;
@@ -552,9 +584,9 @@
       container: null,
       cleanup: [],
     };
-    const signInButton = authRoot.querySelector("[data-challenge-auth-sign-in]");
-    const dropdown = authRoot.querySelector("[data-challenge-auth-dropdown]");
-    const googleLink = authRoot.querySelector("[data-challenge-auth-google]");
+    const signInButton = authRoot.querySelector("[data-cbp-auth-sign-in]");
+    const dropdown = authRoot.querySelector("[data-cbp-auth-dropdown]");
+    const googleLink = authRoot.querySelector("[data-cbp-auth-google]");
     if (!signInButton || !dropdown || !googleLink) return () => {};
     googleLink.href = `${AUTH_BASE}/auth/google`;
 
@@ -567,11 +599,11 @@
     }
 
     function ensurePortalStyles(parentDocument) {
-      if (parentDocument.getElementById("challengeAuthPortalStyles")) return;
+      if (parentDocument.getElementById("cbpAuthPortalStyles")) return;
       const style = parentDocument.createElement("style");
-      style.id = "challengeAuthPortalStyles";
+      style.id = "cbpAuthPortalStyles";
       style.textContent = `
-        .challenge-auth-portal {
+        .cbp-auth-portal {
           position: fixed;
           z-index: 2147483647;
           opacity: 0;
@@ -581,14 +613,14 @@
           transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
           font-family: "Montserrat", sans-serif;
         }
-        .challenge-auth-portal.open {
+        .cbp-auth-portal.open {
           opacity: 1;
           visibility: visible;
           pointer-events: auto;
           transform: translateY(0);
           transition-delay: 0s;
         }
-        .challenge-auth-portal-row {
+        .cbp-auth-portal-row {
           padding: 8px;
           border: 1px solid #d8d8d8;
           border-radius: 6px;
@@ -596,7 +628,7 @@
           box-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08);
           min-width: 240px;
         }
-        .challenge-auth-portal-link {
+        .cbp-auth-portal-link {
           width: 100%;
           display: inline-flex;
           align-items: center;
@@ -615,10 +647,10 @@
           white-space: nowrap;
           box-sizing: border-box;
         }
-        .challenge-auth-portal-link:hover {
+        .cbp-auth-portal-link:hover {
           box-shadow: 0 1px 2px rgba(0,0,0,0.12);
         }
-        .challenge-auth-portal-icon {
+        .cbp-auth-portal-icon {
           width: 18px;
           height: 18px;
           display: inline-block;
@@ -677,13 +709,13 @@
       teardownPortal();
 
       const container = parentDocument.createElement("div");
-      container.className = "challenge-auth-portal";
+      container.className = "cbp-auth-portal";
       container.setAttribute("role", "dialog");
       container.setAttribute("aria-label", "Sign in");
       container.innerHTML = `
-        <div class="challenge-auth-portal-row">
-          <a class="challenge-auth-portal-link" href="${AUTH_BASE}/auth/google">
-            <img class="challenge-auth-portal-icon" alt="Google" src="${GOOGLE_ICON_URL}" />
+        <div class="cbp-auth-portal-row">
+          <a class="cbp-auth-portal-link" href="${AUTH_BASE}/auth/google">
+            <img class="cbp-auth-portal-icon" alt="Google" src="${GOOGLE_ICON_URL}" />
             Sign in with Google
           </a>
         </div>
@@ -693,7 +725,7 @@
       positionPortal(container);
       container.classList.add("open");
 
-      const portalLink = container.querySelector(".challenge-auth-portal-link");
+      const portalLink = container.querySelector(".cbp-auth-portal-link");
       const closeOnOutside = (event) => {
         if (!container.contains(event.target)) {
           closeDropdown();
@@ -788,13 +820,13 @@
 
   function appendSignInControl(line) {
     const authRoot = document.createElement("span");
-    authRoot.className = "challenge-auth";
+    authRoot.className = "cbp-auth";
     authRoot.innerHTML = `
-      <button class="challenge-btn" type="button" aria-expanded="false" data-challenge-auth-sign-in>Sign in</button>
-      <span class="challenge-auth-dropdown" aria-hidden="true" inert data-challenge-auth-dropdown>
-        <span class="challenge-auth-row">
-          <a class="challenge-google-btn" href="/auth/google" data-challenge-auth-google>
-            <img class="challenge-google-icon" alt="Google" src="${GOOGLE_ICON_URL}" />
+      <button class="cbp-btn" type="button" aria-expanded="false" data-cbp-auth-sign-in>Sign in</button>
+      <span class="cbp-auth-dropdown" aria-hidden="true" inert data-cbp-auth-dropdown>
+        <span class="cbp-auth-row">
+          <a class="cbp-google-btn" href="/auth/google" data-cbp-auth-google>
+            <img class="cbp-google-icon" alt="Google" src="${GOOGLE_ICON_URL}" />
             Sign in with Google
           </a>
         </span>
@@ -806,26 +838,26 @@
 
   function appendEmailCopy(main, email) {
     const hint = document.createElement("div");
-    hint.className = "challenge-hint";
+    hint.className = "cbp-hint";
     hint.appendChild(document.createTextNode("Send your email "));
 
     const chip = document.createElement("span");
-    chip.className = "challenge-email-chip";
+    chip.className = "cbp-email-chip";
     const emailText = document.createElement("span");
-    emailText.className = "challenge-email-text";
+    emailText.className = "cbp-email-text";
     emailText.textContent = email;
     chip.appendChild(emailText);
 
     const copyWrap = document.createElement("span");
-    copyWrap.className = "challenge-copy-wrap";
+    copyWrap.className = "cbp-copy-wrap";
 
     const copyBtn = document.createElement("button");
-    copyBtn.className = "challenge-btn challenge-copy-btn";
+    copyBtn.className = "cbp-btn cbp-copy-btn";
     copyBtn.type = "button";
     copyBtn.setAttribute("aria-label", "Copy email");
     copyBtn.title = "Copy email";
     const copyTip = document.createElement("span");
-    copyTip.className = "challenge-copy-tip";
+    copyTip.className = "cbp-copy-tip";
     copyTip.textContent = "Copied";
     let copyTipTimer = null;
     const showCopyTip = () => {
@@ -863,86 +895,115 @@
 
   function appendDetails(main) {
     const toggle = document.createElement("button");
-    toggle.className = "challenge-link-btn";
+    toggle.className = "cbp-link-btn";
     toggle.type = "button";
-    toggle.setAttribute("aria-expanded", "false");
-    toggle.innerHTML = '<span>Details</span><span class="challenge-chevron" aria-hidden="true"></span>';
+    toggle.textContent = "Details";
     main.appendChild(toggle);
 
-    const panel = document.createElement("div");
-    panel.className = "challenge-details-panel";
-    panel.setAttribute("aria-hidden", "true");
-
-    const inner = document.createElement("div");
-    inner.className = "challenge-details-inner";
-
-    const captainsText = document.createElement("p");
-    captainsText.appendChild(document.createTextNode("If you don't know who your captain is, check here: "));
-    const captainsLink = document.createElement("a");
-    captainsLink.href = "https://carcassonne.gg/players/?captains=1";
-    captainsLink.target = "_blank";
-    captainsLink.rel = "noopener noreferrer";
-    captainsLink.textContent = "https://carcassonne.gg/players/?captains=1";
-    captainsText.appendChild(captainsLink);
-    inner.appendChild(captainsText);
-
-    const captainIntro = document.createElement("p");
-    captainIntro.textContent = "Your captain needs to do the following:";
-    inner.appendChild(captainIntro);
-
-    const list = document.createElement("ul");
-    list.className = "challenge-details-list";
-
-    const openPlayersItem = document.createElement("li");
-    openPlayersItem.appendChild(document.createTextNode("Open User Menu -> Player Hub -> Players "));
-    const playersLink = document.createElement("a");
-    playersLink.href = "https://carcassonne.gg/player-hub/players/";
-    playersLink.target = "_blank";
-    playersLink.rel = "noopener noreferrer";
-    playersLink.textContent = "https://carcassonne.gg/player-hub/players/";
-    openPlayersItem.appendChild(playersLink);
-    list.appendChild(openPlayersItem);
-
-    const editProfileItem = document.createElement("li");
-    editProfileItem.textContent = "Edit your profile (or create one if needed)";
-    list.appendChild(editProfileItem);
-
-    const addEmailItem = document.createElement("li");
-    addEmailItem.textContent = "Add your email to Login Email";
-    list.appendChild(addEmailItem);
-
-    inner.appendChild(list);
-
-    const contactText = document.createElement("p");
-    contactText.textContent = "If you cannot find a captain, contact us at carcassonne.gg@gmail.com.";
-    inner.appendChild(contactText);
-
-    panel.appendChild(inner);
-    main.appendChild(panel);
-
-    function setOpen(open) {
-      toggle.classList.toggle("open", open);
-      toggle.setAttribute("aria-expanded", open ? "true" : "false");
-      panel.classList.toggle("open", open);
-      panel.setAttribute("aria-hidden", open ? "false" : "true");
-      if (open) {
-        panel.style.height = "0px";
-        panel.offsetHeight;
-        panel.style.height = `${panel.scrollHeight}px`;
-      } else {
-        panel.style.height = `${panel.scrollHeight}px`;
-        panel.offsetHeight;
-        panel.style.height = "0px";
-      }
-    }
-
     toggle.addEventListener("click", () => {
-      setOpen(!panel.classList.contains("open"));
-    });
-    panel.addEventListener("transitionend", () => {
-      if (panel.classList.contains("open")) {
-        panel.style.height = "auto";
+      const previouslyFocused = document.activeElement;
+      const overlay = document.createElement("div");
+      overlay.className = "cbp-modal-overlay";
+
+      const dialog = document.createElement("div");
+      dialog.className = "cbp-modal";
+      dialog.setAttribute("role", "dialog");
+      dialog.setAttribute("aria-modal", "true");
+      dialog.setAttribute("aria-labelledby", "cbpDetailsModalTitle");
+
+      const header = document.createElement("div");
+      header.className = "cbp-modal-header";
+
+      const title = document.createElement("div");
+      title.id = "cbpDetailsModalTitle";
+      title.className = "cbp-modal-title";
+      title.textContent = "How to verify your BGA account";
+      header.appendChild(title);
+
+      const closeIcon = document.createElement("button");
+      closeIcon.type = "button";
+      closeIcon.className = "cbp-modal-close";
+      closeIcon.setAttribute("aria-label", "Close");
+      closeIcon.textContent = "×";
+      header.appendChild(closeIcon);
+      dialog.appendChild(header);
+
+      const content = document.createElement("div");
+      content.className = "cbp-modal-content";
+
+      const captainsText = document.createElement("p");
+      captainsText.appendChild(document.createTextNode("If you don't know who your captain is, check here: "));
+      const captainsLink = document.createElement("a");
+      captainsLink.href = "https://carcassonne.gg/players/?captains=1";
+      captainsLink.target = "_blank";
+      captainsLink.rel = "noopener noreferrer";
+      captainsLink.textContent = "https://carcassonne.gg/players/?captains=1";
+      captainsText.appendChild(captainsLink);
+      content.appendChild(captainsText);
+
+      const captainIntro = document.createElement("p");
+      captainIntro.textContent = "Your captain needs to do the following:";
+      content.appendChild(captainIntro);
+
+      const list = document.createElement("ul");
+      list.className = "cbp-details-list";
+
+      const openPlayersItem = document.createElement("li");
+      openPlayersItem.appendChild(document.createTextNode("Open User Menu -> Player Hub -> Players "));
+      const playersLink = document.createElement("a");
+      playersLink.href = "https://carcassonne.gg/player-hub/players/";
+      playersLink.target = "_blank";
+      playersLink.rel = "noopener noreferrer";
+      playersLink.textContent = "https://carcassonne.gg/player-hub/players/";
+      openPlayersItem.appendChild(playersLink);
+      list.appendChild(openPlayersItem);
+
+      const editProfileItem = document.createElement("li");
+      editProfileItem.textContent = "Edit your profile (or create one if needed)";
+      list.appendChild(editProfileItem);
+
+      const addEmailItem = document.createElement("li");
+      addEmailItem.textContent = "Add your email to Login Email";
+      list.appendChild(addEmailItem);
+
+      content.appendChild(list);
+
+      const contactText = document.createElement("p");
+      contactText.textContent = "If you cannot find a captain, contact us at carcassonne.gg@gmail.com.";
+      content.appendChild(contactText);
+      dialog.appendChild(content);
+
+      const actions = document.createElement("div");
+      actions.className = "cbp-modal-actions";
+      const closeButton = document.createElement("button");
+      closeButton.type = "button";
+      closeButton.className = "cbp-btn";
+      closeButton.textContent = "Close";
+      actions.appendChild(closeButton);
+      dialog.appendChild(actions);
+
+      function closeModal() {
+        document.removeEventListener("keydown", onKeydown);
+        overlay.remove();
+        if (previouslyFocused instanceof HTMLElement) {
+          previouslyFocused.focus();
+        }
       }
+
+      function onKeydown(event) {
+        if (event.key === "Escape") closeModal();
+      }
+
+      closeIcon.addEventListener("click", closeModal);
+      closeButton.addEventListener("click", closeModal);
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) closeModal();
+      });
+      document.addEventListener("keydown", onKeydown);
+
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+      closeIcon.focus();
     });
   }
 
@@ -960,7 +1021,7 @@
     const profileReady = authenticated && !!profileId && hasRealName && hasPhoto;
 
     const checklist = document.createElement("div");
-    checklist.className = "challenge-checklist";
+    checklist.className = "cbp-checklist";
 
     const signInStep = buildStep("Sign in to the site", authenticated);
     if (!authenticated) {
@@ -1001,7 +1062,7 @@
 
   async function renderChallenges() {
     cleanupAuth();
-    contentEl.className = "challenges-status";
+    contentEl.className = "cbp-status";
     contentEl.textContent = "Loading...";
 
     const session = await fetchSession();
