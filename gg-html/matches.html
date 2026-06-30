@@ -907,10 +907,31 @@ code {
   color: #61111f;
 }
 
+.challenge-new-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 5;
+  width: 30px;
+  height: 30px;
+  pointer-events: none;
+}
+
+.challenge-new-badge img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 /* When badge present, drop streams slightly below it */
 .match-right.under-badge {
   margin-top: 12px;
   }
+
+.match-right.under-new-badge {
+  margin-top: 22px;
+}
 
   /* Loading indicator */
   .loading-indicator {
@@ -1037,6 +1058,40 @@ function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
   container.appendChild(badge);
   if (rightDiv) {
     rightDiv.classList.add("under-badge");
+  }
+}
+
+function parseUtcDateValue(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return NaN;
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)
+    ? raw
+    : `${raw.replace(" ", "T")}Z`;
+  return Date.parse(normalized);
+}
+
+function appendChallengeNewBadge({ match, container, rightDiv }) {
+  if (match?.source_type !== "challenge" || !container) return;
+
+  const createdAt = parseUtcDateValue(match.created_at);
+  if (!Number.isFinite(createdAt)) return;
+
+  const ageMs = Date.now() - createdAt;
+  const fourHoursMs = 4 * 60 * 60 * 1000;
+  if (ageMs < 0 || ageMs > fourHoursMs) return;
+
+  const badge = document.createElement("div");
+  badge.className = "challenge-new-badge";
+  badge.title = "New challenge duel";
+
+  const icon = document.createElement("img");
+  icon.src = "https://carcassonne.gg/gallery/new.png";
+  icon.alt = "New";
+  badge.appendChild(icon);
+  container.appendChild(badge);
+
+  if (rightDiv) {
+    rightDiv.classList.add("under-new-badge");
   }
 }
 
@@ -1300,6 +1355,7 @@ function createMatchElement(match, options = {}) {
   if (lineupDiv) wrapper.appendChild(lineupDiv);
 
   appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
+  appendChallengeNewBadge({ match, container, rightDiv });
 
   return wrapper;
 }
@@ -1437,6 +1493,7 @@ function createDuelElement(match, options = {}) {
   wrapper.appendChild(container);
 
   appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
+  appendChallengeNewBadge({ match, container, rightDiv });
 
   return wrapper;
 }
@@ -1528,6 +1585,7 @@ function createDuelElementCompact(match) {
   wrapper.appendChild(container);
 
   appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
+  appendChallengeNewBadge({ match, container, rightDiv });
 
   return wrapper;
 }
@@ -2650,6 +2708,7 @@ function adaptDbMainPageMatchesData(data) {
       flag1: String(duel?.player_1_association_flag || duel?.player_1_avatar || "").trim(),
       flag2: String(duel?.player_2_association_flag || duel?.player_2_avatar || "").trim(),
       format: String(duel?.duel_format || "").trim(),
+      created_at: String(duel?.created_at || "").trim(),
       status: String(duel?.status || "").trim(),
       gw1: duel?.dw1,
       gw2: duel?.dw2,

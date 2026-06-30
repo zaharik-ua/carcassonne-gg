@@ -381,101 +381,342 @@
     justify-content: center;
   }
 
-  .challenge-availability-dialog {
-    width: min(100%, 860px);
+  .challenge-modal.challenge-availability-dialog {
+    width: min(1180px, calc(100vw - 32px));
     display: grid;
-    gap: 12px;
+    gap: 5px;
   }
 
-  .challenge-availability-intro {
-    margin: 0;
-    color: #4b5563;
-    font-size: 13px;
+  .challenge-availability-dialog:focus {
+    outline: none;
+  }
+
+  .challenge-availability-title-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .challenge-availability-info {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border: 1px solid #9aa4b2;
+    border-radius: 50%;
+    background: #fff;
+    color: #667085;
+    padding: 0;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: help;
+    flex: 0 0 auto;
+  }
+
+  .challenge-availability-info-tip {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 7px);
+    z-index: 20;
+    width: min(330px, calc(100vw - 48px));
+    padding: 8px 10px;
+    border-radius: 5px;
+    background: #222;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 500;
     line-height: 1.45;
+    text-align: left;
+    white-space: pre-line;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(-3px);
+    transition: opacity 0.14s ease, transform 0.14s ease, visibility 0s linear 0.14s;
+  }
+
+  .challenge-availability-info:hover .challenge-availability-info-tip,
+  .challenge-availability-info:focus-visible .challenge-availability-info-tip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+    transition-delay: 0s;
   }
 
   .challenge-availability-calendar {
-    display: grid;
-    gap: 10px;
+    overflow-x: auto;
+    border: 1px solid #d8dee8;
+    border-radius: 6px;
+    background: #fff;
   }
 
-  .challenge-availability-day {
-    display: grid;
-    gap: 6px;
+  .challenge-calendar-shell {
+    position: relative;
+    min-width: 0;
   }
 
-  .challenge-availability-day-title {
-    color: #223040;
+  .challenge-calendar-scroll-btn {
+    position: absolute;
+    top: 50%;
+    z-index: 12;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 44px;
+    border: 0;
+    border-radius: 6px;
+    background: rgba(23, 34, 50, 0.52);
+    color: #fff;
+    padding: 0;
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transform: translateY(-50%);
+    transition: opacity 0.15s ease, background-color 0.15s ease;
+  }
+
+  .challenge-calendar-scroll-btn.is-prev {
+    left: 5px;
+  }
+
+  .challenge-calendar-scroll-btn.is-next {
+    right: 5px;
+  }
+
+  .challenge-calendar-scroll-btn:active {
+    background: rgba(23, 34, 50, 0.72);
+  }
+
+  .challenge-calendar-scroll-btn:disabled {
+    opacity: 0.18;
+    cursor: default;
+  }
+
+  .challenge-calendar-inner {
+    min-width: 620px;
+  }
+
+  .challenge-calendar-header,
+  .challenge-calendar-body {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .challenge-calendar-header {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    border-bottom: 1px solid #cfd6df;
+    background: #fff;
+  }
+
+  .challenge-calendar-header-spacer {
+    border-right: 1px solid #e1e5ea;
+  }
+
+  .challenge-calendar-day-headers,
+  .challenge-calendar-day-columns {
+    display: grid;
+  }
+
+  .challenge-calendar-day-header {
+    min-width: 130px;
+    padding: 8px 5px;
+    border-right: 1px solid #e1e5ea;
+    color: #344054;
     font-size: 13px;
     font-weight: 700;
+    text-align: center;
+    box-sizing: border-box;
   }
 
-  .challenge-availability-hours {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
-    gap: 4px;
-    padding: 2px 1px;
+  .challenge-calendar-times,
+  .challenge-calendar-day-column {
+    position: relative;
+    height: 528px;
   }
 
-  .challenge-availability-hour {
-    appearance: none;
-    min-height: 34px;
-    border: 1px solid #c8ced8;
-    border-radius: 4px;
-    background: #fff;
-    color: #344054;
-    padding: 4px 3px;
-    font: inherit;
+  .challenge-calendar-times {
+    border-right: 1px solid #e1e5ea;
+    background: #fafbfc;
+  }
+
+  .challenge-calendar-time-label {
+    position: absolute;
+    left: 0;
+    width: 50px;
+    color: #7a8492;
     font-size: 10px;
-    font-weight: 600;
-    line-height: 1.2;
+    line-height: 1;
+    text-align: right;
+    transform: translateY(-50%);
+  }
+
+  .challenge-calendar-day-column {
+    min-width: 130px;
+    border-right: 1px solid #e1e5ea;
+    background: repeating-linear-gradient(
+      to bottom,
+      #fff 0,
+      #fff 21px,
+      #e9edf2 21px,
+      #e9edf2 22px
+    );
+    box-sizing: border-box;
     cursor: crosshair;
-    user-select: none;
     touch-action: none;
+    user-select: none;
   }
 
-  .challenge-availability-hour:hover,
-  .challenge-availability-hour.is-preview {
-    border-color: #7cb3de;
-    background: #edf6ff;
+  .challenge-calendar-hour-cell {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 22px;
+    box-sizing: border-box;
   }
 
-  .challenge-availability-hour.is-selected-1 {
-    border-color: #63b98c;
-    background: #dff3e8;
+  .challenge-calendar-hour-cell.is-blocked {
+    background: rgba(107, 114, 128, 0.18);
+    cursor: not-allowed;
+  }
+
+  .challenge-calendar-event-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .challenge-calendar-event {
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    z-index: 3;
+    min-height: 22px;
+    overflow: visible;
+    border: 1px solid #63b98c;
+    border-left: 4px solid #21a366;
+    border-radius: 4px;
+    background: rgba(223, 243, 232, 0.96);
     color: #12633e;
+    padding: 4px 22px 3px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.25;
+    box-sizing: border-box;
+    pointer-events: auto;
+    cursor: pointer;
   }
 
-  .challenge-availability-hour.is-selected-2 {
+  .challenge-calendar-event.is-range-2 {
     border-color: #8d75cc;
-    background: #eee9fb;
+    border-left-color: #7659c2;
+    background: rgba(238, 233, 251, 0.96);
     color: #523994;
   }
 
-  .challenge-availability-hour.is-selected-3 {
+  .challenge-calendar-event.is-range-3 {
     border-color: #d69a48;
-    background: #fff2db;
+    border-left-color: #c5842d;
+    background: rgba(255, 242, 219, 0.97);
     color: #84520f;
   }
 
-  .challenge-availability-selected {
-    display: grid;
-    gap: 6px;
+  .challenge-calendar-event.is-preview {
+    z-index: 5;
+    border-style: dashed;
+    opacity: 0.82;
+    pointer-events: none;
   }
 
-  .challenge-availability-range {
+  .challenge-calendar-event.is-selected {
+    z-index: 6;
+    box-shadow: 0 0 0 2px rgba(26, 115, 183, 0.28);
+  }
+
+  .challenge-calendar-event-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .challenge-calendar-delete {
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.88);
+    color: inherit;
+    padding: 0;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 17px;
+    cursor: pointer;
+  }
+
+  .challenge-calendar-resize-handle {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    z-index: 2;
+    height: 8px;
+    cursor: ns-resize;
+  }
+
+  .challenge-calendar-resize-handle.is-start {
+    top: -4px;
+  }
+
+  .challenge-calendar-resize-handle.is-end {
+    bottom: -4px;
+  }
+
+  .challenge-calendar-resize-handle::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 3px;
+    width: 28px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+    opacity: 0;
+    transform: translateX(-50%);
+    transition: opacity 0.12s ease;
+  }
+
+  .challenge-calendar-resize-handle:hover::after,
+  .challenge-calendar-event.is-selected .challenge-calendar-resize-handle::after {
+    opacity: 0.75;
+  }
+
+  .challenge-calendar-footer {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 10px;
-    min-height: 31px;
-    padding: 5px 7px 5px 10px;
-    border: 1px solid #d8dee8;
-    border-radius: 4px;
-    background: #f8fafc;
-    color: #344054;
+    gap: 12px;
+    color: #667085;
     font-size: 12px;
-    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .challenge-calendar-timezone {
+    flex: 0 0 auto;
+  }
+
+  .challenge-calendar-footer .challenge-request-message {
+    min-height: 0;
+    margin-left: auto;
+    font-size: inherit;
+    line-height: inherit;
+    text-align: right;
   }
 
   .challenge-opponent-availability {
@@ -1157,7 +1398,7 @@
 
   .challenge-modal-overlay {
     position: fixed;
-    inset: 0;
+    inset: 44px 0 0;
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -1169,7 +1410,7 @@
 
   .challenge-modal {
     width: min(100%, 520px);
-    max-height: min(760px, calc(100vh - 32px));
+    max-height: min(760px, calc(100vh - 44px - 32px));
     overflow: auto;
     border: 1px solid #d8dee8;
     border-radius: 8px;
@@ -1780,18 +2021,29 @@
     }
 
     .challenge-opponent-row {
-      grid-template-columns: minmax(0, 1fr);
-      align-items: stretch;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 5px 10px;
+      align-items: start;
+    }
+
+    .challenge-opponent-left {
+      grid-column: 1;
+      grid-row: 1;
     }
 
     .challenge-opponent-ratings {
+      grid-column: 1;
+      grid-row: 2;
       justify-items: start;
       padding-left: 58px;
     }
 
     .challenge-opponent-action {
-      justify-self: start;
-      margin-left: 58px;
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      align-self: center;
+      justify-self: end;
+      margin-left: 0;
     }
 
     .challenge-duel-row {
@@ -1823,12 +2075,31 @@
     }
 
     .challenge-modal {
-      max-height: calc(100vh - 20px);
+      max-height: calc(100vh - 44px - 20px);
       padding: 14px;
     }
 
     .challenge-availability-dialog {
       padding: 12px;
+    }
+
+    .challenge-calendar-day-header,
+    .challenge-calendar-day-column {
+      min-width: 108px;
+    }
+
+    .challenge-calendar-scroll-btn {
+      display: inline-flex;
+    }
+
+    .challenge-availability-info-tip {
+      width: min(240px, calc(100vw - 48px));
+      transform: translateX(-75%) translateY(-3px);
+    }
+
+    .challenge-availability-info:hover .challenge-availability-info-tip,
+    .challenge-availability-info:focus-visible .challenge-availability-info-tip {
+      transform: translateX(-75%) translateY(0);
     }
 
     .challenge-request-row input[type="datetime-local"] {
@@ -4273,7 +4544,7 @@
     inviteBtn.className = "challenge-opponent-action";
     inviteBtn.type = "button";
     inviteBtn.disabled = challengeAccess.bgaVerified && !canCreateRequests && !hasScheduledMatch;
-    inviteBtn.textContent = "Invite to match";
+    inviteBtn.textContent = window.matchMedia("(max-width: 720px)").matches ? "Invite" : "Invite to match";
     if (challengeAccess.bgaVerified && !canCreateRequests && !hasScheduledMatch) {
       inviteBtn.title = "Challenge requests are not available right now.";
     }
@@ -4814,8 +5085,8 @@
     if (!date) return "";
     return new Intl.DateTimeFormat("en-US", {
       timeZone: timezone || "UTC",
-      weekday: "long",
-      month: "long",
+      weekday: "short",
+      month: "short",
       day: "numeric",
     }).format(date);
   }
@@ -4831,6 +5102,12 @@
     }).formatToParts(date);
     const part = (type) => parts.find((item) => item.type === type)?.value || "";
     return `${part("hour")}:${part("minute")}`;
+  }
+
+  function getChallengeAvailabilityHour(value, timezone) {
+    const clock = formatChallengeAvailabilityClock(value, timezone);
+    const hour = Number.parseInt(clock.split(":")[0], 10);
+    return Number.isInteger(hour) ? hour % 24 : 0;
   }
 
   function formatChallengeAvailabilityRange(startValue, endValue, timezone) {
@@ -4884,33 +5161,159 @@
   function openChallengeAvailabilityDialog(period, onSaved) {
     const timezone = getPlayerTimezone(period?.player_time_context);
     const slots = buildChallengeAvailabilitySlots(period, timezone);
+    const hourHeight = 22;
+    const calendarHeight = hourHeight * 24;
+    const dayColumnWidth = window.matchMedia("(max-width: 720px)").matches ? 108 : 150;
+    const minDayColumnWidth = Math.round(dayColumnWidth * 13 / 15);
+    const dayGroups = [];
+    slots.forEach((slot) => {
+      let group = dayGroups[dayGroups.length - 1];
+      if (!group || group.key !== slot.dayKey) {
+        group = { key: slot.dayKey, label: slot.dayLabel, slots: [] };
+        dayGroups.push(group);
+      }
+      group.slots.push(slot);
+    });
+    dayGroups.forEach((group) => {
+      group.firstIndex = group.slots[0].index;
+      group.endIndex = group.slots[group.slots.length - 1].index + 1;
+      group.startHour = getChallengeAvailabilityHour(group.slots[0].start, timezone);
+      const lastSlot = group.slots[group.slots.length - 1];
+      group.endHour = getChallengeLocalDateKey(lastSlot.start, timezone) !== getChallengeLocalDateKey(lastSlot.end, timezone)
+        ? 24
+        : getChallengeAvailabilityHour(lastSlot.end, timezone);
+      group.slotByHour = new Map(group.slots.map((slot) => [
+        getChallengeAvailabilityHour(slot.start, timezone),
+        slot,
+      ]));
+    });
+
+    let ranges = (Array.isArray(period?.availability) ? period.availability : [])
+      .map((range) => {
+        const startMs = parseUtcDate(range?.start_utc)?.getTime();
+        const endMs = parseUtcDate(range?.end_utc)?.getTime();
+        const startIndex = slots.findIndex((slot) => slot.start.getTime() === startMs);
+        const endSlotIndex = slots.findIndex((slot) => slot.end.getTime() === endMs);
+        return startIndex >= 0 && endSlotIndex >= startIndex
+          ? { start: startIndex, end: endSlotIndex + 1 }
+          : null;
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+    let selectedRangeIndex = null;
+    let dragState = null;
+
     const overlay = document.createElement("div");
     overlay.className = "challenge-modal-overlay";
     const dialog = document.createElement("div");
     dialog.className = "challenge-modal challenge-availability-dialog";
+    dialog.style.width = `min(calc(100vw - 32px), ${Math.min(1180, 92 + Math.max(dayGroups.length, 1) * dayColumnWidth)}px)`;
+    dialog.tabIndex = -1;
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
     overlay.appendChild(dialog);
 
+    const titleRow = document.createElement("div");
+    titleRow.className = "challenge-availability-title-row";
+    dialog.appendChild(titleRow);
     const title = document.createElement("div");
     title.className = "challenge-request-title";
     title.textContent = "When can you play?";
-    dialog.appendChild(title);
+    titleRow.appendChild(title);
+    const info = document.createElement("button");
+    info.type = "button";
+    info.className = "challenge-availability-info";
+    info.setAttribute("aria-label", "How to select playing periods");
+    info.textContent = "i";
+    const infoTip = document.createElement("span");
+    infoTip.className = "challenge-availability-info-tip";
+    infoTip.textContent = "Choose the full period during which you can both start and finish a match. For example, if your period ends at 23:00, it means you plan to be unavailable after that — perhaps because it is bedtime. 🙂\nDrag up, down, or across days to create up to 3 playing periods.\nTo resize a period, drag its top or bottom edge.\nSelect a period, then press Delete or tap × to remove it.";
+    info.appendChild(infoTip);
+    titleRow.appendChild(info);
 
-    const intro = document.createElement("p");
-    intro.className = "challenge-availability-intro";
-    intro.textContent = `Drag across whole-hour cells to select up to 3 playing periods. Times are shown in ${timezone}.`;
-    dialog.appendChild(intro);
-
+    const calendarShell = document.createElement("div");
+    calendarShell.className = "challenge-calendar-shell";
+    dialog.appendChild(calendarShell);
     const calendar = document.createElement("div");
     calendar.className = "challenge-availability-calendar";
-    dialog.appendChild(calendar);
+    calendarShell.appendChild(calendar);
+    const previousDaysBtn = document.createElement("button");
+    previousDaysBtn.type = "button";
+    previousDaysBtn.className = "challenge-calendar-scroll-btn is-prev";
+    previousDaysBtn.setAttribute("aria-label", "Scroll to previous days");
+    previousDaysBtn.textContent = "‹";
+    calendarShell.appendChild(previousDaysBtn);
+    const nextDaysBtn = document.createElement("button");
+    nextDaysBtn.type = "button";
+    nextDaysBtn.className = "challenge-calendar-scroll-btn is-next";
+    nextDaysBtn.setAttribute("aria-label", "Scroll to next days");
+    nextDaysBtn.textContent = "›";
+    calendarShell.appendChild(nextDaysBtn);
+    const updateCalendarScrollButtons = () => {
+      const maxScrollLeft = Math.max(0, calendar.scrollWidth - calendar.clientWidth);
+      previousDaysBtn.disabled = calendar.scrollLeft <= 1;
+      nextDaysBtn.disabled = calendar.scrollLeft >= maxScrollLeft - 1;
+    };
+    previousDaysBtn.addEventListener("click", () => {
+      calendar.scrollBy({ left: -dayColumnWidth, behavior: "smooth" });
+    });
+    nextDaysBtn.addEventListener("click", () => {
+      calendar.scrollBy({ left: dayColumnWidth, behavior: "smooth" });
+    });
+    calendar.addEventListener("scroll", updateCalendarScrollButtons, { passive: true });
+    const calendarInner = document.createElement("div");
+    calendarInner.className = "challenge-calendar-inner";
+    calendarInner.style.minWidth = `${56 + Math.max(dayGroups.length, 1) * dayColumnWidth}px`;
+    calendar.appendChild(calendarInner);
 
-    const selectedWrap = document.createElement("div");
-    selectedWrap.className = "challenge-availability-selected";
-    dialog.appendChild(selectedWrap);
+    const header = document.createElement("div");
+    header.className = "challenge-calendar-header";
+    calendarInner.appendChild(header);
+    const headerSpacer = document.createElement("div");
+    headerSpacer.className = "challenge-calendar-header-spacer";
+    header.appendChild(headerSpacer);
+    const dayHeaders = document.createElement("div");
+    dayHeaders.className = "challenge-calendar-day-headers";
+    dayHeaders.style.gridTemplateColumns = `repeat(${Math.max(dayGroups.length, 1)}, minmax(${minDayColumnWidth}px, ${dayColumnWidth}px))`;
+    header.appendChild(dayHeaders);
+    dayGroups.forEach((group) => {
+      const dayHeader = document.createElement("div");
+      dayHeader.className = "challenge-calendar-day-header";
+      dayHeader.textContent = group.label;
+      dayHeaders.appendChild(dayHeader);
+    });
 
+    const body = document.createElement("div");
+    body.className = "challenge-calendar-body";
+    calendarInner.appendChild(body);
+    const times = document.createElement("div");
+    times.className = "challenge-calendar-times";
+    body.appendChild(times);
+    for (let hour = 1; hour < 24; hour += 1) {
+      const label = document.createElement("div");
+      label.className = "challenge-calendar-time-label";
+      label.style.top = `${hour * hourHeight}px`;
+      label.textContent = `${String(hour).padStart(2, "0")}:00`;
+      times.appendChild(label);
+    }
+
+    const dayColumns = document.createElement("div");
+    dayColumns.className = "challenge-calendar-day-columns";
+    dayColumns.style.gridTemplateColumns = `repeat(${Math.max(dayGroups.length, 1)}, minmax(${minDayColumnWidth}px, ${dayColumnWidth}px))`;
+    body.appendChild(dayColumns);
+    const columns = [];
+    const eventLayers = [];
+
+    const calendarFooter = document.createElement("div");
+    calendarFooter.className = "challenge-calendar-footer";
+    dialog.appendChild(calendarFooter);
+    const timezoneNote = document.createElement("div");
+    timezoneNote.className = "challenge-calendar-timezone";
+    timezoneNote.textContent = `Times in ${timezone}`;
+    calendarFooter.appendChild(timezoneNote);
     const message = document.createElement("div");
     message.className = "challenge-request-message";
-    dialog.appendChild(message);
+    calendarFooter.appendChild(message);
 
     const actions = document.createElement("div");
     actions.className = "challenge-info-actions";
@@ -4926,140 +5329,217 @@
     actions.appendChild(saveBtn);
     dialog.appendChild(actions);
 
-    const slotButtons = [];
-    let ranges = (Array.isArray(period?.availability) ? period.availability : [])
-      .map((range) => {
-        const startMs = parseUtcDate(range?.start_utc)?.getTime();
-        const endMs = parseUtcDate(range?.end_utc)?.getTime();
-        const startIndex = slots.findIndex((slot) => slot.start.getTime() === startMs);
-        const endSlotIndex = slots.findIndex((slot) => slot.end.getTime() === endMs);
-        return startIndex >= 0 && endSlotIndex >= startIndex
-          ? { start: startIndex, end: endSlotIndex + 1 }
-          : null;
-      })
-      .filter(Boolean)
-      .slice(0, 3);
-    let dragStart = null;
-    let dragEnd = null;
-
     const setMessage = (text, tone) => {
       message.className = `challenge-request-message${tone ? ` is-${tone}` : ""}`;
       message.textContent = text || "";
     };
-    const getPreview = () => dragStart === null || dragEnd === null
-      ? null
-      : { start: Math.min(dragStart, dragEnd), end: Math.max(dragStart, dragEnd) + 1 };
     const rangesOverlap = (left, right) => left.start < right.end && right.start < left.end;
-
-    const renderSelection = () => {
-      const preview = getPreview();
-      slotButtons.forEach((button, index) => {
-        button.classList.remove("is-selected-1", "is-selected-2", "is-selected-3", "is-preview");
-        ranges.forEach((range, rangeIndex) => {
-          if (index >= range.start && index < range.end) button.classList.add(`is-selected-${rangeIndex + 1}`);
-        });
-        if (preview && index >= preview.start && index < preview.end) button.classList.add("is-preview");
-      });
-
-      selectedWrap.innerHTML = "";
-      if (!ranges.length) {
-        const empty = document.createElement("div");
-        empty.className = "challenge-opponents-state";
-        empty.textContent = "No playing periods selected yet.";
-        selectedWrap.appendChild(empty);
-        return;
+    const getPreviewRange = () => {
+      if (!dragState) return null;
+      if (dragState.type === "create") {
+        if (dragState.anchor === dragState.current) {
+          return { start: dragState.fallbackSlotIndex, end: dragState.fallbackSlotIndex + 1 };
+        }
+        return {
+          start: Math.min(dragState.anchor, dragState.current),
+          end: Math.max(dragState.anchor, dragState.current),
+        };
       }
-      ranges.forEach((range, index) => {
-        const row = document.createElement("div");
-        row.className = "challenge-availability-range";
-        const text = document.createElement("span");
-        text.textContent = `${index + 1}. ${formatChallengeAvailabilityRange(slots[range.start].start, slots[range.end - 1].end, timezone)}`;
-        row.appendChild(text);
-        const removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.className = "challenge-btn challenge-btn-small challenge-btn-danger";
-        removeBtn.textContent = "Remove";
-        removeBtn.addEventListener("click", () => {
-          ranges.splice(index, 1);
-          setMessage("", "");
-          renderSelection();
-        });
-        row.appendChild(removeBtn);
-        selectedWrap.appendChild(row);
+      const original = ranges[dragState.rangeIndex];
+      if (!original) return null;
+      if (dragState.type === "resize-start") {
+        return { start: Math.min(dragState.current, original.end - 1), end: original.end };
+      }
+      return { start: original.start, end: Math.max(dragState.current, original.start + 1) };
+    };
+    const getBoundaryFromPoint = (clientX, clientY) => {
+      if (!columns.length) return null;
+      let dayIndex = columns.findIndex((column) => {
+        const rect = column.getBoundingClientRect();
+        return clientX >= rect.left && clientX <= rect.right;
+      });
+      if (dayIndex < 0) {
+        const firstRect = columns[0].getBoundingClientRect();
+        dayIndex = clientX < firstRect.left ? 0 : columns.length - 1;
+      }
+      const columnRect = columns[dayIndex].getBoundingClientRect();
+      const group = dayGroups[dayIndex];
+      const rawHour = Math.round(Math.max(0, Math.min(calendarHeight, clientY - columnRect.top)) / hourHeight);
+      const hour = Math.max(group.startHour, Math.min(group.endHour, rawHour));
+      return group.firstIndex + (hour - group.startHour);
+    };
+    const removeRange = (rangeIndex) => {
+      if (!Number.isInteger(rangeIndex) || !ranges[rangeIndex]) return;
+      ranges.splice(rangeIndex, 1);
+      selectedRangeIndex = null;
+      setMessage("", "");
+      renderSelection();
+    };
+    const startResize = (event, rangeIndex, type) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      selectedRangeIndex = rangeIndex;
+      const range = ranges[rangeIndex];
+      dragState = {
+        type,
+        rangeIndex,
+        current: type === "resize-start" ? range.start : range.end,
+      };
+      setMessage("", "");
+      renderSelection();
+    };
+
+    const renderRange = (range, rangeIndex, options = {}) => {
+      if (!range || range.start < 0 || range.end > slots.length || range.start >= range.end) return;
+      dayGroups.forEach((group, dayIndex) => {
+        const segmentStart = Math.max(range.start, group.firstIndex);
+        const segmentEnd = Math.min(range.end, group.endIndex);
+        if (segmentStart >= segmentEnd) return;
+        const startHour = group.startHour + (segmentStart - group.firstIndex);
+        const endHour = group.startHour + (segmentEnd - group.firstIndex);
+        const eventEl = document.createElement("div");
+        eventEl.className = `challenge-calendar-event is-range-${Math.min(rangeIndex + 1, 3)}${options.preview ? " is-preview" : ""}${!options.preview && selectedRangeIndex === rangeIndex ? " is-selected" : ""}`;
+        eventEl.style.top = `${startHour * hourHeight}px`;
+        eventEl.style.height = `${(endHour - startHour) * hourHeight}px`;
+        const label = document.createElement("div");
+        label.className = "challenge-calendar-event-label";
+        label.textContent = `${String(startHour).padStart(2, "0")}:00–${String(endHour).padStart(2, "0")}:00`;
+        eventEl.appendChild(label);
+
+        if (!options.preview) {
+          eventEl.addEventListener("click", (event) => {
+            event.stopPropagation();
+            selectedRangeIndex = rangeIndex;
+            setMessage("", "");
+            renderSelection();
+          });
+          if (selectedRangeIndex === rangeIndex) {
+            const deleteBtn = document.createElement("button");
+            deleteBtn.type = "button";
+            deleteBtn.className = "challenge-calendar-delete";
+            deleteBtn.setAttribute("aria-label", "Delete playing period");
+            deleteBtn.textContent = "×";
+            deleteBtn.addEventListener("click", (event) => {
+              event.stopPropagation();
+              removeRange(rangeIndex);
+            });
+            eventEl.appendChild(deleteBtn);
+          }
+          if (segmentStart === range.start) {
+            const startHandle = document.createElement("div");
+            startHandle.className = "challenge-calendar-resize-handle is-start";
+            startHandle.addEventListener("pointerdown", (event) => startResize(event, rangeIndex, "resize-start"));
+            eventEl.appendChild(startHandle);
+          }
+          if (segmentEnd === range.end) {
+            const endHandle = document.createElement("div");
+            endHandle.className = "challenge-calendar-resize-handle is-end";
+            endHandle.addEventListener("pointerdown", (event) => startResize(event, rangeIndex, "resize-end"));
+            eventEl.appendChild(endHandle);
+          }
+        }
+        eventLayers[dayIndex].appendChild(eventEl);
       });
     };
 
-    const dayGroups = [];
-    slots.forEach((slot) => {
-      let group = dayGroups[dayGroups.length - 1];
-      if (!group || group.key !== slot.dayKey) {
-        group = { key: slot.dayKey, label: slot.dayLabel, slots: [] };
-        dayGroups.push(group);
-      }
-      group.slots.push(slot);
-    });
-    dayGroups.forEach((group) => {
-      const day = document.createElement("div");
-      day.className = "challenge-availability-day";
-      const dayTitle = document.createElement("div");
-      dayTitle.className = "challenge-availability-day-title";
-      dayTitle.textContent = group.label;
-      day.appendChild(dayTitle);
-      const hours = document.createElement("div");
-      hours.className = "challenge-availability-hours";
-      group.slots.forEach((slot) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "challenge-availability-hour";
-        button.dataset.slotIndex = String(slot.index);
-        button.textContent = slot.label;
-        button.addEventListener("pointerdown", (event) => {
-          if (event.button !== undefined && event.button !== 0) return;
-          event.preventDefault();
-          dragStart = slot.index;
-          dragEnd = slot.index;
-          setMessage("", "");
-          renderSelection();
-        });
-        slotButtons[slot.index] = button;
-        hours.appendChild(button);
+    const renderSelection = () => {
+      eventLayers.forEach((layer) => {
+        layer.innerHTML = "";
       });
-      day.appendChild(hours);
-      calendar.appendChild(day);
+      const preview = getPreviewRange();
+      ranges.forEach((range, rangeIndex) => {
+        if (dragState?.type?.startsWith("resize") && dragState.rangeIndex === rangeIndex) return;
+        renderRange(range, rangeIndex);
+      });
+      if (preview) {
+        const previewIndex = dragState?.type === "create" ? ranges.length : dragState.rangeIndex;
+        renderRange(preview, previewIndex, { preview: true });
+      }
+    };
+
+    dayGroups.forEach((group) => {
+      const column = document.createElement("div");
+      column.className = "challenge-calendar-day-column";
+      columns.push(column);
+      for (let hour = 0; hour < 24; hour += 1) {
+        const cell = document.createElement("div");
+        const slot = group.slotByHour.get(hour) || null;
+        cell.className = `challenge-calendar-hour-cell${slot ? "" : " is-blocked"}`;
+        cell.style.top = `${hour * hourHeight}px`;
+        if (slot) {
+          cell.dataset.slotIndex = String(slot.index);
+          cell.addEventListener("pointerdown", (event) => {
+            if (event.button !== undefined && event.button !== 0) return;
+            event.preventDefault();
+            selectedRangeIndex = null;
+            dragState = {
+              type: "create",
+              anchor: slot.index,
+              current: slot.index,
+              fallbackSlotIndex: slot.index,
+            };
+            setMessage("", "");
+            renderSelection();
+          });
+        }
+        column.appendChild(cell);
+      }
+      const eventLayer = document.createElement("div");
+      eventLayer.className = "challenge-calendar-event-layer";
+      eventLayers.push(eventLayer);
+      column.appendChild(eventLayer);
+      dayColumns.appendChild(column);
     });
 
     const onPointerMove = (event) => {
-      if (dragStart === null) return;
-      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.("[data-slot-index]");
-      if (!target || !dialog.contains(target)) return;
-      const nextIndex = Number(target.dataset.slotIndex);
-      if (Number.isInteger(nextIndex) && nextIndex !== dragEnd) {
-        dragEnd = nextIndex;
-        renderSelection();
-      }
+      if (!dragState) return;
+      const boundary = getBoundaryFromPoint(event.clientX, event.clientY);
+      if (boundary === null || boundary === dragState.current) return;
+      dragState.current = boundary;
+      renderSelection();
     };
     const onPointerUp = () => {
-      if (dragStart === null) return;
-      const nextRange = getPreview();
-      dragStart = null;
-      dragEnd = null;
-      if (!nextRange) return;
-      if (ranges.length >= 3) {
-        setMessage("You can select up to 3 playing periods.", "error");
-      } else if (ranges.some((range) => rangesOverlap(range, nextRange))) {
-        setMessage("Playing periods cannot overlap. Remove an existing period first.", "error");
+      if (!dragState) return;
+      const completedDrag = dragState;
+      const nextRange = getPreviewRange();
+      dragState = null;
+      if (!nextRange) {
+        renderSelection();
+        return;
+      }
+      const otherRanges = ranges.filter((_range, index) => index !== completedDrag.rangeIndex);
+      if (completedDrag.type === "create" && ranges.length >= 3) {
+        setMessage(
+          window.matchMedia("(max-width: 720px)").matches
+            ? "Up to 3 playing periods."
+            : "You can select up to 3 playing periods.",
+          "error"
+        );
+      } else if (otherRanges.some((range) => rangesOverlap(range, nextRange))) {
+        setMessage("Playing periods cannot overlap.", "error");
       } else {
-        ranges.push(nextRange);
+        if (completedDrag.type === "create") ranges.push(nextRange);
+        else ranges[completedDrag.rangeIndex] = nextRange;
         ranges.sort((left, right) => left.start - right.start);
+        selectedRangeIndex = ranges.findIndex((range) => range.start === nextRange.start && range.end === nextRange.end);
       }
       renderSelection();
     };
+    const onKeyDown = (event) => {
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedRangeIndex !== null) {
+        event.preventDefault();
+        removeRange(selectedRangeIndex);
+      }
+    };
     document.addEventListener("pointermove", onPointerMove);
     document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("keydown", onKeyDown);
 
     const closeModal = () => {
       document.removeEventListener("pointermove", onPointerMove);
       document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("keydown", onKeyDown);
       overlay.remove();
     };
     cancelBtn.addEventListener("click", closeModal);
@@ -5098,6 +5578,8 @@
     }
     renderSelection();
     document.body.appendChild(overlay);
+    window.requestAnimationFrame(updateCalendarScrollButtons);
+    dialog.focus({ preventScroll: true });
   }
 
   function createStatusDropdown(period, initialStatus) {

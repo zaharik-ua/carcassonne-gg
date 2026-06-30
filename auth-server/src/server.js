@@ -14715,6 +14715,7 @@ function publicMainPageMatchesHandler(req, res, next) {
       SELECT
         d.id,
         d.challenge_period_id,
+        d.created_at,
         d.time_utc,
         d.duel_format,
         d.player_1_id,
@@ -15064,6 +15065,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 challenge_period_id: row.challenge_period_id,
                 challenge_period_name: row.challenge_period_name,
                 challenge_period_logo: row.challenge_period_logo,
+                created_at: row.created_at,
                 time_utc: row.time_utc,
                 duel_format: row.duel_format,
                 player_1_id: row.player_1_id,
