@@ -1191,6 +1191,38 @@
     return { peak, low };
   }
 
+  function buildBgaAvatarUrl(playerId, avatar) {
+    const playerIdText = String(playerId || "").trim();
+    const avatarText = String(avatar || "").trim();
+    if (!avatarText) return "";
+
+    if (/^https?:\/\//i.test(avatarText)) {
+      return avatarText;
+    }
+
+    if (avatarText === "x00000") {
+      return "https://x.boardgamearena.net/data/avatar/default_184.jpg";
+    }
+
+    const defaultMatch = avatarText.match(/^_def_(\d+)$/);
+    if (defaultMatch) {
+      const defaultAvatarId = defaultMatch[1].padStart(4, "0");
+      return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultAvatarId}.jpg`;
+    }
+
+    if (!playerIdText) return "";
+    if (!/^\d+$/.test(playerIdText)) return "";
+
+    const playerIdNumber = Number(playerIdText);
+    if (!Number.isFinite(playerIdNumber)) return "";
+
+    const firstFolder = String(Math.floor(playerIdNumber / 100000000));
+    const secondFolder = String(Math.floor(playerIdNumber / 1000000));
+    const thirdFolder = String(Math.floor(playerIdNumber / 1000));
+
+    return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+  }
+
   function getBadgeByPlayerId(playerId) {
     const pid = String(playerId || "");
     const profile = ggProfilesById.get(pid);
@@ -1199,7 +1231,8 @@
       return { url: assocMeta.flag, alt: assocMeta.name || "flag" };
     }
     const bga = bgaPlayersById.get(pid);
-    if (bga && bga.avatar) return { url: bga.avatar, alt: "avatar" };
+    const avatarUrl = buildBgaAvatarUrl(pid, bga?.avatar || profile?.avatar);
+    if (avatarUrl) return { url: avatarUrl, alt: "avatar" };
     return { url: "", alt: "" };
   }
 
@@ -2800,6 +2833,7 @@
         master_title: Number(dbProfile?.master_title || 0),
         master_title_date: String(dbProfile?.master_title_date || ""),
         team_captain: Number(dbProfile?.team_captain || 0),
+        avatar: String(dbProfile?.avatar || jsonProfile?.avatar || "").trim(),
       };
       mergedProfile.assosiation = mergedProfile.association;
 
@@ -2835,6 +2869,7 @@
       master_title: Number(dbProfile?.master_title || 0),
       master_title_date: String(dbProfile?.master_title_date || ""),
       team_captain: Number(dbProfile?.team_captain || 0),
+      avatar: String(dbProfile?.avatar || "").trim(),
     };
     const dbProfileForPlayer = {
       ...(dbProfile || { id: String(playerId) }),
@@ -2855,7 +2890,7 @@
     const assocKey = profile ? String(profile.assosiation || profile.association || "") : "";
     const assoc = resolveAssociationMeta(assocKey);
     const isTeamCaptain = profile && toBool(profile.team_captain);
-    const avatar = bga.avatar || "";
+    const avatar = buildBgaAvatarUrl(playerId, bga.avatar || dbProfile?.avatar);
     const nick = profile ? String(profile.bga_nickname || profile.bga_name || profile.nickname || "") : "";
     const realName = profile && profile.name ? String(profile.name) : "";
     const rating = profile && profile.gg_elo ? String(profile.gg_elo) : "";

@@ -376,6 +376,121 @@
     line-height: 1.35;
   }
 
+  .challenge-availability-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .challenge-availability-dialog {
+    width: min(100%, 860px);
+    display: grid;
+    gap: 12px;
+  }
+
+  .challenge-availability-intro {
+    margin: 0;
+    color: #4b5563;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .challenge-availability-calendar {
+    display: grid;
+    gap: 10px;
+  }
+
+  .challenge-availability-day {
+    display: grid;
+    gap: 6px;
+  }
+
+  .challenge-availability-day-title {
+    color: #223040;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .challenge-availability-hours {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+    gap: 4px;
+    padding: 2px 1px;
+  }
+
+  .challenge-availability-hour {
+    appearance: none;
+    min-height: 34px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #344054;
+    padding: 4px 3px;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: crosshair;
+    user-select: none;
+    touch-action: none;
+  }
+
+  .challenge-availability-hour:hover,
+  .challenge-availability-hour.is-preview {
+    border-color: #7cb3de;
+    background: #edf6ff;
+  }
+
+  .challenge-availability-hour.is-selected-1 {
+    border-color: #63b98c;
+    background: #dff3e8;
+    color: #12633e;
+  }
+
+  .challenge-availability-hour.is-selected-2 {
+    border-color: #8d75cc;
+    background: #eee9fb;
+    color: #523994;
+  }
+
+  .challenge-availability-hour.is-selected-3 {
+    border-color: #d69a48;
+    background: #fff2db;
+    color: #84520f;
+  }
+
+  .challenge-availability-selected {
+    display: grid;
+    gap: 6px;
+  }
+
+  .challenge-availability-range {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 31px;
+    padding: 5px 7px 5px 10px;
+    border: 1px solid #d8dee8;
+    border-radius: 4px;
+    background: #f8fafc;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .challenge-opponent-availability {
+    display: grid;
+    gap: 2px;
+    color: #475467;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .challenge-opponent-availability-title {
+    color: #667085;
+    font-weight: 600;
+  }
+
   .challenge-period-stack {
     display: grid;
     gap: 8px;
@@ -1712,6 +1827,10 @@
       padding: 14px;
     }
 
+    .challenge-availability-dialog {
+      padding: 12px;
+    }
+
     .challenge-request-row input[type="datetime-local"] {
       padding-right: 36px;
       color: #2f3947;
@@ -2439,7 +2558,7 @@
     };
 
     const ggElo = parseFiniteNumber(player?.gg_elo);
-    row.appendChild(createRating([ggElo === null ? "-" : String(Math.trunc(ggElo))], "GG Elo"));
+    row.appendChild(createRating([ggElo === null ? "1500 (new)" : String(Math.trunc(ggElo))], "GG Elo"));
 
     const bgaElo = parseFiniteNumber(player?.bga_elo);
     row.appendChild(createRating([bgaElo === null ? "-" : String(Math.trunc(bgaElo))], "BGA Elo"));
@@ -3071,7 +3190,7 @@
 
   function formatGgEloLine(opponent) {
     const ggEloNumber = parseFiniteNumber(opponent?.gg_elo);
-    if (ggEloNumber === null) return "-";
+    if (ggEloNumber === null) return "1500 (new)";
     const ggElo = String(Math.trunc(ggEloNumber));
     const rank = parseFiniteNumber(opponent?.gg_rank);
     return rank === null ? ggElo : `${ggElo} (#${Math.trunc(rank)})`;
@@ -3189,24 +3308,41 @@
     return bgaPlayersPromise;
   }
 
-  function buildBgaAvatarUrl(playerId) {
-    const id = String(playerId || "").trim();
-    if (!/^\d+$/.test(id)) return "";
-    const numericId = Number(id);
-    if (!Number.isFinite(numericId)) return "";
-    const billionBucket = Math.floor(numericId / 1000000000);
-    const millionBucket = Math.floor(numericId / 1000000);
-    const thousandBucket = Math.floor(numericId / 1000);
-    return `https://x.boardgamearena.net/data/avatar/${billionBucket}/${millionBucket}/${thousandBucket}/${id}_184.jpg`;
+  function buildBgaAvatarUrl(playerId, avatar) {
+    const playerIdText = String(playerId || "").trim();
+    const avatarText = String(avatar || "").trim();
+    if (!avatarText) return "";
+
+    if (/^https?:\/\//i.test(avatarText)) {
+      return avatarText;
+    }
+
+    if (avatarText === "x00000") {
+      return "https://x.boardgamearena.net/data/avatar/default_184.jpg";
+    }
+
+    const defaultMatch = avatarText.match(/^_def_(\d+)$/);
+    if (defaultMatch) {
+      const defaultAvatarId = defaultMatch[1].padStart(4, "0");
+      return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultAvatarId}.jpg`;
+    }
+
+    if (!playerIdText) return "";
+    if (!/^\d+$/.test(playerIdText)) return "";
+
+    const playerIdNumber = Number(playerIdText);
+    if (!Number.isFinite(playerIdNumber)) return "";
+
+    const firstFolder = String(Math.floor(playerIdNumber / 100000000));
+    const secondFolder = String(Math.floor(playerIdNumber / 1000000));
+    const thirdFolder = String(Math.floor(playerIdNumber / 1000));
+
+    return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
   }
 
   function getUsableAvatarUrl(value, playerId) {
     const raw = String(value || "").trim();
-    if (!raw) return "";
-    if (/^https?:\/\//i.test(raw)) return raw;
-    if (raw.startsWith("//")) return `https:${raw}`;
-    if (raw.startsWith("/")) return "";
-    return buildBgaAvatarUrl(playerId);
+    return buildBgaAvatarUrl(playerId, raw);
   }
 
   function mergeOpponentRating(opponent, ratingsById) {
@@ -4092,6 +4228,23 @@
     association.textContent = String(opponent?.association?.name || opponent?.association?.id || "No association");
     country.appendChild(association);
 
+    const availability = Array.isArray(opponent?.availability) ? opponent.availability : [];
+    if (availability.length) {
+      const timezone = getPlayerTimezone(period?.player_time_context);
+      const availabilityEl = document.createElement("div");
+      availabilityEl.className = "challenge-opponent-availability";
+      const availabilityTitle = document.createElement("div");
+      availabilityTitle.className = "challenge-opponent-availability-title";
+      availabilityTitle.textContent = `Can play (${timezone}):`;
+      availabilityEl.appendChild(availabilityTitle);
+      availability.forEach((range) => {
+        const line = document.createElement("div");
+        line.textContent = formatChallengeAvailabilityRange(range?.start_utc, range?.end_utc, timezone);
+        availabilityEl.appendChild(line);
+      });
+      main.appendChild(availabilityEl);
+    }
+
     const ratings = document.createElement("div");
     ratings.className = "challenge-opponent-ratings";
     row.appendChild(ratings);
@@ -4639,6 +4792,314 @@
     ].some((request) => String(request?.status || "").trim() === "pending");
   }
 
+  function getChallengeLocalDateKey(value, timezone) {
+    const date = value instanceof Date ? value : parseUtcDate(value);
+    if (!date) return "";
+    try {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone || "UTC",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(date);
+      const part = (type) => parts.find((item) => item.type === type)?.value || "";
+      return `${part("year")}-${part("month")}-${part("day")}`;
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function formatChallengeAvailabilityDay(value, timezone) {
+    const date = value instanceof Date ? value : parseUtcDate(value);
+    if (!date) return "";
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone || "UTC",
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    }).format(date);
+  }
+
+  function formatChallengeAvailabilityClock(value, timezone) {
+    const date = value instanceof Date ? value : parseUtcDate(value);
+    if (!date) return "";
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone || "UTC",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(date);
+    const part = (type) => parts.find((item) => item.type === type)?.value || "";
+    return `${part("hour")}:${part("minute")}`;
+  }
+
+  function formatChallengeAvailabilityRange(startValue, endValue, timezone) {
+    const start = startValue instanceof Date ? startValue : parseUtcDate(startValue);
+    const end = endValue instanceof Date ? endValue : parseUtcDate(endValue);
+    if (!start || !end) return "-";
+    const dateFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone || "UTC",
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    const startText = `${dateFormatter.format(start)}, ${formatChallengeAvailabilityClock(start, timezone)}`;
+    const endClock = formatChallengeAvailabilityClock(end, timezone);
+    if (getChallengeLocalDateKey(start, timezone) === getChallengeLocalDateKey(end, timezone)) {
+      return `${startText} – ${endClock}`;
+    }
+    return `${startText} – ${dateFormatter.format(end)}, ${endClock}`;
+  }
+
+  function buildChallengeAvailabilitySlots(period, timezone) {
+    const start = parseUtcDate(period?.play_starts_at);
+    const end = parseUtcDate(period?.play_ends_at);
+    if (!start || !end) return [];
+    const hourMs = 60 * 60 * 1000;
+    const minuteMs = 60 * 1000;
+    const slots = [];
+    let firstWholeHour = Math.ceil(start.getTime() / minuteMs) * minuteMs;
+    while (
+      firstWholeHour < end.getTime()
+      && !formatChallengeAvailabilityClock(new Date(firstWholeHour), timezone).endsWith(":00")
+    ) {
+      firstWholeHour += minuteMs;
+    }
+    for (let time = firstWholeHour; time + hourMs <= end.getTime(); time += hourMs) {
+      const slotStart = new Date(time);
+      const slotEnd = new Date(time + hourMs);
+      const crossesDay = getChallengeLocalDateKey(slotStart, timezone) !== getChallengeLocalDateKey(slotEnd, timezone);
+      slots.push({
+        index: slots.length,
+        start: slotStart,
+        end: slotEnd,
+        dayKey: getChallengeLocalDateKey(slotStart, timezone),
+        dayLabel: formatChallengeAvailabilityDay(slotStart, timezone),
+        label: `${formatChallengeAvailabilityClock(slotStart, timezone)}–${crossesDay ? "24:00" : formatChallengeAvailabilityClock(slotEnd, timezone)}`,
+      });
+    }
+    return slots;
+  }
+
+  function openChallengeAvailabilityDialog(period, onSaved) {
+    const timezone = getPlayerTimezone(period?.player_time_context);
+    const slots = buildChallengeAvailabilitySlots(period, timezone);
+    const overlay = document.createElement("div");
+    overlay.className = "challenge-modal-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "challenge-modal challenge-availability-dialog";
+    overlay.appendChild(dialog);
+
+    const title = document.createElement("div");
+    title.className = "challenge-request-title";
+    title.textContent = "When can you play?";
+    dialog.appendChild(title);
+
+    const intro = document.createElement("p");
+    intro.className = "challenge-availability-intro";
+    intro.textContent = `Drag across whole-hour cells to select up to 3 playing periods. Times are shown in ${timezone}.`;
+    dialog.appendChild(intro);
+
+    const calendar = document.createElement("div");
+    calendar.className = "challenge-availability-calendar";
+    dialog.appendChild(calendar);
+
+    const selectedWrap = document.createElement("div");
+    selectedWrap.className = "challenge-availability-selected";
+    dialog.appendChild(selectedWrap);
+
+    const message = document.createElement("div");
+    message.className = "challenge-request-message";
+    dialog.appendChild(message);
+
+    const actions = document.createElement("div");
+    actions.className = "challenge-info-actions";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "challenge-btn challenge-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "challenge-btn challenge-btn-primary";
+    saveBtn.textContent = "Save playing times";
+    actions.appendChild(cancelBtn);
+    actions.appendChild(saveBtn);
+    dialog.appendChild(actions);
+
+    const slotButtons = [];
+    let ranges = (Array.isArray(period?.availability) ? period.availability : [])
+      .map((range) => {
+        const startMs = parseUtcDate(range?.start_utc)?.getTime();
+        const endMs = parseUtcDate(range?.end_utc)?.getTime();
+        const startIndex = slots.findIndex((slot) => slot.start.getTime() === startMs);
+        const endSlotIndex = slots.findIndex((slot) => slot.end.getTime() === endMs);
+        return startIndex >= 0 && endSlotIndex >= startIndex
+          ? { start: startIndex, end: endSlotIndex + 1 }
+          : null;
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+    let dragStart = null;
+    let dragEnd = null;
+
+    const setMessage = (text, tone) => {
+      message.className = `challenge-request-message${tone ? ` is-${tone}` : ""}`;
+      message.textContent = text || "";
+    };
+    const getPreview = () => dragStart === null || dragEnd === null
+      ? null
+      : { start: Math.min(dragStart, dragEnd), end: Math.max(dragStart, dragEnd) + 1 };
+    const rangesOverlap = (left, right) => left.start < right.end && right.start < left.end;
+
+    const renderSelection = () => {
+      const preview = getPreview();
+      slotButtons.forEach((button, index) => {
+        button.classList.remove("is-selected-1", "is-selected-2", "is-selected-3", "is-preview");
+        ranges.forEach((range, rangeIndex) => {
+          if (index >= range.start && index < range.end) button.classList.add(`is-selected-${rangeIndex + 1}`);
+        });
+        if (preview && index >= preview.start && index < preview.end) button.classList.add("is-preview");
+      });
+
+      selectedWrap.innerHTML = "";
+      if (!ranges.length) {
+        const empty = document.createElement("div");
+        empty.className = "challenge-opponents-state";
+        empty.textContent = "No playing periods selected yet.";
+        selectedWrap.appendChild(empty);
+        return;
+      }
+      ranges.forEach((range, index) => {
+        const row = document.createElement("div");
+        row.className = "challenge-availability-range";
+        const text = document.createElement("span");
+        text.textContent = `${index + 1}. ${formatChallengeAvailabilityRange(slots[range.start].start, slots[range.end - 1].end, timezone)}`;
+        row.appendChild(text);
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "challenge-btn challenge-btn-small challenge-btn-danger";
+        removeBtn.textContent = "Remove";
+        removeBtn.addEventListener("click", () => {
+          ranges.splice(index, 1);
+          setMessage("", "");
+          renderSelection();
+        });
+        row.appendChild(removeBtn);
+        selectedWrap.appendChild(row);
+      });
+    };
+
+    const dayGroups = [];
+    slots.forEach((slot) => {
+      let group = dayGroups[dayGroups.length - 1];
+      if (!group || group.key !== slot.dayKey) {
+        group = { key: slot.dayKey, label: slot.dayLabel, slots: [] };
+        dayGroups.push(group);
+      }
+      group.slots.push(slot);
+    });
+    dayGroups.forEach((group) => {
+      const day = document.createElement("div");
+      day.className = "challenge-availability-day";
+      const dayTitle = document.createElement("div");
+      dayTitle.className = "challenge-availability-day-title";
+      dayTitle.textContent = group.label;
+      day.appendChild(dayTitle);
+      const hours = document.createElement("div");
+      hours.className = "challenge-availability-hours";
+      group.slots.forEach((slot) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "challenge-availability-hour";
+        button.dataset.slotIndex = String(slot.index);
+        button.textContent = slot.label;
+        button.addEventListener("pointerdown", (event) => {
+          if (event.button !== undefined && event.button !== 0) return;
+          event.preventDefault();
+          dragStart = slot.index;
+          dragEnd = slot.index;
+          setMessage("", "");
+          renderSelection();
+        });
+        slotButtons[slot.index] = button;
+        hours.appendChild(button);
+      });
+      day.appendChild(hours);
+      calendar.appendChild(day);
+    });
+
+    const onPointerMove = (event) => {
+      if (dragStart === null) return;
+      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.("[data-slot-index]");
+      if (!target || !dialog.contains(target)) return;
+      const nextIndex = Number(target.dataset.slotIndex);
+      if (Number.isInteger(nextIndex) && nextIndex !== dragEnd) {
+        dragEnd = nextIndex;
+        renderSelection();
+      }
+    };
+    const onPointerUp = () => {
+      if (dragStart === null) return;
+      const nextRange = getPreview();
+      dragStart = null;
+      dragEnd = null;
+      if (!nextRange) return;
+      if (ranges.length >= 3) {
+        setMessage("You can select up to 3 playing periods.", "error");
+      } else if (ranges.some((range) => rangesOverlap(range, nextRange))) {
+        setMessage("Playing periods cannot overlap. Remove an existing period first.", "error");
+      } else {
+        ranges.push(nextRange);
+        ranges.sort((left, right) => left.start - right.start);
+      }
+      renderSelection();
+    };
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+
+    const closeModal = () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      overlay.remove();
+    };
+    cancelBtn.addEventListener("click", closeModal);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal();
+    });
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      cancelBtn.disabled = true;
+      setMessage("Saving...", "");
+      try {
+        const availability = ranges.map((range) => ({
+          start_utc: slots[range.start].start.toISOString(),
+          end_utc: slots[range.end - 1].end.toISOString(),
+        }));
+        const data = await apiJson(`${CHALLENGE_PERIODS_URL}/${encodeURIComponent(String(period?.id || ""))}/player-availability`, {
+          method: "PATCH",
+          body: JSON.stringify({ availability }),
+        });
+        period.availability = Array.isArray(data?.period_player?.availability)
+          ? data.period_player.availability
+          : availability;
+        if (typeof onSaved === "function") onSaved(period.availability);
+        refreshOpponentPanel(period?.id);
+        closeModal();
+      } catch (error) {
+        saveBtn.disabled = false;
+        cancelBtn.disabled = false;
+        setMessage(error?.message || "Failed to save playing periods.", "error");
+      }
+    });
+
+    if (!slots.length) {
+      setMessage("This Challenge period has no complete hourly slots.", "error");
+      saveBtn.disabled = true;
+    }
+    renderSelection();
+    document.body.appendChild(overlay);
+  }
+
   function createStatusDropdown(period, initialStatus) {
     let currentStatus = normalizeStatus(initialStatus);
     const periodAllowsManualStatus = ["planning_open", "active"].includes(String(period?.status || "").trim());
@@ -4701,6 +5162,18 @@
     noteEl.className = "challenge-status-note";
     card.appendChild(noteEl);
 
+    const availabilityBtn = document.createElement("button");
+    availabilityBtn.type = "button";
+    availabilityBtn.className = "challenge-btn challenge-btn-secondary challenge-availability-btn";
+    card.appendChild(availabilityBtn);
+    const updateAvailabilityButton = () => {
+      const count = Array.isArray(period?.availability) ? period.availability.length : 0;
+      availabilityBtn.textContent = count ? `Edit playing times (${count})` : "Set playing times";
+    };
+    availabilityBtn.addEventListener("click", () => {
+      requireChallengeAccess(() => openChallengeAvailabilityDialog(period, updateAvailabilityButton));
+    });
+
     const close = () => {
       btnEl.classList.remove("open");
       btnEl.setAttribute("aria-expanded", "false");
@@ -4738,6 +5211,8 @@
         : String(period?.status || "") === "draft"
           ? "Status selection will open when the planning period starts."
           : "Status changes are closed for this period.");
+      availabilityBtn.hidden = statusValue !== "available" || !periodAllowsManualStatus;
+      updateAvailabilityButton();
       optionEls.forEach((optionEl) => {
         const active = String(optionEl.dataset.value || "") === statusValue;
         optionEl.classList.toggle("active", active);

@@ -3750,6 +3750,12 @@ function ensureChallengesSchema() {
       player_id TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'not_selected',
       challenge_duel_id TEXT,
+      availability_start_1_utc TEXT,
+      availability_end_1_utc TEXT,
+      availability_start_2_utc TEXT,
+      availability_end_2_utc TEXT,
+      availability_start_3_utc TEXT,
+      availability_end_3_utc TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (period_id, player_id),
@@ -3773,6 +3779,16 @@ function ensureChallengesSchema() {
       console.error("Failed to ensure challenge_period_players schema", createErr);
       return;
     }
+    db.all("PRAGMA table_info(challenge_period_players)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect challenge_period_players schema", pragmaErr);
+        return;
+      }
+      [1, 2, 3].forEach((index) => {
+        addColumnIfMissing(columns || [], "challenge_period_players", `availability_start_${index}_utc`, "TEXT");
+        addColumnIfMissing(columns || [], "challenge_period_players", `availability_end_${index}_utc`, "TEXT");
+      });
+    });
     db.run(
       "CREATE INDEX IF NOT EXISTS idx_challenge_period_players_status ON challenge_period_players(period_id, status)",
       (indexErr) => {
@@ -6786,6 +6802,7 @@ function mapChallengeOpponent(row) {
     bga_elo: normalizeIntegerOrNull(row?.bga_elo),
     period_status: normalizeChallengePlayerPeriodStatus(row?.period_player_status),
     period_status_updated_at: normalizeNullableText(row?.period_status_updated_at),
+    availability: mapChallengeAvailability(row),
     association: {
       id: associationId,
       name: associationName,
@@ -6797,6 +6814,80 @@ function mapChallengeOpponent(row) {
     pending_request_id: normalizeNullableText(row?.pending_request_id),
     is_current_player: Number(row?.is_current_player) === 1,
     is_same_association: Number(row?.is_same_association) === 1,
+  };
+}
+
+function mapChallengeAvailability(row) {
+  return [1, 2, 3]
+    .map((index) => {
+      const startUtc = normalizeNullableText(row?.[`availability_start_${index}_utc`]);
+      const endUtc = normalizeNullableText(row?.[`availability_end_${index}_utc`]);
+      return startUtc && endUtc ? { start_utc: startUtc, end_utc: endUtc } : null;
+    })
+    .filter(Boolean);
+}
+
+function isChallengeWholeHourInTimezone(timestamp, timezone) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime()) || date.getUTCMilliseconds() !== 0) return false;
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone || "UTC",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).formatToParts(date);
+    const part = (type) => parts.find((item) => item.type === type)?.value || "";
+    return part("minute") === "00" && part("second") === "00";
+  } catch (_error) {
+    return false;
+  }
+}
+
+function normalizeChallengeAvailability(value, period, timezone) {
+  if (!Array.isArray(value)) {
+    return { error: "Availability must be an array" };
+  }
+  if (value.length > 3) {
+    return { error: "You can select up to 3 playing periods" };
+  }
+
+  const periodStart = Date.parse(String(period?.play_starts_at || ""));
+  const periodEnd = Date.parse(String(period?.play_ends_at || ""));
+  const ranges = [];
+  for (const item of value) {
+    const startRaw = item?.start_utc ?? item?.startUtc;
+    const endRaw = item?.end_utc ?? item?.endUtc;
+    const start = Date.parse(String(startRaw || ""));
+    const end = Date.parse(String(endRaw || ""));
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      return { error: "Each playing period must have a valid start and end time" };
+    }
+    if (start < periodStart || end > periodEnd || start >= end) {
+      return { error: "Playing periods must be within the Challenge playing window" };
+    }
+    if ((end - start) % (60 * 60 * 1000) !== 0) {
+      return { error: "Playing periods must use whole-hour durations" };
+    }
+    if (!isChallengeWholeHourInTimezone(start, timezone) || !isChallengeWholeHourInTimezone(end, timezone)) {
+      return { error: "Playing periods must start and end on a whole hour" };
+    }
+    ranges.push({
+      start_utc: new Date(start).toISOString(),
+      end_utc: new Date(end).toISOString(),
+      start,
+      end,
+    });
+  }
+
+  ranges.sort((left, right) => left.start - right.start || left.end - right.end);
+  for (let index = 1; index < ranges.length; index += 1) {
+    if (ranges[index].start < ranges[index - 1].end) {
+      return { error: "Playing periods cannot overlap" };
+    }
+  }
+  return {
+    availability: ranges.map(({ start_utc, end_utc }) => ({ start_utc, end_utc })),
   };
 }
 
@@ -6832,6 +6923,12 @@ async function loadChallengePeriodPlayerStatus(periodId, playerId) {
         player_id,
         status,
         challenge_duel_id,
+        availability_start_1_utc,
+        availability_end_1_utc,
+        availability_start_2_utc,
+        availability_end_2_utc,
+        availability_start_3_utc,
+        availability_end_3_utc,
         created_at,
         updated_at
       FROM challenge_period_players
@@ -7053,6 +7150,7 @@ function mapChallengePeriodForPlayer(row) {
     has_sent_request: Number(row.has_sent_request) === 1,
     challenge_duel_id: row.challenge_duel_id || null,
     challenge_duel_status: duelStatus || null,
+    availability: mapChallengeAvailability(row),
   };
 }
 
@@ -7125,6 +7223,12 @@ app.get("/challenge-periods/player", async (req, res) => {
             LIMIT 1
           ) AS has_sent_request,
           cpp.challenge_duel_id,
+          cpp.availability_start_1_utc,
+          cpp.availability_end_1_utc,
+          cpp.availability_start_2_utc,
+          cpp.availability_end_2_utc,
+          cpp.availability_start_3_utc,
+          cpp.availability_end_3_utc,
           d.status AS duel_status
         FROM challenge_periods cp
         LEFT JOIN challenge_period_players cpp
@@ -7202,6 +7306,12 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
           cpp.status AS period_player_status,
           cpp.updated_at AS period_status_updated_at,
           cpp.challenge_duel_id,
+          cpp.availability_start_1_utc,
+          cpp.availability_end_1_utc,
+          cpp.availability_start_2_utc,
+          cpp.availability_end_2_utc,
+          cpp.availability_start_3_utc,
+          cpp.availability_end_3_utc,
           COALESCE(NULLIF(trim(t.id), ''), NULLIF(trim(a.code), ''), NULLIF(trim(p.association), '')) AS association_id,
           COALESCE(NULLIF(trim(t.name), ''), NULLIF(trim(a.name), ''), NULLIF(trim(p.association), '')) AS association_name,
           COALESCE(NULLIF(trim(t.flag), ''), NULLIF(trim(t.logo), ''), NULLIF(trim(a.flag), '')) AS association_flag,
@@ -8688,6 +8798,90 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
     }
     console.error("Failed to accept Challenge request", error);
     return res.status(500).json({ ok: false, message: "Failed to accept Challenge request" });
+  }
+});
+
+app.patch("/challenge-periods/:id/player-availability", requireAuthenticated, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const playerId = normalizeNullableText(req.user?.player_id);
+
+  if (!playerId) {
+    return res.status(403).json({
+      ok: false,
+      code: "profile_required",
+      message: "Linked player profile is required",
+    });
+  }
+  if (!periodId) {
+    return res.status(400).json({ ok: false, message: "Invalid Challenge period id" });
+  }
+
+  try {
+    const [period, beforeRow, timeContext] = await Promise.all([
+      loadChallengePeriodById(periodId),
+      loadChallengePeriodPlayerStatus(periodId, playerId),
+      loadChallengePlayerTimeContext(playerId),
+    ]);
+    if (!period || !["planning_open", "active"].includes(period.status)) {
+      return res.status(404).json({ ok: false, message: "Editable Challenge period not found" });
+    }
+    if (normalizeChallengePlayerPeriodStatus(beforeRow?.status) !== "available") {
+      return res.status(409).json({ ok: false, message: "Set your period status to Open to match first" });
+    }
+
+    const normalized = normalizeChallengeAvailability(req.body?.availability, period, timeContext?.timezone || "UTC");
+    if (normalized.error) {
+      return res.status(400).json({ ok: false, message: normalized.error });
+    }
+
+    const values = [];
+    for (let index = 0; index < 3; index += 1) {
+      values.push(
+        normalized.availability[index]?.start_utc || null,
+        normalized.availability[index]?.end_utc || null
+      );
+    }
+    const updateResult = await dbRunAsync(
+      `
+        UPDATE challenge_period_players
+        SET
+          availability_start_1_utc = ?,
+          availability_end_1_utc = ?,
+          availability_start_2_utc = ?,
+          availability_end_2_utc = ?,
+          availability_start_3_utc = ?,
+          availability_end_3_utc = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE period_id = ?
+          AND player_id = ?
+          AND status = 'available'
+      `,
+      [...values, periodId, playerId]
+    );
+    if (!Number(updateResult?.changes)) {
+      return res.status(409).json({ ok: false, message: "Your period status is no longer Open to match" });
+    }
+
+    const afterRow = await loadChallengePeriodPlayerStatus(periodId, playerId);
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_period_player.availability_updated",
+      entity_type: "challenge_period_player",
+      action: "update",
+      record_id: `${periodId}:${playerId}`,
+      changes: buildAuditChanges(beforeRow, afterRow),
+      metadata: { period_id: periodId, player_id: playerId },
+    });
+    return res.json({
+      ok: true,
+      period_player: {
+        ...afterRow,
+        availability: mapChallengeAvailability(afterRow),
+      },
+    });
+  } catch (error) {
+    console.error("Failed to update Challenge player availability", error);
+    return res.status(500).json({ ok: false, message: "Failed to update playing periods" });
   }
 });
 
