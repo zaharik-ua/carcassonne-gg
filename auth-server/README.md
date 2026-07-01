@@ -186,7 +186,43 @@ sudo systemctl status update-player-elo-daily.timer
 sudo systemctl status update-player-elo-missing.timer
 ```
 
-## 9) Регулярний фікс статусів матчів і дуелей
+## 9) Оновлення GG Elo з публічного JSON
+
+При старті `auth-server` таблиця `profiles` автоматично отримує поля:
+
+- `gg_elo REAL`
+- `gg_elo_updated_at TEXT`
+
+Ручний запуск синхронізації:
+
+```bash
+cd auth-server
+python3 run_update_profile_gg_elo.py
+```
+
+Або через shell-обгортку:
+
+```bash
+cd auth-server
+./scripts/run_update_profile_gg_elo.sh
+```
+
+Скрипт читає `gg_profiles` з
+`https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json`,
+зіставляє `gg_profiles[].id` (або `profile_id`) з `profiles.id` і для профілів
+із числовим GG Elo оновлює тільки `gg_elo` та `gg_elo_updated_at`.
+`updated_by`, `updated_at` та `audit_trail` не змінюються.
+
+Перевірка джерела й зіставлення без оновлення рядків:
+
+```bash
+python3 run_update_profile_gg_elo.py --dry-run
+```
+
+Параметри `--db-path`, `--source-url` і `--timeout` дозволяють використати той
+самий entry point для майбутнього cron/systemd-запуску.
+
+## 10) Регулярний фікс статусів матчів і дуелей
 
 Є окремий maintenance-скрипт:
 
@@ -240,7 +276,7 @@ sudo systemctl enable --now fix-matches-and-duels.timer
 sudo systemctl status fix-matches-and-duels.timer
 ```
 
-## 10) Прибирання тимчасових каталогів Chromium
+## 11) Прибирання тимчасових каталогів Chromium
 
 Якщо headless Chromium аварійно завершується, у `/tmp` можуть залишатися каталоги виду:
 
@@ -276,7 +312,7 @@ sudo systemctl start cleanup-chrome-tmp.service
 journalctl -u cleanup-chrome-tmp.service -n 100 --no-pager
 ```
 
-## 11) WTCOC sync probe
+## 12) WTCOC sync probe
 
 Для WTCOC є окремий ручний CLI-скрипт, який поки не записує дані в БД, а робить live fetch із WTCOC API та показує:
 
@@ -316,7 +352,7 @@ python3 run_sync_wtcoc_matches.py --db-path ./data/auth.sqlite --tournament-id W
 python3 run_sync_wtcoc_matches.py --db-path ./data/auth.sqlite --tournament-id WTCOC-2026 --apply
 ```
 
-## 12) Telegram alerts for server health
+## 13) Telegram alerts for server health
 
 У репозиторії є готовий health-check, який надсилає Telegram alerts для:
 

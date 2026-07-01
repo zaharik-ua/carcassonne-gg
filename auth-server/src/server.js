@@ -3018,6 +3018,10 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         instagram TEXT,
         contact_email TEXT,
         avatar TEXT,
+        bga_elo INTEGER,
+        bga_elo_updated_at TEXT,
+        gg_elo REAL,
+        gg_elo_updated_at TEXT,
         id TEXT,
         created_by TEXT,
         updated_by TEXT,
@@ -3041,6 +3045,10 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         instagram,
         contact_email,
         avatar,
+        bga_elo,
+        bga_elo_updated_at,
+        gg_elo,
+        gg_elo_updated_at,
         id,
         created_by,
         updated_by,
@@ -3064,6 +3072,10 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         instagram,
         contact_email,
         avatar,
+        bga_elo,
+        bga_elo_updated_at,
+        gg_elo,
+        gg_elo_updated_at,
         id,
         created_by,
         updated_by,
@@ -3200,6 +3212,8 @@ function ensureProfilesSchema() {
       addColumnIfMissing(currentColumns, "profiles", "avatar", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "bga_elo", "INTEGER");
       addColumnIfMissing(currentColumns, "profiles", "bga_elo_updated_at", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "gg_elo", "REAL");
+      addColumnIfMissing(currentColumns, "profiles", "gg_elo_updated_at", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "created_by", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "updated_by", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "deleted_by", "TEXT");
@@ -5290,6 +5304,10 @@ db.serialize(() => {
               instagram TEXT,
               contact_email TEXT,
               avatar TEXT,
+              bga_elo INTEGER,
+              bga_elo_updated_at TEXT,
+              gg_elo REAL,
+              gg_elo_updated_at TEXT,
               id TEXT,
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
