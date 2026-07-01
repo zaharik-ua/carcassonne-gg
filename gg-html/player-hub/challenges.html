@@ -2829,7 +2829,7 @@
     };
 
     const ggElo = parseFiniteNumber(player?.gg_elo);
-    row.appendChild(createRating([ggElo === null ? "1500 (new)" : String(Math.trunc(ggElo))], "GG Elo"));
+    row.appendChild(createRating([ggElo === null ? "unrated (new)" : String(Math.trunc(ggElo))], "GG Elo"));
 
     const bgaElo = parseFiniteNumber(player?.bga_elo);
     row.appendChild(createRating([bgaElo === null ? "-" : String(Math.trunc(bgaElo))], "BGA Elo"));
@@ -3461,7 +3461,7 @@
 
   function formatGgEloLine(opponent) {
     const ggEloNumber = parseFiniteNumber(opponent?.gg_elo);
-    if (ggEloNumber === null) return "1500 (new)";
+    if (ggEloNumber === null) return "unrated (new)";
     const ggElo = String(Math.trunc(ggEloNumber));
     const rank = parseFiniteNumber(opponent?.gg_rank);
     return rank === null ? ggElo : `${ggElo} (#${Math.trunc(rank)})`;
