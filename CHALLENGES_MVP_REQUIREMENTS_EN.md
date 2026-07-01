@@ -352,13 +352,20 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-ADM-001** Admin can see the list of Challenges periods.
 - [ ] **CH-ADM-002** Administrator can create and edit periods.
 - [ ] **CH-ADM-003** Admin can change period status according to allowed transitions.
-- [ ] **CH-ADM-004** The administrator sees all requests of the period, including terminal statuses.
+- [x] **CH-ADM-004** The administrator sees all requests of the period, including terminal statuses.
 - [ ] **CH-ADM-005** Admin can see the status of each player in the selected period.
 - [ ] **CH-ADM-006** Admin can manually create a Challenge match.
 - [ ] **CH-ADM-007** Admin can edit Challenge match.
 - [ ] **CH-ADM-008** Admin can transfer Challenge match without player approval flow.
 - [ ] **CH-ADM-009** Admin can cancel Challenge match.
 - [ ] **CH-ADM-010** Admin can adjust result after `result_review_ends_at`.
+- [x] **CH-ADM-011** Above all blocks on the Challenges page, a global admin sees an `Admin mode` toggle; the toggle is not displayed to other users.
+- [x] **CH-ADM-012** When `Admin mode` is enabled, every open Challenge period shows all requests from all players rather than only requests involving the current user.
+- [x] **CH-ADM-013** When `Admin mode` is enabled, all Challenge matches in the period are shown, including a duel created by an administrator without a `challenge_request_id`.
+- [x] **CH-ADM-014** After `Admin mode` is enabled, a `Removed items` toggle appears next to it; enabling it adds hidden requests with `hidden_by_creator_at IS NOT NULL` and soft-deleted duels with `deleted_at IS NOT NULL` to the lists.
+- [x] **CH-ADM-015** Requests and matches belonging to other players are read-only in `Admin mode`, without player actions for accepting, declining, rescheduling, cancelling, or removing them.
+- [x] **CH-ADM-016** The backend permits the `admin_mode=1` and `include_removed=1` parameters only for global admins; requests for these modes by authenticated non-admins return `403` and do not expose other players' or removed records.
+- [x] **CH-ADM-017** Outside `Admin mode`, the API and UI retain player-scoped filtering, and hidden requests and soft-deleted duels are not displayed.
 
 ## 18. Audit log
 
@@ -403,6 +410,7 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-E2E-017** A request that is not accepted by the suggested time can be confirmed "in fact" to `play_ends_at`; at the same time, only one duel is created, and the result is obtained through the existing functionality.
 - [x] **CH-E2E-018** A player with `available` status creates up to three non-overlapping whole-hour windows in the local calendar, saves them in UTC, edits or removes them, and another player sees those windows in their own timezone.
 - [ ] **CH-E2E-019** An unauthenticated user sees the full Challenges page preview; each of the three gated actions opens onboarding, Google sign-in does not close the main popup, a manual BGA check displays loading/error states, and after both items are complete `Start playing` closes the popup without automatically repeating the original action.
+- [ ] **CH-E2E-020** A global admin enables `Admin mode` and sees other players' requests and matches without player actions, then enables `Removed items` and additionally sees hidden requests and soft-deleted duels; a non-admin does not see the toggles and receives `403` when directly requesting the admin API parameters.
 
 ## 21. Data scheme of new DB objects
 
@@ -602,6 +610,7 @@ This section tracks large technical blocks. Detailed readiness is determined by 
 - [ ] **CH-IMP-015** End-to-end MVP validation.
 - [x] **CH-IMP-016** Player availability time windows: DB fields, API, audit, desktop/mobile calendar, and opponent display.
 - [x] **CH-IMP-017** Public Challenges preview and sign-in/BGA-verification onboarding before mutating actions.
+- [x] **CH-IMP-018** Global-admin mode on the Challenges page: all requests and matches, read-only presentation, optional inclusion of soft-deleted records, and backend access control.
 
 ## 23. Outside of MVP
 
