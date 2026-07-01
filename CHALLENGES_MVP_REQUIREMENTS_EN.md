@@ -32,6 +32,8 @@ Challenges is a mode in which the player during a certain game period:
 - A challenge match is the product name of a singles series between two players. At the data level, it is stored as one `duel` and its associated `games`, without creating a team entry in `matches`.
 - For Challenge duels, the existing `duels` statuses are used, expanded only if necessary.
 - One player can play no more than one Challenge match in one period.
+- A player with `available` status may optionally specify up to three time windows during which they can both start and finish a match. These windows are informational and do not restrict request creation or the time options proposed in a request.
+- The Challenges page has a public preview mode: periods, request sections, the open-to-match player list, and action buttons are also displayed to unauthenticated users and users without a linked BGA profile. Mutating actions remain available only after sign-in and BGA account verification.
 - All dates and times are stored in UTC.
 
 ## 3. Terminology and statuses
@@ -132,9 +134,25 @@ Available statuses `duels` are marked separately from statuses to be added for C
 - [ ] **CH-PLY-011** When transferring a match to `Requested new time`, both players become `available`.
 - [x] **CH-PLY-012** Player from `match_scheduled` cannot go to `unavailable` until canceling the match.
 
+### 6.1. Player availability time windows
+
+- [x] **CH-AVL-001** A player with `available` status can save zero to three availability time windows for a specific period.
+- [x] **CH-AVL-002** Each window represents the full interval during which the player can both start and finish a match.
+- [x] **CH-AVL-003** Windows can be changed only while the period is `planning_open` or `active` and the player's status remains `available`.
+- [x] **CH-AVL-004** An empty availability array removes all saved time windows.
+- [x] **CH-AVL-005** Each window must contain valid timestamps, satisfy `start < end`, and remain fully within `play_starts_at..play_ends_at`.
+- [x] **CH-AVL-006** The start, end, and duration of each window use whole-hour boundaries in the player's association timezone.
+- [x] **CH-AVL-007** A player's time windows cannot overlap; the backend sorts them by start time before saving.
+- [x] **CH-AVL-008** Windows are stored in UTC and returned by the API as an array of `{ start_utc, end_utc }` objects.
+- [x] **CH-AVL-009** The player UI displays a calendar in the player's association timezone, blocks hours outside the period's playing window, and supports drag selection.
+- [x] **CH-AVL-010** A saved window can be selected, resized by dragging its top or bottom edge, and removed with the `×` button or the Delete/Backspace key.
+- [x] **CH-AVL-011** On mobile, the calendar provides horizontal day scrolling, compact columns, and previous/next day controls.
+- [x] **CH-AVL-012** The “Open to match” list displays an opponent's saved windows in the current player's timezone.
+- [x] **CH-AVL-013** Updates use `PATCH /challenge-periods/:id/player-availability`, revalidate the period and player statuses, and create the `challenge_period_player.availability_updated` audit event.
+
 ## 7. Available opponents and eligibility
 
-- [ ] **CH-ELG-001** Challenges actions are only available to the authorized user associated with the player profile.
+- [x] **CH-ELG-001** Challenges mutating actions can only be performed by an authenticated user associated with a verified player profile; the sections and buttons themselves may remain visible in public preview mode.
 - [ ] **CH-ELG-002** Active and inactive profiles can be participants in Challenges.
 - [ ] **CH-ELG-003** The "Open to Match" list contains players with the status `available` in the selected period.
 - [ ] **CH-ELG-004** The current player does not appear as an available opponent for himself.
@@ -152,6 +170,21 @@ Terminal statuses for re-invitation:
 - `cancelled_by_sender`;
 - `auto_cancelled`;
 - `expired`.
+
+### 7.1. Public preview and Challenges access onboarding
+
+- [x] **CH-ONB-001** An unauthenticated user and an authenticated user without a verified BGA profile can see all open Challenge periods, `Your period status`, the `Requests` / `Incoming` / `Sent` sections, the `Create request` button, the `Open to match` section, and `Invite to match` buttons; the page renders the normal UI instead of `Unauthorized` or `Linked player profile is required`.
+- [x] **CH-ONB-002** When a user without full access attempts to change `Your period status`, click `Create request`, or click `Invite to match`, no mutating request is performed and a Challenges-styled onboarding popup opens.
+- [x] **CH-ONB-003** The popup explains in clear English that scheduling a Challenge match requires signing in to carcassonne.gg and verifying a BGA account.
+- [x] **CH-ONB-004** The popup contains two sequential items: `Sign in to the site` and `Verify your BGA account`; completed items have a completed state.
+- [x] **CH-ONB-005** `Sign in with Google` opens authentication in a separate popup window. After successful sign-in, the onboarding popup remains open, refetches `/auth/me`, and lets the user continue with the second item.
+- [x] **CH-ONB-006** `Verify your BGA account` is complete when `/auth/me` returns a linked player/BGA profile ID and the profile's `Login Email`.
+- [x] **CH-ONB-007** Before verification, the second item displays its instructions immediately without an intermediate `Details` link: the user's login email with a copy button, a captains-list link, steps for the captain, a clickable `Players` label linking to `https://carcassonne.gg/player-hub/players/`, and the support email address.
+- [x] **CH-ONB-008** `Check verification` refetches the user state, displays `https://carcassonne.gg/gallery/loading-red.gif` while checking, and is disabled against repeated clicks during the request.
+- [x] **CH-ONB-009** If the BGA profile remains unverified after a manual check, the popup displays `Your BGA account is not linked yet. Please contact your association captain.` and remains open.
+- [x] **CH-ONB-010** While the popup is open, the BGA verification state is also refreshed automatically; after successful verification, the second item switches to its completed state.
+- [x] **CH-ONB-011** When both items are complete, the popup footer contains only the secondary `Start playing` button; it only closes the popup and does not automatically repeat the action that opened onboarding.
+- [x] **CH-ONB-012** `GET /challenge-periods/player` and `GET /challenge-periods/:id/eligible-opponents` support public reads, while request creation, player-status changes, and other mutating Challenge endpoints remain protected by authentication and backend eligibility checks.
 
 ## 8. Creation of an request
 
@@ -368,6 +401,8 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-E2E-015** Request expires only after passing the last offered time option.
 - [ ] **CH-E2E-016** During `active`, a player creates a request with the time of a match already played within the period, the opponent accepts it, a duel is created and results are obtained through the available functionality.
 - [ ] **CH-E2E-017** A request that is not accepted by the suggested time can be confirmed "in fact" to `play_ends_at`; at the same time, only one duel is created, and the result is obtained through the existing functionality.
+- [x] **CH-E2E-018** A player with `available` status creates up to three non-overlapping whole-hour windows in the local calendar, saves them in UTC, edits or removes them, and another player sees those windows in their own timezone.
+- [ ] **CH-E2E-019** An unauthenticated user sees the full Challenges page preview; each of the three gated actions opens onboarding, Google sign-in does not close the main popup, a manual BGA check displays loading/error states, and after both items are complete `Start playing` closes the popup without automatically repeating the original action.
 
 ## 21. Data scheme of new DB objects
 
@@ -409,6 +444,12 @@ One record stores the state of one player in one period.
 | `player_id` | `TEXT` |no| — | FK → `profiles.id`. |
 | `status` | `TEXT` |no| `'not_selected'` |`not_selected`, `available`, `unavailable`, `match_scheduled` or `played`.|
 | `challenge_duel_id` | `TEXT` |yes| `NULL` |FK → `duels.id`; the player's current confirmed or played Challenge-duel. For `Requested new time` and after cancellation - `NULL`.|
+| `availability_start_1_utc` | `TEXT` |yes| `NULL` |Start of the first availability window in UTC.|
+| `availability_end_1_utc` | `TEXT` |yes| `NULL` |End of the first availability window in UTC.|
+| `availability_start_2_utc` | `TEXT` |yes| `NULL` |Start of the second availability window in UTC.|
+| `availability_end_2_utc` | `TEXT` |yes| `NULL` |End of the second availability window in UTC.|
+| `availability_start_3_utc` | `TEXT` |yes| `NULL` |Start of the third availability window in UTC.|
+| `availability_end_3_utc` | `TEXT` |yes| `NULL` |End of the third availability window in UTC.|
 | `created_at` | `TEXT` |no| `CURRENT_TIMESTAMP` |Creation time.|
 | `updated_at` | `TEXT` |no| `CURRENT_TIMESTAMP` |Last update time.|
 
@@ -417,6 +458,7 @@ Mandatory constraints and indexes:
 - `PRIMARY KEY (period_id, player_id)`;
 - `CHECK` for allowed values ​​`status`;
 - `CHECK`, which is set to `challenge_duel_id` for `match_scheduled` and `played`, and `NULL` for other statuses;
+- each availability window is stored only as a complete start/end pair; the backend validates the three-window limit, period boundaries, whole hours, positive duration, and non-overlap;
 - index `(period_id, status)` for the list of available players;
 - accepting a match atomically sets `challenge_duel_id` to both players only if it is still `NULL`; this field is the blocking DB level of the second confirmed match in the same period.
 
@@ -534,6 +576,7 @@ For Challenge events, `entity_type` contains `challenge_period`, `challenge_requ
 - A separate result table is not needed: the result is stored in the existing `duels` and `games`.
 - A separate Challenge match object is not required: the match is stored as `duels` with `source_type = 'challenge'`.
 - A separate `challenge_request_time_options` table is not created for MVP: the three current time options are stored by `time_option_1_utc`, `time_option_2_utc` and `time_option_3_utc` fields in `challenge_requests`.
+- A separate availability-window table is not created for MVP: up to three start/end pairs are stored directly in `challenge_period_players`.
 - A separate table `challenge_notifications` is not created: Challenge notifications are stored in a universal table `notifications` with `domain = 'challenge'`.
 - `games` does not require new Challenge fields and is linked via the existing `games.duel_id`.
 - The team table `matches` is not used for Challenges.
@@ -557,6 +600,8 @@ This section tracks large technical blocks. Detailed readiness is determined by 
 - [ ] **CH-IMP-013** Background expiration/status jobs.
 - [ ] **CH-IMP-014** Automated tests of critical state transitions and race conditions.
 - [ ] **CH-IMP-015** End-to-end MVP validation.
+- [x] **CH-IMP-016** Player availability time windows: DB fields, API, audit, desktop/mobile calendar, and opponent display.
+- [x] **CH-IMP-017** Public Challenges preview and sign-in/BGA-verification onboarding before mutating actions.
 
 ## 23. Outside of MVP
 
