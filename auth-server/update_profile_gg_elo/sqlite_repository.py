@@ -21,13 +21,34 @@ class SqliteProfileGgEloRepository:
             ).fetchall()
         return {str(row["id"]).strip() for row in rows}
 
-    def update_gg_elos(self, ratings_by_id: dict[str, float]) -> int:
-        if not ratings_by_id:
-            return 0
+    def load_active_profile_ids(self) -> set[str]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT trim(COALESCE(id, '')) AS id
+                FROM profiles
+                WHERE trim(COALESCE(id, '')) <> ''
+                  AND deleted_at IS NULL
+                  AND lower(trim(COALESCE(status, ''))) = 'active'
+                """
+            ).fetchall()
+        return {str(row["id"]).strip() for row in rows}
 
+    def update_gg_elos(
+        self,
+        ratings_by_id: dict[str, float],
+        positions_by_id: dict[str, int],
+    ) -> int:
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE TRANSACTION")
             try:
+                conn.execute(
+                    """
+                    UPDATE profiles
+                    SET gg_rating_position = NULL
+                    WHERE deleted_at IS NULL
+                    """
+                )
                 updated = 0
                 for profile_id, gg_elo in ratings_by_id.items():
                     cursor = conn.execute(
@@ -35,11 +56,12 @@ class SqliteProfileGgEloRepository:
                         UPDATE profiles
                         SET
                           gg_elo = ?,
-                          gg_elo_updated_at = CURRENT_TIMESTAMP
+                          gg_elo_updated_at = CURRENT_TIMESTAMP,
+                          gg_rating_position = ?
                         WHERE trim(COALESCE(id, '')) = ?
                           AND deleted_at IS NULL
                         """,
-                        (gg_elo, profile_id),
+                        (gg_elo, positions_by_id.get(profile_id), profile_id),
                     )
                     updated += max(0, int(cursor.rowcount))
                 conn.commit()
@@ -65,7 +87,7 @@ class SqliteProfileGgEloRepository:
                 str(row["name"]).strip()
                 for row in conn.execute("PRAGMA table_info(profiles)").fetchall()
             }
-            required_columns = {"id", "deleted_at"}
+            required_columns = {"id", "status", "deleted_at"}
             missing = sorted(required_columns - columns)
             if missing:
                 raise RuntimeError(f"profiles table is missing required columns: {', '.join(missing)}")
@@ -73,4 +95,6 @@ class SqliteProfileGgEloRepository:
                 conn.execute("ALTER TABLE profiles ADD COLUMN gg_elo REAL")
             if "gg_elo_updated_at" not in columns:
                 conn.execute("ALTER TABLE profiles ADD COLUMN gg_elo_updated_at TEXT")
+            if "gg_rating_position" not in columns:
+                conn.execute("ALTER TABLE profiles ADD COLUMN gg_rating_position INTEGER")
             conn.commit()

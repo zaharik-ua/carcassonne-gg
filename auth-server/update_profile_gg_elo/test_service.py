@@ -26,6 +26,7 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
                 """
                 CREATE TABLE profiles (
                   id TEXT,
+                  status TEXT,
                   deleted_at TEXT,
                   updated_by TEXT,
                   updated_at TEXT
@@ -34,11 +35,12 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
                   entity_type TEXT
                 );
-                INSERT INTO profiles (id, deleted_at, updated_by, updated_at)
+                INSERT INTO profiles (id, status, deleted_at, updated_by, updated_at)
                 VALUES
-                  ('100', NULL, 'admin-7', '2026-01-02 03:04:05'),
-                  ('200', NULL, 'admin-8', '2026-02-03 04:05:06'),
-                  ('300', '2026-03-01 00:00:00', 'admin-9', '2026-03-01 00:00:00');
+                  ('100', 'Active', NULL, 'admin-7', '2026-01-02 03:04:05'),
+                  ('200', 'Active', NULL, 'admin-8', '2026-02-03 04:05:06'),
+                  ('250', 'Removed', NULL, 'admin-10', '2026-02-04 05:06:07'),
+                  ('300', 'Active', '2026-03-01 00:00:00', 'admin-9', '2026-03-01 00:00:00');
                 """
             )
 
@@ -53,6 +55,7 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
                 "gg_profiles": [
                     {"id": "100", "gg_elo": "1829.95"},
                     {"profile_id": "200", "gg_elo": 1700},
+                    {"id": "250", "gg_elo": "1900"},
                     {"id": "300", "gg_elo": "1600.25"},
                     {"id": "400", "gg_elo": "1500"},
                     {"id": "500", "gg_elo": None},
@@ -62,12 +65,13 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
 
         summary = service.run()
 
-        self.assertEqual(summary["matched_profiles"], 2)
-        self.assertEqual(summary["updated_profiles"], 2)
+        self.assertEqual(summary["matched_profiles"], 3)
+        self.assertEqual(summary["ranked_active_profiles"], 2)
+        self.assertEqual(summary["updated_profiles"], 3)
         with sqlite3.connect(self.db_path) as conn:
             rows = conn.execute(
                 """
-                SELECT id, gg_elo, gg_elo_updated_at, updated_by, updated_at
+                SELECT id, gg_elo, gg_elo_updated_at, gg_rating_position, updated_by, updated_at
                 FROM profiles
                 ORDER BY id
                 """
@@ -76,12 +80,16 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
 
         self.assertEqual(rows[0][1], 1829.95)
         self.assertIsNotNone(rows[0][2])
-        self.assertEqual(rows[0][3:], ("admin-7", "2026-01-02 03:04:05"))
+        self.assertEqual(rows[0][3], 1)
+        self.assertEqual(rows[0][4:], ("admin-7", "2026-01-02 03:04:05"))
         self.assertEqual(rows[1][1], 1700.0)
         self.assertIsNotNone(rows[1][2])
-        self.assertEqual(rows[1][3:], ("admin-8", "2026-02-03 04:05:06"))
-        self.assertIsNone(rows[2][1])
-        self.assertIsNone(rows[2][2])
+        self.assertEqual(rows[1][3], 2)
+        self.assertEqual(rows[1][4:], ("admin-8", "2026-02-03 04:05:06"))
+        self.assertEqual(rows[2][1], 1900.0)
+        self.assertIsNone(rows[2][3])
+        self.assertIsNone(rows[3][1])
+        self.assertIsNone(rows[3][2])
         self.assertEqual(audit_count, 0)
 
 

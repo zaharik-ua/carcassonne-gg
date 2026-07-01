@@ -3022,6 +3022,7 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         bga_elo_updated_at TEXT,
         gg_elo REAL,
         gg_elo_updated_at TEXT,
+        gg_rating_position INTEGER,
         id TEXT,
         created_by TEXT,
         updated_by TEXT,
@@ -3049,6 +3050,7 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         bga_elo_updated_at,
         gg_elo,
         gg_elo_updated_at,
+        gg_rating_position,
         id,
         created_by,
         updated_by,
@@ -3076,6 +3078,7 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         bga_elo_updated_at,
         gg_elo,
         gg_elo_updated_at,
+        gg_rating_position,
         id,
         created_by,
         updated_by,
@@ -3214,6 +3217,7 @@ function ensureProfilesSchema() {
       addColumnIfMissing(currentColumns, "profiles", "bga_elo_updated_at", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "gg_elo", "REAL");
       addColumnIfMissing(currentColumns, "profiles", "gg_elo_updated_at", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "gg_rating_position", "INTEGER");
       addColumnIfMissing(currentColumns, "profiles", "created_by", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "updated_by", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "deleted_by", "TEXT");
@@ -5308,6 +5312,7 @@ db.serialize(() => {
               bga_elo_updated_at TEXT,
               gg_elo REAL,
               gg_elo_updated_at TEXT,
+              gg_rating_position INTEGER,
               id TEXT,
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

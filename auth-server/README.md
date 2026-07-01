@@ -192,6 +192,7 @@ sudo systemctl status update-player-elo-missing.timer
 
 - `gg_elo REAL`
 - `gg_elo_updated_at TEXT`
+- `gg_rating_position INTEGER`
 
 Ручний запуск синхронізації:
 
@@ -210,7 +211,9 @@ cd auth-server
 Скрипт читає `gg_profiles` з
 `https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json`,
 зіставляє `gg_profiles[].id` (або `profile_id`) з `profiles.id` і для профілів
-із числовим GG Elo оновлює тільки `gg_elo` та `gg_elo_updated_at`.
+із числовим GG Elo оновлює тільки `gg_elo`, `gg_elo_updated_at` і
+`gg_rating_position`. Позиція рахується серед активних профілів за спаданням
+GG Elo так само, як у списку гравців; для неактивних профілів позиція `NULL`.
 `updated_by`, `updated_at` та `audit_trail` не змінюються.
 
 Перевірка джерела й зіставлення без оновлення рядків:
