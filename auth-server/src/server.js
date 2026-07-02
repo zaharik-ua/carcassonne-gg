@@ -3775,6 +3775,7 @@ function ensureChallengesSchema() {
       availability_start_3_utc TEXT,
       availability_end_3_utc TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      status_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (period_id, player_id),
       FOREIGN KEY (period_id) REFERENCES challenge_periods(id) ON DELETE CASCADE,
@@ -3805,6 +3806,39 @@ function ensureChallengesSchema() {
       [1, 2, 3].forEach((index) => {
         addColumnIfMissing(columns || [], "challenge_period_players", `availability_start_${index}_utc`, "TEXT");
         addColumnIfMissing(columns || [], "challenge_period_players", `availability_end_${index}_utc`, "TEXT");
+      });
+      const hasStatusUpdatedAt = (columns || []).some((column) => column.name === "status_updated_at");
+      db.serialize(() => {
+        if (!hasStatusUpdatedAt) {
+          db.run(
+            "ALTER TABLE challenge_period_players ADD COLUMN status_updated_at TEXT",
+            (alterErr) => {
+              if (alterErr) {
+                console.error("Failed to add status_updated_at column to challenge_period_players", alterErr);
+              }
+            }
+          );
+        }
+        db.run(
+          `
+            UPDATE challenge_period_players
+            SET status_updated_at = updated_at
+            WHERE status_updated_at IS NULL
+          `,
+          (backfillErr) => {
+            if (backfillErr) {
+              console.error("Failed to backfill challenge_period_players.status_updated_at", backfillErr);
+            }
+          }
+        );
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_challenge_period_players_status_updated ON challenge_period_players(period_id, status, status_updated_at)",
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure challenge_period_players status_updated_at index", indexErr);
+            }
+          }
+        );
       });
     });
     db.run(
@@ -6953,6 +6987,7 @@ async function loadChallengePeriodPlayerStatus(periodId, playerId) {
         availability_start_3_utc,
         availability_end_3_utc,
         created_at,
+        status_updated_at,
         updated_at
       FROM challenge_period_players
       WHERE period_id = ?
@@ -7327,7 +7362,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
           p.status AS profile_status,
           p.bga_elo,
           cpp.status AS period_player_status,
-          cpp.updated_at AS period_status_updated_at,
+          cpp.status_updated_at AS period_status_updated_at,
           cpp.challenge_duel_id,
           cpp.availability_start_1_utc,
           cpp.availability_end_1_utc,
@@ -7376,7 +7411,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
          )
         WHERE cpp.period_id = ?
           AND cpp.status = 'available'
-        ORDER BY cpp.updated_at ASC, p.bga_nickname COLLATE NOCASE ASC, p.id COLLATE NOCASE ASC
+        ORDER BY cpp.status_updated_at ASC, p.bga_nickname COLLATE NOCASE ASC, p.id COLLATE NOCASE ASC
       `,
       [periodId, ...activeStatuses, periodId, playerId, playerId, periodId]
     );
@@ -8338,6 +8373,10 @@ app.patch("/challenge-periods/:id/requests/:requestId/reschedule", requireAuthen
           SET
             status = 'available',
             challenge_duel_id = NULL,
+            status_updated_at = CASE
+              WHEN status <> 'available' THEN CURRENT_TIMESTAMP
+              ELSE status_updated_at
+            END,
             updated_at = CURRENT_TIMESTAMP
           WHERE period_id = ?
             AND player_id IN (?, ?)
@@ -8460,6 +8499,10 @@ app.patch("/challenge-periods/:id/requests/:requestId/cancel-match", requireAuth
           SET
             status = 'not_selected',
             challenge_duel_id = NULL,
+            status_updated_at = CASE
+              WHEN status <> 'not_selected' THEN CURRENT_TIMESTAMP
+              ELSE status_updated_at
+            END,
             updated_at = CURRENT_TIMESTAMP
           WHERE period_id = ?
             AND player_id IN (?, ?)
@@ -8688,12 +8731,17 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
             status,
             challenge_duel_id,
             created_at,
+            status_updated_at,
             updated_at
           )
-          VALUES (?, ?, 'match_scheduled', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, 'match_scheduled', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           ON CONFLICT(period_id, player_id) DO UPDATE SET
             status = 'match_scheduled',
             challenge_duel_id = excluded.challenge_duel_id,
+            status_updated_at = CASE
+              WHEN challenge_period_players.status <> excluded.status THEN CURRENT_TIMESTAMP
+              ELSE challenge_period_players.status_updated_at
+            END,
             updated_at = CURRENT_TIMESTAMP
         `,
         [periodId, lockedRequest.player_1_id, duelId]
@@ -8706,12 +8754,17 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
             status,
             challenge_duel_id,
             created_at,
+            status_updated_at,
             updated_at
           )
-          VALUES (?, ?, 'match_scheduled', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, 'match_scheduled', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           ON CONFLICT(period_id, player_id) DO UPDATE SET
             status = 'match_scheduled',
             challenge_duel_id = excluded.challenge_duel_id,
+            status_updated_at = CASE
+              WHEN challenge_period_players.status <> excluded.status THEN CURRENT_TIMESTAMP
+              ELSE challenge_period_players.status_updated_at
+            END,
             updated_at = CURRENT_TIMESTAMP
         `,
         [periodId, lockedRequest.player_2_id, duelId]
@@ -8963,12 +9016,17 @@ app.patch("/challenge-periods/:id/player-status", requireAuthenticated, async (r
             status,
             challenge_duel_id,
             created_at,
+            status_updated_at,
             updated_at
           )
-          VALUES (?, ?, ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           ON CONFLICT(period_id, player_id) DO UPDATE SET
             status = excluded.status,
             challenge_duel_id = NULL,
+            status_updated_at = CASE
+              WHEN challenge_period_players.status <> excluded.status THEN CURRENT_TIMESTAMP
+              ELSE challenge_period_players.status_updated_at
+            END,
             updated_at = CURRENT_TIMESTAMP
         `,
         [periodId, playerId, nextStatus]

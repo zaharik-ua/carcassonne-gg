@@ -459,6 +459,7 @@ One record stores the state of one player in one period.
 | `availability_start_3_utc` | `TEXT` |yes| `NULL` |Start of the third availability window in UTC.|
 | `availability_end_3_utc` | `TEXT` |yes| `NULL` |End of the third availability window in UTC.|
 | `created_at` | `TEXT` |no| `CURRENT_TIMESTAMP` |Creation time.|
+| `status_updated_at` | `TEXT` |no| `CURRENT_TIMESTAMP` |Time of the last actual `status` change; used to sort `Open to match`.|
 | `updated_at` | `TEXT` |no| `CURRENT_TIMESTAMP` |Last update time.|
 
 Mandatory constraints and indexes:
@@ -467,7 +468,7 @@ Mandatory constraints and indexes:
 - `CHECK` for allowed values ​​`status`;
 - `CHECK`, which is set to `challenge_duel_id` for `match_scheduled` and `played`, and `NULL` for other statuses;
 - each availability window is stored only as a complete start/end pair; the backend validates the three-window limit, period boundaries, whole hours, positive duration, and non-overlap;
-- index `(period_id, status)` for the list of available players;
+- indexes `(period_id, status)` and `(period_id, status, status_updated_at)` for listing and sorting available players;
 - accepting a match atomically sets `challenge_duel_id` to both players only if it is still `NULL`; this field is the blocking DB level of the second confirmed match in the same period.
 
 ### 21.3. `challenge_requests`
