@@ -14919,6 +14919,7 @@ function publicMainPageMatchesHandler(req, res, next) {
         COALESCE(NULLIF(trim(t2.flag), ''), NULLIF(trim(t2.logo), ''), NULLIF(trim(a2.flag), '')) AS player_2_association_flag,
         d.dw1,
         d.dw2,
+        d.gg_rating,
         d.status,
         cp.name AS challenge_period_name,
         cp.logo AS challenge_period_logo
@@ -15269,6 +15270,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 player_2_association_flag: row.player_2_association_flag,
                 dw1: row.dw1,
                 dw2: row.dw2,
+                gg_rating: row.gg_rating,
                 status: row.status,
                 streams: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
                 streamers: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_avatar),

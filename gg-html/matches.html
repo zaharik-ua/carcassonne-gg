@@ -186,6 +186,10 @@ code {
     letter-spacing: -1.5px;
   }
 
+  .match-rating--gg:not(.match-rating--gold) .material-icons-round {
+    font-size: 10px;
+  }
+
   /* Special style for rating 6: gold stars only */
   .match-rating--gold .material-icons-round {
     color: #DAA520;
@@ -997,12 +1001,14 @@ function normalizeBadgeColor(value) {
 }
 
 // Build rating stars element (1-5 grey stars, 6 = 5 gold stars)
-function createRatingElement(rating) {
+function createRatingElement(rating, { isGgRating = false } = {}) {
   const rNum = (rating === null || rating === undefined || rating === "") ? null : parseInt(rating, 10);
   if (!Number.isInteger(rNum)) return null;
 
   const wrap = document.createElement("div");
-  wrap.className = "match-rating" + (rNum === 6 ? " match-rating--gold" : "");
+  wrap.className = "match-rating"
+    + (isGgRating ? " match-rating--gg" : "")
+    + (rNum === 6 ? " match-rating--gold" : "");
 
   const total = 5;
   const filledCount = (rNum >= 1 && rNum <= 5) ? rNum : (rNum === 6 ? 5 : 0);
@@ -1013,7 +1019,7 @@ function createRatingElement(rating) {
     s.className = "material-icons-round";
     s.textContent = "star";
     if (rNum !== 6) {
-      s.style.color = "#333";
+      s.style.color = isGgRating ? "#8b1e2d" : "#333";
     }
     wrap.appendChild(s);
   }
@@ -1392,7 +1398,9 @@ function createDuelElement(match, options = {}) {
 
   // Optional rating stars above time for Today duel matches (create DOM)
   if (showRating) {
-    const ratingEl = createRatingElement(match.rating);
+    const ratingEl = createRatingElement(match.rating, {
+      isGgRating: match.source_type === "challenge",
+    });
     if (ratingEl) timeDiv.appendChild(ratingEl);
   }
   const timeTextEl = document.createElement("div");
@@ -1937,7 +1945,7 @@ function renderSection(container, title, tournaments, matches, events, options =
       let el;
       if (isDuelTournament(tType)) {
         // Show rating for Today and Upcoming duel matches in Time mode
-        el = createDuelElement(match, { showRating: match.source_type !== "challenge", isToday });
+        el = createDuelElement(match, { showRating: true, isToday });
       } else {
         // TEAM: also show rating in Time mode
         el = createMatchElement(match, { showRating: true, isToday });
@@ -2201,7 +2209,7 @@ function renderSection(container, title, tournaments, matches, events, options =
         if (isDuelTournament(tType)) {
           const showRating = (title === "Today" || title === "Upcoming Matches");
           const el = createDuelElement(match, {
-            showRating: showRating && match.source_type !== "challenge",
+            showRating,
             isToday,
           });
           card.appendChild(el);
@@ -2712,7 +2720,7 @@ function adaptDbMainPageMatchesData(data) {
       status: String(duel?.status || "").trim(),
       gw1: duel?.dw1,
       gw2: duel?.dw2,
-      rating: null,
+      rating: duel?.gg_rating,
       streams: Array.isArray(duel?.streams)
         ? duel.streams.map((value) => String(value || "").trim()).filter(Boolean)
         : [],
