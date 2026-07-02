@@ -11,6 +11,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from update_gg_duel_ratings.calculator import (
+    build_anchors,
+    calculate_gg_rating_full,
+    round_gg_rating,
+)
+
 
 @dataclass(frozen=True)
 class ImportPaths:
@@ -398,6 +404,11 @@ def _upsert_matches(conn: sqlite3.Connection, *, actor_id: str, matches: list[di
 
 def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[str, object]]) -> dict[str, int]:
     duel_columns = _load_columns(conn, "duels")
+    if "gg_rating_full" not in duel_columns:
+        conn.execute("ALTER TABLE duels ADD COLUMN gg_rating_full REAL")
+    if "gg_rating" not in duel_columns:
+        conn.execute("ALTER TABLE duels ADD COLUMN gg_rating INTEGER")
+    duel_columns = _load_columns(conn, "duels")
     required_columns = {
         "id",
         "tournament_id",
@@ -420,6 +431,24 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
 
     inserted = 0
     updated = 0
+    gg_elos_by_player_id: dict[str, float] = {}
+    profile_columns = _load_columns(conn, "profiles")
+    gg_elo_rows = (
+        conn.execute(
+            "SELECT id, gg_elo FROM profiles WHERE deleted_at IS NULL AND gg_elo IS NOT NULL"
+        ).fetchall()
+        if "gg_elo" in profile_columns
+        else []
+    )
+    for row in gg_elo_rows:
+        try:
+            gg_elos_by_player_id[str(row["id"] or "").strip()] = float(row["gg_elo"])
+        except (TypeError, ValueError):
+            continue
+    try:
+        gg_anchors = build_anchors(list(gg_elos_by_player_id.values()))
+    except ValueError:
+        gg_anchors = None
     for item in duels:
         existing = conn.execute(
             """
@@ -430,6 +459,14 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
             """,
             (item["id"],),
         ).fetchone()
+
+        gg_rating_full = None
+        if existing is None and gg_anchors is not None:
+            gg_rating_full = calculate_gg_rating_full(
+                gg_elos_by_player_id.get(str(item["player_1_id"] or "").strip()),
+                gg_elos_by_player_id.get(str(item["player_2_id"] or "").strip()),
+                gg_anchors,
+            )
 
         conn.execute(
             """
@@ -447,6 +484,8 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
               dw2,
               rating_full,
               rating,
+              gg_rating_full,
+              gg_rating,
               status,
               results_last_error,
               results_checked_at,
@@ -457,7 +496,7 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
               created_at,
               updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET
               tournament_id = excluded.tournament_id,
               match_id = excluded.match_id,
@@ -489,6 +528,8 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
                 item["custom_time"],
                 item["player_1_id"],
                 item["player_2_id"],
+                gg_rating_full,
+                round_gg_rating(gg_rating_full),
                 item["status"],
                 actor_id,
                 actor_id,

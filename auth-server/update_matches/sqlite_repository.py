@@ -408,6 +408,10 @@ class SqliteMatchRepository(MatchRepository):
                 conn.execute("ALTER TABLE duels ADD COLUMN rating_full REAL")
             if "rating" not in duel_columns:
                 conn.execute("ALTER TABLE duels ADD COLUMN rating INTEGER")
+            if "gg_rating_full" not in duel_columns:
+                conn.execute("ALTER TABLE duels ADD COLUMN gg_rating_full REAL")
+            if "gg_rating" not in duel_columns:
+                conn.execute("ALTER TABLE duels ADD COLUMN gg_rating INTEGER")
             if "dw1_import" not in duel_columns:
                 conn.execute("ALTER TABLE duels ADD COLUMN dw1_import INTEGER")
             if "dw2_import" not in duel_columns:

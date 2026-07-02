@@ -1667,6 +1667,8 @@ function loadDuelsByMatchId(matchId, callback) {
         dw2,
         rating_full,
         rating,
+        gg_rating_full,
+        gg_rating,
         status,
         results_last_error,
         results_checked_at
@@ -1738,6 +1740,8 @@ function loadDuelsByIds(duelIds, callback) {
         dw2,
         rating_full,
         rating,
+        gg_rating_full,
+        gg_rating,
         status,
         results_last_error,
         results_checked_at
@@ -1924,6 +1928,77 @@ function calculateDuelRating(ratingFull) {
     return null;
   }
   return Math.round(ratingFull);
+}
+
+function percentileInclusive(sortedValues, percentile) {
+  if (!Array.isArray(sortedValues) || !sortedValues.length) return null;
+  const position = (sortedValues.length - 1) * percentile;
+  const lowerIndex = Math.floor(position);
+  const upperIndex = Math.ceil(position);
+  const lowerValue = sortedValues[lowerIndex];
+  const upperValue = sortedValues[upperIndex];
+  return lowerValue + ((upperValue - lowerValue) * (position - lowerIndex));
+}
+
+function buildGgRatingContext(profileRows) {
+  const ggEloByPlayerId = new Map();
+  const ratingList = [];
+  (Array.isArray(profileRows) ? profileRows : []).forEach((row) => {
+    const playerId = String(row?.id || "").trim();
+    const rawRating = row?.gg_elo;
+    if (!playerId || rawRating === null || rawRating === undefined || String(rawRating).trim() === "") return;
+    const rating = Number(rawRating);
+    if (!Number.isFinite(rating)) return;
+    ggEloByPlayerId.set(playerId, rating);
+    ratingList.push(rating);
+  });
+  ratingList.sort((a, b) => a - b);
+  return {
+    ggEloByPlayerId,
+    lowAnchor: percentileInclusive(ratingList, 0.15),
+    highAnchor: percentileInclusive(ratingList, 0.95),
+  };
+}
+
+async function loadGgRatingContext() {
+  const rows = await dbAllAsync(
+    `
+      SELECT id, gg_elo
+      FROM profiles
+      WHERE deleted_at IS NULL
+        AND gg_elo IS NOT NULL
+        AND trim(CAST(gg_elo AS TEXT)) <> ''
+    `
+  );
+  return buildGgRatingContext(rows);
+}
+
+function calculateGgDuelRating(context, player1Id, player2Id) {
+  const playerRatingA = context?.ggEloByPlayerId?.get(String(player1Id || "").trim());
+  const playerRatingB = context?.ggEloByPlayerId?.get(String(player2Id || "").trim());
+  const lowAnchor = context?.lowAnchor;
+  const highAnchor = context?.highAnchor;
+  if (![playerRatingA, playerRatingB, lowAnchor, highAnchor].every(Number.isFinite)) {
+    return { ggRatingFull: null, ggRating: null };
+  }
+
+  const ratingSpan = Math.max(highAnchor - lowAnchor, 1);
+  const differenceScale = ratingSpan * 0.4375;
+  const maximumScore = 5.49;
+  const curvePower = 0.8;
+  const closenessBonus = 0.15;
+  const matchAverage = (playerRatingA + playerRatingB) / 2;
+  const normalizedStrength = Math.min(1, Math.max(0, (matchAverage - lowAnchor) / ratingSpan));
+  const closeness = 1 - Math.min(1, Math.abs(playerRatingA - playerRatingB) / differenceScale);
+  const calculatedScore = Math.min(
+    maximumScore,
+    maximumScore * (normalizedStrength ** curvePower)
+      + closenessBonus * normalizedStrength * (closeness ** curvePower)
+  );
+  const ggRatingFull = playerRatingA >= highAnchor && playerRatingB >= highAnchor
+    ? 6
+    : calculatedScore;
+  return { ggRatingFull, ggRating: Math.round(ggRatingFull) };
 }
 
 function calculateMatchRating(duelRatingFullValues) {
@@ -3524,6 +3599,8 @@ function ensureDuelsSchema() {
       dw2_import INTEGER,
       rating_full REAL,
       rating INTEGER,
+      gg_rating_full REAL,
+      gg_rating INTEGER,
       status TEXT,
       results_last_error TEXT,
       results_checked_at TEXT,
@@ -3569,6 +3646,8 @@ function ensureDuelsSchema() {
         addColumnIfMissing(columns, "duels", "results_checked_at", "TEXT");
         addColumnIfMissing(columns, "duels", "rating_full", "REAL");
         addColumnIfMissing(columns, "duels", "rating", "INTEGER");
+        addColumnIfMissing(columns, "duels", "gg_rating_full", "REAL");
+        addColumnIfMissing(columns, "duels", "gg_rating", "INTEGER");
         addColumnIfMissing(columns, "duels", "dw1_import", "INTEGER");
         addColumnIfMissing(columns, "duels", "dw2_import", "INTEGER");
         addColumnIfMissing(columns, "duels", "created_by", "TEXT");
@@ -8683,6 +8762,12 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
           ]
         );
       } else {
+        const ggRatingContext = await loadGgRatingContext();
+        const { ggRatingFull, ggRating } = calculateGgDuelRating(
+          ggRatingContext,
+          lockedRequest.player_1_id,
+          lockedRequest.player_2_id
+        );
         await dbRunAsync(
           `
             INSERT INTO duels (
@@ -8697,6 +8782,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
               player_2_id,
               dw1,
               dw2,
+              gg_rating_full,
+              gg_rating,
               status,
               created_by,
               updated_by,
@@ -8708,7 +8795,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
               created_at,
               updated_at
             )
-            VALUES (?, NULL, NULL, NULL, ?, ?, NULL, ?, ?, NULL, NULL, 'Planned', ?, ?, NULL, NULL, ?, ?, 'challenge', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (?, NULL, NULL, NULL, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, 'Planned', ?, ?, NULL, NULL, ?, ?, 'challenge', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           `,
           [
             duelId,
@@ -8716,6 +8803,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
             acceptedTimeUtc,
             lockedRequest.player_1_id,
             lockedRequest.player_2_id,
+            ggRatingFull,
+            ggRating,
             playerId,
             playerId,
             periodId,
@@ -13937,7 +14026,7 @@ app.post("/duels/:id/refetch-results", (req, res) => {
   );
 });
 
-app.post("/duels/bulk-upsert", (req, res) => {
+app.post("/duels/bulk-upsert", async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
   }
@@ -13949,6 +14038,13 @@ app.post("/duels/bulk-upsert", (req, res) => {
   const isTeamCaptain = Number(req.user.team_captain) === 1;
   const userAssociation = String(req.user.association || "").trim().toUpperCase();
   const actorPlayerId = String(req.user.player_id || "").trim() || null;
+  let ggRatingContext;
+  try {
+    ggRatingContext = await loadGgRatingContext();
+  } catch (error) {
+    console.error("Failed to load GG rating context", error);
+    return res.status(500).json({ ok: false, message: "Failed to calculate GG ratings" });
+  }
 
   const toIntOrNull = (v) => {
     if (v === null || v === undefined || String(v).trim() === "") return null;
@@ -13985,6 +14081,7 @@ app.post("/duels/bulk-upsert", (req, res) => {
         toIntOrNull(item?.dw1),
         toIntOrNull(item?.dw2)
       );
+      const { ggRatingFull, ggRating } = calculateGgDuelRating(ggRatingContext, player1, player2);
       sanitized.push({
         id,
         tournament_id: normalizeText(item?.tournament_id),
@@ -13997,6 +14094,8 @@ app.post("/duels/bulk-upsert", (req, res) => {
         player_2_id: player2,
         dw1: normalizedDuelScores.dw1,
         dw2: normalizedDuelScores.dw2,
+        gg_rating_full: ggRatingFull,
+        gg_rating: ggRating,
         status,
       });
     }
@@ -14020,6 +14119,8 @@ app.post("/duels/bulk-upsert", (req, res) => {
           player_2_id,
           dw1,
           dw2,
+          gg_rating_full,
+          gg_rating,
           status,
           created_by,
           updated_by,
@@ -14028,7 +14129,7 @@ app.post("/duels/bulk-upsert", (req, res) => {
           created_at,
           updated_at
         )
-        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO UPDATE SET
           tournament_id = excluded.tournament_id,
           match_id = NULL,
@@ -14062,6 +14163,8 @@ app.post("/duels/bulk-upsert", (req, res) => {
             item.player_2_id,
             item.dw1,
             item.dw2,
+            item.gg_rating_full,
+            item.gg_rating,
             item.status,
             actorPlayerId,
             actorPlayerId,
@@ -14158,6 +14261,7 @@ app.post("/duels/bulk-upsert", (req, res) => {
             toIntOrNull(item?.dw1),
             toIntOrNull(item?.dw2)
           );
+          const { ggRatingFull, ggRating } = calculateGgDuelRating(ggRatingContext, player1, player2);
           sanitized.push({
             id,
             tournament_id: normalizeText(item?.tournament_id) || tournament.id,
@@ -14170,6 +14274,8 @@ app.post("/duels/bulk-upsert", (req, res) => {
             player_2_id: player2,
             dw1: normalizedDuelScores.dw1,
             dw2: normalizedDuelScores.dw2,
+            gg_rating_full: ggRatingFull,
+            gg_rating: ggRating,
             status,
           });
         }
@@ -14245,6 +14351,8 @@ app.post("/duels/bulk-upsert", (req, res) => {
                   player_2_id,
                   dw1,
                   dw2,
+                  gg_rating_full,
+                  gg_rating,
                   status,
                   created_by,
                   updated_by,
@@ -14253,7 +14361,7 @@ app.post("/duels/bulk-upsert", (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT(id) DO UPDATE SET
                   tournament_id = excluded.tournament_id,
                   match_id = excluded.match_id,
@@ -14288,6 +14396,8 @@ app.post("/duels/bulk-upsert", (req, res) => {
                       item.player_2_id,
                       item.dw1,
                       item.dw2,
+                      item.gg_rating_full,
+                      item.gg_rating,
                       item.status,
                       actorPlayerId,
                       actorPlayerId,

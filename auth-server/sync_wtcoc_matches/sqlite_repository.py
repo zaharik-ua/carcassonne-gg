@@ -4,6 +4,12 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
+from update_gg_duel_ratings.calculator import (
+    build_anchors,
+    calculate_gg_rating_full,
+    round_gg_rating,
+)
+
 
 @dataclass(frozen=True)
 class TeamMapping:
@@ -126,6 +132,7 @@ class SqliteWtcocRepository:
             self._ensure_match_metadata_columns(conn)
             self._ensure_wtcoc_match_links_table(conn)
             link_map = self._load_wtcoc_match_link_map(conn, tournament_id)
+            gg_anchors, gg_elos_by_player_id = self._load_gg_rating_context(conn)
 
             conn.execute("BEGIN IMMEDIATE TRANSACTION")
             try:
@@ -464,6 +471,13 @@ class SqliteWtcocRepository:
                         (item["id"],),
                     ).fetchone()
                     if existing is None:
+                        gg_rating_full = None
+                        if gg_anchors is not None:
+                            gg_rating_full = calculate_gg_rating_full(
+                                gg_elos_by_player_id.get(str(item["player_1_id"] or "").strip()),
+                                gg_elos_by_player_id.get(str(item["player_2_id"] or "").strip()),
+                                gg_anchors,
+                            )
                         inserted_duels += 1
                         changed_duel_ids.append(str(item["id"]))
                         conn.execute(
@@ -484,6 +498,8 @@ class SqliteWtcocRepository:
                               dw2_import,
                               rating_full,
                               rating,
+                              gg_rating_full,
+                              gg_rating,
                               status,
                               results_last_error,
                               results_checked_at,
@@ -494,7 +510,7 @@ class SqliteWtcocRepository:
                               created_at,
                               updated_at
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, 'Planned', NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, ?, ?, 'Planned', NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                             """,
                             (
                                 item["id"],
@@ -508,6 +524,8 @@ class SqliteWtcocRepository:
                                 item["player_2_id"],
                                 item.get("dw1_import") if item.get("import_results_ready") else None,
                                 item.get("dw2_import") if item.get("import_results_ready") else None,
+                                gg_rating_full,
+                                round_gg_rating(gg_rating_full),
                                 normalized_actor_id,
                                 normalized_actor_id,
                             ),
@@ -666,12 +684,43 @@ class SqliteWtcocRepository:
             if column_name not in match_columns:
                 conn.execute(f"ALTER TABLE matches ADD COLUMN {column_name} INTEGER")
                 changed = True
-        for column_name in ("dw1_import", "dw2_import"):
+        for column_name, column_type in (
+            ("dw1_import", "INTEGER"),
+            ("dw2_import", "INTEGER"),
+            ("gg_rating_full", "REAL"),
+            ("gg_rating", "INTEGER"),
+        ):
             if column_name not in duel_columns:
-                conn.execute(f"ALTER TABLE duels ADD COLUMN {column_name} INTEGER")
+                conn.execute(f"ALTER TABLE duels ADD COLUMN {column_name} {column_type}")
                 changed = True
         if changed:
             conn.commit()
+
+    @staticmethod
+    def _load_gg_rating_context(conn: sqlite3.Connection):
+        profile_columns = {
+            str(row["name"] or "").strip().lower()
+            for row in conn.execute("PRAGMA table_info(profiles)").fetchall()
+        }
+        if "gg_elo" not in profile_columns:
+            return None, {}
+        rows = conn.execute(
+            "SELECT id, gg_elo FROM profiles WHERE deleted_at IS NULL AND gg_elo IS NOT NULL"
+        ).fetchall()
+        ratings_by_player_id: dict[str, float] = {}
+        for row in rows:
+            player_id = str(row["id"] or "").strip()
+            try:
+                rating = float(row["gg_elo"])
+            except (TypeError, ValueError):
+                continue
+            if player_id:
+                ratings_by_player_id[player_id] = rating
+        try:
+            anchors = build_anchors(list(ratings_by_player_id.values()))
+        except ValueError:
+            anchors = None
+        return anchors, ratings_by_player_id
 
     @staticmethod
     def _ensure_match_metadata_columns(conn: sqlite3.Connection) -> None:

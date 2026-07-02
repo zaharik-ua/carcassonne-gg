@@ -225,7 +225,50 @@ python3 run_update_profile_gg_elo.py --dry-run
 Параметри `--db-path`, `--source-url` і `--timeout` дозволяють використати той
 самий entry point для майбутнього cron/systemd-запуску.
 
-## 10) Регулярний фікс статусів матчів і дуелей
+## 10) GG-рейтинг дуелей
+
+Таблиця `duels` автоматично отримує поля:
+
+- `gg_rating_full REAL` — повне дробове значення;
+- `gg_rating INTEGER` — значення, округлене за тим самим принципом, що й `rating`.
+
+Під час створення дуелі рейтинг обчислюється з `profiles.gg_elo` обох гравців
+за формулою Google Sheets із перцентилями 15% і 95% усіх числових GG Elo.
+Під час звичайного оновлення або `ON CONFLICT DO UPDATE` GG-рейтинг не
+перераховується.
+
+Ручний перерахунок наявних дуелей:
+
+```bash
+cd auth-server
+
+# одна дуель (параметр можна повторювати)
+python3 run_update_gg_duel_ratings.py --duel-id DUEL_ID
+
+# усі Planned
+python3 run_update_gg_duel_ratings.py --status Planned
+
+# усі challenge-дуелі
+python3 run_update_gg_duel_ratings.py --source-type challenge
+
+# усі дуелі турніру
+python3 run_update_gg_duel_ratings.py --tournament-id CCL-2026
+
+# усі з порожнім gg_rating_full
+python3 run_update_gg_duel_ratings.py --missing
+```
+
+Фільтри можна комбінувати — тоді вони застосовуються через `AND`. Для
+перевірки без запису є `--dry-run`. Скрипт змінює тільки `gg_rating_full` і
+`gg_rating`, не змінюючи `updated_at`, `updated_by` та аудит.
+
+Альтернативний запуск через shell-обгортку:
+
+```bash
+./scripts/run_update_gg_duel_ratings.sh --missing
+```
+
+## 11) Регулярний фікс статусів матчів і дуелей
 
 Є окремий maintenance-скрипт:
 
@@ -279,7 +322,7 @@ sudo systemctl enable --now fix-matches-and-duels.timer
 sudo systemctl status fix-matches-and-duels.timer
 ```
 
-## 11) Прибирання тимчасових каталогів Chromium
+## 12) Прибирання тимчасових каталогів Chromium
 
 Якщо headless Chromium аварійно завершується, у `/tmp` можуть залишатися каталоги виду:
 
@@ -315,7 +358,7 @@ sudo systemctl start cleanup-chrome-tmp.service
 journalctl -u cleanup-chrome-tmp.service -n 100 --no-pager
 ```
 
-## 12) WTCOC sync probe
+## 13) WTCOC sync probe
 
 Для WTCOC є окремий ручний CLI-скрипт, який поки не записує дані в БД, а робить live fetch із WTCOC API та показує:
 
@@ -355,7 +398,7 @@ python3 run_sync_wtcoc_matches.py --db-path ./data/auth.sqlite --tournament-id W
 python3 run_sync_wtcoc_matches.py --db-path ./data/auth.sqlite --tournament-id WTCOC-2026 --apply
 ```
 
-## 13) Telegram alerts for server health
+## 14) Telegram alerts for server health
 
 У репозиторії є готовий health-check, який надсилає Telegram alerts для:
 
