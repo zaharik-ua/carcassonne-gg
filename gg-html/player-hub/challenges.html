@@ -3000,7 +3000,8 @@
     actions.className = "challenge-duel-actions";
     const statusNode = createChallengeDuelStatusNode(duel?.status, request, !!duel?.deleted_at);
     if (statusNode) actions.appendChild(statusNode);
-    if (!options.readOnly && String(duel?.status || "") === "Planned") {
+    const editableDuelStatuses = new Set(["Planned", "In progress", "Error"]);
+    if (!options.readOnly && editableDuelStatuses.has(String(duel?.status || ""))) {
       actions.appendChild(createChallengeDuelEditDropdown(period, request, currentPlayerId));
     }
     row.appendChild(actions);
@@ -5019,7 +5020,15 @@
       const sent = (Array.isArray(data?.sent_requests) ? data.sent_requests : [])
         .map(enrichRequest)
         .filter((request) => String(request?.created_by_player_id || "") === currentPlayerId);
-      const visibleChallengeDuelStatuses = new Set(["Draft", "Requested new time", "Planned", "Cancelled"]);
+      const visibleChallengeDuelStatuses = new Set([
+        "Draft",
+        "Requested new time",
+        "Planned",
+        "In progress",
+        "Done",
+        "Error",
+        "Cancelled",
+      ]);
       const challengeDuelRequest = incoming.concat(sent).find((request) => (
         request?.duel?.id
         && visibleChallengeDuelStatuses.has(String(request?.duel?.status || ""))

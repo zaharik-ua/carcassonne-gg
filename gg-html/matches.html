@@ -259,7 +259,7 @@ code {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     gap: 24px;
-    padding: 12px 6px 6px;
+    padding: 22px 6px 6px;
   }
 
   .challenge-match-player {
@@ -437,6 +437,37 @@ code {
     font-size: 12px;
     line-height: 1.2;
     font-weight: 600;
+    text-decoration: none;
+    transition: background-color 0.18s ease, color 0.18s ease;
+  }
+
+  .challenge-match-result__game--player-1 {
+    background: #f6dada;
+    color: #7a2525;
+  }
+
+  .challenge-match-result__game--player-2 {
+    background: #d7eaff;
+    color: #073654;
+  }
+
+  a.challenge-match-result__game:hover,
+  a.challenge-match-result__game:focus-visible {
+    background: #d7eaff;
+    color: #073654;
+    outline: none;
+  }
+
+  a.challenge-match-result__game--player-1:hover,
+  a.challenge-match-result__game--player-1:focus-visible {
+    background: #efc7c7;
+    color: #681b1b;
+  }
+
+  a.challenge-match-result__game--player-2:hover,
+  a.challenge-match-result__game--player-2:focus-visible {
+    background: #c5def8;
+    color: #052c45;
   }
 
   .challenge-match-card__vs {
@@ -474,7 +505,7 @@ code {
     .challenge-match-card {
       grid-template-columns: 1fr;
       gap: 14px;
-      padding: 18px 2px 4px;
+      padding: 24px 2px 4px;
     }
 
     .challenge-match-player--right {
@@ -1604,10 +1635,11 @@ function createChallengeMatchResult(match) {
     .map((game) => {
       const player1Score = game?.player_1_score;
       const player2Score = game?.player_2_score;
+      const tableId = String(game?.bga_table_id || "").trim();
       const hasPlayer1Score = player1Score !== null && player1Score !== undefined && String(player1Score).trim() !== "";
       const hasPlayer2Score = player2Score !== null && player2Score !== undefined && String(player2Score).trim() !== "";
       return hasPlayer1Score && hasPlayer2Score
-        ? { player1Score, player2Score }
+        ? { player1Score, player2Score, tableId }
         : null;
     })
     .filter(Boolean);
@@ -1645,9 +1677,24 @@ function createChallengeMatchResult(match) {
     const gameScores = document.createElement("div");
     gameScores.className = "challenge-match-result__games";
     games.forEach((game) => {
-      const badge = document.createElement("span");
+      const badge = document.createElement(game.tableId ? "a" : "span");
       badge.className = "challenge-match-result__game";
+      const player1Score = Number(game.player1Score);
+      const player2Score = Number(game.player2Score);
+      if (Number.isFinite(player1Score) && Number.isFinite(player2Score)) {
+        if (player1Score > player2Score) {
+          badge.classList.add("challenge-match-result__game--player-1");
+        } else if (player2Score > player1Score) {
+          badge.classList.add("challenge-match-result__game--player-2");
+        }
+      }
       badge.textContent = `${game.player1Score}:${game.player2Score}`;
+      if (game.tableId) {
+        badge.href = `https://boardgamearena.com/table?table=${encodeURIComponent(game.tableId)}`;
+        badge.target = "_blank";
+        badge.rel = "noopener noreferrer";
+        badge.title = "Open game on Board Game Arena";
+      }
       gameScores.appendChild(badge);
     });
     result.appendChild(gameScores);

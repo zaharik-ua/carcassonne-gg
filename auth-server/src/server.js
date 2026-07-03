@@ -8342,6 +8342,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/counter", requireAuthentic
   }
 });
 
+const EDITABLE_CHALLENGE_DUEL_STATUSES = new Set(["Planned", "In progress", "Error"]);
+
 app.patch("/challenge-periods/:id/requests/:requestId/reschedule", requireAuthenticated, async (req, res) => {
   const periodId = normalizeNullableText(req.params.id);
   const requestId = normalizeNullableText(req.params.requestId);
@@ -8371,8 +8373,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/reschedule", requireAuthen
     if (beforeRow.status !== "accepted") {
       return res.status(409).json({ ok: false, message: "Only accepted Challenge matches can request a new time" });
     }
-    if (!beforeDuel || beforeDuel.status !== "Planned") {
-      return res.status(409).json({ ok: false, message: "Only planned Challenge matches can request a new time" });
+    if (!beforeDuel || !EDITABLE_CHALLENGE_DUEL_STATUSES.has(beforeDuel.status)) {
+      return res.status(409).json({ ok: false, message: "Done Challenge matches cannot request a new time" });
     }
     const outOfRangeOption = timeOptions.find((timeOption) => timeOption && !isChallengeTimeWithinPeriod(timeOption, period));
     if (outOfRangeOption) {
@@ -8391,8 +8393,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/reschedule", requireAuthen
         error.httpStatus = 409;
         throw error;
       }
-      if (!lockedDuel || lockedDuel.status !== "Planned") {
-        const error = new Error("Challenge match is no longer planned");
+      if (!lockedDuel || !EDITABLE_CHALLENGE_DUEL_STATUSES.has(lockedDuel.status)) {
+        const error = new Error("Challenge match can no longer request a new time");
         error.httpStatus = 409;
         throw error;
       }
@@ -8440,7 +8442,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/reschedule", requireAuthen
           WHERE id = ?
             AND challenge_period_id = ?
             AND challenge_request_id = ?
-            AND status = 'Planned'
+            AND status IN ('Planned', 'In progress', 'Error')
             AND source_type = 'challenge'
             AND deleted_at IS NULL
         `,
@@ -8520,8 +8522,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/cancel-match", requireAuth
     if (beforeRow.status !== "accepted") {
       return res.status(409).json({ ok: false, message: "Only accepted Challenge matches can be cancelled" });
     }
-    if (!beforeDuel || beforeDuel.status !== "Planned") {
-      return res.status(409).json({ ok: false, message: "Only planned Challenge matches can be cancelled" });
+    if (!beforeDuel || !EDITABLE_CHALLENGE_DUEL_STATUSES.has(beforeDuel.status)) {
+      return res.status(409).json({ ok: false, message: "Done Challenge matches cannot be cancelled" });
     }
     let afterRow = null;
     let afterDuel = null;
@@ -8535,8 +8537,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/cancel-match", requireAuth
         error.httpStatus = 409;
         throw error;
       }
-      if (!lockedDuel || lockedDuel.status !== "Planned") {
-        const error = new Error("Challenge match is no longer planned");
+      if (!lockedDuel || !EDITABLE_CHALLENGE_DUEL_STATUSES.has(lockedDuel.status)) {
+        const error = new Error("Challenge match can no longer be cancelled");
         error.httpStatus = 409;
         throw error;
       }
@@ -8554,7 +8556,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/cancel-match", requireAuth
           WHERE id = ?
             AND challenge_period_id = ?
             AND challenge_request_id = ?
-            AND status = 'Planned'
+            AND status IN ('Planned', 'In progress', 'Error')
             AND source_type = 'challenge'
             AND deleted_at IS NULL
         `,
