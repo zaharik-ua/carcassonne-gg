@@ -131,6 +131,39 @@ code {
   font-weight: 400;
   white-space: normal; /* allow wrapping */
 }
+.rating-tooltip__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.rating-tooltip__legend-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.rating-tooltip__legend-stars {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 0;
+}
+.rating-tooltip__legend-stars .material-icons-round {
+  font-size: 12px;
+  line-height: 12px;
+  letter-spacing: -2px;
+}
+.rating-tooltip__legend-stars--gg .is-filled {
+  color: #8b1e2d;
+}
+.rating-tooltip__legend-stars--bga .is-filled {
+  color: #333;
+}
+.rating-tooltip__legend-stars .is-empty {
+  color: #bbb;
+}
+.rating-tooltip__legend-label {
+  color: #333;
+}
 @media (max-width: 600px) {
   .rating-tooltip { width: 90vw; }
 }
@@ -158,6 +191,319 @@ code {
     padding: 4px 8px;
     box-sizing: border-box;
     position: relative; /* allows top-right badge */
+  }
+
+  .match-row.challenge-match-row {
+    cursor: pointer;
+    transition: background-color 0.18s ease;
+  }
+
+  .match-row.challenge-match-row:hover,
+  .match-row.challenge-match-row:focus-visible {
+    background-color: #f1f1f1;
+    outline: none;
+  }
+
+  .challenge-match-modal-overlay {
+    position: fixed;
+    inset: 44px 0 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(24, 31, 41, 0.42);
+    box-sizing: border-box;
+  }
+
+  .challenge-match-modal {
+    position: relative;
+    width: min(100%, 760px);
+    max-height: min(620px, calc(100vh - 44px - 32px));
+    overflow: auto;
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 16px 36px rgba(15, 28, 48, 0.22);
+    padding: 22px 24px;
+    box-sizing: border-box;
+  }
+
+  .challenge-match-modal__close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #667080;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .challenge-match-modal__close:hover,
+  .challenge-match-modal__close:focus-visible {
+    background: #f1f3f6;
+    color: #172232;
+    outline: none;
+  }
+
+  .challenge-match-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 24px;
+    padding: 12px 6px 6px;
+  }
+
+  .challenge-match-player {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .challenge-match-player--right {
+    align-items: flex-end;
+    text-align: right;
+  }
+
+  .challenge-match-player__rating {
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    color: #172232;
+    font-size: 14px;
+    font-weight: 400;
+  }
+
+  .challenge-match-player__rank,
+  .challenge-match-player__rating-value {
+    font-weight: 700;
+  }
+
+  .challenge-match-player__ratings {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .challenge-match-player__rating-line {
+    display: inline-flex;
+    gap: 4px;
+  }
+
+  .challenge-match-player__profile {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .challenge-match-player--right .challenge-match-player__profile {
+    flex-direction: row-reverse;
+  }
+
+  .challenge-match-player__info {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: #333;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .challenge-match-player--right .challenge-match-player__info {
+    align-items: flex-end;
+  }
+
+  .challenge-match-player__avatar {
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border-radius: 6px;
+    background: #f2f2f2;
+    object-fit: cover;
+  }
+
+  .challenge-match-player__avatar-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #718096;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .challenge-match-player__nickname {
+    min-width: 0;
+    overflow: hidden;
+    color: #172232;
+    font-size: 18px;
+    font-weight: 700;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .challenge-match-player__nickname:hover,
+  .challenge-match-player__nickname:focus-visible {
+    color: #0277BD;
+    outline: none;
+  }
+
+  .challenge-match-player__flag {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    object-fit: contain;
+  }
+
+  .challenge-match-player__country-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+    font-size: 13px;
+  }
+
+  .challenge-match-player__name,
+  .challenge-match-player__country {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .challenge-match-result {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 14px 12px 4px;
+    border-top: 1px solid #d8dee8;
+  }
+
+  .challenge-match-result__status {
+    padding: 3px 8px;
+    border-radius: 3px;
+    background: #d7eaff;
+    color: #073654;
+    font-size: 11px;
+    line-height: 1.2;
+    font-weight: 700;
+  }
+
+  .challenge-match-result__status--completed {
+    background: #d5ead5;
+    color: #2b6f2b;
+  }
+
+  .challenge-match-result__score {
+    color: #172232;
+    font-size: 24px;
+    line-height: 1;
+    font-weight: 700;
+  }
+
+  .challenge-match-result__games {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .challenge-match-result__game {
+    display: inline-flex;
+    padding: 3px 7px;
+    border-radius: 3px;
+    background: #e7e7e7;
+    color: #333;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 600;
+  }
+
+  .challenge-match-card__vs {
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    color: #8b1e2d;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .challenge-match-card__vs::before,
+  .challenge-match-card__vs::after {
+    content: "";
+    width: 1px;
+    height: 34%;
+    position: absolute;
+    left: 50%;
+    background: #d8dee8;
+  }
+
+  .challenge-match-card__vs::before { top: 7%; }
+  .challenge-match-card__vs::after { bottom: 7%; }
+
+  .challenge-match-card__vs {
+    position: relative;
+  }
+
+  @media (max-width: 600px) {
+    .challenge-match-modal {
+      max-height: calc(100vh - 44px - 24px);
+      padding: 18px 16px;
+    }
+
+    .challenge-match-card {
+      grid-template-columns: 1fr;
+      gap: 14px;
+      padding: 18px 2px 4px;
+    }
+
+    .challenge-match-player--right {
+      align-items: flex-start;
+      text-align: left;
+    }
+
+    .challenge-match-player--right .challenge-match-player__profile {
+      flex-direction: row;
+    }
+
+    .challenge-match-player--right .challenge-match-player__info {
+      align-items: flex-start;
+    }
+
+    .challenge-match-card__vs {
+      width: 100%;
+      align-self: auto;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .challenge-match-card__vs::before,
+    .challenge-match-card__vs::after {
+      width: auto;
+      height: 1px;
+      position: static;
+      flex: 1;
+    }
   }
 
   .match-time {
@@ -960,6 +1306,7 @@ if (openMatchId) {
   openMatchId.split(',').forEach(id => openLineupsSet.add(id));
 }
 const streamsOff = new URLSearchParams(window.location.search).get("streams") === "false";
+let challengePlayerDetailsCachePromise = null;
 const DUEL_TOURNAMENT_TYPES = new Set(["coc", "league", "individual"]);
 const INDIVIDUAL_TOURNAMENT_TYPE = "individual";
 const INDIVIDUAL_STAGE_CLASS_MAP = {
@@ -1033,6 +1380,31 @@ function createRatingElement(rating, { isGgRating = false } = {}) {
   return wrap;
 }
 
+function createRatingTooltipLegendRow({ label, type }) {
+  const row = document.createElement("div");
+  row.className = "rating-tooltip__legend-row";
+
+  const stars = document.createElement("span");
+  stars.className = `rating-tooltip__legend-stars rating-tooltip__legend-stars--${type}`;
+  stars.setAttribute("role", "img");
+  stars.setAttribute("aria-label", "3 out of 5 stars");
+
+  for (let index = 0; index < 5; index += 1) {
+    const star = document.createElement("span");
+    star.className = `material-icons-round ${index < 3 ? "is-filled" : "is-empty"}`;
+    star.textContent = "star";
+    stars.appendChild(star);
+  }
+
+  const labelElement = document.createElement("span");
+  labelElement.className = "rating-tooltip__legend-label";
+  labelElement.textContent = label;
+
+  row.appendChild(stars);
+  row.appendChild(labelElement);
+  return row;
+}
+
 function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
   if (!match || !container) return;
   const typeValue = tournamentType || match.tournament_type;
@@ -1099,6 +1471,264 @@ function appendChallengeNewBadge({ match, container, rightDiv }) {
   if (rightDiv) {
     rightDiv.classList.add("under-new-badge");
   }
+}
+
+function buildBgaAvatarUrl(playerId, avatarValue) {
+  const playerIdText = String(playerId || "").trim();
+  const avatarText = String(avatarValue || "").trim();
+  if (!avatarText) return "";
+  if (/^https?:\/\//i.test(avatarText)) return avatarText;
+  if (avatarText === "x00000") return "https://x.boardgamearena.net/data/avatar/default_184.jpg";
+
+  const defaultMatch = avatarText.match(/^_def_(\d+)$/);
+  if (defaultMatch) {
+    return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultMatch[1].padStart(4, "0")}.jpg`;
+  }
+
+  if (!/^\d+$/.test(playerIdText)) return "";
+  const playerIdNumber = Number(playerIdText);
+  if (!Number.isFinite(playerIdNumber)) return "";
+  const firstFolder = String(Math.floor(playerIdNumber / 100000000));
+  const secondFolder = String(Math.floor(playerIdNumber / 1000000));
+  const thirdFolder = String(Math.floor(playerIdNumber / 1000));
+  return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+}
+
+function getPlayerInitials(player) {
+  const source = String(player?.nickname || player?.name || "?").trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  return (parts.length > 1 ? `${parts[0][0]}${parts[1][0]}` : source.slice(0, 2)).toUpperCase();
+}
+
+function createChallengePlayerCard(player, side) {
+  const card = document.createElement("section");
+  card.className = `challenge-match-player challenge-match-player--${side}`;
+  const eloValue = Number(player?.elo);
+  const hasRating = Number.isFinite(eloValue) && eloValue > 0;
+  const bgaEloValue = Number(player?.bgaElo);
+  const hasBgaRating = Number.isFinite(bgaEloValue) && bgaEloValue > 0;
+
+  const rating = document.createElement("div");
+  rating.className = "challenge-match-player__rating";
+  const rank = document.createElement("span");
+  rank.className = "challenge-match-player__rank";
+  rank.textContent = hasRating && player?.rank ? `#${player.rank}` : "New";
+  const ratings = document.createElement("span");
+  ratings.className = "challenge-match-player__ratings";
+  const elo = document.createElement("span");
+  elo.className = "challenge-match-player__rating-line";
+  if (hasRating) {
+    const eloLabel = document.createElement("span");
+    eloLabel.textContent = "GG Elo:";
+    const eloRating = document.createElement("span");
+    eloRating.className = "challenge-match-player__rating-value";
+    eloRating.textContent = String(Math.trunc(eloValue));
+    elo.appendChild(eloLabel);
+    elo.appendChild(eloRating);
+  } else {
+    elo.classList.add("challenge-match-player__rating-value");
+    elo.textContent = "Unrated";
+  }
+  ratings.appendChild(elo);
+
+  const bgaElo = document.createElement("span");
+  bgaElo.className = "challenge-match-player__rating-line";
+  const bgaEloLabel = document.createElement("span");
+  bgaEloLabel.textContent = "BGA Elo:";
+  const bgaEloRating = document.createElement("span");
+  bgaEloRating.className = "challenge-match-player__rating-value";
+  bgaEloRating.textContent = hasBgaRating ? String(Math.trunc(bgaEloValue)) : "Unrated";
+  bgaElo.appendChild(bgaEloLabel);
+  bgaElo.appendChild(bgaEloRating);
+  ratings.appendChild(bgaElo);
+  rating.appendChild(rank);
+  rating.appendChild(ratings);
+  card.appendChild(rating);
+
+  const profile = document.createElement("div");
+  profile.className = "challenge-match-player__profile";
+  if (player?.avatar) {
+    const avatar = document.createElement("img");
+    avatar.className = "challenge-match-player__avatar";
+    avatar.src = player.avatar;
+    avatar.alt = "";
+    avatar.loading = "lazy";
+    profile.appendChild(avatar);
+  } else {
+    const avatarFallback = document.createElement("span");
+    avatarFallback.className = "challenge-match-player__avatar challenge-match-player__avatar-fallback";
+    avatarFallback.textContent = getPlayerInitials(player);
+    profile.appendChild(avatarFallback);
+  }
+
+  const info = document.createElement("div");
+  info.className = "challenge-match-player__info";
+  const nickname = document.createElement("a");
+  nickname.className = "challenge-match-player__nickname";
+  nickname.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(String(player?.id || ""))}`;
+  nickname.textContent = player?.nickname || player?.id || "Unknown player";
+  info.appendChild(nickname);
+
+  const name = document.createElement("span");
+  name.className = "challenge-match-player__name";
+  name.textContent = player?.name || "—";
+  info.appendChild(name);
+
+  const countryRow = document.createElement("div");
+  countryRow.className = "challenge-match-player__country-row";
+  if (player?.flag) {
+    const flag = document.createElement("img");
+    flag.className = "challenge-match-player__flag";
+    flag.src = player.flag;
+    flag.alt = "";
+    countryRow.appendChild(flag);
+  }
+  const country = document.createElement("span");
+  country.className = "challenge-match-player__country";
+  country.textContent = player?.country || "—";
+  countryRow.appendChild(country);
+  info.appendChild(countryRow);
+  profile.appendChild(info);
+  card.appendChild(profile);
+
+  return card;
+}
+
+function createChallengeMatchResult(match) {
+  const normalizedStatus = String(match?.status || "").trim().toLowerCase();
+  const isInProgress = normalizedStatus === "in progress";
+  const isCompleted = normalizedStatus === "done" || normalizedStatus === "completed";
+  if (!isInProgress && !isCompleted) return null;
+
+  const games = (Array.isArray(match?.games) ? match.games : [])
+    .map((game) => {
+      const player1Score = game?.player_1_score;
+      const player2Score = game?.player_2_score;
+      const hasPlayer1Score = player1Score !== null && player1Score !== undefined && String(player1Score).trim() !== "";
+      const hasPlayer2Score = player2Score !== null && player2Score !== undefined && String(player2Score).trim() !== "";
+      return hasPlayer1Score && hasPlayer2Score
+        ? { player1Score, player2Score }
+        : null;
+    })
+    .filter(Boolean);
+
+  const hasMatchScore = match?.gw1 !== null && match?.gw1 !== undefined && String(match.gw1).trim() !== ""
+    && match?.gw2 !== null && match?.gw2 !== undefined && String(match.gw2).trim() !== "";
+  if (!hasMatchScore && !games.length) return null;
+
+  let score1 = hasMatchScore ? match.gw1 : 0;
+  let score2 = hasMatchScore ? match.gw2 : 0;
+  if (!hasMatchScore) {
+    games.forEach((game) => {
+      const gameScore1 = Number(game.player1Score);
+      const gameScore2 = Number(game.player2Score);
+      if (!Number.isFinite(gameScore1) || !Number.isFinite(gameScore2)) return;
+      if (gameScore1 > gameScore2) score1 += 1;
+      if (gameScore2 > gameScore1) score2 += 1;
+    });
+  }
+
+  const result = document.createElement("section");
+  result.className = "challenge-match-result";
+
+  const status = document.createElement("div");
+  status.className = `challenge-match-result__status${isCompleted ? " challenge-match-result__status--completed" : ""}`;
+  status.textContent = isCompleted ? "COMPLETED" : "IN PROGRESS";
+  result.appendChild(status);
+
+  const score = document.createElement("div");
+  score.className = "challenge-match-result__score";
+  score.textContent = `${score1} - ${score2}`;
+  result.appendChild(score);
+
+  if (games.length) {
+    const gameScores = document.createElement("div");
+    gameScores.className = "challenge-match-result__games";
+    games.forEach((game) => {
+      const badge = document.createElement("span");
+      badge.className = "challenge-match-result__game";
+      badge.textContent = `${game.player1Score}:${game.player2Score}`;
+      gameScores.appendChild(badge);
+    });
+    result.appendChild(gameScores);
+  }
+
+  return result;
+}
+
+function closeChallengeMatchModal() {
+  const overlay = document.querySelector(".challenge-match-modal-overlay");
+  if (!overlay) return;
+  const returnFocus = overlay._returnFocus;
+  overlay.remove();
+  document.removeEventListener("keydown", handleChallengeMatchModalKeydown);
+  if (returnFocus instanceof HTMLElement) returnFocus.focus({ preventScroll: true });
+}
+
+function handleChallengeMatchModalKeydown(event) {
+  if (event.key === "Escape") closeChallengeMatchModal();
+}
+
+function openChallengeMatchModal(match, returnFocus) {
+  closeChallengeMatchModal();
+  const overlay = document.createElement("div");
+  overlay.className = "challenge-match-modal-overlay";
+  overlay._returnFocus = returnFocus;
+
+  const dialog = document.createElement("div");
+  dialog.className = "challenge-match-modal";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", `${match?.team1 || "Player 1"} versus ${match?.team2 || "Player 2"}`);
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "challenge-match-modal__close";
+  closeButton.setAttribute("aria-label", "Close match details");
+  closeButton.innerHTML = "&times;";
+  closeButton.addEventListener("click", closeChallengeMatchModal);
+  dialog.appendChild(closeButton);
+
+  const matchCard = document.createElement("div");
+  matchCard.className = "challenge-match-card";
+  matchCard.appendChild(createChallengePlayerCard(match?.player1Details || {}, "left"));
+  const vs = document.createElement("div");
+  vs.className = "challenge-match-card__vs";
+  vs.textContent = "VS";
+  matchCard.appendChild(vs);
+  matchCard.appendChild(createChallengePlayerCard(match?.player2Details || {}, "right"));
+  const matchResult = createChallengeMatchResult(match);
+  if (matchResult) matchCard.appendChild(matchResult);
+  dialog.appendChild(matchCard);
+  overlay.appendChild(dialog);
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeChallengeMatchModal();
+  });
+  document.body.appendChild(overlay);
+  document.addEventListener("keydown", handleChallengeMatchModalKeydown);
+  closeButton.focus({ preventScroll: true });
+}
+
+function bindChallengeMatchDetails(container, match) {
+  if (match?.source_type !== "challenge") return;
+  container.classList.add("challenge-match-row");
+  container.tabIndex = 0;
+  container.setAttribute("role", "button");
+  container.setAttribute("aria-haspopup", "dialog");
+  container.setAttribute("aria-label", `Show match details: ${match?.team1 || "Player 1"} versus ${match?.team2 || "Player 2"}`);
+
+  const activate = (event) => {
+    if (event.target instanceof Element && event.target.closest("a, button, input, select, textarea")) return;
+    openChallengeMatchModal(match, container);
+  };
+  container.addEventListener("click", activate);
+  container.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (event.target instanceof Element && event.target.closest("a, button, input, select, textarea")) return;
+    event.preventDefault();
+    activate(event);
+  });
 }
 
 function buildMatchNewsUrl(shortTitleValue, idValue, urlValue) {
@@ -1362,6 +1992,7 @@ function createMatchElement(match, options = {}) {
 
   appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
   appendChallengeNewBadge({ match, container, rightDiv });
+  bindChallengeMatchDetails(container, match);
 
   return wrapper;
 }
@@ -1446,9 +2077,14 @@ function createDuelElement(match, options = {}) {
     }
 
     const link = document.createElement("a");
-    link.href = `https://boardgamearena.com/player?id=${ids[i]}`;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
+    const playerId = String(ids[i] || "").trim();
+    if (match.source_type === "challenge") {
+      link.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(playerId)}`;
+    } else {
+      link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(playerId)}`;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    }
     link.textContent = name || "";
 
     row.appendChild(link);
@@ -1502,6 +2138,7 @@ function createDuelElement(match, options = {}) {
 
   appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
   appendChallengeNewBadge({ match, container, rightDiv });
+  bindChallengeMatchDetails(container, match);
 
   return wrapper;
 }
@@ -1538,9 +2175,14 @@ function createDuelElementCompact(match) {
     }
 
     const link = document.createElement("a");
-    link.href = `https://boardgamearena.com/player?id=${ids[i]}`;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
+    const playerId = String(ids[i] || "").trim();
+    if (match.source_type === "challenge") {
+      link.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(playerId)}`;
+    } else {
+      link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(playerId)}`;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    }
     link.textContent = name || "";
 
     row.appendChild(link);
@@ -1594,6 +2236,7 @@ function createDuelElementCompact(match) {
 
   appendRoundBadge({ match, container, rightDiv, tournamentType: match.tournament_type });
   appendChallengeNewBadge({ match, container, rightDiv });
+  bindChallengeMatchDetails(container, match);
 
   return wrapper;
 }
@@ -1885,9 +2528,24 @@ function renderSection(container, title, tournaments, matches, events, options =
 
     const tooltip = document.createElement("div");
     tooltip.className = "rating-tooltip";
-    tooltip.innerHTML = `The match rating depends on two things:<br><br>
+    const ratingLegend = document.createElement("div");
+    ratingLegend.className = "rating-tooltip__legend";
+    ratingLegend.appendChild(createRatingTooltipLegendRow({
+      label: "Rating based on GG Elo",
+      type: "gg",
+    }));
+    ratingLegend.appendChild(createRatingTooltipLegendRow({
+      label: "Rating based on BGA Elo",
+      type: "bga",
+    }));
+
+    const ratingDescription = document.createElement("div");
+    ratingDescription.innerHTML = `The match rating depends on two things:<br><br>
 1. The average Elo of both players – stronger players → higher base rating.<br><br>
 2. How close their Elo values are – if the ratings are similar, the adjustment increases the match rating slightly (because it’s expected to be a more balanced game).`;
+
+    tooltip.appendChild(ratingLegend);
+    tooltip.appendChild(ratingDescription);
 
     ratingHelp.appendChild(star);
     ratingHelp.appendChild(info);
@@ -2641,7 +3299,64 @@ function bindLineupToggle(matchId, lineupPanel, chevronIcon, toggleBtn) {
   });
 }
 
-function adaptDbMainPageMatchesData(data) {
+function buildChallengePlayerDetailsIndex(profilesPayload, teamsPayload, ggPlayersPayload) {
+  const profiles = Array.isArray(profilesPayload?.profiles) ? profilesPayload.profiles : [];
+  const teams = Array.isArray(teamsPayload?.teams) ? teamsPayload.teams : [];
+  const ggProfiles = Array.isArray(ggPlayersPayload?.gg_profiles) ? ggPlayersPayload.gg_profiles : [];
+  const teamsById = new Map(
+    teams.map((team) => [String(team?.id || "").trim().toUpperCase(), team]).filter(([id]) => Boolean(id))
+  );
+  const ratingsById = new Map();
+  [...ggProfiles]
+    .filter((profile) => Number.isFinite(Number(profile?.gg_elo)) && Number(profile.gg_elo) > 0)
+    .sort((a, b) => Number(b.gg_elo) - Number(a.gg_elo))
+    .forEach((profile, index) => {
+      const id = String(profile?.id ?? profile?.profile_id ?? "").trim();
+      if (!id) return;
+      ratingsById.set(id, {
+        elo: Math.trunc(Number(profile.gg_elo)),
+        rank: index + 1,
+      });
+    });
+
+  return new Map(profiles.map((profile) => {
+    const id = String(profile?.id ?? profile?.player_id ?? "").trim();
+    const associationId = String(profile?.association || "").trim().toUpperCase();
+    const team = teamsById.get(associationId) || null;
+    const rating = ratingsById.get(id) || null;
+    return [id, {
+      id,
+      nickname: String(profile?.bga_nickname || profile?.nickname || id).trim(),
+      name: String(profile?.name || "").trim(),
+      avatar: buildBgaAvatarUrl(id, profile?.avatar),
+      flag: String(team?.flag || team?.logo || "").trim(),
+      country: String(team?.name || associationId).trim(),
+      elo: rating?.elo ?? null,
+      rank: rating?.rank ?? null,
+      bgaElo: Number.isFinite(Number(profile?.bga_elo)) && Number(profile.bga_elo) > 0
+        ? Math.trunc(Number(profile.bga_elo))
+        : null,
+    }];
+  }).filter(([id]) => Boolean(id)));
+}
+
+function getChallengePlayerDetails(duel, side, playerDetailsById) {
+  const id = String(duel?.[`player_${side}_id`] || "").trim();
+  const indexed = playerDetailsById instanceof Map ? playerDetailsById.get(id) : null;
+  return {
+    id,
+    nickname: String(indexed?.nickname || duel?.[`player_${side}_name`] || id).trim(),
+    name: String(indexed?.name || duel?.[`player_${side}_real_name`] || "").trim(),
+    avatar: String(indexed?.avatar || buildBgaAvatarUrl(id, duel?.[`player_${side}_avatar`]) || "").trim(),
+    flag: String(indexed?.flag || duel?.[`player_${side}_association_flag`] || "").trim(),
+    country: String(indexed?.country || duel?.[`player_${side}_association_name`] || duel?.[`player_${side}_country`] || "").trim(),
+    elo: indexed?.elo ?? duel?.[`player_${side}_gg_elo`] ?? null,
+    rank: indexed?.rank ?? duel?.[`player_${side}_gg_rank`] ?? null,
+    bgaElo: indexed?.bgaElo ?? duel?.[`player_${side}_bga_elo`] ?? null,
+  };
+}
+
+function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
   const result = {
     matches_today: [],
     matches_scheduled: [],
@@ -2720,6 +3435,7 @@ function adaptDbMainPageMatchesData(data) {
       status: String(duel?.status || "").trim(),
       gw1: duel?.dw1,
       gw2: duel?.dw2,
+      games: Array.isArray(duel?.games) ? duel.games.filter(Boolean) : [],
       rating: duel?.gg_rating,
       streams: Array.isArray(duel?.streams)
         ? duel.streams.map((value) => String(value || "").trim()).filter(Boolean)
@@ -2727,6 +3443,8 @@ function adaptDbMainPageMatchesData(data) {
       streamers: Array.isArray(duel?.streamers)
         ? duel.streamers.map((value) => String(value || "").trim()).filter(Boolean)
         : [],
+      player1Details: getChallengePlayerDetails(duel, 1, playerDetailsById),
+      player2Details: getChallengePlayerDetails(duel, 2, playerDetailsById),
       source_type: "challenge",
     };
 
@@ -2856,6 +3574,9 @@ function applySourcePriority(matches, priority) {
   const primaryURL = "https://api.carcassonne.com.ua/public/matches";
   const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches.json";
   const dbMatchesURL = "https://api.carcassonne.gg/public/main-page-matches";
+  const profilesURL = "https://api.carcassonne.gg/profiles/public";
+  const teamsURL = "https://api.carcassonne.gg/teams";
+  const ggPlayersURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
 
   const baseMatchesPromise = fetchPrimaryWithRetry(primaryURL, { retries: 2, delayMs: 500, timeout: 10000 })
     .catch(err => {
@@ -2878,9 +3599,23 @@ function applySourcePriority(matches, priority) {
       return null;
     });
 
-  Promise.all([baseMatchesPromise, dbMatchesPromise])
-    .then(([baseData, dbMatchesData]) => {
-      lastData = { baseData, dbMatchesData };
+  const fetchOptionalJson = (url) => fetch(url)
+    .then(res => res.ok ? res.json() : {})
+    .catch(() => ({}));
+  if (!challengePlayerDetailsCachePromise) {
+    challengePlayerDetailsCachePromise = Promise.all([
+      fetchOptionalJson(profilesURL),
+      fetchOptionalJson(teamsURL),
+      fetchOptionalJson(ggPlayersURL),
+    ]).then(([profilesPayload, teamsPayload, ggPlayersPayload]) => (
+      buildChallengePlayerDetailsIndex(profilesPayload, teamsPayload, ggPlayersPayload)
+    ));
+  }
+  const challengePlayerDetailsPromise = challengePlayerDetailsCachePromise;
+
+  Promise.all([baseMatchesPromise, dbMatchesPromise, challengePlayerDetailsPromise])
+    .then(([baseData, dbMatchesData, challengePlayerDetails]) => {
+      lastData = { baseData, dbMatchesData, challengePlayerDetails };
       renderAllSectionsFromData(lastData);
       setLoading(false);
     })
@@ -2892,7 +3627,10 @@ function applySourcePriority(matches, priority) {
 
   function renderAllSectionsFromData(dataBundle) {
     const baseData = dataBundle?.baseData || {};
-    const dbMatchesData = adaptDbMainPageMatchesData(dataBundle?.dbMatchesData || {});
+    const dbMatchesData = adaptDbMainPageMatchesData(
+      dataBundle?.dbMatchesData || {},
+      dataBundle?.challengePlayerDetails || new Map()
+    );
     const mergedTodayTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_today || []), ...(baseData.tournaments_today || [])]);
     const mergedScheduledTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_scheduled || []), ...(baseData.tournaments_scheduled || [])]);
     const mergedFinishedTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_finished || []), ...(baseData.tournaments_finished || [])]);

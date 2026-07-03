@@ -15272,6 +15272,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 dw2: row.dw2,
                 gg_rating: row.gg_rating,
                 status: row.status,
+                games: gamesByDuelId.get(String(row.id || "").trim()) || [],
                 streams: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
                 streamers: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_avatar),
               })),
@@ -15317,7 +15318,13 @@ function publicMainPageMatchesHandler(req, res, next) {
       if (!normalizedMatchIds.length) {
         return loadStreamsByDuelIds(normalizedChallengeDuelIds, (streamsErr, challengeStreamRows) => {
           if (streamsErr) return next(streamsErr);
-          return finalize([], [], challengeStreamRows || [], []);
+          if (!normalizedChallengeDuelIds.length) {
+            return finalize([], [], challengeStreamRows || [], []);
+          }
+          return loadGamesByDuelIds(normalizedChallengeDuelIds, (gamesErr, challengeGameRows) => {
+            if (gamesErr) return next(gamesErr);
+            return finalize([], challengeGameRows || [], challengeStreamRows || [], []);
+          });
         });
       }
 
@@ -15406,10 +15413,14 @@ function publicMainPageMatchesHandler(req, res, next) {
                 .map((row) => String(row?.id || "").trim())
                 .filter(Boolean)
             ));
-            if (!normalizedDuelIds.length) {
+            const allNormalizedDuelIds = Array.from(new Set([
+              ...normalizedDuelIds,
+              ...normalizedChallengeDuelIds,
+            ]));
+            if (!allNormalizedDuelIds.length) {
               return finalize(duelRows || [], [], streamRows || [], newsRows || []);
             }
-            return loadGamesByDuelIds(normalizedDuelIds, (gamesErr, gameRows) => {
+            return loadGamesByDuelIds(allNormalizedDuelIds, (gamesErr, gameRows) => {
               if (gamesErr) return next(gamesErr);
               return finalize(duelRows || [], gameRows || [], streamRows || [], newsRows || []);
             });

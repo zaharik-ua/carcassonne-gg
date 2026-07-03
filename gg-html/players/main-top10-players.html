@@ -151,11 +151,21 @@
     const scriptEl = document.currentScript;
     const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
     const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
-    const container = scriptEl && scriptEl.previousElementSibling && scriptEl.previousElementSibling.classList.contains("top10-widget")
+    const adjacentContainer = scriptEl
+      && scriptEl.previousElementSibling
+      && scriptEl.previousElementSibling.classList.contains("top10-widget")
       ? scriptEl.previousElementSibling
       : null;
+    const container = adjacentContainer && adjacentContainer.dataset.top10Initialized !== "true"
+      ? adjacentContainer
+      : Array.from(document.querySelectorAll(".top10-widget"))
+          .find(widget => widget.dataset.top10Initialized !== "true");
 
-    if (!container) return;
+    if (!container) {
+      console.warn("Top-10 widget container was not found or was already initialized.");
+      return;
+    }
+    container.dataset.top10Initialized = "true";
 
     function normalizeKey(value) {
       return String(value || "").trim().toUpperCase();
