@@ -7130,6 +7130,24 @@ async function loadChallengeDuelByRequest(periodId, requestId) {
   );
 }
 
+async function loadChallengeDuelById(periodId, duelId, options = {}) {
+  const normalizedPeriodId = normalizeNullableText(periodId);
+  const normalizedDuelId = normalizeNullableText(duelId);
+  if (!normalizedPeriodId || !normalizedDuelId) return null;
+  return dbGetAsync(
+    `
+      SELECT *
+      FROM duels
+      WHERE challenge_period_id = ?
+        AND id = ?
+        AND source_type = 'challenge'
+        ${options.includeDeleted ? "" : "AND deleted_at IS NULL"}
+      LIMIT 1
+    `,
+    [normalizedPeriodId, normalizedDuelId]
+  );
+}
+
 async function resolveChallengeDuelCancelledByPlayerId(duel) {
   const explicitPlayerId = normalizeNullableText(duel?.cancelled_by_player_id);
   if (explicitPlayerId) return explicitPlayerId;
@@ -7944,6 +7962,285 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
   } catch (error) {
     console.error("Failed to load Challenge requests", error);
     return res.status(500).json({ ok: false, message: "Failed to load Challenge requests" });
+  }
+});
+
+const ADMIN_CHALLENGE_DUEL_STATUSES = new Set([
+  "Draft",
+  "Requested new time",
+  "Planned",
+  "In progress",
+  "Done",
+  "Error",
+  "Cancelled",
+]);
+
+function getChallengeRequestStatusForDuelStatus(status) {
+  if (["Draft", "Requested new time"].includes(status)) return "pending";
+  if (status === "Cancelled") return "auto_cancelled";
+  return "accepted";
+}
+
+app.patch("/challenge-periods/:id/matches/:duelId", requireAdmin, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const duelId = normalizeNullableText(req.params.duelId);
+  const player1Id = normalizeNullableText(req.body?.player_1_id ?? req.body?.player1Id);
+  const player2Id = normalizeNullableText(req.body?.player_2_id ?? req.body?.player2Id);
+  const timeUtc = normalizeUtcTimestamp(req.body?.time_utc ?? req.body?.timeUtc);
+  const rawFormat = normalizeNullableText(req.body?.duel_format ?? req.body?.duelFormat);
+  const formatKey = String(rawFormat || "").toLowerCase();
+  const duelFormat = formatKey === "bo3" ? "Bo3" : formatKey === "bo5" ? "Bo5" : "";
+  const status = normalizeNullableText(req.body?.status);
+  const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
+
+  if (!periodId || !duelId) return res.status(400).json({ ok: false, message: "Invalid Challenge match id" });
+  if (!player1Id || !player2Id || player1Id === player2Id) {
+    return res.status(400).json({ ok: false, message: "Choose two different players" });
+  }
+  if (!timeUtc) return res.status(400).json({ ok: false, message: "Choose a valid match time" });
+  if (!duelFormat) return res.status(400).json({ ok: false, message: "Choose Bo3 or Bo5" });
+  if (!ADMIN_CHALLENGE_DUEL_STATUSES.has(status)) {
+    return res.status(400).json({ ok: false, message: "Choose a valid match status" });
+  }
+
+  try {
+    const [period, beforeDuel, playerRows] = await Promise.all([
+      loadChallengePeriodById(periodId),
+      loadChallengeDuelById(periodId, duelId, { includeDeleted: true }),
+      dbAllAsync("SELECT id FROM profiles WHERE id IN (?, ?) AND deleted_at IS NULL", [player1Id, player2Id]),
+    ]);
+    if (!period) return res.status(404).json({ ok: false, message: "Challenge period not found" });
+    if (!beforeDuel) return res.status(404).json({ ok: false, message: "Challenge match not found" });
+    if ((playerRows || []).length !== 2) {
+      return res.status(400).json({ ok: false, message: "One of the selected players is unavailable" });
+    }
+
+    const requestId = normalizeNullableText(beforeDuel.challenge_request_id);
+    const beforeRequest = requestId ? await loadChallengeRequestById(periodId, requestId) : null;
+    if (!beforeRequest) {
+      return res.status(409).json({ ok: false, message: "The Challenge request linked to this match was not found" });
+    }
+
+    if ([...CHALLENGE_ACTIVE_DUEL_STATUSES, "Done"].includes(status)) {
+      const conflict = await dbGetAsync(
+        `
+          SELECT id
+          FROM duels
+          WHERE challenge_period_id = ?
+            AND id <> ?
+            AND deleted_at IS NULL
+            AND status IN ('Planned', 'In progress', 'Error', 'Done')
+            AND (player_1_id IN (?, ?) OR player_2_id IN (?, ?))
+          LIMIT 1
+        `,
+        [periodId, duelId, player1Id, player2Id, player1Id, player2Id]
+      );
+      if (conflict) {
+        return res.status(409).json({ ok: false, message: "One of the players already has another Challenge match in this period" });
+      }
+    }
+
+    const requestStatus = getChallengeRequestStatusForDuelStatus(status);
+    const periodPlayerStatus = status === "Done" ? "played" : "match_scheduled";
+    let afterDuel = null;
+    let afterRequest = null;
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await dbRunAsync(
+        `
+          UPDATE challenge_period_players
+          SET
+            status = 'not_selected',
+            challenge_duel_id = NULL,
+            status_updated_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE period_id = ?
+            AND challenge_duel_id = ?
+        `,
+        [periodId, duelId]
+      );
+      await dbRunAsync(
+        `
+          UPDATE challenge_requests
+          SET
+            player_1_id = ?,
+            player_2_id = ?,
+            created_by_player_id = ?,
+            awaiting_player_id = ?,
+            status = ?,
+            time_option_1_utc = ?,
+            time_option_2_utc = NULL,
+            time_option_3_utc = NULL,
+            allows_bo3 = ?,
+            allows_bo5 = ?,
+            accepted_time_utc = ?,
+            accepted_format = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE period_id = ? AND id = ?
+        `,
+        [
+          player1Id,
+          player2Id,
+          player1Id,
+          player2Id,
+          requestStatus,
+          timeUtc,
+          duelFormat === "Bo3" ? 1 : 0,
+          duelFormat === "Bo5" ? 1 : 0,
+          requestStatus === "accepted" ? timeUtc : null,
+          requestStatus === "accepted" ? duelFormat : null,
+          periodId,
+          requestId,
+        ]
+      );
+      await dbRunAsync(
+        `
+          UPDATE duels
+          SET
+            player_1_id = ?,
+            player_2_id = ?,
+            time_utc = ?,
+            duel_format = ?,
+            status = ?,
+            cancelled_by_player_id = CASE WHEN ? = 'Cancelled' THEN cancelled_by_player_id ELSE NULL END,
+            cancellation_reason = CASE WHEN ? = 'Cancelled' THEN COALESCE(cancellation_reason, 'cancelled_by_admin') ELSE NULL END,
+            cancelled_at = CASE WHEN ? = 'Cancelled' THEN COALESCE(cancelled_at, CURRENT_TIMESTAMP) ELSE NULL END,
+            updated_by = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE challenge_period_id = ? AND id = ? AND source_type = 'challenge'
+        `,
+        [player1Id, player2Id, timeUtc, duelFormat, status, status, status, status, actorPlayerId, periodId, duelId]
+      );
+
+      if ([...CHALLENGE_ACTIVE_DUEL_STATUSES, "Done"].includes(status) && !beforeDuel.deleted_at) {
+        for (const playerId of [player1Id, player2Id]) {
+          await dbRunAsync(
+            `
+              INSERT INTO challenge_period_players (
+                period_id, player_id, status, challenge_duel_id, created_at, status_updated_at, updated_at
+              )
+              VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              ON CONFLICT(period_id, player_id) DO UPDATE SET
+                status = excluded.status,
+                challenge_duel_id = excluded.challenge_duel_id,
+                status_updated_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            `,
+            [periodId, playerId, periodPlayerStatus, duelId]
+          );
+        }
+      }
+
+      afterDuel = await loadChallengeDuelById(periodId, duelId, { includeDeleted: true });
+      afterRequest = await loadChallengeRequestById(periodId, requestId);
+      await dbRunAsync("COMMIT");
+    } catch (error) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw error;
+    }
+
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_duel.updated_by_admin",
+      entity_type: "duel",
+      action: "update",
+      record_id: duelId,
+      changes: buildAuditChanges(beforeDuel, afterDuel),
+      metadata: { period_id: periodId, request_id: requestId, duel_id: duelId },
+    });
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_request.match_updated_by_admin",
+      entity_type: "challenge_request",
+      action: "update",
+      record_id: requestId,
+      changes: buildAuditChanges(beforeRequest, afterRequest),
+      metadata: { period_id: periodId, request_id: requestId, duel_id: duelId },
+    });
+    return res.json({ ok: true, duel: afterDuel, challenge_request: mapChallengeRequest(afterRequest) });
+  } catch (error) {
+    if (error?.code === "SQLITE_CONSTRAINT") {
+      return res.status(409).json({ ok: false, message: "These match changes conflict with existing Challenge data" });
+    }
+    console.error("Failed to update Challenge match as admin", error);
+    return res.status(500).json({ ok: false, message: "Failed to update Challenge match" });
+  }
+});
+
+app.delete("/challenge-periods/:id/matches/:duelId", requireAdmin, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const duelId = normalizeNullableText(req.params.duelId);
+  const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
+  if (!periodId || !duelId) return res.status(400).json({ ok: false, message: "Invalid Challenge match id" });
+
+  try {
+    const beforeDuel = await loadChallengeDuelById(periodId, duelId, { includeDeleted: true });
+    if (!beforeDuel) return res.status(404).json({ ok: false, message: "Challenge match not found" });
+    if (beforeDuel.deleted_at) return res.json({ ok: true, duel: beforeDuel });
+    const requestId = normalizeNullableText(beforeDuel.challenge_request_id);
+    const beforeRequest = requestId ? await loadChallengeRequestById(periodId, requestId) : null;
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await dbRunAsync(
+        `
+          UPDATE duels
+          SET deleted_by = ?, deleted_at = CURRENT_TIMESTAMP, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE challenge_period_id = ? AND id = ? AND source_type = 'challenge' AND deleted_at IS NULL
+        `,
+        [actorPlayerId, actorPlayerId, periodId, duelId]
+      );
+      await dbRunAsync(
+        `
+          UPDATE challenge_period_players
+          SET status = 'not_selected', challenge_duel_id = NULL, status_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+          WHERE period_id = ? AND challenge_duel_id = ?
+        `,
+        [periodId, duelId]
+      );
+      if (requestId) {
+        await dbRunAsync(
+          `
+            UPDATE challenge_requests
+            SET status = 'auto_cancelled', hidden_by_creator_at = COALESCE(hidden_by_creator_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
+            WHERE period_id = ? AND id = ?
+          `,
+          [periodId, requestId]
+        );
+      }
+      await dbRunAsync("COMMIT");
+    } catch (error) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw error;
+    }
+
+    const afterDuel = await loadChallengeDuelById(periodId, duelId, { includeDeleted: true });
+    const afterRequest = requestId ? await loadChallengeRequestById(periodId, requestId) : null;
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_duel.removed_by_admin",
+      entity_type: "duel",
+      action: "delete",
+      record_id: duelId,
+      changes: buildAuditChanges(beforeDuel, afterDuel),
+      metadata: { period_id: periodId, request_id: requestId, duel_id: duelId, soft_delete: true },
+    });
+    if (beforeRequest && afterRequest) {
+      logAuditEvent({
+        ...getAuditActor(req.user),
+        event_type: "challenge_request.match_removed_by_admin",
+        entity_type: "challenge_request",
+        action: "update",
+        record_id: requestId,
+        changes: buildAuditChanges(beforeRequest, afterRequest),
+        metadata: { period_id: periodId, request_id: requestId, duel_id: duelId, soft_delete: true },
+      });
+    }
+    return res.json({ ok: true, duel: afterDuel });
+  } catch (error) {
+    console.error("Failed to remove Challenge match as admin", error);
+    return res.status(500).json({ ok: false, message: "Failed to remove Challenge match" });
   }
 });
 

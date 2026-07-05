@@ -451,6 +451,18 @@ code {
     color: #073654;
   }
 
+  .challenge-match-result__game--clock {
+    align-items: center;
+    gap: 3px;
+    background: #f3e4c4;
+    color: #8c6418;
+  }
+
+  .challenge-match-result__game-clock {
+    font-size: 10px;
+    line-height: 1;
+  }
+
   a.challenge-match-result__game:hover,
   a.challenge-match-result__game:focus-visible {
     background: #d7eaff;
@@ -468,6 +480,12 @@ code {
   a.challenge-match-result__game--player-2:focus-visible {
     background: #c5def8;
     color: #052c45;
+  }
+
+  a.challenge-match-result__game--clock:hover,
+  a.challenge-match-result__game--clock:focus-visible {
+    background: #ead5b2;
+    color: #795412;
   }
 
   .challenge-match-card__vs {
@@ -1636,10 +1654,12 @@ function createChallengeMatchResult(match) {
       const player1Score = game?.player_1_score;
       const player2Score = game?.player_2_score;
       const tableId = String(game?.bga_table_id || "").trim();
+      const player1Clock = isTruthyOne(game?.player_1_clock);
+      const player2Clock = isTruthyOne(game?.player_2_clock);
       const hasPlayer1Score = player1Score !== null && player1Score !== undefined && String(player1Score).trim() !== "";
       const hasPlayer2Score = player2Score !== null && player2Score !== undefined && String(player2Score).trim() !== "";
       return hasPlayer1Score && hasPlayer2Score
-        ? { player1Score, player2Score, tableId }
+        ? { player1Score, player2Score, player1Clock, player2Clock, tableId }
         : null;
     })
     .filter(Boolean);
@@ -1652,6 +1672,11 @@ function createChallengeMatchResult(match) {
   let score2 = hasMatchScore ? match.gw2 : 0;
   if (!hasMatchScore) {
     games.forEach((game) => {
+      if (game.player1Clock !== game.player2Clock) {
+        if (game.player1Clock) score2 += 1;
+        if (game.player2Clock) score1 += 1;
+        return;
+      }
       const gameScore1 = Number(game.player1Score);
       const gameScore2 = Number(game.player2Score);
       if (!Number.isFinite(gameScore1) || !Number.isFinite(gameScore2)) return;
@@ -1679,16 +1704,27 @@ function createChallengeMatchResult(match) {
     games.forEach((game) => {
       const badge = document.createElement(game.tableId ? "a" : "span");
       badge.className = "challenge-match-result__game";
-      const player1Score = Number(game.player1Score);
-      const player2Score = Number(game.player2Score);
-      if (Number.isFinite(player1Score) && Number.isFinite(player2Score)) {
-        if (player1Score > player2Score) {
-          badge.classList.add("challenge-match-result__game--player-1");
-        } else if (player2Score > player1Score) {
-          badge.classList.add("challenge-match-result__game--player-2");
+      const hasClockLoss = game.player1Clock !== game.player2Clock;
+      if (hasClockLoss) {
+        badge.classList.add("challenge-match-result__game--clock");
+        const clock = document.createElement("i");
+        clock.className = "fa-regular fa-clock challenge-match-result__game-clock";
+        const clockScore = document.createElement("span");
+        clockScore.textContent = game.player1Clock ? "0:1" : "1:0";
+        badge.appendChild(clock);
+        badge.appendChild(clockScore);
+      } else {
+        const player1Score = Number(game.player1Score);
+        const player2Score = Number(game.player2Score);
+        if (Number.isFinite(player1Score) && Number.isFinite(player2Score)) {
+          if (player1Score > player2Score) {
+            badge.classList.add("challenge-match-result__game--player-1");
+          } else if (player2Score > player1Score) {
+            badge.classList.add("challenge-match-result__game--player-2");
+          }
         }
+        badge.textContent = `${game.player1Score}:${game.player2Score}`;
       }
-      badge.textContent = `${game.player1Score}:${game.player2Score}`;
       if (game.tableId) {
         badge.href = `https://boardgamearena.com/table?table=${encodeURIComponent(game.tableId)}`;
         badge.target = "_blank";

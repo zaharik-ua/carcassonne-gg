@@ -1448,6 +1448,7 @@
   }
 
   .challenge-request-row input,
+  .challenge-request-row select,
   .challenge-request-row textarea {
     width: 100%;
     height: 30px;
@@ -1458,6 +1459,36 @@
     font: inherit;
     font-size: 14px;
     box-sizing: border-box;
+  }
+
+  .challenge-request-row select {
+    background: #fff;
+  }
+
+  .challenge-admin-match-dialog {
+    width: min(100%, 620px);
+  }
+
+  .challenge-admin-match-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+  }
+
+  .challenge-admin-match-form .challenge-request-title,
+  .challenge-admin-match-form .challenge-request-message,
+  .challenge-admin-match-form .challenge-admin-match-actions {
+    grid-column: 1 / -1;
+  }
+
+  .challenge-admin-match-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .challenge-admin-match-actions .challenge-btn-danger {
+    margin-right: auto;
   }
 
   .challenge-request-row input[type="datetime-local"] {
@@ -2110,8 +2141,19 @@
     }
 
     .challenge-request-row input:not([type="checkbox"]),
+    .challenge-request-row select,
     .cp-dd-search input {
       font-size: 16px;
+    }
+
+    .challenge-admin-match-form {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .challenge-admin-match-form .challenge-request-title,
+    .challenge-admin-match-form .challenge-request-message,
+    .challenge-admin-match-form .challenge-admin-match-actions {
+      grid-column: 1;
     }
   }
 </style>
@@ -2942,6 +2984,210 @@
     return node;
   }
 
+  function openAdminChallengeMatchDialog(period, request) {
+    const duel = request?.duel || null;
+    if (!duel?.id) return;
+
+    const overlay = document.createElement("div");
+    overlay.className = "challenge-modal-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "challenge-modal challenge-admin-match-dialog";
+    dialog.textContent = "Loading...";
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    const closeModal = () => {
+      overlay.remove();
+      closeAllDropdowns();
+    };
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal();
+    });
+
+    (async () => {
+      const profiles = await fetchChallengeProfiles();
+      const ensurePlayerOption = (player, playerId) => {
+        const id = String(playerId || player?.player_id || "").trim();
+        if (!id || profiles.some((profile) => String(profile?.id || "") === id)) return profiles;
+        return profiles.concat({
+          id,
+          value: id,
+          label: getOpponentDisplayName(player),
+          flag: String(player?.association?.flag || player?.flag || "").trim(),
+        });
+      };
+      const player1Options = ensurePlayerOption(request?.player_1, request?.player_1_id);
+      const player2Options = ensurePlayerOption(request?.player_2, request?.player_2_id);
+
+      dialog.innerHTML = "";
+      const form = document.createElement("form");
+      form.className = "challenge-admin-match-form";
+      form.noValidate = true;
+      dialog.appendChild(form);
+
+      const title = document.createElement("div");
+      title.className = "challenge-request-title";
+      title.textContent = "Edit Challenge match";
+      form.appendChild(title);
+
+      const player1Dropdown = createPlayerSearchDropdown(request?.player_1_id, player1Options, {
+        placeholderLabel: "Select player 1",
+      });
+      addChallengeFormRow(form, "Player 1", player1Dropdown.root, { required: true });
+
+      const player2Dropdown = createPlayerSearchDropdown(request?.player_2_id, player2Options, {
+        placeholderLabel: "Select player 2",
+      });
+      addChallengeFormRow(form, "Player 2", player2Dropdown.root, { required: true });
+
+      const timeInput = document.createElement("input");
+      timeInput.type = "datetime-local";
+      timeInput.value = toDatetimeLocalFromUtc(duel?.time_utc || request?.accepted_time_utc);
+      addChallengeFormRow(form, "Time, UTC", timeInput, { required: true });
+
+      const formatSelect = document.createElement("select");
+      ["Bo3", "Bo5"].forEach((format) => {
+        const option = document.createElement("option");
+        option.value = format;
+        option.textContent = format;
+        option.selected = format === String(duel?.duel_format || request?.accepted_format || "");
+        formatSelect.appendChild(option);
+      });
+      addChallengeFormRow(form, "Format", formatSelect, { required: true });
+
+      const statusSelect = document.createElement("select");
+      ["Draft", "Requested new time", "Planned", "In progress", "Done", "Error", "Cancelled"].forEach((status) => {
+        const option = document.createElement("option");
+        option.value = status;
+        option.textContent = status;
+        option.selected = status === String(duel?.status || "");
+        statusSelect.appendChild(option);
+      });
+      addChallengeFormRow(form, "Status", statusSelect, { required: true });
+
+      const message = document.createElement("div");
+      message.className = "challenge-request-message";
+      if (duel?.deleted_at) {
+        message.classList.add("is-error");
+        message.textContent = "This match has been removed. Its data is read-only in the Removed items view.";
+      }
+      form.appendChild(message);
+
+      const actions = document.createElement("div");
+      actions.className = "challenge-admin-match-actions";
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "challenge-btn challenge-btn-danger";
+      deleteBtn.textContent = "Delete match";
+      deleteBtn.disabled = !!duel?.deleted_at;
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "challenge-btn challenge-btn-secondary";
+      cancelBtn.textContent = "Cancel";
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "submit";
+      saveBtn.className = "challenge-btn challenge-btn-primary";
+      saveBtn.textContent = "Save changes";
+      saveBtn.disabled = !!duel?.deleted_at;
+      actions.appendChild(deleteBtn);
+      actions.appendChild(cancelBtn);
+      actions.appendChild(saveBtn);
+      form.appendChild(actions);
+
+      const setMessage = (text, tone) => {
+        message.className = `challenge-request-message${tone ? ` is-${tone}` : ""}`;
+        message.textContent = text || "";
+      };
+      const setSaving = (saving) => {
+        saveBtn.disabled = !!saving || !!duel?.deleted_at;
+        deleteBtn.disabled = !!saving || !!duel?.deleted_at;
+        cancelBtn.disabled = !!saving;
+        player1Dropdown.setDisabled(!!saving || !!duel?.deleted_at);
+        player2Dropdown.setDisabled(!!saving || !!duel?.deleted_at);
+        timeInput.disabled = !!saving || !!duel?.deleted_at;
+        formatSelect.disabled = !!saving || !!duel?.deleted_at;
+        statusSelect.disabled = !!saving || !!duel?.deleted_at;
+      };
+
+      cancelBtn.addEventListener("click", closeModal);
+      deleteBtn.addEventListener("click", async () => {
+        const confirmed = await showChallengeConfirmDialog(
+          "Delete Challenge match",
+          "Delete this match?",
+          {
+            note: "The match and its request will move to Removed items. Both players will become available for another match.",
+            confirmText: "Delete match",
+            confirmClassName: "challenge-btn-danger",
+            cancelText: "Back",
+          }
+        );
+        if (!confirmed) return;
+        setSaving(true);
+        setMessage("Deleting...", "");
+        try {
+          await apiJson(
+            `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(String(period?.id || ""))}/matches/${encodeURIComponent(String(duel.id))}`,
+            { method: "DELETE" }
+          );
+          closeModal();
+          renderChallenges();
+        } catch (error) {
+          setSaving(false);
+          setMessage(error?.message || "Failed to delete match.", "error");
+        }
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const player1Id = player1Dropdown.getValue();
+        const player2Id = player2Dropdown.getValue();
+        const timeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
+        if (!player1Id || !player2Id) {
+          setMessage("Choose both players.", "error");
+          return;
+        }
+        if (player1Id === player2Id) {
+          setMessage("Choose two different players.", "error");
+          return;
+        }
+        if (!timeUtc) {
+          setMessage("Choose a valid match time.", "error");
+          return;
+        }
+        setSaving(true);
+        setMessage("Saving...", "");
+        try {
+          await apiJson(
+            `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(String(period?.id || ""))}/matches/${encodeURIComponent(String(duel.id))}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({
+                player_1_id: player1Id,
+                player_2_id: player2Id,
+                time_utc: timeUtc,
+                duel_format: formatSelect.value,
+                status: statusSelect.value,
+              }),
+            }
+          );
+          closeModal();
+          renderChallenges();
+        } catch (error) {
+          setSaving(false);
+          setMessage(error?.message || "Failed to update match.", "error");
+        }
+      });
+
+      setSaving(false);
+    })().catch((error) => {
+      dialog.innerHTML = "";
+      const text = document.createElement("div");
+      text.className = "challenge-request-message is-error";
+      text.textContent = error?.message || "Failed to load match editor.";
+      dialog.appendChild(text);
+    });
+  }
+
   function canCurrentPlayerRemoveChallengeDuel(request, currentPlayerId) {
     const duel = request?.duel || null;
     const playerId = String(currentPlayerId || "").trim();
@@ -3000,6 +3246,11 @@
     actions.className = "challenge-duel-actions";
     const statusNode = createChallengeDuelStatusNode(duel?.status, request, !!duel?.deleted_at);
     if (statusNode) actions.appendChild(statusNode);
+    if (options.adminView) {
+      actions.appendChild(createActionButton("Edit", "challenge-btn-secondary", () => {
+        openAdminChallengeMatchDialog(period, request);
+      }));
+    }
     const editableDuelStatuses = new Set(["Planned", "In progress", "Error"]);
     if (!options.readOnly && editableDuelStatuses.has(String(duel?.status || ""))) {
       actions.appendChild(createChallengeDuelEditDropdown(period, request, currentPlayerId));
@@ -5001,7 +5252,7 @@
       if (requestAdminMode) {
         const allRequests = (Array.isArray(data?.all_requests) ? data.all_requests : []).map(enrichRequest);
         const matches = (Array.isArray(data?.matches) ? data.matches : []).map(enrichRequest);
-        renderChallengeMatchPanel(period, currentPlayerId, matches, { readOnly: true });
+        renderChallengeMatchPanel(period, currentPlayerId, matches, { readOnly: true, adminView: true });
         bodyEl.innerHTML = "";
         bodyEl.appendChild(createRequestListSection(
           "All requests",
