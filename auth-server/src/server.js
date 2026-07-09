@@ -334,6 +334,11 @@ const CHALLENGE_PERIOD_STATUSES = new Set([
   "archived",
   "cancelled",
 ]);
+const CHALLENGE_PERIOD_PENDING_EXPIRING_STATUSES = new Set([
+  "result_review",
+  "archived",
+  "cancelled",
+]);
 const CHALLENGE_PLAYER_PERIOD_STATUSES = new Set([
   "not_selected",
   "available",
@@ -464,6 +469,10 @@ function normalizeIntegerOrNull(value) {
 function normalizeChallengePeriodStatus(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return CHALLENGE_PERIOD_STATUSES.has(normalized) ? normalized : "draft";
+}
+
+function challengePeriodStatusExpiresPendingRequests(status) {
+  return CHALLENGE_PERIOD_PENDING_EXPIRING_STATUSES.has(String(status || "").trim().toLowerCase());
 }
 
 function normalizeUtcTimestamp(value) {
@@ -3796,6 +3805,34 @@ function ensureGamesSchema() {
   });
 }
 
+function expirePendingChallengeRequestsForClosedPeriods() {
+  const expiringStatuses = Array.from(CHALLENGE_PERIOD_PENDING_EXPIRING_STATUSES);
+  db.run(
+    `
+      UPDATE challenge_requests
+      SET
+        status = 'expired',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE status = 'pending'
+        AND period_id IN (
+          SELECT id
+          FROM challenge_periods
+          WHERE status IN (${expiringStatuses.map(() => "?").join(", ")})
+        )
+    `,
+    expiringStatuses,
+    function onExpireClosedPeriodRequests(expireErr) {
+      if (expireErr) {
+        console.error("Failed to expire pending Challenge requests for closed periods", expireErr);
+        return;
+      }
+      if (this.changes) {
+        console.info(`Expired ${this.changes} pending Challenge request(s) for closed periods`);
+      }
+    }
+  );
+}
+
 function ensureChallengesSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS challenge_periods (
@@ -4043,6 +4080,7 @@ function ensureChallengesSchema() {
         }
       }
     );
+    expirePendingChallengeRequestsForClosedPeriods();
   });
 }
 
@@ -7693,9 +7731,10 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
             SELECT COUNT(*) AS count
             FROM challenge_requests
             WHERE created_by_player_id = ?
+              AND period_id = ?
               AND status = 'pending'
           `,
-          [player1Id]
+          [player1Id, periodId]
         ),
       ]);
 
@@ -7727,7 +7766,7 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
         throw error;
       }
       if (Number(pendingCreatedCount?.count || 0) >= 3) {
-        const error = new Error("You can have no more than three pending Challenge requests");
+        const error = new Error("You can have no more than three pending Challenge requests in this period");
         error.httpStatus = 409;
         throw error;
       }
@@ -9600,36 +9639,91 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
       return res.status(404).json({ ok: false, message: "Challenge period not found" });
     }
 
-    await dbRunAsync(
-      `
-        UPDATE challenge_periods
-        SET
-          name = ?,
-          description = ?,
-          logo = ?,
-          status = ?,
-          planning_starts_at = ?,
-          play_starts_at = ?,
-          play_ends_at = ?,
-          result_review_ends_at = ?,
-          updated_by = ?,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `,
-      [
-        period.name,
-        period.description,
-        period.logo,
-        period.status,
-        period.planning_starts_at,
-        period.play_starts_at,
-        period.play_ends_at,
-        period.result_review_ends_at,
-        actorPlayerId,
-        periodId,
-      ]
-    );
-    const updatedRow = await loadChallengePeriodById(periodId);
+    let updatedRow = null;
+    let expiredRequestAudits = [];
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const requestsToExpire = challengePeriodStatusExpiresPendingRequests(period.status)
+        ? await dbAllAsync(
+          `
+            SELECT *
+            FROM challenge_requests
+            WHERE period_id = ?
+              AND status = 'pending'
+          `,
+          [periodId]
+        )
+        : [];
+
+      await dbRunAsync(
+        `
+          UPDATE challenge_periods
+          SET
+            name = ?,
+            description = ?,
+            logo = ?,
+            status = ?,
+            planning_starts_at = ?,
+            play_starts_at = ?,
+            play_ends_at = ?,
+            result_review_ends_at = ?,
+            updated_by = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [
+          period.name,
+          period.description,
+          period.logo,
+          period.status,
+          period.planning_starts_at,
+          period.play_starts_at,
+          period.play_ends_at,
+          period.result_review_ends_at,
+          actorPlayerId,
+          periodId,
+        ]
+      );
+
+      if (requestsToExpire.length) {
+        const requestIds = requestsToExpire.map((request) => request.id);
+        await dbRunAsync(
+          `
+            UPDATE challenge_requests
+            SET
+              status = 'expired',
+              updated_at = CURRENT_TIMESTAMP
+            WHERE period_id = ?
+              AND status = 'pending'
+              AND id IN (${requestIds.map(() => "?").join(", ")})
+          `,
+          [periodId, ...requestIds]
+        );
+        const afterExpiredRequests = await dbAllAsync(
+          `
+            SELECT *
+            FROM challenge_requests
+            WHERE period_id = ?
+              AND id IN (${requestIds.map(() => "?").join(", ")})
+          `,
+          [periodId, ...requestIds]
+        );
+        const afterExpiredRequestsById = new Map((afterExpiredRequests || []).map((request) => [request.id, request]));
+        expiredRequestAudits = requestsToExpire
+          .map((beforeRequest) => ({
+            before: beforeRequest,
+            after: afterExpiredRequestsById.get(beforeRequest.id) || null,
+          }))
+          .filter((entry) => entry.after);
+      }
+
+      updatedRow = await loadChallengePeriodById(periodId);
+      await dbRunAsync("COMMIT");
+    } catch (error) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw error;
+    }
+
     logAuditEvent({
       ...getAuditActor(req.user),
       event_type: "challenge_period.updated",
@@ -9637,7 +9731,26 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
       action: "update",
       record_id: periodId,
       changes: buildAuditChanges(beforeRow, updatedRow),
-      metadata: { period_id: periodId },
+      metadata: {
+        period_id: periodId,
+        expired_pending_request_count: expiredRequestAudits.length,
+      },
+    });
+    expiredRequestAudits.forEach(({ before, after }) => {
+      logAuditEvent({
+        ...getAuditActor(req.user),
+        event_type: "challenge_request.expired",
+        entity_type: "challenge_request",
+        action: "update",
+        record_id: before.id,
+        changes: buildAuditChanges(before, after),
+        metadata: {
+          period_id: periodId,
+          request_id: before.id,
+          reason: "period_status_changed",
+          period_status: period.status,
+        },
+      });
     });
     return res.json({ ok: true, challenge_period: updatedRow || null });
   } catch (error) {

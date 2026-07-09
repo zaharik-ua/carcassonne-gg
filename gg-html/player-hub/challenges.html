@@ -2474,6 +2474,7 @@
   const PLAYER_CHALLENGE_PERIODS_URL = `${CHALLENGE_PERIODS_URL}/player`;
   const DUELS_URL = `${AUTH_BASE}/duels`;
   const DUEL_GAMES_SAVE_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/games/save`;
+  const ENABLE_PLAYER_CHALLENGE_RESULT_EDIT = false;
   const ELIGIBLE_OPPONENTS_PATH = "eligible-opponents";
   const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
   const CHALLENGE_PROGRESS_EVENT = "gg-challenge-progress-change";
@@ -4105,7 +4106,8 @@
       }));
     }
     if (
-      !options.readOnly
+      ENABLE_PLAYER_CHALLENGE_RESULT_EDIT
+      && !options.readOnly
       && isChallengeResultEditableStatus(duel?.status)
       && isCurrentPlayerChallengeDuelParticipant(request, currentPlayerId)
     ) {
