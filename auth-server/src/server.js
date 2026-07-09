@@ -7248,6 +7248,39 @@ function mapChallengeRequestWithPlayers(row) {
   };
 }
 
+async function attachGamesToChallengeRequests(requests) {
+  const normalizedRequests = Array.isArray(requests) ? requests.filter(Boolean) : [];
+  const duelIds = Array.from(new Set(
+    normalizedRequests
+      .map((request) => normalizeNullableText(request?.duel?.id))
+      .filter(Boolean)
+  ));
+  if (!duelIds.length) return normalizedRequests;
+
+  const gameRows = await new Promise((resolve, reject) => {
+    loadGamesByDuelIds(duelIds, (gamesErr, rows) => {
+      if (gamesErr) {
+        reject(gamesErr);
+        return;
+      }
+      resolve(rows || []);
+    });
+  });
+  const gamesByDuelId = new Map();
+  (Array.isArray(gameRows) ? gameRows : []).forEach((game) => {
+    const duelId = normalizeNullableText(game?.duel_id);
+    if (!duelId) return;
+    if (!gamesByDuelId.has(duelId)) gamesByDuelId.set(duelId, []);
+    gamesByDuelId.get(duelId).push(game);
+  });
+  normalizedRequests.forEach((request) => {
+    const duelId = normalizeNullableText(request?.duel?.id);
+    if (!duelId || !request.duel) return;
+    request.duel.games = gamesByDuelId.get(duelId) || [];
+  });
+  return normalizedRequests;
+}
+
 async function loadChallengePlayerProfileContext(playerId) {
   const normalizedPlayerId = normalizeNullableText(playerId);
   if (!normalizedPlayerId) return null;
@@ -7872,7 +7905,7 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
       adminMode ? [periodId] : [periodId, playerId, playerId]
     );
     const requestRowsById = new Map((rows || []).map((row) => [String(row?.id || ""), row]));
-    const requests = (rows || []).map(mapChallengeRequestWithPlayers).filter(Boolean);
+    const requests = await attachGamesToChallengeRequests((rows || []).map(mapChallengeRequestWithPlayers).filter(Boolean));
     await Promise.all(requests.map(async (request) => {
       if (!request?.duel || request.duel.cancelled_by_player_id) return;
       const requestRow = requestRowsById.get(String(request.id || ""));
@@ -7942,6 +7975,7 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
         `,
         [periodId]
       );
+      const matches = await attachGamesToChallengeRequests((matchRows || []).map(mapChallengeRequestWithPlayers).filter(Boolean));
       return res.json({
         ok: true,
         admin_mode: true,
@@ -7949,7 +7983,7 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
         player_id: playerId,
         period,
         all_requests: requests,
-        matches: (matchRows || []).map(mapChallengeRequestWithPlayers).filter(Boolean),
+        matches,
       });
     }
     return res.json({
@@ -13579,12 +13613,18 @@ app.post("/duels/:id/games/save", (req, res) => {
         d.match_id,
         d.time_utc,
         d.duel_format,
+        d.player_1_id,
+        d.player_2_id,
+        d.status AS duel_status,
+        d.challenge_period_id,
+        d.challenge_request_id,
+        d.source_type,
         m.tournament_id,
         m.team_1,
         m.team_2,
         m.status AS match_status
       FROM duels d
-      JOIN matches m
+      LEFT JOIN matches m
         ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
        AND m.deleted_at IS NULL
       WHERE trim(COALESCE(d.id, '')) = trim(?)
@@ -13598,6 +13638,258 @@ app.post("/duels/:id/games/save", (req, res) => {
       }
       if (!duelRow) {
         return res.status(404).json({ ok: false, message: "Duel not found" });
+      }
+
+      const isChallengeDuel = String(duelRow.source_type || "").trim().toLowerCase() === "challenge";
+
+      const saveDuelGames = async () => {
+        const existingGames = await dbAllAsync(
+          `
+            SELECT
+              id,
+              game_number,
+              status,
+              player_1_score,
+              player_2_score
+            FROM games
+            WHERE trim(COALESCE(duel_id, '')) = trim(?)
+              AND deleted_at IS NULL
+          `,
+          [duelId]
+        );
+        const existingGamesById = new Map();
+        const existingGamesByNumber = new Map();
+        for (const row of Array.isArray(existingGames) ? existingGames : []) {
+          const existingId = String(row?.id || "").trim();
+          if (existingId) existingGamesById.set(existingId, row);
+          const existingGameNumber = normalizePositiveInteger(row?.game_number);
+          if (existingGameNumber) existingGamesByNumber.set(existingGameNumber, row);
+        }
+
+        const sanitizedGames = [];
+        for (let index = 0; index < games.length; index += 1) {
+          const item = games[index] && typeof games[index] === "object" ? games[index] : {};
+          const gameNumber = normalizePositiveInteger(item.game_number);
+          if (!gameNumber) {
+            return res.status(400).json({ ok: false, message: "game_number must be a positive integer" });
+          }
+          const id = normalizeNullableText(item.id) || `${duelId}-${gameNumber}`;
+          const bgaTableId = normalizeNullableText(item.bga_table_id);
+          const existingGame = existingGamesById.get(id) || existingGamesByNumber.get(gameNumber) || null;
+          const shouldLockExistingScores = !isAdmin && !isChallengeDuel && !!existingGame;
+          const player1Score = shouldLockExistingScores
+            ? normalizeIntegerOrNull(existingGame.player_1_score)
+            : normalizeIntegerOrNull(item.player_1_score);
+          const player2Score = shouldLockExistingScores
+            ? normalizeIntegerOrNull(existingGame.player_2_score)
+            : normalizeIntegerOrNull(item.player_2_score);
+          const player1Rank = normalizeZeroOneOrNull(item.player_1_rank);
+          const player2Rank = normalizeZeroOneOrNull(item.player_2_rank);
+          const player1Clock = normalizeZeroOneOrNull(item.player_1_clock);
+          const player2Clock = normalizeZeroOneOrNull(item.player_2_clock);
+          const status = existingGame
+            ? normalizeNullableText(existingGame?.status)
+            : normalizeNullableText(item.status);
+          const isNoShowGame = String(status || "").trim().toLowerCase() === "no show";
+
+          if (!existingGame && !isNoShowGame) {
+            if (!bgaTableId) {
+              return res.status(400).json({ ok: false, message: "Table ID is required." });
+            }
+            if (!/^\d{9}$/.test(String(bgaTableId))) {
+              return res.status(400).json({ ok: false, message: "Table ID must be exactly 9 digits." });
+            }
+          }
+
+          sanitizedGames.push({
+            id,
+            duel_id: duelId,
+            bga_table_id: bgaTableId,
+            game_number: gameNumber,
+            player_1_score: player1Score,
+            player_2_score: player2Score,
+            player_1_rank: player1Rank,
+            player_2_rank: player2Rank,
+            player_1_clock: player1Clock ?? 0,
+            player_2_clock: player2Clock ?? 0,
+            status,
+          });
+        }
+
+        await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+        try {
+          for (const item of sanitizedGames) {
+            await dbRunAsync(
+              `
+                INSERT INTO games (
+                  id,
+                  duel_id,
+                  bga_table_id,
+                  game_number,
+                  player_1_score,
+                  player_2_score,
+                  player_1_rank,
+                  player_2_rank,
+                  player_1_clock,
+                  player_2_clock,
+                  status,
+                  deleted_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                ON CONFLICT(id) DO UPDATE SET
+                  duel_id = excluded.duel_id,
+                  bga_table_id = excluded.bga_table_id,
+                  game_number = excluded.game_number,
+                  player_1_score = excluded.player_1_score,
+                  player_2_score = excluded.player_2_score,
+                  player_1_rank = excluded.player_1_rank,
+                  player_2_rank = excluded.player_2_rank,
+                  player_1_clock = excluded.player_1_clock,
+                  player_2_clock = excluded.player_2_clock,
+                  status = excluded.status,
+                  deleted_at = NULL
+              `,
+              [
+                item.id,
+                item.duel_id,
+                item.bga_table_id,
+                item.game_number,
+                item.player_1_score,
+                item.player_2_score,
+                item.player_1_rank,
+                item.player_2_rank,
+                item.player_1_clock,
+                item.player_2_clock,
+                item.status,
+              ]
+            );
+          }
+
+          const incomingGameIds = new Set(
+            sanitizedGames
+              .map((item) => String(item?.id || "").trim())
+              .filter(Boolean)
+          );
+          const activeGames = await dbAllAsync(
+            `
+              SELECT id
+              FROM games
+              WHERE trim(COALESCE(duel_id, '')) = trim(?)
+                AND deleted_at IS NULL
+            `,
+            [duelId]
+          );
+          const gameIdsToSoftDelete = (Array.isArray(activeGames) ? activeGames : [])
+            .map((row) => String(row?.id || "").trim())
+            .filter((id) => id && !incomingGameIds.has(id));
+
+          if (gameIdsToSoftDelete.length) {
+            await dbRunAsync(
+              `
+                UPDATE games
+                SET
+                  deleted_at = CURRENT_TIMESTAMP
+                WHERE id IN (${gameIdsToSoftDelete.map(() => "?").join(", ")})
+              `,
+              gameIdsToSoftDelete
+            );
+          }
+
+          const recomputedDuel = await recomputeDuelAggregates(duelId, actorPlayerId);
+          if (isChallengeDuel && recomputedDuel?.status) {
+            const nextPlayerStatus = recomputedDuel.status === "Done" ? "played" : "match_scheduled";
+            const shouldKeepChallengeDuel = new Set([...CHALLENGE_ACTIVE_DUEL_STATUSES, "Done"]).has(recomputedDuel.status);
+            if (shouldKeepChallengeDuel) {
+              for (const playerId of [duelRow.player_1_id, duelRow.player_2_id].map(normalizeNullableText).filter(Boolean)) {
+                await dbRunAsync(
+                  `
+                    INSERT INTO challenge_period_players (
+                      period_id, player_id, status, challenge_duel_id, created_at, status_updated_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ON CONFLICT(period_id, player_id) DO UPDATE SET
+                      status = excluded.status,
+                      challenge_duel_id = excluded.challenge_duel_id,
+                      status_updated_at = CURRENT_TIMESTAMP,
+                      updated_at = CURRENT_TIMESTAMP
+                  `,
+                  [duelRow.challenge_period_id, playerId, nextPlayerStatus, duelId]
+                );
+              }
+            }
+          }
+          if (recomputedDuel?.matchId) {
+            await recomputeMatchAggregates(recomputedDuel.matchId, actorPlayerId);
+          }
+          await dbRunAsync("COMMIT");
+
+          const [savedDuel] = await new Promise((resolve, reject) => {
+            loadDuelsByIds([duelId], (loadErr, rows) => {
+              if (loadErr) {
+                reject(loadErr);
+                return;
+              }
+              resolve(rows || []);
+            });
+          });
+          const savedMatch = recomputedDuel?.matchId
+            ? await dbGetAsync(
+                `
+                  SELECT
+                    id,
+                    status,
+                    dw1,
+                    dw2,
+                    gw1,
+                    gw2
+                  FROM matches
+                  WHERE id = ?
+                    AND deleted_at IS NULL
+                  LIMIT 1
+                `,
+                [recomputedDuel.matchId]
+              )
+            : null;
+
+          return res.json({
+            ok: true,
+            duel: savedDuel || null,
+            match: savedMatch || null,
+          });
+        } catch (error) {
+          try {
+            await dbRunAsync("ROLLBACK");
+          } catch (_rollbackErr) {
+            // ignore rollback error
+          }
+          if (String(error?.message || "").includes("UNIQUE")) {
+            return res.status(409).json({ ok: false, message: "Game with this id or BGA table already exists" });
+          }
+          return res.status(500).json({ ok: false, message: "Failed to save duel games" });
+        }
+      };
+
+      const runSaveDuelGames = () => saveDuelGames().catch((error) => {
+        console.error(`Failed to save duel games for ${duelId}`, error);
+        return res.status(500).json({ ok: false, message: "Failed to save duel games" });
+      });
+
+      if (isChallengeDuel) {
+        if (!isCompletedMatchStatus(duelRow.duel_status)) {
+          return res.status(403).json({ ok: false, message: "Challenge match results can be edited only for Done or Error matches" });
+        }
+        const userPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
+        const isParticipant = [duelRow.player_1_id, duelRow.player_2_id]
+          .map(normalizeNullableText)
+          .includes(userPlayerId);
+        if (!isAdmin && !isParticipant) {
+          return res.status(403).json({ ok: false, message: "Forbidden" });
+        }
+        return runSaveDuelGames();
+      }
+
+      if (!duelRow.match_id || !duelRow.tournament_id) {
+        return res.status(404).json({ ok: false, message: "Match not found" });
       }
       if (!isCompletedMatchStatus(duelRow.match_status)) {
         return res.status(403).json({ ok: false, message: "Match results can be edited only for completed matches" });
@@ -13625,210 +13917,7 @@ app.post("/duels/:id/games/save", (req, res) => {
           });
         }
 
-        return (async () => {
-          const existingGames = await dbAllAsync(
-            `
-              SELECT
-                id,
-                game_number,
-                status,
-                player_1_score,
-                player_2_score
-              FROM games
-              WHERE trim(COALESCE(duel_id, '')) = trim(?)
-                AND deleted_at IS NULL
-            `,
-            [duelId]
-          );
-          const existingGamesById = new Map();
-          const existingGamesByNumber = new Map();
-          for (const row of Array.isArray(existingGames) ? existingGames : []) {
-            const existingId = String(row?.id || "").trim();
-            if (existingId) existingGamesById.set(existingId, row);
-            const existingGameNumber = normalizePositiveInteger(row?.game_number);
-            if (existingGameNumber) existingGamesByNumber.set(existingGameNumber, row);
-          }
-
-          const sanitizedGames = [];
-          for (let index = 0; index < games.length; index += 1) {
-            const item = games[index] && typeof games[index] === "object" ? games[index] : {};
-            const gameNumber = normalizePositiveInteger(item.game_number);
-            if (!gameNumber) {
-              return res.status(400).json({ ok: false, message: "game_number must be a positive integer" });
-            }
-            const id = normalizeNullableText(item.id) || `${duelId}-${gameNumber}`;
-            const bgaTableId = normalizeNullableText(item.bga_table_id);
-            const existingGame = existingGamesById.get(id) || existingGamesByNumber.get(gameNumber) || null;
-            const isLockedNoShowGame = !!existingGame;
-            const player1Score = !isAdmin && existingGame
-              ? normalizeIntegerOrNull(existingGame.player_1_score)
-              : normalizeIntegerOrNull(item.player_1_score);
-            const player2Score = !isAdmin && existingGame
-              ? normalizeIntegerOrNull(existingGame.player_2_score)
-              : normalizeIntegerOrNull(item.player_2_score);
-            const player1Rank = normalizeZeroOneOrNull(item.player_1_rank);
-            const player2Rank = normalizeZeroOneOrNull(item.player_2_rank);
-            const player1Clock = normalizeZeroOneOrNull(item.player_1_clock);
-            const player2Clock = normalizeZeroOneOrNull(item.player_2_clock);
-            const status = isLockedNoShowGame
-              ? normalizeNullableText(existingGame?.status)
-              : normalizeNullableText(item.status);
-            const isNoShowGame = String(status || "").trim().toLowerCase() === "no show";
-
-            if (!existingGame && !isNoShowGame) {
-              if (!bgaTableId) {
-                return res.status(400).json({ ok: false, message: "Table ID is required." });
-              }
-              if (!/^\d{9}$/.test(String(bgaTableId))) {
-                return res.status(400).json({ ok: false, message: "Table ID must be exactly 9 digits." });
-              }
-            }
-
-            sanitizedGames.push({
-              id,
-              duel_id: duelId,
-              bga_table_id: bgaTableId,
-              game_number: gameNumber,
-              player_1_score: player1Score,
-              player_2_score: player2Score,
-              player_1_rank: player1Rank,
-              player_2_rank: player2Rank,
-              player_1_clock: player1Clock ?? 0,
-              player_2_clock: player2Clock ?? 0,
-              status,
-            });
-          }
-
-          await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
-          try {
-            for (const item of sanitizedGames) {
-              await dbRunAsync(
-                `
-                  INSERT INTO games (
-                    id,
-                    duel_id,
-                    bga_table_id,
-                    game_number,
-                    player_1_score,
-                    player_2_score,
-                    player_1_rank,
-                    player_2_rank,
-                    player_1_clock,
-                    player_2_clock,
-                    status,
-                    deleted_at
-                  )
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-                  ON CONFLICT(id) DO UPDATE SET
-                    duel_id = excluded.duel_id,
-                    bga_table_id = excluded.bga_table_id,
-                    game_number = excluded.game_number,
-                    player_1_score = excluded.player_1_score,
-                    player_2_score = excluded.player_2_score,
-                    player_1_rank = excluded.player_1_rank,
-                    player_2_rank = excluded.player_2_rank,
-                    player_1_clock = excluded.player_1_clock,
-                    player_2_clock = excluded.player_2_clock,
-                    status = excluded.status,
-                    deleted_at = NULL
-                `,
-                [
-                  item.id,
-                  item.duel_id,
-                  item.bga_table_id,
-                  item.game_number,
-                  item.player_1_score,
-                  item.player_2_score,
-                  item.player_1_rank,
-                  item.player_2_rank,
-                  item.player_1_clock,
-                  item.player_2_clock,
-                  item.status,
-                ]
-              );
-            }
-
-            const incomingGameIds = new Set(
-              sanitizedGames
-                .map((item) => String(item?.id || "").trim())
-                .filter(Boolean)
-            );
-            const existingGames = await dbAllAsync(
-              `
-                SELECT id
-                FROM games
-                WHERE trim(COALESCE(duel_id, '')) = trim(?)
-                  AND deleted_at IS NULL
-              `,
-              [duelId]
-            );
-            const gameIdsToSoftDelete = (Array.isArray(existingGames) ? existingGames : [])
-              .map((row) => String(row?.id || "").trim())
-              .filter((id) => id && !incomingGameIds.has(id));
-
-            if (gameIdsToSoftDelete.length) {
-              await dbRunAsync(
-                `
-                  UPDATE games
-                  SET
-                    deleted_at = CURRENT_TIMESTAMP
-                  WHERE id IN (${gameIdsToSoftDelete.map(() => "?").join(", ")})
-                `,
-                gameIdsToSoftDelete
-              );
-            }
-
-            const recomputedDuel = await recomputeDuelAggregates(duelId, actorPlayerId);
-            if (recomputedDuel?.matchId) {
-              await recomputeMatchAggregates(recomputedDuel.matchId, actorPlayerId);
-            }
-            await dbRunAsync("COMMIT");
-
-            const [savedDuel] = await new Promise((resolve, reject) => {
-              loadDuelsByIds([duelId], (loadErr, rows) => {
-                if (loadErr) {
-                  reject(loadErr);
-                  return;
-                }
-                resolve(rows || []);
-              });
-            });
-            const savedMatch = recomputedDuel?.matchId
-              ? await dbGetAsync(
-                  `
-                    SELECT
-                      id,
-                      status,
-                      dw1,
-                      dw2,
-                      gw1,
-                      gw2
-                    FROM matches
-                    WHERE id = ?
-                      AND deleted_at IS NULL
-                    LIMIT 1
-                  `,
-                  [recomputedDuel.matchId]
-                )
-              : null;
-
-            return res.json({
-              ok: true,
-              duel: savedDuel || null,
-              match: savedMatch || null,
-            });
-          } catch (error) {
-            try {
-              await dbRunAsync("ROLLBACK");
-            } catch (_rollbackErr) {
-              // ignore rollback error
-            }
-            if (String(error?.message || "").includes("UNIQUE")) {
-              return res.status(409).json({ ok: false, message: "Game with this id or BGA table already exists" });
-            }
-            return res.status(500).json({ ok: false, message: "Failed to save duel games" });
-          }
-        })();
+        return runSaveDuelGames();
       });
     }
   );

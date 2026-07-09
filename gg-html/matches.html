@@ -2435,6 +2435,14 @@ function hasLegacyMatchTime(timeValue) {
   return /^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$/.test(raw);
 }
 
+function getRenderableMatches(matches) {
+  return (matches || []).filter(match => !isMatchHidden(match) && hasLegacyMatchTime(match?.time));
+}
+
+function hasRenderableMatches(matches) {
+  return getRenderableMatches(matches).length > 0;
+}
+
 function buildEventDateTimeLabel(timeValue) {
   const dateObj = new Date(parseUtcTimestamp(timeValue));
   const MONTHS_3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -2508,8 +2516,8 @@ function renderEventsCard(container, events) {
 }
 
 function renderSection(container, title, tournaments, matches, events, options = {}) {
-  const { renderEventsLast = false } = options;
-  const visibleMatches = (matches || []).filter(match => !isMatchHidden(match) && hasLegacyMatchTime(match?.time));
+  const { renderEventsLast = false, showScheduleControls = false } = options;
+  const visibleMatches = getRenderableMatches(matches);
   const visibleEvents = Array.isArray(events) ? events : [];
   if (visibleMatches.length === 0 && visibleEvents.length === 0) return;
   const isToday = title === "Today";
@@ -2550,8 +2558,8 @@ function renderSection(container, title, tournaments, matches, events, options =
   const titleSpan = document.createElement("span");
   titleSpan.textContent = title;
   sectionTitle.appendChild(titleSpan);
-  // Right side: only Today — single toggle affects both Today and Upcoming
-  if (isToday) {
+  // Right side: single toggle affects both Today and Upcoming.
+  if (showScheduleControls) {
     const toggle = document.createElement("div");
     toggle.className = "sort-toggle";
 
@@ -3733,13 +3741,19 @@ function applySourcePriority(matches, priority) {
     const container = document.getElementById("matches-container");
     container.innerHTML = "";
 
+    const showScheduleControlsInToday = hasRenderableMatches(mergedTodayMatches);
+    const showScheduleControlsInUpcoming = !showScheduleControlsInToday && hasRenderableMatches(mergedScheduledMatches);
+
     renderSection(
       container,
       "Today",
       mergedTodayTournaments,
       mergedTodayMatches,
       baseData.events_today || [],
-      { renderEventsLast: true }
+      {
+        renderEventsLast: true,
+        showScheduleControls: showScheduleControlsInToday,
+      }
     );
     renderSection(
       container,
@@ -3747,7 +3761,10 @@ function applySourcePriority(matches, priority) {
       mergedScheduledTournaments,
       mergedScheduledMatches,
       baseData.events_scheduled || [],
-      { renderEventsLast: true }
+      {
+        renderEventsLast: true,
+        showScheduleControls: showScheduleControlsInUpcoming,
+      }
     );
     renderSection(
       container,
