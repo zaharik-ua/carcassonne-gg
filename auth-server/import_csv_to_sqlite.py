@@ -231,6 +231,11 @@ def _validate_required_tables(conn: sqlite3.Connection, *, required_tables: set[
 
 def _insert_profiles(conn: sqlite3.Connection, *, actor_id: str, profiles: list[dict[str, str]]) -> dict[str, int]:
     profile_columns = _load_columns(conn, "profiles")
+    if "gg_base_elo" not in profile_columns:
+        conn.execute("ALTER TABLE profiles ADD COLUMN gg_base_elo REAL")
+    if "gg_elo_period_delta" not in profile_columns:
+        conn.execute("ALTER TABLE profiles ADD COLUMN gg_elo_period_delta REAL")
+    profile_columns = _load_columns(conn, "profiles")
     required_columns = {"id", "bga_nickname", "association"}
     missing_columns = sorted(required_columns - profile_columns)
     if missing_columns:
@@ -408,6 +413,9 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
         conn.execute("ALTER TABLE duels ADD COLUMN gg_rating_full REAL")
     if "gg_rating" not in duel_columns:
         conn.execute("ALTER TABLE duels ADD COLUMN gg_rating INTEGER")
+    if "ranking" not in duel_columns:
+        conn.execute("ALTER TABLE duels ADD COLUMN ranking INTEGER NOT NULL DEFAULT 1")
+    conn.execute("UPDATE duels SET ranking = 1 WHERE ranking IS NULL")
     duel_columns = _load_columns(conn, "duels")
     required_columns = {
         "id",

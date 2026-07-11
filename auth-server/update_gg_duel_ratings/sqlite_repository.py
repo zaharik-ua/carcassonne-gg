@@ -158,4 +158,7 @@ class SqliteGgDuelRatingsRepository:
                 conn.execute("ALTER TABLE duels ADD COLUMN gg_rating_full REAL")
             if "gg_rating" not in duel_columns:
                 conn.execute("ALTER TABLE duels ADD COLUMN gg_rating INTEGER")
+            if "ranking" not in duel_columns:
+                conn.execute("ALTER TABLE duels ADD COLUMN ranking INTEGER NOT NULL DEFAULT 1")
+            conn.execute("UPDATE duels SET ranking = 1 WHERE ranking IS NULL")
             conn.commit()

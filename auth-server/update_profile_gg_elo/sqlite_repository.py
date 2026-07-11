@@ -56,12 +56,13 @@ class SqliteProfileGgEloRepository:
                         UPDATE profiles
                         SET
                           gg_elo = ?,
+                          gg_base_elo = COALESCE(gg_base_elo, ?),
                           gg_elo_updated_at = CURRENT_TIMESTAMP,
                           gg_rating_position = ?
                         WHERE trim(COALESCE(id, '')) = ?
                           AND deleted_at IS NULL
                         """,
-                        (gg_elo, positions_by_id.get(profile_id), profile_id),
+                        (gg_elo, gg_elo, positions_by_id.get(profile_id), profile_id),
                     )
                     updated += max(0, int(cursor.rowcount))
                 conn.commit()
@@ -93,8 +94,21 @@ class SqliteProfileGgEloRepository:
                 raise RuntimeError(f"profiles table is missing required columns: {', '.join(missing)}")
             if "gg_elo" not in columns:
                 conn.execute("ALTER TABLE profiles ADD COLUMN gg_elo REAL")
+            if "gg_base_elo" not in columns:
+                conn.execute("ALTER TABLE profiles ADD COLUMN gg_base_elo REAL")
+            if "gg_elo_period_delta" not in columns:
+                conn.execute("ALTER TABLE profiles ADD COLUMN gg_elo_period_delta REAL")
             if "gg_elo_updated_at" not in columns:
                 conn.execute("ALTER TABLE profiles ADD COLUMN gg_elo_updated_at TEXT")
             if "gg_rating_position" not in columns:
                 conn.execute("ALTER TABLE profiles ADD COLUMN gg_rating_position INTEGER")
+            conn.execute(
+                """
+                UPDATE profiles
+                SET gg_base_elo = gg_elo
+                WHERE gg_base_elo IS NULL
+                  AND gg_elo IS NOT NULL
+                  AND trim(CAST(gg_elo AS TEXT)) <> ''
+                """
+            )
             conn.commit()

@@ -582,6 +582,7 @@
   const MOBILE_MENU_ITEMS_URL = `${AUTH_BASE}/mobile-menu-items`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const DUEL_FORMATS_URL = `${AUTH_BASE}/duel-formats`;
+  const SYSTEM_SETTINGS_URL = `${AUTH_BASE}/system-settings`;
   const STREAMER_SCOREBOARD_STYLE_OPTIONS = ["Default", "Nallerheim"];
 
   const SECTION_CONFIG = {
@@ -662,6 +663,13 @@
       createLabel: "Create",
       load: () => apiJson(DUEL_FORMATS_URL, { method: "GET" }).then((data) => data.duel_formats || []),
     },
+    systemSettings: {
+      key: "systemSettings",
+      title: "System Settings",
+      buttonLabel: "Edit",
+      createLabel: "",
+      load: () => apiJson(SYSTEM_SETTINGS_URL, { method: "GET" }).then((data) => data.system_settings || []),
+    },
     users: {
       key: "users",
       title: "Users",
@@ -726,6 +734,7 @@
     tournaments: [],
     challengePeriods: [],
     duelFormats: [],
+    systemSettings: [],
     matchesReference: [],
     profilesPublic: [],
     users: [],
@@ -995,6 +1004,12 @@
   function createDateTimeRow(labelText, value) {
     const field = createTextRow(labelText, formatDateTimeLocalInput(value));
     field.input.type = "datetime-local";
+    return field;
+  }
+
+  function createDateRow(labelText, value) {
+    const field = createTextRow(labelText, value ? String(value).slice(0, 10) : "");
+    field.input.type = "date";
     return field;
   }
 
@@ -4177,6 +4192,62 @@
     }
   }
 
+  function openSystemSettingForm(item, anchorRow) {
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+
+    const keyField = createTextRow("setting_key", item?.setting_key || "", { readOnly: true });
+    const valueField = item?.value_type === "date"
+      ? createDateRow("setting_value", item?.setting_value || "")
+      : createTextRow("setting_value", item?.setting_value || "");
+
+    form.appendChild(keyField.row);
+    form.appendChild(valueField.row);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = "Save";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => {
+      closeInlineForm();
+      setStatus("", false);
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = {
+        setting_value: String(valueField.input.value || "").trim() || null,
+      };
+
+      try {
+        await apiJson(`${SYSTEM_SETTINGS_URL}/${encodeURIComponent(item.setting_key)}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+        setStatus("System setting updated.", false);
+        closeInlineForm();
+        await loadSectionData("systemSettings");
+        renderSection();
+      } catch (error) {
+        setStatus(error?.message || "Failed to save system setting.", true);
+      }
+    });
+
+    mountDetailForm(form, anchorRow, { toggleSameRow: true });
+  }
+
   function openUserView(item, anchorRow) {
     const view = document.createElement("div");
     view.className = "cp-edit-form";
@@ -4678,6 +4749,31 @@
     });
   }
 
+  function renderSystemSettings() {
+    sectionTitle.textContent = "System Settings";
+    sectionCreateBtn.classList.add("hidden");
+    sectionCreateBtn.onclick = null;
+
+    if (!state.systemSettings.length) {
+      renderListEmpty("No system settings yet.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    state.systemSettings.forEach((item) => {
+      const value = String(item?.setting_value || "").trim() || "Not set";
+      sectionList.appendChild(createListRow({
+        imageSrc: "",
+        imageAlt: item.label,
+        imageRound: false,
+        title: item.label || item.setting_key || "-",
+        subtitle: `${value} • ${item.description || item.setting_key || ""}`,
+        buttonLabel: "Edit",
+        onClick: (row) => openSystemSettingForm(item, row),
+      }));
+    });
+  }
+
   function renderUsers() {
     sectionTitle.textContent = "Users";
     sectionCreateBtn.classList.add("hidden");
@@ -4776,6 +4872,7 @@
     if (state.activeSection === "tournaments") renderTournaments();
     if (state.activeSection === "challengePeriods") renderChallengePeriods();
     if (state.activeSection === "duelFormats") renderDuelFormats();
+    if (state.activeSection === "systemSettings") renderSystemSettings();
     if (state.activeSection === "users") renderUsers();
     if (state.activeSection === "auditTrail") renderAuditTrail();
   }

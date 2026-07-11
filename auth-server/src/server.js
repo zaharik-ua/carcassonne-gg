@@ -272,6 +272,7 @@ const LINEUP_AUDIT_FIELDS = [
   "dw1",
   "dw2",
   "status",
+  "ranking",
 ];
 const TOURNAMENT_ACCESS_TYPES = {
   FRIENDLY: "Friendly",
@@ -351,6 +352,25 @@ const CHALLENGE_ACTIVE_DUEL_STATUSES = new Set([
   "In progress",
   "Error",
 ]);
+const SYSTEM_SETTING_DEFINITIONS = [
+  {
+    key: "gg_rating_base_date",
+    label: "GG rating base date",
+    description: "Date from which current GG rating recalculation starts.",
+    value_type: "date",
+    default_value: null,
+    sort_order: 10,
+  },
+  {
+    key: "gg_rating_delta_start_date",
+    label: "GG rating delta start date",
+    description: "Date from which GG rating period delta is calculated.",
+    value_type: "date",
+    default_value: null,
+    sort_order: 20,
+  },
+];
+const SYSTEM_SETTING_KEYS = new Set(SYSTEM_SETTING_DEFINITIONS.map((setting) => setting.key));
 
 function quoteSqlIdentifier(identifier) {
   return `"${String(identifier || "").replaceAll('"', '""')}"`;
@@ -389,6 +409,15 @@ function buildAssociationCode(name, usedCodes, fallbackIndex) {
 function normalizeNullableText(value) {
   const normalized = String(value || "").trim();
   return normalized || null;
+}
+
+function normalizeDateOnly(value) {
+  const normalized = normalizeNullableText(value);
+  if (!normalized) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+  const date = new Date(`${normalized}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10) === normalized ? normalized : null;
 }
 
 function normalizeYouTubeVideoId(value) {
@@ -1678,6 +1707,7 @@ function loadDuelsByMatchId(matchId, callback) {
         rating,
         gg_rating_full,
         gg_rating,
+        ranking,
         status,
         results_last_error,
         results_checked_at
@@ -1751,6 +1781,7 @@ function loadDuelsByIds(duelIds, callback) {
         rating,
         gg_rating_full,
         gg_rating,
+        ranking,
         status,
         results_last_error,
         results_checked_at
@@ -3105,6 +3136,8 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         bga_elo INTEGER,
         bga_elo_updated_at TEXT,
         gg_elo REAL,
+        gg_base_elo REAL,
+        gg_elo_period_delta REAL,
         gg_elo_updated_at TEXT,
         gg_rating_position INTEGER,
         id TEXT,
@@ -3133,6 +3166,8 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         bga_elo,
         bga_elo_updated_at,
         gg_elo,
+        gg_base_elo,
+        gg_elo_period_delta,
         gg_elo_updated_at,
         gg_rating_position,
         id,
@@ -3161,6 +3196,8 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         bga_elo,
         bga_elo_updated_at,
         gg_elo,
+        gg_elo,
+        NULL,
         gg_elo_updated_at,
         gg_rating_position,
         id,
@@ -3300,6 +3337,8 @@ function ensureProfilesSchema() {
       addColumnIfMissing(currentColumns, "profiles", "bga_elo", "INTEGER");
       addColumnIfMissing(currentColumns, "profiles", "bga_elo_updated_at", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "gg_elo", "REAL");
+      addColumnIfMissing(currentColumns, "profiles", "gg_base_elo", "REAL");
+      addColumnIfMissing(currentColumns, "profiles", "gg_elo_period_delta", "REAL");
       addColumnIfMissing(currentColumns, "profiles", "gg_elo_updated_at", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "gg_rating_position", "INTEGER");
       addColumnIfMissing(currentColumns, "profiles", "created_by", "TEXT");
@@ -3308,6 +3347,20 @@ function ensureProfilesSchema() {
       addColumnIfMissing(currentColumns, "profiles", "deleted_at", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(currentColumns, "profiles", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      db.run(
+        `
+          UPDATE profiles
+          SET gg_base_elo = gg_elo
+          WHERE gg_base_elo IS NULL
+            AND gg_elo IS NOT NULL
+            AND trim(CAST(gg_elo AS TEXT)) <> ''
+        `,
+        (backfillErr) => {
+          if (backfillErr) {
+            console.error("Failed to backfill profiles.gg_base_elo", backfillErr);
+          }
+        }
+      );
       db.run(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_id ON profiles(id)",
         (indexErr) => {
@@ -3610,6 +3663,7 @@ function ensureDuelsSchema() {
       rating INTEGER,
       gg_rating_full REAL,
       gg_rating INTEGER,
+      ranking INTEGER NOT NULL DEFAULT 1,
       status TEXT,
       results_last_error TEXT,
       results_checked_at TEXT,
@@ -3657,6 +3711,7 @@ function ensureDuelsSchema() {
         addColumnIfMissing(columns, "duels", "rating", "INTEGER");
         addColumnIfMissing(columns, "duels", "gg_rating_full", "REAL");
         addColumnIfMissing(columns, "duels", "gg_rating", "INTEGER");
+        addColumnIfMissing(columns, "duels", "ranking", "INTEGER NOT NULL DEFAULT 1");
         addColumnIfMissing(columns, "duels", "dw1_import", "INTEGER");
         addColumnIfMissing(columns, "duels", "dw2_import", "INTEGER");
         addColumnIfMissing(columns, "duels", "created_by", "TEXT");
@@ -3669,6 +3724,14 @@ function ensureDuelsSchema() {
         addColumnIfMissing(columns, "duels", "cancelled_by_player_id", "TEXT");
         addColumnIfMissing(columns, "duels", "cancellation_reason", "TEXT");
         addColumnIfMissing(columns, "duels", "cancelled_at", "TEXT");
+        db.run(
+          "UPDATE duels SET ranking = 1 WHERE ranking IS NULL",
+          (normalizeErr) => {
+            if (normalizeErr) {
+              console.error("Failed to backfill duels.ranking", normalizeErr);
+            }
+          }
+        );
         db.run(
           "CREATE UNIQUE INDEX IF NOT EXISTS idx_duels_challenge_request_id ON duels(challenge_request_id) WHERE challenge_request_id IS NOT NULL",
           (indexErr) => {
@@ -3732,6 +3795,81 @@ function ensureDuelFormatsSchema() {
       if (!Array.isArray(columns) || columns.length === 0) return;
       addColumnIfMissing(columns, "duel_formats", "games_to_win", "INTEGER NOT NULL DEFAULT 1");
       addColumnIfMissing(columns, "duel_formats", "minutes_to_play", "INTEGER NOT NULL DEFAULT 60");
+    });
+  });
+}
+
+function ensureSystemSettingsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      setting_key TEXT PRIMARY KEY,
+      setting_value TEXT,
+      label TEXT NOT NULL,
+      description TEXT,
+      value_type TEXT NOT NULL DEFAULT 'text',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure system_settings schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(system_settings)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect system_settings schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "system_settings", "setting_value", "TEXT");
+      addColumnIfMissing(columns, "system_settings", "label", "TEXT NOT NULL DEFAULT ''");
+      addColumnIfMissing(columns, "system_settings", "description", "TEXT");
+      addColumnIfMissing(columns, "system_settings", "value_type", "TEXT NOT NULL DEFAULT 'text'");
+      addColumnIfMissing(columns, "system_settings", "sort_order", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "system_settings", "created_by", "TEXT");
+      addColumnIfMissing(columns, "system_settings", "updated_by", "TEXT");
+      addColumnIfMissing(columns, "system_settings", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "system_settings", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+
+      const stmt = db.prepare(`
+        INSERT INTO system_settings (
+          setting_key,
+          setting_value,
+          label,
+          description,
+          value_type,
+          sort_order,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(setting_key) DO UPDATE SET
+          label = excluded.label,
+          description = excluded.description,
+          value_type = excluded.value_type,
+          sort_order = excluded.sort_order
+      `);
+      SYSTEM_SETTING_DEFINITIONS.forEach((setting) => {
+        stmt.run(
+          [
+            setting.key,
+            setting.default_value,
+            setting.label,
+            setting.description,
+            setting.value_type,
+            setting.sort_order,
+          ],
+          (seedErr) => {
+            if (seedErr) {
+              console.error(`Failed to seed system setting ${setting.key}`, seedErr);
+            }
+          }
+        );
+      });
+      stmt.finalize();
     });
   });
 }
@@ -5215,6 +5353,7 @@ function normalizeLineupAuditRecord(lineup) {
     dw1: normalizeInteger(lineup.dw1),
     dw2: normalizeInteger(lineup.dw2),
     status: normalizeNullableText(lineup.status),
+    ranking: normalizeInteger(lineup.ranking),
   };
 }
 
@@ -5462,6 +5601,8 @@ db.serialize(() => {
               bga_elo INTEGER,
               bga_elo_updated_at TEXT,
               gg_elo REAL,
+              gg_base_elo REAL,
+              gg_elo_period_delta REAL,
               gg_elo_updated_at TEXT,
               gg_rating_position INTEGER,
               id TEXT,
@@ -5476,6 +5617,7 @@ db.serialize(() => {
           ensureMatchesSchema();
           ensureDuelsSchema();
           ensureDuelFormatsSchema();
+          ensureSystemSettingsSchema();
           ensureGamesSchema();
           ensureChallengesSchema();
           ensureTeamsSchema();
@@ -5940,6 +6082,11 @@ app.get("/profiles/public", (_req, res, next) => {
         p.avatar,
         p.bga_elo,
         p.bga_elo_updated_at,
+        p.gg_elo,
+        p.gg_base_elo,
+        p.gg_elo_period_delta,
+        p.gg_elo_updated_at,
+        p.gg_rating_position,
         p.name,
         p.association,
         COALESCE(NULLIF(trim(p.status), ''), 'Active') AS status,
@@ -9890,6 +10037,98 @@ app.patch("/duel-formats/:format", requireAdmin, (req, res) => {
       );
     }
   );
+});
+
+app.get("/system-settings", requireAdmin, async (_req, res) => {
+  try {
+    const rows = await dbAllAsync(
+      `
+        SELECT
+          setting_key,
+          setting_value,
+          label,
+          description,
+          value_type,
+          sort_order,
+          updated_at
+        FROM system_settings
+        WHERE setting_key IN (${SYSTEM_SETTING_DEFINITIONS.map(() => "?").join(", ")})
+        ORDER BY sort_order ASC, setting_key ASC
+      `,
+      SYSTEM_SETTING_DEFINITIONS.map((setting) => setting.key)
+    );
+    return res.json({ ok: true, system_settings: rows || [] });
+  } catch (error) {
+    console.error("Failed to load system settings", error);
+    return res.status(500).json({ ok: false, message: "Failed to load system settings" });
+  }
+});
+
+app.patch("/system-settings/:key", requireAdmin, async (req, res) => {
+  const settingKey = normalizeNullableText(req.params.key);
+  if (!settingKey || !SYSTEM_SETTING_KEYS.has(settingKey)) {
+    return res.status(404).json({ ok: false, message: "System setting not found" });
+  }
+
+  const definition = SYSTEM_SETTING_DEFINITIONS.find((setting) => setting.key === settingKey);
+  const rawValue = req.body?.setting_value ?? req.body?.value;
+  const settingValue = definition?.value_type === "date"
+    ? normalizeDateOnly(rawValue)
+    : normalizeNullableText(rawValue);
+  const valueWasProvided = rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== "";
+
+  if (definition?.value_type === "date" && valueWasProvided && !settingValue) {
+    return res.status(400).json({ ok: false, message: "Date must use YYYY-MM-DD format" });
+  }
+
+  try {
+    const beforeRow = await dbGetAsync(
+      "SELECT * FROM system_settings WHERE setting_key = ? LIMIT 1",
+      [settingKey]
+    );
+    if (!beforeRow) return res.status(404).json({ ok: false, message: "System setting not found" });
+
+    await dbRunAsync(
+      `
+        UPDATE system_settings
+        SET
+          setting_value = ?,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE setting_key = ?
+      `,
+      [settingValue, normalizeNullableText(req.user?.player_id ?? req.user?.bga_id), settingKey]
+    );
+    const updatedRow = await dbGetAsync(
+      `
+        SELECT
+          setting_key,
+          setting_value,
+          label,
+          description,
+          value_type,
+          sort_order,
+          updated_at
+        FROM system_settings
+        WHERE setting_key = ?
+        LIMIT 1
+      `,
+      [settingKey]
+    );
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "system_setting.updated",
+      entity_type: "system_setting",
+      action: "update",
+      record_id: settingKey,
+      changes: buildAuditChanges(beforeRow, updatedRow),
+      metadata: { setting_key: settingKey },
+    });
+    return res.json({ ok: true, system_setting: updatedRow || null });
+  } catch (error) {
+    console.error("Failed to update system setting", error);
+    return res.status(500).json({ ok: false, message: "Failed to update system setting" });
+  }
 });
 
 app.get("/tournaments", (req, res, next) => {
