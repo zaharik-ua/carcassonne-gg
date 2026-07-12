@@ -23,7 +23,7 @@ const CONFIG = {
   dedupeDuels: true,
 
   // Дата зрізу для попереднього Elo (включно по цій даті)
-  previousEloDate: "12.04.2026",
+  previousEloDate: "10.04.2026",
 };
 
 /**

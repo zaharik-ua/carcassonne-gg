@@ -9,14 +9,6 @@ from .service import ProfileGgEloUpdateService
 from .sqlite_repository import SqliteProfileGgEloRepository
 
 
-class StubClient:
-    def __init__(self, payload: dict) -> None:
-        self.payload = payload
-
-    def fetch(self) -> dict:
-        return self.payload
-
-
 class ProfileGgEloUpdateServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -28,69 +20,152 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
                   id TEXT,
                   status TEXT,
                   deleted_at TEXT,
-                  updated_by TEXT,
-                  updated_at TEXT
+                  gg_base_elo REAL,
+                  gg_elo REAL,
+                  gg_elo_period_delta REAL,
+                  gg_elo_updated_at TEXT,
+                  gg_rating_position INTEGER
                 );
-                CREATE TABLE audit_trail (
-                  id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  entity_type TEXT
+                CREATE TABLE duels (
+                  id TEXT,
+                  time_utc TEXT,
+                  player_1_id TEXT,
+                  player_2_id TEXT,
+                  dw1 INTEGER,
+                  dw2 INTEGER,
+                  duel_format TEXT,
+                  ranking INTEGER,
+                  deleted_at TEXT
                 );
-                INSERT INTO profiles (id, status, deleted_at, updated_by, updated_at)
+                CREATE TABLE system_settings (
+                  setting_key TEXT PRIMARY KEY,
+                  setting_value TEXT
+                );
+
+                INSERT INTO system_settings (setting_key, setting_value)
                 VALUES
-                  ('100', 'Active', NULL, 'admin-7', '2026-01-02 03:04:05'),
-                  ('200', 'Active', NULL, 'admin-8', '2026-02-03 04:05:06'),
-                  ('250', 'Removed', NULL, 'admin-10', '2026-02-04 05:06:07'),
-                  ('300', 'Active', '2026-03-01 00:00:00', 'admin-9', '2026-03-01 00:00:00');
+                  ('gg_rating_base_date', '2026-01-01'),
+                  ('gg_rating_delta_start_date', '2026-02-01');
+
+                INSERT INTO profiles (id, status, deleted_at, gg_base_elo)
+                VALUES
+                  ('100', 'Active', NULL, 1600),
+                  ('200', 'Active', NULL, NULL),
+                  ('300', 'Removed', NULL, 1400),
+                  ('400', 'Active', '2026-01-05 00:00:00', 1800),
+                  ('500', 'Active', NULL, NULL);
+
+                INSERT INTO duels (id, time_utc, player_1_id, player_2_id, dw1, dw2, duel_format, ranking, deleted_at)
+                VALUES
+                  ('before-base', '2025-12-31T23:59:59Z', '100', '200', 1, 0, 'Bo1', 1, NULL),
+                  ('before-delta', '2026-01-10T10:00:00Z', '100', '200', 1, 0, 'Bo1', 1, NULL),
+                  ('after-delta', '2026-02-10T10:00:00Z', '200', '100', 1, 0, 'Bo1', 1, NULL),
+                  ('ranking-zero', '2026-02-10T11:00:00Z', '100', '200', 1, 0, 'Bo1', 0, NULL),
+                  ('unknown-player', '2026-02-11T10:00:00Z', '100', '999', 1, 0, 'Bo1', 1, NULL),
+                  ('deleted-duel', '2026-02-12T10:00:00Z', '100', '200', 1, 0, 'Bo1', 1, '2026-02-12');
                 """
             )
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def test_updates_only_gg_elo_fields_without_audit(self) -> None:
+    def test_recalculates_profile_gg_elo_from_local_duels(self) -> None:
         repository = SqliteProfileGgEloRepository(str(self.db_path))
-        service = ProfileGgEloUpdateService(
-            repository=repository,
-            client=StubClient({
-                "gg_profiles": [
-                    {"id": "100", "gg_elo": "1829.95"},
-                    {"profile_id": "200", "gg_elo": 1700},
-                    {"id": "250", "gg_elo": "1900"},
-                    {"id": "300", "gg_elo": "1600.25"},
-                    {"id": "400", "gg_elo": "1500"},
-                    {"id": "500", "gg_elo": None},
-                ]
-            }),
-        )
+        service = ProfileGgEloUpdateService(repository=repository)
 
         summary = service.run()
 
-        self.assertEqual(summary["matched_profiles"], 3)
-        self.assertEqual(summary["ranked_active_profiles"], 2)
-        self.assertEqual(summary["updated_profiles"], 3)
+        self.assertEqual(summary["profiles"], 4)
+        self.assertEqual(summary["selected_duels"], 3)
+        self.assertEqual(summary["processed_duels"], 2)
+        self.assertEqual(summary["period_duels"], 1)
+        self.assertEqual(summary["skipped_duels_unknown_players"], 1)
+        self.assertEqual(summary["base_elo_backfills"], 1)
+        self.assertEqual(summary["updated_profiles"], 4)
+
         with sqlite3.connect(self.db_path) as conn:
             rows = conn.execute(
                 """
-                SELECT id, gg_elo, gg_elo_updated_at, gg_rating_position, updated_by, updated_at
+                SELECT id, gg_base_elo, gg_elo, gg_elo_period_delta, gg_elo_updated_at, gg_rating_position
                 FROM profiles
                 ORDER BY id
                 """
             ).fetchall()
-            audit_count = conn.execute("SELECT COUNT(*) FROM audit_trail").fetchone()[0]
 
-        self.assertEqual(rows[0][1], 1829.95)
-        self.assertIsNotNone(rows[0][2])
-        self.assertEqual(rows[0][3], 1)
-        self.assertEqual(rows[0][4:], ("admin-7", "2026-01-02 03:04:05"))
-        self.assertEqual(rows[1][1], 1700.0)
-        self.assertIsNotNone(rows[1][2])
-        self.assertEqual(rows[1][3], 2)
-        self.assertEqual(rows[1][4:], ("admin-8", "2026-02-03 04:05:06"))
-        self.assertEqual(rows[2][1], 1900.0)
-        self.assertIsNone(rows[2][3])
-        self.assertIsNone(rows[3][1])
-        self.assertIsNone(rows[3][2])
-        self.assertEqual(audit_count, 0)
+        by_id = {row[0]: row for row in rows}
+        self.assertEqual(by_id["100"][1], 1600)
+        self.assertAlmostEqual(by_id["100"][2], 1590.08, places=2)
+        self.assertAlmostEqual(by_id["100"][3], -21.44, places=2)
+        self.assertIsNotNone(by_id["100"][4])
+        self.assertEqual(by_id["100"][5], 1)
+
+        self.assertEqual(by_id["200"][1], 1500)
+        self.assertAlmostEqual(by_id["200"][2], 1509.92, places=2)
+        self.assertAlmostEqual(by_id["200"][3], 21.44, places=2)
+        self.assertIsNotNone(by_id["200"][4])
+        self.assertEqual(by_id["200"][5], 2)
+
+        self.assertEqual(by_id["300"][1], 1400)
+        self.assertAlmostEqual(by_id["300"][2], 1400.0, places=2)
+        self.assertAlmostEqual(by_id["300"][3], 0.0, places=2)
+        self.assertIsNone(by_id["300"][5])
+
+        self.assertEqual(by_id["400"][1], 1800)
+        self.assertIsNone(by_id["400"][2])
+        self.assertIsNone(by_id["400"][3])
+
+        self.assertIsNone(by_id["500"][1])
+        self.assertAlmostEqual(by_id["500"][2], 1500.0, places=2)
+        self.assertAlmostEqual(by_id["500"][3], 0.0, places=2)
+        self.assertEqual(by_id["500"][5], 3)
+
+        with sqlite3.connect(self.db_path) as conn:
+            duel_rows = conn.execute(
+                """
+                SELECT
+                  id,
+                  player1_elo_before,
+                  player1_elo_after,
+                  player2_elo_before,
+                  player2_elo_after
+                FROM duels
+                ORDER BY id
+                """
+            ).fetchall()
+
+        duels_by_id = {row[0]: row for row in duel_rows}
+        self.assertAlmostEqual(duels_by_id["before-delta"][1], 1600.0, places=2)
+        self.assertAlmostEqual(duels_by_id["before-delta"][2], 1611.52, places=2)
+        self.assertAlmostEqual(duels_by_id["before-delta"][3], 1500.0, places=2)
+        self.assertAlmostEqual(duels_by_id["before-delta"][4], 1488.48, places=2)
+
+        self.assertAlmostEqual(duels_by_id["after-delta"][1], 1488.48, places=2)
+        self.assertAlmostEqual(duels_by_id["after-delta"][2], 1509.92, places=2)
+        self.assertAlmostEqual(duels_by_id["after-delta"][3], 1611.52, places=2)
+        self.assertAlmostEqual(duels_by_id["after-delta"][4], 1590.08, places=2)
+
+        self.assertIsNone(duels_by_id["ranking-zero"][1])
+        self.assertIsNone(duels_by_id["unknown-player"][1])
+
+    def test_dry_run_does_not_update_profiles(self) -> None:
+        repository = SqliteProfileGgEloRepository(str(self.db_path))
+        service = ProfileGgEloUpdateService(repository=repository)
+
+        summary = service.run(dry_run=True)
+
+        self.assertTrue(summary["dry_run"])
+        self.assertEqual(summary["updated_profiles"], 0)
+        with sqlite3.connect(self.db_path) as conn:
+            count = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM profiles
+                WHERE gg_elo IS NOT NULL
+                   OR gg_elo_period_delta IS NOT NULL
+                   OR (id = '200' AND gg_base_elo IS NOT NULL)
+                """
+            ).fetchone()[0]
+        self.assertEqual(count, 0)
 
 
 if __name__ == "__main__":
