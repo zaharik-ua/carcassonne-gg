@@ -1123,6 +1123,12 @@
     return d ? d.getTime() : 0;
   }
 
+  function isChallengeDuel(duel) {
+    const sourceType = String(duel?.source_type || "").trim().toLowerCase();
+    const tournamentId = String(firstDefined(duel?.tournament_id, duel?.tournamentId) || "").trim();
+    return sourceType === "challenge" || tournamentId === "Challenges" || tournamentId.startsWith("challenge:");
+  }
+
   function getBaseDateTimestamp(baseDateRaw) {
     const raw = String(baseDateRaw || "").trim();
     if (!raw) return null;
@@ -1160,9 +1166,31 @@
     const jsonTournaments = Array.isArray(jsonData?.tournaments)
       ? jsonData.tournaments
       : (Array.isArray(jsonData?.tournaments_list) ? jsonData.tournaments_list : []);
-    const dbDuels = Array.isArray(dbPayload?.duels) ? dbPayload.duels : [];
+    const dbDuels = Array.isArray(dbPayload?.duels)
+      ? dbPayload.duels.map((duel) => {
+          if (!isChallengeDuel(duel)) return duel;
+          return {
+            ...duel,
+            tournament_id: "Challenges",
+            tournamentId: "Challenges",
+          };
+        })
+      : [];
     const dbMatches = Array.isArray(dbPayload?.matches) ? dbPayload.matches : [];
-    const dbTournaments = Array.isArray(dbPayload?.tournaments) ? dbPayload.tournaments : [];
+    const dbTournaments = Array.isArray(dbPayload?.tournaments) ? dbPayload.tournaments.slice() : [];
+    if (dbDuels.some(isChallengeDuel) && !dbTournaments.some((tournament) => (
+      String(firstDefined(tournament?.tournament_id, tournament?.tournamentId, tournament?.id) || "").trim() === "Challenges"
+    ))) {
+      dbTournaments.unshift({
+        id: "Challenges",
+        tournament_id: "Challenges",
+        name: "Challenges",
+        short_title: "Challenges",
+        logo: "https://carcassonne.gg/gallery/challenges.png",
+        logo_image: "https://carcassonne.gg/gallery/challenges.png",
+        type: "Individual",
+      });
+    }
     const baseDateTs = getBaseDateTimestamp(dbPayload?.gg_rating_base_date);
 
     if (!Number.isFinite(baseDateTs)) {
@@ -1659,9 +1687,10 @@
         const s1 = firstDefined(duel.games_won1, duel.gwA);
         const s2 = firstDefined(duel.games_won2, duel.gwB);
         const tId = String(firstDefined(duel.tournament_id, duel.tournamentId) || "");
-        const matchDate = firstDefined(duel.time_start_utc, duel.timestamp);
+        const matchDate = firstDefined(duel.time_start_utc, duel.timestamp, duel.time_utc, duel.time);
         const duelMatchId = firstDefined(duel.match_id, duel.matchId);
         const tInfo = getTournamentMeta(tId);
+        const challengeDuel = isChallengeDuel(duel);
         if (tId && tId !== lastTournamentId) {
           const tRow = document.createElement("div");
           tRow.className = "player-matches-entry";
@@ -1761,7 +1790,18 @@
 
         const details = document.createElement("div");
         details.className = "player-match-details";
-        if (tInfo && (tInfo.fullName || tInfo.name)) {
+        if (challengeDuel) {
+          const challengeLine = document.createElement("div");
+          challengeLine.className = "detail-line";
+          const challengeLabel = document.createElement("span");
+          challengeLabel.className = "detail-label";
+          challengeLabel.textContent = "Challenge:";
+          const challengeValue = document.createElement("strong");
+          challengeValue.textContent = firstDefined(duel.challenge_period_name, "Challenges");
+          challengeLine.appendChild(challengeLabel);
+          challengeLine.appendChild(challengeValue);
+          details.appendChild(challengeLine);
+        } else if (tInfo && (tInfo.fullName || tInfo.name)) {
           const tLine = document.createElement("div");
           tLine.className = "detail-line";
           const tLabel = document.createElement("span");
@@ -1781,7 +1821,7 @@
           details.appendChild(tLine);
         }
 
-        if (duelMatchId) {
+        if (!challengeDuel && duelMatchId) {
           const match = getMatchByDuel(duel);
           const roundText = match && match.round ? match.round : (duel.round || "");
           if (roundText) {
@@ -1837,7 +1877,7 @@
             matchLine.appendChild(matchValue);
             details.appendChild(matchLine);
           }
-        } else if (duel.round) {
+        } else if (!challengeDuel && duel.round) {
           const roundLine = document.createElement("div");
           roundLine.className = "detail-line";
           const roundLabel = document.createElement("span");
@@ -1850,7 +1890,7 @@
           details.appendChild(roundLine);
         }
 
-        const timeRaw = firstDefined(duel.time_start_utc, duel.timestamp);
+        const timeRaw = firstDefined(duel.time_start_utc, duel.timestamp, duel.time_utc, duel.time);
         const timeText = formatDetailTime(timeRaw);
         if (timeText) {
           const timeLine = document.createElement("div");

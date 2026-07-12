@@ -16281,8 +16281,6 @@ app.get("/public/player-official-duels", async (req, res, next) => {
           AND trim(COALESCE(d.time_utc, '')) <> ''
           AND datetime(d.time_utc) IS NOT NULL
           AND datetime(d.time_utc) > datetime(?)
-          AND trim(COALESCE(d.dw1, '')) <> ''
-          AND trim(COALESCE(d.dw2, '')) <> ''
           AND (
             trim(COALESCE(d.player_1_id, '')) = trim(?)
             OR trim(COALESCE(d.player_2_id, '')) = trim(?)
@@ -16308,14 +16306,14 @@ app.get("/public/player-official-duels", async (req, res, next) => {
     const getDuelTournamentId = (row) => {
       const sourceType = normalizeNullableText(row?.source_type).toLowerCase();
       if (sourceType === "challenge") {
-        return `challenge:${normalizeNullableText(row?.challenge_period_id) || "duels"}`;
+        return "Challenges";
       }
       return normalizeNullableText(row?.tournament_id) || "Official-Matches";
     };
     const getDuelTournamentName = (row) => {
       const sourceType = normalizeNullableText(row?.source_type).toLowerCase();
       if (sourceType === "challenge") {
-        return normalizeNullableText(row?.challenge_period_name) || "Challenges";
+        return "Challenges";
       }
       return normalizeNullableText(row?.tournament_name || row?.tournament_short_title || row?.tournament_id) || "Official Matches";
     };
@@ -16332,9 +16330,9 @@ app.get("/public/player-official-duels", async (req, res, next) => {
           id: tournamentId,
           tournament_id: tournamentId,
           name: getDuelTournamentName(row),
-          short_title: normalizeNullableText(isChallenge ? row?.challenge_period_name : row?.tournament_short_title) || getDuelTournamentName(row),
-          logo: normalizeNullableText(isChallenge ? row?.challenge_period_logo : row?.tournament_logo),
-          logo_image: normalizeNullableText(isChallenge ? row?.challenge_period_logo : row?.tournament_logo),
+          short_title: getDuelTournamentName(row),
+          logo: isChallenge ? "https://carcassonne.gg/gallery/challenges.png" : normalizeNullableText(row?.tournament_logo),
+          logo_image: isChallenge ? "https://carcassonne.gg/gallery/challenges.png" : normalizeNullableText(row?.tournament_logo),
           link: normalizeNullableText(isChallenge ? "https://carcassonne.gg/player-hub/challenges/" : row?.tournament_link),
           type: isChallenge ? "Individual" : normalizeTournamentType(row?.tournament_type),
         });
@@ -16406,6 +16404,8 @@ app.get("/public/player-official-duels", async (req, res, next) => {
           status: row.status,
           source_type: row.source_type,
           challenge_period_id: row.challenge_period_id,
+          challenge_period_name: row.challenge_period_name,
+          challenge_period_logo: row.challenge_period_logo,
           round: buildRoundLabel(row),
           player1_elo_before: row.player1_elo_before,
           player1_elo_after: row.player1_elo_after,
