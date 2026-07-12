@@ -3712,6 +3712,10 @@ function ensureDuelsSchema() {
         addColumnIfMissing(columns, "duels", "gg_rating_full", "REAL");
         addColumnIfMissing(columns, "duels", "gg_rating", "INTEGER");
         addColumnIfMissing(columns, "duels", "ranking", "INTEGER NOT NULL DEFAULT 1");
+        addColumnIfMissing(columns, "duels", "player1_elo_before", "REAL");
+        addColumnIfMissing(columns, "duels", "player1_elo_after", "REAL");
+        addColumnIfMissing(columns, "duels", "player2_elo_before", "REAL");
+        addColumnIfMissing(columns, "duels", "player2_elo_after", "REAL");
         addColumnIfMissing(columns, "duels", "dw1_import", "INTEGER");
         addColumnIfMissing(columns, "duels", "dw2_import", "INTEGER");
         addColumnIfMissing(columns, "duels", "created_by", "TEXT");
@@ -16177,6 +16181,243 @@ function publicMainPageMatchesHandler(req, res, next) {
 }
 
 app.get("/public/main-page-matches", publicMainPageMatchesHandler);
+
+app.get("/public/player-official-duels", async (req, res, next) => {
+  const playerId = normalizeNullableText(req.query?.player_id ?? req.query?.player ?? req.query?.id);
+  if (!playerId) {
+    return res.status(400).json({ ok: false, message: "player_id is required" });
+  }
+
+  try {
+    const settingsRow = await dbGetAsync(
+      `
+        SELECT setting_value
+        FROM system_settings
+        WHERE setting_key = 'gg_rating_base_date'
+        LIMIT 1
+      `
+    );
+    const baseDate = normalizeNullableText(settingsRow?.setting_value);
+
+    if (!baseDate) {
+      return res.json({
+        ok: true,
+        gg_rating_base_date: null,
+        tournaments: [],
+        teams: [],
+        matches: [],
+        duels: [],
+      });
+    }
+
+    const duelRows = await dbAllAsync(
+      `
+        SELECT
+          d.id,
+          d.tournament_id,
+          d.match_id,
+          d.duel_number,
+          d.duel_format,
+          d.time_utc,
+          d.player_1_id,
+          COALESCE(NULLIF(trim(p1.bga_nickname), ''), trim(d.player_1_id)) AS player_1_name,
+          p1.avatar AS player_1_avatar,
+          d.player_2_id,
+          COALESCE(NULLIF(trim(p2.bga_nickname), ''), trim(d.player_2_id)) AS player_2_name,
+          p2.avatar AS player_2_avatar,
+          d.dw1,
+          d.dw2,
+          d.rating,
+          d.gg_rating,
+          d.ranking,
+          d.status,
+          d.source_type,
+          d.challenge_period_id,
+          d.player1_elo_before,
+          d.player1_elo_after,
+          d.player2_elo_before,
+          d.player2_elo_after,
+          m.time_utc AS match_time_utc,
+          m.team_1,
+          m.team_2,
+          m.dw1 AS match_dw1,
+          m.dw2 AS match_dw2,
+          m.gw1 AS match_gw1,
+          m.gw2 AS match_gw2,
+          m.round_name,
+          m.round_short_name,
+          m.match_short_name,
+          m.round_dates,
+          m.badge_name,
+          team1.name AS team_1_name,
+          COALESCE(NULLIF(trim(team1.flag), ''), NULLIF(trim(team1.logo), '')) AS team_1_flag,
+          team2.name AS team_2_name,
+          COALESCE(NULLIF(trim(team2.flag), ''), NULLIF(trim(team2.logo), '')) AS team_2_flag,
+          t.name AS tournament_name,
+          t.short_title AS tournament_short_title,
+          t.logo AS tournament_logo,
+          t.link AS tournament_link,
+          t.tournament_type,
+          cp.name AS challenge_period_name,
+          cp.logo AS challenge_period_logo
+        FROM duels d
+        LEFT JOIN profiles p1
+          ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
+        LEFT JOIN profiles p2
+          ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
+        LEFT JOIN matches m
+          ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
+         AND m.deleted_at IS NULL
+        LEFT JOIN tournaments t
+          ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(d.tournament_id, '')))
+        LEFT JOIN teams team1
+          ON upper(trim(COALESCE(team1.id, ''))) = upper(trim(COALESCE(m.team_1, '')))
+        LEFT JOIN teams team2
+          ON upper(trim(COALESCE(team2.id, ''))) = upper(trim(COALESCE(m.team_2, '')))
+        LEFT JOIN challenge_periods cp
+          ON trim(COALESCE(cp.id, '')) = trim(COALESCE(d.challenge_period_id, ''))
+        WHERE d.deleted_at IS NULL
+          AND COALESCE(d.ranking, 1) = 1
+          AND trim(COALESCE(d.time_utc, '')) <> ''
+          AND datetime(d.time_utc) IS NOT NULL
+          AND datetime(d.time_utc) > datetime(?)
+          AND trim(COALESCE(d.dw1, '')) <> ''
+          AND trim(COALESCE(d.dw2, '')) <> ''
+          AND (
+            trim(COALESCE(d.player_1_id, '')) = trim(?)
+            OR trim(COALESCE(d.player_2_id, '')) = trim(?)
+          )
+        ORDER BY datetime(d.time_utc) DESC, d.id ASC
+      `,
+      [baseDate, playerId, playerId]
+    );
+
+    const normalizeTournamentType = (value) => {
+      const raw = normalizeNullableText(value);
+      const lower = raw.toLowerCase();
+      if (lower === "team" || lower === "teams") return "TEAM";
+      if (lower === "individual" || lower === "individuals") return "Individual";
+      return raw || "Individual";
+    };
+    const buildRoundLabel = (row) => {
+      const title = normalizeNullableText(row?.round_name || row?.round_short_name || row?.badge_name || row?.match_short_name);
+      const dates = normalizeNullableText(row?.round_dates);
+      if (title && dates) return `${title}: ${dates}`;
+      return title || dates;
+    };
+    const getDuelTournamentId = (row) => {
+      const sourceType = normalizeNullableText(row?.source_type).toLowerCase();
+      if (sourceType === "challenge") {
+        return `challenge:${normalizeNullableText(row?.challenge_period_id) || "duels"}`;
+      }
+      return normalizeNullableText(row?.tournament_id) || "Official-Matches";
+    };
+    const getDuelTournamentName = (row) => {
+      const sourceType = normalizeNullableText(row?.source_type).toLowerCase();
+      if (sourceType === "challenge") {
+        return normalizeNullableText(row?.challenge_period_name) || "Challenges";
+      }
+      return normalizeNullableText(row?.tournament_name || row?.tournament_short_title || row?.tournament_id) || "Official Matches";
+    };
+
+    const tournamentsById = new Map();
+    const matchesById = new Map();
+    const teamsById = new Map();
+
+    (duelRows || []).forEach((row) => {
+      const tournamentId = getDuelTournamentId(row);
+      if (tournamentId && !tournamentsById.has(tournamentId)) {
+        const isChallenge = normalizeNullableText(row?.source_type).toLowerCase() === "challenge";
+        tournamentsById.set(tournamentId, {
+          id: tournamentId,
+          tournament_id: tournamentId,
+          name: getDuelTournamentName(row),
+          short_title: normalizeNullableText(isChallenge ? row?.challenge_period_name : row?.tournament_short_title) || getDuelTournamentName(row),
+          logo: normalizeNullableText(isChallenge ? row?.challenge_period_logo : row?.tournament_logo),
+          logo_image: normalizeNullableText(isChallenge ? row?.challenge_period_logo : row?.tournament_logo),
+          link: normalizeNullableText(isChallenge ? "https://carcassonne.gg/player-hub/challenges/" : row?.tournament_link),
+          type: isChallenge ? "Individual" : normalizeTournamentType(row?.tournament_type),
+        });
+      }
+
+      const matchId = normalizeNullableText(row?.match_id);
+      if (matchId && !matchesById.has(matchId)) {
+        matchesById.set(matchId, {
+          id: matchId,
+          match_id: matchId,
+          tournament_id: tournamentId,
+          time_utc: row.match_time_utc || row.time_utc,
+          team1_id: row.team_1,
+          team2_id: row.team_2,
+          team1: normalizeNullableText(row.team_1_name || row.team_1),
+          team2: normalizeNullableText(row.team_2_name || row.team_2),
+          duels_won1: row.match_dw1 ?? "",
+          duels_won2: row.match_dw2 ?? "",
+          games_won1: row.match_gw1 ?? "",
+          games_won2: row.match_gw2 ?? "",
+          round: buildRoundLabel(row),
+        });
+      }
+
+      [
+        [row.team_1, row.team_1_name, row.team_1_flag],
+        [row.team_2, row.team_2_name, row.team_2_flag],
+      ].forEach(([id, name, flag]) => {
+        const key = normalizeNullableText(id);
+        const label = normalizeNullableText(name || id);
+        const logo = normalizeNullableText(flag);
+        if (!key || !label || !logo || teamsById.has(key)) return;
+        teamsById.set(key, { iso: key, team: label, flag: logo, logo });
+      });
+    });
+
+    return res.json({
+      ok: true,
+      gg_rating_base_date: baseDate,
+      tournaments: Array.from(tournamentsById.values()),
+      teams: Array.from(teamsById.values()),
+      matches: Array.from(matchesById.values()),
+      duels: (duelRows || []).map((row) => {
+        const tournamentId = getDuelTournamentId(row);
+        return {
+          id: row.id,
+          tournament_id: tournamentId,
+          tournamentId,
+          match_id: normalizeNullableText(row.match_id),
+          matchId: normalizeNullableText(row.match_id),
+          duel_number: row.duel_number,
+          duel_format: row.duel_format,
+          time_start_utc: row.time_utc,
+          time_utc: row.time_utc,
+          timestamp: row.time_utc,
+          player1_id: row.player_1_id,
+          player1: row.player_1_name,
+          player2_id: row.player_2_id,
+          player2: row.player_2_name,
+          games_won1: row.dw1 ?? "",
+          games_won2: row.dw2 ?? "",
+          score1: row.dw1 ?? "",
+          score2: row.dw2 ?? "",
+          dw1: row.dw1,
+          dw2: row.dw2,
+          rating: row.rating,
+          gg_rating: row.gg_rating,
+          ranking: row.ranking,
+          status: row.status,
+          source_type: row.source_type,
+          challenge_period_id: row.challenge_period_id,
+          round: buildRoundLabel(row),
+          player1_elo_before: row.player1_elo_before,
+          player1_elo_after: row.player1_elo_after,
+          player2_elo_before: row.player2_elo_before,
+          player2_elo_after: row.player2_elo_after,
+        };
+      }),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
 
 app.get("/public/team-official-matches", async (req, res, next) => {
   const normalizeText = (value) => String(value ?? "").trim();

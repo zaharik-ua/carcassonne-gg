@@ -398,10 +398,10 @@
 
   function hasRatingChange(player) {
     const rawElo = String(player?.gg_elo ?? "").trim();
-    const rawPreviousElo = String(player?.gg_elo_previous ?? "").trim();
+    const rawDelta = String(player?.gg_elo_period_delta ?? "").trim();
     const current = Number(rawElo);
-    const previous = Number(rawPreviousElo);
-    return rawElo !== "" && rawPreviousElo !== "" && Number.isFinite(current) && Number.isFinite(previous) && current !== previous;
+    const delta = Number(rawDelta);
+    return rawElo !== "" && rawDelta !== "" && Number.isFinite(current) && Number.isFinite(delta) && delta !== 0;
   }
 
   async function fetchProfilesMap() {
@@ -484,17 +484,17 @@
     tdElo.className = "col-elo";
     {
       const rawElo = (player.gg_elo ?? "").toString().trim();
-      const rawPreviousElo = (player.gg_elo_previous ?? "").toString().trim();
+      const rawDelta = (player.gg_elo_period_delta ?? "").toString().trim();
       const val = Number(rawElo);
-      const previousVal = Number(rawPreviousElo);
+      const deltaVal = Number(rawDelta);
       if (rawElo !== "" && Number.isFinite(val)) {
         const span = document.createElement("span");
         span.classList.add("elo-rating");
         span.textContent = String(Math.trunc(val));
         tdElo.appendChild(span);
 
-        if (rawPreviousElo !== "" && Number.isFinite(previousVal) && val !== previousVal) {
-          const diff = Math.round(val - previousVal);
+        if (rawDelta !== "" && Number.isFinite(deltaVal) && deltaVal !== 0) {
+          const diff = Math.round(deltaVal);
           const diffEl = document.createElement("span");
           diffEl.classList.add("elo-rating-change");
           if (diff > 0) {
@@ -804,8 +804,8 @@
           id: profileId,
           player: String(dbProfile?.bga_nickname || jsonProfile?.bga_nickname || jsonProfile?.bga_name || "").trim(),
           name: String(dbProfile?.name || ""),
-          gg_elo: jsonProfile?.gg_elo || "",
-          gg_elo_previous: jsonProfile?.gg_elo_previous || "",
+          gg_elo: dbProfile?.gg_elo ?? "",
+          gg_elo_period_delta: dbProfile?.gg_elo_period_delta ?? "",
           achievements: Array.isArray(jsonProfile?.achievements) ? jsonProfile.achievements : [],
           master_title: Number(dbProfile?.master_title || 0),
           team_captain: Number(dbProfile?.team_captain || 0),

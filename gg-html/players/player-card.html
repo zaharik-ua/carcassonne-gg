@@ -889,6 +889,7 @@
 (function() {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
+  const PLAYER_OFFICIAL_DUELS_URL = `${AUTH_BASE}/public/player-official-duels`;
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
   const PROFILE_CONTACTS_URL = `${AUTH_BASE}/profiles/contacts`;
   const CONTACT_ICONS = {
@@ -935,6 +936,19 @@
       return map;
     } catch (_error) {
       return new Map();
+    }
+  }
+
+  async function fetchPlayerOfficialDuels(playerId) {
+    const pid = String(playerId || "").trim();
+    if (!pid) return null;
+    try {
+      const url = `${PLAYER_OFFICIAL_DUELS_URL}?player_id=${encodeURIComponent(pid)}`;
+      const response = await fetch(url);
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (_error) {
+      return null;
     }
   }
 
@@ -1104,9 +1118,75 @@
   }
 
   function parseDuelTimestamp(duel) {
-    const raw = firstDefined(duel.time_start_utc, duel.timestamp);
+    const raw = firstDefined(duel.time_start_utc, duel.timestamp, duel.time_utc, duel.time);
     const d = parseDateFromRaw(raw);
     return d ? d.getTime() : 0;
+  }
+
+  function getBaseDateTimestamp(baseDateRaw) {
+    const raw = String(baseDateRaw || "").trim();
+    if (!raw) return null;
+    const ts = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T00:00:00Z` : raw);
+    return Number.isFinite(ts) ? ts : null;
+  }
+
+  function isDuelOnOrBeforeBaseDate(duel, baseDateTs) {
+    if (!Number.isFinite(baseDateTs)) return true;
+    const ts = parseDuelTimestamp(duel);
+    if (!Number.isFinite(ts) || ts <= 0) return true;
+    return ts <= baseDateTs;
+  }
+
+  function mergeByStableId(primaryRows, fallbackRows, getId) {
+    const rows = [];
+    const seen = new Set();
+    (primaryRows || []).forEach((row) => {
+      const id = String(getId(row) || "").trim();
+      if (id) seen.add(id);
+      rows.push(row);
+    });
+    (fallbackRows || []).forEach((row) => {
+      const id = String(getId(row) || "").trim();
+      if (id && seen.has(id)) return;
+      if (id) seen.add(id);
+      rows.push(row);
+    });
+    return rows;
+  }
+
+  function buildMergedOfficialData(jsonData, dbPayload) {
+    const jsonDuels = Array.isArray(jsonData?.duels) ? jsonData.duels : [];
+    const jsonMatches = Array.isArray(jsonData?.matches) ? jsonData.matches : [];
+    const jsonTournaments = Array.isArray(jsonData?.tournaments)
+      ? jsonData.tournaments
+      : (Array.isArray(jsonData?.tournaments_list) ? jsonData.tournaments_list : []);
+    const dbDuels = Array.isArray(dbPayload?.duels) ? dbPayload.duels : [];
+    const dbMatches = Array.isArray(dbPayload?.matches) ? dbPayload.matches : [];
+    const dbTournaments = Array.isArray(dbPayload?.tournaments) ? dbPayload.tournaments : [];
+    const baseDateTs = getBaseDateTimestamp(dbPayload?.gg_rating_base_date);
+
+    if (!Number.isFinite(baseDateTs)) {
+      return {
+        duels: jsonDuels,
+        matches: jsonMatches,
+        tournaments: jsonTournaments,
+        teams: Array.isArray(dbPayload?.teams) ? dbPayload.teams : [],
+      };
+    }
+
+    const historicalJsonDuels = jsonDuels.filter((duel) => isDuelOnOrBeforeBaseDate(duel, baseDateTs));
+    const mergedDuels = mergeByStableId(
+      dbDuels,
+      historicalJsonDuels,
+      (duel) => firstDefined(duel.id, duel.duel_id, duel.duelId)
+    );
+
+    return {
+      duels: mergedDuels,
+      matches: mergeByStableId(dbMatches, jsonMatches, (match) => firstDefined(match.match_id, match.matchId, match.id)),
+      tournaments: mergeByStableId(dbTournaments, jsonTournaments, (tournament) => firstDefined(tournament.tournament_id, tournament.tournamentId, tournament.id)),
+      teams: Array.isArray(dbPayload?.teams) ? dbPayload.teams : [],
+    };
   }
 
   function parseDateFromRaw(raw) {
@@ -2772,12 +2852,13 @@
     }
 
     const dataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/official_matches.json";
-    const [res, profilesMap, editAccess, associationsList, profileContacts] = await Promise.all([
+    const [res, profilesMap, editAccess, associationsList, profileContacts, dbOfficialDuelsPayload] = await Promise.all([
       fetch(dataURL),
       fetchProfilesMap(),
       fetchEditAccess(playerId),
       fetchAssociations(),
       fetchProfileContacts(playerId),
+      fetchPlayerOfficialDuels(playerId),
     ]);
     const effectiveEditAccess = getEffectiveEditAccess(playerId, editAccess);
     associations = Array.isArray(associationsList) ? associationsList : [];
@@ -2799,9 +2880,10 @@
     const bgaPlayers = data.bga_players || [];
     const ggProfiles = data.gg_profiles || [];
     const countries = data.countries || [];
-    duels = data.duels || [];
-    matches = data.matches || [];
-    const tournaments = data.tournaments || data.tournaments_list || [];
+    const mergedOfficialData = buildMergedOfficialData(data, dbOfficialDuelsPayload);
+    duels = mergedOfficialData.duels || [];
+    matches = mergedOfficialData.matches || [];
+    const tournaments = mergedOfficialData.tournaments || [];
 
     bgaPlayersById = new Map(bgaPlayers.map(p => [String(p.player_id), p]));
     ggProfilesById = new Map();
@@ -2830,6 +2912,8 @@
         name: String(dbProfile?.name || ""),
         association: String(dbProfile?.association || jsonProfile?.association || jsonProfile?.assosiation || ""),
         status: String(dbProfile?.status || jsonProfile?.status || ""),
+        gg_elo: dbProfile?.gg_elo ?? "",
+        gg_elo_period_delta: dbProfile?.gg_elo_period_delta ?? "",
         master_title: Number(dbProfile?.master_title || 0),
         master_title_date: String(dbProfile?.master_title_date || ""),
         team_captain: Number(dbProfile?.team_captain || 0),
@@ -2841,6 +2925,10 @@
     });
     countriesByKey = new Map();
     countries.forEach(c => {
+      if (c.iso) countriesByKey.set(String(c.iso), c);
+      if (c.team) countriesByKey.set(String(c.team), c);
+    });
+    (mergedOfficialData.teams || []).forEach(c => {
       if (c.iso) countriesByKey.set(String(c.iso), c);
       if (c.team) countriesByKey.set(String(c.team), c);
     });
@@ -2866,6 +2954,8 @@
       association: String(dbProfile?.association || ""),
       assosiation: String(dbProfile?.association || ""),
       status: String(dbProfile?.status || ""),
+      gg_elo: dbProfile?.gg_elo ?? "",
+      gg_elo_period_delta: dbProfile?.gg_elo_period_delta ?? "",
       master_title: Number(dbProfile?.master_title || 0),
       master_title_date: String(dbProfile?.master_title_date || ""),
       team_captain: Number(dbProfile?.team_captain || 0),
@@ -2893,7 +2983,7 @@
     const avatar = buildBgaAvatarUrl(playerId, bga.avatar || dbProfile?.avatar);
     const nick = profile ? String(profile.bga_nickname || profile.bga_name || profile.nickname || "") : "";
     const realName = profile && profile.name ? String(profile.name) : "";
-    const rating = profile && profile.gg_elo ? String(profile.gg_elo) : "";
+    const rating = String(profile?.gg_elo ?? "").trim();
 
     const card = document.createElement("div");
     card.className = "player-card";

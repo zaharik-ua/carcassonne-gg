@@ -220,13 +220,16 @@
           return {
             id: profileId,
             player: String(dbProfile?.bga_nickname || jsonProfile?.bga_nickname || jsonProfile?.bga_name || "").trim(),
-            gg_elo: jsonProfile?.gg_elo || "",
-            gg_elo_previous: jsonProfile?.gg_elo_previous || "",
+            gg_elo: dbProfile?.gg_elo ?? "",
+            gg_elo_period_delta: dbProfile?.gg_elo_period_delta ?? "",
             flag: country?.flag || ""
           };
         })
         .filter((p) => Boolean(p.player))
-        .filter(p => Number.isFinite(Number(String(p.gg_elo).trim())))
+        .filter(p => {
+          const rawElo = String(p.gg_elo ?? "").trim();
+          return rawElo !== "" && Number.isFinite(Number(rawElo));
+        })
         .sort((a, b) => Number(b.gg_elo) - Number(a.gg_elo))
         .slice(0, 10);
 
@@ -266,9 +269,9 @@
         eloBlock.appendChild(elo);
 
         const currentElo = Number(String(player.gg_elo).trim());
-        const previousElo = Number(String(player.gg_elo_previous).trim());
-        if (Number.isFinite(currentElo) && Number.isFinite(previousElo) && currentElo !== previousElo) {
-          const diff = Math.round(currentElo - previousElo);
+        const periodDelta = Number(String(player.gg_elo_period_delta).trim());
+        if (Number.isFinite(currentElo) && Number.isFinite(periodDelta) && periodDelta !== 0) {
+          const diff = Math.round(periodDelta);
           const change = document.createElement("span");
           change.className = "gg-elo-change";
           if (diff > 0) {
@@ -290,7 +293,7 @@
 
       const header = document.createElement("div");
       header.className = "header-row";
-      header.innerHTML = '<a href="https://carcassonne.gg/players/" target="_self">See all players</a><div class="last-updated">Last updated: 24th of June</div>';
+      header.innerHTML = '<a href="https://carcassonne.gg/players/" target="_self">See all players</a><div class="last-updated">Last updated: 12th of July</div>';
       card.appendChild(header);
 
       container.appendChild(card);

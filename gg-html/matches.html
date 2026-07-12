@@ -3390,25 +3390,34 @@ function bindLineupToggle(matchId, lineupPanel, chevronIcon, toggleBtn) {
   });
 }
 
-function buildChallengePlayerDetailsIndex(profilesPayload, teamsPayload, ggPlayersPayload) {
+function buildChallengePlayerDetailsIndex(profilesPayload, teamsPayload) {
   const profiles = Array.isArray(profilesPayload?.profiles) ? profilesPayload.profiles : [];
   const teams = Array.isArray(teamsPayload?.teams) ? teamsPayload.teams : [];
-  const ggProfiles = Array.isArray(ggPlayersPayload?.gg_profiles) ? ggPlayersPayload.gg_profiles : [];
   const teamsById = new Map(
     teams.map((team) => [String(team?.id || "").trim().toUpperCase(), team]).filter(([id]) => Boolean(id))
   );
+  const profileId = (profile) => String(profile?.id ?? profile?.player_id ?? "").trim();
+  const ratingProfiles = profiles.filter((profile) => {
+    const rawElo = String(profile?.gg_elo ?? "").trim();
+    return profileId(profile) && rawElo !== "" && Number.isFinite(Number(rawElo)) && Number(rawElo) > 0;
+  });
+  const fallbackRankById = new Map(
+    ratingProfiles
+      .slice()
+      .sort((a, b) => Number(b.gg_elo) - Number(a.gg_elo))
+      .map((profile, index) => [profileId(profile), index + 1])
+  );
   const ratingsById = new Map();
-  [...ggProfiles]
-    .filter((profile) => Number.isFinite(Number(profile?.gg_elo)) && Number(profile.gg_elo) > 0)
-    .sort((a, b) => Number(b.gg_elo) - Number(a.gg_elo))
-    .forEach((profile, index) => {
-      const id = String(profile?.id ?? profile?.profile_id ?? "").trim();
-      if (!id) return;
-      ratingsById.set(id, {
-        elo: Math.trunc(Number(profile.gg_elo)),
-        rank: index + 1,
-      });
+  ratingProfiles.forEach((profile) => {
+    const id = profileId(profile);
+    const position = Number(profile?.gg_rating_position);
+    ratingsById.set(id, {
+      elo: Math.trunc(Number(profile.gg_elo)),
+      rank: Number.isFinite(position) && position > 0
+        ? Math.trunc(position)
+        : fallbackRankById.get(id),
     });
+  });
 
   return new Map(profiles.map((profile) => {
     const id = String(profile?.id ?? profile?.player_id ?? "").trim();
@@ -3667,7 +3676,6 @@ function applySourcePriority(matches, priority) {
   const dbMatchesURL = "https://api.carcassonne.gg/public/main-page-matches";
   const profilesURL = "https://api.carcassonne.gg/profiles/public";
   const teamsURL = "https://api.carcassonne.gg/teams";
-  const ggPlayersURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
 
   const baseMatchesPromise = fetchPrimaryWithRetry(primaryURL, { retries: 2, delayMs: 500, timeout: 10000 })
     .catch(err => {
@@ -3697,9 +3705,8 @@ function applySourcePriority(matches, priority) {
     challengePlayerDetailsCachePromise = Promise.all([
       fetchOptionalJson(profilesURL),
       fetchOptionalJson(teamsURL),
-      fetchOptionalJson(ggPlayersURL),
-    ]).then(([profilesPayload, teamsPayload, ggPlayersPayload]) => (
-      buildChallengePlayerDetailsIndex(profilesPayload, teamsPayload, ggPlayersPayload)
+    ]).then(([profilesPayload, teamsPayload]) => (
+      buildChallengePlayerDetailsIndex(profilesPayload, teamsPayload)
     ));
   }
   const challengePlayerDetailsPromise = challengePlayerDetailsCachePromise;
