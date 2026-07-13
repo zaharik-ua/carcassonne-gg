@@ -4,10 +4,9 @@ cd /home/carcassonne-gg/json-data || exit 1
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') ===" >> /home/carcassonne-gg/cron_update_players.log
 
 changes_made=false
-curl_headers=(-H "Origin: https://carcassonne.gg")
 
 temp_file=$(mktemp)
-curl -s "${curl_headers[@]}" https://api.carcassonne.com.ua/public/players -o "$temp_file"
+curl -s https://api.carcassonne.com.ua/public/players -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" masters.json
   if ! git diff --quiet masters.json; then
@@ -22,7 +21,7 @@ fi
 
 
 temp_file=$(mktemp)
-curl -s "${curl_headers[@]}" https://api.carcassonne.com.ua/public/achievements -o "$temp_file"
+curl -s https://api.carcassonne.com.ua/public/achievements -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" achievements.json
   if ! git diff --quiet achievements.json; then

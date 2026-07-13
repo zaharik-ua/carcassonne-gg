@@ -2,14 +2,13 @@
 
 cd /home/carcassonne-gg/json-data/tournaments-done || exit 1
 echo "=== $(date) ===" >> /home/carcassonne-gg/cron_backup.log
-curl_headers=(-H "Origin: https://carcassonne.gg")
 
 
 # List of tournament IDs
 tournaments=("MSO-2026Q1" "MSO-2026Q2" "MSO-2026FT")
 
 for tournament_id in "${tournaments[@]}"; do
-  curl -s "${curl_headers[@]}" "https://api.carcassonne.com.ua/public/tournaments_done?tournament_id=${tournament_id}" -o "${tournament_id}.json"
+  curl -s "https://api.carcassonne.com.ua/public/tournaments_done?tournament_id=${tournament_id}" -o "${tournament_id}.json"
   git add "${tournament_id}.json"
 done
 
