@@ -4,13 +4,14 @@ cd /home/carcassonne-gg/json-data || exit 1
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') ===" >> /home/carcassonne-gg/cron_update_open.log
 
 changes_made=false
+curl_headers=(-H "Origin: https://carcassonne.gg")
 
 # # List of tournament IDs
 # tournaments=("Asian-Cup-2025" "TECS-2025" "UCOCup-2025" "BCPL-2025-Sum" "CZ-2025-COC" "HR-2025-OC-2" "UCOCup-2025" "AR-2025-LNE" "FI-2025-OC")
 
 # for tournament_id in "${tournaments[@]}"; do
 #   temp_file=$(mktemp)
-#   curl -s "https://api.carcassonne.com.ua/public/tournaments?tournament_id=${tournament_id}" -o "$temp_file"
+#   curl -s "${curl_headers[@]}" "https://api.carcassonne.com.ua/public/tournaments?tournament_id=${tournament_id}" -o "$temp_file"
 #   if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
 #     mv "$temp_file" "tournaments-open/${tournament_id}.json"
 #     if ! git diff --quiet "tournaments-open/${tournament_id}.json"; then
@@ -25,7 +26,7 @@ changes_made=false
 # done
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/public/tournaments -o "$temp_file"
+curl -s "${curl_headers[@]}" https://api.carcassonne.com.ua/public/tournaments -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" tournaments-open.json
   if ! git diff --quiet tournaments-open.json; then
@@ -39,7 +40,7 @@ else
 fi
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/public/tournaments_list -o "$temp_file"
+curl -s "${curl_headers[@]}" https://api.carcassonne.com.ua/public/tournaments_list -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" tournaments-list.json
   if ! git diff --quiet tournaments-list.json; then

@@ -4,9 +4,10 @@ cd /home/carcassonne-gg/json-data || exit 1
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') ===" >> /home/carcassonne-gg/cron_update_open.log
 
 changes_made=false
+curl_headers=(-H "Origin: https://carcassonne.gg")
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/public/news -o "$temp_file"
+curl -s "${curl_headers[@]}" https://api.carcassonne.com.ua/public/news -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" news.json
   if ! git diff --quiet news.json; then
@@ -21,7 +22,7 @@ fi
 
 
 temp_file=$(mktemp)
-curl -s https://api.carcassonne.com.ua/public/matches -o "$temp_file"
+curl -s "${curl_headers[@]}" https://api.carcassonne.com.ua/public/matches -o "$temp_file"
 if grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "$temp_file"; then
   mv "$temp_file" matches.json
   if ! git diff --quiet matches.json; then
