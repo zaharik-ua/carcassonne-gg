@@ -1,0 +1,1875 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<!-- Material Icons Round for rating stars -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Icons+Round" rel="stylesheet">
+<style>
+body {
+    font-family: 'Montserrat', sans-serif;
+}
+code {
+    color: #444444;
+    font-size: 11px;
+    background-color: transparent;
+}
+@media (max-width: 600px) {
+    code {
+        color: #444444;
+        font-size: 9px;
+        background-color: transparent;
+    } 
+}
+.history-score {
+  display: inline-block;
+  min-width: 50px;
+}
+
+.elo-rating{
+    color: #fff;
+    font-weight: bold;
+    border-radius: 2px;
+    height: 14px;
+    padding: 1px 5px;
+}
+.gamerank_apprentice,.gamerank_beginner {
+    background-color: #74bed1;
+}
+
+.gamerank_average {
+    background-color: #84b8de;
+}
+
+.gamerank_good {
+    background-color: #94acd6;
+}
+
+.gamerank_strong {
+    background-color: #9ba5d0;
+}
+
+.gamerank_expert {
+    background-color: #a99bc9;
+}
+
+.gamerank_master {
+    background-color: #b593c4;
+}
+.section-title {
+    font-size: 17px;
+    font-style: normal;
+    font-weight: 700;
+    color: #222;
+    margin: 15px 0 10px 0;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.results-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #f7f8fa;
+  border-bottom: 1px solid #ccc;
+  border-radius: 4px 4px 0 0;
+  flex-wrap: wrap;
+}
+
+.results-pagesize {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #555;
+  margin-bottom: 0;
+}
+
+.results-pagesize-picker {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 58px;
+}
+
+.results-pagesize-btn {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 24px;
+  border: 1px solid #c8ced8;
+  border-radius: 4px;
+  background: #fff;
+  color: #2f3947;
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.results-pagesize-btn:hover,
+.results-pagesize-btn:focus-visible {
+  border-color: #9ea7b3;
+}
+
+.results-pagesize-btn.open {
+  border-color: #9ea7b3;
+}
+
+.results-pagesize-label {
+  font-weight: 600;
+  color: #2f3947;
+  white-space: nowrap;
+}
+
+.results-pagesize-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6f7785;
+  font-size: 10px;
+}
+
+.results-pagesize-chevron i {
+  transition: transform 0.18s ease;
+}
+
+.results-pagesize-btn.open .results-pagesize-chevron i {
+  transform: rotate(180deg);
+}
+
+.results-pagesize-menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  min-width: 100%;
+  width: max-content;
+  max-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #d5dbe4;
+  border-radius: 4px;
+  box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+  z-index: 20;
+}
+
+.results-pagesize-menu.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.results-pagesize-option {
+  all: unset;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border-top: 1px solid #edf1f6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #2f3947;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.results-pagesize-option:first-child {
+  border-top: none;
+}
+
+.results-pagesize-option:hover {
+  background: #f5f5f5;
+}
+
+.results-pagesize-option.active {
+  background: #e4f0fb;
+}
+
+.results-pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.results-pagebtn {
+  font: inherit;
+  font-size: 12px;
+  color: #333;
+  background: #fff;
+  border: 1px solid #cfcfcf;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.results-pagebtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.results-pageinfo {
+  font-size: 12px;
+  color: #555;
+  min-width: 72px;
+  text-align: center;
+}
+
+/* Sort toggle on Today row */
+.sort-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.sort-toggle__label {
+  color: #555;
+  font-weight: 600;
+}
+.sort-toggle__options {
+  display: inline-flex;
+  background: none;
+  border-radius: 3px;
+  padding: 2px;
+}
+.sort-toggle__option {
+  padding: 2px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  color: #555;
+  user-select: none;
+}
+.sort-toggle__option.active {
+  background: #fff;
+  color: #111;
+  box-shadow: 0 0 0 1px #ddd inset;
+}
+
+/* Rating help (star + info) on Today row */
+.rating-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+.rating-star {
+  font-size: 12px;
+  line-height: 1;
+  color: #DAA520; /* gold */
+}
+.rating-info-btn {
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+}
+.rating-tooltip {
+  position: absolute;
+  top: 18px;
+  right: 0;
+  z-index: 10;
+  display: none;
+  width: 300px; /* enforce width so it doesn't shrink to parent size */
+  max-width: 90vw; /* clamp on very small screens */
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: #fff;
+  color: #222;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 400;
+  white-space: normal; /* allow wrapping */
+}
+@media (max-width: 600px) {
+  .rating-tooltip { width: 90vw; }
+}
+.tournament-card {
+    background: white;
+    border-radius: 4px;
+    box-shadow: 1.4142px 1.4142px 2px 0 #b2b2b2;
+    margin-bottom: 20px;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/*.tournament-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 2px 4px 8px rgba(0, 0, 0, 0.1);
+}*/
+
+  .match-row {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    height: auto;
+    background-color: white;
+    border-top: 1px solid #ccc;
+    padding: 4px 8px;
+    box-sizing: border-box;
+    position: relative; /* allows top-right badge */
+  }
+
+  .match-wrapper--first .match-row {
+    border-top: none;
+  }
+
+  .match-time {
+    width: 46px;
+    min-width: 46px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 14px;
+    font-weight: bold;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .match-rating {
+    font-size: 0; /* use icon font sizes instead */
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+
+  /* Size stars nicely for compact rows */
+  .match-rating .material-icons-round {
+    font-size: 9.5px;
+    line-height: 8px;
+    vertical-align: middle;
+    letter-spacing: -1.5px;
+  }
+
+  /* Special style for rating 6: gold stars only */
+  .match-rating--gold .material-icons-round {
+    color: #DAA520;
+    font-size: 10.5px;
+    letter-spacing: -2px;
+  }
+
+  .match-time-text {
+    font-size: 12px;
+    line-height: 14px;
+    color: #333; /* keep time color independent from rating color */
+  }
+
+  .match-format-badge {
+    margin-top: 2px;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-size: 10px;
+    line-height: 10px;
+    font-weight: 600;
+  }
+
+  .match-format-badge.bo1 {
+    background-color: #eee;
+    color: #333;
+  }
+
+  .match-format-badge.bo3 {
+    background-color: #d7eaff;
+    color: #073654;
+  }
+
+  .match-format-badge.bo5 {
+    background-color: #fce0e0;
+    color: #590f0f;
+  }
+
+  .divider-vertical {
+    width: 2px;
+    background-color: #dfdfdf;
+    margin: 0 6px;
+    align-self: stretch; /* stretch full row height even when row is auto-height */
+    border-radius: 1px;
+  }
+
+  .match-tournament-logo {
+    min-width: 34px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .match-tournament-logo img {
+    height: 25px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+  }
+
+  .teams {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .teams-stream {
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .team-row {
+    display: flex;
+    align-items: center;
+    font-size: 16px;
+    gap: 6px;
+  }
+
+  .team-row span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .team-flag {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+
+  .duel-players {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .players-stream {
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .duel-player-row {
+    display: flex;
+    align-items: center;
+    font-size: 16px;
+    gap: 6px;
+  }
+
+  .duel-player-row span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .duel-player-avatar {
+    height: 16px;
+    width: 16px;
+    object-fit: contain;
+    border: 0.5px solid #444;
+    border-radius: 2px;
+    margin-top: 1px;
+    margin-bottom: 1px;
+  }
+  .duel-player-avatar.duel-player-avatar--individual {
+    width: 18px;
+    height: auto;
+    border: none;
+  }
+
+  .duel-player-row a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .duel-player-row a:hover {
+    color: #0277BD;
+    text-decoration: none;
+  }
+
+  .match-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .live-icon {
+    width: 30px;
+    height: auto;
+  }
+
+  .score-box.match-score {
+    width: 13px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 18px;
+    line-height: 20px;
+  }
+
+  .score-box.duel-score {
+    width: 13px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 16px;
+    line-height: 20px;
+    margin-right: 7px;
+  }
+
+  .score-box-stream {
+    margin: 0 4px 0 12px;
+    width: 13px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 18px;
+    line-height: 20px;
+  }
+  
+  @media (min-width: 601px) {
+    .score-box.match-score {
+      margin-left: 15px;
+    }
+    .score-box.duel-score {
+      margin-left: 15px;
+    }
+  }
+
+  .score-box-alt {
+    width: 20px;
+    text-align: center;
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .score-box-alt-stream {
+    flex-grow: 1;
+    display: flex;
+    width: 20px;
+    text-align: center;
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .stream-icon {
+    width: 22px;
+    border-radius: 3px;
+    border: 0.5px solid #444;
+    height: auto;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+  }
+
+  .stream-icon:hover {
+    opacity: 1;
+  }
+
+  .stream-score-spacer {
+    width: 30px;
+  }
+
+  @media (max-width: 600px) {
+    .stream-score-spacer {
+      width: 0;
+    }
+  }
+
+  .tournament-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: auto;
+    background-color: white;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 6px 8px;
+  }
+
+  .tournament-header__right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  .matches-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #333;
+    padding: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: color 0.2s ease, transform 0.2s ease;
+  }
+
+  .matches-filter-toggle:hover,
+  .matches-filter-toggle:focus-visible {
+    color: #000;
+    transform: scale(1.05);
+    outline: none;
+  }
+
+  .matches-filter-panel {
+    overflow: hidden;
+    background-color: #f0f6fb;
+    border-bottom: 1px solid #c5d8e6;
+    transition: height 0.3s ease, padding 0.3s ease;
+    height: 0;
+    padding: 0 8px;
+  }
+
+  .matches-filter-panel.open {
+    border-bottom-color: #b7ccdd;
+  }
+
+  .matches-filter-options {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 7px 0;
+    flex-wrap: wrap;
+  }
+
+  .matches-filter-flag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    padding: 2px;
+    width: 28px;
+    height: 20px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  .matches-filter-flag:hover,
+  .matches-filter-flag:focus-visible {
+    border-color: #a5b7c5;
+    box-shadow: 1.2px 1.2px 2px rgba(0, 0, 0, 0.2);
+    outline: none;
+    transform: translateY(-1px);
+  }
+
+  .matches-filter-flag.active {
+    border-color: #2C6DA3;
+    box-shadow: 0 0 0 1px rgba(44, 109, 163, 0.4);
+  }
+
+  .matches-filter-flag img {
+    width: 24px;
+    height: 16px;
+    object-fit: contain;
+    display: block;
+  }
+
+  /* Right-side controls in tournament header (badge + chevron) */
+  .results-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Count badge for finished matches */
+  .results-count-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 9999px;
+    background-color: #2C6DA3;
+    color: #fff;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .tournament-header a,
+  .tournament-header__title {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: inherit;
+    gap: 6px;
+  }
+
+  /* Time mode: thin separators between matches */
+  .time-mode-separator {
+    height: 1px;
+    background-color: #ccc;
+    margin: 0;
+  }
+
+  /* In Time mode, suppress built-in match top borders */
+  .time-mode .match-row {
+    border-top: none;
+    padding: 1px 8px 4px 8px;
+  }
+
+
+  /* Time mode: compact tournament header styles */
+  .time-mode .tournament-header {
+    padding: 6px 8px 1px 8px; 
+    font-size: 11px;  /* tournament name size */
+    color: #555;      /* tournament name color */
+  }
+  .time-mode .tournament-header a,
+  .time-mode .tournament-header__title {
+    color: #555;      /* ensure link inherits the color */
+    font-size: 10px;
+  }
+  .time-mode .tournament-icon {
+    width: 14px;      /* tournament icon size */
+    height: 14px;
+  }
+
+  .tournament-icon {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+  }
+
+.lineup__overview {
+      padding: 10px 12px;
+      line-height: 22px;
+  }
+
+.lineup__row-score {
+  display: inline-block;
+  padding: 0 7px;
+  font-weight: 600;
+  color: #222;
+  letter-spacing: 0.01em;
+  text-shadow: 0 0 0.01px currentColor;
+}
+
+.lineup__row-sep {
+  display: inline-block;
+  padding: 0 7px;
+}
+
+.lineup__row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+}
+
+.lineup__games {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  flex-wrap: wrap;
+}
+
+.lineup__game-link {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.lineup__game-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: #eceff1;
+  color: #222;
+  font-size: 11px;
+  line-height: 13px;
+}
+
+.lineup__game-badge--p1 {
+  background: #dceeff;
+}
+
+.lineup__game-badge--p2 {
+  background: #dff4df;
+}
+
+.lineup__game-badge--clock {
+  background: #f8dede;
+}
+
+.lineup__game-badge:hover {
+  filter: brightness(0.96);
+}
+
+.lineup__game-clock {
+  font-size: 10px;
+  line-height: 1;
+}
+
+  .event-row {
+    min-height: 40px;
+  }
+
+  .event-row .match-time {
+    width: 46px;
+    min-width: 46px;
+  }
+
+  .event-content {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .event-logo {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .event-title-link,
+  .event-title-text {
+    color: #222;
+    font-size: 14px;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .event-title-link {
+    text-decoration: none;
+  }
+
+  .event-title-link:hover {
+    color: #0277BD;
+    text-decoration: none;
+  }
+  
+  @media (max-width: 600px) {
+      .lineup__overview {
+        font-size: 13px;
+        line-height: 18px;
+      }
+    }
+    
+  @media (max-width: 600px) {
+  .lineup td a {
+    word-break: break-word;
+    white-space: normal;
+    }
+  }
+  
+.lineup {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+  background-color: #f5f5f5;
+}
+
+/* Collapsible container for finished duel results */
+.results-collapsible {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+  
+}
+
+/* Inner wrapper for finished duel results */
+.results-collapsible__inner {
+  padding: 0px 0;
+  line-height: 22px;
+}
+
+.lineup td, th {
+    padding: 0px 2px;
+}
+
+.lineup a {
+  color: #333333;
+  text-decoration: none;
+}
+
+.lineup a:hover {
+  color: #146997;
+}
+
+.lineup a:active {
+  color: #333333;
+}
+
+.chevron {
+  cursor: pointer;
+  font-size: 16px;
+  user-select: none;
+  transition: transform 0.3s ease;
+  transform: rotate(180deg);
+}
+
+/* Last Results: grid for duel matches (2 per row desktop, 1 per row mobile) */
+.lastresults-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 600px) {
+  .lastresults-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Трішки ущільнимо ряд для компактних дуелей (опціонально) */
+.match-row.duel-compact {
+  min-height: 48px;
+  height: auto;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+}
+
+/* Playoffs round badge */
+.playoff-round-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background-color: #ee9a4b; /* orange */
+  color: #ffffff;
+  font-size: 10px;
+  line-height: 13px;
+  font-weight: 400;
+  padding: 0 6px;
+  border-radius: 0 0 0 3px; /* only bottom-left corner rounded */
+  z-index: 5;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.playoff-round-badge.individual-badge {
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 0 0 0 6px;
+  letter-spacing: 0.4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.playoff-round-badge.individual-stage-q1 {
+  background-color: #8ec5ff;
+  color: #0b3555;
+}
+
+.playoff-round-badge.individual-stage-q2 {
+  background-color: #bdf4d1;
+  color: #0c4021;
+}
+
+.playoff-round-badge.individual-stage-q3 {
+  background-color: #d8c8ff;
+  color: #2f1a57;
+}
+
+.playoff-round-badge.individual-stage-q4 {
+  background-color: #ffc9ce;
+  color: #61111f;
+}
+
+/* When badge present, drop streams slightly below it */
+.match-right.under-badge {
+  margin-top: 12px;
+  }
+
+  .matches-shell {
+    position: relative;
+    min-height: 72px;
+  }
+
+  /* Loading indicator overlay */
+  .loading-indicator {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 16px 0;
+    background: rgba(255, 255, 255, 0.6);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.18s ease, visibility 0.18s ease;
+    z-index: 15;
+  }
+
+  .loading-indicator.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .loading-indicator img {
+    height: 32px;
+    width: 32px;
+  }
+
+</style>
+<div class="matches-shell">
+  <div id="matches-loading" class="loading-indicator">
+    <img src="https://carcassonne.gg/gallery/loading-red.gif" alt="Loading...">
+  </div>
+  <div id="matches-container"></div>
+</div>
+
+<script>
+const MATCHES_URL = "https://api.carcassonne.gg/public/challenge-duels";
+const RESULTS_PAGE_SIZE_OPTIONS = [15, 30, 50];
+const resultsPaginationState = {
+  pageSize: 15,
+  currentPage: 1,
+  totalItems: 0,
+  totalPages: 1
+};
+const autoUpdate = new URLSearchParams(window.location.search).get("autoupdate") === "true";
+
+function esc(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function parseUtc(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return 0;
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)
+    ? raw
+    : `${raw.replace(" ", "T")}Z`;
+  const ts = Date.parse(normalized);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function hasValue(value) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function isTruthyOne(value) {
+  return value === 1 || value === true || String(value || "").trim() === "1";
+}
+
+function readChallengeDuelsFiltersFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    association: String(params.get("association") || "").trim().toUpperCase(),
+    player: String(params.get("player") || "").trim(),
+    challenge_period: String(params.get("challenge_period") || "").trim()
+  };
+}
+
+function buildMatchesUrl() {
+  const filters = readChallengeDuelsFiltersFromUrl();
+  const url = new URL(MATCHES_URL);
+  url.searchParams.set("results_page_size", String(resultsPaginationState.pageSize));
+  url.searchParams.set("results_page", String(resultsPaginationState.currentPage));
+  url.searchParams.set("results_before", new Date().toISOString());
+  if (filters.association) url.searchParams.set("association", filters.association);
+  if (filters.player) url.searchParams.set("player", filters.player);
+  if (filters.challenge_period) url.searchParams.set("challenge_period", filters.challenge_period);
+  return url.toString();
+}
+
+function getMatchSectionKey(match) {
+  const ts = parseUtc(match?.time_utc);
+  if (!ts) return "results";
+  if (ts < Date.now()) return "results";
+  return "upcoming";
+}
+
+function formatMatchTime(isoValue, { isToday = false, showYear = true, showTime = true } = {}) {
+  const ts = parseUtc(isoValue);
+  if (!ts) return "--:--";
+  const date = new Date(ts);
+  const MONTHS_3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mon = MONTHS_3[date.getMonth()];
+  const yyyy = String(date.getFullYear());
+  const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (isToday) return time;
+
+  const parts = [`${dd} ${mon}`];
+  if (showYear) parts.push(yyyy);
+  if (showTime) parts.push(time);
+  return parts.join("\n");
+}
+
+function createRatingElement(rating) {
+  const rNum = rating === null || rating === undefined || rating === "" ? null : parseInt(rating, 10);
+  if (!Number.isInteger(rNum)) return null;
+
+  const wrap = document.createElement("div");
+  wrap.className = "match-rating" + (rNum === 6 ? " match-rating--gold" : "");
+
+  const filledCount = rNum >= 1 && rNum <= 5 ? rNum : rNum === 6 ? 5 : 0;
+  const emptyCount = 5 - filledCount;
+
+  for (let i = 0; i < filledCount; i += 1) {
+    const star = document.createElement("span");
+    star.className = "material-icons-round";
+    star.textContent = "star";
+    if (rNum !== 6) {
+      star.style.color = "#333";
+    }
+    wrap.appendChild(star);
+  }
+
+  for (let i = 0; i < emptyCount; i += 1) {
+    const star = document.createElement("span");
+    star.className = "material-icons-round";
+    star.textContent = "star";
+    star.style.color = "#bbb";
+    wrap.appendChild(star);
+  }
+
+  return wrap;
+}
+
+function isLiveStatus(status) {
+  const raw = String(status || "").trim().toLowerCase();
+  return raw === "in progress" || raw === "live";
+}
+
+function buildBgaAvatarUrl(playerId, avatarValue) {
+  const playerIdText = String(playerId || "").trim();
+  const avatarText = String(avatarValue || "").trim();
+  if (!avatarText) return "";
+  if (/^https?:\/\//i.test(avatarText)) return avatarText;
+  if (avatarText === "x00000") return "https://x.boardgamearena.net/data/avatar/default_184.jpg";
+
+  const defaultMatch = avatarText.match(/^_def_(\d+)$/);
+  if (defaultMatch) {
+    return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultMatch[1].padStart(4, "0")}.jpg`;
+  }
+
+  if (!/^\d+$/.test(playerIdText)) return "";
+  const playerIdNumber = Number(playerIdText);
+  if (!Number.isFinite(playerIdNumber)) return "";
+  const firstFolder = String(Math.floor(playerIdNumber / 100000000));
+  const secondFolder = String(Math.floor(playerIdNumber / 1000000));
+  const thirdFolder = String(Math.floor(playerIdNumber / 1000));
+  return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+}
+
+function getPlayerInitials(player) {
+  const source = String(player?.nickname || player?.name || "?").trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  return (parts.length > 1 ? `${parts[0][0]}${parts[1][0]}` : source.slice(0, 2)).toUpperCase();
+}
+
+function createChallengePlayerCard(player, side) {
+  const card = document.createElement("section");
+  card.className = `challenge-match-player challenge-match-player--${side}`;
+  const eloValue = Number(player?.elo);
+  const hasRating = Number.isFinite(eloValue) && eloValue > 0;
+  const bgaEloValue = Number(player?.bgaElo);
+  const hasBgaRating = Number.isFinite(bgaEloValue) && bgaEloValue > 0;
+
+  const rating = document.createElement("div");
+  rating.className = "challenge-match-player__rating";
+  const rank = document.createElement("span");
+  rank.className = "challenge-match-player__rank";
+  rank.textContent = hasRating && player?.rank ? `#${player.rank}` : "New";
+  const ratings = document.createElement("span");
+  ratings.className = "challenge-match-player__ratings";
+  const elo = document.createElement("span");
+  elo.className = "challenge-match-player__rating-line";
+  if (hasRating) {
+    const eloLabel = document.createElement("span");
+    eloLabel.textContent = "GG Elo:";
+    const eloRating = document.createElement("span");
+    eloRating.className = "challenge-match-player__rating-value";
+    eloRating.textContent = String(Math.trunc(eloValue));
+    elo.appendChild(eloLabel);
+    elo.appendChild(eloRating);
+  } else {
+    elo.classList.add("challenge-match-player__rating-value");
+    elo.textContent = "Unrated";
+  }
+  ratings.appendChild(elo);
+
+  const bgaElo = document.createElement("span");
+  bgaElo.className = "challenge-match-player__rating-line";
+  const bgaEloLabel = document.createElement("span");
+  bgaEloLabel.textContent = "BGA Elo:";
+  const bgaEloRating = document.createElement("span");
+  bgaEloRating.className = "challenge-match-player__rating-value";
+  bgaEloRating.textContent = hasBgaRating ? String(Math.trunc(bgaEloValue)) : "Unrated";
+  bgaElo.appendChild(bgaEloLabel);
+  bgaElo.appendChild(bgaEloRating);
+  ratings.appendChild(bgaElo);
+  rating.appendChild(rank);
+  rating.appendChild(ratings);
+  card.appendChild(rating);
+
+  const profile = document.createElement("div");
+  profile.className = "challenge-match-player__profile";
+  if (player?.avatar) {
+    const avatar = document.createElement("img");
+    avatar.className = "challenge-match-player__avatar";
+    avatar.src = player.avatar;
+    avatar.alt = "";
+    avatar.loading = "lazy";
+    profile.appendChild(avatar);
+  } else {
+    const avatarFallback = document.createElement("span");
+    avatarFallback.className = "challenge-match-player__avatar challenge-match-player__avatar-fallback";
+    avatarFallback.textContent = getPlayerInitials(player);
+    profile.appendChild(avatarFallback);
+  }
+
+  const info = document.createElement("div");
+  info.className = "challenge-match-player__info";
+  const nickname = document.createElement("a");
+  nickname.className = "challenge-match-player__nickname";
+  nickname.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(String(player?.id || ""))}`;
+  nickname.textContent = player?.nickname || player?.id || "Unknown player";
+  info.appendChild(nickname);
+
+  const name = document.createElement("span");
+  name.className = "challenge-match-player__name";
+  name.textContent = player?.name || "-";
+  info.appendChild(name);
+
+  const countryRow = document.createElement("div");
+  countryRow.className = "challenge-match-player__country-row";
+  if (player?.flag) {
+    const flag = document.createElement("img");
+    flag.className = "challenge-match-player__flag";
+    flag.src = player.flag;
+    flag.alt = "";
+    countryRow.appendChild(flag);
+  }
+  const country = document.createElement("span");
+  country.className = "challenge-match-player__country";
+  country.textContent = player?.country || "-";
+  countryRow.appendChild(country);
+  info.appendChild(countryRow);
+  profile.appendChild(info);
+  card.appendChild(profile);
+
+  return card;
+}
+
+function createChallengeMatchResult(match) {
+  const normalizedStatus = String(match?.status || "").trim().toLowerCase();
+  const isInProgress = normalizedStatus === "in progress";
+  const isCompleted = normalizedStatus === "done" || normalizedStatus === "completed";
+  if (!isInProgress && !isCompleted) return null;
+
+  const games = (Array.isArray(match?.games) ? match.games : [])
+    .map((game) => {
+      const player1Score = game?.player_1_score;
+      const player2Score = game?.player_2_score;
+      const tableId = String(game?.bga_table_id || "").trim();
+      const player1Clock = isTruthyOne(game?.player_1_clock);
+      const player2Clock = isTruthyOne(game?.player_2_clock);
+      return hasValue(player1Score) && hasValue(player2Score)
+        ? { player1Score, player2Score, player1Clock, player2Clock, tableId }
+        : null;
+    })
+    .filter(Boolean);
+
+  const hasMatchScore = hasValue(match?.gw1) && hasValue(match?.gw2);
+  if (!hasMatchScore && !games.length) return null;
+
+  let score1 = hasMatchScore ? match.gw1 : 0;
+  let score2 = hasMatchScore ? match.gw2 : 0;
+  if (!hasMatchScore) {
+    games.forEach((game) => {
+      if (game.player1Clock !== game.player2Clock) {
+        if (game.player1Clock) score2 += 1;
+        if (game.player2Clock) score1 += 1;
+        return;
+      }
+      const gameScore1 = Number(game.player1Score);
+      const gameScore2 = Number(game.player2Score);
+      if (!Number.isFinite(gameScore1) || !Number.isFinite(gameScore2)) return;
+      if (gameScore1 > gameScore2) score1 += 1;
+      if (gameScore2 > gameScore1) score2 += 1;
+    });
+  }
+
+  const result = document.createElement("section");
+  result.className = "challenge-match-result";
+
+  const status = document.createElement("div");
+  status.className = `challenge-match-result__status${isCompleted ? " challenge-match-result__status--completed" : ""}`;
+  status.textContent = isCompleted ? "COMPLETED" : "IN PROGRESS";
+  result.appendChild(status);
+
+  const score = document.createElement("div");
+  score.className = "challenge-match-result__score";
+  score.textContent = `${score1} - ${score2}`;
+  result.appendChild(score);
+
+  if (games.length) {
+    const gameScores = document.createElement("div");
+    gameScores.className = "challenge-match-result__games";
+    games.forEach((game) => {
+      const badge = document.createElement(game.tableId ? "a" : "span");
+      badge.className = "challenge-match-result__game";
+      const hasClockLoss = game.player1Clock !== game.player2Clock;
+      if (hasClockLoss) {
+        badge.classList.add("challenge-match-result__game--clock");
+        const clock = document.createElement("i");
+        clock.className = "fa-regular fa-clock challenge-match-result__game-clock";
+        const clockScore = document.createElement("span");
+        clockScore.textContent = game.player1Clock ? "0:1" : "1:0";
+        badge.appendChild(clock);
+        badge.appendChild(clockScore);
+      } else {
+        const player1Score = Number(game.player1Score);
+        const player2Score = Number(game.player2Score);
+        if (Number.isFinite(player1Score) && Number.isFinite(player2Score)) {
+          if (player1Score > player2Score) badge.classList.add("challenge-match-result__game--player-1");
+          else if (player2Score > player1Score) badge.classList.add("challenge-match-result__game--player-2");
+        }
+        badge.textContent = `${game.player1Score}:${game.player2Score}`;
+      }
+      if (game.tableId) {
+        badge.href = `https://boardgamearena.com/table?table=${encodeURIComponent(game.tableId)}`;
+        badge.target = "_blank";
+        badge.rel = "noopener noreferrer";
+        badge.title = "Open game on Board Game Arena";
+      }
+      gameScores.appendChild(badge);
+    });
+    result.appendChild(gameScores);
+  }
+
+  return result;
+}
+
+function closeChallengeMatchModal() {
+  const overlay = document.querySelector(".challenge-match-modal-overlay");
+  if (!overlay) return;
+  const returnFocus = overlay._returnFocus;
+  overlay.remove();
+  document.removeEventListener("keydown", handleChallengeMatchModalKeydown);
+  if (returnFocus instanceof HTMLElement) returnFocus.focus({ preventScroll: true });
+}
+
+function handleChallengeMatchModalKeydown(event) {
+  if (event.key === "Escape") closeChallengeMatchModal();
+}
+
+function openChallengeMatchModal(match, returnFocus) {
+  closeChallengeMatchModal();
+  const overlay = document.createElement("div");
+  overlay.className = "challenge-match-modal-overlay";
+  overlay._returnFocus = returnFocus;
+
+  const dialog = document.createElement("div");
+  dialog.className = "challenge-match-modal";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", `${match?.team1 || "Player 1"} versus ${match?.team2 || "Player 2"}`);
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "challenge-match-modal__close";
+  closeButton.setAttribute("aria-label", "Close match details");
+  closeButton.innerHTML = "&times;";
+  closeButton.addEventListener("click", closeChallengeMatchModal);
+  dialog.appendChild(closeButton);
+
+  const matchCard = document.createElement("div");
+  matchCard.className = "challenge-match-card";
+  matchCard.appendChild(createChallengePlayerCard(match?.player1Details || {}, "left"));
+  const vs = document.createElement("div");
+  vs.className = "challenge-match-card__vs";
+  vs.textContent = "VS";
+  matchCard.appendChild(vs);
+  matchCard.appendChild(createChallengePlayerCard(match?.player2Details || {}, "right"));
+  const matchResult = createChallengeMatchResult(match);
+  if (matchResult) matchCard.appendChild(matchResult);
+  dialog.appendChild(matchCard);
+  overlay.appendChild(dialog);
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeChallengeMatchModal();
+  });
+  document.body.appendChild(overlay);
+  document.addEventListener("keydown", handleChallengeMatchModalKeydown);
+  closeButton.focus({ preventScroll: true });
+}
+
+function bindChallengeMatchDetails(container, match) {
+  container.classList.add("challenge-match-row");
+  container.tabIndex = 0;
+  container.setAttribute("role", "button");
+  container.setAttribute("aria-haspopup", "dialog");
+  container.setAttribute("aria-label", `Show match details: ${match?.team1 || "Player 1"} versus ${match?.team2 || "Player 2"}`);
+
+  const activate = (event) => {
+    if (event.target instanceof Element && event.target.closest("a, button, input, select, textarea")) return;
+    openChallengeMatchModal(match, container);
+  };
+  container.addEventListener("click", activate);
+  container.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    activate(event);
+  });
+}
+
+function createDuelElement(match, options = {}) {
+  const { isToday = false, showRating = false, showYear = true, showTime = true } = options;
+  const wrapper = document.createElement("div");
+  wrapper.className = "match-wrapper";
+
+  const row = document.createElement("div");
+  row.className = "match-row";
+  row.dataset.id = String(match?.id || "").trim();
+
+  const timeDiv = document.createElement("div");
+  timeDiv.className = "match-time";
+  if (showRating) {
+    const ratingEl = createRatingElement(match?.rating);
+    if (ratingEl) timeDiv.appendChild(ratingEl);
+  }
+  const timeText = document.createElement("div");
+  timeText.className = "match-time-text";
+  timeText.innerHTML = esc(formatMatchTime(match?.time_utc, { isToday, showYear, showTime })).replaceAll("\n", "<br>");
+  timeDiv.appendChild(timeText);
+  const formatKey = String(match?.format || "").trim().toLowerCase();
+  if (["bo1", "bo3", "bo5"].includes(formatKey)) {
+    const badge = document.createElement("div");
+    badge.className = `match-format-badge ${formatKey}`;
+    badge.textContent = String(match.format || "").trim();
+    timeDiv.appendChild(badge);
+  }
+  row.appendChild(timeDiv);
+
+  const divider = document.createElement("div");
+  divider.className = "divider-vertical";
+  row.appendChild(divider);
+
+  const tournamentLogo = String(match?.tournament_logo || "").trim();
+  const tournamentLogoDiv = document.createElement("div");
+  tournamentLogoDiv.className = "match-tournament-logo";
+  if (tournamentLogo) {
+    const logo = document.createElement("img");
+    logo.src = tournamentLogo;
+    logo.alt = String(match?.tournament || "Challenge").trim();
+    tournamentLogoDiv.appendChild(logo);
+  }
+  row.appendChild(tournamentLogoDiv);
+
+  const tournamentDivider = document.createElement("div");
+  tournamentDivider.className = "divider-vertical";
+  row.appendChild(tournamentDivider);
+
+  const playersDiv = document.createElement("div");
+  playersDiv.className = "duel-players";
+
+  [
+    { flag: match?.flag1, name: match?.team1, id: match?.opponent1_id },
+    { flag: match?.flag2, name: match?.team2, id: match?.opponent2_id }
+  ].forEach((player) => {
+    const playerRow = document.createElement("div");
+    playerRow.className = "duel-player-row";
+
+    if (String(player.flag || "").trim()) {
+      const avatar = document.createElement("img");
+      avatar.className = "duel-player-avatar duel-player-avatar--individual";
+      avatar.src = player.flag;
+      avatar.alt = String(player.name || "").trim();
+      playerRow.appendChild(avatar);
+    }
+
+    const link = document.createElement("a");
+    const playerId = String(player.id || "").trim();
+    link.href = playerId ? `https://carcassonne.gg/player/?id=${encodeURIComponent(playerId)}` : "#";
+    link.textContent = String(player.name || "-").trim() || "-";
+    if (!playerId) link.removeAttribute("href");
+    playerRow.appendChild(link);
+    playersDiv.appendChild(playerRow);
+  });
+
+  row.appendChild(playersDiv);
+
+  const rightDiv = document.createElement("div");
+  rightDiv.className = "match-right";
+
+  if (isLiveStatus(match?.status)) {
+    const liveIcon = document.createElement("img");
+    liveIcon.className = "live-icon";
+    liveIcon.src = "https://carcassonne.gg/gallery_gen/f4d6792e3ac5f7356502e64aefa51f32_60x28_fit.png";
+    liveIcon.alt = "LIVE";
+    rightDiv.appendChild(liveIcon);
+  }
+
+  if (Array.isArray(match.streamers) && match.streamers.length) {
+    const streams = Array.isArray(match.streams) ? match.streams : [];
+    match.streamers.forEach((iconUrl, index) => {
+      if (!iconUrl) return;
+      const streamerIcon = document.createElement("img");
+      streamerIcon.className = "stream-icon";
+      streamerIcon.src = iconUrl;
+      streamerIcon.alt = "Stream";
+      const streamUrl = streams[index];
+      if (typeof streamUrl === "string" && streamUrl.trim()) {
+        const streamLink = document.createElement("a");
+        streamLink.href = streamUrl;
+        streamLink.target = "_blank";
+        streamLink.rel = "noopener noreferrer";
+        streamLink.appendChild(streamerIcon);
+        rightDiv.appendChild(streamLink);
+      } else {
+        rightDiv.appendChild(streamerIcon);
+      }
+    });
+  }
+
+  if (hasValue(match?.gw1) || hasValue(match?.gw2)) {
+    const scoreBox = document.createElement("div");
+    scoreBox.className = "score-box duel-score";
+    scoreBox.innerHTML = `<div>${esc(hasValue(match?.gw1) ? match.gw1 : "-")}</div><div>${esc(hasValue(match?.gw2) ? match.gw2 : "-")}</div>`;
+    rightDiv.appendChild(scoreBox);
+  }
+
+  row.appendChild(rightDiv);
+  wrapper.appendChild(row);
+  bindChallengeMatchDetails(row, match);
+
+  return wrapper;
+}
+
+function createSectionTitle(text) {
+  const sectionTitle = document.createElement("div");
+  sectionTitle.className = "section-title";
+  const titleSpan = document.createElement("span");
+  titleSpan.textContent = text;
+  sectionTitle.appendChild(titleSpan);
+  return sectionTitle;
+}
+
+function createEmptyCard(text) {
+  const card = document.createElement("div");
+  card.className = "tournament-card";
+  const row = document.createElement("div");
+  row.className = "match-row";
+  row.style.justifyContent = "center";
+  row.style.color = "#666";
+  row.textContent = text;
+  card.appendChild(row);
+  return card;
+}
+
+function renderSection(container, title, matches, options = {}) {
+  if (!Array.isArray(matches) || matches.length === 0) return;
+
+  container.appendChild(createSectionTitle(title));
+
+  const card = document.createElement("div");
+  card.className = "tournament-card";
+
+  matches.forEach((match, index) => {
+    const matchEl = createDuelElement(match, options);
+    if (index === 0) matchEl.classList.add("match-wrapper--first");
+    card.appendChild(matchEl);
+  });
+
+  container.appendChild(card);
+}
+
+function renderResultsSection(container, title, matches, options = {}) {
+  if (!Array.isArray(matches) || matches.length === 0) return;
+
+  container.appendChild(createSectionTitle(title));
+
+  const card = document.createElement("div");
+  card.className = "tournament-card";
+  container.appendChild(card);
+
+  const controls = document.createElement("div");
+  controls.className = "results-controls";
+  card.appendChild(controls);
+
+  const pageSizeWrap = document.createElement("label");
+  pageSizeWrap.className = "results-pagesize";
+  pageSizeWrap.appendChild(document.createTextNode("Per page:"));
+
+  const pageSizePicker = document.createElement("div");
+  pageSizePicker.className = "results-pagesize-picker";
+  const pageSizeBtn = document.createElement("button");
+  pageSizeBtn.type = "button";
+  pageSizeBtn.className = "results-pagesize-btn";
+  const pageSizeBtnLabel = document.createElement("span");
+  pageSizeBtnLabel.className = "results-pagesize-label";
+  pageSizeBtnLabel.textContent = String(resultsPaginationState.pageSize);
+  const pageSizeChevron = document.createElement("span");
+  pageSizeChevron.className = "results-pagesize-chevron";
+  pageSizeChevron.innerHTML = '<i class="fa fa-chevron-down"></i>';
+  pageSizeBtn.appendChild(pageSizeBtnLabel);
+  pageSizeBtn.appendChild(pageSizeChevron);
+
+  const pageSizeMenu = document.createElement("div");
+  pageSizeMenu.className = "results-pagesize-menu";
+  RESULTS_PAGE_SIZE_OPTIONS.forEach((size) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "results-pagesize-option";
+    option.dataset.value = String(size);
+    option.textContent = String(size);
+    if (size === resultsPaginationState.pageSize) option.classList.add("active");
+    pageSizeMenu.appendChild(option);
+  });
+
+  pageSizePicker.appendChild(pageSizeBtn);
+  pageSizePicker.appendChild(pageSizeMenu);
+  pageSizeWrap.appendChild(pageSizePicker);
+  controls.appendChild(pageSizeWrap);
+
+  const pagination = document.createElement("div");
+  pagination.className = "results-pagination";
+
+  const prevBtn = document.createElement("button");
+  prevBtn.type = "button";
+  prevBtn.className = "results-pagebtn";
+  prevBtn.textContent = "Prev";
+
+  const pageInfo = document.createElement("span");
+  pageInfo.className = "results-pageinfo";
+
+  const nextBtn = document.createElement("button");
+  nextBtn.type = "button";
+  nextBtn.className = "results-pagebtn";
+  nextBtn.textContent = "Next";
+
+  pagination.appendChild(prevBtn);
+  pagination.appendChild(pageInfo);
+  pagination.appendChild(nextBtn);
+  controls.appendChild(pagination);
+
+  function renderPage() {
+    card.querySelectorAll(".match-wrapper").forEach((el) => el.remove());
+
+    matches.forEach((match, index) => {
+      const matchEl = createDuelElement(match, options);
+      if (index === 0) matchEl.classList.add("match-wrapper--first");
+      card.appendChild(matchEl);
+    });
+
+    pageInfo.textContent = `Page ${resultsPaginationState.currentPage} of ${resultsPaginationState.totalPages}`;
+    prevBtn.disabled = resultsPaginationState.currentPage <= 1;
+    nextBtn.disabled = resultsPaginationState.currentPage >= resultsPaginationState.totalPages;
+  }
+
+  function closePageSizeMenu() {
+    pageSizeMenu.classList.remove("open");
+    pageSizeMenu.style.maxHeight = "0px";
+    pageSizeBtn.classList.remove("open");
+  }
+
+  function setPageSize(nextSize) {
+    resultsPaginationState.pageSize = RESULTS_PAGE_SIZE_OPTIONS.includes(nextSize) ? nextSize : 15;
+    resultsPaginationState.currentPage = 1;
+    pageSizeBtnLabel.textContent = String(resultsPaginationState.pageSize);
+    pageSizeMenu.querySelectorAll(".results-pagesize-option").forEach((el) => {
+      el.classList.toggle("active", el.dataset.value === String(resultsPaginationState.pageSize));
+    });
+    fetchAndRenderMatches();
+  }
+
+  pageSizeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isOpen = pageSizeMenu.classList.contains("open");
+    closePageSizeMenu();
+    if (!isOpen) {
+      pageSizeMenu.classList.add("open");
+      pageSizeMenu.style.maxHeight = `${pageSizeMenu.scrollHeight}px`;
+      pageSizeBtn.classList.add("open");
+    }
+  });
+
+  pageSizeMenu.querySelectorAll(".results-pagesize-option").forEach((optBtn) => {
+    optBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const nextSize = Number(optBtn.dataset.value) || 15;
+      setPageSize(nextSize);
+      closePageSizeMenu();
+    });
+  });
+
+  if (window.__challengeDuelsResultsPageSizeHandler) {
+    document.removeEventListener("click", window.__challengeDuelsResultsPageSizeHandler);
+  }
+  window.__challengeDuelsResultsPageSizeHandler = (e) => {
+    if (!pageSizeWrap.contains(e.target)) closePageSizeMenu();
+  };
+  document.addEventListener("click", window.__challengeDuelsResultsPageSizeHandler);
+
+  prevBtn.addEventListener("click", () => {
+    if (resultsPaginationState.currentPage <= 1) return;
+    resultsPaginationState.currentPage -= 1;
+    fetchAndRenderMatches();
+  });
+
+  nextBtn.addEventListener("click", () => {
+    if (resultsPaginationState.currentPage >= resultsPaginationState.totalPages) return;
+    resultsPaginationState.currentPage += 1;
+    fetchAndRenderMatches();
+  });
+
+  renderPage();
+}
+
+function getChallengePlayerDetails(duel, side) {
+  const id = String(duel?.[`player_${side}_id`] || "").trim();
+  const ggElo = Number(duel?.[`player_${side}_gg_elo`]);
+  const ggRank = Number(duel?.[`player_${side}_gg_rank`]);
+  const bgaElo = Number(duel?.[`player_${side}_bga_elo`]);
+  return {
+    id,
+    nickname: String(duel?.[`player_${side}_name`] || id).trim(),
+    name: String(duel?.[`player_${side}_real_name`] || "").trim(),
+    avatar: buildBgaAvatarUrl(id, duel?.[`player_${side}_avatar`]),
+    flag: String(duel?.[`player_${side}_association_flag`] || "").trim(),
+    country: String(duel?.[`player_${side}_association_name`] || "").trim(),
+    elo: Number.isFinite(ggElo) && ggElo > 0 ? Math.trunc(ggElo) : null,
+    rank: Number.isFinite(ggRank) && ggRank > 0 ? Math.trunc(ggRank) : null,
+    bgaElo: Number.isFinite(bgaElo) && bgaElo > 0 ? Math.trunc(bgaElo) : null,
+  };
+}
+
+function normalizeChallengeDuel(duel) {
+  const timeUtc = String(duel?.time_utc || "").trim();
+  const periodName = String(duel?.challenge_period_name || duel?.challenge_period_id || "Challenges").trim();
+  return {
+    id: String(duel?.id || "").trim(),
+    challenge_period_id: String(duel?.challenge_period_id || "").trim(),
+    tournament: periodName,
+    tournament_logo: String(duel?.challenge_period_logo || "").trim(),
+    tournament_type: "Individual",
+    time_utc: timeUtc,
+    team1: String(duel?.player_1_name || duel?.player_1_id || "").trim(),
+    team2: String(duel?.player_2_name || duel?.player_2_id || "").trim(),
+    opponent1_id: String(duel?.player_1_id || "").trim(),
+    opponent2_id: String(duel?.player_2_id || "").trim(),
+    flag1: String(duel?.player_1_association_flag || "").trim(),
+    flag2: String(duel?.player_2_association_flag || "").trim(),
+    format: String(duel?.duel_format || "").trim(),
+    created_at: String(duel?.created_at || "").trim(),
+    status: String(duel?.status || "").trim(),
+    gw1: duel?.dw1,
+    gw2: duel?.dw2,
+    games: Array.isArray(duel?.games) ? duel.games.filter(Boolean) : [],
+    rating: duel?.gg_rating,
+    streams: Array.isArray(duel?.streams)
+      ? duel.streams.map((value) => String(value || "").trim()).filter(Boolean)
+      : [],
+    streamers: Array.isArray(duel?.streamers)
+      ? duel.streamers.map((value) => String(value || "").trim()).filter(Boolean)
+      : [],
+    player1Details: getChallengePlayerDetails(duel, 1),
+    player2Details: getChallengePlayerDetails(duel, 2),
+    source_type: "challenge",
+  };
+}
+
+function renderAllSectionsFromData(data) {
+  const container = document.getElementById("matches-container");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const matches = (Array.isArray(data?.duels) ? data.duels : [])
+    .map(normalizeChallengeDuel)
+    .filter((match) => parseUtc(match?.time_utc));
+  const resultsPagination = data?.pagination?.results || null;
+  resultsPaginationState.totalItems = Number(resultsPagination?.total) || 0;
+  resultsPaginationState.totalPages = Math.max(1, Number(resultsPagination?.total_pages) || 1);
+  resultsPaginationState.currentPage = Math.min(
+    Math.max(1, Number(resultsPagination?.page) || resultsPaginationState.currentPage || 1),
+    resultsPaginationState.totalPages
+  );
+
+  const sections = {
+    upcoming: [],
+    results: []
+  };
+
+  matches.forEach((match) => {
+    sections[getMatchSectionKey(match)].push(match);
+  });
+
+  sections.upcoming.sort((a, b) => parseUtc(a?.time_utc) - parseUtc(b?.time_utc));
+  sections.results.sort((a, b) => parseUtc(b?.time_utc) - parseUtc(a?.time_utc));
+
+  renderSection(container, "Upcoming", sections.upcoming, { isToday: false, showRating: true, showYear: false, showTime: true });
+  renderResultsSection(container, "Results", sections.results, { isToday: false, showRating: false, showYear: true, showTime: false });
+
+  if (!sections.upcoming.length && !sections.results.length) {
+    container.appendChild(createEmptyCard("No challenge duels found."));
+  }
+}
+
+function setLoading(visible) {
+  const el = document.getElementById("matches-loading");
+  if (!el) return;
+  el.classList.toggle("is-visible", Boolean(visible));
+}
+
+async function fetchAndRenderMatches() {
+  setLoading(true);
+  try {
+    const response = await fetch(buildMatchesUrl(), { method: "GET" });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    renderAllSectionsFromData(data || {});
+  } catch (error) {
+    console.error("Failed to load challenge duels:", error);
+    const container = document.getElementById("matches-container");
+    if (container) {
+      container.innerHTML = "";
+      container.appendChild(createEmptyCard("Failed to load challenge duels."));
+    }
+  } finally {
+    setLoading(false);
+  }
+}
+
+fetchAndRenderMatches();
+
+if (autoUpdate) {
+  setInterval(fetchAndRenderMatches, 60000);
+}
+
+function resetPaginationAndReloadChallengeDuels() {
+  resultsPaginationState.currentPage = 1;
+  fetchAndRenderMatches();
+}
+
+window.addEventListener("popstate", resetPaginationAndReloadChallengeDuels);
+window.addEventListener("challenge-duels-filter-change", resetPaginationAndReloadChallengeDuels);
+</script>

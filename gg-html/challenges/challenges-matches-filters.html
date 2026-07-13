@@ -1,0 +1,693 @@
+<!-- FILTERS: Challenge Matches -->
+<style>
+  .pf-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 6px 8px 10px;
+  }
+  .pf-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 2px;
+  }
+  .pf-clear-filters-btn {
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 8px;
+    border: 1px solid #e6b4b4;
+    border-radius: 3px;
+    background: #fff3f3;
+    color: #a12a2a;
+    height: 24px;
+    line-height: 18px;
+    transition: all 0.2s ease;
+    width: fit-content;
+  }
+  .pf-clear-filters-btn:hover {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.4);
+  }
+  .pf-clear-filters-btn:disabled {
+    cursor: default;
+    background: #f6f7f9;
+    border-color: #d8dde3;
+    color: #98a3ae;
+    box-shadow: none;
+  }
+  .pf-search-btn,
+  .pf-country-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .pf-country-toggle {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .pf-country-toggle.active {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.3);
+  }
+  .pf-country-toggle .pf-selected-wrap,
+  .pf-country-toggle .pf-selected-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pf-country-toggle .pf-selected-wrap {
+    margin-left: auto;
+  }
+  .pf-country-toggle .pf-selected-flag img {
+    width: 18px;
+    height: auto;
+    object-fit: contain;
+  }
+  .pf-country-toggle .pf-clear {
+    color: #d32f2f;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .pf-country-row {
+    display: none;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+  .pf-country-row.open {
+    display: flex;
+  }
+  .pf-flag-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .pf-flag-btn.active {
+    border-color: #0277BD;
+  }
+  .pf-flag-btn img {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+  }
+  .pf-search-wrap {
+    display: flex;
+    align-items: center;
+    position: relative;
+    width: 100%;
+  }
+  .pf-search-input {
+    font-size: 13px;
+    padding: 4px 24px 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .pf-search-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 90%;
+    max-height: 220px;
+    overflow: auto;
+    display: none;
+    z-index: 10;
+    background: #eaf4ff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  .pf-search-results ul {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+  }
+  .pf-search-results li {
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .pf-search-results li:hover {
+    background: #f0f6ff;
+  }
+  .pf-search-results li.no-results {
+    color: #888;
+    cursor: default;
+  }
+  .pf-search-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #d32f2f;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 0;
+  }
+  .pf-section-title {
+    margin: 8px 0 2px;
+    color: #333;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .pf-period-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .pf-period-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 3px 7px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    color: #333;
+    font-size: 12px;
+    line-height: 16px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  }
+  .pf-period-btn:hover {
+    border-color: #0277BD;
+    box-shadow: 0 0 3px rgba(2, 119, 189, 0.25);
+  }
+  .pf-period-btn.active {
+    border-color: #0277BD;
+    background: #e4f0fb;
+  }
+  .pf-period-btn img {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    flex: 0 0 auto;
+  }
+  .pf-period-btn span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  @media (max-width: 768px) {
+    .pf-search-input {
+      font-size: 16px;
+    }
+  }
+</style>
+
+<div class="pf-filters">
+  <div class="pf-actions">
+    <button class="pf-clear-filters-btn" id="fmf-clear-btn" type="button">Clear filters</button>
+  </div>
+  <div class="pf-search-host" id="fmf-search-host">
+    <button class="pf-search-btn" id="fmf-search-btn" type="button">Search Player</button>
+  </div>
+  <button class="pf-country-toggle" id="fmf-country-toggle" type="button">
+    <span class="pf-label">Country</span>
+    <span class="pf-selected-wrap" id="fmf-selected-wrap" style="display:none;">
+      <span class="pf-selected-flag" id="fmf-selected-flag"></span>
+      <span class="pf-clear" id="fmf-country-clear">x</span>
+    </span>
+  </button>
+  <div class="pf-country-row" id="fmf-country-row"></div>
+  <div class="pf-section-title">Challenges</div>
+  <div class="pf-period-row" id="fmf-period-row"></div>
+</div>
+
+<script>
+  const fmfDataURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
+  const fmfAuthBase = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const fmfProfilesPublicURL = `${fmfAuthBase}/profiles/public`;
+  const fmfAssociationsURL = `${fmfAuthBase}/associations`;
+  const fmfFiltersURL = `${fmfAuthBase}/public/challenge-duels/filters`;
+
+  const fmfCountryToggle = document.getElementById("fmf-country-toggle");
+  const fmfCountryRow = document.getElementById("fmf-country-row");
+  const fmfSelectedWrap = document.getElementById("fmf-selected-wrap");
+  const fmfSelectedFlag = document.getElementById("fmf-selected-flag");
+  const fmfCountryClear = document.getElementById("fmf-country-clear");
+  const fmfPeriodRow = document.getElementById("fmf-period-row");
+  const fmfSearchHost = document.getElementById("fmf-search-host");
+  const fmfSearchBtn = document.getElementById("fmf-search-btn");
+  const fmfClearBtn = document.getElementById("fmf-clear-btn");
+
+  let fmfCountryOptions = [];
+  let fmfPeriodOptions = [];
+  let fmfSearchWrap = null;
+  let fmfSearchInput = null;
+  let fmfSearchResults = null;
+  let fmfSearchClear = null;
+  let fmfAssociationNamesById = new Map();
+  let fmfPlayers = [];
+  let fmfDraftState = { association: "", player: "", challenge_period: "" };
+
+  function fmfNormalizeKey(value) {
+    return String(value || "").trim().toUpperCase();
+  }
+
+  function fmfReadStateFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      association: fmfNormalizeKey(params.get("association") || ""),
+      player: String(params.get("player") || "").trim(),
+      challenge_period: String(params.get("challenge_period") || "").trim()
+    };
+  }
+
+  function fmfDispatchFilterChange() {
+    window.dispatchEvent(new Event("challenge-duels-filter-change"));
+  }
+
+  function fmfIsSameState(left, right) {
+    return (
+      String(left?.association || "") === String(right?.association || "") &&
+      String(left?.player || "") === String(right?.player || "") &&
+      String(left?.challenge_period || "") === String(right?.challenge_period || "")
+    );
+  }
+
+  function fmfUpdateClearButton() {
+    const appliedState = fmfReadStateFromUrl();
+    fmfClearBtn.disabled = !Boolean(appliedState.association || appliedState.player || appliedState.challenge_period);
+  }
+
+  function fmfReplaceUrlFromState(state) {
+    const appliedState = fmfReadStateFromUrl();
+    if (fmfIsSameState(state, appliedState)) {
+      fmfUpdateClearButton();
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (state.association) params.set("association", state.association);
+    else params.delete("association");
+    if (state.player) params.set("player", state.player);
+    else params.delete("player");
+    if (state.challenge_period) params.set("challenge_period", state.challenge_period);
+    else params.delete("challenge_period");
+
+    const query = params.toString();
+    const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", nextUrl);
+    fmfDispatchFilterChange();
+    fmfUpdateClearButton();
+  }
+
+  function fmfApplyDraftState() {
+    fmfReplaceUrlFromState(fmfDraftState);
+  }
+
+  function fmfToggleCountryRow(forceOpen) {
+    const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !fmfCountryRow.classList.contains("open");
+    fmfCountryRow.classList.toggle("open", shouldOpen);
+    fmfCountryToggle.classList.toggle("active", shouldOpen);
+  }
+
+  function fmfUpdateCountryToggle() {
+    const active = fmfDraftState.association;
+    const opt = fmfCountryOptions.find((item) => item.key === active);
+    if (opt) {
+      fmfSelectedFlag.innerHTML = "";
+      const img = document.createElement("img");
+      img.src = opt.flag;
+      img.alt = opt.title || "Country flag";
+      img.title = opt.title || "";
+      fmfSelectedFlag.appendChild(img);
+      fmfSelectedWrap.style.display = "inline-flex";
+    } else {
+      fmfSelectedFlag.innerHTML = "";
+      fmfSelectedWrap.style.display = "none";
+    }
+    fmfCountryRow.querySelectorAll(".pf-flag-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.association === active);
+    });
+  }
+
+  function fmfUpdatePeriodButtons() {
+    const active = fmfDraftState.challenge_period;
+    fmfPeriodRow.querySelectorAll(".pf-period-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.period === active);
+    });
+  }
+
+  function fmfHideSearchResults() {
+    if (fmfSearchResults) fmfSearchResults.style.display = "none";
+  }
+
+  function fmfUnmountSearchUi({ focusButton = false } = {}) {
+    fmfDraftState.player = "";
+    if (fmfSearchInput) {
+      fmfSearchInput.value = "";
+      fmfSearchInput.readOnly = false;
+      fmfSearchInput.removeAttribute("aria-readonly");
+    }
+    fmfHideSearchResults();
+    if (fmfSearchWrap && fmfSearchHost.contains(fmfSearchWrap)) {
+      fmfSearchHost.replaceChild(fmfSearchBtn, fmfSearchWrap);
+    }
+    fmfApplyDraftState();
+    if (focusButton) fmfSearchBtn.focus();
+  }
+
+  function fmfRenderSearchSelected() {
+    if (!fmfSearchWrap || !fmfSearchInput) return;
+    if (fmfDraftState.player) {
+      fmfSearchInput.value = fmfDraftState.player;
+      fmfSearchInput.readOnly = true;
+      fmfSearchInput.setAttribute("aria-readonly", "true");
+    } else {
+      fmfSearchInput.value = "";
+      fmfSearchInput.readOnly = false;
+      fmfSearchInput.removeAttribute("aria-readonly");
+      fmfSearchInput.placeholder = "Search player...";
+    }
+    if (fmfSearchClear) fmfSearchClear.style.display = "inline-flex";
+    fmfHideSearchResults();
+  }
+
+  async function fmfFetchAssociations() {
+    try {
+      const response = await fetch(fmfAssociationsURL);
+      if (!response.ok) return [];
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.associations) ? payload.associations : [];
+      return rows
+        .map((row) => ({ id: fmfNormalizeKey(row?.id || ""), name: String(row?.name || "").trim() }))
+        .filter((row) => row.id && row.name);
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  async function fmfFetchFilters() {
+    try {
+      const response = await fetch(fmfFiltersURL);
+      if (!response.ok) return { challenge_periods: [] };
+      const payload = await response.json();
+      return {
+        challenge_periods: Array.isArray(payload?.challenge_periods)
+          ? payload.challenge_periods
+            .map((period) => ({
+              id: String(period?.id || "").trim(),
+              name: String(period?.name || "").trim(),
+              logo: String(period?.logo || "").trim(),
+              play_starts_at: String(period?.play_starts_at || "").trim()
+            }))
+            .filter((period) => period.id)
+          : []
+      };
+    } catch (_error) {
+      return { challenge_periods: [] };
+    }
+  }
+
+  async function fmfFetchProfiles() {
+    try {
+      const response = await fetch(fmfProfilesPublicURL);
+      if (!response.ok) return [];
+      const payload = await response.json();
+      return Array.isArray(payload?.profiles) ? payload.profiles : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function fmfSearchPlayers(query) {
+    const normalizedQuery = String(query || "").trim().toLowerCase();
+    if (!normalizedQuery) return [];
+    return fmfPlayers
+      .filter((name) => name.toLowerCase().includes(normalizedQuery))
+      .slice(0, 20);
+  }
+
+  function fmfEnsureSearchUi() {
+    if (fmfSearchWrap) return;
+
+    fmfSearchWrap = document.createElement("div");
+    fmfSearchWrap.className = "pf-search-wrap";
+
+    fmfSearchInput = document.createElement("input");
+    fmfSearchInput.className = "pf-search-input";
+    fmfSearchInput.type = "text";
+    fmfSearchInput.placeholder = "Search player...";
+
+    fmfSearchResults = document.createElement("div");
+    fmfSearchResults.className = "pf-search-results";
+    const list = document.createElement("ul");
+    fmfSearchResults.appendChild(list);
+
+    fmfSearchClear = document.createElement("button");
+    fmfSearchClear.type = "button";
+    fmfSearchClear.className = "pf-search-clear";
+    fmfSearchClear.setAttribute("aria-label", "Close player search");
+    fmfSearchClear.textContent = "x";
+    fmfSearchClear.addEventListener("click", (event) => {
+      event.stopPropagation();
+      fmfUnmountSearchUi({ focusButton: true });
+    });
+
+    fmfSearchWrap.appendChild(fmfSearchInput);
+    fmfSearchWrap.appendChild(fmfSearchResults);
+    fmfSearchWrap.appendChild(fmfSearchClear);
+
+    fmfSearchInput.addEventListener("input", () => {
+      if (!fmfSearchInput || fmfSearchInput.readOnly) return;
+      const query = fmfSearchInput.value.trim();
+      const listEl = fmfSearchResults.querySelector("ul");
+      listEl.innerHTML = "";
+      if (!query) {
+        fmfHideSearchResults();
+        return;
+      }
+
+      const players = fmfSearchPlayers(query);
+      if (!players.length) {
+        const li = document.createElement("li");
+        li.className = "no-results";
+        li.textContent = "No players found";
+        listEl.appendChild(li);
+        fmfSearchResults.style.display = "block";
+        return;
+      }
+
+      players.forEach((name) => {
+        const li = document.createElement("li");
+        li.textContent = name;
+        li.addEventListener("click", () => {
+          fmfDraftState.player = name;
+          fmfRenderSearchSelected();
+          fmfApplyDraftState();
+        });
+        listEl.appendChild(li);
+      });
+      fmfSearchResults.style.display = "block";
+    });
+
+    fmfSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        fmfUnmountSearchUi({ focusButton: true });
+      }
+    });
+  }
+
+  function fmfMountSearchUi() {
+    fmfEnsureSearchUi();
+    if (fmfSearchHost.contains(fmfSearchBtn)) {
+      fmfSearchHost.replaceChild(fmfSearchWrap, fmfSearchBtn);
+    } else if (!fmfSearchHost.contains(fmfSearchWrap)) {
+      fmfSearchHost.appendChild(fmfSearchWrap);
+    }
+    fmfRenderSearchSelected();
+    if (fmfSearchInput && !fmfDraftState.player) fmfSearchInput.focus();
+  }
+
+  function fmfSyncDraftFromUrl() {
+    fmfDraftState = fmfReadStateFromUrl();
+    fmfUpdateCountryToggle();
+    fmfUpdatePeriodButtons();
+    if (fmfDraftState.player || fmfSearchWrap) fmfMountSearchUi();
+    fmfUpdateClearButton();
+  }
+
+  function fmfRenderCountryOptions() {
+    const active = fmfDraftState.association;
+    fmfCountryRow.innerHTML = "";
+    fmfCountryOptions.forEach((opt) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pf-flag-btn";
+      btn.dataset.association = opt.key;
+      if (opt.key === active) btn.classList.add("active");
+
+      const img = document.createElement("img");
+      img.src = opt.flag;
+      img.alt = opt.title || "Country flag";
+      img.title = opt.title || "";
+      btn.appendChild(img);
+
+      btn.addEventListener("click", () => {
+        fmfDraftState.association = fmfDraftState.association === opt.key ? "" : opt.key;
+        fmfUpdateCountryToggle();
+        fmfApplyDraftState();
+        fmfToggleCountryRow(true);
+      });
+
+      fmfCountryRow.appendChild(btn);
+    });
+  }
+
+  function fmfRenderPeriodOptions() {
+    const active = fmfDraftState.challenge_period;
+    fmfPeriodRow.innerHTML = "";
+    fmfPeriodOptions.forEach((period) => {
+      const label = String(period.name || period.id || "").trim();
+      if (!label) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pf-period-btn";
+      btn.dataset.period = period.id;
+      btn.title = label;
+      if (period.id === active) btn.classList.add("active");
+
+      if (period.logo) {
+        const img = document.createElement("img");
+        img.src = period.logo;
+        img.alt = "";
+        btn.appendChild(img);
+      }
+      const span = document.createElement("span");
+      span.textContent = label;
+      btn.appendChild(span);
+
+      btn.addEventListener("click", () => {
+        fmfDraftState.challenge_period = fmfDraftState.challenge_period === period.id ? "" : period.id;
+        fmfUpdatePeriodButtons();
+        fmfApplyDraftState();
+      });
+
+      fmfPeriodRow.appendChild(btn);
+    });
+  }
+
+  async function fmfInitFilters() {
+    try {
+      const [countriesResponse, associationsList, filterData, profiles] = await Promise.all([
+        fetch(fmfDataURL),
+        fmfFetchAssociations(),
+        fmfFetchFilters(),
+        fmfFetchProfiles()
+      ]);
+      if (!countriesResponse.ok) throw new Error("Failed to load filter data");
+
+      const data = await countriesResponse.json();
+      const countries = Array.isArray(data?.countries) ? data.countries : [];
+      fmfAssociationNamesById = new Map(
+        (Array.isArray(associationsList) ? associationsList : [])
+          .map((row) => [fmfNormalizeKey(row?.id || ""), String(row?.name || "").trim()])
+          .filter(([id, name]) => id && name)
+      );
+
+      fmfCountryOptions = countries
+        .map((country) => {
+          const key = fmfNormalizeKey(country.iso || country.team);
+          const titleFromMap = fmfAssociationNamesById.get(key);
+          return {
+            key,
+            flag: country.flag || "",
+            title: titleFromMap || country.team || country.iso || key
+          };
+        })
+        .filter((country) => country.key && country.flag);
+
+      fmfPeriodOptions = (filterData.challenge_periods || []).slice().sort((a, b) => {
+        const left = Date.parse(a.play_starts_at || "");
+        const right = Date.parse(b.play_starts_at || "");
+        const leftTs = Number.isFinite(left) ? left : 0;
+        const rightTs = Number.isFinite(right) ? right : 0;
+        return rightTs - leftTs || String(a.name || a.id).localeCompare(String(b.name || b.id));
+      });
+      fmfPlayers = profiles
+        .map((profile) => String(profile?.bga_nickname || "").trim())
+        .filter(Boolean)
+        .filter((name, index, arr) => arr.indexOf(name) === index)
+        .sort((a, b) => a.localeCompare(b));
+
+      fmfDraftState = fmfReadStateFromUrl();
+      fmfRenderCountryOptions();
+      fmfRenderPeriodOptions();
+      fmfUpdateCountryToggle();
+      fmfUpdatePeriodButtons();
+      fmfUpdateClearButton();
+      if (fmfDraftState.player) fmfMountSearchUi();
+    } catch (error) {
+      console.error("Failed to initialize challenge match filters:", error);
+    }
+  }
+
+  fmfCountryToggle.addEventListener("click", () => fmfToggleCountryRow());
+  fmfCountryClear.addEventListener("click", (event) => {
+    event.stopPropagation();
+    fmfDraftState.association = "";
+    fmfUpdateCountryToggle();
+    fmfApplyDraftState();
+  });
+
+  fmfSearchBtn.addEventListener("click", () => {
+    fmfMountSearchUi();
+  });
+
+  fmfClearBtn.addEventListener("click", () => {
+    if (fmfClearBtn.disabled) return;
+    fmfDraftState = { association: "", player: "", challenge_period: "" };
+    fmfToggleCountryRow(false);
+    if (fmfSearchWrap && fmfSearchHost.contains(fmfSearchWrap)) {
+      fmfSearchHost.replaceChild(fmfSearchBtn, fmfSearchWrap);
+    }
+    if (fmfSearchInput) {
+      fmfSearchInput.value = "";
+      fmfSearchInput.readOnly = false;
+      fmfSearchInput.removeAttribute("aria-readonly");
+    }
+    fmfHideSearchResults();
+    fmfUpdateCountryToggle();
+    fmfUpdatePeriodButtons();
+    fmfReplaceUrlFromState(fmfDraftState);
+  });
+
+  window.addEventListener("popstate", () => {
+    fmfSyncDraftFromUrl();
+  });
+
+  const fmfInit = () => fmfInitFilters();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", fmfInit);
+  } else {
+    fmfInit();
+  }
+</script>
