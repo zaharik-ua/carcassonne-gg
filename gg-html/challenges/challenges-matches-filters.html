@@ -415,6 +415,7 @@
             .map((period) => ({
               id: String(period?.id || "").trim(),
               name: String(period?.name || "").trim(),
+              short_name: String(period?.short_name || "").trim(),
               logo: String(period?.logo || "").trim(),
               play_starts_at: String(period?.play_starts_at || "").trim()
             }))
@@ -566,13 +567,14 @@
     const active = fmfDraftState.challenge_period;
     fmfPeriodRow.innerHTML = "";
     fmfPeriodOptions.forEach((period) => {
-      const label = String(period.name || period.id || "").trim();
+      const fullName = String(period.name || period.id || "").trim();
+      const label = String(period.short_name || fullName || period.id || "").trim();
       if (!label) return;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "pf-period-btn";
       btn.dataset.period = period.id;
-      btn.title = label;
+      btn.title = fullName && fullName !== label ? fullName : label;
       if (period.id === active) btn.classList.add("active");
 
       if (period.logo) {
@@ -630,7 +632,7 @@
         const right = Date.parse(b.play_starts_at || "");
         const leftTs = Number.isFinite(left) ? left : 0;
         const rightTs = Number.isFinite(right) ? right : 0;
-        return rightTs - leftTs || String(a.name || a.id).localeCompare(String(b.name || b.id));
+        return rightTs - leftTs || String(a.short_name || a.name || a.id).localeCompare(String(b.short_name || b.name || b.id));
       });
       fmfPlayers = profiles
         .map((profile) => String(profile?.bga_nickname || "").trim())

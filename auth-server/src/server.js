@@ -3980,6 +3980,7 @@ function ensureChallengesSchema() {
     CREATE TABLE IF NOT EXISTS challenge_periods (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      short_name TEXT,
       description TEXT,
       logo TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
@@ -4009,6 +4010,7 @@ function ensureChallengesSchema() {
         return;
       }
       addColumnIfMissing(columns || [], "challenge_periods", "logo", "TEXT");
+      addColumnIfMissing(columns || [], "challenge_periods", "short_name", "TEXT");
     });
     db.run(
       "CREATE INDEX IF NOT EXISTS idx_challenge_periods_status_dates ON challenge_periods(status, planning_starts_at, play_ends_at, result_review_ends_at)",
@@ -7000,6 +7002,7 @@ async function loadChallengePeriodById(periodId) {
       SELECT
         id,
         name,
+        short_name,
         description,
         logo,
         status,
@@ -7021,6 +7024,7 @@ async function loadChallengePeriodById(periodId) {
 
 function normalizeChallengePeriodPayload(payload) {
   const name = normalizeNullableText(payload?.name);
+  const shortName = normalizeNullableText(payload?.short_name ?? payload?.shortName);
   const description = normalizeNullableText(payload?.description);
   const logo = normalizeNullableText(payload?.logo);
   const status = normalizeChallengePeriodStatus(payload?.status);
@@ -7031,6 +7035,7 @@ function normalizeChallengePeriodPayload(payload) {
 
   return {
     name,
+    short_name: shortName,
     description,
     logo,
     status,
@@ -7516,6 +7521,7 @@ function mapChallengePeriodForPlayer(row) {
   return {
     id: row.id,
     name: row.name,
+    short_name: row.short_name,
     description: row.description,
     logo: row.logo,
     status: row.status,
@@ -7584,6 +7590,7 @@ app.get("/challenge-periods/player", async (req, res) => {
         SELECT
           cp.id,
           cp.name,
+          cp.short_name,
           cp.description,
           cp.logo,
           cp.status,
@@ -9681,6 +9688,7 @@ app.get("/challenge-periods", requireAdmin, async (_req, res) => {
       SELECT
         id,
         name,
+        short_name,
         description,
         logo,
         status,
@@ -9719,6 +9727,7 @@ app.post("/challenge-periods", requireAdmin, async (req, res) => {
         INSERT INTO challenge_periods (
           id,
           name,
+          short_name,
           description,
           logo,
           status,
@@ -9731,11 +9740,12 @@ app.post("/challenge-periods", requireAdmin, async (req, res) => {
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
       [
         periodId,
         period.name,
+        period.short_name,
         period.description,
         period.logo,
         period.status,
@@ -9811,6 +9821,7 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
           UPDATE challenge_periods
           SET
             name = ?,
+            short_name = ?,
             description = ?,
             logo = ?,
             status = ?,
@@ -9824,6 +9835,7 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
         `,
         [
           period.name,
+          period.short_name,
           period.description,
           period.logo,
           period.status,
@@ -16903,6 +16915,7 @@ app.get("/public/challenge-duels", async (req, res, next) => {
       d.gg_rating,
       d.status,
       cp.name AS challenge_period_name,
+      cp.short_name AS challenge_period_short_name,
       cp.logo AS challenge_period_logo,
       cp.play_starts_at AS challenge_period_play_starts_at
     FROM duels d
@@ -17066,6 +17079,7 @@ app.get("/public/challenge-duels", async (req, res, next) => {
           return [id, {
             id,
             name: String(row?.challenge_period_name || id).trim(),
+            short_name: String(row?.challenge_period_short_name || "").trim(),
             logo: String(row?.challenge_period_logo || "").trim(),
             play_starts_at: row.challenge_period_play_starts_at || null,
           }];
@@ -17084,6 +17098,7 @@ app.get("/public/challenge-duels", async (req, res, next) => {
           challenge_period_id: row.challenge_period_id,
           challenge_request_id: row.challenge_request_id,
           challenge_period_name: row.challenge_period_name,
+          challenge_period_short_name: row.challenge_period_short_name,
           challenge_period_logo: row.challenge_period_logo,
           challenge_period_play_starts_at: row.challenge_period_play_starts_at,
           created_at: row.created_at,
@@ -17129,6 +17144,7 @@ app.get("/public/challenge-duels/filters", async (_req, res, next) => {
         SELECT
           id,
           name,
+          short_name,
           logo,
           play_starts_at
         FROM challenge_periods
@@ -17146,6 +17162,7 @@ app.get("/public/challenge-duels/filters", async (_req, res, next) => {
         .map((row) => ({
           id: String(row?.id || "").trim(),
           name: String(row?.name || "").trim(),
+          short_name: String(row?.short_name || "").trim(),
           logo: String(row?.logo || "").trim(),
           play_starts_at: row?.play_starts_at || null,
         }))

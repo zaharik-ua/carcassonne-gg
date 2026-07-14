@@ -3651,6 +3651,7 @@
 
     const idField = createTextRow("id", item?.id || "", { readOnly: true });
     const nameField = createTextRow("name", item?.name || "");
+    const shortNameField = createTextRow("short_name", item?.short_name || "");
     const descriptionField = createTextRow("description", item?.description || "");
     const logoField = createTextRow("logo", item?.logo || "");
     logoField.input.type = "url";
@@ -3675,6 +3676,7 @@
 
     if (mode === "edit") form.appendChild(idField.row);
     form.appendChild(nameField.row);
+    form.appendChild(shortNameField.row);
     form.appendChild(descriptionField.row);
     form.appendChild(logoField.row);
     form.appendChild(statusField.row);
@@ -3713,6 +3715,7 @@
       event.preventDefault();
       const payload = {
         name: String(nameField.input.value || "").trim(),
+        short_name: String(shortNameField.input.value || "").trim(),
         description: String(descriptionField.input.value || "").trim(),
         logo: String(logoField.input.value || "").trim(),
         status: String(statusField.select.value || "draft").trim(),
@@ -4705,6 +4708,7 @@
     sectionList.innerHTML = "";
     state.challengePeriods.forEach((item) => {
       const subtitleParts = [];
+      if (item.short_name) subtitleParts.push(`Short: ${String(item.short_name).trim()}`);
       if (item.status) subtitleParts.push(String(item.status).trim());
       if (item.planning_starts_at) subtitleParts.push(`Planning: ${formatDateUtc(item.planning_starts_at)}`);
       if (item.play_starts_at || item.play_ends_at) {

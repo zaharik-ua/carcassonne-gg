@@ -546,5 +546,13 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded", fetchCOCTournaments);
+  function runWhenReady(callback) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", callback);
+    } else {
+      callback();
+    }
+  }
+
+  runWhenReady(fetchCOCTournaments);
 </script>
