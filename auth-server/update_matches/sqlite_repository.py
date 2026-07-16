@@ -8,13 +8,35 @@ from .models import MatchUpdateRequest, MatchUpdateResult
 from .repository import MatchRepository, TARGET_EMPTY_FINISHED, TARGET_FINISHED_PENDING, TARGET_ONGOING
 
 
+RESULT_SYNC_PROTECTED_STATUSES = {
+    "cancelled",
+    "canceled",
+    "draft",
+    "removed",
+    "requested new time",
+}
+AUTO_RESULT_SYNC_BLOCKED_STATUSES = RESULT_SYNC_PROTECTED_STATUSES | {
+    "done",
+    "error",
+    "no show",
+}
+
+
+def _status_sql(statuses: set[str]) -> str:
+    return "(" + ",".join(f"'{status}'" for status in sorted(statuses)) + ")"
+
+
+RESULT_SYNC_PROTECTED_STATUS_SQL = _status_sql(RESULT_SYNC_PROTECTED_STATUSES)
+AUTO_RESULT_SYNC_BLOCKED_STATUS_SQL = _status_sql(AUTO_RESULT_SYNC_BLOCKED_STATUSES)
+
+
 class SqliteMatchRepository(MatchRepository):
     def __init__(self, db_path: str) -> None:
         self.db_path = str(Path(db_path).resolve())
         self._ensure_schema()
 
     def fetch_duel_by_id(self, *, duel_id: str) -> list[MatchUpdateRequest]:
-        sql = """
+        sql = f"""
             SELECT
               l.id AS duel_id,
               l.match_id,
@@ -33,12 +55,13 @@ class SqliteMatchRepository(MatchRepository):
               ON trim(COALESCE(p1.id, '')) = trim(COALESCE(l.player_1_id, ''))
             LEFT JOIN profiles p2
               ON trim(COALESCE(p2.id, '')) = trim(COALESCE(l.player_2_id, ''))
-            WHERE l.deleted_at IS NULL
+            WHERE trim(COALESCE(l.deleted_at, '')) = ''
               AND trim(COALESCE(l.id, '')) = trim(?)
               AND trim(COALESCE(l.player_1_id, '')) <> ''
               AND trim(COALESCE(l.player_2_id, '')) <> ''
               AND trim(COALESCE(l.time_utc, '')) <> ''
               AND trim(COALESCE(l.duel_format, '')) <> ''
+              AND lower(trim(COALESCE(l.status, 'Planned'))) NOT IN {RESULT_SYNC_PROTECTED_STATUS_SQL}
             LIMIT 1
         """
 
@@ -47,7 +70,7 @@ class SqliteMatchRepository(MatchRepository):
         return [self._row_to_request(rows[0], "manual_duel")] if rows else []
 
     def fetch_duels_for_match(self, *, match_id: str) -> list[MatchUpdateRequest]:
-        sql = """
+        sql = f"""
             SELECT
               l.id AS duel_id,
               l.match_id,
@@ -66,12 +89,13 @@ class SqliteMatchRepository(MatchRepository):
               ON trim(COALESCE(p1.id, '')) = trim(COALESCE(l.player_1_id, ''))
             LEFT JOIN profiles p2
               ON trim(COALESCE(p2.id, '')) = trim(COALESCE(l.player_2_id, ''))
-            WHERE l.deleted_at IS NULL
+            WHERE trim(COALESCE(l.deleted_at, '')) = ''
               AND trim(COALESCE(l.match_id, '')) = trim(?)
               AND trim(COALESCE(l.player_1_id, '')) <> ''
               AND trim(COALESCE(l.player_2_id, '')) <> ''
               AND trim(COALESCE(l.time_utc, '')) <> ''
               AND trim(COALESCE(l.duel_format, '')) <> ''
+              AND lower(trim(COALESCE(l.status, 'Planned'))) NOT IN {RESULT_SYNC_PROTECTED_STATUS_SQL}
             ORDER BY COALESCE(l.duel_number, 999999) ASC, datetime(l.time_utc) ASC, l.id ASC
         """
 
@@ -81,12 +105,13 @@ class SqliteMatchRepository(MatchRepository):
 
     def fetch_matches_to_update(self, *, target: str, limit: int) -> list[MatchUpdateRequest]:
         params = {"limit": int(limit)}
-        where_sql = """
-            l.deleted_at IS NULL
+        where_sql = f"""
+            trim(COALESCE(l.deleted_at, '')) = ''
             AND trim(COALESCE(l.player_1_id, '')) <> ''
             AND trim(COALESCE(l.player_2_id, '')) <> ''
             AND trim(COALESCE(l.time_utc, '')) <> ''
             AND trim(COALESCE(l.duel_format, '')) <> ''
+            AND lower(trim(COALESCE(l.status, 'Planned'))) NOT IN {AUTO_RESULT_SYNC_BLOCKED_STATUS_SQL}
         """
 
         if target == TARGET_ONGOING:
@@ -141,6 +166,7 @@ class SqliteMatchRepository(MatchRepository):
                 SELECT
                   l.id,
                   l.status,
+                  l.deleted_at,
                   l.time_utc,
                   COALESCE(df.games_to_win, ?) AS games_to_win
                 FROM duels l
@@ -153,6 +179,13 @@ class SqliteMatchRepository(MatchRepository):
             ).fetchone()
             if current is None:
                 raise RuntimeError(f"Duel not found: {match.match_id}")
+            if self._is_result_sync_blocked(current):
+                print(
+                    f"⏭️ Skipping result sync for protected duel {match.match_id} "
+                    f"(status={current['status']!r}, deleted_at={current['deleted_at']!r})",
+                    flush=True,
+                )
+                return
 
             target_wins = int(current["games_to_win"] or match.gtw or 2)
             now_ts = int(datetime.now(timezone.utc).timestamp())
@@ -267,6 +300,25 @@ class SqliteMatchRepository(MatchRepository):
 
     def save_match_error(self, match: MatchUpdateRequest, message: str) -> None:
         with self._connect() as conn:
+            current = conn.execute(
+                """
+                SELECT id, status, deleted_at
+                FROM duels
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (match.match_id,),
+            ).fetchone()
+            if current is None:
+                print(f"⚠️ Match update failed for missing duel {match.match_id}: {message}", flush=True)
+                return
+            if self._is_result_sync_blocked(current):
+                print(
+                    f"⏭️ Skipping result sync error for protected duel {match.match_id} "
+                    f"(status={current['status']!r}, deleted_at={current['deleted_at']!r})",
+                    flush=True,
+                )
+                return
             conn.execute(
                 """
                 UPDATE duels
@@ -384,6 +436,12 @@ class SqliteMatchRepository(MatchRepository):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    @staticmethod
+    def _is_result_sync_blocked(row: sqlite3.Row) -> bool:
+        deleted_at = str(row["deleted_at"] or "").strip()
+        status = str(row["status"] or "Planned").strip().lower()
+        return bool(deleted_at) or status in RESULT_SYNC_PROTECTED_STATUSES
 
     def _ensure_schema(self) -> None:
         with self._connect() as conn:

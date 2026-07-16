@@ -69,9 +69,10 @@ python3 run_update_matches.py --match-id 20250330UKRPRT
 
 ## Selection rules
 
-- `finished_pending`: duel already ended, status is not `Done`, `Error`, or `No Show`
-- `ongoing`: duel already started, not yet ended, status is not `Done`, `Error`, or `No Show`
-- manual test mode: `--match-id <match_id>` ignores automatic selection and loads all duels of that match
+- `finished_pending`: duel already ended, status is not `Done`, `Error`, or `No Show`, and it is still eligible for result sync
+- `ongoing`: duel already started, not yet ended, status is not `Done`, `Error`, or `No Show`, and it is still eligible for result sync
+- manual test mode: `--match-id <match_id>` ignores automatic target selection but still skips protected duels
+- protected duels are never synced from BGA: deleted duels and statuses `Cancelled`, `Draft`, `Requested new time`, `Removed`
 - automatic runs prioritize the least recently checked duels via `duels.results_checked_at`
 
 ## Result rules
@@ -86,6 +87,7 @@ python3 run_update_matches.py --match-id 20250330UKRPRT
   - `In progress` while the current time is inside the combined duel time window of the match and not all duels are `Done`
   - `Planned` otherwise
 - `games` rows are upserted by `bga_table_id`
+- before writing either results or errors, the script re-checks the duel and skips it if it became protected during the run
 
 ## Logging
 
