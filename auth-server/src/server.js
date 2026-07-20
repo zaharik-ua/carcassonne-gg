@@ -495,6 +495,13 @@ function normalizeIntegerOrNull(value) {
   return Number.isInteger(normalized) ? normalized : null;
 }
 
+function normalizeNumberOrNull(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const normalized = Number(raw);
+  return Number.isFinite(normalized) ? normalized : null;
+}
+
 function normalizeChallengePeriodStatus(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return CHALLENGE_PERIOD_STATUSES.has(normalized) ? normalized : "draft";
@@ -7130,6 +7137,8 @@ function mapChallengeOpponent(row) {
     avatar: normalizeNullableText(row?.avatar),
     profile_status: normalizeNullableText(row?.profile_status),
     bga_elo: normalizeIntegerOrNull(row?.bga_elo),
+    gg_elo: normalizeNumberOrNull(row?.gg_elo),
+    gg_rank: normalizeIntegerOrNull(row?.gg_rating_position),
     period_status: normalizeChallengePlayerPeriodStatus(row?.period_player_status),
     period_status_updated_at: normalizeNullableText(row?.period_status_updated_at),
     availability: mapChallengeAvailability(row),
@@ -7410,6 +7419,8 @@ function mapChallengeRequestPlayer(row, prefix) {
     name: normalizeNullableText(row[`${prefix}_name`]),
     avatar: normalizeNullableText(row[`${prefix}_avatar`]),
     bga_elo: normalizeIntegerOrNull(row[`${prefix}_bga_elo`]),
+    gg_elo: normalizeNumberOrNull(row[`${prefix}_gg_elo`]),
+    gg_rank: normalizeIntegerOrNull(row[`${prefix}_gg_rating_position`]),
     association: {
       id: associationId,
       name: associationName,
@@ -7487,6 +7498,8 @@ async function loadChallengePlayerProfileContext(playerId) {
         p.avatar,
         p.status AS profile_status,
         p.bga_elo,
+        p.gg_elo,
+        p.gg_rating_position,
         COALESCE(NULLIF(trim(t.id), ''), NULLIF(trim(a.code), ''), NULLIF(trim(p.association), '')) AS association_id,
         COALESCE(NULLIF(trim(t.name), ''), NULLIF(trim(a.name), ''), NULLIF(trim(p.association), '')) AS association_name,
         COALESCE(NULLIF(trim(t.flag), ''), NULLIF(trim(t.logo), ''), NULLIF(trim(a.flag), '')) AS association_flag,
@@ -7687,6 +7700,8 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
           p.avatar,
           p.status AS profile_status,
           p.bga_elo,
+          p.gg_elo,
+          p.gg_rating_position,
           cpp.status AS period_player_status,
           cpp.status_updated_at AS period_status_updated_at,
           cpp.challenge_duel_id,
@@ -8042,6 +8057,8 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
           p1.name AS p1_name,
           p1.avatar AS p1_avatar,
           p1.bga_elo AS p1_bga_elo,
+          p1.gg_elo AS p1_gg_elo,
+          p1.gg_rating_position AS p1_gg_rating_position,
           COALESCE(NULLIF(trim(t1.id), ''), NULLIF(trim(a1.code), ''), NULLIF(trim(p1.association), '')) AS p1_association_id,
           COALESCE(NULLIF(trim(t1.name), ''), NULLIF(trim(a1.name), ''), NULLIF(trim(p1.association), '')) AS p1_association_name,
           COALESCE(NULLIF(trim(t1.flag), ''), NULLIF(trim(t1.logo), ''), NULLIF(trim(a1.flag), '')) AS p1_association_flag,
@@ -8051,6 +8068,8 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
           p2.name AS p2_name,
           p2.avatar AS p2_avatar,
           p2.bga_elo AS p2_bga_elo,
+          p2.gg_elo AS p2_gg_elo,
+          p2.gg_rating_position AS p2_gg_rating_position,
           COALESCE(NULLIF(trim(t2.id), ''), NULLIF(trim(a2.code), ''), NULLIF(trim(p2.association), '')) AS p2_association_id,
           COALESCE(NULLIF(trim(t2.name), ''), NULLIF(trim(a2.name), ''), NULLIF(trim(p2.association), '')) AS p2_association_name,
           COALESCE(NULLIF(trim(t2.flag), ''), NULLIF(trim(t2.logo), ''), NULLIF(trim(a2.flag), '')) AS p2_association_flag,
@@ -8140,6 +8159,8 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
             p1.name AS p1_name,
             p1.avatar AS p1_avatar,
             p1.bga_elo AS p1_bga_elo,
+            p1.gg_elo AS p1_gg_elo,
+            p1.gg_rating_position AS p1_gg_rating_position,
             p1.association AS p1_association_id,
             p1.association AS p1_association_name,
             d.player_2_id AS p2_player_id,
@@ -8147,6 +8168,8 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
             p2.name AS p2_name,
             p2.avatar AS p2_avatar,
             p2.bga_elo AS p2_bga_elo,
+            p2.gg_elo AS p2_gg_elo,
+            p2.gg_rating_position AS p2_gg_rating_position,
             p2.association AS p2_association_id,
             p2.association AS p2_association_name,
             d.id AS duel_id,

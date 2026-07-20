@@ -1120,7 +1120,15 @@
   }
 
 
-  document.addEventListener("DOMContentLoaded", () => {
+  function runWhenReady(callback) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", callback);
+    } else {
+      callback();
+    }
+  }
+
+  runWhenReady(() => {
     fetchWc2024Data();
   });
 </script>

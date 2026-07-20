@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bracket</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/brackets-viewer@latest/dist/brackets-viewer.min.css" />
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/brackets-viewer@latest/dist/brackets-viewer.min.js"></script>
+    <style>
+        .brackets-viewer {
+          /* Colors */
+          --primary-background: #fff;
+          --secondary-background: #6384c1;
+          --match-background: #2c539a;
+          --font-color: #fff;
+          --win-color: #98eb92;
+          --loss-color: #ffa4a4;
+          --label-color: #333333;
+          --hint-color: #a7a7a7;
+          --connector-color: #9e9e9e;
+          --border-color: #d9d9d9;
+          --border-hover-color: #b6b5b5;
+
+          /* Sizes */
+          --text-size: 14px;
+          --round-margin: 20px;
+          --match-width: 150px;
+          --match-horizontal-padding: 6px;
+          --match-vertical-padding: 5px;
+          --connector-border-width: 2px;
+          --match-border-width: 1px;
+          --match-border-radius: 0.2em;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="playoff-bracket" class="brackets-viewer"></div>
+
+    <script>
+        const data = {
+            stage: [
+                {
+                    id: 1,
+                    name: null,
+                    type: "single_elimination",
+                    settings: { seedOrdering: ["natural"], consolationFinal: ["true"] }
+                }
+            ],
+            match: [
+                { id: 1, stage_id: 1, group_id: 1, round_id: 1, number: 1, status: 4, opponent1: { id: 1, score: 0, result: "loss" }, opponent2: { id: 2, score: 2, result: "win" } },
+                { id: 2, stage_id: 1, group_id: 1, round_id: 1, number: 2, status: 4, opponent1: { id: 3, score: 1, result: "loss" }, opponent2: { id: 4, score: 2, result: "win" } },
+                { id: 3, stage_id: 1, group_id: 1, round_id: 1, number: 3, status: 4, opponent1: { id: 5, score: 2, result: "win" }, opponent2: { id: 6, score: 1, result: "loss" } },
+                { id: 4, stage_id: 1, group_id: 1, round_id: 1, number: 4, status: 4, opponent1: { id: 7, score: 1, result: "loss" }, opponent2: { id: 8, score: 2, result: "win" } },
+                { id: 5, stage_id: 1, group_id: 1, round_id: 1, number: 5, status: 4, opponent1: { id: 9, score: 2, result: "win" }, opponent2: { id: 10, score: 0, result: "loss" } },
+                { id: 6, stage_id: 1, group_id: 1, round_id: 1, number: 6, status: 4, opponent1: { id: 11, score: 2, result: "win" }, opponent2: { id: 12, score: 0, result: "loss" } },
+                { id: 7, stage_id: 1, group_id: 1, round_id: 1, number: 7, status: 4, opponent1: { id: 13, score: 1, result: "loss" }, opponent2: { id: 14, score: 2, result: "win" } },
+                { id: 8, stage_id: 1, group_id: 1, round_id: 1, number: 8, status: 4, opponent1: { id: 15, score: 2, result: "win" }, opponent2: { id: 16, score: 1, result: "loss" } },
+                { id: 9, stage_id: 1, group_id: 1, round_id: 2, number: 1, status: 4, child_count: 3, opponent1: { id: 17, score: 0, result: "loss" }, opponent2: { id: 2, score: 2, result: "win" } },
+                { id: 10, stage_id: 1, group_id: 1, round_id: 2, number: 2, status: 4, child_count: 3, opponent1: { id: 18, score: 0, result: "loss" }, opponent2: { id: 4, score: 2, result: "win" } },
+                { id: 11, stage_id: 1, group_id: 1, round_id: 2, number: 3, status: 4, child_count: 3, opponent1: { id: 19, score: 2, result: "win" }, opponent2: { id: 5, score: 0, result: "loss" } },
+                { id: 12, stage_id: 1, group_id: 1, round_id: 2, number: 4, status: 1, child_count: 3, opponent1: { id: 20, score: 2, result: "win" }, opponent2: { id: 8, score: 0, result: "loss" } },
+                { id: 13, stage_id: 1, group_id: 1, round_id: 2, number: 5, status: 1, child_count: 3, opponent1: { id: 21, score: 2, result: "win" }, opponent2: { id: 9, score: 0, result: "loss" } },
+                { id: 14, stage_id: 1, group_id: 1, round_id: 2, number: 6, status: 1, child_count: 3, opponent1: { id: 22, score: 0, result: "loss" }, opponent2: { id: 11, score: 2, result: "win" } },
+                { id: 15, stage_id: 1, group_id: 1, round_id: 2, number: 7, status: 1, child_count: 3, opponent1: { id: 23, score: 2, result: "win" }, opponent2: { id: 14, score: 0, result: "loss" } },
+                { id: 16, stage_id: 1, group_id: 1, round_id: 2, number: 8, status: 1, child_count: 3, opponent1: { id: 24, score: 2, result: "win" }, opponent2: { id: 15, score: 1, result: "loss" } },
+                { id: 17, stage_id: 1, group_id: 1, round_id: 3, number: 1, status: 1, child_count: 5, opponent1: { id: 2, score: 2, result: "loss" }, opponent2: { id: 4, score: 3, result: "win" } },
+                { id: 18, stage_id: 1, group_id: 1, round_id: 3, number: 2, status: 1, child_count: 5, opponent1: { id: 19, score: 3, result: "win" }, opponent2: { id: 20, score: 2, result: "loss" } },
+                { id: 19, stage_id: 1, group_id: 1, round_id: 3, number: 3, status: 1, child_count: 5, opponent1: { id: 21, score: 3, result: "win" }, opponent2: { id: 11, score: 2, result: "loss" } },
+                { id: 20, stage_id: 1, group_id: 1, round_id: 3, number: 4, status: 1, child_count: 5, opponent1: { id: 23, score: 3, result: "win" }, opponent2: { id: 24, score: 1, result: "loss" } },
+                { id: 21, stage_id: 1, group_id: 1, round_id: 4, number: 1, status: 1, child_count: 5, opponent1: { id: 4, score: 1, result: "loss" }, opponent2: { id: 19, score: 3, result: "win" } },
+                { id: 22, stage_id: 1, group_id: 1, round_id: 4, number: 2, status: 1, child_count: 5, opponent1: { id: 21, score: 3, result: "win" }, opponent2: { id: 23, score: 0, result: "loss" } },
+                { id: 23, stage_id: 1, group_id: 1, round_id: 5, number: 1, status: 1, child_count: 5, opponent1: { id: 19, score: 3, result: "win" }, opponent2: { id: 21, score: 0, result: "loss" } },
+                { id: 24, stage_id: 1, group_id: 2, round_id: 6, number: 1, status: 4, child_count: 5, opponent1: { id: 4, score: 2, result: "loss" }, opponent2: { id: 23, score: 3, result: "win" } }
+            ],
+            
+            match_game: [
+             { id: 9, stage_id: 1, parent_id: 1 },
+             { id: 9, stage_id: 1, parent_id: 2 }
+            ],
+            
+            participants: [
+                { id: 1, name: "senglar" },
+                { id: 2, name: "napalmEye" },
+                { id: 3, name: "hydrobaby" },
+                { id: 4, name: "Pakshe" },
+                { id: 5, name: "leodavinci" },
+                { id: 6, name: "crocodilefundy" },
+                { id: 7, name: "Megot Noskill" },
+                { id: 8, name: "game__over" },
+                { id: 9, name: "statmatt" },
+                { id: 10, name: "mtuu" },
+                { id: 11, name: "posij118" },
+                { id: 12, name: "easttung" },
+                { id: 13, name: "Tito Arce" },
+                { id: 14, name: "Lord Terrycloth" },
+                { id: 15, name: "portgard" },
+                { id: 16, name: "Glovir" },
+                { id: 17, name: "Secret_Star" },
+                { id: 18, name: "Samuelsson" },
+                { id: 19, name: "Alexey_LV" },
+                { id: 20, name: "RabbitRain" },
+                { id: 21, name: "Someone_you_know" },
+                { id: 22, name: "VisitorQ" },
+                { id: 23, name: "yzemaze" },
+                { id: 24, name: "isloun" }
+            ]
+        };
+
+        function runWhenReady(callback) {
+            if (document.readyState === "loading") {
+                document.addEventListener("DOMContentLoaded", callback);
+            } else {
+                callback();
+            }
+        }
+
+        runWhenReady(function() {
+            window.bracketsViewer.setParticipantImages([
+                
+                { participantId: 1, imageUrl: 'https://carcassonne.gg/gallery/catalonia.png' },
+                { participantId: 2, imageUrl: 'https://carcassonne.gg/gallery/latvia.png' },
+                { participantId: 3, imageUrl: 'https://carcassonne.gg/gallery/taiwan.png' },
+                { participantId: 4, imageUrl: 'https://carcassonne.gg/gallery/thailand.png' },
+                { participantId: 5, imageUrl: 'https://carcassonne.gg/gallery/portugal.png' },
+                { participantId: 6, imageUrl: 'https://carcassonne.gg/gallery/usa.png' },
+                { participantId: 7, imageUrl: 'https://carcassonne.gg/gallery/australia.png' },
+                { participantId: 8, imageUrl: 'https://carcassonne.gg/gallery/romania.png' },
+                { participantId: 9, imageUrl: 'https://carcassonne.gg/gallery/united-kingdom.png' },
+                { participantId: 10, imageUrl: 'https://carcassonne.gg/gallery/poland.png' },
+                { participantId: 11, imageUrl: 'https://carcassonne.gg/gallery/czech-republic.png' },
+                { participantId: 12, imageUrl: 'https://carcassonne.gg/gallery/hong%20kong.png' },
+                { participantId: 13, imageUrl: 'https://carcassonne.gg/gallery/chile.png' },
+                { participantId: 14, imageUrl: 'https://carcassonne.gg/gallery/united-kingdom.png' },
+                { participantId: 15, imageUrl: 'https://carcassonne.gg/gallery/vietnam.png' },
+                { participantId: 16, imageUrl: 'https://carcassonne.gg/gallery/portugal.png' },
+                { participantId: 17, imageUrl: 'https://carcassonne.gg/gallery/china.png' },
+                { participantId: 18, imageUrl: 'https://carcassonne.gg/gallery/ukraine.png' },
+                { participantId: 19, imageUrl: 'https://carcassonne.gg/gallery/latvia.png' },
+                { participantId: 20, imageUrl: 'https://carcassonne.gg/gallery/japan.png' },
+                { participantId: 21, imageUrl: 'https://carcassonne.gg/gallery/rcp.png' },
+                { participantId: 22, imageUrl: 'https://carcassonne.gg/gallery/catalonia.png' },
+                { participantId: 23, imageUrl: 'https://carcassonne.gg/gallery/germany.png' },
+                { participantId: 24, imageUrl: 'https://carcassonne.gg/gallery/rcp.png' }
+
+            ]);
+            
+window.bracketsViewer.addLocale('en', {
+    "match-label": {
+        "default": "",
+        "standard-bracket": "R",    
+        "standard-bracket-semi-final": "Semi-final",
+        "standard-bracket-final": "Grand Final",
+        "consolation-final": "Bronze match",
+        "match-game": "y"
+    }
+});
+
+            window.bracketsViewer.render({
+                stages: data.stage,
+                matches: data.match,
+                matchGames: [],
+                participants: data.participants,
+                root: document.getElementById("playoff-bracket")
+            }, {
+                customRoundName: (info, t) => {
+                    if (info.roundNumber === 1) return "Playoff Round 1";
+                    if (info.roundNumber === 2) return "Round of 16";
+                    if (info.roundNumber === 3) return "Quarter-finals";
+                    if (info.roundNumber === 4) return "Semi-finals";
+                    if (info.roundNumber === 5) return "Grand Final";
+                    if (info.roundNumber === 6) return "Bronze medal match";                    
+
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -426,7 +426,13 @@
     list.appendChild(mobileList);
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    renderPlayers();
-  });
+  function runWhenReady(callback) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", callback);
+    } else {
+      callback();
+    }
+  }
+
+  runWhenReady(renderPlayers);
 </script>

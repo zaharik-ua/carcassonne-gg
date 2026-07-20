@@ -1122,12 +1122,18 @@
     });
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
+  function bootstrap() {
     loadTournamentsList()
       .then(() => {
         fetchTournamentsAndInit();
       });
-  });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootstrap);
+  } else {
+    bootstrap();
+  }
 
   // Opens a fullscreen overlay that shows only the bracket block
   function openBracketFullscreen(sourceWrapper) {

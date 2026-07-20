@@ -2468,7 +2468,6 @@
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
-  const GG_PLAYERS_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
   const OFFICIAL_MATCHES_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/official_matches.json";
   const CHALLENGE_PERIODS_URL = `${AUTH_BASE}/challenge-periods`;
   const PLAYER_CHALLENGE_PERIODS_URL = `${CHALLENGE_PERIODS_URL}/player`;
@@ -2777,10 +2776,14 @@
               value: playerId,
               label: nickname,
               bga_nickname: nickname,
+              avatar: String(profile?.avatar || "").trim(),
               association: associationCode,
               flag: team?.flag || "",
               association_name: team?.name || associationCode,
               timezone: team?.timezone || "UTC",
+              bga_elo: profile?.bga_elo ?? null,
+              gg_elo: profile?.gg_elo ?? null,
+              gg_rank: profile?.gg_rating_position ?? null,
             };
           })
           .filter(Boolean)
@@ -4653,30 +4656,14 @@
     if (ggRatingsPromise) return ggRatingsPromise;
     ggRatingsPromise = (async () => {
       try {
-        const response = await fetch(GG_PLAYERS_URL);
-        if (!response.ok) return new Map();
-        const data = await response.json().catch(() => ({}));
-        const profiles = Array.isArray(data?.gg_profiles) ? data.gg_profiles : [];
-        const sorted = [...profiles].sort((a, b) => {
-          const aElo = parseFiniteNumber(a?.gg_elo);
-          const bElo = parseFiniteNumber(b?.gg_elo);
-          if (aElo !== null && bElo !== null) return bElo - aElo;
-          if (aElo !== null) return -1;
-          if (bElo !== null) return 1;
-          return String(a?.bga_nickname || "").localeCompare(String(b?.bga_nickname || ""));
-        });
-        const rankById = new Map();
-        sorted.forEach((profile, index) => {
-          const id = String(profile?.id ?? profile?.profile_id ?? "").trim();
-          if (id) rankById.set(id, index + 1);
-        });
+        const profiles = await fetchChallengeProfiles();
         const ratingsById = new Map();
         profiles.forEach((profile) => {
           const id = String(profile?.id ?? profile?.profile_id ?? "").trim();
           if (!id) return;
           ratingsById.set(id, {
             gg_elo: profile?.gg_elo ?? null,
-            gg_rank: rankById.get(id) || null,
+            gg_rank: profile?.gg_rank ?? profile?.gg_rating_position ?? null,
           });
         });
         return ratingsById;
