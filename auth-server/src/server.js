@@ -11315,7 +11315,11 @@ app.get("/public/tournament-teams", async (req, res) => {
   }
 
   try {
-    const tournamentTeams = await loadTournamentTeams(tournamentId);
+    const tournamentTeams = await loadTournamentPlayersForAccess({
+      tournament: { id: tournamentId },
+      canAccessAllTeams: true,
+      captainTeamIds: [],
+    });
     return res.json({
       ok: true,
       tournament_id: tournamentId,
@@ -11325,6 +11329,15 @@ app.get("/public/tournament-teams", async (req, res) => {
         team_id: team.team_id,
         team_name: team.team_name,
         team_flag: team.team_flag,
+        players: (team.players || []).map((player) => ({
+          id: player.id,
+          tournament_id: player.tournament_id,
+          team_id: player.team_id,
+          player_id: player.player_id,
+          captain: Number(player.captain) === 1,
+          bga_nickname: player.bga_nickname,
+          avatar: player.avatar,
+        })),
       })),
     });
   } catch (error) {
