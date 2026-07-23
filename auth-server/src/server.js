@@ -2793,6 +2793,210 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
   );
 }
 
+function buildTournamentTeamRecordId(tournamentId, teamId) {
+  return `${String(tournamentId || "").trim()}-${String(teamId || "").trim()}`;
+}
+
+function buildTournamentPlayerRecordId(tournamentId, teamId, playerId) {
+  return `${buildTournamentTeamRecordId(tournamentId, teamId)}-${String(playerId || "").trim()}`;
+}
+
+function createTournamentTeamRequestError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+async function loadTournamentTeamById(recordId) {
+  const normalizedId = normalizeNullableText(recordId);
+  if (!normalizedId) return null;
+  return dbGetAsync(
+    `
+      SELECT
+        tt.id,
+        tt.tournament_id,
+        tt.team_id,
+        tt.captain_id,
+        tm.name AS team_name,
+        COALESCE(NULLIF(trim(tm.flag), ''), NULLIF(trim(tm.logo), '')) AS team_flag,
+        p.bga_nickname AS captain_bga_nickname,
+        p.name AS captain_name,
+        p.avatar AS captain_avatar,
+        tt.created_at,
+        tt.updated_at
+      FROM tournament_teams tt
+      LEFT JOIN teams tm
+        ON upper(trim(tm.id)) = upper(trim(tt.team_id))
+      LEFT JOIN profiles p
+        ON trim(p.id) = trim(tt.captain_id)
+       AND p.deleted_at IS NULL
+      WHERE upper(trim(tt.id)) = upper(trim(?))
+      LIMIT 1
+    `,
+    [normalizedId]
+  );
+}
+
+async function loadTournamentTeams(tournamentId = null) {
+  const normalizedTournamentId = normalizeNullableText(tournamentId);
+  const params = [];
+  const whereSql = normalizedTournamentId
+    ? "WHERE upper(trim(tt.tournament_id)) = upper(trim(?))"
+    : "";
+  if (normalizedTournamentId) params.push(normalizedTournamentId);
+  return dbAllAsync(
+    `
+      SELECT
+        tt.id,
+        tt.tournament_id,
+        tt.team_id,
+        tt.captain_id,
+        tm.name AS team_name,
+        COALESCE(NULLIF(trim(tm.flag), ''), NULLIF(trim(tm.logo), '')) AS team_flag,
+        p.bga_nickname AS captain_bga_nickname,
+        p.name AS captain_name,
+        p.avatar AS captain_avatar,
+        tt.created_at,
+        tt.updated_at
+      FROM tournament_teams tt
+      LEFT JOIN teams tm
+        ON upper(trim(tm.id)) = upper(trim(tt.team_id))
+      LEFT JOIN profiles p
+        ON trim(p.id) = trim(tt.captain_id)
+       AND p.deleted_at IS NULL
+      ${whereSql}
+      ORDER BY tt.tournament_id COLLATE NOCASE ASC, tm.name COLLATE NOCASE ASC, tt.team_id COLLATE NOCASE ASC
+    `,
+    params
+  );
+}
+
+async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, options = {}) {
+  const normalizedTournamentId = normalizeNullableText(tournamentId);
+  const normalizedTeamId = normalizeNullableText(teamId);
+  const normalizedCaptainId = normalizeNullableText(captainId);
+
+  if (!normalizedTournamentId) {
+    throw createTournamentTeamRequestError(400, "tournament_id is required");
+  }
+  if (!normalizedTeamId) {
+    throw createTournamentTeamRequestError(400, "team_id is required");
+  }
+  if (!normalizedCaptainId) {
+    throw createTournamentTeamRequestError(400, "captain_id is required");
+  }
+
+  const [tournament, team, captain] = await Promise.all([
+    dbGetAsync(
+      `
+        SELECT id, tournament_type
+        FROM tournaments
+        WHERE upper(trim(id)) = upper(trim(?))
+        LIMIT 1
+      `,
+      [normalizedTournamentId]
+    ),
+    dbGetAsync(
+      `
+        SELECT id
+        FROM teams
+        WHERE upper(trim(id)) = upper(trim(?))
+        LIMIT 1
+      `,
+      [normalizedTeamId]
+    ),
+    dbGetAsync(
+      `
+        SELECT id
+        FROM profiles
+        WHERE trim(id) = trim(?)
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [normalizedCaptainId]
+    ),
+  ]);
+
+  if (!tournament) {
+    throw createTournamentTeamRequestError(404, "Tournament not found");
+  }
+  if (!options.allowNonTeamTournament && normalizeTournamentType(tournament.tournament_type) !== TOURNAMENT_TYPES.TEAMS) {
+    throw createTournamentTeamRequestError(400, "Tournament teams can be configured only for Teams tournaments");
+  }
+  if (!team) {
+    throw createTournamentTeamRequestError(400, "team_id must reference a team");
+  }
+  if (!captain) {
+    throw createTournamentTeamRequestError(400, "captain_id must reference an active profile");
+  }
+
+  return {
+    tournament_id: String(tournament.id).trim(),
+    team_id: String(team.id).trim(),
+    captain_id: String(captain.id).trim(),
+  };
+}
+
+async function syncTournamentTeamCaptainPlayer(tournamentId, teamId, captainId) {
+  await dbRunAsync(
+    `
+      UPDATE tournament_players
+      SET captain = 0,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE upper(trim(tournament_id)) = upper(trim(?))
+        AND upper(trim(team_id)) = upper(trim(?))
+        AND captain <> 0
+    `,
+    [tournamentId, teamId]
+  );
+  const playerRecordId = buildTournamentPlayerRecordId(tournamentId, teamId, captainId);
+  await dbRunAsync(
+    `
+      INSERT INTO tournament_players (
+        id,
+        tournament_id,
+        team_id,
+        player_id,
+        captain,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(tournament_id, team_id, player_id)
+      DO UPDATE SET
+        id = excluded.id,
+        captain = 1,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    [playerRecordId, tournamentId, teamId, captainId]
+  );
+}
+
+async function upsertTournamentTeamRecord(entry) {
+  const recordId = buildTournamentTeamRecordId(entry.tournament_id, entry.team_id);
+  await dbRunAsync(
+    `
+      INSERT INTO tournament_teams (
+        id,
+        tournament_id,
+        team_id,
+        captain_id,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(tournament_id, team_id)
+      DO UPDATE SET
+        id = excluded.id,
+        captain_id = excluded.captain_id,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    [recordId, entry.tournament_id, entry.team_id, entry.captain_id]
+  );
+  await syncTournamentTeamCaptainPlayer(entry.tournament_id, entry.team_id, entry.captain_id);
+  return recordId;
+}
+
 function syncUserBgaIdFromEmail(userId, email, options, done) {
   const callback = typeof done === "function"
     ? done
@@ -4407,6 +4611,111 @@ function ensureTournamentAccessUsersSchema() {
   });
 }
 
+function ensureTournamentTeamsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tournament_teams (
+      id TEXT PRIMARY KEY COLLATE NOCASE,
+      tournament_id TEXT NOT NULL COLLATE NOCASE,
+      team_id TEXT NOT NULL COLLATE NOCASE,
+      captain_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (tournament_id, team_id),
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+      FOREIGN KEY (team_id) REFERENCES teams(id),
+      FOREIGN KEY (captain_id) REFERENCES profiles(id)
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure tournament_teams schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(tournament_teams)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect tournament_teams schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "tournament_teams", "tournament_id", "TEXT");
+      addColumnIfMissing(columns, "tournament_teams", "team_id", "TEXT");
+      addColumnIfMissing(columns, "tournament_teams", "captain_id", "TEXT");
+      addColumnIfMissing(columns, "tournament_teams", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "tournament_teams", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      db.run(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_teams_tournament_team ON tournament_teams(tournament_id COLLATE NOCASE, team_id COLLATE NOCASE)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure tournament_teams tournament/team index", indexErr);
+          }
+        }
+      );
+      db.run(
+        "CREATE INDEX IF NOT EXISTS idx_tournament_teams_captain_id ON tournament_teams(captain_id)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure tournament_teams captain index", indexErr);
+          }
+        }
+      );
+    });
+  });
+}
+
+function ensureTournamentPlayersSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tournament_players (
+      id TEXT PRIMARY KEY COLLATE NOCASE,
+      tournament_id TEXT NOT NULL COLLATE NOCASE,
+      team_id TEXT NOT NULL COLLATE NOCASE,
+      player_id TEXT NOT NULL,
+      captain BOOLEAN NOT NULL DEFAULT 0 CHECK (captain IN (0, 1)),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (tournament_id, team_id, player_id),
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+      FOREIGN KEY (team_id) REFERENCES teams(id),
+      FOREIGN KEY (player_id) REFERENCES profiles(id),
+      FOREIGN KEY (tournament_id, team_id)
+        REFERENCES tournament_teams(tournament_id, team_id)
+        ON DELETE CASCADE
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure tournament_players schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(tournament_players)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect tournament_players schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "tournament_players", "tournament_id", "TEXT");
+      addColumnIfMissing(columns, "tournament_players", "team_id", "TEXT");
+      addColumnIfMissing(columns, "tournament_players", "player_id", "TEXT");
+      addColumnIfMissing(columns, "tournament_players", "captain", "BOOLEAN NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "tournament_players", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "tournament_players", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      db.run(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_players_tournament_team_player ON tournament_players(tournament_id COLLATE NOCASE, team_id COLLATE NOCASE, player_id)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure tournament_players tournament/team/player index", indexErr);
+          }
+        }
+      );
+      db.run(
+        "CREATE INDEX IF NOT EXISTS idx_tournament_players_player_id ON tournament_players(player_id)",
+        (indexErr) => {
+          if (indexErr) {
+            console.error("Failed to ensure tournament_players player index", indexErr);
+          }
+        }
+      );
+    });
+  });
+}
+
 function ensureFriendlyFindSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS friendly_find (
@@ -5636,6 +5945,8 @@ db.serialize(() => {
           ensureTeamsSchema();
           ensureTournamentsSchema();
           ensureTournamentAccessUsersSchema();
+          ensureTournamentTeamsSchema();
+          ensureTournamentPlayersSchema();
           ensureFriendlyFindSchema();
           ensureStreamersSchema();
           ensureLocalWebsitesSchema();
@@ -10603,6 +10914,246 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
       );
     }
   );
+});
+
+app.get("/tournament-teams", requireAdmin, async (req, res) => {
+  try {
+    const tournamentId = normalizeNullableText(req.query?.tournament_id);
+    const tournamentTeams = await loadTournamentTeams(tournamentId);
+    return res.json({ ok: true, tournament_teams: tournamentTeams });
+  } catch (error) {
+    console.error("Failed to load tournament teams", error);
+    return res.status(500).json({ ok: false, message: "Failed to load tournament teams" });
+  }
+});
+
+app.post("/tournament-teams", requireAdmin, async (req, res) => {
+  try {
+    const entry = await resolveTournamentTeamReferences(
+      req.body?.tournament_id,
+      req.body?.team_id,
+      req.body?.captain_id
+    );
+    const expectedId = buildTournamentTeamRecordId(entry.tournament_id, entry.team_id);
+    const payloadId = normalizeNullableText(req.body?.id);
+    if (payloadId && payloadId.toUpperCase() !== expectedId.toUpperCase()) {
+      return res.status(400).json({ ok: false, message: `id must be ${expectedId}` });
+    }
+
+    const duplicate = await dbGetAsync(
+      `
+        SELECT id
+        FROM tournament_teams
+        WHERE upper(trim(tournament_id)) = upper(trim(?))
+          AND upper(trim(team_id)) = upper(trim(?))
+        LIMIT 1
+      `,
+      [entry.tournament_id, entry.team_id]
+    );
+    if (duplicate) {
+      return res.status(409).json({ ok: false, message: "This team is already added to the tournament" });
+    }
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const recordId = await upsertTournamentTeamRecord(entry);
+      await dbRunAsync("COMMIT");
+      const tournamentTeam = await loadTournamentTeamById(recordId);
+      return res.status(201).json({ ok: true, tournament_team: tournamentTeam });
+    } catch (txError) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw txError;
+    }
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    if (status >= 500) console.error("Failed to create tournament team", error);
+    return res.status(status).json({
+      ok: false,
+      message: status >= 500 ? "Failed to create tournament team" : error.message,
+    });
+  }
+});
+
+app.patch("/tournament-teams/:id", requireAdmin, async (req, res) => {
+  const recordId = normalizeNullableText(req.params.id);
+  if (!recordId) {
+    return res.status(400).json({ ok: false, message: "Invalid tournament team id" });
+  }
+
+  try {
+    const current = await loadTournamentTeamById(recordId);
+    if (!current) {
+      return res.status(404).json({ ok: false, message: "Tournament team not found" });
+    }
+
+    const payloadId = normalizeNullableText(req.body?.id);
+    if (payloadId && payloadId.toUpperCase() !== String(current.id).toUpperCase()) {
+      return res.status(400).json({ ok: false, message: "Tournament team id cannot be changed" });
+    }
+    const requestedTournamentId = normalizeNullableText(req.body?.tournament_id);
+    if (requestedTournamentId && requestedTournamentId.toUpperCase() !== String(current.tournament_id).toUpperCase()) {
+      return res.status(400).json({ ok: false, message: "tournament_id cannot be changed" });
+    }
+    const requestedTeamId = normalizeNullableText(req.body?.team_id);
+    if (requestedTeamId && requestedTeamId.toUpperCase() !== String(current.team_id).toUpperCase()) {
+      return res.status(400).json({ ok: false, message: "team_id cannot be changed" });
+    }
+
+    const entry = await resolveTournamentTeamReferences(
+      current.tournament_id,
+      current.team_id,
+      req.body?.captain_id ?? current.captain_id
+    );
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const updatedId = await upsertTournamentTeamRecord(entry);
+      await dbRunAsync("COMMIT");
+      const tournamentTeam = await loadTournamentTeamById(updatedId);
+      return res.json({ ok: true, tournament_team: tournamentTeam });
+    } catch (txError) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw txError;
+    }
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    if (status >= 500) console.error("Failed to update tournament team", error);
+    return res.status(status).json({
+      ok: false,
+      message: status >= 500 ? "Failed to update tournament team" : error.message,
+    });
+  }
+});
+
+app.put("/tournament-teams", requireAdmin, async (req, res) => {
+  const tournamentId = normalizeNullableText(req.body?.tournament_id);
+  const requestedTeams = Array.isArray(req.body?.teams)
+    ? req.body.teams
+    : Array.isArray(req.body?.tournament_teams)
+      ? req.body.tournament_teams
+      : null;
+
+  if (!tournamentId) {
+    return res.status(400).json({ ok: false, message: "tournament_id is required" });
+  }
+  if (!requestedTeams) {
+    return res.status(400).json({ ok: false, message: "teams must be an array" });
+  }
+
+  try {
+    const tournament = await dbGetAsync(
+      `
+        SELECT id, tournament_type
+        FROM tournaments
+        WHERE upper(trim(id)) = upper(trim(?))
+        LIMIT 1
+      `,
+      [tournamentId]
+    );
+    if (!tournament) {
+      return res.status(404).json({ ok: false, message: "Tournament not found" });
+    }
+    if (requestedTeams.length && normalizeTournamentType(tournament.tournament_type) !== TOURNAMENT_TYPES.TEAMS) {
+      return res.status(400).json({
+        ok: false,
+        message: "Tournament teams can be configured only for Teams tournaments",
+      });
+    }
+
+    const entries = [];
+    const seenTeamIds = new Set();
+    for (const requestedEntry of requestedTeams) {
+      const entry = await resolveTournamentTeamReferences(
+        tournament.id,
+        requestedEntry?.team_id ?? requestedEntry?.teamId,
+        requestedEntry?.captain_id ?? requestedEntry?.captainId,
+        { allowNonTeamTournament: requestedTeams.length === 0 }
+      );
+      const key = entry.team_id.toUpperCase();
+      if (seenTeamIds.has(key)) {
+        return res.status(400).json({ ok: false, message: `Duplicate team_id: ${entry.team_id}` });
+      }
+      seenTeamIds.add(key);
+      entries.push(entry);
+    }
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const existingTeams = await dbAllAsync(
+        `
+          SELECT id, team_id
+          FROM tournament_teams
+          WHERE upper(trim(tournament_id)) = upper(trim(?))
+        `,
+        [tournament.id]
+      );
+      const removedTeams = existingTeams.filter((entry) => !seenTeamIds.has(String(entry.team_id || "").trim().toUpperCase()));
+      for (const removed of removedTeams) {
+        await dbRunAsync(
+          `
+            DELETE FROM tournament_players
+            WHERE upper(trim(tournament_id)) = upper(trim(?))
+              AND upper(trim(team_id)) = upper(trim(?))
+          `,
+          [tournament.id, removed.team_id]
+        );
+        await dbRunAsync("DELETE FROM tournament_teams WHERE upper(trim(id)) = upper(trim(?))", [removed.id]);
+      }
+      for (const entry of entries) {
+        await upsertTournamentTeamRecord(entry);
+      }
+      await dbRunAsync("COMMIT");
+    } catch (txError) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw txError;
+    }
+
+    const tournamentTeams = await loadTournamentTeams(tournament.id);
+    return res.json({ ok: true, tournament_teams: tournamentTeams });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    if (status >= 500) console.error("Failed to replace tournament teams", error);
+    return res.status(status).json({
+      ok: false,
+      message: status >= 500 ? "Failed to save tournament teams" : error.message,
+    });
+  }
+});
+
+app.delete("/tournament-teams/:id", requireAdmin, async (req, res) => {
+  const recordId = normalizeNullableText(req.params.id);
+  if (!recordId) {
+    return res.status(400).json({ ok: false, message: "Invalid tournament team id" });
+  }
+
+  try {
+    const current = await loadTournamentTeamById(recordId);
+    if (!current) {
+      return res.status(404).json({ ok: false, message: "Tournament team not found" });
+    }
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await dbRunAsync(
+        `
+          DELETE FROM tournament_players
+          WHERE upper(trim(tournament_id)) = upper(trim(?))
+            AND upper(trim(team_id)) = upper(trim(?))
+        `,
+        [current.tournament_id, current.team_id]
+      );
+      await dbRunAsync("DELETE FROM tournament_teams WHERE upper(trim(id)) = upper(trim(?))", [current.id]);
+      await dbRunAsync("COMMIT");
+    } catch (txError) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw txError;
+    }
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("Failed to delete tournament team", error);
+    return res.status(500).json({ ok: false, message: "Failed to delete tournament team" });
+  }
 });
 
 app.get("/teams", (_req, res, next) => {

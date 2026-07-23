@@ -490,7 +490,7 @@
   const NEWS_PUBLIC_URL = "https://api.carcassonne.gg/public/news";
   const PLAYERS_PUBLIC_URL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json";
   const NEWS_API_ORIGIN = new URL(NEWS_PUBLIC_URL).origin;
-  const LONG_NEWS_DESCRIPTION_LIMIT = 1000;
+  const LONG_NEWS_DESCRIPTION_LIMIT = 500;
   const newsContainer = document.getElementById("news-container");
   let imageModal;
   let allNewsItems = [];
@@ -768,6 +768,12 @@
       .replace(/\s+/g, " ")
       .trim()
       .length;
+  };
+
+  const hasNewsDescriptionImage = (html) => {
+    const template = document.createElement("template");
+    template.innerHTML = String(html || "");
+    return !!template.content.querySelector("img");
   };
 
   const fetchPublicNewsItem = (newsId) => {
@@ -1150,15 +1156,15 @@
       const isImportantImage = normalizedImportance === "medium" && isImageMedia;
       const displayAsMajor = isMajor || isImportantImage || isYouTubeNews;
       const descriptionHtml = String(newsItem.description || "").trim();
+      const descriptionTextLength = getNewsDescriptionTextLength(descriptionHtml);
+      const hasNewsImage = isImageMedia || hasNewsDescriptionImage(descriptionHtml);
       const detailUrl = getNewsDetailUrl(newsItem);
       const shouldLinkDetailInsteadOfPreview = (
         !isYouTubeNews
-        && !displayAsMajor
-        && !isImageMedia
-        && getNewsDescriptionTextLength(descriptionHtml) > LONG_NEWS_DESCRIPTION_LIMIT
+        && (hasNewsImage || descriptionTextLength > LONG_NEWS_DESCRIPTION_LIMIT)
         && !!detailUrl
       );
-      if (displayAsMajor || shouldLinkDetailInsteadOfPreview) {
+      if (isYouTubeNews || shouldLinkDetailInsteadOfPreview) {
         row.classList.add("news-row-high");
       }
       const dateValue = getNewsTimestampValue(newsItem);
@@ -1184,7 +1190,7 @@
         icon.src = iconUrl;
         icon.alt = newsItem.title || newsItem.short_title || "News icon";
         icon.classList.add(isImportantImage ? "news-icon-important-image" : `news-icon-${normalizedImportance}`);
-        if (displayAsMajor) {
+        if (shouldLinkDetailInsteadOfPreview) {
           icon.addEventListener("click", event => {
             event.stopPropagation();
             if (detailUrl) {
@@ -1253,7 +1259,7 @@
         contentWrapper.appendChild(shortDescription);
       }
 
-      if (displayAsMajor || shouldLinkDetailInsteadOfPreview) {
+      if (isYouTubeNews || shouldLinkDetailInsteadOfPreview) {
         row.addEventListener("click", event => {
           if (event.target?.closest?.("a")) return;
           if (youtubeWatchUrl) {
@@ -1266,7 +1272,7 @@
         });
       }
 
-      if (descriptionHtml && !displayAsMajor && !shouldLinkDetailInsteadOfPreview) {
+      if (descriptionHtml && !isYouTubeNews && !shouldLinkDetailInsteadOfPreview) {
         if (normalizedImportance === "medium") {
           row.classList.add("news-row-important-toggle");
         }

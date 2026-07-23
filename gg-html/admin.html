@@ -254,6 +254,10 @@
     gap: 2px;
   }
 
+  .cp-edit-row-full {
+    grid-column: 1 / -1;
+  }
+
   .cp-edit-row label {
     font-size: 12px;
     font-weight: 600;
@@ -573,6 +577,7 @@
   const CATEGORIES_URL = `${AUTH_BASE}/categories`;
   const LOCAL_WEBSITES_URL = `${AUTH_BASE}/local-websites`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const TOURNAMENT_TEAMS_URL = `${AUTH_BASE}/tournament-teams`;
   const CHALLENGE_PERIODS_URL = `${AUTH_BASE}/challenge-periods`;
   const USERS_URL = `${AUTH_BASE}/users`;
   const USER_OPTIONS_URL = `${AUTH_BASE}/users/options`;
@@ -723,6 +728,7 @@
     activeSection: "",
     associations: [],
     teams: [],
+    teamsLoaded: false,
     streamers: [],
     icons: [],
     categories: [],
@@ -737,6 +743,7 @@
     systemSettings: [],
     matchesReference: [],
     profilesPublic: [],
+    profilesPublicLoaded: false,
     users: [],
     userOptions: [],
     userOptionsLoaded: false,
@@ -1424,6 +1431,191 @@
     };
   }
 
+  function createTournamentTeamsPickerRow(labelText, teamOptions, captainOptions, selectedEntries) {
+    const teamsMap = new Map();
+    (Array.isArray(teamOptions) ? teamOptions : []).forEach((entry) => {
+      const value = String(entry?.value ?? "").trim();
+      if (!value) return;
+      teamsMap.set(value, {
+        value,
+        label: String(entry?.label ?? value),
+      });
+    });
+    const captainsMap = new Map();
+    (Array.isArray(captainOptions) ? captainOptions : []).forEach((entry) => {
+      const value = String(entry?.value ?? "").trim();
+      if (!value) return;
+      captainsMap.set(value, {
+        value,
+        label: String(entry?.label ?? value),
+      });
+    });
+
+    const selectedMap = new Map();
+    (Array.isArray(selectedEntries) ? selectedEntries : []).forEach((entry) => {
+      const teamId = String(entry?.team_id ?? entry?.teamId ?? "").trim();
+      const captainId = String(entry?.captain_id ?? entry?.captainId ?? "").trim();
+      if (!teamId || !captainId || !teamsMap.has(teamId) || !captainsMap.has(captainId)) return;
+      selectedMap.set(teamId, { team_id: teamId, captain_id: captainId });
+    });
+    const selectedOrder = Array.from(selectedMap.keys());
+
+    const row = document.createElement("div");
+    row.className = "cp-edit-row";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+
+    const picker = document.createElement("div");
+    picker.className = "admin-picker";
+    const addWrap = document.createElement("div");
+    addWrap.className = "admin-picker-add";
+    const teamSelect = document.createElement("select");
+    const captainSelect = document.createElement("select");
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "cp-btn cp-btn-secondary";
+    addBtn.textContent = "Add";
+    const list = document.createElement("div");
+    list.className = "admin-picker-list";
+    let pickerDisabled = false;
+
+    const appendPlaceholder = (select, text) => {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = text;
+      option.selected = true;
+      select.appendChild(option);
+    };
+
+    const updateAddButton = () => {
+      addBtn.disabled = pickerDisabled || !teamSelect.value || !captainSelect.value;
+    };
+
+    const renderAddOptions = () => {
+      const previousCaptainId = captainSelect.value;
+      teamSelect.innerHTML = "";
+      captainSelect.innerHTML = "";
+      appendPlaceholder(teamSelect, "Select team...");
+      appendPlaceholder(captainSelect, "Select captain...");
+
+      Array.from(teamsMap.values()).forEach((entry) => {
+        if (selectedMap.has(entry.value)) return;
+        const option = document.createElement("option");
+        option.value = entry.value;
+        option.textContent = entry.label;
+        teamSelect.appendChild(option);
+      });
+      Array.from(captainsMap.values()).forEach((entry) => {
+        const option = document.createElement("option");
+        option.value = entry.value;
+        option.textContent = entry.label;
+        if (entry.value === previousCaptainId) option.selected = true;
+        captainSelect.appendChild(option);
+      });
+
+      teamSelect.disabled = pickerDisabled || teamSelect.options.length <= 1;
+      captainSelect.disabled = pickerDisabled || captainSelect.options.length <= 1;
+      updateAddButton();
+    };
+
+    const removeTeam = (teamId) => {
+      selectedMap.delete(teamId);
+      const index = selectedOrder.indexOf(teamId);
+      if (index >= 0) selectedOrder.splice(index, 1);
+      render();
+    };
+
+    const renderList = () => {
+      list.innerHTML = "";
+      if (!selectedOrder.length) {
+        const empty = document.createElement("div");
+        empty.className = "admin-picker-empty";
+        empty.textContent = "No teams configured.";
+        list.appendChild(empty);
+        return;
+      }
+
+      selectedOrder.forEach((teamId) => {
+        const selected = selectedMap.get(teamId);
+        const team = teamsMap.get(teamId);
+        if (!selected || !team) return;
+
+        const item = document.createElement("div");
+        item.className = "admin-picker-item";
+        const text = document.createElement("div");
+        text.className = "admin-picker-item-text";
+        text.textContent = team.label;
+
+        const selectedCaptain = document.createElement("select");
+        Array.from(captainsMap.values()).forEach((captain) => {
+          const option = document.createElement("option");
+          option.value = captain.value;
+          option.textContent = captain.label;
+          if (captain.value === selected.captain_id) option.selected = true;
+          selectedCaptain.appendChild(option);
+        });
+        selectedCaptain.disabled = pickerDisabled;
+        selectedCaptain.addEventListener("change", () => {
+          selected.captain_id = selectedCaptain.value;
+        });
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "cp-btn cp-btn-secondary";
+        removeBtn.textContent = "Remove";
+        removeBtn.disabled = pickerDisabled;
+        removeBtn.addEventListener("click", () => removeTeam(teamId));
+
+        item.appendChild(text);
+        item.appendChild(selectedCaptain);
+        item.appendChild(removeBtn);
+        list.appendChild(item);
+      });
+    };
+
+    const render = () => {
+      renderAddOptions();
+      renderList();
+    };
+
+    teamSelect.addEventListener("change", updateAddButton);
+    captainSelect.addEventListener("change", updateAddButton);
+    addBtn.addEventListener("click", () => {
+      const teamId = String(teamSelect.value || "").trim();
+      const captainId = String(captainSelect.value || "").trim();
+      if (!teamId || !captainId || selectedMap.has(teamId)) return;
+      selectedMap.set(teamId, { team_id: teamId, captain_id: captainId });
+      selectedOrder.push(teamId);
+      render();
+    });
+
+    addWrap.appendChild(teamSelect);
+    addWrap.appendChild(captainSelect);
+    addWrap.appendChild(addBtn);
+    picker.appendChild(addWrap);
+    picker.appendChild(list);
+    row.appendChild(label);
+    row.appendChild(picker);
+    render();
+
+    return {
+      row,
+      setDisabled(isDisabled) {
+        pickerDisabled = !!isDisabled;
+        render();
+      },
+      getValues() {
+        return selectedOrder.map((teamId) => {
+          const selected = selectedMap.get(teamId);
+          return {
+            team_id: selected?.team_id || teamId,
+            captain_id: selected?.captain_id || "",
+          };
+        }).filter((entry) => entry.team_id && entry.captain_id);
+      },
+    };
+  }
+
   function createCodeRow(labelText, value) {
     const row = document.createElement("div");
     row.className = "cp-edit-row";
@@ -1581,6 +1773,20 @@
     const data = await apiJson(USER_OPTIONS_URL, { method: "GET" });
     state.userOptions = Array.isArray(data?.users) ? data.users : [];
     state.userOptionsLoaded = true;
+  }
+
+  async function ensureTeamsLoaded() {
+    if (state.teamsLoaded) return;
+    const data = await apiJson(TEAMS_URL, { method: "GET" });
+    state.teams = Array.isArray(data?.teams) ? data.teams : [];
+    state.teamsLoaded = true;
+  }
+
+  async function ensureProfilesPublicLoaded() {
+    if (state.profilesPublicLoaded) return;
+    const data = await apiJson(PROFILES_PUBLIC_URL, { method: "GET" });
+    state.profilesPublic = Array.isArray(data?.profiles) ? data.profiles : [];
+    state.profilesPublicLoaded = true;
   }
 
   async function ensureCategoriesLoaded() {
@@ -3392,11 +3598,19 @@
   }
 
   async function openTournamentForm(mode, item, anchorRow) {
+    let tournamentTeams = [];
     try {
       await Promise.all([
         ensureUserOptionsLoaded(),
         ensureCategoriesLoaded(),
+        ensureTeamsLoaded(),
+        ensureProfilesPublicLoaded(),
       ]);
+      if (mode === "edit" && item?.id) {
+        const params = new URLSearchParams({ tournament_id: String(item.id) });
+        const data = await apiJson(`${TOURNAMENT_TEAMS_URL}?${params.toString()}`, { method: "GET" });
+        tournamentTeams = Array.isArray(data?.tournament_teams) ? data.tournament_teams : [];
+      }
     } catch (error) {
       setStatus(error?.message || "Failed to load references.", true);
       return;
@@ -3463,6 +3677,40 @@
     );
     const accessUsersHint = document.createElement("p");
     accessUsersHint.className = "admin-inline-value";
+    const tournamentTeamsField = createTournamentTeamsPickerRow(
+      "tournament_teams",
+      state.teams
+        .slice()
+        .sort((left, right) => String(left?.name || left?.id || "").localeCompare(String(right?.name || right?.id || "")))
+        .map((team) => {
+          const id = String(team?.id || "").trim();
+          const name = String(team?.name || "").trim();
+          return {
+            value: id,
+            label: [id, name].filter(Boolean).join(" • ") || id,
+          };
+        }),
+      state.profilesPublic
+        .slice()
+        .sort((left, right) => {
+          const leftNickname = String(left?.bga_nickname || left?.name || left?.id || "");
+          const rightNickname = String(right?.bga_nickname || right?.name || right?.id || "");
+          return leftNickname.localeCompare(rightNickname);
+        })
+        .map((profile) => {
+          const id = String(profile?.id || "").trim();
+          const nickname = String(profile?.bga_nickname || "").trim();
+          const name = String(profile?.name || "").trim();
+          const association = String(profile?.association || "").trim();
+          return {
+            value: id,
+            label: [id, nickname, name, association].filter(Boolean).join(" • ") || id,
+          };
+        }),
+      tournamentTeams
+    );
+    const tournamentTeamsHint = document.createElement("p");
+    tournamentTeamsHint.className = "admin-inline-value";
 
     form.appendChild(idField.row);
     form.appendChild(nameField.row);
@@ -3476,7 +3724,11 @@
     form.appendChild(lineupSizeTypeField.row);
     form.appendChild(lineupSizeField.row);
     form.appendChild(accessUsersField.row);
+    accessUsersField.row.classList.add("cp-edit-row-full");
     accessUsersField.row.appendChild(accessUsersHint);
+    form.appendChild(tournamentTeamsField.row);
+    tournamentTeamsField.row.classList.add("cp-edit-row-full");
+    tournamentTeamsField.row.appendChild(tournamentTeamsHint);
 
     const toggleAccessUsersState = () => {
       const isTeams = String(tournamentTypeField.select.value || "").trim() === "Teams";
@@ -3484,11 +3736,14 @@
       subtypeField.row.classList.toggle("hidden", !isTeams);
       accessUsersField.row.classList.toggle("hidden", !isTeams);
       accessUsersField.setDisabled(!(isTeams && isOfficial));
+      tournamentTeamsField.row.classList.toggle("hidden", !isTeams);
+      tournamentTeamsField.setDisabled(!isTeams);
       accessUsersHint.textContent = !isTeams
         ? "Subtype is used only for team tournaments."
         : isOfficial
           ? "Select users who will have access to this official tournament and assign role: admin or captain."
           : "Friendly tournaments are available to all captains.";
+      tournamentTeamsHint.textContent = "Select each participating team and its captain profile.";
     };
     tournamentTypeField.select.addEventListener("change", toggleAccessUsersState);
     subtypeField.select.addEventListener("change", toggleAccessUsersState);
@@ -3569,6 +3824,9 @@
         lineup_size: Number.parseInt(String(lineupSizeField.input.value || "").trim(), 10),
         access_users: accessUsersField.getValues(),
       };
+      const tournamentTeamsPayload = payload.tournament_type === "Teams"
+        ? tournamentTeamsField.getValues()
+        : [];
       if (!payload.id) {
         setStatus("Tournament id is required.", true);
         return;
@@ -3616,14 +3874,20 @@
             method: "POST",
             body: JSON.stringify(payload),
           });
-          setStatus("Tournament created.", false);
         } else {
           await apiJson(`${TOURNAMENTS_URL}/${encodeURIComponent(item.id)}`, {
             method: "PATCH",
             body: JSON.stringify(payload),
           });
-          setStatus("Tournament updated.", false);
         }
+        await apiJson(TOURNAMENT_TEAMS_URL, {
+          method: "PUT",
+          body: JSON.stringify({
+            tournament_id: payload.id,
+            teams: tournamentTeamsPayload,
+          }),
+        });
+        setStatus(mode === "create" ? "Tournament created." : "Tournament updated.", false);
         if (mode === "create") {
           sectionForm.classList.add("hidden");
           sectionForm.innerHTML = "";
@@ -4851,6 +5115,7 @@
     const items = await SECTION_CONFIG[section].load();
     state[section] = Array.isArray(items) ? items : [];
     if (section === "categories") state.categoriesLoaded = true;
+    if (section === "teams") state.teamsLoaded = true;
   }
 
   async function renderSection() {
