@@ -11308,6 +11308,31 @@ app.get("/tournament-teams", requireAdmin, async (req, res) => {
   }
 });
 
+app.get("/public/tournament-teams", async (req, res) => {
+  const tournamentId = normalizeNullableText(req.query?.tournament_id);
+  if (!tournamentId) {
+    return res.status(400).json({ ok: false, message: "tournament_id is required" });
+  }
+
+  try {
+    const tournamentTeams = await loadTournamentTeams(tournamentId);
+    return res.json({
+      ok: true,
+      tournament_id: tournamentId,
+      tournament_teams: tournamentTeams.map((team) => ({
+        id: team.id,
+        tournament_id: team.tournament_id,
+        team_id: team.team_id,
+        team_name: team.team_name,
+        team_flag: team.team_flag,
+      })),
+    });
+  } catch (error) {
+    console.error("Failed to load public tournament teams", error);
+    return res.status(500).json({ ok: false, message: "Failed to load tournament teams" });
+  }
+});
+
 app.post("/tournament-teams", requireAdmin, async (req, res) => {
   try {
     const entry = await resolveTournamentTeamReferences(

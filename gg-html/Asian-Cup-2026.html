@@ -1,0 +1,286 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --main-bg-color: #2c6da3;
+    --hover-bg-color: #24598a;
+    --accent-text-color: #fff;
+  }
+
+  body {
+    font-family: "Montserrat", sans-serif;
+  }
+
+  .asian-cup-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 10px 0;
+  }
+
+  .asian-cup-tab {
+    padding: 6px 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #333;
+    cursor: pointer;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .asian-cup-tab:hover,
+  .asian-cup-tab.active {
+    background-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+  }
+
+  .asian-cup-panel[hidden] {
+    display: none;
+  }
+
+  .asian-cup-section {
+    margin: 5px 0;
+  }
+
+  .asian-cup-section-title {
+    margin-bottom: 3px;
+    color: #222;
+    font-size: 17px;
+    font-weight: 700;
+  }
+
+  .asian-cup-text {
+    color: #333;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .asian-cup-text p {
+    margin: 0 0 12px;
+  }
+
+  .asian-cup-text p:last-child {
+    margin-bottom: 0;
+  }
+
+  .asian-cup-text ul {
+    margin: 4px 0 12px;
+    padding-left: 22px;
+  }
+
+  .asian-cup-text li {
+    margin: 3px 0;
+  }
+
+  .asian-cup-text a {
+    color: #0277bd;
+    overflow-wrap: anywhere;
+    text-decoration: none;
+  }
+
+  .asian-cup-text a:hover {
+    text-decoration: underline;
+  }
+
+  .asian-cup-teams {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 20px;
+  }
+
+  .asian-cup-team {
+    display: flex;
+    width: 300px;
+    min-height: 47px;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 2px;
+    background-color: var(--main-bg-color);
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    color: var(--accent-text-color);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .asian-cup-team img {
+    width: 35px;
+    height: 35px;
+    flex: 0 0 auto;
+    border-radius: 2px;
+    object-fit: contain;
+  }
+
+  .asian-cup-status {
+    color: #555;
+    font-size: 14px;
+  }
+
+  @media (max-width: 480px) {
+    .asian-cup-team {
+      width: 100%;
+    }
+  }
+</style>
+
+<div id="asian-cup-title" style="font-size:18px; font-weight:700; line-height:20px; padding:0 0 10px;">
+  Carcassonne Asian Cup 2026
+</div>
+
+<div class="asian-cup-tabs" id="asian-cup-tabs" role="tablist" aria-label="Tournament sections">
+  <button class="asian-cup-tab active" type="button" role="tab" aria-selected="true" aria-controls="asian-cup-overview" data-tab="overview">Overview</button>
+  <button class="asian-cup-tab" type="button" role="tab" aria-selected="false" aria-controls="asian-cup-playoffs" data-tab="playoffs">Playoffs</button>
+  <button class="asian-cup-tab" type="button" role="tab" aria-selected="false" aria-controls="asian-cup-groups" data-tab="groups">Groups Stage</button>
+  <button class="asian-cup-tab" type="button" role="tab" aria-selected="false" aria-controls="asian-cup-matches" data-tab="matches">Matches</button>
+  <button class="asian-cup-tab" type="button" role="tab" aria-selected="false" aria-controls="asian-cup-teams" data-tab="teams">Teams</button>
+  <button class="asian-cup-tab" type="button" role="tab" aria-selected="false" aria-controls="asian-cup-rules" data-tab="rules">Rules</button>
+</div>
+
+<div class="asian-cup-panel" id="asian-cup-overview" role="tabpanel" data-panel="overview">
+  <div class="asian-cup-section">
+    <div class="asian-cup-section-title">About</div>
+    <div class="asian-cup-text">
+      <p><strong>Carcassonne Asian Cup 2026</strong></p>
+      <p><strong>Draw:</strong></p>
+      <p><strong>Tournament dates:</strong> August 3th to September 6th, 2026</p>
+      <p><strong>Seeding Pots</strong><br><em>will be added soon</em></p>
+      <p>
+        <strong>Tournament format</strong><br>
+        Group Stage: two groups, each team plays against all other teams in their group.<br>
+        The best 2 teams from each group advance to the Playoffs:
+      </p>
+      <ul>
+        <li>Semi-finals: 1st team from one group vs 2nd team from another group</li>
+        <li>Match for the bronze medals</li>
+        <li>Grand Final</li>
+      </ul>
+      <p>All matches are 5 vs 5 duels in a best-of-3 format.</p>
+    </div>
+  </div>
+</div>
+
+<div class="asian-cup-panel" id="asian-cup-playoffs" role="tabpanel" data-panel="playoffs" hidden></div>
+<div class="asian-cup-panel" id="asian-cup-groups" role="tabpanel" data-panel="groups" hidden></div>
+<div class="asian-cup-panel" id="asian-cup-matches" role="tabpanel" data-panel="matches" hidden></div>
+
+<div class="asian-cup-panel" id="asian-cup-teams" role="tabpanel" data-panel="teams" hidden>
+  <div class="asian-cup-status">Loading teams…</div>
+</div>
+
+<div class="asian-cup-panel" id="asian-cup-rules" role="tabpanel" data-panel="rules" hidden>
+  <div class="asian-cup-text">
+    <strong>Rules:</strong>
+    <a href="https://drive.google.com/file/d/1jsquFyDt6ZHRvNN-F4H4u9Kd-738u6aE/view"
+       target="_blank"
+       rel="noopener noreferrer">https://drive.google.com/file/d/1jsquFyDt6ZHRvNN-F4H4u9Kd-738u6aE/view</a>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const TOURNAMENT_ID = "Asian-Cup-2026";
+    const API_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+    const tabsContainer = document.getElementById("asian-cup-tabs");
+    const tabs = Array.from(tabsContainer.querySelectorAll("[data-tab]"));
+    const panels = Array.from(document.querySelectorAll(".asian-cup-panel[data-panel]"));
+    const teamsPanel = document.getElementById("asian-cup-teams");
+
+    function showTab(tabId, updateUrl = true) {
+      const selectedTab = tabs.some((tab) => tab.dataset.tab === tabId)
+        ? tabId
+        : "overview";
+
+      tabs.forEach((tab) => {
+        const isActive = tab.dataset.tab === selectedTab;
+        tab.classList.toggle("active", isActive);
+        tab.setAttribute("aria-selected", String(isActive));
+      });
+
+      panels.forEach((panel) => {
+        panel.hidden = panel.dataset.panel !== selectedTab;
+      });
+
+      if (updateUrl) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("tab", selectedTab);
+        window.history.replaceState(null, "", url.toString());
+      }
+    }
+
+    function renderTeams(tournamentTeams) {
+      teamsPanel.replaceChildren();
+      if (!tournamentTeams.length) {
+        const empty = document.createElement("div");
+        empty.className = "asian-cup-status";
+        empty.textContent = "No teams yet.";
+        teamsPanel.appendChild(empty);
+        return;
+      }
+
+      const list = document.createElement("div");
+      list.className = "asian-cup-teams";
+
+      tournamentTeams.forEach((team) => {
+        const card = document.createElement("div");
+        card.className = "asian-cup-team";
+
+        if (team.team_flag) {
+          const logo = document.createElement("img");
+          logo.src = team.team_flag;
+          logo.alt = "";
+          card.appendChild(logo);
+        }
+
+        const name = document.createElement("span");
+        name.textContent = team.team_name || team.team_id || "";
+        card.appendChild(name);
+        list.appendChild(card);
+      });
+
+      teamsPanel.appendChild(list);
+    }
+
+    async function loadTeams() {
+      try {
+        const url = new URL(`${API_BASE}/public/tournament-teams`);
+        url.searchParams.set("tournament_id", TOURNAMENT_ID);
+        const response = await fetch(url.toString());
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        const tournamentTeams = Array.isArray(data.tournament_teams)
+          ? data.tournament_teams
+          : [];
+        tournamentTeams.sort((first, second) => (
+          (first.team_name || first.team_id || "").localeCompare(
+            second.team_name || second.team_id || "",
+            undefined,
+            { sensitivity: "base" }
+          )
+        ));
+        renderTeams(tournamentTeams);
+      } catch (error) {
+        console.error("Failed to load Asian Cup teams", error);
+        const failure = document.createElement("div");
+        failure.className = "asian-cup-status";
+        failure.textContent = "Failed to load teams.";
+        teamsPanel.replaceChildren(failure);
+      }
+    }
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => showTab(tab.dataset.tab));
+    });
+
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    showTab(requestedTab || "overview", false);
+    loadTeams();
+  })();
+</script>
