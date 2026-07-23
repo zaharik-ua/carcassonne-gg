@@ -473,6 +473,11 @@
     flex: 1 1 auto;
   }
 
+  .admin-picker-add input {
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+
   .admin-picker-list {
     display: grid;
     gap: 6px;
@@ -497,6 +502,11 @@
     line-height: 1.3;
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  .admin-picker-item input {
+    flex: 1 1 260px;
+    min-width: 0;
   }
 
   .admin-picker-empty {
@@ -1470,7 +1480,6 @@
     const addWrap = document.createElement("div");
     addWrap.className = "admin-picker-add";
     const teamSelect = document.createElement("select");
-    const captainSelect = document.createElement("select");
     const addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "cp-btn cp-btn-secondary";
@@ -1478,6 +1487,7 @@
     const list = document.createElement("div");
     list.className = "admin-picker-list";
     let pickerDisabled = false;
+    let captainSearchIndex = 0;
 
     const appendPlaceholder = (select, text) => {
       const option = document.createElement("option");
@@ -1487,16 +1497,82 @@
       select.appendChild(option);
     };
 
-    const updateAddButton = () => {
-      addBtn.disabled = pickerDisabled || !teamSelect.value || !captainSelect.value;
+    const createCaptainSearchControl = (initialCaptainId, onChange) => {
+      captainSearchIndex += 1;
+      const input = document.createElement("input");
+      input.type = "search";
+      input.placeholder = "Select captain...";
+      input.autocomplete = "off";
+      const dataList = document.createElement("datalist");
+      dataList.id = `tournament-captains-${Date.now()}-${captainSearchIndex}`;
+      input.setAttribute("list", dataList.id);
+
+      Array.from(captainsMap.values()).forEach((entry) => {
+        const option = document.createElement("option");
+        option.value = entry.label;
+        option.label = entry.value;
+        dataList.appendChild(option);
+      });
+
+      const resolveCaptainId = (rawValue) => {
+        const normalized = String(rawValue || "").trim().toLowerCase();
+        if (!normalized) return "";
+        for (const entry of captainsMap.values()) {
+          if (entry.value.toLowerCase() === normalized || entry.label.toLowerCase() === normalized) {
+            return entry.value;
+          }
+          const labelParts = entry.label
+            .split("•")
+            .map((part) => part.trim().toLowerCase())
+            .filter(Boolean);
+          if (labelParts.includes(normalized)) return entry.value;
+        }
+        return "";
+      };
+
+      const notifyChange = () => {
+        input.dataset.captainId = resolveCaptainId(input.value);
+        if (typeof onChange === "function") onChange(input.dataset.captainId);
+      };
+      input.addEventListener("input", notifyChange);
+      input.addEventListener("change", notifyChange);
+
+      const setValue = (captainId) => {
+        const normalizedId = String(captainId || "").trim();
+        const captain = captainsMap.get(normalizedId);
+        input.value = captain?.label || "";
+        input.dataset.captainId = captain ? captain.value : "";
+      };
+      setValue(initialCaptainId);
+
+      return {
+        input,
+        dataList,
+        getValue() {
+          return String(input.dataset.captainId || "").trim();
+        },
+        clear() {
+          input.value = "";
+          input.dataset.captainId = "";
+          if (typeof onChange === "function") onChange("");
+        },
+        setDisabled(isDisabled) {
+          input.disabled = !!isDisabled;
+        },
+      };
     };
 
+    const captainSearch = createCaptainSearchControl("");
+
+    const updateAddButton = () => {
+      addBtn.disabled = pickerDisabled || !teamSelect.value || !captainSearch.getValue();
+    };
+    captainSearch.input.addEventListener("input", updateAddButton);
+    captainSearch.input.addEventListener("change", updateAddButton);
+
     const renderAddOptions = () => {
-      const previousCaptainId = captainSelect.value;
       teamSelect.innerHTML = "";
-      captainSelect.innerHTML = "";
       appendPlaceholder(teamSelect, "Select team...");
-      appendPlaceholder(captainSelect, "Select captain...");
 
       Array.from(teamsMap.values()).forEach((entry) => {
         if (selectedMap.has(entry.value)) return;
@@ -1505,16 +1581,9 @@
         option.textContent = entry.label;
         teamSelect.appendChild(option);
       });
-      Array.from(captainsMap.values()).forEach((entry) => {
-        const option = document.createElement("option");
-        option.value = entry.value;
-        option.textContent = entry.label;
-        if (entry.value === previousCaptainId) option.selected = true;
-        captainSelect.appendChild(option);
-      });
 
       teamSelect.disabled = pickerDisabled || teamSelect.options.length <= 1;
-      captainSelect.disabled = pickerDisabled || captainSelect.options.length <= 1;
+      captainSearch.setDisabled(pickerDisabled || captainsMap.size === 0);
       updateAddButton();
     };
 
@@ -1546,18 +1615,10 @@
         text.className = "admin-picker-item-text";
         text.textContent = team.label;
 
-        const selectedCaptain = document.createElement("select");
-        Array.from(captainsMap.values()).forEach((captain) => {
-          const option = document.createElement("option");
-          option.value = captain.value;
-          option.textContent = captain.label;
-          if (captain.value === selected.captain_id) option.selected = true;
-          selectedCaptain.appendChild(option);
+        const selectedCaptain = createCaptainSearchControl(selected.captain_id, (captainId) => {
+          selected.captain_id = captainId;
         });
-        selectedCaptain.disabled = pickerDisabled;
-        selectedCaptain.addEventListener("change", () => {
-          selected.captain_id = selectedCaptain.value;
-        });
+        selectedCaptain.setDisabled(pickerDisabled);
 
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
@@ -1567,7 +1628,8 @@
         removeBtn.addEventListener("click", () => removeTeam(teamId));
 
         item.appendChild(text);
-        item.appendChild(selectedCaptain);
+        item.appendChild(selectedCaptain.input);
+        item.appendChild(selectedCaptain.dataList);
         item.appendChild(removeBtn);
         list.appendChild(item);
       });
@@ -1579,18 +1641,19 @@
     };
 
     teamSelect.addEventListener("change", updateAddButton);
-    captainSelect.addEventListener("change", updateAddButton);
     addBtn.addEventListener("click", () => {
       const teamId = String(teamSelect.value || "").trim();
-      const captainId = String(captainSelect.value || "").trim();
+      const captainId = captainSearch.getValue();
       if (!teamId || !captainId || selectedMap.has(teamId)) return;
       selectedMap.set(teamId, { team_id: teamId, captain_id: captainId });
       selectedOrder.push(teamId);
+      captainSearch.clear();
       render();
     });
 
     addWrap.appendChild(teamSelect);
-    addWrap.appendChild(captainSelect);
+    addWrap.appendChild(captainSearch.input);
+    addWrap.appendChild(captainSearch.dataList);
     addWrap.appendChild(addBtn);
     picker.appendChild(addWrap);
     picker.appendChild(list);
@@ -1612,6 +1675,9 @@
             captain_id: selected?.captain_id || "",
           };
         }).filter((entry) => entry.team_id && entry.captain_id);
+      },
+      hasInvalidCaptain() {
+        return selectedOrder.some((teamId) => !String(selectedMap.get(teamId)?.captain_id || "").trim());
       },
     };
   }
@@ -3833,6 +3899,10 @@
       }
       if (!payload.name) {
         setStatus("Tournament name is required.", true);
+        return;
+      }
+      if (payload.tournament_type === "Teams" && tournamentTeamsField.hasInvalidCaptain()) {
+        setStatus("Select each captain from the search suggestions.", true);
         return;
       }
       if (payload.tournament_type !== "Teams") {

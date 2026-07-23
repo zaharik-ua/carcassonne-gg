@@ -2504,6 +2504,10 @@ function getTournamentAccessUserId(user) {
   return Number.isInteger(userId) && userId > 0 ? userId : 0;
 }
 
+function getTournamentAccessProfileId(user) {
+  return String(user?.player_id || "").trim() || String(user?.bga_id || "").trim();
+}
+
 function loadTournamentAccessForUser(tournamentId, user, done) {
   const [rawTournamentId, normalizedTournamentId] = getTournamentLookupVariants(tournamentId);
   if (!rawTournamentId) {
@@ -2513,6 +2517,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
 
   const isAdmin = Number(user?.admin) === 1;
   const userId = getTournamentAccessUserId(user);
+  const profileId = getTournamentAccessProfileId(user);
 
   db.get(
     `
@@ -2531,13 +2536,24 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         t.lineup_size,
         CASE
           WHEN ? = 1 THEN ?
-          WHEN ? > 0 THEN (
+          WHEN ? > 0 AND EXISTS (
+            SELECT 1
+            FROM tournament_access_users tau_access
+            WHERE upper(trim(tau_access.tournament_id)) = upper(trim(t.id))
+              AND tau_access.user_id = ?
+          ) THEN (
             SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
             FROM tournament_access_users tau
             WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
               AND tau.user_id = ?
             LIMIT 1
           )
+          WHEN trim(?) <> '' AND EXISTS (
+            SELECT 1
+            FROM tournament_teams tt
+            WHERE upper(trim(tt.tournament_id)) = upper(trim(t.id))
+              AND trim(tt.captain_id) = trim(?)
+          ) THEN ?
           ELSE NULL
         END AS access_role,
         CASE
@@ -2548,6 +2564,12 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
             FROM tournament_access_users tau
             WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
               AND tau.user_id = ?
+          ) THEN 1
+          WHEN trim(?) <> '' AND EXISTS (
+            SELECT 1
+            FROM tournament_teams tt
+            WHERE upper(trim(tt.tournament_id)) = upper(trim(t.id))
+              AND trim(tt.captain_id) = trim(?)
           ) THEN 1
           ELSE 0
         END AS has_access
@@ -2564,13 +2586,19 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
       isAdmin ? 1 : 0,
       TOURNAMENT_ACCESS_ROLES.ADMIN,
       userId,
+      userId,
       TOURNAMENT_ACCESS_ROLES.CAPTAIN,
       userId,
+      profileId,
+      profileId,
+      TOURNAMENT_ACCESS_ROLES.CAPTAIN,
       isAdmin ? 1 : 0,
       TOURNAMENT_ACCESS_TYPES.FRIENDLY,
       TOURNAMENT_ACCESS_TYPES.FRIENDLY,
       userId,
       userId,
+      profileId,
+      profileId,
       rawTournamentId,
       normalizedTournamentId || rawTournamentId,
     ],
@@ -10484,7 +10512,7 @@ app.patch("/system-settings/:key", requireAdmin, async (req, res) => {
 app.get("/tournaments", (req, res, next) => {
   const includeAccessUsers = Number(req.user?.admin) === 1;
   const userId = getTournamentAccessUserId(req.user);
-  const currentProfileId = String(req.user?.player_id || "").trim();
+  const currentProfileId = getTournamentAccessProfileId(req.user);
   const includeNewsEditorScope = !includeAccessUsers
     && String(req.query?.scope || "").trim().toLowerCase() === "news"
     && !!currentProfileId;
@@ -10501,6 +10529,12 @@ app.get("/tournaments", (req, res, next) => {
             FROM tournament_access_users tau_filter
             WHERE upper(trim(tau_filter.tournament_id)) = upper(trim(t.id))
               AND tau_filter.user_id = ?
+          ))
+          OR (trim(?) <> '' AND EXISTS (
+            SELECT 1
+            FROM tournament_teams tt_filter
+            WHERE upper(trim(tt_filter.tournament_id)) = upper(trim(t.id))
+              AND trim(tt_filter.captain_id) = trim(?)
           ))
           )
         )
@@ -10536,13 +10570,24 @@ app.get("/tournaments", (req, res, next) => {
         t.lineup_size,
         CASE
           WHEN ? = 1 THEN ?
-          WHEN ? > 0 THEN (
+          WHEN ? > 0 AND EXISTS (
+            SELECT 1
+            FROM tournament_access_users tau_access
+            WHERE upper(trim(tau_access.tournament_id)) = upper(trim(t.id))
+              AND tau_access.user_id = ?
+          ) THEN (
             SELECT COALESCE(NULLIF(lower(trim(tau_role.role)), ''), ?)
             FROM tournament_access_users tau_role
             WHERE upper(trim(tau_role.tournament_id)) = upper(trim(t.id))
               AND tau_role.user_id = ?
             LIMIT 1
           )
+          WHEN trim(?) <> '' AND EXISTS (
+            SELECT 1
+            FROM tournament_teams tt_role
+            WHERE upper(trim(tt_role.tournament_id)) = upper(trim(t.id))
+              AND trim(tt_role.captain_id) = trim(?)
+          ) THEN ?
           ELSE NULL
         END AS access_role,
         (
@@ -10572,8 +10617,12 @@ app.get("/tournaments", (req, res, next) => {
           1,
           TOURNAMENT_ACCESS_ROLES.ADMIN,
           userId,
+          userId,
           TOURNAMENT_ACCESS_ROLES.CAPTAIN,
           userId,
+          currentProfileId,
+          currentProfileId,
+          TOURNAMENT_ACCESS_ROLES.CAPTAIN,
         ]
       : [
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
@@ -10584,14 +10633,20 @@ app.get("/tournaments", (req, res, next) => {
           0,
           TOURNAMENT_ACCESS_ROLES.ADMIN,
           userId,
+          userId,
           TOURNAMENT_ACCESS_ROLES.CAPTAIN,
           userId,
+          currentProfileId,
+          currentProfileId,
+          TOURNAMENT_ACCESS_ROLES.CAPTAIN,
           TOURNAMENT_PLAYER_HUB_VISIBILITY.VISIBLE,
           TOURNAMENT_PLAYER_HUB_VISIBILITY.VISIBLE,
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
           userId,
           userId,
+          currentProfileId,
+          currentProfileId,
         ].concat(includeNewsEditorScope
           ? [currentProfileId, NEWS_EDITOR_ACCESS_TYPES.GLOBAL, NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT]
           : []),
@@ -15802,6 +15857,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
 app.get("/matches", (req, res, next) => {
   const isAdmin = Number(req.user?.admin) === 1;
   const userId = getTournamentAccessUserId(req.user);
+  const currentProfileId = getTournamentAccessProfileId(req.user);
   const userAssociation = String(req.user?.association || "").trim().toUpperCase();
   const allowedPageSizes = [10, 20, 50];
   const matchSectionKeys = ["ongoing", "calendar", "finished"];
@@ -15846,6 +15902,12 @@ app.get("/matches", (req, res, next) => {
               FROM tournament_access_users tau
               WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
                 AND tau.user_id = ?
+            ))
+            OR (trim(?) <> '' AND EXISTS (
+              SELECT 1
+              FROM tournament_teams tt
+              WHERE upper(trim(tt.tournament_id)) = upper(trim(t.id))
+                AND trim(tt.captain_id) = trim(?)
             ))
         )
       )
@@ -15915,6 +15977,8 @@ app.get("/matches", (req, res, next) => {
         TOURNAMENT_ACCESS_TYPES.FRIENDLY,
         userId,
         userId,
+        currentProfileId,
+        currentProfileId,
         ...sectionVisibilityParams,
       ];
   const selectMatchFields = `
@@ -15955,16 +16019,34 @@ app.get("/matches", (req, res, next) => {
           WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
           LIMIT 1
         ) AS tournament_access_type,
-        (
-          SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
-          FROM tournament_access_users tau
-          WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
-            AND tau.user_id = ?
-          LIMIT 1
+        COALESCE(
+          (
+            SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
+            FROM tournament_access_users tau
+            WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
+              AND tau.user_id = ?
+            LIMIT 1
+          ),
+          CASE
+            WHEN trim(?) <> '' AND EXISTS (
+              SELECT 1
+              FROM tournament_teams tt
+              WHERE upper(trim(tt.tournament_id)) = upper(trim(m.tournament_id))
+                AND trim(tt.captain_id) = trim(?)
+            ) THEN ?
+            ELSE NULL
+          END
         ) AS tournament_access_role
       FROM matches m
     `;
-  const selectMatchParams = [TOURNAMENT_ACCESS_TYPES.FRIENDLY, TOURNAMENT_ACCESS_ROLES.CAPTAIN, userId];
+  const selectMatchParams = [
+    TOURNAMENT_ACCESS_TYPES.FRIENDLY,
+    TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+    userId,
+    currentProfileId,
+    currentProfileId,
+    TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+  ];
   const sectionSql = {
     ongoing: {
       filter: "trim(COALESCE(m.time_utc, '')) <> '' AND datetime(m.time_utc) >= datetime(?)",
@@ -16108,12 +16190,23 @@ app.get("/matches", (req, res, next) => {
           WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
           LIMIT 1
         ) AS tournament_access_type,
-        (
-          SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
-          FROM tournament_access_users tau
-          WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
-            AND tau.user_id = ?
-          LIMIT 1
+        COALESCE(
+          (
+            SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
+            FROM tournament_access_users tau
+            WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
+              AND tau.user_id = ?
+            LIMIT 1
+          ),
+          CASE
+            WHEN trim(?) <> '' AND EXISTS (
+              SELECT 1
+              FROM tournament_teams tt
+              WHERE upper(trim(tt.tournament_id)) = upper(trim(m.tournament_id))
+                AND trim(tt.captain_id) = trim(?)
+            ) THEN ?
+            ELSE NULL
+          END
         ) AS tournament_access_role
       FROM matches m
       WHERE m.deleted_at IS NULL
@@ -16121,15 +16214,27 @@ app.get("/matches", (req, res, next) => {
       ORDER BY m.time_utc DESC, m.id ASC
     `,
     isAdmin
-      ? [TOURNAMENT_ACCESS_TYPES.FRIENDLY, TOURNAMENT_ACCESS_ROLES.CAPTAIN, userId]
+      ? [
+          TOURNAMENT_ACCESS_TYPES.FRIENDLY,
+          TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+          userId,
+          currentProfileId,
+          currentProfileId,
+          TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+        ]
       : [
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
           TOURNAMENT_ACCESS_ROLES.CAPTAIN,
           userId,
+          currentProfileId,
+          currentProfileId,
+          TOURNAMENT_ACCESS_ROLES.CAPTAIN,
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
           userId,
           userId,
+          currentProfileId,
+          currentProfileId,
         ],
     (err, rows) => {
       if (err) return next(err);
