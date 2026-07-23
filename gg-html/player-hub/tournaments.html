@@ -2491,6 +2491,17 @@
       .filter((entry) => entry.userId);
   }
 
+  function normalizeTournamentCaptainTeamIds(value) {
+    const entries = Array.isArray(value)
+      ? value
+      : String(value || "").split("|");
+    return Array.from(new Set(
+      entries
+        .map((teamId) => normalizeCode(teamId))
+        .filter(Boolean)
+    ));
+  }
+
   function getTournamentAccessState(tournament, authState = {}) {
     const subtypeRaw = String(tournament?.subtype || tournament?.access_type || "").trim().toLowerCase();
     const accessType = (subtypeRaw === "official" || subtypeRaw === "closed" || subtypeRaw === "2")
@@ -2507,6 +2518,10 @@
     const currentUserEntry = currentUserAuthId
       ? accessUsers.find((entry) => entry.userId === currentUserAuthId) || null
       : null;
+    const accessViaAccessUsers = tournament?.access_via_access_users === true
+      || Number(tournament?.access_via_access_users) === 1
+      || !!currentUserEntry;
+    const captainTeamIds = normalizeTournamentCaptainTeamIds(tournament?.captain_team_ids);
     const hasClosedAccess = accessType === "Official"
       ? !!(isAdminUser || currentUserEntry || accessRole === "admin" || accessRole === "captain")
       : false;
@@ -2520,10 +2535,24 @@
       accessType,
       accessRole,
       currentUserEntry,
+      accessViaAccessUsers,
+      captainTeamIds,
       hasClosedAccess,
       canSee,
       canManage,
     };
+  }
+
+  function canOfficialCaptainAccessMatch(tournamentAccess, captainAssociationCode, match) {
+    const team1 = readMatchTeam1(match);
+    const team2 = readMatchTeam2(match);
+    const captainTeamIds = normalizeTournamentCaptainTeamIds(tournamentAccess?.captainTeamIds);
+    if (captainTeamIds.some((teamId) => teamId === team1 || teamId === team2)) {
+      return true;
+    }
+    if (!tournamentAccess?.accessViaAccessUsers) return false;
+    const association = normalizeCode(captainAssociationCode);
+    return !!association && (association === team1 || association === team2);
   }
 
   function isTournamentHiddenInPlayerHub(tournament) {
@@ -6822,9 +6851,11 @@
           if (closedTournamentMatches) {
             if (!currentTournamentAccess.hasClosedAccess) return false;
             if (canManageClosedTournamentMatches) return true;
-            const team1 = readMatchTeam1(match);
-            const team2 = readMatchTeam2(match);
-            return !!captainAssociationCode && (team1 === captainAssociationCode || team2 === captainAssociationCode);
+            return canOfficialCaptainAccessMatch(
+              currentTournamentAccess,
+              captainAssociationCode,
+              match
+            );
           }
           if (isAdminUser) {
             if (activeView === CAPTAIN_VIEWS.MATCHES && friendlyMatchesAdminAssociation) {
@@ -6994,8 +7025,11 @@
             String(currentTournamentAccess?.currentUserEntry?.role || "").trim().toLowerCase() === "captain"
             || currentTournamentRole === "captain"
           )
-          && !!captainAssociationCode
-          && (matchTeam1 === captainAssociationCode || matchTeam2 === captainAssociationCode);
+          && canOfficialCaptainAccessMatch(
+            currentTournamentAccess,
+            captainAssociationCode,
+            matchToEdit
+          );
         const isClosedTournamentCaptainResultsEditExpired = isClosedTournamentCaptainResultsEditor
           && hasMatchStartedMoreThanHoursAgo(matchToEdit, 24);
         const canEditResults = isCompletedMatchStatus(matchToEdit?.status)

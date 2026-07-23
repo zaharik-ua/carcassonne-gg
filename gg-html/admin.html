@@ -1441,7 +1441,11 @@
     };
   }
 
-  function createTournamentTeamsPickerRow(labelText, teamOptions, captainOptions, selectedEntries) {
+  function createTournamentTeamsPickerRow(labelText, teamOptions, captainOptions, selectedEntries, initialTeamType = "National") {
+    const normalizeTeamType = (value) => (
+      String(value || "").trim().toLowerCase() === "club" ? "Club" : "National"
+    );
+    let selectedTeamType = normalizeTeamType(initialTeamType);
     const teamsMap = new Map();
     (Array.isArray(teamOptions) ? teamOptions : []).forEach((entry) => {
       const value = String(entry?.value ?? "").trim();
@@ -1449,6 +1453,8 @@
       teamsMap.set(value, {
         value,
         label: String(entry?.label ?? value),
+        type: normalizeTeamType(entry?.type),
+        association: String(entry?.association ?? value).trim().toUpperCase(),
       });
     });
     const captainsMap = new Map();
@@ -1458,6 +1464,7 @@
       captainsMap.set(value, {
         value,
         label: String(entry?.label ?? value),
+        association: String(entry?.association || "").trim().toUpperCase(),
       });
     });
 
@@ -1465,7 +1472,13 @@
     (Array.isArray(selectedEntries) ? selectedEntries : []).forEach((entry) => {
       const teamId = String(entry?.team_id ?? entry?.teamId ?? "").trim();
       const captainId = String(entry?.captain_id ?? entry?.captainId ?? "").trim();
-      if (!teamId || !captainId || !teamsMap.has(teamId) || !captainsMap.has(captainId)) return;
+      const team = teamsMap.get(teamId);
+      if (
+        !teamId
+        || !captainId
+        || !team
+        || !captainsMap.has(captainId)
+      ) return;
       selectedMap.set(teamId, { team_id: teamId, captain_id: captainId });
     });
     const selectedOrder = Array.from(selectedMap.keys());
@@ -1497,8 +1510,21 @@
       select.appendChild(option);
     };
 
-    const createCaptainSearchControl = (initialCaptainId, onChange) => {
+    const getAvailableCaptains = (teamId) => {
+      const selectedTeam = teamsMap.get(String(teamId || "").trim()) || null;
+      if (selectedTeamType === "Club") {
+        return Array.from(captainsMap.values());
+      }
+      if (!selectedTeam) return [];
+      return Array.from(captainsMap.values()).filter((captain) => (
+        captain.association
+        && captain.association === selectedTeam.association
+      ));
+    };
+
+    const createCaptainSearchControl = (initialCaptainId, onChange, initialTeamId = "") => {
       captainSearchIndex += 1;
+      let activeTeamId = String(initialTeamId || "").trim();
       const input = document.createElement("input");
       input.type = "search";
       input.placeholder = "Select captain...";
@@ -1507,17 +1533,20 @@
       dataList.id = `tournament-captains-${Date.now()}-${captainSearchIndex}`;
       input.setAttribute("list", dataList.id);
 
-      Array.from(captainsMap.values()).forEach((entry) => {
-        const option = document.createElement("option");
-        option.value = entry.label;
-        option.label = entry.value;
-        dataList.appendChild(option);
-      });
+      const renderCaptainOptions = () => {
+        dataList.innerHTML = "";
+        getAvailableCaptains(activeTeamId).forEach((entry) => {
+          const option = document.createElement("option");
+          option.value = entry.label;
+          option.label = entry.value;
+          dataList.appendChild(option);
+        });
+      };
 
       const resolveCaptainId = (rawValue) => {
         const normalized = String(rawValue || "").trim().toLowerCase();
         if (!normalized) return "";
-        for (const entry of captainsMap.values()) {
+        for (const entry of getAvailableCaptains(activeTeamId)) {
           if (entry.value.toLowerCase() === normalized || entry.label.toLowerCase() === normalized) {
             return entry.value;
           }
@@ -1539,11 +1568,21 @@
 
       const setValue = (captainId) => {
         const normalizedId = String(captainId || "").trim();
-        const captain = captainsMap.get(normalizedId);
+        const captain = getAvailableCaptains(activeTeamId)
+          .find((entry) => entry.value === normalizedId);
         input.value = captain?.label || "";
         input.dataset.captainId = captain ? captain.value : "";
       };
+      const syncDisabledState = () => {
+        input.disabled = pickerDisabled;
+        input.readOnly = !pickerDisabled && selectedTeamType === "National" && !activeTeamId;
+      };
+      renderCaptainOptions();
       setValue(initialCaptainId);
+      syncDisabledState();
+      if (initialCaptainId && !input.dataset.captainId && typeof onChange === "function") {
+        onChange("");
+      }
 
       return {
         input,
@@ -1556,8 +1595,19 @@
           input.dataset.captainId = "";
           if (typeof onChange === "function") onChange("");
         },
+        setTeamId(teamId) {
+          const previousCaptainId = String(input.dataset.captainId || "").trim();
+          activeTeamId = String(teamId || "").trim();
+          renderCaptainOptions();
+          setValue(previousCaptainId);
+          syncDisabledState();
+          if (previousCaptainId && !input.dataset.captainId && typeof onChange === "function") {
+            onChange("");
+          }
+        },
         setDisabled(isDisabled) {
           input.disabled = !!isDisabled;
+          input.readOnly = !isDisabled && selectedTeamType === "National" && !activeTeamId;
         },
       };
     };
@@ -1575,6 +1625,7 @@
       appendPlaceholder(teamSelect, "Select team...");
 
       Array.from(teamsMap.values()).forEach((entry) => {
+        if (entry.type !== selectedTeamType) return;
         if (selectedMap.has(entry.value)) return;
         const option = document.createElement("option");
         option.value = entry.value;
@@ -1583,6 +1634,7 @@
       });
 
       teamSelect.disabled = pickerDisabled || teamSelect.options.length <= 1;
+      captainSearch.setTeamId(teamSelect.value);
       captainSearch.setDisabled(pickerDisabled || captainsMap.size === 0);
       updateAddButton();
     };
@@ -1615,9 +1667,13 @@
         text.className = "admin-picker-item-text";
         text.textContent = team.label;
 
-        const selectedCaptain = createCaptainSearchControl(selected.captain_id, (captainId) => {
-          selected.captain_id = captainId;
-        });
+        const selectedCaptain = createCaptainSearchControl(
+          selected.captain_id,
+          (captainId) => {
+            selected.captain_id = captainId;
+          },
+          teamId
+        );
         selectedCaptain.setDisabled(pickerDisabled);
 
         const removeBtn = document.createElement("button");
@@ -1640,7 +1696,10 @@
       renderList();
     };
 
-    teamSelect.addEventListener("change", updateAddButton);
+    teamSelect.addEventListener("change", () => {
+      captainSearch.setTeamId(teamSelect.value);
+      updateAddButton();
+    });
     addBtn.addEventListener("click", () => {
       const teamId = String(teamSelect.value || "").trim();
       const captainId = captainSearch.getValue();
@@ -1665,6 +1724,21 @@
       row,
       setDisabled(isDisabled) {
         pickerDisabled = !!isDisabled;
+        render();
+      },
+      setTeamType(teamType) {
+        const normalizedTeamType = normalizeTeamType(teamType);
+        if (normalizedTeamType !== selectedTeamType) {
+          selectedTeamType = normalizedTeamType;
+          selectedOrder.slice().forEach((teamId) => {
+            if (teamsMap.get(teamId)?.type !== selectedTeamType) {
+              selectedMap.delete(teamId);
+              const index = selectedOrder.indexOf(teamId);
+              if (index >= 0) selectedOrder.splice(index, 1);
+            }
+          });
+          captainSearch.clear();
+        }
         render();
       },
       getValues() {
@@ -3697,6 +3771,12 @@
       ["Individuals", "Teams", "Clubs", "National"],
       false
     );
+    const teamTypeField = createSelectRow(
+      "team_type",
+      String(item?.team_type || "National"),
+      ["National", "Club"],
+      false
+    );
     const categoryField = createSelectRow(
       "category",
       String(item?.category || ""),
@@ -3754,6 +3834,8 @@
           return {
             value: id,
             label: [id, name].filter(Boolean).join(" • ") || id,
+            type: String(team?.type || "National").trim(),
+            association: id,
           };
         }),
       state.profilesPublic
@@ -3771,9 +3853,11 @@
           return {
             value: id,
             label: [id, nickname, name, association].filter(Boolean).join(" • ") || id,
+            association,
           };
         }),
-      tournamentTeams
+      tournamentTeams,
+      teamTypeField.select.value
     );
     const tournamentTeamsHint = document.createElement("p");
     tournamentTeamsHint.className = "admin-inline-value";
@@ -3784,6 +3868,7 @@
     form.appendChild(logoField.row);
     form.appendChild(linkField.row);
     form.appendChild(tournamentTypeField.row);
+    form.appendChild(teamTypeField.row);
     form.appendChild(categoryField.row);
     form.appendChild(subtypeField.row);
     form.appendChild(playerHubVisibilityField.row);
@@ -3799,20 +3884,26 @@
     const toggleAccessUsersState = () => {
       const isTeams = String(tournamentTypeField.select.value || "").trim() === "Teams";
       const isOfficial = String(subtypeField.select.value || "").trim() === "Official";
+      teamTypeField.row.classList.toggle("hidden", !isTeams);
+      teamTypeField.select.disabled = !isTeams;
       subtypeField.row.classList.toggle("hidden", !isTeams);
       accessUsersField.row.classList.toggle("hidden", !isTeams);
       accessUsersField.setDisabled(!(isTeams && isOfficial));
       tournamentTeamsField.row.classList.toggle("hidden", !isTeams);
       tournamentTeamsField.setDisabled(!isTeams);
+      tournamentTeamsField.setTeamType(teamTypeField.select.value);
       accessUsersHint.textContent = !isTeams
         ? "Subtype is used only for team tournaments."
         : isOfficial
           ? "Select users who will have access to this official tournament and assign role: admin or captain."
           : "Friendly tournaments are available to all captains.";
-      tournamentTeamsHint.textContent = "Select each participating team and its captain profile.";
+      tournamentTeamsHint.textContent = teamTypeField.select.value === "National"
+        ? "Select National teams. Captains must belong to the same association as the selected team."
+        : "Select Club teams. Captains may belong to any association.";
     };
     tournamentTypeField.select.addEventListener("change", toggleAccessUsersState);
     subtypeField.select.addEventListener("change", toggleAccessUsersState);
+    teamTypeField.select.addEventListener("change", toggleAccessUsersState);
     toggleAccessUsersState();
 
     const toggleCategoryState = () => {
@@ -3883,6 +3974,7 @@
         logo: String(logoField.input.value || "").trim(),
         link: String(linkField.input.value || "").trim(),
         tournament_type: String(tournamentTypeField.select.value || "Teams").trim(),
+        team_type: String(teamTypeField.select.value || "National").trim(),
         category: String(categoryField.select.value || "").trim(),
         subtype: String(subtypeField.select.value || "Friendly").trim(),
         player_hub_visibility: String(playerHubVisibilityField.select.value || "Visible").trim(),
@@ -3906,6 +3998,7 @@
         return;
       }
       if (payload.tournament_type !== "Teams") {
+        payload.team_type = "National";
         payload.subtype = null;
         payload.access_users = [];
       } else if (payload.subtype !== "Official") {
@@ -5008,11 +5101,13 @@
     state.tournaments.forEach((item) => {
       const subtitleParts = [];
       const tournamentType = String(item?.tournament_type || item?.type || "").trim();
+      const teamType = String(item?.team_type || "").trim();
       const category = String(item?.category || "").trim();
       const subtype = String(item?.subtype || item?.access_type || "").trim();
       const playerHubVisibility = String(item?.player_hub_visibility || "").trim();
       if (item.short_title) subtitleParts.push(String(item.short_title).trim());
       if (tournamentType) subtitleParts.push(tournamentType);
+      if (tournamentType === "Teams" && teamType) subtitleParts.push(teamType);
       if (category) subtitleParts.push(category);
       if (tournamentType === "Teams" && subtype) subtitleParts.push(subtype);
       if (playerHubVisibility) subtitleParts.push(playerHubVisibility);

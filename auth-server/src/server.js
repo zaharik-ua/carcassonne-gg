@@ -284,6 +284,10 @@ const TOURNAMENT_TYPES = {
   CLUBS: "Clubs",
   NATIONAL: "National",
 };
+const TEAM_TYPES = {
+  NATIONAL: "National",
+  CLUB: "Club",
+};
 const DEFAULT_CATEGORIES = [
   { name: "Players", sort_order: 10 },
   { name: "GG", sort_order: 20 },
@@ -2404,6 +2408,17 @@ function normalizeTournamentType(value) {
   return TOURNAMENT_TYPES.TEAMS;
 }
 
+function normalizeTeamType(value) {
+  return String(value ?? "").trim().toLowerCase() === "club"
+    ? TEAM_TYPES.CLUB
+    : TEAM_TYPES.NATIONAL;
+}
+
+function isValidTeamType(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "national" || normalized === "club";
+}
+
 function normalizeTournamentPlayerHubVisibility(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
   return normalized === "hidden"
@@ -2530,6 +2545,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(t.tournament_type), ''), ?) AS tournament_type,
+        t.team_type,
         NULLIF(trim(t.category), '') AS category,
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
@@ -2572,7 +2588,22 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
               AND trim(tt.captain_id) = trim(?)
           ) THEN 1
           ELSE 0
-        END AS has_access
+        END AS has_access,
+        CASE
+          WHEN ? > 0 AND EXISTS (
+            SELECT 1
+            FROM tournament_access_users tau
+            WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
+              AND tau.user_id = ?
+          ) THEN 1
+          ELSE 0
+        END AS access_via_access_users,
+        (
+          SELECT GROUP_CONCAT(tt.team_id, '|')
+          FROM tournament_teams tt
+          WHERE upper(trim(tt.tournament_id)) = upper(trim(t.id))
+            AND trim(tt.captain_id) = trim(?)
+        ) AS captain_team_ids_csv
       FROM tournaments t
       WHERE ${buildTournamentLookupWhereClause("t.id")}
       LIMIT 1
@@ -2599,6 +2630,9 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
       userId,
       profileId,
       profileId,
+      userId,
+      userId,
+      profileId,
       rawTournamentId,
       normalizedTournamentId || rawTournamentId,
     ],
@@ -2621,25 +2655,43 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         access_type: normalizeTournamentAccessType(row.access_type),
         subtype: normalizeTournamentAccessType(row.subtype),
         tournament_type: normalizeTournamentType(row.tournament_type),
+        team_type: normalizeTeamType(row.team_type),
         category: normalizeTournamentCategory(row.tournament_type, row.category),
         player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
         lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
         lineup_size: normalizeTournamentLineupSize(row.lineup_size),
         access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
         has_access: Number(row.has_access) === 1,
+        access_via_access_users: Number(row.access_via_access_users) === 1,
+        captain_team_ids: normalizeTournamentCaptainTeamIds(row.captain_team_ids_csv),
       });
     }
   );
 }
 
+function normalizeTournamentCaptainTeamIds(value) {
+  const entries = Array.isArray(value)
+    ? value
+    : String(value || "").split("|");
+  return Array.from(new Set(
+    entries
+      .map((teamId) => String(teamId || "").trim().toUpperCase())
+      .filter(Boolean)
+  ));
+}
+
 function canClosedTournamentCaptainAccessMatch(tournament, userAssociation, team1, team2) {
   if (normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) !== TOURNAMENT_ACCESS_TYPES.OFFICIAL) return false;
   if (tournament?.access_role !== TOURNAMENT_ACCESS_ROLES.CAPTAIN) return false;
-  const association = String(userAssociation || "").trim().toUpperCase();
-  if (!association) return false;
   const normalizedTeam1 = String(team1 || "").trim().toUpperCase();
   const normalizedTeam2 = String(team2 || "").trim().toUpperCase();
-  return association === normalizedTeam1 || association === normalizedTeam2;
+  const captainTeamIds = normalizeTournamentCaptainTeamIds(tournament?.captain_team_ids);
+  if (captainTeamIds.some((teamId) => teamId === normalizedTeam1 || teamId === normalizedTeam2)) {
+    return true;
+  }
+  if (tournament?.access_via_access_users !== true) return false;
+  const association = String(userAssociation || "").trim().toUpperCase();
+  return !!association && (association === normalizedTeam1 || association === normalizedTeam2);
 }
 
 function validateTournamentAccessUserIds(userIds, done) {
@@ -2750,6 +2802,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(tournament_type), ''), ?) AS tournament_type,
+        team_type,
         NULLIF(trim(category), '') AS category,
         COALESCE(NULLIF(trim(player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(lineup_size_type, ?) AS lineup_size_type,
@@ -2782,6 +2835,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         access_type: normalizeTournamentAccessType(row.access_type),
         subtype: normalizeTournamentAccessType(row.subtype),
         tournament_type: normalizeTournamentType(row.tournament_type),
+        team_type: normalizeTeamType(row.team_type),
         category: normalizeTournamentCategory(row.tournament_type, row.category),
         player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
         lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
@@ -2917,7 +2971,7 @@ async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, 
   const [tournament, team, captain] = await Promise.all([
     dbGetAsync(
       `
-        SELECT id, tournament_type
+        SELECT id, tournament_type, team_type
         FROM tournaments
         WHERE upper(trim(id)) = upper(trim(?))
         LIMIT 1
@@ -2926,7 +2980,7 @@ async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, 
     ),
     dbGetAsync(
       `
-        SELECT id
+        SELECT id, type
         FROM teams
         WHERE upper(trim(id)) = upper(trim(?))
         LIMIT 1
@@ -2935,7 +2989,7 @@ async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, 
     ),
     dbGetAsync(
       `
-        SELECT id
+        SELECT id, association
         FROM profiles
         WHERE trim(id) = trim(?)
           AND deleted_at IS NULL
@@ -2956,6 +3010,23 @@ async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, 
   }
   if (!captain) {
     throw createTournamentTeamRequestError(400, "captain_id must reference an active profile");
+  }
+  const tournamentTeamType = normalizeTeamType(tournament.team_type);
+  const selectedTeamType = normalizeTeamType(team.type);
+  if (selectedTeamType !== tournamentTeamType) {
+    throw createTournamentTeamRequestError(
+      400,
+      `team_id must reference a ${tournamentTeamType} team`
+    );
+  }
+  if (
+    tournamentTeamType === TEAM_TYPES.NATIONAL
+    && String(captain.association || "").trim().toUpperCase() !== String(team.id || "").trim().toUpperCase()
+  ) {
+    throw createTournamentTeamRequestError(
+      400,
+      "For National tournaments, captain association must match team_id"
+    );
   }
 
   return {
@@ -4543,6 +4614,7 @@ function ensureTournamentsSchema() {
       logo TEXT,
       link TEXT,
       tournament_type TEXT NOT NULL DEFAULT 'Teams',
+      team_type TEXT NOT NULL DEFAULT 'National',
       category TEXT,
       subtype TEXT,
       access_type TEXT NOT NULL DEFAULT 'Friendly',
@@ -4568,6 +4640,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "logo", "TEXT");
       addColumnIfMissing(columns, "tournaments", "link", "TEXT");
       addColumnIfMissing(columns, "tournaments", "tournament_type", "TEXT NOT NULL DEFAULT 'Teams'");
+      addColumnIfMissing(columns, "tournaments", "team_type", "TEXT NOT NULL DEFAULT 'National'");
       addColumnIfMissing(columns, "tournaments", "category", "TEXT");
       addColumnIfMissing(columns, "tournaments", "subtype", "TEXT");
       addColumnIfMissing(columns, "tournaments", "access_type", "TEXT NOT NULL DEFAULT 'Friendly'");
@@ -4581,6 +4654,10 @@ function ensureTournamentsSchema() {
           UPDATE tournaments
           SET
             tournament_type = COALESCE(NULLIF(trim(tournament_type), ''), 'Teams'),
+            team_type = CASE
+              WHEN lower(trim(COALESCE(team_type, ''))) = 'club' THEN 'Club'
+              ELSE 'National'
+            END,
             category = CASE
               WHEN COALESCE(NULLIF(trim(category), ''), '') = '' THEN NULL
               WHEN lower(trim(tournament_type)) IN ('individuals', 'individual', 'teams', 'team') THEN category
@@ -4603,7 +4680,7 @@ function ensureTournamentsSchema() {
         `,
         (backfillErr) => {
           if (backfillErr) {
-            console.error("Failed to backfill tournaments subtype and visibility", backfillErr);
+            console.error("Failed to backfill tournaments type settings and visibility", backfillErr);
           }
         }
       );
@@ -10564,6 +10641,7 @@ app.get("/tournaments", (req, res, next) => {
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(t.tournament_type), ''), ?) AS tournament_type,
+        t.team_type,
         NULLIF(trim(t.category), '') AS category,
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
@@ -10602,7 +10680,22 @@ app.get("/tournaments", (req, res, next) => {
           )
           FROM tournament_access_users tau
           WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
-        ) AS access_users_csv
+        ) AS access_users_csv,
+        CASE
+          WHEN ? > 0 AND EXISTS (
+            SELECT 1
+            FROM tournament_access_users tau_current
+            WHERE upper(trim(tau_current.tournament_id)) = upper(trim(t.id))
+              AND tau_current.user_id = ?
+          ) THEN 1
+          ELSE 0
+        END AS access_via_access_users,
+        (
+          SELECT GROUP_CONCAT(tt_current.team_id, '|')
+          FROM tournament_teams tt_current
+          WHERE upper(trim(tt_current.tournament_id)) = upper(trim(t.id))
+            AND trim(tt_current.captain_id) = trim(?)
+        ) AS captain_team_ids_csv
       FROM tournaments t
       ${visibilitySql}
       ORDER BY t.id COLLATE NOCASE ASC
@@ -10623,6 +10716,9 @@ app.get("/tournaments", (req, res, next) => {
           currentProfileId,
           currentProfileId,
           TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+          userId,
+          userId,
+          currentProfileId,
         ]
       : [
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
@@ -10639,6 +10735,9 @@ app.get("/tournaments", (req, res, next) => {
           currentProfileId,
           currentProfileId,
           TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+          userId,
+          userId,
+          currentProfileId,
           TOURNAMENT_PLAYER_HUB_VISIBILITY.VISIBLE,
           TOURNAMENT_PLAYER_HUB_VISIBILITY.VISIBLE,
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
@@ -10664,11 +10763,14 @@ app.get("/tournaments", (req, res, next) => {
             access_type: normalizeTournamentAccessType(row.access_type),
             subtype: row.subtype ? normalizeTournamentAccessType(row.subtype) : null,
             tournament_type: normalizeTournamentType(row.tournament_type),
+            team_type: normalizeTeamType(row.team_type),
             category: normalizeTournamentCategory(row.tournament_type, row.category),
             player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
             lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
             lineup_size: normalizeTournamentLineupSize(row.lineup_size),
             access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
+            access_via_access_users: Number(row.access_via_access_users) === 1,
+            captain_team_ids: normalizeTournamentCaptainTeamIds(row.captain_team_ids_csv),
           };
           if (includeAccessUsers) {
             tournament.access_user_ids = String(row.access_user_ids_csv || "")
@@ -10702,6 +10804,8 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
+  const requestedTeamType = normalizeNullableText(req.body?.team_type);
+  const teamType = normalizeTeamType(requestedTeamType);
   const requestedCategory = normalizeCategoryName(req.body?.category);
   const subtype = normalizeTournamentSubtypeForType(tournamentType, req.body?.subtype ?? req.body?.access_type);
   const playerHubVisibility = normalizeTournamentPlayerHubVisibility(req.body?.player_hub_visibility);
@@ -10725,6 +10829,9 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   }
   if (!name) {
     return res.status(400).json({ ok: false, message: "name is required" });
+  }
+  if (tournamentType === TOURNAMENT_TYPES.TEAMS && requestedTeamType && !isValidTeamType(requestedTeamType)) {
+    return res.status(400).json({ ok: false, message: "team_type must be National or Club" });
   }
   if (lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED && !lineupSize) {
     return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
@@ -10771,6 +10878,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   logo,
                   link,
                   tournament_type,
+                  team_type,
                   category,
                   subtype,
                   access_type,
@@ -10780,9 +10888,9 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
-              [id, name, shortTitle, logo, link, tournamentType, category, subtype, accessType, playerHubVisibility, lineupSizeType, lineupSize],
+              [id, name, shortTitle, logo, link, tournamentType, teamType, category, subtype, accessType, playerHubVisibility, lineupSizeType, lineupSize],
               (insertErr) => {
                 if (insertErr) {
                   db.run("ROLLBACK");
@@ -10829,6 +10937,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
+  const requestedTeamType = normalizeNullableText(req.body?.team_type);
   const requestedCategory = normalizeCategoryName(req.body?.category);
   const subtype = normalizeTournamentSubtypeForType(tournamentType, req.body?.subtype ?? req.body?.access_type);
   const playerHubVisibility = normalizeTournamentPlayerHubVisibility(req.body?.player_hub_visibility);
@@ -10856,6 +10965,9 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
   if (!name) {
     return res.status(400).json({ ok: false, message: "name is required" });
   }
+  if (tournamentType === TOURNAMENT_TYPES.TEAMS && requestedTeamType && !isValidTeamType(requestedTeamType)) {
+    return res.status(400).json({ ok: false, message: "team_type must be National or Club" });
+  }
   if (lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED && !lineupSize) {
     return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
   }
@@ -10871,7 +10983,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
 
   return db.get(
     `
-      SELECT id
+      SELECT id, team_type
       FROM tournaments
       WHERE ${buildTournamentLookupWhereClause("id")}
       LIMIT 1
@@ -10884,6 +10996,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
       if (!currentRow) {
         return res.status(404).json({ ok: false, message: "Tournament not found" });
       }
+      const teamType = normalizeTeamType(requestedTeamType || currentRow.team_type);
 
       return validateTournamentAccessUserIds(
         subtype === TOURNAMENT_ACCESS_TYPES.OFFICIAL ? requestedAccessUsers : [],
@@ -10904,6 +11017,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                   logo = ?,
                   link = ?,
                   tournament_type = ?,
+                  team_type = ?,
                   category = ?,
                   subtype = ?,
                   access_type = ?,
@@ -10920,6 +11034,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                 logo,
                 link,
                 tournamentType,
+                teamType,
                 category,
                 subtype,
                 accessType,
@@ -15929,8 +16044,32 @@ app.get("/matches", (req, res, next) => {
             AND tau.user_id = ?
           LIMIT 1
         ), '') = ?
-        OR upper(trim(COALESCE(m.team_1, ''))) = upper(trim(?))
-        OR upper(trim(COALESCE(m.team_2, ''))) = upper(trim(?))
+        OR (
+          ? > 0
+          AND EXISTS (
+            SELECT 1
+            FROM tournament_access_users tau
+            WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
+              AND tau.user_id = ?
+          )
+          AND (
+            upper(trim(COALESCE(m.team_1, ''))) = upper(trim(?))
+            OR upper(trim(COALESCE(m.team_2, ''))) = upper(trim(?))
+          )
+        )
+        OR (
+          trim(?) <> ''
+          AND EXISTS (
+            SELECT 1
+            FROM tournament_teams tt
+            WHERE upper(trim(tt.tournament_id)) = upper(trim(m.tournament_id))
+              AND trim(tt.captain_id) = trim(?)
+              AND (
+                upper(trim(tt.team_id)) = upper(trim(COALESCE(m.team_1, '')))
+                OR upper(trim(tt.team_id)) = upper(trim(COALESCE(m.team_2, '')))
+              )
+          )
+        )
       )
     `;
   const baseWhereClauses = ["m.deleted_at IS NULL"];
@@ -15961,8 +16100,12 @@ app.get("/matches", (req, res, next) => {
         TOURNAMENT_ACCESS_ROLES.CAPTAIN,
         userId,
         TOURNAMENT_ACCESS_ROLES.ADMIN,
+        userId,
+        userId,
         userAssociation,
         userAssociation,
+        currentProfileId,
+        currentProfileId,
       ];
   const sectionWhereSql = `
       WHERE ${baseWhereClauses.join("\n        AND ")}
@@ -16036,7 +16179,22 @@ app.get("/matches", (req, res, next) => {
             ) THEN ?
             ELSE NULL
           END
-        ) AS tournament_access_role
+        ) AS tournament_access_role,
+        CASE
+          WHEN ? > 0 AND EXISTS (
+            SELECT 1
+            FROM tournament_access_users tau_current
+            WHERE upper(trim(tau_current.tournament_id)) = upper(trim(m.tournament_id))
+              AND tau_current.user_id = ?
+          ) THEN 1
+          ELSE 0
+        END AS tournament_access_via_access_users,
+        (
+          SELECT GROUP_CONCAT(tt_current.team_id, '|')
+          FROM tournament_teams tt_current
+          WHERE upper(trim(tt_current.tournament_id)) = upper(trim(m.tournament_id))
+            AND trim(tt_current.captain_id) = trim(?)
+        ) AS tournament_captain_team_ids_csv
       FROM matches m
     `;
   const selectMatchParams = [
@@ -16046,6 +16204,9 @@ app.get("/matches", (req, res, next) => {
     currentProfileId,
     currentProfileId,
     TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+    userId,
+    userId,
+    currentProfileId,
   ];
   const sectionSql = {
     ongoing: {
@@ -16207,7 +16368,22 @@ app.get("/matches", (req, res, next) => {
             ) THEN ?
             ELSE NULL
           END
-        ) AS tournament_access_role
+        ) AS tournament_access_role,
+        CASE
+          WHEN ? > 0 AND EXISTS (
+            SELECT 1
+            FROM tournament_access_users tau_current
+            WHERE upper(trim(tau_current.tournament_id)) = upper(trim(m.tournament_id))
+              AND tau_current.user_id = ?
+          ) THEN 1
+          ELSE 0
+        END AS tournament_access_via_access_users,
+        (
+          SELECT GROUP_CONCAT(tt_current.team_id, '|')
+          FROM tournament_teams tt_current
+          WHERE upper(trim(tt_current.tournament_id)) = upper(trim(m.tournament_id))
+            AND trim(tt_current.captain_id) = trim(?)
+        ) AS tournament_captain_team_ids_csv
       FROM matches m
       WHERE m.deleted_at IS NULL
       ${visibilitySql}
@@ -16221,6 +16397,9 @@ app.get("/matches", (req, res, next) => {
           currentProfileId,
           currentProfileId,
           TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+          userId,
+          userId,
+          currentProfileId,
         ]
       : [
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
@@ -16229,6 +16408,9 @@ app.get("/matches", (req, res, next) => {
           currentProfileId,
           currentProfileId,
           TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+          userId,
+          userId,
+          currentProfileId,
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
           TOURNAMENT_ACCESS_TYPES.FRIENDLY,
           userId,
@@ -16247,7 +16429,12 @@ app.get("/matches", (req, res, next) => {
           : null;
         if (tournamentAccessRole === TOURNAMENT_ACCESS_ROLES.ADMIN) return true;
         return canClosedTournamentCaptainAccessMatch(
-          { access_type: tournamentAccessType, access_role: tournamentAccessRole },
+          {
+            access_type: tournamentAccessType,
+            access_role: tournamentAccessRole,
+            access_via_access_users: Number(row?.tournament_access_via_access_users) === 1,
+            captain_team_ids: normalizeTournamentCaptainTeamIds(row?.tournament_captain_team_ids_csv),
+          },
           userAssociation,
           row?.team_1,
           row?.team_2
