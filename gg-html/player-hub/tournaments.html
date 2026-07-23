@@ -473,6 +473,117 @@
     gap: 2px;
   }
 
+  .cp-divider-vertical {
+    width: 1px;
+    background-color: #dfdfdf;
+    margin: 0 6px;
+    align-self: stretch;
+    border-radius: 1px;
+  }
+
+  .cp-player-main {
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .cp-player-avatar {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border-radius: 5px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #eef2f6;
+  }
+
+  .cp-player-nick {
+    font-size: 16px;
+    line-height: 1.1;
+    color: #222;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cp-player-name {
+    font-size: 13px;
+    line-height: 1.1;
+    color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cp-team-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 2px;
+  }
+
+  .cp-team-section-head .cp-edit-btn {
+    margin-left: 0;
+    flex-shrink: 0;
+  }
+
+  .cp-team-empty {
+    padding: 12px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .cp-team-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    padding: 16px;
+    overflow-y: auto;
+    background: rgba(24, 31, 41, 0.42);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .cp-team-modal {
+    width: min(100%, 520px);
+    margin: auto 0;
+    padding: 16px;
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 16px 36px rgba(15, 28, 48, 0.22);
+    display: grid;
+    gap: 12px;
+  }
+
+  .cp-team-modal-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #222;
+  }
+
+  .cp-team-modal-fields {
+    display: grid;
+    gap: 8px;
+  }
+
+  .cp-team-modal-field {
+    display: grid;
+    gap: 6px;
+  }
+
+  .cp-team-modal-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
   .cp-edit-btn {
     border: 1px solid #c8ced8;
     background: #fff;
@@ -1552,6 +1663,7 @@
   const MATCHES_URL = `${AUTH_BASE}/matches`;
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const TOURNAMENT_PLAYERS_URL = `${AUTH_BASE}/tournament-players`;
   const DUELS_URL = `${AUTH_BASE}/duels`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const PROFILES_URL = `${AUTH_BASE}/profiles`;
@@ -2086,6 +2198,475 @@
     const name = String(profile?.name || "").trim();
     const pid = String(profile?.id ?? profile?.player_id ?? "").trim();
     return nick || name || pid || "-";
+  }
+
+  function buildBgaAvatarUrl(playerId, avatar) {
+    const playerIdText = String(playerId || "").trim();
+    const avatarText = String(avatar || "").trim();
+    if (!playerIdText || !avatarText || !/^\d+$/.test(playerIdText)) return "";
+    const playerIdNumber = Number(playerIdText);
+    if (!Number.isFinite(playerIdNumber)) return "";
+    const firstFolder = String(Math.floor(playerIdNumber / 100000000));
+    const secondFolder = String(Math.floor(playerIdNumber / 1000000));
+    const thirdFolder = String(Math.floor(playerIdNumber / 1000));
+    return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+  }
+
+  function createTournamentPlayerDropdown(initialValue, options, config = {}) {
+    const normalizedOptions = (Array.isArray(options) ? options : [])
+      .map((option) => ({
+        value: String(option?.value || "").trim(),
+        label: String(option?.label || option?.value || "").trim(),
+      }));
+    let value = String(initialValue || "").trim();
+    if (!normalizedOptions.some((option) => option.value === value)) value = "";
+
+    const root = document.createElement("div");
+    root.className = "cp-dd";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "cp-dd-btn";
+    const buttonContent = document.createElement("span");
+    buttonContent.className = "cp-dd-btn-content";
+    const chevron = document.createElement("span");
+    chevron.className = "cp-dd-chevron";
+    chevron.textContent = "▾";
+    button.appendChild(buttonContent);
+    button.appendChild(chevron);
+
+    const menu = document.createElement("div");
+    menu.className = "cp-dd-menu";
+    const searchWrap = document.createElement("div");
+    searchWrap.className = "cp-dd-search";
+    const searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Type to filter...";
+    searchWrap.appendChild(searchInput);
+    menu.appendChild(searchWrap);
+    let filterQuery = "";
+
+    const findOption = (nextValue) => (
+      normalizedOptions.find((option) => option.value === String(nextValue || "").trim()) || null
+    );
+    const renderButton = () => {
+      buttonContent.innerHTML = "";
+      const selected = findOption(value) || findOption("");
+      const text = document.createElement("span");
+      text.textContent = selected?.label || "Select player";
+      if (!value) text.style.color = "#999";
+      buttonContent.appendChild(text);
+    };
+    const close = () => {
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      button.classList.remove("open");
+    };
+    const setValue = (nextValue, trigger = false) => {
+      const next = findOption(nextValue);
+      if (!next) return;
+      value = next.value;
+      renderButton();
+      menu.querySelectorAll(".cp-dd-option").forEach((optionButton) => {
+        optionButton.classList.toggle("active", optionButton.dataset.value === value);
+      });
+      if (trigger && typeof config.onChange === "function") config.onChange(value);
+    };
+    const renderOptions = () => {
+      menu.querySelectorAll(".cp-dd-option").forEach((node) => node.remove());
+      const query = filterQuery.trim().toLowerCase();
+      normalizedOptions
+        .filter((option) => {
+          if (option.value === "__add_new__") return true;
+          if (!query) return true;
+          return `${option.label} ${option.value}`.toLowerCase().includes(query);
+        })
+        .forEach((option) => {
+          const optionButton = document.createElement("button");
+          optionButton.type = "button";
+          optionButton.className = "cp-dd-option";
+          optionButton.dataset.value = option.value;
+          optionButton.textContent = option.label || option.value;
+          optionButton.classList.toggle("active", option.value === value);
+          optionButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+            setValue(option.value, true);
+            close();
+          });
+          menu.appendChild(optionButton);
+        });
+    };
+    const open = () => {
+      if (button.disabled) return;
+      if (typeof config.onBeforeOpen === "function") config.onBeforeOpen();
+      filterQuery = "";
+      searchInput.value = "";
+      renderOptions();
+      menu.classList.add("open");
+      menu.style.maxHeight = `${Math.min(menu.scrollHeight, 300)}px`;
+      button.classList.add("open");
+      try {
+        searchInput.focus({ preventScroll: true });
+      } catch (_error) {
+        searchInput.focus();
+      }
+    };
+
+    searchInput.addEventListener("click", (event) => event.stopPropagation());
+    searchInput.addEventListener("keydown", (event) => event.stopPropagation());
+    searchInput.addEventListener("input", () => {
+      filterQuery = searchInput.value;
+      renderOptions();
+      menu.style.maxHeight = `${Math.min(menu.scrollHeight, 300)}px`;
+    });
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menu.classList.contains("open")) close();
+      else open();
+    });
+    document.addEventListener("click", (event) => {
+      if (!root.contains(event.target)) close();
+    }, config.signal ? { signal: config.signal } : undefined);
+
+    renderButton();
+    renderOptions();
+    root.appendChild(button);
+    root.appendChild(menu);
+    button.disabled = !!config.disabled;
+    button.classList.toggle("disabled", !!config.disabled);
+    return {
+      root,
+      getValue: () => value,
+      setValue,
+      close,
+    };
+  }
+
+  function createTournamentPlayerInline(associationCode, tournamentId, allProfiles, onCreated, onCancel) {
+    const wrap = document.createElement("div");
+    wrap.style.padding = "8px";
+    wrap.style.border = "1px solid #e0e0e0";
+    wrap.style.borderRadius = "4px";
+    wrap.style.display = "grid";
+    wrap.style.gap = "6px";
+
+    const bgaIdInput = document.createElement("input");
+    bgaIdInput.type = "text";
+    bgaIdInput.placeholder = "BGA ID";
+    const nicknameInput = document.createElement("input");
+    nicknameInput.type = "text";
+    nicknameInput.placeholder = "BGA nickname";
+    const associationInput = document.createElement("input");
+    associationInput.type = "text";
+    associationInput.value = associationCode;
+    associationInput.readOnly = true;
+    [bgaIdInput, nicknameInput, associationInput].forEach((input) => {
+      input.style.height = "30px";
+      input.style.border = "1px solid #c8ced8";
+      input.style.borderRadius = "4px";
+      input.style.padding = "4px 8px";
+      input.style.boxSizing = "border-box";
+      wrap.appendChild(input);
+    });
+    associationInput.style.background = "#f3f4f6";
+
+    const error = document.createElement("div");
+    error.className = "cp-edit-error cp-hidden";
+    wrap.appendChild(error);
+    const actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.gap = "8px";
+    const createButton = document.createElement("button");
+    createButton.type = "button";
+    createButton.className = "cp-btn cp-btn-primary";
+    createButton.textContent = "Create";
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "cp-btn cp-btn-secondary";
+    cancelButton.textContent = "Cancel";
+    actions.appendChild(createButton);
+    actions.appendChild(cancelButton);
+    wrap.appendChild(actions);
+
+    const setError = (message) => {
+      error.textContent = String(message || "");
+      error.classList.toggle("cp-hidden", !message);
+    };
+    cancelButton.addEventListener("click", onCancel);
+    createButton.addEventListener("click", async () => {
+      setError("");
+      const playerId = bgaIdInput.value.trim();
+      const nickname = nicknameInput.value.trim();
+      if (!/^\d{6,9}$/.test(playerId)) {
+        setError("BGA ID must be 6-9 digits.");
+        return;
+      }
+      if (!nickname) {
+        setError("BGA nickname is required.");
+        return;
+      }
+      createButton.disabled = true;
+      createButton.textContent = "Creating...";
+      try {
+        const response = await fetch(PROFILES_URL, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: playerId,
+            bga_nickname: nickname,
+            association: associationCode,
+            tournament_id: tournamentId,
+          }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok) {
+          setError(result?.message || "Failed to create profile.");
+          return;
+        }
+        const profile = {
+          ...(result.profile || {}),
+          id: String(result?.profile?.id || playerId).trim(),
+          bga_nickname: String(result?.profile?.bga_nickname || nickname).trim(),
+          association: normalizeCode(result?.profile?.association || associationCode),
+        };
+        allProfiles.push(profile);
+        onCreated(profile);
+      } catch (_error) {
+        setError("Failed to create profile.");
+      } finally {
+        createButton.disabled = false;
+        createButton.textContent = "Create";
+      }
+    });
+    return wrap;
+  }
+
+  function openManageTournamentTeamModal(team, allProfiles, tournamentId) {
+    const teamId = normalizeCode(team?.team_id);
+    const teamName = String(team?.team_name || teamId || "Team").trim();
+    const captainId = String(team?.captain_id || "").trim();
+    const initialPlayers = Array.isArray(team?.players) ? team.players : [];
+    const initialPlayerIds = initialPlayers
+      .map((player) => String(player?.player_id || player?.id || "").trim())
+      .filter(Boolean);
+    let selectedIds = [
+      ...(captainId ? [captainId] : []),
+      ...initialPlayerIds.filter((playerId) => playerId !== captainId),
+    ].slice(0, 10);
+    while (selectedIds.length < 10) selectedIds.push("");
+
+    const overlay = document.createElement("div");
+    overlay.className = "cp-team-modal-overlay";
+    const modal = document.createElement("div");
+    modal.className = "cp-team-modal";
+    const title = document.createElement("div");
+    title.className = "cp-team-modal-title";
+    title.textContent = `Manage team: ${teamName}`;
+    const fields = document.createElement("div");
+    fields.className = "cp-team-modal-fields";
+    const error = document.createElement("div");
+    error.className = "cp-edit-error cp-hidden";
+    const actions = document.createElement("div");
+    actions.className = "cp-team-modal-actions";
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "cp-btn cp-btn-secondary";
+    cancelButton.textContent = "Cancel";
+    const saveButton = document.createElement("button");
+    saveButton.type = "button";
+    saveButton.className = "cp-btn cp-btn-primary";
+    saveButton.textContent = "Save";
+    actions.appendChild(cancelButton);
+    actions.appendChild(saveButton);
+    modal.appendChild(title);
+    modal.appendChild(fields);
+    modal.appendChild(error);
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const modalController = new AbortController();
+    let fieldsController = null;
+    const close = () => {
+      fieldsController?.abort();
+      modalController.abort();
+      overlay.remove();
+    };
+    const setError = (message) => {
+      error.textContent = String(message || "");
+      error.classList.toggle("cp-hidden", !message);
+    };
+    const getCandidateProfiles = () => {
+      const byId = new Map();
+      allProfiles
+        .filter((profile) => normalizeCode(profile?.association) === teamId)
+        .forEach((profile) => byId.set(String(profile?.id || "").trim(), profile));
+      if (captainId && !byId.has(captainId)) {
+        const captainProfile = allProfiles.find((profile) => String(profile?.id || "").trim() === captainId);
+        byId.set(captainId, captainProfile || {
+          id: captainId,
+          bga_nickname: team?.captain_bga_nickname,
+          name: team?.captain_name,
+        });
+      }
+      return Array.from(byId.values())
+        .filter((profile) => String(profile?.id || "").trim())
+        .sort((a, b) => playerLabel(a).localeCompare(playerLabel(b)));
+    };
+    const renderFields = () => {
+      fieldsController?.abort();
+      fieldsController = new AbortController();
+      fields.innerHTML = "";
+      const playerOptions = [{ value: "", label: "Select player" }]
+        .concat(getCandidateProfiles().map((profile) => ({
+          value: String(profile?.id || "").trim(),
+          label: playerLabel(profile),
+        })))
+        .concat([{ value: "__add_new__", label: "Add new player" }]);
+      const dropdowns = [];
+
+      selectedIds.forEach((selectedId, index) => {
+        const field = document.createElement("div");
+        field.className = "cp-team-modal-field";
+        const inlineArea = document.createElement("div");
+        const dropdown = createTournamentPlayerDropdown(selectedId, playerOptions, {
+          disabled: !!captainId && index === 0,
+          signal: fieldsController.signal,
+          onBeforeOpen: () => dropdowns.forEach((entry) => entry.close()),
+          onChange: (nextValue) => {
+            if (nextValue === "__add_new__") {
+              selectedIds[index] = "";
+              dropdown.setValue("");
+              inlineArea.innerHTML = "";
+              inlineArea.appendChild(createTournamentPlayerInline(
+                teamId,
+                tournamentId,
+                allProfiles,
+                (profile) => {
+                  selectedIds[index] = String(profile?.id || "").trim();
+                  renderFields();
+                },
+                () => {
+                  inlineArea.innerHTML = "";
+                }
+              ));
+              return;
+            }
+            selectedIds[index] = nextValue;
+            inlineArea.innerHTML = "";
+          },
+        });
+        dropdowns.push(dropdown);
+        field.appendChild(dropdown.root);
+        field.appendChild(inlineArea);
+        fields.appendChild(field);
+      });
+    };
+
+    cancelButton.addEventListener("click", close, { signal: modalController.signal });
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) close();
+    }, { signal: modalController.signal });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") close();
+    }, { signal: modalController.signal });
+    saveButton.addEventListener("click", async () => {
+      setError("");
+      const playerIds = selectedIds.map((playerId) => String(playerId || "").trim()).filter(Boolean);
+      if (new Set(playerIds).size !== playerIds.length) {
+        setError("A player cannot be selected more than once.");
+        return;
+      }
+      saveButton.disabled = true;
+      saveButton.textContent = "Saving...";
+      try {
+        const response = await fetch(TOURNAMENT_PLAYERS_URL, {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tournament_id: tournamentId,
+            team_id: teamId,
+            player_ids: playerIds,
+          }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok) {
+          setError(result?.message || "Failed to save team players.");
+          return;
+        }
+        close();
+        initCaptainPage();
+      } catch (_error) {
+        setError("Failed to save team players.");
+      } finally {
+        saveButton.disabled = false;
+        saveButton.textContent = "Save";
+      }
+    }, { signal: modalController.signal });
+    renderFields();
+  }
+
+  function createTournamentPlayerRow(player) {
+    const row = document.createElement("div");
+    row.className = "cp-match-row";
+    const avatarUrl = buildBgaAvatarUrl(player?.player_id || player?.id, player?.avatar);
+    if (avatarUrl) {
+      const avatar = document.createElement("img");
+      avatar.className = "cp-player-avatar";
+      avatar.src = avatarUrl;
+      avatar.alt = "";
+      row.appendChild(avatar);
+      const divider = document.createElement("div");
+      divider.className = "cp-divider-vertical";
+      row.appendChild(divider);
+    }
+    const main = document.createElement("div");
+    main.className = "cp-player-main";
+    const nickname = document.createElement("div");
+    nickname.className = "cp-player-nick";
+    nickname.textContent = String(player?.bga_nickname || player?.player_id || player?.id || "-").trim() || "-";
+    main.appendChild(nickname);
+    const fullName = String(player?.name || "").trim();
+    if (fullName) {
+      const name = document.createElement("div");
+      name.className = "cp-player-name";
+      name.textContent = fullName;
+      main.appendChild(name);
+    }
+    row.appendChild(main);
+    return row;
+  }
+
+  function renderTournamentPlayersSection(team, allProfiles, tournamentId) {
+    const section = document.createElement("div");
+    section.className = "captain-section-shell";
+    const header = document.createElement("div");
+    header.className = "cp-team-section-head";
+    header.appendChild(renderSectionTitle(`Players: ${String(team?.team_name || team?.team_id || "Team").trim()}`));
+    const manageButton = document.createElement("button");
+    manageButton.type = "button";
+    manageButton.className = "cp-edit-btn";
+    manageButton.textContent = "Manage team";
+    manageButton.addEventListener("click", () => {
+      openManageTournamentTeamModal(team, allProfiles, tournamentId);
+    });
+    header.appendChild(manageButton);
+    section.appendChild(header);
+
+    const list = document.createElement("div");
+    list.className = "captain-list";
+    const players = Array.isArray(team?.players) ? team.players : [];
+    if (!players.length) {
+      const empty = document.createElement("div");
+      empty.className = "cp-team-empty";
+      empty.textContent = "No players selected.";
+      list.appendChild(empty);
+    } else {
+      players.forEach((player) => list.appendChild(createTournamentPlayerRow(player)));
+    }
+    section.appendChild(list);
+    return section;
   }
 
   function parseNullableInt(value) {
@@ -3179,9 +3760,26 @@
       requestOptions: options.requestOptions || {},
     };
 
+    const tournamentTeams = Array.isArray(options.tournamentTeams) ? options.tournamentTeams : [];
+    tournamentTeams.forEach((team) => {
+      contentEl.appendChild(renderTournamentPlayersSection(
+        team,
+        Array.isArray(options.allProfiles) ? options.allProfiles : [],
+        String(options.tournamentId || "").trim()
+      ));
+    });
+
     const calendar = normalizeMatchesForSection("calendar", matches);
     const ongoing = normalizeMatchesForSection("ongoing", matches);
     const finished = normalizeMatchesForSection("finished", matches);
+    const hasAnyMatchSection = (
+      ongoing.length > 0
+      || calendar.length > 0
+      || finished.length > 0
+      || matchesPaginationState.ongoing.totalItems > 0
+      || matchesPaginationState.calendar.totalItems > 0
+      || matchesPaginationState.finished.totalItems > 0
+    );
 
     if (ongoing.length > 0 || matchesPaginationState.ongoing.totalItems > 0) {
       contentEl.appendChild(renderSectionBlock("Ongoing", ongoing, teamsById, lineupsByMatch, profilesById, getMatchesSectionOptions("ongoing", matchesListContext.options)));
@@ -3191,6 +3789,12 @@
     }
     if (finished.length > 0 || matchesPaginationState.finished.totalItems > 0) {
       contentEl.appendChild(renderSectionBlock("Finished", finished, teamsById, lineupsByMatch, profilesById, getMatchesSectionOptions("finished", matchesListContext.options)));
+    }
+    if (!hasAnyMatchSection) {
+      const emptyMatches = document.createElement("div");
+      emptyMatches.className = "captain-alert";
+      emptyMatches.textContent = String(options.emptyMatchesMessage || "No matches found for this tournament.");
+      contentEl.appendChild(emptyMatches);
     }
   }
 
@@ -6772,6 +7376,29 @@
         return;
       }
 
+      let tournamentTeamsWithPlayers = [];
+      if (
+        activeView === CAPTAIN_VIEWS.MATCHES
+        && currentTournament
+        && !isCreateMode
+        && !isEditMode
+      ) {
+        try {
+          const tournamentPlayersResponse = await fetch(
+            `${TOURNAMENT_PLAYERS_URL}?tournament_id=${encodeURIComponent(String(currentTournament.id || ""))}`,
+            { method: "GET", credentials: "include" }
+          );
+          if (tournamentPlayersResponse.ok) {
+            const tournamentPlayersData = await tournamentPlayersResponse.json().catch(() => ({}));
+            tournamentTeamsWithPlayers = Array.isArray(tournamentPlayersData?.tournament_teams)
+              ? tournamentPlayersData.tournament_teams
+              : [];
+          }
+        } catch (_error) {
+          tournamentTeamsWithPlayers = [];
+        }
+      }
+
       const friendlyMatchesAdminAssociation = activeView === CAPTAIN_VIEWS.MATCHES && isAdminUser
         ? (
           currentTournamentAccess.accessType === "Official"
@@ -6964,20 +7591,8 @@
         return;
       }
 
-      if (activeView === CAPTAIN_VIEWS.MATCHES && !filtered.length) {
-        if (!currentTournament) {
-          renderNoMatchesMessage("Tournament not found or unavailable.");
-          return;
-        }
-        renderNoMatchesMessage(
-          currentTournamentAccess.accessType === "Official"
-            ? "No matches found for this tournament."
-            : isAdminErrorMatchesFilter
-              ? "No matches with status Error found for this tournament."
-              : friendlyMatchesAdminAssociation
-                ? `No matches found for association ${friendlyMatchesAdminAssociation}.`
-                : "No matches found for this tournament."
-        );
+      if (activeView === CAPTAIN_VIEWS.MATCHES && !filtered.length && !currentTournament) {
+        renderNoMatchesMessage("Tournament not found or unavailable.");
         return;
       }
 
@@ -7066,6 +7681,16 @@
           lineupsOnly: currentTournamentAccess.accessType === "Official" && !canManageClosedTournamentMatches,
           pagination: matchesData?.pagination || {},
           requestOptions: matchesRequestOptions,
+          tournamentTeams: tournamentTeamsWithPlayers,
+          allProfiles,
+          tournamentId: String(currentTournament?.id || requestedTournamentId || "").trim(),
+          emptyMatchesMessage: currentTournamentAccess.accessType === "Official"
+            ? "No matches found for this tournament."
+            : isAdminErrorMatchesFilter
+              ? "No matches with status Error found for this tournament."
+              : friendlyMatchesAdminAssociation
+                ? `No matches found for association ${friendlyMatchesAdminAssociation}.`
+                : "No matches found for this tournament.",
         });
       }
 

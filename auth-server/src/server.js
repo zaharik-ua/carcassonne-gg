@@ -2953,6 +2953,127 @@ async function loadTournamentTeams(tournamentId = null) {
   );
 }
 
+function loadTournamentAccessForUserAsync(tournamentId, user) {
+  return new Promise((resolve, reject) => {
+    loadTournamentAccessForUser(tournamentId, user, (error, tournament) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(tournament || null);
+    });
+  });
+}
+
+async function resolveTournamentPlayersAccess(tournamentId, user) {
+  const normalizedTournamentId = normalizeNullableText(tournamentId);
+  if (!normalizedTournamentId) {
+    throw createTournamentTeamRequestError(400, "tournament_id is required");
+  }
+
+  const tournament = await loadTournamentAccessForUserAsync(normalizedTournamentId, user);
+  if (!tournament) {
+    throw createTournamentTeamRequestError(404, "Tournament not found");
+  }
+
+  const isGlobalAdmin = Number(user?.admin) === 1;
+  const isTournamentAdmin = tournament?.has_access === true
+    && tournament?.access_role === TOURNAMENT_ACCESS_ROLES.ADMIN;
+  const captainTeamIds = normalizeTournamentCaptainTeamIds(tournament?.captain_team_ids);
+  if (!isGlobalAdmin && !isTournamentAdmin && !captainTeamIds.length) {
+    throw createTournamentTeamRequestError(403, "Forbidden");
+  }
+
+  return {
+    tournament,
+    canAccessAllTeams: isGlobalAdmin || isTournamentAdmin,
+    captainTeamIds,
+  };
+}
+
+async function loadTournamentPlayersForAccess(access) {
+  const tournamentId = String(access?.tournament?.id || "").trim();
+  const allowedTeamIds = access?.canAccessAllTeams
+    ? null
+    : normalizeTournamentCaptainTeamIds(access?.captainTeamIds);
+  const teamParams = [tournamentId];
+  let teamFilterSql = "";
+  if (Array.isArray(allowedTeamIds)) {
+    if (!allowedTeamIds.length) return [];
+    teamFilterSql = `AND upper(trim(tt.team_id)) IN (${allowedTeamIds.map(() => "?").join(", ")})`;
+    teamParams.push(...allowedTeamIds);
+  }
+
+  const tournamentTeams = await dbAllAsync(
+    `
+      SELECT
+        tt.id,
+        tt.tournament_id,
+        tt.team_id,
+        tt.captain_id,
+        tm.name AS team_name,
+        COALESCE(NULLIF(trim(tm.flag), ''), NULLIF(trim(tm.logo), '')) AS team_flag,
+        p.bga_nickname AS captain_bga_nickname,
+        p.name AS captain_name,
+        p.avatar AS captain_avatar
+      FROM tournament_teams tt
+      LEFT JOIN teams tm
+        ON upper(trim(tm.id)) = upper(trim(tt.team_id))
+      LEFT JOIN profiles p
+        ON trim(p.id) = trim(tt.captain_id)
+       AND p.deleted_at IS NULL
+      WHERE upper(trim(tt.tournament_id)) = upper(trim(?))
+        ${teamFilterSql}
+      ORDER BY tm.name COLLATE NOCASE ASC, tt.team_id COLLATE NOCASE ASC
+    `,
+    teamParams
+  );
+  if (!tournamentTeams.length) return [];
+
+  const visibleTeamIds = tournamentTeams.map((team) => String(team.team_id || "").trim().toUpperCase());
+  const tournamentPlayers = await dbAllAsync(
+    `
+      SELECT
+        tp.id,
+        tp.tournament_id,
+        tp.team_id,
+        tp.player_id,
+        COALESCE(tp.captain, 0) AS captain,
+        p.bga_nickname,
+        p.avatar,
+        p.name,
+        p.association,
+        COALESCE(NULLIF(trim(p.status), ''), 'Active') AS status,
+        COALESCE(p.master_title, 0) AS master_title,
+        p.master_title_date
+      FROM tournament_players tp
+      INNER JOIN profiles p
+        ON trim(p.id) = trim(tp.player_id)
+       AND p.deleted_at IS NULL
+      WHERE upper(trim(tp.tournament_id)) = upper(trim(?))
+        AND upper(trim(tp.team_id)) IN (${visibleTeamIds.map(() => "?").join(", ")})
+      ORDER BY
+        upper(trim(tp.team_id)) ASC,
+        COALESCE(tp.captain, 0) DESC,
+        p.bga_nickname COLLATE NOCASE ASC,
+        p.name COLLATE NOCASE ASC,
+        p.id ASC
+    `,
+    [tournamentId, ...visibleTeamIds]
+  );
+  const playersByTeam = new Map();
+  tournamentPlayers.forEach((player) => {
+    const teamId = String(player.team_id || "").trim().toUpperCase();
+    if (!playersByTeam.has(teamId)) playersByTeam.set(teamId, []);
+    playersByTeam.get(teamId).push(player);
+  });
+
+  return tournamentTeams.map((team) => ({
+    ...team,
+    players: playersByTeam.get(String(team.team_id || "").trim().toUpperCase()) || [],
+  }));
+}
+
 async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, options = {}) {
   const normalizedTournamentId = normalizeNullableText(tournamentId);
   const normalizedTeamId = normalizeNullableText(teamId);
@@ -6863,10 +6984,13 @@ app.post("/profiles", (req, res) => {
       return res.status(500).json({ ok: false, message: "Failed to validate tournament access" });
     }
     if (
-      normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) === TOURNAMENT_ACCESS_TYPES.OFFICIAL
-      && tournament?.has_access
+      tournament?.has_access
       && tournament?.access_role === TOURNAMENT_ACCESS_ROLES.ADMIN
     ) {
+      return continueWithProfileCreate();
+    }
+    const captainTeamIds = normalizeTournamentCaptainTeamIds(tournament?.captain_team_ids);
+    if (tournament?.has_access && captainTeamIds.includes(association)) {
       return continueWithProfileCreate();
     }
     if (!isTeamCaptain || !userAssociation) {
@@ -11323,6 +11447,181 @@ app.delete("/tournament-teams/:id", requireAdmin, async (req, res) => {
   } catch (error) {
     console.error("Failed to delete tournament team", error);
     return res.status(500).json({ ok: false, message: "Failed to delete tournament team" });
+  }
+});
+
+app.get("/tournament-players", requireAuthenticated, async (req, res) => {
+  try {
+    const access = await resolveTournamentPlayersAccess(req.query?.tournament_id, req.user);
+    const tournamentTeams = await loadTournamentPlayersForAccess(access);
+    return res.json({
+      ok: true,
+      tournament_id: access.tournament.id,
+      can_access_all_teams: access.canAccessAllTeams,
+      tournament_teams: tournamentTeams,
+      tournament_players: tournamentTeams.flatMap((team) => team.players || []),
+    });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    if (status >= 500) console.error("Failed to load tournament players", error);
+    return res.status(status).json({
+      ok: false,
+      message: status >= 500 ? "Failed to load tournament players" : error.message,
+    });
+  }
+});
+
+app.put("/tournament-players", requireAuthenticated, async (req, res) => {
+  const requestedTournamentId = normalizeNullableText(req.body?.tournament_id);
+  const requestedTeamId = normalizeNullableText(req.body?.team_id);
+  const requestedPlayerIds = Array.isArray(req.body?.player_ids)
+    ? req.body.player_ids
+    : Array.isArray(req.body?.players)
+      ? req.body.players.map((player) => player?.player_id ?? player?.id ?? player)
+      : null;
+
+  if (!requestedTournamentId) {
+    return res.status(400).json({ ok: false, message: "tournament_id is required" });
+  }
+  if (!requestedTeamId) {
+    return res.status(400).json({ ok: false, message: "team_id is required" });
+  }
+  if (!requestedPlayerIds) {
+    return res.status(400).json({ ok: false, message: "player_ids must be an array" });
+  }
+
+  try {
+    const access = await resolveTournamentPlayersAccess(requestedTournamentId, req.user);
+    const normalizedTeamId = requestedTeamId.toUpperCase();
+    if (
+      !access.canAccessAllTeams
+      && !access.captainTeamIds.some((teamId) => teamId === normalizedTeamId)
+    ) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+
+    const tournamentTeam = await dbGetAsync(
+      `
+        SELECT tt.tournament_id, tt.team_id, tt.captain_id
+        FROM tournament_teams tt
+        WHERE upper(trim(tt.tournament_id)) = upper(trim(?))
+          AND upper(trim(tt.team_id)) = upper(trim(?))
+        LIMIT 1
+      `,
+      [access.tournament.id, requestedTeamId]
+    );
+    if (!tournamentTeam) {
+      return res.status(404).json({ ok: false, message: "Tournament team not found" });
+    }
+
+    const normalizedRequestedIds = requestedPlayerIds
+      .map((playerId) => String(playerId || "").trim())
+      .filter(Boolean);
+    if (new Set(normalizedRequestedIds).size !== normalizedRequestedIds.length) {
+      return res.status(400).json({ ok: false, message: "A player cannot be selected more than once" });
+    }
+
+    const captainId = String(tournamentTeam.captain_id || "").trim();
+    const playerIds = [
+      ...(captainId ? [captainId] : []),
+      ...normalizedRequestedIds.filter((playerId) => playerId !== captainId),
+    ];
+    if (playerIds.length > 10) {
+      return res.status(400).json({ ok: false, message: "A team can have at most 10 players" });
+    }
+
+    if (playerIds.length) {
+      const profiles = await dbAllAsync(
+        `
+          SELECT id, association
+          FROM profiles
+          WHERE id IN (${playerIds.map(() => "?").join(", ")})
+            AND deleted_at IS NULL
+        `,
+        playerIds
+      );
+      const profilesById = new Map(
+        profiles.map((profile) => [String(profile.id || "").trim(), profile])
+      );
+      const missingPlayerId = playerIds.find((playerId) => !profilesById.has(playerId));
+      if (missingPlayerId) {
+        return res.status(400).json({
+          ok: false,
+          message: `Player not found: ${missingPlayerId}`,
+        });
+      }
+      const wrongAssociationPlayerId = playerIds.find((playerId) => (
+        playerId !== captainId
+        && String(profilesById.get(playerId)?.association || "").trim().toUpperCase() !== normalizedTeamId
+      ));
+      if (wrongAssociationPlayerId) {
+        return res.status(400).json({
+          ok: false,
+          message: `Player ${wrongAssociationPlayerId} does not belong to team ${tournamentTeam.team_id}`,
+        });
+      }
+    }
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await dbRunAsync(
+        `
+          DELETE FROM tournament_players
+          WHERE upper(trim(tournament_id)) = upper(trim(?))
+            AND upper(trim(team_id)) = upper(trim(?))
+        `,
+        [tournamentTeam.tournament_id, tournamentTeam.team_id]
+      );
+      for (const playerId of playerIds) {
+        await dbRunAsync(
+          `
+            INSERT INTO tournament_players (
+              id,
+              tournament_id,
+              team_id,
+              player_id,
+              captain,
+              created_at,
+              updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `,
+          [
+            buildTournamentPlayerRecordId(
+              tournamentTeam.tournament_id,
+              tournamentTeam.team_id,
+              playerId
+            ),
+            tournamentTeam.tournament_id,
+            tournamentTeam.team_id,
+            playerId,
+            playerId === captainId ? 1 : 0,
+          ]
+        );
+      }
+      await dbRunAsync("COMMIT");
+    } catch (txError) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw txError;
+    }
+
+    const tournamentTeams = await loadTournamentPlayersForAccess(access);
+    const savedTeam = tournamentTeams.find((team) => (
+      String(team.team_id || "").trim().toUpperCase() === normalizedTeamId
+    )) || null;
+    return res.json({
+      ok: true,
+      tournament_id: access.tournament.id,
+      tournament_team: savedTeam,
+      tournament_players: savedTeam?.players || [],
+    });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    if (status >= 500) console.error("Failed to save tournament players", error);
+    return res.status(status).json({
+      ok: false,
+      message: status >= 500 ? "Failed to save tournament players" : error.message,
+    });
   }
 });
 
