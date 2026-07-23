@@ -1475,9 +1475,8 @@
       const team = teamsMap.get(teamId);
       if (
         !teamId
-        || !captainId
         || !team
-        || !captainsMap.has(captainId)
+        || (captainId && !captainsMap.has(captainId))
       ) return;
       selectedMap.set(teamId, { team_id: teamId, captain_id: captainId });
     });
@@ -1527,7 +1526,7 @@
       let activeTeamId = String(initialTeamId || "").trim();
       const input = document.createElement("input");
       input.type = "search";
-      input.placeholder = "Select captain...";
+      input.placeholder = "Select captain (optional)...";
       input.autocomplete = "off";
       const dataList = document.createElement("datalist");
       dataList.id = `tournament-captains-${Date.now()}-${captainSearchIndex}`;
@@ -1615,7 +1614,7 @@
     const captainSearch = createCaptainSearchControl("");
 
     const updateAddButton = () => {
-      addBtn.disabled = pickerDisabled || !teamSelect.value || !captainSearch.getValue();
+      addBtn.disabled = pickerDisabled || !teamSelect.value;
     };
     captainSearch.input.addEventListener("input", updateAddButton);
     captainSearch.input.addEventListener("change", updateAddButton);
@@ -1703,7 +1702,7 @@
     addBtn.addEventListener("click", () => {
       const teamId = String(teamSelect.value || "").trim();
       const captainId = captainSearch.getValue();
-      if (!teamId || !captainId || selectedMap.has(teamId)) return;
+      if (!teamId || selectedMap.has(teamId)) return;
       selectedMap.set(teamId, { team_id: teamId, captain_id: captainId });
       selectedOrder.push(teamId);
       captainSearch.clear();
@@ -1746,12 +1745,9 @@
           const selected = selectedMap.get(teamId);
           return {
             team_id: selected?.team_id || teamId,
-            captain_id: selected?.captain_id || "",
+            captain_id: selected?.captain_id || null,
           };
-        }).filter((entry) => entry.team_id && entry.captain_id);
-      },
-      hasInvalidCaptain() {
-        return selectedOrder.some((teamId) => !String(selectedMap.get(teamId)?.captain_id || "").trim());
+        }).filter((entry) => entry.team_id);
       },
     };
   }
@@ -3898,8 +3894,8 @@
           ? "Select users who will have access to this official tournament and assign role: admin or captain."
           : "Friendly tournaments are available to all captains.";
       tournamentTeamsHint.textContent = teamTypeField.select.value === "National"
-        ? "Select National teams. Captains must belong to the same association as the selected team."
-        : "Select Club teams. Captains may belong to any association.";
+        ? "Select National teams. If selected, a captain must belong to the same association as the team."
+        : "Select Club teams. An optional captain may belong to any association.";
     };
     tournamentTypeField.select.addEventListener("change", toggleAccessUsersState);
     subtypeField.select.addEventListener("change", toggleAccessUsersState);
@@ -3991,10 +3987,6 @@
       }
       if (!payload.name) {
         setStatus("Tournament name is required.", true);
-        return;
-      }
-      if (payload.tournament_type === "Teams" && tournamentTeamsField.hasInvalidCaptain()) {
-        setStatus("Select each captain from the search suggestions.", true);
         return;
       }
       if (payload.tournament_type !== "Teams") {

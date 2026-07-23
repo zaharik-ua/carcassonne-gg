@@ -3085,9 +3085,6 @@ async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, 
   if (!normalizedTeamId) {
     throw createTournamentTeamRequestError(400, "team_id is required");
   }
-  if (!normalizedCaptainId) {
-    throw createTournamentTeamRequestError(400, "captain_id is required");
-  }
 
   const [tournament, team, captain] = await Promise.all([
     dbGetAsync(
@@ -3108,16 +3105,18 @@ async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, 
       `,
       [normalizedTeamId]
     ),
-    dbGetAsync(
-      `
-        SELECT id, association
-        FROM profiles
-        WHERE trim(id) = trim(?)
-          AND deleted_at IS NULL
-        LIMIT 1
-      `,
-      [normalizedCaptainId]
-    ),
+    normalizedCaptainId
+      ? dbGetAsync(
+          `
+            SELECT id, association
+            FROM profiles
+            WHERE trim(id) = trim(?)
+              AND deleted_at IS NULL
+            LIMIT 1
+          `,
+          [normalizedCaptainId]
+        )
+      : Promise.resolve(null),
   ]);
 
   if (!tournament) {
@@ -3129,7 +3128,7 @@ async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, 
   if (!team) {
     throw createTournamentTeamRequestError(400, "team_id must reference a team");
   }
-  if (!captain) {
+  if (normalizedCaptainId && !captain) {
     throw createTournamentTeamRequestError(400, "captain_id must reference an active profile");
   }
   const tournamentTeamType = normalizeTeamType(tournament.team_type);
@@ -3141,7 +3140,8 @@ async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, 
     );
   }
   if (
-    tournamentTeamType === TEAM_TYPES.NATIONAL
+    captain
+    && tournamentTeamType === TEAM_TYPES.NATIONAL
     && String(captain.association || "").trim().toUpperCase() !== String(team.id || "").trim().toUpperCase()
   ) {
     throw createTournamentTeamRequestError(
@@ -3153,7 +3153,7 @@ async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, 
   return {
     tournament_id: String(tournament.id).trim(),
     team_id: String(team.id).trim(),
-    captain_id: String(captain.id).trim(),
+    captain_id: captain ? String(captain.id).trim() : null,
   };
 }
 
@@ -3169,6 +3169,7 @@ async function syncTournamentTeamCaptainPlayer(tournamentId, teamId, captainId) 
     `,
     [tournamentId, teamId]
   );
+  if (!captainId) return;
   const playerRecordId = buildTournamentPlayerRecordId(tournamentId, teamId, captainId);
   await dbRunAsync(
     `
@@ -4837,13 +4838,109 @@ function ensureTournamentAccessUsersSchema() {
   });
 }
 
+function ensureTournamentTeamIndexes() {
+  db.run(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_teams_tournament_team ON tournament_teams(tournament_id COLLATE NOCASE, team_id COLLATE NOCASE)",
+    (indexErr) => {
+      if (indexErr) {
+        console.error("Failed to ensure tournament_teams tournament/team index", indexErr);
+      }
+    }
+  );
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_tournament_teams_captain_id ON tournament_teams(captain_id)",
+    (indexErr) => {
+      if (indexErr) {
+        console.error("Failed to ensure tournament_teams captain index", indexErr);
+      }
+    }
+  );
+}
+
+function migrateTournamentTeamsCaptainIdToNullable() {
+  db.get("PRAGMA foreign_keys", (pragmaErr, pragmaRow) => {
+    if (pragmaErr) {
+      console.error("Failed to inspect SQLite foreign key mode before tournament_teams migration", pragmaErr);
+      return;
+    }
+    const foreignKeysWereEnabled = Number(pragmaRow?.foreign_keys) === 1;
+    const runMigration = () => {
+      db.exec(
+        `
+          BEGIN IMMEDIATE TRANSACTION;
+          DROP TABLE IF EXISTS tournament_teams_nullable_migration;
+          CREATE TABLE tournament_teams_nullable_migration (
+            id TEXT PRIMARY KEY COLLATE NOCASE,
+            tournament_id TEXT NOT NULL COLLATE NOCASE,
+            team_id TEXT NOT NULL COLLATE NOCASE,
+            captain_id TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (tournament_id, team_id),
+            FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+            FOREIGN KEY (team_id) REFERENCES teams(id),
+            FOREIGN KEY (captain_id) REFERENCES profiles(id)
+          );
+          INSERT INTO tournament_teams_nullable_migration (
+            id,
+            tournament_id,
+            team_id,
+            captain_id,
+            created_at,
+            updated_at
+          )
+          SELECT
+            id,
+            tournament_id,
+            team_id,
+            captain_id,
+            created_at,
+            updated_at
+          FROM tournament_teams;
+          DROP TABLE tournament_teams;
+          ALTER TABLE tournament_teams_nullable_migration RENAME TO tournament_teams;
+          COMMIT;
+        `,
+        (migrationErr) => {
+          if (migrationErr) {
+            db.run("ROLLBACK", () => {
+              const reportFailure = () => {
+                console.error("Failed to make tournament_teams.captain_id nullable", migrationErr);
+              };
+              if (foreignKeysWereEnabled) {
+                db.run("PRAGMA foreign_keys = ON", reportFailure);
+              } else {
+                reportFailure();
+              }
+            });
+            return;
+          }
+          const finish = () => {
+            ensureTournamentTeamIndexes();
+          };
+          if (foreignKeysWereEnabled) {
+            db.run("PRAGMA foreign_keys = ON", finish);
+          } else {
+            finish();
+          }
+        }
+      );
+    };
+    if (foreignKeysWereEnabled) {
+      db.run("PRAGMA foreign_keys = OFF", runMigration);
+    } else {
+      runMigration();
+    }
+  });
+}
+
 function ensureTournamentTeamsSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS tournament_teams (
       id TEXT PRIMARY KEY COLLATE NOCASE,
       tournament_id TEXT NOT NULL COLLATE NOCASE,
       team_id TEXT NOT NULL COLLATE NOCASE,
-      captain_id TEXT NOT NULL,
+      captain_id TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE (tournament_id, team_id),
@@ -4867,22 +4964,12 @@ function ensureTournamentTeamsSchema() {
       addColumnIfMissing(columns, "tournament_teams", "captain_id", "TEXT");
       addColumnIfMissing(columns, "tournament_teams", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "tournament_teams", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-      db.run(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_teams_tournament_team ON tournament_teams(tournament_id COLLATE NOCASE, team_id COLLATE NOCASE)",
-        (indexErr) => {
-          if (indexErr) {
-            console.error("Failed to ensure tournament_teams tournament/team index", indexErr);
-          }
-        }
-      );
-      db.run(
-        "CREATE INDEX IF NOT EXISTS idx_tournament_teams_captain_id ON tournament_teams(captain_id)",
-        (indexErr) => {
-          if (indexErr) {
-            console.error("Failed to ensure tournament_teams captain index", indexErr);
-          }
-        }
-      );
+      const captainIdColumn = columns.find((column) => column.name === "captain_id");
+      if (Number(captainIdColumn?.notnull) === 1) {
+        migrateTournamentTeamsCaptainIdToNullable();
+        return;
+      }
+      ensureTournamentTeamIndexes();
     });
   });
 }
@@ -11296,7 +11383,9 @@ app.patch("/tournament-teams/:id", requireAdmin, async (req, res) => {
     const entry = await resolveTournamentTeamReferences(
       current.tournament_id,
       current.team_id,
-      req.body?.captain_id ?? current.captain_id
+      Object.prototype.hasOwnProperty.call(req.body || {}, "captain_id")
+        ? req.body.captain_id
+        : current.captain_id
     );
 
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
