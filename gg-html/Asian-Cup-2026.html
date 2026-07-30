@@ -76,6 +76,80 @@
     color: #333;
   }
 
+  .overview-about-text p {
+    margin: 0 0 8px;
+  }
+
+  .overview-about-text p:last-child {
+    margin-bottom: 0;
+  }
+
+  .overview-about-text ol,
+  .overview-about-text ul {
+    margin: 4px 0 8px 20px;
+    padding: 0;
+  }
+
+  .overview-about-text a {
+    color: #1a73b7;
+    text-decoration: underline;
+  }
+
+  .overview-about-text img {
+    display: block;
+    width: 100%;
+    max-width: 640px;
+    height: auto;
+    margin: 8px 0;
+    border-radius: 4px;
+  }
+
+  .overview-about-text .news-section-title {
+    color: var(--main-bg-color);
+    display: block;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.15;
+    margin: 10px 0 6px;
+    text-transform: uppercase;
+  }
+
+  .overview-about-text .news-quote-block {
+    margin: 8px 0;
+  }
+
+  .overview-about-text .news-quote-author {
+    color: #4b5563;
+    display: block;
+    font-size: 0.85em;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .overview-about-text .news-quote-author:not(:empty)::after {
+    content: ":";
+  }
+
+  .overview-about-text .news-quote-text {
+    color: #1a73b7;
+    display: block;
+    font-size: 14px;
+    font-style: italic;
+    line-height: 1.25;
+    margin: 3px 0 0 18px;
+    padding: 5px 10px;
+    white-space: pre-wrap;
+  }
+
+  .overview-about-text .news-quote-text-no-italic {
+    font-style: normal;
+  }
+
+  .overview-about-text .news-quote-text-bold {
+    font-weight: 600;
+  }
+
   .group-table {
     width: 100%;
     border-collapse: collapse;
@@ -993,23 +1067,7 @@
     stage1_groups: "Groups",
     stage2_name: "Playoffs",
     stage2_format: "Single Elimination",
-    about: `
-      <p><strong>Carcassonne Asian Cup 2026</strong></p>
-      <p><strong>Draw:</strong></p>
-      <p><strong>Tournament dates:</strong> August 3th to September 6th, 2026</p>
-      <p><strong>Seeding Pots</strong><br><em>will be added soon</em></p>
-      <p>
-        <strong>Tournament format</strong><br>
-        Group Stage: two groups, each team plays against all other teams in their group.<br>
-        The best 2 teams from each group advance to the Playoffs:
-      </p>
-      <ul>
-        <li>Semi-finals: 1st team from one group vs 2nd team from another group</li>
-        <li>Match for the bronze medals</li>
-        <li>Grand Final</li>
-      </ul>
-      <p>All matches are 5 vs 5 duels in a best-of-3 format.</p>
-    `,
+    about: "",
     rules: `
       <strong>Rules:</strong>
       <a href="https://drive.google.com/file/d/1jsquFyDt6ZHRvNN-F4H4u9Kd-738u6aE/view"
@@ -1400,6 +1458,27 @@
   const VERTICAL_SPACING = 25;
   const HORIZONTAL_SPACING = 30;
   let THIRD_PLACE_VERTICAL_OFFSET = 50;
+
+  async function loadTournamentAboutFromDatabase() {
+    try {
+      const response = await fetch(
+        `${API_BASE}/public/tournaments/${encodeURIComponent(currentTournamentId)}`
+      );
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      currentTournament.about = typeof data?.tournament?.about === "string"
+        ? data.tournament.about.trim()
+        : "";
+      renderOverviewContent();
+    } catch (error) {
+      console.error("Failed to load Asian Cup About", error);
+      currentTournament.about = "";
+      renderOverviewContent();
+    }
+  }
 
   async function loadTournamentTeamsFromDatabase() {
     try {
@@ -4856,6 +4935,7 @@
     document.getElementById("tournament-title").textContent = currentTournament.name;
     applyTournamentTheme(currentTournament.style);
     initAndRenderTournamentContent(currentTournament);
+    loadTournamentAboutFromDatabase();
     loadTournamentTeamsFromDatabase();
   });
 

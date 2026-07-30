@@ -10802,6 +10802,33 @@ app.patch("/system-settings/:key", requireAdmin, async (req, res) => {
   }
 });
 
+app.get("/public/tournaments/:id", (req, res, next) => {
+  const tournamentId = normalizeNullableText(req.params?.id);
+  if (!tournamentId) {
+    return res.status(400).json({ ok: false, message: "Invalid tournament id" });
+  }
+  const [rawTournamentId, normalizedTournamentId] = getTournamentLookupVariants(tournamentId);
+
+  return db.get(
+    `
+      SELECT
+        id,
+        about
+      FROM tournaments
+      WHERE ${buildTournamentLookupWhereClause("id")}
+      LIMIT 1
+    `,
+    [rawTournamentId, normalizedTournamentId || rawTournamentId],
+    (error, tournament) => {
+      if (error) return next(error);
+      if (!tournament) {
+        return res.status(404).json({ ok: false, message: "Tournament not found" });
+      }
+      return res.json({ ok: true, tournament });
+    }
+  );
+});
+
 app.get("/tournaments", (req, res, next) => {
   const includeAccessUsers = Number(req.user?.admin) === 1;
   const userId = getTournamentAccessUserId(req.user);
