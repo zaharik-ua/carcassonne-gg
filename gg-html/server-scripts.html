@@ -1,0 +1,2343 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#123c33">
+  <title>Server scripts · Carcassonne GG</title>
+  <meta
+    name="description"
+    content="Операційний каталог серверних скриптів Carcassonne GG: призначення, актуальність, розклад і приклади ручного запуску."
+  >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&amp;display=swap"
+    rel="stylesheet"
+  >
+  <style>
+    :root {
+      --ink: #17231f;
+      --muted: #66716d;
+      --muted-strong: #485650;
+      --paper: #f4f1e9;
+      --card: #fffdf8;
+      --line: #d9ddd5;
+      --line-dark: #c4cbc1;
+      --forest: #123c33;
+      --forest-2: #1b5548;
+      --forest-soft: #e5eee9;
+      --lime: #b8d96d;
+      --lime-dark: #76972f;
+      --blue: #356ea8;
+      --blue-soft: #e9f1f9;
+      --amber: #a96818;
+      --amber-soft: #fff2d9;
+      --red: #b4483d;
+      --red-soft: #fbe9e6;
+      --grey-soft: #edf0ed;
+      --code: #11241f;
+      --shadow-sm: 0 1px 2px rgba(18, 40, 33, 0.06);
+      --shadow-md: 0 14px 40px rgba(18, 40, 33, 0.09);
+      --radius-sm: 10px;
+      --radius: 16px;
+      --radius-lg: 24px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 86% -8%, rgba(184, 217, 109, 0.18), transparent 31rem),
+        var(--paper);
+      color: var(--ink);
+      font-family: "Montserrat", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    svg {
+      display: block;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(18, 60, 51, 0.96);
+      color: #fff;
+      backdrop-filter: blur(14px);
+    }
+
+    .topbar__inner {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      text-decoration: none;
+    }
+
+    .brand__mark {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2px;
+      padding: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.09);
+    }
+
+    .brand__mark span {
+      border-radius: 2px;
+      background: var(--lime);
+    }
+
+    .brand__mark span:nth-child(2),
+    .brand__mark span:nth-child(3) {
+      opacity: 0.45;
+    }
+
+    .brand__name {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .topbar__nav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .topbar__nav a {
+      padding: 7px 10px;
+      border-radius: 8px;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .topbar__nav a:hover,
+    .topbar__nav a:focus-visible {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      outline: none;
+    }
+
+    .hero {
+      padding: 58px 0 30px;
+    }
+
+    .hero__grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.7fr);
+      gap: 28px;
+      align-items: end;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 14px;
+      color: var(--forest-2);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      width: 22px;
+      height: 2px;
+      border-radius: 99px;
+      background: var(--lime-dark);
+      content: "";
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 790px;
+      margin-bottom: 17px;
+      font-size: clamp(36px, 5.8vw, 66px);
+      line-height: 0.98;
+      letter-spacing: -0.045em;
+    }
+
+    .hero__lead {
+      max-width: 720px;
+      margin-bottom: 0;
+      color: var(--muted-strong);
+      font-size: clamp(15px, 1.8vw, 18px);
+      line-height: 1.65;
+    }
+
+    .hero__meta {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 253, 248, 0.72);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .hero__meta-label {
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .hero__meta-value {
+      margin-bottom: 6px;
+      font-size: 19px;
+      font-weight: 800;
+    }
+
+    .hero__meta-copy {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stats {
+      padding: 0 0 26px;
+    }
+
+    .stats__grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .stat {
+      min-height: 103px;
+      padding: 20px 22px;
+      border-left: 1px solid var(--line);
+    }
+
+    .stat:first-child {
+      border-left: 0;
+    }
+
+    .stat__value {
+      margin-bottom: 3px;
+      color: var(--forest);
+      font-size: 29px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+
+    .stat__label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .priority {
+      padding: 18px 0 36px;
+    }
+
+    .priority-card {
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(0, 0.85fr) minmax(410px, 1.15fr);
+      min-height: 390px;
+      border-radius: var(--radius-lg);
+      background: var(--forest);
+      color: #fff;
+      box-shadow: 0 22px 52px rgba(18, 60, 51, 0.2);
+    }
+
+    .priority-card::after {
+      position: absolute;
+      right: -95px;
+      top: -110px;
+      width: 330px;
+      height: 330px;
+      border: 1px solid rgba(184, 217, 109, 0.18);
+      border-radius: 50%;
+      box-shadow:
+        0 0 0 48px rgba(184, 217, 109, 0.04),
+        0 0 0 96px rgba(184, 217, 109, 0.025);
+      content: "";
+      pointer-events: none;
+    }
+
+    .priority-card__copy {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 34px;
+    }
+
+    .priority-card__index {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--lime);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .priority-card__index span {
+      display: grid;
+      width: 27px;
+      height: 27px;
+      place-items: center;
+      border: 1px solid rgba(184, 217, 109, 0.35);
+      border-radius: 50%;
+    }
+
+    .priority-card h2 {
+      max-width: 470px;
+      margin-bottom: 16px;
+      font-size: clamp(27px, 4vw, 43px);
+      line-height: 1.05;
+      letter-spacing: -0.035em;
+    }
+
+    .priority-card__desc {
+      max-width: 520px;
+      margin-bottom: 24px;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .priority-card__facts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .fact {
+      padding: 6px 9px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      color: rgba(255, 255, 255, 0.76);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .priority-card__terminal {
+      position: relative;
+      z-index: 2;
+      align-self: stretch;
+      margin: 22px;
+      padding: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 17px;
+      background: #0d251f;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+    }
+
+    .terminal__top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .terminal__label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: rgba(255, 255, 255, 0.58);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .terminal__dots {
+      display: flex;
+      gap: 5px;
+    }
+
+    .terminal__dots i {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .terminal__dots i:first-child {
+      background: #db7064;
+    }
+
+    .terminal__dots i:nth-child(2) {
+      background: #e0b75d;
+    }
+
+    .terminal__dots i:last-child {
+      background: var(--lime);
+    }
+
+    .steps {
+      display: grid;
+      gap: 15px;
+      margin: 0 0 20px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .step__number {
+      display: grid;
+      width: 22px;
+      height: 22px;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(184, 217, 109, 0.12);
+      color: var(--lime);
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .step__title {
+      margin-bottom: 6px;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .code-line {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .code-line code,
+    .codebox code {
+      color: #e9f3ee;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 11px;
+      line-height: 1.65;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    .code-line code::first-line {
+      color: var(--lime);
+    }
+
+    .copy-button {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.7);
+      cursor: pointer;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .copy-button:hover,
+    .copy-button:focus-visible {
+      border-color: rgba(184, 217, 109, 0.5);
+      color: var(--lime);
+      outline: none;
+    }
+
+    .copy-button svg {
+      width: 13px;
+      height: 13px;
+    }
+
+    .priority-card__note {
+      display: flex;
+      gap: 8px;
+      margin: 0;
+      padding: 11px 12px;
+      border-radius: 9px;
+      background: rgba(184, 217, 109, 0.08);
+      color: rgba(255, 255, 255, 0.64);
+      font-size: 10px;
+      line-height: 1.55;
+    }
+
+    .priority-card__note svg {
+      flex: 0 0 auto;
+      width: 15px;
+      height: 15px;
+      margin-top: 1px;
+      color: var(--lime);
+    }
+
+    .section {
+      padding: 30px 0;
+      scroll-margin-top: 75px;
+    }
+
+    .section__head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 19px;
+    }
+
+    .section h2 {
+      margin-bottom: 7px;
+      font-size: clamp(25px, 3vw, 34px);
+      line-height: 1.08;
+      letter-spacing: -0.035em;
+    }
+
+    .section__intro {
+      max-width: 720px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .runbook {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(290px, 0.7fr);
+      gap: 16px;
+      margin-bottom: 26px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .panel--command {
+      padding: 24px;
+    }
+
+    .panel--command h3,
+    .panel--status h3 {
+      margin-bottom: 7px;
+      font-size: 17px;
+    }
+
+    .panel__lead {
+      margin-bottom: 18px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .codebox {
+      position: relative;
+      padding: 18px 92px 18px 18px;
+      overflow: auto;
+      border-radius: 11px;
+      background: var(--code);
+    }
+
+    .codebox code {
+      display: block;
+      min-width: min-content;
+      white-space: pre;
+    }
+
+    .codebox .copy-button {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+    }
+
+    .panel__hint {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .panel__hint svg {
+      flex: 0 0 auto;
+      width: 15px;
+      height: 15px;
+      margin-top: 1px;
+      color: var(--amber);
+    }
+
+    .panel--status {
+      overflow: hidden;
+    }
+
+    .panel--status > div {
+      padding: 23px;
+    }
+
+    .status-checks {
+      display: grid;
+      gap: 0;
+      margin: 0;
+      padding: 0;
+      border-top: 1px solid var(--line);
+      list-style: none;
+    }
+
+    .status-checks li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 13px 17px;
+      border-top: 1px solid var(--line);
+      font-size: 11px;
+    }
+
+    .status-checks li:first-child {
+      border-top: 0;
+    }
+
+    .status-checks code {
+      color: var(--muted-strong);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 10px;
+    }
+
+    .status-checks span {
+      flex: 0 0 auto;
+      color: var(--forest-2);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .catalog-toolbar {
+      position: sticky;
+      top: 70px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+      padding: 11px;
+      border: 1px solid rgba(217, 221, 213, 0.88);
+      border-radius: 13px;
+      background: rgba(244, 241, 233, 0.92);
+      backdrop-filter: blur(14px);
+    }
+
+    .filters {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .filters::-webkit-scrollbar {
+      display: none;
+    }
+
+    .filter {
+      flex: 0 0 auto;
+      padding: 7px 11px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .filter:hover,
+    .filter:focus-visible {
+      border-color: var(--line-dark);
+      color: var(--ink);
+      outline: none;
+    }
+
+    .filter.is-active {
+      background: var(--forest);
+      color: #fff;
+    }
+
+    .search {
+      position: relative;
+      flex: 0 1 280px;
+    }
+
+    .search svg {
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      width: 15px;
+      height: 15px;
+      color: #818b86;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+
+    .search input {
+      width: 100%;
+      height: 36px;
+      padding: 0 34px 0 34px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      outline: 0;
+      background: var(--card);
+      color: var(--ink);
+      font-size: 11px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .search input:focus {
+      border-color: var(--forest-2);
+      box-shadow: 0 0 0 3px rgba(27, 85, 72, 0.11);
+    }
+
+    .search input::placeholder {
+      color: #8b9490;
+    }
+
+    .search__clear {
+      position: absolute;
+      right: 7px;
+      top: 50%;
+      display: none;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transform: translateY(-50%);
+    }
+
+    .search__clear.is-visible {
+      display: grid;
+    }
+
+    .search__clear:hover,
+    .search__clear:focus-visible {
+      background: var(--grey-soft);
+      outline: none;
+    }
+
+    .group {
+      margin-top: 28px;
+    }
+
+    .group:first-of-type {
+      margin-top: 0;
+    }
+
+    .group__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 12px;
+      padding: 0 2px;
+    }
+
+    .group__title {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .group__title-icon {
+      display: grid;
+      width: 29px;
+      height: 29px;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--forest-soft);
+      color: var(--forest-2);
+    }
+
+    .group__title-icon svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .group__count {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .script-card {
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 325px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+      transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    .script-card:hover {
+      border-color: var(--line-dark);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    .script-card__head {
+      padding: 20px 20px 14px;
+    }
+
+    .script-card__meta {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+
+    .script-card__path {
+      min-width: 0;
+      color: var(--muted);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 9px;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    .badge {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+
+    .badge::before {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      content: "";
+    }
+
+    .badge--configured,
+    .badge--current {
+      background: var(--forest-soft);
+      color: var(--forest-2);
+    }
+
+    .badge--manual {
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+
+    .badge--verify {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .badge--maintenance {
+      background: var(--grey-soft);
+      color: #65716b;
+    }
+
+    .script-card h3 {
+      margin-bottom: 7px;
+      font-size: 18px;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+    }
+
+    .script-card__desc {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.65;
+    }
+
+    .script-card__facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin: 0 20px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fbfaf5;
+    }
+
+    .script-card__fact {
+      min-width: 0;
+      padding: 11px 12px;
+      border-left: 1px solid var(--line);
+    }
+
+    .script-card__fact:first-child {
+      border-left: 0;
+    }
+
+    .script-card__fact-label {
+      display: block;
+      margin-bottom: 3px;
+      color: #8a938e;
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .script-card__fact-value {
+      display: block;
+      color: var(--muted-strong);
+      font-size: 10px;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    .script-card__command {
+      margin: 14px 20px 17px;
+      padding: 13px 68px 13px 13px;
+    }
+
+    .script-card__command code {
+      font-size: 9.5px;
+      line-height: 1.55;
+    }
+
+    .script-card__command .copy-button {
+      top: 9px;
+      right: 9px;
+      padding: 5px 6px;
+    }
+
+    .script-card__more {
+      width: 100%;
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: auto;
+      padding: 10px 20px;
+      border: 0;
+      border-top: 1px solid var(--line);
+      background: #fbfaf5;
+      color: var(--muted-strong);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: left;
+    }
+
+    .script-card__more:hover,
+    .script-card__more:focus-visible {
+      background: var(--forest-soft);
+      color: var(--forest);
+      outline: none;
+    }
+
+    .script-card__more svg {
+      width: 15px;
+      height: 15px;
+      transition: transform 160ms ease;
+    }
+
+    .script-card__more[aria-expanded="true"] svg {
+      transform: rotate(180deg);
+    }
+
+    .script-card__details {
+      display: none;
+      padding: 16px 20px 18px;
+      border-top: 1px solid var(--line);
+      background: #fffefa;
+    }
+
+    .script-card__details.is-open {
+      display: block;
+    }
+
+    .detail-row {
+      display: grid;
+      grid-template-columns: 86px minmax(0, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .detail-row:first-child {
+      margin-top: 0;
+    }
+
+    .detail-row strong {
+      color: var(--muted-strong);
+      font-size: 9px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .detail-row code {
+      color: var(--forest-2);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 9px;
+      overflow-wrap: anywhere;
+    }
+
+    .empty-state {
+      display: none;
+      padding: 52px 24px;
+      border: 1px dashed var(--line-dark);
+      border-radius: var(--radius);
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .empty-state.is-visible {
+      display: block;
+    }
+
+    .empty-state svg {
+      width: 28px;
+      height: 28px;
+      margin: 0 auto 12px;
+      color: var(--forest-2);
+    }
+
+    .empty-state h3 {
+      margin-bottom: 5px;
+      color: var(--ink);
+      font-size: 16px;
+    }
+
+    .empty-state p {
+      margin-bottom: 0;
+      font-size: 11px;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .legend__item {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 253, 248, 0.64);
+    }
+
+    .legend__item .badge {
+      margin-bottom: 9px;
+    }
+
+    .legend__item p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 9.5px;
+      line-height: 1.55;
+    }
+
+    .inventory {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .inventory__row {
+      display: grid;
+      grid-template-columns: minmax(190px, 0.8fr) minmax(260px, 1.25fr) minmax(170px, 0.65fr);
+      gap: 16px;
+      align-items: center;
+      min-height: 54px;
+      padding: 11px 17px;
+      border-top: 1px solid var(--line);
+      font-size: 10px;
+    }
+
+    .inventory__row:first-child {
+      border-top: 0;
+    }
+
+    .inventory__row--head {
+      min-height: 39px;
+      background: #f0eee7;
+      color: var(--muted);
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .inventory__row code {
+      color: var(--forest-2);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .inventory__row span {
+      color: var(--muted);
+    }
+
+    .footer {
+      margin-top: 54px;
+      padding: 28px 0 34px;
+      border-top: 1px solid var(--line);
+    }
+
+    .footer__inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .footer__back {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--forest-2);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .footer__back:hover,
+    .footer__back:focus-visible {
+      text-decoration: underline;
+      outline: none;
+    }
+
+    .footer__back svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 22px;
+      z-index: 80;
+      padding: 9px 13px;
+      border-radius: 9px;
+      background: var(--ink);
+      color: #fff;
+      box-shadow: 0 8px 28px rgba(12, 25, 20, 0.22);
+      font-size: 10px;
+      font-weight: 700;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 12px);
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .toast.is-visible {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 920px) {
+      .hero__grid,
+      .runbook {
+        grid-template-columns: 1fr;
+      }
+
+      .hero__meta {
+        max-width: 520px;
+      }
+
+      .priority-card {
+        grid-template-columns: 1fr;
+      }
+
+      .priority-card__copy {
+        padding-bottom: 10px;
+      }
+
+      .priority-card__terminal {
+        margin-top: 10px;
+      }
+
+      .stats__grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .stat:nth-child(3) {
+        border-left: 0;
+      }
+
+      .stat:nth-child(n + 3) {
+        border-top: 1px solid var(--line);
+      }
+
+      .legend {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        width: min(100% - 20px, 1180px);
+      }
+
+      .topbar__inner {
+        min-height: 52px;
+      }
+
+      .brand__name {
+        font-size: 11px;
+      }
+
+      .topbar__nav {
+        display: none;
+      }
+
+      .hero {
+        padding-top: 40px;
+      }
+
+      h1 {
+        font-size: clamp(35px, 12vw, 49px);
+      }
+
+      .hero__lead {
+        font-size: 14px;
+      }
+
+      .stat {
+        min-height: 88px;
+        padding: 17px;
+      }
+
+      .stat__value {
+        font-size: 24px;
+      }
+
+      .priority-card__copy {
+        padding: 25px 20px 8px;
+      }
+
+      .priority-card__terminal {
+        margin: 17px 12px 12px;
+        padding: 17px;
+      }
+
+      .catalog-toolbar {
+        top: 60px;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .search {
+        width: 100%;
+        max-width: none;
+      }
+
+      .cards {
+        grid-template-columns: 1fr;
+      }
+
+      .section__head {
+        display: block;
+      }
+
+      .inventory__row {
+        grid-template-columns: 1fr;
+        gap: 3px;
+        padding: 14px 16px;
+      }
+
+      .inventory__row--head {
+        display: none;
+      }
+
+      .footer__inner {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+
+    @media (max-width: 460px) {
+      .stats__grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stat {
+        border-top: 1px solid var(--line);
+        border-left: 0;
+      }
+
+      .stat:first-child {
+        border-top: 0;
+      }
+
+      .priority-card h2 {
+        font-size: 28px;
+      }
+
+      .codebox {
+        padding-right: 16px;
+        padding-top: 51px;
+      }
+
+      .script-card__command {
+        padding-top: 45px;
+        padding-right: 13px;
+      }
+
+      .legend {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <svg class="sr-only" aria-hidden="true">
+    <symbol id="i-copy" viewBox="0 0 24 24">
+      <rect x="8" y="8" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+    </symbol>
+    <symbol id="i-info" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M12 10.6v6M12 7.2h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-search" viewBox="0 0 24 24">
+      <circle cx="10.8" cy="10.8" r="6.8" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24">
+      <path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-timer" viewBox="0 0 24 24">
+      <circle cx="12" cy="13" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M9 3h6M12 6v2M12 13l3-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24">
+      <rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="m7 10 3 2.5L7 15M12.5 15H17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-wrench" viewBox="0 0 24 24">
+      <path d="M14.5 6.5a4.8 4.8 0 0 0-6.1 6.1L3.8 17.2a2.1 2.1 0 1 0 3 3l4.6-4.6a4.8 4.8 0 0 0 6.1-6.1l-3 3-3-3 3-3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24">
+      <path d="M19 12H5M11 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="shell topbar__inner">
+      <a class="brand" href="#top" aria-label="Carcassonne GG — на початок сторінки">
+        <span class="brand__mark" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </span>
+        <span class="brand__name">Carcassonne GG · Ops</span>
+      </a>
+      <nav class="topbar__nav" aria-label="Навігація сторінкою">
+        <a href="#quick-check">Перевірка</a>
+        <a href="#catalog">Каталог</a>
+        <a href="#inventory">Entrypoints</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="shell hero__grid">
+        <div>
+          <p class="eyebrow">Server operations</p>
+          <h1>Скрипти, що тримають дані актуальними</h1>
+          <p class="hero__lead">
+            Єдиний каталог автоматичних jobs, ручних перерахунків і сервісних
+            перевірок: що запускається, що змінює та якою командою це повторити
+            на production-сервері.
+          </p>
+        </div>
+        <aside class="hero__meta" aria-label="Актуальність документації">
+          <p class="hero__meta-label">Звірено з репозиторієм</p>
+          <p class="hero__meta-value">27 липня 2026</p>
+          <p class="hero__meta-copy">
+            Статуси нижче описують конфігурацію в Git. Live-стан сервера
+            перевіряється командами в секції «Швидка перевірка».
+          </p>
+        </aside>
+      </div>
+    </section>
+
+    <section class="stats" aria-label="Огляд каталогу">
+      <div class="shell stats__grid">
+        <div class="stat">
+          <div class="stat__value" id="stat-total">25</div>
+          <div class="stat__label">операційні сценарії</div>
+        </div>
+        <div class="stat">
+          <div class="stat__value" id="stat-systemd">7</div>
+          <div class="stat__label">systemd-таймерів</div>
+        </div>
+        <div class="stat">
+          <div class="stat__value" id="stat-cron">6</div>
+          <div class="stat__label">cron-синхронізацій</div>
+        </div>
+        <div class="stat">
+          <div class="stat__value" id="stat-manual">12</div>
+          <div class="stat__label">ручних / сервісних сценаріїв</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="priority">
+      <div class="shell">
+        <article class="priority-card">
+          <div class="priority-card__copy">
+            <div>
+              <div class="priority-card__index"><span>01</span> Частий ручний сценарій</div>
+            </div>
+            <div>
+              <h2>Перерахунок GG Elo</h2>
+              <p class="priority-card__desc">
+                Перебудовує рейтинг профілів із локальних завершених дуелей,
+                оновлює позиції, period delta та Elo snapshots у дуелях.
+                Початковий рейтинг — 1500, K-factor — 32.
+              </p>
+              <div class="priority-card__facts">
+                <span class="fact">ручний запуск</span>
+                <span class="fact">SQLite write</span>
+                <span class="fact">є dry-run</span>
+                <span class="fact">актуальний · 12.07.2026</span>
+              </div>
+            </div>
+          </div>
+          <div class="priority-card__terminal">
+            <div class="terminal__top">
+              <span class="terminal__label">production terminal</span>
+              <span class="terminal__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            </div>
+            <ol class="steps">
+              <li class="step">
+                <span class="step__number">1</span>
+                <div>
+                  <div class="step__title">Спочатку переглянути результат без запису</div>
+                  <div class="code-line">
+                    <code>cd /home/carcassonne-gg/auth-server
+python3 run_update_profile_gg_elo.py --dry-run</code>
+                    <button class="copy-button" type="button" data-copy="cd /home/carcassonne-gg/auth-server&#10;python3 run_update_profile_gg_elo.py --dry-run" aria-label="Скопіювати dry-run команду">
+                      <svg aria-hidden="true"><use href="#i-copy"></use></svg> Copy
+                    </button>
+                  </div>
+                </div>
+              </li>
+              <li class="step">
+                <span class="step__number">2</span>
+                <div>
+                  <div class="step__title">Якщо summary коректний — застосувати</div>
+                  <div class="code-line">
+                    <code>python3 run_update_profile_gg_elo.py</code>
+                    <button class="copy-button" type="button" data-copy="cd /home/carcassonne-gg/auth-server&#10;python3 run_update_profile_gg_elo.py" aria-label="Скопіювати команду перерахунку">
+                      <svg aria-hidden="true"><use href="#i-copy"></use></svg> Copy
+                    </button>
+                  </div>
+                </div>
+              </li>
+            </ol>
+            <p class="priority-card__note">
+              <svg aria-hidden="true"><use href="#i-info"></use></svg>
+              Не плутати з <strong>run_update_gg_duel_ratings.py</strong>:
+              той скрипт оновлює складність/рейтинг вибраних дуелей, а не Elo профілів.
+            </p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="quick-check">
+      <div class="shell">
+        <div class="section__head">
+          <div>
+            <p class="eyebrow">Перед ручним запуском</p>
+            <h2>Швидка перевірка сервера</h2>
+            <p class="section__intro">
+              Ці команди нічого не змінюють. Вони показують активні таймери,
+              останні запуски, cron-конфігурацію та відомий success marker для daily Elo.
+            </p>
+          </div>
+        </div>
+        <div class="runbook">
+          <article class="panel panel--command">
+            <h3>Один read-only блок</h3>
+            <p class="panel__lead">Виконайте після SSH-входу на сервер.</p>
+            <div class="codebox">
+              <code>cd /home/carcassonne-gg/auth-server
+sudo systemctl list-timers --all \
+  update-duels.timer \
+  sync-wtcoc-matches.timer \
+  fix-matches-and-duels.timer \
+  update-player-elo-daily.timer \
+  update-player-elo-missing.timer \
+  cleanup-chrome-tmp.timer \
+  server-alerts.timer
+
+sqlite3 ./data/auth.sqlite \
+  "SELECT job_name,last_success_at,last_status FROM job_runs ORDER BY job_name;"
+
+crontab -l</code>
+              <button class="copy-button" type="button" data-copy="cd /home/carcassonne-gg/auth-server&#10;sudo systemctl list-timers --all update-duels.timer sync-wtcoc-matches.timer fix-matches-and-duels.timer update-player-elo-daily.timer update-player-elo-missing.timer cleanup-chrome-tmp.timer server-alerts.timer&#10;sqlite3 ./data/auth.sqlite &quot;SELECT job_name,last_success_at,last_status FROM job_runs ORDER BY job_name;&quot;&#10;crontab -l" aria-label="Скопіювати команди перевірки">
+                <svg aria-hidden="true"><use href="#i-copy"></use></svg> Copy
+              </button>
+            </div>
+            <p class="panel__hint">
+              <svg aria-hidden="true"><use href="#i-info"></use></svg>
+              Таблиця <code>job_runs</code> зараз фіксує success тільки для
+              <code>update-player-elo-daily</code>; для решти jobs джерело істини — systemd та логи.
+            </p>
+          </article>
+          <article class="panel panel--status">
+            <div>
+              <h3>Де дивитися правду</h3>
+              <p class="panel__lead">Git показує задум, сервер — фактичний стан.</p>
+            </div>
+            <ul class="status-checks">
+              <li><code>systemctl list-timers</code><span>next / last run</span></li>
+              <li><code>systemctl status …</code><span>exit status</span></li>
+              <li><code>journalctl -u …</code><span>system logs</span></li>
+              <li><code>/var/log/carcassonne/</code><span>job logs</span></li>
+              <li><code>crontab -l</code><span>JSON sync schedule</span></li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="legend" aria-label="Легенда статусів">
+          <div class="legend__item">
+            <span class="badge badge--configured">Налаштовано</span>
+            <p>У репозиторії є service + timer. Фактичний active state перевіряється на сервері.</p>
+          </div>
+          <div class="legend__item">
+            <span class="badge badge--manual">Ручний</span>
+            <p>Актуальний CLI або wrapper без окремого регулярного таймера.</p>
+          </div>
+          <div class="legend__item">
+            <span class="badge badge--verify">Звірити cron</span>
+            <p>Скрипт актуальний, але його crontab-розклад не зберігається у Git.</p>
+          </div>
+          <div class="legend__item">
+            <span class="badge badge--maintenance">За потреби</span>
+            <p>Діагностика, імпорт або одноразова міграційна операція.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="catalog">
+      <div class="shell">
+        <div class="section__head">
+          <div>
+            <p class="eyebrow">Повний каталог</p>
+            <h2>Усі операційні сценарії</h2>
+            <p class="section__intro">
+              Команди розраховані на production path <code>/home/carcassonne-gg</code>.
+              Пошук працює за назвою, шляхом, даними та призначенням скрипта.
+            </p>
+          </div>
+        </div>
+
+        <div class="catalog-toolbar">
+          <div class="filters" role="group" aria-label="Фільтри каталогу">
+            <button class="filter is-active" type="button" data-filter="all">Усі</button>
+            <button class="filter" type="button" data-filter="systemd">Systemd</button>
+            <button class="filter" type="button" data-filter="cron">Cron / JSON</button>
+            <button class="filter" type="button" data-filter="manual">Ручні</button>
+            <button class="filter" type="button" data-filter="maintenance">Сервісні</button>
+          </div>
+          <label class="search">
+            <span class="sr-only">Пошук скрипта</span>
+            <svg aria-hidden="true"><use href="#i-search"></use></svg>
+            <input id="script-search" type="search" placeholder="Наприклад: Elo, WTCOC, JSON…" autocomplete="off">
+            <button class="search__clear" id="search-clear" type="button" aria-label="Очистити пошук">×</button>
+          </label>
+        </div>
+
+        <div id="catalog-groups"></div>
+        <div class="empty-state" id="empty-state">
+          <svg aria-hidden="true"><use href="#i-search"></use></svg>
+          <h3>Нічого не знайдено</h3>
+          <p>Спробуйте коротший запит або іншу категорію.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="inventory">
+      <div class="shell">
+        <div class="section__head">
+          <div>
+            <p class="eyebrow">Технічний індекс</p>
+            <h2>Entrypoints і wrappers</h2>
+            <p class="section__intro">
+              Допоміжні entrypoints не дублюються окремими картками, якщо вони
+              є wrapper-ом або внутрішньою частиною вже описаного job.
+            </p>
+          </div>
+        </div>
+        <div class="inventory">
+          <div class="inventory__row inventory__row--head">
+            <div>Entrypoint</div>
+            <div>Wrapper / system unit</div>
+            <div>Роль</div>
+          </div>
+          <div class="inventory__row">
+            <code>run_update_matches.py</code>
+            <code>scripts/run_update_matches.sh · update-duels.service</code>
+            <span>BGA results sync</span>
+          </div>
+          <div class="inventory__row">
+            <code>run_update_player_elo.py</code>
+            <code>run_update_player_elo*.sh · 2 timers</code>
+            <span>BGA Elo профілів</span>
+          </div>
+          <div class="inventory__row">
+            <code>run_record_job_success.py</code>
+            <code>scripts/run_update_player_elo_daily.sh</code>
+            <span>Внутрішній success marker</span>
+          </div>
+          <div class="inventory__row">
+            <code>run_update_profile_gg_elo.py</code>
+            <code>scripts/run_update_profile_gg_elo.sh</code>
+            <span>GG Elo профілів</span>
+          </div>
+          <div class="inventory__row">
+            <code>run_update_gg_duel_ratings.py</code>
+            <code>scripts/run_update_gg_duel_ratings.sh</code>
+            <span>GG-рейтинг дуелей</span>
+          </div>
+          <div class="inventory__row">
+            <code>run_update_profile_bga_data.py</code>
+            <code>run_update_profile_bga_data_batch.py · batch wrapper</code>
+            <span>Nickname та avatar</span>
+          </div>
+          <div class="inventory__row">
+            <code>run_sync_wtcoc_matches.py</code>
+            <code>run_sync_wtcoc_matches*.sh · sync timer</code>
+            <span>WTCOC матчі</span>
+          </div>
+          <div class="inventory__row">
+            <code>fix_matches_and_duels.py</code>
+            <code>run_fix_matches_and_duels.py · wrapper · timer</code>
+            <span>Статуси й рахунки</span>
+          </div>
+          <div class="inventory__row">
+            <code>import_csv_to_sqlite.py</code>
+            <code>run_import_csv_to_sqlite.py</code>
+            <span>CSV preview / import</span>
+          </div>
+          <div class="inventory__row">
+            <code>find_import_result_mismatches.py</code>
+            <code>run_find_import_result_mismatches.py</code>
+            <span>Read-only аудит імпорту</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell footer__inner">
+      <span>Carcassonne GG · server operations runbook · repository review 27.07.2026</span>
+      <a class="footer__back" href="#top">
+        <svg aria-hidden="true"><use href="#i-arrow"></use></svg>
+        На початок
+      </a>
+    </div>
+  </footer>
+
+  <div class="toast" id="copy-toast" role="status" aria-live="polite">Команду скопійовано</div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const groups = [
+        {
+          id: "systemd",
+          title: "Автоматичні systemd jobs",
+          icon: "timer",
+          description: "service + timer збережені в репозиторії"
+        },
+        {
+          id: "cron",
+          title: "Cron-синхронізації JSON",
+          icon: "terminal",
+          description: "оновлюють файли й роблять git push"
+        },
+        {
+          id: "manual",
+          title: "Ручні перерахунки та синхронізації",
+          icon: "terminal",
+          description: "запускаються оператором"
+        },
+        {
+          id: "maintenance",
+          title: "Діагностика та міграційні інструменти",
+          icon: "wrench",
+          description: "використовувати за конкретної потреби"
+        }
+      ];
+
+      const scripts = [
+        {
+          group: "systemd",
+          title: "Результати дуелей із BGA",
+          path: "auth-server/systemd/update-duels.timer",
+          status: "configured",
+          statusLabel: "Налаштовано",
+          description: "Забирає партії з BGA, оновлює dw1/dw2, статуси дуелей і матчів та upsert-ить games.",
+          schedule: "Через 60 с після завершення",
+          impact: "SQLite: duels, matches, games",
+          command: "sudo systemctl start update-duels.service",
+          inspect: "tail -f /var/log/carcassonne/update-duels.log",
+          source: "update_matches.cli · limit 20",
+          safety: "Працює під flock; protected-статуси не синхронізуються.",
+          updated: "16.07.2026"
+        },
+        {
+          group: "systemd",
+          title: "Синхронізація матчів WTCOC",
+          path: "auth-server/systemd/sync-wtcoc-matches.timer",
+          status: "configured",
+          statusLabel: "Налаштовано",
+          description: "Отримує calendar/playoff із WTCOC API та застосовує замаплені matches і duels у локальну БД.",
+          schedule: "Кожні 30 хв",
+          impact: "SQLite: matches, duels",
+          command: "sudo systemctl start sync-wtcoc-matches.service",
+          inspect: "tail -f /var/log/carcassonne/sync-wtcoc-matches.log",
+          source: "run_sync_wtcoc_matches.py --apply",
+          safety: "Запис іде тільки для замаплених команд і підтверджених lineup.",
+          updated: "02.07.2026"
+        },
+        {
+          group: "systemd",
+          title: "Фікс статусів матчів і дуелей",
+          path: "auth-server/systemd/fix-matches-and-duels.timer",
+          status: "configured",
+          statusLabel: "Налаштовано",
+          description: "Повертає future-обʼєкти до Planned і перераховує статуси та агреговані рахунки за дуелями.",
+          schedule: "Кожну годину",
+          impact: "SQLite: matches, duels",
+          command: "cd /home/carcassonne-gg/auth-server\npython3 run_fix_matches_and_duels.py --dry-run\nsudo systemctl start fix-matches-and-duels.service",
+          inspect: "tail -f /var/log/carcassonne/fix-matches-and-duels.log",
+          source: "run_fix_matches_and_duels.py",
+          safety: "Перед ручним service start варто виконати --dry-run.",
+          updated: "29.06.2026"
+        },
+        {
+          group: "systemd",
+          title: "Повне оновлення BGA Elo",
+          path: "auth-server/systemd/update-player-elo-daily.timer",
+          status: "configured",
+          statusLabel: "Налаштовано",
+          description: "Оновлює BGA Elo всіх профілів, потім ratings для Planned і записує success у job_runs.",
+          schedule: "Щодня о 01:00 UTC",
+          impact: "SQLite: profiles, ratings, job_runs",
+          command: "sudo systemctl start update-player-elo-daily.service",
+          inspect: "tail -f /var/log/carcassonne/update-player-elo-daily.log",
+          source: "run_update_player_elo_daily.sh",
+          safety: "Спільний flock не дозволяє накластися з hourly missing job.",
+          updated: "02.07.2026"
+        },
+        {
+          group: "systemd",
+          title: "Заповнення відсутнього BGA Elo",
+          path: "auth-server/systemd/update-player-elo-missing.timer",
+          status: "configured",
+          statusLabel: "Налаштовано",
+          description: "Обирає тільки profiles з bga_elo IS NULL і перераховує відсутні Planned ratings.",
+          schedule: "Щогодини о :05 UTC",
+          impact: "SQLite: profiles, ratings",
+          command: "sudo systemctl start update-player-elo-missing.service",
+          inspect: "tail -f /var/log/carcassonne/update-player-elo-missing.log",
+          source: "run_update_player_elo_missing.sh",
+          safety: "Значення 0 не вважається NULL і не потрапляє в selection.",
+          updated: "02.07.2026"
+        },
+        {
+          group: "systemd",
+          title: "Прибирання Chromium temp",
+          path: "auth-server/systemd/cleanup-chrome-tmp.timer",
+          status: "configured",
+          statusLabel: "Налаштовано",
+          description: "Видаляє залишені headless Chromium каталоги з /tmp, якщо вони старші за визначений TTL.",
+          schedule: "Кожні 6 год",
+          impact: "/tmp: Chromium directories",
+          command: "sudo systemctl start cleanup-chrome-tmp.service",
+          inspect: "journalctl -u cleanup-chrome-tmp.service -n 100 --no-pager",
+          source: "run_cleanup_chrome_tmp.sh · TTL 360 хв",
+          safety: "Обмежено двома точними шаблонами каталогів у /tmp.",
+          updated: "08.04.2026"
+        },
+        {
+          group: "systemd",
+          title: "Server health alerts",
+          path: "auth-server/systemd/server-alerts.timer",
+          status: "configured",
+          statusLabel: "Налаштовано",
+          description: "Перевіряє диск, timers і повторювані Chromium errors; за потреби надсилає Telegram alert.",
+          schedule: "Кожні 5 хв",
+          impact: "Read-only + Telegram message",
+          command: "sudo systemctl start server-alerts.service",
+          inspect: "journalctl -u server-alerts.service -n 100 --no-pager",
+          source: "run_server_alerts.sh · .env",
+          safety: "Без TELEGRAM_BOT_TOKEN / CHAT_ID лише пише повідомлення в journal.",
+          updated: "08.04.2026"
+        },
+        {
+          group: "cron",
+          title: "Головна: новини та матчі",
+          path: "server-scripts/update_main_page_files.sh",
+          status: "verify",
+          statusLabel: "Звірити cron",
+          description: "Завантажує news.json і matches.json з public API, комітить лише зміни та push-ить main.",
+          schedule: "Cron: розклад не в Git",
+          impact: "2 JSON + git push main",
+          command: "cd /home/carcassonne-gg\nbash server-scripts/update_main_page_files.sh",
+          inspect: "tail -n 100 /home/carcassonne-gg/cron_update_open.log",
+          source: "/public/news · /public/matches",
+          safety: "Команда може створити commit і виконати git pull --rebase / push.",
+          updated: "13.07.2026"
+        },
+        {
+          group: "cron",
+          title: "Офіційні матчі та список гравців",
+          path: "server-scripts/update_official_matches_file.sh",
+          status: "verify",
+          statusLabel: "Звірити cron",
+          description: "Оновлює official_matches.json і list_of_players.json та публікує зміни через Git.",
+          schedule: "Cron: розклад не в Git",
+          impact: "2 JSON + git push main",
+          command: "cd /home/carcassonne-gg\nbash server-scripts/update_official_matches_file.sh",
+          inspect: "tail -n 100 /home/carcassonne-gg/cron_update_official.log",
+          source: "/public/official_matches · /public/list_of_players",
+          safety: "Валідує API response за status=success перед заміною файлів.",
+          updated: "13.07.2026"
+        },
+        {
+          group: "cron",
+          title: "Masters та achievements",
+          path: "server-scripts/update_players_files.sh",
+          status: "verify",
+          statusLabel: "Звірити cron",
+          description: "Оновлює masters.json із /players та achievements.json із public API.",
+          schedule: "Cron: розклад не в Git",
+          impact: "2 JSON + git push main",
+          command: "cd /home/carcassonne-gg\nbash server-scripts/update_players_files.sh",
+          inspect: "tail -n 100 /home/carcassonne-gg/cron_update_players.log",
+          source: "/public/players · /public/achievements",
+          safety: "Публікує зміни у main; перед запуском перевірити чистий worktree.",
+          updated: "13.07.2026"
+        },
+        {
+          group: "cron",
+          title: "Відкриті турніри та їх список",
+          path: "server-scripts/update_tournaments_open_files.sh",
+          status: "verify",
+          statusLabel: "Звірити cron",
+          description: "Оновлює агрегати tournaments-open.json і tournaments-list.json та push-ить зміни.",
+          schedule: "Cron: розклад не в Git",
+          impact: "2 JSON + git push main",
+          command: "cd /home/carcassonne-gg\nbash server-scripts/update_tournaments_open_files.sh",
+          inspect: "tail -n 100 /home/carcassonne-gg/cron_update_open.log",
+          source: "/public/tournaments · /public/tournaments_list",
+          safety: "Список per-tournament JSON у коді закоментований; працюють два агрегати.",
+          updated: "13.07.2026"
+        },
+        {
+          group: "cron",
+          title: "Завершені турніри",
+          path: "server-scripts/update_tournaments_done_files.sh",
+          status: "verify",
+          statusLabel: "Звірити список",
+          description: "Оновлює per-tournament JSON для hardcoded списку MSO-2026Q1, MSO-2026Q2 і MSO-2026FT.",
+          schedule: "Cron: розклад не в Git",
+          impact: "3 JSON + git push main",
+          command: "cd /home/carcassonne-gg\nbash server-scripts/update_tournaments_done_files.sh",
+          inspect: "tail -n 100 /home/carcassonne-gg/cron_backup.log",
+          source: "/public/tournaments_done?tournament_id=…",
+          safety: "Перед новим сезоном треба актуалізувати масив tournaments у скрипті.",
+          updated: "13.07.2026"
+        },
+        {
+          group: "cron",
+          title: "Очний турнір",
+          path: "server-scripts/update_inperson_tournament.sh",
+          status: "verify",
+          statusLabel: "Передати ID",
+          description: "Завантажує один турнір із carcassonne.com.ua в json-data/{id}.json і публікує через Git.",
+          schedule: "Cron: розклад не в Git",
+          impact: "1 JSON + git push main",
+          command: "cd /home/carcassonne-gg\nbash server-scripts/update_inperson_tournament.sh wc2025",
+          inspect: "tail -n 100 /home/carcassonne-gg/cron_update_inperson.log",
+          source: "/public/{TOURNAMENT_ID}",
+          safety: "Default теж wc2025; завжди передавайте актуальний tournament ID явно.",
+          updated: "13.07.2026"
+        },
+        {
+          group: "manual",
+          title: "GG Elo профілів",
+          path: "auth-server/run_update_profile_gg_elo.py",
+          status: "current",
+          statusLabel: "Актуальний",
+          description: "Повністю перераховує profiles.gg_elo, positions, period delta та duel Elo snapshots із локальних дуелей.",
+          schedule: "Ручний запуск",
+          impact: "SQLite: profiles, duels",
+          command: "cd /home/carcassonne-gg/auth-server\npython3 run_update_profile_gg_elo.py --dry-run\npython3 run_update_profile_gg_elo.py",
+          inspect: "JSON summary у terminal output",
+          source: "INITIAL_ELO 1500 · K 32",
+          safety: "Виконуйте dry-run і збережіть backup БД перед повним перерахунком.",
+          updated: "12.07.2026"
+        },
+        {
+          group: "manual",
+          title: "GG-рейтинг вибраних дуелей",
+          path: "auth-server/run_update_gg_duel_ratings.py",
+          status: "current",
+          statusLabel: "Актуальний",
+          description: "Перераховує gg_rating_full і gg_rating за duel id, status, source type, tournament або missing.",
+          schedule: "Ручний запуск",
+          impact: "SQLite: duels.gg_rating*",
+          command: "cd /home/carcassonne-gg/auth-server\npython3 run_update_gg_duel_ratings.py --missing --dry-run\npython3 run_update_gg_duel_ratings.py --missing",
+          inspect: "JSON summary у terminal output",
+          source: "Фільтри комбінуються через AND",
+          safety: "Без selection filter скрипт не стартує; підтримує --dry-run.",
+          updated: "11.07.2026"
+        },
+        {
+          group: "manual",
+          title: "Ratings матчів і дуелей",
+          path: "auth-server/run_update_ratings.py",
+          status: "manual",
+          statusLabel: "Ручний",
+          description: "Оновлює BGA-based rating для однієї дуелі, матчу, всіх Planned або тільки missing Planned.",
+          schedule: "Також викликається Elo jobs",
+          impact: "SQLite: duel/match ratings",
+          command: "cd /home/carcassonne-gg/auth-server\npython3 run_update_ratings.py --planned",
+          inspect: "JSON summary у terminal output",
+          source: "--duel-id · --match-id · --planned",
+          safety: "Dry-run немає; для точкової операції використовуйте id замість --planned.",
+          updated: "02.07.2026"
+        },
+        {
+          group: "manual",
+          title: "BGA nickname та avatar профілів",
+          path: "auth-server/run_update_profile_bga_data_batch.py",
+          status: "manual",
+          statusLabel: "Ручний",
+          description: "Оновлює nickname/avatar одного профілю або batch до 20 профілів; wrapper захищений flock.",
+          schedule: "Ручний / batch",
+          impact: "SQLite: profiles",
+          command: "cd /home/carcassonne-gg/auth-server\n./scripts/run_update_profile_bga_data_batch.sh --limit 20",
+          inspect: "JSON summary у terminal output",
+          source: "Single: run_update_profile_bga_data.py --player-id ID",
+          safety: "Dry-run немає; для тесту обмежтеся одним --player-id.",
+          updated: "02.04.2026"
+        },
+        {
+          group: "manual",
+          title: "Імпорт відсутніх WTCOC players",
+          path: "auth-server/run_sync_wtcoc_players.py",
+          status: "manual",
+          statusLabel: "Ручний",
+          description: "Зіставляє WTCOC players із profiles, показує план і за прапорцем --apply додає відсутні профілі.",
+          schedule: "Ручний запуск",
+          impact: "SQLite: profiles з --apply",
+          command: "cd /home/carcassonne-gg/auth-server\npython3 run_sync_wtcoc_players.py\npython3 run_sync_wtcoc_players.py --apply",
+          inspect: "JSON import plan у terminal output",
+          source: "WTCOC_API_TOKEN / default API",
+          safety: "Перший запуск без --apply є preview і нічого не записує.",
+          updated: "08.05.2026"
+        },
+        {
+          group: "maintenance",
+          title: "Аудит результатів WTCOC",
+          path: "auth-server/run_check_wtcoc_results.py",
+          status: "maintenance",
+          statusLabel: "Read-only",
+          description: "Порівнює завершені результати WTCOC API з локальними matches/duels і формує звіт розбіжностей.",
+          schedule: "За потреби",
+          impact: "Read-only",
+          command: "cd /home/carcassonne-gg/auth-server\npython3 run_check_wtcoc_results.py --tournament-id WTCOC-2026",
+          inspect: "JSON report у terminal output",
+          source: "Опційно: --match-id 12",
+          safety: "Не має apply-режиму та не змінює БД.",
+          updated: "20.04.2026"
+        },
+        {
+          group: "maintenance",
+          title: "Preview / імпорт CSV у SQLite",
+          path: "auth-server/run_import_csv_to_sqlite.py",
+          status: "maintenance",
+          statusLabel: "За потреби",
+          description: "Імпортує profiles, matches і duels із CSV; без --apply лише показує план.",
+          schedule: "Міграція",
+          impact: "SQLite з --apply",
+          command: "cd /home/carcassonne-gg/auth-server\npython3 run_import_csv_to_sqlite.py --import-dir ../archive/import\npython3 run_import_csv_to_sqlite.py --import-dir ../archive/import --apply",
+          inspect: "Preview / summary у terminal output",
+          source: "--only profiles|matches|duels",
+          safety: "Перед --apply обовʼязково перевірити preview та backup auth.sqlite.",
+          updated: "11.07.2026"
+        },
+        {
+          group: "maintenance",
+          title: "Розбіжності import-результатів",
+          path: "auth-server/run_find_import_result_mismatches.py",
+          status: "maintenance",
+          statusLabel: "Read-only",
+          description: "Шукає matches/duels, де поточні result columns відрізняються від непорожніх *_import columns.",
+          schedule: "За потреби",
+          impact: "Read-only",
+          command: "cd /home/carcassonne-gg/auth-server\npython3 run_find_import_result_mismatches.py --tournament-id WTCOC-2026",
+          inspect: "Text report; опційно --json",
+          source: "Фільтри: tournament-id / match-id",
+          safety: "Діагностичний скрипт, не виконує UPDATE.",
+          updated: "27.04.2026"
+        },
+        {
+          group: "maintenance",
+          title: "Невалідні Friendly matches",
+          path: "auth-server/find_invalid_friendly_matches.py",
+          status: "maintenance",
+          statusLabel: "Read-only",
+          description: "Знаходить friendly matches, де association гравців дуелі не відповідає командам матчу.",
+          schedule: "За потреби",
+          impact: "Read-only",
+          command: "cd /home/carcassonne-gg/auth-server\npython3 find_invalid_friendly_matches.py --tournament-id Friendly-Matches",
+          inspect: "Text report; опційно --json",
+          source: "Опційно: --match-id MATCH_ID",
+          safety: "Лише перевірка цілісності даних.",
+          updated: "16.04.2026"
+        },
+        {
+          group: "maintenance",
+          title: "Ремонт WTCOC game links",
+          path: "auth-server/fix_wtcoc_games_duel_links.py",
+          status: "maintenance",
+          statusLabel: "Міграція",
+          description: "Замінює legacy WTCOC duel ids у games.duel_id на актуальні ідентифікатори.",
+          schedule: "Одноразово / за потреби",
+          impact: "SQLite: games.duel_id",
+          command: "cd /home/carcassonne-gg/auth-server\npython3 fix_wtcoc_games_duel_links.py --dry-run\npython3 fix_wtcoc_games_duel_links.py",
+          inspect: "Summary у terminal output",
+          source: "Default prefix: WTCOC",
+          safety: "Спочатку --dry-run; за потреби звузити --tournament-prefix.",
+          updated: "20.04.2026"
+        },
+        {
+          group: "maintenance",
+          title: "Ремонт WTCOC stream links",
+          path: "auth-server/fix_wtcoc_stream_links.py",
+          status: "maintenance",
+          statusLabel: "Міграція",
+          description: "Замінює legacy WTCOC match/duel ids у streams.entity_id на актуальні значення.",
+          schedule: "Одноразово / за потреби",
+          impact: "SQLite: streams.entity_id",
+          command: "cd /home/carcassonne-gg/auth-server\npython3 fix_wtcoc_stream_links.py --dry-run\npython3 fix_wtcoc_stream_links.py",
+          inspect: "Summary у terminal output",
+          source: "Default prefix: WTCOC",
+          safety: "Спочатку --dry-run; зробити backup БД перед apply.",
+          updated: "22.04.2026"
+        },
+        {
+          group: "maintenance",
+          title: "Open lineup для WTCOC матчів",
+          path: "auth-server/scripts/update_wtcoc_existing_matches.sh",
+          status: "maintenance",
+          statusLabel: "Точковий update",
+          description: "Для вибраного турніру встановлює lineup_type=Open і очищає lineup deadline у всіх активних matches.",
+          schedule: "Одноразово",
+          impact: "SQLite: matches",
+          command: "cd /home/carcassonne-gg/auth-server\n./scripts/update_wtcoc_existing_matches.sh ./data/auth.sqlite WTCOC-2026",
+          inspect: "Before / After таблиці в terminal",
+          source: "Аргументи: DB_PATH TOURNAMENT_ID",
+          safety: "Dry-run немає: команда одразу виконує UPDATE для всього турніру.",
+          updated: "11.04.2026"
+        }
+      ];
+
+      const groupRoot = document.getElementById("catalog-groups");
+      const emptyState = document.getElementById("empty-state");
+      const searchInput = document.getElementById("script-search");
+      const searchClear = document.getElementById("search-clear");
+      const toast = document.getElementById("copy-toast");
+      let activeFilter = "all";
+      let toastTimer = null;
+
+      const escapeHtml = (value) => String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+      const iconName = (group) => {
+        if (group === "systemd") return "timer";
+        if (group === "maintenance") return "wrench";
+        return "terminal";
+      };
+
+      const searchableText = (script) => Object.values(script)
+        .join(" ")
+        .toLocaleLowerCase("uk");
+
+      const cardTemplate = (script, index) => {
+        const detailsId = `details-${script.group}-${index}`;
+        return `
+          <article class="script-card" data-group="${escapeHtml(script.group)}" data-search="${escapeHtml(searchableText(script))}">
+            <div class="script-card__head">
+              <div class="script-card__meta">
+                <span class="script-card__path">${escapeHtml(script.path)}</span>
+                <span class="badge badge--${escapeHtml(script.status)}">${escapeHtml(script.statusLabel)}</span>
+              </div>
+              <h3>${escapeHtml(script.title)}</h3>
+              <p class="script-card__desc">${escapeHtml(script.description)}</p>
+            </div>
+            <div class="script-card__facts">
+              <div class="script-card__fact">
+                <span class="script-card__fact-label">Розклад</span>
+                <span class="script-card__fact-value">${escapeHtml(script.schedule)}</span>
+              </div>
+              <div class="script-card__fact">
+                <span class="script-card__fact-label">Змінює</span>
+                <span class="script-card__fact-value">${escapeHtml(script.impact)}</span>
+              </div>
+            </div>
+            <div class="codebox script-card__command">
+              <code>${escapeHtml(script.command)}</code>
+              <button class="copy-button" type="button" data-copy="${escapeHtml(script.command)}" aria-label="Скопіювати команду ${escapeHtml(script.title)}">
+                <svg aria-hidden="true"><use href="#i-copy"></use></svg> Copy
+              </button>
+            </div>
+            <button class="script-card__more" type="button" aria-expanded="false" aria-controls="${detailsId}">
+              <span>Логи, джерело та застереження</span>
+              <svg aria-hidden="true"><use href="#i-chevron"></use></svg>
+            </button>
+            <div class="script-card__details" id="${detailsId}">
+              <div class="detail-row"><strong>Перевірка</strong><code>${escapeHtml(script.inspect)}</code></div>
+              <div class="detail-row"><strong>Джерело</strong><span>${escapeHtml(script.source)}</span></div>
+              <div class="detail-row"><strong>Важливо</strong><span>${escapeHtml(script.safety)}</span></div>
+              <div class="detail-row"><strong>Код змінено</strong><span>${escapeHtml(script.updated)}</span></div>
+            </div>
+          </article>
+        `;
+      };
+
+      const render = () => {
+        const query = searchInput.value.trim().toLocaleLowerCase("uk");
+        let visibleTotal = 0;
+        const html = groups.map((group) => {
+          const items = scripts.filter((script) => {
+            const matchesGroup = activeFilter === "all" || script.group === activeFilter;
+            const matchesQuery = !query || searchableText(script).includes(query);
+            return script.group === group.id && matchesGroup && matchesQuery;
+          });
+          if (!items.length) return "";
+          visibleTotal += items.length;
+          return `
+            <section class="group" aria-labelledby="group-${escapeHtml(group.id)}">
+              <div class="group__head">
+                <h3 class="group__title" id="group-${escapeHtml(group.id)}">
+                  <span class="group__title-icon" aria-hidden="true"><svg><use href="#i-${iconName(group.id)}"></use></svg></span>
+                  ${escapeHtml(group.title)}
+                </h3>
+                <span class="group__count">${items.length} · ${escapeHtml(group.description)}</span>
+              </div>
+              <div class="cards">${items.map(cardTemplate).join("")}</div>
+            </section>
+          `;
+        }).join("");
+
+        groupRoot.innerHTML = html;
+        emptyState.classList.toggle("is-visible", visibleTotal === 0);
+        searchClear.classList.toggle("is-visible", Boolean(searchInput.value));
+      };
+
+      const copyText = async (text) => {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (error) {
+          const area = document.createElement("textarea");
+          area.value = text;
+          area.style.position = "fixed";
+          area.style.opacity = "0";
+          document.body.appendChild(area);
+          area.select();
+          document.execCommand("copy");
+          area.remove();
+        }
+        window.clearTimeout(toastTimer);
+        toast.classList.add("is-visible");
+        toastTimer = window.setTimeout(() => toast.classList.remove("is-visible"), 1800);
+      };
+
+      document.addEventListener("click", (event) => {
+        const copyButton = event.target.closest("[data-copy]");
+        if (copyButton) {
+          copyText(copyButton.dataset.copy);
+          return;
+        }
+
+        const detailsButton = event.target.closest(".script-card__more");
+        if (detailsButton) {
+          const expanded = detailsButton.getAttribute("aria-expanded") === "true";
+          detailsButton.setAttribute("aria-expanded", String(!expanded));
+          document.getElementById(detailsButton.getAttribute("aria-controls"))
+            ?.classList.toggle("is-open", !expanded);
+          return;
+        }
+
+        const filterButton = event.target.closest("[data-filter]");
+        if (filterButton) {
+          activeFilter = filterButton.dataset.filter;
+          document.querySelectorAll("[data-filter]").forEach((button) => {
+            const isActive = button === filterButton;
+            button.classList.toggle("is-active", isActive);
+            button.setAttribute("aria-pressed", String(isActive));
+          });
+          render();
+        }
+      });
+
+      searchInput.addEventListener("input", render);
+      searchInput.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          searchInput.value = "";
+          render();
+        }
+      });
+      searchClear.addEventListener("click", () => {
+        searchInput.value = "";
+        searchInput.focus();
+        render();
+      });
+
+      document.querySelectorAll("[data-filter]").forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.classList.contains("is-active")));
+      });
+
+      document.getElementById("stat-total").textContent = scripts.length;
+      document.getElementById("stat-systemd").textContent = scripts.filter((item) => item.group === "systemd").length;
+      document.getElementById("stat-cron").textContent = scripts.filter((item) => item.group === "cron").length;
+      document.getElementById("stat-manual").textContent = scripts.filter((item) => ["manual", "maintenance"].includes(item.group)).length;
+
+      render();
+    })();
+  </script>
+</body>
+</html>
