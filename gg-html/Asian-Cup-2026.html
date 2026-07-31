@@ -1535,6 +1535,55 @@
     renderTeamsContent();
   }
 
+  async function loadStandingsFromDatabase() {
+    try {
+      const url = new URL(`${API_BASE}/standings`);
+      url.searchParams.set("tournament_id", currentTournamentId);
+      url.searchParams.set("stage", "Stage 1");
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      const teamsById = new Map(
+        (teams || []).map(team => [
+          String(team.team_id || "").trim().toUpperCase(),
+          team
+        ])
+      );
+      standings = (Array.isArray(data.standings) ? data.standings : [])
+        .filter(row => row && row.team_id && !row.player_id)
+        .map(row => {
+          const teamId = String(row.team_id || "").trim();
+          const team = teamsById.get(teamId.toUpperCase());
+          return {
+            id: row.id,
+            tournament_id: row.tournament_id || currentTournamentId,
+            stage: row.stage || "Stage 1",
+            group: row.group || "",
+            team_id: teamId,
+            team: team?.team || teamId,
+            matches_played: row.mp ?? 0,
+            matches_won: row.mw ?? 0,
+            matches_lost: row.ml ?? 0,
+            duels_won: row.dw ?? 0,
+            duels_lost: row.dl ?? 0,
+            games_won: row.gw ?? 0,
+            games_lost: row.gl ?? 0,
+            matches_difference: row.mdif ?? 0,
+            duels_difference: row.ddif ?? 0,
+            games_difference: row.gdif ?? 0,
+            standing_icon: row.standing_icon || null,
+            position: row.position_override ?? row.position ?? null
+          };
+        });
+    } catch (error) {
+      console.error("Failed to load Asian Cup standings", error);
+      standings = [];
+    }
+  }
+
   function initAndRenderTournamentContent(currentTournament) {
     // --- INIT TOURNAMENT CONTENT ---
     // Dynamically create tabs and content containers based on tournament configuration
@@ -4934,9 +4983,12 @@
   runWhenReady(async () => {
     document.getElementById("tournament-title").textContent = currentTournament.name;
     applyTournamentTheme(currentTournament.style);
-    await loadTournamentHtmlFromDatabase();
+    await Promise.all([
+      loadTournamentHtmlFromDatabase(),
+      loadTournamentTeamsFromDatabase()
+    ]);
+    await loadStandingsFromDatabase();
     initAndRenderTournamentContent(currentTournament);
-    loadTournamentTeamsFromDatabase();
   });
 
   // Opens a fullscreen overlay that shows only the bracket block

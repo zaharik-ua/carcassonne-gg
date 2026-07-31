@@ -11613,7 +11613,7 @@ app.get("/tournament-teams", requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/standings", requireAdmin, async (req, res) => {
+app.get("/standings", async (req, res) => {
   const tournamentId = normalizeNullableText(req.query?.tournament_id);
   const requestedStage = normalizeNullableText(req.query?.stage);
   if (!tournamentId) {
