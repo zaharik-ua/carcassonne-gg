@@ -139,6 +139,18 @@
     cursor: not-allowed;
   }
 
+  .cp-edit-row input[readonly] {
+    background: #f3f4f6;
+    color: #667085;
+  }
+
+  .cp-edit-row.cp-edit-row-checkbox > input[type="checkbox"] {
+    width: auto;
+    height: auto;
+    justify-self: start;
+    margin: 0;
+  }
+
   .cp-edit-row--line-start {
     grid-column: 1;
   }
@@ -1080,25 +1092,6 @@
     display: none !important;
   }
 
-  .cp-tournament-form select {
-    width: 100%;
-    border: 1px solid #c8ced8;
-    border-radius: 4px;
-    height: 30px;
-    padding: 4px 8px;
-    background: #fff;
-    color: #2f3947;
-    font: inherit;
-    font-size: 14px;
-    box-sizing: border-box;
-  }
-
-  .cp-tournament-form select:disabled {
-    background: #f3f4f6;
-    color: #8c96a4;
-    cursor: not-allowed;
-  }
-
   .cp-tournament-form .cp-edit-row--full {
     grid-column: 1 / -1;
   }
@@ -1143,31 +1136,55 @@
     gap: 8px;
   }
 
+  .cp-tournament-config-header,
   .cp-tournament-config-row {
     display: grid;
-    grid-template-columns: minmax(180px, 1fr) minmax(130px, 0.55fr) auto;
-    align-items: end;
+    grid-template-columns: minmax(0, 1fr) minmax(90px, 0.45fr) 26px;
+    align-items: center;
     gap: 8px;
-    padding: 10px;
-    border: 1px solid #dbe2ea;
-    border-radius: 6px;
-    background: #f8fafc;
   }
 
+  .cp-tournament-config-header {
+    color: #333;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .cp-tournament-config-header--teams,
   .cp-tournament-config-row--teams {
-    grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1.2fr) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 26px;
   }
 
   .cp-tournament-config-control {
-    display: grid;
-    gap: 3px;
     min-width: 0;
   }
 
-  .cp-tournament-config-control label {
-    color: #475467;
-    font-size: 11px;
-    font-weight: 600;
+  .cp-tournament-config-input {
+    width: 100%;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    height: 30px;
+    padding: 4px 8px;
+    background: #fff;
+    color: #2f3947;
+    font: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .cp-tournament-config-input:disabled {
+    background: #f3f4f6;
+    color: #8c96a4;
+    cursor: not-allowed;
+  }
+
+  .cp-tournament-remove-row {
+    align-self: center;
+    height: 22px;
+    line-height: 1;
+    min-width: 22px;
+    padding: 0;
+    width: 22px;
   }
 
   .cp-tournament-config-empty {
@@ -1244,19 +1261,18 @@
       font-size: 16px !important;
     }
 
-    .cp-tournament-form select {
+    .cp-tournament-config-input {
       font-size: 16px;
     }
 
-    .cp-tournament-config-row,
-    .cp-tournament-config-row--teams {
-      grid-template-columns: minmax(0, 1fr);
-      align-items: stretch;
+    .cp-tournament-config-header,
+    .cp-tournament-config-row {
+      grid-template-columns: minmax(0, 1fr) minmax(82px, 0.45fr) 26px;
     }
 
-    .cp-tournament-config-row .cp-btn-danger {
-      justify-self: start;
-      margin-left: 0;
+    .cp-tournament-config-header--teams,
+    .cp-tournament-config-row--teams {
+      grid-template-columns: repeat(2, minmax(0, 1fr)) 26px;
     }
   }
 
@@ -1290,6 +1306,7 @@
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const TOURNAMENT_TEAMS_URL = `${AUTH_BASE}/tournament-teams`;
+  const STANDINGS_URL = `${AUTH_BASE}/standings`;
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const USER_OPTIONS_URL = `${AUTH_BASE}/users/options`;
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
@@ -5733,13 +5750,195 @@
     return result;
   }
 
-  function appendTournamentSelectOption(select, value, label, selectedValue) {
-    const option = document.createElement("option");
-    option.value = String(value ?? "");
-    option.textContent = String(label ?? value ?? "");
-    option.selected = option.value === String(selectedValue ?? "");
-    select.appendChild(option);
+  let openTournamentDropdown = null;
+
+  function createTournamentDropdown(initialValue, options, config = {}) {
+    const normalizedOptions = (Array.isArray(options) ? options : [])
+      .map((option) => {
+        if (option && typeof option === "object") {
+          return {
+            value: String(option.value ?? "").trim(),
+            label: String(option.label ?? option.value ?? "").trim(),
+            logo: String(option.logo || "").trim(),
+          };
+        }
+        const value = String(option ?? "").trim();
+        return { value, label: value, logo: "" };
+      });
+    let value = String(initialValue ?? "").trim();
+    if (!normalizedOptions.some((option) => option.value === value)) {
+      value = normalizedOptions[0]?.value || "";
+    }
+    let disabled = config.disabled === true;
+    let filterQuery = "";
+    const changeHandlers = [];
+
+    const root = document.createElement("div");
+    root.className = "cp-dd";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "cp-dd-btn";
+    const buttonContent = document.createElement("span");
+    buttonContent.className = "cp-dd-btn-content";
+    const chevron = document.createElement("span");
+    chevron.className = "cp-dd-chevron";
+    chevron.textContent = "▾";
+    button.appendChild(buttonContent);
+    button.appendChild(chevron);
+
+    const menu = document.createElement("div");
+    menu.className = "cp-dd-menu";
+    const searchable = config.searchable === true;
+    let searchInput = null;
+    if (searchable) {
+      const searchWrap = document.createElement("div");
+      searchWrap.className = "cp-dd-search";
+      searchInput = document.createElement("input");
+      searchInput.type = "text";
+      searchInput.placeholder = "Type to filter...";
+      searchWrap.appendChild(searchInput);
+      menu.appendChild(searchWrap);
+    }
+
+    const selectedOption = () => normalizedOptions.find((option) => option.value === value) || null;
+    const appendOptionContent = (target, option) => {
+      if (config.showLogo && option?.logo) {
+        const logo = document.createElement("img");
+        logo.className = "cp-dd-flag";
+        logo.src = option.logo;
+        logo.alt = "";
+        target.appendChild(logo);
+      }
+      const label = document.createElement("span");
+      label.className = target === buttonContent ? "" : "cp-dd-option-label";
+      label.textContent = option?.label || option?.value || "";
+      if (!option?.value) label.style.color = "#999";
+      target.appendChild(label);
+    };
+    const renderButton = () => {
+      buttonContent.innerHTML = "";
+      const option = selectedOption();
+      if (option) appendOptionContent(buttonContent, option);
+    };
+    const renderMenu = () => {
+      menu.querySelectorAll(".cp-dd-option,.cp-dd-empty").forEach((node) => node.remove());
+      const query = filterQuery.trim().toLowerCase();
+      const visibleOptions = normalizedOptions.filter((option) => (
+        !query || `${option.label} ${option.value}`.toLowerCase().includes(query)
+      ));
+      if (!visibleOptions.length) {
+        const empty = document.createElement("div");
+        empty.className = "cp-dd-empty";
+        empty.textContent = "Nothing found.";
+        empty.style.padding = "8px 10px";
+        empty.style.fontSize = "13px";
+        empty.style.color = "#6b7280";
+        menu.appendChild(empty);
+        return;
+      }
+      visibleOptions.forEach((option) => {
+        const optionButton = document.createElement("button");
+        optionButton.type = "button";
+        optionButton.className = "cp-dd-option";
+        optionButton.dataset.value = option.value;
+        optionButton.classList.toggle("active", option.value === value);
+        appendOptionContent(optionButton, option);
+        optionButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          api.setValue(option.value, true);
+          api.close();
+        });
+        menu.appendChild(optionButton);
+      });
+    };
+
+    const api = {
+      root,
+      name: "",
+      close() {
+        menu.classList.remove("open");
+        menu.style.maxHeight = "0px";
+        button.classList.remove("open");
+        if (openTournamentDropdown === api) openTournamentDropdown = null;
+      },
+      getValue: () => value,
+      setValue(nextValue, trigger = false) {
+        const next = String(nextValue ?? "").trim();
+        if (!normalizedOptions.some((option) => option.value === next)) return;
+        value = next;
+        renderButton();
+        menu.querySelectorAll(".cp-dd-option").forEach((option) => {
+          option.classList.toggle("active", String(option.dataset.value || "") === value);
+        });
+        if (trigger) {
+          changeHandlers.forEach((handler) => handler({ target: api, currentTarget: api }));
+        }
+      },
+      setDisabled(nextDisabled) {
+        disabled = !!nextDisabled;
+        root.classList.toggle("disabled", disabled);
+        button.disabled = disabled;
+        if (disabled) api.close();
+      },
+      addEventListener(type, handler) {
+        if (type === "change" && typeof handler === "function") changeHandlers.push(handler);
+      },
+    };
+    Object.defineProperties(api, {
+      value: {
+        get: () => api.getValue(),
+        set: (nextValue) => api.setValue(nextValue, false),
+      },
+      disabled: {
+        get: () => disabled,
+        set: (nextDisabled) => api.setDisabled(nextDisabled),
+      },
+    });
+
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (disabled || button.disabled) return;
+      const wasOpen = menu.classList.contains("open");
+      if (openTournamentDropdown && openTournamentDropdown !== api) openTournamentDropdown.close();
+      if (wasOpen) {
+        api.close();
+        return;
+      }
+      filterQuery = "";
+      if (searchInput) searchInput.value = "";
+      renderMenu();
+      menu.classList.add("open");
+      menu.style.maxHeight = `${Math.min(menu.scrollHeight, 300)}px`;
+      button.classList.add("open");
+      openTournamentDropdown = api;
+      if (searchInput && window.matchMedia("(min-width: 600px)").matches) {
+        try {
+          searchInput.focus({ preventScroll: true });
+        } catch (_error) {
+          searchInput.focus();
+        }
+      }
+    });
+    if (searchInput) {
+      searchInput.addEventListener("click", (event) => event.stopPropagation());
+      searchInput.addEventListener("keydown", (event) => event.stopPropagation());
+      searchInput.addEventListener("input", () => {
+        filterQuery = searchInput.value;
+        renderMenu();
+        menu.style.maxHeight = `${Math.min(menu.scrollHeight, 300)}px`;
+      });
+    }
+    root.appendChild(button);
+    root.appendChild(menu);
+    renderButton();
+    renderMenu();
+    api.setDisabled(disabled);
+    return api;
   }
+
+  document.addEventListener("click", () => {
+    if (openTournamentDropdown) openTournamentDropdown.close();
+  });
 
   function createTournamentFormRow(labelText, value, options = {}) {
     const row = document.createElement("div");
@@ -5750,38 +5949,47 @@
     let input = null;
 
     if (Array.isArray(options.selectOptions)) {
-      input = document.createElement("select");
       const currentValue = String(value ?? "");
-      options.selectOptions.forEach((entry) => {
-        if (entry && typeof entry === "object") {
-          appendTournamentSelectOption(input, entry.value, entry.label, currentValue);
-        } else {
-          appendTournamentSelectOption(input, entry, entry, currentValue);
-        }
-      });
-      if (currentValue && !Array.from(input.options).some((entry) => entry.value === currentValue)) {
-        appendTournamentSelectOption(input, currentValue, currentValue, currentValue);
+      const selectOptions = options.selectOptions.slice();
+      const hasCurrentValue = selectOptions.some((entry) => (
+        String(entry && typeof entry === "object" ? entry.value : entry ?? "") === currentValue
+      ));
+      if (currentValue && !hasCurrentValue) {
+        selectOptions.push({ value: currentValue, label: currentValue });
       }
+      input = createTournamentDropdown(currentValue, selectOptions, {
+        searchable: options.searchable === true,
+        showLogo: options.showLogo === true,
+      });
     } else {
       input = document.createElement("input");
       input.type = options.type || "text";
-      input.value = String(value ?? "");
+      if (input.type === "checkbox") {
+        row.classList.add("cp-edit-row-checkbox");
+        input.checked = value === true
+          || value === 1
+          || String(value ?? "").trim().toLowerCase() === "true";
+      } else {
+        input.value = String(value ?? "");
+      }
       if (options.min !== undefined) input.min = String(options.min);
       if (options.readOnly) input.readOnly = true;
     }
 
     input.name = String(options.name || labelText || "").trim();
     row.appendChild(label);
-    row.appendChild(input);
+    row.appendChild(input.root || input);
     return { row, input };
   }
 
   function getTournamentUserLabel(user) {
-    const details = [];
-    if (user?.name) details.push(String(user.name).trim());
-    if (user?.bga_nickname) details.push(`BGA: ${String(user.bga_nickname).trim()}`);
-    if (user?.email) details.push(String(user.email).trim());
-    return `${user?.id || ""} - ${details.filter(Boolean).join(" • ") || `User #${user?.id || ""}`}`;
+    return String(
+      user?.bga_nickname
+      || user?.name
+      || user?.email
+      || user?.id
+      || ""
+    ).trim();
   }
 
   function createTournamentAccessUsersEditor(users, initialEntries) {
@@ -5823,6 +6031,14 @@
 
     const render = () => {
       list.innerHTML = "";
+      const header = document.createElement("div");
+      header.className = "cp-tournament-config-header";
+      ["User", "Role", ""].forEach((label) => {
+        const cell = document.createElement("div");
+        cell.textContent = label;
+        header.appendChild(cell);
+      });
+      list.appendChild(header);
       if (!entries.length) {
         const empty = document.createElement("div");
         empty.className = "cp-tournament-config-empty";
@@ -5835,44 +6051,45 @@
         row.className = "cp-tournament-config-row";
         const userControl = document.createElement("div");
         userControl.className = "cp-tournament-config-control";
-        const userLabel = document.createElement("label");
-        userLabel.textContent = "User";
-        const userSelect = document.createElement("select");
-        appendTournamentSelectOption(userSelect, "", "Select user...", entry.user_id);
         const selectedByOtherRows = new Set(
           entries.filter((_item, otherIndex) => otherIndex !== index).map((item) => item.user_id)
         );
-        userOptions.forEach((option) => {
-          if (!selectedByOtherRows.has(option.value) || option.value === entry.user_id) {
-            appendTournamentSelectOption(userSelect, option.value, option.label, entry.user_id);
-          }
-        });
-        userSelect.disabled = disabled;
+        const availableUserOptions = userOptions.filter((option) => (
+          !selectedByOtherRows.has(option.value) || option.value === entry.user_id
+        ));
+        if (entry.user_id && !availableUserOptions.some((option) => option.value === entry.user_id)) {
+          availableUserOptions.push({ value: entry.user_id, label: entry.user_id });
+        }
+        const userSelect = createTournamentDropdown(
+          entry.user_id,
+          [{ value: "", label: "Select user" }].concat(availableUserOptions),
+          { searchable: true }
+        );
+        userSelect.setDisabled(disabled);
         userSelect.addEventListener("change", () => {
           entry.user_id = userSelect.value;
           render();
         });
-        userControl.appendChild(userLabel);
-        userControl.appendChild(userSelect);
+        userControl.appendChild(userSelect.root);
 
         const roleControl = document.createElement("div");
         roleControl.className = "cp-tournament-config-control";
-        const roleLabel = document.createElement("label");
-        roleLabel.textContent = "Role";
-        const roleSelect = document.createElement("select");
-        appendTournamentSelectOption(roleSelect, "captain", "Captain", entry.role);
-        appendTournamentSelectOption(roleSelect, "admin", "Admin", entry.role);
-        roleSelect.disabled = disabled;
+        const roleSelect = createTournamentDropdown(entry.role, [
+          { value: "captain", label: "Captain" },
+          { value: "admin", label: "Admin" },
+        ]);
+        roleSelect.setDisabled(disabled);
         roleSelect.addEventListener("change", () => {
           entry.role = roleSelect.value === "admin" ? "admin" : "captain";
         });
-        roleControl.appendChild(roleLabel);
-        roleControl.appendChild(roleSelect);
+        roleControl.appendChild(roleSelect.root);
 
         const removeButton = document.createElement("button");
         removeButton.type = "button";
-        removeButton.className = "cp-btn cp-btn-danger";
-        removeButton.textContent = "Remove";
+        removeButton.className = "cp-btn cp-btn-secondary cp-tournament-remove-row";
+        removeButton.textContent = "×";
+        removeButton.title = "Remove user";
+        removeButton.setAttribute("aria-label", "Remove user");
         removeButton.disabled = disabled;
         removeButton.addEventListener("click", () => {
           entries.splice(index, 1);
@@ -5934,17 +6151,16 @@
   function getTournamentTeamLabel(team) {
     const id = String(team?.id || "").trim();
     const name = String(team?.name || "").trim();
-    return [id, name].filter(Boolean).join(" • ") || id;
+    return name || id;
   }
 
   function getTournamentProfileLabel(profile) {
-    const parts = [
-      String(profile?.id || "").trim(),
-      String(profile?.bga_nickname || "").trim(),
-      String(profile?.name || "").trim(),
-      String(profile?.association || "").trim(),
-    ].filter(Boolean);
-    return parts.join(" • ");
+    return String(
+      profile?.bga_nickname
+      || profile?.name
+      || profile?.id
+      || ""
+    ).trim();
   }
 
   function createTournamentTeamsEditor(teams, profiles, initialEntries, initialTeamType) {
@@ -5973,6 +6189,7 @@
       .map((team) => ({
         value: String(team?.id || "").trim(),
         label: getTournamentTeamLabel(team),
+        logo: String(team?.logo || "").trim(),
         type: getTournamentTeamType(team?.type),
       }))
       .filter((entry) => entry.value)
@@ -5993,6 +6210,13 @@
       .filter((entry) => entry.team_id);
     let teamType = getTournamentTeamType(initialTeamType);
     let disabled = false;
+    const changeHandlers = [];
+    const notifyChange = () => {
+      const values = entries
+        .filter((entry) => entry.team_id)
+        .map((entry) => ({ team_id: entry.team_id, captain_id: entry.captain_id || null }));
+      changeHandlers.forEach((handler) => handler(values));
+    };
 
     const availableCaptains = (teamId) => {
       if (teamType === "Club") return profileOptions;
@@ -6005,6 +6229,14 @@
       hint.textContent = teamType === "National"
         ? "National team captains must belong to the same association."
         : "Club team captains are optional and may belong to any association.";
+      const header = document.createElement("div");
+      header.className = "cp-tournament-config-header cp-tournament-config-header--teams";
+      ["Team", "Captain", ""].forEach((label) => {
+        const cell = document.createElement("div");
+        cell.textContent = label;
+        header.appendChild(cell);
+      });
+      list.appendChild(header);
       if (!entries.length) {
         const empty = document.createElement("div");
         empty.className = "cp-tournament-config-empty";
@@ -6017,63 +6249,62 @@
         row.className = "cp-tournament-config-row cp-tournament-config-row--teams";
         const teamControl = document.createElement("div");
         teamControl.className = "cp-tournament-config-control";
-        const teamLabel = document.createElement("label");
-        teamLabel.textContent = "Team";
-        const teamSelect = document.createElement("select");
-        appendTournamentSelectOption(teamSelect, "", "Select team...", entry.team_id);
         const selectedByOtherRows = new Set(
           entries.filter((_item, otherIndex) => otherIndex !== index).map((item) => item.team_id)
         );
-        teamOptions.forEach((option) => {
-          if (option.type !== teamType) return;
-          if (!selectedByOtherRows.has(option.value) || option.value === entry.team_id) {
-            appendTournamentSelectOption(teamSelect, option.value, option.label, entry.team_id);
-          }
-        });
-        if (entry.team_id && !Array.from(teamSelect.options).some((option) => option.value === entry.team_id)) {
-          appendTournamentSelectOption(teamSelect, entry.team_id, entry.team_id, entry.team_id);
+        const availableTeamOptions = teamOptions.filter((option) => (
+          option.type === teamType
+          && (!selectedByOtherRows.has(option.value) || option.value === entry.team_id)
+        ));
+        if (entry.team_id && !availableTeamOptions.some((option) => option.value === entry.team_id)) {
+          availableTeamOptions.push({ value: entry.team_id, label: entry.team_id, logo: "" });
         }
-        teamSelect.disabled = disabled;
+        const teamSelect = createTournamentDropdown(
+          entry.team_id,
+          [{ value: "", label: "Select team", logo: "" }].concat(availableTeamOptions),
+          { searchable: true, showLogo: true }
+        );
+        teamSelect.setDisabled(disabled);
         teamSelect.addEventListener("change", () => {
           entry.team_id = teamSelect.value;
           const captainStillValid = availableCaptains(entry.team_id)
             .some((profile) => profile.value === entry.captain_id);
           if (!captainStillValid) entry.captain_id = "";
           render();
+          notifyChange();
         });
-        teamControl.appendChild(teamLabel);
-        teamControl.appendChild(teamSelect);
+        teamControl.appendChild(teamSelect.root);
 
         const captainControl = document.createElement("div");
         captainControl.className = "cp-tournament-config-control";
-        const captainLabel = document.createElement("label");
-        captainLabel.textContent = "Captain";
-        const captainSelect = document.createElement("select");
         if (
           entry.captain_id
           && !availableCaptains(entry.team_id).some((profile) => profile.value === entry.captain_id)
         ) {
           entry.captain_id = "";
         }
-        appendTournamentSelectOption(captainSelect, "", "No captain", entry.captain_id);
-        availableCaptains(entry.team_id).forEach((profile) => {
-          appendTournamentSelectOption(captainSelect, profile.value, profile.label, entry.captain_id);
-        });
-        captainSelect.disabled = disabled || !entry.team_id;
+        const captainSelect = createTournamentDropdown(
+          entry.captain_id,
+          [{ value: "", label: "No captain" }].concat(availableCaptains(entry.team_id)),
+          { searchable: true }
+        );
+        captainSelect.setDisabled(disabled || !entry.team_id);
         captainSelect.addEventListener("change", () => {
           entry.captain_id = captainSelect.value;
         });
-        captainControl.appendChild(captainLabel);
-        captainControl.appendChild(captainSelect);
+        captainControl.appendChild(captainSelect.root);
 
         const removeButton = document.createElement("button");
         removeButton.type = "button";
-        removeButton.className = "cp-btn cp-btn-danger";
-        removeButton.textContent = "Remove";
+        removeButton.className = "cp-btn cp-btn-secondary cp-tournament-remove-row";
+        removeButton.textContent = "×";
+        removeButton.title = "Remove team";
+        removeButton.setAttribute("aria-label", "Remove team");
         removeButton.disabled = disabled;
         removeButton.addEventListener("click", () => {
           entries.splice(index, 1);
           render();
+          notifyChange();
         });
 
         row.appendChild(teamControl);
@@ -6090,6 +6321,7 @@
       const firstAvailable = teamOptions.find((option) => option.type === teamType && !used.has(option.value));
       entries.push({ team_id: firstAvailable?.value || "", captain_id: "" });
       render();
+      notifyChange();
     });
 
     root.appendChild(head);
@@ -6106,6 +6338,7 @@
           entries = entries.filter((entry) => (
             teamOptions.some((team) => team.value === entry.team_id && team.type === teamType)
           ));
+          notifyChange();
         }
         render();
       },
@@ -6121,10 +6354,196 @@
             captain_id: entry.captain_id || null,
           }));
       },
+      onChange(handler) {
+        if (typeof handler === "function") changeHandlers.push(handler);
+      },
       getValidationError() {
         if (entries.some((entry) => !entry.team_id)) return "Select a team in every tournament_teams row.";
         const ids = entries.map((entry) => normalizeCode(entry.team_id));
         if (new Set(ids).size !== ids.length) return "The same tournament team cannot be selected twice.";
+        return "";
+      },
+    };
+  }
+
+  function createTournamentStandingsEditor(teams, initialTournamentTeams, initialEntries) {
+    const root = document.createElement("section");
+    root.className = "cp-tournament-section";
+    const head = document.createElement("div");
+    head.className = "cp-tournament-section-head";
+    const headText = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "cp-tournament-section-title";
+    title.textContent = "Standings: Stage 1";
+    const hint = document.createElement("div");
+    hint.className = "cp-tournament-section-hint";
+    hint.textContent = "Select teams from Tournament teams. Group is optional.";
+    headText.appendChild(title);
+    headText.appendChild(hint);
+    head.appendChild(headText);
+
+    const list = document.createElement("div");
+    list.className = "cp-tournament-config-list";
+    const addButton = document.createElement("button");
+    addButton.type = "button";
+    addButton.className = "cp-btn cp-btn-secondary cp-tournament-add-row";
+    addButton.textContent = "Add standing";
+
+    const teamsById = new Map(
+      (Array.isArray(teams) ? teams : [])
+        .map((team) => ({
+          value: String(team?.id || "").trim(),
+          label: getTournamentTeamLabel(team),
+          logo: String(team?.logo || team?.flag || "").trim(),
+        }))
+        .filter((team) => team.value)
+        .map((team) => [normalizeCode(team.value), team])
+    );
+    let tournamentTeamIds = (Array.isArray(initialTournamentTeams) ? initialTournamentTeams : [])
+      .map((entry) => String(entry?.team_id ?? entry?.teamId ?? "").trim())
+      .filter(Boolean);
+    let entries = (Array.isArray(initialEntries) ? initialEntries : [])
+      .map((entry) => {
+        const parsedId = Number.parseInt(String(entry?.id ?? "").trim(), 10);
+        return {
+          id: Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null,
+          team_id: String(entry?.team_id ?? entry?.teamId ?? "").trim(),
+          group: String(entry?.group ?? "").trim(),
+        };
+      })
+      .filter((entry) => entry.team_id);
+    let disabled = false;
+
+    const getTeamOptions = () => tournamentTeamIds
+      .map((teamId) => teamsById.get(normalizeCode(teamId)) || {
+        value: teamId,
+        label: teamId,
+        logo: "",
+      })
+      .sort((left, right) => left.label.localeCompare(right.label));
+
+    const render = () => {
+      list.innerHTML = "";
+      const header = document.createElement("div");
+      header.className = "cp-tournament-config-header cp-tournament-config-header--teams";
+      ["Team", "Group", ""].forEach((label) => {
+        const cell = document.createElement("div");
+        cell.textContent = label;
+        header.appendChild(cell);
+      });
+      list.appendChild(header);
+      if (!entries.length) {
+        const empty = document.createElement("div");
+        empty.className = "cp-tournament-config-empty";
+        empty.textContent = "No Stage 1 standings configured.";
+        list.appendChild(empty);
+      }
+
+      const teamOptions = getTeamOptions();
+      entries.forEach((entry, index) => {
+        const row = document.createElement("div");
+        row.className = "cp-tournament-config-row cp-tournament-config-row--teams";
+
+        const teamControl = document.createElement("div");
+        teamControl.className = "cp-tournament-config-control";
+        const selectedByOtherRows = new Set(
+          entries
+            .filter((_item, otherIndex) => otherIndex !== index)
+            .map((item) => normalizeCode(item.team_id))
+        );
+        const availableTeamOptions = teamOptions.filter((option) => (
+          !selectedByOtherRows.has(normalizeCode(option.value))
+          || normalizeCode(option.value) === normalizeCode(entry.team_id)
+        ));
+        if (entry.team_id && !availableTeamOptions.some((option) => (
+          normalizeCode(option.value) === normalizeCode(entry.team_id)
+        ))) {
+          availableTeamOptions.push({ value: entry.team_id, label: entry.team_id, logo: "" });
+        }
+        const teamSelect = createTournamentDropdown(
+          entry.team_id,
+          [{ value: "", label: "Select team", logo: "" }].concat(availableTeamOptions),
+          { searchable: true, showLogo: true }
+        );
+        teamSelect.setDisabled(disabled);
+        teamSelect.addEventListener("change", () => {
+          entry.team_id = teamSelect.value;
+          render();
+        });
+        teamControl.appendChild(teamSelect.root);
+
+        const groupControl = document.createElement("div");
+        groupControl.className = "cp-tournament-config-control";
+        const groupInput = document.createElement("input");
+        groupInput.type = "text";
+        groupInput.className = "cp-tournament-config-input";
+        groupInput.value = entry.group;
+        groupInput.placeholder = "Optional";
+        groupInput.disabled = disabled;
+        groupInput.addEventListener("input", () => {
+          entry.group = groupInput.value;
+        });
+        groupControl.appendChild(groupInput);
+
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.className = "cp-btn cp-btn-secondary cp-tournament-remove-row";
+        removeButton.textContent = "×";
+        removeButton.title = "Remove standing";
+        removeButton.setAttribute("aria-label", "Remove standing");
+        removeButton.disabled = disabled;
+        removeButton.addEventListener("click", () => {
+          entries.splice(index, 1);
+          render();
+        });
+
+        row.appendChild(teamControl);
+        row.appendChild(groupControl);
+        row.appendChild(removeButton);
+        list.appendChild(row);
+      });
+      addButton.disabled = disabled || entries.length >= teamOptions.length;
+    };
+
+    addButton.addEventListener("click", () => {
+      const used = new Set(entries.map((entry) => normalizeCode(entry.team_id)));
+      const firstAvailable = getTeamOptions().find((option) => !used.has(normalizeCode(option.value)));
+      entries.push({ id: null, team_id: firstAvailable?.value || "", group: "" });
+      render();
+    });
+
+    root.appendChild(head);
+    root.appendChild(list);
+    root.appendChild(addButton);
+    render();
+
+    return {
+      root,
+      setTournamentTeams(nextTournamentTeams) {
+        tournamentTeamIds = (Array.isArray(nextTournamentTeams) ? nextTournamentTeams : [])
+          .map((entry) => String(entry?.team_id ?? entry?.teamId ?? "").trim())
+          .filter(Boolean);
+        const availableIds = new Set(tournamentTeamIds.map(normalizeCode));
+        entries = entries.filter((entry) => availableIds.has(normalizeCode(entry.team_id)));
+        render();
+      },
+      setDisabled(isDisabled) {
+        disabled = !!isDisabled;
+        render();
+      },
+      getValues() {
+        return entries
+          .filter((entry) => entry.team_id)
+          .map((entry) => ({
+            id: entry.id,
+            team_id: entry.team_id,
+            group: String(entry.group || "").trim() || null,
+          }));
+      },
+      getValidationError() {
+        if (entries.some((entry) => !entry.team_id)) return "Select a team in every standings row.";
+        const teamIds = entries.map((entry) => normalizeCode(entry.team_id));
+        if (new Set(teamIds).size !== teamIds.length) return "The same team cannot be selected twice in standings.";
         return "";
       },
     };
@@ -6212,12 +6631,14 @@
     try {
       const tournamentId = String(tournament?.id || "").trim();
       const teamParams = new URLSearchParams({ tournament_id: tournamentId });
-      const [usersData, teamsData, profilesData, categoriesData, tournamentTeamsData] = await Promise.all([
+      const standingsParams = new URLSearchParams({ tournament_id: tournamentId, stage: "Stage 1" });
+      const [usersData, teamsData, profilesData, categoriesData, tournamentTeamsData, standingsData] = await Promise.all([
         requestTournamentJson(USER_OPTIONS_URL, { method: "GET" }),
         requestTournamentJson(TEAMS_URL, { method: "GET" }),
         requestTournamentJson(PROFILES_PUBLIC_URL, { method: "GET" }),
         requestTournamentJson(CATEGORIES_URL, { method: "GET" }),
         requestTournamentJson(`${TOURNAMENT_TEAMS_URL}?${teamParams.toString()}`, { method: "GET" }),
+        requestTournamentJson(`${STANDINGS_URL}?${standingsParams.toString()}`, { method: "GET" }),
       ]);
       renderMyTournamentEditForm(tournament, {
         users: Array.isArray(usersData?.users) ? usersData.users : [],
@@ -6226,6 +6647,9 @@
         categories: Array.isArray(categoriesData?.categories) ? categoriesData.categories : [],
         tournamentTeams: Array.isArray(tournamentTeamsData?.tournament_teams)
           ? tournamentTeamsData.tournament_teams
+          : [],
+        standings: Array.isArray(standingsData?.standings)
+          ? standingsData.standings.filter((entry) => entry?.team_id && !entry?.player_id)
           : [],
       });
     } catch (error) {
@@ -6292,6 +6716,34 @@
       tournament?.lineup_size || "",
       { type: "number", min: 1 }
     );
+    const tournamentFormatField = createTournamentFormRow(
+      "Tournament Format",
+      tournament?.tournament_format || "1 Stage",
+      { selectOptions: ["1 Stage", "2 Stages", "3 Stages", "Leagues"] }
+    );
+    const stage1GroupsField = createTournamentFormRow(
+      "Stage 1 Groups",
+      tournament?.stage1_groups === true
+        || Number(tournament?.stage1_groups) === 1
+        || String(tournament?.stage1_groups || "").trim().toLowerCase() === "groups",
+      { type: "checkbox" }
+    );
+    const stageFormatOptions = [
+      "Round-robin",
+      "Swiss",
+      "Single Elimination",
+      "Double Elimination",
+    ];
+    const stage1FormatField = createTournamentFormRow(
+      "Stage 1 Format",
+      tournament?.stage1_format || "Round-robin",
+      { selectOptions: stageFormatOptions }
+    );
+    const stage2FormatField = createTournamentFormRow(
+      "Stage 2 Format",
+      tournament?.stage2_format || "Round-robin",
+      { selectOptions: stageFormatOptions }
+    );
 
     [
       idField,
@@ -6306,6 +6758,10 @@
       visibilityField,
       lineupSizeTypeField,
       lineupSizeField,
+      tournamentFormatField,
+      stage1GroupsField,
+      stage1FormatField,
+      stage2FormatField,
     ].forEach((field) => form.appendChild(field.row));
 
     const aboutRow = document.createElement("div");
@@ -6350,8 +6806,17 @@
       references.tournamentTeams,
       teamTypeField.input.value
     );
+    const standingsEditor = createTournamentStandingsEditor(
+      references.teams,
+      tournamentTeamsEditor.getValues(),
+      references.standings
+    );
+    tournamentTeamsEditor.onChange((tournamentTeams) => {
+      standingsEditor.setTournamentTeams(tournamentTeams);
+    });
     form.appendChild(accessUsersEditor.root);
     form.appendChild(tournamentTeamsEditor.root);
+    form.appendChild(standingsEditor.root);
 
     const status = document.createElement("div");
     status.className = "cp-edit-error";
@@ -6385,6 +6850,8 @@
       const supportsLineup = isTeams || tournamentType === "Clubs";
       const isFixedLineup = lineupSizeTypeField.input.value === "1";
       const isOfficial = isTeams && subtypeField.input.value === "Official";
+      const supportsStage1Standings = isTeams
+        && ["Round-robin", "Swiss"].includes(stage1FormatField.input.value);
 
       teamTypeField.row.classList.toggle("cp-hidden", !isTeams);
       subtypeField.row.classList.toggle("cp-hidden", !isTeams);
@@ -6393,23 +6860,30 @@
       lineupSizeField.row.classList.toggle("cp-hidden", !(supportsLineup && isFixedLineup));
       accessUsersEditor.root.classList.toggle("cp-hidden", !isTeams);
       tournamentTeamsEditor.root.classList.toggle("cp-hidden", !isTeams);
+      standingsEditor.root.classList.toggle("cp-hidden", !supportsStage1Standings);
 
       teamTypeField.input.disabled = isBusy || !isTeams;
       subtypeField.input.disabled = isBusy || !isTeams;
       categoryField.input.disabled = isBusy || !supportsCategory;
       lineupSizeTypeField.input.disabled = isBusy || !supportsLineup;
       lineupSizeField.input.disabled = isBusy || !supportsLineup || !isFixedLineup;
+      tournamentFormatField.input.disabled = isBusy;
+      stage1GroupsField.input.disabled = isBusy;
+      stage1FormatField.input.disabled = isBusy;
+      stage2FormatField.input.disabled = isBusy;
       lineupSizeField.input.required = supportsLineup && isFixedLineup;
       accessUsersEditor.setOfficial(isOfficial);
       if (isBusy) accessUsersEditor.setDisabled(true);
       tournamentTeamsEditor.setTeamType(teamTypeField.input.value);
       tournamentTeamsEditor.setDisabled(isBusy || !isTeams);
+      standingsEditor.setDisabled(isBusy || !supportsStage1Standings);
     };
 
     tournamentTypeField.input.addEventListener("change", syncConditionalFields);
     teamTypeField.input.addEventListener("change", syncConditionalFields);
     subtypeField.input.addEventListener("change", syncConditionalFields);
     lineupSizeTypeField.input.addEventListener("change", syncConditionalFields);
+    stage1FormatField.input.addEventListener("change", syncConditionalFields);
     syncConditionalFields();
 
     const setBusy = (busy) => {
@@ -6442,6 +6916,8 @@
       const isOfficial = isTeams && subtypeField.input.value === "Official";
       const supportsCategory = tournamentType === "Individuals" || isTeams;
       const supportsLineup = isTeams || tournamentType === "Clubs";
+      const supportsStage1Standings = isTeams
+        && ["Round-robin", "Swiss"].includes(stage1FormatField.input.value);
       const lineupSizeType = supportsLineup && lineupSizeTypeField.input.value === "1" ? 1 : 2;
       const lineupSize = Number.parseInt(lineupSizeField.input.value, 10);
       const payload = {
@@ -6457,11 +6933,16 @@
         player_hub_visibility: visibilityField.input.value,
         lineup_size_type: lineupSizeType,
         lineup_size: lineupSizeType === 1 ? lineupSize : null,
+        tournament_format: tournamentFormatField.input.value,
+        stage1_groups: stage1GroupsField.input.checked,
+        stage1_format: stage1FormatField.input.value,
+        stage2_format: stage2FormatField.input.value,
         about: aboutEditor.getHtml(),
         rules: rulesEditor.getHtml(),
         access_users: isOfficial ? accessUsersEditor.getValues() : [],
       };
       const tournamentTeams = isTeams ? tournamentTeamsEditor.getValues() : [];
+      const stage1Standings = supportsStage1Standings ? standingsEditor.getValues() : [];
 
       if (!payload.name) {
         setStatus("Tournament name is required.");
@@ -6485,6 +6966,13 @@
           return;
         }
       }
+      if (supportsStage1Standings) {
+        const standingsError = standingsEditor.getValidationError();
+        if (standingsError) {
+          setStatus(standingsError);
+          return;
+        }
+      }
 
       setBusy(true);
       try {
@@ -6497,6 +6985,14 @@
           body: JSON.stringify({
             tournament_id: payload.id,
             teams: tournamentTeams,
+          }),
+        });
+        await requestTournamentJson(STANDINGS_URL, {
+          method: "PUT",
+          body: JSON.stringify({
+            tournament_id: payload.id,
+            stage: "Stage 1",
+            standings: stage1Standings,
           }),
         });
         setStatus("Tournament updated.", true);

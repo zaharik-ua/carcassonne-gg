@@ -1,0 +1,629 @@
+\documentclass[10pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage[a4paper,margin=20mm,headheight=22pt]{geometry}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{colortbl}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{pdflscape}
+\usepackage{hyperref}
+
+\definecolor{AsianNavy}{HTML}{17324D}
+\definecolor{AsianBlue}{HTML}{3478A9}
+\definecolor{AsianLightBlue}{HTML}{DCEBF7}
+\definecolor{AsianRed}{HTML}{C94A4A}
+\definecolor{AsianLightRed}{HTML}{F7DCDC}
+\definecolor{AsianGold}{HTML}{D8A62A}
+\definecolor{AsianInk}{HTML}{202A33}
+\definecolor{AsianGray}{HTML}{66727D}
+\definecolor{AsianLightGray}{HTML}{F1F4F6}
+\definecolor{AsianDiagonal}{HTML}{777777}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=AsianBlue,
+  urlcolor=AsianBlue,
+  pdftitle={Carcassonne Asian Cup 2026 - Tournament Rules},
+  pdfauthor={Carcassonne Asian Cup Organizers}
+}
+\urlstyle{same}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.48em}
+\setlist[itemize]{leftmargin=1.6em,itemsep=0.22em,topsep=0.22em}
+\setlist[enumerate]{leftmargin=1.8em,itemsep=0.3em,topsep=0.25em}
+\renewcommand{\arraystretch}{1.22}
+\emergencystretch=2em
+\setcounter{tocdepth}{1}
+
+\titleformat{\section}
+  {\Large\bfseries\color{AsianNavy}}
+  {\thesection}{0.65em}{}
+  [\vspace{-0.35em}\color{AsianGold}\titlerule]
+\titleformat{\subsection}
+  {\large\bfseries\color{AsianBlue}}
+  {\thesubsection}{0.55em}{}
+\titleformat{\subsubsection}
+  {\normalsize\bfseries\color{AsianInk}}
+  {}{0pt}{}
+\titlespacing*{\section}{0pt}{1.45em}{0.8em}
+\titlespacing*{\subsection}{0pt}{1.1em}{0.45em}
+\titlespacing*{\subsubsection}{0pt}{0.9em}{0.25em}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{AsianGray}\textbf{Carcassonne Asian Cup 2026}}
+\fancyhead[R]{\small\color{AsianGray}Tournament Rules}
+\fancyfoot[C]{\small\color{AsianGray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{AsianGold}\leaders\hrule height \headrulewidth\hfill}}
+
+\newtcolorbox{keybox}[1][]{
+  enhanced,
+  colback=AsianLightGray,
+  colframe=AsianNavy,
+  boxrule=0.8pt,
+  arc=1.5mm,
+  left=4mm,right=4mm,top=3mm,bottom=3mm,
+  #1
+}
+
+\newtcolorbox{notebox}[1][]{
+  enhanced,
+  colback=AsianLightBlue,
+  colframe=AsianBlue,
+  boxrule=0.6pt,
+  arc=1.5mm,
+  left=4mm,right=4mm,top=3mm,bottom=3mm,
+  #1
+}
+
+\newcommand{\term}[1]{\textbf{#1}}
+\newcommand{\BGA}{\href{https://boardgamearena.com}{Board Game Arena (BGA)}}
+\newcommand{\TournamentPage}{\href{https://carcassonne.gg/Asian-Cup-2026/}{carcassonne.gg/Asian-Cup-2026}}
+\newcommand{\PlayerHub}{\href{https://carcassonne.gg/player-hub/tournaments/?id=Asian-Cup-2026}{Asian Cup 2026 Player Hub}}
+\newcommand{\RankingPage}{\href{https://carcassonne.gg/National-Teams-Ranking/}{National Team Ranking}}
+
+\begin{document}
+
+\begin{titlepage}
+  \thispagestyle{empty}
+  \color{AsianInk}
+
+  \vspace*{15mm}
+  {\color{AsianGold}\rule{\textwidth}{2.2pt}}
+
+  \vspace{18mm}
+  {\fontsize{19}{23}\selectfont\bfseries\color{AsianBlue} CARCASSONNE\par}
+  \vspace{4mm}
+  {\fontsize{34}{39}\selectfont\bfseries\color{AsianNavy} ASIAN CUP 2026\par}
+  \vspace{4mm}
+  {\Large\color{AsianGray}Official Tournament Rules\par}
+
+  \vspace{15mm}
+  \begin{keybox}
+    \begin{tabularx}{\textwidth}{>{\bfseries\color{AsianNavy}}p{42mm}X}
+      Draw & August 1, 2026\\
+      Tournament dates & August 3--September 13, 2026\\
+      Participants & Seven national teams\\
+      Group Stage & One group; four matches per team\\
+      Finals & Championship Match and Bronze Medal Match\\
+      Match format & Five best-of-three duels (\textbf{5 vs 5})\\
+      Platform & \BGA
+    \end{tabularx}
+  \end{keybox}
+
+  \vfill
+  \begin{minipage}{0.72\textwidth}
+    \small
+    The third edition of the Carcassonne Asian Cup Online Championship brings
+    together national teams from Asia and Oceania. These rules apply throughout
+    the 2026 competition.
+  \end{minipage}
+
+  \vspace{14mm}
+  {\color{AsianGold}\rule{\textwidth}{2.2pt}}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+\section{Tournament Overview}
+
+\subsection{Dates and participants}
+
+The draw will take place on \term{August 1, 2026}. The tournament will run from
+\term{August 3 through September 13, 2026}.
+
+The seven participating teams, listed in the order of the National Team Ranking
+used for the draw, are:
+
+\begin{center}
+\begin{tabular}{r l r@{\qquad}r l r}
+  \toprule
+  \textbf{Rank} & \textbf{Team} & \textbf{Rating} &
+  \textbf{Rank} & \textbf{Team} & \textbf{Rating}\\
+  \midrule
+  1 & Japan & 1837 & 5 & Taiwan & 1554\\
+  2 & China & 1813 & 6 & Australia & 1321\\
+  3 & Hong Kong & 1670 & 7 & Vietnam & 1298\\
+  4 & Thailand & 1598 & & &\\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Competition structure}
+
+\begin{itemize}
+  \item All seven teams compete in a \term{single group}.
+  \item Each team plays \term{four matches against four different opponents}.
+  \item The Group Stage schedule is created through the balanced draw described
+        in Section~\ref{sec:draw}.
+  \item After the Group Stage:
+    \begin{itemize}
+      \item \term{1st vs 2nd} --- Championship Match;
+      \item \term{3rd vs 4th} --- Bronze Medal Match.
+    \end{itemize}
+  \item Teams finishing fifth through seventh retain their relative Group Stage
+        positions in the final ranking.
+\end{itemize}
+
+\section{Eligibility and Team Requirements}
+
+\subsection{Eligibility}
+
+Each team must consist of players from the same country, or from a single region
+where Carcassonne is published in its own language. Only one team per
+country or region is allowed. Team members must have been born in, or currently
+live in, the country or region they represent.
+
+\subsection{Registration}
+
+The captain registers the team through the \PlayerHub. When building the team
+roster, the captain selects players who have already been added to their
+association or creates records for players who have not yet been added.
+Captains are responsible for keeping this information accurate and up to date
+throughout the tournament.
+
+\subsection{Team composition}
+
+\begin{itemize}
+  \item A team must have at least \term{8 players} and no more than
+        \term{10 players}.
+  \item At least eight team members must play at least one duel during the Group
+        Stage. A team that fails to meet this requirement loses one match win
+        (\term{MW}) in the final Group Stage standings.
+  \item Each team must appoint one captain.
+  \item During the Group Stage only, a team may add players up to the ten-player
+        limit or replace players. A player who has already played in at least
+        one match may not be replaced. Every change requires prior notice to
+        the organizers.
+  \item Each team must have access to a Premium BGA account capable of creating
+        the tournament match. The account holder does not have to be in that
+        match's lineup.
+\end{itemize}
+
+\subsection{Captain's responsibility}
+
+The captain must ensure that every team member understands and accepts these
+rules and later organizer updates. The captain handles team communication,
+scheduling, lineups, and results.
+
+\section{Scheduling and Lineups}
+
+\subsection{Official schedule}
+
+The organizer-published schedule determines the Group Stage rounds and the
+dates of the Championship and Bronze Medal Matches. Captains arrange the exact
+date and time of each assigned match within the permitted round window.
+
+All submitted dates and times must use \term{UTC+8}. Captains may use
+\href{https://savvytime.com/converter}{Savvy Time} to avoid conversion errors.
+
+\subsection{Scheduling a match}
+
+\begin{itemize}
+  \item Captains must agree on and submit their match date and time by
+        \term{23:59 UTC+8 on Wednesday} of the applicable match week through
+        the \PlayerHub.
+  \item A match may be played earlier, provided that the date, time, and both
+        lineups are submitted at least 24 hours before it begins.
+  \item If no date and time are submitted by the deadline, the match is
+        automatically scheduled for \term{Sunday at 19:00 UTC+8}.
+  \item Captains should reply promptly to scheduling messages, even when a final
+        time has not yet been agreed.
+\end{itemize}
+
+\subsection{Submitting lineups}
+
+Each captain submits a lineup of five players, assigned to positions 1--5,
+through the \PlayerHub\ at least \term{24 hours before the match}. The
+submitted lineups are then published on \TournamentPage.
+
+Position 1 on one team plays Position 1 on the other team, and so on through
+Position 5. After submission, no more than one player may be changed, and only
+because of a major unforeseen event with organizer approval.
+
+Failure to submit a lineup on time may be penalized as a match loss:
+\term{0--5 duels and 0--10 games}.
+
+\section{Balanced Group Stage Draw}
+\label{sec:draw}
+
+\subsection{Ranking basis}
+
+The draw uses the current \RankingPage. Instead of producing a completely
+random schedule, it gives every team a balanced set of opponents while
+preserving randomness.
+
+For each team, the other six teams are divided into:
+
+\begin{itemize}
+  \item the \term{Top 3} --- the three highest-rated available opponents; and
+  \item the \term{Lower 3} --- the three lowest-rated available opponents.
+\end{itemize}
+
+Each team is drawn to play:
+
+\begin{itemize}
+  \item \term{two opponents from its Top 3}; and
+  \item \term{two opponents from its Lower 3}.
+\end{itemize}
+
+Because the opponent sets are calculated separately for every team, a pairing
+may belong to different categories from the two teams' perspectives.
+
+\subsection{Opponent pools}
+
+\small
+\begin{center}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{25mm}X X}
+  \toprule
+  \textbf{Team} & \textbf{Top 3 opponents} & \textbf{Lower 3 opponents}\\
+  \midrule
+  Japan & China, Hong Kong, Thailand & Taiwan, Australia, Vietnam\\
+  China & Japan, Hong Kong, Thailand & Taiwan, Australia, Vietnam\\
+  Hong Kong & Japan, China, Thailand & Taiwan, Australia, Vietnam\\
+  Thailand & Japan, China, Hong Kong & Taiwan, Australia, Vietnam\\
+  Taiwan & Japan, China, Hong Kong & Thailand, Australia, Vietnam\\
+  Australia & Japan, China, Hong Kong & Thailand, Taiwan, Vietnam\\
+  Vietnam & Japan, China, Hong Kong & Thailand, Taiwan, Australia\\
+  \bottomrule
+\end{tabularx}
+\end{center}
+\normalsize
+
+\begin{notebox}
+\textbf{Examples.}
+For Japan, the Top 3 are China, Hong Kong, and Thailand; the Lower 3 are
+Taiwan, Australia, and Vietnam. For Taiwan, the Top 3 are Japan, China, and
+Hong Kong; the Lower 3 are Thailand, Australia, and Vietnam.
+\end{notebox}
+
+\subsection{Draw validity}
+
+A schedule is valid only if all of the following are true:
+
+\begin{enumerate}
+  \item every team has exactly four opponents;
+  \item no two teams meet more than once in the Group Stage;
+  \item every scheduled pairing is reciprocal;
+  \item from each team's own perspective, exactly two opponents are from its
+        Top 3 and exactly two are from its Lower 3.
+\end{enumerate}
+
+This prevents any team from receiving an exceptionally difficult or
+exceptionally easy schedule while still leaving room for randomness in the
+draw.
+
+\clearpage
+\begin{landscape}
+\section*{Example of a Valid Balanced Draw}
+\addcontentsline{toc}{subsection}{Example of a valid balanced draw}
+
+In the matrix below, \term{1} means that the match is scheduled and
+\term{0} means that it is not. Cell colors show the opponent category from the
+row team's perspective.
+
+\vspace{0.5em}
+\begin{center}
+\setlength{\tabcolsep}{5.2pt}
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{
+  >{\bfseries}l
+  *{7}{>{\centering\arraybackslash}p{18mm}}
+  >{\centering\arraybackslash}p{14mm}
+  >{\centering\arraybackslash}p{14mm}
+  >{\centering\arraybackslash}p{13mm}}
+  \toprule
+  & \textbf{Japan} & \textbf{China} & \textbf{Hong Kong} &
+    \textbf{Thailand} & \textbf{Taiwan} & \textbf{Australia} &
+    \textbf{Vietnam} & \textbf{Top 3} & \textbf{Lower 3} &
+    \textbf{Total}\\
+  \midrule
+  Japan
+    & \cellcolor{AsianDiagonal}\color{white}-- 
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightBlue}0
+    & \cellcolor{AsianLightRed}0
+    & \cellcolor{AsianLightRed}1
+    & \cellcolor{AsianLightRed}1 & 2 & 2 & \textbf{4}\\
+  China
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianDiagonal}\color{white}--
+    & \cellcolor{AsianLightBlue}0
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightRed}1
+    & \cellcolor{AsianLightRed}1
+    & \cellcolor{AsianLightRed}0 & 2 & 2 & \textbf{4}\\
+  Hong Kong
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightBlue}0
+    & \cellcolor{AsianDiagonal}\color{white}--
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightRed}1
+    & \cellcolor{AsianLightRed}0
+    & \cellcolor{AsianLightRed}1 & 2 & 2 & \textbf{4}\\
+  Thailand
+    & \cellcolor{AsianLightBlue}0
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianDiagonal}\color{white}--
+    & \cellcolor{AsianLightRed}1
+    & \cellcolor{AsianLightRed}1
+    & \cellcolor{AsianLightRed}0 & 2 & 2 & \textbf{4}\\
+  Taiwan
+    & \cellcolor{AsianLightBlue}0
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightRed}1
+    & \cellcolor{AsianDiagonal}\color{white}--
+    & \cellcolor{AsianLightRed}0
+    & \cellcolor{AsianLightRed}1 & 2 & 2 & \textbf{4}\\
+  Australia
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightBlue}0
+    & \cellcolor{AsianLightRed}1
+    & \cellcolor{AsianLightRed}0
+    & \cellcolor{AsianDiagonal}\color{white}--
+    & \cellcolor{AsianLightRed}1 & 2 & 2 & \textbf{4}\\
+  Vietnam
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightBlue}0
+    & \cellcolor{AsianLightBlue}1
+    & \cellcolor{AsianLightRed}0
+    & \cellcolor{AsianLightRed}1
+    & \cellcolor{AsianLightRed}1
+    & \cellcolor{AsianDiagonal}\color{white}-- & 2 & 2 & \textbf{4}\\
+  \bottomrule
+\end{tabular}
+
+\vspace{1em}
+\colorbox{AsianLightBlue}{\strut\quad Top 3 opponent\quad}
+\hspace{1.5em}
+\colorbox{AsianLightRed}{\strut\quad Lower 3 opponent\quad}
+\hspace{1.5em}
+\colorbox{AsianDiagonal}{\color{white}\strut\quad Same team\quad}
+\end{center}
+
+\vfill
+\small\color{AsianGray}
+This matrix is an example of a valid outcome, not the official 2026 schedule.
+\end{landscape}
+\clearpage
+
+\section{Match Format}
+
+\subsection{Five simultaneous duels}
+
+A team match consists of \term{five duels}, normally played simultaneously.
+Each duel is a best-of-three encounter between one player from each team.
+
+\begin{itemize}
+  \item The first player to win two games wins the duel.
+  \item If a player wins the first two games, the duel ends 2--0 and no third
+        result is recorded.
+  \item The team that wins at least three of the five duels wins the match.
+\end{itemize}
+
+\subsection{BGA tournament settings}
+
+Matches are played in BGA tournament mode with \term{15 minutes per player}.
+The starting player does not necessarily alternate between games, so the same
+player may start two or all three games of a duel.
+
+If a duel has already been decided after two games but BGA launches a third
+game, both players must enter it and jointly abandon it.
+
+\subsection{Tied game score}
+
+Every game must produce a winner for tournament purposes. If the final board
+score is tied, the player who \term{did not start the game} is the winner.
+
+\section{Group Stage Standings}
+\label{sec:standings}
+
+\subsection{Recorded statistics}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{16mm}X >{\bfseries}p{16mm}X}
+  \toprule
+  MP & Matches Played & MW & Matches Won\\
+  DW & Duels Won & DL & Duels Lost\\
+  GW & Games Won & GL & Games Lost\\
+  DD & Duels Difference ($DW-DL$) & GD & Games Difference ($GW-GL$)\\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+One match win is recorded for each team match won, one duel win for each duel
+won, and one game win for each game won.
+
+\subsection{Tie-break order}
+
+Final Group Stage positions are determined in the following order:
+
+\begin{enumerate}
+  \item \term{MW (Matches Won)} --- number of team matches won.
+  \item \term{DD (Duels Difference)} --- difference between Duels Won and
+        Duels Lost.
+  \item \term{DW (Duels Won)} --- total number of duels won.
+  \item \term{GD (Games Difference)} --- difference between Games Won and
+        Games Lost.
+  \item \term{GW (Games Won)} --- total number of games won.
+  \item \term{OMW (Opponents' Matches Won)} --- total number of team matches
+        won by all opponents faced during the Group Stage.
+  \item \term{ODD (Opponents' Duels Difference)} --- combined difference
+        between DW and DL of all opponents faced during the Group Stage.
+  \item \term{ODW (Opponents' Duels Won)} --- total number of duels won by all
+        opponents faced during the Group Stage.
+\end{enumerate}
+
+\begin{notebox}
+\textbf{Buchholz principle.}
+OMW, ODD, and ODW measure the results achieved by the opponents a team actually
+faced. They reward strength of schedule and are applied only after the team's
+own match, duel, and game results.
+\end{notebox}
+
+\subsection{Medal matches and final positions}
+
+The first- and second-placed teams contest the Championship Match. Its winner
+finishes first and its loser finishes second. The third- and fourth-placed teams
+contest the Bronze Medal Match. Its winner finishes third and its loser finishes
+fourth.
+
+\section{Clock Rules}
+
+If a player runs out of time during a game, that player loses the game. This is
+a loss for that game only, not automatically for the entire duel.
+
+A player has run out of time when the time shown after completing a turn and
+synchronizing with the server is zero or negative. If possible, the player
+should concede so that BGA awards the win correctly. If there is doubt, the red
+``time penalty'' clock shown in the game results is decisive. If both players
+run out of time, the player who ran out first loses.
+
+Players should reduce connection risks by arranging a reliable internet
+connection and, where possible, keeping a backup connection such as a mobile
+hotspot available. Any duel affected by a serious technical issue must be
+completed as soon as possible and reported to the organizers.
+
+\section{Courtesy and Fair Play}
+
+\subsection{Player conduct}
+
+Players and spectators must remain courteous and respectful. Captains should
+encourage prompt communication and avoid waiting until the final moment to
+resolve scheduling issues.
+
+\subsection{Discarded tiles}
+
+When BGA automatically discards a tile that cannot be placed legally, the
+opponent may not notice it. The player should inform the opponent in the game
+chat whenever this happens.
+
+\subsection{Unauthorized assistance}
+
+Players must play their own games without advice, coaching, or outside
+assistance. Tile-counting and memory aids---including apps, spreadsheets, notes,
+or pen and paper---are strictly forbidden. Players are also responsible for
+avoiding unsolicited help.
+
+An individual or team using inappropriate assistance may be removed from the
+tournament and may also be excluded from future editions.
+
+\subsection{Conceding}
+
+Except when a player has run out of time or when these rules explicitly require
+abandoning an unnecessary third game, games must be played to completion.
+
+\section{Results, Absences, and Incidents}
+
+\subsection{Reporting results}
+
+Results are recorded automatically from BGA data. Within \term{24 hours after
+the match ends}, both captains must review them in the \PlayerHub. Either
+captain may submit a required correction there for approval by the opposing
+captain; unresolved discrepancies must be referred to the organizers.
+
+\subsection{How incidents are recorded}
+
+\begin{itemize}
+  \item \term{Normal game:} the final score and winner are imported
+        automatically from BGA. No action is required unless the imported data
+        are incorrect.
+  \item \term{Tied board score:} the non-starting player is the game winner.
+        Submit a correction if the automatic result does not reflect this rule.
+  \item \term{Time loss:} the game is a win for the opponent. Submit a
+        correction if necessary.
+  \item \term{No-show:} if a player has not appeared within 15 minutes of the
+        scheduled time, the opponent wins the duel 2--0; the captain must submit
+        the required correction through the Player Hub.
+  \item \term{Duel decided in two games:} no third-game result is recorded.
+\end{itemize}
+
+\subsection{Before play begins}
+
+Players must join promptly and verify the tournament settings before play. BGA
+may close a tournament place when a player does not enter within the platform's
+joining window. Once play has begun, claims based on settings that could have
+been checked beforehand may be rejected.
+
+\section{Duties, Disputes, and Prizes}
+
+\subsection{Duties of team captains}
+
+\begin{itemize}
+  \item Ensure that all players understand and follow the rules and organizer
+        updates.
+  \item Remind team members to behave respectfully as players and spectators.
+  \item Communicate with the opposing captain and tournament organizers.
+  \item Submit match dates, times, and lineups, and review automatically
+        recorded results, by their deadlines.
+  \item Notify the organizers about approved roster changes and significant
+        match incidents.
+\end{itemize}
+
+\subsection{Dispute Arbitration Zone}
+
+The Dispute Arbitration Zone (DAZ) considers disputes and determines the
+appropriate resolution. The organizers may also act against players or teams
+engaging in unfair play or conduct contrary to these rules.
+
+When submitting a dispute, provide the match, duel, game link, relevant times,
+screenshots, and a concise description of the issue. Organizer contact details
+and the official communication channel will be published with the tournament
+materials.
+
+\subsection{Prizes}
+
+The winning team will be crowned the \term{Carcassonne Asian Cup 2026 Champion}
+and recognized as the leading online national team in Asia and Oceania for this
+edition.
+
+\subsection{Questions}
+
+Questions about these rules should be sent through the official organizer
+contact channel. Tournament announcements and updates will be published on
+\TournamentPage.
+
+\vfill
+\begin{center}
+  \color{AsianGold}\rule{0.7\textwidth}{1pt}\\[0.7em]
+  \small\color{AsianGray}
+  Carcassonne Asian Cup 2026 --- Official Tournament Rules
+\end{center}
+
+\end{document}

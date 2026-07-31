@@ -331,6 +331,14 @@ const TOURNAMENT_LINEUP_SIZE_TYPES = {
   FIXED: 1,
   FLEXIBLE: 2,
 };
+const TOURNAMENT_FORMATS = ["1 Stage", "2 Stages", "3 Stages", "Leagues"];
+const TOURNAMENT_STAGE_FORMATS = [
+  "Round-robin",
+  "Swiss",
+  "Single Elimination",
+  "Double Elimination",
+];
+const STANDINGS_STAGES = ["Stage 1", "Stage 2"];
 const CHALLENGE_PERIOD_STATUSES = new Set([
   "draft",
   "planning_open",
@@ -2498,6 +2506,29 @@ function normalizeTournamentLineupSize(value) {
   return Number.isInteger(normalized) && normalized > 0 ? normalized : null;
 }
 
+function normalizeTournamentFormat(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return TOURNAMENT_FORMATS.find((format) => format.toLowerCase() === normalized)
+    || TOURNAMENT_FORMATS[0];
+}
+
+function normalizeTournamentStageFormat(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return TOURNAMENT_STAGE_FORMATS.find((format) => format.toLowerCase() === normalized)
+    || TOURNAMENT_STAGE_FORMATS[0];
+}
+
+function normalizeStandingsStage(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return STANDINGS_STAGES.find((stage) => stage.toLowerCase() === normalized)
+    || STANDINGS_STAGES[0];
+}
+
+function isValidStandingsStage(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return STANDINGS_STAGES.some((stage) => stage.toLowerCase() === normalized);
+}
+
 function getTournamentLookupVariants(value) {
   const raw = normalizeNullableText(value);
   if (!raw) return [];
@@ -2552,6 +2583,10 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
         t.lineup_size,
+        t.tournament_format,
+        COALESCE(t.stage1_groups, 0) AS stage1_groups,
+        t.stage1_format,
+        t.stage2_format,
         CASE
           WHEN ? = 1 THEN ?
           WHEN ? > 0 AND EXISTS (
@@ -2664,6 +2699,10 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
         lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
         lineup_size: normalizeTournamentLineupSize(row.lineup_size),
+        tournament_format: normalizeTournamentFormat(row.tournament_format),
+        stage1_groups: normalizeBooleanInt(row.stage1_groups) === 1,
+        stage1_format: normalizeTournamentStageFormat(row.stage1_format),
+        stage2_format: normalizeTournamentStageFormat(row.stage2_format),
         access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
         has_access: Number(row.has_access) === 1,
         access_via_access_users: Number(row.access_via_access_users) === 1,
@@ -2812,7 +2851,11 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         NULLIF(trim(category), '') AS category,
         COALESCE(NULLIF(trim(player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(lineup_size_type, ?) AS lineup_size_type,
-        lineup_size
+        lineup_size,
+        tournament_format,
+        COALESCE(stage1_groups, 0) AS stage1_groups,
+        stage1_format,
+        stage2_format
       FROM tournaments
       WHERE ${buildTournamentLookupWhereClause("id")}
       LIMIT 1
@@ -2846,6 +2889,10 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
         lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
         lineup_size: normalizeTournamentLineupSize(row.lineup_size),
+        tournament_format: normalizeTournamentFormat(row.tournament_format),
+        stage1_groups: normalizeBooleanInt(row.stage1_groups) === 1,
+        stage1_format: normalizeTournamentStageFormat(row.stage1_format),
+        stage2_format: normalizeTournamentStageFormat(row.stage2_format),
       };
       if (!includeAccessUsers) {
         done(null, tournament);
@@ -2954,6 +3001,51 @@ async function loadTournamentTeams(tournamentId = null) {
        AND p.deleted_at IS NULL
       ${whereSql}
       ORDER BY tt.tournament_id COLLATE NOCASE ASC, tm.name COLLATE NOCASE ASC, tt.team_id COLLATE NOCASE ASC
+    `,
+    params
+  );
+}
+
+async function loadStandings(tournamentId, stage = null) {
+  const normalizedTournamentId = normalizeNullableText(tournamentId);
+  if (!normalizedTournamentId) return [];
+  const normalizedStage = stage ? normalizeStandingsStage(stage) : null;
+  const params = [normalizedTournamentId];
+  const stageSql = normalizedStage ? "AND lower(trim(s.stage)) = lower(trim(?))" : "";
+  if (normalizedStage) params.push(normalizedStage);
+  return dbAllAsync(
+    `
+      SELECT
+        s.id,
+        s.tournament_id,
+        s.stage,
+        s."group" AS "group",
+        s.team_id,
+        s.player_id,
+        s.mp,
+        s.mw,
+        s.ml,
+        s.dw,
+        s.dl,
+        s.gw,
+        s.gl,
+        s.mdif,
+        s.ddif,
+        s.gdif,
+        s.standing_icon,
+        s.position,
+        s.position_override,
+        s.created_at,
+        s.updated_at
+      FROM standings s
+      WHERE upper(trim(s.tournament_id)) = upper(trim(?))
+        ${stageSql}
+      ORDER BY
+        CASE WHEN s.position_override IS NULL THEN 1 ELSE 0 END ASC,
+        s.position_override ASC,
+        CASE WHEN s.position IS NULL THEN 1 ELSE 0 END ASC,
+        s.position ASC,
+        s.id ASC
     `,
     params
   );
@@ -4751,6 +4843,10 @@ function ensureTournamentsSchema() {
       player_hub_visibility TEXT NOT NULL DEFAULT 'Visible',
       lineup_size_type INTEGER NOT NULL DEFAULT 2,
       lineup_size INTEGER,
+      tournament_format TEXT NOT NULL DEFAULT '1 Stage',
+      stage1_groups BOOLEAN NOT NULL DEFAULT 0 CHECK (stage1_groups IN (0, 1)),
+      stage1_format TEXT NOT NULL DEFAULT 'Round-robin',
+      stage2_format TEXT NOT NULL DEFAULT 'Round-robin',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -4779,6 +4875,10 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "player_hub_visibility", "TEXT NOT NULL DEFAULT 'Visible'");
       addColumnIfMissing(columns, "tournaments", "lineup_size_type", "INTEGER NOT NULL DEFAULT 2");
       addColumnIfMissing(columns, "tournaments", "lineup_size", "INTEGER");
+      addColumnIfMissing(columns, "tournaments", "tournament_format", "TEXT NOT NULL DEFAULT '1 Stage'");
+      addColumnIfMissing(columns, "tournaments", "stage1_groups", "BOOLEAN NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "tournaments", "stage1_format", "TEXT NOT NULL DEFAULT 'Round-robin'");
+      addColumnIfMissing(columns, "tournaments", "stage2_format", "TEXT NOT NULL DEFAULT 'Round-robin'");
       addColumnIfMissing(columns, "tournaments", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "tournaments", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       db.run(
@@ -4808,6 +4908,28 @@ function ensureTournamentsSchema() {
             player_hub_visibility = CASE
               WHEN lower(trim(COALESCE(player_hub_visibility, ''))) = 'hidden' THEN 'Hidden'
               ELSE 'Visible'
+            END,
+            tournament_format = CASE lower(trim(COALESCE(tournament_format, '')))
+              WHEN '2 stages' THEN '2 Stages'
+              WHEN '3 stages' THEN '3 Stages'
+              WHEN 'leagues' THEN 'Leagues'
+              ELSE '1 Stage'
+            END,
+            stage1_groups = CASE
+              WHEN lower(trim(COALESCE(stage1_groups, ''))) IN ('1', 'true', 'yes', 'on', 'groups') THEN 1
+              ELSE 0
+            END,
+            stage1_format = CASE lower(trim(COALESCE(stage1_format, '')))
+              WHEN 'swiss' THEN 'Swiss'
+              WHEN 'single elimination' THEN 'Single Elimination'
+              WHEN 'double elimination' THEN 'Double Elimination'
+              ELSE 'Round-robin'
+            END,
+            stage2_format = CASE lower(trim(COALESCE(stage2_format, '')))
+              WHEN 'swiss' THEN 'Swiss'
+              WHEN 'single elimination' THEN 'Single Elimination'
+              WHEN 'double elimination' THEN 'Double Elimination'
+              ELSE 'Round-robin'
             END
         `,
         (backfillErr) => {
@@ -5033,6 +5155,88 @@ function ensureTournamentPlayersSchema() {
           if (indexErr) {
             console.error("Failed to ensure tournament_players player index", indexErr);
           }
+        }
+      );
+    });
+  });
+}
+
+function ensureStandingsSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS standings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id TEXT NOT NULL COLLATE NOCASE,
+      stage TEXT NOT NULL DEFAULT 'Stage 1' CHECK (stage IN ('Stage 1', 'Stage 2')),
+      "group" TEXT,
+      team_id TEXT COLLATE NOCASE,
+      player_id TEXT,
+      mp INTEGER NOT NULL DEFAULT 0,
+      mw INTEGER NOT NULL DEFAULT 0,
+      ml INTEGER NOT NULL DEFAULT 0,
+      dw INTEGER NOT NULL DEFAULT 0,
+      dl INTEGER NOT NULL DEFAULT 0,
+      gw INTEGER NOT NULL DEFAULT 0,
+      gl INTEGER NOT NULL DEFAULT 0,
+      mdif INTEGER NOT NULL DEFAULT 0,
+      ddif INTEGER NOT NULL DEFAULT 0,
+      gdif INTEGER NOT NULL DEFAULT 0,
+      standing_icon TEXT,
+      position INTEGER,
+      position_override INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+      FOREIGN KEY (team_id) REFERENCES teams(id),
+      FOREIGN KEY (player_id) REFERENCES profiles(id),
+      FOREIGN KEY (tournament_id, team_id)
+        REFERENCES tournament_teams(tournament_id, team_id)
+        ON DELETE CASCADE
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure standings schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(standings)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect standings schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "standings", "tournament_id", "TEXT");
+      addColumnIfMissing(columns, "standings", "stage", "TEXT NOT NULL DEFAULT 'Stage 1'");
+      addColumnIfMissing(columns, "standings", "group", "TEXT");
+      addColumnIfMissing(columns, "standings", "team_id", "TEXT");
+      addColumnIfMissing(columns, "standings", "player_id", "TEXT");
+      addColumnIfMissing(columns, "standings", "mp", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "standings", "mw", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "standings", "ml", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "standings", "dw", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "standings", "dl", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "standings", "gw", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "standings", "gl", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "standings", "mdif", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "standings", "ddif", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "standings", "gdif", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "standings", "standing_icon", "TEXT");
+      addColumnIfMissing(columns, "standings", "position", "INTEGER");
+      addColumnIfMissing(columns, "standings", "position_override", "INTEGER");
+      addColumnIfMissing(columns, "standings", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      addColumnIfMissing(columns, "standings", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      db.run(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_standings_tournament_stage_team
+         ON standings(tournament_id COLLATE NOCASE, stage COLLATE NOCASE, team_id COLLATE NOCASE)
+         WHERE team_id IS NOT NULL AND trim(team_id) <> '' AND player_id IS NULL`,
+        (indexErr) => {
+          if (indexErr) console.error("Failed to ensure standings team index", indexErr);
+        }
+      );
+      db.run(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_standings_tournament_stage_player
+         ON standings(tournament_id COLLATE NOCASE, stage COLLATE NOCASE, player_id)
+         WHERE player_id IS NOT NULL AND trim(player_id) <> '' AND team_id IS NULL`,
+        (indexErr) => {
+          if (indexErr) console.error("Failed to ensure standings player index", indexErr);
         }
       );
     });
@@ -6270,6 +6474,7 @@ db.serialize(() => {
           ensureTournamentAccessUsersSchema();
           ensureTournamentTeamsSchema();
           ensureTournamentPlayersSchema();
+          ensureStandingsSchema();
           ensureFriendlyFindSchema();
           ensureStreamersSchema();
           ensureLocalWebsitesSchema();
@@ -10897,6 +11102,10 @@ app.get("/tournaments", (req, res, next) => {
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
         t.lineup_size,
+        t.tournament_format,
+        COALESCE(t.stage1_groups, 0) AS stage1_groups,
+        t.stage1_format,
+        t.stage2_format,
         CASE
           WHEN ? = 1 THEN ?
           WHEN ? > 0 AND EXISTS (
@@ -11021,6 +11230,10 @@ app.get("/tournaments", (req, res, next) => {
             player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
             lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
             lineup_size: normalizeTournamentLineupSize(row.lineup_size),
+            tournament_format: normalizeTournamentFormat(row.tournament_format),
+            stage1_groups: normalizeBooleanInt(row.stage1_groups) === 1,
+            stage1_format: normalizeTournamentStageFormat(row.stage1_format),
+            stage2_format: normalizeTournamentStageFormat(row.stage2_format),
             access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
             access_via_access_users: Number(row.access_via_access_users) === 1,
             captain_team_ids: normalizeTournamentCaptainTeamIds(row.captain_team_ids_csv),
@@ -11069,6 +11282,10 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
     : null;
+  const tournamentFormat = normalizeTournamentFormat(req.body?.tournament_format);
+  const stage1Groups = normalizeBooleanInt(req.body?.stage1_groups);
+  const stage1Format = normalizeTournamentStageFormat(req.body?.stage1_format);
+  const stage2Format = normalizeTournamentStageFormat(req.body?.stage2_format);
   const requestedAccessUsers = normalizeTournamentAccessUsers(req.body?.access_users, req.body?.access_user_ids);
   let category = null;
 
@@ -11142,12 +11359,36 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   player_hub_visibility,
                   lineup_size_type,
                   lineup_size,
+                  tournament_format,
+                  stage1_groups,
+                  stage1_format,
+                  stage2_format,
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
-              [id, name, shortTitle, logo, link, about, rules, tournamentType, teamType, category, subtype, accessType, playerHubVisibility, lineupSizeType, lineupSize],
+              [
+                id,
+                name,
+                shortTitle,
+                logo,
+                link,
+                about,
+                rules,
+                tournamentType,
+                teamType,
+                category,
+                subtype,
+                accessType,
+                playerHubVisibility,
+                lineupSizeType,
+                lineupSize,
+                tournamentFormat,
+                stage1Groups,
+                stage1Format,
+                stage2Format,
+              ],
               (insertErr) => {
                 if (insertErr) {
                   db.run("ROLLBACK");
@@ -11205,6 +11446,10 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
   const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
     : null;
+  const tournamentFormat = normalizeTournamentFormat(req.body?.tournament_format);
+  const stage1Groups = normalizeBooleanInt(req.body?.stage1_groups);
+  const stage1Format = normalizeTournamentStageFormat(req.body?.stage1_format);
+  const stage2Format = normalizeTournamentStageFormat(req.body?.stage2_format);
   const requestedAccessUsers = normalizeTournamentAccessUsers(req.body?.access_users, req.body?.access_user_ids);
   let category = null;
 
@@ -11285,6 +11530,10 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                   player_hub_visibility = ?,
                   lineup_size_type = ?,
                   lineup_size = ?,
+                  tournament_format = ?,
+                  stage1_groups = ?,
+                  stage1_format = ?,
+                  stage2_format = ?,
                   updated_at = CURRENT_TIMESTAMP
                 WHERE ${buildTournamentLookupWhereClause("id")}
               `,
@@ -11304,6 +11553,10 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                 playerHubVisibility,
                 lineupSizeType,
                 lineupSize,
+                tournamentFormat,
+                stage1Groups,
+                stage1Format,
+                stage2Format,
                 rawTournamentId,
                 normalizedTournamentId || rawTournamentId,
               ],
@@ -11357,6 +11610,195 @@ app.get("/tournament-teams", requireAdmin, async (req, res) => {
   } catch (error) {
     console.error("Failed to load tournament teams", error);
     return res.status(500).json({ ok: false, message: "Failed to load tournament teams" });
+  }
+});
+
+app.get("/standings", requireAdmin, async (req, res) => {
+  const tournamentId = normalizeNullableText(req.query?.tournament_id);
+  const requestedStage = normalizeNullableText(req.query?.stage);
+  if (!tournamentId) {
+    return res.status(400).json({ ok: false, message: "tournament_id is required" });
+  }
+  if (requestedStage && !isValidStandingsStage(requestedStage)) {
+    return res.status(400).json({ ok: false, message: "stage must be Stage 1 or Stage 2" });
+  }
+
+  try {
+    const tournament = await dbGetAsync(
+      "SELECT id FROM tournaments WHERE upper(trim(id)) = upper(trim(?)) LIMIT 1",
+      [tournamentId]
+    );
+    if (!tournament) {
+      return res.status(404).json({ ok: false, message: "Tournament not found" });
+    }
+    const standings = await loadStandings(tournament.id, requestedStage || null);
+    return res.json({ ok: true, standings });
+  } catch (error) {
+    console.error("Failed to load standings", error);
+    return res.status(500).json({ ok: false, message: "Failed to load standings" });
+  }
+});
+
+app.put("/standings", requireAdmin, async (req, res) => {
+  const tournamentId = normalizeNullableText(req.body?.tournament_id);
+  const requestedStage = normalizeNullableText(req.body?.stage) || STANDINGS_STAGES[0];
+  const requestedStandings = Array.isArray(req.body?.standings) ? req.body.standings : null;
+
+  if (!tournamentId) {
+    return res.status(400).json({ ok: false, message: "tournament_id is required" });
+  }
+  if (!isValidStandingsStage(requestedStage)) {
+    return res.status(400).json({ ok: false, message: "stage must be Stage 1 or Stage 2" });
+  }
+  if (!requestedStandings) {
+    return res.status(400).json({ ok: false, message: "standings must be an array" });
+  }
+
+  const stage = normalizeStandingsStage(requestedStage);
+  try {
+    const tournament = await dbGetAsync(
+      "SELECT id FROM tournaments WHERE upper(trim(id)) = upper(trim(?)) LIMIT 1",
+      [tournamentId]
+    );
+    if (!tournament) {
+      return res.status(404).json({ ok: false, message: "Tournament not found" });
+    }
+
+    const tournamentTeams = await dbAllAsync(
+      `
+        SELECT team_id
+        FROM tournament_teams
+        WHERE upper(trim(tournament_id)) = upper(trim(?))
+      `,
+      [tournament.id]
+    );
+    const canonicalTeamIds = new Map(
+      tournamentTeams.map((entry) => [
+        String(entry.team_id || "").trim().toUpperCase(),
+        String(entry.team_id || "").trim(),
+      ])
+    );
+    const entries = [];
+    const seenTeamIds = new Set();
+    const seenIds = new Set();
+    for (const requestedEntry of requestedStandings) {
+      const teamIdKey = normalizeNullableText(requestedEntry?.team_id ?? requestedEntry?.teamId)?.toUpperCase();
+      if (!teamIdKey) {
+        return res.status(400).json({ ok: false, message: "team_id is required in every standings row" });
+      }
+      if (!canonicalTeamIds.has(teamIdKey)) {
+        return res.status(400).json({
+          ok: false,
+          message: `team_id must reference a tournament team: ${teamIdKey}`,
+        });
+      }
+      if (seenTeamIds.has(teamIdKey)) {
+        return res.status(400).json({ ok: false, message: `Duplicate team_id: ${canonicalTeamIds.get(teamIdKey)}` });
+      }
+      seenTeamIds.add(teamIdKey);
+      const parsedId = Number.parseInt(String(requestedEntry?.id ?? "").trim(), 10);
+      const id = Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
+      if (id && seenIds.has(id)) {
+        return res.status(400).json({ ok: false, message: `Duplicate standings id: ${id}` });
+      }
+      if (id) seenIds.add(id);
+      entries.push({
+        id,
+        team_id: canonicalTeamIds.get(teamIdKey),
+        group: normalizeNullableText(requestedEntry?.group),
+      });
+    }
+
+    const existingRows = await dbAllAsync(
+      `
+        SELECT id, team_id
+        FROM standings
+        WHERE upper(trim(tournament_id)) = upper(trim(?))
+          AND lower(trim(stage)) = lower(trim(?))
+          AND team_id IS NOT NULL
+          AND player_id IS NULL
+      `,
+      [tournament.id, stage]
+    );
+    const existingById = new Map(existingRows.map((row) => [Number(row.id), row]));
+    const existingByTeamId = new Map(existingRows.map((row) => [
+      String(row.team_id || "").trim().toUpperCase(),
+      row,
+    ]));
+    const invalidRequestedId = entries.find((entry) => entry.id && !existingById.has(entry.id));
+    if (invalidRequestedId) {
+      return res.status(400).json({
+        ok: false,
+        message: `standings id does not belong to this tournament stage: ${invalidRequestedId.id}`,
+      });
+    }
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      if (existingRows.length) {
+        await dbRunAsync(
+          `UPDATE standings SET team_id = NULL, updated_at = CURRENT_TIMESTAMP
+           WHERE id IN (${existingRows.map(() => "?").join(", ")})`,
+          existingRows.map((row) => row.id)
+        );
+      }
+      const retainedIds = new Set();
+      for (const entry of entries) {
+        const matchedRow = entry.id
+          ? existingById.get(entry.id)
+          : existingByTeamId.get(String(entry.team_id).trim().toUpperCase());
+        if (matchedRow && !retainedIds.has(Number(matchedRow.id))) {
+          retainedIds.add(Number(matchedRow.id));
+          await dbRunAsync(
+            `
+              UPDATE standings
+              SET team_id = ?, "group" = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `,
+            [entry.team_id, entry.group, matchedRow.id]
+          );
+        } else {
+          const insertResult = await dbRunAsync(
+            `
+              INSERT INTO standings (
+                tournament_id,
+                stage,
+                "group",
+                team_id,
+                created_at,
+                updated_at
+              )
+              VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `,
+            [tournament.id, stage, entry.group, entry.team_id]
+          );
+          retainedIds.add(Number(insertResult.lastID));
+        }
+      }
+      const removedIds = existingRows
+        .map((row) => Number(row.id))
+        .filter((id) => !retainedIds.has(id));
+      if (removedIds.length) {
+        await dbRunAsync(
+          `DELETE FROM standings WHERE id IN (${removedIds.map(() => "?").join(", ")})`,
+          removedIds
+        );
+      }
+      await dbRunAsync("COMMIT");
+    } catch (transactionError) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw transactionError;
+    }
+
+    const standings = await loadStandings(tournament.id, stage);
+    return res.json({ ok: true, standings });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    if (status >= 500) console.error("Failed to replace standings", error);
+    return res.status(status).json({
+      ok: false,
+      message: status >= 500 ? "Failed to save standings" : error.message,
+    });
   }
 });
 
@@ -11564,6 +12006,14 @@ app.put("/tournament-teams", requireAdmin, async (req, res) => {
       for (const removed of removedTeams) {
         await dbRunAsync(
           `
+            DELETE FROM standings
+            WHERE upper(trim(tournament_id)) = upper(trim(?))
+              AND upper(trim(team_id)) = upper(trim(?))
+          `,
+          [tournament.id, removed.team_id]
+        );
+        await dbRunAsync(
+          `
             DELETE FROM tournament_players
             WHERE upper(trim(tournament_id)) = upper(trim(?))
               AND upper(trim(team_id)) = upper(trim(?))
@@ -11607,6 +12057,14 @@ app.delete("/tournament-teams/:id", requireAdmin, async (req, res) => {
 
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
     try {
+      await dbRunAsync(
+        `
+          DELETE FROM standings
+          WHERE upper(trim(tournament_id)) = upper(trim(?))
+            AND upper(trim(team_id)) = upper(trim(?))
+        `,
+        [current.tournament_id, current.team_id]
+      );
       await dbRunAsync(
         `
           DELETE FROM tournament_players
