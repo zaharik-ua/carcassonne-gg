@@ -4,8 +4,8 @@
 <!-- СТИЛІ -->
 <style>
   :root {
-    --main-bg-color: #2C6DA3;   /* синій за замовчуванням */
-    --hover-bg-color: #24598a; /* синій hover за замовчуванням */
+    --main-bg-color: #d85c5c;
+    --hover-bg-color: #c64a4b;
     --accent-text-color: #fff;  /* текст/іконки на фоні головного кольору */
   }
 
@@ -1060,7 +1060,7 @@
     tournament_id: currentTournamentId,
     name: "Carcassonne Asian Cup 2026",
     type: "TEAM",
-    style: "blue",
+    style: "red",
     tournament_format: "2 Stages",
     stage1_name: "Groups Stage",
     stage1_format: "Round-robin",
@@ -1068,12 +1068,7 @@
     stage2_name: "Playoffs",
     stage2_format: "Single Elimination",
     about: "",
-    rules: `
-      <strong>Rules:</strong>
-      <a href="https://drive.google.com/file/d/1jsquFyDt6ZHRvNN-F4H4u9Kd-738u6aE/view"
-         target="_blank"
-         rel="noopener noreferrer">https://drive.google.com/file/d/1jsquFyDt6ZHRvNN-F4H4u9Kd-738u6aE/view</a>
-    `
+    rules: ""
   };
 
   // --- Dynamic tournament theme colors ---
@@ -1459,7 +1454,7 @@
   const HORIZONTAL_SPACING = 30;
   let THIRD_PLACE_VERTICAL_OFFSET = 50;
 
-  async function loadTournamentAboutFromDatabase() {
+  async function loadTournamentHtmlFromDatabase() {
     try {
       const response = await fetch(
         `${API_BASE}/public/tournaments/${encodeURIComponent(currentTournamentId)}`
@@ -1472,11 +1467,13 @@
       currentTournament.about = typeof data?.tournament?.about === "string"
         ? data.tournament.about.trim()
         : "";
-      renderOverviewContent();
+      currentTournament.rules = typeof data?.tournament?.rules === "string"
+        ? data.tournament.rules.trim()
+        : "";
     } catch (error) {
-      console.error("Failed to load Asian Cup About", error);
+      console.error("Failed to load Asian Cup About and Rules", error);
       currentTournament.about = "";
-      renderOverviewContent();
+      currentTournament.rules = "";
     }
   }
 
@@ -1863,7 +1860,10 @@
     if (rulesTab) {
       const rulesContainer = document.getElementById("tab-rules-content");
       rulesContainer.innerHTML = "";
-      rulesContainer.innerHTML = `<div style="font-size:14px;">${currentTournament.rules}</div>`;
+      const rulesContent = document.createElement("div");
+      rulesContent.className = "overview-about-text";
+      rulesContent.innerHTML = currentTournament.rules;
+      rulesContainer.appendChild(rulesContent);
     }
 
     // Teams content (if present)
@@ -4931,11 +4931,11 @@
     }
   }
 
-  runWhenReady(() => {
+  runWhenReady(async () => {
     document.getElementById("tournament-title").textContent = currentTournament.name;
     applyTournamentTheme(currentTournament.style);
+    await loadTournamentHtmlFromDatabase();
     initAndRenderTournamentContent(currentTournament);
-    loadTournamentAboutFromDatabase();
     loadTournamentTeamsFromDatabase();
   });
 

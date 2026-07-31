@@ -2543,6 +2543,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         t.logo,
         t.link,
         t.about,
+        t.rules,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(t.tournament_type), ''), ?) AS tournament_type,
@@ -2654,6 +2655,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         logo: row.logo,
         link: row.link,
         about: row.about,
+        rules: row.rules,
         access_type: normalizeTournamentAccessType(row.access_type),
         subtype: normalizeTournamentAccessType(row.subtype),
         tournament_type: normalizeTournamentType(row.tournament_type),
@@ -2802,6 +2804,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         logo,
         link,
         about,
+        rules,
         COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(tournament_type), ''), ?) AS tournament_type,
@@ -4739,6 +4742,7 @@ function ensureTournamentsSchema() {
       logo TEXT,
       link TEXT,
       about TEXT,
+      rules TEXT,
       tournament_type TEXT NOT NULL DEFAULT 'Teams',
       team_type TEXT NOT NULL DEFAULT 'National',
       category TEXT,
@@ -4766,6 +4770,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "logo", "TEXT");
       addColumnIfMissing(columns, "tournaments", "link", "TEXT");
       addColumnIfMissing(columns, "tournaments", "about", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "rules", "TEXT");
       addColumnIfMissing(columns, "tournaments", "tournament_type", "TEXT NOT NULL DEFAULT 'Teams'");
       addColumnIfMissing(columns, "tournaments", "team_type", "TEXT NOT NULL DEFAULT 'National'");
       addColumnIfMissing(columns, "tournaments", "category", "TEXT");
@@ -10813,7 +10818,8 @@ app.get("/public/tournaments/:id", (req, res, next) => {
     `
       SELECT
         id,
-        about
+        about,
+        rules
       FROM tournaments
       WHERE ${buildTournamentLookupWhereClause("id")}
       LIMIT 1
@@ -10882,6 +10888,7 @@ app.get("/tournaments", (req, res, next) => {
         t.logo,
         t.link,
         t.about,
+        t.rules,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(t.tournament_type), ''), ?) AS tournament_type,
@@ -11005,6 +11012,7 @@ app.get("/tournaments", (req, res, next) => {
             logo: row.logo,
             link: row.link,
             about: row.about,
+            rules: row.rules,
             access_type: normalizeTournamentAccessType(row.access_type),
             subtype: row.subtype ? normalizeTournamentAccessType(row.subtype) : null,
             tournament_type: normalizeTournamentType(row.tournament_type),
@@ -11049,6 +11057,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const about = String(req.body?.about || "").trim() || null;
+  const rules = String(req.body?.rules || "").trim() || null;
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
   const requestedTeamType = normalizeNullableText(req.body?.team_type);
   const teamType = normalizeTeamType(requestedTeamType);
@@ -11124,6 +11133,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   logo,
                   link,
                   about,
+                  rules,
                   tournament_type,
                   team_type,
                   category,
@@ -11135,9 +11145,9 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
-              [id, name, shortTitle, logo, link, about, tournamentType, teamType, category, subtype, accessType, playerHubVisibility, lineupSizeType, lineupSize],
+              [id, name, shortTitle, logo, link, about, rules, tournamentType, teamType, category, subtype, accessType, playerHubVisibility, lineupSizeType, lineupSize],
               (insertErr) => {
                 if (insertErr) {
                   db.run("ROLLBACK");
@@ -11184,6 +11194,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const about = String(req.body?.about || "").trim() || null;
+  const rules = String(req.body?.rules || "").trim() || null;
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
   const requestedTeamType = normalizeNullableText(req.body?.team_type);
   const requestedCategory = normalizeCategoryName(req.body?.category);
@@ -11265,6 +11276,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                   logo = ?,
                   link = ?,
                   about = ?,
+                  rules = ?,
                   tournament_type = ?,
                   team_type = ?,
                   category = ?,
@@ -11283,6 +11295,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                 logo,
                 link,
                 about,
+                rules,
                 tournamentType,
                 teamType,
                 category,

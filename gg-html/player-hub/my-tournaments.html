@@ -1107,6 +1107,10 @@
     min-height: 320px;
   }
 
+  .cp-tournament-form .cp-edit-row--rules .cp-news-editor-area {
+    min-height: 160px;
+  }
+
   .cp-tournament-section {
     grid-column: 1 / -1;
     display: grid;
@@ -6318,6 +6322,20 @@
     aboutRow.appendChild(aboutEditor.root);
     form.appendChild(aboutRow);
 
+    const rulesRow = document.createElement("div");
+    rulesRow.className = "cp-edit-row cp-edit-row--full cp-edit-row--description cp-edit-row--rules";
+    const rulesLabel = document.createElement("label");
+    rulesLabel.textContent = "Rules";
+    const rulesEditor = createNewsDescriptionEditor(tournament?.rules || "", {
+      placeholder: "Write formatted tournament rules...",
+      canUploadSource: true,
+      currentUserAuthId: tournamentEditorCache.currentUserAuthId,
+      isAdmin: true,
+    });
+    rulesRow.appendChild(rulesLabel);
+    rulesRow.appendChild(rulesEditor.root);
+    form.appendChild(rulesRow);
+
     const accessUsersEditor = createTournamentAccessUsersEditor(
       references.users,
       Array.isArray(tournament?.access_users)
@@ -6402,6 +6420,7 @@
       });
       idField.input.readOnly = true;
       aboutEditor.setDisabled(isBusy);
+      rulesEditor.setDisabled(isBusy);
       saveButton.textContent = isBusy ? "Saving..." : "Save";
       syncConditionalFields();
     };
@@ -6411,6 +6430,10 @@
       setStatus("");
       if (aboutEditor.isUploading()) {
         setStatus("Wait until the About image upload finishes.");
+        return;
+      }
+      if (rulesEditor.isUploading()) {
+        setStatus("Wait until the Rules image upload finishes.");
         return;
       }
 
@@ -6435,6 +6458,7 @@
         lineup_size_type: lineupSizeType,
         lineup_size: lineupSizeType === 1 ? lineupSize : null,
         about: aboutEditor.getHtml(),
+        rules: rulesEditor.getHtml(),
         access_users: isOfficial ? accessUsersEditor.getValues() : [],
       };
       const tournamentTeams = isTeams ? tournamentTeamsEditor.getValues() : [];
