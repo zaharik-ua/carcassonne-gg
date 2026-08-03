@@ -6744,6 +6744,11 @@
       tournament?.stage2_format || "Round-robin",
       { selectOptions: stageFormatOptions }
     );
+    const isTestField = createTournamentFormRow(
+      "Test tournament",
+      tournament?.is_test === true || Number(tournament?.is_test) === 1,
+      { type: "checkbox" }
+    );
 
     [
       idField,
@@ -6762,6 +6767,7 @@
       stage1GroupsField,
       stage1FormatField,
       stage2FormatField,
+      isTestField,
     ].forEach((field) => form.appendChild(field.row));
 
     const aboutRow = document.createElement("div");
@@ -6937,6 +6943,7 @@
         stage1_groups: stage1GroupsField.input.checked,
         stage1_format: stage1FormatField.input.value,
         stage2_format: stage2FormatField.input.value,
+        is_test: isTestField.input.checked,
         about: aboutEditor.getHtml(),
         rules: rulesEditor.getHtml(),
         access_users: isOfficial ? accessUsersEditor.getValues() : [],
@@ -7033,7 +7040,7 @@
       const isGlobalAdmin = currentUser?.isAdmin === true || Number(currentUser?.admin) === 1;
       if (!isGlobalAdmin) {
         renderStaticInfoSection("My Tournaments", [
-          "This section is currently available only to global admins.",
+          "This section is still under development.",
         ]);
         return;
       }

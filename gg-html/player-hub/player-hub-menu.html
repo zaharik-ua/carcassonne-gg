@@ -214,6 +214,12 @@
     },
     {
       type: "view",
+      view: "my-tournaments",
+      label: "My Tournaments",
+      icon: "https://carcassonne.gg/gallery/tournament.svg",
+    },
+    {
+      type: "view",
       view: "streams",
       label: "My Streams",
       icon: "https://carcassonne.gg/gallery/streams.png",
@@ -334,6 +340,7 @@
     if (
       view === "players"
       || view === "friendly-find"
+      || view === "my-tournaments"
       || view === "streams"
       || view === "news"
       || view === "nationals"
@@ -549,7 +556,7 @@
         if (isAdminUser) return true;
         if (item.view === "players" || item.view === "friendly-find") return isCaptainUser;
         if (item.view === "streams") return isStreamerUser;
-        if (item.view === "news") return isAuthenticatedUser;
+        if (item.view === "news" || item.view === "my-tournaments") return isAuthenticatedUser;
         if (item.view === "nationals" || item.view === "challenges") {
           return isAuthenticatedUser && hasLinkedBgaId;
         }

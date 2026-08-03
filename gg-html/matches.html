@@ -2422,6 +2422,13 @@ function isMatchHidden(match) {
   return raw === "yes";
 }
 
+function isTestEntity(entity) {
+  if (!entity) return false;
+  if (entity.is_test === true || entity.is_test === 1) return true;
+  const raw = String(entity.is_test ?? "").trim().toLowerCase();
+  return ["1", "true", "yes", "on"].includes(raw);
+}
+
 function parseUtcTimestamp(timeValue) {
   const [datePart, timePart] = (timeValue || "").split(" ");
   const [day, month, year] = (datePart || "").split(".").map(Number);
@@ -2436,7 +2443,11 @@ function hasLegacyMatchTime(timeValue) {
 }
 
 function getRenderableMatches(matches) {
-  return (matches || []).filter(match => !isMatchHidden(match) && hasLegacyMatchTime(match?.time));
+  return (matches || []).filter(match => (
+    !isTestEntity(match)
+    && !isMatchHidden(match)
+    && hasLegacyMatchTime(match?.time)
+  ));
 }
 
 function hasRenderableMatches(matches) {
@@ -3489,6 +3500,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
 
   const duelsByMatchId = new Map();
   (Array.isArray(data?.duels) ? data.duels : []).forEach((duel) => {
+    if (isTestEntity(duel)) return;
     const matchId = String(duel?.match_id || "").trim();
     if (!matchId) return;
     if (!duelsByMatchId.has(matchId)) duelsByMatchId.set(matchId, []);
@@ -3496,6 +3508,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
   });
 
   (Array.isArray(data?.challenge_duels) ? data.challenge_duels : []).forEach((duel) => {
+    if (isTestEntity(duel)) return;
     const timeUtc = String(duel?.time_utc || "").trim();
     if (!timeUtc || !Number.isFinite(Date.parse(timeUtc))) return;
 
@@ -3546,6 +3559,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
       player1Details: getChallengePlayerDetails(duel, 1, playerDetailsById),
       player2Details: getChallengePlayerDetails(duel, 2, playerDetailsById),
       source_type: "challenge",
+      is_test: false,
     };
 
     if (sectionKey === "today") result.matches_today.push(normalizedDuel);
@@ -3554,6 +3568,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
   });
 
   (Array.isArray(data?.matches) ? data.matches : []).forEach((match) => {
+    if (isTestEntity(match)) return;
     const timeUtc = String(match?.time_utc || "").trim();
     if (!timeUtc || !Number.isFinite(Date.parse(timeUtc))) {
       return;
@@ -3582,6 +3597,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
     }
     const normalizedMatch = {
       id: String(match?.id || "").trim(),
+      is_test: false,
       tournament: tournamentName,
       tournament_logo: tournamentLogo,
       tournament_link: tournamentLink,

@@ -3801,6 +3801,11 @@
     if (lineupSizeTypeField.select.options[0]) lineupSizeTypeField.select.options[0].textContent = "1 - Fixed";
     if (lineupSizeTypeField.select.options[1]) lineupSizeTypeField.select.options[1].textContent = "2 - Flexible";
     const lineupSizeField = createNumberRow("lineup_size", item?.lineup_size || "");
+    const isTestField = createCheckboxRow(
+      "is_test",
+      item?.is_test === true || Number(item?.is_test) === 1,
+      "Test tournament"
+    );
     const accessUsersField = createTournamentAccessPickerRow(
       "access_users",
       state.userOptions.map((user) => {
@@ -3870,6 +3875,7 @@
     form.appendChild(playerHubVisibilityField.row);
     form.appendChild(lineupSizeTypeField.row);
     form.appendChild(lineupSizeField.row);
+    form.appendChild(isTestField.row);
     form.appendChild(accessUsersField.row);
     accessUsersField.row.classList.add("cp-edit-row-full");
     accessUsersField.row.appendChild(accessUsersHint);
@@ -3976,6 +3982,7 @@
         player_hub_visibility: String(playerHubVisibilityField.select.value || "Visible").trim(),
         lineup_size_type: Number.parseInt(String(lineupSizeTypeField.select.value || "2"), 10) === 1 ? 1 : 2,
         lineup_size: Number.parseInt(String(lineupSizeField.input.value || "").trim(), 10),
+        is_test: isTestField.input.checked,
         access_users: accessUsersField.getValues(),
       };
       const tournamentTeamsPayload = payload.tournament_type === "Teams"
@@ -5103,6 +5110,7 @@
       if (category) subtitleParts.push(category);
       if (tournamentType === "Teams" && subtype) subtitleParts.push(subtype);
       if (playerHubVisibility) subtitleParts.push(playerHubVisibility);
+      if (item?.is_test === true || Number(item?.is_test) === 1) subtitleParts.push("Test");
       sectionList.appendChild(createListRow({
         imageSrc: item.logo,
         imageAlt: item.name,

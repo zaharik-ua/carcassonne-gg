@@ -2658,20 +2658,22 @@
     return row;
   }
 
-  function renderTournamentPlayersSection(team, allProfiles, tournamentId) {
+  function renderTournamentPlayersSection(team, allProfiles, tournamentId, options = {}) {
     const section = document.createElement("div");
     section.className = "captain-section-shell";
     const header = document.createElement("div");
     header.className = "cp-team-section-head";
     header.appendChild(renderSectionTitle(`Players: ${String(team?.team_name || team?.team_id || "Team").trim()}`));
-    const manageButton = document.createElement("button");
-    manageButton.type = "button";
-    manageButton.className = "cp-edit-btn";
-    manageButton.textContent = "Manage team";
-    manageButton.addEventListener("click", () => {
-      openManageTournamentTeamModal(team, allProfiles, tournamentId);
-    });
-    header.appendChild(manageButton);
+    if (options.isGlobalAdmin === true) {
+      const manageButton = document.createElement("button");
+      manageButton.type = "button";
+      manageButton.className = "cp-edit-btn";
+      manageButton.textContent = "Manage team";
+      manageButton.addEventListener("click", () => {
+        openManageTournamentTeamModal(team, allProfiles, tournamentId);
+      });
+      header.appendChild(manageButton);
+    }
     section.appendChild(header);
 
     const list = document.createElement("div");
@@ -3743,19 +3745,27 @@
       right.appendChild(errorBadge);
     }
 
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "cp-edit-btn";
-    if (!isPlannedMatch) {
-      editBtn.textContent = "View";
-      editBtn.classList.add("cp-edit-btn-view");
-    } else {
-      editBtn.textContent = options.lineupsOnly === true ? "Lineups" : "Edit";
+    const hasMatchTime = hasValue(match?.time_utc ?? match?.time);
+    const shouldShowEditButton = !(
+      isPlannedMatch
+      && options.lineupsOnly === true
+      && !hasMatchTime
+    );
+    if (shouldShowEditButton) {
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "cp-edit-btn";
+      if (!isPlannedMatch) {
+        editBtn.textContent = "View";
+        editBtn.classList.add("cp-edit-btn-view");
+      } else {
+        editBtn.textContent = options.lineupsOnly === true ? "Lineups" : "Edit";
+      }
+      editBtn.addEventListener("click", () => {
+        openCaptainEdit(CAPTAIN_VIEWS.MATCHES, { matchId: String(match?.id || "") });
+      });
+      right.appendChild(editBtn);
     }
-    editBtn.addEventListener("click", () => {
-      openCaptainEdit(CAPTAIN_VIEWS.MATCHES, { matchId: String(match?.id || "") });
-    });
-    right.appendChild(editBtn);
 
     row.appendChild(right);
     if (matchLineups.length === 0) {
@@ -3779,15 +3789,6 @@
       },
       requestOptions: options.requestOptions || {},
     };
-
-    const tournamentTeams = Array.isArray(options.tournamentTeams) ? options.tournamentTeams : [];
-    tournamentTeams.forEach((team) => {
-      contentEl.appendChild(renderTournamentPlayersSection(
-        team,
-        Array.isArray(options.allProfiles) ? options.allProfiles : [],
-        String(options.tournamentId || "").trim()
-      ));
-    });
 
     const calendar = normalizeMatchesForSection("calendar", matches);
     const ongoing = normalizeMatchesForSection("ongoing", matches);
@@ -3816,6 +3817,16 @@
       emptyMatches.textContent = String(options.emptyMatchesMessage || "No matches found for this tournament.");
       contentEl.appendChild(emptyMatches);
     }
+
+    const tournamentTeams = Array.isArray(options.tournamentTeams) ? options.tournamentTeams : [];
+    tournamentTeams.forEach((team) => {
+      contentEl.appendChild(renderTournamentPlayersSection(
+        team,
+        Array.isArray(options.allProfiles) ? options.allProfiles : [],
+        String(options.tournamentId || "").trim(),
+        { isGlobalAdmin: options.isGlobalAdmin === true }
+      ));
+    });
   }
 
   function applyProfileBgaPayload(targetProfile, profilePayload) {
@@ -7704,6 +7715,7 @@
           tournamentTeams: tournamentTeamsWithPlayers,
           allProfiles,
           tournamentId: String(currentTournament?.id || requestedTournamentId || "").trim(),
+          isGlobalAdmin: isAdminUser,
           emptyMatchesMessage: currentTournamentAccess.accessType === "Official"
             ? "No matches found for this tournament."
             : isAdminErrorMatchesFilter

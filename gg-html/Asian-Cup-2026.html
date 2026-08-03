@@ -1239,6 +1239,15 @@
     return found && found.flag ? found.flag : "";
   }
 
+  function compareRoundValues(roundA, roundB) {
+    const valueA = String(roundA || '').trim();
+    const valueB = String(roundB || '').trim();
+    if (!valueA && !valueB) return 0;
+    if (!valueA) return 1;
+    if (!valueB) return -1;
+    return valueA.localeCompare(valueB, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
   function buildPlayerMatchesBlock({ playerId, teamName, stageFilter = null, tournamentId = null, isTeam = false, usePlayerAvatars = false }) {
     const matchesTournamentId = tournamentId || currentTournamentId;
     const pid = String(playerId || '');
@@ -1255,7 +1264,8 @@
           return d.team1 === teamName || d.team2 === teamName;
         }
         return String(d.player1_id) === pid || String(d.player2_id) === pid;
-      });
+      })
+      .sort((a, b) => compareRoundValues(a.round, b.round));
 
     const wrapper = document.createElement('div');
     wrapper.className = 'player-matches';
@@ -1464,11 +1474,14 @@
       }
 
       const data = await response.json();
-      currentTournament.about = typeof data?.tournament?.about === "string"
-        ? data.tournament.about.trim()
+      const tournamentRecord = data?.tournament && typeof data.tournament === "object"
+        ? data.tournament
+        : data;
+      currentTournament.about = typeof tournamentRecord?.about === "string"
+        ? tournamentRecord.about.trim()
         : "";
-      currentTournament.rules = typeof data?.tournament?.rules === "string"
-        ? data.tournament.rules.trim()
+      currentTournament.rules = typeof tournamentRecord?.rules === "string"
+        ? tournamentRecord.rules.trim()
         : "";
     } catch (error) {
       console.error("Failed to load Asian Cup About and Rules", error);
@@ -1518,7 +1531,7 @@
         (Array.isArray(team.players) ? team.players : []).map(player => ({
           player_id: player.player_id || "",
           player: player.bga_nickname || player.player_id || "",
-          avatar: player.avatar || ""
+          avatar: buildBgaAvatarUrl(player.player_id, player.avatar)
         }))
       ));
       teamsLoaded = true;
@@ -1533,6 +1546,86 @@
     }
 
     renderTeamsContent();
+  }
+
+  async function loadTournamentMatchesFromDatabase() {
+    try {
+      const url = new URL(`${API_BASE}/public/main-page-matches`);
+      url.searchParams.set("tournament_id", currentTournamentId);
+      url.searchParams.set("include_bracket", "true");
+
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      const normalizedTournamentId = currentTournamentId.toUpperCase();
+      const belongsToCurrentTournament = entry => (
+        String(entry?.tournament_id || "").trim().toUpperCase() === normalizedTournamentId
+      );
+      const normalizeStatus = status => String(status || "").trim().toUpperCase();
+      const normalizeScore = score => (
+        score === null || score === undefined ? "" : score
+      );
+      const normalizeStage = stage => {
+        const rawStage = String(stage || "").trim();
+        const normalizedStage = rawStage.toLowerCase();
+        if (!normalizedStage || normalizedStage === "stage 1" || normalizedStage === "groups stage") {
+          return "Stage 1";
+        }
+        if (["stage 2", "playoffs", "final stage"].includes(normalizedStage)) {
+          return "Stage 2";
+        }
+        return rawStage;
+      };
+
+      matches = (Array.isArray(data.matches) ? data.matches : [])
+        .filter(belongsToCurrentTournament)
+        .map(match => ({
+          ...match,
+          match_id: match.match_id || match.id || "",
+          tournament_id: currentTournamentId,
+          time: match.time || match.time_utc || "",
+          team1: match.team1 || match.team_1_name || match.team_1 || "",
+          team2: match.team2 || match.team_2_name || match.team_2 || "",
+          duels_won1: normalizeScore(match.duels_won1 ?? match.dw1),
+          duels_won2: normalizeScore(match.duels_won2 ?? match.dw2),
+          games_won1: normalizeScore(match.games_won1 ?? match.gw1),
+          games_won2: normalizeScore(match.games_won2 ?? match.gw2),
+          stage: normalizeStage(match.stage),
+          group: match.group || "",
+          round: match.round || match.round_name || match.round_short_name || "Matches",
+          status: normalizeStatus(match.status),
+          knockout_stage: match.knockout_stage
+            || (Number(match.third_place_match) === 1 ? "third_place" : "")
+        }));
+
+      const tournamentMatchIds = new Set(
+        matches.map(match => String(match.match_id || "").trim()).filter(Boolean)
+      );
+      duels = (Array.isArray(data.duels) ? data.duels : [])
+        .filter(duel => (
+          belongsToCurrentTournament(duel)
+          && tournamentMatchIds.has(String(duel.match_id || "").trim())
+        ))
+        .map(duel => ({
+          ...duel,
+          tournament_id: currentTournamentId,
+          player1_id: duel.player1_id || duel.player_1_id || "",
+          player1: duel.player1 || duel.player_1_name || duel.player_1_id || "",
+          player2_id: duel.player2_id || duel.player_2_id || "",
+          player2: duel.player2 || duel.player_2_name || duel.player_2_id || "",
+          score1: normalizeScore(duel.score1 ?? duel.dw1),
+          score2: normalizeScore(duel.score2 ?? duel.dw2),
+          time: duel.time || duel.time_utc || "",
+          status: normalizeStatus(duel.status)
+        }));
+    } catch (error) {
+      console.error("Failed to load Asian Cup matches", error);
+      matches = [];
+      duels = [];
+    }
   }
 
   async function loadStandingsFromDatabase() {
@@ -1736,6 +1829,7 @@
       } else if (tabId === "teams") {
         document.getElementById("tab-teams-content").style.display = "block";
       } else if (tabId === "rules") {
+        renderRulesContent();
         document.getElementById("tab-rules-content").style.display = "block";
       } else if (tabId && tabId.startsWith("league-")) {
         const leagueContent = document.getElementById(`tab-${tabId}-content`);
@@ -1906,19 +2000,28 @@
     }
     
     // Rules content (if present)
-    if (rulesTab) {
-      const rulesContainer = document.getElementById("tab-rules-content");
-      rulesContainer.innerHTML = "";
-      const rulesContent = document.createElement("div");
-      rulesContent.className = "overview-about-text";
-      rulesContent.innerHTML = currentTournament.rules;
-      rulesContainer.appendChild(rulesContent);
-    }
+    if (rulesTab) renderRulesContent();
 
     // Teams content (if present)
     if (teamsTab) renderTeamsContent();
     // Show the first tab by default, or the requested one
     showTab(defaultTabId);
+  }
+
+  function renderRulesContent() {
+    const rulesContainer = document.getElementById("tab-rules-content");
+    if (!rulesContainer) return;
+    rulesContainer.innerHTML = "";
+
+    const rulesHtml = typeof currentTournament.rules === "string"
+      ? currentTournament.rules.trim()
+      : "";
+    if (!rulesHtml) return;
+
+    const rulesContent = document.createElement("div");
+    rulesContent.className = "overview-about-text";
+    rulesContent.innerHTML = rulesHtml;
+    rulesContainer.appendChild(rulesContent);
   }
 
   function renderTeamsContent() {
@@ -3029,6 +3132,27 @@
       const d = new Date(ts);
       return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
     }
+    // Database UTC timestamp: YYYY-MM-DD HH:MM[:SS] or ISO equivalent.
+    const databaseTime = s.match(
+      /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?Z?)?$/
+    );
+    if (databaseTime) {
+      const [, yyyy, mm, dd, hours, minutes, seconds] = databaseTime;
+      const hasTime = hours !== undefined && minutes !== undefined;
+      const ts = Date.UTC(
+        Number(yyyy),
+        Number(mm) - 1,
+        Number(dd),
+        Number(hours || 12),
+        Number(minutes || 0),
+        Number(seconds || 0)
+      );
+      const d = new Date(ts);
+      const dayMon = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      if (!hasTime) return dayMon;
+      const hm = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+      return `${dayMon} ${hm}`;
+    }
     // Fallback: return as-is
     return s;
   }
@@ -3070,7 +3194,7 @@
     const forceOpenFirstIncomplete = options.openFirstIncompleteRound === true;
     const hasOpenRound = tournament.status === "In progress";
     let roundToOpen = null;
-    const groupedRounds = Object.keys(groupedByRound);
+    const groupedRounds = Object.keys(groupedByRound).sort(compareRoundValues);
     if (forceOpenFirstIncomplete || hasOpenRound) {
       for (const round of groupedRounds) {
         const roundMatches = groupedByRound[round];
@@ -3084,7 +3208,8 @@
 
     let openAccordion = null;
 
-    for (const [round, roundMatches] of Object.entries(groupedByRound)) {
+    for (const round of groupedRounds) {
+      const roundMatches = groupedByRound[round];
       const section = document.createElement("div");
       section.className = "group-section";
 
@@ -4009,7 +4134,22 @@
   }
 
   function renderSingleElimination(playoffMatches, containerOverride, tournamentType) {
-    
+    const normalizedPlayoffMatches = Array.isArray(playoffMatches)
+      ? playoffMatches.filter(Boolean)
+      : [];
+    if (!normalizedPlayoffMatches.length) {
+      const emptyContainer = containerOverride || document.getElementById("playoff-bracket");
+      if (emptyContainer) {
+        emptyContainer.innerHTML = "";
+        const emptyMessage = document.createElement("div");
+        emptyMessage.className = "overview-about-text";
+        emptyMessage.textContent = "No matches yet.";
+        emptyContainer.appendChild(emptyMessage);
+      }
+      return;
+    }
+    playoffMatches = normalizedPlayoffMatches;
+
     // Optionally override THIRD_PLACE_VERTICAL_OFFSET from currentTournament (ignore null/empty)
     if (currentTournament && currentTournament.hasOwnProperty('third_place_vertical_offset')) {
       const tpo = currentTournament.third_place_vertical_offset;
@@ -4985,7 +5125,8 @@
     applyTournamentTheme(currentTournament.style);
     await Promise.all([
       loadTournamentHtmlFromDatabase(),
-      loadTournamentTeamsFromDatabase()
+      loadTournamentTeamsFromDatabase(),
+      loadTournamentMatchesFromDatabase()
     ]);
     await loadStandingsFromDatabase();
     initAndRenderTournamentContent(currentTournament);

@@ -224,6 +224,7 @@ const ICON_AUDIT_FIELDS = [
 const MATCH_AUDIT_FIELDS = [
   "id",
   "tournament_id",
+  "is_test",
   "time_utc",
   "lineup_type",
   "lineup_deadline_h",
@@ -1714,6 +1715,7 @@ function loadDuelsByMatchId(matchId, callback) {
         id,
         tournament_id,
         match_id,
+        is_test,
         duel_number,
         duel_format,
         time_utc,
@@ -1788,6 +1790,7 @@ function loadDuelsByIds(duelIds, callback) {
         id,
         tournament_id,
         match_id,
+        is_test,
         duel_number,
         duel_format,
         time_utc,
@@ -2573,6 +2576,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         t.short_title,
         t.logo,
         t.link,
+        COALESCE(t.is_test, 0) AS is_test,
         t.about,
         t.rules,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
@@ -2689,6 +2693,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         short_title: row.short_title,
         logo: row.logo,
         link: row.link,
+        is_test: normalizeBooleanInt(row.is_test) === 1,
         about: row.about,
         rules: row.rules,
         access_type: normalizeTournamentAccessType(row.access_type),
@@ -2842,6 +2847,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         short_title,
         logo,
         link,
+        COALESCE(is_test, 0) AS is_test,
         about,
         rules,
         COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), ''), ?) AS access_type,
@@ -2881,6 +2887,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
 
       const tournament = {
         ...row,
+        is_test: normalizeBooleanInt(row.is_test) === 1,
         access_type: normalizeTournamentAccessType(row.access_type),
         subtype: normalizeTournamentAccessType(row.subtype),
         tournament_type: normalizeTournamentType(row.tournament_type),
@@ -3962,6 +3969,7 @@ function ensureMatchesSchema() {
     if (!Array.isArray(columns) || columns.length === 0) return;
 
     const addOrBackfillMatchesColumns = (currentColumns) => {
+      addColumnIfMissing(currentColumns, "matches", "is_test", "BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1))");
       addColumnIfMissing(currentColumns, "matches", "lineup_deadline_h", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "lineup_deadline_utc", "TEXT");
       addColumnIfMissing(currentColumns, "matches", "deleted_at", "TEXT");
@@ -4045,6 +4053,7 @@ function ensureMatchesSchema() {
           multiple_elimination_stage TEXT,
           badge_name TEXT,
           badge_color TEXT,
+          is_test BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1)),
           metadata TEXT
         );
         INSERT INTO matches (
@@ -4087,6 +4096,7 @@ function ensureMatchesSchema() {
           multiple_elimination_stage,
           badge_name,
           badge_color,
+          is_test,
           metadata
         )
         SELECT
@@ -4129,6 +4139,7 @@ function ensureMatchesSchema() {
           ${selectExpr("multiple_elimination_stage")},
           ${selectExpr("badge_name")},
           ${selectExpr("badge_color")},
+          ${selectExpr("is_test", "0")},
           ${selectExpr("metadata")}
         FROM matches_time_utc_legacy;
         DROP TABLE matches_time_utc_legacy;
@@ -4204,6 +4215,7 @@ function ensureDuelsSchema() {
       challenge_period_id TEXT,
       challenge_request_id TEXT,
       source_type TEXT,
+      is_test BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1)),
       cancelled_by_player_id TEXT,
       cancellation_reason TEXT,
       cancelled_at TEXT,
@@ -4255,6 +4267,7 @@ function ensureDuelsSchema() {
         addColumnIfMissing(columns, "duels", "challenge_period_id", "TEXT");
         addColumnIfMissing(columns, "duels", "challenge_request_id", "TEXT");
         addColumnIfMissing(columns, "duels", "source_type", "TEXT");
+        addColumnIfMissing(columns, "duels", "is_test", "BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1))");
         addColumnIfMissing(columns, "duels", "cancelled_by_player_id", "TEXT");
         addColumnIfMissing(columns, "duels", "cancellation_reason", "TEXT");
         addColumnIfMissing(columns, "duels", "cancelled_at", "TEXT");
@@ -4825,6 +4838,138 @@ function ensureTeamsSchema() {
   });
 }
 
+function ensureTestFlagPropagationSchema() {
+  db.exec(
+    `
+      UPDATE matches
+      SET is_test = COALESCE((
+        SELECT COALESCE(t.is_test, 0)
+        FROM tournaments t
+        WHERE upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(matches.tournament_id, '')))
+        LIMIT 1
+      ), 0);
+
+      UPDATE duels
+      SET is_test = COALESCE(
+        (
+          SELECT COALESCE(m.is_test, 0)
+          FROM matches m
+          WHERE trim(COALESCE(m.id, '')) = trim(COALESCE(duels.match_id, ''))
+          LIMIT 1
+        ),
+        (
+          SELECT COALESCE(t.is_test, 0)
+          FROM tournaments t
+          WHERE upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(duels.tournament_id, '')))
+          LIMIT 1
+        ),
+        0
+      );
+
+      CREATE TRIGGER IF NOT EXISTS trg_matches_inherit_test_after_insert
+      AFTER INSERT ON matches
+      BEGIN
+        UPDATE matches
+        SET is_test = COALESCE((
+          SELECT COALESCE(t.is_test, 0)
+          FROM tournaments t
+          WHERE upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(NEW.tournament_id, '')))
+          LIMIT 1
+        ), 0)
+        WHERE rowid = NEW.rowid;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_matches_inherit_test_after_tournament_update
+      AFTER UPDATE OF tournament_id ON matches
+      BEGIN
+        UPDATE matches
+        SET is_test = COALESCE((
+          SELECT COALESCE(t.is_test, 0)
+          FROM tournaments t
+          WHERE upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(NEW.tournament_id, '')))
+          LIMIT 1
+        ), 0)
+        WHERE rowid = NEW.rowid;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_duels_inherit_test_after_insert
+      AFTER INSERT ON duels
+      BEGIN
+        UPDATE duels
+        SET is_test = COALESCE(
+          (
+            SELECT COALESCE(m.is_test, 0)
+            FROM matches m
+            WHERE trim(COALESCE(m.id, '')) = trim(COALESCE(NEW.match_id, ''))
+            LIMIT 1
+          ),
+          (
+            SELECT COALESCE(t.is_test, 0)
+            FROM tournaments t
+            WHERE upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(NEW.tournament_id, '')))
+            LIMIT 1
+          ),
+          0
+        )
+        WHERE rowid = NEW.rowid;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_duels_inherit_test_after_parent_update
+      AFTER UPDATE OF tournament_id, match_id ON duels
+      BEGIN
+        UPDATE duels
+        SET is_test = COALESCE(
+          (
+            SELECT COALESCE(m.is_test, 0)
+            FROM matches m
+            WHERE trim(COALESCE(m.id, '')) = trim(COALESCE(NEW.match_id, ''))
+            LIMIT 1
+          ),
+          (
+            SELECT COALESCE(t.is_test, 0)
+            FROM tournaments t
+            WHERE upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(NEW.tournament_id, '')))
+            LIMIT 1
+          ),
+          0
+        )
+        WHERE rowid = NEW.rowid;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_duels_sync_after_match_test_update
+      AFTER UPDATE OF is_test ON matches
+      BEGIN
+        UPDATE duels
+        SET is_test = NEW.is_test
+        WHERE trim(COALESCE(match_id, '')) = trim(COALESCE(NEW.id, ''));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_tournament_test_update_children
+      AFTER UPDATE OF is_test ON tournaments
+      BEGIN
+        UPDATE matches
+        SET is_test = NEW.is_test
+        WHERE upper(trim(COALESCE(tournament_id, ''))) = upper(trim(COALESCE(NEW.id, '')));
+
+        UPDATE duels
+        SET is_test = NEW.is_test
+        WHERE upper(trim(COALESCE(tournament_id, ''))) = upper(trim(COALESCE(NEW.id, '')))
+          OR EXISTS (
+            SELECT 1
+            FROM matches m
+            WHERE trim(COALESCE(m.id, '')) = trim(COALESCE(duels.match_id, ''))
+              AND upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(COALESCE(NEW.id, '')))
+          );
+      END;
+    `,
+    (error) => {
+      if (error) {
+        console.error("Failed to ensure test flag propagation", error);
+      }
+    }
+  );
+}
+
 function ensureTournamentsSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS tournaments (
@@ -4833,6 +4978,7 @@ function ensureTournamentsSchema() {
       short_title TEXT,
       logo TEXT,
       link TEXT,
+      is_test BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1)),
       about TEXT,
       rules TEXT,
       tournament_type TEXT NOT NULL DEFAULT 'Teams',
@@ -4865,6 +5011,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "short_title", "TEXT");
       addColumnIfMissing(columns, "tournaments", "logo", "TEXT");
       addColumnIfMissing(columns, "tournaments", "link", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "is_test", "BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1))");
       addColumnIfMissing(columns, "tournaments", "about", "TEXT");
       addColumnIfMissing(columns, "tournaments", "rules", "TEXT");
       addColumnIfMissing(columns, "tournaments", "tournament_type", "TEXT NOT NULL DEFAULT 'Teams'");
@@ -4885,6 +5032,10 @@ function ensureTournamentsSchema() {
         `
           UPDATE tournaments
           SET
+            is_test = CASE
+              WHEN lower(trim(COALESCE(is_test, ''))) IN ('1', 'true', 'yes', 'on') THEN 1
+              ELSE 0
+            END,
             tournament_type = COALESCE(NULLIF(trim(tournament_type), ''), 'Teams'),
             team_type = CASE
               WHEN lower(trim(COALESCE(team_type, ''))) = 'club' THEN 'Club'
@@ -4936,6 +5087,7 @@ function ensureTournamentsSchema() {
           if (backfillErr) {
             console.error("Failed to backfill tournaments type settings and visibility", backfillErr);
           }
+          ensureTestFlagPropagationSchema();
         }
       );
     });
@@ -11023,6 +11175,7 @@ app.get("/public/tournaments/:id", (req, res, next) => {
     `
       SELECT
         id,
+        COALESCE(is_test, 0) AS is_test,
         about,
         rules
       FROM tournaments
@@ -11035,7 +11188,13 @@ app.get("/public/tournaments/:id", (req, res, next) => {
       if (!tournament) {
         return res.status(404).json({ ok: false, message: "Tournament not found" });
       }
-      return res.json({ ok: true, tournament });
+      return res.json({
+        ok: true,
+        tournament: {
+          ...tournament,
+          is_test: normalizeBooleanInt(tournament.is_test) === 1,
+        },
+      });
     }
   );
 });
@@ -11092,6 +11251,7 @@ app.get("/tournaments", (req, res, next) => {
         t.short_title,
         t.logo,
         t.link,
+        COALESCE(t.is_test, 0) AS is_test,
         t.about,
         t.rules,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
@@ -11220,6 +11380,7 @@ app.get("/tournaments", (req, res, next) => {
             short_title: row.short_title,
             logo: row.logo,
             link: row.link,
+            is_test: normalizeBooleanInt(row.is_test) === 1,
             about: row.about,
             rules: row.rules,
             access_type: normalizeTournamentAccessType(row.access_type),
@@ -11269,6 +11430,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   const shortTitle = String(req.body?.short_title || "").trim() || null;
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
+  const isTest = normalizeBooleanInt(req.body?.is_test);
   const about = String(req.body?.about || "").trim() || null;
   const rules = String(req.body?.rules || "").trim() || null;
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
@@ -11349,6 +11511,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   short_title,
                   logo,
                   link,
+                  is_test,
                   about,
                   rules,
                   tournament_type,
@@ -11366,7 +11529,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
               [
                 id,
@@ -11374,6 +11537,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                 shortTitle,
                 logo,
                 link,
+                isTest,
                 about,
                 rules,
                 tournamentType,
@@ -11434,6 +11598,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
   const shortTitle = String(req.body?.short_title || "").trim() || null;
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
+  const isTest = normalizeBooleanInt(req.body?.is_test);
   const about = String(req.body?.about || "").trim() || null;
   const rules = String(req.body?.rules || "").trim() || null;
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
@@ -11520,6 +11685,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                   short_title = ?,
                   logo = ?,
                   link = ?,
+                  is_test = ?,
                   about = ?,
                   rules = ?,
                   tournament_type = ?,
@@ -11543,6 +11709,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                 shortTitle,
                 logo,
                 link,
+                isTest,
                 about,
                 rules,
                 tournamentType,
@@ -16638,7 +16805,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
   }
 
   return db.get(
-    "SELECT tournament_id, team_1, team_2 FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1",
+    "SELECT tournament_id, team_1, team_2, COALESCE(is_test, 0) AS is_test FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1",
     [matchId],
     (matchErr, matchRow) => {
       if (matchErr) {
@@ -16702,6 +16869,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
             id,
             tournament_id: normalizeText(item?.tournament_id) || tournament.id,
             match_id: matchId,
+            is_test: normalizeBooleanInt(matchRow.is_test),
             duel_number: duelNumber,
             duel_format: normalizeText(item?.duel_format),
             time_utc: normalizeText(item?.time_utc),
@@ -16779,6 +16947,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                   id,
                   tournament_id,
                   match_id,
+                  is_test,
                   duel_number,
                   duel_format,
                   time_utc,
@@ -16797,10 +16966,11 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT(id) DO UPDATE SET
                   tournament_id = excluded.tournament_id,
                   match_id = excluded.match_id,
+                  is_test = excluded.is_test,
                   duel_number = excluded.duel_number,
                   duel_format = excluded.duel_format,
                   time_utc = excluded.time_utc,
@@ -16824,6 +16994,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                       item.id,
                       item.tournament_id,
                       item.match_id,
+                      item.is_test,
                       item.duel_number,
                       item.duel_format,
                       item.time_utc,
@@ -17091,6 +17262,7 @@ app.get("/matches", (req, res, next) => {
         m.multiple_elimination_stage,
         m.badge_name,
         m.badge_color,
+        COALESCE(m.is_test, 0) AS is_test,
         m.metadata,
         (
           SELECT COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?)
@@ -17243,6 +17415,7 @@ app.get("/matches", (req, res, next) => {
           multiple_elimination_stage: row.multiple_elimination_stage,
           badge_name: row.badge_name,
           badge_color: row.badge_color,
+          is_test: normalizeBooleanInt(row.is_test) === 1,
           metadata: row.metadata,
         })),
       });
@@ -17280,6 +17453,7 @@ app.get("/matches", (req, res, next) => {
         m.multiple_elimination_stage,
         m.badge_name,
         m.badge_color,
+        COALESCE(m.is_test, 0) AS is_test,
         m.metadata,
         (
           SELECT COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?)
@@ -17405,6 +17579,7 @@ app.get("/matches", (req, res, next) => {
         multiple_elimination_stage: row.multiple_elimination_stage,
         badge_name: row.badge_name,
         badge_color: row.badge_color,
+        is_test: normalizeBooleanInt(row.is_test) === 1,
         metadata: row.metadata,
       }));
       return res.json({ ok: true, matches: filteredRows });
@@ -17445,6 +17620,8 @@ function publicMainPageMatchesHandler(req, res, next) {
   if (tournamentFilter) {
     matchWhereClauses.push("upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))");
     matchWhereParams.push(tournamentFilter);
+  } else {
+    matchWhereClauses.push("COALESCE(m.is_test, 0) = 0");
   }
 
   if (!includeBracket || !tournamentFilter) {
@@ -17478,6 +17655,7 @@ function publicMainPageMatchesHandler(req, res, next) {
         d.dw1,
         d.dw2,
         d.gg_rating,
+        COALESCE(d.is_test, 0) AS is_test,
         d.status,
         cp.name AS challenge_period_name,
         cp.logo AS challenge_period_logo
@@ -17501,6 +17679,7 @@ function publicMainPageMatchesHandler(req, res, next) {
         ON upper(trim(COALESCE(t2.id, ''))) = upper(trim(COALESCE(p2.association, '')))
         OR lower(trim(COALESCE(t2.name, ''))) = lower(trim(COALESCE(p2.association, '')))
       WHERE d.deleted_at IS NULL
+        AND COALESCE(d.is_test, 0) = 0
         AND d.source_type = 'challenge'
         AND trim(COALESCE(d.match_id, '')) = ''
         AND d.status IN ('Planned', 'In progress', 'Done', 'Error')
@@ -17546,6 +17725,7 @@ function publicMainPageMatchesHandler(req, res, next) {
         m.multiple_elimination_stage,
         m.badge_name,
         m.badge_color,
+        COALESCE(m.is_test, 0) AS is_test,
         m.metadata,
         team1.name AS team_1_name,
         COALESCE(NULLIF(trim(team1.flag), ''), NULLIF(trim(team1.logo), '')) AS team_1_flag,
@@ -17794,6 +17974,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 games_won2: row.gw2 ?? "",
                 badge_name: row.badge_name,
                 badge_color: row.badge_color,
+                is_test: normalizeBooleanInt(row.is_test) === 1,
                 metadata: row.metadata,
                 streams: (streamsByMatchId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
                 streamers: (streamsByMatchId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_avatar),
@@ -17829,6 +18010,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 dw1: row.dw1,
                 dw2: row.dw2,
                 gg_rating: row.gg_rating,
+                is_test: normalizeBooleanInt(row.is_test) === 1,
                 status: row.status,
                 games: gamesByDuelId.get(String(row.id || "").trim()) || [],
                 streams: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
@@ -17859,6 +18041,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 dw1: row.dw1,
                 dw2: row.dw2,
                 rating: row.rating,
+                is_test: normalizeBooleanInt(row.is_test) === 1,
                 status: row.status,
                 games: gamesByDuelId.get(String(row.id || "").trim()) || [],
               })),
@@ -17942,6 +18125,7 @@ function publicMainPageMatchesHandler(req, res, next) {
               d.dw1,
               d.dw2,
               d.rating,
+              COALESCE(d.is_test, 0) AS is_test,
               d.status
             FROM duels d
             LEFT JOIN profiles p1
@@ -17949,6 +18133,7 @@ function publicMainPageMatchesHandler(req, res, next) {
             LEFT JOIN profiles p2
               ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
             WHERE d.deleted_at IS NULL
+              ${tournamentFilter ? "" : "AND COALESCE(d.is_test, 0) = 0"}
               AND trim(COALESCE(d.match_id, '')) IN (${placeholders})
               ${includeBracket && tournamentFilter ? "" : `
               AND (
@@ -19549,6 +19734,7 @@ app.post("/matches", (req, res) => {
               UPDATE matches
               SET
                 tournament_id = ?,
+                is_test = ?,
                 time_utc = ?,
                 lineup_type = ?,
                 lineup_deadline_h = ?,
@@ -19583,6 +19769,7 @@ app.post("/matches", (req, res) => {
             `,
             [
               tournamentId,
+              tournament.is_test ? 1 : 0,
               timeUtc,
               lineupType,
               lineupDeadlineHours,
@@ -19633,6 +19820,7 @@ app.post("/matches", (req, res) => {
                     SELECT
                       id,
                       tournament_id,
+                      COALESCE(is_test, 0) AS is_test,
                       time_utc,
                       lineup_type,
                       lineup_deadline_h,
@@ -19696,6 +19884,7 @@ app.post("/matches", (req, res) => {
           INSERT INTO matches (
             id,
             tournament_id,
+            is_test,
             time_utc,
             lineup_type,
             lineup_deadline_h,
@@ -19725,11 +19914,12 @@ app.post("/matches", (req, res) => {
             created_by,
             updated_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           matchId,
           tournamentId,
+          tournament.is_test ? 1 : 0,
           timeUtc,
           lineupType,
           lineupDeadlineHours,
@@ -19772,6 +19962,7 @@ app.post("/matches", (req, res) => {
               SELECT
                 id,
                 tournament_id,
+                COALESCE(is_test, 0) AS is_test,
                 time_utc,
                 lineup_type,
                 lineup_deadline_h,
@@ -19884,6 +20075,7 @@ app.patch("/matches/:id", (req, res) => {
       SELECT
         id,
         tournament_id,
+        COALESCE(is_test, 0) AS is_test,
         time_utc,
         created_at,
         lineup_type,
@@ -20039,6 +20231,7 @@ app.patch("/matches/:id", (req, res) => {
           SET
             id = ?,
             tournament_id = ?,
+            is_test = ?,
             team_1 = ?,
             team_2 = ?,
             time_utc = ?,
@@ -20072,6 +20265,7 @@ app.patch("/matches/:id", (req, res) => {
         [
           nextMatchId,
           tournament.id,
+          tournament.is_test ? 1 : 0,
           team1,
           team2,
           timeUtc,
@@ -20117,6 +20311,7 @@ app.patch("/matches/:id", (req, res) => {
                 SELECT
                   id,
                   tournament_id,
+                  COALESCE(is_test, 0) AS is_test,
                   time_utc,
                   lineup_type,
                   lineup_deadline_h,
