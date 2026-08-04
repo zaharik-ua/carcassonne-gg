@@ -226,6 +226,9 @@ const MATCH_AUDIT_FIELDS = [
   "tournament_id",
   "is_test",
   "time_utc",
+  "proposed_time_utc",
+  "proposed_time_by_team_id",
+  "proposed_time_status",
   "lineup_type",
   "lineup_deadline_h",
   "lineup_deadline_utc",
@@ -308,6 +311,11 @@ const DEFAULT_CATEGORIES = [
 const TOURNAMENT_ACCESS_ROLES = {
   ADMIN: "admin",
   CAPTAIN: "captain",
+};
+const MATCH_TIME_PROPOSAL_STATUSES = {
+  PENDING: "pending",
+  ACCEPTED: "accepted",
+  CHANGE_PENDING: "change_pending",
 };
 const TOURNAMENT_PLAYER_HUB_VISIBILITY = {
   VISIBLE: "Visible",
@@ -3972,6 +3980,14 @@ function ensureMatchesSchema() {
       addColumnIfMissing(currentColumns, "matches", "is_test", "BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1))");
       addColumnIfMissing(currentColumns, "matches", "lineup_deadline_h", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "lineup_deadline_utc", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "proposed_time_utc", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "proposed_time_by_team_id", "TEXT");
+      addColumnIfMissing(
+        currentColumns,
+        "matches",
+        "proposed_time_status",
+        "TEXT CHECK (proposed_time_status IS NULL OR proposed_time_status IN ('pending', 'accepted', 'change_pending'))"
+      );
       addColumnIfMissing(currentColumns, "matches", "deleted_at", "TEXT");
       addColumnIfMissing(currentColumns, "matches", "created_by", "TEXT");
       addColumnIfMissing(currentColumns, "matches", "updated_by", "TEXT");
@@ -4017,6 +4033,9 @@ function ensureMatchesSchema() {
           id TEXT PRIMARY KEY,
           tournament_id TEXT,
           time_utc TEXT,
+          proposed_time_utc TEXT,
+          proposed_time_by_team_id TEXT,
+          proposed_time_status TEXT CHECK (proposed_time_status IS NULL OR proposed_time_status IN ('pending', 'accepted', 'change_pending')),
           lineup_type TEXT,
           lineup_deadline_h INTEGER,
           lineup_deadline_utc TEXT,
@@ -4060,6 +4079,9 @@ function ensureMatchesSchema() {
           id,
           tournament_id,
           time_utc,
+          proposed_time_utc,
+          proposed_time_by_team_id,
+          proposed_time_status,
           lineup_type,
           lineup_deadline_h,
           lineup_deadline_utc,
@@ -4103,6 +4125,9 @@ function ensureMatchesSchema() {
           ${selectExpr("id")},
           ${selectExpr("tournament_id")},
           ${selectExpr("time_utc")},
+          ${selectExpr("proposed_time_utc")},
+          ${selectExpr("proposed_time_by_team_id")},
+          ${selectExpr("proposed_time_status")},
           ${selectExpr("lineup_type")},
           ${selectExpr("lineup_deadline_h")},
           ${selectExpr("lineup_deadline_utc")},
@@ -17236,6 +17261,9 @@ app.get("/matches", (req, res, next) => {
         m.id,
         m.tournament_id,
         m.time_utc,
+        m.proposed_time_utc,
+        m.proposed_time_by_team_id,
+        m.proposed_time_status,
         m.lineup_type,
         m.lineup_deadline_h,
         m.lineup_deadline_utc,
@@ -17389,6 +17417,9 @@ app.get("/matches", (req, res, next) => {
           id: row.id,
           tournament_id: row.tournament_id,
           time_utc: row.time_utc,
+          proposed_time_utc: row.proposed_time_utc,
+          proposed_time_by_team_id: row.proposed_time_by_team_id,
+          proposed_time_status: row.proposed_time_status,
           lineup_type: row.lineup_type,
           lineup_deadline_h: row.lineup_deadline_h,
           lineup_deadline_utc: row.lineup_deadline_utc,
@@ -17427,6 +17458,9 @@ app.get("/matches", (req, res, next) => {
         m.id,
         m.tournament_id,
         m.time_utc,
+        m.proposed_time_utc,
+        m.proposed_time_by_team_id,
+        m.proposed_time_status,
         m.lineup_type,
         m.lineup_deadline_h,
         m.lineup_deadline_utc,
@@ -17553,6 +17587,9 @@ app.get("/matches", (req, res, next) => {
         id: row.id,
         tournament_id: row.tournament_id,
         time_utc: row.time_utc,
+        proposed_time_utc: row.proposed_time_utc,
+        proposed_time_by_team_id: row.proposed_time_by_team_id,
+        proposed_time_status: row.proposed_time_status,
         lineup_type: row.lineup_type,
         lineup_deadline_h: row.lineup_deadline_h,
         lineup_deadline_utc: row.lineup_deadline_utc,
@@ -19565,6 +19602,99 @@ app.get("/public/friendly-matches/players", async (req, res, next) => {
   }
 });
 
+function resolveOfficialMatchCaptainTeamId(tournament, userAssociation, team1Value, team2Value) {
+  if (normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) !== TOURNAMENT_ACCESS_TYPES.OFFICIAL) {
+    return null;
+  }
+  if (!tournament?.has_access || tournament?.access_role !== TOURNAMENT_ACCESS_ROLES.CAPTAIN) {
+    return null;
+  }
+
+  const team1 = String(team1Value || "").trim().toUpperCase();
+  const team2 = String(team2Value || "").trim().toUpperCase();
+  const allowedMatchTeams = new Set([team1, team2].filter(Boolean));
+  const candidates = new Set(
+    normalizeTournamentCaptainTeamIds(tournament?.captain_team_ids)
+      .filter((teamId) => allowedMatchTeams.has(teamId))
+  );
+  const association = String(userAssociation || "").trim().toUpperCase();
+  if (tournament?.access_via_access_users === true && allowedMatchTeams.has(association)) {
+    candidates.add(association);
+  }
+  return candidates.size === 1 ? Array.from(candidates)[0] : null;
+}
+
+async function loadMatchTimeProposalContext(matchId, user) {
+  const normalizedMatchId = String(matchId || "").trim();
+  const match = await dbGetAsync(
+    `
+      SELECT
+        id,
+        tournament_id,
+        time_utc,
+        proposed_time_utc,
+        proposed_time_by_team_id,
+        proposed_time_status,
+        lineup_type,
+        lineup_deadline_h,
+        lineup_deadline_utc,
+        team_1,
+        team_2,
+        status
+      FROM matches
+      WHERE id = ?
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
+    [normalizedMatchId]
+  );
+  if (!match) {
+    const error = new Error("Match not found");
+    error.httpStatus = 404;
+    throw error;
+  }
+
+  const tournament = await loadTournamentAccessForUserAsync(match.tournament_id, user);
+  if (!tournament) {
+    const error = new Error("Tournament not found");
+    error.httpStatus = 404;
+    throw error;
+  }
+  if (normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) !== TOURNAMENT_ACCESS_TYPES.OFFICIAL) {
+    const error = new Error("Time proposals are available only for official tournaments");
+    error.httpStatus = 403;
+    throw error;
+  }
+  if (String(match.status || "").trim().toLowerCase() !== "planned") {
+    const error = new Error("Match time can be changed only while the match is Planned");
+    error.httpStatus = 409;
+    throw error;
+  }
+
+  const captainTeamId = resolveOfficialMatchCaptainTeamId(
+    tournament,
+    user?.association,
+    match.team_1,
+    match.team_2
+  );
+  if (!captainTeamId) {
+    const error = new Error("Only a captain of one of the match teams can manage its time proposal");
+    error.httpStatus = 403;
+    throw error;
+  }
+  return { match, tournament, captainTeamId };
+}
+
+function matchTimeProposalSnapshotMatches(match, payload) {
+  const currentTime = normalizeUtcTimestamp(match?.proposed_time_utc);
+  const currentTeam = String(match?.proposed_time_by_team_id || "").trim().toUpperCase() || null;
+  const currentStatus = normalizeNullableText(match?.proposed_time_status);
+  const expectedTime = normalizeUtcTimestamp(payload?.expected_proposed_time_utc);
+  const expectedTeam = String(payload?.expected_proposed_time_by_team_id || "").trim().toUpperCase() || null;
+  const expectedStatus = normalizeNullableText(payload?.expected_proposed_time_status);
+  return currentTime === expectedTime && currentTeam === expectedTeam && currentStatus === expectedStatus;
+}
+
 app.post("/matches", (req, res) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
@@ -19736,6 +19866,9 @@ app.post("/matches", (req, res) => {
                 tournament_id = ?,
                 is_test = ?,
                 time_utc = ?,
+                proposed_time_utc = NULL,
+                proposed_time_by_team_id = NULL,
+                proposed_time_status = NULL,
                 lineup_type = ?,
                 lineup_deadline_h = ?,
                 lineup_deadline_utc = ?,
@@ -19822,6 +19955,9 @@ app.post("/matches", (req, res) => {
                       tournament_id,
                       COALESCE(is_test, 0) AS is_test,
                       time_utc,
+                      proposed_time_utc,
+                      proposed_time_by_team_id,
+                      proposed_time_status,
                       lineup_type,
                       lineup_deadline_h,
                       lineup_deadline_utc,
@@ -19964,6 +20100,9 @@ app.post("/matches", (req, res) => {
                 tournament_id,
                 COALESCE(is_test, 0) AS is_test,
                 time_utc,
+                proposed_time_utc,
+                proposed_time_by_team_id,
+                proposed_time_status,
                 lineup_type,
                 lineup_deadline_h,
                 lineup_deadline_utc,
@@ -20077,6 +20216,9 @@ app.patch("/matches/:id", (req, res) => {
         tournament_id,
         COALESCE(is_test, 0) AS is_test,
         time_utc,
+        proposed_time_utc,
+        proposed_time_by_team_id,
+        proposed_time_status,
         created_at,
         lineup_type,
         lineup_deadline_h,
@@ -20224,6 +20366,14 @@ app.patch("/matches/:id", (req, res) => {
       const multipleEliminationStage = normalizeText(payload.multiple_elimination_stage);
       const badgeName = normalizeText(payload.badge_name);
       const badgeColor = normalizeText(payload.badge_color);
+      const existingTimeUtc = parseUtcIsoOrNull(existingRow.time_utc);
+      const proposalMustReset = existingTeam1 !== team1
+        || existingTeam2 !== team2
+        || existingTimeUtc !== timeUtc
+        || status !== "Planned";
+      const proposedTimeUtc = proposalMustReset ? null : normalizeText(existingRow.proposed_time_utc);
+      const proposedTimeByTeamId = proposalMustReset ? null : normalizeCode(existingRow.proposed_time_by_team_id) || null;
+      const proposedTimeStatus = proposalMustReset ? null : normalizeText(existingRow.proposed_time_status);
 
         return db.run(
         `
@@ -20235,6 +20385,9 @@ app.patch("/matches/:id", (req, res) => {
             team_1 = ?,
             team_2 = ?,
             time_utc = ?,
+            proposed_time_utc = ?,
+            proposed_time_by_team_id = ?,
+            proposed_time_status = ?,
             lineup_type = ?,
             lineup_deadline_h = ?,
             lineup_deadline_utc = ?,
@@ -20269,6 +20422,9 @@ app.patch("/matches/:id", (req, res) => {
           team1,
           team2,
           timeUtc,
+          proposedTimeUtc,
+          proposedTimeByTeamId,
+          proposedTimeStatus,
           lineupType,
           lineupDeadlineHours,
           lineupDeadlineUtc,
@@ -20313,6 +20469,9 @@ app.patch("/matches/:id", (req, res) => {
                   tournament_id,
                   COALESCE(is_test, 0) AS is_test,
                   time_utc,
+                  proposed_time_utc,
+                  proposed_time_by_team_id,
+                  proposed_time_status,
                   lineup_type,
                   lineup_deadline_h,
                   lineup_deadline_utc,
@@ -20394,6 +20553,217 @@ app.patch("/matches/:id", (req, res) => {
       });
     }
   );
+});
+
+app.post("/matches/:id/time-proposal", requireAuthenticated, async (req, res) => {
+  const matchId = String(req.params.id || "").trim();
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const proposedTimeUtc = normalizeUtcTimestamp(payload.proposed_time_utc);
+  if (!matchId) {
+    return res.status(400).json({ ok: false, message: "Match id is required" });
+  }
+  if (!proposedTimeUtc) {
+    return res.status(400).json({ ok: false, message: "A valid proposed_time_utc is required" });
+  }
+  if (Date.parse(proposedTimeUtc) <= Date.now()) {
+    return res.status(400).json({ ok: false, message: "Proposed match time must be in the future" });
+  }
+
+  let transactionOpen = false;
+  try {
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    transactionOpen = true;
+    const { match, captainTeamId } = await loadMatchTimeProposalContext(matchId, req.user);
+    if (!matchTimeProposalSnapshotMatches(match, payload)) {
+      const error = new Error("The time proposal has changed. Reload the match and try again");
+      error.httpStatus = 409;
+      throw error;
+    }
+
+    const currentProposedTimeUtc = normalizeUtcTimestamp(match.proposed_time_utc);
+    const currentProposedByTeamId = String(match.proposed_time_by_team_id || "").trim().toUpperCase();
+    const currentProposalStatus = String(match.proposed_time_status || "").trim().toLowerCase();
+    const hasActiveProposal = [
+      MATCH_TIME_PROPOSAL_STATUSES.PENDING,
+      MATCH_TIME_PROPOSAL_STATUSES.CHANGE_PENDING,
+    ].includes(currentProposalStatus);
+    if (currentProposedTimeUtc === proposedTimeUtc) {
+      const error = new Error(
+        hasActiveProposal && currentProposedByTeamId !== captainTeamId
+          ? "Choose a different time for the counter-proposal"
+          : "Choose a time different from the current proposal"
+      );
+      error.httpStatus = 400;
+      throw error;
+    }
+
+    const currentMatchTimeUtc = normalizeUtcTimestamp(match.time_utc);
+    if (currentMatchTimeUtc && currentMatchTimeUtc === proposedTimeUtc) {
+      const error = new Error("Choose a time different from the current match time");
+      error.httpStatus = 400;
+      throw error;
+    }
+    const nextProposalStatus = currentMatchTimeUtc
+      ? MATCH_TIME_PROPOSAL_STATUSES.CHANGE_PENDING
+      : MATCH_TIME_PROPOSAL_STATUSES.PENDING;
+    const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
+
+    await dbRunAsync(
+      `
+        UPDATE matches
+        SET
+          proposed_time_utc = ?,
+          proposed_time_by_team_id = ?,
+          proposed_time_status = ?,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND deleted_at IS NULL
+          AND lower(trim(COALESCE(status, ''))) = 'planned'
+      `,
+      [proposedTimeUtc, captainTeamId, nextProposalStatus, actorPlayerId, matchId]
+    );
+    const updatedMatch = await dbGetAsync("SELECT * FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1", [matchId]);
+    await dbRunAsync("COMMIT");
+    transactionOpen = false;
+
+    const eventType = hasActiveProposal
+      ? (
+          currentProposedByTeamId === captainTeamId
+            ? "match.time_proposal.updated"
+            : "match.time_proposal.countered"
+        )
+      : (currentMatchTimeUtc ? "match.time_change_proposed" : "match.time_proposal.created");
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: eventType,
+      entity_type: "match",
+      action: "update",
+      record_id: matchId,
+      changes: buildAuditChanges(match, updatedMatch, MATCH_AUDIT_FIELDS),
+      metadata: { captain_team_id: captainTeamId },
+    });
+    return res.status(hasActiveProposal ? 200 : 201).json({ ok: true, match: updatedMatch });
+  } catch (error) {
+    if (transactionOpen) await dbRunAsync("ROLLBACK").catch(() => {});
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({ ok: false, message: error.message });
+    }
+    console.error("Failed to save match time proposal", error);
+    return res.status(500).json({ ok: false, message: "Failed to save match time proposal" });
+  }
+});
+
+app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req, res) => {
+  const matchId = String(req.params.id || "").trim();
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  if (!matchId) {
+    return res.status(400).json({ ok: false, message: "Match id is required" });
+  }
+
+  let transactionOpen = false;
+  try {
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    transactionOpen = true;
+    const { match, captainTeamId } = await loadMatchTimeProposalContext(matchId, req.user);
+    if (!matchTimeProposalSnapshotMatches(match, payload)) {
+      const error = new Error("The time proposal has changed. Reload the match and review it again");
+      error.httpStatus = 409;
+      throw error;
+    }
+
+    const proposalStatus = String(match.proposed_time_status || "").trim().toLowerCase();
+    if (![MATCH_TIME_PROPOSAL_STATUSES.PENDING, MATCH_TIME_PROPOSAL_STATUSES.CHANGE_PENDING].includes(proposalStatus)) {
+      const error = new Error("There is no pending time proposal for this match");
+      error.httpStatus = 409;
+      throw error;
+    }
+    const proposedByTeamId = String(match.proposed_time_by_team_id || "").trim().toUpperCase();
+    const matchTeamIds = new Set([
+      String(match.team_1 || "").trim().toUpperCase(),
+      String(match.team_2 || "").trim().toUpperCase(),
+    ].filter(Boolean));
+    if (!proposedByTeamId || !matchTeamIds.has(proposedByTeamId) || proposedByTeamId === captainTeamId) {
+      const error = new Error("Only the other team's captain can accept this proposal");
+      error.httpStatus = 403;
+      throw error;
+    }
+    const proposedTimeUtc = normalizeUtcTimestamp(match.proposed_time_utc);
+    if (!proposedTimeUtc || Date.parse(proposedTimeUtc) <= Date.now()) {
+      const error = new Error("The proposed match time is no longer available");
+      error.httpStatus = 409;
+      throw error;
+    }
+
+    const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
+    const isSecretLineup = String(match.lineup_type || "").trim().toLowerCase() === "secret";
+    const storedDeadlineHours = Number(match.lineup_deadline_h);
+    const lineupDeadlineHours = isSecretLineup
+      ? ([6, 12, 24, 48].includes(storedDeadlineHours) ? storedDeadlineHours : 24)
+      : null;
+    const lineupDeadlineUtc = isSecretLineup
+      ? new Date(Date.parse(proposedTimeUtc) - lineupDeadlineHours * 60 * 60 * 1000).toISOString()
+      : null;
+
+    await dbRunAsync(
+      `
+        UPDATE matches
+        SET
+          time_utc = ?,
+          proposed_time_status = ?,
+          lineup_deadline_h = ?,
+          lineup_deadline_utc = ?,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND deleted_at IS NULL
+          AND lower(trim(COALESCE(status, ''))) = 'planned'
+      `,
+      [
+        proposedTimeUtc,
+        MATCH_TIME_PROPOSAL_STATUSES.ACCEPTED,
+        lineupDeadlineHours,
+        lineupDeadlineUtc,
+        actorPlayerId,
+        matchId,
+      ]
+    );
+    await dbRunAsync(
+      `
+        UPDATE duels
+        SET
+          time_utc = ?,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE match_id = ?
+          AND deleted_at IS NULL
+          AND COALESCE(custom_time, 0) = 0
+          AND lower(trim(COALESCE(status, ''))) NOT IN ('done', 'error', 'no show', 'in progress')
+      `,
+      [proposedTimeUtc, actorPlayerId, matchId]
+    );
+    const updatedMatch = await dbGetAsync("SELECT * FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1", [matchId]);
+    await dbRunAsync("COMMIT");
+    transactionOpen = false;
+
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "match.time_proposal.accepted",
+      entity_type: "match",
+      action: "update",
+      record_id: matchId,
+      changes: buildAuditChanges(match, updatedMatch, MATCH_AUDIT_FIELDS),
+      metadata: { accepted_by_team_id: captainTeamId, proposed_by_team_id: proposedByTeamId },
+    });
+    return res.json({ ok: true, match: updatedMatch });
+  } catch (error) {
+    if (transactionOpen) await dbRunAsync("ROLLBACK").catch(() => {});
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({ ok: false, message: error.message });
+    }
+    console.error("Failed to accept match time proposal", error);
+    return res.status(500).json({ ok: false, message: "Failed to accept match time proposal" });
+  }
 });
 
 app.delete("/matches/:id", (req, res) => {
