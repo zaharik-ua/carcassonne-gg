@@ -10,6 +10,11 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import connectSqlite3 from "connect-sqlite3";
 import { ensureImagesSchema, registerImageRoutes } from "./images.js";
+import {
+  SECRET_LINEUP_SIZE,
+  ensureSecretLineupsSchema,
+  publishSecretLineupMatchInTransaction,
+} from "./secret-lineups.js";
 
 dotenv.config();
 
@@ -73,6 +78,7 @@ const uploadsRootDir = path.isAbsolute(UPLOADS_DIR)
   : path.resolve(__dirname, "..", UPLOADS_DIR);
 
 const db = new sqlite3.Database(dbFullPath);
+db.configure("busyTimeout", 5000);
 
 function logUpdaterOutput(context, output) {
   const label = String(context || "").trim() || "runUpdater";
@@ -232,6 +238,7 @@ const MATCH_AUDIT_FIELDS = [
   "lineup_type",
   "lineup_deadline_h",
   "lineup_deadline_utc",
+  "lineups_published_at",
   "number_of_duels",
   "team_1",
   "team_2",
@@ -4287,6 +4294,7 @@ function ensureMatchesSchema() {
           lineup_type TEXT,
           lineup_deadline_h INTEGER,
           lineup_deadline_utc TEXT,
+          lineups_published_at TEXT,
           number_of_duels INTEGER,
           team_1 TEXT,
           team_2 TEXT,
@@ -4333,6 +4341,7 @@ function ensureMatchesSchema() {
           lineup_type,
           lineup_deadline_h,
           lineup_deadline_utc,
+          lineups_published_at,
           number_of_duels,
           team_1,
           team_2,
@@ -4379,6 +4388,7 @@ function ensureMatchesSchema() {
           ${selectExpr("lineup_type")},
           ${selectExpr("lineup_deadline_h")},
           ${selectExpr("lineup_deadline_utc")},
+          ${selectExpr("lineups_published_at")},
           ${selectExpr("number_of_duels")},
           ${selectExpr("team_1")},
           ${selectExpr("team_2")},
@@ -6890,6 +6900,9 @@ db.serialize(() => {
           ensureAssociationsSchema();
           ensureMatchesSchema();
           ensureDuelsSchema();
+          ensureSecretLineupsSchema(db).catch((error) => {
+            console.error("Failed to ensure secret lineups schema", error);
+          });
           ensureDuelFormatsSchema();
           ensureSystemSettingsSchema();
           ensureGamesSchema();
@@ -17120,7 +17133,19 @@ app.post("/duels/bulk-upsert", async (req, res) => {
   }
 
   return db.get(
-    "SELECT tournament_id, team_1, team_2, COALESCE(is_test, 0) AS is_test FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1",
+    `
+      SELECT
+        tournament_id,
+        team_1,
+        team_2,
+        lineup_type,
+        lineups_published_at,
+        COALESCE(is_test, 0) AS is_test
+      FROM matches
+      WHERE id = ?
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
     [matchId],
     (matchErr, matchRow) => {
       if (matchErr) {
@@ -17128,6 +17153,15 @@ app.post("/duels/bulk-upsert", async (req, res) => {
       }
       if (!matchRow) {
         return res.status(404).json({ ok: false, message: "Match not found" });
+      }
+      if (
+        String(matchRow.lineup_type || "").trim().toLowerCase() === "secret"
+        && !matchRow.lineups_published_at
+      ) {
+        return res.status(409).json({
+          ok: false,
+          message: "Unpublished Secret lineups must be submitted through the private team lineup form",
+        });
       }
       const team1 = String(matchRow.team_1 || "").trim().toUpperCase();
       const team2 = String(matchRow.team_2 || "").trim().toUpperCase();
@@ -17557,6 +17591,7 @@ app.get("/matches", (req, res, next) => {
         m.lineup_type,
         m.lineup_deadline_h,
         m.lineup_deadline_utc,
+        m.lineups_published_at,
         m.number_of_duels,
         m.team_1,
         m.team_2,
@@ -17713,6 +17748,7 @@ app.get("/matches", (req, res, next) => {
           lineup_type: row.lineup_type,
           lineup_deadline_h: row.lineup_deadline_h,
           lineup_deadline_utc: row.lineup_deadline_utc,
+          lineups_published_at: row.lineups_published_at,
           number_of_duels: row.number_of_duels,
           team_1: row.team_1,
           team_2: row.team_2,
@@ -17754,6 +17790,7 @@ app.get("/matches", (req, res, next) => {
         m.lineup_type,
         m.lineup_deadline_h,
         m.lineup_deadline_utc,
+        m.lineups_published_at,
         m.number_of_duels,
         m.team_1,
         m.team_2,
@@ -17883,6 +17920,7 @@ app.get("/matches", (req, res, next) => {
         lineup_type: row.lineup_type,
         lineup_deadline_h: row.lineup_deadline_h,
         lineup_deadline_utc: row.lineup_deadline_utc,
+        lineups_published_at: row.lineups_published_at,
         number_of_duels: row.number_of_duels,
         team_1: row.team_1,
         team_2: row.team_2,
@@ -19984,6 +20022,316 @@ function matchTimeProposalSnapshotMatches(match, payload) {
   const expectedStatus = normalizeNullableText(payload?.expected_proposed_time_status);
   return currentTime === expectedTime && currentTeam === expectedTeam && currentStatus === expectedStatus;
 }
+
+async function loadSecretLineupCaptainContext(matchId, user, options = {}) {
+  const normalizedMatchId = String(matchId || "").trim();
+  const match = await dbGetAsync(
+    `
+      SELECT
+        id,
+        tournament_id,
+        time_utc,
+        lineup_type,
+        lineup_deadline_h,
+        lineup_deadline_utc,
+        lineups_published_at,
+        number_of_duels,
+        team_1,
+        team_2,
+        status,
+        CASE
+          WHEN datetime(lineup_deadline_utc) IS NOT NULL
+            AND datetime(lineup_deadline_utc) <= CURRENT_TIMESTAMP
+          THEN 1 ELSE 0
+        END AS lineup_deadline_passed
+      FROM matches
+      WHERE trim(COALESCE(id, '')) = trim(?)
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
+    [normalizedMatchId]
+  );
+  if (!match) {
+    const error = new Error("Match not found");
+    error.httpStatus = 404;
+    throw error;
+  }
+  if (String(match.status || "").trim().toLowerCase() !== "planned") {
+    const error = new Error("A lineup can be managed only while the match is Planned");
+    error.httpStatus = 409;
+    throw error;
+  }
+  if (String(match.lineup_type || "").trim().toLowerCase() !== "secret") {
+    const error = new Error("Private lineup submission is available only for Secret lineups");
+    error.httpStatus = 409;
+    throw error;
+  }
+  if (!normalizeUtcTimestamp(match.time_utc) || !normalizeUtcTimestamp(match.lineup_deadline_utc)) {
+    const error = new Error("The match time must be agreed before submitting a lineup");
+    error.httpStatus = 409;
+    throw error;
+  }
+
+  const tournament = await loadTournamentAccessForUserAsync(match.tournament_id, user);
+  if (!tournament) {
+    const error = new Error("Tournament not found");
+    error.httpStatus = 404;
+    throw error;
+  }
+  const captainTeamId = resolveOfficialMatchCaptainTeamId(
+    tournament,
+    user?.association,
+    match.team_1,
+    match.team_2
+  );
+  if (!captainTeamId) {
+    const error = new Error("Only a captain of one of the match teams can manage its lineup");
+    error.httpStatus = 403;
+    throw error;
+  }
+  const submission = await dbGetAsync(
+    `
+      SELECT
+        match_id,
+        team_id,
+        first_submitted_at,
+        submitted_by,
+        revision,
+        updated_at
+      FROM match_lineup_submissions
+      WHERE trim(COALESCE(match_id, '')) = trim(?)
+        AND upper(trim(COALESCE(team_id, ''))) = upper(trim(?))
+      LIMIT 1
+    `,
+    [normalizedMatchId, captainTeamId]
+  );
+  const entries = submission
+    ? await dbAllAsync(
+        `
+          SELECT position, player_id
+          FROM match_lineup_entries
+          WHERE trim(COALESCE(match_id, '')) = trim(?)
+            AND upper(trim(COALESCE(team_id, ''))) = upper(trim(?))
+          ORDER BY position ASC
+        `,
+        [normalizedMatchId, captainTeamId]
+      )
+    : [];
+  const roster = options.includeRoster === true
+    ? await dbAllAsync(
+        `
+          SELECT
+            trim(tp.player_id) AS id,
+            p.bga_nickname,
+            p.name
+          FROM tournament_players tp
+          INNER JOIN profiles p
+            ON trim(COALESCE(p.id, '')) = trim(COALESCE(tp.player_id, ''))
+           AND p.deleted_at IS NULL
+          WHERE upper(trim(COALESCE(tp.tournament_id, ''))) = upper(trim(?))
+            AND upper(trim(COALESCE(tp.team_id, ''))) = upper(trim(?))
+          ORDER BY
+            COALESCE(tp.captain, 0) DESC,
+            p.bga_nickname COLLATE NOCASE ASC,
+            p.name COLLATE NOCASE ASC,
+            p.id ASC
+        `,
+        [match.tournament_id, captainTeamId]
+      )
+    : null;
+  return {
+    match,
+    tournament,
+    captainTeamId,
+    submission,
+    entries,
+    roster,
+  };
+}
+
+function buildMySecretLineupResponse(context) {
+  const submitted = !!context?.submission;
+  const deadlinePassed = Number(context?.match?.lineup_deadline_passed) === 1;
+  const published = !!context?.match?.lineups_published_at;
+  return {
+    team_id: context?.captainTeamId || null,
+    player_ids: (context?.entries || [])
+      .map((entry) => String(entry?.player_id || "").trim())
+      .filter(Boolean),
+    submitted,
+    first_submitted_at: context?.submission?.first_submitted_at || null,
+    updated_at: context?.submission?.updated_at || null,
+    revision: Number(context?.submission?.revision) || 0,
+    editable: !published && (!deadlinePassed || !submitted),
+    deadline_passed: deadlinePassed,
+    lineup_deadline_utc: context?.match?.lineup_deadline_utc || null,
+    lineups_published_at: context?.match?.lineups_published_at || null,
+    ...(Array.isArray(context?.roster) ? { available_players: context.roster } : {}),
+  };
+}
+
+app.get("/matches/:id/my-lineup", requireAuthenticated, async (req, res) => {
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const context = await loadSecretLineupCaptainContext(req.params.id, req.user, {
+      includeRoster: String(req.query?.include_players || "").trim() === "1",
+    });
+    return res.json({ ok: true, lineup: buildMySecretLineupResponse(context) });
+  } catch (error) {
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({ ok: false, message: error.message });
+    }
+    console.error("Failed to load captain lineup", error);
+    return res.status(500).json({ ok: false, message: "Failed to load lineup" });
+  }
+});
+
+app.put("/matches/:id/my-lineup", requireAuthenticated, async (req, res) => {
+  res.set("Cache-Control", "private, no-store");
+  const playerIds = Array.isArray(req.body?.player_ids)
+    ? req.body.player_ids.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  if (playerIds.length !== SECRET_LINEUP_SIZE) {
+    return res.status(400).json({
+      ok: false,
+      message: `Exactly ${SECRET_LINEUP_SIZE} players are required`,
+    });
+  }
+  if (new Set(playerIds).size !== playerIds.length) {
+    return res.status(400).json({ ok: false, message: "A player cannot be selected more than once" });
+  }
+
+  let transactionOpen = false;
+  try {
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    transactionOpen = true;
+    const context = await loadSecretLineupCaptainContext(req.params.id, req.user);
+    const currentState = buildMySecretLineupResponse(context);
+    if (currentState.lineups_published_at) {
+      const error = new Error("The lineups have already been published");
+      error.httpStatus = 409;
+      throw error;
+    }
+    if (currentState.deadline_passed && currentState.submitted) {
+      const error = new Error("The lineup deadline has passed; an already submitted lineup can no longer be changed");
+      error.httpStatus = 409;
+      throw error;
+    }
+
+    const rosterRows = await dbAllAsync(
+      `
+        SELECT trim(tp.player_id) AS player_id
+        FROM tournament_players tp
+        INNER JOIN profiles p
+          ON trim(COALESCE(p.id, '')) = trim(COALESCE(tp.player_id, ''))
+         AND p.deleted_at IS NULL
+        WHERE upper(trim(COALESCE(tp.tournament_id, ''))) = upper(trim(?))
+          AND upper(trim(COALESCE(tp.team_id, ''))) = upper(trim(?))
+          AND trim(COALESCE(tp.player_id, '')) IN (${playerIds.map(() => "?").join(", ")})
+      `,
+      [context.match.tournament_id, context.captainTeamId, ...playerIds]
+    );
+    const rosterPlayerIds = new Set(rosterRows.map((row) => String(row?.player_id || "").trim()));
+    const invalidPlayerId = playerIds.find((playerId) => !rosterPlayerIds.has(playerId));
+    if (invalidPlayerId) {
+      const error = new Error("Every selected player must belong to your tournament roster");
+      error.httpStatus = 400;
+      throw error;
+    }
+
+    const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
+    await dbRunAsync(
+      `
+        INSERT INTO match_lineup_submissions (
+          match_id,
+          team_id,
+          first_submitted_at,
+          submitted_by,
+          revision,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, CURRENT_TIMESTAMP, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(match_id, team_id) DO UPDATE SET
+          submitted_by = excluded.submitted_by,
+          revision = match_lineup_submissions.revision + 1,
+          updated_at = CURRENT_TIMESTAMP
+      `,
+      [context.match.id, context.captainTeamId, actorPlayerId]
+    );
+    await dbRunAsync(
+      `
+        DELETE FROM match_lineup_entries
+        WHERE trim(COALESCE(match_id, '')) = trim(?)
+          AND upper(trim(COALESCE(team_id, ''))) = upper(trim(?))
+      `,
+      [context.match.id, context.captainTeamId]
+    );
+    for (let index = 0; index < playerIds.length; index += 1) {
+      await dbRunAsync(
+        `
+          INSERT INTO match_lineup_entries (
+            match_id,
+            team_id,
+            position,
+            player_id,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        [context.match.id, context.captainTeamId, index + 1, playerIds[index]]
+      );
+    }
+
+    const publishResult = await publishSecretLineupMatchInTransaction(
+      db,
+      context.match.id,
+      actorPlayerId
+    );
+    await dbRunAsync("COMMIT");
+    transactionOpen = false;
+
+    const savedContext = await loadSecretLineupCaptainContext(context.match.id, req.user);
+    const savedLineup = buildMySecretLineupResponse(savedContext);
+    if (publishResult?.published) {
+      await recomputeMatchAggregates(context.match.id, actorPlayerId).catch((error) => {
+        console.error("Failed to recompute match after lineup publication", error);
+      });
+    }
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: currentState.submitted ? "secret_lineup.updated" : "secret_lineup.submitted",
+      entity_type: "secret_lineup",
+      action: currentState.submitted ? "update" : "create",
+      record_id: `${context.match.id}:${context.captainTeamId}`,
+      changes: {
+        revision: {
+          from: currentState.revision || null,
+          to: savedLineup.revision,
+        },
+      },
+      metadata: {
+        match_id: context.match.id,
+        team_id: context.captainTeamId,
+        players_count: playerIds.length,
+        published: !!publishResult?.published,
+      },
+    });
+    return res.json({
+      ok: true,
+      lineup: savedLineup,
+      published: !!publishResult?.published,
+    });
+  } catch (error) {
+    if (transactionOpen) await dbRunAsync("ROLLBACK").catch(() => {});
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({ ok: false, message: error.message });
+    }
+    console.error("Failed to save captain lineup", error);
+    return res.status(500).json({ ok: false, message: "Failed to save lineup" });
+  }
+});
 
 app.post("/matches", (req, res) => {
   if (!req.user) {
@@ -22564,13 +22912,20 @@ app.get("/profiles/:playerId/delete-check", (req, res) => {
 
       return db.get(
         `
-          SELECT id
+        SELECT 1 AS assigned
+        FROM (
+          SELECT player_1_id AS player_id
           FROM duels
           WHERE deleted_at IS NULL
             AND (player_1_id = ? OR player_2_id = ?)
-          LIMIT 1
-        `,
-        [requestedPlayerId, requestedPlayerId],
+          UNION ALL
+          SELECT player_id
+          FROM match_lineup_entries
+          WHERE trim(COALESCE(player_id, '')) = trim(?)
+        ) assigned_lineups
+        LIMIT 1
+      `,
+        [requestedPlayerId, requestedPlayerId, requestedPlayerId],
         (lineupErr, lineupRow) => {
           if (lineupErr) {
             return res.status(500).json({ ok: false, message: "Failed to validate duels" });
@@ -22641,13 +22996,20 @@ app.delete("/profiles/:playerId", (req, res) => {
 
       return db.get(
         `
-          SELECT id
+        SELECT 1 AS assigned
+        FROM (
+          SELECT player_1_id AS player_id
           FROM duels
           WHERE deleted_at IS NULL
             AND (player_1_id = ? OR player_2_id = ?)
-          LIMIT 1
-        `,
-        [requestedPlayerId, requestedPlayerId],
+          UNION ALL
+          SELECT player_id
+          FROM match_lineup_entries
+          WHERE trim(COALESCE(player_id, '')) = trim(?)
+        ) assigned_lineups
+        LIMIT 1
+      `,
+        [requestedPlayerId, requestedPlayerId, requestedPlayerId],
         (lineupErr, lineupRow) => {
           if (lineupErr) {
             return res.status(500).json({ ok: false, message: "Failed to validate duels" });

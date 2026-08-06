@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "publish:secret-lineups": "node src/publish-secret-lineups.js",
+    "test": "node --test src/*.test.js"
   },
   "dependencies": {
     "connect-sqlite3": "^0.9.15",

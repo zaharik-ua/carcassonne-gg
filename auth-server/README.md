@@ -419,7 +419,7 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 ALERT_DISK_USED_PERCENT=90
 ALERT_DISK_MOUNTS=/
-ALERT_UNITS="update-duels.timer cleanup-chrome-tmp.timer"
+ALERT_UNITS="update-duels.timer cleanup-chrome-tmp.timer publish-secret-lineups.timer"
 ALERT_UPDATE_DUELS_LOG=/var/log/carcassonne/update-duels.log
 ALERT_LOG_PATTERN=tab crashed
 ALERT_LOG_PERSISTENCE_MINUTES=10
@@ -450,4 +450,34 @@ sudo systemctl status server-alerts.timer
 ```bash
 sudo systemctl start server-alerts.service
 journalctl -u server-alerts.service -n 100 --no-pager
+```
+
+## 15) Публікація закритих лайнапів
+
+Капітанські лайнапи `Secret`-матчів зберігаються окремо від `duels`. Щохвилинний
+publisher створює публічні дуелі тільки коли дедлайн настав і обидві команди
+подали по 5 гравців. Якщо друга команда подає склад після дедлайну, публікація
+також виконується одразу в API-транзакції.
+
+Ручний запуск:
+
+```bash
+cd auth-server
+npm run publish:secret-lineups
+```
+
+Встановлення timer-а на сервері:
+
+```bash
+sudo cp auth-server/systemd/publish-secret-lineups.service /etc/systemd/system/
+sudo cp auth-server/systemd/publish-secret-lineups.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now publish-secret-lineups.timer
+sudo systemctl status publish-secret-lineups.timer
+```
+
+Перегляд останніх запусків:
+
+```bash
+journalctl -u publish-secret-lineups.service -n 100 --no-pager
 ```

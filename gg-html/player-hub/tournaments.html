@@ -585,6 +585,60 @@
     flex-wrap: wrap;
   }
 
+  .cp-lineup-submit-meta {
+    display: grid;
+    gap: 4px;
+    padding: 9px 10px;
+    border: 1px solid #d8dee8;
+    border-radius: 6px;
+    background: #f7f9fc;
+    color: #475467;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .cp-lineup-submit-team {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #223040;
+    font-weight: 700;
+  }
+
+  .cp-lineup-submit-team img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+
+  .cp-lineup-submit-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .cp-lineup-submit-row {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+  }
+
+  .cp-lineup-submit-position {
+    color: #475467;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: right;
+  }
+
+  .cp-time-counter-proposal {
+    display: grid;
+    gap: 8px;
+  }
+
+  .cp-time-counter-proposal > .cp-btn {
+    justify-self: end;
+  }
+
   .cp-time-modal-current {
     padding: 9px 10px;
     border: 1px solid #d8dee8;
@@ -655,6 +709,11 @@
 
   .cp-edit-btn:hover {
     border-color: #9ea7b3;
+  }
+
+  .cp-edit-btn:disabled {
+    cursor: default;
+    opacity: 0.58;
   }
 
   .cp-edit-btn.cp-edit-btn-view {
@@ -1732,6 +1791,9 @@
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const MATCHES_URL = `${AUTH_BASE}/matches`;
+  const MY_LINEUP_URL = (matchId, includePlayers = false) => (
+    `${MATCHES_URL}/${encodeURIComponent(matchId)}/my-lineup${includePlayers ? "?include_players=1" : ""}`
+  );
   const TEAMS_URL = `${AUTH_BASE}/teams`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
   const TOURNAMENT_PLAYERS_URL = `${AUTH_BASE}/tournament-players`;
@@ -3136,14 +3198,14 @@
       error.textContent = String(message || "");
       error.classList.toggle("cp-hidden", !message);
     };
-    const addField = (labelText, control) => {
+    const addField = (labelText, control, parent = fields) => {
       const row = document.createElement("div");
       row.className = "cp-edit-row";
       const label = document.createElement("label");
       label.textContent = labelText;
       row.appendChild(label);
       row.appendChild(control);
-      fields.appendChild(row);
+      parent.appendChild(row);
       return row;
     };
 
@@ -3183,7 +3245,15 @@
     timeInput.value = isIncomingProposal
       ? ""
       : toDatetimeLocalFromUtc(isOwnProposal ? match?.proposed_time_utc : (match?.time_utc ?? match?.time));
-    const timeRow = addField(isIncomingProposal ? "Another time, UTC" : "Proposed time, UTC", timeInput);
+    const counterProposal = isIncomingProposal ? document.createElement("div") : null;
+    if (counterProposal) {
+      counterProposal.className = "cp-time-counter-proposal cp-hidden";
+    }
+    const timeRow = addField(
+      isIncomingProposal ? "Another time, UTC" : "Proposed time, UTC",
+      timeInput,
+      counterProposal || fields
+    );
     const localPreview = createLocalPreview(toUtcIsoFromDatetimeLocal(timeInput.value));
     timeRow.appendChild(localPreview);
     const refreshPreview = () => {
@@ -3221,7 +3291,16 @@
         : "Send proposal";
     actions.appendChild(primaryButton);
 
-    const actionButtons = [cancelButton, counterButton, primaryButton].filter(Boolean);
+    const sendProposalButton = isIncomingProposal ? document.createElement("button") : null;
+    if (sendProposalButton) {
+      sendProposalButton.type = "button";
+      sendProposalButton.className = "cp-btn cp-btn-primary";
+      sendProposalButton.textContent = "Send proposal";
+      counterProposal.appendChild(sendProposalButton);
+      modal.appendChild(counterProposal);
+    }
+
+    const actionButtons = [cancelButton, counterButton, primaryButton, sendProposalButton].filter(Boolean);
     const setSaving = (saving) => {
       actionButtons.forEach((button) => { button.disabled = !!saving; });
       timeInput.disabled = !!saving;
@@ -3296,7 +3375,16 @@
     };
 
     cancelButton.addEventListener("click", close, { signal: controller.signal });
-    if (counterButton) counterButton.addEventListener("click", sendProposal, { signal: controller.signal });
+    if (counterButton) {
+      counterButton.addEventListener("click", () => {
+        setError("");
+        counterProposal.classList.remove("cp-hidden");
+        timeInput.focus();
+      }, { signal: controller.signal });
+    }
+    if (sendProposalButton) {
+      sendProposalButton.addEventListener("click", sendProposal, { signal: controller.signal });
+    }
     primaryButton.addEventListener("click", isIncomingProposal ? acceptProposal : sendProposal, { signal: controller.signal });
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) close();
@@ -3304,6 +3392,200 @@
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") close();
     }, { signal: controller.signal });
+  }
+
+  async function openCaptainLineupModal(match, teamsById, captainTeamId, options = {}) {
+    const matchId = String(match?.id || "").trim();
+    const teamId = normalizeCode(captainTeamId);
+    if (!matchId || !teamId) return;
+
+    const team = teamsById.get(teamId) || { id: teamId, name: teamId, logo: "" };
+    const overlay = document.createElement("div");
+    overlay.className = "cp-team-modal-overlay";
+    const modal = document.createElement("div");
+    modal.className = "cp-team-modal";
+    const title = document.createElement("div");
+    title.className = "cp-team-modal-title";
+    title.textContent = "Submit lineup";
+    const meta = document.createElement("div");
+    meta.className = "cp-lineup-submit-meta";
+    const teamLine = document.createElement("div");
+    teamLine.className = "cp-lineup-submit-team";
+    if (team?.logo) {
+      const image = document.createElement("img");
+      image.src = team.logo;
+      image.alt = "";
+      teamLine.appendChild(image);
+    }
+    const teamText = document.createElement("span");
+    teamText.textContent = team?.name || teamId;
+    teamLine.appendChild(teamText);
+    meta.appendChild(teamLine);
+    const deadlineLine = document.createElement("div");
+    deadlineLine.textContent = `Lineup deadline: ${formatProposalTimeUtc(match?.lineup_deadline_utc)}`;
+    meta.appendChild(deadlineLine);
+    const fields = document.createElement("div");
+    fields.className = "cp-lineup-submit-list";
+    const error = document.createElement("div");
+    error.className = "cp-edit-error cp-hidden";
+    const actions = document.createElement("div");
+    actions.className = "cp-team-modal-actions";
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "cp-btn cp-btn-secondary";
+    cancelButton.textContent = "Cancel";
+    const saveButton = document.createElement("button");
+    saveButton.type = "button";
+    saveButton.className = "cp-btn cp-btn-primary";
+    saveButton.textContent = "Confirm lineup";
+    saveButton.disabled = true;
+    actions.appendChild(cancelButton);
+    actions.appendChild(saveButton);
+    modal.appendChild(title);
+    modal.appendChild(meta);
+    modal.appendChild(fields);
+    modal.appendChild(error);
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const controller = new AbortController();
+    const dropdowns = [];
+    let selectedIds = Array.from({ length: 5 }, () => "");
+    let lineupState = null;
+    const close = () => {
+      controller.abort();
+      overlay.remove();
+    };
+    const setError = (message) => {
+      error.textContent = String(message || "");
+      error.classList.toggle("cp-hidden", !message);
+    };
+    const tournamentTeams = Array.isArray(options.tournamentTeams) ? options.tournamentTeams : [];
+    const rosterTeam = tournamentTeams.find((entry) => normalizeCode(entry?.team_id) === teamId) || null;
+    const normalizeRosterPlayers = (players) => (
+      (Array.isArray(players) ? players : [])
+          .map((player) => ({
+            id: String(player?.player_id || player?.id || "").trim(),
+            bga_nickname: String(player?.bga_nickname || "").trim(),
+            name: String(player?.name || "").trim(),
+          }))
+          .filter((player) => player.id)
+          .sort((a, b) => playerLabel(a).localeCompare(playerLabel(b)))
+    );
+    let rosterPlayers = normalizeRosterPlayers(rosterTeam?.players);
+    let playerOptions = [{ value: "", label: "Select player" }].concat(
+      rosterPlayers.map((player) => ({ value: player.id, label: playerLabel(player) }))
+    );
+
+    const renderFields = () => {
+      dropdowns.splice(0).forEach((dropdown) => dropdown.close());
+      fields.innerHTML = "";
+      selectedIds.forEach((selectedId, index) => {
+        const row = document.createElement("div");
+        row.className = "cp-lineup-submit-row";
+        const position = document.createElement("div");
+        position.className = "cp-lineup-submit-position";
+        position.textContent = `${index + 1}.`;
+        const dropdown = createTournamentPlayerDropdown(selectedId, playerOptions, {
+          disabled: lineupState?.editable === false,
+          signal: controller.signal,
+          onBeforeOpen: () => dropdowns.forEach((entry) => entry.close()),
+          onChange: (nextValue) => {
+            selectedIds[index] = String(nextValue || "").trim();
+            setError("");
+          },
+        });
+        dropdowns.push(dropdown);
+        row.appendChild(position);
+        row.appendChild(dropdown.root);
+        fields.appendChild(row);
+      });
+    };
+
+    cancelButton.addEventListener("click", close, { signal: controller.signal });
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) close();
+    }, { signal: controller.signal });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") close();
+    }, { signal: controller.signal });
+    saveButton.addEventListener("click", async () => {
+      setError("");
+      const playerIds = selectedIds.map((playerId) => String(playerId || "").trim());
+      if (playerIds.some((playerId) => !playerId)) {
+        setError("Select all 5 players.");
+        return;
+      }
+      if (new Set(playerIds).size !== playerIds.length) {
+        setError("A player cannot be selected more than once.");
+        return;
+      }
+      saveButton.disabled = true;
+      saveButton.textContent = "Saving...";
+      try {
+        const response = await fetch(MY_LINEUP_URL(matchId), {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_ids: playerIds }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok) {
+          setError(result?.message || "Failed to save lineup.");
+          return;
+        }
+        match.my_lineup = result.lineup || null;
+        close();
+        initCaptainPage();
+      } catch (_error) {
+        setError("Failed to save lineup.");
+      } finally {
+        saveButton.disabled = lineupState?.editable === false;
+        saveButton.textContent = "Confirm lineup";
+      }
+    }, { signal: controller.signal });
+
+    fields.textContent = "Loading lineup...";
+    try {
+      const response = await fetch(MY_LINEUP_URL(matchId, true), {
+        method: "GET",
+        credentials: "include",
+        signal: controller.signal,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.ok) {
+        setError(result?.message || "Failed to load lineup.");
+        fields.innerHTML = "";
+        return;
+      }
+      lineupState = result.lineup || {};
+      match.my_lineup = lineupState;
+      if (Array.isArray(lineupState.available_players)) {
+        rosterPlayers = normalizeRosterPlayers(lineupState.available_players);
+        playerOptions = [{ value: "", label: "Select player" }].concat(
+          rosterPlayers.map((player) => ({ value: player.id, label: playerLabel(player) }))
+        );
+      }
+      selectedIds = Array.from({ length: 5 }, (_, index) => (
+        String(lineupState?.player_ids?.[index] || "").trim()
+      ));
+      title.textContent = lineupState.submitted ? "Edit lineup" : "Submit lineup";
+      deadlineLine.textContent = `Lineup deadline: ${formatProposalTimeUtc(lineupState.lineup_deadline_utc)}`;
+      if (rosterPlayers.length < 5) {
+        setError("Your tournament roster must contain at least 5 players before submitting a lineup.");
+      } else if (lineupState.editable === false) {
+        setError(lineupState.lineups_published_at
+          ? "The lineups have already been published."
+          : "The lineup deadline has passed; this lineup can no longer be changed.");
+      }
+      saveButton.disabled = lineupState.editable === false || rosterPlayers.length < 5;
+      renderFields();
+    } catch (errorCaught) {
+      if (errorCaught?.name === "AbortError") return;
+      fields.innerHTML = "";
+      setError("Failed to load lineup.");
+    }
   }
 
   function createMatchTimeProposalPanel(match, teamsById, captainTeamId) {
@@ -3613,23 +3895,39 @@
   }
 
   async function loadLineupsByMatchIds(matches) {
-    const ids = (Array.isArray(matches) ? matches : [])
+    const matchRows = Array.isArray(matches) ? matches : [];
+    const ids = matchRows
       .map((m) => String(m?.id || "").trim())
       .filter(Boolean);
     const uniqueIds = Array.from(new Set(ids));
     const map = new Map();
     await Promise.all(uniqueIds.map(async (matchId) => {
+      const match = matchRows.find((row) => String(row?.id || "").trim() === matchId) || null;
       try {
-        const res = await fetch(`${DUELS_URL}?match_id=${encodeURIComponent(matchId)}`, {
-          method: "GET",
-          credentials: "include",
-        });
+        const shouldLoadPrivateLineup = (
+          String(match?.lineup_type || "").trim().toLowerCase() === "secret"
+          && hasValue(match?.time_utc ?? match?.time)
+          && isPlannedMatchStatus(match?.status)
+        );
+        const [res, privateLineupRes] = await Promise.all([
+          fetch(`${DUELS_URL}?match_id=${encodeURIComponent(matchId)}`, {
+            method: "GET",
+            credentials: "include",
+          }),
+          shouldLoadPrivateLineup
+            ? fetch(MY_LINEUP_URL(matchId), { method: "GET", credentials: "include" })
+            : Promise.resolve(null),
+        ]);
         if (!res.ok) {
           map.set(matchId, []);
-          return;
+        } else {
+          const data = await res.json().catch(() => ({}));
+          map.set(matchId, Array.isArray(data?.duels) ? data.duels : []);
         }
-        const data = await res.json().catch(() => ({}));
-        map.set(matchId, Array.isArray(data?.duels) ? data.duels : []);
+        if (privateLineupRes?.ok && match) {
+          const privateLineupData = await privateLineupRes.json().catch(() => ({}));
+          match.my_lineup = privateLineupData?.lineup || null;
+        }
       } catch (_error) {
         map.set(matchId, []);
       }
@@ -4210,6 +4508,29 @@
         openMatchTimeProposalModal(match, teamsById, captainTeamId);
       });
       right.appendChild(scheduleBtn);
+
+      const isSecretLineup = String(match?.lineup_type || "").trim().toLowerCase() === "secret";
+      if (hasMatchTime && isSecretLineup) {
+        const myLineup = match?.my_lineup || null;
+        const lineupBtn = document.createElement("button");
+        lineupBtn.type = "button";
+        lineupBtn.className = "cp-edit-btn";
+        if (myLineup?.submitted && myLineup?.editable !== false) {
+          lineupBtn.textContent = "Edit lineup";
+        } else if (myLineup?.submitted) {
+          lineupBtn.textContent = "Lineup submitted";
+          lineupBtn.disabled = true;
+          lineupBtn.title = myLineup?.lineups_published_at
+            ? "The lineups have been published."
+            : "The lineup deadline has passed.";
+        } else {
+          lineupBtn.textContent = "Submit lineup";
+        }
+        lineupBtn.addEventListener("click", () => {
+          openCaptainLineupModal(match, teamsById, captainTeamId, options);
+        });
+        right.appendChild(lineupBtn);
+      }
     }
 
     row.appendChild(right);
@@ -4235,6 +4556,9 @@
         captainTeamIds: normalizeTournamentCaptainTeamIds(options.captainTeamIds),
         captainAssociationCode: normalizeCode(options.captainAssociationCode),
         accessViaAccessUsers: options.accessViaAccessUsers === true,
+        tournamentTeams: Array.isArray(options.tournamentTeams) ? options.tournamentTeams : [],
+        allProfiles: Array.isArray(options.allProfiles) ? options.allProfiles : [],
+        tournamentId: String(options.tournamentId || "").trim(),
       },
       requestOptions: options.requestOptions || {},
     };
