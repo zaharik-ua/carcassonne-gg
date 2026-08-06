@@ -661,6 +661,17 @@
     background: #f3f4f6;
   }
 
+  .cp-edit-btn.cp-edit-btn-attention {
+    border-color: #1a73b7;
+    background: #1a73b7;
+    color: #fff;
+  }
+
+  .cp-edit-btn.cp-edit-btn-attention:hover {
+    border-color: #155f98;
+    background: #155f98;
+  }
+
   .cp-status-badge {
     display: inline-flex;
     align-items: center;
@@ -4161,11 +4172,7 @@
     }
 
     const hasMatchTime = hasValue(match?.time_utc ?? match?.time);
-    const shouldShowEditButton = !(
-      isPlannedMatch
-      && options.lineupsOnly === true
-      && !hasMatchTime
-    );
+    const shouldShowEditButton = !(isPlannedMatch && options.lineupsOnly === true);
     if (shouldShowEditButton) {
       const editBtn = document.createElement("button");
       editBtn.type = "button";
@@ -4190,7 +4197,9 @@
       scheduleBtn.type = "button";
       scheduleBtn.className = "cp-edit-btn";
       if (hasActiveProposal) {
-        scheduleBtn.textContent = proposedByTeamId === captainTeamId ? "Edit proposal" : "Review proposal";
+        const isIncomingProposal = proposedByTeamId !== captainTeamId;
+        scheduleBtn.textContent = isIncomingProposal ? "Review proposal" : "Edit proposal";
+        scheduleBtn.classList.toggle("cp-edit-btn-attention", isIncomingProposal);
       } else if (hasMatchTime) {
         scheduleBtn.textContent = "Edit match time";
       } else {

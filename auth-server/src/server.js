@@ -2144,6 +2144,16 @@ async function recomputeDuelRatingsForMatch(matchId) {
 async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
   const normalizedMatchId = String(matchId || "").trim();
   if (!normalizedMatchId) return;
+  const previousMatch = await dbGetAsync(
+    `
+      SELECT tournament_id, status
+      FROM matches
+      WHERE id = ?
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
+    [normalizedMatchId]
+  );
   const { matchRating } = await recomputeDuelRatingsForMatch(normalizedMatchId);
 
   const aggregateRow = await dbGetAsync(
@@ -2232,6 +2242,12 @@ async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
       normalizedMatchId,
     ]
   );
+
+  const transitionedToDone = String(previousMatch?.status || "").trim().toLowerCase() !== "done"
+    && nextStatus === "Done";
+  if (transitionedToDone && previousMatch?.tournament_id) {
+    await recalculateTournamentStandings(previousMatch.tournament_id);
+  }
 }
 
 function isCompletedMatchStatus(status) {
@@ -3064,6 +3080,238 @@ async function loadStandings(tournamentId, stage = null) {
     `,
     params
   );
+}
+
+function normalizeStandingsResultStage(value) {
+  return String(value || "").trim().toLowerCase() === "stage 2" ? "Stage 2" : "Stage 1";
+}
+
+function standingsScoreValue(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
+}
+
+function createEmptyStandingsStats(includeDuels) {
+  return {
+    mp: 0,
+    mw: 0,
+    ml: 0,
+    dw: includeDuels ? 0 : null,
+    dl: includeDuels ? 0 : null,
+    gw: 0,
+    gl: 0,
+    mdif: 0,
+    ddif: includeDuels ? 0 : null,
+    gdif: 0,
+    position: null,
+  };
+}
+
+function applyStandingsResult(stats, scoreFor, scoreAgainst, gameScoreFor = undefined, gameScoreAgainst = undefined) {
+  if (!stats) return;
+  const ownScore = standingsScoreValue(scoreFor);
+  const opponentScore = standingsScoreValue(scoreAgainst);
+  const ownGameScore = gameScoreFor === undefined ? ownScore : standingsScoreValue(gameScoreFor);
+  const opponentGameScore = gameScoreAgainst === undefined ? opponentScore : standingsScoreValue(gameScoreAgainst);
+  stats.mp += 1;
+  if (ownScore > opponentScore) stats.mw += 1;
+  if (ownScore < opponentScore) stats.ml += 1;
+  stats.gw += ownGameScore;
+  stats.gl += opponentGameScore;
+  if (stats.dw !== null && stats.dl !== null) {
+    stats.dw += ownScore;
+    stats.dl += opponentScore;
+  }
+}
+
+function compareCalculatedStandings(left, right, type) {
+  const leftStats = left.stats;
+  const rightStats = right.stats;
+  const metrics = type === "team"
+    ? ["mw", "ddif", "gdif", "gw"]
+    : ["mw", "gdif", "gw"];
+  for (const metric of metrics) {
+    const difference = Number(rightStats[metric] || 0) - Number(leftStats[metric] || 0);
+    if (difference !== 0) return difference;
+  }
+  return String(left.participantId || "").localeCompare(String(right.participantId || ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+async function recalculateTournamentStandings(tournamentId) {
+  const normalizedTournamentId = normalizeNullableText(tournamentId);
+  if (!normalizedTournamentId) {
+    throw createTournamentTeamRequestError(400, "tournament_id is required");
+  }
+
+  const standingsRows = await dbAllAsync(
+    `
+      SELECT id, tournament_id, stage, "group" AS "group", team_id, player_id
+      FROM standings
+      WHERE upper(trim(tournament_id)) = upper(trim(?))
+        AND (
+          (team_id IS NOT NULL AND trim(team_id) <> '')
+          OR (player_id IS NOT NULL AND trim(player_id) <> '')
+        )
+      ORDER BY id ASC
+    `,
+    [normalizedTournamentId]
+  );
+
+  const teamRows = [];
+  const playerRows = [];
+  const teamStatsByKey = new Map();
+  const playerStatsByKey = new Map();
+  const makeStatsKey = (stage, participantId, caseInsensitive = false) => {
+    const normalizedParticipantId = String(participantId || "").trim();
+    return `${normalizeStandingsResultStage(stage)}\u0000${caseInsensitive ? normalizedParticipantId.toUpperCase() : normalizedParticipantId}`;
+  };
+
+  for (const row of standingsRows) {
+    const stage = normalizeStandingsResultStage(row.stage);
+    const teamId = normalizeNullableText(row.team_id);
+    const playerId = normalizeNullableText(row.player_id);
+    if (teamId) {
+      const stats = createEmptyStandingsStats(true);
+      const entry = { ...row, stage, participantId: teamId, stats, type: "team" };
+      teamRows.push(entry);
+      teamStatsByKey.set(makeStatsKey(stage, teamId, true), stats);
+    } else if (playerId) {
+      const stats = createEmptyStandingsStats(false);
+      const entry = { ...row, stage, participantId: playerId, stats, type: "player" };
+      playerRows.push(entry);
+      playerStatsByKey.set(makeStatsKey(stage, playerId), stats);
+    }
+  }
+
+  if (teamRows.length) {
+    const matches = await dbAllAsync(
+      `
+        SELECT stage, team_1, team_2, dw1, dw2, gw1, gw2
+        FROM matches
+        WHERE upper(trim(tournament_id)) = upper(trim(?))
+          AND lower(trim(COALESCE(status, ''))) = 'done'
+          AND deleted_at IS NULL
+          AND trim(COALESCE(team_1, '')) <> ''
+          AND trim(COALESCE(team_2, '')) <> ''
+      `,
+      [normalizedTournamentId]
+    );
+
+    for (const match of matches) {
+      const stage = normalizeStandingsResultStage(match.stage);
+      const team1Stats = teamStatsByKey.get(makeStatsKey(stage, match.team_1, true));
+      const team2Stats = teamStatsByKey.get(makeStatsKey(stage, match.team_2, true));
+      applyStandingsResult(team1Stats, match.dw1, match.dw2, match.gw1, match.gw2);
+      applyStandingsResult(team2Stats, match.dw2, match.dw1, match.gw2, match.gw1);
+    }
+  }
+
+  if (playerRows.length) {
+    const duels = await dbAllAsync(
+      `
+        SELECT m.stage, d.player_1_id, d.player_2_id, d.dw1, d.dw2
+        FROM duels d
+        INNER JOIN matches m
+          ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
+         AND m.deleted_at IS NULL
+        WHERE upper(trim(m.tournament_id)) = upper(trim(?))
+          AND lower(trim(COALESCE(m.status, ''))) = 'done'
+          AND lower(trim(COALESCE(d.status, ''))) IN ('done', 'no show')
+          AND d.deleted_at IS NULL
+          AND trim(COALESCE(d.player_1_id, '')) <> ''
+          AND trim(COALESCE(d.player_2_id, '')) <> ''
+      `,
+      [normalizedTournamentId]
+    );
+
+    for (const duel of duels) {
+      const stage = normalizeStandingsResultStage(duel.stage);
+      const player1Stats = playerStatsByKey.get(makeStatsKey(stage, duel.player_1_id));
+      const player2Stats = playerStatsByKey.get(makeStatsKey(stage, duel.player_2_id));
+      applyStandingsResult(player1Stats, duel.dw1, duel.dw2);
+      applyStandingsResult(player2Stats, duel.dw2, duel.dw1);
+    }
+  }
+
+  const calculatedRows = [...teamRows, ...playerRows];
+  for (const row of calculatedRows) {
+    row.stats.mdif = row.stats.mw - row.stats.ml;
+    row.stats.gdif = row.stats.gw - row.stats.gl;
+    if (row.type === "team") row.stats.ddif = row.stats.dw - row.stats.dl;
+  }
+
+  const positionBuckets = new Map();
+  for (const row of calculatedRows) {
+    const groupKey = String(row.group || "").trim().toLowerCase();
+    const bucketKey = `${row.stage}\u0000${groupKey}\u0000${row.type}`;
+    if (!positionBuckets.has(bucketKey)) positionBuckets.set(bucketKey, []);
+    positionBuckets.get(bucketKey).push(row);
+  }
+  for (const rows of positionBuckets.values()) {
+    rows.sort((left, right) => compareCalculatedStandings(left, right, left.type));
+    rows.forEach((row, index) => {
+      row.stats.position = index + 1;
+    });
+  }
+
+  for (const row of teamRows) {
+    await dbRunAsync(
+      `
+        UPDATE standings
+        SET
+          mp = ?, mw = ?, ml = ?, dw = ?, dl = ?, gw = ?, gl = ?,
+          mdif = ?, ddif = ?, gdif = ?, position = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        row.stats.mp,
+        row.stats.mw,
+        row.stats.ml,
+        row.stats.dw,
+        row.stats.dl,
+        row.stats.gw,
+        row.stats.gl,
+        row.stats.mdif,
+        row.stats.ddif,
+        row.stats.gdif,
+        row.stats.position,
+        row.id,
+      ]
+    );
+  }
+
+  for (const row of playerRows) {
+    await dbRunAsync(
+      `
+        UPDATE standings
+        SET
+          mp = ?, mw = ?, ml = ?, gw = ?, gl = ?,
+          mdif = ?, gdif = ?, position = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        row.stats.mp,
+        row.stats.mw,
+        row.stats.ml,
+        row.stats.gw,
+        row.stats.gl,
+        row.stats.mdif,
+        row.stats.gdif,
+        row.stats.position,
+        row.id,
+      ]
+    );
+  }
+
+  return {
+    tournament_id: normalizedTournamentId,
+    updated_rows: calculatedRows.length,
+    team_rows: teamRows.length,
+    player_rows: playerRows.length,
+  };
 }
 
 function loadTournamentAccessForUserAsync(tournamentId, user) {
@@ -11831,6 +12079,48 @@ app.get("/standings", async (req, res) => {
   }
 });
 
+app.post("/standings/recalculate", requireAdmin, async (req, res) => {
+  const tournamentId = normalizeNullableText(req.body?.tournament_id);
+  if (!tournamentId) {
+    return res.status(400).json({ ok: false, message: "tournament_id is required" });
+  }
+
+  let transactionOpen = false;
+  try {
+    const tournament = await dbGetAsync(
+      "SELECT id FROM tournaments WHERE upper(trim(id)) = upper(trim(?)) LIMIT 1",
+      [tournamentId]
+    );
+    if (!tournament) {
+      return res.status(404).json({ ok: false, message: "Tournament not found" });
+    }
+
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    transactionOpen = true;
+    const summary = await recalculateTournamentStandings(tournament.id);
+    await dbRunAsync("COMMIT");
+    transactionOpen = false;
+
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "standings.recalculated",
+      entity_type: "standings",
+      action: "update",
+      record_id: tournament.id,
+      metadata: summary,
+    });
+    return res.json({ ok: true, summary });
+  } catch (error) {
+    if (transactionOpen) await dbRunAsync("ROLLBACK").catch(() => {});
+    const status = Number(error?.status) || 500;
+    if (status >= 500) console.error("Failed to recalculate standings", error);
+    return res.status(status).json({
+      ok: false,
+      message: status >= 500 ? "Failed to recalculate standings" : error.message,
+    });
+  }
+});
+
 app.put("/standings", requireAdmin, async (req, res) => {
   const tournamentId = normalizeNullableText(req.body?.tournament_id);
   const requestedStage = normalizeNullableText(req.body?.stage) || STANDINGS_STAGES[0];
@@ -20451,7 +20741,7 @@ app.patch("/matches/:id", (req, res) => {
           actorPlayerId,
           matchId,
         ],
-        function onUpdate(updateErr) {
+        async function onUpdate(updateErr) {
           if (updateErr) {
             if (String(updateErr.message || "").includes("UNIQUE")) {
               return res.status(409).json({ ok: false, message: "Match id already exists" });
@@ -20460,6 +20750,20 @@ app.patch("/matches/:id", (req, res) => {
           }
           if (!this || this.changes === 0) {
             return res.status(404).json({ ok: false, message: "Match not found" });
+          }
+
+          const transitionedToDone = String(existingRow.status || "").trim().toLowerCase() !== "done"
+            && status === "Done";
+          if (transitionedToDone) {
+            try {
+              await recalculateTournamentStandings(tournament.id);
+            } catch (standingsError) {
+              console.error("Failed to recalculate standings after match completion", standingsError);
+              return res.status(500).json({
+                ok: false,
+                message: "Match updated, but failed to recalculate standings",
+              });
+            }
           }
 
           const loadUpdatedMatch = () => db.get(

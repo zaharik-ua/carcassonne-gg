@@ -1063,6 +1063,10 @@
     color: #333;
   }
 
+  .cp-btn-push-right {
+    margin-left: auto;
+  }
+
   .cp-btn-danger {
     background: #fff3f3;
     border-color: #e6b4b4;
@@ -6120,7 +6124,7 @@
       root,
       setOfficial(isOfficial) {
         hint.textContent = isOfficial
-          ? "Users listed here can manage this official tournament."
+          ? ""
           : "Access users apply only to official team tournaments.";
         disabled = !isOfficial;
         render();
@@ -6227,7 +6231,7 @@
     const render = () => {
       list.innerHTML = "";
       hint.textContent = teamType === "National"
-        ? "National team captains must belong to the same association."
+        ? ""
         : "Club team captains are optional and may belong to any association.";
       const header = document.createElement("div");
       header.className = "cp-tournament-config-header cp-tournament-config-header--teams";
@@ -6375,11 +6379,7 @@
     const title = document.createElement("div");
     title.className = "cp-tournament-section-title";
     title.textContent = "Standings: Stage 1";
-    const hint = document.createElement("div");
-    hint.className = "cp-tournament-section-hint";
-    hint.textContent = "Select teams from Tournament teams. Group is optional.";
     headText.appendChild(title);
-    headText.appendChild(hint);
     head.appendChild(headText);
 
     const list = document.createElement("div");
@@ -6671,6 +6671,33 @@
       .map((category) => String(category?.name || "").trim())
       .filter(Boolean);
 
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+    const saveButton = document.createElement("button");
+    saveButton.type = "submit";
+    saveButton.className = "cp-btn cp-btn-primary";
+    saveButton.textContent = "Save";
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "cp-btn cp-btn-secondary";
+    cancelButton.textContent = "Cancel";
+    cancelButton.addEventListener("click", () => {
+      renderMyTournamentsList(tournamentEditorCache.tournaments);
+    });
+    const recalculateButton = document.createElement("button");
+    recalculateButton.type = "button";
+    recalculateButton.className = "cp-btn cp-btn-secondary cp-btn-push-right";
+    recalculateButton.textContent = "Recalculate";
+    recalculateButton.title = "Recalculate standings";
+    actions.appendChild(saveButton);
+    actions.appendChild(cancelButton);
+    actions.appendChild(recalculateButton);
+    form.appendChild(actions);
+
+    const status = document.createElement("div");
+    status.className = "cp-edit-error";
+    form.appendChild(status);
+
     const idField = createTournamentFormRow("ID", tournament?.id || "", { readOnly: true });
     const nameField = createTournamentFormRow("Name", tournament?.name || "");
     const shortTitleField = createTournamentFormRow("Short title", tournament?.short_title || "");
@@ -6824,26 +6851,6 @@
     form.appendChild(tournamentTeamsEditor.root);
     form.appendChild(standingsEditor.root);
 
-    const status = document.createElement("div");
-    status.className = "cp-edit-error";
-    const actions = document.createElement("div");
-    actions.className = "cp-edit-actions";
-    const saveButton = document.createElement("button");
-    saveButton.type = "submit";
-    saveButton.className = "cp-btn cp-btn-primary";
-    saveButton.textContent = "Save";
-    const cancelButton = document.createElement("button");
-    cancelButton.type = "button";
-    cancelButton.className = "cp-btn cp-btn-secondary";
-    cancelButton.textContent = "Cancel";
-    cancelButton.addEventListener("click", () => {
-      renderMyTournamentsList(tournamentEditorCache.tournaments);
-    });
-    actions.appendChild(saveButton);
-    actions.appendChild(cancelButton);
-    form.appendChild(status);
-    form.appendChild(actions);
-
     let isBusy = false;
     const setStatus = (message, success = false) => {
       status.textContent = String(message || "");
@@ -6892,7 +6899,7 @@
     stage1FormatField.input.addEventListener("change", syncConditionalFields);
     syncConditionalFields();
 
-    const setBusy = (busy) => {
+    const setBusy = (busy, action = "") => {
       isBusy = !!busy;
       Array.from(form.querySelectorAll("input, select, button")).forEach((control) => {
         if (control === idField.input) return;
@@ -6901,9 +6908,34 @@
       idField.input.readOnly = true;
       aboutEditor.setDisabled(isBusy);
       rulesEditor.setDisabled(isBusy);
-      saveButton.textContent = isBusy ? "Saving..." : "Save";
+      saveButton.textContent = isBusy && action === "save" ? "Saving..." : "Save";
+      recalculateButton.textContent = isBusy && action === "recalculate"
+        ? "Recalculating..."
+        : "Recalculate";
       syncConditionalFields();
     };
+
+    recalculateButton.addEventListener("click", async () => {
+      const tournamentId = String(idField.input.value || "").trim();
+      if (!tournamentId) {
+        setStatus("Tournament ID is required.");
+        return;
+      }
+
+      setStatus("");
+      setBusy(true, "recalculate");
+      try {
+        await requestTournamentJson(`${STANDINGS_URL}/recalculate`, {
+          method: "POST",
+          body: JSON.stringify({ tournament_id: tournamentId }),
+        });
+        setStatus("Standings recalculated.", true);
+      } catch (error) {
+        setStatus(error?.message || "Failed to recalculate standings.");
+      } finally {
+        setBusy(false);
+      }
+    });
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -6981,7 +7013,7 @@
         }
       }
 
-      setBusy(true);
+      setBusy(true, "save");
       try {
         await requestTournamentJson(`${TOURNAMENTS_URL}/${encodeURIComponent(payload.id)}`, {
           method: "PATCH",
