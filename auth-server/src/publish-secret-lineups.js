@@ -29,7 +29,7 @@ try {
     published: publishedCount,
   }));
 } catch (error) {
-  console.error("Failed to publish due secret lineups", error);
+  console.error("Failed to publish due Blind lineups", error);
   process.exitCode = 1;
 } finally {
   await new Promise((resolve) => db.close(() => resolve()));

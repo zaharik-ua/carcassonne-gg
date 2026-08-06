@@ -1,5 +1,9 @@
 export const SECRET_LINEUP_SIZE = 5;
 
+export function isBlindLineupType(value) {
+  return ["blind", "secret", "closed"].includes(String(value || "").trim().toLowerCase());
+}
+
 function dbGet(db, sql, params = []) {
   return new Promise((resolve, reject) => {
     db.get(sql, params, (error, row) => {
@@ -50,9 +54,19 @@ function dbExec(db, sql) {
 
 export async function ensureSecretLineupsSchema(db) {
   const matchColumns = await dbAll(db, "PRAGMA table_info(matches)");
-  if (!matchColumns.some((column) => String(column?.name || "").trim() === "lineups_published_at")) {
+  const matchColumnNames = new Set(
+    matchColumns.map((column) => String(column?.name || "").trim()).filter(Boolean)
+  );
+  const requiredMatchColumns = [
+    ["lineup_deadline_h", "INTEGER"],
+    ["lineup_deadline_utc", "TEXT"],
+    ["lineups_published_at", "TEXT"],
+  ];
+  for (const [columnName, columnDefinition] of requiredMatchColumns) {
+    if (matchColumnNames.has(columnName)) continue;
     try {
-      await dbRun(db, "ALTER TABLE matches ADD COLUMN lineups_published_at TEXT");
+      await dbRun(db, `ALTER TABLE matches ADD COLUMN ${columnName} ${columnDefinition}`);
+      matchColumnNames.add(columnName);
     } catch (error) {
       if (!String(error?.message || "").toLowerCase().includes("duplicate column")) {
         throw error;
@@ -100,6 +114,31 @@ export async function ensureSecretLineupsSchema(db) {
       WHERE lineups_published_at IS NULL;
   `);
 
+  // Normalize legacy values while continuing to recognize them during rollout.
+  await dbRun(
+    db,
+    `
+      UPDATE matches
+      SET lineup_type = 'Blind'
+      WHERE lower(trim(COALESCE(lineup_type, ''))) IN ('secret', 'closed')
+    `
+  );
+  await dbExec(db, `
+    UPDATE matches
+    SET lineup_deadline_h = 24
+    WHERE lower(trim(COALESCE(lineup_type, ''))) = 'blind'
+      AND COALESCE(lineup_deadline_h, 0) NOT IN (6, 12, 24, 48);
+
+    UPDATE matches
+    SET lineup_deadline_utc = strftime(
+      '%Y-%m-%dT%H:%M:%fZ',
+      datetime(time_utc, '-' || lineup_deadline_h || ' hours')
+    )
+    WHERE lower(trim(COALESCE(lineup_type, ''))) = 'blind'
+      AND datetime(time_utc) IS NOT NULL
+      AND datetime(lineup_deadline_utc) IS NULL;
+  `);
+
   const duelsTable = await dbGet(
     db,
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'duels' LIMIT 1"
@@ -113,7 +152,7 @@ export async function ensureSecretLineupsSchema(db) {
         UPDATE matches
         SET lineups_published_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
         WHERE lineups_published_at IS NULL
-          AND lower(trim(COALESCE(lineup_type, ''))) = 'secret'
+          AND lower(trim(COALESCE(lineup_type, ''))) IN ('blind', 'secret', 'closed')
           AND EXISTS (
             SELECT 1
             FROM duels d
@@ -130,7 +169,7 @@ function normalizeTeamId(value) {
 }
 
 function buildPublishedDuelId(matchId, position) {
-  return `secret-lineup-${String(matchId || "").trim()}-${position}`;
+  return `blind-lineup-${String(matchId || "").trim()}-${position}`;
 }
 
 export async function publishSecretLineupMatchInTransaction(db, matchId, actorPlayerId = null) {
@@ -165,8 +204,8 @@ export async function publishSecretLineupMatchInTransaction(db, matchId, actorPl
     [normalizedMatchId]
   );
   if (!match) return { published: false, reason: "match_not_found" };
-  if (String(match.lineup_type || "").trim().toLowerCase() !== "secret") {
-    return { published: false, reason: "not_secret" };
+  if (!isBlindLineupType(match.lineup_type)) {
+    return { published: false, reason: "not_blind" };
   }
   if (match.lineups_published_at) {
     return {
@@ -333,7 +372,7 @@ export async function publishDueSecretLineups(db, actorPlayerId = null) {
       SELECT m.id
       FROM matches m
       WHERE m.deleted_at IS NULL
-        AND lower(trim(COALESCE(m.lineup_type, ''))) = 'secret'
+        AND lower(trim(COALESCE(m.lineup_type, ''))) IN ('blind', 'secret', 'closed')
         AND m.lineups_published_at IS NULL
         AND datetime(m.lineup_deadline_utc) IS NOT NULL
         AND datetime(m.lineup_deadline_utc) <= CURRENT_TIMESTAMP

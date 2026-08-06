@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
+    "publish:blind-lineups": "node src/publish-secret-lineups.js",
     "publish:secret-lineups": "node src/publish-secret-lineups.js",
     "test": "node --test src/*.test.js"
   },

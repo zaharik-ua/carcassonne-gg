@@ -1805,6 +1805,9 @@
   const DUEL_FIX_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/fix`;
   const DUEL_REFETCH_RESULTS_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/refetch-results`;
   const DEADLINE_HOURS_OPTIONS = [6, 12, 24, 48];
+  const isBlindLineupType = (value) => (
+    ["blind", "secret", "closed"].includes(String(value || "").trim().toLowerCase())
+  );
   const ADMIN_MATCH_FILTER_ERROR = "__ERROR__";
   const MATCHES_PAGE_SIZE_OPTIONS = [10, 20, 50];
   const MATCH_SECTION_KEYS = ["ongoing", "calendar", "finished"];
@@ -3905,7 +3908,7 @@
       const match = matchRows.find((row) => String(row?.id || "").trim() === matchId) || null;
       try {
         const shouldLoadPrivateLineup = (
-          String(match?.lineup_type || "").trim().toLowerCase() === "secret"
+          isBlindLineupType(match?.lineup_type)
           && hasValue(match?.time_utc ?? match?.time)
           && isPlannedMatchStatus(match?.status)
         );
@@ -4470,7 +4473,20 @@
     }
 
     const hasMatchTime = hasValue(match?.time_utc ?? match?.time);
-    const shouldShowEditButton = !(isPlannedMatch && options.lineupsOnly === true);
+    const isBlindLineup = isBlindLineupType(match?.lineup_type);
+    const isOpenLineup = !isBlindLineup
+      && ["", "open"].includes(String(match?.lineup_type || "").trim().toLowerCase());
+    const shouldShowCaptainOpenLineups = (
+      isPlannedMatch
+      && options.lineupsOnly === true
+      && !!captainTeamId
+      && hasMatchTime
+      && isOpenLineup
+    );
+    const shouldShowEditButton = (
+      !(isPlannedMatch && options.lineupsOnly === true)
+      || shouldShowCaptainOpenLineups
+    );
     if (shouldShowEditButton) {
       const editBtn = document.createElement("button");
       editBtn.type = "button";
@@ -4509,8 +4525,7 @@
       });
       right.appendChild(scheduleBtn);
 
-      const isSecretLineup = String(match?.lineup_type || "").trim().toLowerCase() === "secret";
-      if (hasMatchTime && isSecretLineup) {
+      if (hasMatchTime && isBlindLineup) {
         const myLineup = match?.my_lineup || null;
         const lineupBtn = document.createElement("button");
         lineupBtn.type = "button";
@@ -5083,12 +5098,12 @@
     localTimeBox.appendChild(localTimeLine2);
 
     const lineupTypeInitialRaw = String(source?.lineup_type || "").trim() || "Open";
-    const lineupTypeInitial = lineupTypeInitialRaw === "Closed" ? "Secret" : lineupTypeInitialRaw;
+    const lineupTypeInitial = isBlindLineupType(lineupTypeInitialRaw) ? "Blind" : "Open";
     const lineupTypeInput = createDropdown(
       lineupTypeInitial,
       [
         { value: "Open", label: "Open" },
-        { value: "Secret", label: "Secret (will be available later)", disabled: true },
+        { value: "Blind", label: "Blind" },
       ]
     );
     addRow("Lineup Type", lineupTypeInput.root);
@@ -5202,7 +5217,7 @@
       `${inferDeadlineHours(source)}h`,
       DEADLINE_HOURS_OPTIONS.map((h) => ({ value: `${h}h`, label: `${h}h` }))
     );
-    const deadlineHoursRow = addRow("To Lineup Deadline", deadlineHoursInput.root);
+    const deadlineHoursRow = addRow("Lineup Deadline", deadlineHoursInput.root);
 
     const duelsInput = document.createElement("input");
     duelsInput.type = "number";
@@ -5429,12 +5444,11 @@
     };
 
     const createDefaultLineupsState = () => {
+      if (isBlindMatchLineupType()) {
+        return Array.from({ length: 5 }, () => createEmptyLineupEntry());
+      }
       if (isFixedTournamentLineup) {
         return Array.from({ length: fixedTournamentLineupSize }, () => createEmptyLineupEntry());
-      }
-      if (isSecretLineupType()) {
-        const n = requiredDuelRows();
-        return Array.from({ length: n }, () => createEmptyLineupEntry());
       }
       return Array.from({ length: 5 }, () => createEmptyLineupEntry());
     };
@@ -5752,9 +5766,17 @@
     };
 
     const syncLineupsToggleButton = () => {
+      const usesPrivateBlindLineups = (
+        isBlindMatchLineupType()
+        && !source?.lineups_published_at
+        && !lineupsEnabled
+      );
       createLineupsBtn.textContent = lineupsEnabled ? "Delete Lineups" : "Create Lineups";
-      createLineupsBtn.classList.toggle("cp-hidden", isReadOnlyNonPlanned);
-      lineupsToggleWrap.classList.toggle("cp-hidden", isReadOnlyNonPlanned && !canShowEditResultsButton);
+      createLineupsBtn.classList.toggle("cp-hidden", isReadOnlyNonPlanned || usesPrivateBlindLineups);
+      lineupsToggleWrap.classList.toggle(
+        "cp-hidden",
+        usesPrivateBlindLineups || (isReadOnlyNonPlanned && !canShowEditResultsButton)
+      );
     };
 
     const getPlayersForTeam = (teamId) => {
@@ -5925,8 +5947,9 @@
       lineupTitleTeam2.appendChild(t2);
     };
 
-    const isSecretLineupType = () => String(lineupTypeInput.getValue() || "").trim() === "Secret";
+    const isBlindMatchLineupType = () => isBlindLineupType(lineupTypeInput.getValue());
     const requiredDuelRows = () => {
+      if (isBlindMatchLineupType()) return 5;
       if (isFixedTournamentLineup) return fixedTournamentLineupSize;
       const duels = parseNullableInt(duelsInput.value);
       return Number.isInteger(duels) && duels > 0 ? duels : 1;
@@ -7151,7 +7174,7 @@
 
       const team1Code = normalizeCode(team1Input.getValue());
       const team2Code = normalizeCode(team2Input.getValue());
-      const canChangeCount = !isReadOnlyNonPlanned && !isFixedTournamentLineup && !isSecretLineupType();
+      const canChangeCount = !isReadOnlyNonPlanned && !isFixedTournamentLineup && !isBlindMatchLineupType();
       const showLineupOrder = isGlobalAdmin;
       const showDuelScoreField = !isPlannedMatchStatus(source?.status);
       const showResultsEditAction = isResultsEditModeEnabled && canEditResults;
@@ -7443,7 +7466,7 @@
 
     const syncLineupsByRules = () => {
       if (!lineupsEnabled) return;
-      if (isFixedTournamentLineup || isSecretLineupType()) {
+      if (isFixedTournamentLineup || isBlindMatchLineupType()) {
         const needed = requiredDuelRows();
         while (lineupsState.length < needed) lineupsState.push(createEmptyLineupEntry());
         if (lineupsState.length > needed) lineupsState = lineupsState.slice(0, needed);
@@ -7557,7 +7580,7 @@
 
     addLineupRowBtn.addEventListener("click", () => {
       if (isReadOnlyNonPlanned) return;
-      if (isFixedTournamentLineup || isSecretLineupType()) return;
+      if (isFixedTournamentLineup || isBlindMatchLineupType()) return;
       lineupsState.push(createEmptyLineupEntry());
       reindexLineupsState();
       renderLineupsRows();
@@ -7572,14 +7595,23 @@
     let previousLineupType = String(lineupTypeInput.getValue() || "").trim();
     const syncDeadlineVisibility = () => {
       const currentLineupType = String(lineupTypeInput.getValue() || "").trim();
-      const isOpen = currentLineupType === "Open";
-      deadlineHoursRow.classList.toggle("cp-hidden", isOpen);
-      duelsRow.classList.toggle("cp-hidden", isOpen);
-      if (!isOpen && previousLineupType === "Open") {
+      const isBlind = isBlindLineupType(currentLineupType);
+      deadlineHoursRow.classList.toggle("cp-hidden", !isBlind);
+      duelsRow.classList.toggle("cp-hidden", !isBlind);
+      if (isBlind) duelsInput.value = "5";
+      if (!isFixedTournamentLineup && !isLineupsOnly && !isReadOnlyNonPlanned) {
+        duelsInput.disabled = isBlind;
+      }
+      if (isBlind && previousLineupType === "Open") {
         deadlineHoursInput.setValue("24h", true);
       }
+      if (isBlind && !source?.lineups_published_at && !hadInitialLineups) {
+        lineupsEnabled = false;
+        lineupsState = [];
+      }
       previousLineupType = currentLineupType;
-      syncLineupsByRules();
+      if (lineupsEnabled) syncLineupsByRules();
+      else renderLineupsRows();
     };
     lineupTypeInput.setOnChange(syncDeadlineVisibility);
     syncDeadlineVisibility();
@@ -7840,16 +7872,18 @@
       const deadlineHours = deadlineHoursRaw.endsWith("h")
         ? Number(deadlineHoursRaw.slice(0, -1))
         : Number(deadlineHoursRaw);
-      if (lineupType === "Secret" && timeUtc && !DEADLINE_HOURS_OPTIONS.includes(deadlineHours)) {
-        validationErrors.push("To Lineup Deadline is required for Secret lineup.");
+      if (lineupType === "Blind" && !DEADLINE_HOURS_OPTIONS.includes(deadlineHours)) {
+        validationErrors.push("Lineup Deadline is required for Blind lineup.");
       }
       const lineupDeadlineUtc = lineupType === "Open"
         ? null
         : (timeUtc ? computeLineupDeadlineUtc(timeUtc, deadlineHours) : null);
-      if (lineupType === "Secret" && timeUtc && !lineupDeadlineUtc) {
+      if (lineupType === "Blind" && timeUtc && !lineupDeadlineUtc) {
         validationErrors.push("Failed to calculate Lineup Deadline, UTC.");
       }
-      const duels = isFixedTournamentLineup ? fixedTournamentLineupSize : parseNullableInt(duelsInput.value);
+      const duels = lineupType === "Blind"
+        ? 5
+        : (isFixedTournamentLineup ? fixedTournamentLineupSize : parseNullableInt(duelsInput.value));
       if (!Number.isInteger(duels) || duels <= 0) {
         validationErrors.push("Number of Duels must be a positive integer.");
       }
@@ -7865,7 +7899,7 @@
         team_2: normalizeCode(team2Value),
         time_utc: timeUtc,
         lineup_type: lineupType,
-        lineup_deadline_h: lineupType === "Open" ? null : (timeUtc ? deadlineHours : null),
+        lineup_deadline_h: lineupType === "Open" ? null : deadlineHours,
         lineup_deadline_utc: lineupDeadlineUtc,
         number_of_duels: duels,
         status: String(statusInput.getValue() || "").trim() || "Planned",
@@ -7889,6 +7923,9 @@
         badge_color: String(badgeColorInput.value || "").trim() || null,
       };
 
+      if (lineupType === "Blind" && lineupsEnabled && !source?.lineups_published_at) {
+        validationErrors.push("Delete existing Open lineups before switching the match to Blind.");
+      }
       if (lineupsEnabled) {
         if (!lineupsState.length) {
           validationErrors.push("At least one lineup row is required.");

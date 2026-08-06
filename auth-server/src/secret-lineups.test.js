@@ -57,6 +57,7 @@ async function createDatabase(t) {
       is_test INTEGER NOT NULL DEFAULT 0,
       time_utc TEXT,
       lineup_type TEXT,
+      lineup_deadline_h INTEGER,
       lineup_deadline_utc TEXT,
       team_1 TEXT,
       team_2 TEXT,
@@ -100,7 +101,7 @@ async function seedMatch(db, matchId, deadlineUtc) {
         id, tournament_id, time_utc, lineup_type, lineup_deadline_utc,
         team_1, team_2, status
       )
-      VALUES (?, 'TOURNAMENT', ?, 'Secret', ?, 'AAA', 'BBB', 'Planned')
+      VALUES (?, 'TOURNAMENT', ?, 'Blind', ?, 'AAA', 'BBB', 'Planned')
     `,
     [matchId, new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), deadlineUtc]
   );
@@ -129,6 +130,31 @@ async function seedLineup(db, matchId, teamId, playerPrefix) {
   }
 }
 
+test("normalizes legacy Secret lineup type to Blind", async (t) => {
+  const db = await createDatabase(t);
+  const matchId = "legacy-secret-match";
+  await seedMatch(db, matchId, new Date(Date.now() + 60 * 60 * 1000).toISOString());
+  await run(
+    db,
+    "UPDATE matches SET lineup_type = 'Secret', lineup_deadline_utc = NULL WHERE id = ?",
+    [matchId]
+  );
+
+  await ensureSecretLineupsSchema(db);
+  const match = await get(
+    db,
+    "SELECT lineup_type, lineup_deadline_h, lineup_deadline_utc, time_utc FROM matches WHERE id = ?",
+    [matchId]
+  );
+
+  assert.equal(match.lineup_type, "Blind");
+  assert.equal(match.lineup_deadline_h, 24);
+  assert.equal(
+    Math.round((Date.parse(match.time_utc) - Date.parse(match.lineup_deadline_utc)) / (60 * 60 * 1000)),
+    24
+  );
+});
+
 test("keeps both submitted lineups private before the deadline", async (t) => {
   const db = await createDatabase(t);
   const matchId = "future-match";
@@ -143,6 +169,21 @@ test("keeps both submitted lineups private before the deadline", async (t) => {
   assert.equal(result.reason, "deadline_not_reached");
   assert.equal(duelCount.count, 0);
   assert.equal(match.lineups_published_at, null);
+});
+
+test("does not run the private publisher for Open lineups", async (t) => {
+  const db = await createDatabase(t);
+  const matchId = "open-match";
+  await seedMatch(db, matchId, new Date(Date.now() - 60 * 1000).toISOString());
+  await run(db, "UPDATE matches SET lineup_type = 'Open' WHERE id = ?", [matchId]);
+  await seedLineup(db, matchId, "AAA", "a");
+  await seedLineup(db, matchId, "BBB", "b");
+
+  const result = await publishSecretLineupMatch(db, matchId);
+  const duelCount = await get(db, "SELECT COUNT(*) AS count FROM duels WHERE match_id = ?", [matchId]);
+
+  assert.equal(result.reason, "not_blind");
+  assert.equal(duelCount.count, 0);
 });
 
 test("publishes five paired duels once when both due lineups exist", async (t) => {

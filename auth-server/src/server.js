@@ -13,6 +13,7 @@ import { ensureImagesSchema, registerImageRoutes } from "./images.js";
 import {
   SECRET_LINEUP_SIZE,
   ensureSecretLineupsSchema,
+  isBlindLineupType,
   publishSecretLineupMatchInTransaction,
 } from "./secret-lineups.js";
 
@@ -17155,12 +17156,13 @@ app.post("/duels/bulk-upsert", async (req, res) => {
         return res.status(404).json({ ok: false, message: "Match not found" });
       }
       if (
-        String(matchRow.lineup_type || "").trim().toLowerCase() === "secret"
+        isBlindLineupType(matchRow.lineup_type)
         && !matchRow.lineups_published_at
+        && duels.length > 0
       ) {
         return res.status(409).json({
           ok: false,
-          message: "Unpublished Secret lineups must be submitted through the private team lineup form",
+          message: "Unpublished Blind lineups must be submitted through the private team lineup form",
         });
       }
       const team1 = String(matchRow.team_1 || "").trim().toUpperCase();
@@ -20061,8 +20063,8 @@ async function loadSecretLineupCaptainContext(matchId, user, options = {}) {
     error.httpStatus = 409;
     throw error;
   }
-  if (String(match.lineup_type || "").trim().toLowerCase() !== "secret") {
-    const error = new Error("Private lineup submission is available only for Secret lineups");
+  if (!isBlindLineupType(match.lineup_type)) {
+    const error = new Error("Private lineup submission is available only for Blind lineups");
     error.httpStatus = 409;
     throw error;
   }
@@ -20390,27 +20392,29 @@ app.post("/matches", (req, res) => {
   const timeUtc = parseUtcIsoOrNull(payload.time_utc);
 
   const lineupTypeRaw = String(payload.lineup_type || "").trim() || "Open";
-  const lineupType = lineupTypeRaw === "Closed" ? "Secret" : lineupTypeRaw;
-  if (lineupType !== "Open" && lineupType !== "Secret") {
-    return res.status(400).json({ ok: false, message: "lineup_type must be Open or Secret" });
+  const lineupType = isBlindLineupType(lineupTypeRaw) ? "Blind" : lineupTypeRaw;
+  if (lineupType !== "Open" && lineupType !== "Blind") {
+    return res.status(400).json({ ok: false, message: "lineup_type must be Open or Blind" });
   }
 
   const lineupDeadlineHoursRaw = parseIntOrNull(payload.lineup_deadline_h);
   const allowedDeadlineHours = new Set([6, 12, 24, 48]);
   const lineupDeadlineHours = lineupType === "Open"
     ? null
-    : (timeUtc ? (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24) : null);
-  if (lineupType === "Secret" && timeUtc && !allowedDeadlineHours.has(lineupDeadlineHours)) {
-    return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Secret lineup" });
+    : (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24);
+  if (lineupType === "Blind" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
+    return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Blind lineup" });
   }
   const lineupDeadlineUtc = lineupType === "Open"
     ? null
     : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
-  if (lineupType === "Secret" && timeUtc && !lineupDeadlineUtc) {
+  if (lineupType === "Blind" && timeUtc && !lineupDeadlineUtc) {
     return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
   }
 
-  const numberOfDuels = parseIntOrNull(payload.number_of_duels);
+  const numberOfDuels = lineupType === "Blind"
+    ? SECRET_LINEUP_SIZE
+    : parseIntOrNull(payload.number_of_duels);
   if (!Number.isInteger(numberOfDuels) || numberOfDuels <= 0) {
     return res.status(400).json({ ok: false, message: "number_of_duels must be a positive integer" });
   }
@@ -20861,6 +20865,7 @@ app.patch("/matches/:id", (req, res) => {
         lineup_type,
         lineup_deadline_h,
         lineup_deadline_utc,
+        lineups_published_at,
         number_of_duels,
         team_1,
         team_2,
@@ -20935,27 +20940,34 @@ app.patch("/matches/:id", (req, res) => {
       const timeUtc = parseUtcIsoOrNull(payload.time_utc);
 
       const lineupTypeRaw = String(payload.lineup_type || "").trim();
-      const lineupType = lineupTypeRaw === "Closed" ? "Secret" : lineupTypeRaw;
-      if (lineupType !== "Open" && lineupType !== "Secret") {
-        return res.status(400).json({ ok: false, message: "lineup_type must be Open or Secret" });
+      const lineupType = isBlindLineupType(lineupTypeRaw) ? "Blind" : lineupTypeRaw;
+      if (lineupType !== "Open" && lineupType !== "Blind") {
+        return res.status(400).json({ ok: false, message: "lineup_type must be Open or Blind" });
       }
 
       const lineupDeadlineHoursRaw = parseIntOrNull(payload.lineup_deadline_h);
       const allowedDeadlineHours = new Set([6, 12, 24, 48]);
       const lineupDeadlineHours = lineupType === "Open"
         ? null
-        : (timeUtc ? (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24) : null);
-      if (lineupType === "Secret" && timeUtc && !allowedDeadlineHours.has(lineupDeadlineHours)) {
-        return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Secret lineup" });
+        : (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24);
+      if (lineupType === "Blind" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
+        return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Blind lineup" });
       }
       const lineupDeadlineUtc = lineupType === "Open"
         ? null
         : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
-      if (lineupType === "Secret" && timeUtc && !lineupDeadlineUtc) {
+      if (lineupType === "Blind" && timeUtc && !lineupDeadlineUtc) {
         return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
       }
+      const lineupModeChanged = (
+        isBlindLineupType(existingRow.lineup_type)
+        !== isBlindLineupType(lineupType)
+      );
+      const lineupsPublishedAt = lineupModeChanged ? null : existingRow.lineups_published_at;
 
-      const numberOfDuels = parseIntOrNull(payload.number_of_duels);
+      const numberOfDuels = lineupType === "Blind"
+        ? SECRET_LINEUP_SIZE
+        : parseIntOrNull(payload.number_of_duels);
       if (!Number.isInteger(numberOfDuels) || numberOfDuels <= 0) {
         return res.status(400).json({ ok: false, message: "number_of_duels must be a positive integer" });
       }
@@ -21029,6 +21041,7 @@ app.patch("/matches/:id", (req, res) => {
             lineup_type = ?,
             lineup_deadline_h = ?,
             lineup_deadline_utc = ?,
+            lineups_published_at = ?,
             number_of_duels = ?,
             status = ?,
             dw1 = ?,
@@ -21066,6 +21079,7 @@ app.patch("/matches/:id", (req, res) => {
           lineupType,
           lineupDeadlineHours,
           lineupDeadlineUtc,
+          lineupsPublishedAt,
           numberOfDuels,
           status,
           normalizedMatchScores.dw1,
@@ -21100,6 +21114,31 @@ app.patch("/matches/:id", (req, res) => {
             return res.status(404).json({ ok: false, message: "Match not found" });
           }
 
+          if (lineupModeChanged) {
+            try {
+              await dbRunAsync(
+                `
+                  DELETE FROM match_lineup_entries
+                  WHERE trim(COALESCE(match_id, '')) IN (trim(?), trim(?))
+                `,
+                [matchId, nextMatchId]
+              );
+              await dbRunAsync(
+                `
+                  DELETE FROM match_lineup_submissions
+                  WHERE trim(COALESCE(match_id, '')) IN (trim(?), trim(?))
+                `,
+                [matchId, nextMatchId]
+              );
+            } catch (lineupResetError) {
+              console.error("Failed to reset private lineups after lineup type change", lineupResetError);
+              return res.status(500).json({
+                ok: false,
+                message: "Match updated, but failed to reset private lineups",
+              });
+            }
+          }
+
           const transitionedToDone = String(existingRow.status || "").trim().toLowerCase() !== "done"
             && status === "Done";
           if (transitionedToDone) {
@@ -21127,6 +21166,7 @@ app.patch("/matches/:id", (req, res) => {
                   lineup_type,
                   lineup_deadline_h,
                   lineup_deadline_utc,
+                  lineups_published_at,
                   number_of_duels,
                   team_1,
                   team_2,
@@ -21348,12 +21388,12 @@ app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req,
     }
 
     const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
-    const isSecretLineup = String(match.lineup_type || "").trim().toLowerCase() === "secret";
+    const isBlindLineup = isBlindLineupType(match.lineup_type);
     const storedDeadlineHours = Number(match.lineup_deadline_h);
-    const lineupDeadlineHours = isSecretLineup
+    const lineupDeadlineHours = isBlindLineup
       ? ([6, 12, 24, 48].includes(storedDeadlineHours) ? storedDeadlineHours : 24)
       : null;
-    const lineupDeadlineUtc = isSecretLineup
+    const lineupDeadlineUtc = isBlindLineup
       ? new Date(Date.parse(proposedTimeUtc) - lineupDeadlineHours * 60 * 60 * 1000).toISOString()
       : null;
 
