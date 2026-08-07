@@ -20508,8 +20508,8 @@ app.post("/matches", (req, res) => {
   const roundShortName = normalizeText(payload.round_short_name);
   const matchShortName = normalizeText(payload.match_short_name);
   const thirdPlaceMatch = parseBooleanInteger(payload.third_place_match);
-  const team1LineupAdded = parseBooleanInteger(payload.team_1_lineup_added);
-  const team2LineupAdded = parseBooleanInteger(payload.team_2_lineup_added);
+  const team1LineupAdded = 0;
+  const team2LineupAdded = 0;
   const knockoutId = parseIntOrNull(payload.knockout_id);
   const nextGameWin = parseIntOrNull(payload.next_game_win);
   const nextGameLose = parseIntOrNull(payload.next_game_lose);
@@ -21096,12 +21096,8 @@ app.patch("/matches/:id", (req, res) => {
       const roundShortName = normalizeText(payload.round_short_name);
       const matchShortName = normalizeText(payload.match_short_name);
       const thirdPlaceMatch = parseBooleanInteger(payload.third_place_match);
-      const team1LineupAdded = Object.prototype.hasOwnProperty.call(payload, "team_1_lineup_added")
-        ? parseBooleanInteger(payload.team_1_lineup_added)
-        : parseBooleanInteger(existingRow.team_1_lineup_added);
-      const team2LineupAdded = Object.prototype.hasOwnProperty.call(payload, "team_2_lineup_added")
-        ? parseBooleanInteger(payload.team_2_lineup_added)
-        : parseBooleanInteger(existingRow.team_2_lineup_added);
+      const team1LineupAdded = parseBooleanInteger(existingRow.team_1_lineup_added);
+      const team2LineupAdded = parseBooleanInteger(existingRow.team_2_lineup_added);
       const knockoutId = parseIntOrNull(payload.knockout_id);
       const nextGameWin = parseIntOrNull(payload.next_game_win);
       const nextGameLose = parseIntOrNull(payload.next_game_lose);

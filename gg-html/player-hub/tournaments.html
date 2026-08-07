@@ -5206,24 +5206,30 @@
     const thirdPlaceMatchInput = document.createElement("input");
     thirdPlaceMatchInput.type = "checkbox";
     thirdPlaceMatchInput.checked = ["1", "true", "yes"].includes(String(source?.third_place_match ?? "").trim().toLowerCase());
+    thirdPlaceMatchInput.setAttribute("aria-label", "Third Place Match");
     const thirdPlaceMatchControl = document.createElement("label");
     thirdPlaceMatchControl.className = "cp-edit-checkbox";
     thirdPlaceMatchControl.appendChild(thirdPlaceMatchInput);
-    thirdPlaceMatchControl.appendChild(document.createTextNode("Third place match"));
     const team1LineupAddedInput = document.createElement("input");
     team1LineupAddedInput.type = "checkbox";
     team1LineupAddedInput.checked = ["1", "true", "yes"].includes(String(source?.team_1_lineup_added ?? "").trim().toLowerCase());
+    team1LineupAddedInput.disabled = true;
+    team1LineupAddedInput.setAttribute("aria-label", "Team 1 Lineup Added");
+    team1LineupAddedInput.title = "This field is set automatically.";
     const team1LineupAddedControl = document.createElement("label");
     team1LineupAddedControl.className = "cp-edit-checkbox";
+    team1LineupAddedControl.title = "This field is set automatically.";
     team1LineupAddedControl.appendChild(team1LineupAddedInput);
-    team1LineupAddedControl.appendChild(document.createTextNode("Team 1 lineup added"));
     const team2LineupAddedInput = document.createElement("input");
     team2LineupAddedInput.type = "checkbox";
     team2LineupAddedInput.checked = ["1", "true", "yes"].includes(String(source?.team_2_lineup_added ?? "").trim().toLowerCase());
+    team2LineupAddedInput.disabled = true;
+    team2LineupAddedInput.setAttribute("aria-label", "Team 2 Lineup Added");
+    team2LineupAddedInput.title = "This field is set automatically.";
     const team2LineupAddedControl = document.createElement("label");
     team2LineupAddedControl.className = "cp-edit-checkbox";
+    team2LineupAddedControl.title = "This field is set automatically.";
     team2LineupAddedControl.appendChild(team2LineupAddedInput);
-    team2LineupAddedControl.appendChild(document.createTextNode("Team 2 lineup added"));
     const knockoutIdInput = createNumberInput("knockout_id");
     const nextGameWinInput = createNumberInput("next_game_win");
     const nextGameLoseInput = createNumberInput("next_game_lose");
@@ -7709,8 +7715,6 @@
         roundShortNameInput,
         matchShortNameInput,
         thirdPlaceMatchInput,
-        team1LineupAddedInput,
-        team2LineupAddedInput,
         knockoutIdInput,
         nextGameWinInput,
         nextGameLoseInput,
@@ -7746,8 +7750,6 @@
         roundShortNameInput,
         matchShortNameInput,
         thirdPlaceMatchInput,
-        team1LineupAddedInput,
-        team2LineupAddedInput,
         knockoutIdInput,
         nextGameWinInput,
         nextGameLoseInput,
@@ -7960,8 +7962,6 @@
         round_short_name: String(roundShortNameInput.value || "").trim() || null,
         match_short_name: String(matchShortNameInput.value || "").trim() || null,
         third_place_match: thirdPlaceMatchInput.checked,
-        team_1_lineup_added: team1LineupAddedInput.checked,
-        team_2_lineup_added: team2LineupAddedInput.checked,
         knockout_id: parseNullableInt(knockoutIdInput.value),
         next_game_win: parseNullableInt(nextGameWinInput.value),
         next_game_lose: parseNullableInt(nextGameLoseInput.value),
