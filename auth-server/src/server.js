@@ -240,6 +240,8 @@ const MATCH_AUDIT_FIELDS = [
   "lineup_deadline_h",
   "lineup_deadline_utc",
   "lineups_published_at",
+  "team_1_lineup_added",
+  "team_2_lineup_added",
   "number_of_duels",
   "team_1",
   "team_2",
@@ -1939,6 +1941,52 @@ function dbRunAsync(sql, params = []) {
       resolve(this);
     });
   });
+}
+
+async function syncMatchLineupAddedFlags(matchId, actorPlayerId = null) {
+  const normalizedMatchId = String(matchId || "").trim();
+  if (!normalizedMatchId) return;
+  await dbRunAsync(
+    `
+      UPDATE matches
+      SET
+        team_1_lineup_added = CASE
+          WHEN lower(trim(COALESCE(lineup_type, ''))) IN ('blind', 'secret', 'closed') THEN CASE WHEN EXISTS (
+            SELECT 1
+            FROM match_lineup_submissions s
+            WHERE trim(COALESCE(s.match_id, '')) = trim(COALESCE(matches.id, ''))
+              AND upper(trim(COALESCE(s.team_id, ''))) = upper(trim(COALESCE(matches.team_1, '')))
+          ) THEN 1 ELSE 0 END
+          ELSE CASE WHEN EXISTS (
+            SELECT 1
+            FROM duels d
+            WHERE trim(COALESCE(d.match_id, '')) = trim(COALESCE(matches.id, ''))
+              AND d.deleted_at IS NULL
+              AND trim(COALESCE(d.player_1_id, '')) <> ''
+          ) THEN 1 ELSE 0 END
+        END,
+        team_2_lineup_added = CASE
+          WHEN lower(trim(COALESCE(lineup_type, ''))) IN ('blind', 'secret', 'closed') THEN CASE WHEN EXISTS (
+            SELECT 1
+            FROM match_lineup_submissions s
+            WHERE trim(COALESCE(s.match_id, '')) = trim(COALESCE(matches.id, ''))
+              AND upper(trim(COALESCE(s.team_id, ''))) = upper(trim(COALESCE(matches.team_2, '')))
+          ) THEN 1 ELSE 0 END
+          ELSE CASE WHEN EXISTS (
+            SELECT 1
+            FROM duels d
+            WHERE trim(COALESCE(d.match_id, '')) = trim(COALESCE(matches.id, ''))
+              AND d.deleted_at IS NULL
+              AND trim(COALESCE(d.player_2_id, '')) <> ''
+          ) THEN 1 ELSE 0 END
+        END,
+        updated_by = COALESCE(?, updated_by),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE trim(COALESCE(id, '')) = trim(?)
+        AND deleted_at IS NULL
+    `,
+    [actorPlayerId, normalizedMatchId]
+  );
 }
 
 function normalizeStatusText(status) {
@@ -4236,6 +4284,8 @@ function ensureMatchesSchema() {
       addColumnIfMissing(currentColumns, "matches", "is_test", "BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1))");
       addColumnIfMissing(currentColumns, "matches", "lineup_deadline_h", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "lineup_deadline_utc", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "team_1_lineup_added", "INTEGER NOT NULL DEFAULT 0 CHECK (team_1_lineup_added IN (0, 1))");
+      addColumnIfMissing(currentColumns, "matches", "team_2_lineup_added", "INTEGER NOT NULL DEFAULT 0 CHECK (team_2_lineup_added IN (0, 1))");
       addColumnIfMissing(currentColumns, "matches", "proposed_time_utc", "TEXT");
       addColumnIfMissing(currentColumns, "matches", "proposed_time_by_team_id", "TEXT");
       addColumnIfMissing(
@@ -4296,6 +4346,8 @@ function ensureMatchesSchema() {
           lineup_deadline_h INTEGER,
           lineup_deadline_utc TEXT,
           lineups_published_at TEXT,
+          team_1_lineup_added INTEGER NOT NULL DEFAULT 0 CHECK (team_1_lineup_added IN (0, 1)),
+          team_2_lineup_added INTEGER NOT NULL DEFAULT 0 CHECK (team_2_lineup_added IN (0, 1)),
           number_of_duels INTEGER,
           team_1 TEXT,
           team_2 TEXT,
@@ -4343,6 +4395,8 @@ function ensureMatchesSchema() {
           lineup_deadline_h,
           lineup_deadline_utc,
           lineups_published_at,
+          team_1_lineup_added,
+          team_2_lineup_added,
           number_of_duels,
           team_1,
           team_2,
@@ -4390,6 +4444,8 @@ function ensureMatchesSchema() {
           ${selectExpr("lineup_deadline_h")},
           ${selectExpr("lineup_deadline_utc")},
           ${selectExpr("lineups_published_at")},
+          ${selectExpr("team_1_lineup_added", "0")},
+          ${selectExpr("team_2_lineup_added", "0")},
           ${selectExpr("number_of_duels")},
           ${selectExpr("team_1")},
           ${selectExpr("team_2")},
@@ -17260,7 +17316,8 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                   return res.status(500).json({ ok: false, message: "Failed to clear old duels" });
                 }
                 if (!sanitized.length) {
-                  return recomputeMatchAggregates(matchId, actorPlayerId)
+                  return syncMatchLineupAddedFlags(matchId, actorPlayerId)
+                    .then(() => recomputeMatchAggregates(matchId, actorPlayerId))
                     .then(() => dbRunAsync("COMMIT"))
                     .then(() => {
                       const action = previousLineups.length ? "delete" : "update";
@@ -17373,7 +17430,8 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                       pending -= 1;
                       if (pending === 0) {
                         stmt.finalize(() => {
-                          recomputeMatchAggregates(matchId, actorPlayerId)
+                          syncMatchLineupAddedFlags(matchId, actorPlayerId)
+                            .then(() => recomputeMatchAggregates(matchId, actorPlayerId))
                             .then(() => dbRunAsync("COMMIT"))
                             .then(() => new Promise((resolve, reject) => {
                               loadDuelsByMatchId(matchId, (loadErr, savedDuels) => {
@@ -17594,6 +17652,8 @@ app.get("/matches", (req, res, next) => {
         m.lineup_deadline_h,
         m.lineup_deadline_utc,
         m.lineups_published_at,
+        COALESCE(m.team_1_lineup_added, 0) AS team_1_lineup_added,
+        COALESCE(m.team_2_lineup_added, 0) AS team_2_lineup_added,
         m.number_of_duels,
         m.team_1,
         m.team_2,
@@ -17751,6 +17811,8 @@ app.get("/matches", (req, res, next) => {
           lineup_deadline_h: row.lineup_deadline_h,
           lineup_deadline_utc: row.lineup_deadline_utc,
           lineups_published_at: row.lineups_published_at,
+          team_1_lineup_added: Number(row.team_1_lineup_added) === 1,
+          team_2_lineup_added: Number(row.team_2_lineup_added) === 1,
           number_of_duels: row.number_of_duels,
           team_1: row.team_1,
           team_2: row.team_2,
@@ -17793,6 +17855,8 @@ app.get("/matches", (req, res, next) => {
         m.lineup_deadline_h,
         m.lineup_deadline_utc,
         m.lineups_published_at,
+        COALESCE(m.team_1_lineup_added, 0) AS team_1_lineup_added,
+        COALESCE(m.team_2_lineup_added, 0) AS team_2_lineup_added,
         m.number_of_duels,
         m.team_1,
         m.team_2,
@@ -17923,6 +17987,8 @@ app.get("/matches", (req, res, next) => {
         lineup_deadline_h: row.lineup_deadline_h,
         lineup_deadline_utc: row.lineup_deadline_utc,
         lineups_published_at: row.lineups_published_at,
+        team_1_lineup_added: Number(row.team_1_lineup_added) === 1,
+        team_2_lineup_added: Number(row.team_2_lineup_added) === 1,
         number_of_duels: row.number_of_duels,
         team_1: row.team_1,
         team_2: row.team_2,
@@ -20285,6 +20351,7 @@ app.put("/matches/:id/my-lineup", requireAuthenticated, async (req, res) => {
         [context.match.id, context.captainTeamId, index + 1, playerIds[index]]
       );
     }
+    await syncMatchLineupAddedFlags(context.match.id, actorPlayerId);
 
     const publishResult = await publishSecretLineupMatchInTransaction(
       db,
@@ -20441,6 +20508,8 @@ app.post("/matches", (req, res) => {
   const roundShortName = normalizeText(payload.round_short_name);
   const matchShortName = normalizeText(payload.match_short_name);
   const thirdPlaceMatch = parseBooleanInteger(payload.third_place_match);
+  const team1LineupAdded = parseBooleanInteger(payload.team_1_lineup_added);
+  const team2LineupAdded = parseBooleanInteger(payload.team_2_lineup_added);
   const knockoutId = parseIntOrNull(payload.knockout_id);
   const nextGameWin = parseIntOrNull(payload.next_game_win);
   const nextGameLose = parseIntOrNull(payload.next_game_lose);
@@ -20514,6 +20583,9 @@ app.post("/matches", (req, res) => {
                 lineup_type = ?,
                 lineup_deadline_h = ?,
                 lineup_deadline_utc = ?,
+                lineups_published_at = NULL,
+                team_1_lineup_added = ?,
+                team_2_lineup_added = ?,
                 number_of_duels = ?,
                 team_1 = ?,
                 team_2 = ?,
@@ -20549,6 +20621,8 @@ app.post("/matches", (req, res) => {
               lineupType,
               lineupDeadlineHours,
               lineupDeadlineUtc,
+              team1LineupAdded,
+              team2LineupAdded,
               numberOfDuels,
               team1,
               team2,
@@ -20603,6 +20677,9 @@ app.post("/matches", (req, res) => {
                       lineup_type,
                       lineup_deadline_h,
                       lineup_deadline_utc,
+                      lineups_published_at,
+                      team_1_lineup_added,
+                      team_2_lineup_added,
                       number_of_duels,
                       team_1,
                       team_2,
@@ -20667,6 +20744,8 @@ app.post("/matches", (req, res) => {
             lineup_type,
             lineup_deadline_h,
             lineup_deadline_utc,
+            team_1_lineup_added,
+            team_2_lineup_added,
             number_of_duels,
             team_1,
             team_2,
@@ -20692,7 +20771,7 @@ app.post("/matches", (req, res) => {
             created_by,
             updated_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           matchId,
@@ -20702,6 +20781,8 @@ app.post("/matches", (req, res) => {
           lineupType,
           lineupDeadlineHours,
           lineupDeadlineUtc,
+          team1LineupAdded,
+          team2LineupAdded,
           numberOfDuels,
           team1,
           team2,
@@ -20748,6 +20829,9 @@ app.post("/matches", (req, res) => {
                 lineup_type,
                 lineup_deadline_h,
                 lineup_deadline_utc,
+                lineups_published_at,
+                team_1_lineup_added,
+                team_2_lineup_added,
                 number_of_duels,
                 team_1,
                 team_2,
@@ -20866,6 +20950,8 @@ app.patch("/matches/:id", (req, res) => {
         lineup_deadline_h,
         lineup_deadline_utc,
         lineups_published_at,
+        team_1_lineup_added,
+        team_2_lineup_added,
         number_of_duels,
         team_1,
         team_2,
@@ -21010,6 +21096,12 @@ app.patch("/matches/:id", (req, res) => {
       const roundShortName = normalizeText(payload.round_short_name);
       const matchShortName = normalizeText(payload.match_short_name);
       const thirdPlaceMatch = parseBooleanInteger(payload.third_place_match);
+      const team1LineupAdded = Object.prototype.hasOwnProperty.call(payload, "team_1_lineup_added")
+        ? parseBooleanInteger(payload.team_1_lineup_added)
+        : parseBooleanInteger(existingRow.team_1_lineup_added);
+      const team2LineupAdded = Object.prototype.hasOwnProperty.call(payload, "team_2_lineup_added")
+        ? parseBooleanInteger(payload.team_2_lineup_added)
+        : parseBooleanInteger(existingRow.team_2_lineup_added);
       const knockoutId = parseIntOrNull(payload.knockout_id);
       const nextGameWin = parseIntOrNull(payload.next_game_win);
       const nextGameLose = parseIntOrNull(payload.next_game_lose);
@@ -21042,6 +21134,8 @@ app.patch("/matches/:id", (req, res) => {
             lineup_deadline_h = ?,
             lineup_deadline_utc = ?,
             lineups_published_at = ?,
+            team_1_lineup_added = ?,
+            team_2_lineup_added = ?,
             number_of_duels = ?,
             status = ?,
             dw1 = ?,
@@ -21080,6 +21174,8 @@ app.patch("/matches/:id", (req, res) => {
           lineupDeadlineHours,
           lineupDeadlineUtc,
           lineupsPublishedAt,
+          team1LineupAdded,
+          team2LineupAdded,
           numberOfDuels,
           status,
           normalizedMatchScores.dw1,
@@ -21130,6 +21226,7 @@ app.patch("/matches/:id", (req, res) => {
                 `,
                 [matchId, nextMatchId]
               );
+              await syncMatchLineupAddedFlags(nextMatchId, actorPlayerId);
             } catch (lineupResetError) {
               console.error("Failed to reset private lineups after lineup type change", lineupResetError);
               return res.status(500).json({
@@ -21167,6 +21264,8 @@ app.patch("/matches/:id", (req, res) => {
                   lineup_deadline_h,
                   lineup_deadline_utc,
                   lineups_published_at,
+                  team_1_lineup_added,
+                  team_2_lineup_added,
                   number_of_duels,
                   team_1,
                   team_2,

@@ -411,6 +411,13 @@
     max-width: 100%;
   }
 
+  .cp-lineup-added-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    flex: 0 0 auto;
+  }
+
   .cp-team-flag {
     width: 20px;
     height: 20px;
@@ -4294,6 +4301,14 @@
     const team1NameEl = document.createElement("span");
     team1NameEl.textContent = team1Name;
     team1Row.appendChild(team1NameEl);
+    if (match?.team_1_lineup_added === true || Number(match?.team_1_lineup_added) === 1) {
+      const lineupAddedIcon = document.createElement("img");
+      lineupAddedIcon.className = "cp-lineup-added-icon";
+      lineupAddedIcon.src = "https://carcassonne.gg/gallery/lineup-added.png";
+      lineupAddedIcon.alt = "Lineup added";
+      lineupAddedIcon.title = "Lineup for this team has been added.";
+      team1Row.appendChild(lineupAddedIcon);
+    }
     teamsWrap.appendChild(team1Row);
 
     const team2Row = document.createElement("div");
@@ -4308,6 +4323,14 @@
     const team2NameEl = document.createElement("span");
     team2NameEl.textContent = team2Name;
     team2Row.appendChild(team2NameEl);
+    if (match?.team_2_lineup_added === true || Number(match?.team_2_lineup_added) === 1) {
+      const lineupAddedIcon = document.createElement("img");
+      lineupAddedIcon.className = "cp-lineup-added-icon";
+      lineupAddedIcon.src = "https://carcassonne.gg/gallery/lineup-added.png";
+      lineupAddedIcon.alt = "Lineup added";
+      lineupAddedIcon.title = "Lineup for this team has been added.";
+      team2Row.appendChild(lineupAddedIcon);
+    }
     teamsWrap.appendChild(team2Row);
 
     row.appendChild(teamsWrap);
@@ -4726,6 +4749,8 @@
           lineup_type: "Open",
           lineup_deadline_h: 24,
           lineup_deadline_utc: null,
+          team_1_lineup_added: false,
+          team_2_lineup_added: false,
           number_of_duels: isFixedTournamentLineup ? fixedTournamentLineupSize : 5,
           status: "Planned",
           dw1: null,
@@ -5109,6 +5134,24 @@
     addRow("Lineup Type", lineupTypeInput.root);
     form.appendChild(localTimeBox);
 
+    const deadlineHoursInput = createDropdown(
+      `${inferDeadlineHours(source)}h`,
+      DEADLINE_HOURS_OPTIONS.map((h) => ({ value: `${h}h`, label: `${h}h` }))
+    );
+    const deadlineHoursRow = addRow("Lineup Deadline", deadlineHoursInput.root);
+
+    const duelsInput = document.createElement("input");
+    duelsInput.type = "number";
+    duelsInput.step = "1";
+    duelsInput.min = "1";
+    duelsInput.value = String(source?.number_of_duels ?? (isFixedTournamentLineup ? fixedTournamentLineupSize : 5));
+    const duelsRow = addRow("Number of Duels", duelsInput);
+    if (isFixedTournamentLineup) {
+      duelsInput.readOnly = true;
+      duelsInput.disabled = true;
+      duelsInput.value = String(fixedTournamentLineupSize);
+    }
+
     const advancedToggleWrap = document.createElement("div");
     advancedToggleWrap.style.gridColumn = "1 / -1";
     const advancedToggleBtn = document.createElement("button");
@@ -5167,6 +5210,20 @@
     thirdPlaceMatchControl.className = "cp-edit-checkbox";
     thirdPlaceMatchControl.appendChild(thirdPlaceMatchInput);
     thirdPlaceMatchControl.appendChild(document.createTextNode("Third place match"));
+    const team1LineupAddedInput = document.createElement("input");
+    team1LineupAddedInput.type = "checkbox";
+    team1LineupAddedInput.checked = ["1", "true", "yes"].includes(String(source?.team_1_lineup_added ?? "").trim().toLowerCase());
+    const team1LineupAddedControl = document.createElement("label");
+    team1LineupAddedControl.className = "cp-edit-checkbox";
+    team1LineupAddedControl.appendChild(team1LineupAddedInput);
+    team1LineupAddedControl.appendChild(document.createTextNode("Team 1 lineup added"));
+    const team2LineupAddedInput = document.createElement("input");
+    team2LineupAddedInput.type = "checkbox";
+    team2LineupAddedInput.checked = ["1", "true", "yes"].includes(String(source?.team_2_lineup_added ?? "").trim().toLowerCase());
+    const team2LineupAddedControl = document.createElement("label");
+    team2LineupAddedControl.className = "cp-edit-checkbox";
+    team2LineupAddedControl.appendChild(team2LineupAddedInput);
+    team2LineupAddedControl.appendChild(document.createTextNode("Team 2 lineup added"));
     const knockoutIdInput = createNumberInput("knockout_id");
     const nextGameWinInput = createNumberInput("next_game_win");
     const nextGameLoseInput = createNumberInput("next_game_lose");
@@ -5195,6 +5252,8 @@
     addRowTo(advancedFieldsWrap, "Round Short Name", roundShortNameInput);
     addRowTo(advancedFieldsWrap, "Match Short Name", matchShortNameInput);
     addRowTo(advancedFieldsWrap, "Third Place Match", thirdPlaceMatchControl);
+    addRowTo(advancedFieldsWrap, "Team 1 Lineup Added", team1LineupAddedControl);
+    addRowTo(advancedFieldsWrap, "Team 2 Lineup Added", team2LineupAddedControl);
     addRowTo(advancedFieldsWrap, "Knockout ID", knockoutIdInput);
     addRowTo(advancedFieldsWrap, "Next game win", nextGameWinInput);
     addRowTo(advancedFieldsWrap, "Next game lose", nextGameLoseInput);
@@ -5212,24 +5271,6 @@
       advancedFieldsWrap.classList.toggle("cp-hidden", !shouldShow);
       advancedToggleBtn.textContent = shouldShow ? "Hide advanced settings" : "Show advanced settings";
     });
-
-    const deadlineHoursInput = createDropdown(
-      `${inferDeadlineHours(source)}h`,
-      DEADLINE_HOURS_OPTIONS.map((h) => ({ value: `${h}h`, label: `${h}h` }))
-    );
-    const deadlineHoursRow = addRow("Lineup Deadline", deadlineHoursInput.root);
-
-    const duelsInput = document.createElement("input");
-    duelsInput.type = "number";
-    duelsInput.step = "1";
-    duelsInput.min = "1";
-    duelsInput.value = String(source?.number_of_duels ?? (isFixedTournamentLineup ? fixedTournamentLineupSize : 5));
-    const duelsRow = addRow("Number of Duels", duelsInput);
-    if (isFixedTournamentLineup) {
-      duelsInput.readOnly = true;
-      duelsInput.disabled = true;
-      duelsInput.value = String(fixedTournamentLineupSize);
-    }
 
     const dw1Input = document.createElement("input");
     dw1Input.type = "number";
@@ -7668,6 +7709,8 @@
         roundShortNameInput,
         matchShortNameInput,
         thirdPlaceMatchInput,
+        team1LineupAddedInput,
+        team2LineupAddedInput,
         knockoutIdInput,
         nextGameWinInput,
         nextGameLoseInput,
@@ -7703,6 +7746,8 @@
         roundShortNameInput,
         matchShortNameInput,
         thirdPlaceMatchInput,
+        team1LineupAddedInput,
+        team2LineupAddedInput,
         knockoutIdInput,
         nextGameWinInput,
         nextGameLoseInput,
@@ -7915,6 +7960,8 @@
         round_short_name: String(roundShortNameInput.value || "").trim() || null,
         match_short_name: String(matchShortNameInput.value || "").trim() || null,
         third_place_match: thirdPlaceMatchInput.checked,
+        team_1_lineup_added: team1LineupAddedInput.checked,
+        team_2_lineup_added: team2LineupAddedInput.checked,
         knockout_id: parseNullableInt(knockoutIdInput.value),
         next_game_win: parseNullableInt(nextGameWinInput.value),
         next_game_lose: parseNullableInt(nextGameLoseInput.value),

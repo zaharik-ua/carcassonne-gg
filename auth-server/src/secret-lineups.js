@@ -61,6 +61,8 @@ export async function ensureSecretLineupsSchema(db) {
     ["lineup_deadline_h", "INTEGER"],
     ["lineup_deadline_utc", "TEXT"],
     ["lineups_published_at", "TEXT"],
+    ["team_1_lineup_added", "INTEGER NOT NULL DEFAULT 0 CHECK (team_1_lineup_added IN (0, 1))"],
+    ["team_2_lineup_added", "INTEGER NOT NULL DEFAULT 0 CHECK (team_2_lineup_added IN (0, 1))"],
   ];
   for (const [columnName, columnDefinition] of requiredMatchColumns) {
     if (matchColumnNames.has(columnName)) continue;
@@ -137,6 +139,26 @@ export async function ensureSecretLineupsSchema(db) {
     WHERE lower(trim(COALESCE(lineup_type, ''))) = 'blind'
       AND datetime(time_utc) IS NOT NULL
       AND datetime(lineup_deadline_utc) IS NULL;
+
+    UPDATE matches
+    SET team_1_lineup_added = 1
+    WHERE COALESCE(team_1_lineup_added, 0) = 0
+      AND EXISTS (
+        SELECT 1
+        FROM match_lineup_submissions s
+        WHERE trim(COALESCE(s.match_id, '')) = trim(COALESCE(matches.id, ''))
+          AND upper(trim(COALESCE(s.team_id, ''))) = upper(trim(COALESCE(matches.team_1, '')))
+      );
+
+    UPDATE matches
+    SET team_2_lineup_added = 1
+    WHERE COALESCE(team_2_lineup_added, 0) = 0
+      AND EXISTS (
+        SELECT 1
+        FROM match_lineup_submissions s
+        WHERE trim(COALESCE(s.match_id, '')) = trim(COALESCE(matches.id, ''))
+          AND upper(trim(COALESCE(s.team_id, ''))) = upper(trim(COALESCE(matches.team_2, '')))
+      );
   `);
 
   const duelsTable = await dbGet(
@@ -144,6 +166,30 @@ export async function ensureSecretLineupsSchema(db) {
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'duels' LIMIT 1"
   );
   if (duelsTable) {
+    await dbExec(db, `
+      UPDATE matches
+      SET team_1_lineup_added = 1
+      WHERE COALESCE(team_1_lineup_added, 0) = 0
+        AND EXISTS (
+          SELECT 1
+          FROM duels d
+          WHERE trim(COALESCE(d.match_id, '')) = trim(COALESCE(matches.id, ''))
+            AND d.deleted_at IS NULL
+            AND trim(COALESCE(d.player_1_id, '')) <> ''
+        );
+
+      UPDATE matches
+      SET team_2_lineup_added = 1
+      WHERE COALESCE(team_2_lineup_added, 0) = 0
+        AND EXISTS (
+          SELECT 1
+          FROM duels d
+          WHERE trim(COALESCE(d.match_id, '')) = trim(COALESCE(matches.id, ''))
+            AND d.deleted_at IS NULL
+            AND trim(COALESCE(d.player_2_id, '')) <> ''
+        );
+    `);
+
     // Existing duels were already public before this feature. Mark those matches as
     // published so the migration never hides or rematerializes historical data.
     await dbRun(
@@ -333,6 +379,8 @@ export async function publishSecretLineupMatchInTransaction(db, matchId, actorPl
       UPDATE matches
       SET
         lineups_published_at = CURRENT_TIMESTAMP,
+        team_1_lineup_added = 1,
+        team_2_lineup_added = 1,
         updated_by = COALESCE(?, updated_by),
         updated_at = CURRENT_TIMESTAMP
       WHERE trim(COALESCE(id, '')) = trim(?)

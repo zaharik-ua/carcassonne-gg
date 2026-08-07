@@ -171,6 +171,23 @@ test("keeps both submitted lineups private before the deadline", async (t) => {
   assert.equal(match.lineups_published_at, null);
 });
 
+test("backfills the per-team lineup-added flags from private submissions", async (t) => {
+  const db = await createDatabase(t);
+  const matchId = "lineup-flags-match";
+  await seedMatch(db, matchId, new Date(Date.now() + 60 * 60 * 1000).toISOString());
+  await seedLineup(db, matchId, "AAA", "a");
+
+  await ensureSecretLineupsSchema(db);
+  const match = await get(
+    db,
+    "SELECT team_1_lineup_added, team_2_lineup_added FROM matches WHERE id = ?",
+    [matchId]
+  );
+
+  assert.equal(match.team_1_lineup_added, 1);
+  assert.equal(match.team_2_lineup_added, 0);
+});
+
 test("does not run the private publisher for Open lineups", async (t) => {
   const db = await createDatabase(t);
   const matchId = "open-match";
@@ -199,12 +216,18 @@ test("publishes five paired duels once when both due lineups exist", async (t) =
     "SELECT duel_number, player_1_id, player_2_id FROM duels WHERE match_id = ? ORDER BY duel_number",
     [matchId]
   );
-  const match = await get(db, "SELECT lineups_published_at FROM matches WHERE id = ?", [matchId]);
+  const match = await get(
+    db,
+    "SELECT lineups_published_at, team_1_lineup_added, team_2_lineup_added FROM matches WHERE id = ?",
+    [matchId]
+  );
   const secondResult = await publishSecretLineupMatch(db, matchId);
   const duelCount = await get(db, "SELECT COUNT(*) AS count FROM duels WHERE match_id = ?", [matchId]);
 
   assert.equal(result.published, true);
   assert.ok(match.lineups_published_at);
+  assert.equal(match.team_1_lineup_added, 1);
+  assert.equal(match.team_2_lineup_added, 1);
   assert.deepEqual(duels, Array.from({ length: SECRET_LINEUP_SIZE }, (_, index) => ({
     duel_number: index + 1,
     player_1_id: `a-${index + 1}`,
