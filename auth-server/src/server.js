@@ -18895,7 +18895,7 @@ app.get("/public/player-official-duels", async (req, res, next) => {
     );
 
     const normalizeTournamentType = (value) => {
-      const raw = normalizeNullableText(value);
+      const raw = normalizeNullableText(value) || "";
       const lower = raw.toLowerCase();
       if (lower === "team" || lower === "teams") return "TEAM";
       if (lower === "individual" || lower === "individuals") return "Individual";
@@ -18908,14 +18908,14 @@ app.get("/public/player-official-duels", async (req, res, next) => {
       return title || dates;
     };
     const getDuelTournamentId = (row) => {
-      const sourceType = normalizeNullableText(row?.source_type).toLowerCase();
+      const sourceType = String(row?.source_type || "").trim().toLowerCase();
       if (sourceType === "challenge") {
         return "Challenges";
       }
       return normalizeNullableText(row?.tournament_id) || "Official-Matches";
     };
     const getDuelTournamentName = (row) => {
-      const sourceType = normalizeNullableText(row?.source_type).toLowerCase();
+      const sourceType = String(row?.source_type || "").trim().toLowerCase();
       if (sourceType === "challenge") {
         return "Challenges";
       }
@@ -18929,7 +18929,7 @@ app.get("/public/player-official-duels", async (req, res, next) => {
     (duelRows || []).forEach((row) => {
       const tournamentId = getDuelTournamentId(row);
       if (tournamentId && !tournamentsById.has(tournamentId)) {
-        const isChallenge = normalizeNullableText(row?.source_type).toLowerCase() === "challenge";
+        const isChallenge = String(row?.source_type || "").trim().toLowerCase() === "challenge";
         tournamentsById.set(tournamentId, {
           id: tournamentId,
           tournament_id: tournamentId,
