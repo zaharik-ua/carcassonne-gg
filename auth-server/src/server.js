@@ -402,6 +402,8 @@ const SYSTEM_SETTING_DEFINITIONS = [
   },
 ];
 const SYSTEM_SETTING_KEYS = new Set(SYSTEM_SETTING_DEFINITIONS.map((setting) => setting.key));
+const PROFILE_GG_ELO_SCRIPT_ID = "profile-gg-elo";
+let profileGgEloScriptRunning = false;
 
 function quoteSqlIdentifier(identifier) {
   return `"${String(identifier || "").replaceAll('"', '""')}"`;
@@ -2452,6 +2454,65 @@ function execFileAsync(file, args = [], options = {}) {
       resolve({ stdout, stderr });
     });
   });
+}
+
+function parseProfileGgEloScriptOutput(output) {
+  const text = String(output || "").trim();
+  if (!text) return null;
+  try {
+    const payload = JSON.parse(text);
+    return payload && typeof payload === "object" ? payload : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+async function runProfileGgEloScript({ dryRun }) {
+  const authServerRoot = path.resolve(__dirname, "..");
+  const updateScriptPath = path.resolve(authServerRoot, "run_update_profile_gg_elo.py");
+  const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
+
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      pythonBin,
+      [
+        updateScriptPath,
+        "--db-path",
+        dbFullPath,
+        ...(dryRun ? ["--dry-run"] : []),
+      ],
+      {
+        cwd: authServerRoot,
+        env: process.env,
+        timeout: 10 * 60 * 1000,
+        maxBuffer: 1024 * 1024 * 10,
+      }
+    );
+    logUpdaterOutput(
+      `admin-script:${PROFILE_GG_ELO_SCRIPT_ID}:${dryRun ? "check" : "run"}`,
+      [stdout, stderr].map((part) => String(part || "").trim()).filter(Boolean).join("\n")
+    );
+    const payload = parseProfileGgEloScriptOutput(stdout);
+    if (!payload || payload.ok !== true) {
+      throw new Error("GG Elo script returned an invalid response");
+    }
+    return payload;
+  } catch (error) {
+    console.error("Profile GG Elo admin script failed", {
+      dryRun: !!dryRun,
+      pythonBin,
+      script: updateScriptPath,
+      code: error?.code ?? null,
+      signal: error?.signal ?? null,
+      stdout: String(error?.stdout || "").trim(),
+      stderr: String(error?.stderr || "").trim(),
+      message: error?.message || null,
+    });
+    const payload = parseProfileGgEloScriptOutput(error?.stdout);
+    const scriptError = new Error(payload?.message || "Failed to execute the GG Elo script");
+    scriptError.cause = error;
+    throw scriptError;
+  }
 }
 
 function hasNonEmptyValue(value) {
@@ -11504,6 +11565,117 @@ app.patch("/system-settings/:key", requireAdmin, async (req, res) => {
   } catch (error) {
     console.error("Failed to update system setting", error);
     return res.status(500).json({ ok: false, message: "Failed to update system setting" });
+  }
+});
+
+app.post("/admin-scripts/profile-gg-elo/check", requireAdmin, async (req, res) => {
+  const deltaStartDate = normalizeDateOnly(req.body?.gg_rating_delta_start_date);
+  if (!deltaStartDate) {
+    return res.status(400).json({
+      ok: false,
+      message: "gg_rating_delta_start_date must use YYYY-MM-DD format",
+    });
+  }
+  if (profileGgEloScriptRunning) {
+    return res.status(409).json({ ok: false, message: "The GG Elo script is already running" });
+  }
+
+  profileGgEloScriptRunning = true;
+  try {
+    const settingRows = await dbAllAsync(
+      `
+        SELECT *
+        FROM system_settings
+        WHERE setting_key IN ('gg_rating_base_date', 'gg_rating_delta_start_date')
+      `
+    );
+    const settingsByKey = new Map(
+      settingRows.map((row) => [String(row?.setting_key || "").trim(), row])
+    );
+    const baseSetting = settingsByKey.get("gg_rating_base_date");
+    const deltaSetting = settingsByKey.get("gg_rating_delta_start_date");
+    const baseDate = normalizeDateOnly(baseSetting?.setting_value);
+    if (!baseDate) {
+      return res.status(400).json({
+        ok: false,
+        message: "Set gg_rating_base_date in System Settings before checking duels",
+      });
+    }
+    if (!deltaSetting) {
+      return res.status(404).json({ ok: false, message: "GG rating delta start date setting not found" });
+    }
+
+    await dbRunAsync(
+      `
+        UPDATE system_settings
+        SET
+          setting_value = ?,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE setting_key = 'gg_rating_delta_start_date'
+      `,
+      [deltaStartDate, normalizeNullableText(req.user?.player_id ?? req.user?.bga_id)]
+    );
+
+    const summary = await runProfileGgEloScript({ dryRun: true });
+    return res.json({
+      ok: true,
+      settings: {
+        gg_rating_base_date: baseDate,
+        gg_rating_delta_start_date: deltaStartDate,
+      },
+      summary,
+    });
+  } catch (error) {
+    console.error("Failed to check GG Elo duels", error);
+    return res.status(500).json({ ok: false, message: error?.message || "Failed to check GG Elo duels" });
+  } finally {
+    profileGgEloScriptRunning = false;
+  }
+});
+
+app.post("/admin-scripts/profile-gg-elo/run", requireAdmin, async (req, res) => {
+  const confirmedBaseDate = normalizeDateOnly(req.body?.gg_rating_base_date);
+  const confirmedDeltaStartDate = normalizeDateOnly(req.body?.gg_rating_delta_start_date);
+  if (!confirmedBaseDate || !confirmedDeltaStartDate) {
+    return res.status(400).json({ ok: false, message: "Check duels before running the GG Elo recalculation" });
+  }
+  if (profileGgEloScriptRunning) {
+    return res.status(409).json({ ok: false, message: "The GG Elo script is already running" });
+  }
+
+  profileGgEloScriptRunning = true;
+  try {
+    const rows = await dbAllAsync(
+      `
+        SELECT setting_key, setting_value
+        FROM system_settings
+        WHERE setting_key IN ('gg_rating_base_date', 'gg_rating_delta_start_date')
+      `
+    );
+    const values = new Map(
+      rows.map((row) => [String(row?.setting_key || "").trim(), normalizeDateOnly(row?.setting_value)])
+    );
+    if (
+      values.get("gg_rating_base_date") !== confirmedBaseDate
+      || values.get("gg_rating_delta_start_date") !== confirmedDeltaStartDate
+    ) {
+      return res.status(409).json({
+        ok: false,
+        message: "GG rating dates changed after the duel check. Check duels again before running.",
+      });
+    }
+
+    const summary = await runProfileGgEloScript({ dryRun: false });
+    return res.json({ ok: true, summary });
+  } catch (error) {
+    console.error("Failed to recalculate profile GG Elo", error);
+    return res.status(500).json({
+      ok: false,
+      message: error?.message || "Failed to recalculate profile GG Elo",
+    });
+  } finally {
+    profileGgEloScriptRunning = false;
   }
 });
 

@@ -23,6 +23,8 @@ class GgEloProfileRow:
 class GgEloDuelRow:
     duel_id: str
     time_utc: datetime
+    tournament_id: str | None
+    challenge_period_id: str | None
     player_1_id: str
     player_2_id: str
     dw1: int | None
@@ -91,6 +93,8 @@ class SqliteProfileGgEloRepository:
                 SELECT
                   trim(COALESCE(id, '')) AS id,
                   time_utc,
+                  NULLIF(trim(COALESCE(tournament_id, '')), '') AS tournament_id,
+                  NULLIF(trim(COALESCE(challenge_period_id, '')), '') AS challenge_period_id,
                   trim(COALESCE(player_1_id, '')) AS player_1_id,
                   trim(COALESCE(player_2_id, '')) AS player_2_id,
                   dw1,
@@ -119,6 +123,12 @@ class SqliteProfileGgEloRepository:
                 GgEloDuelRow(
                     duel_id=str(row["id"]).strip(),
                     time_utc=parsed_time,
+                    tournament_id=str(row["tournament_id"]).strip() if row["tournament_id"] is not None else None,
+                    challenge_period_id=(
+                        str(row["challenge_period_id"]).strip()
+                        if row["challenge_period_id"] is not None
+                        else None
+                    ),
                     player_1_id=str(row["player_1_id"]).strip(),
                     player_2_id=str(row["player_2_id"]).strip(),
                     dw1=_int_or_none(row["dw1"]),
@@ -232,6 +242,8 @@ class SqliteProfileGgEloRepository:
                 "dw1",
                 "dw2",
                 "duel_format",
+                "tournament_id",
+                "challenge_period_id",
                 "ranking",
                 "deleted_at",
             }

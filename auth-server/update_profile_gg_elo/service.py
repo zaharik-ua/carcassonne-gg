@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 
 from .sqlite_repository import (
+    GgEloDuelRow,
     GgEloDuelRatingUpdate,
     SqliteProfileGgEloRepository,
 )
@@ -48,6 +49,8 @@ class ProfileGgEloUpdateService:
         skipped_invalid_scores = 0
         processed_duels = 0
         period_duels = 0
+        processed_duel_rows = []
+        period_duel_rows = []
         duel_rating_updates: list[GgEloDuelRatingUpdate] = []
 
         duels = self.repository.load_duels_after(settings.base_date)
@@ -87,6 +90,7 @@ class ProfileGgEloUpdateService:
             player_a.duels += 1
             player_b.duels += 1
             processed_duels += 1
+            processed_duel_rows.append(duel)
 
             if duel.time_utc <= settings.delta_start_date:
                 player_a.elo_at_delta_start = player_a.elo
@@ -95,6 +99,7 @@ class ProfileGgEloUpdateService:
                 player_a.period_duels += 1
                 player_b.period_duels += 1
                 period_duels += 1
+                period_duel_rows.append(duel)
 
         ratings_by_id = {
             profile_id: round_rating(state.elo)
@@ -135,7 +140,61 @@ class ProfileGgEloUpdateService:
             "base_elo_backfills": len(base_elo_backfills_by_id),
             "updated_duel_elo_snapshots": len(duel_rating_updates),
             "updated_profiles": updated,
+            "duel_statistics": {
+                "from_base_date": _build_duel_statistics(
+                    setting_key="gg_rating_base_date",
+                    start_date=settings.base_date.isoformat(),
+                    duels=processed_duel_rows,
+                ),
+                "from_delta_start_date": _build_duel_statistics(
+                    setting_key="gg_rating_delta_start_date",
+                    start_date=settings.delta_start_date.isoformat(),
+                    duels=period_duel_rows,
+                ),
+            },
         }
+
+
+def _build_duel_statistics(
+    *,
+    setting_key: str,
+    start_date: str,
+    duels: list[GgEloDuelRow],
+) -> dict:
+    counts: dict[tuple[str, str], int] = {}
+    for duel in duels:
+        if duel.challenge_period_id:
+            source_type = "challenge"
+            source_id = duel.challenge_period_id
+        elif duel.tournament_id:
+            source_type = "tournament"
+            source_id = duel.tournament_id
+        else:
+            source_type = "unassigned"
+            source_id = "Unassigned"
+        key = (source_type, source_id)
+        counts[key] = counts.get(key, 0) + 1
+
+    groups = [
+        {
+            "source_type": source_type,
+            "source_id": source_id,
+            "duels": duel_count,
+        }
+        for (source_type, source_id), duel_count in sorted(
+            counts.items(),
+            key=lambda item: (
+                {"tournament": 0, "challenge": 1, "unassigned": 2}.get(item[0][0], 3),
+                item[0][1].lower(),
+            ),
+        )
+    ]
+    return {
+        "setting_key": setting_key,
+        "start_date": start_date,
+        "total_duels": len(duels),
+        "groups": groups,
+    }
 
 
 def infer_result_from_scores(dw1: int | float | None, dw2: int | float | None) -> dict | None:

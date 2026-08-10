@@ -28,6 +28,8 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
                 );
                 CREATE TABLE duels (
                   id TEXT,
+                  tournament_id TEXT,
+                  challenge_period_id TEXT,
                   time_utc TEXT,
                   player_1_id TEXT,
                   player_2_id TEXT,
@@ -55,14 +57,26 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
                   ('400', 'Active', '2026-01-05 00:00:00', 1800),
                   ('500', 'Active', NULL, NULL);
 
-                INSERT INTO duels (id, time_utc, player_1_id, player_2_id, dw1, dw2, duel_format, ranking, deleted_at)
+                INSERT INTO duels (
+                  id,
+                  tournament_id,
+                  challenge_period_id,
+                  time_utc,
+                  player_1_id,
+                  player_2_id,
+                  dw1,
+                  dw2,
+                  duel_format,
+                  ranking,
+                  deleted_at
+                )
                 VALUES
-                  ('before-base', '2025-12-31T23:59:59Z', '100', '200', 1, 0, 'Bo1', 1, NULL),
-                  ('before-delta', '2026-01-10T10:00:00Z', '100', '200', 1, 0, 'Bo1', 1, NULL),
-                  ('after-delta', '2026-02-10T10:00:00Z', '200', '100', 1, 0, 'Bo1', 1, NULL),
-                  ('ranking-zero', '2026-02-10T11:00:00Z', '100', '200', 1, 0, 'Bo1', 0, NULL),
-                  ('unknown-player', '2026-02-11T10:00:00Z', '100', '999', 1, 0, 'Bo1', 1, NULL),
-                  ('deleted-duel', '2026-02-12T10:00:00Z', '100', '200', 1, 0, 'Bo1', 1, '2026-02-12');
+                  ('before-base', 'Asian-Cup-2026', NULL, '2025-12-31T23:59:59Z', '100', '200', 1, 0, 'Bo1', 1, NULL),
+                  ('before-delta', 'Asian-Cup-2026', NULL, '2026-01-10T10:00:00Z', '100', '200', 1, 0, 'Bo1', 1, NULL),
+                  ('after-delta', NULL, '2026_summer_challenge_3', '2026-02-10T10:00:00Z', '200', '100', 1, 0, 'Bo1', 1, NULL),
+                  ('ranking-zero', 'Asian-Cup-2026', NULL, '2026-02-10T11:00:00Z', '100', '200', 1, 0, 'Bo1', 0, NULL),
+                  ('unknown-player', 'Asian-Cup-2026', NULL, '2026-02-11T10:00:00Z', '100', '999', 1, 0, 'Bo1', 1, NULL),
+                  ('deleted-duel', 'Asian-Cup-2026', NULL, '2026-02-12T10:00:00Z', '100', '200', 1, 0, 'Bo1', 1, '2026-02-12');
                 """
             )
 
@@ -82,6 +96,29 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
         self.assertEqual(summary["skipped_duels_unknown_players"], 1)
         self.assertEqual(summary["base_elo_backfills"], 1)
         self.assertEqual(summary["updated_profiles"], 4)
+        self.assertEqual(
+            summary["duel_statistics"]["from_base_date"],
+            {
+                "setting_key": "gg_rating_base_date",
+                "start_date": "2026-01-01T00:00:00+00:00",
+                "total_duels": 2,
+                "groups": [
+                    {"source_type": "tournament", "source_id": "Asian-Cup-2026", "duels": 1},
+                    {"source_type": "challenge", "source_id": "2026_summer_challenge_3", "duels": 1},
+                ],
+            },
+        )
+        self.assertEqual(
+            summary["duel_statistics"]["from_delta_start_date"],
+            {
+                "setting_key": "gg_rating_delta_start_date",
+                "start_date": "2026-02-01T00:00:00+00:00",
+                "total_duels": 1,
+                "groups": [
+                    {"source_type": "challenge", "source_id": "2026_summer_challenge_3", "duels": 1},
+                ],
+            },
+        )
 
         with sqlite3.connect(self.db_path) as conn:
             rows = conn.execute(

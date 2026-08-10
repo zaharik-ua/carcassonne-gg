@@ -518,6 +518,102 @@
     background: #fafbfd;
   }
 
+  .admin-script-note,
+  .admin-script-result,
+  .admin-script-stats {
+    grid-column: 1 / -1;
+  }
+
+  .admin-script-note {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .admin-script-result {
+    display: grid;
+    gap: 10px;
+  }
+
+  .admin-script-message {
+    margin: 0;
+    padding: 9px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+    background: var(--primary-soft);
+    color: var(--text);
+  }
+
+  .admin-script-message.success {
+    background: #e4f4e9;
+    color: var(--ok);
+  }
+
+  .admin-script-message.error {
+    background: #fbe8e8;
+    color: var(--danger);
+  }
+
+  .admin-script-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .admin-script-stat-card {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: #fafbfd;
+  }
+
+  .admin-script-stat-card h3 {
+    margin: 0;
+    font-size: 14px;
+  }
+
+  .admin-script-stat-total {
+    margin: 4px 0 8px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .admin-script-stat-groups {
+    display: grid;
+    gap: 5px;
+  }
+
+  .admin-script-stat-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 5px;
+    border-top: 1px solid #e3e8ef;
+    font-size: 12px;
+  }
+
+  .admin-script-stat-source {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-script-stat-type {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+
+  .admin-script-stat-count {
+    flex-shrink: 0;
+    font-weight: 700;
+  }
+
   @media (max-width: 640px) {
     .cp-edit-form {
       grid-template-columns: 1fr;
@@ -538,6 +634,10 @@
 
     .users-subtitle {
       line-height: 1.35;
+    }
+
+    .admin-script-stats {
+      grid-template-columns: 1fr;
     }
   }
 </style>
@@ -598,6 +698,7 @@
   const PROFILES_PUBLIC_URL = `${AUTH_BASE}/profiles/public`;
   const DUEL_FORMATS_URL = `${AUTH_BASE}/duel-formats`;
   const SYSTEM_SETTINGS_URL = `${AUTH_BASE}/system-settings`;
+  const PROFILE_GG_ELO_SCRIPT_URL = `${AUTH_BASE}/admin-scripts/profile-gg-elo`;
   const STREAMER_SCOREBOARD_STYLE_OPTIONS = ["Default", "Nallerheim"];
 
   const SECTION_CONFIG = {
@@ -678,6 +779,19 @@
       createLabel: "Create",
       load: () => apiJson(DUEL_FORMATS_URL, { method: "GET" }).then((data) => data.duel_formats || []),
     },
+    maintenanceScripts: {
+      key: "maintenanceScripts",
+      title: "Maintenance Scripts",
+      buttonLabel: "Run",
+      createLabel: "",
+      load: () => Promise.resolve([
+        {
+          id: "profile-gg-elo",
+          title: "Recalculate Player GG Elo Ratings",
+          description: "Check eligible ranked duels and update player GG Elo ratings.",
+        },
+      ]),
+    },
     systemSettings: {
       key: "systemSettings",
       title: "System Settings",
@@ -750,6 +864,7 @@
     tournaments: [],
     challengePeriods: [],
     duelFormats: [],
+    maintenanceScripts: [],
     systemSettings: [],
     matchesReference: [],
     profilesPublic: [],
@@ -4677,6 +4792,230 @@
     mountDetailForm(form, anchorRow, { toggleSameRow: true });
   }
 
+  function createGgEloDuelStatistics(summary) {
+    const statistics = summary?.duel_statistics || {};
+    const wrap = document.createElement("div");
+    wrap.className = "admin-script-stats";
+
+    [
+      { key: "from_base_date", label: "From gg_rating_base_date" },
+      { key: "from_delta_start_date", label: "From gg_rating_delta_start_date" },
+    ].forEach((definition) => {
+      const statistic = statistics[definition.key] || {};
+      const card = document.createElement("div");
+      card.className = "admin-script-stat-card";
+
+      const heading = document.createElement("h3");
+      const date = String(statistic.start_date || "").slice(0, 10) || "not set";
+      heading.textContent = `${definition.label} (${date})`;
+      card.appendChild(heading);
+
+      const total = document.createElement("p");
+      total.className = "admin-script-stat-total";
+      const totalDuels = Number(statistic.total_duels) || 0;
+      total.textContent = `${totalDuels} duel${totalDuels === 1 ? "" : "s"} included`;
+      card.appendChild(total);
+
+      const groups = document.createElement("div");
+      groups.className = "admin-script-stat-groups";
+      const groupItems = Array.isArray(statistic.groups) ? statistic.groups : [];
+      if (!groupItems.length) {
+        const empty = document.createElement("div");
+        empty.className = "admin-script-note";
+        empty.textContent = "No eligible duels.";
+        groups.appendChild(empty);
+      } else {
+        groupItems.forEach((group) => {
+          const row = document.createElement("div");
+          row.className = "admin-script-stat-row";
+
+          const source = document.createElement("span");
+          source.className = "admin-script-stat-source";
+          source.appendChild(document.createTextNode(String(group?.source_id || "Unassigned")));
+          const sourceType = document.createElement("span");
+          sourceType.className = "admin-script-stat-type";
+          sourceType.textContent = group?.source_type === "challenge"
+            ? "Challenge"
+            : group?.source_type === "tournament"
+              ? "Tournament"
+              : "Unassigned";
+          source.appendChild(sourceType);
+
+          const count = document.createElement("span");
+          count.className = "admin-script-stat-count";
+          count.textContent = String(Number(group?.duels) || 0);
+
+          row.appendChild(source);
+          row.appendChild(count);
+          groups.appendChild(row);
+        });
+      }
+      card.appendChild(groups);
+      wrap.appendChild(card);
+    });
+
+    return wrap;
+  }
+
+  function openProfileGgEloScriptForm(_item, anchorRow) {
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+    const loading = document.createElement("p");
+    loading.className = "admin-script-note";
+    loading.textContent = "Loading GG rating settings...";
+    form.appendChild(loading);
+    mountDetailForm(form, anchorRow, { toggleSameRow: true });
+
+    apiJson(SYSTEM_SETTINGS_URL, { method: "GET" }).then((data) => {
+      if (!form.isConnected) return;
+      const settings = Array.isArray(data?.system_settings) ? data.system_settings : [];
+      const baseSetting = settings.find((setting) => setting?.setting_key === "gg_rating_base_date");
+      const deltaSetting = settings.find((setting) => setting?.setting_key === "gg_rating_delta_start_date");
+      const baseDate = String(baseSetting?.setting_value || "").slice(0, 10);
+      const deltaStartDate = String(deltaSetting?.setting_value || "").slice(0, 10);
+
+      form.innerHTML = "";
+      const dateField = createDateRow("gg_rating_delta_start_date", deltaStartDate);
+      dateField.row.classList.add("cp-edit-row-full");
+      dateField.input.required = true;
+      form.appendChild(dateField.row);
+
+      const note = document.createElement("p");
+      note.className = "admin-script-note";
+      note.textContent = `Base date: ${baseDate || "not set"}. The delta start date is saved when you check duels.`;
+      form.appendChild(note);
+
+      const resultMount = document.createElement("div");
+      resultMount.className = "admin-script-result";
+      form.appendChild(resultMount);
+
+      const actions = document.createElement("div");
+      actions.className = "cp-edit-actions";
+
+      const checkBtn = document.createElement("button");
+      checkBtn.type = "submit";
+      checkBtn.className = "cp-btn cp-btn-secondary";
+      checkBtn.textContent = "Check Duels";
+
+      const runBtn = document.createElement("button");
+      runBtn.type = "button";
+      runBtn.className = "cp-btn cp-btn-primary hidden";
+      runBtn.textContent = "Recalculate GG Elo";
+
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "cp-btn cp-btn-secondary";
+      closeBtn.textContent = "Close";
+      closeBtn.addEventListener("click", () => {
+        closeInlineForm();
+        setStatus("", false);
+      });
+
+      actions.appendChild(checkBtn);
+      actions.appendChild(runBtn);
+      actions.appendChild(closeBtn);
+      form.appendChild(actions);
+
+      let checkedSettings = null;
+      let requestRunning = false;
+      let completed = false;
+
+      const setBusy = (busy, label) => {
+        requestRunning = busy;
+        dateField.input.disabled = busy || completed;
+        checkBtn.disabled = busy;
+        runBtn.disabled = busy;
+        closeBtn.disabled = busy;
+        checkBtn.textContent = busy && label === "check" ? "Checking..." : "Check Duels";
+        runBtn.textContent = busy && label === "run" ? "Recalculating..." : "Recalculate GG Elo";
+      };
+
+      const showMessage = (message, type) => {
+        const messageEl = document.createElement("p");
+        messageEl.className = `admin-script-message${type ? ` ${type}` : ""}`;
+        messageEl.textContent = message;
+        resultMount.appendChild(messageEl);
+      };
+
+      dateField.input.addEventListener("input", () => {
+        if (requestRunning) return;
+        checkedSettings = null;
+        runBtn.classList.add("hidden");
+        resultMount.innerHTML = "";
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const nextDeltaStartDate = String(dateField.input.value || "").trim();
+        if (!nextDeltaStartDate) {
+          resultMount.innerHTML = "";
+          showMessage("gg_rating_delta_start_date is required.", "error");
+          return;
+        }
+
+        setBusy(true, "check");
+        resultMount.innerHTML = "";
+        try {
+          const response = await apiJson(`${PROFILE_GG_ELO_SCRIPT_URL}/check`, {
+            method: "POST",
+            body: JSON.stringify({ gg_rating_delta_start_date: nextDeltaStartDate }),
+          });
+          checkedSettings = response.settings || null;
+          showMessage("Date saved. Review the eligible duels before recalculating GG Elo.", "success");
+          resultMount.appendChild(createGgEloDuelStatistics(response.summary));
+          runBtn.classList.remove("hidden");
+          setStatus("Duel check completed.", false);
+        } catch (error) {
+          checkedSettings = null;
+          runBtn.classList.add("hidden");
+          showMessage(error?.message || "Failed to check duels.", "error");
+          setStatus("Failed to check duels.", true);
+        } finally {
+          setBusy(false, "");
+        }
+      });
+
+      runBtn.addEventListener("click", async () => {
+        if (!checkedSettings) return;
+        if (!window.confirm("Recalculate GG Elo for all players using the checked duels?")) return;
+
+        setBusy(true, "run");
+        try {
+          const response = await apiJson(`${PROFILE_GG_ELO_SCRIPT_URL}/run`, {
+            method: "POST",
+            body: JSON.stringify(checkedSettings),
+          });
+          const summary = response.summary || {};
+          resultMount.innerHTML = "";
+          showMessage(
+            `GG Elo recalculation completed successfully. Updated ${Number(summary.updated_profiles) || 0} profiles and ${Number(summary.updated_duel_elo_snapshots) || 0} duel rating snapshots.`,
+            "success"
+          );
+          resultMount.appendChild(createGgEloDuelStatistics(summary));
+          completed = true;
+          checkBtn.classList.add("hidden");
+          runBtn.classList.add("hidden");
+          checkedSettings = null;
+          setStatus("GG Elo recalculation completed successfully.", false);
+        } catch (error) {
+          resultMount.innerHTML = "";
+          showMessage(error?.message || "Failed to recalculate GG Elo.", "error");
+          setStatus("GG Elo recalculation failed.", true);
+        } finally {
+          setBusy(false, "");
+        }
+      });
+    }).catch((error) => {
+      if (!form.isConnected) return;
+      form.innerHTML = "";
+      const message = document.createElement("p");
+      message.className = "admin-script-message error";
+      message.textContent = error?.message || "Failed to load GG rating settings.";
+      form.appendChild(message);
+      setStatus("Failed to load GG rating settings.", true);
+    });
+  }
+
   function openUserView(item, anchorRow) {
     const view = document.createElement("div");
     view.className = "cp-edit-form";
@@ -5182,6 +5521,30 @@
     });
   }
 
+  function renderMaintenanceScripts() {
+    sectionTitle.textContent = "Maintenance Scripts";
+    sectionCreateBtn.classList.add("hidden");
+    sectionCreateBtn.onclick = null;
+
+    if (!state.maintenanceScripts.length) {
+      renderListEmpty("No maintenance scripts available.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    state.maintenanceScripts.forEach((item) => {
+      sectionList.appendChild(createListRow({
+        imageSrc: "",
+        imageAlt: item.title,
+        imageRound: false,
+        title: item.title || item.id,
+        subtitle: item.description || "",
+        buttonLabel: "Run",
+        onClick: (row) => openProfileGgEloScriptForm(item, row),
+      }));
+    });
+  }
+
   function renderSystemSettings() {
     sectionTitle.textContent = "System Settings";
     sectionCreateBtn.classList.add("hidden");
@@ -5306,6 +5669,7 @@
     if (state.activeSection === "tournaments") renderTournaments();
     if (state.activeSection === "challengePeriods") renderChallengePeriods();
     if (state.activeSection === "duelFormats") renderDuelFormats();
+    if (state.activeSection === "maintenanceScripts") renderMaintenanceScripts();
     if (state.activeSection === "systemSettings") renderSystemSettings();
     if (state.activeSection === "users") renderUsers();
     if (state.activeSection === "auditTrail") renderAuditTrail();

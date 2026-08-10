@@ -418,6 +418,16 @@
     flex: 0 0 auto;
   }
 
+  .cp-team-row .cp-lineup-deadline-countdown {
+    color: #d93025;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+    max-width: none;
+    flex: 0 0 auto;
+  }
+
   .cp-team-flag {
     width: 20px;
     height: 20px;
@@ -1812,6 +1822,7 @@
   const DUEL_FIX_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/fix`;
   const DUEL_REFETCH_RESULTS_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/refetch-results`;
   const DEADLINE_HOURS_OPTIONS = [6, 12, 24, 48];
+  const LINEUP_DEADLINE_WARNING_SECONDS = 4 * 60 * 60;
   const isBlindLineupType = (value) => (
     ["blind", "secret", "closed"].includes(String(value || "").trim().toLowerCase())
   );
@@ -1836,6 +1847,48 @@
   let isCaptainPageInitializing = false;
   let captainPageRefreshQueued = false;
   let matchesListContext = null;
+  let lineupDeadlineCountdownTimerId = null;
+
+  function updateLineupDeadlineCountdown(element) {
+    const deadlineTs = Number(element?.dataset?.deadlineTs);
+    if (!element || !Number.isFinite(deadlineTs)) {
+      element?.classList.add("cp-hidden");
+      return;
+    }
+    const remainingMs = deadlineTs - Date.now();
+    const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+    const shouldShow = remainingMs <= 0 || remainingSeconds < LINEUP_DEADLINE_WARNING_SECONDS;
+    element.classList.toggle("cp-hidden", !shouldShow);
+    if (!shouldShow) return;
+    const hours = Math.floor(remainingSeconds / 3600);
+    const minutes = Math.floor((remainingSeconds % 3600) / 60);
+    const seconds = remainingSeconds % 60;
+    const valueElement = element.querySelector("strong");
+    if (valueElement) {
+      valueElement.textContent = `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+  }
+
+  function updateLineupDeadlineCountdowns() {
+    document.querySelectorAll(".cp-lineup-deadline-countdown[data-deadline-ts]").forEach((element) => {
+      updateLineupDeadlineCountdown(element);
+    });
+  }
+
+  function createLineupDeadlineCountdown(deadlineUtc) {
+    const deadlineTs = Date.parse(String(deadlineUtc || "").trim());
+    if (!Number.isFinite(deadlineTs)) return null;
+    const element = document.createElement("span");
+    element.className = "cp-lineup-deadline-countdown cp-hidden";
+    element.dataset.deadlineTs = String(deadlineTs);
+    element.appendChild(document.createTextNode("Lineup deadline: "));
+    element.appendChild(document.createElement("strong"));
+    updateLineupDeadlineCountdown(element);
+    if (lineupDeadlineCountdownTimerId === null) {
+      lineupDeadlineCountdownTimerId = window.setInterval(updateLineupDeadlineCountdowns, 1000);
+    }
+    return element;
+  }
 
   function setMatchesLoading(visible) {
     const el = document.getElementById("matches-loading");
@@ -4288,6 +4341,10 @@
 
     const teamsWrap = document.createElement("div");
     teamsWrap.className = "cp-teams";
+    const showLineupAddedIcons = isPlannedMatch;
+    const showLineupDeadlineCountdowns = isPlannedMatch && isBlindLineupType(match?.lineup_type);
+    const team1LineupAdded = match?.team_1_lineup_added === true || Number(match?.team_1_lineup_added) === 1;
+    const team2LineupAdded = match?.team_2_lineup_added === true || Number(match?.team_2_lineup_added) === 1;
 
     const team1Row = document.createElement("div");
     team1Row.className = "cp-team-row";
@@ -4301,13 +4358,16 @@
     const team1NameEl = document.createElement("span");
     team1NameEl.textContent = team1Name;
     team1Row.appendChild(team1NameEl);
-    if (match?.team_1_lineup_added === true || Number(match?.team_1_lineup_added) === 1) {
+    if (showLineupAddedIcons && team1LineupAdded) {
       const lineupAddedIcon = document.createElement("img");
       lineupAddedIcon.className = "cp-lineup-added-icon";
       lineupAddedIcon.src = "https://carcassonne.gg/gallery/lineup-added.png";
       lineupAddedIcon.alt = "Lineup added";
       lineupAddedIcon.title = "Lineup for this team has been added.";
       team1Row.appendChild(lineupAddedIcon);
+    } else if (showLineupDeadlineCountdowns) {
+      const lineupDeadlineCountdown = createLineupDeadlineCountdown(match?.lineup_deadline_utc);
+      if (lineupDeadlineCountdown) team1Row.appendChild(lineupDeadlineCountdown);
     }
     teamsWrap.appendChild(team1Row);
 
@@ -4323,13 +4383,16 @@
     const team2NameEl = document.createElement("span");
     team2NameEl.textContent = team2Name;
     team2Row.appendChild(team2NameEl);
-    if (match?.team_2_lineup_added === true || Number(match?.team_2_lineup_added) === 1) {
+    if (showLineupAddedIcons && team2LineupAdded) {
       const lineupAddedIcon = document.createElement("img");
       lineupAddedIcon.className = "cp-lineup-added-icon";
       lineupAddedIcon.src = "https://carcassonne.gg/gallery/lineup-added.png";
       lineupAddedIcon.alt = "Lineup added";
       lineupAddedIcon.title = "Lineup for this team has been added.";
       team2Row.appendChild(lineupAddedIcon);
+    } else if (showLineupDeadlineCountdowns) {
+      const lineupDeadlineCountdown = createLineupDeadlineCountdown(match?.lineup_deadline_utc);
+      if (lineupDeadlineCountdown) team2Row.appendChild(lineupDeadlineCountdown);
     }
     teamsWrap.appendChild(team2Row);
 
@@ -4563,6 +4626,7 @@
             : "The lineup deadline has passed.";
         } else {
           lineupBtn.textContent = "Submit lineup";
+          lineupBtn.classList.add("cp-edit-btn-attention");
         }
         lineupBtn.addEventListener("click", () => {
           openCaptainLineupModal(match, teamsById, captainTeamId, options);

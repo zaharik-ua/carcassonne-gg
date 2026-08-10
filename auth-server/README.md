@@ -49,6 +49,7 @@ npm start
 - `GOOGLE_CLIENT_SECRET` - з Google Cloud
 - `GOOGLE_CALLBACK_URL` - напр. `https://carcassonne.gg/auth/google/callback`
 - `DB_PATH` - шлях до SQLite, напр. `./data/auth.sqlite`
+- `PYTHON_BIN` - Python executable для maintenance-скриптів, за замовчуванням `python3`
 - `NODE_ENV=production` - для secure cookie у проді
 
 ## 5) Реверс-проксі (nginx приклад)
@@ -186,44 +187,53 @@ sudo systemctl status update-player-elo-daily.timer
 sudo systemctl status update-player-elo-missing.timer
 ```
 
-## 9) Оновлення GG Elo з публічного JSON
+## 9) Перерахунок GG Elo з локальних дуелей
 
 При старті `auth-server` таблиця `profiles` автоматично отримує поля:
 
+- `gg_base_elo REAL`
 - `gg_elo REAL`
+- `gg_elo_period_delta REAL`
 - `gg_elo_updated_at TEXT`
 - `gg_rating_position INTEGER`
 
-Ручний запуск синхронізації:
+Ручна перевірка без запису:
 
 ```bash
 cd auth-server
-python3 run_update_profile_gg_elo.py
-```
-
-Або через shell-обгортку:
-
-```bash
-cd auth-server
-./scripts/run_update_profile_gg_elo.sh
-```
-
-Скрипт читає `gg_profiles` з
-`https://zaharik-ua.github.io/carcassonne-gg/json-data/list_of_players.json`,
-зіставляє `gg_profiles[].id` (або `profile_id`) з `profiles.id` і для профілів
-із числовим GG Elo оновлює тільки `gg_elo`, `gg_elo_updated_at` і
-`gg_rating_position`. Позиція рахується серед активних профілів за спаданням
-GG Elo так само, як у списку гравців; для неактивних профілів позиція `NULL`.
-`updated_by`, `updated_at` та `audit_trail` не змінюються.
-
-Перевірка джерела й зіставлення без оновлення рядків:
-
-```bash
 python3 run_update_profile_gg_elo.py --dry-run
 ```
 
-Параметри `--db-path`, `--source-url` і `--timeout` дозволяють використати той
-самий entry point для майбутнього cron/systemd-запуску.
+Якщо summary коректний, реальний перерахунок:
+
+```bash
+python3 run_update_profile_gg_elo.py
+```
+
+Для іншої SQLite-бази передай `--db-path /path/to/auth.sqlite`. Також доступна
+shell-обгортка:
+
+```bash
+./scripts/run_update_profile_gg_elo.sh --dry-run
+./scripts/run_update_profile_gg_elo.sh
+```
+
+Скрипт читає `gg_rating_base_date` і `gg_rating_delta_start_date` з
+`system_settings`, послідовно обробляє рейтингові дуелі після базової дати та
+оновлює GG Elo, period delta, позиції активних гравців і Elo snapshots дуелей.
+У dry-run summary є два зрізи `duel_statistics`: від базової дати та від дати
+початку delta, згруповані за `tournament_id` або `challenge_period_id`.
+
+Той самий workflow доступний адміну на сайті:
+
+1. Відкрити `Admin` → `Maintenance Scripts`.
+2. Запустити `Recalculate Player GG Elo Ratings`.
+3. За потреби змінити `gg_rating_delta_start_date` і натиснути `Check Duels`.
+4. Перевірити обидва зрізи дуелей і підтвердити `Recalculate GG Elo`.
+
+API запуску захищений роллю admin, не дозволяє одночасні запуски та повторно
+звіряє обидві дати перед реальним оновленням. Перевірка дуелей, збереження
+delta-дати та перерахунок рейтингу не створюють записи в `audit_trail`.
 
 ## 10) GG-рейтинг дуелей
 

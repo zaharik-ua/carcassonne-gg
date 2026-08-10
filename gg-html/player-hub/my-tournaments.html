@@ -1108,6 +1108,60 @@
     min-height: 160px;
   }
 
+  .cp-tournament-rich-text-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .cp-tournament-rich-text-edit {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: #667085;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 12px;
+    height: 24px;
+    justify-content: center;
+    padding: 0;
+    width: 24px;
+  }
+
+  .cp-tournament-rich-text-edit:hover,
+  .cp-tournament-rich-text-edit:focus-visible {
+    background: #eef2f6;
+    color: #1a73b7;
+  }
+
+  .cp-tournament-rich-text-edit:disabled {
+    color: #98a2b3;
+    cursor: not-allowed;
+    opacity: 0.72;
+  }
+
+  .cp-tournament-rich-text-preview {
+    background: #f3f4f6;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    color: #667085;
+    display: -webkit-box;
+    font-size: 14px;
+    line-height: 1.45;
+    max-height: calc(4.35em + 16px);
+    min-height: 42px;
+    overflow: hidden;
+    padding: 8px 10px;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .cp-tournament-rich-text-preview.is-empty {
+    color: #98a2b3;
+    font-style: italic;
+  }
+
   .cp-tournament-section {
     grid-column: 1 / -1;
     display: grid;
@@ -5827,9 +5881,12 @@
     const renderMenu = () => {
       menu.querySelectorAll(".cp-dd-option,.cp-dd-empty").forEach((node) => node.remove());
       const query = filterQuery.trim().toLowerCase();
-      const visibleOptions = normalizedOptions.filter((option) => (
-        !query || `${option.label} ${option.value}`.toLowerCase().includes(query)
-      ));
+      const visibleOptions = normalizedOptions.filter((option) => {
+        const searchableText = config.searchByLabelOnly
+          ? option.label
+          : `${option.label} ${option.value}`;
+        return !query || searchableText.toLowerCase().includes(query);
+      });
       if (!visibleOptions.length) {
         const empty = document.createElement("div");
         empty.className = "cp-dd-empty";
@@ -5963,6 +6020,7 @@
       }
       input = createTournamentDropdown(currentValue, selectOptions, {
         searchable: options.searchable === true,
+        searchByLabelOnly: options.searchByLabelOnly === true,
         showLogo: options.showLogo === true,
       });
     } else {
@@ -6109,9 +6167,7 @@
     };
 
     addButton.addEventListener("click", () => {
-      const used = new Set(entries.map((entry) => entry.user_id));
-      const firstAvailable = userOptions.find((option) => !used.has(option.value));
-      entries.push({ user_id: firstAvailable?.value || "", role: "captain" });
+      entries.push({ user_id: "", role: "captain" });
       render();
     });
 
@@ -6321,9 +6377,7 @@
     };
 
     addButton.addEventListener("click", () => {
-      const used = new Set(entries.map((entry) => entry.team_id));
-      const firstAvailable = teamOptions.find((option) => option.type === teamType && !used.has(option.value));
-      entries.push({ team_id: firstAvailable?.value || "", captain_id: "" });
+      entries.push({ team_id: "", captain_id: "" });
       render();
       notifyChange();
     });
@@ -6632,11 +6686,12 @@
       const tournamentId = String(tournament?.id || "").trim();
       const teamParams = new URLSearchParams({ tournament_id: tournamentId });
       const standingsParams = new URLSearchParams({ tournament_id: tournamentId, stage: "Stage 1" });
-      const [usersData, teamsData, profilesData, categoriesData, tournamentTeamsData, standingsData] = await Promise.all([
+      const [usersData, teamsData, profilesData, categoriesData, iconsData, tournamentTeamsData, standingsData] = await Promise.all([
         requestTournamentJson(USER_OPTIONS_URL, { method: "GET" }),
         requestTournamentJson(TEAMS_URL, { method: "GET" }),
         requestTournamentJson(PROFILES_PUBLIC_URL, { method: "GET" }),
         requestTournamentJson(CATEGORIES_URL, { method: "GET" }),
+        requestTournamentJson(ICONS_URL, { method: "GET" }),
         requestTournamentJson(`${TOURNAMENT_TEAMS_URL}?${teamParams.toString()}`, { method: "GET" }),
         requestTournamentJson(`${STANDINGS_URL}?${standingsParams.toString()}`, { method: "GET" }),
       ]);
@@ -6645,6 +6700,7 @@
         teams: Array.isArray(teamsData?.teams) ? teamsData.teams : [],
         profiles: Array.isArray(profilesData?.profiles) ? profilesData.profiles : [],
         categories: Array.isArray(categoriesData?.categories) ? categoriesData.categories : [],
+        icons: Array.isArray(iconsData?.icons) ? iconsData.icons : [],
         tournamentTeams: Array.isArray(tournamentTeamsData?.tournament_teams)
           ? tournamentTeamsData.tournament_teams
           : [],
@@ -6658,9 +6714,71 @@
     }
   }
 
+  function createTournamentRichTextField(labelText, initialHtml, options = {}) {
+    const row = document.createElement("div");
+    row.className = `cp-edit-row cp-edit-row--full cp-edit-row--description${options.isRules ? " cp-edit-row--rules" : ""}`;
+
+    const head = document.createElement("div");
+    head.className = "cp-tournament-rich-text-head";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "cp-tournament-rich-text-edit";
+    editButton.title = `Edit ${labelText}`;
+    editButton.setAttribute("aria-label", `Edit ${labelText}`);
+    const editIcon = document.createElement("i");
+    editIcon.className = "fa-solid fa-pencil";
+    editIcon.setAttribute("aria-hidden", "true");
+    editButton.appendChild(editIcon);
+    head.appendChild(label);
+    head.appendChild(editButton);
+
+    const preview = document.createElement("div");
+    preview.className = "cp-tournament-rich-text-preview";
+    preview.setAttribute("role", "textbox");
+    preview.setAttribute("aria-label", labelText);
+    preview.setAttribute("aria-readonly", "true");
+    const previewSource = document.createElement("div");
+    previewSource.innerHTML = sanitizeNewsDescriptionHtml(initialHtml) || "";
+    previewSource.querySelectorAll("br").forEach((lineBreak) => lineBreak.replaceWith(" "));
+    previewSource.querySelectorAll("img").forEach((image) => {
+      image.replaceWith(`${String(image.alt || "Image").trim() || "Image"} `);
+    });
+    previewSource.querySelectorAll("p, li, h2, blockquote, .news-quote-author, .news-quote-text").forEach((block) => {
+      block.appendChild(document.createTextNode(" "));
+    });
+    const previewText = String(previewSource.textContent || "").replace(/\s+/g, " ").trim();
+    preview.textContent = previewText || "No content.";
+    preview.classList.toggle("is-empty", !previewText);
+
+    const editor = createNewsDescriptionEditor(initialHtml || "", {
+      placeholder: options.placeholder,
+      canUploadSource: true,
+      currentUserAuthId: tournamentEditorCache.currentUserAuthId,
+      isAdmin: true,
+    });
+    editor.root.classList.add("cp-hidden");
+
+    editButton.addEventListener("click", () => {
+      preview.classList.add("cp-hidden");
+      editor.root.classList.remove("cp-hidden");
+      editButton.classList.add("cp-hidden");
+      window.requestAnimationFrame(() => {
+        editor.root.querySelector(".cp-news-editor-area")?.focus();
+      });
+    });
+
+    row.appendChild(head);
+    row.appendChild(preview);
+    row.appendChild(editor.root);
+    return { row, editor };
+  }
+
   function renderMyTournamentEditForm(tournament, references) {
     const form = document.createElement("form");
     form.className = "cp-edit-form cp-tournament-form";
+    const tournamentId = String(tournament?.id || "").trim();
     const tournamentCategories = (references.categories || [])
       .filter((category) => Number(category?.is_tournament) === 1)
       .slice()
@@ -6670,6 +6788,25 @@
       })
       .map((category) => String(category?.name || "").trim())
       .filter(Boolean);
+    const currentLogo = toApiAbsoluteUrl(tournament?.logo || "");
+    const tournamentIconOptions = (Array.isArray(references.icons) ? references.icons : [])
+      .map((icon) => {
+        const iconLink = toApiAbsoluteUrl(icon?.icon_link || "");
+        return {
+          value: iconLink,
+          label: String(icon?.name || icon?.id || "").trim(),
+          logo: iconLink,
+        };
+      })
+      .filter((icon) => icon.value && icon.label)
+      .sort((left, right) => left.label.localeCompare(right.label));
+    if (currentLogo && !tournamentIconOptions.some((icon) => icon.value === currentLogo)) {
+      tournamentIconOptions.unshift({
+        value: currentLogo,
+        label: "Current logo",
+        logo: currentLogo,
+      });
+    }
 
     const actions = document.createElement("div");
     actions.className = "cp-edit-actions";
@@ -6687,7 +6824,7 @@
     const recalculateButton = document.createElement("button");
     recalculateButton.type = "button";
     recalculateButton.className = "cp-btn cp-btn-secondary cp-btn-push-right";
-    recalculateButton.textContent = "Recalculate";
+    recalculateButton.textContent = "Recalculate Standings";
     recalculateButton.title = "Recalculate standings";
     actions.appendChild(saveButton);
     actions.appendChild(cancelButton);
@@ -6698,10 +6835,14 @@
     status.className = "cp-edit-error";
     form.appendChild(status);
 
-    const idField = createTournamentFormRow("ID", tournament?.id || "", { readOnly: true });
     const nameField = createTournamentFormRow("Name", tournament?.name || "");
     const shortTitleField = createTournamentFormRow("Short title", tournament?.short_title || "");
-    const logoField = createTournamentFormRow("Logo", tournament?.logo || "");
+    const logoField = createTournamentFormRow("Logo", currentLogo, {
+      selectOptions: [{ value: "", label: "Not selected", logo: "" }].concat(tournamentIconOptions),
+      searchable: true,
+      searchByLabelOnly: true,
+      showLogo: true,
+    });
     const linkField = createTournamentFormRow("Link", tournament?.link || "");
     const tournamentTypeField = createTournamentFormRow(
       "Tournament type",
@@ -6778,7 +6919,6 @@
     );
 
     [
-      idField,
       nameField,
       shortTitleField,
       logoField,
@@ -6797,33 +6937,17 @@
       isTestField,
     ].forEach((field) => form.appendChild(field.row));
 
-    const aboutRow = document.createElement("div");
-    aboutRow.className = "cp-edit-row cp-edit-row--full cp-edit-row--description";
-    const aboutLabel = document.createElement("label");
-    aboutLabel.textContent = "About";
-    const aboutEditor = createNewsDescriptionEditor(tournament?.about || "", {
+    const aboutField = createTournamentRichTextField("About", tournament?.about || "", {
       placeholder: "Write formatted tournament information...",
-      canUploadSource: true,
-      currentUserAuthId: tournamentEditorCache.currentUserAuthId,
-      isAdmin: true,
     });
-    aboutRow.appendChild(aboutLabel);
-    aboutRow.appendChild(aboutEditor.root);
-    form.appendChild(aboutRow);
-
-    const rulesRow = document.createElement("div");
-    rulesRow.className = "cp-edit-row cp-edit-row--full cp-edit-row--description cp-edit-row--rules";
-    const rulesLabel = document.createElement("label");
-    rulesLabel.textContent = "Rules";
-    const rulesEditor = createNewsDescriptionEditor(tournament?.rules || "", {
+    const rulesField = createTournamentRichTextField("Rules", tournament?.rules || "", {
       placeholder: "Write formatted tournament rules...",
-      canUploadSource: true,
-      currentUserAuthId: tournamentEditorCache.currentUserAuthId,
-      isAdmin: true,
+      isRules: true,
     });
-    rulesRow.appendChild(rulesLabel);
-    rulesRow.appendChild(rulesEditor.root);
-    form.appendChild(rulesRow);
+    const aboutEditor = aboutField.editor;
+    const rulesEditor = rulesField.editor;
+    form.appendChild(aboutField.row);
+    form.appendChild(rulesField.row);
 
     const accessUsersEditor = createTournamentAccessUsersEditor(
       references.users,
@@ -6902,21 +7026,18 @@
     const setBusy = (busy, action = "") => {
       isBusy = !!busy;
       Array.from(form.querySelectorAll("input, select, button")).forEach((control) => {
-        if (control === idField.input) return;
         control.disabled = isBusy;
       });
-      idField.input.readOnly = true;
       aboutEditor.setDisabled(isBusy);
       rulesEditor.setDisabled(isBusy);
       saveButton.textContent = isBusy && action === "save" ? "Saving..." : "Save";
       recalculateButton.textContent = isBusy && action === "recalculate"
         ? "Recalculating..."
-        : "Recalculate";
+        : "Recalculate Standings";
       syncConditionalFields();
     };
 
     recalculateButton.addEventListener("click", async () => {
-      const tournamentId = String(idField.input.value || "").trim();
       if (!tournamentId) {
         setStatus("Tournament ID is required.");
         return;
@@ -6959,7 +7080,7 @@
       const lineupSizeType = supportsLineup && lineupSizeTypeField.input.value === "1" ? 1 : 2;
       const lineupSize = Number.parseInt(lineupSizeField.input.value, 10);
       const payload = {
-        id: String(idField.input.value || "").trim(),
+        id: tournamentId,
         name: String(nameField.input.value || "").trim(),
         short_title: String(shortTitleField.input.value || "").trim(),
         logo: String(logoField.input.value || "").trim(),
