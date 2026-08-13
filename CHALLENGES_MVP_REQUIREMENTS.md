@@ -426,6 +426,8 @@ Terminal-статуси для повторного запрошення:
 | `name` | `TEXT` | ні | — | Назва періоду. |
 | `description` | `TEXT` | так | `NULL` | Короткий опис. |
 | `logo` | `TEXT` | так | `NULL` | Посилання на картинку логотипа періоду. |
+| `rivals_tournament_id` | `TEXT` | так | `NULL` | ID пов'язаного турніру категорії `Rivals`. |
+| `max_matches_per_player` | `INTEGER` | ні | `1` | Максимальна кількість матчів одного гравця в цьому періоді. |
 | `status` | `TEXT` | ні | `'draft'` | `draft`, `planning_open`, `active`, `result_review`, `archived` або `cancelled`. |
 | `planning_starts_at` | `TEXT` | ні | — | Початок планування в UTC. |
 | `play_starts_at` | `TEXT` | ні | — | Початок ігрового періоду в UTC. |
@@ -439,7 +441,9 @@ Terminal-статуси для повторного запрошення:
 Обов'язкові constraints та індекси:
 
 - `CHECK (planning_starts_at <= play_starts_at AND play_starts_at < play_ends_at AND play_ends_at <= result_review_ends_at)`;
+- `CHECK (max_matches_per_player >= 1)`;
 - `CHECK` для дозволених значень `status`;
+- індекс `rivals_tournament_id` для списку періодів пов'язаного Rivals-турніру;
 - індекс `(status, planning_starts_at, play_ends_at, result_review_ends_at)` для пошуку відкритих періодів.
 
 ### 21.2. `challenge_period_players`

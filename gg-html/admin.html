@@ -770,7 +770,13 @@
       title: "Challenge Periods",
       buttonLabel: "Edit",
       createLabel: "Create",
-      load: () => apiJson(CHALLENGE_PERIODS_URL, { method: "GET" }).then((data) => data.challenge_periods || []),
+      load: () => Promise.all([
+        apiJson(CHALLENGE_PERIODS_URL, { method: "GET" }),
+        apiJson(TOURNAMENTS_URL, { method: "GET" }),
+      ]).then(([periodsData, tournamentsData]) => {
+        state.tournaments = Array.isArray(tournamentsData?.tournaments) ? tournamentsData.tournaments : [];
+        return periodsData.challenge_periods || [];
+      }),
     },
     duelFormats: {
       key: "duelFormats",
@@ -4197,6 +4203,27 @@
     const logoField = createTextRow("logo", item?.logo || "");
     logoField.input.type = "url";
     logoField.input.placeholder = "https://carcassonne.gg/gallery/asian-cup.png";
+    const rivalsTournamentOptions = [{ value: "", label: "Not selected" }].concat(
+      state.tournaments
+        .filter((tournament) => String(tournament?.category || "").trim().toLowerCase() === "rivals")
+        .slice()
+        .sort((left, right) => String(left?.name || left?.id || "").localeCompare(String(right?.name || right?.id || "")))
+        .map((tournament) => ({
+          value: String(tournament?.id || "").trim(),
+          label: `${String(tournament?.name || tournament?.id || "").trim()} (${String(tournament?.id || "").trim()})`,
+        }))
+    );
+    const rivalsTournamentField = createSelectOptionsRow(
+      "Rivals",
+      String(item?.rivals_tournament_id || ""),
+      rivalsTournamentOptions,
+      false
+    );
+    const maxMatchesPerPlayerField = createNumberRow(
+      "Max matches per player",
+      item?.max_matches_per_player ?? 1
+    );
+    maxMatchesPerPlayerField.input.min = "1";
     const statusField = createSelectOptionsRow(
       "status",
       String(item?.status || "draft"),
@@ -4220,6 +4247,8 @@
     form.appendChild(shortNameField.row);
     form.appendChild(descriptionField.row);
     form.appendChild(logoField.row);
+    form.appendChild(rivalsTournamentField.row);
+    form.appendChild(maxMatchesPerPlayerField.row);
     form.appendChild(statusField.row);
     form.appendChild(planningStartsField.row);
     form.appendChild(playStartsField.row);
@@ -4259,6 +4288,8 @@
         short_name: String(shortNameField.input.value || "").trim(),
         description: String(descriptionField.input.value || "").trim(),
         logo: String(logoField.input.value || "").trim(),
+        rivals_tournament_id: String(rivalsTournamentField.select.value || "").trim() || null,
+        max_matches_per_player: Number.parseInt(String(maxMatchesPerPlayerField.input.value || "").trim(), 10),
         status: String(statusField.select.value || "draft").trim(),
         planning_starts_at: dateTimeUtcInputToIso(planningStartsField.input.value),
         play_starts_at: dateTimeUtcInputToIso(playStartsField.input.value),
@@ -4271,6 +4302,10 @@
       }
       if (!payload.name) {
         setStatus("Challenge period name is required.", true);
+        return;
+      }
+      if (!Number.isInteger(payload.max_matches_per_player) || payload.max_matches_per_player < 1) {
+        setStatus("Max matches per player must be a positive integer.", true);
         return;
       }
       if (!payload.planning_starts_at || !payload.play_starts_at || !payload.play_ends_at || !payload.result_review_ends_at) {
@@ -5478,6 +5513,8 @@
       const subtitleParts = [];
       if (item.short_name) subtitleParts.push(`Short: ${String(item.short_name).trim()}`);
       if (item.status) subtitleParts.push(String(item.status).trim());
+      if (item.rivals_tournament_id) subtitleParts.push(`Rivals: ${String(item.rivals_tournament_id).trim()}`);
+      subtitleParts.push(`Max matches/player: ${Number(item.max_matches_per_player) || 1}`);
       if (item.planning_starts_at) subtitleParts.push(`Planning: ${formatDateUtc(item.planning_starts_at)}`);
       if (item.play_starts_at || item.play_ends_at) {
         subtitleParts.push(`Play: ${formatDateUtc(item.play_starts_at)} - ${formatDateUtc(item.play_ends_at)}`);

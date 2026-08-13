@@ -4927,6 +4927,8 @@ function ensureChallengesSchema() {
       short_name TEXT,
       description TEXT,
       logo TEXT,
+      rivals_tournament_id TEXT,
+      max_matches_per_player INTEGER NOT NULL DEFAULT 1,
       status TEXT NOT NULL DEFAULT 'draft',
       planning_starts_at TEXT NOT NULL,
       play_starts_at TEXT NOT NULL,
@@ -4936,6 +4938,8 @@ function ensureChallengesSchema() {
       updated_by TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (rivals_tournament_id) REFERENCES tournaments(id) ON DELETE SET NULL,
+      CHECK (max_matches_per_player >= 1),
       CHECK (status IN ('draft', 'planning_open', 'active', 'result_review', 'archived', 'cancelled')),
       CHECK (
         planning_starts_at <= play_starts_at
@@ -4953,8 +4957,25 @@ function ensureChallengesSchema() {
         console.error("Failed to inspect challenge_periods schema", pragmaErr);
         return;
       }
-      addColumnIfMissing(columns || [], "challenge_periods", "logo", "TEXT");
-      addColumnIfMissing(columns || [], "challenge_periods", "short_name", "TEXT");
+      db.serialize(() => {
+        addColumnIfMissing(columns || [], "challenge_periods", "logo", "TEXT");
+        addColumnIfMissing(columns || [], "challenge_periods", "short_name", "TEXT");
+        addColumnIfMissing(columns || [], "challenge_periods", "rivals_tournament_id", "TEXT");
+        addColumnIfMissing(
+          columns || [],
+          "challenge_periods",
+          "max_matches_per_player",
+          "INTEGER NOT NULL DEFAULT 1 CHECK (max_matches_per_player >= 1)"
+        );
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_challenge_periods_rivals_tournament ON challenge_periods(rivals_tournament_id)",
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure challenge_periods Rivals tournament index", indexErr);
+            }
+          }
+        );
+      });
     });
     db.run(
       "CREATE INDEX IF NOT EXISTS idx_challenge_periods_status_dates ON challenge_periods(status, planning_starts_at, play_ends_at, result_review_ends_at)",
@@ -8410,6 +8431,8 @@ async function loadChallengePeriodById(periodId) {
         short_name,
         description,
         logo,
+        rivals_tournament_id,
+        max_matches_per_player,
         status,
         planning_starts_at,
         play_starts_at,
@@ -8432,6 +8455,14 @@ function normalizeChallengePeriodPayload(payload) {
   const shortName = normalizeNullableText(payload?.short_name ?? payload?.shortName);
   const description = normalizeNullableText(payload?.description);
   const logo = normalizeNullableText(payload?.logo);
+  const rivalsTournamentId = normalizeNullableText(
+    payload?.rivals_tournament_id ?? payload?.rivalsTournamentId ?? payload?.rivals
+  );
+  const rawMaxMatchesPerPlayer = payload?.max_matches_per_player ?? payload?.maxMatchesPerPlayer ?? 1;
+  const parsedMaxMatchesPerPlayer = Number(String(rawMaxMatchesPerPlayer).trim());
+  const maxMatchesPerPlayer = Number.isInteger(parsedMaxMatchesPerPlayer) && parsedMaxMatchesPerPlayer > 0
+    ? parsedMaxMatchesPerPlayer
+    : null;
   const status = normalizeChallengePeriodStatus(payload?.status);
   const planningStartsAt = normalizeUtcTimestamp(payload?.planning_starts_at ?? payload?.planningStartsAt);
   const playStartsAt = normalizeUtcTimestamp(payload?.play_starts_at ?? payload?.playStartsAt);
@@ -8443,12 +8474,36 @@ function normalizeChallengePeriodPayload(payload) {
     short_name: shortName,
     description,
     logo,
+    rivals_tournament_id: rivalsTournamentId,
+    max_matches_per_player: maxMatchesPerPlayer,
     status,
     planning_starts_at: planningStartsAt,
     play_starts_at: playStartsAt,
     play_ends_at: playEndsAt,
     result_review_ends_at: resultReviewEndsAt,
   };
+}
+
+async function resolveChallengePeriodRivalsTournamentId(value) {
+  const requestedId = normalizeNullableText(value);
+  if (!requestedId) return { id: null, error: "" };
+
+  const tournament = await dbGetAsync(
+    `
+      SELECT id, category
+      FROM tournaments
+      WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
+      LIMIT 1
+    `,
+    [requestedId]
+  );
+  if (!tournament) {
+    return { id: null, error: "Selected Rivals tournament was not found" };
+  }
+  if (String(tournament.category || "").trim().toLowerCase() !== "rivals") {
+    return { id: null, error: "Selected tournament must have the Rivals category" };
+  }
+  return { id: normalizeNullableText(tournament.id), error: "" };
 }
 
 function normalizeChallengePlayerPeriodStatus(value) {
@@ -8635,6 +8690,7 @@ function getManualChallengePlayerPeriodStatus(value) {
 
 function validateChallengePeriodPayload(period) {
   if (!period.name) return "name is required";
+  if (!period.max_matches_per_player) return "max_matches_per_player must be a positive integer";
   if (!period.planning_starts_at) return "planning_starts_at is required";
   if (!period.play_starts_at) return "play_starts_at is required";
   if (!period.play_ends_at) return "play_ends_at is required";
@@ -8935,6 +8991,8 @@ function mapChallengePeriodForPlayer(row) {
     short_name: row.short_name,
     description: row.description,
     logo: row.logo,
+    rivals_tournament_id: row.rivals_tournament_id || null,
+    max_matches_per_player: normalizePositiveInteger(row.max_matches_per_player) || 1,
     status: row.status,
     planning_starts_at: row.planning_starts_at,
     play_starts_at: row.play_starts_at,
@@ -9004,6 +9062,8 @@ app.get("/challenge-periods/player", async (req, res) => {
           cp.short_name,
           cp.description,
           cp.logo,
+          cp.rivals_tournament_id,
+          cp.max_matches_per_player,
           cp.status,
           cp.planning_starts_at,
           cp.play_starts_at,
@@ -11112,6 +11172,8 @@ app.get("/challenge-periods", requireAdmin, async (_req, res) => {
         short_name,
         description,
         logo,
+        rivals_tournament_id,
+        max_matches_per_player,
         status,
         planning_starts_at,
         play_starts_at,
@@ -11143,6 +11205,12 @@ app.post("/challenge-periods", requireAdmin, async (req, res) => {
   const periodId = requestedId || buildChallengePeriodId(period.name, period.play_starts_at);
 
   try {
+    const rivalsTournament = await resolveChallengePeriodRivalsTournamentId(period.rivals_tournament_id);
+    if (rivalsTournament.error) {
+      return res.status(400).json({ ok: false, message: rivalsTournament.error });
+    }
+    period.rivals_tournament_id = rivalsTournament.id;
+
     await dbRunAsync(
       `
         INSERT INTO challenge_periods (
@@ -11151,6 +11219,8 @@ app.post("/challenge-periods", requireAdmin, async (req, res) => {
           short_name,
           description,
           logo,
+          rivals_tournament_id,
+          max_matches_per_player,
           status,
           planning_starts_at,
           play_starts_at,
@@ -11161,7 +11231,7 @@ app.post("/challenge-periods", requireAdmin, async (req, res) => {
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
       [
         periodId,
@@ -11169,6 +11239,8 @@ app.post("/challenge-periods", requireAdmin, async (req, res) => {
         period.short_name,
         period.description,
         period.logo,
+        period.rivals_tournament_id,
+        period.max_matches_per_player,
         period.status,
         period.planning_starts_at,
         period.play_starts_at,
@@ -11221,6 +11293,12 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
       return res.status(404).json({ ok: false, message: "Challenge period not found" });
     }
 
+    const rivalsTournament = await resolveChallengePeriodRivalsTournamentId(period.rivals_tournament_id);
+    if (rivalsTournament.error) {
+      return res.status(400).json({ ok: false, message: rivalsTournament.error });
+    }
+    period.rivals_tournament_id = rivalsTournament.id;
+
     let updatedRow = null;
     let expiredRequestAudits = [];
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
@@ -11245,6 +11323,8 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
             short_name = ?,
             description = ?,
             logo = ?,
+            rivals_tournament_id = ?,
+            max_matches_per_player = ?,
             status = ?,
             planning_starts_at = ?,
             play_starts_at = ?,
@@ -11259,6 +11339,8 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
           period.short_name,
           period.description,
           period.logo,
+          period.rivals_tournament_id,
+          period.max_matches_per_player,
           period.status,
           period.planning_starts_at,
           period.play_starts_at,
@@ -11886,55 +11968,90 @@ app.get("/tournaments", (req, res, next) => {
           : []),
     (err, rows) => {
       if (err) return next(err);
-      return res.json({
-        ok: true,
-        tournaments: (rows || []).map((row) => {
-          const tournament = {
-            id: row.id,
-            name: row.name,
-            short_title: row.short_title,
-            logo: row.logo,
-            link: row.link,
-            is_test: normalizeBooleanInt(row.is_test) === 1,
-            about: row.about,
-            rules: row.rules,
-            access_type: normalizeTournamentAccessType(row.access_type),
-            subtype: row.subtype ? normalizeTournamentAccessType(row.subtype) : null,
-            tournament_type: normalizeTournamentType(row.tournament_type),
-            team_type: normalizeTeamType(row.team_type),
-            category: normalizeTournamentCategory(row.tournament_type, row.category),
-            player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
-            lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
-            lineup_size: normalizeTournamentLineupSize(row.lineup_size),
-            tournament_format: normalizeTournamentFormat(row.tournament_format),
-            stage1_groups: normalizeBooleanInt(row.stage1_groups) === 1,
-            stage1_format: normalizeTournamentStageFormat(row.stage1_format),
-            stage2_format: normalizeTournamentStageFormat(row.stage2_format),
-            access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
-            access_via_access_users: Number(row.access_via_access_users) === 1,
-            captain_team_ids: normalizeTournamentCaptainTeamIds(row.captain_team_ids_csv),
-          };
-          if (includeAccessUsers) {
-            tournament.access_user_ids = String(row.access_user_ids_csv || "")
-              .split(",")
-              .map((value) => Number.parseInt(value, 10))
-              .filter((value) => Number.isInteger(value) && value > 0);
-            tournament.access_users = String(row.access_users_csv || "")
-              .split("|")
-              .map((entry) => {
-                const [userIdRaw, roleRaw] = String(entry || "").split(":");
-                const userId = Number.parseInt(String(userIdRaw || "").trim(), 10);
-                if (!Number.isInteger(userId) || userId <= 0) return null;
-                return {
-                  user_id: userId,
-                  role: normalizeTournamentAccessRole(roleRaw),
-                };
-              })
-              .filter(Boolean);
-          }
-          return tournament;
-        }),
-      });
+      return db.all(
+        `
+          SELECT
+            id,
+            name,
+            status,
+            play_starts_at,
+            play_ends_at,
+            rivals_tournament_id
+          FROM challenge_periods
+          WHERE trim(COALESCE(rivals_tournament_id, '')) <> ''
+          ORDER BY datetime(play_starts_at) DESC, id COLLATE NOCASE ASC
+        `,
+        (periodErr, periodRows) => {
+          if (periodErr) return next(periodErr);
+
+          const challengePeriodsByTournamentId = new Map();
+          (periodRows || []).forEach((period) => {
+            const tournamentKey = String(period?.rivals_tournament_id || "").trim().toUpperCase();
+            if (!tournamentKey) return;
+            if (!challengePeriodsByTournamentId.has(tournamentKey)) {
+              challengePeriodsByTournamentId.set(tournamentKey, []);
+            }
+            challengePeriodsByTournamentId.get(tournamentKey).push({
+              id: period.id,
+              name: period.name,
+              status: period.status,
+              play_starts_at: period.play_starts_at,
+              play_ends_at: period.play_ends_at,
+            });
+          });
+
+          return res.json({
+            ok: true,
+            tournaments: (rows || []).map((row) => {
+              const tournament = {
+                id: row.id,
+                name: row.name,
+                short_title: row.short_title,
+                logo: row.logo,
+                link: row.link,
+                is_test: normalizeBooleanInt(row.is_test) === 1,
+                about: row.about,
+                rules: row.rules,
+                access_type: normalizeTournamentAccessType(row.access_type),
+                subtype: row.subtype ? normalizeTournamentAccessType(row.subtype) : null,
+                tournament_type: normalizeTournamentType(row.tournament_type),
+                team_type: normalizeTeamType(row.team_type),
+                category: normalizeTournamentCategory(row.tournament_type, row.category),
+                player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
+                lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
+                lineup_size: normalizeTournamentLineupSize(row.lineup_size),
+                tournament_format: normalizeTournamentFormat(row.tournament_format),
+                stage1_groups: normalizeBooleanInt(row.stage1_groups) === 1,
+                stage1_format: normalizeTournamentStageFormat(row.stage1_format),
+                stage2_format: normalizeTournamentStageFormat(row.stage2_format),
+                access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
+                access_via_access_users: Number(row.access_via_access_users) === 1,
+                captain_team_ids: normalizeTournamentCaptainTeamIds(row.captain_team_ids_csv),
+                challenge_periods: challengePeriodsByTournamentId.get(String(row.id || "").trim().toUpperCase()) || [],
+              };
+              if (includeAccessUsers) {
+                tournament.access_user_ids = String(row.access_user_ids_csv || "")
+                  .split(",")
+                  .map((value) => Number.parseInt(value, 10))
+                  .filter((value) => Number.isInteger(value) && value > 0);
+                tournament.access_users = String(row.access_users_csv || "")
+                  .split("|")
+                  .map((entry) => {
+                    const [userIdRaw, roleRaw] = String(entry || "").split(":");
+                    const userId = Number.parseInt(String(userIdRaw || "").trim(), 10);
+                    if (!Number.isInteger(userId) || userId <= 0) return null;
+                    return {
+                      user_id: userId,
+                      role: normalizeTournamentAccessRole(roleRaw),
+                    };
+                  })
+                  .filter(Boolean);
+              }
+              return tournament;
+            }),
+          });
+        }
+      );
     }
   );
 });

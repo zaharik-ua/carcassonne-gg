@@ -1263,6 +1263,63 @@
     padding: 3px;
   }
 
+  .cp-rivals-periods {
+    border-top: 1px solid #e5e7eb;
+    display: grid;
+    gap: 7px;
+    margin-top: 5px;
+    padding-top: 8px;
+  }
+
+  .cp-rivals-periods-title {
+    color: #344054;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .cp-rivals-period-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .cp-rivals-period {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+    display: grid;
+    gap: 3px;
+    padding: 7px 9px;
+  }
+
+  .cp-rivals-period-head {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .cp-rivals-period-name {
+    color: #1f2937;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .cp-rivals-period-status {
+    background: #eef2f6;
+    border-radius: 999px;
+    color: #475467;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+  }
+
+  .cp-rivals-period-dates,
+  .cp-rivals-period-empty {
+    color: #667085;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
   .cp-edit-success {
     color: #177245;
     font-size: 12px;
@@ -6603,6 +6660,58 @@
     };
   }
 
+  function appendRivalsChallengePeriods(container, tournament) {
+    if (String(tournament?.category || "").trim().toLowerCase() !== "rivals") return;
+
+    const section = document.createElement("section");
+    section.className = "cp-rivals-periods";
+    const periods = Array.isArray(tournament?.challenge_periods) ? tournament.challenge_periods : [];
+
+    const sectionTitle = document.createElement("div");
+    sectionTitle.className = "cp-rivals-periods-title";
+    sectionTitle.textContent = `Challenge Periods (${periods.length})`;
+    section.appendChild(sectionTitle);
+
+    if (!periods.length) {
+      const empty = document.createElement("div");
+      empty.className = "cp-rivals-period-empty";
+      empty.textContent = "No Challenge Periods yet.";
+      section.appendChild(empty);
+      container.appendChild(section);
+      return;
+    }
+
+    const list = document.createElement("div");
+    list.className = "cp-rivals-period-list";
+    periods.forEach((period) => {
+      const periodRow = document.createElement("div");
+      periodRow.className = "cp-rivals-period";
+
+      const head = document.createElement("div");
+      head.className = "cp-rivals-period-head";
+      const name = document.createElement("span");
+      name.className = "cp-rivals-period-name";
+      name.textContent = String(period?.name || period?.id || "Challenge Period");
+      const status = document.createElement("span");
+      status.className = "cp-rivals-period-status";
+      status.textContent = String(period?.status || "draft");
+      head.appendChild(name);
+      head.appendChild(status);
+
+      const dates = document.createElement("div");
+      dates.className = "cp-rivals-period-dates";
+      const start = period?.play_starts_at ? formatNewsDateTime(period.play_starts_at) : "Not set";
+      const end = period?.play_ends_at ? formatNewsDateTime(period.play_ends_at) : "Not set";
+      dates.textContent = `${start} – ${end}`;
+
+      periodRow.appendChild(head);
+      periodRow.appendChild(dates);
+      list.appendChild(periodRow);
+    });
+    section.appendChild(list);
+    container.appendChild(section);
+  }
+
   function renderMyTournamentsList(tournaments) {
     setPageHeading("My Tournaments");
     clearFilters();
@@ -6658,6 +6767,7 @@
       });
       main.appendChild(title);
       main.appendChild(meta);
+      appendRivalsChallengePeriods(main, item);
 
       const actions = document.createElement("div");
       actions.className = "cp-news-actions";

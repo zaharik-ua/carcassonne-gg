@@ -426,6 +426,8 @@ One entry describes one period of Challenges.
 | `name` | `TEXT` |no| — |Name of the period.|
 | `description` | `TEXT` |yes| `NULL` |Brief description.|
 | `logo` | `TEXT` |yes| `NULL` |Link to a picture of the period logo.|
+| `rivals_tournament_id` | `TEXT` |yes| `NULL` |ID of the related tournament in the `Rivals` category.|
+| `max_matches_per_player` | `INTEGER` |no| `1` |Maximum number of matches one player may have in this period.|
 | `status` | `TEXT` |no| `'draft'` |`draft`, `planning_open`, `active`, `result_review`, `archived` or `cancelled`.|
 | `planning_starts_at` | `TEXT` |no| — |Start planning in UTC.|
 | `play_starts_at` | `TEXT` |no| — |Start of game period in UTC.|
@@ -439,7 +441,9 @@ One entry describes one period of Challenges.
 Mandatory constraints and indexes:
 
 - `CHECK (planning_starts_at <= play_starts_at AND play_starts_at < play_ends_at AND play_ends_at <= result_review_ends_at)`;
+- `CHECK (max_matches_per_player >= 1)`;
 - `CHECK` for allowed values ​​`status`;
+- index on `rivals_tournament_id` for listing periods of a related Rivals tournament;
 - index `(status, planning_starts_at, play_ends_at, result_review_ends_at)` to find open periods.
 
 ### 21.2. `challenge_period_players`
