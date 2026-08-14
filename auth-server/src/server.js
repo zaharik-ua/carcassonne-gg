@@ -11973,6 +11973,7 @@ app.get("/tournaments", (req, res, next) => {
           SELECT
             id,
             name,
+            logo,
             status,
             play_starts_at,
             play_ends_at,
@@ -11994,6 +11995,7 @@ app.get("/tournaments", (req, res, next) => {
             challengePeriodsByTournamentId.get(tournamentKey).push({
               id: period.id,
               name: period.name,
+              logo: period.logo,
               status: period.status,
               play_starts_at: period.play_starts_at,
               play_ends_at: period.play_ends_at,

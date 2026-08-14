@@ -1265,58 +1265,61 @@
 
   .cp-rivals-periods {
     border-top: 1px solid #e5e7eb;
-    display: grid;
-    gap: 7px;
     margin-top: 5px;
-    padding-top: 8px;
+    padding-top: 12px;
   }
 
-  .cp-rivals-periods-title {
-    color: #344054;
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  .cp-rivals-period-list {
-    display: grid;
-    gap: 6px;
-  }
-
-  .cp-rivals-period {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 5px;
-    display: grid;
-    gap: 3px;
-    padding: 7px 9px;
-  }
-
-  .cp-rivals-period-head {
-    align-items: center;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+  .cp-tournament-config-header--periods,
+  .cp-tournament-config-row--periods {
+    grid-template-columns: minmax(0, 1fr) minmax(100px, 0.38fr) minmax(170px, 0.62fr);
   }
 
   .cp-rivals-period-name {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .cp-rivals-period-name-text {
     color: #1f2937;
     font-size: 13px;
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cp-rivals-period-logo {
+    background: #f3f4f6;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    flex: 0 0 auto;
+    height: 28px;
+    object-fit: contain;
+    width: 28px;
+  }
+
+  .cp-rivals-period-logo--placeholder {
+    align-items: center;
+    color: #667085;
+    display: inline-flex;
+    font-size: 9px;
     font-weight: 700;
+    justify-content: center;
   }
 
   .cp-rivals-period-status {
-    background: #eef2f6;
-    border-radius: 999px;
     color: #475467;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
-    padding: 2px 7px;
   }
 
   .cp-rivals-period-dates,
   .cp-rivals-period-empty {
     color: #667085;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.4;
   }
 
@@ -1388,6 +1391,11 @@
     .cp-tournament-config-header--teams,
     .cp-tournament-config-row--teams {
       grid-template-columns: repeat(2, minmax(0, 1fr)) 26px;
+    }
+
+    .cp-tournament-config-header--periods,
+    .cp-tournament-config-row--periods {
+      grid-template-columns: minmax(0, 1fr) minmax(76px, 0.38fr) minmax(120px, 0.72fr);
     }
   }
 
@@ -6660,56 +6668,109 @@
     };
   }
 
-  function appendRivalsChallengePeriods(container, tournament) {
-    if (String(tournament?.category || "").trim().toLowerCase() !== "rivals") return;
+  function formatChallengePeriodStatus(value) {
+    const status = String(value || "").trim().toLowerCase();
+    const labels = {
+      draft: "Draft",
+      planning_open: "Planning",
+      active: "Active",
+      result_review: "Result Review",
+      archived: "Archived",
+      cancelled: "Cancelled",
+    };
+    return labels[status] || String(value || "").trim() || "Draft";
+  }
 
+  function formatChallengePeriodDate(value) {
+    const date = new Date(String(value || "").trim());
+    if (!Number.isFinite(date.getTime())) return "Not set";
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    return `${day}.${month}.${date.getUTCFullYear()}`;
+  }
+
+  function createRivalsChallengePeriodsSection(tournament) {
     const section = document.createElement("section");
-    section.className = "cp-rivals-periods";
+    section.className = "cp-tournament-section cp-rivals-periods";
     const periods = Array.isArray(tournament?.challenge_periods) ? tournament.challenge_periods : [];
 
+    const sectionHead = document.createElement("div");
+    sectionHead.className = "cp-tournament-section-head";
     const sectionTitle = document.createElement("div");
-    sectionTitle.className = "cp-rivals-periods-title";
-    sectionTitle.textContent = `Challenge Periods (${periods.length})`;
-    section.appendChild(sectionTitle);
+    sectionTitle.className = "cp-tournament-section-title";
+    sectionTitle.textContent = "Challenge Periods";
+    sectionHead.appendChild(sectionTitle);
+    section.appendChild(sectionHead);
+
+    const list = document.createElement("div");
+    list.className = "cp-tournament-config-list";
+
+    const header = document.createElement("div");
+    header.className = "cp-tournament-config-header cp-tournament-config-header--periods";
+    ["Name", "Status", "Dates"].forEach((label) => {
+      const cell = document.createElement("div");
+      cell.textContent = label;
+      header.appendChild(cell);
+    });
+    list.appendChild(header);
 
     if (!periods.length) {
       const empty = document.createElement("div");
-      empty.className = "cp-rivals-period-empty";
+      empty.className = "cp-tournament-config-empty cp-rivals-period-empty";
       empty.textContent = "No Challenge Periods yet.";
-      section.appendChild(empty);
-      container.appendChild(section);
-      return;
+      list.appendChild(empty);
+      section.appendChild(list);
+      return section;
     }
 
-    const list = document.createElement("div");
-    list.className = "cp-rivals-period-list";
     periods.forEach((period) => {
       const periodRow = document.createElement("div");
-      periodRow.className = "cp-rivals-period";
+      periodRow.className = "cp-tournament-config-row cp-tournament-config-row--periods";
 
-      const head = document.createElement("div");
-      head.className = "cp-rivals-period-head";
-      const name = document.createElement("span");
+      const periodName = String(period?.name || period?.id || "Challenge Period");
+      const name = document.createElement("div");
       name.className = "cp-rivals-period-name";
-      name.textContent = String(period?.name || period?.id || "Challenge Period");
+      const logoUrl = toApiAbsoluteUrl(period?.logo || "");
+      if (logoUrl) {
+        const logo = document.createElement("img");
+        logo.className = "cp-rivals-period-logo";
+        logo.src = logoUrl;
+        logo.alt = periodName;
+        logo.addEventListener("error", () => {
+          const placeholder = document.createElement("span");
+          placeholder.className = "cp-rivals-period-logo cp-rivals-period-logo--placeholder";
+          placeholder.textContent = "CP";
+          logo.replaceWith(placeholder);
+        }, { once: true });
+        name.appendChild(logo);
+      } else {
+        const placeholder = document.createElement("span");
+        placeholder.className = "cp-rivals-period-logo cp-rivals-period-logo--placeholder";
+        placeholder.textContent = "CP";
+        name.appendChild(placeholder);
+      }
+      const nameText = document.createElement("span");
+      nameText.className = "cp-rivals-period-name-text";
+      nameText.textContent = periodName;
+      name.appendChild(nameText);
+
       const status = document.createElement("span");
       status.className = "cp-rivals-period-status";
-      status.textContent = String(period?.status || "draft");
-      head.appendChild(name);
-      head.appendChild(status);
+      status.textContent = formatChallengePeriodStatus(period?.status);
 
       const dates = document.createElement("div");
       dates.className = "cp-rivals-period-dates";
-      const start = period?.play_starts_at ? formatNewsDateTime(period.play_starts_at) : "Not set";
-      const end = period?.play_ends_at ? formatNewsDateTime(period.play_ends_at) : "Not set";
+      const start = formatChallengePeriodDate(period?.play_starts_at);
+      const end = formatChallengePeriodDate(period?.play_ends_at);
       dates.textContent = `${start} – ${end}`;
 
-      periodRow.appendChild(head);
+      periodRow.appendChild(name);
+      periodRow.appendChild(status);
       periodRow.appendChild(dates);
       list.appendChild(periodRow);
     });
     section.appendChild(list);
-    container.appendChild(section);
+    return section;
   }
 
   function renderMyTournamentsList(tournaments) {
@@ -6767,7 +6828,6 @@
       });
       main.appendChild(title);
       main.appendChild(meta);
-      appendRivalsChallengePeriods(main, item);
 
       const actions = document.createElement("div");
       actions.className = "cp-news-actions";
@@ -7059,6 +7119,9 @@
     form.appendChild(aboutField.row);
     form.appendChild(rulesField.row);
 
+    const challengePeriodsSection = createRivalsChallengePeriodsSection(tournament);
+    form.appendChild(challengePeriodsSection);
+
     const accessUsersEditor = createTournamentAccessUsersEditor(
       references.users,
       Array.isArray(tournament?.access_users)
@@ -7094,6 +7157,7 @@
       const tournamentType = tournamentTypeField.input.value;
       const isTeams = tournamentType === "Teams";
       const supportsCategory = tournamentType === "Individuals" || isTeams;
+      const isRivalsCategory = String(categoryField.input.value || "").trim().toLowerCase() === "rivals";
       const supportsLineup = isTeams || tournamentType === "Clubs";
       const isFixedLineup = lineupSizeTypeField.input.value === "1";
       const isOfficial = isTeams && subtypeField.input.value === "Official";
@@ -7103,6 +7167,7 @@
       teamTypeField.row.classList.toggle("cp-hidden", !isTeams);
       subtypeField.row.classList.toggle("cp-hidden", !isTeams);
       categoryField.row.classList.toggle("cp-hidden", !supportsCategory);
+      challengePeriodsSection.classList.toggle("cp-hidden", !supportsCategory || !isRivalsCategory);
       lineupSizeTypeField.row.classList.toggle("cp-hidden", !supportsLineup);
       lineupSizeField.row.classList.toggle("cp-hidden", !(supportsLineup && isFixedLineup));
       accessUsersEditor.root.classList.toggle("cp-hidden", !isTeams);
@@ -7128,6 +7193,7 @@
 
     tournamentTypeField.input.addEventListener("change", syncConditionalFields);
     teamTypeField.input.addEventListener("change", syncConditionalFields);
+    categoryField.input.addEventListener("change", syncConditionalFields);
     subtypeField.input.addEventListener("change", syncConditionalFields);
     lineupSizeTypeField.input.addEventListener("change", syncConditionalFields);
     stage1FormatField.input.addEventListener("change", syncConditionalFields);
