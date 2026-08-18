@@ -11,6 +11,13 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import connectSqlite3 from "connect-sqlite3";
 import { ensureImagesSchema, registerImageRoutes } from "./images.js";
 import {
+  attachImpersonationAuthContext,
+  createImpersonationState,
+  getImpersonationAuthContext,
+  getImpersonationUserSummary,
+  normalizeImpersonationState,
+} from "./impersonation.js";
+import {
   SECRET_LINEUP_SIZE,
   ensureSecretLineupsSchema,
   isBlindLineupType,
@@ -6645,6 +6652,11 @@ function ensureAuditTrailSchema() {
       actor_bga_id TEXT,
       actor_bga_nickname TEXT,
       actor_email TEXT,
+      effective_user_id INTEGER,
+      effective_player_id TEXT,
+      effective_bga_nickname TEXT,
+      effective_email TEXT,
+      impersonation_id TEXT,
       idempotency_key TEXT,
       changes TEXT,
       metadata TEXT,
@@ -6663,12 +6675,33 @@ function ensureAuditTrailSchema() {
       if (!Array.isArray(columns) || columns.length === 0) return;
       db.serialize(() => {
         addColumnIfMissing(columns, "audit_trail", "actor_player_id", "TEXT");
+        addColumnIfMissing(columns, "audit_trail", "effective_user_id", "INTEGER");
+        addColumnIfMissing(columns, "audit_trail", "effective_player_id", "TEXT");
+        addColumnIfMissing(columns, "audit_trail", "effective_bga_nickname", "TEXT");
+        addColumnIfMissing(columns, "audit_trail", "effective_email", "TEXT");
+        addColumnIfMissing(columns, "audit_trail", "impersonation_id", "TEXT");
         addColumnIfMissing(columns, "audit_trail", "idempotency_key", "TEXT");
         db.run(
           "CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_trail_idempotency_key ON audit_trail(idempotency_key) WHERE idempotency_key IS NOT NULL",
           (indexErr) => {
             if (indexErr) {
               console.error("Failed to ensure audit trail idempotency_key index", indexErr);
+            }
+          }
+        );
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_audit_trail_effective_user ON audit_trail(effective_user_id, created_at DESC, id DESC)",
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure audit trail effective user index", indexErr);
+            }
+          }
+        );
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_audit_trail_impersonation ON audit_trail(impersonation_id, created_at ASC, id ASC)",
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure audit trail impersonation index", indexErr);
             }
           }
         );
@@ -6840,12 +6873,20 @@ function buildLineupsAuditChanges(previousLineups, nextLineups) {
 }
 
 function getAuditActor(user) {
+  const authContext = getImpersonationAuthContext(user);
+  const actorUser = authContext?.actorUser || user;
+  const effectiveUser = authContext?.impersonation ? user : null;
   return {
-    actor_user_id: Number.isInteger(Number(user?.id)) ? Number(user.id) : null,
-    actor_player_id: normalizeNullableText(user?.player_id ?? user?.bga_id),
-    actor_bga_id: normalizeNullableText(user?.player_id ?? user?.bga_id),
-    actor_bga_nickname: normalizeNullableText(user?.bga_nickname),
-    actor_email: normalizeNullableText(user?.email),
+    actor_user_id: Number.isInteger(Number(actorUser?.id)) ? Number(actorUser.id) : null,
+    actor_player_id: normalizeNullableText(actorUser?.player_id ?? actorUser?.bga_id),
+    actor_bga_id: normalizeNullableText(actorUser?.player_id ?? actorUser?.bga_id),
+    actor_bga_nickname: normalizeNullableText(actorUser?.bga_nickname),
+    actor_email: normalizeNullableText(actorUser?.email),
+    effective_user_id: Number.isInteger(Number(effectiveUser?.id)) ? Number(effectiveUser.id) : null,
+    effective_player_id: normalizeNullableText(effectiveUser?.player_id ?? effectiveUser?.bga_id),
+    effective_bga_nickname: normalizeNullableText(effectiveUser?.bga_nickname),
+    effective_email: normalizeNullableText(effectiveUser?.email),
+    impersonation_id: normalizeNullableText(authContext?.impersonation?.id),
   };
 }
 
@@ -6863,11 +6904,16 @@ function logAuditEvent(entry, done = () => {}) {
         actor_bga_id,
         actor_bga_nickname,
         actor_email,
+        effective_user_id,
+        effective_player_id,
+        effective_bga_nickname,
+        effective_email,
+        impersonation_id,
         idempotency_key,
         changes,
         metadata
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       normalizeNullableText(actor.event_type) || "unknown",
@@ -6879,6 +6925,11 @@ function logAuditEvent(entry, done = () => {}) {
       normalizeNullableText(actor.actor_bga_id),
       normalizeNullableText(actor.actor_bga_nickname),
       normalizeNullableText(actor.actor_email),
+      Number.isInteger(Number(actor.effective_user_id)) ? Number(actor.effective_user_id) : null,
+      normalizeNullableText(actor.effective_player_id),
+      normalizeNullableText(actor.effective_bga_nickname),
+      normalizeNullableText(actor.effective_email),
+      normalizeNullableText(actor.impersonation_id),
       normalizeNullableText(actor.idempotency_key),
       safeStringifyJson(actor.changes ?? null),
       safeStringifyJson(actor.metadata ?? null),
@@ -7073,7 +7124,7 @@ passport.serializeUser((user, done) => {
   done(null, user.id);
 });
 
-passport.deserializeUser((id, done) => {
+function loadAuthUserById(id, done) {
   db.get(
     `
       SELECT
@@ -7102,9 +7153,16 @@ passport.deserializeUser((id, done) => {
     [id],
     (err, row) => {
       if (err) return done(err);
-      return done(null, row || false);
+      return done(null, row || null);
     }
   );
+}
+
+passport.deserializeUser((id, done) => {
+  loadAuthUserById(id, (err, user) => {
+    if (err) return done(err);
+    return done(null, user || false);
+  });
 });
 
 passport.use(
@@ -7243,7 +7301,37 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 app.use((req, _res, next) => {
-  const userId = Number(req.user?.id);
+  const actorUser = req.user || null;
+  const impersonation = normalizeImpersonationState(req.session?.impersonation);
+
+  req.actorUser = actorUser;
+  req.effectiveUser = actorUser;
+  req.impersonation = impersonation
+    ? { active: true, ...impersonation }
+    : { active: false };
+
+  if (!actorUser || !impersonation) {
+    next();
+    return;
+  }
+
+  loadAuthUserById(impersonation.targetUserId, (loadErr, targetUser) => {
+    if (loadErr) return next(loadErr);
+    if (!targetUser) {
+      req.user = null;
+      req.effectiveUser = null;
+      next();
+      return;
+    }
+
+    attachImpersonationAuthContext(targetUser, actorUser, impersonation);
+    req.user = targetUser;
+    req.effectiveUser = targetUser;
+    next();
+  });
+});
+app.use((req, _res, next) => {
+  const userId = Number(req.actorUser?.id);
   if (!Number.isInteger(userId) || userId <= 0) {
     next();
     return;
@@ -7271,6 +7359,34 @@ function requireAdmin(req, res, next) {
   }
   if (Number(req.user.admin) !== 1) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
+  return next();
+}
+
+function requireActorAuthenticated(req, res, next) {
+  if (!req.actorUser) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+  return next();
+}
+
+function requireActorAdmin(req, res, next) {
+  if (!req.actorUser) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+  if (Number(req.actorUser.admin) !== 1) {
+    return res.status(403).json({ ok: false, message: "Global admin role required" });
+  }
+  return next();
+}
+
+function requireTrustedJsonRequest(req, res, next) {
+  if (!req.is("application/json")) {
+    return res.status(415).json({ ok: false, message: "Content-Type application/json is required" });
+  }
+  const origin = String(req.get("origin") || "").trim();
+  if (origin && !FRONTEND_ORIGINS.includes(origin)) {
+    return res.status(403).json({ ok: false, message: "Origin is not allowed" });
   }
   return next();
 }
@@ -7480,8 +7596,11 @@ app.get(
     failureRedirect: "/auth/failure",
     session: true,
   }),
-  (_req, res) => {
-    res.type("html").send(`<!doctype html>
+  (req, res, next) => {
+    delete req.session.impersonation;
+    req.session.save((saveErr) => {
+      if (saveErr) return next(saveErr);
+      return res.type("html").send(`<!doctype html>
 <html>
 <head><meta charset="utf-8"><title>Auth complete</title></head>
 <body>
@@ -7495,12 +7614,114 @@ app.get(
 </script>
 </body>
 </html>`);
+    });
   }
 );
 
 app.get("/auth/failure", (_req, res) => {
   res.status(401).json({ ok: false, message: "Google auth failed" });
 });
+
+app.post(
+  "/auth/impersonation/start",
+  requireTrustedJsonRequest,
+  requireActorAdmin,
+  (req, res, next) => {
+    if (req.impersonation?.active) {
+      return res.status(409).json({ ok: false, message: "User view is already active" });
+    }
+
+    const targetUserId = Number(req.body?.targetUserId ?? req.body?.target_user_id);
+    if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
+      return res.status(400).json({ ok: false, message: "Valid targetUserId is required" });
+    }
+    if (targetUserId === Number(req.actorUser.id)) {
+      return res.status(400).json({ ok: false, message: "Cannot enter your own user view" });
+    }
+
+    return loadAuthUserById(targetUserId, (loadErr, targetUser) => {
+      if (loadErr) return next(loadErr);
+      if (!targetUser) {
+        return res.status(404).json({ ok: false, message: "Target user not found" });
+      }
+
+      const impersonation = createImpersonationState(targetUserId);
+      if (!impersonation) {
+        return res.status(400).json({ ok: false, message: "Invalid target user" });
+      }
+
+      req.session.impersonation = impersonation;
+      return req.session.save((saveErr) => {
+        if (saveErr) return next(saveErr);
+        attachImpersonationAuthContext(targetUser, req.actorUser, impersonation);
+        return logAuditEvent(
+          {
+            ...getAuditActor(targetUser),
+            event_type: "impersonation.started",
+            entity_type: "impersonation",
+            action: "start",
+            record_id: impersonation.id,
+            metadata: {
+              target_user_id: targetUserId,
+            },
+          },
+          () => res.status(201).json({
+            ok: true,
+            impersonation: {
+              active: true,
+              id: impersonation.id,
+              startedAt: impersonation.startedAt,
+              actor: getImpersonationUserSummary(req.actorUser),
+              target: getImpersonationUserSummary(targetUser),
+            },
+            redirectUrl: `${SITE_BASE_URL}/player-hub/`,
+          })
+        );
+      });
+    });
+  }
+);
+
+app.post(
+  "/auth/impersonation/stop",
+  requireTrustedJsonRequest,
+  requireActorAuthenticated,
+  (req, res, next) => {
+    const impersonation = normalizeImpersonationState(req.session?.impersonation);
+    if (!impersonation) {
+      return res.json({ ok: true, impersonation: { active: false }, redirectUrl: `${SITE_BASE_URL}/admin` });
+    }
+
+    const auditActor = req.user
+      ? getAuditActor(req.user)
+      : {
+          ...getAuditActor(req.actorUser),
+          effective_user_id: impersonation.targetUserId,
+          impersonation_id: impersonation.id,
+        };
+    delete req.session.impersonation;
+    return req.session.save((saveErr) => {
+      if (saveErr) return next(saveErr);
+      return logAuditEvent(
+        {
+          ...auditActor,
+          event_type: "impersonation.stopped",
+          entity_type: "impersonation",
+          action: "stop",
+          record_id: impersonation.id,
+          metadata: {
+            target_user_id: impersonation.targetUserId,
+          },
+        },
+        () => res.json({
+          ok: true,
+          impersonation: { active: false },
+          redirectUrl: `${SITE_BASE_URL}/admin`,
+        })
+      );
+    });
+  }
+);
 
 app.get("/profiles/public", (_req, res, next) => {
   db.all(
@@ -16277,6 +16498,7 @@ app.get("/users", requireAdmin, (req, res, next) => {
             u.name,
             u.picture,
             u.bga_id,
+            COALESCE(u.admin, 0) AS admin,
             p.bga_nickname,
             u.created_at,
             u.last_login
@@ -16335,12 +16557,16 @@ app.get("/audit-trail", requireAdmin, (req, res, next) => {
   const parsedLimit = Number.parseInt(String(req.query.limit || "10"), 10);
   const parsedPage = Number.parseInt(String(req.query.page || "1"), 10);
   const parsedActorUserId = Number.parseInt(String(req.query.actor_user_id || ""), 10);
+  const parsedRelatedUserId = Number.parseInt(String(req.query.related_user_id || ""), 10);
   const limit = allowedPageSizes.has(parsedLimit) ? parsedLimit : 10;
   const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const offset = (page - 1) * limit;
   const notAdminsOnly = String(req.query.not_admins || "").trim() === "1";
   const actorUserId = Number.isInteger(parsedActorUserId) && parsedActorUserId > 0
     ? parsedActorUserId
+    : null;
+  const relatedUserId = Number.isInteger(parsedRelatedUserId) && parsedRelatedUserId > 0
+    ? parsedRelatedUserId
     : null;
   const auditFilterClauses = [];
   const auditFilterParams = [];
@@ -16350,7 +16576,7 @@ app.get("/audit-trail", requireAdmin, (req, res, next) => {
       NOT EXISTS (
         SELECT 1
         FROM users actor_users
-        WHERE actor_users.id = audit_trail.actor_user_id
+        WHERE actor_users.id = COALESCE(audit_trail.effective_user_id, audit_trail.actor_user_id)
           AND COALESCE(actor_users.admin, 0) = 1
       )
     `);
@@ -16359,6 +16585,11 @@ app.get("/audit-trail", requireAdmin, (req, res, next) => {
   if (actorUserId != null) {
     auditFilterClauses.push("audit_trail.actor_user_id = ?");
     auditFilterParams.push(actorUserId);
+  }
+
+  if (relatedUserId != null) {
+    auditFilterClauses.push("COALESCE(audit_trail.effective_user_id, audit_trail.actor_user_id) = ?");
+    auditFilterParams.push(relatedUserId);
   }
 
   const auditFilterSql = auditFilterClauses.length
@@ -16392,6 +16623,11 @@ app.get("/audit-trail", requireAdmin, (req, res, next) => {
             actor_bga_id,
             actor_bga_nickname,
             actor_email,
+            effective_user_id,
+            effective_player_id,
+            effective_bga_nickname,
+            effective_email,
+            impersonation_id,
             idempotency_key,
             changes,
             metadata,
@@ -22635,7 +22871,22 @@ app.delete("/friendly-find/:id", (req, res) => {
 });
 
 app.get("/auth/me", (req, res) => {
+  res.set("Cache-Control", "no-store");
   if (!req.user) {
+    if (req.actorUser && req.impersonation?.active) {
+      return res.status(409).json({
+        authenticated: true,
+        user: null,
+        message: "Target user is unavailable",
+        impersonation: {
+          active: true,
+          id: req.impersonation.id,
+          startedAt: req.impersonation.startedAt,
+          actor: getImpersonationUserSummary(req.actorUser),
+          target: { id: req.impersonation.targetUserId },
+        },
+      });
+    }
     return res.status(401).json({ authenticated: false });
   }
 
@@ -22660,6 +22911,16 @@ app.get("/auth/me", (req, res) => {
     ? `${SITE_BASE_URL}/player/?id=${encodeURIComponent(player_id)}`
     : `${SITE_BASE_URL}/player/?id=noprofile`;
   const isAdmin = Number(admin) === 1;
+
+  const impersonation = req.impersonation?.active
+    ? {
+        active: true,
+        id: req.impersonation.id,
+        startedAt: req.impersonation.startedAt,
+        actor: getImpersonationUserSummary(req.actorUser),
+        target: getImpersonationUserSummary(req.user),
+      }
+    : { active: false };
 
   return res.json({
     authenticated: true,
@@ -22696,6 +22957,7 @@ app.get("/auth/me", (req, res) => {
         team_captain: Number(team_captain) === 1 ? 1 : 0,
       },
     },
+    impersonation,
   });
 });
 

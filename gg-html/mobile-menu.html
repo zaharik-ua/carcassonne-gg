@@ -334,6 +334,16 @@
     background: var(--gg-nav-hover);
   }
 
+  .gg-mobile-nav__auth-user-trigger--impersonating {
+    background: #fff4d6;
+    color: #8a5700;
+    box-shadow: inset 0 0 0 1px #d58a00;
+  }
+
+  .gg-mobile-nav__auth-user-trigger--impersonating:hover {
+    background: #ffefc2;
+  }
+
   .gg-mobile-nav__auth-user-picture {
     width: 28px;
     height: 28px;
@@ -489,6 +499,7 @@
             <a id="ggAuthManageTeamLink" class="gg-mobile-nav__auth-menu-item gg-mobile-nav__hidden" href="https://carcassonne.gg/player-hub/" role="menuitem">Player Hub</a>
             <a id="ggAuthProfileLink" class="gg-mobile-nav__auth-menu-item" href="https://carcassonne.gg/player/?id=noprofile" role="menuitem">My profile</a>
             <button id="ggAuthLogoutButton" class="gg-mobile-nav__auth-menu-item" type="button" role="menuitem">Log out</button>
+            <button id="ggAuthExitImpersonationButton" class="gg-mobile-nav__auth-menu-item gg-mobile-nav__hidden" type="button" role="menuitem">Exit user view</button>
           </div>
         </div>
       </div>
@@ -591,6 +602,7 @@
     const manageTeamLink = document.getElementById("ggAuthManageTeamLink");
     const profileLink = document.getElementById("ggAuthProfileLink");
     const logoutButton = document.getElementById("ggAuthLogoutButton");
+    const exitImpersonationButton = document.getElementById("ggAuthExitImpersonationButton");
 
     let lastAuthStateKey = null;
 
@@ -606,9 +618,12 @@
       return parts[0] || "";
     }
 
-    function emitAuthStateChange(user) {
+    function emitAuthStateChange(user, impersonation) {
+      const impersonationId = impersonation && impersonation.active
+        ? String(impersonation.id || "active")
+        : "none";
       const stateKey = user
-        ? "in:" + String(user.id || user.player_id || user.playerId || user.email || user.name || "user").trim()
+        ? "in:" + String(user.id || user.player_id || user.playerId || user.email || user.name || "user").trim() + ":" + impersonationId
         : "out";
 
       if (stateKey === lastAuthStateKey) return;
@@ -617,7 +632,8 @@
       window.dispatchEvent(new CustomEvent("gg-auth-state-change", {
         detail: {
           authenticated: !!user,
-          user: user || null
+          user: user || null,
+          impersonation: impersonation && impersonation.active ? impersonation : { active: false }
         }
       }));
     }
@@ -676,6 +692,10 @@
       signInButton.classList.remove("gg-mobile-nav__hidden");
       signInPanel.classList.add("gg-mobile-nav__hidden");
       authUser.classList.remove("gg-mobile-nav__auth-user--visible");
+      authUserTrigger.classList.remove("gg-mobile-nav__auth-user-trigger--impersonating");
+      authUserTrigger.removeAttribute("title");
+      exitImpersonationButton.classList.add("gg-mobile-nav__hidden");
+      exitImpersonationButton.disabled = false;
       profileLink.href = "https://carcassonne.gg/player/?id=noprofile";
       adminLink.classList.add("gg-mobile-nav__hidden");
       adminLink.href = "https://carcassonne.gg/admin";
@@ -685,13 +705,29 @@
       emitAuthStateChange(null);
     }
 
-    function setLoggedInUI(user) {
+    function setLoggedInUI(user, impersonation) {
       signInButton.classList.add("gg-mobile-nav__hidden");
       signInPanel.classList.add("gg-mobile-nav__hidden");
       authUser.classList.add("gg-mobile-nav__auth-user--visible");
       authUserName.textContent = getFirstName(user.name) || user.email || "User";
       authUserPicture.src = user.picture || "https://www.gravatar.com/avatar/?d=mp";
       authUserPicture.alt = user.name || "User";
+      const isImpersonating = !!(impersonation && impersonation.active);
+      const targetLabel = String(
+        (impersonation && impersonation.target && (
+          impersonation.target.name || impersonation.target.bgaNickname
+        )) || user.name || user.email || "user"
+      ).trim();
+      if (isImpersonating) {
+        authUserName.textContent = "Viewing as " + (getFirstName(targetLabel) || targetLabel);
+      }
+      authUserTrigger.classList.toggle("gg-mobile-nav__auth-user-trigger--impersonating", isImpersonating);
+      authUserTrigger.title = isImpersonating ? "Viewing site as " + targetLabel : "";
+      exitImpersonationButton.classList.toggle("gg-mobile-nav__hidden", !isImpersonating);
+      exitImpersonationButton.disabled = false;
+      exitImpersonationButton.textContent = isImpersonating
+        ? "Exit " + (getFirstName(targetLabel) || targetLabel) + " view"
+        : "Exit user view";
       profileLink.href = user.myProfileUrl || "https://carcassonne.gg/player/?id=noprofile";
 
       if (user.isAdmin) {
@@ -705,7 +741,7 @@
       manageTeamLink.classList.remove("gg-mobile-nav__hidden");
       manageTeamLink.href = "https://carcassonne.gg/player-hub/";
       closeUserMenu();
-      emitAuthStateChange(user);
+      emitAuthStateChange(user, impersonation);
     }
 
     async function fetchSession() {
@@ -722,7 +758,7 @@
 
         const data = await response.json();
         if (data.authenticated && data.user) {
-          setLoggedInUI(data.user);
+          setLoggedInUI(data.user, data.impersonation);
         } else {
           setLoggedOutUI();
         }
@@ -780,6 +816,31 @@
         });
       } finally {
         setLoggedOutUI();
+      }
+    });
+
+    exitImpersonationButton.addEventListener("click", async function () {
+      exitImpersonationButton.disabled = true;
+      const previousText = exitImpersonationButton.textContent;
+      exitImpersonationButton.textContent = "Exiting user view...";
+      try {
+        const response = await fetch(AUTH_BASE + "/auth/impersonation/stop", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: "{}"
+        });
+        const data = await response.json().catch(function () { return {}; });
+        if (!response.ok || data.ok === false) {
+          throw new Error(data.message || "Failed to exit user view");
+        }
+        window.location.href = data.redirectUrl || "https://carcassonne.gg/admin";
+      } catch (error) {
+        exitImpersonationButton.disabled = false;
+        exitImpersonationButton.textContent = previousText;
+        window.alert(error && error.message ? error.message : "Failed to exit user view");
       }
     });
 

@@ -131,6 +131,31 @@
       border-color: #bdbdbd;
     }
 
+    .lp-auth__user-trigger--impersonating {
+      border-color: #d58a00;
+      background: #fff4d6;
+      box-shadow: 0 0 0 2px rgba(213, 138, 0, 0.15);
+    }
+
+    .lp-auth__user-trigger--impersonating:hover {
+      border-color: #b87500;
+      background: #ffefc2;
+    }
+
+    .lp-auth__viewing-as {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 5px;
+      background: #b87500;
+      color: #fff;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
     .lp-auth__user-picture {
       width: 24px;
       height: 24px;
@@ -206,6 +231,7 @@
       <div id="lpAuthUser" class="lp-auth__user">
         <button id="lpAuthUserTrigger" class="lp-auth__user-trigger" type="button" aria-expanded="false" aria-controls="lpAuthUserMenu">
           <img id="lpAuthUserPicture" class="lp-auth__user-picture" alt="User" />
+          <span id="lpAuthViewingAs" class="lp-auth__viewing-as lp-auth__hidden">Viewing as</span>
           <span id="lpAuthUserName" class="lp-auth__user-name"></span>
           <span class="lp-auth__user-caret">▼</span>
         </button>
@@ -215,6 +241,7 @@
           <a id="lpAuthManageTeamLink" class="lp-auth__menu-item lp-auth__hidden" href="https://carcassonne.gg/player-hub/" role="menuitem">Player Hub</a>
           <a id="lpAuthProfileLink" class="lp-auth__menu-item" href="https://carcassonne.gg/player/?id=noprofile" role="menuitem">My profile</a>
           <button id="lpAuthLogoutButton" class="lp-auth__menu-item" type="button" role="menuitem">Log out</button>
+          <button id="lpAuthExitImpersonationButton" class="lp-auth__menu-item lp-auth__hidden" type="button" role="menuitem">Exit user view</button>
         </div>
       </div>
     </div>
@@ -234,11 +261,13 @@
     const authUserTrigger = document.getElementById("lpAuthUserTrigger");
     const authUserPicture = document.getElementById("lpAuthUserPicture");
     const authUserName = document.getElementById("lpAuthUserName");
+    const viewingAsBadge = document.getElementById("lpAuthViewingAs");
     const adminLink = document.getElementById("lpAuthAdminLink");
     const manageTeamLink = document.getElementById("lpAuthManageTeamLink");
     const profileLink = document.getElementById("lpAuthProfileLink");
     const userMenu = document.getElementById("lpAuthUserMenu");
     const logoutButton = document.getElementById("lpAuthLogoutButton");
+    const exitImpersonationButton = document.getElementById("lpAuthExitImpersonationButton");
     let lastAuthStateKey = null;
 
     function toBool(value) {
@@ -466,9 +495,10 @@
       }
     }
 
-    function emitAuthStateChange(user) {
+    function emitAuthStateChange(user, impersonation = null) {
+      const impersonationId = impersonation?.active ? String(impersonation.id || "active") : "none";
       const stateKey = user
-        ? `in:${String(user.id || user.player_id || user.playerId || user.email || user.name || "user").trim()}`
+        ? `in:${String(user.id || user.player_id || user.playerId || user.email || user.name || "user").trim()}:${impersonationId}`
         : "out";
       if (stateKey === lastAuthStateKey) return;
       lastAuthStateKey = stateKey;
@@ -476,6 +506,7 @@
         detail: {
           authenticated: !!user,
           user: user || null,
+          impersonation: impersonation?.active ? impersonation : { active: false },
         },
       }));
     }
@@ -485,6 +516,11 @@
       signInDropdown.classList.remove("lp-auth__hidden");
       signInDropdown.setAttribute("inert", "");
       authUser.classList.remove("lp-auth__user--visible");
+      authUserTrigger.classList.remove("lp-auth__user-trigger--impersonating");
+      authUserTrigger.removeAttribute("title");
+      viewingAsBadge.classList.add("lp-auth__hidden");
+      exitImpersonationButton.classList.add("lp-auth__hidden");
+      exitImpersonationButton.disabled = false;
       profileLink.href = "https://carcassonne.gg/player/?id=noprofile";
       adminLink.classList.add("lp-auth__hidden");
       adminLink.href = "https://carcassonne.gg/admin";
@@ -495,7 +531,7 @@
       emitAuthStateChange(null);
     }
 
-    function setLoggedInUI(user) {
+    function setLoggedInUI(user, impersonation = null) {
       signInLabel.classList.add("lp-auth__hidden");
       signInDropdown.classList.add("lp-auth__hidden");
       signInDropdown.setAttribute("inert", "");
@@ -503,6 +539,22 @@
       authUserName.textContent = getFirstName(user.name) || user.email || "User";
       authUserPicture.src = user.picture || "https://www.gravatar.com/avatar/?d=mp";
       authUserPicture.alt = user.name || "User";
+      const isImpersonating = impersonation?.active === true;
+      const targetLabel = String(
+        impersonation?.target?.name
+        || impersonation?.target?.bgaNickname
+        || user.name
+        || user.email
+        || "user"
+      ).trim();
+      authUserTrigger.classList.toggle("lp-auth__user-trigger--impersonating", isImpersonating);
+      authUserTrigger.title = isImpersonating ? `Viewing site as ${targetLabel}` : "";
+      viewingAsBadge.classList.toggle("lp-auth__hidden", !isImpersonating);
+      exitImpersonationButton.classList.toggle("lp-auth__hidden", !isImpersonating);
+      exitImpersonationButton.disabled = false;
+      exitImpersonationButton.textContent = isImpersonating
+        ? `Exit ${getFirstName(targetLabel) || targetLabel} view`
+        : "Exit user view";
       profileLink.href = user.myProfileUrl || "https://carcassonne.gg/player/?id=noprofile";
       if (user.isAdmin) {
         adminLink.classList.remove("lp-auth__hidden");
@@ -515,7 +567,7 @@
       manageTeamLink.href = "https://carcassonne.gg/player-hub/";
       closeSignInDropdown();
       closeUserMenu();
-      emitAuthStateChange(user);
+      emitAuthStateChange(user, impersonation);
     }
 
     async function fetchSession() {
@@ -532,7 +584,7 @@
 
         const data = await response.json();
         if (data.authenticated && data.user) {
-          setLoggedInUI(data.user);
+          setLoggedInUI(data.user, data.impersonation);
         } else {
           setLoggedOutUI();
         }
@@ -565,6 +617,29 @@
         });
       } finally {
         setLoggedOutUI();
+      }
+    });
+
+    exitImpersonationButton.addEventListener("click", async () => {
+      exitImpersonationButton.disabled = true;
+      const previousText = exitImpersonationButton.textContent;
+      exitImpersonationButton.textContent = "Exiting user view...";
+      try {
+        const response = await fetch(`${AUTH_BASE}/auth/impersonation/stop`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data?.ok === false) {
+          throw new Error(data?.message || "Failed to exit user view");
+        }
+        window.parent.location.href = data.redirectUrl || "https://carcassonne.gg/admin";
+      } catch (error) {
+        exitImpersonationButton.disabled = false;
+        exitImpersonationButton.textContent = previousText;
+        window.alert(error?.message || "Failed to exit user view");
       }
     });
 
