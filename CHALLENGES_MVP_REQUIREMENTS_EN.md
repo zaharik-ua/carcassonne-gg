@@ -153,8 +153,8 @@ Available statuses `duels` are marked separately from statuses to be added for C
 - [x] **CH-CAP-005** For each period, the player API returns the derived fields `matches_count`, `matches_limit`, `matches_remaining = max(0, matches_limit - matches_count)`, and `is_match_limit_reached`.
 - [x] **CH-CAP-006** A player may create, receive through manual selection, or accept a request when their status is `available` or `not_selected` and `matches_count < matches_limit`; `unavailable` blocks these actions.
 - [x] **CH-CAP-007** Confirming a match increases the derived `matches_count` for both players without storing a separate cached counter.
-- [ ] **CH-CAP-008** When a player reaches `matches_limit` after confirming a match, every other pending request involving that player becomes `auto_cancelled`; while the player remains below the limit, the other pending requests remain open.
-- [ ] **CH-CAP-009** Duels in `Draft` or `Requested new time` that belong to auto-cancelled requests become `Cancelled`.
+- [x] **CH-CAP-008** When a player reaches `matches_limit` after confirming a match, every other pending request involving that player becomes `auto_cancelled`; while the player remains below the limit, the other pending requests remain open.
+- [x] **CH-CAP-009** Duels in `Draft` or `Requested new time` that belong to auto-cancelled requests become `Cancelled`.
 - [x] **CH-CAP-010** If a slot is released by `Cancelled`, `Requested new time`, or soft deletion, a player whose status is `available` or `not_selected` may create and handle requests again without manually changing status; only `available` is shown in the `Open to match` list.
 - [x] **CH-CAP-011** A duel in `Error` occupies a slot indefinitely until the existing player/admin flow moves it to `Done`, `Cancelled`, or a soft-deleted state; there is no separate automatic slot release.
 
@@ -202,7 +202,7 @@ Terminal statuses for re-invitation:
 - [x] **CH-RIV-003** A duel in `Cancelled` or a soft-deleted duel does not block a later request between the same pair.
 - [x] **CH-RIV-004** For a period without `rivals_tournament_id`, pair uniqueness is enforced at least within that Challenge period.
 - [x] **CH-RIV-005** Pair uniqueness is checked when a request is created and checked again transactionally on accept; for a reschedule, the current duel is excluded from the check.
-- [ ] **CH-RIV-006** When a pair confirms a match, all other pending requests for that pair across the linked Rivals tournament become `auto_cancelled`.
+- [x] **CH-RIV-006** When a pair confirms a match, all other pending requests for that pair across the linked Rivals tournament become `auto_cancelled`.
 - [x] **CH-RIV-007** Pair comparison is unordered: `(player A, player B)` and `(player B, player A)` are the same pair.
 
 ### 7.2. “Open to match” list toggle
@@ -294,22 +294,22 @@ Terminal statuses for re-invitation:
 
 ## 11. Request acceptance
 
-- [ ] **CH-ACC-001** When accepting, the player chooses one of the current suggested times.
-- [ ] **CH-ACC-002** If both formats are offered, player chooses Bo3 or Bo5.
-- [ ] **CH-ACC-003** If one format is offered, it is used automatically.
-- [ ] **CH-ACC-004** Request acceptance is performed by one DB transaction.
-- [ ] **CH-ACC-005** The transaction is rechecking that the request is still `pending`.
-- [ ] **CH-ACC-006** Transaction checks that actor is `awaiting_player_id`.
-- [ ] **CH-ACC-007** The transaction checks that the period allows the request to be accepted.
-- [ ] **CH-ACC-008** Within the transaction, `matches_count` is recalculated for both players and the condition `matches_count < max_matches_per_player` is checked.
-- [ ] **CH-ACC-009** Request goes to `accepted`.
-- [ ] **CH-ACC-010** A new `Planned` duel is being created or an associated duel in status `Requested new time` is being confirmed.
-- [ ] **CH-ACC-011** Duel contains two players, agreed time and format.
-- [ ] **CH-ACC-012** Confirmation does not change either player's participation status, and the API returns updated derived match counters.
-- [ ] **CH-ACC-013** Other pending requests involving these players remain open if the relevant player still has a free slot after accept; for a player who reached the limit, they become `auto_cancelled`.
-- [ ] **CH-ACC-014** Duels in `Draft` or `Requested new time` that belong to auto-cancelled requests become `Cancelled`.
-- [ ] **CH-ACC-015** The transactional check prevents either player's `matches_count` from exceeding `max_matches_per_player`, including during simultaneous accepts.
-- [ ] **CH-ACC-016** Repeating the same accept does not create a duplicate duel.
+- [x] **CH-ACC-001** When accepting, the player chooses one of the current suggested times.
+- [x] **CH-ACC-002** If both formats are offered, player chooses Bo3 or Bo5.
+- [x] **CH-ACC-003** If one format is offered, it is used automatically.
+- [x] **CH-ACC-004** Request acceptance is performed by one DB transaction.
+- [x] **CH-ACC-005** The transaction is rechecking that the request is still `pending`.
+- [x] **CH-ACC-006** Transaction checks that actor is `awaiting_player_id`.
+- [x] **CH-ACC-007** The transaction checks that the period allows the request to be accepted.
+- [x] **CH-ACC-008** Within the transaction, `matches_count` is recalculated for both players and the condition `matches_count < max_matches_per_player` is checked.
+- [x] **CH-ACC-009** Request goes to `accepted`.
+- [x] **CH-ACC-010** A new `Planned` duel is being created or an associated duel in status `Requested new time` is being confirmed.
+- [x] **CH-ACC-011** Duel contains two players, agreed time and format.
+- [x] **CH-ACC-012** Confirmation does not change either player's participation status, and the API returns updated derived match counters.
+- [x] **CH-ACC-013** Other pending requests involving these players remain open if the relevant player still has a free slot after accept; for a player who reached the limit, they become `auto_cancelled`.
+- [x] **CH-ACC-014** Duels in `Draft` or `Requested new time` that belong to auto-cancelled requests become `Cancelled`.
+- [x] **CH-ACC-015** The transactional check prevents either player's `matches_count` from exceeding `max_matches_per_player`, including during simultaneous accepts.
+- [x] **CH-ACC-016** Repeating the same accept does not create a duplicate duel.
 
 ### 11.1. Schedule conflicts between matches
 
@@ -364,7 +364,7 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-RSC-011** When the new time is rejected, the request goes to `declined`.
 - [ ] **CH-RSC-012** When rejecting a new time, the linked match in status `Requested new time` changes to `Cancelled`.
 - [ ] **CH-RSC-013** Rejecting the new time does not change either player's participation status.
-- [ ] **CH-RSC-014** If accepting another request causes either participant to reach `max_matches_per_player`, the pending reschedule request becomes `auto_cancelled` and its duel in `Requested new time` becomes `Cancelled`; while a slot remains, the reschedule request stays open.
+- [x] **CH-RSC-014** If accepting another request causes either participant to reach `max_matches_per_player`, the pending reschedule request becomes `auto_cancelled` and its duel in `Requested new time` becomes `Cancelled`; while a slot remains, the reschedule request stays open.
 
 ## 14. Cancellation of the match
 

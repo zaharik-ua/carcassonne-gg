@@ -30,12 +30,15 @@ import {
   CHALLENGE_PLAYER_PERIOD_STATUSES,
   CHALLENGE_RIVALS_PAIR_DUEL_STATUSES,
   buildChallengeMatchCapacity,
+  closeChallengePendingRequestsAfterAccept,
   ensureChallengePeriodConfigurationSchema,
   ensureChallengePeriodPlayersSchema,
   isChallengeMatchSlotStatus,
   isChallengePendingRequestLimitReached,
   isChallengePlayerRequestEligibleStatus,
   isChallengeRivalsPairDuelStatus,
+  loadChallengeBlockingRivalsPairDuel,
+  loadChallengeMatchCapacities,
   resolveMaxMatchesPerPlayer,
   resolveMaxPendingRequestsPerPlayer,
   shouldCloseChallengeRequestsForPlayerStatus,
@@ -1943,6 +1946,18 @@ function dbRunAsync(sql, params = []) {
       resolve(this);
     });
   });
+}
+
+let challengeAcceptQueue = Promise.resolve();
+
+async function acquireChallengeAcceptLock() {
+  const previous = challengeAcceptQueue;
+  let releaseLock = null;
+  challengeAcceptQueue = new Promise((resolve) => {
+    releaseLock = resolve;
+  });
+  await previous;
+  return releaseLock;
 }
 
 async function syncMatchLineupAddedFlags(matchId, actorPlayerId = null) {
@@ -8962,54 +8977,25 @@ async function loadChallengeMatchCountForPlayer(periodId, playerId, options = {}
 }
 
 async function loadChallengeMatchCapacityForPlayer(period, playerId, options = {}) {
-  const matchesCount = await loadChallengeMatchCountForPlayer(period?.id, playerId, options);
-  return buildChallengeMatchCapacity(matchesCount, period?.max_matches_per_player);
+  const normalizedPlayerId = normalizeNullableText(playerId);
+  const capacities = await loadChallengeMatchCapacities(db, {
+    periodId: period?.id,
+    playerIds: normalizedPlayerId ? [normalizedPlayerId] : [],
+    maxMatchesPerPlayer: period?.max_matches_per_player,
+    excludeDuelId: options.excludeDuelId,
+  });
+  return capacities[normalizedPlayerId]
+    || buildChallengeMatchCapacity(0, period?.max_matches_per_player);
 }
 
 async function loadChallengeBlockingRivalsDuel(period, player1Id, player2Id, options = {}) {
-  const periodId = normalizeNullableText(period?.id);
-  const rivalsTournamentId = normalizeNullableText(period?.rivals_tournament_id);
-  const normalizedPlayer1Id = normalizeNullableText(player1Id);
-  const normalizedPlayer2Id = normalizeNullableText(player2Id);
-  const excludedDuelId = normalizeNullableText(options.excludeDuelId);
-  if (!periodId || !normalizedPlayer1Id || !normalizedPlayer2Id) return null;
-
-  const pairStatuses = Array.from(CHALLENGE_RIVALS_PAIR_DUEL_STATUSES);
-  const scopeSql = rivalsTournamentId
-    ? "upper(trim(COALESCE(pair_period.rivals_tournament_id, ''))) = upper(trim(?))"
-    : "pair_duel.challenge_period_id = ?";
-  const scopeValue = rivalsTournamentId || periodId;
-  return dbGetAsync(
-    `
-      SELECT
-        pair_duel.id,
-        pair_duel.status,
-        pair_duel.challenge_period_id
-      FROM duels pair_duel
-      INNER JOIN challenge_periods pair_period
-        ON pair_period.id = pair_duel.challenge_period_id
-      WHERE pair_duel.source_type = 'challenge'
-        AND pair_duel.deleted_at IS NULL
-        AND pair_duel.status IN (${pairStatuses.map(() => "?").join(", ")})
-        AND ${scopeSql}
-        AND (
-          (pair_duel.player_1_id = ? AND pair_duel.player_2_id = ?)
-          OR (pair_duel.player_1_id = ? AND pair_duel.player_2_id = ?)
-        )
-        AND (? IS NULL OR pair_duel.id <> ?)
-      LIMIT 1
-    `,
-    [
-      ...pairStatuses,
-      scopeValue,
-      normalizedPlayer1Id,
-      normalizedPlayer2Id,
-      normalizedPlayer2Id,
-      normalizedPlayer1Id,
-      excludedDuelId,
-      excludedDuelId,
-    ]
-  );
+  return loadChallengeBlockingRivalsPairDuel(db, {
+    periodId: period?.id,
+    rivalsTournamentId: period?.rivals_tournament_id,
+    player1Id,
+    player2Id,
+    excludeDuelId: options.excludeDuelId,
+  });
 }
 
 async function loadChallengeRequestById(periodId, requestId) {
@@ -11226,12 +11212,22 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
     if (!isChallengeTimeWithinPeriod(acceptedTimeUtc, period)) {
       return res.status(400).json({ ok: false, message: "Accepted time must be within the Challenge playing window" });
     }
-    const duelTournamentId = normalizeNullableText(period.rivals_tournament_id);
-
     let duelId = buildChallengeDuelId(periodId, requestId);
     let afterRow = null;
     let duelRow = null;
-    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    let playerMatchCapacities = [];
+    let autoCancellationResult = {
+      auto_cancelled_request_ids: [],
+      auto_cancelled_request_count: 0,
+      cancelled_duel_count: 0,
+    };
+    const releaseChallengeAcceptLock = await acquireChallengeAcceptLock();
+    try {
+      await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    } catch (error) {
+      releaseChallengeAcceptLock();
+      throw error;
+    }
     try {
       const [lockedPeriod, lockedRequest] = await Promise.all([
         loadChallengePeriodById(periodId),
@@ -11242,6 +11238,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
         error.httpStatus = 404;
         throw error;
       }
+      const lockedDuelTournamentId = normalizeNullableText(lockedPeriod.rivals_tournament_id);
       if (!lockedRequest || lockedRequest.status !== "pending" || lockedRequest.awaiting_player_id !== playerId) {
         const error = new Error("Challenge request is no longer pending");
         error.httpStatus = 409;
@@ -11351,7 +11348,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
               AND deleted_at IS NULL
           `,
           [
-            duelTournamentId,
+            lockedDuelTournamentId,
             canonicalFormat,
             acceptedTimeUtc,
             lockedRequest.player_1_id,
@@ -11400,7 +11397,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
           `,
           [
             duelId,
-            duelTournamentId,
+            lockedDuelTournamentId,
             canonicalFormat,
             acceptedTimeUtc,
             lockedRequest.player_1_id,
@@ -11414,81 +11411,29 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
           ]
         );
       }
-      await dbRunAsync(
-        `
-          UPDATE duels
-          SET
-            status = 'Cancelled',
-            cancelled_by_player_id = CASE
-              WHEN player_1_id IN (?, ?)
-                AND player_2_id NOT IN (?, ?)
-                THEN player_1_id
-              WHEN player_2_id IN (?, ?)
-                AND player_1_id NOT IN (?, ?)
-                THEN player_2_id
-              ELSE ?
-            END,
-            cancellation_reason = 'another_match_accepted',
-            cancelled_at = CURRENT_TIMESTAMP,
-            updated_by = ?,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE challenge_period_id = ?
-            AND status IN ('Draft', 'Requested new time')
-            AND source_type = 'challenge'
-            AND deleted_at IS NULL
-            AND challenge_request_id IN (
-              SELECT id
-              FROM challenge_requests
-              WHERE period_id = ?
-                AND status = 'pending'
-                AND id <> ?
-                AND (
-                  player_1_id IN (?, ?)
-                  OR player_2_id IN (?, ?)
-                )
-            )
-        `,
-        [
-          lockedRequest.player_1_id,
-          lockedRequest.player_2_id,
-          lockedRequest.player_1_id,
-          lockedRequest.player_2_id,
-          lockedRequest.player_1_id,
-          lockedRequest.player_2_id,
-          lockedRequest.player_1_id,
-          lockedRequest.player_2_id,
-          playerId,
-          playerId,
-          periodId,
-          periodId,
-          requestId,
-          lockedRequest.player_1_id,
-          lockedRequest.player_2_id,
-          lockedRequest.player_1_id,
-          lockedRequest.player_2_id,
-        ]
-      );
-      await dbRunAsync(
-        `
-          UPDATE challenge_requests
-          SET status = 'auto_cancelled', updated_at = CURRENT_TIMESTAMP
-          WHERE period_id = ?
-            AND status = 'pending'
-            AND id <> ?
-            AND (
-              player_1_id IN (?, ?)
-              OR player_2_id IN (?, ?)
-            )
-        `,
-        [
-          periodId,
-          requestId,
-          lockedRequest.player_1_id,
-          lockedRequest.player_2_id,
-          lockedRequest.player_1_id,
-          lockedRequest.player_2_id,
-        ]
-      );
+      const acceptedPlayerIds = [lockedRequest.player_1_id, lockedRequest.player_2_id];
+      const postAcceptCapacities = await loadChallengeMatchCapacities(db, {
+        periodId,
+        playerIds: acceptedPlayerIds,
+        maxMatchesPerPlayer: lockedPeriod.max_matches_per_player,
+      });
+      playerMatchCapacities = acceptedPlayerIds.map((acceptedPlayerId) => ({
+        player_id: acceptedPlayerId,
+        ...(postAcceptCapacities[acceptedPlayerId]
+          || buildChallengeMatchCapacity(0, lockedPeriod.max_matches_per_player)),
+      }));
+      const saturatedPlayerIds = playerMatchCapacities
+        .filter((capacity) => capacity.is_match_limit_reached)
+        .map((capacity) => capacity.player_id);
+      autoCancellationResult = await closeChallengePendingRequestsAfterAccept(db, {
+        periodId,
+        rivalsTournamentId: lockedPeriod.rivals_tournament_id,
+        acceptedRequestId: requestId,
+        player1Id: lockedRequest.player_1_id,
+        player2Id: lockedRequest.player_2_id,
+        saturatedPlayerIds,
+        actorPlayerId: playerId,
+      });
 
       afterRow = await loadChallengeRequestById(periodId, requestId);
       duelRow = await dbGetAsync("SELECT id, status, time_utc, duel_format FROM duels WHERE id = ? LIMIT 1", [duelId]);
@@ -11496,6 +11441,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
     } catch (error) {
       await dbRunAsync("ROLLBACK").catch(() => {});
       throw error;
+    } finally {
+      releaseChallengeAcceptLock();
     }
 
     logAuditEvent({
@@ -11505,12 +11452,20 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
       action: "update",
       record_id: requestId,
       changes: buildAuditChanges(beforeRow, afterRow),
-      metadata: { period_id: periodId, request_id: requestId, duel_id: duelId },
+      metadata: {
+        period_id: periodId,
+        request_id: requestId,
+        duel_id: duelId,
+        auto_cancelled_request_count: autoCancellationResult.auto_cancelled_request_count,
+        cancelled_duel_count: autoCancellationResult.cancelled_duel_count,
+      },
     });
     return res.json({
       ok: true,
       challenge_request: mapChallengeRequest(afterRow),
       duel: duelRow || null,
+      player_match_capacities: playerMatchCapacities,
+      auto_cancelled_request_count: autoCancellationResult.auto_cancelled_request_count,
     });
   } catch (error) {
     if (error?.httpStatus) return res.status(error.httpStatus).json({ ok: false, message: error.message || "Failed to accept Challenge request" });

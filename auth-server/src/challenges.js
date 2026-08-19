@@ -103,6 +103,243 @@ export function buildChallengeMatchCapacity(matchesCount, configuredLimit) {
   };
 }
 
+function normalizeChallengeIdentifier(value) {
+  const normalized = String(value ?? "").trim();
+  return normalized || null;
+}
+
+export async function loadChallengeMatchCapacities(db, options = {}) {
+  const periodId = normalizeChallengeIdentifier(options.periodId);
+  const excludedDuelId = normalizeChallengeIdentifier(options.excludeDuelId);
+  const playerIds = Array.from(new Set(
+    (Array.isArray(options.playerIds) ? options.playerIds : [])
+      .map(normalizeChallengeIdentifier)
+      .filter(Boolean)
+  ));
+  const capacities = {};
+  if (!periodId || !playerIds.length) return capacities;
+
+  const slotStatuses = Array.from(CHALLENGE_MATCH_SLOT_DUEL_STATUSES);
+  await Promise.all(playerIds.map(async (playerId) => {
+    const row = await dbGet(
+      db,
+      `
+        SELECT COUNT(*) AS matches_count
+        FROM duels
+        WHERE challenge_period_id = ?
+          AND source_type = 'challenge'
+          AND deleted_at IS NULL
+          AND status IN (${slotStatuses.map(() => "?").join(", ")})
+          AND (player_1_id = ? OR player_2_id = ?)
+          AND (? IS NULL OR id <> ?)
+      `,
+      [
+        periodId,
+        ...slotStatuses,
+        playerId,
+        playerId,
+        excludedDuelId,
+        excludedDuelId,
+      ]
+    );
+    capacities[playerId] = buildChallengeMatchCapacity(
+      row?.matches_count,
+      options.maxMatchesPerPlayer
+    );
+  }));
+  return capacities;
+}
+
+export async function loadChallengeBlockingRivalsPairDuel(db, options = {}) {
+  const periodId = normalizeChallengeIdentifier(options.periodId);
+  const rivalsTournamentId = normalizeChallengeIdentifier(options.rivalsTournamentId);
+  const player1Id = normalizeChallengeIdentifier(options.player1Id);
+  const player2Id = normalizeChallengeIdentifier(options.player2Id);
+  const excludedDuelId = normalizeChallengeIdentifier(options.excludeDuelId);
+  if (!periodId || !player1Id || !player2Id) return null;
+
+  const pairStatuses = Array.from(CHALLENGE_RIVALS_PAIR_DUEL_STATUSES);
+  const scopeSql = rivalsTournamentId
+    ? "upper(trim(COALESCE(pair_period.rivals_tournament_id, ''))) = upper(trim(?))"
+    : "pair_duel.challenge_period_id = ?";
+  return dbGet(
+    db,
+    `
+      SELECT
+        pair_duel.id,
+        pair_duel.status,
+        pair_duel.challenge_period_id
+      FROM duels pair_duel
+      INNER JOIN challenge_periods pair_period
+        ON pair_period.id = pair_duel.challenge_period_id
+      WHERE pair_duel.source_type = 'challenge'
+        AND pair_duel.deleted_at IS NULL
+        AND pair_duel.status IN (${pairStatuses.map(() => "?").join(", ")})
+        AND ${scopeSql}
+        AND (
+          (pair_duel.player_1_id = ? AND pair_duel.player_2_id = ?)
+          OR (pair_duel.player_1_id = ? AND pair_duel.player_2_id = ?)
+        )
+        AND (? IS NULL OR pair_duel.id <> ?)
+      LIMIT 1
+    `,
+    [
+      ...pairStatuses,
+      rivalsTournamentId || periodId,
+      player1Id,
+      player2Id,
+      player2Id,
+      player1Id,
+      excludedDuelId,
+      excludedDuelId,
+    ]
+  );
+}
+
+export async function closeChallengePendingRequestsAfterAccept(db, options = {}) {
+  const periodId = normalizeChallengeIdentifier(options.periodId);
+  const rivalsTournamentId = normalizeChallengeIdentifier(options.rivalsTournamentId);
+  const acceptedRequestId = normalizeChallengeIdentifier(options.acceptedRequestId);
+  const player1Id = normalizeChallengeIdentifier(options.player1Id);
+  const player2Id = normalizeChallengeIdentifier(options.player2Id);
+  const actorPlayerId = normalizeChallengeIdentifier(options.actorPlayerId) || player1Id;
+  const saturatedPlayerIds = Array.from(new Set(
+    (Array.isArray(options.saturatedPlayerIds) ? options.saturatedPlayerIds : [])
+      .map(normalizeChallengeIdentifier)
+      .filter((playerId) => playerId === player1Id || playerId === player2Id)
+  ));
+  if (!periodId || !acceptedRequestId || !player1Id || !player2Id) {
+    return {
+      auto_cancelled_request_ids: [],
+      auto_cancelled_request_count: 0,
+      cancelled_duel_count: 0,
+    };
+  }
+
+  const targetConditions = [];
+  const targetParams = [];
+  if (rivalsTournamentId) {
+    targetConditions.push(`
+      (
+        (
+          (cr.player_1_id = ? AND cr.player_2_id = ?)
+          OR (cr.player_1_id = ? AND cr.player_2_id = ?)
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM challenge_periods pair_period
+          WHERE pair_period.id = cr.period_id
+            AND upper(trim(COALESCE(pair_period.rivals_tournament_id, ''))) = upper(trim(?))
+        )
+      )
+    `);
+    targetParams.push(player1Id, player2Id, player2Id, player1Id, rivalsTournamentId);
+  } else {
+    targetConditions.push(`
+      (
+        cr.period_id = ?
+        AND (
+          (cr.player_1_id = ? AND cr.player_2_id = ?)
+          OR (cr.player_1_id = ? AND cr.player_2_id = ?)
+        )
+      )
+    `);
+    targetParams.push(periodId, player1Id, player2Id, player2Id, player1Id);
+  }
+  if (saturatedPlayerIds.length) {
+    const playerPlaceholders = saturatedPlayerIds.map(() => "?").join(", ");
+    targetConditions.push(`
+      (
+        cr.period_id = ?
+        AND (
+          cr.player_1_id IN (${playerPlaceholders})
+          OR cr.player_2_id IN (${playerPlaceholders})
+        )
+      )
+    `);
+    targetParams.push(periodId, ...saturatedPlayerIds, ...saturatedPlayerIds);
+  }
+
+  const targetRequests = await dbAll(
+    db,
+    `
+      SELECT cr.id, cr.period_id, cr.player_1_id, cr.player_2_id
+      FROM challenge_requests cr
+      WHERE cr.status = 'pending'
+        AND cr.id <> ?
+        AND (${targetConditions.join(" OR ")})
+      ORDER BY cr.period_id ASC, cr.id ASC
+    `,
+    [acceptedRequestId, ...targetParams]
+  );
+  const targetRequestIds = targetRequests
+    .map((request) => normalizeChallengeIdentifier(request?.id))
+    .filter(Boolean);
+  if (!targetRequestIds.length) {
+    return {
+      auto_cancelled_request_ids: [],
+      auto_cancelled_request_count: 0,
+      cancelled_duel_count: 0,
+    };
+  }
+
+  const requestPlaceholders = targetRequestIds.map(() => "?").join(", ");
+  const duelResult = await dbRun(
+    db,
+    `
+      UPDATE duels
+      SET
+        status = 'Cancelled',
+        cancelled_by_player_id = CASE
+          WHEN player_1_id IN (?, ?)
+            AND player_2_id NOT IN (?, ?)
+            THEN player_1_id
+          WHEN player_2_id IN (?, ?)
+            AND player_1_id NOT IN (?, ?)
+            THEN player_2_id
+          ELSE ?
+        END,
+        cancellation_reason = 'another_match_accepted',
+        cancelled_at = CURRENT_TIMESTAMP,
+        updated_by = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE challenge_request_id IN (${requestPlaceholders})
+        AND status IN ('Draft', 'Requested new time')
+        AND source_type = 'challenge'
+        AND deleted_at IS NULL
+    `,
+    [
+      player1Id,
+      player2Id,
+      player1Id,
+      player2Id,
+      player1Id,
+      player2Id,
+      player1Id,
+      player2Id,
+      actorPlayerId,
+      actorPlayerId,
+      ...targetRequestIds,
+    ]
+  );
+  const requestResult = await dbRun(
+    db,
+    `
+      UPDATE challenge_requests
+      SET status = 'auto_cancelled', updated_at = CURRENT_TIMESTAMP
+      WHERE id IN (${requestPlaceholders})
+        AND status = 'pending'
+    `,
+    targetRequestIds
+  );
+
+  return {
+    auto_cancelled_request_ids: targetRequestIds,
+    auto_cancelled_request_count: Number(requestResult?.changes) || 0,
+    cancelled_duel_count: Number(duelResult?.changes) || 0,
+  };
+}
+
 export function shouldCloseChallengeRequestsForPlayerStatus(status) {
   return String(status || "").trim().toLowerCase() === "unavailable";
 }
@@ -121,6 +358,15 @@ function dbGet(db, sql, params = []) {
     db.get(sql, params, (error, row) => {
       if (error) reject(error);
       else resolve(row || null);
+    });
+  });
+}
+
+function dbRun(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function onRun(error) {
+      if (error) reject(error);
+      else resolve({ changes: this?.changes || 0, lastID: this?.lastID ?? null });
     });
   });
 }

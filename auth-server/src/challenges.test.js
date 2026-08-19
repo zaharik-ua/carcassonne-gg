@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import sqlite3 from "sqlite3";
 import {
@@ -6,6 +9,7 @@ import {
   CHALLENGE_RIVALS_PAIR_DUEL_STATUSES,
   DEFAULT_MAX_PENDING_REQUESTS_PER_PLAYER,
   buildChallengeMatchCapacity,
+  closeChallengePendingRequestsAfterAccept,
   ensureChallengePeriodConfigurationSchema,
   ensureChallengePeriodPlayersSchema,
   getChallengeFormatDurationMinutes,
@@ -13,6 +17,8 @@ import {
   isChallengePendingRequestLimitReached,
   isChallengePlayerRequestEligibleStatus,
   isChallengeRivalsPairDuelStatus,
+  loadChallengeBlockingRivalsPairDuel,
+  loadChallengeMatchCapacities,
   resolveMaxMatchesPerPlayer,
   resolveMaxPendingRequestsPerPlayer,
   shouldCloseChallengeRequestsForPlayerStatus,
@@ -37,6 +43,136 @@ function all(db, sql, params = []) {
   return new Promise((resolve, reject) => {
     db.all(sql, params, (error, rows) => (error ? reject(error) : resolve(rows || [])));
   });
+}
+
+function get(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (error, row) => (error ? reject(error) : resolve(row || null)));
+  });
+}
+
+function close(db) {
+  return new Promise((resolve, reject) => {
+    db.close((error) => (error ? reject(error) : resolve()));
+  });
+}
+
+async function ensureChallengeAcceptanceTestSchema(db) {
+  await exec(
+    db,
+    `
+      CREATE TABLE challenge_periods (
+        id TEXT PRIMARY KEY,
+        rivals_tournament_id TEXT,
+        max_matches_per_player INTEGER NOT NULL
+      );
+      CREATE TABLE challenge_requests (
+        id TEXT PRIMARY KEY,
+        period_id TEXT NOT NULL,
+        player_1_id TEXT NOT NULL,
+        player_2_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        updated_at TEXT
+      );
+      CREATE TABLE duels (
+        id TEXT PRIMARY KEY,
+        challenge_period_id TEXT NOT NULL,
+        challenge_request_id TEXT,
+        source_type TEXT,
+        player_1_id TEXT NOT NULL,
+        player_2_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        deleted_at TEXT,
+        cancelled_by_player_id TEXT,
+        cancellation_reason TEXT,
+        cancelled_at TEXT,
+        updated_by TEXT,
+        updated_at TEXT
+      );
+    `
+  );
+}
+
+async function createChallengeAcceptanceDatabase(t) {
+  const db = new sqlite3.Database(":memory:");
+  t.after(() => close(db));
+  await ensureChallengeAcceptanceTestSchema(db);
+  return db;
+}
+
+async function createConcurrentChallengeAcceptanceDatabase(t) {
+  const directory = await mkdtemp(join(tmpdir(), "challenge-acceptance-"));
+  const databasePath = join(directory, "acceptance.sqlite");
+  const firstDb = new sqlite3.Database(databasePath);
+  firstDb.configure("busyTimeout", 3000);
+  await ensureChallengeAcceptanceTestSchema(firstDb);
+  const secondDb = new sqlite3.Database(databasePath);
+  secondDb.configure("busyTimeout", 3000);
+  t.after(async () => {
+    await Promise.all([close(firstDb), close(secondDb)]);
+    await rm(directory, { recursive: true, force: true });
+  });
+  return [firstDb, secondDb];
+}
+
+async function acceptChallengeMatchWithGuards(db, options) {
+  let transactionStarted = false;
+  try {
+    await run(db, "BEGIN IMMEDIATE TRANSACTION");
+    transactionStarted = true;
+    const capacities = await loadChallengeMatchCapacities(db, {
+      periodId: options.periodId,
+      playerIds: [options.player1Id, options.player2Id],
+      maxMatchesPerPlayer: options.maxMatchesPerPlayer,
+    });
+    if (
+      capacities[options.player1Id]?.is_match_limit_reached
+      || capacities[options.player2Id]?.is_match_limit_reached
+    ) {
+      const error = new Error("match_limit_reached");
+      error.code = "match_limit_reached";
+      throw error;
+    }
+    const blockingPairDuel = await loadChallengeBlockingRivalsPairDuel(db, {
+      periodId: options.periodId,
+      rivalsTournamentId: options.rivalsTournamentId,
+      player1Id: options.player1Id,
+      player2Id: options.player2Id,
+    });
+    if (blockingPairDuel) {
+      const error = new Error("rivals_pair_used");
+      error.code = "rivals_pair_used";
+      throw error;
+    }
+    await run(
+      db,
+      `
+        INSERT INTO duels (
+          id,
+          challenge_period_id,
+          challenge_request_id,
+          source_type,
+          player_1_id,
+          player_2_id,
+          status
+        )
+        VALUES (?, ?, ?, 'challenge', ?, ?, 'Planned')
+      `,
+      [
+        options.duelId,
+        options.periodId,
+        options.requestId,
+        options.player1Id,
+        options.player2Id,
+      ]
+    );
+    await run(db, "COMMIT");
+    transactionStarted = false;
+    return options.duelId;
+  } catch (error) {
+    if (transactionStarted) await run(db, "ROLLBACK").catch(() => {});
+    throw error;
+  }
 }
 
 async function createDatabase(t) {
@@ -119,6 +255,277 @@ test("builds derived match capacity without storing counters", () => {
     matches_remaining: 1,
     is_match_limit_reached: false,
   });
+});
+
+test("auto-cancels Rivals pair duplicates and only saturated players' other requests", async (t) => {
+  const db = await createChallengeAcceptanceDatabase(t);
+  await exec(
+    db,
+    `
+      INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player) VALUES
+        ('period-1', 'RIVALS-1', 2),
+        ('period-2', 'RIVALS-1', 2),
+        ('period-3', 'RIVALS-2', 2);
+      INSERT INTO challenge_requests (id, period_id, player_1_id, player_2_id, status) VALUES
+        ('accepted', 'period-1', 'A', 'B', 'accepted'),
+        ('limit-a', 'period-1', 'A', 'C', 'pending'),
+        ('free-b', 'period-1', 'B', 'D', 'pending'),
+        ('unrelated', 'period-1', 'C', 'D', 'pending'),
+        ('pair-rivals', 'period-2', 'B', 'A', 'pending'),
+        ('pair-other-rivals', 'period-3', 'A', 'B', 'pending');
+      INSERT INTO duels (
+        id,
+        challenge_period_id,
+        challenge_request_id,
+        source_type,
+        player_1_id,
+        player_2_id,
+        status
+      ) VALUES
+        ('duel-limit-a', 'period-1', 'limit-a', 'challenge', 'A', 'C', 'Requested new time'),
+        ('duel-free-b', 'period-1', 'free-b', 'challenge', 'B', 'D', 'Draft'),
+        ('duel-unrelated', 'period-1', 'unrelated', 'challenge', 'C', 'D', 'Draft'),
+        ('duel-pair-rivals', 'period-2', 'pair-rivals', 'challenge', 'B', 'A', 'Draft'),
+        ('duel-pair-other-rivals', 'period-3', 'pair-other-rivals', 'challenge', 'A', 'B', 'Draft');
+    `
+  );
+
+  const result = await closeChallengePendingRequestsAfterAccept(db, {
+    periodId: "period-1",
+    rivalsTournamentId: "RIVALS-1",
+    acceptedRequestId: "accepted",
+    player1Id: "A",
+    player2Id: "B",
+    saturatedPlayerIds: ["A"],
+    actorPlayerId: "B",
+  });
+
+  assert.deepEqual(result, {
+    auto_cancelled_request_ids: ["limit-a", "pair-rivals"],
+    auto_cancelled_request_count: 2,
+    cancelled_duel_count: 2,
+  });
+  assert.deepEqual(
+    await all(db, "SELECT id, status FROM challenge_requests ORDER BY id"),
+    [
+      { id: "accepted", status: "accepted" },
+      { id: "free-b", status: "pending" },
+      { id: "limit-a", status: "auto_cancelled" },
+      { id: "pair-other-rivals", status: "pending" },
+      { id: "pair-rivals", status: "auto_cancelled" },
+      { id: "unrelated", status: "pending" },
+    ]
+  );
+  assert.deepEqual(
+    await all(db, "SELECT id, status FROM duels ORDER BY id"),
+    [
+      { id: "duel-free-b", status: "Draft" },
+      { id: "duel-limit-a", status: "Cancelled" },
+      { id: "duel-pair-other-rivals", status: "Draft" },
+      { id: "duel-pair-rivals", status: "Cancelled" },
+      { id: "duel-unrelated", status: "Draft" },
+    ]
+  );
+});
+
+test("keeps other pending requests open below the limit while cancelling the Rivals pair", async (t) => {
+  const db = await createChallengeAcceptanceDatabase(t);
+  await exec(
+    db,
+    `
+      INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player) VALUES
+        ('period-1', 'RIVALS-1', 2),
+        ('period-2', 'RIVALS-1', 2);
+      INSERT INTO challenge_requests (id, period_id, player_1_id, player_2_id, status) VALUES
+        ('accepted', 'period-1', 'A', 'B', 'accepted'),
+        ('other-a', 'period-1', 'A', 'C', 'pending'),
+        ('other-b', 'period-1', 'B', 'D', 'pending'),
+        ('pair-rivals', 'period-2', 'A', 'B', 'pending');
+    `
+  );
+
+  const result = await closeChallengePendingRequestsAfterAccept(db, {
+    periodId: "period-1",
+    rivalsTournamentId: "RIVALS-1",
+    acceptedRequestId: "accepted",
+    player1Id: "A",
+    player2Id: "B",
+    saturatedPlayerIds: [],
+    actorPlayerId: "B",
+  });
+
+  assert.deepEqual(result.auto_cancelled_request_ids, ["pair-rivals"]);
+  assert.deepEqual(
+    await all(db, "SELECT id, status FROM challenge_requests ORDER BY id"),
+    [
+      { id: "accepted", status: "accepted" },
+      { id: "other-a", status: "pending" },
+      { id: "other-b", status: "pending" },
+      { id: "pair-rivals", status: "auto_cancelled" },
+    ]
+  );
+});
+
+test("serializes simultaneous accepts at the N=1 match limit", async (t) => {
+  const [firstDb, secondDb] = await createConcurrentChallengeAcceptanceDatabase(t);
+  await run(
+    firstDb,
+    "INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player) VALUES ('period-1', 'RIVALS-1', 1)"
+  );
+
+  const results = await Promise.allSettled([
+    acceptChallengeMatchWithGuards(firstDb, {
+      duelId: "duel-ab",
+      requestId: "request-ab",
+      periodId: "period-1",
+      rivalsTournamentId: "RIVALS-1",
+      player1Id: "A",
+      player2Id: "B",
+      maxMatchesPerPlayer: 1,
+    }),
+    acceptChallengeMatchWithGuards(secondDb, {
+      duelId: "duel-ac",
+      requestId: "request-ac",
+      periodId: "period-1",
+      rivalsTournamentId: "RIVALS-1",
+      player1Id: "A",
+      player2Id: "C",
+      maxMatchesPerPlayer: 1,
+    }),
+  ]);
+
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+  assert.equal(results.find((result) => result.status === "rejected")?.reason?.code, "match_limit_reached");
+  assert.equal(
+    Number((await get(
+      firstDb,
+      "SELECT COUNT(*) AS count FROM duels WHERE player_1_id = 'A' OR player_2_id = 'A'"
+    ))?.count),
+    1
+  );
+});
+
+test("allows two simultaneous accepts at N=2 when both slots are free", async (t) => {
+  const [firstDb, secondDb] = await createConcurrentChallengeAcceptanceDatabase(t);
+  await run(
+    firstDb,
+    "INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player) VALUES ('period-1', 'RIVALS-1', 2)"
+  );
+
+  const results = await Promise.allSettled([
+    acceptChallengeMatchWithGuards(firstDb, {
+      duelId: "duel-ab",
+      requestId: "request-ab",
+      periodId: "period-1",
+      rivalsTournamentId: "RIVALS-1",
+      player1Id: "A",
+      player2Id: "B",
+      maxMatchesPerPlayer: 2,
+    }),
+    acceptChallengeMatchWithGuards(secondDb, {
+      duelId: "duel-ac",
+      requestId: "request-ac",
+      periodId: "period-1",
+      rivalsTournamentId: "RIVALS-1",
+      player1Id: "A",
+      player2Id: "C",
+      maxMatchesPerPlayer: 2,
+    }),
+  ]);
+
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 2);
+  assert.equal(
+    Number((await get(
+      firstDb,
+      "SELECT COUNT(*) AS count FROM duels WHERE player_1_id = 'A' OR player_2_id = 'A'"
+    ))?.count),
+    2
+  );
+});
+
+test("allows only one simultaneous accept when one of two slots remains", async (t) => {
+  const [firstDb, secondDb] = await createConcurrentChallengeAcceptanceDatabase(t);
+  await exec(
+    firstDb,
+    `
+      INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player)
+      VALUES ('period-1', 'RIVALS-1', 2);
+      INSERT INTO duels (
+        id, challenge_period_id, source_type, player_1_id, player_2_id, status
+      ) VALUES ('existing', 'period-1', 'challenge', 'A', 'X', 'Done');
+    `
+  );
+
+  const results = await Promise.allSettled([
+    acceptChallengeMatchWithGuards(firstDb, {
+      duelId: "duel-ab",
+      requestId: "request-ab",
+      periodId: "period-1",
+      rivalsTournamentId: "RIVALS-1",
+      player1Id: "A",
+      player2Id: "B",
+      maxMatchesPerPlayer: 2,
+    }),
+    acceptChallengeMatchWithGuards(secondDb, {
+      duelId: "duel-ac",
+      requestId: "request-ac",
+      periodId: "period-1",
+      rivalsTournamentId: "RIVALS-1",
+      player1Id: "A",
+      player2Id: "C",
+      maxMatchesPerPlayer: 2,
+    }),
+  ]);
+
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+  assert.equal(results.find((result) => result.status === "rejected")?.reason?.code, "match_limit_reached");
+  assert.equal(
+    Number((await get(
+      firstDb,
+      "SELECT COUNT(*) AS count FROM duels WHERE player_1_id = 'A' OR player_2_id = 'A'"
+    ))?.count),
+    2
+  );
+});
+
+test("allows only one simultaneous accept for the same pair in different Rivals periods", async (t) => {
+  const [firstDb, secondDb] = await createConcurrentChallengeAcceptanceDatabase(t);
+  await exec(
+    firstDb,
+    `
+      INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player) VALUES
+        ('period-1', 'RIVALS-1', 2),
+        ('period-2', 'RIVALS-1', 2);
+    `
+  );
+
+  const results = await Promise.allSettled([
+    acceptChallengeMatchWithGuards(firstDb, {
+      duelId: "duel-period-1",
+      requestId: "request-period-1",
+      periodId: "period-1",
+      rivalsTournamentId: "RIVALS-1",
+      player1Id: "A",
+      player2Id: "B",
+      maxMatchesPerPlayer: 2,
+    }),
+    acceptChallengeMatchWithGuards(secondDb, {
+      duelId: "duel-period-2",
+      requestId: "request-period-2",
+      periodId: "period-2",
+      rivalsTournamentId: "RIVALS-1",
+      player1Id: "B",
+      player2Id: "A",
+      maxMatchesPerPlayer: 2,
+    }),
+  ]);
+
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+  assert.equal(results.find((result) => result.status === "rejected")?.reason?.code, "rivals_pair_used");
+  assert.equal(Number((await get(firstDb, "SELECT COUNT(*) AS count FROM duels"))?.count), 1);
 });
 
 test("adds the pending-request limit to a legacy period table idempotently", async (t) => {
