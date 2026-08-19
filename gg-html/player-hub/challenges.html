@@ -4914,10 +4914,23 @@
     return false;
   }
 
-  function showChallengeMatchScheduledDialog() {
+  function getChallengeMatchLimit(period) {
+    const value = Number.parseInt(String(period?.matches_limit ?? period?.max_matches_per_player ?? "1"), 10);
+    return Number.isInteger(value) && value > 0 ? value : 1;
+  }
+
+  function isChallengeMatchLimitReached(period) {
+    if (typeof period?.is_match_limit_reached === "boolean") {
+      return period.is_match_limit_reached;
+    }
+    return Number(period?.matches_count || 0) >= getChallengeMatchLimit(period);
+  }
+
+  function showChallengeMatchLimitReachedDialog(period) {
+    const matchLimit = getChallengeMatchLimit(period);
     showChallengeInfoDialog(
-      "Match already scheduled",
-      "You already have a scheduled Challenge match in this period. Each player can have only one Challenge match per period."
+      "Match limit reached",
+      `You already have ${matchLimit} ${matchLimit === 1 ? "match" : "matches"} counting toward this period's limit.`
     );
   }
 
@@ -5447,6 +5460,24 @@
     return row;
   }
 
+  function mapChallengeRequestCandidateToOption(candidate) {
+    const playerId = String(candidate?.player_id || "").trim();
+    return {
+      id: playerId,
+      value: playerId,
+      label: getOpponentDisplayName(candidate),
+      bga_nickname: String(candidate?.bga_nickname || "").trim(),
+      avatar: String(candidate?.avatar || "").trim(),
+      association: String(candidate?.association?.id || "").trim(),
+      association_name: String(candidate?.association?.name || "").trim(),
+      flag: String(candidate?.association?.flag || "").trim(),
+      timezone: String(candidate?.association?.timezone || "UTC").trim() || "UTC",
+      bga_elo: candidate?.bga_elo ?? null,
+      gg_elo: candidate?.gg_elo ?? null,
+      gg_rank: candidate?.gg_rank ?? null,
+    };
+  }
+
   function openChallengeRequestForm(period, opponent, currentPlayer) {
     const overlay = document.createElement("div");
     overlay.className = "challenge-modal-overlay";
@@ -5465,27 +5496,45 @@
     });
 
     (async () => {
-      const profiles = await fetchChallengeProfiles();
+      const periodId = String(period?.id || "").trim();
+      const eligibilityData = await apiJson(
+        `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(periodId)}/${ELIGIBLE_OPPONENTS_PATH}`,
+        { method: "GET" }
+      );
+      if (!eligibilityData?.eligibility?.can_create_requests) {
+        const reasons = Array.isArray(eligibilityData?.eligibility?.reasons)
+          ? eligibilityData.eligibility.reasons
+          : [];
+        if (reasons.includes("current_player_match_limit")) {
+          throw new Error("You have reached the Challenge match limit for this period.");
+        }
+        if (reasons.includes("current_player_unavailable")) {
+          throw new Error("Your status is Not playing this period.");
+        }
+        throw new Error("Challenge requests are not available right now.");
+      }
+      const profiles = (Array.isArray(eligibilityData?.request_candidates)
+        ? eligibilityData.request_candidates
+        : [])
+        .map(mapChallengeRequestCandidateToOption)
+        .filter((profile) => profile.id && profile.label)
+        .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
       const profileById = new Map(profiles.map((profile) => [String(profile.id || "").trim(), profile]));
       const currentPlayerId = String(currentPlayer?.player_id || "").trim();
       const opponentId = String(opponent?.player_id || "").trim();
       const hasInitialOpponent = Boolean(opponentId);
-      const currentOption = profileById.get(currentPlayerId) || {
+      const currentApiPlayer = eligibilityData?.current_player || currentPlayer;
+      const currentOption = {
         id: currentPlayerId,
-        label: getOpponentDisplayName(currentPlayer),
-        flag: String(currentPlayer?.association?.flag || period?.player_time_context?.association_flag || "").trim(),
-        timezone: String(currentPlayer?.association?.timezone || period?.player_time_context?.timezone || "UTC").trim(),
+        label: getOpponentDisplayName(currentApiPlayer),
+        flag: String(currentApiPlayer?.association?.flag || period?.player_time_context?.association_flag || "").trim(),
+        timezone: String(currentApiPlayer?.association?.timezone || period?.player_time_context?.timezone || "UTC").trim(),
       };
-      const opponentOption = hasInitialOpponent ? (profileById.get(opponentId) || {
-        id: opponentId,
-        value: opponentId,
-        label: getOpponentDisplayName(opponent),
-        flag: String(opponent?.association?.flag || "").trim(),
-        timezone: String(opponent?.association?.timezone || "UTC").trim(),
-      }) : null;
-      const playerOptions = !hasInitialOpponent || profiles.some((profile) => profile.id === opponentId)
-        ? profiles
-        : profiles.concat(opponentOption);
+      const opponentOption = hasInitialOpponent ? profileById.get(opponentId) || null : null;
+      if (hasInitialOpponent && !opponentOption) {
+        throw new Error("This opponent is no longer available for a Challenge request.");
+      }
+      const playerOptions = profiles;
       let selectedOpponent = opponentOption;
 
       dialog.innerHTML = "";
@@ -6046,8 +6095,8 @@
     row.dataset.associationId = String(opponent?.association?.id || "");
     const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
     const canCreateRequests = !!eligibility?.can_create_requests;
-    const playerHasScheduledMatch = Number(period?.matches_count || 0) > 0;
-    const hasScheduledMatch = reasons.includes("current_player_has_match") || playerHasScheduledMatch;
+    const currentPlayerAtMatchLimit = reasons.includes("current_player_match_limit")
+      || isChallengeMatchLimitReached(period);
     const opponentId = String(opponent?.player_id || "").trim();
     const currentPlayerId = String(currentPlayer?.player_id || "").trim();
     const isCurrentPlayer = !!opponent?.is_current_player || (!!opponentId && opponentId === currentPlayerId);
@@ -6055,6 +6104,12 @@
       !!opponent?.is_same_association
       || (!!getPlayerAssociationKey(opponent) && getPlayerAssociationKey(opponent) === getPlayerAssociationKey(currentPlayer))
     );
+    const opponentAtMatchLimit = !!opponent?.is_match_limit_reached;
+    const hasRivalsMatch = !!opponent?.has_rivals_match;
+    const hasPendingRequest = !!opponent?.pending_request_id;
+    const opponentCanInvite = typeof opponent?.can_invite === "boolean"
+      ? opponent.can_invite
+      : !opponentAtMatchLimit && !isSameAssociation && !hasRivalsMatch && !hasPendingRequest;
 
     const left = document.createElement("div");
     left.className = "challenge-opponent-left";
@@ -6131,16 +6186,21 @@
     const inviteBtn = document.createElement("button");
     inviteBtn.className = "challenge-opponent-action";
     inviteBtn.type = "button";
-    inviteBtn.disabled = challengeAccess.bgaVerified && !canCreateRequests && !hasScheduledMatch;
+    inviteBtn.disabled = challengeAccess.bgaVerified && (!canCreateRequests || !opponentCanInvite);
     inviteBtn.textContent = window.matchMedia("(max-width: 720px)").matches ? "Invite" : "Invite to match";
-    if (challengeAccess.bgaVerified && !canCreateRequests && !hasScheduledMatch) {
-      inviteBtn.title = "Challenge requests are not available right now.";
+    if (challengeAccess.bgaVerified && inviteBtn.disabled) {
+      if (currentPlayerAtMatchLimit) inviteBtn.title = "You have reached this period's match limit.";
+      else if (opponentAtMatchLimit) inviteBtn.title = "This player has reached the match limit.";
+      else if (isSameAssociation) inviteBtn.title = "Players from the same association cannot play each other.";
+      else if (hasRivalsMatch) inviteBtn.title = "You already played this opponent in the linked Rivals tournament.";
+      else if (hasPendingRequest) inviteBtn.title = "A pending request already exists with this player.";
+      else inviteBtn.title = "Challenge requests are not available right now.";
     }
     inviteBtn.addEventListener("click", () => {
       if (inviteBtn.disabled) return;
       const openInvite = (requestingPlayer) => {
-        if (hasScheduledMatch) {
-          showChallengeMatchScheduledDialog();
+        if (currentPlayerAtMatchLimit) {
+          showChallengeMatchLimitReachedDialog(period);
           return;
         }
         if (isSameAssociation) {
@@ -6148,6 +6208,21 @@
             "Invite unavailable",
             "Players from the same association cannot play a Challenge match."
           );
+          return;
+        }
+        if (hasRivalsMatch) {
+          showChallengeInfoDialog(
+            "Invite unavailable",
+            "You already have a Challenge match with this player in the linked Rivals tournament."
+          );
+          return;
+        }
+        if (hasPendingRequest) {
+          showChallengeInfoDialog("Invite unavailable", "A pending request already exists with this player.");
+          return;
+        }
+        if (opponentAtMatchLimit) {
+          showChallengeInfoDialog("Invite unavailable", "This player has reached the match limit for this period.");
           return;
         }
         openChallengeRequestForm(period, opponent, requestingPlayer);
@@ -6512,8 +6587,8 @@
   function createNewChallengeRequestButton(period, currentPlayerId, pendingSentCount) {
     return createActionButton("Create request", "challenge-btn-secondary", () => {
       const openRequest = () => {
-        if (Number(period?.matches_count || 0) > 0) {
-          showChallengeMatchScheduledDialog();
+        if (isChallengeMatchLimitReached(period)) {
+          showChallengeMatchLimitReachedDialog(period);
           return;
         }
         const pendingRequestLimit = getChallengePendingRequestLimit(period);
@@ -7579,10 +7654,11 @@
     return wrap;
   }
 
-  function createMatchLimitNotice() {
+  function createMatchLimitNotice(period) {
+    const matchLimit = getChallengeMatchLimit(period);
     const notice = document.createElement("aside");
     notice.className = "challenge-match-limit-notice";
-    notice.setAttribute("aria-label", "Temporary Challenge match limit");
+    notice.setAttribute("aria-label", "Challenge match limit");
 
     const icon = document.createElement("span");
     icon.className = "challenge-match-limit-notice-icon";
@@ -7592,10 +7668,10 @@
 
     const text = document.createElement("div");
     const title = document.createElement("strong");
-    title.textContent = "Temporary match limit: ";
+    title.textContent = "Match limit: ";
     text.appendChild(title);
     text.appendChild(document.createTextNode(
-      "1 match per player per period for now. We plan to increase the limit to 2 around August 20–21."
+      `${matchLimit} ${matchLimit === 1 ? "match" : "matches"} per player in this period.`
     ));
     notice.appendChild(text);
 
@@ -7677,7 +7753,7 @@
         if (String(period?.status || "") !== "draft") {
           stack.appendChild(createChallengeMatchPanel(period));
           if (!isClosedPeriod) {
-            stack.appendChild(createMatchLimitNotice());
+            stack.appendChild(createMatchLimitNotice(period));
           }
           stack.appendChild(createRequestsPanel(period, { hidden: isClosedPeriod }));
           if (!isClosedPeriod) {

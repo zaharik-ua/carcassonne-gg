@@ -22,13 +22,6 @@ export const CHALLENGE_PLAYER_PERIOD_STATUSES = new Set([
   "unavailable",
 ]);
 
-// Existing one-match eligibility continues to use this set until Part 3.
-export const CHALLENGE_ACTIVE_DUEL_STATUSES = new Set([
-  "Planned",
-  "In progress",
-  "Error",
-]);
-
 export const CHALLENGE_MATCH_SLOT_DUEL_STATUSES = new Set([
   "Planned",
   "In progress",
@@ -40,6 +33,15 @@ export const CHALLENGE_NON_SLOT_DUEL_STATUSES = new Set([
   "Draft",
   "Requested new time",
   "Cancelled",
+]);
+
+export const CHALLENGE_RIVALS_PAIR_DUEL_STATUSES = new Set([
+  "Draft",
+  "Requested new time",
+  "Planned",
+  "In progress",
+  "Done",
+  "Error",
 ]);
 
 export const CHALLENGE_FORMAT_DURATION_MINUTES = Object.freeze({
@@ -72,6 +74,15 @@ export function isChallengePendingRequestLimitReached(pendingCount, configuredLi
 
 export function isChallengeMatchSlotStatus(status) {
   return CHALLENGE_MATCH_SLOT_DUEL_STATUSES.has(String(status || "").trim());
+}
+
+export function isChallengeRivalsPairDuelStatus(status) {
+  return CHALLENGE_RIVALS_PAIR_DUEL_STATUSES.has(String(status || "").trim());
+}
+
+export function isChallengePlayerRequestEligibleStatus(status) {
+  const normalized = String(status || "").trim().toLowerCase();
+  return normalized === "available" || normalized === "not_selected";
 }
 
 export function getChallengeFormatDurationMinutes(format) {

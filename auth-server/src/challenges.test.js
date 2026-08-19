@@ -3,6 +3,7 @@ import test from "node:test";
 import sqlite3 from "sqlite3";
 import {
   CHALLENGE_PLAYER_PERIOD_STATUSES,
+  CHALLENGE_RIVALS_PAIR_DUEL_STATUSES,
   DEFAULT_MAX_PENDING_REQUESTS_PER_PLAYER,
   buildChallengeMatchCapacity,
   ensureChallengePeriodConfigurationSchema,
@@ -10,6 +11,8 @@ import {
   getChallengeFormatDurationMinutes,
   isChallengeMatchSlotStatus,
   isChallengePendingRequestLimitReached,
+  isChallengePlayerRequestEligibleStatus,
+  isChallengeRivalsPairDuelStatus,
   resolveMaxMatchesPerPlayer,
   resolveMaxPendingRequestsPerPlayer,
   shouldCloseChallengeRequestsForPlayerStatus,
@@ -59,7 +62,7 @@ test("checks pending-request limits using the configured period value", () => {
   assert.equal(isChallengePendingRequestLimitReached(5, 5), true);
 });
 
-test("defines the future N-match slot statuses and format durations", () => {
+test("defines N-match slot statuses and format durations", () => {
   ["Planned", "In progress", "Done", "Error"].forEach((status) => {
     assert.equal(isChallengeMatchSlotStatus(status), true, `${status} must occupy a slot`);
   });
@@ -71,6 +74,19 @@ test("defines the future N-match slot statuses and format durations", () => {
   assert.equal(getChallengeFormatDurationMinutes("Bo7"), null);
 });
 
+test("defines Rivals-wide pair blocking statuses", () => {
+  assert.deepEqual(
+    [...CHALLENGE_RIVALS_PAIR_DUEL_STATUSES],
+    ["Draft", "Requested new time", "Planned", "In progress", "Done", "Error"]
+  );
+  ["Draft", "Requested new time", "Planned", "In progress", "Done", "Error"].forEach((status) => {
+    assert.equal(isChallengeRivalsPairDuelStatus(status), true, `${status} must block the pair`);
+  });
+  ["Cancelled", "", null].forEach((status) => {
+    assert.equal(isChallengeRivalsPairDuelStatus(status), false, `${status} must not block the pair`);
+  });
+});
+
 test("limits player period status to manual participation choices", () => {
   assert.deepEqual(
     [...CHALLENGE_PLAYER_PERIOD_STATUSES],
@@ -79,6 +95,9 @@ test("limits player period status to manual participation choices", () => {
   assert.equal(shouldCloseChallengeRequestsForPlayerStatus("available"), false);
   assert.equal(shouldCloseChallengeRequestsForPlayerStatus("not_selected"), false);
   assert.equal(shouldCloseChallengeRequestsForPlayerStatus("unavailable"), true);
+  assert.equal(isChallengePlayerRequestEligibleStatus("available"), true);
+  assert.equal(isChallengePlayerRequestEligibleStatus("not_selected"), true);
+  assert.equal(isChallengePlayerRequestEligibleStatus("unavailable"), false);
 });
 
 test("builds derived match capacity without storing counters", () => {

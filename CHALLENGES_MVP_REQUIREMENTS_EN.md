@@ -58,13 +58,13 @@ Challenges is a mode in which the player during a certain game period:
 
 ### 3.2. Player statuses during the period
 
-The status belongs to the specific pair `player_id + period_id` and describes only whether the player is willing to create and receive new requests. Individual match states and the number of used match slots are derived from `duels`.
+The status belongs to the specific pair `player_id + period_id` and controls visibility in the `Open to match` list and a full opt-out from new matches. Individual match states and the number of used match slots are derived from `duels`.
 
 |Status|Display|Meaning|
 |---|---|---|
-| `not_selected` |Not selected|The player has not selected participation or has manually closed themselves to new matches without marking a full opt-out from the period.|
+| `not_selected` |Not selected|The player is hidden from the `Open to match` list but may create requests and be selected manually through `Create request` while a match slot remains.|
 | `available` |Open to match|The player is open to new requests while at least one match slot remains.|
-| `unavailable` |Not playing this period|The player explicitly does not want to schedule additional matches in this period.|
+| `unavailable` |Not playing this period|The player has fully opted out of creating, receiving, and accepting requests during this period.|
 
 ### 3.3. Request statuses
 
@@ -74,7 +74,7 @@ The status belongs to the specific pair `player_id + period_id` and describes on
 | `accepted` |The request has been accepted and is linked to a confirmed match.|
 | `declined` |The request was rejected by the player from whom a response was expected.|
 | `cancelled_by_sender` |The request has been withdrawn by its original author.|
-| `auto_cancelled` |The request was automatically closed because a match limit was reached, participation status changed, the period closed, or a match for the same pair was confirmed within the Rivals tournament.|
+| `auto_cancelled` |The request was automatically closed because a match limit was reached, a player switched to `unavailable`, the period closed, or a match for the same pair was confirmed within the Rivals tournament.|
 | `expired` |The last time proposed in the request has passed.|
 
 ### 3.4. Challenge match statuses (`duel`)
@@ -133,7 +133,7 @@ Available statuses `duels` are marked separately from statuses to be added for C
 - [x] **CH-PLY-001** There is no more than one status record for each player and period.
 - [x] **CH-PLY-002** Initial player status is `not_selected`.
 - [ ] **CH-PLY-003** A player may switch among `not_selected`, `available`, and `unavailable` during `planning_open` or `active`, even when they already have scheduled or completed matches.
-- [ ] **CH-PLY-004** Switching to `not_selected` closes the player to new requests but does not change existing pending requests, linked duels, or confirmed matches.
+- [ ] **CH-PLY-004** Switching to `not_selected` removes the player from the `Open to match` list but preserves their ability to create requests and be selected manually, without changing pending requests, linked duels, or confirmed matches.
 - [ ] **CH-PLY-005** Before switching from `available` or `not_selected` to `unavailable`, the UI warns that pending requests will be closed automatically when such requests exist.
 - [ ] **CH-PLY-006** When switching from `available` or `not_selected` to `unavailable`, every pending request involving that player becomes `auto_cancelled`; linked duels in `Draft` or `Requested new time` become `Cancelled`, while confirmed matches remain unchanged.
 - [ ] **CH-PLY-007** Switching from `available` to `not_selected` does not close pending requests or change linked duels in `Draft` or `Requested new time`.
@@ -141,22 +141,22 @@ Available statuses `duels` are marked separately from statuses to be added for C
 - [ ] **CH-PLY-009** Receiving a valid result and moving a duel to `Done` does not change either player's participation status.
 - [ ] **CH-PLY-010** Cancelling one of several matches does not change either player's participation status.
 - [ ] **CH-PLY-011** Moving a duel to `Requested new time` does not change either player's participation status.
-- [ ] **CH-PLY-012** A player with scheduled or completed matches may manually close themselves to additional matches by selecting `not_selected` or `unavailable`.
+- [ ] **CH-PLY-012** A player with scheduled or completed matches may hide themselves from the `Open to match` list through `not_selected` or fully close themselves to additional matches through `unavailable`.
 - [ ] **CH-PLY-013** The migration maps legacy `match_scheduled` and `played` statuses to `available`, preserves existing duels, and removes `challenge_duel_id`; derived match limits additionally constrain actual eligibility after migration.
 
 ### 6.1. Match limit and derived counters
 
-- [ ] **CH-CAP-001** A match occupies one player slot when its Challenge duel is not soft-deleted and has status `Planned`, `In progress`, `Done`, or `Error`.
-- [ ] **CH-CAP-002** Duels in `Draft`, `Requested new time`, or `Cancelled`, and soft-deleted duels, do not occupy a slot.
-- [ ] **CH-CAP-003** A player's `matches_count` is calculated transactionally from `duels` using `challenge_period_id`, participant, and the statuses in `CH-CAP-001`; it is not stored in `challenge_period_players`.
-- [ ] **CH-CAP-004** `matches_limit` comes from `challenge_periods.max_matches_per_player` and is not duplicated in `challenge_period_players`.
-- [ ] **CH-CAP-005** For each period, the player API returns the derived fields `matches_count`, `matches_limit`, `matches_remaining = max(0, matches_limit - matches_count)`, and `is_match_limit_reached`.
-- [ ] **CH-CAP-006** A player may create, receive, or accept a new request only when their status is `available` and `matches_count < matches_limit`.
-- [ ] **CH-CAP-007** Confirming a match increases the derived `matches_count` for both players without storing a separate cached counter.
+- [x] **CH-CAP-001** A match occupies one player slot when its Challenge duel is not soft-deleted and has status `Planned`, `In progress`, `Done`, or `Error`.
+- [x] **CH-CAP-002** Duels in `Draft`, `Requested new time`, or `Cancelled`, and soft-deleted duels, do not occupy a slot.
+- [x] **CH-CAP-003** A player's `matches_count` is calculated transactionally from `duels` using `challenge_period_id`, participant, and the statuses in `CH-CAP-001`; it is not stored in `challenge_period_players`.
+- [x] **CH-CAP-004** `matches_limit` comes from `challenge_periods.max_matches_per_player` and is not duplicated in `challenge_period_players`.
+- [x] **CH-CAP-005** For each period, the player API returns the derived fields `matches_count`, `matches_limit`, `matches_remaining = max(0, matches_limit - matches_count)`, and `is_match_limit_reached`.
+- [x] **CH-CAP-006** A player may create, receive through manual selection, or accept a request when their status is `available` or `not_selected` and `matches_count < matches_limit`; `unavailable` blocks these actions.
+- [x] **CH-CAP-007** Confirming a match increases the derived `matches_count` for both players without storing a separate cached counter.
 - [ ] **CH-CAP-008** When a player reaches `matches_limit` after confirming a match, every other pending request involving that player becomes `auto_cancelled`; while the player remains below the limit, the other pending requests remain open.
 - [ ] **CH-CAP-009** Duels in `Draft` or `Requested new time` that belong to auto-cancelled requests become `Cancelled`.
-- [ ] **CH-CAP-010** If a slot is released by `Cancelled`, `Requested new time`, or soft deletion, a player whose status is `available` automatically becomes eligible for new requests again without manually changing status.
-- [ ] **CH-CAP-011** A duel in `Error` occupies a slot indefinitely until the existing player/admin flow moves it to `Done`, `Cancelled`, or a soft-deleted state; there is no separate automatic slot release.
+- [x] **CH-CAP-010** If a slot is released by `Cancelled`, `Requested new time`, or soft deletion, a player whose status is `available` or `not_selected` may create and handle requests again without manually changing status; only `available` is shown in the `Open to match` list.
+- [x] **CH-CAP-011** A duel in `Error` occupies a slot indefinitely until the existing player/admin flow moves it to `Done`, `Cancelled`, or a soft-deleted state; there is no separate automatic slot release.
 
 ### 6.2. Player availability time windows
 
@@ -177,16 +177,16 @@ Available statuses `duels` are marked separately from statuses to be added for C
 ## 7. Available opponents and eligibility
 
 - [x] **CH-ELG-001** Challenges mutating actions can only be performed by an authenticated user associated with a verified player profile; the sections and buttons themselves may remain visible in public preview mode.
-- [ ] **CH-ELG-002** Active and inactive profiles can be participants in Challenges.
-- [ ] **CH-ELG-003** The "Open to Match" list contains players with the status `available` in the selected period.
-- [ ] **CH-ELG-004** The current player does not appear as an available opponent for himself.
-- [ ] **CH-ELG-005** The list of available opponents does not show players from the same association.
-- [ ] **CH-ELG-006** The available-opponents list excludes players who have reached `max_matches_per_player`; a player with one or more matches below the limit remains listed while their status is `available`.
-- [ ] **CH-ELG-007** Manual selection and the Players page may invite only a player with status `available`, an unused match slot, and no other eligibility restriction.
-- [ ] **CH-ELG-008** A player with status `not_selected` or `unavailable` cannot be invited.
-- [ ] **CH-ELG-009** Having a scheduled or completed match does not by itself block a new request while the player remains below the limit.
-- [ ] **CH-ELG-010** Cannot create a second pending request between the same pair of players in the same period.
-- [ ] **CH-ELG-011** After the previous request becomes terminal, the same pair can be invited again only if it has no other non-cancelled Challenge duel in the linked Rivals tournament.
+- [x] **CH-ELG-002** Active and inactive profiles can be participants in Challenges.
+- [x] **CH-ELG-003** The "Open to Match" list contains players with the status `available` in the selected period.
+- [x] **CH-ELG-004** The current player does not appear as an available opponent for himself.
+- [x] **CH-ELG-005** The list of available opponents does not show players from the same association.
+- [x] **CH-ELG-006** The available-opponents list excludes players who have reached `max_matches_per_player`; a player with one or more matches below the limit remains listed while their status is `available`.
+- [x] **CH-ELG-007** `Create request`, another manual selector, or the Players page may invite a player with status `available` or `not_selected`, an unused match slot, and no other eligibility restriction.
+- [x] **CH-ELG-008** A player with `not_selected` is hidden from the `Open to match` list but remains available through manual selection; a player with `unavailable` cannot be invited.
+- [x] **CH-ELG-009** Having a scheduled or completed match does not by itself block a new request while the player remains below the limit.
+- [x] **CH-ELG-010** Cannot create a second pending request between the same pair of players in the same period.
+- [x] **CH-ELG-011** After the previous request becomes terminal, the same pair can be invited again only if it has no other non-cancelled Challenge duel in the linked Rivals tournament.
 
 Terminal statuses for re-invitation:
 
@@ -197,13 +197,13 @@ Terminal statuses for re-invitation:
 
 ### 7.1. Opponent uniqueness within a Rivals tournament
 
-- [ ] **CH-RIV-001** When a Challenge period has a `rivals_tournament_id`, the backend checks the player pair across every Challenge period with the same `rivals_tournament_id`.
-- [ ] **CH-RIV-002** A pair is considered already used when it has a non-soft-deleted Challenge duel in `Draft`, `Requested new time`, `Planned`, `In progress`, `Done`, or `Error`.
-- [ ] **CH-RIV-003** A duel in `Cancelled` or a soft-deleted duel does not block a later request between the same pair.
-- [ ] **CH-RIV-004** For a period without `rivals_tournament_id`, pair uniqueness is enforced at least within that Challenge period.
-- [ ] **CH-RIV-005** Pair uniqueness is checked when a request is created and checked again transactionally on accept; for a reschedule, the current duel is excluded from the check.
+- [x] **CH-RIV-001** When a Challenge period has a `rivals_tournament_id`, the backend checks the player pair across every Challenge period with the same `rivals_tournament_id`.
+- [x] **CH-RIV-002** A pair is considered already used when it has a non-soft-deleted Challenge duel in `Draft`, `Requested new time`, `Planned`, `In progress`, `Done`, or `Error`.
+- [x] **CH-RIV-003** A duel in `Cancelled` or a soft-deleted duel does not block a later request between the same pair.
+- [x] **CH-RIV-004** For a period without `rivals_tournament_id`, pair uniqueness is enforced at least within that Challenge period.
+- [x] **CH-RIV-005** Pair uniqueness is checked when a request is created and checked again transactionally on accept; for a reschedule, the current duel is excluded from the check.
 - [ ] **CH-RIV-006** When a pair confirms a match, all other pending requests for that pair across the linked Rivals tournament become `auto_cancelled`.
-- [ ] **CH-RIV-007** Pair comparison is unordered: `(player A, player B)` and `(player B, player A)` are the same pair.
+- [x] **CH-RIV-007** Pair comparison is unordered: `(player A, player B)` and `(player B, player A)` are the same pair.
 
 ### 7.2. “Open to match” list toggle
 
@@ -215,7 +215,7 @@ Terminal statuses for re-invitation:
 - [ ] **CH-OPP-006** `Available opponents` excludes players who already have a non-cancelled Challenge duel with the current player in any period of the linked Rivals tournament; for a period without `rivals_tournament_id`, the current period is checked.
 - [ ] **CH-OPP-007** In `All players`, the current player's row has no invite action; same-association and already-matched rows show a disabled invite action or a clear reason why they are unavailable.
 - [ ] **CH-OPP-008** Switching the toggle works without reloading the page and does not change backend eligibility: a direct request to an unavailable opponent is still rejected.
-- [ ] **CH-OPP-009** The API returns enough data for both views, including `is_current_player`, `is_same_association`, `has_rivals_match`, `matches_count`, `matches_limit`, and `is_match_limit_reached`, or equivalent separate collections.
+- [x] **CH-OPP-009** The API returns enough data for both views, including `is_current_player`, `is_same_association`, `has_rivals_match`, `matches_count`, `matches_limit`, and `is_match_limit_reached`, or equivalent separate collections.
 
 ### 7.3. Public preview and Challenges access onboarding
 
@@ -236,7 +236,7 @@ Terminal statuses for re-invitation:
 
 ### 8.1. Entry points
 
-- [ ] **CH-REQ-001** A challenge can be created via the Player Hub → Challenges clean form.
+- [x] **CH-REQ-001** A request can be created through the Player Hub → Challenges clean form; its opponent selector contains eligible players with `available` or `not_selected` status.
 - [x] **CH-REQ-002** A request can be created from a list of available players with a pre-selected opponent.
 - [ ] **CH-REQ-003** Request can be created from the Players page via the "Invite to match" button with a pre-selected opponent.
 
@@ -372,7 +372,7 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-CAN-002** After the scheduled start time, cancellation of an unplayed `Planned` match remains available via player flow.
 - [ ] **CH-CAN-003** When cancelled, the match goes to `Cancelled` or equivalently soft-deleted with a recorded cancellation reason.
 - [ ] **CH-CAN-004** Cancelling a match reduces both players' derived `matches_count` and does not change their participation status.
-- [ ] **CH-CAN-005** After a slot is released, a player with status `available` may create, receive, and accept requests again; `not_selected` and `unavailable` remain closed.
+- [ ] **CH-CAN-005** After a slot is released, a player with status `available` or `not_selected` may create, receive, and accept requests again; `not_selected` remains hidden from the `Open to match` list, while `unavailable` remains fully closed.
 - [ ] **CH-CAN-006** Another member receives a cancellation notification.
 - [ ] **CH-CAN-007** Admin can cancel a match regardless of start time.
 
@@ -496,6 +496,7 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-E2E-026** A period with `max_pending_requests_per_player = 5` allows an author to have five pending requests and rejects the sixth.
 - [ ] **CH-E2E-027** The player UI shows all matches in the period and the `X / N matches` counter; after a first match below the limit, a player whose status is `available` remains in the `Open to match` list.
 - [ ] **CH-E2E-028** The `Open to match` list opens in `Available opponents` by default, excluding the current player, their association members, and previously used Rivals opponents; switching to `All players` displays those available rows but still prevents an invalid request.
+- [ ] **CH-E2E-029** A player with `available` or `not_selected` status opens `Create request`, selects an eligible opponent with `not_selected`, and successfully creates the request; that opponent still does not appear in the `Open to match` list.
 
 ## 21. Data scheme of new DB objects
 
