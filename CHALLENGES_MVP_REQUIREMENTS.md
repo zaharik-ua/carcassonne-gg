@@ -31,6 +31,8 @@ Challenges — режим, у якому гравець протягом виз�
 - Коригування результату працює на довірі: зміна одного гравця застосовується одразу, без підтвердження другим гравцем.
 - Challenge-матч є продуктовою назвою одиночної серії між двома гравцями. На рівні даних він зберігається як один `duel` і пов'язані з ним `games`, без створення командного запису в `matches`.
 - Для Challenge-дуелей використовуються наявні статуси `duels`, розширені лише за необхідності.
+- Скарги, проблеми та звернення щодо турнірів зберігаються в універсальній таблиці `tournament_cases`. У поточному MVP автоматично створюється лише кейс категорії `no_show`; UI списку та опрацювання кейсів поки не реалізується.
+- Взаємне скасування проблемного Challenge-матчу не створює `tournament_cases`; no-show створює відкриту скаргу та зберігає введені гравцем деталі.
 - Один гравець може зіграти не більше одного Challenge-матчу в одному періоді.
 - Гравець зі статусом `available` може додатково вказати до трьох часових вікон, коли він може і почати, і завершити матч. Ці вікна мають інформаційний характер і не обмежують створення заявки або запропоновані в ній часові опції.
 - Сторінка Challenges має публічний preview-режим: періоди, секції заявок, список відкритих до матчу гравців і кнопки дій відображаються також неавторизованим користувачам та користувачам без прив'язаного BGA-профілю. Виконання mutating actions залишається доступним лише після авторизації та верифікації BGA-акаунта.
@@ -335,6 +337,20 @@ Terminal-статуси для повторного запрошення:
 - [ ] **CH-RES-014** Кожна ручна зміна результату записується в audit log.
 - [ ] **CH-RES-015** Після `result_review_ends_at` результат може змінювати лише адміністратор.
 
+### 15.1. Вирішення `Error`-матчу без результату
+
+- [x] **CH-CAS-001** Для Challenge-duel у статусі `Error` без зафіксованого duel/game-результату статус `Error` у player UI відображається червоним.
+- [x] **CH-CAS-002** Для такого матчу учаснику не показується `Edit Results`; замість нього доступна коротка дія `Resolve`.
+- [x] **CH-CAS-003** `Resolve` відкриває modal у стилі Challenges з одним custom dropdown `Match outcome` та неактивною кнопкою `Submit`, доки результат не обрано.
+- [x] **CH-CAS-004** Dropdown містить `Match cancelled by mutual agreement of both players` і по одному варіанту `Player <nickname> did not show up for the match` для кожного учасника; nickname відображається напівжирним.
+- [x] **CH-CAS-005** Взаємне скасування переводить duel у `Cancelled`, записує `cancellation_reason = 'Match cancelled by mutual agreement of both players.'` і не створює `tournament_cases`.
+- [x] **CH-CAS-006** Для no-show modal показує обов'язкове editable textarea `Details`, попередньо заповнене англійським текстом із no-show гравцем, суперником, назвою Challenge period і запланованими UTC датою та часом.
+- [x] **CH-CAS-007** No-show переводить duel у `Cancelled`, зберігає фінальний текст `Details` у `duels.cancellation_reason` і створює відкритий `tournament_cases` типу `complaint` та категорії `no_show`.
+- [x] **CH-CAS-008** No-show case пов'язується з duel, Challenge period і `rivals_tournament_id` періоду, якщо турнір заданий; також зберігаються автор звернення та reported player.
+- [x] **CH-CAS-009** Обидва resolution flow транзакційно переводять пов'язану заявку в `auto_cancelled`, звільняють `challenge_period_players.challenge_duel_id` і повертають обох гравців у `not_selected`.
+- [x] **CH-CAS-010** Backend дозволяє resolution лише учаснику відповідного Challenge-duel, повторно перевіряє `Error` і відсутність результату та повертає conflict для вже зміненого матчу.
+- [x] **CH-CAS-011** `tournament_cases` поки не повертається окремим list API і ніде не відображається в UI.
+
 ## 16. Сповіщення
 
 - [ ] **CH-NTF-001** Гравець отримує сповіщення про нову заявку.
@@ -378,6 +394,7 @@ Terminal-статуси для повторного запрошення:
 - [ ] **CH-AUD-007** Expiration заявки записується в audit log.
 - [ ] **CH-AUD-008** Для кожної події зберігаються actor, action, request ID, previous state, next state та timestamp.
 - [ ] **CH-AUD-009** Історія audit log не видаляється при приховуванні заявки гравцем.
+- [x] **CH-AUD-010** Resolution проблемного Challenge-матчу записує audit events для duel і заявки, а no-show додатково записує `tournament_case.created`.
 
 ## 19. Конкурентність та цілісність даних
 
@@ -411,10 +428,12 @@ Terminal-статуси для повторного запрошення:
 - [x] **CH-E2E-018** Гравець у статусі `available` створює до трьох непересічних погодинних вікон у локальному календарі, зберігає їх у UTC, редагує або видаляє, а інший гравець бачить ці вікна у своїй часовій зоні.
 - [ ] **CH-E2E-019** Неавторизований користувач бачить повний preview сторінки Challenges; кожна з трьох gated actions відкриває onboarding, Google sign-in не закриває основний попап, ручна BGA-перевірка показує loading/error state, а після виконання обох пунктів `Start playing` закриває попап без автоматичного повторення початкової дії.
 - [ ] **CH-E2E-020** Global admin вмикає `Admin mode`, бачить чужі заявки та матчі без player actions, потім вмикає `Removed items` і додатково бачить приховані заявки та soft-deleted duels; не-адміністратор не бачить перемикачів і отримує `403` при прямому запиті admin-параметрів API.
+- [ ] **CH-E2E-021** Учасник відкриває `Error`-матч без результату, обирає взаємне скасування, після Submit бачить `Cancelled`; case не створюється, заявка закрита, а обидва гравці більше не заблоковані цим duel.
+- [ ] **CH-E2E-022** Учасник відкриває `Error`-матч без результату, обирає no-show одного з гравців, редагує автоматичні Details і після Submit отримує `Cancelled` duel та рівно один відкритий `tournament_cases`, пов'язаний із duel, періодом і Rivals-турніром.
 
 ## 21. Схема даних нових DB-об'єктів
 
-Схема нижче є цільовою для SQLite. Усі ідентифікатори нових сутностей мають тип `TEXT`, усі timestamps зберігаються як UTC ISO 8601 у полях типу `TEXT`, а boolean-значення — як `INTEGER` зі значенням `0` або `1`.
+Схема нижче є цільовою для SQLite. Ідентифікатори нових сутностей мають тип `TEXT`, якщо для конкретної таблиці не вказано інше; усі timestamps зберігаються як UTC ISO 8601 у полях типу `TEXT`, а boolean-значення — як `INTEGER` зі значенням `0` або `1`.
 
 ### 21.1. `challenge_periods`
 
@@ -514,7 +533,44 @@ Terminal-статуси для повторного запрошення:
 - індекси `(awaiting_player_id, status)`, `(created_by_player_id, status)` і `(period_id, status)`;
 - backend рахує ліміт із трьох заявок через `(period_id, created_by_player_id, status = 'pending')` у транзакції створення.
 
-### 21.4. `notifications`
+### 21.4. `tournament_cases`
+
+Універсальна таблиця зберігає скарги, проблеми та звернення гравців щодо турнірів. Кейс може бути пов'язаний із командним матчем, duel, турніром, Challenge period або майбутнім типом сутності. У поточному Challenge flow запис створюється лише для no-show.
+
+| Поле | Тип | Null | Default | Призначення |
+|---|---|---:|---|---|
+| `id` | `INTEGER` | ні | auto | Autoincrement primary key. |
+| `case_type` | `TEXT` | ні | `'problem'` | `complaint`, `problem`, `request` або `other`. |
+| `category` | `TEXT` | так | `NULL` | Підтип кейсу; для поточного flow — `no_show`. |
+| `status` | `TEXT` | ні | `'open'` | `open`, `in_progress`, `resolved` або `closed`. |
+| `priority` | `TEXT` | ні | `'normal'` | `low`, `normal`, `high` або `urgent`. |
+| `subject` | `TEXT` | ні | — | Коротка тема кейсу. |
+| `details` | `TEXT` | ні | `''` | Деталі, надані гравцем або системою. |
+| `submitted_by_user_id` | `INTEGER` | так | `NULL` | FK → `users.id`; auth-користувач, який створив кейс. |
+| `submitted_by_player_id` | `TEXT` | ні | — | FK → `profiles.id`; гравець, який відправив звернення. |
+| `responsible_user_id` | `INTEGER` | так | `NULL` | FK → `users.id`; відповідальний за опрацювання кейсу. |
+| `reported_player_id` | `TEXT` | так | `NULL` | FK → `profiles.id`; гравець, щодо якого створено звернення. |
+| `match_id` | `TEXT` | так | `NULL` | FK → `matches.id`; пов'язаний командний матч, якщо є. |
+| `duel_id` | `TEXT` | так | `NULL` | FK → `duels.id`; пов'язаний duel, якщо є. |
+| `tournament_id` | `TEXT` | так | `NULL` | FK → `tournaments.id`; пов'язаний турнір, якщо є. |
+| `challenge_period_id` | `TEXT` | так | `NULL` | FK → `challenge_periods.id`; пов'язаний Challenge period, якщо є. |
+| `related_entity_type` | `TEXT` | так | `NULL` | Розширюваний тип іншої пов'язаної сутності. |
+| `related_entity_id` | `TEXT` | так | `NULL` | ID іншої пов'язаної сутності. |
+| `resolution` | `TEXT` | так | `NULL` | Рішення або підсумок опрацювання кейсу. |
+| `resolved_at` | `TEXT` | так | `NULL` | Час вирішення в UTC. |
+| `deleted_at` | `TEXT` | так | `NULL` | Час soft delete в UTC. |
+| `created_at` | `TEXT` | ні | `CURRENT_TIMESTAMP` | Час створення. |
+| `updated_at` | `TEXT` | ні | `CURRENT_TIMESTAMP` | Час останньої зміни. |
+
+Обов'язкові constraints та індекси:
+
+- `CHECK` для дозволених значень `case_type`, `status` і `priority`;
+- індекси для workflow `(status, priority, created_at)`, автора `(submitted_by_player_id, created_at)` і відповідального `(responsible_user_id, status, created_at)`;
+- окремі індекси для `match_id`, `duel_id`, `tournament_id`, `challenge_period_id` та універсальної пари `(related_entity_type, related_entity_id)`;
+- no-show case створюється в тій самій `BEGIN IMMEDIATE` транзакції, що переводить duel у `Cancelled`, закриває заявку й оновлює статуси гравців;
+- взаємне скасування не створює запис у цій таблиці.
+
+### 21.5. `notifications`
 
 Універсальна таблиця є outbox та сховищем in-app сповіщень для всіх майбутніх доменів сайту. Один логічний event може створити окремі записи для каналів `in_app` та `email`. Для Challenges доменний контекст зберігається через `domain`, `event_type`, `source_entity_type`, `source_entity_id` і `payload`, без окремих Challenge-specific колонок.
 
@@ -543,7 +599,7 @@ Terminal-статуси для повторного запрошення:
 - `CHECK`, що `source_entity_type` і `source_entity_id` або обидва задані, або обидва `NULL`;
 - індекси `(recipient_user_id, channel, read_at, created_at)`, `(delivery_status, channel, created_at)` та `(domain, source_entity_type, source_entity_id)`.
 
-### 21.5. Розширення наявної таблиці `duels`
+### 21.6. Розширення наявної таблиці `duels`
 
 Для Challenge-матчів до `duels` додаються поля:
 
@@ -573,7 +629,7 @@ Terminal-статуси для повторного запрошення:
 - `cancelled_by_player_id` посилається на `profiles.id` для player cancellation; значення `'1'` зарезервоване для admin cancellation;
 - DB trigger або еквівалентна транзакційна перевірка узгоджує `challenge_period_players.challenge_duel_id` з учасниками duel і не дозволяє другий активний/зіграний Challenge-duel у періоді.
 
-### 21.6. Розширення наявної таблиці `audit_trail`
+### 21.7. Розширення наявної таблиці `audit_trail`
 
 Нова таблиця audit log не створюється. До наявної `audit_trail` додаються:
 
@@ -584,7 +640,7 @@ Terminal-статуси для повторного запрошення:
 
 Для Challenge-подій `entity_type` містить `challenge_period`, `challenge_request` або `challenge_duel`, `record_id` — ID відповідного об'єкта, `changes` — JSON із previous/next state, а `metadata` — пов'язані `period_id`, `request_id`, `duel_id` та технічний контекст операції. Для `idempotency_key IS NOT NULL` створюється unique partial index.
 
-### 21.7. Об'єкти, які не створюються
+### 21.8. Об'єкти, які не створюються
 
 - Окрема таблиця результатів не потрібна: результат зберігається в наявних `duels` і `games`.
 - Окремий Challenge-об'єкт матчу не потрібний: матч зберігається як `duels` із `source_type = 'challenge'`.
@@ -616,12 +672,12 @@ Terminal-статуси для повторного запрошення:
 - [x] **CH-IMP-016** Часові вікна доступності гравця: DB-поля, API, audit, desktop/mobile календар і відображення суперникам.
 - [x] **CH-IMP-017** Публічний preview Challenges та onboarding для sign-in/BGA verification перед mutating actions.
 - [x] **CH-IMP-018** Global-admin режим на сторінці Challenges: усі заявки й матчі, read-only відображення, опційне включення soft-deleted записів і backend access control.
+- [x] **CH-IMP-019** `tournament_cases` schema та player flow `Resolve` для `Error` Challenge-матчу без результату, включно з mutual cancellation і no-show case.
 
 ## 23. Поза межами MVP
 
 - Розрахунок та оновлення рейтингу.
 - Реалізація або зміна механізму автоматичного імпорту BGA-результатів.
-- Report an Issue.
 - Штрафи за no-show, неправильний результат або пізнє скасування.
 - Спеціальна логіка зміни асоціації посеред періоду.
 - Історичний UI для архівних періодів, заявок, матчів і rating delta.
@@ -635,7 +691,7 @@ Terminal-статуси для повторного запрошення:
 
 - вплив результатів Challenges на рейтинг;
 - автоматичне зіставлення BGA tables із Challenge-матчем;
-- Report an Issue та admin dispute workflow;
+- admin UI для списку, призначення відповідального, розгляду та закриття `tournament_cases`;
 - санкції за зловживання;
 - історія участі та статистика Challenges;
 - нагадування та розширені канали сповіщень.

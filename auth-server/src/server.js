@@ -23,6 +23,7 @@ import {
   isBlindLineupType,
   publishSecretLineupMatchInTransaction,
 } from "./secret-lineups.js";
+import { ensureTournamentCasesSchema } from "./tournament-cases.js";
 
 dotenv.config();
 
@@ -7114,6 +7115,9 @@ db.serialize(() => {
           ensureStreamsSchema();
           ensureMobileMenuItemsSchema();
           ensureAuditTrailSchema();
+          ensureTournamentCasesSchema(db).catch((error) => {
+            console.error("Failed to ensure tournament_cases schema", error);
+          });
         }
       );
     }
@@ -9120,6 +9124,8 @@ function mapChallengeRequestWithPlayers(row) {
       time_utc: row.duel_time_utc,
       duel_format: row.duel_format,
       rating: row.duel_rating,
+      dw1: normalizeIntegerOrNull(row.duel_dw1),
+      dw2: normalizeIntegerOrNull(row.duel_dw2),
       cancelled_by_player_id: row.duel_cancelled_by_player_id || null,
       cancellation_reason: row.duel_cancellation_reason || null,
       cancelled_at: row.duel_cancelled_at || null,
@@ -9758,6 +9764,8 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
           d.time_utc AS duel_time_utc,
           d.duel_format,
           d.rating AS duel_rating,
+          d.dw1 AS duel_dw1,
+          d.dw2 AS duel_dw2,
           d.cancelled_by_player_id AS duel_cancelled_by_player_id,
           d.updated_by AS duel_updated_by,
           d.cancellation_reason AS duel_cancellation_reason,
@@ -9856,6 +9864,8 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
             d.time_utc AS duel_time_utc,
             d.duel_format,
             d.rating AS duel_rating,
+            d.dw1 AS duel_dw1,
+            d.dw2 AS duel_dw2,
             d.cancelled_by_player_id AS duel_cancelled_by_player_id,
             d.cancellation_reason AS duel_cancellation_reason,
             d.cancelled_at AS duel_cancelled_at,
@@ -9913,6 +9923,275 @@ function getChallengeRequestStatusForDuelStatus(status) {
   if (status === "Cancelled") return "auto_cancelled";
   return "accepted";
 }
+
+const CHALLENGE_ISSUE_RESOLUTIONS = new Set(["mutual_cancellation", "player_no_show"]);
+
+async function challengeDuelHasRecordedResult(duel) {
+  if ([duel?.dw1, duel?.dw2].some((value) => Number(value || 0) > 0)) return true;
+  const resultGame = await dbGetAsync(
+    `
+      SELECT id
+      FROM games
+      WHERE trim(COALESCE(duel_id, '')) = trim(?)
+        AND deleted_at IS NULL
+        AND (
+          player_1_score IS NOT NULL
+          OR player_2_score IS NOT NULL
+          OR player_1_rank IS NOT NULL
+          OR player_2_rank IS NOT NULL
+          OR lower(trim(COALESCE(status, ''))) = 'no show'
+        )
+      LIMIT 1
+    `,
+    [duel?.id]
+  );
+  return !!resultGame;
+}
+
+app.patch("/challenge-periods/:id/matches/:duelId/resolve-issue", requireAuthenticated, async (req, res) => {
+  const periodId = normalizeNullableText(req.params.id);
+  const duelId = normalizeNullableText(req.params.duelId);
+  const actorPlayerId = normalizeNullableText(req.user?.player_id);
+  const actorUserId = normalizePositiveInteger(req.user?.id);
+  const resolution = String(req.body?.resolution || "").trim().toLowerCase();
+  const reportedPlayerId = normalizeNullableText(req.body?.reported_player_id ?? req.body?.reportedPlayerId);
+  const submittedDetails = normalizeNullableText(req.body?.details);
+
+  if (!actorPlayerId) {
+    return res.status(403).json({ ok: false, code: "profile_required", message: "Linked player profile is required" });
+  }
+  if (!periodId || !duelId) {
+    return res.status(400).json({ ok: false, message: "Invalid Challenge match id" });
+  }
+  if (!CHALLENGE_ISSUE_RESOLUTIONS.has(resolution)) {
+    return res.status(400).json({ ok: false, message: "Choose a valid match outcome" });
+  }
+  if (resolution === "player_no_show" && !reportedPlayerId) {
+    return res.status(400).json({ ok: false, message: "Choose the player who did not show up" });
+  }
+  if (resolution === "player_no_show" && !submittedDetails) {
+    return res.status(400).json({ ok: false, message: "Details are required for a no-show report" });
+  }
+  if (String(submittedDetails || "").length > 5000) {
+    return res.status(400).json({ ok: false, message: "Details must be 5,000 characters or fewer" });
+  }
+
+  let beforeDuel = null;
+  let afterDuel = null;
+  let beforeRequest = null;
+  let afterRequest = null;
+  let createdCase = null;
+
+  try {
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const [period, lockedDuel] = await Promise.all([
+        loadChallengePeriodById(periodId),
+        loadChallengeDuelById(periodId, duelId),
+      ]);
+      if (!period) {
+        const error = new Error("Challenge period not found");
+        error.httpStatus = 404;
+        throw error;
+      }
+      if (!lockedDuel) {
+        const error = new Error("Challenge match not found");
+        error.httpStatus = 404;
+        throw error;
+      }
+
+      const participantIds = [lockedDuel.player_1_id, lockedDuel.player_2_id]
+        .map(normalizeNullableText)
+        .filter(Boolean);
+      if (participantIds.length !== 2 || participantIds[0] === participantIds[1]) {
+        const error = new Error("Challenge match participants are invalid");
+        error.httpStatus = 409;
+        throw error;
+      }
+      if (!participantIds.includes(actorPlayerId)) {
+        const error = new Error("Only match participants can resolve this issue");
+        error.httpStatus = 403;
+        throw error;
+      }
+      if (lockedDuel.status !== "Error") {
+        const error = new Error("Only Error matches can be resolved here");
+        error.httpStatus = 409;
+        throw error;
+      }
+      if (await challengeDuelHasRecordedResult(lockedDuel)) {
+        const error = new Error("This match already has recorded results");
+        error.httpStatus = 409;
+        throw error;
+      }
+      if (resolution === "player_no_show" && !participantIds.includes(reportedPlayerId)) {
+        const error = new Error("The no-show player must be a match participant");
+        error.httpStatus = 400;
+        throw error;
+      }
+
+      const requestId = normalizeNullableText(lockedDuel.challenge_request_id);
+      beforeDuel = lockedDuel;
+      beforeRequest = requestId ? await loadChallengeRequestById(periodId, requestId) : null;
+      const cancellationReason = resolution === "mutual_cancellation"
+        ? "Match cancelled by mutual agreement of both players."
+        : submittedDetails;
+
+      const updateResult = await dbRunAsync(
+        `
+          UPDATE duels
+          SET
+            status = 'Cancelled',
+            cancelled_by_player_id = ?,
+            cancellation_reason = ?,
+            cancelled_at = CURRENT_TIMESTAMP,
+            updated_by = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+            AND challenge_period_id = ?
+            AND source_type = 'challenge'
+            AND status = 'Error'
+            AND deleted_at IS NULL
+        `,
+        [actorPlayerId, cancellationReason, actorPlayerId, duelId, periodId]
+      );
+      if (!Number(updateResult?.changes || 0)) {
+        const error = new Error("Challenge match is no longer available for resolution");
+        error.httpStatus = 409;
+        throw error;
+      }
+
+      if (requestId) {
+        await dbRunAsync(
+          `
+            UPDATE challenge_requests
+            SET status = 'auto_cancelled', updated_at = CURRENT_TIMESTAMP
+            WHERE period_id = ?
+              AND id = ?
+              AND status = 'accepted'
+          `,
+          [periodId, requestId]
+        );
+      }
+      await dbRunAsync(
+        `
+          UPDATE challenge_period_players
+          SET
+            status = 'not_selected',
+            challenge_duel_id = NULL,
+            status_updated_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE period_id = ?
+            AND challenge_duel_id = ?
+        `,
+        [periodId, duelId]
+      );
+
+      if (resolution === "player_no_show") {
+        const profileRows = await dbAllAsync(
+          `
+            SELECT id, bga_nickname, name
+            FROM profiles
+            WHERE id IN (?, ?)
+          `,
+          participantIds
+        );
+        const profilesById = new Map((profileRows || []).map((row) => [normalizeNullableText(row?.id), row]));
+        const otherPlayerId = participantIds.find((playerId) => playerId !== reportedPlayerId) || null;
+        const reportedProfile = profilesById.get(reportedPlayerId) || null;
+        const otherProfile = profilesById.get(otherPlayerId) || null;
+        const reportedName = normalizeNullableText(reportedProfile?.bga_nickname ?? reportedProfile?.name) || reportedPlayerId;
+        const otherName = normalizeNullableText(otherProfile?.bga_nickname ?? otherProfile?.name) || otherPlayerId || "opponent";
+        const insertResult = await dbRunAsync(
+          `
+            INSERT INTO tournament_cases (
+              case_type,
+              category,
+              status,
+              priority,
+              subject,
+              details,
+              submitted_by_user_id,
+              submitted_by_player_id,
+              reported_player_id,
+              duel_id,
+              tournament_id,
+              challenge_period_id,
+              created_at,
+              updated_at
+            )
+            VALUES ('complaint', 'no_show', 'open', 'normal', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `,
+          [
+            `No-show report: ${reportedName} vs ${otherName}`,
+            submittedDetails,
+            actorUserId,
+            actorPlayerId,
+            reportedPlayerId,
+            duelId,
+            normalizeNullableText(period.rivals_tournament_id),
+            periodId,
+          ]
+        );
+        createdCase = await dbGetAsync(
+          "SELECT * FROM tournament_cases WHERE id = ? LIMIT 1",
+          [insertResult?.lastID]
+        );
+      }
+
+      afterDuel = await loadChallengeDuelById(periodId, duelId);
+      afterRequest = beforeRequest ? await loadChallengeRequestById(periodId, beforeRequest.id) : null;
+      await dbRunAsync("COMMIT");
+    } catch (error) {
+      await dbRunAsync("ROLLBACK").catch(() => {});
+      throw error;
+    }
+
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "challenge_duel.issue_resolved",
+      entity_type: "duel",
+      action: "update",
+      record_id: duelId,
+      changes: buildAuditChanges(beforeDuel, afterDuel),
+      metadata: { period_id: periodId, request_id: beforeRequest?.id || null, duel_id: duelId, resolution },
+    });
+    if (beforeRequest) {
+      logAuditEvent({
+        ...getAuditActor(req.user),
+        event_type: "challenge_request.issue_resolved",
+        entity_type: "challenge_request",
+        action: "update",
+        record_id: beforeRequest.id,
+        changes: buildAuditChanges(beforeRequest, afterRequest),
+        metadata: { period_id: periodId, request_id: beforeRequest.id, duel_id: duelId, resolution },
+      });
+    }
+    if (createdCase) {
+      logAuditEvent({
+        ...getAuditActor(req.user),
+        event_type: "tournament_case.created",
+        entity_type: "tournament_case",
+        action: "create",
+        record_id: String(createdCase.id),
+        changes: buildAuditChanges(null, createdCase),
+        metadata: { period_id: periodId, duel_id: duelId, category: "no_show" },
+      });
+    }
+
+    return res.json({
+      ok: true,
+      duel: afterDuel,
+      challenge_request: mapChallengeRequest(afterRequest),
+      tournament_case: createdCase,
+    });
+  } catch (error) {
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({ ok: false, message: error.message || "Failed to resolve Challenge match" });
+    }
+    console.error("Failed to resolve Challenge match issue", error);
+    return res.status(500).json({ ok: false, message: "Failed to resolve Challenge match" });
+  }
+});
 
 app.patch("/challenge-periods/:id/matches/:duelId", requireAdmin, async (req, res) => {
   const periodId = normalizeNullableText(req.params.id);

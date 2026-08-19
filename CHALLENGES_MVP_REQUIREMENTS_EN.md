@@ -31,6 +31,8 @@ Challenges is a mode in which the player during a certain game period:
 - Score adjustment works on trust: one player's change is applied immediately, without confirmation by the other player.
 - A challenge match is the product name of a singles series between two players. At the data level, it is stored as one `duel` and its associated `games`, without creating a team entry in `matches`.
 - For Challenge duels, the existing `duels` statuses are used, expanded only if necessary.
+- Tournament complaints, problems, and player requests are stored in the universal `tournament_cases` table. In the current MVP, only a `no_show` case is created automatically; a case-list and case-management UI is not included yet.
+- A mutual cancellation of a problematic Challenge match does not create a `tournament_cases` record; a no-show creates an open complaint and stores the details supplied by the player.
 - One player can play no more than one Challenge match in one period.
 - A player with `available` status may optionally specify up to three time windows during which they can both start and finish a match. These windows are informational and do not restrict request creation or the time options proposed in a request.
 - The Challenges page has a public preview mode: periods, request sections, the open-to-match player list, and action buttons are also displayed to unauthenticated users and users without a linked BGA profile. Mutating actions remain available only after sign-in and BGA account verification.
@@ -335,6 +337,20 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-RES-014** Each manual change of the result is recorded in the audit log.
 - [ ] **CH-RES-015** After `result_review_ends_at`, the result can only be changed by an administrator.
 
+### 15.1. Resolving an `Error` match without a result
+
+- [x] **CH-CAS-001** For a Challenge duel with `Error` status and no recorded duel/game result, the player UI displays `Error` in red.
+- [x] **CH-CAS-002** Participants do not see `Edit Results` for such a match; the short `Resolve` action is displayed instead.
+- [x] **CH-CAS-003** `Resolve` opens a Challenges-style modal with one custom `Match outcome` dropdown and a disabled `Submit` button until an outcome is selected.
+- [x] **CH-CAS-004** The dropdown contains `Match cancelled by mutual agreement of both players` and one `Player <nickname> did not show up for the match` option for each participant; the nickname is displayed in bold.
+- [x] **CH-CAS-005** Mutual cancellation changes the duel to `Cancelled`, stores `cancellation_reason = 'Match cancelled by mutual agreement of both players.'`, and does not create a `tournament_cases` record.
+- [x] **CH-CAS-006** For a no-show, the modal displays a required editable `Details` textarea prefilled in English with the absent player, opponent, Challenge period name, and scheduled UTC date and time.
+- [x] **CH-CAS-007** A no-show changes the duel to `Cancelled`, stores the final `Details` text in `duels.cancellation_reason`, and creates an open `tournament_cases` record with type `complaint` and category `no_show`.
+- [x] **CH-CAS-008** The no-show case is linked to the duel, Challenge period, and the period's `rivals_tournament_id` when present; it also stores the submitting player and reported player.
+- [x] **CH-CAS-009** Both resolution flows transactionally change the related request to `auto_cancelled`, clear `challenge_period_players.challenge_duel_id`, and return both players to `not_selected`.
+- [x] **CH-CAS-010** The backend permits resolution only to a participant in the relevant Challenge duel, rechecks the `Error` status and absence of a result, and returns a conflict when the match has already changed.
+- [x] **CH-CAS-011** `tournament_cases` is not exposed by a dedicated list API and is not displayed anywhere in the UI yet.
+
 ## 16. Notifications
 
 - [ ] **CH-NTF-001** The player receives a notification about a new request.
@@ -378,6 +394,7 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-AUD-007** Request expiration is recorded in the audit log.
 - [ ] **CH-AUD-008** Actor, action, request ID, previous state, next state and timestamp are stored for each event.
 - [ ] **CH-AUD-009** The audit log history is not deleted when the player hides the request.
+- [x] **CH-AUD-010** Resolving a problematic Challenge match records audit events for the duel and request; a no-show additionally records `tournament_case.created`.
 
 ## 19. Competitiveness and data integrity
 
@@ -411,10 +428,12 @@ This flow is used if players have already played a match, but did not create an 
 - [x] **CH-E2E-018** A player with `available` status creates up to three non-overlapping whole-hour windows in the local calendar, saves them in UTC, edits or removes them, and another player sees those windows in their own timezone.
 - [ ] **CH-E2E-019** An unauthenticated user sees the full Challenges page preview; each of the three gated actions opens onboarding, Google sign-in does not close the main popup, a manual BGA check displays loading/error states, and after both items are complete `Start playing` closes the popup without automatically repeating the original action.
 - [ ] **CH-E2E-020** A global admin enables `Admin mode` and sees other players' requests and matches without player actions, then enables `Removed items` and additionally sees hidden requests and soft-deleted duels; a non-admin does not see the toggles and receives `403` when directly requesting the admin API parameters.
+- [ ] **CH-E2E-021** A participant opens an `Error` match without a result, selects mutual cancellation, and sees `Cancelled` after Submit; no case is created, the request is closed, and neither player remains blocked by the duel.
+- [ ] **CH-E2E-022** A participant opens an `Error` match without a result, selects one player as a no-show, edits the generated Details, and after Submit receives a `Cancelled` duel and exactly one open `tournament_cases` record linked to the duel, period, and Rivals tournament.
 
 ## 21. Data scheme of new DB objects
 
-The schema below is targeted for SQLite. All new entity identifiers are of type `TEXT` , all timestamps are stored as UTC ISO 8601 in fields of type `TEXT` , and boolean values ​​are stored as `INTEGER` with a value of `0` or `1` .
+The schema below targets SQLite. New entity identifiers use `TEXT` unless a table explicitly states otherwise; all timestamps are stored as UTC ISO 8601 values in `TEXT` fields, and boolean values are stored as `INTEGER` values of `0` or `1`.
 
 ### 21.1. `challenge_periods`
 
@@ -514,7 +533,44 @@ Mandatory constraints and indexes:
 - indices `(awaiting_player_id, status)`, `(created_by_player_id, status)` and `(period_id, status)`;
 - the backend counts the three-request limit via `(created_by_player_id, status = 'pending')` in the creation transaction.
 
-### 21.4. `notifications`
+### 21.4. `tournament_cases`
+
+This universal table stores tournament complaints, problems, and player requests. A case can be linked to a team match, duel, tournament, Challenge period, or a future entity type. The current Challenge flow creates a record only for a no-show.
+
+| Field | Type | Null | Default | Purpose |
+|---|---|---:|---|---|
+| `id` | `INTEGER` | no | auto | Autoincrement primary key. |
+| `case_type` | `TEXT` | no | `'problem'` | `complaint`, `problem`, `request`, or `other`. |
+| `category` | `TEXT` | yes | `NULL` | Case subtype; `no_show` for the current flow. |
+| `status` | `TEXT` | no | `'open'` | `open`, `in_progress`, `resolved`, or `closed`. |
+| `priority` | `TEXT` | no | `'normal'` | `low`, `normal`, `high`, or `urgent`. |
+| `subject` | `TEXT` | no | — | Short case subject. |
+| `details` | `TEXT` | no | `''` | Details supplied by the player or system. |
+| `submitted_by_user_id` | `INTEGER` | yes | `NULL` | FK → `users.id`; authenticated user who created the case. |
+| `submitted_by_player_id` | `TEXT` | no | — | FK → `profiles.id`; player who submitted the case. |
+| `responsible_user_id` | `INTEGER` | yes | `NULL` | FK → `users.id`; user responsible for handling the case. |
+| `reported_player_id` | `TEXT` | yes | `NULL` | FK → `profiles.id`; player the case concerns. |
+| `match_id` | `TEXT` | yes | `NULL` | FK → `matches.id`; related team match, when present. |
+| `duel_id` | `TEXT` | yes | `NULL` | FK → `duels.id`; related duel, when present. |
+| `tournament_id` | `TEXT` | yes | `NULL` | FK → `tournaments.id`; related tournament, when present. |
+| `challenge_period_id` | `TEXT` | yes | `NULL` | FK → `challenge_periods.id`; related Challenge period, when present. |
+| `related_entity_type` | `TEXT` | yes | `NULL` | Extensible type for another related entity. |
+| `related_entity_id` | `TEXT` | yes | `NULL` | ID of another related entity. |
+| `resolution` | `TEXT` | yes | `NULL` | Decision or outcome of case handling. |
+| `resolved_at` | `TEXT` | yes | `NULL` | Resolution time in UTC. |
+| `deleted_at` | `TEXT` | yes | `NULL` | Soft-deletion time in UTC. |
+| `created_at` | `TEXT` | no | `CURRENT_TIMESTAMP` | Creation time. |
+| `updated_at` | `TEXT` | no | `CURRENT_TIMESTAMP` | Last update time. |
+
+Required constraints and indexes:
+
+- `CHECK` constraints for allowed `case_type`, `status`, and `priority` values;
+- indexes for workflow `(status, priority, created_at)`, submitter `(submitted_by_player_id, created_at)`, and assignee `(responsible_user_id, status, created_at)`;
+- separate indexes for `match_id`, `duel_id`, `tournament_id`, `challenge_period_id`, and the extensible `(related_entity_type, related_entity_id)` pair;
+- a no-show case is created in the same `BEGIN IMMEDIATE` transaction that changes the duel to `Cancelled`, closes the request, and updates both player statuses;
+- mutual cancellation does not create a record in this table.
+
+### 21.5. `notifications`
 
 The universal table is the outbox and in-app notification store for all future site domains. One logical event can create separate entries for `in_app` and `email` channels. For Challenges, the domain context is stored via `domain`, `event_type`, `source_entity_type`, `source_entity_id`, and `payload`, without separate Challenge-specific columns.
 
@@ -543,7 +599,7 @@ Mandatory constraints and indexes:
 - `CHECK` that `source_entity_type` and `source_entity_id` are either both given, or both `NULL`;
 - indices `(recipient_user_id, channel, read_at, created_at)`, `(delivery_status, channel, created_at)` and `(domain, source_entity_type, source_entity_id)`.
 
-### 21.5. Extending the existing table `duels`
+### 21.6. Extending the existing table `duels`
 
 For Challenge matches, fields are added to `duels`:
 
@@ -573,7 +629,7 @@ Mandatory constraints and indexes:
 - `cancelled_by_player_id` refers to `profiles.id` for player cancellation; the value `'1'` is reserved for admin cancellation;
 - A DB trigger or equivalent transactional check matches `challenge_period_players.challenge_duel_id` with duel participants and disallows a second active/played Challenge-duel in the period.
 
-### 21.6. Extending the existing table `audit_trail`
+### 21.7. Extending the existing table `audit_trail`
 
 A new audit log table is not created. The following are added to the existing `audit_trail`:
 
@@ -584,7 +640,7 @@ A new audit log table is not created. The following are added to the existing `a
 
 For Challenge events, `entity_type` contains `challenge_period`, `challenge_request` or `challenge_duel`, `record_id` is the ID of the corresponding object, `changes` is the JSON with the previous/next state, and `metadata` is the associated `period_id`, `request_id`, `duel_id` and the technical context of the operation. A unique partial index is created for `idempotency_key IS NOT NULL`.
 
-### 21.7. Objects that are not created
+### 21.8. Objects that are not created
 
 - A separate result table is not needed: the result is stored in the existing `duels` and `games`.
 - A separate Challenge match object is not required: the match is stored as `duels` with `source_type = 'challenge'`.
@@ -616,12 +672,12 @@ This section tracks large technical blocks. Detailed readiness is determined by 
 - [x] **CH-IMP-016** Player availability time windows: DB fields, API, audit, desktop/mobile calendar, and opponent display.
 - [x] **CH-IMP-017** Public Challenges preview and sign-in/BGA-verification onboarding before mutating actions.
 - [x] **CH-IMP-018** Global-admin mode on the Challenges page: all requests and matches, read-only presentation, optional inclusion of soft-deleted records, and backend access control.
+- [x] **CH-IMP-019** `tournament_cases` schema and the player `Resolve` flow for an `Error` Challenge match without a result, including mutual cancellation and no-show case creation.
 
 ## 23. Outside of MVP
 
 - Calculation and updating of the rating.
 - Implementation or change of the mechanism of automatic import of BGA results.
-- Report an Issue.
 - Penalties for no-show, incorrect result or late cancellation.
 - Special logic for changing the association in the middle of a period.
 - Historical UI for archived periods, requests, matches and rating delta.
@@ -635,7 +691,7 @@ The following features can use saved Challenge matches and audit history, but re
 
 - the impact of the results of Challenges on the rating;
 - automatic matching of BGA tables with the Challenge match;
-- Report an Issue and admin dispute workflow;
+- admin UI for listing, assigning, reviewing, and closing `tournament_cases`;
 - sanctions for abuse;
 - participation history and Challenges statistics;
 - reminders and advanced notification channels.

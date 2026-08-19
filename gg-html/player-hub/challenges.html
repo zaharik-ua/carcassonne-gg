@@ -245,6 +245,40 @@
     font-weight: 700;
   }
 
+  .challenge-match-limit-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 10px 12px;
+    border: 1px solid #f0b8c1;
+    border-radius: 6px;
+    background: var(--red-soft);
+    color: #7f1d1d;
+    font-size: 13px;
+    line-height: 1.45;
+    box-sizing: border-box;
+  }
+
+  .challenge-match-limit-notice-icon {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+    border-radius: 50%;
+    background: var(--red);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .challenge-match-limit-notice strong {
+    color: var(--red);
+    font-weight: 700;
+  }
+
   .challenge-time-context {
     display: inline-flex;
     align-items: center;
@@ -1016,6 +1050,11 @@
     color: var(--red);
   }
 
+  .challenge-duel-status.is-error {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+
   .challenge-duel-status.is-removed,
   .challenge-request-status.is-removed {
     border-color: #f0b8c1;
@@ -1535,6 +1574,143 @@
 
   .challenge-admin-match-dialog {
     width: min(100%, 760px);
+  }
+
+  .challenge-case-dialog {
+    width: min(100%, 560px);
+  }
+
+  .challenge-case-form {
+    display: grid;
+    gap: 10px;
+  }
+
+  .challenge-case-dropdown {
+    position: relative;
+    width: 100%;
+  }
+
+  .challenge-case-dropdown-btn {
+    appearance: none;
+    width: 100%;
+    min-height: 36px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    padding: 7px 9px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.35;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+
+  .challenge-case-dropdown-btn:hover,
+  .challenge-case-dropdown-btn:focus-visible,
+  .challenge-case-dropdown-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .challenge-case-dropdown-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  .challenge-case-dropdown-value {
+    min-width: 0;
+  }
+
+  .challenge-case-dropdown-value.is-placeholder {
+    color: #7a8492;
+  }
+
+  .challenge-case-dropdown-chevron {
+    flex: 0 0 auto;
+    color: #6f7785;
+    font-size: 10px;
+    transition: transform 0.16s ease;
+  }
+
+  .challenge-case-dropdown-btn.open .challenge-case-dropdown-chevron {
+    transform: rotate(180deg);
+  }
+
+  .challenge-case-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 30;
+    display: grid;
+    width: 100%;
+    max-height: 0;
+    overflow: hidden;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+    box-sizing: border-box;
+  }
+
+  .challenge-case-dropdown-menu.open {
+    max-height: 220px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .challenge-case-dropdown-option {
+    appearance: none;
+    width: 100%;
+    min-height: 38px;
+    border: 0;
+    border-top: 1px solid #edf1f6;
+    background: #fff;
+    color: #2f3947;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.35;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+
+  .challenge-case-dropdown-option:first-child {
+    border-top: 0;
+  }
+
+  .challenge-case-dropdown-option:hover,
+  .challenge-case-dropdown-option:focus-visible {
+    background: #f5f7fa;
+  }
+
+  .challenge-case-dropdown-option.active {
+    background: #e4f0fb;
+  }
+
+  .challenge-case-dropdown strong {
+    font-weight: 700;
+  }
+
+  .challenge-case-details[hidden] {
+    display: none;
+  }
+
+  .challenge-case-details textarea {
+    height: auto;
+    min-height: 108px;
+    resize: vertical;
+    line-height: 1.45;
   }
 
   .challenge-admin-match-form {
@@ -2473,6 +2649,9 @@
   const PLAYER_CHALLENGE_PERIODS_URL = `${CHALLENGE_PERIODS_URL}/player`;
   const DUELS_URL = `${AUTH_BASE}/duels`;
   const DUEL_GAMES_SAVE_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/games/save`;
+  const CHALLENGE_DUEL_ISSUE_URL = (periodId, duelId) => (
+    `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(periodId)}/matches/${encodeURIComponent(duelId)}/resolve-issue`
+  );
   const ENABLE_PLAYER_CHALLENGE_RESULT_EDIT = true;
   const ELIGIBLE_OPPONENTS_PATH = "eligible-opponents";
   const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
@@ -3356,12 +3535,295 @@
     return ["Done", "Error"].includes(String(status || "").trim());
   }
 
+  function isChallengeErrorWithoutResult(duel) {
+    if (String(duel?.status || "").trim() !== "Error") return false;
+    if ([duel?.dw1, duel?.dw2].some((value) => Number(value || 0) > 0)) return false;
+    return !(Array.isArray(duel?.games) ? duel.games : []).some((game) => (
+      hasValue(game?.player_1_score)
+      || hasValue(game?.player_2_score)
+      || hasValue(game?.player_1_rank)
+      || hasValue(game?.player_2_rank)
+      || String(game?.status || "").trim().toLowerCase() === "no show"
+    ));
+  }
+
   function isCurrentPlayerChallengeDuelParticipant(request, currentPlayerId) {
     const playerId = String(currentPlayerId || "").trim();
     if (!playerId) return false;
     return [request?.player_1_id, request?.player_2_id]
       .map((value) => String(value || "").trim())
       .includes(playerId);
+  }
+
+  function formatChallengeIssueUtcDateTime(value) {
+    const date = new Date(String(value || ""));
+    if (Number.isNaN(date.getTime())) return "the scheduled time";
+    return `${new Intl.DateTimeFormat("en-GB", {
+      timeZone: "UTC",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date)} UTC`;
+  }
+
+  function buildChallengeNoShowDetails(period, request, reportedPlayerId) {
+    const missingPlayer = String(request?.player_1_id || "") === String(reportedPlayerId || "")
+      ? request?.player_1
+      : request?.player_2;
+    const opponent = String(request?.player_1_id || "") === String(reportedPlayerId || "")
+      ? request?.player_2
+      : request?.player_1;
+    const missingName = getOpponentDisplayName(missingPlayer || { player_id: reportedPlayerId });
+    const opponentName = getOpponentDisplayName(opponent);
+    const periodName = String(period?.name || period?.short_name || "the Challenge period").trim();
+    const timeText = formatChallengeIssueUtcDateTime(request?.duel?.time_utc || request?.accepted_time_utc);
+    return `${missingName} did not show up for the match against ${opponentName} during ${periodName}, scheduled for ${timeText}.`;
+  }
+
+  function createChallengeIssueOutcomeDropdown(request, onChange) {
+    const options = [
+      {
+        value: "mutual_cancellation",
+        type: "mutual_cancellation",
+      },
+      {
+        value: "player_1_no_show",
+        type: "player_no_show",
+        reportedPlayerId: String(request?.player_1_id || "").trim(),
+        nickname: getOpponentDisplayName(request?.player_1 || { player_id: request?.player_1_id }),
+      },
+      {
+        value: "player_2_no_show",
+        type: "player_no_show",
+        reportedPlayerId: String(request?.player_2_id || "").trim(),
+        nickname: getOpponentDisplayName(request?.player_2 || { player_id: request?.player_2_id }),
+      },
+    ];
+    let selectedValue = "";
+    let disabled = false;
+
+    const root = document.createElement("div");
+    root.className = "challenge-case-dropdown";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "challenge-case-dropdown-btn";
+    button.setAttribute("aria-haspopup", "listbox");
+    button.setAttribute("aria-expanded", "false");
+    const buttonValue = document.createElement("span");
+    buttonValue.className = "challenge-case-dropdown-value is-placeholder";
+    const chevron = document.createElement("span");
+    chevron.className = "challenge-case-dropdown-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "▾";
+    button.appendChild(buttonValue);
+    button.appendChild(chevron);
+    root.appendChild(button);
+
+    const menu = document.createElement("div");
+    menu.className = "challenge-case-dropdown-menu";
+    menu.setAttribute("role", "listbox");
+    root.appendChild(menu);
+
+    const appendLabel = (target, option) => {
+      if (!option) {
+        target.textContent = "Select an outcome";
+        return;
+      }
+      if (option.type === "mutual_cancellation") {
+        target.textContent = "Match cancelled by mutual agreement of both players";
+        return;
+      }
+      target.appendChild(document.createTextNode("Player "));
+      const nickname = document.createElement("strong");
+      nickname.textContent = option.nickname;
+      target.appendChild(nickname);
+      target.appendChild(document.createTextNode(" did not show up for the match"));
+    };
+
+    const close = () => {
+      menu.classList.remove("open");
+      button.classList.remove("open");
+      button.setAttribute("aria-expanded", "false");
+    };
+    const renderButton = () => {
+      buttonValue.innerHTML = "";
+      const selected = options.find((option) => option.value === selectedValue) || null;
+      buttonValue.classList.toggle("is-placeholder", !selected);
+      appendLabel(buttonValue, selected);
+    };
+    const select = (value, trigger = true) => {
+      selectedValue = options.some((option) => option.value === value) ? value : "";
+      menu.querySelectorAll(".challenge-case-dropdown-option").forEach((optionButton) => {
+        optionButton.classList.toggle("active", optionButton.dataset.value === selectedValue);
+      });
+      renderButton();
+      if (trigger && typeof onChange === "function") onChange(api.getSelected());
+    };
+
+    options.forEach((option) => {
+      const optionButton = document.createElement("button");
+      optionButton.type = "button";
+      optionButton.className = "challenge-case-dropdown-option";
+      optionButton.dataset.value = option.value;
+      optionButton.setAttribute("role", "option");
+      appendLabel(optionButton, option);
+      optionButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        select(option.value);
+        close();
+      });
+      menu.appendChild(optionButton);
+    });
+
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (disabled) return;
+      const wasOpen = menu.classList.contains("open");
+      closeAllDropdowns();
+      if (wasOpen) return;
+      menu.classList.add("open");
+      button.classList.add("open");
+      button.setAttribute("aria-expanded", "true");
+    });
+
+    const api = {
+      root,
+      close,
+      getSelected() {
+        return options.find((option) => option.value === selectedValue) || null;
+      },
+      setDisabled(nextDisabled) {
+        disabled = !!nextDisabled;
+        button.disabled = disabled;
+        if (disabled) close();
+      },
+    };
+    dropdowns.push(api);
+    renderButton();
+    return api;
+  }
+
+  function openChallengeMatchIssueDialog(period, request) {
+    const duel = request?.duel || null;
+    if (!duel?.id || !isChallengeErrorWithoutResult(duel)) return;
+
+    const overlay = document.createElement("div");
+    overlay.className = "challenge-modal-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "challenge-modal challenge-case-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", "Resolve Challenge match issue");
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    const form = document.createElement("form");
+    form.className = "challenge-case-form";
+    form.noValidate = true;
+    dialog.appendChild(form);
+
+    const title = document.createElement("div");
+    title.className = "challenge-request-title";
+    title.textContent = "Resolve Match Issue";
+    form.appendChild(title);
+
+    let selectedOutcome = null;
+    let saving = false;
+    let submitBtn = null;
+    const details = document.createElement("textarea");
+    details.maxLength = 5000;
+    const detailsRow = addChallengeFormRow(form, "Details", details, { required: true });
+    detailsRow.classList.add("challenge-case-details");
+    detailsRow.hidden = true;
+
+    const updateSubmitState = () => {
+      if (!submitBtn) return;
+      submitBtn.disabled = saving
+        || !selectedOutcome
+        || (selectedOutcome.type === "player_no_show" && !String(details.value || "").trim());
+    };
+    const outcomeDropdown = createChallengeIssueOutcomeDropdown(request, (outcome) => {
+      selectedOutcome = outcome;
+      const isNoShow = outcome?.type === "player_no_show";
+      detailsRow.hidden = !isNoShow;
+      if (isNoShow) {
+        details.value = buildChallengeNoShowDetails(period, request, outcome.reportedPlayerId);
+      } else {
+        details.value = "";
+      }
+      updateSubmitState();
+    });
+    const outcomeRow = addChallengeFormRow(form, "Match outcome", outcomeDropdown.root, { required: true });
+    form.insertBefore(outcomeRow, detailsRow);
+
+    const message = document.createElement("div");
+    message.className = "challenge-request-message";
+    form.appendChild(message);
+
+    const actions = document.createElement("div");
+    actions.className = "challenge-admin-match-actions";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "challenge-btn challenge-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    submitBtn = document.createElement("button");
+    submitBtn.type = "submit";
+    submitBtn.className = "challenge-btn challenge-btn-primary";
+    submitBtn.textContent = "Submit";
+    submitBtn.disabled = true;
+    actions.appendChild(cancelBtn);
+    actions.appendChild(submitBtn);
+    form.appendChild(actions);
+
+    const closeModal = () => {
+      outcomeDropdown.close();
+      overlay.remove();
+    };
+    const setMessage = (text, tone) => {
+      message.className = `challenge-request-message${tone ? ` is-${tone}` : ""}`;
+      message.textContent = text || "";
+    };
+    const setSaving = (nextSaving) => {
+      saving = !!nextSaving;
+      outcomeDropdown.setDisabled(saving);
+      details.disabled = saving;
+      cancelBtn.disabled = saving;
+      submitBtn.textContent = saving ? "Submitting..." : "Submit";
+      updateSubmitState();
+    };
+
+    details.addEventListener("input", updateSubmitState);
+    cancelBtn.addEventListener("click", closeModal);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay && !saving) closeModal();
+    });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!selectedOutcome || submitBtn.disabled) return;
+      setSaving(true);
+      setMessage("Submitting...", "");
+      try {
+        await apiJson(
+          CHALLENGE_DUEL_ISSUE_URL(String(period?.id || ""), String(duel.id || "")),
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              resolution: selectedOutcome.type,
+              reported_player_id: selectedOutcome.reportedPlayerId || null,
+              details: selectedOutcome.type === "player_no_show" ? String(details.value || "").trim() : null,
+            }),
+          }
+        );
+        closeModal();
+        renderChallenges();
+      } catch (error) {
+        setSaving(false);
+        setMessage(error?.message || "Failed to resolve match issue.", "error");
+      }
+    });
   }
 
   function formatUtcReadonlyDateTime(value) {
@@ -4063,6 +4525,8 @@
     const timezone = currentPlayer?.association?.timezone || period?.player_time_context?.timezone || "UTC";
     const player1 = request?.player_1 || { player_id: request?.player_1_id };
     const player2 = request?.player_2 || { player_id: request?.player_2_id };
+    const isErrorWithoutResult = isChallengeErrorWithoutResult(duel);
+    const isCurrentPlayerParticipant = isCurrentPlayerChallengeDuelParticipant(request, currentPlayerId);
 
     const section = document.createElement("div");
     section.className = "challenge-duel-block";
@@ -4112,10 +4576,16 @@
       ENABLE_PLAYER_CHALLENGE_RESULT_EDIT
       && !options.readOnly
       && isChallengeResultEditableStatus(duel?.status)
-      && isCurrentPlayerChallengeDuelParticipant(request, currentPlayerId)
+      && !isErrorWithoutResult
+      && isCurrentPlayerParticipant
     ) {
       actions.appendChild(createActionButton("Edit Results", "challenge-btn-primary", () => {
         openAdminChallengeMatchDialog(period, request, { matchReadonly: true });
+      }));
+    }
+    if (!options.readOnly && isErrorWithoutResult && isCurrentPlayerParticipant) {
+      actions.appendChild(createActionButton("Resolve", "challenge-btn-danger", () => {
+        openChallengeMatchIssueDialog(period, request);
       }));
     }
     const editableDuelStatuses = new Set(["Planned", "In progress"]);
@@ -7097,6 +7567,29 @@
     return wrap;
   }
 
+  function createMatchLimitNotice() {
+    const notice = document.createElement("aside");
+    notice.className = "challenge-match-limit-notice";
+    notice.setAttribute("aria-label", "Temporary Challenge match limit");
+
+    const icon = document.createElement("span");
+    icon.className = "challenge-match-limit-notice-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "i";
+    notice.appendChild(icon);
+
+    const text = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = "Temporary match limit: ";
+    text.appendChild(title);
+    text.appendChild(document.createTextNode(
+      "1 match per player per period for now. We plan to increase the limit to 2 around August 20–21."
+    ));
+    notice.appendChild(text);
+
+    return notice;
+  }
+
   function createRequestsPanel(period, options = {}) {
     const wrap = document.createElement("div");
     wrap.className = "challenge-panel-wrap";
@@ -7171,6 +7664,9 @@
         stack.appendChild(createPeriodBand(period, timeContext));
         if (String(period?.status || "") !== "draft") {
           stack.appendChild(createChallengeMatchPanel(period));
+          if (!isClosedPeriod) {
+            stack.appendChild(createMatchLimitNotice());
+          }
           stack.appendChild(createRequestsPanel(period, { hidden: isClosedPeriod }));
           if (!isClosedPeriod) {
             stack.appendChild(createOpponentsPanel(period));
