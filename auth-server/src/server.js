@@ -11181,6 +11181,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
     if (!isChallengeTimeWithinPeriod(acceptedTimeUtc, period)) {
       return res.status(400).json({ ok: false, message: "Accepted time must be within the Challenge playing window" });
     }
+    const duelTournamentId = normalizeNullableText(period.rivals_tournament_id);
 
     let duelId = buildChallengeDuelId(periodId, requestId);
     let afterRow = null;
@@ -11244,6 +11245,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
           `
             UPDATE duels
             SET
+              tournament_id = COALESCE(?, tournament_id),
               duel_format = ?,
               time_utc = ?,
               player_1_id = ?,
@@ -11262,6 +11264,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
               AND deleted_at IS NULL
           `,
           [
+            duelTournamentId,
             canonicalFormat,
             acceptedTimeUtc,
             lockedRequest.player_1_id,
@@ -11306,10 +11309,11 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
               created_at,
               updated_at
             )
-            VALUES (?, NULL, NULL, NULL, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, 'Planned', ?, ?, NULL, NULL, ?, ?, 'challenge', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (?, ?, NULL, NULL, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, 'Planned', ?, ?, NULL, NULL, ?, ?, 'challenge', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           `,
           [
             duelId,
+            duelTournamentId,
             canonicalFormat,
             acceptedTimeUtc,
             lockedRequest.player_1_id,

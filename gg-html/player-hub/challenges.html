@@ -1577,12 +1577,20 @@
   }
 
   .challenge-case-dialog {
+    --challenge-case-dialog-min-height: min(330px, calc(100vh - 44px - 32px));
     width: min(100%, 560px);
+    min-height: var(--challenge-case-dialog-min-height);
   }
 
   .challenge-case-form {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: 10px;
+    min-height: calc(var(--challenge-case-dialog-min-height) - 34px);
+  }
+
+  .challenge-case-form .challenge-admin-match-actions {
+    margin-top: auto;
   }
 
   .challenge-case-dropdown {
@@ -4584,7 +4592,7 @@
       }));
     }
     if (!options.readOnly && isErrorWithoutResult && isCurrentPlayerParticipant) {
-      actions.appendChild(createActionButton("Resolve", "challenge-btn-danger", () => {
+      actions.appendChild(createActionButton("Resolve", "challenge-btn-primary", () => {
         openChallengeMatchIssueDialog(period, request);
       }));
     }
@@ -5807,6 +5815,7 @@
             body: JSON.stringify({
               accepted_time_utc: selectedTime,
               accepted_format: selectedFormat,
+              tournament_id: String(period?.rivals_tournament_id || "").trim() || null,
             }),
           }
         );
