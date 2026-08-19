@@ -313,13 +313,13 @@ Terminal statuses for re-invitation:
 
 ### 11.1. Schedule conflicts between matches
 
-- [ ] **CH-SCH-001** For scheduling checks, the standard duration is `90` minutes for Bo3 and `150` minutes for Bo5.
-- [ ] **CH-SCH-002** The check includes the player's non-soft-deleted duels in the current Challenge period with a valid `time_utc` and status `Planned`, `In progress`, `Done`, or `Error`.
-- [ ] **CH-SCH-003** For every new/existing match pair, the absolute difference between their `time_utc` values must be at least the greater standard duration of the two formats: 90 minutes for Bo3/Bo3 and 150 minutes for Bo3/Bo5 or Bo5/Bo5.
-- [ ] **CH-SCH-004** Exactly 90 or 150 minutes, as applicable, is allowed; a smaller interval before or after an existing start time is a conflict.
-- [ ] **CH-SCH-005** The backend checks both players transactionally on accept after a specific time and format are selected; the same rule applies to re-accept after rescheduling and to retroactive confirmation.
-- [ ] **CH-SCH-006** On conflict, the backend returns a conflict response with the conflicting duel and does not change the request, duel, or any other entity.
-- [ ] **CH-SCH-007** Time options may be proposed even when a potential conflict exists; the selected option is blocked only during accept.
+- [x] **CH-SCH-001** For scheduling checks, the standard duration is `90` minutes for Bo3 and `150` minutes for Bo5.
+- [x] **CH-SCH-002** The check includes the player's non-soft-deleted duels in the current Challenge period with a valid `time_utc` and status `Planned`, `In progress`, `Done`, or `Error`.
+- [x] **CH-SCH-003** For every new/existing match pair, the absolute difference between their `time_utc` values must be at least the greater standard duration of the two formats: 90 minutes for Bo3/Bo3 and 150 minutes for Bo3/Bo5 or Bo5/Bo5.
+- [x] **CH-SCH-004** Exactly 90 or 150 minutes, as applicable, is allowed; a smaller interval before or after an existing start time is a conflict.
+- [x] **CH-SCH-005** The backend checks both players transactionally on accept after a specific time and format are selected; the same rule applies to re-accept after rescheduling and to retroactive confirmation.
+- [x] **CH-SCH-006** On conflict, the backend returns a conflict response with the conflicting duel and does not change the request, duel, or any other entity.
+- [x] **CH-SCH-007** Time options may be proposed even when a potential conflict exists; the selected option is blocked only during accept.
 
 ### 11.2. Creating a match retroactively
 
@@ -359,7 +359,7 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-RSC-006** Match goes to `Requested new time`.
 - [ ] **CH-RSC-007** Pre-confirmed time not saved as active match slot.
 - [ ] **CH-RSC-008** `Requested new time` does not occupy a match slot; neither player's participation status changes, and their ability to use other requests depends on their status and remaining matches.
-- [ ] **CH-RSC-009** When accepting a new time, the request becomes `accepted` and the match becomes `Planned` only if both players still have a slot and the new time does not conflict with their other matches.
+- [x] **CH-RSC-009** When accepting a new time, the request becomes `accepted` and the match becomes `Planned` only if both players still have a slot and the new time does not conflict with their other matches.
 - [ ] **CH-RSC-010** After re-accept, the match is counted in `matches_count` again, but neither player's participation status changes.
 - [ ] **CH-RSC-011** When the new time is rejected, the request goes to `declined`.
 - [ ] **CH-RSC-012** When rejecting a new time, the linked match in status `Requested new time` changes to `Cancelled`.

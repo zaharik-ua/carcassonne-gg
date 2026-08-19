@@ -39,6 +39,7 @@ import {
   isChallengeRivalsPairDuelStatus,
   loadChallengeBlockingRivalsPairDuel,
   loadChallengeMatchCapacities,
+  loadChallengeScheduleConflict,
   resolveMaxMatchesPerPlayer,
   resolveMaxPendingRequestsPerPlayer,
   shouldCloseChallengeRequestsForPlayerStatus,
@@ -11277,6 +11278,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
         player1Capacity,
         player2Capacity,
         blockingPairDuel,
+        scheduleConflict,
       ] = await Promise.all([
         loadChallengePeriodPlayerStatus(periodId, lockedRequest.player_1_id),
         loadChallengePeriodPlayerStatus(periodId, lockedRequest.player_2_id),
@@ -11288,6 +11290,13 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
           lockedRequest.player_2_id,
           { excludeDuelId: existingRescheduleDuel?.id }
         ),
+        loadChallengeScheduleConflict(db, {
+          periodId,
+          playerIds: [lockedRequest.player_1_id, lockedRequest.player_2_id],
+          timeUtc: acceptedTimeUtc,
+          format: canonicalFormat,
+          excludeDuelId: existingRescheduleDuel?.id,
+        }),
       ]);
       const player1Status = normalizeChallengePlayerPeriodStatus(player1PeriodStatus?.status);
       const player2Status = normalizeChallengePlayerPeriodStatus(player2PeriodStatus?.status);
@@ -11307,6 +11316,20 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
       if (blockingPairDuel) {
         const error = new Error("These players already have a Challenge match in the linked Rivals tournament");
         error.httpStatus = 409;
+        throw error;
+      }
+      if (scheduleConflict) {
+        const error = new Error(
+          `Selected time conflicts with another Challenge match. Keep at least ${scheduleConflict.required_gap_minutes} minutes between match starts.`
+        );
+        error.httpStatus = 409;
+        error.code = "challenge_schedule_conflict";
+        error.conflictingDuel = scheduleConflict.duel;
+        error.scheduleConflict = {
+          conflicting_player_ids: scheduleConflict.conflicting_player_ids,
+          required_gap_minutes: scheduleConflict.required_gap_minutes,
+          start_difference_minutes: scheduleConflict.start_difference_minutes,
+        };
         throw error;
       }
 
@@ -11468,7 +11491,15 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
       auto_cancelled_request_count: autoCancellationResult.auto_cancelled_request_count,
     });
   } catch (error) {
-    if (error?.httpStatus) return res.status(error.httpStatus).json({ ok: false, message: error.message || "Failed to accept Challenge request" });
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({
+        ok: false,
+        ...(error.code ? { code: error.code } : {}),
+        message: error.message || "Failed to accept Challenge request",
+        ...(error.conflictingDuel ? { conflicting_duel: error.conflictingDuel } : {}),
+        ...(error.scheduleConflict ? { conflict: error.scheduleConflict } : {}),
+      });
+    }
     if (error?.code === "SQLITE_CONSTRAINT") {
       return res.status(409).json({ ok: false, message: "Challenge match already exists for this request" });
     }

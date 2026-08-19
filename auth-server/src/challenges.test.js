@@ -19,6 +19,7 @@ import {
   isChallengeRivalsPairDuelStatus,
   loadChallengeBlockingRivalsPairDuel,
   loadChallengeMatchCapacities,
+  loadChallengeScheduleConflict,
   resolveMaxMatchesPerPlayer,
   resolveMaxPendingRequestsPerPlayer,
   shouldCloseChallengeRequestsForPlayerStatus,
@@ -82,6 +83,8 @@ async function ensureChallengeAcceptanceTestSchema(db) {
         player_1_id TEXT NOT NULL,
         player_2_id TEXT NOT NULL,
         status TEXT NOT NULL,
+        time_utc TEXT,
+        duel_format TEXT,
         deleted_at TEXT,
         cancelled_by_player_id TEXT,
         cancellation_reason TEXT,
@@ -144,6 +147,21 @@ async function acceptChallengeMatchWithGuards(db, options) {
       error.code = "rivals_pair_used";
       throw error;
     }
+    if (options.timeUtc && options.format) {
+      const scheduleConflict = await loadChallengeScheduleConflict(db, {
+        periodId: options.periodId,
+        playerIds: [options.player1Id, options.player2Id],
+        timeUtc: options.timeUtc,
+        format: options.format,
+        excludeDuelId: options.excludeDuelId,
+      });
+      if (scheduleConflict) {
+        const error = new Error("schedule_conflict");
+        error.code = "schedule_conflict";
+        error.conflict = scheduleConflict;
+        throw error;
+      }
+    }
     await run(
       db,
       `
@@ -154,9 +172,11 @@ async function acceptChallengeMatchWithGuards(db, options) {
           source_type,
           player_1_id,
           player_2_id,
-          status
+          status,
+          time_utc,
+          duel_format
         )
-        VALUES (?, ?, ?, 'challenge', ?, ?, 'Planned')
+        VALUES (?, ?, ?, 'challenge', ?, ?, 'Planned', ?, ?)
       `,
       [
         options.duelId,
@@ -164,6 +184,8 @@ async function acceptChallengeMatchWithGuards(db, options) {
         options.requestId,
         options.player1Id,
         options.player2Id,
+        options.timeUtc || null,
+        options.format || null,
       ]
     );
     await run(db, "COMMIT");
@@ -207,7 +229,176 @@ test("defines N-match slot statuses and format durations", () => {
   });
   assert.equal(getChallengeFormatDurationMinutes("Bo3"), 90);
   assert.equal(getChallengeFormatDurationMinutes("Bo5"), 150);
+  assert.equal(getChallengeFormatDurationMinutes("bo5"), 150);
   assert.equal(getChallengeFormatDurationMinutes("Bo7"), null);
+});
+
+test("uses the larger format duration on both sides of a mixed-format match", async (t) => {
+  const db = await createChallengeAcceptanceDatabase(t);
+  await exec(
+    db,
+    `
+      INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player)
+      VALUES ('period-1', 'RIVALS-1', 3);
+      INSERT INTO duels (
+        id, challenge_period_id, source_type, player_1_id, player_2_id,
+        status, time_utc, duel_format
+      ) VALUES (
+        'existing-bo5', 'period-1', 'challenge', 'B', 'X',
+        'Planned', '2026-08-20 10:00:00.000', 'Bo5'
+      );
+    `
+  );
+
+  const afterConflict = await loadChallengeScheduleConflict(db, {
+    periodId: "period-1",
+    playerIds: ["A", "B"],
+    timeUtc: "2026-08-20T12:29:00.000Z",
+    format: "Bo3",
+  });
+  assert.equal(afterConflict?.duel?.id, "existing-bo5");
+  assert.deepEqual(afterConflict?.conflicting_player_ids, ["B"]);
+  assert.equal(afterConflict?.required_gap_minutes, 150);
+  assert.equal(afterConflict?.start_difference_minutes, 149);
+
+  assert.equal(await loadChallengeScheduleConflict(db, {
+    periodId: "period-1",
+    playerIds: ["A", "B"],
+    timeUtc: "2026-08-20T12:30:00.000Z",
+    format: "Bo3",
+  }), null);
+  assert.equal((await loadChallengeScheduleConflict(db, {
+    periodId: "period-1",
+    playerIds: ["A", "B"],
+    timeUtc: "2026-08-20T07:31:00.000Z",
+    format: "Bo3",
+  }))?.duel?.id, "existing-bo5");
+  assert.equal(await loadChallengeScheduleConflict(db, {
+    periodId: "period-1",
+    playerIds: ["A", "B"],
+    timeUtc: "2026-08-20T07:30:00.000Z",
+    format: "Bo3",
+  }), null);
+});
+
+test("checks only active-slot Challenge duels in the same period with valid times", async (t) => {
+  const db = await createChallengeAcceptanceDatabase(t);
+  await exec(
+    db,
+    `
+      INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player) VALUES
+        ('period-1', 'RIVALS-1', 3),
+        ('period-2', 'RIVALS-1', 3);
+      INSERT INTO duels (
+        id, challenge_period_id, source_type, player_1_id, player_2_id,
+        status, time_utc, duel_format, deleted_at
+      ) VALUES
+        ('other-period', 'period-2', 'challenge', 'A', 'X', 'Planned', '2026-08-20T10:00:00.000Z', 'Bo3', NULL),
+        ('draft', 'period-1', 'challenge', 'A', 'X', 'Draft', '2026-08-20T10:00:00.000Z', 'Bo3', NULL),
+        ('cancelled', 'period-1', 'challenge', 'B', 'X', 'Cancelled', '2026-08-20T10:00:00.000Z', 'Bo5', NULL),
+        ('deleted', 'period-1', 'challenge', 'A', 'X', 'Done', '2026-08-20T10:00:00.000Z', 'Bo3', '2026-08-20T09:00:00.000Z'),
+        ('invalid-time', 'period-1', 'challenge', 'B', 'X', 'Error', 'not-a-time', 'Bo5', NULL),
+        ('unrelated', 'period-1', 'challenge', 'C', 'X', 'In progress', '2026-08-20T10:00:00.000Z', 'Bo5', NULL);
+    `
+  );
+
+  const candidate = {
+    periodId: "period-1",
+    playerIds: ["A", "B"],
+    timeUtc: "2026-08-20T10:30:00.000Z",
+    format: "Bo3",
+  };
+  assert.equal(await loadChallengeScheduleConflict(db, candidate), null);
+
+  await run(db, "UPDATE duels SET status = 'Error' WHERE id = 'draft'");
+  assert.equal((await loadChallengeScheduleConflict(db, candidate))?.duel?.id, "draft");
+});
+
+test("rejects a conflicting accept atomically and allows the exact boundary", async (t) => {
+  const db = await createChallengeAcceptanceDatabase(t);
+  await exec(
+    db,
+    `
+      INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player)
+      VALUES ('period-1', 'RIVALS-1', 2);
+      INSERT INTO duels (
+        id, challenge_period_id, source_type, player_1_id, player_2_id,
+        status, time_utc, duel_format
+      ) VALUES (
+        'existing', 'period-1', 'challenge', 'A', 'X',
+        'Done', '2026-08-20T10:00:00.000Z', 'Bo5'
+      );
+    `
+  );
+
+  await assert.rejects(
+    acceptChallengeMatchWithGuards(db, {
+      duelId: "conflicting",
+      requestId: "request-conflicting",
+      periodId: "period-1",
+      rivalsTournamentId: "RIVALS-1",
+      player1Id: "A",
+      player2Id: "B",
+      maxMatchesPerPlayer: 2,
+      timeUtc: "2026-08-20T12:29:00.000Z",
+      format: "Bo3",
+    }),
+    (error) => error?.code === "schedule_conflict"
+      && error?.conflict?.duel?.id === "existing"
+  );
+  assert.equal(Number((await get(db, "SELECT COUNT(*) AS count FROM duels"))?.count), 1);
+
+  await acceptChallengeMatchWithGuards(db, {
+    duelId: "boundary",
+    requestId: "request-boundary",
+    periodId: "period-1",
+    rivalsTournamentId: "RIVALS-1",
+    player1Id: "A",
+    player2Id: "B",
+    maxMatchesPerPlayer: 2,
+    timeUtc: "2026-08-20T12:30:00.000Z",
+    format: "Bo3",
+  });
+  assert.deepEqual(await get(
+    db,
+    "SELECT id, time_utc, duel_format FROM duels WHERE id = 'boundary'"
+  ), {
+    id: "boundary",
+    time_utc: "2026-08-20T12:30:00.000Z",
+    duel_format: "Bo3",
+  });
+});
+
+test("can exclude the rescheduled duel from its own schedule check", async (t) => {
+  const db = await createChallengeAcceptanceDatabase(t);
+  await exec(
+    db,
+    `
+      INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player)
+      VALUES ('period-1', 'RIVALS-1', 2);
+      INSERT INTO duels (
+        id, challenge_period_id, challenge_request_id, source_type,
+        player_1_id, player_2_id, status, time_utc, duel_format
+      ) VALUES (
+        'rescheduled', 'period-1', 'request-1', 'challenge',
+        'A', 'B', 'Planned', '2026-08-20T10:00:00.000Z', 'Bo3'
+      );
+    `
+  );
+
+  assert.equal((await loadChallengeScheduleConflict(db, {
+    periodId: "period-1",
+    playerIds: ["A", "B"],
+    timeUtc: "2026-08-20T10:00:00.000Z",
+    format: "Bo3",
+  }))?.duel?.id, "rescheduled");
+  assert.equal(await loadChallengeScheduleConflict(db, {
+    periodId: "period-1",
+    playerIds: ["A", "B"],
+    timeUtc: "2026-08-20T10:00:00.000Z",
+    format: "Bo3",
+    excludeDuelId: "rescheduled",
+  }), null);
 });
 
 test("defines Rivals-wide pair blocking statuses", () => {
@@ -442,6 +633,44 @@ test("allows two simultaneous accepts at N=2 when both slots are free", async (t
     ))?.count),
     2
   );
+});
+
+test("allows only one simultaneous accept when the selected times conflict", async (t) => {
+  const [firstDb, secondDb] = await createConcurrentChallengeAcceptanceDatabase(t);
+  await run(
+    firstDb,
+    "INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player) VALUES ('period-1', 'RIVALS-1', 2)"
+  );
+
+  const results = await Promise.allSettled([
+    acceptChallengeMatchWithGuards(firstDb, {
+      duelId: "duel-ab",
+      requestId: "request-ab",
+      periodId: "period-1",
+      rivalsTournamentId: "RIVALS-1",
+      player1Id: "A",
+      player2Id: "B",
+      maxMatchesPerPlayer: 2,
+      timeUtc: "2026-08-20T10:00:00.000Z",
+      format: "Bo3",
+    }),
+    acceptChallengeMatchWithGuards(secondDb, {
+      duelId: "duel-ac",
+      requestId: "request-ac",
+      periodId: "period-1",
+      rivalsTournamentId: "RIVALS-1",
+      player1Id: "A",
+      player2Id: "C",
+      maxMatchesPerPlayer: 2,
+      timeUtc: "2026-08-20T11:00:00.000Z",
+      format: "Bo3",
+    }),
+  ]);
+
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+  assert.equal(results.find((result) => result.status === "rejected")?.reason?.code, "schedule_conflict");
+  assert.equal(Number((await get(firstDb, "SELECT COUNT(*) AS count FROM duels"))?.count), 1);
 });
 
 test("allows only one simultaneous accept when one of two slots remains", async (t) => {

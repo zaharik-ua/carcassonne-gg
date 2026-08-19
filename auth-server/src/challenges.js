@@ -86,7 +86,61 @@ export function isChallengePlayerRequestEligibleStatus(status) {
 }
 
 export function getChallengeFormatDurationMinutes(format) {
-  return CHALLENGE_FORMAT_DURATION_MINUTES[String(format || "").trim()] || null;
+  const normalized = String(format || "").trim().toLowerCase();
+  if (normalized === "bo3") return CHALLENGE_FORMAT_DURATION_MINUTES.Bo3;
+  if (normalized === "bo5") return CHALLENGE_FORMAT_DURATION_MINUTES.Bo5;
+  return null;
+}
+
+function parseChallengeUtcTimestampMs(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const normalized = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(raw)
+    ? `${raw.replace(" ", "T")}Z`
+    : raw;
+  const timestampMs = Date.parse(normalized);
+  return Number.isFinite(timestampMs) ? timestampMs : null;
+}
+
+export function findChallengeScheduleConflict(options = {}) {
+  const playerIds = new Set(
+    (Array.isArray(options.playerIds) ? options.playerIds : [])
+      .map(normalizeChallengeIdentifier)
+      .filter(Boolean)
+  );
+  const candidateTimestampMs = parseChallengeUtcTimestampMs(options.timeUtc);
+  const candidateDurationMinutes = getChallengeFormatDurationMinutes(options.format);
+  if (!playerIds.size || candidateTimestampMs === null || !candidateDurationMinutes) return null;
+
+  const conflicts = (Array.isArray(options.duels) ? options.duels : []).flatMap((duel) => {
+    const duelPlayerIds = [
+      normalizeChallengeIdentifier(duel?.player_1_id),
+      normalizeChallengeIdentifier(duel?.player_2_id),
+    ].filter(Boolean);
+    const conflictingPlayerIds = duelPlayerIds.filter((playerId) => playerIds.has(playerId));
+    if (!conflictingPlayerIds.length) return [];
+
+    const existingTimestampMs = parseChallengeUtcTimestampMs(duel?.time_utc);
+    const existingDurationMinutes = getChallengeFormatDurationMinutes(duel?.duel_format);
+    if (existingTimestampMs === null || !existingDurationMinutes) return [];
+
+    const requiredGapMinutes = Math.max(candidateDurationMinutes, existingDurationMinutes);
+    const startDifferenceMs = Math.abs(candidateTimestampMs - existingTimestampMs);
+    if (startDifferenceMs >= requiredGapMinutes * 60 * 1000) return [];
+
+    return [{
+      duel,
+      conflicting_player_ids: Array.from(new Set(conflictingPlayerIds)),
+      required_gap_minutes: requiredGapMinutes,
+      start_difference_minutes: startDifferenceMs / (60 * 1000),
+    }];
+  });
+
+  conflicts.sort((left, right) => (
+    left.start_difference_minutes - right.start_difference_minutes
+    || String(left.duel?.id || "").localeCompare(String(right.duel?.id || ""))
+  ));
+  return conflicts[0] || null;
 }
 
 export function buildChallengeMatchCapacity(matchesCount, configuredLimit) {
@@ -194,6 +248,65 @@ export async function loadChallengeBlockingRivalsPairDuel(db, options = {}) {
       excludedDuelId,
     ]
   );
+}
+
+export async function loadChallengeScheduleConflict(db, options = {}) {
+  const periodId = normalizeChallengeIdentifier(options.periodId);
+  const excludedDuelId = normalizeChallengeIdentifier(options.excludeDuelId);
+  const playerIds = Array.from(new Set(
+    (Array.isArray(options.playerIds) ? options.playerIds : [])
+      .map(normalizeChallengeIdentifier)
+      .filter(Boolean)
+  ));
+  if (
+    !periodId
+    || !playerIds.length
+    || parseChallengeUtcTimestampMs(options.timeUtc) === null
+    || !getChallengeFormatDurationMinutes(options.format)
+  ) {
+    return null;
+  }
+
+  const slotStatuses = Array.from(CHALLENGE_MATCH_SLOT_DUEL_STATUSES);
+  const playerPlaceholders = playerIds.map(() => "?").join(", ");
+  const duels = await dbAll(
+    db,
+    `
+      SELECT
+        id,
+        challenge_period_id,
+        challenge_request_id,
+        player_1_id,
+        player_2_id,
+        status,
+        time_utc,
+        duel_format
+      FROM duels
+      WHERE challenge_period_id = ?
+        AND source_type = 'challenge'
+        AND deleted_at IS NULL
+        AND status IN (${slotStatuses.map(() => "?").join(", ")})
+        AND (
+          player_1_id IN (${playerPlaceholders})
+          OR player_2_id IN (${playerPlaceholders})
+        )
+        AND (? IS NULL OR id <> ?)
+    `,
+    [
+      periodId,
+      ...slotStatuses,
+      ...playerIds,
+      ...playerIds,
+      excludedDuelId,
+      excludedDuelId,
+    ]
+  );
+  return findChallengeScheduleConflict({
+    playerIds,
+    timeUtc: options.timeUtc,
+    format: options.format,
+    duels,
+  });
 }
 
 export async function closeChallengePendingRequestsAfterAccept(db, options = {}) {
