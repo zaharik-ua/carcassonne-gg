@@ -1029,6 +1029,15 @@
     color: var(--blue);
   }
 
+  .challenge-duel-score {
+    width: 13px;
+    margin: 0 7px 0 15px;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 20px;
+  }
+
   .challenge-duel-status {
     border-radius: 4px;
     background: var(--green-soft);
@@ -1491,16 +1500,16 @@
   }
 
   .challenge-opponent-action:not(:disabled) {
-    border-color: var(--blue);
-    background: var(--blue);
-    color: #fff;
+    border-color: #c8ced8;
+    background: #fff;
+    color: #2f3947;
     cursor: pointer;
   }
 
   .challenge-opponent-action:not(:disabled):hover,
   .challenge-opponent-action:not(:disabled):focus-visible {
-    background: var(--blue-hover);
-    border-color: var(--blue-hover);
+    background: #fff;
+    border-color: #c8ced8;
   }
 
   .challenge-modal-overlay {
@@ -3529,9 +3538,11 @@
       && String(request?.status || "").trim() === "pending"
       && request?.has_counter_offer
       ? "Requested new time"
-      : rawStatus;
+      : rawStatus === "Done"
+        ? "Played"
+        : rawStatus;
     if (!label) return null;
-    if (["Planned", "Played"].includes(label)) return null;
+    if (label === "Planned") return null;
     const normalized = label.toLowerCase().replace(/\s+/g, "_");
     const node = document.createElement("div");
     node.className = `challenge-duel-status is-${normalized}`;
@@ -4571,6 +4582,17 @@
     players.appendChild(createChallengeDuelPlayerRow(player2));
     row.appendChild(players);
 
+    if (hasValue(duel?.dw1) || hasValue(duel?.dw2)) {
+      const score = document.createElement("div");
+      score.className = "challenge-duel-score";
+      [duel?.dw1, duel?.dw2].forEach((value) => {
+        const scoreValue = document.createElement("div");
+        scoreValue.textContent = hasValue(value) ? String(value) : "-";
+        score.appendChild(scoreValue);
+      });
+      row.appendChild(score);
+    }
+
     const actions = document.createElement("div");
     actions.className = "challenge-duel-actions";
     const statusNode = createChallengeDuelStatusNode(duel?.status, request, !!duel?.deleted_at);
@@ -4587,7 +4609,7 @@
       && !isErrorWithoutResult
       && isCurrentPlayerParticipant
     ) {
-      actions.appendChild(createActionButton("Edit Results", "challenge-btn-primary", () => {
+      actions.appendChild(createActionButton("Edit Results", "challenge-btn-secondary", () => {
         openAdminChallengeMatchDialog(period, request, { matchReadonly: true });
       }));
     }
@@ -6048,7 +6070,8 @@
     row.dataset.associationId = String(opponent?.association?.id || "");
     const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
     const canCreateRequests = !!eligibility?.can_create_requests;
-    const playerHasScheduledMatch = normalizeStatus(period?.player_status) === "match_scheduled";
+    const playerHasScheduledMatch = normalizeStatus(period?.player_status) === "match_scheduled"
+      || !!period?.challenge_duel_id;
     const hasScheduledMatch = reasons.includes("current_player_has_match") || playerHasScheduledMatch;
     const opponentId = String(opponent?.player_id || "").trim();
     const currentPlayerId = String(currentPlayer?.player_id || "").trim();
@@ -6130,10 +6153,6 @@
       return row;
     }
 
-    if (playerHasScheduledMatch) {
-      return row;
-    }
-
     const inviteBtn = document.createElement("button");
     inviteBtn.className = "challenge-opponent-action";
     inviteBtn.type = "button";
@@ -6144,24 +6163,27 @@
     }
     inviteBtn.addEventListener("click", () => {
       if (inviteBtn.disabled) return;
+      const openInvite = (requestingPlayer) => {
+        if (hasScheduledMatch) {
+          showChallengeMatchScheduledDialog();
+          return;
+        }
+        if (isSameAssociation) {
+          showChallengeInfoDialog(
+            "Invite unavailable",
+            "Players from the same association cannot play a Challenge match."
+          );
+          return;
+        }
+        openChallengeRequestForm(period, opponent, requestingPlayer);
+      };
       if (!challengeAccess.bgaVerified) {
-        requireChallengeAccess(() => openChallengeRequestForm(period, opponent, {
+        requireChallengeAccess(() => openInvite({
           player_id: getCurrentUserProfileId(challengeAccess.user),
         }));
         return;
       }
-      if (hasScheduledMatch) {
-        showChallengeMatchScheduledDialog();
-        return;
-      }
-      if (isSameAssociation) {
-        showChallengeInfoDialog(
-          "Invite unavailable",
-          "Players from the same association cannot play a Challenge match."
-        );
-        return;
-      }
-      openChallengeRequestForm(period, opponent, currentPlayer);
+      openInvite(currentPlayer);
     });
     row.appendChild(inviteBtn);
 
@@ -6507,17 +6529,23 @@
     duelBlocks.forEach((duelBlock) => bodyEl.appendChild(duelBlock));
   }
 
+  function getChallengePendingRequestLimit(period) {
+    const value = Number.parseInt(String(period?.max_pending_requests_per_player ?? "3"), 10);
+    return Number.isInteger(value) && value > 0 ? value : 3;
+  }
+
   function createNewChallengeRequestButton(period, currentPlayerId, pendingSentCount) {
-    return createActionButton("Create request", "challenge-btn-primary", () => {
+    return createActionButton("Create request", "challenge-btn-secondary", () => {
       const openRequest = () => {
         if (normalizeStatus(period?.player_status) === "match_scheduled" || period?.challenge_duel_id) {
           showChallengeMatchScheduledDialog();
           return;
         }
-        if (pendingSentCount >= 3) {
+        const pendingRequestLimit = getChallengePendingRequestLimit(period);
+        if (pendingSentCount >= pendingRequestLimit) {
           showChallengeInfoDialog(
             "Request limit reached",
-            "You can send up to 3 match requests. Remove an already sent request to create a new one."
+            `You can send up to ${pendingRequestLimit} match requests. Remove an already sent request to create a new one.`
           );
           return;
         }
@@ -6533,6 +6561,7 @@
     const bodyEl = panel.querySelector("[data-requests-body]");
     if (!bodyEl) return;
     const isClosedPeriod = isClosedChallengePeriod(period);
+    const pendingRequestLimit = getChallengePendingRequestLimit(period);
     renderChallengeMatchPanel(period, "", null);
     bodyEl.innerHTML = "";
     setRequestPanelVisible(panel, !isClosedPeriod);
@@ -6553,7 +6582,7 @@
       "",
       "sent",
       "No sent invites.",
-      "0 / 3 requests",
+      `0 / ${pendingRequestLimit} requests`,
       { actionButton: createNewChallengeRequestButton(period, "", 0) }
     ));
   }
@@ -6644,6 +6673,7 @@
       renderChallengeMatchPanel(period, currentPlayerId, challengeDuelRequest);
       setRequestPanelVisible(panel, !isClosedPeriod || visibleRequests.length > 0);
       const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;
+      const pendingRequestLimit = getChallengePendingRequestLimit(period);
       const createRequestBtn = isClosedPeriod
         ? null
         : createNewChallengeRequestButton(period, currentPlayerId, pendingSentCount);
@@ -6672,7 +6702,7 @@
           currentPlayerId,
           "sent",
           "No sent invites.",
-          `${pendingSentCount} / 3 requests`,
+          `${pendingSentCount} / ${pendingRequestLimit} requests`,
           createRequestBtn ? { actionButton: createRequestBtn } : {}
         ));
       } else if (visibleRequests.length > 0) {
@@ -6687,7 +6717,7 @@
             currentPlayerId,
             "sent",
             "No sent invites.",
-            isClosedPeriod ? "" : `${pendingSentCount} / 3 requests`,
+            isClosedPeriod ? "" : `${pendingSentCount} / ${pendingRequestLimit} requests`,
             createRequestBtn ? { actionButton: createRequestBtn } : {}
           ));
         }

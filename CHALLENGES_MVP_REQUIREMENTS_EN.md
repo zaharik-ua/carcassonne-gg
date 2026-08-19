@@ -1,6 +1,6 @@
 # Challenges MVP - requirements and implementation tracker
 
-Document status: `approved for implementation`
+Document status: `draft for review`
 
 The purpose of the document is to capture the MVP scope of the Challenges mode and use the checkboxes below to track implementation.
 
@@ -20,7 +20,7 @@ Challenges is a mode in which the player during a certain game period:
 2. Finds an opponent from another association.
 3. Creates or receives a match request.
 4. Coordinates time and Bo3/Bo5 format.
-5. Plays no more than one match per period.
+5. Plays no more than `max_matches_per_player` matches per period.
 6. Reviews and, if necessary, adjusts the result of the match.
 
 ## 2. Established product decisions
@@ -33,7 +33,12 @@ Challenges is a mode in which the player during a certain game period:
 - For Challenge duels, the existing `duels` statuses are used, expanded only if necessary.
 - Tournament complaints, problems, and player requests are stored in the universal `tournament_cases` table. In the current MVP, only a `no_show` case is created automatically; a case-list and case-management UI is not included yet.
 - A mutual cancellation of a problematic Challenge match does not create a `tournament_cases` record; a no-show creates an open complaint and stores the details supplied by the player.
-- One player can play no more than one Challenge match in one period.
+- Each Challenge period defines `max_matches_per_player`; one player may have no more than that many slot-occupying matches in the period.
+- The match limit is stored only in `challenge_periods`. The actual number of scheduled/played matches is not duplicated in `challenge_period_players`; it is calculated transactionally from `duels`.
+- A player's participation status (`not_selected`, `available`, `unavailable`) is not an aggregate match status. A player may have confirmed or completed matches and remain `available` until the limit is reached.
+- Within one `Rivals` tournament, the same pair of players may have no more than one non-cancelled Challenge match, regardless of how many Challenge periods are linked to that tournament.
+- For schedule-conflict checks, a Bo3 lasts 90 minutes and a Bo5 lasts 150 minutes.
+- The limit of pending requests created by a player is configured separately for each period through `max_pending_requests_per_player`, with a default of `3`.
 - A player with `available` status may optionally specify up to three time windows during which they can both start and finish a match. These windows are informational and do not restrict request creation or the time options proposed in a request.
 - The Challenges page has a public preview mode: periods, request sections, the open-to-match player list, and action buttons are also displayed to unauthenticated users and users without a linked BGA profile. Mutating actions remain available only after sign-in and BGA account verification.
 - All dates and times are stored in UTC.
@@ -53,15 +58,13 @@ Challenges is a mode in which the player during a certain game period:
 
 ### 3.2. Player statuses during the period
 
-The status belongs to the specific pair `player_id + period_id`.
+The status belongs to the specific pair `player_id + period_id` and describes only whether the player is willing to create and receive new requests. Individual match states and the number of used match slots are derived from `duels`.
 
 |Status|Display|Meaning|
 |---|---|---|
-| `not_selected` |Not selected|The player has not yet made a selection or their previous match has been cancelled.|
-| `available` |Open to a match|The player is open to offers.|
-| `unavailable` |Closed for match|The player does not participate in this period.|
-| `match_scheduled` |The match is scheduled|The player has a confirmed match.|
-| `played` |The match is played|The match ended with a result.|
+| `not_selected` |Not selected|The player has not selected participation or has manually closed themselves to new matches without marking a full opt-out from the period.|
+| `available` |Open to match|The player is open to new requests while at least one match slot remains.|
+| `unavailable` |Not playing this period|The player explicitly does not want to schedule additional matches in this period.|
 
 ### 3.3. Request statuses
 
@@ -71,7 +74,7 @@ The status belongs to the specific pair `player_id + period_id`.
 | `accepted` |The request has been accepted and is linked to a confirmed match.|
 | `declined` |The request was rejected by the player from whom a response was expected.|
 | `cancelled_by_sender` |The request has been withdrawn by its original author.|
-| `auto_cancelled` |Request automatically closed due to another confirmed match or change in availability.|
+| `auto_cancelled` |The request was automatically closed because a match limit was reached, participation status changed, the period closed, or a match for the same pair was confirmed within the Rivals tournament.|
 | `expired` |The last time proposed in the request has passed.|
 
 ### 3.4. Challenge match statuses (`duel`)
@@ -108,12 +111,15 @@ Available statuses `duels` are marked separately from statuses to be added for C
 - [ ] **CH-PER-011** The period in `draft` is displayed to players without the ability to change participation status or create requests.
 - [ ] **CH-PER-012** In `planning_open`, players can change participation status and create requests.
 - [ ] **CH-PER-013** In `active`, players can change participation status, create requests and play matches.
-- [ ] **CH-PER-014** `result_review` cannot create or accept new requests.
+- [ ] **CH-PER-014** In `result_review`, new requests cannot be created or accepted; every pending request in the period automatically becomes `expired`.
 - [ ] **CH-PER-015** `result_review` can view and adjust match results.
 - [ ] **CH-PER-016** In `archived`, all player actions are blocked.
-- [ ] **CH-PER-017** Admin can transfer period to `cancelled` only after canceling all active bids and pending matches.
+- [ ] **CH-PER-017** An admin may move a period to `cancelled` only after cancelling unfinished matches; when a period moves to `archived` or `cancelled`, all of its pending requests automatically become `expired`.
 - [ ] **CH-PER-018** The Challenges page displays all periods with statuses `draft`, `planning_open`, `active`, and `result_review`.
 - [ ] **CH-PER-019** The simultaneous existence of the current `active` period and the next `planning_open` period is supported by the UI and API.
+- [ ] **CH-PER-020** A period contains a positive integer `max_matches_per_player` with a default of `1`.
+- [ ] **CH-PER-021** A period contains a positive integer `max_pending_requests_per_player` with a default of `3`.
+- [ ] **CH-PER-022** An admin can edit both limits in the Challenge-period form.
 
 ## 5. Banner on the main page
 
@@ -126,17 +132,32 @@ Available statuses `duels` are marked separately from statuses to be added for C
 
 - [x] **CH-PLY-001** There is no more than one status record for each player and period.
 - [x] **CH-PLY-002** Initial player status is `not_selected`.
-- [x] **CH-PLY-003** Player can go from `not_selected` or `unavailable` to `available` during `planning_open` or `active`.
-- [x] **CH-PLY-004** Player can go to `unavailable` if they don't have `Planned` match in this period.
-- [x] **CH-PLY-005** Before going to `unavailable`, the UI shows a warning about automatic closing of requests.
-- [x] **CH-PLY-006** When going to `unavailable`, all pending requests involving this player go to `auto_cancelled`.
-- [x] **CH-PLY-008** When confirming a match, the status of both players becomes `match_scheduled`.
-- [ ] **CH-PLY-009** After receiving a correct result, the status of both players becomes `played`.
-- [ ] **CH-PLY-010** After a normal cancellation of a scheduled match, the status of both players becomes `not_selected`.
-- [ ] **CH-PLY-011** When transferring a match to `Requested new time`, both players become `available`.
-- [x] **CH-PLY-012** Player from `match_scheduled` cannot go to `unavailable` until canceling the match.
+- [ ] **CH-PLY-003** A player may switch among `not_selected`, `available`, and `unavailable` during `planning_open` or `active`, even when they already have scheduled or completed matches.
+- [ ] **CH-PLY-004** Switching to `not_selected` or `unavailable` closes the player only to new requests and does not cancel existing matches.
+- [ ] **CH-PLY-005** Before switching from `available` to `not_selected` or `unavailable`, the UI warns that pending requests will be closed automatically.
+- [ ] **CH-PLY-006** When switching from `available` to `not_selected` or `unavailable`, every pending request involving that player becomes `auto_cancelled`; linked duels in `Draft` or `Requested new time` become `Cancelled`.
+- [ ] **CH-PLY-008** Confirming a match does not change either player's manually selected participation status.
+- [ ] **CH-PLY-009** Receiving a valid result and moving a duel to `Done` does not change either player's participation status.
+- [ ] **CH-PLY-010** Cancelling one of several matches does not change either player's participation status.
+- [ ] **CH-PLY-011** Moving a duel to `Requested new time` does not change either player's participation status.
+- [ ] **CH-PLY-012** A player with scheduled or completed matches may manually close themselves to additional matches by selecting `not_selected` or `unavailable`.
+- [ ] **CH-PLY-013** The migration maps legacy `match_scheduled` and `played` statuses to `available`, preserves existing duels, and removes `challenge_duel_id`; derived match limits additionally constrain actual eligibility after migration.
 
-### 6.1. Player availability time windows
+### 6.1. Match limit and derived counters
+
+- [ ] **CH-CAP-001** A match occupies one player slot when its Challenge duel is not soft-deleted and has status `Planned`, `In progress`, `Done`, or `Error`.
+- [ ] **CH-CAP-002** Duels in `Draft`, `Requested new time`, or `Cancelled`, and soft-deleted duels, do not occupy a slot.
+- [ ] **CH-CAP-003** A player's `matches_count` is calculated transactionally from `duels` using `challenge_period_id`, participant, and the statuses in `CH-CAP-001`; it is not stored in `challenge_period_players`.
+- [ ] **CH-CAP-004** `matches_limit` comes from `challenge_periods.max_matches_per_player` and is not duplicated in `challenge_period_players`.
+- [ ] **CH-CAP-005** For each period, the player API returns the derived fields `matches_count`, `matches_limit`, `matches_remaining = max(0, matches_limit - matches_count)`, and `is_match_limit_reached`.
+- [ ] **CH-CAP-006** A player may create, receive, or accept a new request only when their status is `available` and `matches_count < matches_limit`.
+- [ ] **CH-CAP-007** Confirming a match increases the derived `matches_count` for both players without storing a separate cached counter.
+- [ ] **CH-CAP-008** When a player reaches `matches_limit` after confirming a match, every other pending request involving that player becomes `auto_cancelled`; while the player remains below the limit, the other pending requests remain open.
+- [ ] **CH-CAP-009** Duels in `Draft` or `Requested new time` that belong to auto-cancelled requests become `Cancelled`.
+- [ ] **CH-CAP-010** If a slot is released by `Cancelled`, `Requested new time`, or soft deletion, a player whose status is `available` automatically becomes eligible for new requests again without manually changing status.
+- [ ] **CH-CAP-011** A duel in `Error` occupies a slot indefinitely until the existing player/admin flow moves it to `Done`, `Cancelled`, or a soft-deleted state; there is no separate automatic slot release.
+
+### 6.2. Player availability time windows
 
 - [x] **CH-AVL-001** A player with `available` status can save zero to three availability time windows for a specific period.
 - [x] **CH-AVL-002** Each window represents the full interval during which the player can both start and finish a match.
@@ -159,12 +180,12 @@ Available statuses `duels` are marked separately from statuses to be added for C
 - [ ] **CH-ELG-003** The "Open to Match" list contains players with the status `available` in the selected period.
 - [ ] **CH-ELG-004** The current player does not appear as an available opponent for himself.
 - [ ] **CH-ELG-005** The list of available opponents does not show players from the same association.
-- [ ] **CH-ELG-006** The list of available opponents does not show players who already have a scheduled match in the period.
-- [ ] **CH-ELG-007** It is possible to invite a player with `not_selected` via manual selection or the Players page, unless otherwise restricted.
-- [ ] **CH-ELG-008** Unable to invite player with status `unavailable`.
-- [ ] **CH-ELG-009** Cannot invite a player who already has a scheduled match in the period.
+- [ ] **CH-ELG-006** The available-opponents list excludes players who have reached `max_matches_per_player`; a player with one or more matches below the limit remains listed while their status is `available`.
+- [ ] **CH-ELG-007** Manual selection and the Players page may invite only a player with status `available`, an unused match slot, and no other eligibility restriction.
+- [ ] **CH-ELG-008** A player with status `not_selected` or `unavailable` cannot be invited.
+- [ ] **CH-ELG-009** Having a scheduled or completed match does not by itself block a new request while the player remains below the limit.
 - [ ] **CH-ELG-010** Cannot create a second pending request between the same pair of players in the same period.
-- [ ] **CH-ELG-011** After the terminal status of the previous request, the same pair of players can be requested again.
+- [ ] **CH-ELG-011** After the previous request becomes terminal, the same pair can be invited again only if it has no other non-cancelled Challenge duel in the linked Rivals tournament.
 
 Terminal statuses for re-invitation:
 
@@ -173,7 +194,29 @@ Terminal statuses for re-invitation:
 - `auto_cancelled`;
 - `expired`.
 
-### 7.1. Public preview and Challenges access onboarding
+### 7.1. Opponent uniqueness within a Rivals tournament
+
+- [ ] **CH-RIV-001** When a Challenge period has a `rivals_tournament_id`, the backend checks the player pair across every Challenge period with the same `rivals_tournament_id`.
+- [ ] **CH-RIV-002** A pair is considered already used when it has a non-soft-deleted Challenge duel in `Draft`, `Requested new time`, `Planned`, `In progress`, `Done`, or `Error`.
+- [ ] **CH-RIV-003** A duel in `Cancelled` or a soft-deleted duel does not block a later request between the same pair.
+- [ ] **CH-RIV-004** For a period without `rivals_tournament_id`, pair uniqueness is enforced at least within that Challenge period.
+- [ ] **CH-RIV-005** Pair uniqueness is checked when a request is created and checked again transactionally on accept; for a reschedule, the current duel is excluded from the check.
+- [ ] **CH-RIV-006** When a pair confirms a match, all other pending requests for that pair across the linked Rivals tournament become `auto_cancelled`.
+- [ ] **CH-RIV-007** Pair comparison is unordered: `(player A, player B)` and `(player B, player A)` are the same pair.
+
+### 7.2. “Open to match” list toggle
+
+- [ ] **CH-OPP-001** The `Open to match` section has a two-option toggle: `Available opponents` and `All players`.
+- [ ] **CH-OPP-002** `Available opponents` is selected by default whenever the page or period is opened.
+- [ ] **CH-OPP-003** `All players` shows every player whose participation status is `available` and who has a free match slot, including the current player, players from the same association, and players who already have a non-cancelled match with the current player in the linked Rivals tournament.
+- [ ] **CH-OPP-004** `Available opponents` uses the same base list but excludes the current player.
+- [ ] **CH-OPP-005** `Available opponents` excludes players from the current player's association.
+- [ ] **CH-OPP-006** `Available opponents` excludes players who already have a non-cancelled Challenge duel with the current player in any period of the linked Rivals tournament; for a period without `rivals_tournament_id`, the current period is checked.
+- [ ] **CH-OPP-007** In `All players`, the current player's row has no invite action; same-association and already-matched rows show a disabled invite action or a clear reason why they are unavailable.
+- [ ] **CH-OPP-008** Switching the toggle works without reloading the page and does not change backend eligibility: a direct request to an unavailable opponent is still rejected.
+- [ ] **CH-OPP-009** The API returns enough data for both views, including `is_current_player`, `is_same_association`, `has_rivals_match`, `matches_count`, `matches_limit`, and `is_match_limit_reached`, or equivalent separate collections.
+
+### 7.3. Public preview and Challenges access onboarding
 
 - [x] **CH-ONB-001** An unauthenticated user and an authenticated user without a verified BGA profile can see all open Challenge periods, `Your period status`, the `Requests` / `Incoming` / `Sent` sections, the `Create request` button, the `Open to match` section, and `Invite to match` buttons; the page renders the normal UI instead of `Unauthorized` or `Linked player profile is required`.
 - [x] **CH-ONB-002** When a user without full access attempts to change `Your period status`, click `Create request`, or click `Invite to match`, no mutating request is performed and a Challenges-styled onboarding popup opens.
@@ -210,10 +253,10 @@ Terminal statuses for re-invitation:
 
 ### 8.3. Request limit
 
-- [x] **CH-REQ-013** One player can be the author of no more than three pending requests at the same time.
-- [x] **CH-REQ-014** The limit is calculated for `created_by_player_id`.
+- [ ] **CH-REQ-013** One player may be the author of no more than `challenge_periods.max_pending_requests_per_player` pending requests within one period; the default limit is `3`.
+- [x] **CH-REQ-014** The limit is calculated for the pair `period_id + created_by_player_id`.
 - [x] **CH-REQ-015** Another player's counteroffer does not release the bid from its original submitter's limit.
-- [x] **CH-REQ-016** The limit check is performed on the backend in the same transaction as the request creation.
+- [ ] **CH-REQ-016** The backend reads the period's current limit and checks it in the same transaction that creates the request.
 
 ### 8.4. Withdrawal and deletion
 
@@ -234,7 +277,9 @@ Terminal statuses for re-invitation:
 - [ ] **CH-LST-002** The player sees a list of the requests they have created with their current statuses.
 - [ ] **CH-LST-003** For a pending request, the proposed times, formats and player from whom a response is expected are shown.
 - [ ] **CH-LST-004** For the terminal request, its final status is shown.
-- [ ] **CH-LST-005** Player sees his confirmed match for each open period.
+- [ ] **CH-LST-005** A player sees all of their Challenge matches in every open period, not only the first match.
+- [ ] **CH-LST-006** The match-list heading shows a counter formatted as `X / N matches`, where `X = matches_count` and `N = matches_limit`.
+- [ ] **CH-LST-007** Each match in the list retains its own reschedule, cancellation, result-view, and result-edit actions according to its duel status.
 
 ## 10. Answer and counteroffer
 
@@ -255,30 +300,40 @@ Terminal statuses for re-invitation:
 - [ ] **CH-ACC-005** The transaction is rechecking that the request is still `pending`.
 - [ ] **CH-ACC-006** Transaction checks that actor is `awaiting_player_id`.
 - [ ] **CH-ACC-007** The transaction checks that the period allows the request to be accepted.
-- [ ] **CH-ACC-008** The transaction checks that both players do not already have another confirmed match in this period.
+- [ ] **CH-ACC-008** Within the transaction, `matches_count` is recalculated for both players and the condition `matches_count < max_matches_per_player` is checked.
 - [ ] **CH-ACC-009** Request goes to `accepted`.
 - [ ] **CH-ACC-010** A new `Planned` duel is being created or an associated duel in status `Requested new time` is being confirmed.
 - [ ] **CH-ACC-011** Duel contains two players, agreed time and format.
-- [ ] **CH-ACC-012** The status of both players becomes `match_scheduled`.
-- [ ] **CH-ACC-013** All other pending bids involving either of these two players go to `auto_cancelled`.
-- [ ] **CH-ACC-014** Duels associated with auto-cancelled requests in status `Requested new time` go to `Cancelled`.
-- [ ] **CH-ACC-015** DB-level constraint does not allow one player to have more than one active Challenge-duel in one period.
+- [ ] **CH-ACC-012** Confirmation does not change either player's participation status, and the API returns updated derived match counters.
+- [ ] **CH-ACC-013** Other pending requests involving these players remain open if the relevant player still has a free slot after accept; for a player who reached the limit, they become `auto_cancelled`.
+- [ ] **CH-ACC-014** Duels in `Draft` or `Requested new time` that belong to auto-cancelled requests become `Cancelled`.
+- [ ] **CH-ACC-015** The transactional check prevents either player's `matches_count` from exceeding `max_matches_per_player`, including during simultaneous accepts.
 - [ ] **CH-ACC-016** Repeating the same accept does not create a duplicate duel.
 
-### 11.1. Creating a match "by the way"
+### 11.1. Schedule conflicts between matches
+
+- [ ] **CH-SCH-001** For scheduling checks, the standard duration is `90` minutes for Bo3 and `150` minutes for Bo5.
+- [ ] **CH-SCH-002** The check includes the player's non-soft-deleted duels in the current Challenge period with a valid `time_utc` and status `Planned`, `In progress`, `Done`, or `Error`.
+- [ ] **CH-SCH-003** For every new/existing match pair, the absolute difference between their `time_utc` values must be at least the greater standard duration of the two formats: 90 minutes for Bo3/Bo3 and 150 minutes for Bo3/Bo5 or Bo5/Bo5.
+- [ ] **CH-SCH-004** Exactly 90 or 150 minutes, as applicable, is allowed; a smaller interval before or after an existing start time is a conflict.
+- [ ] **CH-SCH-005** The backend checks both players transactionally on accept after a specific time and format are selected; the same rule applies to re-accept after rescheduling and to retroactive confirmation.
+- [ ] **CH-SCH-006** On conflict, the backend returns a conflict response with the conflicting duel and does not change the request, duel, or any other entity.
+- [ ] **CH-SCH-007** Time options may be proposed even when a potential conflict exists; the selected option is blocked only during accept.
+
+### 11.2. Creating a match retroactively
 
 This flow is used if players have already played a match, but did not create an request in advance, or created it, but did not have time to confirm it before the start of the match. Obtaining and importing actual results is done by existing separate functionality and is not part of this flow.
 
 - [ ] **CH-RET-001** During the `active` period status, a player can create a request with a match time in the past if that time is within `play_starts_at..play_ends_at` the corresponding period.
 - [ ] **CH-RET-002** A request with time in the past is clearly marked in the UI as a request for an already played match.
-- [ ] **CH-RET-003** Another player can accept a request for a match that has already been played, if both players do not already have another confirmed Challenge match in that period.
+- [ ] **CH-RET-003** The other player may accept a request for an already played match when both players have a free slot, pass the Rivals opponent-uniqueness check, and have no schedule conflict.
 - [ ] **CH-RET-004** If a request was created before a match but not accepted in time, a player with `awaiting_player_id` can confirm it after the suggested time as a match already played, even if the request has changed to `expired` status.
 - [ ] **CH-RET-005** The creation and confirmation of a request "in fact" is available to `play_ends_at` and also during `result_review`; `archived` and `cancelled` cannot create or confirm such a match.
 - [ ] **CH-RET-006** When "in fact" is confirmed, the request goes to `accepted` and the Challenge-duel is created by a single DB transaction with the agreed participants, format and actual match time in the past.
-- [ ] **CH-RET-007** Before confirmation, the backend rechecks the period status, actual match time limits, actor, eligibility of both players and the limit of "no more than one Challenge match per period".
+- [ ] **CH-RET-007** Before confirmation, the backend rechecks period status, actual-match time boundaries, actor, both players' eligibility, match limits, opponent uniqueness, and schedule conflicts.
 - [ ] **CH-RET-008** After creating a Challenge-duel, the existing mechanism for obtaining actual results is launched or applied; a separate logic for searching or importing results is not implemented within this flow.
-- [ ] **CH-RET-009** If the existing mechanism immediately finds a correct result, the duel goes to `Done` and both players go to `played`; if the result has not yet been received, the further status is determined by the general rules of Challenge-duel and receiving results.
-- [ ] **CH-RET-010** Confirmation "in fact" automatically closes other pending requests of both players according to the general request acceptance rules.
+- [ ] **CH-RET-009** If the existing mechanism immediately finds a valid result, the duel moves to `Done` without changing either player's participation status; if no result is available yet, the subsequent status follows the general Challenge-duel and result-retrieval rules.
+- [ ] **CH-RET-010** Retroactive confirmation closes other pending requests only under the general match-limit and Rivals pair-uniqueness rules.
 - [ ] **CH-RET-011** Reconfirming the same request "in fact" does not create a duplicate duel and does not trigger duplicate retrieval of results.
 
 ## 12. Challenge match as a duel
@@ -293,6 +348,7 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-MAT-008** Members are stored directly in `duels.player_1_id` and `duels.player_2_id`.
 - [ ] **CH-MAT-009** Challenge-match games are stored in `games` with a link to Challenge-duel via `games.duel_id`.
 - [ ] **CH-MAT-010** On the Challenges page, a confirmed match shows opponent, association, UTC/local time, format and status.
+- [ ] **CH-MAT-011** One player may participate in multiple Challenge duels in one period up to `max_matches_per_player`; membership is determined through `duels.player_1_id`/`player_2_id`, not through one duel FK in `challenge_period_players`.
 
 ## 13. Postponement of the match
 
@@ -301,21 +357,21 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-RSC-005** `awaiting_player_id` becomes another member of the match.
 - [ ] **CH-RSC-006** Match goes to `Requested new time`.
 - [ ] **CH-RSC-007** Pre-confirmed time not saved as active match slot.
-- [ ] **CH-RSC-008** Both players go to `available` and can receive or accept other bids.
-- [ ] **CH-RSC-009** When accepting a new time, the request goes to `accepted` and the match goes to `Planned`.
-- [ ] **CH-RSC-010** After re-accepting, both players go to `match_scheduled`.
+- [ ] **CH-RSC-008** `Requested new time` does not occupy a match slot; neither player's participation status changes, and their ability to use other requests depends on their status and remaining matches.
+- [ ] **CH-RSC-009** When accepting a new time, the request becomes `accepted` and the match becomes `Planned` only if both players still have a slot and the new time does not conflict with their other matches.
+- [ ] **CH-RSC-010** After re-accept, the match is counted in `matches_count` again, but neither player's participation status changes.
 - [ ] **CH-RSC-011** When the new time is rejected, the request goes to `declined`.
 - [ ] **CH-RSC-012** When rejecting a new time, the linked match in status `Requested new time` changes to `Cancelled`.
-- [ ] **CH-RSC-013** Once rejected, both players remain `available`.
-- [ ] **CH-RSC-014** If one of the participants accepted another request, the transfer request goes to `auto_cancelled` and its match in status `Requested new time` goes to `Cancelled`.
+- [ ] **CH-RSC-013** Rejecting the new time does not change either player's participation status.
+- [ ] **CH-RSC-014** If accepting another request causes either participant to reach `max_matches_per_player`, the pending reschedule request becomes `auto_cancelled` and its duel in `Requested new time` becomes `Cancelled`; while a slot remains, the reschedule request stays open.
 
 ## 14. Cancellation of the match
 
 - [ ] **CH-CAN-001** Any participant may cancel a `Planned` match either before or after the scheduled start time if the match has not been played and the result has not been recorded.
 - [ ] **CH-CAN-002** After the scheduled start time, cancellation of an unplayed `Planned` match remains available via player flow.
 - [ ] **CH-CAN-003** When cancelled, the match goes to `Cancelled` or equivalently soft-deleted with a recorded cancellation reason.
-- [ ] **CH-CAN-004** When canceled, the status of both players becomes `not_selected`.
-- [ ] **CH-CAN-005** After canceling, players can re-enter `available`.
+- [ ] **CH-CAN-004** Cancelling a match reduces both players' derived `matches_count` and does not change their participation status.
+- [ ] **CH-CAN-005** After a slot is released, a player with status `available` may create, receive, and accept requests again; `not_selected` and `unavailable` remain closed.
 - [ ] **CH-CAN-006** Another member receives a cancellation notification.
 - [ ] **CH-CAN-007** Admin can cancel a match regardless of start time.
 
@@ -324,7 +380,7 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-RES-001** An automatically obtained correct result is stored in the existing `duels` and `games` without creating or updating the team `match`.
 - [ ] **CH-RES-002** Challenge-duel goes to `Done` after correct completion.
 - [ ] **CH-RES-003** In the Challenges UI, the status of `Done` is displayed as `Played`.
-- [ ] **CH-RES-004** After correct completion, the status of both players becomes `played`.
+- [ ] **CH-RES-004** `Done` continues to occupy one match slot for both players but does not change their participation status.
 - [ ] **CH-RES-005** If a correct result is not obtained after the end of the match, Challenge-duel goes to `Error`.
 - [ ] **CH-RES-006** Before `result_review_ends_at`, any participant in a match could adjust the result without confirmation from another participant.
 - [ ] **CH-RES-007** Player can change actual match time.
@@ -347,7 +403,7 @@ This flow is used if players have already played a match, but did not create an 
 - [x] **CH-CAS-006** For a no-show, the modal displays a required editable `Details` textarea prefilled in English with the absent player, opponent, Challenge period name, and scheduled UTC date and time.
 - [x] **CH-CAS-007** A no-show changes the duel to `Cancelled`, stores the final `Details` text in `duels.cancellation_reason`, and creates an open `tournament_cases` record with type `complaint` and category `no_show`.
 - [x] **CH-CAS-008** The no-show case is linked to the duel, Challenge period, and the period's `rivals_tournament_id` when present; it also stores the submitting player and reported player.
-- [x] **CH-CAS-009** Both resolution flows transactionally change the related request to `auto_cancelled`, clear `challenge_period_players.challenge_duel_id`, and return both players to `not_selected`.
+- [ ] **CH-CAS-009** Both resolution flows transactionally change the related request to `auto_cancelled`; the `Cancelled` duel stops occupying a slot, but neither player's participation status changes.
 - [x] **CH-CAS-010** The backend permits resolution only to a participant in the relevant Challenge duel, rechecks the `Error` status and absence of a result, and returns a conflict when the match has already changed.
 - [x] **CH-CAS-011** `tournament_cases` is not exposed by a dedicated list API and is not displayed anywhere in the UI yet.
 
@@ -382,6 +438,7 @@ This flow is used if players have already played a match, but did not create an 
 - [x] **CH-ADM-015** Requests and matches belonging to other players are read-only in `Admin mode`, without player actions for accepting, declining, rescheduling, cancelling, or removing them.
 - [x] **CH-ADM-016** The backend permits the `admin_mode=1` and `include_removed=1` parameters only for global admins; requests for these modes by authenticated non-admins return `403` and do not expose other players' or removed records.
 - [x] **CH-ADM-017** Outside `Admin mode`, the API and UI retain player-scoped filtering, and hidden requests and soft-deleted duels are not displayed.
+- [ ] **CH-ADM-018** The period admin UI can edit `max_matches_per_player` and `max_pending_requests_per_player` and shows derived `matches_count / matches_limit` for each player without storing those counters in `challenge_period_players`.
 
 ## 18. Audit log
 
@@ -399,25 +456,27 @@ This flow is used if players have already played a match, but did not create an 
 ## 19. Competitiveness and data integrity
 
 - [ ] **CH-CON-001** All multi-entity status transitions are performed transactionally.
-- [ ] **CH-CON-002** Two simultaneous accepts for one player cannot create two confirmed Challenge-duels.
-- [ ] **CH-CON-003** Accept and player transition to `unavailable` executed at the same time end with one valid state with no partially updated data.
+- [ ] **CH-CON-002** Simultaneous accepts for one player may create only as many confirmed Challenge duels as there were free slots at the start of the transactions; `matches_count` never exceeds `max_matches_per_player`.
+- [ ] **CH-CON-003** Accept and a simultaneous player transition to `not_selected` or `unavailable` finish in one valid state without partially updated data.
 - [ ] **CH-CON-004** Accept of an request that has already become a terminal returns a conflict and does not change the data.
 - [ ] **CH-CON-005** Resubmitting the same API request does not create duplicate duels, games, audit events, or notifications.
 - [ ] **CH-CON-006** Soft-deleted/Cancelled match does not block new match creation for players in the same period.
 - [ ] **CH-CON-007** A match in status `Requested new time` is not considered scheduled and does not block other bids.
+- [ ] **CH-CON-008** Two simultaneous accepts in different Challenge periods of the same Rivals tournament cannot create two non-cancelled matches between the same pair.
+- [ ] **CH-CON-009** Match-limit, pair-uniqueness, and schedule-conflict checks run in the same transaction that creates or replans the duel.
 
 ## 20. Critical acceptance scenarios
 
-- [ ] **CH-E2E-001** Player becomes available, creates bid, opponent accepts, match is created, both get `match_scheduled`.
-- [ ] **CH-E2E-002** A player with three pending requests cannot create a fourth.
+- [ ] **CH-E2E-001** A player becomes `available`, creates a request, and the opponent accepts it; the match is created, the counter becomes `1 / N matches`, and neither player's participation status changes.
+- [ ] **CH-E2E-002** A player who has reached the configured `max_pending_requests_per_player` cannot create another pending request.
 - [ ] **CH-E2E-003** The counteroffer modifies `awaiting_player_id` and does not affect the original author's limit.
-- [ ] **CH-E2E-004** After decline or cancel, the same pair of players can be invited again with a different time.
-- [ ] **CH-E2E-005** Accepting one request automatically closes all other pending requests of both players.
-- [ ] **CH-E2E-006** Two simultaneous accepts for the same player end up creating only one confirmed match.
-- [ ] **CH-E2E-007** Switching to unavailable closes the corresponding requests and is not allowed for a scheduled match.
-- [ ] **CH-E2E-008** Rescheduling moves the match to `Requested new time`, the request to `pending`, and the players to `available`.
-- [ ] **CH-E2E-009** Reject transfer moves match from `Requested new time` to `Cancelled` and leaves both players `available`.
-- [x] **CH-E2E-010** While the match time is being renegotiated and the match is in `Requested new time`, a player can confirm a match with another player; after that, the transfer request automatically goes to `auto_cancelled` and the previous match goes to `Cancelled`.
+- [ ] **CH-E2E-004** After decline or duel cancellation, the same pair may be invited again if it has no other non-cancelled duel in the Rivals tournament.
+- [ ] **CH-E2E-005** With `max_matches_per_player > 1`, accepting the first request leaves other pending requests open while the relevant player has a free slot.
+- [ ] **CH-E2E-006** Multiple simultaneous accepts for one player do not create matches beyond `max_matches_per_player`.
+- [ ] **CH-E2E-007** A player with scheduled matches moves to `not_selected` or `unavailable`; pending requests are closed, while confirmed matches remain unchanged.
+- [ ] **CH-E2E-008** Rescheduling moves the match to `Requested new time`, the request to `pending`, releases one slot, and does not change either player's participation status.
+- [ ] **CH-E2E-009** Rejecting a reschedule moves the match from `Requested new time` to `Cancelled` and does not change either player's participation status.
+- [ ] **CH-E2E-010** While a duel is in `Requested new time`, a player may confirm another match; the reschedule request is automatically closed only if this causes the player to reach the limit.
 - [ ] **CH-E2E-011** An unplayed `Planned` match without a fixed result can be canceled via player flow both before and after the scheduled start time.
 - [ ] **CH-E2E-012** Manually changing the score is immediately visible to both players and generates a notification and audit event.
 - [ ] **CH-E2E-013** After `result_review_ends_at`, the player cannot change the result, but the admin can.
@@ -430,6 +489,12 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-E2E-020** A global admin enables `Admin mode` and sees other players' requests and matches without player actions, then enables `Removed items` and additionally sees hidden requests and soft-deleted duels; a non-admin does not see the toggles and receives `403` when directly requesting the admin API parameters.
 - [ ] **CH-E2E-021** A participant opens an `Error` match without a result, selects mutual cancellation, and sees `Cancelled` after Submit; no case is created, the request is closed, and neither player remains blocked by the duel.
 - [ ] **CH-E2E-022** A participant opens an `Error` match without a result, selects one player as a no-show, edits the generated Details, and after Submit receives a `Cancelled` duel and exactly one open `tournament_cases` record linked to the duel, period, and Rivals tournament.
+- [ ] **CH-E2E-023** After a player reaches `N / N matches`, all of their other pending requests, including requests linked to `Requested new time`, are automatically closed; below the limit they remain open.
+- [ ] **CH-E2E-024** Accept is rejected when the new Bo3/Bo5 start is less than the required 90/150 minutes before or after another match of either participant; the exact boundary is allowed.
+- [ ] **CH-E2E-025** Players who already have a non-cancelled duel in an earlier Challenge period of a Rivals tournament cannot create or accept another match with each other in a different period of that tournament.
+- [ ] **CH-E2E-026** A period with `max_pending_requests_per_player = 5` allows an author to have five pending requests and rejects the sixth.
+- [ ] **CH-E2E-027** The player UI shows all matches in the period and the `X / N matches` counter; after a first match below the limit, a player whose status is `available` remains in the `Open to match` list.
+- [ ] **CH-E2E-028** The `Open to match` list opens in `Available opponents` by default, excluding the current player, their association members, and previously used Rivals opponents; switching to `All players` displays those available rows but still prevents an invalid request.
 
 ## 21. Data scheme of new DB objects
 
@@ -447,6 +512,7 @@ One entry describes one period of Challenges.
 | `logo` | `TEXT` |yes| `NULL` |Link to a picture of the period logo.|
 | `rivals_tournament_id` | `TEXT` |yes| `NULL` |ID of the related tournament in the `Rivals` category.|
 | `max_matches_per_player` | `INTEGER` |no| `1` |Maximum number of matches one player may have in this period.|
+| `max_pending_requests_per_player` | `INTEGER` |no| `3` |Maximum number of pending requests simultaneously created by one player in this period.|
 | `status` | `TEXT` |no| `'draft'` |`draft`, `planning_open`, `active`, `result_review`, `archived` or `cancelled`.|
 | `planning_starts_at` | `TEXT` |no| — |Start planning in UTC.|
 | `play_starts_at` | `TEXT` |no| — |Start of game period in UTC.|
@@ -461,20 +527,20 @@ Mandatory constraints and indexes:
 
 - `CHECK (planning_starts_at <= play_starts_at AND play_starts_at < play_ends_at AND play_ends_at <= result_review_ends_at)`;
 - `CHECK (max_matches_per_player >= 1)`;
+- `CHECK (max_pending_requests_per_player >= 1)`;
 - `CHECK` for allowed values ​​`status`;
 - index on `rivals_tournament_id` for listing periods of a related Rivals tournament;
 - index `(status, planning_starts_at, play_ends_at, result_review_ends_at)` to find open periods.
 
 ### 21.2. `challenge_period_players`
 
-One record stores the state of one player in one period.
+One record stores only one player's manually selected participation status and availability windows for one period. It does not store a match reference, match limit, or cached counters.
 
 |Field|Type| Null | Default |Purpose|
 |---|---|---:|---|---|
 | `period_id` | `TEXT` |no| — | FK → `challenge_periods.id`. |
 | `player_id` | `TEXT` |no| — | FK → `profiles.id`. |
-| `status` | `TEXT` |no| `'not_selected'` |`not_selected`, `available`, `unavailable`, `match_scheduled` or `played`.|
-| `challenge_duel_id` | `TEXT` |yes| `NULL` |FK → `duels.id`; the player's current confirmed or played Challenge-duel. For `Requested new time` and after cancellation - `NULL`.|
+| `status` | `TEXT` |no| `'not_selected'` |`not_selected`, `available`, or `unavailable`; the status does not aggregate the player's match states.|
 | `availability_start_1_utc` | `TEXT` |yes| `NULL` |Start of the first availability window in UTC.|
 | `availability_end_1_utc` | `TEXT` |yes| `NULL` |End of the first availability window in UTC.|
 | `availability_start_2_utc` | `TEXT` |yes| `NULL` |Start of the second availability window in UTC.|
@@ -489,10 +555,9 @@ Mandatory constraints and indexes:
 
 - `PRIMARY KEY (period_id, player_id)`;
 - `CHECK` for allowed values ​​`status`;
-- `CHECK`, which is set to `challenge_duel_id` for `match_scheduled` and `played`, and `NULL` for other statuses;
 - each availability window is stored only as a complete start/end pair; the backend validates the three-window limit, period boundaries, whole hours, positive duration, and non-overlap;
 - indexes `(period_id, status)` and `(period_id, status, status_updated_at)` for listing and sorting available players;
-- accepting a match atomically sets `challenge_duel_id` to both players only if it is still `NULL`; this field is the blocking DB level of the second confirmed match in the same period.
+- `matches_count`, `matches_limit`, `matches_remaining`, and `is_match_limit_reached` are built at query/API level from `duels` and `challenge_periods` and are not added as columns to this table.
 
 ### 21.3. `challenge_requests`
 
@@ -531,7 +596,7 @@ Mandatory constraints and indexes:
 - limits `play_starts_at..play_ends_at` for time options are checked by the backend in the transaction because they depend on `challenge_periods`;
 - partial unique index for one `pending`-request for the normalized pair `(period_id, min(player_1_id, player_2_id), max(player_1_id, player_2_id))`;
 - indices `(awaiting_player_id, status)`, `(created_by_player_id, status)` and `(period_id, status)`;
-- the backend counts the three-request limit via `(created_by_player_id, status = 'pending')` in the creation transaction.
+- within the creation transaction, the backend counts pending requests using `(period_id, created_by_player_id, status = 'pending')` and compares the count with the current `challenge_periods.max_pending_requests_per_player`.
 
 ### 21.4. `tournament_cases`
 
@@ -567,7 +632,7 @@ Required constraints and indexes:
 - `CHECK` constraints for allowed `case_type`, `status`, and `priority` values;
 - indexes for workflow `(status, priority, created_at)`, submitter `(submitted_by_player_id, created_at)`, and assignee `(responsible_user_id, status, created_at)`;
 - separate indexes for `match_id`, `duel_id`, `tournament_id`, `challenge_period_id`, and the extensible `(related_entity_type, related_entity_id)` pair;
-- a no-show case is created in the same `BEGIN IMMEDIATE` transaction that changes the duel to `Cancelled`, closes the request, and updates both player statuses;
+- a no-show case is created in the same `BEGIN IMMEDIATE` transaction that changes the duel to `Cancelled` and closes the request; neither player's participation status changes;
 - mutual cancellation does not create a record in this table.
 
 ### 21.5. `notifications`
@@ -624,10 +689,12 @@ For Challenge-duel, available fields are used as follows:
 Mandatory constraints and indexes:
 
 - unique partial index on `challenge_request_id` when it is not `NULL` so that one request does not create two duels;
-- indexes `(challenge_period_id, status)` and `(source_type, player_1_id, player_2_id)`;
+- indexes `(challenge_period_id, status)`, `(challenge_period_id, player_1_id, status)`, `(challenge_period_id, player_2_id, status)`, and `(source_type, player_1_id, player_2_id)` for slot counts and match lookup;
 - `CHECK`, which `source_type = 'challenge'` is set to `challenge_period_id`, both are different players, `match_id IS NULL` and allowed Challenge-status;
 - `cancelled_by_player_id` refers to `profiles.id` for player cancellation; the value `'1'` is reserved for admin cancellation;
-- A DB trigger or equivalent transactional check matches `challenge_period_players.challenge_duel_id` with duel participants and disallows a second active/played Challenge-duel in the period.
+- accept/re-accept transactionally count each participant's non-soft-deleted duels in `Planned`, `In progress`, `Done`, and `Error` and do not allow `challenge_periods.max_matches_per_player` to be exceeded;
+- request creation and accept/re-accept transactionally verify that the same normalized pair has no other non-cancelled Challenge duel across all periods of the relevant `rivals_tournament_id`;
+- accept/re-accept transactionally check both participants' `time_utc` conflicts using 90 minutes for Bo3 and 150 minutes for Bo5.
 
 ### 21.7. Extending the existing table `audit_trail`
 
@@ -654,11 +721,11 @@ For Challenge events, `entity_type` contains `challenge_period`, `challenge_requ
 
 This section tracks large technical blocks. Detailed readiness is determined by the requirement checkboxes above.
 
-- [x] **CH-IMP-001** Database schema and migrations.
-- [x] **CH-IMP-002** Period API and admin UI.
+- [ ] **CH-IMP-001** Database schema and migrations.
+- [ ] **CH-IMP-002** Period API and admin UI.
 - [ ] **CH-IMP-003** Player-period status API and UI.
-- [x] **CH-IMP-004** Eligibility and list of available opponents.
-- [x] **CH-IMP-005** Request API and player UI.
+- [ ] **CH-IMP-004** Eligibility and list of available opponents.
+- [ ] **CH-IMP-005** Request API and player UI.
 - [ ] **CH-IMP-006** Accept/counteroffer/cancel/expire state transitions.
 - [ ] **CH-IMP-007** Integration of Challenge requests with `duels` and `games` without using team `matches`.
 - [ ] **CH-IMP-008** Reschedule and match cancellation flows.
@@ -673,6 +740,8 @@ This section tracks large technical blocks. Detailed readiness is determined by 
 - [x] **CH-IMP-017** Public Challenges preview and sign-in/BGA-verification onboarding before mutating actions.
 - [x] **CH-IMP-018** Global-admin mode on the Challenges page: all requests and matches, read-only presentation, optional inclusion of soft-deleted records, and backend access control.
 - [x] **CH-IMP-019** `tournament_cases` schema and the player `Resolve` flow for an `Error` Challenge match without a result, including mutual cancellation and no-show case creation.
+- [ ] **CH-IMP-020** Multi-match refactor: remove `challenge_duel_id`, make player status independent, add derived counters and N-match eligibility, make auto-cancel conditional, and list all matches.
+- [ ] **CH-IMP-021** Configurable pending-request limit, Rivals-wide opponent uniqueness, schedule-conflict checks, and the `Available opponents` / `All players` toggle.
 
 ## 23. Outside of MVP
 

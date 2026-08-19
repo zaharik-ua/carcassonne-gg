@@ -4230,6 +4230,11 @@
       item?.max_matches_per_player ?? 1
     );
     maxMatchesPerPlayerField.input.min = "1";
+    const maxPendingRequestsPerPlayerField = createNumberRow(
+      "Max pending requests per player",
+      item?.max_pending_requests_per_player ?? 3
+    );
+    maxPendingRequestsPerPlayerField.input.min = "1";
     const statusField = createSelectOptionsRow(
       "status",
       String(item?.status || "draft"),
@@ -4255,6 +4260,7 @@
     form.appendChild(logoField.row);
     form.appendChild(rivalsTournamentField.row);
     form.appendChild(maxMatchesPerPlayerField.row);
+    form.appendChild(maxPendingRequestsPerPlayerField.row);
     form.appendChild(statusField.row);
     form.appendChild(planningStartsField.row);
     form.appendChild(playStartsField.row);
@@ -4296,6 +4302,10 @@
         logo: String(logoField.input.value || "").trim(),
         rivals_tournament_id: String(rivalsTournamentField.select.value || "").trim() || null,
         max_matches_per_player: Number.parseInt(String(maxMatchesPerPlayerField.input.value || "").trim(), 10),
+        max_pending_requests_per_player: Number.parseInt(
+          String(maxPendingRequestsPerPlayerField.input.value || "").trim(),
+          10
+        ),
         status: String(statusField.select.value || "draft").trim(),
         planning_starts_at: dateTimeUtcInputToIso(planningStartsField.input.value),
         play_starts_at: dateTimeUtcInputToIso(playStartsField.input.value),
@@ -4312,6 +4322,10 @@
       }
       if (!Number.isInteger(payload.max_matches_per_player) || payload.max_matches_per_player < 1) {
         setStatus("Max matches per player must be a positive integer.", true);
+        return;
+      }
+      if (!Number.isInteger(payload.max_pending_requests_per_player) || payload.max_pending_requests_per_player < 1) {
+        setStatus("Max pending requests per player must be a positive integer.", true);
         return;
       }
       if (!payload.planning_starts_at || !payload.play_starts_at || !payload.play_ends_at || !payload.result_review_ends_at) {
@@ -5552,6 +5566,7 @@
       if (item.status) subtitleParts.push(String(item.status).trim());
       if (item.rivals_tournament_id) subtitleParts.push(`Rivals: ${String(item.rivals_tournament_id).trim()}`);
       subtitleParts.push(`Max matches/player: ${Number(item.max_matches_per_player) || 1}`);
+      subtitleParts.push(`Max pending requests/player: ${Number(item.max_pending_requests_per_player) || 3}`);
       if (item.planning_starts_at) subtitleParts.push(`Planning: ${formatDateUtc(item.planning_starts_at)}`);
       if (item.play_starts_at || item.play_ends_at) {
         subtitleParts.push(`Play: ${formatDateUtc(item.play_starts_at)} - ${formatDateUtc(item.play_ends_at)}`);

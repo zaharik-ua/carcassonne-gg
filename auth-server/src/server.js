@@ -23,6 +23,16 @@ import {
   isBlindLineupType,
   publishSecretLineupMatchInTransaction,
 } from "./secret-lineups.js";
+import {
+  CHALLENGE_ACTIVE_DUEL_STATUSES,
+  CHALLENGE_PERIOD_PENDING_EXPIRING_STATUSES,
+  CHALLENGE_PERIOD_STATUSES,
+  CHALLENGE_PLAYER_PERIOD_STATUSES,
+  ensureChallengePeriodConfigurationSchema,
+  isChallengePendingRequestLimitReached,
+  resolveMaxMatchesPerPlayer,
+  resolveMaxPendingRequestsPerPlayer,
+} from "./challenges.js";
 import { ensureTournamentCasesSchema } from "./tournament-cases.js";
 
 dotenv.config();
@@ -366,31 +376,6 @@ const TOURNAMENT_STAGE_FORMATS = [
   "Double Elimination",
 ];
 const STANDINGS_STAGES = ["Stage 1", "Stage 2"];
-const CHALLENGE_PERIOD_STATUSES = new Set([
-  "draft",
-  "planning_open",
-  "active",
-  "result_review",
-  "archived",
-  "cancelled",
-]);
-const CHALLENGE_PERIOD_PENDING_EXPIRING_STATUSES = new Set([
-  "result_review",
-  "archived",
-  "cancelled",
-]);
-const CHALLENGE_PLAYER_PERIOD_STATUSES = new Set([
-  "not_selected",
-  "available",
-  "unavailable",
-  "match_scheduled",
-  "played",
-]);
-const CHALLENGE_ACTIVE_DUEL_STATUSES = new Set([
-  "Planned",
-  "In progress",
-  "Error",
-]);
 const SYSTEM_SETTING_DEFINITIONS = [
   {
     key: "gg_rating_base_date",
@@ -4705,6 +4690,22 @@ function ensureDuelsSchema() {
           }
         );
         db.run(
+          "CREATE INDEX IF NOT EXISTS idx_duels_challenge_period_player_1_status ON duels(challenge_period_id, player_1_id, status)",
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure duels Challenge period/player 1/status index", indexErr);
+            }
+          }
+        );
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_duels_challenge_period_player_2_status ON duels(challenge_period_id, player_2_id, status)",
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure duels Challenge period/player 2/status index", indexErr);
+            }
+          }
+        );
+        db.run(
           "CREATE INDEX IF NOT EXISTS idx_duels_source_players ON duels(source_type, player_1_id, player_2_id)",
           (indexErr) => {
             if (indexErr) {
@@ -4937,6 +4938,7 @@ function ensureChallengesSchema() {
       logo TEXT,
       rivals_tournament_id TEXT,
       max_matches_per_player INTEGER NOT NULL DEFAULT 1,
+      max_pending_requests_per_player INTEGER NOT NULL DEFAULT 3,
       status TEXT NOT NULL DEFAULT 'draft',
       planning_starts_at TEXT NOT NULL,
       play_starts_at TEXT NOT NULL,
@@ -4948,6 +4950,7 @@ function ensureChallengesSchema() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (rivals_tournament_id) REFERENCES tournaments(id) ON DELETE SET NULL,
       CHECK (max_matches_per_player >= 1),
+      CHECK (max_pending_requests_per_player >= 1),
       CHECK (status IN ('draft', 'planning_open', 'active', 'result_review', 'archived', 'cancelled')),
       CHECK (
         planning_starts_at <= play_starts_at
@@ -4960,6 +4963,9 @@ function ensureChallengesSchema() {
       console.error("Failed to ensure challenge_periods schema", createErr);
       return;
     }
+    ensureChallengePeriodConfigurationSchema(db).catch((configurationError) => {
+      console.error("Failed to ensure Challenge period configuration schema", configurationError);
+    });
     db.all("PRAGMA table_info(challenge_periods)", (pragmaErr, columns) => {
       if (pragmaErr) {
         console.error("Failed to inspect challenge_periods schema", pragmaErr);
@@ -8658,6 +8664,7 @@ async function loadChallengePeriodById(periodId) {
         logo,
         rivals_tournament_id,
         max_matches_per_player,
+        max_pending_requests_per_player,
         status,
         planning_starts_at,
         play_starts_at,
@@ -8683,11 +8690,11 @@ function normalizeChallengePeriodPayload(payload) {
   const rivalsTournamentId = normalizeNullableText(
     payload?.rivals_tournament_id ?? payload?.rivalsTournamentId ?? payload?.rivals
   );
-  const rawMaxMatchesPerPlayer = payload?.max_matches_per_player ?? payload?.maxMatchesPerPlayer ?? 1;
-  const parsedMaxMatchesPerPlayer = Number(String(rawMaxMatchesPerPlayer).trim());
-  const maxMatchesPerPlayer = Number.isInteger(parsedMaxMatchesPerPlayer) && parsedMaxMatchesPerPlayer > 0
-    ? parsedMaxMatchesPerPlayer
-    : null;
+  const rawMaxMatchesPerPlayer = payload?.max_matches_per_player ?? payload?.maxMatchesPerPlayer;
+  const rawMaxPendingRequestsPerPlayer = payload?.max_pending_requests_per_player
+    ?? payload?.maxPendingRequestsPerPlayer;
+  const maxMatchesPerPlayer = resolveMaxMatchesPerPlayer(rawMaxMatchesPerPlayer);
+  const maxPendingRequestsPerPlayer = resolveMaxPendingRequestsPerPlayer(rawMaxPendingRequestsPerPlayer);
   const status = normalizeChallengePeriodStatus(payload?.status);
   const planningStartsAt = normalizeUtcTimestamp(payload?.planning_starts_at ?? payload?.planningStartsAt);
   const playStartsAt = normalizeUtcTimestamp(payload?.play_starts_at ?? payload?.playStartsAt);
@@ -8701,6 +8708,7 @@ function normalizeChallengePeriodPayload(payload) {
     logo,
     rivals_tournament_id: rivalsTournamentId,
     max_matches_per_player: maxMatchesPerPlayer,
+    max_pending_requests_per_player: maxPendingRequestsPerPlayer,
     status,
     planning_starts_at: planningStartsAt,
     play_starts_at: playStartsAt,
@@ -8916,6 +8924,9 @@ function getManualChallengePlayerPeriodStatus(value) {
 function validateChallengePeriodPayload(period) {
   if (!period.name) return "name is required";
   if (!period.max_matches_per_player) return "max_matches_per_player must be a positive integer";
+  if (!period.max_pending_requests_per_player) {
+    return "max_pending_requests_per_player must be a positive integer";
+  }
   if (!period.planning_starts_at) return "planning_starts_at is required";
   if (!period.play_starts_at) return "play_starts_at is required";
   if (!period.play_ends_at) return "play_ends_at is required";
@@ -9220,6 +9231,7 @@ function mapChallengePeriodForPlayer(row) {
     logo: row.logo,
     rivals_tournament_id: row.rivals_tournament_id || null,
     max_matches_per_player: normalizePositiveInteger(row.max_matches_per_player) || 1,
+    max_pending_requests_per_player: normalizePositiveInteger(row.max_pending_requests_per_player) || 3,
     status: row.status,
     planning_starts_at: row.planning_starts_at,
     play_starts_at: row.play_starts_at,
@@ -9291,6 +9303,7 @@ app.get("/challenge-periods/player", async (req, res) => {
           cp.logo,
           cp.rivals_tournament_id,
           cp.max_matches_per_player,
+          cp.max_pending_requests_per_player,
           cp.status,
           cp.planning_starts_at,
           cp.play_starts_at,
@@ -9574,12 +9587,14 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
     let insertedRow = null;
     try {
       const [
+        lockedPeriod,
         currentPeriodStatus,
         opponentPeriodStatus,
         currentActiveDuel,
         opponentActiveDuel,
         pendingCreatedCount,
       ] = await Promise.all([
+        loadChallengePeriodById(periodId),
         loadChallengePeriodPlayerStatus(periodId, player1Id),
         loadChallengePeriodPlayerStatus(periodId, player2Id),
         loadChallengeBlockingDuelForPlayer(periodId, player1Id),
@@ -9595,6 +9610,12 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
           [player1Id, periodId]
         ),
       ]);
+
+      if (!lockedPeriod || !["planning_open", "active"].includes(lockedPeriod.status)) {
+        const error = new Error("Editable Challenge period not found");
+        error.httpStatus = 404;
+        throw error;
+      }
 
       const currentStatus = normalizeChallengePlayerPeriodStatus(currentPeriodStatus?.status);
       const opponentStatus = normalizeChallengePlayerPeriodStatus(opponentPeriodStatus?.status);
@@ -9623,8 +9644,13 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
         error.httpStatus = 409;
         throw error;
       }
-      if (Number(pendingCreatedCount?.count || 0) >= 3) {
-        const error = new Error("You can have no more than three pending Challenge requests in this period");
+      const maxPendingRequestsPerPlayer = resolveMaxPendingRequestsPerPlayer(
+        lockedPeriod.max_pending_requests_per_player
+      );
+      if (isChallengePendingRequestLimitReached(pendingCreatedCount?.count, maxPendingRequestsPerPlayer)) {
+        const error = new Error(
+          `You can have no more than ${maxPendingRequestsPerPlayer} pending Challenge requests in this period`
+        );
         error.httpStatus = 409;
         throw error;
       }
@@ -11678,6 +11704,7 @@ app.get("/challenge-periods", requireAdmin, async (_req, res) => {
         logo,
         rivals_tournament_id,
         max_matches_per_player,
+        max_pending_requests_per_player,
         status,
         planning_starts_at,
         play_starts_at,
@@ -11725,6 +11752,7 @@ app.post("/challenge-periods", requireAdmin, async (req, res) => {
           logo,
           rivals_tournament_id,
           max_matches_per_player,
+          max_pending_requests_per_player,
           status,
           planning_starts_at,
           play_starts_at,
@@ -11735,7 +11763,7 @@ app.post("/challenge-periods", requireAdmin, async (req, res) => {
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
       [
         periodId,
@@ -11745,6 +11773,7 @@ app.post("/challenge-periods", requireAdmin, async (req, res) => {
         period.logo,
         period.rivals_tournament_id,
         period.max_matches_per_player,
+        period.max_pending_requests_per_player,
         period.status,
         period.planning_starts_at,
         period.play_starts_at,
@@ -11829,6 +11858,7 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
             logo = ?,
             rivals_tournament_id = ?,
             max_matches_per_player = ?,
+            max_pending_requests_per_player = ?,
             status = ?,
             planning_starts_at = ?,
             play_starts_at = ?,
@@ -11845,6 +11875,7 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
           period.logo,
           period.rivals_tournament_id,
           period.max_matches_per_player,
+          period.max_pending_requests_per_player,
           period.status,
           period.planning_starts_at,
           period.play_starts_at,
