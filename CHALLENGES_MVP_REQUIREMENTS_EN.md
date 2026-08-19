@@ -133,9 +133,10 @@ Available statuses `duels` are marked separately from statuses to be added for C
 - [x] **CH-PLY-001** There is no more than one status record for each player and period.
 - [x] **CH-PLY-002** Initial player status is `not_selected`.
 - [ ] **CH-PLY-003** A player may switch among `not_selected`, `available`, and `unavailable` during `planning_open` or `active`, even when they already have scheduled or completed matches.
-- [ ] **CH-PLY-004** Switching to `not_selected` or `unavailable` closes the player only to new requests and does not cancel existing matches.
-- [ ] **CH-PLY-005** Before switching from `available` to `not_selected` or `unavailable`, the UI warns that pending requests will be closed automatically.
-- [ ] **CH-PLY-006** When switching from `available` to `not_selected` or `unavailable`, every pending request involving that player becomes `auto_cancelled`; linked duels in `Draft` or `Requested new time` become `Cancelled`.
+- [ ] **CH-PLY-004** Switching to `not_selected` closes the player to new requests but does not change existing pending requests, linked duels, or confirmed matches.
+- [ ] **CH-PLY-005** Before switching from `available` or `not_selected` to `unavailable`, the UI warns that pending requests will be closed automatically when such requests exist.
+- [ ] **CH-PLY-006** When switching from `available` or `not_selected` to `unavailable`, every pending request involving that player becomes `auto_cancelled`; linked duels in `Draft` or `Requested new time` become `Cancelled`, while confirmed matches remain unchanged.
+- [ ] **CH-PLY-007** Switching from `available` to `not_selected` does not close pending requests or change linked duels in `Draft` or `Requested new time`.
 - [ ] **CH-PLY-008** Confirming a match does not change either player's manually selected participation status.
 - [ ] **CH-PLY-009** Receiving a valid result and moving a duel to `Done` does not change either player's participation status.
 - [ ] **CH-PLY-010** Cancelling one of several matches does not change either player's participation status.
@@ -457,7 +458,7 @@ This flow is used if players have already played a match, but did not create an 
 
 - [ ] **CH-CON-001** All multi-entity status transitions are performed transactionally.
 - [ ] **CH-CON-002** Simultaneous accepts for one player may create only as many confirmed Challenge duels as there were free slots at the start of the transactions; `matches_count` never exceeds `max_matches_per_player`.
-- [ ] **CH-CON-003** Accept and a simultaneous player transition to `not_selected` or `unavailable` finish in one valid state without partially updated data.
+- [ ] **CH-CON-003** Accept and a simultaneous player transition to `not_selected` or `unavailable` finish in one valid state without partially updated data and apply the distinct pending-request preservation/closure rules of those statuses.
 - [ ] **CH-CON-004** Accept of an request that has already become a terminal returns a conflict and does not change the data.
 - [ ] **CH-CON-005** Resubmitting the same API request does not create duplicate duels, games, audit events, or notifications.
 - [ ] **CH-CON-006** Soft-deleted/Cancelled match does not block new match creation for players in the same period.
@@ -473,7 +474,7 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-E2E-004** After decline or duel cancellation, the same pair may be invited again if it has no other non-cancelled duel in the Rivals tournament.
 - [ ] **CH-E2E-005** With `max_matches_per_player > 1`, accepting the first request leaves other pending requests open while the relevant player has a free slot.
 - [ ] **CH-E2E-006** Multiple simultaneous accepts for one player do not create matches beyond `max_matches_per_player`.
-- [ ] **CH-E2E-007** A player with scheduled matches moves to `not_selected` or `unavailable`; pending requests are closed, while confirmed matches remain unchanged.
+- [ ] **CH-E2E-007** A player with scheduled matches moves to `not_selected`, leaving pending requests and linked `Draft`/`Requested new time` duels unchanged; after moving to `unavailable`, they are closed, while confirmed matches remain unchanged in both cases.
 - [ ] **CH-E2E-008** Rescheduling moves the match to `Requested new time`, the request to `pending`, releases one slot, and does not change either player's participation status.
 - [ ] **CH-E2E-009** Rejecting a reschedule moves the match from `Requested new time` to `Cancelled` and does not change either player's participation status.
 - [ ] **CH-E2E-010** While a duel is in `Requested new time`, a player may confirm another match; the reschedule request is automatically closed only if this causes the player to reach the limit.

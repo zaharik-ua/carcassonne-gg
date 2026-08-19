@@ -354,18 +354,6 @@
     background: var(--red-soft);
   }
 
-  .challenge-status-btn.is-scheduled {
-    border-color: #cfe1f3;
-    background: #edf6ff;
-    color: #155d95;
-  }
-
-  .challenge-status-btn.is-played {
-    border-color: #9dd7b9;
-    background: var(--green-soft);
-    color: #12633e;
-  }
-
   .challenge-status-btn.disabled {
     cursor: not-allowed;
   }
@@ -2714,18 +2702,6 @@
       tone: "unavailable",
       note: "You are not participating in this period.",
       editable: true,
-    },
-    match_scheduled: {
-      label: "Match scheduled",
-      tone: "scheduled",
-      note: "Status is locked because your match is already scheduled.",
-      editable: false,
-    },
-    played: {
-      label: "Match played",
-      tone: "played",
-      note: "Status is locked because your match has been played.",
-      editable: false,
     },
   };
   const PERIOD_STATUS_LABELS = {
@@ -6070,8 +6046,7 @@
     row.dataset.associationId = String(opponent?.association?.id || "");
     const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
     const canCreateRequests = !!eligibility?.can_create_requests;
-    const playerHasScheduledMatch = normalizeStatus(period?.player_status) === "match_scheduled"
-      || !!period?.challenge_duel_id;
+    const playerHasScheduledMatch = Number(period?.matches_count || 0) > 0;
     const hasScheduledMatch = reasons.includes("current_player_has_match") || playerHasScheduledMatch;
     const opponentId = String(opponent?.player_id || "").trim();
     const currentPlayerId = String(currentPlayer?.player_id || "").trim();
@@ -6537,7 +6512,7 @@
   function createNewChallengeRequestButton(period, currentPlayerId, pendingSentCount) {
     return createActionButton("Create request", "challenge-btn-secondary", () => {
       const openRequest = () => {
-        if (normalizeStatus(period?.player_status) === "match_scheduled" || period?.challenge_duel_id) {
+        if (Number(period?.matches_count || 0) > 0) {
           showChallengeMatchScheduledDialog();
           return;
         }
@@ -7368,8 +7343,6 @@
         "is-not_selected",
         "is-available",
         "is-unavailable",
-        "is-scheduled",
-        "is-played",
         "disabled"
       );
       btnEl.classList.add(`is-${status.tone}`);

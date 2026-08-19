@@ -25,13 +25,17 @@ import {
 } from "./secret-lineups.js";
 import {
   CHALLENGE_ACTIVE_DUEL_STATUSES,
+  CHALLENGE_MATCH_SLOT_DUEL_STATUSES,
   CHALLENGE_PERIOD_PENDING_EXPIRING_STATUSES,
   CHALLENGE_PERIOD_STATUSES,
   CHALLENGE_PLAYER_PERIOD_STATUSES,
+  buildChallengeMatchCapacity,
   ensureChallengePeriodConfigurationSchema,
+  ensureChallengePeriodPlayersSchema,
   isChallengePendingRequestLimitReached,
   resolveMaxMatchesPerPlayer,
   resolveMaxPendingRequestsPerPlayer,
+  shouldCloseChallengeRequestsForPlayerStatus,
 } from "./challenges.js";
 import { ensureTournamentCasesSchema } from "./tournament-cases.js";
 
@@ -5006,7 +5010,6 @@ function ensureChallengesSchema() {
       period_id TEXT NOT NULL,
       player_id TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'not_selected',
-      challenge_duel_id TEXT,
       availability_start_1_utc TEXT,
       availability_end_1_utc TEXT,
       availability_start_2_utc TEXT,
@@ -5019,75 +5022,16 @@ function ensureChallengesSchema() {
       PRIMARY KEY (period_id, player_id),
       FOREIGN KEY (period_id) REFERENCES challenge_periods(id) ON DELETE CASCADE,
       FOREIGN KEY (player_id) REFERENCES profiles(id),
-      FOREIGN KEY (challenge_duel_id) REFERENCES duels(id),
-      CHECK (status IN ('not_selected', 'available', 'unavailable', 'match_scheduled', 'played')),
-      CHECK (
-        (
-          status IN ('match_scheduled', 'played')
-          AND challenge_duel_id IS NOT NULL
-        )
-        OR (
-          status NOT IN ('match_scheduled', 'played')
-          AND challenge_duel_id IS NULL
-        )
-      )
+      CHECK (status IN ('not_selected', 'available', 'unavailable'))
     )
   `, (createErr) => {
     if (createErr) {
       console.error("Failed to ensure challenge_period_players schema", createErr);
       return;
     }
-    db.all("PRAGMA table_info(challenge_period_players)", (pragmaErr, columns) => {
-      if (pragmaErr) {
-        console.error("Failed to inspect challenge_period_players schema", pragmaErr);
-        return;
-      }
-      [1, 2, 3].forEach((index) => {
-        addColumnIfMissing(columns || [], "challenge_period_players", `availability_start_${index}_utc`, "TEXT");
-        addColumnIfMissing(columns || [], "challenge_period_players", `availability_end_${index}_utc`, "TEXT");
-      });
-      const hasStatusUpdatedAt = (columns || []).some((column) => column.name === "status_updated_at");
-      db.serialize(() => {
-        if (!hasStatusUpdatedAt) {
-          db.run(
-            "ALTER TABLE challenge_period_players ADD COLUMN status_updated_at TEXT",
-            (alterErr) => {
-              if (alterErr) {
-                console.error("Failed to add status_updated_at column to challenge_period_players", alterErr);
-              }
-            }
-          );
-        }
-        db.run(
-          `
-            UPDATE challenge_period_players
-            SET status_updated_at = updated_at
-            WHERE status_updated_at IS NULL
-          `,
-          (backfillErr) => {
-            if (backfillErr) {
-              console.error("Failed to backfill challenge_period_players.status_updated_at", backfillErr);
-            }
-          }
-        );
-        db.run(
-          "CREATE INDEX IF NOT EXISTS idx_challenge_period_players_status_updated ON challenge_period_players(period_id, status, status_updated_at)",
-          (indexErr) => {
-            if (indexErr) {
-              console.error("Failed to ensure challenge_period_players status_updated_at index", indexErr);
-            }
-          }
-        );
-      });
+    ensureChallengePeriodPlayersSchema(db).catch((migrationError) => {
+      console.error("Failed to migrate challenge_period_players schema", migrationError);
     });
-    db.run(
-      "CREATE INDEX IF NOT EXISTS idx_challenge_period_players_status ON challenge_period_players(period_id, status)",
-      (indexErr) => {
-        if (indexErr) {
-          console.error("Failed to ensure challenge_period_players status index", indexErr);
-        }
-      }
-    );
   });
 
   db.run(`
@@ -8917,8 +8861,8 @@ function normalizeChallengeAvailability(value, period, timezone) {
 }
 
 function getManualChallengePlayerPeriodStatus(value) {
-  const status = normalizeChallengePlayerPeriodStatus(value);
-  return ["not_selected", "available", "unavailable"].includes(status) ? status : null;
+  const status = String(value || "").trim().toLowerCase();
+  return CHALLENGE_PLAYER_PERIOD_STATUSES.has(status) ? status : null;
 }
 
 function validateChallengePeriodPayload(period) {
@@ -8951,7 +8895,6 @@ async function loadChallengePeriodPlayerStatus(periodId, playerId) {
         period_id,
         player_id,
         status,
-        challenge_duel_id,
         availability_start_1_utc,
         availability_end_1_utc,
         availability_start_2_utc,
@@ -8987,6 +8930,25 @@ async function loadChallengeBlockingDuelForPlayer(periodId, playerId) {
     `,
     [normalizedPeriodId, ...blockingStatuses, normalizedPlayerId, normalizedPlayerId]
   );
+}
+
+async function loadChallengeMatchCountForPlayer(periodId, playerId) {
+  const normalizedPeriodId = normalizeNullableText(periodId);
+  const normalizedPlayerId = normalizeNullableText(playerId);
+  if (!normalizedPeriodId || !normalizedPlayerId) return 0;
+  const slotStatuses = Array.from(CHALLENGE_MATCH_SLOT_DUEL_STATUSES);
+  const row = await dbGetAsync(
+    `
+      SELECT COUNT(*) AS matches_count
+      FROM duels
+      WHERE challenge_period_id = ?
+        AND deleted_at IS NULL
+        AND status IN (${slotStatuses.map(() => "?").join(", ")})
+        AND (player_1_id = ? OR player_2_id = ?)
+    `,
+    [normalizedPeriodId, ...slotStatuses, normalizedPlayerId, normalizedPlayerId]
+  );
+  return Math.max(0, Number(row?.matches_count) || 0);
 }
 
 async function loadChallengeRequestById(periodId, requestId) {
@@ -9053,20 +9015,37 @@ async function resolveChallengeDuelCancelledByPlayerId(duel) {
     .filter(Boolean);
   if (!periodId || !duelId || participantIds.length !== 2) return null;
 
+  const slotStatuses = Array.from(CHALLENGE_MATCH_SLOT_DUEL_STATUSES);
   const rows = await dbAllAsync(
     `
-      SELECT player_id
-      FROM challenge_period_players
-      WHERE period_id = ?
-        AND player_id IN (?, ?)
-        AND challenge_duel_id IS NOT NULL
-        AND challenge_duel_id <> ?
+      SELECT player_1_id, player_2_id
+      FROM duels
+      WHERE challenge_period_id = ?
+        AND id <> ?
+        AND source_type = 'challenge'
+        AND deleted_at IS NULL
+        AND status IN (${slotStatuses.map(() => "?").join(", ")})
+        AND (
+          player_1_id IN (?, ?)
+          OR player_2_id IN (?, ?)
+        )
     `,
-    [periodId, participantIds[0], participantIds[1], duelId]
+    [
+      periodId,
+      duelId,
+      ...slotStatuses,
+      participantIds[0],
+      participantIds[1],
+      participantIds[0],
+      participantIds[1],
+    ]
   );
-  const matchedPlayerIds = (rows || [])
-    .map((row) => normalizeNullableText(row?.player_id))
-    .filter(Boolean);
+  const matchedPlayerIds = participantIds.filter((playerId) => (
+    (rows || []).some((row) => (
+      normalizeNullableText(row?.player_1_id) === playerId
+      || normalizeNullableText(row?.player_2_id) === playerId
+    ))
+  ));
   if (matchedPlayerIds.length === 1) return matchedPlayerIds[0];
 
   const updatedByPlayerId = normalizeNullableText(duel?.updated_by);
@@ -9214,14 +9193,8 @@ async function loadChallengePlayerProfileContext(playerId) {
 }
 
 function mapChallengePeriodForPlayer(row) {
-  const duelStatus = normalizeNullableText(row?.duel_status);
-  const storedStatus = normalizeChallengePlayerPeriodStatus(row?.player_status);
-  let playerStatus = storedStatus;
-  if (duelStatus === "Done") {
-    playerStatus = "played";
-  } else if (row?.challenge_duel_id && ["Draft", "Requested new time", "Planned", "In progress", "Error"].includes(duelStatus)) {
-    playerStatus = "match_scheduled";
-  }
+  const playerStatus = normalizeChallengePlayerPeriodStatus(row?.player_status);
+  const capacity = buildChallengeMatchCapacity(row?.matches_count, row?.max_matches_per_player);
 
   return {
     id: row.id,
@@ -9238,9 +9211,8 @@ function mapChallengePeriodForPlayer(row) {
     play_ends_at: row.play_ends_at,
     result_review_ends_at: row.result_review_ends_at,
     player_status: playerStatus,
+    ...capacity,
     has_sent_request: Number(row.has_sent_request) === 1,
-    challenge_duel_id: row.challenge_duel_id || null,
-    challenge_duel_status: duelStatus || null,
     availability: mapChallengeAvailability(row),
   };
 }
@@ -9290,6 +9262,7 @@ async function loadChallengePlayerTimeContext(playerId) {
 
 app.get("/challenge-periods/player", async (req, res) => {
   const playerId = normalizeNullableText(req.user?.player_id);
+  const slotStatuses = Array.from(CHALLENGE_MATCH_SLOT_DUEL_STATUSES);
 
   try {
     const timeContext = await loadChallengePlayerTimeContext(playerId);
@@ -9317,24 +9290,28 @@ app.get("/challenge-periods/player", async (req, res) => {
               AND cr.created_by_player_id = ?
             LIMIT 1
           ) AS has_sent_request,
-          cpp.challenge_duel_id,
+          (
+            SELECT COUNT(*)
+            FROM duels player_duel
+            WHERE player_duel.challenge_period_id = cp.id
+              AND player_duel.deleted_at IS NULL
+              AND player_duel.status IN (${slotStatuses.map(() => "?").join(", ")})
+              AND (player_duel.player_1_id = ? OR player_duel.player_2_id = ?)
+          ) AS matches_count,
           cpp.availability_start_1_utc,
           cpp.availability_end_1_utc,
           cpp.availability_start_2_utc,
           cpp.availability_end_2_utc,
           cpp.availability_start_3_utc,
-          cpp.availability_end_3_utc,
-          d.status AS duel_status
+          cpp.availability_end_3_utc
         FROM challenge_periods cp
         LEFT JOIN challenge_period_players cpp
           ON cpp.period_id = cp.id
          AND cpp.player_id = ?
-        LEFT JOIN duels d
-          ON d.id = cpp.challenge_duel_id
         WHERE cp.status IN ('draft', 'planning_open', 'active', 'result_review')
         ORDER BY datetime(cp.planning_starts_at) DESC, datetime(cp.play_starts_at) DESC, cp.id ASC
       `,
-      [playerId, playerId]
+      [playerId, ...slotStatuses, playerId, playerId, playerId]
     );
     return res.json({
       ok: true,
@@ -9357,22 +9334,12 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
   }
 
   try {
-    const [period, currentProfile, currentPeriodStatus, currentActiveDuel] = await Promise.all([
+    const [period, currentProfile, currentPeriodStatus, currentBlockingDuel, currentMatchesCount] = await Promise.all([
       loadChallengePeriodById(periodId),
       loadChallengePlayerProfileContext(playerId),
       loadChallengePeriodPlayerStatus(periodId, playerId),
-      dbGetAsync(
-        `
-          SELECT id, status
-          FROM duels
-          WHERE challenge_period_id = ?
-            AND deleted_at IS NULL
-            AND status IN (${Array.from(CHALLENGE_ACTIVE_DUEL_STATUSES).map(() => "?").join(", ")})
-            AND (player_1_id = ? OR player_2_id = ?)
-          LIMIT 1
-        `,
-        [periodId, ...Array.from(CHALLENGE_ACTIVE_DUEL_STATUSES), playerId, playerId]
-      ),
+      loadChallengeBlockingDuelForPlayer(periodId, playerId),
+      loadChallengeMatchCountForPlayer(periodId, playerId),
     ]);
 
     if (!period || !["planning_open", "active", "result_review"].includes(period.status)) {
@@ -9382,13 +9349,13 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
     const canCreateRequests = ["planning_open", "active"].includes(period.status)
       && !!currentProfile
       && currentStatus !== "unavailable"
-      && !currentActiveDuel;
+      && !currentBlockingDuel;
     const canListOpponents = ["planning_open", "active"].includes(period.status);
     const eligibilityReasons = [];
     if (!["planning_open", "active"].includes(period.status)) eligibilityReasons.push("period_closed");
-    if (currentActiveDuel) eligibilityReasons.push("current_player_has_match");
+    if (currentBlockingDuel) eligibilityReasons.push("current_player_has_match");
 
-    const activeStatuses = Array.from(CHALLENGE_ACTIVE_DUEL_STATUSES);
+    const activeStatuses = Array.from(CHALLENGE_MATCH_SLOT_DUEL_STATUSES);
     const rows = await dbAllAsync(
       `
         SELECT
@@ -9402,7 +9369,6 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
           p.gg_rating_position,
           cpp.status AS period_player_status,
           cpp.status_updated_at AS period_status_updated_at,
-          cpp.challenge_duel_id,
           cpp.availability_start_1_utc,
           cpp.availability_end_1_utc,
           cpp.availability_start_2_utc,
@@ -9413,7 +9379,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
           COALESCE(NULLIF(trim(t.name), ''), NULLIF(trim(a.name), ''), NULLIF(trim(p.association), '')) AS association_name,
           COALESCE(NULLIF(trim(t.flag), ''), NULLIF(trim(t.logo), ''), NULLIF(trim(a.flag), '')) AS association_flag,
           NULLIF(trim(t.timezone), '') AS team_timezone,
-          active_d.id AS active_challenge_duel_id,
+          active_d.id AS blocking_duel_id,
           pending_req.id AS pending_request_id
         FROM challenge_period_players cpp
         INNER JOIN profiles p
@@ -9475,7 +9441,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       if (isSameAssociation) {
         blockedCounts.same_association += 1;
       }
-      if (normalizeNullableText(row?.active_challenge_duel_id) || normalizeNullableText(row?.challenge_duel_id)) {
+      if (normalizeNullableText(row?.blocking_duel_id)) {
         blockedCounts.scheduled_match += 1;
         continue;
       }
@@ -9496,8 +9462,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       period: mapChallengePeriodForPlayer({
         ...period,
         player_status: currentStatus,
-        challenge_duel_id: currentPeriodStatus?.challenge_duel_id || null,
-        duel_status: currentActiveDuel?.status || null,
+        matches_count: currentMatchesCount,
       }),
       current_player: currentProfile ? mapChallengeOpponent({
         ...currentProfile,
@@ -9624,7 +9589,7 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
         error.httpStatus = 409;
         throw error;
       }
-      if (["match_scheduled", "played"].includes(currentStatus) || currentPeriodStatus?.challenge_duel_id || currentActiveDuel) {
+      if (currentActiveDuel) {
         const error = new Error("You already have a Challenge match in this period");
         error.httpStatus = 409;
         throw error;
@@ -9634,12 +9599,7 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
         error.httpStatus = 409;
         throw error;
       }
-      if (["match_scheduled", "played"].includes(opponentStatus)) {
-        const error = new Error("Opponent already has a Challenge match in this period");
-        error.httpStatus = 409;
-        throw error;
-      }
-      if (opponentPeriodStatus?.challenge_duel_id || opponentActiveDuel) {
+      if (opponentActiveDuel) {
         const error = new Error("Opponent already has a Challenge match in this period");
         error.httpStatus = 409;
         throw error;
@@ -10098,20 +10058,6 @@ app.patch("/challenge-periods/:id/matches/:duelId/resolve-issue", requireAuthent
           [periodId, requestId]
         );
       }
-      await dbRunAsync(
-        `
-          UPDATE challenge_period_players
-          SET
-            status = 'not_selected',
-            challenge_duel_id = NULL,
-            status_updated_at = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE period_id = ?
-            AND challenge_duel_id = ?
-        `,
-        [periodId, duelId]
-      );
-
       if (resolution === "player_no_show") {
         const profileRows = await dbAllAsync(
           `
@@ -10279,25 +10225,11 @@ app.patch("/challenge-periods/:id/matches/:duelId", requireAdmin, async (req, re
     }
 
     const requestStatus = getChallengeRequestStatusForDuelStatus(status);
-    const periodPlayerStatus = status === "Done" ? "played" : "match_scheduled";
     let afterDuel = null;
     let afterRequest = null;
 
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
     try {
-      await dbRunAsync(
-        `
-          UPDATE challenge_period_players
-          SET
-            status = 'not_selected',
-            challenge_duel_id = NULL,
-            status_updated_at = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE period_id = ?
-            AND challenge_duel_id = ?
-        `,
-        [periodId, duelId]
-      );
       await dbRunAsync(
         `
           UPDATE challenge_requests
@@ -10350,25 +10282,6 @@ app.patch("/challenge-periods/:id/matches/:duelId", requireAdmin, async (req, re
         `,
         [player1Id, player2Id, timeUtc, duelFormat, status, status, status, status, actorPlayerId, periodId, duelId]
       );
-
-      if ([...CHALLENGE_ACTIVE_DUEL_STATUSES, "Done"].includes(status) && !beforeDuel.deleted_at) {
-        for (const playerId of [player1Id, player2Id]) {
-          await dbRunAsync(
-            `
-              INSERT INTO challenge_period_players (
-                period_id, player_id, status, challenge_duel_id, created_at, status_updated_at, updated_at
-              )
-              VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-              ON CONFLICT(period_id, player_id) DO UPDATE SET
-                status = excluded.status,
-                challenge_duel_id = excluded.challenge_duel_id,
-                status_updated_at = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP
-            `,
-            [periodId, playerId, periodPlayerStatus, duelId]
-          );
-        }
-      }
 
       afterDuel = await loadChallengeDuelById(periodId, duelId, { includeDeleted: true });
       afterRequest = await loadChallengeRequestById(periodId, requestId);
@@ -10428,14 +10341,6 @@ app.delete("/challenge-periods/:id/matches/:duelId", requireAdmin, async (req, r
           WHERE challenge_period_id = ? AND id = ? AND source_type = 'challenge' AND deleted_at IS NULL
         `,
         [actorPlayerId, actorPlayerId, periodId, duelId]
-      );
-      await dbRunAsync(
-        `
-          UPDATE challenge_period_players
-          SET status = 'not_selected', challenge_duel_id = NULL, status_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-          WHERE period_id = ? AND challenge_duel_id = ?
-        `,
-        [periodId, duelId]
       );
       if (requestId) {
         await dbRunAsync(
@@ -10983,23 +10888,6 @@ app.patch("/challenge-periods/:id/requests/:requestId/reschedule", requireAuthen
         `,
         [playerId, lockedDuel.id, periodId, requestId]
       );
-      await dbRunAsync(
-        `
-          UPDATE challenge_period_players
-          SET
-            status = 'available',
-            challenge_duel_id = NULL,
-            status_updated_at = CASE
-              WHEN status <> 'available' THEN CURRENT_TIMESTAMP
-              ELSE status_updated_at
-            END,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE period_id = ?
-            AND player_id IN (?, ?)
-        `,
-        [periodId, lockedRequest.player_1_id, lockedRequest.player_2_id]
-      );
-
       afterRow = await loadChallengeRequestById(periodId, requestId);
       afterDuel = await loadChallengeDuelByRequest(periodId, requestId);
       await dbRunAsync("COMMIT");
@@ -11109,23 +10997,6 @@ app.patch("/challenge-periods/:id/requests/:requestId/cancel-match", requireAuth
         `,
         [periodId, requestId]
       );
-      await dbRunAsync(
-        `
-          UPDATE challenge_period_players
-          SET
-            status = 'not_selected',
-            challenge_duel_id = NULL,
-            status_updated_at = CASE
-              WHEN status <> 'not_selected' THEN CURRENT_TIMESTAMP
-              ELSE status_updated_at
-            END,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE period_id = ?
-            AND player_id IN (?, ?)
-        `,
-        [periodId, lockedRequest.player_1_id, lockedRequest.player_2_id]
-      );
-
       afterRow = await loadChallengeRequestById(periodId, requestId);
       afterDuel = await loadChallengeDuelByRequest(periodId, requestId);
       await dbRunAsync("COMMIT");
@@ -11355,52 +11226,6 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
       }
       await dbRunAsync(
         `
-          INSERT INTO challenge_period_players (
-            period_id,
-            player_id,
-            status,
-            challenge_duel_id,
-            created_at,
-            status_updated_at,
-            updated_at
-          )
-          VALUES (?, ?, 'match_scheduled', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          ON CONFLICT(period_id, player_id) DO UPDATE SET
-            status = 'match_scheduled',
-            challenge_duel_id = excluded.challenge_duel_id,
-            status_updated_at = CASE
-              WHEN challenge_period_players.status <> excluded.status THEN CURRENT_TIMESTAMP
-              ELSE challenge_period_players.status_updated_at
-            END,
-            updated_at = CURRENT_TIMESTAMP
-        `,
-        [periodId, lockedRequest.player_1_id, duelId]
-      );
-      await dbRunAsync(
-        `
-          INSERT INTO challenge_period_players (
-            period_id,
-            player_id,
-            status,
-            challenge_duel_id,
-            created_at,
-            status_updated_at,
-            updated_at
-          )
-          VALUES (?, ?, 'match_scheduled', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          ON CONFLICT(period_id, player_id) DO UPDATE SET
-            status = 'match_scheduled',
-            challenge_duel_id = excluded.challenge_duel_id,
-            status_updated_at = CASE
-              WHEN challenge_period_players.status <> excluded.status THEN CURRENT_TIMESTAMP
-              ELSE challenge_period_players.status_updated_at
-            END,
-            updated_at = CURRENT_TIMESTAMP
-        `,
-        [periodId, lockedRequest.player_2_id, duelId]
-      );
-      await dbRunAsync(
-        `
           UPDATE duels
           SET
             status = 'Cancelled',
@@ -11617,13 +11442,34 @@ app.patch("/challenge-periods/:id/player-status", requireAuthenticated, async (r
     }
 
     const beforeRow = await loadChallengePeriodPlayerStatus(periodId, playerId);
-    if (["match_scheduled", "played"].includes(normalizeChallengePlayerPeriodStatus(beforeRow?.status)) || beforeRow?.challenge_duel_id) {
-      return res.status(409).json({ ok: false, message: "Status is locked because a Challenge match exists" });
-    }
 
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
     try {
-      if (nextStatus === "unavailable") {
+      if (shouldCloseChallengeRequestsForPlayerStatus(nextStatus)) {
+        await dbRunAsync(
+          `
+            UPDATE duels
+            SET
+              status = 'Cancelled',
+              cancelled_by_player_id = ?,
+              cancellation_reason = 'player_closed_to_requests',
+              cancelled_at = CURRENT_TIMESTAMP,
+              updated_by = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE challenge_period_id = ?
+              AND source_type = 'challenge'
+              AND deleted_at IS NULL
+              AND status IN ('Draft', 'Requested new time')
+              AND challenge_request_id IN (
+                SELECT id
+                FROM challenge_requests
+                WHERE period_id = ?
+                  AND status = 'pending'
+                  AND (player_1_id = ? OR player_2_id = ?)
+              )
+          `,
+          [playerId, playerId, periodId, periodId, playerId, playerId]
+        );
         await dbRunAsync(
           `
             UPDATE challenge_requests
@@ -11644,15 +11490,13 @@ app.patch("/challenge-periods/:id/player-status", requireAuthenticated, async (r
             period_id,
             player_id,
             status,
-            challenge_duel_id,
             created_at,
             status_updated_at,
             updated_at
           )
-          VALUES (?, ?, ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           ON CONFLICT(period_id, player_id) DO UPDATE SET
             status = excluded.status,
-            challenge_duel_id = NULL,
             status_updated_at = CASE
               WHEN challenge_period_players.status <> excluded.status THEN CURRENT_TIMESTAMP
               ELSE challenge_period_players.status_updated_at
@@ -11684,7 +11528,6 @@ app.patch("/challenge-periods/:id/player-status", requireAuthenticated, async (r
         period_id: periodId,
         player_id: playerId,
         status: nextStatus,
-        challenge_duel_id: null,
       },
     });
   } catch (error) {
@@ -17237,28 +17080,6 @@ app.post("/duels/:id/games/save", (req, res) => {
           }
 
           const recomputedDuel = await recomputeDuelAggregates(duelId, actorPlayerId);
-          if (isChallengeDuel && recomputedDuel?.status) {
-            const nextPlayerStatus = recomputedDuel.status === "Done" ? "played" : "match_scheduled";
-            const shouldKeepChallengeDuel = new Set([...CHALLENGE_ACTIVE_DUEL_STATUSES, "Done"]).has(recomputedDuel.status);
-            if (shouldKeepChallengeDuel) {
-              for (const playerId of [duelRow.player_1_id, duelRow.player_2_id].map(normalizeNullableText).filter(Boolean)) {
-                await dbRunAsync(
-                  `
-                    INSERT INTO challenge_period_players (
-                      period_id, player_id, status, challenge_duel_id, created_at, status_updated_at, updated_at
-                    )
-                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    ON CONFLICT(period_id, player_id) DO UPDATE SET
-                      status = excluded.status,
-                      challenge_duel_id = excluded.challenge_duel_id,
-                      status_updated_at = CURRENT_TIMESTAMP,
-                      updated_at = CURRENT_TIMESTAMP
-                  `,
-                  [duelRow.challenge_period_id, playerId, nextPlayerStatus, duelId]
-                );
-              }
-            }
-          }
           if (recomputedDuel?.matchId) {
             await recomputeMatchAggregates(recomputedDuel.matchId, actorPlayerId);
           }
