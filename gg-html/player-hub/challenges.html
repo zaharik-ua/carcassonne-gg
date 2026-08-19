@@ -849,6 +849,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 10px;
     min-width: 0;
   }
@@ -864,6 +865,51 @@
     font-size: 12px;
     font-weight: 600;
     white-space: nowrap;
+  }
+
+  .challenge-opponents-head-controls {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    min-width: 0;
+    margin-left: auto;
+  }
+
+  .challenge-opponents-view-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    border: 1px solid #d7dde6;
+    border-radius: 6px;
+    background: #f4f6f8;
+  }
+
+  .challenge-opponents-view-option {
+    appearance: none;
+    min-height: 28px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #667085;
+    padding: 5px 9px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .challenge-opponents-view-option:hover,
+  .challenge-opponents-view-option:focus-visible {
+    color: #2f3947;
+  }
+
+  .challenge-opponents-view-option[aria-pressed="true"] {
+    background: #fff;
+    color: #172232;
+    box-shadow: 0 1px 3px rgba(15, 28, 48, 0.14);
   }
 
   .challenge-opponents-body {
@@ -2466,6 +2512,19 @@
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 5px 10px;
       align-items: start;
+    }
+
+    .challenge-opponents-head-controls {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .challenge-opponents-view-toggle {
+      min-width: 0;
+    }
+
+    .challenge-opponents-view-option {
+      padding-inline: 7px;
     }
 
     .challenge-opponent-left {
@@ -4595,7 +4654,11 @@
       }));
     }
     const editableDuelStatuses = new Set(["Planned", "In progress"]);
-    if (!options.readOnly && editableDuelStatuses.has(String(duel?.status || ""))) {
+    if (
+      !options.readOnly
+      && request?.id
+      && editableDuelStatuses.has(String(duel?.status || ""))
+    ) {
       actions.appendChild(createChallengeDuelEditDropdown(period, request, currentPlayerId));
     }
     row.appendChild(actions);
@@ -4919,11 +4982,16 @@
     return Number.isInteger(value) && value > 0 ? value : 1;
   }
 
+  function getChallengeMatchCount(period) {
+    const value = Number.parseInt(String(period?.matches_count ?? "0"), 10);
+    return Number.isInteger(value) && value > 0 ? value : 0;
+  }
+
   function isChallengeMatchLimitReached(period) {
     if (typeof period?.is_match_limit_reached === "boolean") {
       return period.is_match_limit_reached;
     }
-    return Number(period?.matches_count || 0) >= getChallengeMatchLimit(period);
+    return getChallengeMatchCount(period) >= getChallengeMatchLimit(period);
   }
 
   function showChallengeMatchLimitReachedDialog(period) {
@@ -6258,6 +6326,53 @@
     bodyEl.appendChild(state);
   }
 
+  function renderOpponentsForPeriod(item) {
+    const panel = item?.panel;
+    if (!panel) return;
+    const viewMode = item.viewMode === "all" ? "all" : "available";
+    panel.querySelectorAll("[data-opponents-view]").forEach((button) => {
+      button.setAttribute("aria-pressed", button.dataset.opponentsView === viewMode ? "true" : "false");
+    });
+    const opponents = Array.isArray(item?.opponentsByView?.[viewMode])
+      ? item.opponentsByView[viewMode]
+      : [];
+    const countEl = panel.querySelector("[data-opponents-count]");
+    const bodyEl = panel.querySelector("[data-opponents-body]");
+    if (countEl) {
+      countEl.textContent = `${opponents.length} ${opponents.length === 1 ? "player" : "players"}`;
+    }
+    if (!bodyEl) return;
+    bodyEl.innerHTML = "";
+
+    const eligibilityText = getEligibilityStateText(item?.eligibility);
+    if (eligibilityText) {
+      const state = document.createElement("div");
+      state.className = "challenge-opponents-state";
+      state.textContent = eligibilityText;
+      bodyEl.appendChild(state);
+      return;
+    }
+
+    if (!opponents.length) {
+      const state = document.createElement("div");
+      state.className = "challenge-opponents-state";
+      state.textContent = viewMode === "all"
+        ? "No players are open to match right now."
+        : "No available opponents right now.";
+      bodyEl.appendChild(state);
+      return;
+    }
+
+    opponents.forEach((opponent) => {
+      bodyEl.appendChild(createOpponentRow(
+        opponent,
+        item.period,
+        item.currentPlayer || null,
+        item.eligibility || {}
+      ));
+    });
+  }
+
   async function loadOpponentsForPeriod(period, panel) {
     const periodId = String(period?.id || "").trim();
     if (!periodId) {
@@ -6275,38 +6390,21 @@
         fetchGgRatingsById(),
         fetchBgaPlayersById(),
       ]);
-      const opponents = (Array.isArray(data?.available_opponents) ? data.available_opponents : [])
+      const enrichOpponents = (opponents) => opponents
         .map((opponent) => mergeOpponentRating(opponent, ratingsById))
         .map((opponent) => mergeOpponentBgaPlayer(opponent, bgaPlayersById))
         .sort(compareOpponentsByStatusUpdatedAt);
-      const countEl = panel.querySelector("[data-opponents-count]");
-      const bodyEl = panel.querySelector("[data-opponents-body]");
-      if (countEl) {
-        countEl.textContent = `${opponents.length} ${opponents.length === 1 ? "player" : "players"}`;
-      }
-      if (!bodyEl) return;
-      bodyEl.innerHTML = "";
-
-      const eligibilityText = getEligibilityStateText(data?.eligibility);
-      if (eligibilityText) {
-        const state = document.createElement("div");
-        state.className = "challenge-opponents-state";
-        state.textContent = eligibilityText;
-        bodyEl.appendChild(state);
-        return;
-      }
-
-      if (!opponents.length) {
-        const state = document.createElement("div");
-        state.className = "challenge-opponents-state";
-        state.textContent = "No available opponents right now.";
-        bodyEl.appendChild(state);
-        return;
-      }
-
-      opponents.forEach((opponent) => {
-        bodyEl.appendChild(createOpponentRow(opponent, period, data?.current_player || null, data?.eligibility || {}));
-      });
+      const item = opponentPanels.get(periodId);
+      if (!item || item.panel !== panel) return;
+      item.currentPlayer = data?.current_player || null;
+      item.eligibility = data?.eligibility || {};
+      item.opponentsByView = {
+        available: enrichOpponents(
+          Array.isArray(data?.available_opponents) ? data.available_opponents : []
+        ),
+        all: enrichOpponents(Array.isArray(data?.all_players) ? data.all_players : []),
+      };
+      renderOpponentsForPeriod(item);
     } catch (error) {
       setOpponentsState(panel, error?.message || "Failed to load opponents.", true);
     }
@@ -6568,12 +6666,18 @@
     const bodyEl = item.panel.querySelector("[data-match-body]");
     if (!bodyEl) return;
     const titleEl = item.panel.querySelector("[data-match-title]");
-    if (titleEl) titleEl.textContent = options.readOnly ? "Matches" : "Match";
+    if (titleEl) titleEl.textContent = "Matches";
     bodyEl.innerHTML = "";
     const requests = Array.isArray(requestOrRequests) ? requestOrRequests : [requestOrRequests];
     const duelBlocks = requests
       .map((request) => createChallengeDuelBlock(request, period, currentPlayerId, options))
       .filter(Boolean);
+    const countEl = item.panel.querySelector("[data-match-count]");
+    if (countEl) {
+      countEl.textContent = options.adminView
+        ? `${duelBlocks.length} ${duelBlocks.length === 1 ? "match" : "matches"}`
+        : `${getChallengeMatchCount(period)} / ${getChallengeMatchLimit(period)} matches`;
+    }
     item.panel.dataset.challengeHasContent = duelBlocks.length ? "true" : "false";
     item.panel.hidden = !duelBlocks.length;
     duelBlocks.forEach((duelBlock) => bodyEl.appendChild(duelBlock));
@@ -6673,6 +6777,16 @@
         player_1: enrichRequestPlayer(request?.player_1, request?.player_1_id),
         player_2: enrichRequestPlayer(request?.player_2, request?.player_2_id),
       });
+      if (data?.period) {
+        [
+          "matches_count",
+          "matches_limit",
+          "matches_remaining",
+          "is_match_limit_reached",
+        ].forEach((field) => {
+          if (data.period[field] !== undefined) period[field] = data.period[field];
+        });
+      }
       const currentPlayerId = String(data?.player_id || "").trim();
       if (requestAdminMode) {
         const allRequests = (Array.isArray(data?.all_requests) ? data.all_requests : []).map(enrichRequest);
@@ -6715,12 +6829,15 @@
         "Error",
         "Cancelled",
       ]);
-      const challengeDuelRequest = visibleRequests.find((request) => (
+      const responseMatches = Array.isArray(data?.matches)
+        ? data.matches.map(enrichRequest)
+        : visibleRequests;
+      const challengeDuelRequests = responseMatches.filter((request) => (
         hasVisibleChallengeMatch(request)
         && visibleChallengeDuelStatuses.has(String(request?.duel?.status || ""))
-      )) || null;
+      ));
       const isClosedPeriod = isClosedChallengePeriod(period);
-      renderChallengeMatchPanel(period, currentPlayerId, challengeDuelRequest);
+      renderChallengeMatchPanel(period, currentPlayerId, challengeDuelRequests);
       setRequestPanelVisible(panel, !isClosedPeriod || visibleRequests.length > 0);
       const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;
       const pendingRequestLimit = getChallengePendingRequestLimit(period);
@@ -7606,10 +7723,36 @@
     title.textContent = "Open to match";
     head.appendChild(title);
 
+    const controls = document.createElement("div");
+    controls.className = "challenge-opponents-head-controls";
+    head.appendChild(controls);
+
+    const viewToggle = document.createElement("div");
+    viewToggle.className = "challenge-opponents-view-toggle";
+    viewToggle.setAttribute("role", "group");
+    viewToggle.setAttribute("aria-label", "Open to match list view");
+    controls.appendChild(viewToggle);
+
+    const availableViewButton = document.createElement("button");
+    availableViewButton.type = "button";
+    availableViewButton.className = "challenge-opponents-view-option";
+    availableViewButton.dataset.opponentsView = "available";
+    availableViewButton.setAttribute("aria-pressed", "true");
+    availableViewButton.textContent = "Available opponents";
+    viewToggle.appendChild(availableViewButton);
+
+    const allViewButton = document.createElement("button");
+    allViewButton.type = "button";
+    allViewButton.className = "challenge-opponents-view-option";
+    allViewButton.dataset.opponentsView = "all";
+    allViewButton.setAttribute("aria-pressed", "false");
+    allViewButton.textContent = "All players";
+    viewToggle.appendChild(allViewButton);
+
     const count = document.createElement("div");
     count.className = "challenge-opponents-count";
     count.dataset.opponentsCount = "true";
-    head.appendChild(count);
+    controls.appendChild(count);
 
     const panel = document.createElement("section");
     panel.className = "challenge-opponents-panel";
@@ -7620,7 +7763,21 @@
     body.dataset.opponentsBody = "true";
     panel.appendChild(body);
 
-    opponentPanels.set(String(period?.id || ""), { period, panel: wrap });
+    const item = {
+      period,
+      panel: wrap,
+      viewMode: "available",
+      currentPlayer: null,
+      eligibility: {},
+      opponentsByView: { available: [], all: [] },
+    };
+    const setViewMode = (viewMode) => {
+      item.viewMode = viewMode === "all" ? "all" : "available";
+      renderOpponentsForPeriod(item);
+    };
+    availableViewButton.addEventListener("click", () => setViewMode("available"));
+    allViewButton.addEventListener("click", () => setViewMode("all"));
+    opponentPanels.set(String(period?.id || ""), item);
     loadOpponentsForPeriod(period, wrap);
     return wrap;
   }
@@ -7638,8 +7795,13 @@
     const title = document.createElement("div");
     title.className = "challenge-opponents-title";
     title.dataset.matchTitle = "true";
-    title.textContent = "Match";
+    title.textContent = "Matches";
     head.appendChild(title);
+
+    const count = document.createElement("div");
+    count.className = "challenge-opponents-count";
+    count.dataset.matchCount = "true";
+    head.appendChild(count);
 
     const panel = document.createElement("section");
     panel.className = "challenge-requests-panel";

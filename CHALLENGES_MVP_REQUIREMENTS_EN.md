@@ -207,14 +207,14 @@ Terminal statuses for re-invitation:
 
 ### 7.2. “Open to match” list toggle
 
-- [ ] **CH-OPP-001** The `Open to match` section has a two-option toggle: `Available opponents` and `All players`.
-- [ ] **CH-OPP-002** `Available opponents` is selected by default whenever the page or period is opened.
-- [ ] **CH-OPP-003** `All players` shows every player whose participation status is `available` and who has a free match slot, including the current player, players from the same association, and players who already have a non-cancelled match with the current player in the linked Rivals tournament.
-- [ ] **CH-OPP-004** `Available opponents` uses the same base list but excludes the current player.
-- [ ] **CH-OPP-005** `Available opponents` excludes players from the current player's association.
-- [ ] **CH-OPP-006** `Available opponents` excludes players who already have a non-cancelled Challenge duel with the current player in any period of the linked Rivals tournament; for a period without `rivals_tournament_id`, the current period is checked.
-- [ ] **CH-OPP-007** In `All players`, the current player's row has no invite action; same-association and already-matched rows show a disabled invite action or a clear reason why they are unavailable.
-- [ ] **CH-OPP-008** Switching the toggle works without reloading the page and does not change backend eligibility: a direct request to an unavailable opponent is still rejected.
+- [x] **CH-OPP-001** The `Open to match` section has a two-option toggle: `Available opponents` and `All players`.
+- [x] **CH-OPP-002** `Available opponents` is selected by default whenever the page or period is opened.
+- [x] **CH-OPP-003** `All players` shows every player whose participation status is `available` and who has a free match slot, including the current player, players from the same association, and players who already have a non-cancelled match with the current player in the linked Rivals tournament.
+- [x] **CH-OPP-004** `Available opponents` uses the same base list but excludes the current player.
+- [x] **CH-OPP-005** `Available opponents` excludes players from the current player's association.
+- [x] **CH-OPP-006** `Available opponents` excludes players who already have a non-cancelled Challenge duel with the current player in any period of the linked Rivals tournament; for a period without `rivals_tournament_id`, the current period is checked.
+- [x] **CH-OPP-007** In `All players`, the current player's row has no invite action; same-association and already-matched rows show a disabled invite action or a clear reason why they are unavailable.
+- [x] **CH-OPP-008** Switching the toggle works without reloading the page and does not change backend eligibility: a direct request to an unavailable opponent is still rejected.
 - [x] **CH-OPP-009** The API returns enough data for both views, including `is_current_player`, `is_same_association`, `has_rivals_match`, `matches_count`, `matches_limit`, and `is_match_limit_reached`, or equivalent separate collections.
 
 ### 7.3. Public preview and Challenges access onboarding
@@ -278,9 +278,9 @@ Terminal statuses for re-invitation:
 - [ ] **CH-LST-002** The player sees a list of the requests they have created with their current statuses.
 - [ ] **CH-LST-003** For a pending request, the proposed times, formats and player from whom a response is expected are shown.
 - [ ] **CH-LST-004** For the terminal request, its final status is shown.
-- [ ] **CH-LST-005** A player sees all of their Challenge matches in every open period, not only the first match.
-- [ ] **CH-LST-006** The match-list heading shows a counter formatted as `X / N matches`, where `X = matches_count` and `N = matches_limit`.
-- [ ] **CH-LST-007** Each match in the list retains its own reschedule, cancellation, result-view, and result-edit actions according to its duel status.
+- [x] **CH-LST-005** A player sees all of their Challenge matches in every open period, not only the first match.
+- [x] **CH-LST-006** The match-list heading shows a counter formatted as `X / N matches`, where `X = matches_count` and `N = matches_limit`.
+- [x] **CH-LST-007** Each match in the list retains its own reschedule, cancellation, result-view, and result-edit actions according to its duel status.
 
 ## 10. Answer and counteroffer
 
@@ -742,8 +742,8 @@ This section tracks large technical blocks. Detailed readiness is determined by 
 - [x] **CH-IMP-017** Public Challenges preview and sign-in/BGA-verification onboarding before mutating actions.
 - [x] **CH-IMP-018** Global-admin mode on the Challenges page: all requests and matches, read-only presentation, optional inclusion of soft-deleted records, and backend access control.
 - [x] **CH-IMP-019** `tournament_cases` schema and the player `Resolve` flow for an `Error` Challenge match without a result, including mutual cancellation and no-show case creation.
-- [ ] **CH-IMP-020** Multi-match refactor: remove `challenge_duel_id`, make player status independent, add derived counters and N-match eligibility, make auto-cancel conditional, and list all matches.
-- [ ] **CH-IMP-021** Configurable pending-request limit, Rivals-wide opponent uniqueness, schedule-conflict checks, and the `Available opponents` / `All players` toggle.
+- [x] **CH-IMP-020** Multi-match refactor: remove `challenge_duel_id`, make player status independent, add derived counters and N-match eligibility, make auto-cancel conditional, and list all matches.
+- [x] **CH-IMP-021** Configurable pending-request limit, Rivals-wide opponent uniqueness, schedule-conflict checks, and the `Available opponents` / `All players` toggle.
 
 ## 23. Outside of MVP
 

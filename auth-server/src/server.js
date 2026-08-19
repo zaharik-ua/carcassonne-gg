@@ -9563,7 +9563,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         if (pendingRequestId) blockedCounts.pending_request += 1;
         if (canListOpponents && !capacity.is_match_limit_reached) {
           allPlayers.push(mappedOpponent);
-          if (!playerId || (!isCurrentPlayer && !isSameAssociation && !hasRivalsMatch && !pendingRequestId)) {
+          if (!playerId || (!isCurrentPlayer && !isSameAssociation && !hasRivalsMatch)) {
             availableOpponents.push(mappedOpponent);
           }
         }
@@ -9832,10 +9832,17 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
   }
 
   try {
-    const period = await loadChallengePeriodById(periodId);
+    const [period, currentMatchesCount] = await Promise.all([
+      loadChallengePeriodById(periodId),
+      loadChallengeMatchCountForPlayer(periodId, playerId),
+    ]);
     if (!period || !["planning_open", "active", "result_review"].includes(period.status)) {
       return res.status(404).json({ ok: false, message: "Open Challenge period not found" });
     }
+    const periodWithCapacity = {
+      ...period,
+      ...buildChallengeMatchCapacity(currentMatchesCount, period.max_matches_per_player),
+    };
 
     const rows = await dbAllAsync(
       `
@@ -9932,77 +9939,111 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
         updated_by: requestRow?.duel_updated_by,
       });
     }));
+    const matchRows = await dbAllAsync(
+      `
+        SELECT
+          cr.id,
+          COALESCE(cr.period_id, d.challenge_period_id) AS period_id,
+          COALESCE(cr.player_1_id, d.player_1_id) AS player_1_id,
+          COALESCE(cr.player_2_id, d.player_2_id) AS player_2_id,
+          cr.created_by_player_id,
+          cr.awaiting_player_id,
+          cr.status,
+          cr.time_option_1_utc,
+          cr.time_option_2_utc,
+          cr.time_option_3_utc,
+          cr.allows_bo3,
+          cr.allows_bo5,
+          cr.accepted_time_utc,
+          cr.accepted_format,
+          cr.hidden_by_creator_at,
+          cr.created_at,
+          cr.updated_at,
+          d.player_1_id AS p1_player_id,
+          p1.bga_nickname AS p1_bga_nickname,
+          p1.name AS p1_name,
+          p1.avatar AS p1_avatar,
+          p1.bga_elo AS p1_bga_elo,
+          p1.gg_elo AS p1_gg_elo,
+          p1.gg_rating_position AS p1_gg_rating_position,
+          COALESCE(NULLIF(trim(t1.id), ''), NULLIF(trim(a1.code), ''), NULLIF(trim(p1.association), '')) AS p1_association_id,
+          COALESCE(NULLIF(trim(t1.name), ''), NULLIF(trim(a1.name), ''), NULLIF(trim(p1.association), '')) AS p1_association_name,
+          COALESCE(NULLIF(trim(t1.flag), ''), NULLIF(trim(t1.logo), ''), NULLIF(trim(a1.flag), '')) AS p1_association_flag,
+          NULLIF(trim(t1.timezone), '') AS p1_team_timezone,
+          d.player_2_id AS p2_player_id,
+          p2.bga_nickname AS p2_bga_nickname,
+          p2.name AS p2_name,
+          p2.avatar AS p2_avatar,
+          p2.bga_elo AS p2_bga_elo,
+          p2.gg_elo AS p2_gg_elo,
+          p2.gg_rating_position AS p2_gg_rating_position,
+          COALESCE(NULLIF(trim(t2.id), ''), NULLIF(trim(a2.code), ''), NULLIF(trim(p2.association), '')) AS p2_association_id,
+          COALESCE(NULLIF(trim(t2.name), ''), NULLIF(trim(a2.name), ''), NULLIF(trim(p2.association), '')) AS p2_association_name,
+          COALESCE(NULLIF(trim(t2.flag), ''), NULLIF(trim(t2.logo), ''), NULLIF(trim(a2.flag), '')) AS p2_association_flag,
+          NULLIF(trim(t2.timezone), '') AS p2_team_timezone,
+          d.id AS duel_id,
+          d.status AS duel_status,
+          d.time_utc AS duel_time_utc,
+          d.duel_format,
+          d.rating AS duel_rating,
+          d.dw1 AS duel_dw1,
+          d.dw2 AS duel_dw2,
+          d.cancelled_by_player_id AS duel_cancelled_by_player_id,
+          d.updated_by AS duel_updated_by,
+          d.cancellation_reason AS duel_cancellation_reason,
+          d.cancelled_at AS duel_cancelled_at,
+          d.deleted_at AS duel_deleted_at
+        FROM duels d
+        LEFT JOIN challenge_requests cr
+          ON cr.id = d.challenge_request_id
+        LEFT JOIN profiles p1
+          ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
+        LEFT JOIN associations a1
+          ON upper(trim(COALESCE(a1.code, ''))) = upper(trim(COALESCE(p1.association, '')))
+          OR lower(trim(COALESCE(a1.name, ''))) = lower(trim(COALESCE(p1.association, '')))
+        LEFT JOIN teams t1
+          ON upper(trim(COALESCE(t1.id, ''))) = upper(trim(COALESCE(p1.association, '')))
+          OR lower(trim(COALESCE(t1.name, ''))) = lower(trim(COALESCE(p1.association, '')))
+          OR upper(trim(COALESCE(t1.id, ''))) = upper(trim(COALESCE(a1.code, '')))
+          OR lower(trim(COALESCE(t1.name, ''))) = lower(trim(COALESCE(a1.name, '')))
+        LEFT JOIN profiles p2
+          ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
+        LEFT JOIN associations a2
+          ON upper(trim(COALESCE(a2.code, ''))) = upper(trim(COALESCE(p2.association, '')))
+          OR lower(trim(COALESCE(a2.name, ''))) = lower(trim(COALESCE(p2.association, '')))
+        LEFT JOIN teams t2
+          ON upper(trim(COALESCE(t2.id, ''))) = upper(trim(COALESCE(p2.association, '')))
+          OR lower(trim(COALESCE(t2.name, ''))) = lower(trim(COALESCE(p2.association, '')))
+          OR upper(trim(COALESCE(t2.id, ''))) = upper(trim(COALESCE(a2.code, '')))
+          OR lower(trim(COALESCE(t2.name, ''))) = lower(trim(COALESCE(a2.name, '')))
+        WHERE d.challenge_period_id = ?
+          AND d.source_type = 'challenge'
+          ${includeRemoved ? "" : "AND d.deleted_at IS NULL"}
+          ${adminMode ? "" : "AND (d.player_1_id = ? OR d.player_2_id = ?)"}
+        ORDER BY datetime(d.time_utc) DESC, d.id ASC
+      `,
+      adminMode ? [periodId] : [periodId, playerId, playerId]
+    );
+    const matchRowsByDuelId = new Map((matchRows || []).map((row) => [String(row?.duel_id || ""), row]));
+    const matches = await attachGamesToChallengeRequests((matchRows || []).map(mapChallengeRequestWithPlayers).filter(Boolean));
+    await Promise.all(matches.map(async (match) => {
+      if (!match?.duel || match.duel.cancelled_by_player_id) return;
+      const matchRow = matchRowsByDuelId.get(String(match.duel.id || ""));
+      match.duel.cancelled_by_player_id = await resolveChallengeDuelCancelledByPlayerId({
+        ...match.duel,
+        challenge_period_id: match.period_id,
+        player_1_id: match.player_1_id,
+        player_2_id: match.player_2_id,
+        updated_by: matchRow?.duel_updated_by,
+      });
+    }));
     if (adminMode) {
-      const matchRows = await dbAllAsync(
-        `
-          SELECT
-            cr.id,
-            cr.period_id,
-            cr.player_1_id,
-            cr.player_2_id,
-            cr.created_by_player_id,
-            cr.awaiting_player_id,
-            cr.status,
-            cr.time_option_1_utc,
-            cr.time_option_2_utc,
-            cr.time_option_3_utc,
-            cr.allows_bo3,
-            cr.allows_bo5,
-            cr.accepted_time_utc,
-            cr.accepted_format,
-            cr.hidden_by_creator_at,
-            cr.created_at,
-            cr.updated_at,
-            d.player_1_id AS p1_player_id,
-            p1.bga_nickname AS p1_bga_nickname,
-            p1.name AS p1_name,
-            p1.avatar AS p1_avatar,
-            p1.bga_elo AS p1_bga_elo,
-            p1.gg_elo AS p1_gg_elo,
-            p1.gg_rating_position AS p1_gg_rating_position,
-            p1.association AS p1_association_id,
-            p1.association AS p1_association_name,
-            d.player_2_id AS p2_player_id,
-            p2.bga_nickname AS p2_bga_nickname,
-            p2.name AS p2_name,
-            p2.avatar AS p2_avatar,
-            p2.bga_elo AS p2_bga_elo,
-            p2.gg_elo AS p2_gg_elo,
-            p2.gg_rating_position AS p2_gg_rating_position,
-            p2.association AS p2_association_id,
-            p2.association AS p2_association_name,
-            d.id AS duel_id,
-            d.status AS duel_status,
-            d.time_utc AS duel_time_utc,
-            d.duel_format,
-            d.rating AS duel_rating,
-            d.dw1 AS duel_dw1,
-            d.dw2 AS duel_dw2,
-            d.cancelled_by_player_id AS duel_cancelled_by_player_id,
-            d.cancellation_reason AS duel_cancellation_reason,
-            d.cancelled_at AS duel_cancelled_at,
-            d.deleted_at AS duel_deleted_at
-          FROM duels d
-          LEFT JOIN challenge_requests cr
-            ON cr.id = d.challenge_request_id
-          LEFT JOIN profiles p1
-            ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
-          LEFT JOIN profiles p2
-            ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
-          WHERE d.challenge_period_id = ?
-            AND d.source_type = 'challenge'
-            ${includeRemoved ? "" : "AND d.deleted_at IS NULL"}
-          ORDER BY datetime(d.time_utc) DESC, d.id ASC
-        `,
-        [periodId]
-      );
-      const matches = await attachGamesToChallengeRequests((matchRows || []).map(mapChallengeRequestWithPlayers).filter(Boolean));
       return res.json({
         ok: true,
         admin_mode: true,
         include_removed: includeRemoved,
         player_id: playerId,
-        period,
+        period: periodWithCapacity,
         all_requests: requests,
         matches,
       });
@@ -10010,9 +10051,10 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
     return res.json({
       ok: true,
       player_id: playerId,
-      period,
+      period: periodWithCapacity,
       incoming_requests: requests.filter((request) => request.created_by_player_id !== playerId),
       sent_requests: requests.filter((request) => request.created_by_player_id === playerId),
+      matches,
     });
   } catch (error) {
     console.error("Failed to load Challenge requests", error);
