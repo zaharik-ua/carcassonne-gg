@@ -157,6 +157,20 @@ export function buildChallengeMatchCapacity(matchesCount, configuredLimit) {
   };
 }
 
+export function buildChallengeMatchProgress(matchesCount, matchesPlayedCount, configuredLimit) {
+  const capacity = buildChallengeMatchCapacity(matchesCount, configuredLimit);
+  const parsedPlayedCount = Number(matchesPlayedCount);
+  const playedCount = Number.isFinite(parsedPlayedCount) && parsedPlayedCount > 0
+    ? Math.floor(parsedPlayedCount)
+    : 0;
+  return {
+    ...capacity,
+    matches_played_count: playedCount,
+    is_match_limit_played: capacity.is_match_limit_reached
+      && playedCount >= capacity.matches_limit,
+  };
+}
+
 function normalizeChallengeIdentifier(value) {
   const normalized = String(value ?? "").trim();
   return normalized || null;

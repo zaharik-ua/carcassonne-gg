@@ -9,6 +9,7 @@ import {
   CHALLENGE_RIVALS_PAIR_DUEL_STATUSES,
   DEFAULT_MAX_PENDING_REQUESTS_PER_PLAYER,
   buildChallengeMatchCapacity,
+  buildChallengeMatchProgress,
   closeChallengePendingRequestsAfterAccept,
   ensureChallengePeriodConfigurationSchema,
   ensureChallengePeriodPlayersSchema,
@@ -445,6 +446,33 @@ test("builds derived match capacity without storing counters", () => {
     matches_limit: 1,
     matches_remaining: 1,
     is_match_limit_reached: false,
+  });
+});
+
+test("builds scheduled and played progress at the match limit", () => {
+  assert.deepEqual(buildChallengeMatchProgress(2, 1, 2), {
+    matches_count: 2,
+    matches_limit: 2,
+    matches_remaining: 0,
+    is_match_limit_reached: true,
+    matches_played_count: 1,
+    is_match_limit_played: false,
+  });
+  assert.deepEqual(buildChallengeMatchProgress(2, 2, 2), {
+    matches_count: 2,
+    matches_limit: 2,
+    matches_remaining: 0,
+    is_match_limit_reached: true,
+    matches_played_count: 2,
+    is_match_limit_played: true,
+  });
+  assert.deepEqual(buildChallengeMatchProgress(1, 1, 2), {
+    matches_count: 1,
+    matches_limit: 2,
+    matches_remaining: 1,
+    is_match_limit_reached: false,
+    matches_played_count: 1,
+    is_match_limit_played: false,
   });
 });
 

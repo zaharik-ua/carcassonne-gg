@@ -250,10 +250,10 @@
     align-items: flex-start;
     gap: 9px;
     padding: 10px 12px;
-    border: 1px solid #f0b8c1;
+    border: 1px solid #9dd7b9;
     border-radius: 6px;
-    background: var(--red-soft);
-    color: #7f1d1d;
+    background: var(--green-soft);
+    color: #12633e;
     font-size: 13px;
     line-height: 1.45;
     box-sizing: border-box;
@@ -267,7 +267,7 @@
     height: 18px;
     margin-top: 1px;
     border-radius: 50%;
-    background: var(--red);
+    background: var(--green);
     color: #fff;
     font-size: 12px;
     font-weight: 700;
@@ -275,7 +275,7 @@
   }
 
   .challenge-match-limit-notice strong {
-    color: var(--red);
+    color: #12633e;
     font-weight: 700;
   }
 
@@ -354,8 +354,24 @@
     background: var(--red-soft);
   }
 
+  .challenge-status-btn.is-scheduled {
+    border-color: #a9cce7;
+    background: #eef6fc;
+    color: var(--blue);
+  }
+
+  .challenge-status-btn.is-played {
+    border-color: #9dd7b9;
+    background: var(--green-soft);
+    color: #12633e;
+  }
+
   .challenge-status-btn.disabled {
     cursor: not-allowed;
+  }
+
+  .challenge-status-btn.disabled .challenge-status-chevron {
+    visibility: hidden;
   }
 
   .challenge-status-text {
@@ -1519,31 +1535,32 @@
     appearance: none;
     border: 1px solid #c8ced8;
     border-radius: 4px;
-    background: #f3f5f8;
-    color: #8a94a3;
+    background: transparent;
+    color: #667085;
     padding: 7px 10px;
     font-size: 12px;
     font-weight: 700;
     line-height: 1.2;
     white-space: nowrap;
-    cursor: not-allowed;
-  }
-
-  .challenge-opponent-action:disabled {
-    opacity: 1;
-  }
-
-  .challenge-opponent-action:not(:disabled) {
-    border-color: #c8ced8;
-    background: #fff;
-    color: #2f3947;
     cursor: pointer;
   }
 
-  .challenge-opponent-action:not(:disabled):hover,
-  .challenge-opponent-action:not(:disabled):focus-visible {
-    background: #fff;
-    border-color: #c8ced8;
+  .challenge-opponent-action.is-primary {
+    border-color: var(--blue);
+    background: var(--blue);
+    color: #fff;
+  }
+
+  .challenge-opponent-action.is-primary:hover,
+  .challenge-opponent-action.is-primary:focus-visible {
+    border-color: var(--blue-hover);
+    background: var(--blue-hover);
+  }
+
+  .challenge-opponent-action.is-blocked:hover,
+  .challenge-opponent-action.is-blocked:focus-visible {
+    border-color: #9ea7b3;
+    color: #2f3947;
   }
 
   .challenge-modal-overlay {
@@ -2069,6 +2086,19 @@
 
   .challenge-btn-secondary {
     background: #fff;
+    color: #2f3947;
+  }
+
+  .challenge-btn-unavailable {
+    background: transparent;
+    color: #667085;
+    opacity: 1;
+    cursor: pointer;
+  }
+
+  .challenge-btn-unavailable:hover,
+  .challenge-btn-unavailable:focus-visible {
+    border-color: #9ea7b3;
     color: #2f3947;
   }
 
@@ -2761,6 +2791,20 @@
       tone: "unavailable",
       note: "You are not participating in this period.",
       editable: true,
+    },
+  };
+  const LOCKED_PERIOD_STATUS_COPY = {
+    matches_scheduled: {
+      label: "Matches scheduled",
+      tone: "scheduled",
+      note: "You have scheduled all matches allowed for this period.",
+      editable: false,
+    },
+    matches_played: {
+      label: "Matches played",
+      tone: "played",
+      note: "You have played all matches allowed for this period.",
+      editable: false,
     },
   };
   const PERIOD_STATUS_LABELS = {
@@ -4994,6 +5038,19 @@
     return getChallengeMatchCount(period) >= getChallengeMatchLimit(period);
   }
 
+  function getChallengePlayedMatchCount(period) {
+    const value = Number.parseInt(String(period?.matches_played_count ?? "0"), 10);
+    return Number.isInteger(value) && value > 0 ? value : 0;
+  }
+
+  function getLockedChallengePeriodStatus(period) {
+    if (!isChallengeMatchLimitReached(period)) return "";
+    const matchesLimit = getChallengeMatchLimit(period);
+    const allMatchesPlayed = period?.is_match_limit_played === true
+      || getChallengePlayedMatchCount(period) >= matchesLimit;
+    return allMatchesPlayed ? "matches_played" : "matches_scheduled";
+  }
+
   function showChallengeMatchLimitReachedDialog(period) {
     const matchLimit = getChallengeMatchLimit(period);
     showChallengeInfoDialog(
@@ -6254,18 +6311,21 @@
     const inviteBtn = document.createElement("button");
     inviteBtn.className = "challenge-opponent-action";
     inviteBtn.type = "button";
-    inviteBtn.disabled = challengeAccess.bgaVerified && (!canCreateRequests || !opponentCanInvite);
+    const isInviteAvailable = !challengeAccess.bgaVerified || (canCreateRequests && opponentCanInvite);
+    inviteBtn.classList.toggle("is-primary", isInviteAvailable);
+    inviteBtn.classList.toggle("is-blocked", !isInviteAvailable);
+    inviteBtn.setAttribute("aria-disabled", isInviteAvailable ? "false" : "true");
     inviteBtn.textContent = window.matchMedia("(max-width: 720px)").matches ? "Invite" : "Invite to match";
-    if (challengeAccess.bgaVerified && inviteBtn.disabled) {
+    if (!isInviteAvailable) {
       if (currentPlayerAtMatchLimit) inviteBtn.title = "You have reached this period's match limit.";
       else if (opponentAtMatchLimit) inviteBtn.title = "This player has reached the match limit.";
       else if (isSameAssociation) inviteBtn.title = "Players from the same association cannot play each other.";
       else if (hasRivalsMatch) inviteBtn.title = "You already played this opponent in the linked Rivals tournament.";
       else if (hasPendingRequest) inviteBtn.title = "A pending request already exists with this player.";
+      else if (reasons.includes("current_player_unavailable")) inviteBtn.title = "Your status is Not playing this period.";
       else inviteBtn.title = "Challenge requests are not available right now.";
     }
     inviteBtn.addEventListener("click", () => {
-      if (inviteBtn.disabled) return;
       const openInvite = (requestingPlayer) => {
         if (currentPlayerAtMatchLimit) {
           showChallengeMatchLimitReachedDialog(period);
@@ -6291,6 +6351,17 @@
         }
         if (opponentAtMatchLimit) {
           showChallengeInfoDialog("Invite unavailable", "This player has reached the match limit for this period.");
+          return;
+        }
+        if (reasons.includes("current_player_unavailable")) {
+          showChallengeInfoDialog(
+            "Invite unavailable",
+            "Your status is Not playing this period. Change it before creating a match request."
+          );
+          return;
+        }
+        if (!canCreateRequests) {
+          showChallengeInfoDialog("Invite unavailable", "Challenge requests are not available right now.");
           return;
         }
         openChallengeRequestForm(period, opponent, requestingPlayer);
@@ -6689,26 +6760,53 @@
   }
 
   function createNewChallengeRequestButton(period, currentPlayerId, pendingSentCount) {
-    return createActionButton("Create request", "challenge-btn-secondary", () => {
-      const openRequest = () => {
-        if (isChallengeMatchLimitReached(period)) {
-          showChallengeMatchLimitReachedDialog(period);
-          return;
-        }
-        const pendingRequestLimit = getChallengePendingRequestLimit(period);
-        if (pendingSentCount >= pendingRequestLimit) {
-          showChallengeInfoDialog(
-            "Request limit reached",
-            `You can send up to ${pendingRequestLimit} match requests. Remove an already sent request to create a new one.`
-          );
-          return;
-        }
-        openChallengeRequestForm(period, null, {
-          player_id: currentPlayerId || getCurrentUserProfileId(challengeAccess.user),
-        });
-      };
-      requireChallengeAccess(openRequest);
-    });
+    const pendingRequestLimit = getChallengePendingRequestLimit(period);
+    const hasFreeMatchSlot = !isChallengeMatchLimitReached(period);
+    const participationStatus = normalizeStatus(period?.player_status);
+    const isParticipationEligible = participationStatus !== "unavailable";
+    const isRequestLimitAvailable = pendingSentCount < pendingRequestLimit;
+    const isCreationAvailable = hasFreeMatchSlot
+      && isParticipationEligible
+      && isRequestLimitAvailable;
+    const button = createActionButton(
+      "Create request",
+      isCreationAvailable
+        ? "challenge-btn-primary"
+        : "challenge-btn-secondary challenge-btn-unavailable",
+      () => {
+        const openRequest = () => {
+          if (!hasFreeMatchSlot) {
+            showChallengeMatchLimitReachedDialog(period);
+            return;
+          }
+          if (!isParticipationEligible) {
+            showChallengeInfoDialog(
+              "Request unavailable",
+              "Your status is Not playing this period. Change it before creating a match request."
+            );
+            return;
+          }
+          if (!isRequestLimitAvailable) {
+            showChallengeInfoDialog(
+              "Request limit reached",
+              `You can send up to ${pendingRequestLimit} match requests. Remove an already sent request to create a new one.`
+            );
+            return;
+          }
+          openChallengeRequestForm(period, null, {
+            player_id: currentPlayerId || getCurrentUserProfileId(challengeAccess.user),
+          });
+        };
+        requireChallengeAccess(openRequest);
+      }
+    );
+    button.setAttribute("aria-disabled", isCreationAvailable ? "false" : "true");
+    if (!isCreationAvailable) {
+      if (!hasFreeMatchSlot) button.title = "You have reached this period's match limit.";
+      else if (!isParticipationEligible) button.title = "Your status is Not playing this period.";
+      else button.title = `You already have ${pendingRequestLimit} pending match requests.`;
+    }
+    return button;
   }
 
   function renderLockedChallengeRequests(period, panel) {
@@ -7518,7 +7616,10 @@
       menuEl.classList.remove("open");
     };
     const open = () => {
-      const status = STATUS_COPY[currentStatus] || STATUS_COPY.not_selected;
+      const lockedStatusValue = getLockedChallengePeriodStatus(period);
+      const status = lockedStatusValue
+        ? LOCKED_PERIOD_STATUS_COPY[lockedStatusValue]
+        : STATUS_COPY[currentStatus] || STATUS_COPY.not_selected;
       if (!status.editable || !periodAllowsManualStatus) return;
       closeAllDropdowns();
       btnEl.classList.add("open");
@@ -7527,7 +7628,10 @@
     };
     const setStatus = (nextStatus, noteOverride) => {
       const statusValue = normalizeStatus(nextStatus);
-      const status = STATUS_COPY[statusValue] || STATUS_COPY.not_selected;
+      const lockedStatusValue = getLockedChallengePeriodStatus(period);
+      const status = lockedStatusValue
+        ? LOCKED_PERIOD_STATUS_COPY[lockedStatusValue]
+        : STATUS_COPY[statusValue] || STATUS_COPY.not_selected;
       const editable = status.editable && periodAllowsManualStatus;
       currentStatus = statusValue;
       btnEl.classList.remove(
@@ -7535,6 +7639,8 @@
         "is-not_selected",
         "is-available",
         "is-unavailable",
+        "is-scheduled",
+        "is-played",
         "disabled"
       );
       btnEl.classList.add(`is-${status.tone}`);
@@ -7542,12 +7648,16 @@
       btnEl.disabled = !editable;
       btnEl.setAttribute("aria-disabled", editable ? "false" : "true");
       textEl.textContent = status.label;
-      noteEl.textContent = noteOverride || (periodAllowsManualStatus
+      noteEl.textContent = lockedStatusValue
+        ? status.note
+        : noteOverride || (periodAllowsManualStatus
         ? status.note
         : String(period?.status || "") === "draft"
           ? "Status selection will open when the planning period starts."
           : "Status changes are closed for this period.");
-      availabilityBtn.hidden = statusValue !== "available" || !periodAllowsManualStatus;
+      availabilityBtn.hidden = !!lockedStatusValue
+        || statusValue !== "available"
+        || !periodAllowsManualStatus;
       updateAvailabilityButton();
       optionEls.forEach((optionEl) => {
         const active = String(optionEl.dataset.value || "") === statusValue;
@@ -7830,10 +7940,10 @@
 
     const text = document.createElement("div");
     const title = document.createElement("strong");
-    title.textContent = "Match limit: ";
+    title.textContent = "Match limit increased: ";
     text.appendChild(title);
     text.appendChild(document.createTextNode(
-      `${matchLimit} ${matchLimit === 1 ? "match" : "matches"} per player in this period.`
+      `${matchLimit} ${matchLimit === 1 ? "match" : "matches"} per week in GG Rivals.`
     ));
     notice.appendChild(text);
 

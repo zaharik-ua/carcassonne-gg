@@ -30,6 +30,7 @@ import {
   CHALLENGE_PLAYER_PERIOD_STATUSES,
   CHALLENGE_RIVALS_PAIR_DUEL_STATUSES,
   buildChallengeMatchCapacity,
+  buildChallengeMatchProgress,
   closeChallengePendingRequestsAfterAccept,
   ensureChallengePeriodConfigurationSchema,
   ensureChallengePeriodPlayersSchema,
@@ -8948,15 +8949,19 @@ async function loadChallengePeriodPlayerStatus(periodId, playerId) {
   );
 }
 
-async function loadChallengeMatchCountForPlayer(periodId, playerId, options = {}) {
+async function loadChallengeMatchProgressForPlayer(periodId, playerId, options = {}) {
   const normalizedPeriodId = normalizeNullableText(periodId);
   const normalizedPlayerId = normalizeNullableText(playerId);
   const excludedDuelId = normalizeNullableText(options.excludeDuelId);
-  if (!normalizedPeriodId || !normalizedPlayerId) return 0;
+  if (!normalizedPeriodId || !normalizedPlayerId) {
+    return { matches_count: 0, matches_played_count: 0 };
+  }
   const slotStatuses = Array.from(CHALLENGE_MATCH_SLOT_DUEL_STATUSES);
   const row = await dbGetAsync(
     `
-      SELECT COUNT(*) AS matches_count
+      SELECT
+        COUNT(*) AS matches_count,
+        COALESCE(SUM(CASE WHEN status = 'Done' THEN 1 ELSE 0 END), 0) AS matches_played_count
       FROM duels
       WHERE challenge_period_id = ?
         AND source_type = 'challenge'
@@ -8974,7 +8979,10 @@ async function loadChallengeMatchCountForPlayer(periodId, playerId, options = {}
       excludedDuelId,
     ]
   );
-  return Math.max(0, Number(row?.matches_count) || 0);
+  return {
+    matches_count: Math.max(0, Number(row?.matches_count) || 0),
+    matches_played_count: Math.max(0, Number(row?.matches_played_count) || 0),
+  };
 }
 
 async function loadChallengeMatchCapacityForPlayer(period, playerId, options = {}) {
@@ -9242,7 +9250,11 @@ async function loadChallengePlayerProfileContext(playerId) {
 
 function mapChallengePeriodForPlayer(row) {
   const playerStatus = normalizeChallengePlayerPeriodStatus(row?.player_status);
-  const capacity = buildChallengeMatchCapacity(row?.matches_count, row?.max_matches_per_player);
+  const progress = buildChallengeMatchProgress(
+    row?.matches_count,
+    row?.matches_played_count,
+    row?.max_matches_per_player
+  );
 
   return {
     id: row.id,
@@ -9259,7 +9271,7 @@ function mapChallengePeriodForPlayer(row) {
     play_ends_at: row.play_ends_at,
     result_review_ends_at: row.result_review_ends_at,
     player_status: playerStatus,
-    ...capacity,
+    ...progress,
     has_sent_request: Number(row.has_sent_request) === 1,
     availability: mapChallengeAvailability(row),
   };
@@ -9347,6 +9359,15 @@ app.get("/challenge-periods/player", async (req, res) => {
               AND player_duel.status IN (${slotStatuses.map(() => "?").join(", ")})
               AND (player_duel.player_1_id = ? OR player_duel.player_2_id = ?)
           ) AS matches_count,
+          (
+            SELECT COUNT(*)
+            FROM duels played_duel
+            WHERE played_duel.challenge_period_id = cp.id
+              AND played_duel.source_type = 'challenge'
+              AND played_duel.deleted_at IS NULL
+              AND played_duel.status = 'Done'
+              AND (played_duel.player_1_id = ? OR played_duel.player_2_id = ?)
+          ) AS matches_played_count,
           cpp.availability_start_1_utc,
           cpp.availability_end_1_utc,
           cpp.availability_start_2_utc,
@@ -9360,7 +9381,7 @@ app.get("/challenge-periods/player", async (req, res) => {
         WHERE cp.status IN ('draft', 'planning_open', 'active', 'result_review')
         ORDER BY datetime(cp.planning_starts_at) DESC, datetime(cp.play_starts_at) DESC, cp.id ASC
       `,
-      [playerId, ...slotStatuses, playerId, playerId, playerId]
+      [playerId, ...slotStatuses, playerId, playerId, playerId, playerId, playerId]
     );
     return res.json({
       ok: true,
@@ -9383,17 +9404,18 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
   }
 
   try {
-    const [period, currentProfile, currentPeriodStatus, currentMatchesCount] = await Promise.all([
+    const [period, currentProfile, currentPeriodStatus, currentMatchProgress] = await Promise.all([
       loadChallengePeriodById(periodId),
       loadChallengePlayerProfileContext(playerId),
       loadChallengePeriodPlayerStatus(periodId, playerId),
-      loadChallengeMatchCountForPlayer(periodId, playerId),
+      loadChallengeMatchProgressForPlayer(periodId, playerId),
     ]);
 
     if (!period || !["planning_open", "active", "result_review"].includes(period.status)) {
       return res.status(404).json({ ok: false, message: "Open Challenge period not found" });
     }
     const currentStatus = normalizeChallengePlayerPeriodStatus(currentPeriodStatus?.status);
+    const currentMatchesCount = currentMatchProgress.matches_count;
     const currentCapacity = buildChallengeMatchCapacity(currentMatchesCount, period.max_matches_per_player);
     const canCreateRequests = ["planning_open", "active"].includes(period.status)
       && !!currentProfile
@@ -9578,6 +9600,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         ...period,
         player_status: currentStatus,
         matches_count: currentMatchesCount,
+        matches_played_count: currentMatchProgress.matches_played_count,
       }),
       current_player: currentProfile ? mapChallengeOpponent({
         ...currentProfile,
@@ -9832,16 +9855,20 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
   }
 
   try {
-    const [period, currentMatchesCount] = await Promise.all([
+    const [period, currentMatchProgress] = await Promise.all([
       loadChallengePeriodById(periodId),
-      loadChallengeMatchCountForPlayer(periodId, playerId),
+      loadChallengeMatchProgressForPlayer(periodId, playerId),
     ]);
     if (!period || !["planning_open", "active", "result_review"].includes(period.status)) {
       return res.status(404).json({ ok: false, message: "Open Challenge period not found" });
     }
     const periodWithCapacity = {
       ...period,
-      ...buildChallengeMatchCapacity(currentMatchesCount, period.max_matches_per_player),
+      ...buildChallengeMatchProgress(
+        currentMatchProgress.matches_count,
+        currentMatchProgress.matches_played_count,
+        period.max_matches_per_player
+      ),
     };
 
     const rows = await dbAllAsync(

@@ -132,17 +132,20 @@ Available statuses `duels` are marked separately from statuses to be added for C
 
 - [x] **CH-PLY-001** There is no more than one status record for each player and period.
 - [x] **CH-PLY-002** Initial player status is `not_selected`.
-- [ ] **CH-PLY-003** A player may switch among `not_selected`, `available`, and `unavailable` during `planning_open` or `active`, even when they already have scheduled or completed matches.
+- [ ] **CH-PLY-003** A player may switch among `not_selected`, `available`, and `unavailable` during `planning_open` or `active`, even when they already have scheduled or completed matches, while `matches_count < matches_limit`.
 - [ ] **CH-PLY-004** Switching to `not_selected` removes the player from the `Open to match` list but preserves their ability to create requests and be selected manually, without changing pending requests, linked duels, or confirmed matches.
 - [ ] **CH-PLY-005** Before switching from `available` or `not_selected` to `unavailable`, the UI warns that pending requests will be closed automatically when such requests exist.
 - [ ] **CH-PLY-006** When switching from `available` or `not_selected` to `unavailable`, every pending request involving that player becomes `auto_cancelled`; linked duels in `Draft` or `Requested new time` become `Cancelled`, while confirmed matches remain unchanged.
 - [ ] **CH-PLY-007** Switching from `available` to `not_selected` does not close pending requests or change linked duels in `Draft` or `Requested new time`.
-- [ ] **CH-PLY-008** Confirming a match does not change either player's manually selected participation status.
-- [ ] **CH-PLY-009** Receiving a valid result and moving a duel to `Done` does not change either player's participation status.
+- [ ] **CH-PLY-008** Confirming a match does not change either player's stored manual participation status; after the limit is reached, the UI overrides it with a derived locked state.
+- [ ] **CH-PLY-009** Receiving a valid result and moving a duel to `Done` does not change the stored manual participation status, but may change the derived UI state from `Matches scheduled` to `Matches played`.
 - [ ] **CH-PLY-010** Cancelling one of several matches does not change either player's participation status.
 - [ ] **CH-PLY-011** Moving a duel to `Requested new time` does not change either player's participation status.
-- [ ] **CH-PLY-012** A player with scheduled or completed matches may hide themselves from the `Open to match` list through `not_selected` or fully close themselves to additional matches through `unavailable`.
+- [ ] **CH-PLY-012** A player with scheduled or completed matches and a free slot may hide themselves from the `Open to match` list through `not_selected` or fully close themselves to additional matches through `unavailable`.
 - [ ] **CH-PLY-013** The migration maps legacy `match_scheduled` and `played` statuses to `available`, preserves existing duels, and removes `challenge_duel_id`; derived match limits additionally constrain actual eligibility after migration.
+- [x] **CH-PLY-014** When `matches_count >= matches_limit`, `Your period status` shows the locked `Matches scheduled` state instead of the manual status while not all allowed matches have the `Done` status.
+- [x] **CH-PLY-015** When the number of Challenge duels in the `Done` status reaches `matches_limit`, `Your period status` shows the locked `Matches played` state.
+- [x] **CH-PLY-016** `Matches scheduled` and `Matches played` are derived UI states only and do not overwrite the manual status in `challenge_period_players`; after a slot is released, the manual status is displayed and editable again.
 
 ### 6.1. Match limit and derived counters
 
@@ -150,7 +153,7 @@ Available statuses `duels` are marked separately from statuses to be added for C
 - [x] **CH-CAP-002** Duels in `Draft`, `Requested new time`, or `Cancelled`, and soft-deleted duels, do not occupy a slot.
 - [x] **CH-CAP-003** A player's `matches_count` is calculated transactionally from `duels` using `challenge_period_id`, participant, and the statuses in `CH-CAP-001`; it is not stored in `challenge_period_players`.
 - [x] **CH-CAP-004** `matches_limit` comes from `challenge_periods.max_matches_per_player` and is not duplicated in `challenge_period_players`.
-- [x] **CH-CAP-005** For each period, the player API returns the derived fields `matches_count`, `matches_limit`, `matches_remaining = max(0, matches_limit - matches_count)`, and `is_match_limit_reached`.
+- [x] **CH-CAP-005** For each period, the player API returns the derived fields `matches_count`, `matches_played_count`, `matches_limit`, `matches_remaining = max(0, matches_limit - matches_count)`, `is_match_limit_reached`, and `is_match_limit_played`.
 - [x] **CH-CAP-006** A player may create, receive through manual selection, or accept a request when their status is `available` or `not_selected` and `matches_count < matches_limit`; `unavailable` blocks these actions.
 - [x] **CH-CAP-007** Confirming a match increases the derived `matches_count` for both players without storing a separate cached counter.
 - [x] **CH-CAP-008** When a player reaches `matches_limit` after confirming a match, every other pending request involving that player becomes `auto_cancelled`; while the player remains below the limit, the other pending requests remain open.
@@ -216,6 +219,7 @@ Terminal statuses for re-invitation:
 - [x] **CH-OPP-007** In `All players`, the current player's row has no invite action; same-association and already-matched rows show a disabled invite action or a clear reason why they are unavailable.
 - [x] **CH-OPP-008** Switching the toggle works without reloading the page and does not change backend eligibility: a direct request to an unavailable opponent is still rejected.
 - [x] **CH-OPP-009** The API returns enough data for both views, including `is_current_player`, `is_same_association`, `has_rivals_match`, `matches_count`, `matches_limit`, and `is_match_limit_reached`, or equivalent separate collections.
+- [x] **CH-OPP-010** `Invite to match` is blue when a request can be created and both players have a free slot; when unavailable, it is transparent, remains clickable, and opens a popup explaining the blocking reason.
 
 ### 7.3. Public preview and Challenges access onboarding
 
@@ -271,6 +275,7 @@ Terminal statuses for re-invitation:
 - [ ] **CH-REQ-021** The request does not expire after passing a separate time option, if future options remain in it.
 - [ ] **CH-REQ-022** Pending request goes to `expired` after last suggested time.
 - [ ] **CH-REQ-023** Expiration is performed automatically and idempotently.
+- [x] **CH-REQ-024** `Create request` is blue while the player has a free match slot and may create a request; after reaching the match or pending-request limit, or with `unavailable` status, it is transparent, remains clickable, and shows a popup with the specific reason.
 
 ## 9. Review of requests
 
