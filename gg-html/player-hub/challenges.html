@@ -1351,6 +1351,20 @@
     font-weight: 400;
   }
 
+  .challenge-request-comment {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .challenge-request-comment-text {
+    min-width: 0;
+    color: #344054;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
   .challenge-request-time-list {
     display: flex;
     flex-wrap: wrap;
@@ -1630,6 +1644,13 @@
 
   .challenge-request-row select {
     background: #fff;
+  }
+
+  .challenge-request-row textarea.challenge-request-comment-input {
+    height: auto;
+    min-height: 68px;
+    line-height: 1.4;
+    resize: vertical;
   }
 
   .challenge-admin-match-dialog {
@@ -2642,6 +2663,7 @@
 
     .challenge-request-row input:not([type="checkbox"]),
     .challenge-request-row select,
+    .challenge-request-row textarea,
     .cp-dd-search input {
       font-size: 16px;
     }
@@ -3490,6 +3512,23 @@
       }
       row.appendChild(group);
     });
+    return row;
+  }
+
+  function createRequestComment(request) {
+    const comment = String(request?.comment || "").trim();
+    if (!comment) return null;
+
+    const row = document.createElement("div");
+    row.className = "challenge-request-comment";
+    const label = document.createElement("span");
+    label.className = "challenge-request-meta-label";
+    label.textContent = "Comment:";
+    const text = document.createElement("span");
+    text.className = "challenge-request-comment-text";
+    text.textContent = comment;
+    row.appendChild(label);
+    row.appendChild(text);
     return row;
   }
 
@@ -5751,6 +5790,11 @@
       });
       addChallengeFormRow(form, "Format", formatWrap, { required: true });
 
+      const commentInput = document.createElement("textarea");
+      commentInput.className = "challenge-request-comment-input";
+      commentInput.rows = 3;
+      addChallengeFormRow(form, "Comment", commentInput);
+
       const message = document.createElement("div");
       message.className = "challenge-request-message";
       form.appendChild(message);
@@ -5790,6 +5834,7 @@
         });
         bo3Input.disabled = !!isSaving;
         bo5Input.disabled = !!isSaving;
+        commentInput.disabled = !!isSaving;
       };
 
       cancelBtn.addEventListener("click", closeModal);
@@ -5835,6 +5880,7 @@
               time_option_3_utc: timeOptionValues[2] || null,
               allows_bo3: bo3Input.checked,
               allows_bo5: bo5Input.checked,
+              comment: String(commentInput.value || "").trim() || null,
             }),
           });
           notifyChallengeProgress("request_created");
@@ -6095,6 +6141,14 @@
     });
     addChallengeFormRow(form, "Format", formatWrap, { required: true });
 
+    const isCounterProposal = (options.action || "counter") === "counter";
+    const commentInput = isCounterProposal ? document.createElement("textarea") : null;
+    if (commentInput) {
+      commentInput.className = "challenge-request-comment-input";
+      commentInput.rows = 3;
+      addChallengeFormRow(form, "Comment", commentInput);
+    }
+
     const message = document.createElement("div");
     message.className = "challenge-request-message";
     form.appendChild(message);
@@ -6133,6 +6187,7 @@
       });
       bo3Input.disabled = !!isSaving;
       bo5Input.disabled = !!isSaving;
+      if (commentInput) commentInput.disabled = !!isSaving;
     };
 
     cancelBtn.addEventListener("click", closeModal);
@@ -6173,6 +6228,7 @@
               time_option_3_utc: timeOptionValues[2] || null,
               allows_bo3: bo3Input.checked,
               allows_bo5: bo5Input.checked,
+              ...(commentInput ? { comment: String(commentInput.value || "").trim() || null } : {}),
             }),
           }
         );
@@ -6471,7 +6527,8 @@
       item.eligibility = data?.eligibility || {};
       item.opponentsByView = {
         available: enrichOpponents(
-          Array.isArray(data?.available_opponents) ? data.available_opponents : []
+          (Array.isArray(data?.available_opponents) ? data.available_opponents : [])
+            .filter((opponent) => !opponent?.pending_request_id)
         ),
         all: enrichOpponents(Array.isArray(data?.all_players) ? data.all_players : []),
       };
@@ -6642,6 +6699,8 @@
     const meta = document.createElement("div");
     meta.className = "challenge-request-meta";
     meta.appendChild(createRequestOptionsRow(request, timezone, timeFlagSrc));
+    const comment = createRequestComment(request);
+    if (comment) meta.appendChild(comment);
     card.appendChild(meta);
 
     if (adminView) return card;

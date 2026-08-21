@@ -5080,6 +5080,7 @@ function ensureChallengesSchema() {
       time_option_3_utc TEXT,
       allows_bo3 INTEGER NOT NULL DEFAULT 0,
       allows_bo5 INTEGER NOT NULL DEFAULT 0,
+      comment TEXT,
       accepted_time_utc TEXT,
       accepted_format TEXT,
       hidden_by_creator_at TEXT,
@@ -5138,6 +5139,7 @@ function ensureChallengesSchema() {
         return;
       }
       addColumnIfMissing(columns || [], "challenge_requests", "hidden_by_creator_at", "TEXT");
+      addColumnIfMissing(columns || [], "challenge_requests", "comment", "TEXT");
     });
     db.run(
       `
@@ -9123,6 +9125,7 @@ function mapChallengeRequest(row) {
     time_option_3_utc: row.time_option_3_utc,
     allows_bo3: Number(row.allows_bo3) === 1,
     allows_bo5: Number(row.allows_bo5) === 1,
+    comment: row.comment || null,
     accepted_time_utc: row.accepted_time_utc || null,
     accepted_format: row.accepted_format || null,
     hidden_by_creator_at: row.hidden_by_creator_at || null,
@@ -9585,7 +9588,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         if (pendingRequestId) blockedCounts.pending_request += 1;
         if (canListOpponents && !capacity.is_match_limit_reached) {
           allPlayers.push(mappedOpponent);
-          if (!playerId || (!isCurrentPlayer && !isSameAssociation && !hasRivalsMatch)) {
+          if (!playerId || (!isCurrentPlayer && !isSameAssociation && !hasRivalsMatch && !pendingRequestId)) {
             availableOpponents.push(mappedOpponent);
           }
         }
@@ -9633,6 +9636,7 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
   const requestedId = normalizeNullableText(req.body?.id);
   const { options: timeOptions, error: timeOptionsError } = normalizeChallengeRequestTimeOptions(req.body || {});
   const formatPayload = normalizeChallengeRequestFormatPayload(req.body || {});
+  const comment = normalizeNullableText(req.body?.comment);
 
   if (!player1Id) {
     return res.status(403).json({
@@ -9779,10 +9783,11 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
             time_option_3_utc,
             allows_bo3,
             allows_bo5,
+            comment,
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [
           requestId,
@@ -9796,6 +9801,7 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
           timeOptions[2] || null,
           formatPayload.allows_bo3,
           formatPayload.allows_bo5,
+          comment,
         ]
       );
       insertedRow = await dbGetAsync("SELECT * FROM challenge_requests WHERE id = ? LIMIT 1", [requestId]);
@@ -9981,6 +9987,7 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
           cr.time_option_3_utc,
           cr.allows_bo3,
           cr.allows_bo5,
+          cr.comment,
           cr.accepted_time_utc,
           cr.accepted_format,
           cr.hidden_by_creator_at,
@@ -10910,6 +10917,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/counter", requireAuthentic
   const playerId = normalizeNullableText(req.user?.player_id);
   const { options: timeOptions, error: timeOptionsError } = normalizeChallengeRequestTimeOptions(req.body || {});
   const formatPayload = normalizeChallengeRequestFormatPayload(req.body || {});
+  const comment = normalizeNullableText(req.body?.comment);
 
   if (!playerId) return res.status(403).json({ ok: false, code: "profile_required", message: "Linked player profile is required" });
   if (!periodId || !requestId) return res.status(400).json({ ok: false, message: "Invalid Challenge request id" });
@@ -10951,6 +10959,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/counter", requireAuthentic
           time_option_3_utc = ?,
           allows_bo3 = ?,
           allows_bo5 = ?,
+          comment = ?,
           accepted_time_utc = NULL,
           accepted_format = NULL,
           updated_at = CURRENT_TIMESTAMP
@@ -10965,6 +10974,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/counter", requireAuthentic
         timeOptions[2] || null,
         formatPayload.allows_bo3,
         formatPayload.allows_bo5,
+        comment,
         periodId,
         requestId,
       ]

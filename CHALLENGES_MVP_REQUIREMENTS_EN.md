@@ -584,6 +584,7 @@ One entry stores the bid or current counteroffer between two players.
 | `time_option_3_utc` | `TEXT` |yes| `NULL` |The third suggested time is in UTC.|
 | `allows_bo3` | `INTEGER` |no| `0` |Is the Bo3 format available?|
 | `allows_bo5` | `INTEGER` |no| `0` |Is Bo5 format available.|
+| `comment` | `TEXT` |yes| `NULL` |Player comment for the current proposal; replaced by a counteroffer.|
 | `accepted_time_utc` | `TEXT` |yes| `NULL` |Selected or actual time after acceptance.|
 | `accepted_format` | `TEXT` |yes| `NULL` |Agreed format: `Bo3` or `Bo5`.|
 | `hidden_by_creator_at` | `TEXT` |yes| `NULL` |Hides the terminal request from the author list without physical deletion.|
