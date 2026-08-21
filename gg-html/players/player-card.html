@@ -1129,6 +1129,10 @@
     return sourceType === "challenge" || tournamentId === "Challenges" || tournamentId.startsWith("challenge:");
   }
 
+  function isCancelledDuel(duel) {
+    return String(duel?.status || "").trim().toLowerCase() === "cancelled";
+  }
+
   function getBaseDateTimestamp(baseDateRaw) {
     const raw = String(baseDateRaw || "").trim();
     if (!raw) return null;
@@ -1161,13 +1165,13 @@
   }
 
   function buildMergedOfficialData(jsonData, dbPayload) {
-    const jsonDuels = Array.isArray(jsonData?.duels) ? jsonData.duels : [];
+    const jsonDuels = Array.isArray(jsonData?.duels) ? jsonData.duels.filter((duel) => !isCancelledDuel(duel)) : [];
     const jsonMatches = Array.isArray(jsonData?.matches) ? jsonData.matches : [];
     const jsonTournaments = Array.isArray(jsonData?.tournaments)
       ? jsonData.tournaments
       : (Array.isArray(jsonData?.tournaments_list) ? jsonData.tournaments_list : []);
     const dbDuels = Array.isArray(dbPayload?.duels)
-      ? dbPayload.duels.map((duel) => {
+      ? dbPayload.duels.filter((duel) => !isCancelledDuel(duel)).map((duel) => {
           if (!isChallengeDuel(duel)) return duel;
           return {
             ...duel,

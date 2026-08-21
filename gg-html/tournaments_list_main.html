@@ -193,7 +193,7 @@
       const data = await res.json();
       const allowedStatuses = ["Planned", "In progress", "Done"];
       const tournaments = data.tournaments.filter(t =>
-        t.type === "COC"
+        (t.type === "COC" || (t.type === "TEAM" && String(t.country || "").trim() !== ""))
         && allowedStatuses.includes(t.status)
         && String(t.hidden).toLowerCase() !== "yes"
       );

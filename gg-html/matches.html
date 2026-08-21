@@ -489,30 +489,61 @@ code {
   }
 
   .challenge-match-card__vs {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-rows: auto minmax(12px, 1fr) auto minmax(12px, 1fr);
+    justify-items: center;
     align-self: stretch;
     color: #8b1e2d;
     font-size: 18px;
     font-weight: 700;
   }
 
+  .challenge-match-card__vs-content {
+    grid-row: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .challenge-match-card__format {
+    grid-row: 1;
+  }
+
+  .challenge-match-format-badge {
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    line-height: 12px;
+    font-weight: 600;
+  }
+
+  .challenge-match-format-badge.bo1 {
+    background-color: #eee;
+    color: #333;
+  }
+
+  .challenge-match-format-badge.bo3 {
+    background-color: #d7eaff;
+    color: #073654;
+  }
+
+  .challenge-match-format-badge.bo5 {
+    background-color: #fce0e0;
+    color: #590f0f;
+  }
+
   .challenge-match-card__vs::before,
   .challenge-match-card__vs::after {
     content: "";
     width: 1px;
-    height: 34%;
-    position: absolute;
-    left: 50%;
+    height: auto;
+    align-self: stretch;
+    margin: 6px 0;
     background: #d8dee8;
   }
 
-  .challenge-match-card__vs::before { top: 7%; }
-  .challenge-match-card__vs::after { bottom: 7%; }
-
-  .challenge-match-card__vs {
-    position: relative;
-  }
+  .challenge-match-card__vs::before { grid-row: 2; }
+  .challenge-match-card__vs::after { grid-row: 4; }
 
   @media (max-width: 600px) {
     .challenge-match-modal {
@@ -542,17 +573,32 @@ code {
     .challenge-match-card__vs {
       width: 100%;
       align-self: auto;
-      justify-content: center;
-      gap: 12px;
+      grid-template-columns: 1fr auto 1fr;
+      grid-template-rows: auto auto;
+      column-gap: 12px;
+      row-gap: 6px;
+    }
+
+    .challenge-match-card__format {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .challenge-match-card__vs-content {
+      grid-column: 2;
+      grid-row: 2;
     }
 
     .challenge-match-card__vs::before,
     .challenge-match-card__vs::after {
       width: auto;
       height: 1px;
-      position: static;
-      flex: 1;
+      align-self: center;
+      margin: 0;
     }
+
+    .challenge-match-card__vs::before { grid-column: 1; grid-row: 2; }
+    .challenge-match-card__vs::after { grid-column: 3; grid-row: 2; }
   }
 
   .match-time {
@@ -1429,6 +1475,17 @@ function createRatingElement(rating, { isGgRating = false } = {}) {
   return wrap;
 }
 
+function createMatchFormatBadge(formatValue, badgeClass = "match-format-badge") {
+  const rawFormat = typeof formatValue === "string" ? formatValue.trim() : "";
+  const formatKey = rawFormat.toLowerCase();
+  if (!rawFormat || !["bo1", "bo3", "bo5"].includes(formatKey)) return null;
+
+  const badge = document.createElement("div");
+  badge.className = `${badgeClass} ${formatKey}`;
+  badge.textContent = rawFormat;
+  return badge;
+}
+
 function createRatingTooltipLegendRow({ label, type }) {
   const row = document.createElement("div");
   row.className = "rating-tooltip__legend-row";
@@ -1777,7 +1834,17 @@ function openChallengeMatchModal(match, returnFocus) {
   matchCard.appendChild(createChallengePlayerCard(match?.player1Details || {}, "left"));
   const vs = document.createElement("div");
   vs.className = "challenge-match-card__vs";
-  vs.textContent = "VS";
+  const vsContent = document.createElement("div");
+  vsContent.className = "challenge-match-card__vs-content";
+  const formatBadge = createMatchFormatBadge(match?.format, "challenge-match-format-badge");
+  if (formatBadge) {
+    formatBadge.classList.add("challenge-match-card__format");
+    vs.appendChild(formatBadge);
+  }
+  const vsLabel = document.createElement("span");
+  vsLabel.textContent = "VS";
+  vsContent.appendChild(vsLabel);
+  vs.appendChild(vsContent);
   matchCard.appendChild(vs);
   matchCard.appendChild(createChallengePlayerCard(match?.player2Details || {}, "right"));
   const matchResult = createChallengeMatchResult(match);
@@ -2122,15 +2189,11 @@ function createDuelElement(match, options = {}) {
   timeTextEl.textContent = timeLabel;
   timeDiv.appendChild(timeTextEl);
 
-  if (isToday || match.source_type === "challenge") {
-    const rawFormat = typeof match.format === "string" ? match.format.trim() : "";
-    const formatKey = rawFormat.toLowerCase();
-    if (rawFormat && ["bo1", "bo3", "bo5"].includes(formatKey)) {
-      const badge = document.createElement("div");
-      badge.className = `match-format-badge ${formatKey}`;
-      badge.textContent = rawFormat;
-      timeDiv.appendChild(badge);
-    }
+  const formatBadge = createMatchFormatBadge(match.format);
+  const isUpcomingChallengeBo5 = match.source_type === "challenge"
+    && String(match.format || "").trim().toLowerCase() === "bo5";
+  if (formatBadge && (isToday || isUpcomingChallengeBo5)) {
+    timeDiv.appendChild(formatBadge);
   }
   const newsLink = createMatchNewsLink(match);
   if (newsLink) timeDiv.appendChild(newsLink);

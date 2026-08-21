@@ -19616,6 +19616,7 @@ app.get("/public/player-official-duels", async (req, res, next) => {
         LEFT JOIN challenge_periods cp
           ON trim(COALESCE(cp.id, '')) = trim(COALESCE(d.challenge_period_id, ''))
         WHERE d.deleted_at IS NULL
+          AND lower(trim(COALESCE(d.status, ''))) <> 'cancelled'
           AND COALESCE(d.ranking, 1) = 1
           AND trim(COALESCE(d.time_utc, '')) <> ''
           AND datetime(d.time_utc) IS NOT NULL
