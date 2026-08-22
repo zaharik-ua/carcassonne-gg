@@ -209,6 +209,20 @@ class SqliteProfileGgEloRepository:
                         for item in duel_rating_updates
                     ],
                 )
+                setting_cursor = conn.execute(
+                    """
+                    UPDATE system_settings
+                    SET
+                      setting_value = strftime('%Y-%m-%d', 'now'),
+                      updated_by = NULL,
+                      updated_at = CURRENT_TIMESTAMP
+                    WHERE setting_key = 'gg_rating_last_update_date'
+                    """
+                )
+                if int(setting_cursor.rowcount or 0) != 1:
+                    raise RuntimeError(
+                        "system_settings.gg_rating_last_update_date must exist before recalculating GG Elo"
+                    )
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -249,7 +263,12 @@ class SqliteProfileGgEloRepository:
                 "status",
                 "deleted_at",
             }
-            required_settings_columns = {"setting_key", "setting_value"}
+            required_settings_columns = {
+                "setting_key",
+                "setting_value",
+                "updated_by",
+                "updated_at",
+            }
             missing_columns = {
                 "profiles": sorted(required_profile_columns - profile_columns),
                 "duels": sorted(required_duel_columns - duel_columns),

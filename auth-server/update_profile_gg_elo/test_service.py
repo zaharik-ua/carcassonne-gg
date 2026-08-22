@@ -42,13 +42,16 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
                 );
                 CREATE TABLE system_settings (
                   setting_key TEXT PRIMARY KEY,
-                  setting_value TEXT
+                  setting_value TEXT,
+                  updated_by TEXT,
+                  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
 
                 INSERT INTO system_settings (setting_key, setting_value)
                 VALUES
                   ('gg_rating_base_date', '2026-01-01'),
-                  ('gg_rating_delta_start_date', '2026-02-01');
+                  ('gg_rating_delta_start_date', '2026-02-01'),
+                  ('gg_rating_last_update_date', NULL);
 
                 INSERT INTO profiles (id, status, deleted_at, gg_base_elo)
                 VALUES
@@ -188,6 +191,23 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
         self.assertIsNone(duels_by_id["not-done-with-score"][1])
         self.assertIsNone(duels_by_id["unknown-player"][1])
 
+        with sqlite3.connect(self.db_path) as conn:
+            last_update_row = conn.execute(
+                """
+                SELECT
+                  setting_value,
+                  updated_by,
+                  updated_at,
+                  setting_value = strftime('%Y-%m-%d', 'now')
+                FROM system_settings
+                WHERE setting_key = 'gg_rating_last_update_date'
+                """
+            ).fetchone()
+        self.assertIsNotNone(last_update_row)
+        self.assertTrue(last_update_row[3])
+        self.assertIsNone(last_update_row[1])
+        self.assertIsNotNone(last_update_row[2])
+
     def test_dry_run_does_not_update_profiles(self) -> None:
         repository = SqliteProfileGgEloRepository(str(self.db_path))
         service = ProfileGgEloUpdateService(repository=repository)
@@ -206,7 +226,15 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
                    OR (id = '200' AND gg_base_elo IS NOT NULL)
                 """
             ).fetchone()[0]
+            last_update_date = conn.execute(
+                """
+                SELECT setting_value
+                FROM system_settings
+                WHERE setting_key = 'gg_rating_last_update_date'
+                """
+            ).fetchone()[0]
         self.assertEqual(count, 0)
+        self.assertIsNone(last_update_date)
 
 
 if __name__ == "__main__":

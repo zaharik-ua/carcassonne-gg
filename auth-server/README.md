@@ -221,6 +221,9 @@ shell-обгортка:
 Скрипт читає `gg_rating_base_date` і `gg_rating_delta_start_date` з
 `system_settings`, послідовно обробляє рейтингові дуелі після базової дати та
 оновлює GG Elo, period delta, позиції активних гравців і Elo snapshots дуелей.
+Після успішного реального перерахунку він записує поточну UTC-дату в
+`gg_rating_last_update_date`; цю дату також можна змінити вручну в
+`Admin` → `System Settings`. Dry-run і `Check Duels` дату не змінюють.
 У dry-run summary є два зрізи `duel_statistics`: від базової дати та від дати
 початку delta, згруповані за `tournament_id` або `challenge_period_id`.
 

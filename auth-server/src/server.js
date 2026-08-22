@@ -405,6 +405,14 @@ const SYSTEM_SETTING_DEFINITIONS = [
     default_value: null,
     sort_order: 20,
   },
+  {
+    key: "gg_rating_last_update_date",
+    label: "GG rating last update date",
+    description: "Date when GG ratings were last recalculated. Can also be set manually.",
+    value_type: "date",
+    default_value: null,
+    sort_order: 30,
+  },
 ];
 const SYSTEM_SETTING_KEYS = new Set(SYSTEM_SETTING_DEFINITIONS.map((setting) => setting.key));
 const PROFILE_GG_ELO_SCRIPT_ID = "profile-gg-elo";
