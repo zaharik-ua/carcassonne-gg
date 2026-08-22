@@ -103,6 +103,7 @@ class SqliteProfileGgEloRepository:
                 FROM duels
                 WHERE deleted_at IS NULL
                   AND COALESCE(ranking, 0) = 1
+                  AND trim(COALESCE(status, '')) = 'Done'
                   AND trim(COALESCE(id, '')) <> ''
                   AND trim(COALESCE(time_utc, '')) <> ''
                   AND trim(COALESCE(player_1_id, '')) <> ''
@@ -245,6 +246,7 @@ class SqliteProfileGgEloRepository:
                 "tournament_id",
                 "challenge_period_id",
                 "ranking",
+                "status",
                 "deleted_at",
             }
             required_settings_columns = {"setting_key", "setting_value"}

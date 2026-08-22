@@ -510,10 +510,11 @@ code {
   }
 
   .challenge-match-format-badge {
-    padding: 4px 6px;
+    display: inline-flex;
+    padding: 3px 7px;
     border-radius: 3px;
     font-size: 12px;
-    line-height: 12px;
+    line-height: 1.2;
     font-weight: 600;
   }
 
@@ -1446,6 +1447,7 @@ function normalizeBadgeColor(value) {
 function createRatingElement(rating, { isGgRating = false } = {}) {
   const rNum = (rating === null || rating === undefined || rating === "") ? null : parseInt(rating, 10);
   if (!Number.isInteger(rNum)) return null;
+  if (isGgRating && rNum === 0) return null;
 
   const wrap = document.createElement("div");
   wrap.className = "match-rating"

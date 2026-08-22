@@ -37,6 +37,7 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
                   dw2 INTEGER,
                   duel_format TEXT,
                   ranking INTEGER,
+                  status TEXT,
                   deleted_at TEXT
                 );
                 CREATE TABLE system_settings (
@@ -68,15 +69,17 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
                   dw2,
                   duel_format,
                   ranking,
+                  status,
                   deleted_at
                 )
                 VALUES
-                  ('before-base', 'Asian-Cup-2026', NULL, '2025-12-31T23:59:59Z', '100', '200', 1, 0, 'Bo1', 1, NULL),
-                  ('before-delta', 'Asian-Cup-2026', NULL, '2026-01-10T10:00:00Z', '100', '200', 1, 0, 'Bo1', 1, NULL),
-                  ('after-delta', NULL, '2026_summer_challenge_3', '2026-02-10T10:00:00Z', '200', '100', 1, 0, 'Bo1', 1, NULL),
-                  ('ranking-zero', 'Asian-Cup-2026', NULL, '2026-02-10T11:00:00Z', '100', '200', 1, 0, 'Bo1', 0, NULL),
-                  ('unknown-player', 'Asian-Cup-2026', NULL, '2026-02-11T10:00:00Z', '100', '999', 1, 0, 'Bo1', 1, NULL),
-                  ('deleted-duel', 'Asian-Cup-2026', NULL, '2026-02-12T10:00:00Z', '100', '200', 1, 0, 'Bo1', 1, '2026-02-12');
+                  ('before-base', 'Asian-Cup-2026', NULL, '2025-12-31T23:59:59Z', '100', '200', 1, 0, 'Bo1', 1, 'Done', NULL),
+                  ('before-delta', 'Asian-Cup-2026', NULL, '2026-01-10T10:00:00Z', '100', '200', 1, 0, 'Bo1', 1, 'Done', NULL),
+                  ('after-delta', NULL, '2026_summer_challenge_3', '2026-02-10T10:00:00Z', '200', '100', 1, 0, 'Bo1', 1, 'Done', NULL),
+                  ('ranking-zero', 'Asian-Cup-2026', NULL, '2026-02-10T11:00:00Z', '100', '200', 1, 0, 'Bo1', 0, 'Done', NULL),
+                  ('not-done-with-score', 'Asian-Cup-2026', NULL, '2026-02-10T12:00:00Z', '100', '200', 1, 0, 'Bo1', 1, 'Planned', NULL),
+                  ('unknown-player', 'Asian-Cup-2026', NULL, '2026-02-11T10:00:00Z', '100', '999', 1, 0, 'Bo1', 1, 'Done', NULL),
+                  ('deleted-duel', 'Asian-Cup-2026', NULL, '2026-02-12T10:00:00Z', '100', '200', 1, 0, 'Bo1', 1, 'Done', '2026-02-12');
                 """
             )
 
@@ -182,6 +185,7 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
         self.assertAlmostEqual(duels_by_id["after-delta"][4], 1590.08, places=2)
 
         self.assertIsNone(duels_by_id["ranking-zero"][1])
+        self.assertIsNone(duels_by_id["not-done-with-score"][1])
         self.assertIsNone(duels_by_id["unknown-player"][1])
 
     def test_dry_run_does_not_update_profiles(self) -> None:

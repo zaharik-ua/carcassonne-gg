@@ -36,10 +36,11 @@
     align-items: center;
     width: 100%;
     padding: 12px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--card);
-    color: var(--text);
+    border: 1.5px solid #fff;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #f4ded8 0%, #fff4f0 100%);
+    box-shadow: 0 4px 14px rgba(102, 50, 42, 0.08);
+    color: #000;
     box-sizing: border-box;
   }
 
@@ -66,6 +67,11 @@
   .challenges-list {
     display: grid;
     gap: 30px;
+  }
+
+  .challenge-period-overview {
+    display: grid;
+    gap: 8px;
   }
 
   .challenge-admin-controls {
@@ -150,7 +156,7 @@
   }
 
   .challenge-period-title {
-    color: #172232;
+    color: #000;
     font-size: 18px;
     font-weight: 700;
     line-height: 1.2;
@@ -172,7 +178,7 @@
     padding: 3px 8px;
     border: 1px solid #cfe1f3;
     border-radius: 4px;
-    background: #edf6ff;
+    background: transparent;
     color: #155d95;
     font-size: 11px;
     font-weight: 700;
@@ -180,10 +186,23 @@
     white-space: nowrap;
   }
 
+  .challenge-period-badge.is-active {
+    border-color: #7cc9a1;
+    background: #f3faf6;
+    color: #167044;
+  }
+
+  .challenge-period-badge.is-planning-open {
+    border-color: #5f82a3;
+    background: #f2f7fb;
+    color: #155d95;
+  }
+
+  .challenge-period-badge.is-result-review,
   .challenge-period-badge.is-closed {
-    border-color: #f0b8c1;
-    background: var(--red-soft);
-    color: var(--red);
+    border-color: #b86a75;
+    background: #fff4f5;
+    color: #7f1d2d;
   }
 
   .challenge-period-toggle {
@@ -197,7 +216,7 @@
     border: 1px solid #d5dbe4;
     border-radius: 4px;
     background: #fff;
-    color: #475467;
+    color: #000;
     padding: 0;
     cursor: pointer;
   }
@@ -209,7 +228,7 @@
   .challenge-period-toggle:hover,
   .challenge-period-toggle:focus-visible {
     border-color: #9ea7b3;
-    color: #172232;
+    color: #000;
   }
 
   .challenge-period-toggle-icon {
@@ -226,7 +245,7 @@
   }
 
   .challenge-period-description {
-    color: #334155;
+    color: #000;
     font-size: 13px;
     line-height: 1.45;
   }
@@ -235,13 +254,13 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px 14px;
-    color: var(--muted);
+    color: #000;
     font-size: 12px;
     line-height: 1.35;
   }
 
   .challenge-period-meta b {
-    color: #475467;
+    color: #000;
     font-weight: 700;
   }
 
@@ -251,7 +270,7 @@
     gap: 9px;
     padding: 10px 12px;
     border: 1px solid #9dd7b9;
-    border-radius: 6px;
+    border-radius: 4px;
     background: var(--green-soft);
     color: #12633e;
     font-size: 13px;
@@ -279,6 +298,70 @@
     font-weight: 700;
   }
 
+  .challenge-period-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .challenge-period-navigation-badge {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 27px;
+    padding: 4px 9px 4px 6px;
+    border: 1px solid #cfe1f3;
+    border-radius: 4px;
+    background: #fff;
+    color: #155d95;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .challenge-period-navigation-badge.is-active {
+    border-color: #7cc9a1;
+    color: #167044;
+  }
+
+  .challenge-period-navigation-badge.is-planning-open {
+    border-color: #8fbce4;
+  }
+
+  .challenge-period-navigation-badge.is-result-review {
+    border-color: #b86a75;
+    color: #7f1d2d;
+  }
+
+  .challenge-period-navigation-badge:hover,
+  .challenge-period-navigation-badge:focus-visible {
+    background: #f3f8fd;
+    box-shadow: 0 1px 4px rgba(15, 28, 48, 0.12);
+  }
+
+  .challenge-period-navigation-badge.is-active:hover,
+  .challenge-period-navigation-badge.is-active:focus-visible {
+    background: #f1faf5;
+  }
+
+  .challenge-period-navigation-badge.is-result-review:hover,
+  .challenge-period-navigation-badge.is-result-review:focus-visible {
+    background: #fff5f6;
+  }
+
+  .challenge-period-navigation-logo {
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    object-fit: cover;
+    flex: 0 0 auto;
+  }
+
   .challenge-time-context {
     display: inline-flex;
     align-items: center;
@@ -299,7 +382,7 @@
   }
 
   .challenge-status-label {
-    color: #333;
+    color: #000;
     font-size: 12px;
     font-weight: 700;
     line-height: 1.25;
@@ -320,7 +403,7 @@
     border: 1px solid #c8ced8;
     border-radius: 4px;
     background: #fff;
-    color: #2f3947;
+    color: #000;
     padding: 6px 8px;
     display: inline-flex;
     align-items: center;
@@ -357,13 +440,13 @@
   .challenge-status-btn.is-scheduled {
     border-color: #a9cce7;
     background: #eef6fc;
-    color: var(--blue);
+    color: #000;
   }
 
   .challenge-status-btn.is-played {
     border-color: #9dd7b9;
     background: var(--green-soft);
-    color: #12633e;
+    color: #000;
   }
 
   .challenge-status-btn.disabled {
@@ -427,7 +510,7 @@
     min-height: 34px;
     padding: 7px 9px;
     border-top: 1px solid #edf1f6;
-    color: #2f3947;
+    color: #000;
     cursor: pointer;
     font-size: 13px;
     font-weight: 600;
@@ -447,18 +530,22 @@
     background: #e4f0fb;
   }
 
+  .challenge-status-option.is-not_selected {
+    color: #7a8492;
+  }
+
   .challenge-status-option.is-available.active {
     background: var(--green-soft);
-    color: #12633e;
+    color: #000;
   }
 
   .challenge-status-option.is-unavailable.active {
     background: var(--red-soft);
-    color: var(--red);
+    color: #000;
   }
 
   .challenge-status-note {
-    color: var(--muted);
+    color: #000;
     font-size: 11px;
     line-height: 1.35;
   }
@@ -823,29 +910,13 @@
     position: relative;
     display: grid;
     gap: 8px;
-  }
-
-  .challenge-period-stack + .challenge-period-stack::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: -17px;
-    height: 5px;
-    background: linear-gradient(
-      to bottom,
-      #fff 0,
-      #fff 2px,
-      transparent 2px,
-      transparent 3px,
-      #fff 3px,
-      #fff 5px
-    );
+    scroll-margin-top: 58px;
   }
 
   .challenge-panel-wrap {
     display: grid;
-    gap: 5px;
+    gap: 0;
+    width: 98%;
   }
 
   .challenge-panel-wrap[hidden] {
@@ -857,7 +928,7 @@
     gap: 9px;
     padding: 10px 12px;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 4px;
     background: #fff;
   }
 
@@ -868,6 +939,59 @@
     flex-wrap: wrap;
     gap: 10px;
     min-width: 0;
+    transition: gap 0.3s ease;
+  }
+
+  .challenge-panel-wrap.is-section-collapsed .challenge-opponents-head {
+    gap: 0;
+  }
+
+  .challenge-section-heading {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .challenge-section-toggle {
+    appearance: none;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    border: 1px solid #c9d5e2;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #fff 0%, #f3f7fb 100%);
+    box-shadow: 0 1px 2px rgba(15, 28, 48, 0.08);
+    color: #2f6f9f;
+    padding: 0;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+  }
+
+  .challenge-section-toggle:hover,
+  .challenge-section-toggle:focus-visible {
+    border-color: #88abc8;
+    background: #edf5fb;
+    box-shadow: 0 2px 5px rgba(26, 115, 183, 0.14);
+    color: var(--blue);
+    outline: none;
+  }
+
+  .challenge-section-toggle:focus-visible {
+    outline: 2px solid rgba(26, 115, 183, 0.24);
+    outline-offset: 2px;
+  }
+
+  .challenge-section-toggle-icon {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.3s ease;
+  }
+
+  .challenge-section-toggle[aria-expanded="true"] .challenge-section-toggle-icon {
+    transform: rotate(180deg);
   }
 
   .challenge-opponents-title {
@@ -889,7 +1013,48 @@
     justify-content: flex-end;
     gap: 10px;
     min-width: 0;
+    max-height: 40px;
     margin-left: auto;
+    overflow: hidden;
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+    transition: max-height 0.3s ease, opacity 0.2s ease, transform 0.3s ease, visibility 0s linear 0s;
+  }
+
+  .challenge-panel-wrap.is-section-collapsed .challenge-opponents-head-controls {
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    visibility: hidden;
+    transition: max-height 0.3s ease, opacity 0.2s ease, transform 0.3s ease, visibility 0s linear 0.3s;
+  }
+
+  .challenge-section-collapsible {
+    height: auto;
+    overflow: hidden;
+    opacity: 1;
+    transition: height 0.3s ease, opacity 0.25s ease;
+  }
+
+  .challenge-section-collapsible-inner {
+    padding-top: 5px;
+  }
+
+  .challenge-panel-wrap.is-section-collapsed .challenge-section-collapsible {
+    height: 0;
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .challenge-opponents-head,
+    .challenge-section-toggle,
+    .challenge-section-toggle-icon,
+    .challenge-opponents-head-controls,
+    .challenge-section-collapsible {
+      transition: none;
+    }
   }
 
   .challenge-opponents-view-toggle {
@@ -897,18 +1062,18 @@
     align-items: center;
     padding: 2px;
     border: 1px solid #d7dde6;
-    border-radius: 6px;
+    border-radius: 3px;
     background: #f4f6f8;
   }
 
   .challenge-opponents-view-option {
     appearance: none;
-    min-height: 28px;
+    min-height: 22px;
     border: 0;
-    border-radius: 4px;
+    border-radius: 2px;
     background: transparent;
     color: #667085;
-    padding: 5px 9px;
+    padding: 3px 9px;
     font: inherit;
     font-size: 12px;
     font-weight: 600;
@@ -938,7 +1103,7 @@
     gap: 12px;
     padding: 10px 12px;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 4px;
     background: #fff;
   }
 
@@ -1545,38 +1710,6 @@
     font-weight: 500;
   }
 
-  .challenge-opponent-action {
-    appearance: none;
-    border: 1px solid #c8ced8;
-    border-radius: 4px;
-    background: transparent;
-    color: #667085;
-    padding: 7px 10px;
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1.2;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  .challenge-opponent-action.is-primary {
-    border-color: var(--blue);
-    background: var(--blue);
-    color: #fff;
-  }
-
-  .challenge-opponent-action.is-primary:hover,
-  .challenge-opponent-action.is-primary:focus-visible {
-    border-color: var(--blue-hover);
-    background: var(--blue-hover);
-  }
-
-  .challenge-opponent-action.is-blocked:hover,
-  .challenge-opponent-action.is-blocked:focus-visible {
-    border-color: #9ea7b3;
-    color: #2f3947;
-  }
-
   .challenge-modal-overlay {
     position: fixed;
     inset: 44px 0 0;
@@ -2085,10 +2218,10 @@
     appearance: none;
     min-height: 23px;
     border: 1px solid #c8ced8;
-    border-radius: 4px;
+    border-radius: 2px;
     padding: 3px 8px;
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 600;
     line-height: 1.2;
     cursor: pointer;
   }
@@ -2108,6 +2241,10 @@
   .challenge-btn-secondary {
     background: #fff;
     color: #2f3947;
+  }
+
+  .challenge-period-band .challenge-availability-btn {
+    color: #000;
   }
 
   .challenge-btn-unavailable {
@@ -2590,7 +2727,7 @@
       padding-left: 58px;
     }
 
-    .challenge-opponent-action {
+    .challenge-opponent-row > .challenge-btn {
       grid-column: 2;
       grid-row: 1 / span 2;
       align-self: center;
@@ -2612,6 +2749,45 @@
       width: 100%;
       margin-left: 0;
       flex-wrap: wrap;
+    }
+
+    .challenge-duel-row.is-played {
+      display: grid;
+      grid-template-columns: 45px 2px minmax(0, 1fr) 13px;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .challenge-duel-row.is-played .challenge-duel-time {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .challenge-duel-row.is-played .challenge-duel-divider {
+      grid-column: 2;
+      grid-row: 1;
+      margin: 0;
+    }
+
+    .challenge-duel-row.is-played .challenge-duel-players {
+      grid-column: 3;
+      grid-row: 1;
+      min-width: 0;
+    }
+
+    .challenge-duel-row.is-played .challenge-duel-score {
+      grid-column: 4;
+      grid-row: 1;
+      justify-self: end;
+      margin: 0;
+    }
+
+    .challenge-duel-row.is-played .challenge-duel-actions {
+      grid-column: 3 / -1;
+      grid-row: 2;
+      justify-self: start;
+      width: auto;
+      margin-left: 0;
     }
 
     .challenge-request-card.has-actions {
@@ -2799,7 +2975,7 @@
     not_selected: {
       label: "Not selected",
       tone: "placeholder",
-      note: "Choose your availability for this period.",
+      note: "Choose if you want to play this week.",
       editable: true,
     },
     available: {
@@ -2809,9 +2985,9 @@
       editable: true,
     },
     unavailable: {
-      label: "Not playing this period",
+      label: "Not playing this week",
       tone: "unavailable",
-      note: "You are not participating in this period.",
+      note: "You are not participating this week.",
       editable: true,
     },
   };
@@ -2831,9 +3007,9 @@
   };
   const PERIOD_STATUS_LABELS = {
     draft: "Draft",
-    planning_open: "Open",
-    active: "Open",
-    result_review: "Closed",
+    planning_open: "Planning",
+    active: "Active",
+    result_review: "Results Review",
     archived: "Closed",
     cancelled: "Closed",
   };
@@ -2866,6 +3042,7 @@
   let adminMode = false;
   let includeRemovedItems = false;
   let renderGeneration = 0;
+  let challengeSectionDisclosureIndex = 0;
   let challengeAccess = {
     authenticated: false,
     bgaVerified: false,
@@ -2921,7 +3098,41 @@
   }
 
   function isClosedChallengePeriod(period) {
-    return PERIOD_STATUS_LABELS[String(period?.status || "").trim()] === "Closed";
+    return ["result_review", "archived", "cancelled"]
+      .includes(String(period?.status || "").trim());
+  }
+
+  function sortChallengePeriods(periods) {
+    const statusRank = {
+      active: 0,
+      planning_open: 1,
+      result_review: 2,
+    };
+    return periods
+      .map((period, index) => ({ period, index }))
+      .sort((left, right) => {
+        const leftStatus = String(left.period?.status || "").trim();
+        const rightStatus = String(right.period?.status || "").trim();
+        const leftRank = statusRank[leftStatus] ?? 3;
+        const rightRank = statusRank[rightStatus] ?? 3;
+        if (leftRank !== rightRank) return leftRank - rightRank;
+        if (leftStatus !== rightStatus || leftRank === 3) return left.index - right.index;
+
+        const dateField = leftStatus === "result_review"
+          ? "result_review_ends_at"
+          : "planning_starts_at";
+        const leftDate = parseUtcDate(left.period?.[dateField]);
+        const rightDate = parseUtcDate(right.period?.[dateField]);
+        if (leftDate && rightDate) {
+          const direction = leftStatus === "result_review" ? -1 : 1;
+          const dateDifference = leftDate.getTime() - rightDate.getTime();
+          if (dateDifference) return dateDifference * direction;
+        } else if (leftDate || rightDate) {
+          return leftDate ? -1 : 1;
+        }
+        return left.index - right.index;
+      })
+      .map(({ period }) => period);
   }
 
   function isRemovedChallengeRequest(request) {
@@ -2943,6 +3154,120 @@
     if (!targetId) return null;
     return Array.from(contentEl.querySelectorAll("[data-challenge-period-stack]"))
       .find((stack) => String(stack.dataset.challengePeriodStack || "") === targetId) || null;
+  }
+
+  function setChallengeSectionExpanded(wrap, isExpanded, options = {}) {
+    if (!wrap) return;
+    const toggle = wrap.querySelector("[data-challenge-section-toggle]");
+    const controls = wrap.querySelector("[data-challenge-section-controls]");
+    const collapsible = wrap.querySelector("[data-challenge-section-collapsible]");
+    if (!toggle || !collapsible) return;
+    if (options.userInitiated) {
+      wrap.dataset.challengeSectionUserToggled = "true";
+    }
+
+    const sectionTitle = String(toggle.dataset.challengeSectionTitle || "section");
+    toggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+    toggle.setAttribute("aria-label", `${isExpanded ? "Hide" : "Show"} ${sectionTitle}`);
+    toggle.title = `${isExpanded ? "Hide" : "Show"} ${sectionTitle}`;
+    collapsible.setAttribute("aria-hidden", isExpanded ? "false" : "true");
+    collapsible.inert = !isExpanded;
+    if (controls) {
+      controls.setAttribute("aria-hidden", isExpanded ? "false" : "true");
+      controls.inert = !isExpanded;
+    }
+
+    if (wrap.challengeDisclosureFrame) {
+      cancelAnimationFrame(wrap.challengeDisclosureFrame);
+    }
+    const currentHeight = collapsible.getBoundingClientRect().height;
+    collapsible.style.height = `${currentHeight}px`;
+    wrap.classList.toggle("is-section-collapsed", !isExpanded);
+
+    if (options.immediate || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      collapsible.style.height = isExpanded ? "auto" : "0px";
+      return;
+    }
+
+    wrap.challengeDisclosureFrame = requestAnimationFrame(() => {
+      collapsible.style.height = isExpanded ? `${collapsible.scrollHeight}px` : "0px";
+      wrap.challengeDisclosureFrame = null;
+    });
+  }
+
+  function createChallengeSectionHeader(wrap, titleText, options = {}) {
+    const isInitiallyExpanded = options.expanded !== false;
+    const head = document.createElement("div");
+    head.className = "challenge-opponents-head";
+    wrap.appendChild(head);
+
+    const heading = document.createElement("div");
+    heading.className = "challenge-section-heading";
+    head.appendChild(heading);
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "challenge-section-toggle";
+    toggle.dataset.challengeSectionToggle = "true";
+    toggle.dataset.challengeSectionTitle = titleText;
+    toggle.setAttribute("aria-expanded", isInitiallyExpanded ? "true" : "false");
+    toggle.setAttribute("aria-label", `${isInitiallyExpanded ? "Hide" : "Show"} ${titleText}`);
+    toggle.title = `${isInitiallyExpanded ? "Hide" : "Show"} ${titleText}`;
+
+    const toggleIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    toggleIcon.classList.add("challenge-section-toggle-icon");
+    toggleIcon.setAttribute("viewBox", "0 0 20 20");
+    toggleIcon.setAttribute("fill", "none");
+    toggleIcon.setAttribute("aria-hidden", "true");
+    const togglePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    togglePath.setAttribute("d", "m5 7.5 5 5 5-5");
+    togglePath.setAttribute("stroke", "currentColor");
+    togglePath.setAttribute("stroke-width", "2");
+    togglePath.setAttribute("stroke-linecap", "round");
+    togglePath.setAttribute("stroke-linejoin", "round");
+    toggleIcon.appendChild(togglePath);
+    toggle.appendChild(toggleIcon);
+    heading.appendChild(toggle);
+
+    const title = document.createElement("div");
+    title.className = "challenge-opponents-title";
+    title.textContent = titleText;
+    heading.appendChild(title);
+
+    const controls = document.createElement("div");
+    controls.className = "challenge-opponents-head-controls";
+    controls.dataset.challengeSectionControls = "true";
+    head.appendChild(controls);
+
+    toggle.addEventListener("click", () => {
+      setChallengeSectionExpanded(
+        wrap,
+        toggle.getAttribute("aria-expanded") !== "true",
+        { userInitiated: true }
+      );
+    });
+    return { title, controls, toggle };
+  }
+
+  function appendChallengeSectionContent(wrap, panel, toggle) {
+    const collapsible = document.createElement("div");
+    collapsible.className = "challenge-section-collapsible";
+    collapsible.dataset.challengeSectionCollapsible = "true";
+    collapsible.id = `challenge-section-content-${++challengeSectionDisclosureIndex}`;
+    collapsible.setAttribute("aria-hidden", "false");
+    toggle.setAttribute("aria-controls", collapsible.id);
+
+    const inner = document.createElement("div");
+    inner.className = "challenge-section-collapsible-inner";
+    inner.appendChild(panel);
+    collapsible.appendChild(inner);
+    wrap.appendChild(collapsible);
+
+    collapsible.addEventListener("transitionend", (event) => {
+      if (event.propertyName !== "height") return;
+      collapsible.style.height = toggle.getAttribute("aria-expanded") === "true" ? "auto" : "0px";
+    });
+    setChallengeSectionExpanded(wrap, toggle.getAttribute("aria-expanded") === "true", { immediate: true });
   }
 
   function applyClosedPeriodDisclosure(stack) {
@@ -3388,6 +3713,10 @@
     const status = String(request?.status || "").trim();
     if (status === "pending" && request?.has_counter_offer) return "new_time_requested";
     return status;
+  }
+
+  function isOpenChallengeRequest(request) {
+    return String(request?.status || "").trim() === "pending";
   }
 
   function getRequestPlayer(request, playerId) {
@@ -4671,6 +5000,7 @@
     const row = document.createElement("div");
     row.className = "challenge-duel-row";
     row.classList.toggle("is-removed", !!duel.deleted_at);
+    row.classList.toggle("is-played", String(duel?.status || "").trim() === "Done");
     row.dataset.challengeDuelId = String(duel.id || "");
     section.appendChild(row);
 
@@ -5075,6 +5405,22 @@
       return period.is_match_limit_reached;
     }
     return getChallengeMatchCount(period) >= getChallengeMatchLimit(period);
+  }
+
+  function shouldCollapseChallengeActionSections(period) {
+    return normalizeStatus(period?.player_status) === "unavailable"
+      || isChallengeMatchLimitReached(period);
+  }
+
+  function applyChallengeActionSectionDefaults(period, options = {}) {
+    if (!shouldCollapseChallengeActionSections(period)) return;
+    const periodId = String(period?.id || "");
+    [requestPanels.get(periodId)?.panel, opponentPanels.get(periodId)?.panel]
+      .filter(Boolean)
+      .forEach((panel) => {
+        if (!options.force && panel.dataset.challengeSectionUserToggled === "true") return;
+        setChallengeSectionExpanded(panel, false, { immediate: true });
+      });
   }
 
   function getChallengePlayedMatchCount(period) {
@@ -5673,7 +6019,7 @@
           throw new Error("You have reached the Challenge match limit for this period.");
         }
         if (reasons.includes("current_player_unavailable")) {
-          throw new Error("Your status is Not playing this period.");
+          throw new Error("Your status is Not playing this week.");
         }
         throw new Error("Challenge requests are not available right now.");
       }
@@ -6365,11 +6711,11 @@
     }
 
     const inviteBtn = document.createElement("button");
-    inviteBtn.className = "challenge-opponent-action";
-    inviteBtn.type = "button";
     const isInviteAvailable = !challengeAccess.bgaVerified || (canCreateRequests && opponentCanInvite);
-    inviteBtn.classList.toggle("is-primary", isInviteAvailable);
-    inviteBtn.classList.toggle("is-blocked", !isInviteAvailable);
+    inviteBtn.className = isInviteAvailable
+      ? "challenge-btn challenge-btn-primary"
+      : "challenge-btn challenge-btn-secondary challenge-btn-unavailable";
+    inviteBtn.type = "button";
     inviteBtn.setAttribute("aria-disabled", isInviteAvailable ? "false" : "true");
     inviteBtn.textContent = window.matchMedia("(max-width: 720px)").matches ? "Invite" : "Invite to match";
     if (!isInviteAvailable) {
@@ -6378,7 +6724,7 @@
       else if (isSameAssociation) inviteBtn.title = "Players from the same association cannot play each other.";
       else if (hasRivalsMatch) inviteBtn.title = "You already played this opponent in the linked Rivals tournament.";
       else if (hasPendingRequest) inviteBtn.title = "A pending request already exists with this player.";
-      else if (reasons.includes("current_player_unavailable")) inviteBtn.title = "Your status is Not playing this period.";
+      else if (reasons.includes("current_player_unavailable")) inviteBtn.title = "Your status is Not playing this week.";
       else inviteBtn.title = "Challenge requests are not available right now.";
     }
     inviteBtn.addEventListener("click", () => {
@@ -6412,7 +6758,7 @@
         if (reasons.includes("current_player_unavailable")) {
           showChallengeInfoDialog(
             "Invite unavailable",
-            "Your status is Not playing this period. Change it before creating a match request."
+            "Your status is Not playing this week. Change it before creating a match request."
           );
           return;
         }
@@ -6841,7 +7187,7 @@
           if (!isParticipationEligible) {
             showChallengeInfoDialog(
               "Request unavailable",
-              "Your status is Not playing this period. Change it before creating a match request."
+              "Your status is Not playing this week. Change it before creating a match request."
             );
             return;
           }
@@ -6862,7 +7208,7 @@
     button.setAttribute("aria-disabled", isCreationAvailable ? "false" : "true");
     if (!isCreationAvailable) {
       if (!hasFreeMatchSlot) button.title = "You have reached this period's match limit.";
-      else if (!isParticipationEligible) button.title = "Your status is Not playing this period.";
+      else if (!isParticipationEligible) button.title = "Your status is Not playing this week.";
       else button.title = `You already have ${pendingRequestLimit} pending match requests.`;
     }
     return button;
@@ -6898,19 +7244,137 @@
     ));
   }
 
+  function renderRequestsForPeriod(item) {
+    const panel = item?.panel;
+    const period = item?.period;
+    if (!panel || !period) return;
+    const requestViewMode = item.viewMode === "all" ? "all" : "open";
+    panel.querySelectorAll("[data-requests-view]").forEach((button) => {
+      button.setAttribute("aria-pressed", button.dataset.requestsView === requestViewMode ? "true" : "false");
+    });
+    if (item.mode === "loading" || item.mode === "error") return;
+    if (item.mode === "locked") {
+      renderLockedChallengeRequests(period, panel);
+      return;
+    }
+
+    const bodyEl = panel.querySelector("[data-requests-body]");
+    if (!bodyEl) return;
+    bodyEl.innerHTML = "";
+
+    if (item.mode === "admin") {
+      const allRequests = Array.isArray(item.allRequests) ? item.allRequests : [];
+      const displayedRequests = requestViewMode === "open"
+        ? allRequests.filter(isOpenChallengeRequest)
+        : allRequests;
+      if (!panel.hidden) {
+        bodyEl.appendChild(createRequestListSection(
+          requestViewMode === "open" ? "Open requests" : "All requests",
+          displayedRequests,
+          period,
+          item.currentPlayerId,
+          "admin",
+          requestViewMode === "open"
+            ? "No open requests."
+            : item.includeRemovedItems ? "No requests, including removed items." : "No requests.",
+          ""
+        ));
+      }
+      return;
+    }
+
+    const incoming = Array.isArray(item.incoming) ? item.incoming : [];
+    const sent = Array.isArray(item.sent) ? item.sent : [];
+    const visibleRequests = incoming.concat(sent);
+    const displayedIncoming = requestViewMode === "open"
+      ? incoming.filter(isOpenChallengeRequest)
+      : incoming;
+    const displayedSent = requestViewMode === "open"
+      ? sent.filter(isOpenChallengeRequest)
+      : sent;
+    const isClosedPeriod = isClosedChallengePeriod(period);
+    const pendingSentCount = sent.filter(isOpenChallengeRequest).length;
+    const pendingRequestLimit = getChallengePendingRequestLimit(period);
+    const createRequestBtn = isClosedPeriod
+      ? null
+      : createNewChallengeRequestButton(period, item.currentPlayerId, pendingSentCount);
+
+    if (panel.hidden) return;
+    if (!isClosedPeriod) {
+      bodyEl.appendChild(createRequestListSection(
+        "Incoming",
+        displayedIncoming,
+        period,
+        item.currentPlayerId,
+        "incoming",
+        requestViewMode === "open" ? "No open incoming requests." : "No incoming requests.",
+        ""
+      ));
+      bodyEl.appendChild(createRequestListSection(
+        "Sent",
+        displayedSent,
+        period,
+        item.currentPlayerId,
+        "sent",
+        requestViewMode === "open" ? "No open sent invites." : "No sent invites.",
+        `${pendingSentCount} / ${pendingRequestLimit} requests`,
+        createRequestBtn ? { actionButton: createRequestBtn } : {}
+      ));
+      return;
+    }
+
+    if (!visibleRequests.length) return;
+    if (displayedIncoming.length) {
+      bodyEl.appendChild(createRequestListSection(
+        "Incoming",
+        displayedIncoming,
+        period,
+        item.currentPlayerId,
+        "incoming",
+        "No incoming requests.",
+        ""
+      ));
+    }
+    if (displayedSent.length) {
+      bodyEl.appendChild(createRequestListSection(
+        "Sent",
+        displayedSent,
+        period,
+        item.currentPlayerId,
+        "sent",
+        "No sent invites.",
+        "",
+        {}
+      ));
+    }
+    if (!displayedIncoming.length && !displayedSent.length) {
+      const state = document.createElement("div");
+      state.className = "challenge-opponents-state";
+      state.textContent = requestViewMode === "open" ? "No open requests." : "No requests.";
+      bodyEl.appendChild(state);
+    }
+  }
+
   async function loadRequestsForPeriod(period, panel) {
     const periodId = String(period?.id || "").trim();
     const requestGeneration = Number(panel?.dataset?.challengeRenderGeneration || renderGeneration);
     const requestAdminMode = adminMode;
     const requestIncludeRemovedItems = includeRemovedItems;
+    const item = requestPanels.get(periodId);
     if (!periodId) {
       setRequestsState(panel, "Challenge period is unavailable.", true);
       return;
     }
     if (!challengeAccess.bgaVerified) {
-      renderLockedChallengeRequests(period, panel);
+      if (item) {
+        item.mode = "locked";
+        renderRequestsForPeriod(item);
+      } else {
+        renderLockedChallengeRequests(period, panel);
+      }
       return;
     }
+    if (item) item.mode = "loading";
     setRequestsState(panel, "Loading requests...", false);
     try {
       const params = new URLSearchParams();
@@ -6944,23 +7408,19 @@
           if (data.period[field] !== undefined) period[field] = data.period[field];
         });
       }
+      applyChallengeActionSectionDefaults(period);
       const currentPlayerId = String(data?.player_id || "").trim();
       if (requestAdminMode) {
         const allRequests = (Array.isArray(data?.all_requests) ? data.all_requests : []).map(enrichRequest);
         const matches = (Array.isArray(data?.matches) ? data.matches : []).map(enrichRequest);
         renderChallengeMatchPanel(period, currentPlayerId, matches, { readOnly: true, adminView: true });
         setRequestPanelVisible(panel, !isClosedChallengePeriod(period) || allRequests.length > 0);
-        bodyEl.innerHTML = "";
-        if (!panel.hidden) {
-          bodyEl.appendChild(createRequestListSection(
-            "All requests",
-            allRequests,
-            period,
-            currentPlayerId,
-            "admin",
-            requestIncludeRemovedItems ? "No requests, including removed items." : "No requests.",
-            `${allRequests.length} total`
-          ));
+        if (item) {
+          item.mode = "admin";
+          item.currentPlayerId = currentPlayerId;
+          item.allRequests = allRequests;
+          item.includeRemovedItems = requestIncludeRemovedItems;
+          renderRequestsForPeriod(item);
         }
         syncClosedPeriodDisclosure(period, {
           hasMatch: matchPanels.get(periodId)?.panel?.dataset.challengeHasContent === "true",
@@ -6996,55 +7456,12 @@
       const isClosedPeriod = isClosedChallengePeriod(period);
       renderChallengeMatchPanel(period, currentPlayerId, challengeDuelRequests);
       setRequestPanelVisible(panel, !isClosedPeriod || visibleRequests.length > 0);
-      const pendingSentCount = sent.filter((request) => String(request?.status || "") === "pending").length;
-      const pendingRequestLimit = getChallengePendingRequestLimit(period);
-      const createRequestBtn = isClosedPeriod
-        ? null
-        : createNewChallengeRequestButton(period, currentPlayerId, pendingSentCount);
-      bodyEl.innerHTML = "";
-      if (panel.hidden) {
-        syncClosedPeriodDisclosure(period, {
-          hasMatch: matchPanels.get(periodId)?.panel?.dataset.challengeHasContent === "true",
-          hasRequests: visibleRequests.length > 0,
-        });
-        return;
-      }
-      if (!isClosedPeriod) {
-        bodyEl.appendChild(createRequestListSection(
-          "Incoming",
-          incoming,
-          period,
-          currentPlayerId,
-          "incoming",
-          "No incoming requests.",
-          ""
-        ));
-        bodyEl.appendChild(createRequestListSection(
-          "Sent",
-          sent,
-          period,
-          currentPlayerId,
-          "sent",
-          "No sent invites.",
-          `${pendingSentCount} / ${pendingRequestLimit} requests`,
-          createRequestBtn ? { actionButton: createRequestBtn } : {}
-        ));
-      } else if (visibleRequests.length > 0) {
-        if (incoming.length) {
-          bodyEl.appendChild(createRequestListSection("Incoming", incoming, period, currentPlayerId, "incoming", "No incoming requests.", ""));
-        }
-        if (sent.length) {
-          bodyEl.appendChild(createRequestListSection(
-            "Sent",
-            sent,
-            period,
-            currentPlayerId,
-            "sent",
-            "No sent invites.",
-            isClosedPeriod ? "" : `${pendingSentCount} / ${pendingRequestLimit} requests`,
-            createRequestBtn ? { actionButton: createRequestBtn } : {}
-          ));
-        }
+      if (item) {
+        item.mode = "player";
+        item.currentPlayerId = currentPlayerId;
+        item.incoming = incoming;
+        item.sent = sent;
+        renderRequestsForPeriod(item);
       }
       syncClosedPeriodDisclosure(period, {
         hasMatch: matchPanels.get(periodId)?.panel?.dataset.challengeHasContent === "true",
@@ -7052,6 +7469,7 @@
       });
     } catch (error) {
       if (requestGeneration !== renderGeneration) return;
+      if (item) item.mode = "error";
       renderChallengeMatchPanel(period, "", null);
       setRequestPanelVisible(panel, !isClosedChallengePeriod(period));
       syncClosedPeriodDisclosure(period, { hasMatch: false, hasRequests: false });
@@ -7606,7 +8024,7 @@
     const label = document.createElement("div");
     label.className = "challenge-status-label";
     label.id = labelId;
-    label.textContent = "Your period status";
+    label.textContent = "Your availability this week";
     card.appendChild(label);
 
     const dropdownEl = document.createElement("div");
@@ -7640,7 +8058,7 @@
     const options = [
       { value: "not_selected", label: "Not selected" },
       { value: "available", label: "Open to match" },
-      { value: "unavailable", label: "Not playing this period" },
+      { value: "unavailable", label: "Not playing this week" },
     ];
     const optionEls = options.map((option) => {
       const optionEl = document.createElement("button");
@@ -7757,7 +8175,7 @@
           }
           if (hasOpenRequests) {
             const confirmed = await showChallengeConfirmDialog(
-              "Not playing this period",
+              "Not playing this week",
               "You have open Challenge requests in this period. Changing your status will close all of them.",
               {
                 note: "This includes both incoming and sent requests.",
@@ -7781,6 +8199,9 @@
           const savedStatus = data?.period_player?.status || nextStatus;
           period.player_status = savedStatus;
           setStatus(savedStatus);
+          if (normalizeStatus(savedStatus) === "unavailable") {
+            applyChallengeActionSectionDefaults(period, { force: true });
+          }
           await Promise.all([
             refreshRequestPanel(period.id),
             refreshOpponentPanel(period.id),
@@ -7827,9 +8248,10 @@
     titleRow.appendChild(title);
 
     const badge = document.createElement("span");
-    badge.className = "challenge-period-badge";
+    const periodStatus = String(period?.status || "").trim();
+    badge.className = `challenge-period-badge is-${periodStatus.replaceAll("_", "-")}`;
     badge.classList.toggle("is-closed", isClosedPeriod);
-    badge.textContent = PERIOD_STATUS_LABELS[period?.status] || String(period?.status || "");
+    badge.textContent = PERIOD_STATUS_LABELS[periodStatus] || periodStatus;
     titleRow.appendChild(badge);
 
     if (isClosedPeriod) {
@@ -7883,18 +8305,9 @@
     wrap.className = "challenge-panel-wrap";
     wrap.dataset.challengePeriodOpponents = String(period?.id || "");
 
-    const head = document.createElement("div");
-    head.className = "challenge-opponents-head";
-    wrap.appendChild(head);
-
-    const title = document.createElement("div");
-    title.className = "challenge-opponents-title";
-    title.textContent = "Open to match";
-    head.appendChild(title);
-
-    const controls = document.createElement("div");
-    controls.className = "challenge-opponents-head-controls";
-    head.appendChild(controls);
+    const { controls, toggle } = createChallengeSectionHeader(wrap, "Open to match", {
+      expanded: !shouldCollapseChallengeActionSections(period),
+    });
 
     const viewToggle = document.createElement("div");
     viewToggle.className = "challenge-opponents-view-toggle";
@@ -7925,12 +8338,12 @@
 
     const panel = document.createElement("section");
     panel.className = "challenge-opponents-panel";
-    wrap.appendChild(panel);
 
     const body = document.createElement("div");
     body.className = "challenge-opponents-body";
     body.dataset.opponentsBody = "true";
     panel.appendChild(body);
+    appendChallengeSectionContent(wrap, panel, toggle);
 
     const item = {
       period,
@@ -7957,36 +8370,28 @@
     wrap.dataset.challengePeriodMatch = String(period?.id || "");
     wrap.hidden = true;
 
-    const head = document.createElement("div");
-    head.className = "challenge-opponents-head";
-    wrap.appendChild(head);
-
-    const title = document.createElement("div");
-    title.className = "challenge-opponents-title";
+    const { title, controls, toggle } = createChallengeSectionHeader(wrap, "Matches");
     title.dataset.matchTitle = "true";
-    title.textContent = "Matches";
-    head.appendChild(title);
 
     const count = document.createElement("div");
     count.className = "challenge-opponents-count";
     count.dataset.matchCount = "true";
-    head.appendChild(count);
+    controls.appendChild(count);
 
     const panel = document.createElement("section");
     panel.className = "challenge-requests-panel";
-    wrap.appendChild(panel);
 
     const body = document.createElement("div");
     body.className = "challenge-requests-grid";
     body.dataset.matchBody = "true";
     panel.appendChild(body);
+    appendChallengeSectionContent(wrap, panel, toggle);
 
     matchPanels.set(String(period?.id || ""), { period, panel: wrap });
     return wrap;
   }
 
-  function createMatchLimitNotice(period) {
-    const matchLimit = getChallengeMatchLimit(period);
+  function createMatchLimitNotice() {
     const notice = document.createElement("aside");
     notice.className = "challenge-match-limit-notice";
     notice.setAttribute("aria-label", "Challenge match limit");
@@ -8001,12 +8406,53 @@
     const title = document.createElement("strong");
     title.textContent = "Match limit increased: ";
     text.appendChild(title);
-    text.appendChild(document.createTextNode(
-      `${matchLimit} ${matchLimit === 1 ? "match" : "matches"} per week in GG Rivals.`
-    ));
+    text.appendChild(document.createTextNode("2 matches per week in GG Rivals."));
     notice.appendChild(text);
 
     return notice;
+  }
+
+  function createPeriodNavigation(periods) {
+    const availableStatuses = new Set(["active", "planning_open", "result_review"]);
+    const navigation = document.createElement("nav");
+    navigation.className = "challenge-period-navigation";
+    navigation.setAttribute("aria-label", "Challenge periods");
+
+    periods
+      .filter((period) => availableStatuses.has(String(period?.status || "").trim()))
+      .forEach((period) => {
+        const periodStatus = String(period?.status || "").trim();
+        const fullName = String(period?.name || period?.id || "Challenge period").trim();
+        const shortName = String(period?.short_name || fullName || period?.id || "Challenge period").trim();
+        const badge = document.createElement("button");
+        badge.type = "button";
+        badge.className = `challenge-period-navigation-badge is-${periodStatus.replaceAll("_", "-")}`;
+        badge.title = fullName;
+        badge.setAttribute("aria-label", `Scroll to ${fullName}`);
+
+        const logoSrc = String(period?.logo || "").trim();
+        if (logoSrc) {
+          const logo = document.createElement("img");
+          logo.className = "challenge-period-navigation-logo";
+          logo.src = logoSrc;
+          logo.alt = "";
+          badge.appendChild(logo);
+        }
+
+        const label = document.createElement("span");
+        label.textContent = shortName;
+        badge.appendChild(label);
+
+        badge.addEventListener("click", () => {
+          getChallengePeriodStack(period?.id)?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        });
+        navigation.appendChild(badge);
+      });
+
+    return navigation;
   }
 
   function createRequestsPanel(period, options = {}) {
@@ -8014,27 +8460,67 @@
     wrap.className = "challenge-panel-wrap";
     wrap.dataset.challengePeriodRequests = String(period?.id || "");
     wrap.dataset.challengeRenderGeneration = String(renderGeneration);
+    wrap.dataset.challengeRequestsView = "open";
     wrap.hidden = !!options.hidden;
 
-    const head = document.createElement("div");
-    head.className = "challenge-opponents-head";
-    wrap.appendChild(head);
+    const { controls, toggle } = createChallengeSectionHeader(wrap, "Requests", {
+      expanded: !shouldCollapseChallengeActionSections(period),
+    });
 
-    const title = document.createElement("div");
-    title.className = "challenge-opponents-title";
-    title.textContent = "Requests";
-    head.appendChild(title);
+    const viewToggle = document.createElement("div");
+    viewToggle.className = "challenge-opponents-view-toggle";
+    viewToggle.setAttribute("role", "group");
+    viewToggle.setAttribute("aria-label", "Requests list view");
+    controls.appendChild(viewToggle);
+
+    const openViewButton = document.createElement("button");
+    openViewButton.type = "button";
+    openViewButton.className = "challenge-opponents-view-option";
+    openViewButton.dataset.requestsView = "open";
+    openViewButton.setAttribute("aria-pressed", "true");
+    openViewButton.textContent = "Open";
+    viewToggle.appendChild(openViewButton);
+
+    const allViewButton = document.createElement("button");
+    allViewButton.type = "button";
+    allViewButton.className = "challenge-opponents-view-option";
+    allViewButton.dataset.requestsView = "all";
+    allViewButton.setAttribute("aria-pressed", "false");
+    allViewButton.textContent = "All Requests";
+    viewToggle.appendChild(allViewButton);
 
     const panel = document.createElement("section");
     panel.className = "challenge-requests-panel";
-    wrap.appendChild(panel);
 
     const body = document.createElement("div");
     body.className = "challenge-requests-grid";
     body.dataset.requestsBody = "true";
     panel.appendChild(body);
+    appendChallengeSectionContent(wrap, panel, toggle);
 
-    requestPanels.set(String(period?.id || ""), { period, panel: wrap });
+    const item = {
+      period,
+      panel: wrap,
+      viewMode: "open",
+      mode: "loading",
+      currentPlayerId: "",
+      incoming: [],
+      sent: [],
+      allRequests: [],
+      includeRemovedItems: false,
+    };
+
+    const setViewMode = (viewMode) => {
+      const nextViewMode = viewMode === "all" ? "all" : "open";
+      if (item.viewMode === nextViewMode) return;
+      item.viewMode = nextViewMode;
+      wrap.dataset.challengeRequestsView = nextViewMode;
+      renderRequestsForPeriod(item);
+    };
+    openViewButton.addEventListener("click", () => setViewMode("open"));
+    allViewButton.addEventListener("click", () => setViewMode("all"));
+
+    requestPanels.set(String(period?.id || ""), item);
     loadRequestsForPeriod(period, wrap);
     return wrap;
   }
@@ -8060,7 +8546,9 @@
         includeRemovedItems = false;
       }
       syncAdminControls();
-      const periods = Array.isArray(data?.challenge_periods) ? data.challenge_periods : [];
+      const periods = sortChallengePeriods(
+        Array.isArray(data?.challenge_periods) ? data.challenge_periods : []
+      );
       const timeContext = await enrichTimeContext(data?.player_time_context || { timezone: "UTC" });
       if (currentGeneration !== renderGeneration) return;
       if (!periods.length) {
@@ -8069,6 +8557,16 @@
       }
       contentEl.className = "challenges-list";
       contentEl.innerHTML = "";
+      const overview = document.createElement("div");
+      overview.className = "challenge-period-overview";
+      if (periods.some((period) => (
+        String(period?.status || "") !== "draft" && !isClosedChallengePeriod(period)
+      ))) {
+        overview.appendChild(createMatchLimitNotice());
+      }
+      const periodNavigation = createPeriodNavigation(periods);
+      if (periodNavigation.childNodes.length) overview.appendChild(periodNavigation);
+      if (overview.childNodes.length) contentEl.appendChild(overview);
       periods.forEach((period) => {
         period.player_time_context = timeContext;
         const isClosedPeriod = isClosedChallengePeriod(period);
@@ -8083,9 +8581,6 @@
         stack.appendChild(createPeriodBand(period, timeContext));
         if (String(period?.status || "") !== "draft") {
           stack.appendChild(createChallengeMatchPanel(period));
-          if (!isClosedPeriod) {
-            stack.appendChild(createMatchLimitNotice(period));
-          }
           stack.appendChild(createRequestsPanel(period, { hidden: isClosedPeriod }));
           if (!isClosedPeriod) {
             stack.appendChild(createOpponentsPanel(period));
