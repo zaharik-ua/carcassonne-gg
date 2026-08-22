@@ -15352,7 +15352,8 @@ app.delete("/news/:id", async (req, res) => {
 
   try {
     const access = await getNewsEditorAccessForUser(req.user);
-    if (!access.isAdmin && !access.isNewsEditor) {
+    const isProposalSubmitter = isNewsProposalSubmitter(access);
+    if (!access.isAdmin && !access.isNewsEditor && !isProposalSubmitter) {
       return sendNewsEditorAccessDenied(res);
     }
 
@@ -15365,8 +15366,15 @@ app.delete("/news/:id", async (req, res) => {
     if (!beforeRow) {
       return res.status(404).json({ ok: false, message: "News not found" });
     }
-    if (!(await canManageNewsItem(access, beforeRow))) {
-      return res.status(403).json({ ok: false, message: "You can delete only news within your news editor access." });
+    const canClearOwnProposal = isOwnEditableNewsProposal(access, beforeRow);
+    const canDeleteManagedNews = !isProposalSubmitter && await canManageNewsItem(access, beforeRow);
+    if (!canClearOwnProposal && !canDeleteManagedNews) {
+      return res.status(403).json({
+        ok: false,
+        message: isProposalSubmitter
+          ? "You can clear only your own draft proposal."
+          : "You can delete only news within your news editor access.",
+      });
     }
 
     const actorPlayerId = String(req.user?.player_id || "").trim() || null;

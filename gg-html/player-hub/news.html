@@ -270,6 +270,32 @@
     color: #315d43;
   }
 
+  .cp-btn-danger.cp-news-clear-btn {
+    background: #b42318;
+    border-color: #b42318;
+    color: #fff;
+  }
+
+  .cp-btn-danger.cp-news-clear-btn:hover {
+    background: #912018;
+    border-color: #912018;
+  }
+
+  .cp-news-clear-dialog {
+    max-width: 440px;
+  }
+
+  .cp-news-clear-dialog .cp-news-clear-message {
+    color: #4b5563;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .cp-news-clear-dialog .cp-news-clear-btn {
+    margin-left: 0;
+  }
+
   .news-empty-state {
     align-items: flex-start;
     display: flex;
@@ -4363,6 +4389,70 @@
     contentEl.appendChild(list);
   }
 
+  function confirmClearNewsPost() {
+    return new Promise((resolve) => {
+      let isClosed = false;
+      const overlay = document.createElement("div");
+      overlay.className = "cp-modal-overlay";
+
+      const dialog = document.createElement("div");
+      dialog.className = "cp-modal-dialog cp-news-clear-dialog";
+      dialog.setAttribute("role", "dialog");
+      dialog.setAttribute("aria-modal", "true");
+      dialog.setAttribute("aria-labelledby", "cp-news-clear-title");
+
+      const title = document.createElement("div");
+      title.id = "cp-news-clear-title";
+      title.className = "cp-modal-title";
+      title.textContent = "Clear post?";
+
+      const message = document.createElement("p");
+      message.className = "cp-news-clear-message";
+      message.textContent = "The text of this news post will be cleared. This action cannot be undone.";
+
+      const actions = document.createElement("div");
+      actions.className = "cp-modal-actions";
+
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.className = "cp-btn cp-btn-secondary";
+      cancelButton.textContent = "Cancel";
+
+      const clearButton = document.createElement("button");
+      clearButton.type = "button";
+      clearButton.className = "cp-btn cp-btn-danger cp-news-clear-btn";
+      clearButton.textContent = "Clear post";
+
+      const closeDialog = (confirmed) => {
+        if (isClosed) return;
+        isClosed = true;
+        document.removeEventListener("keydown", handleKeyDown);
+        overlay.remove();
+        resolve(confirmed);
+      };
+
+      function handleKeyDown(event) {
+        if (event.key === "Escape") closeDialog(false);
+      }
+
+      cancelButton.addEventListener("click", () => closeDialog(false));
+      clearButton.addEventListener("click", () => closeDialog(true));
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) closeDialog(false);
+      });
+
+      actions.appendChild(cancelButton);
+      actions.appendChild(clearButton);
+      dialog.appendChild(title);
+      dialog.appendChild(message);
+      dialog.appendChild(actions);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+      document.addEventListener("keydown", handleKeyDown);
+      cancelButton.focus();
+    });
+  }
+
   function renderNewsEditForm(newsItem, associationsList, tournamentsList, matchOptionsList, categoriesList, iconsList, streamersList, localWebsitesList, formMode = "create", options = {}) {
     const isCreateMode = formMode === "create";
     const isProposalMode = options.proposalMode === true;
@@ -4384,11 +4474,14 @@
     if (isProposalMode) {
       const proposalMessage = document.createElement("div");
       const hasSavedDraft = !!String(source?.id || "").trim();
-      proposalMessage.className = `news-proposal-message${hasSavedDraft ? " is-saved" : ""}`;
-      proposalMessage.setAttribute("role", options.justSaved === true ? "status" : "note");
-      proposalMessage.textContent = hasSavedDraft
-        ? "Your draft has been saved. Our team will review your proposal and contact you once it has been considered. You can continue editing it and save any changes below."
-        : "Have news worth sharing? Submit a draft for publication on carcassonne.gg. Our team will review your proposal and contact you about the next steps.";
+      const hasStatusMessage = options.justSaved === true || options.justCleared === true;
+      proposalMessage.className = `news-proposal-message${hasSavedDraft || options.justCleared === true ? " is-saved" : ""}`;
+      proposalMessage.setAttribute("role", hasStatusMessage ? "status" : "note");
+      proposalMessage.textContent = options.justCleared === true
+        ? "The post has been cleared. You can start a new draft below."
+        : hasSavedDraft
+          ? "Your draft has been saved. Our team will review your proposal and contact you once it has been considered. You can continue editing it and save any changes below."
+          : "Have news worth sharing? Submit a draft for publication on carcassonne.gg. Our team will review your proposal and contact you about the next steps.";
       form.appendChild(proposalMessage);
     }
 
@@ -4397,23 +4490,36 @@
     const saveBtn = document.createElement("button");
     saveBtn.type = "submit";
     saveBtn.className = "cp-btn cp-btn-primary";
-    saveBtn.textContent = "Save";
+    saveBtn.textContent = isProposalMode ? "Save draft" : "Save";
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.className = "cp-btn cp-btn-secondary";
     cancelBtn.textContent = "Cancel";
     topActions.appendChild(saveBtn);
     if (!isProposalMode) topActions.appendChild(cancelBtn);
-    let viewBtn = null;
+    let previewBtn = null;
     if (isProposalMode && !isCreateMode && String(source?.id || "").trim()) {
-      viewBtn = document.createElement("button");
-      viewBtn.type = "button";
-      viewBtn.className = "cp-btn cp-btn-secondary";
-      viewBtn.textContent = "View";
-      viewBtn.addEventListener("click", () => {
-        window.location.href = `https://carcassonne.gg/news/?id=${encodeURIComponent(String(source.id))}`;
+      previewBtn = document.createElement("button");
+      previewBtn.type = "button";
+      previewBtn.className = "cp-btn cp-btn-secondary";
+      previewBtn.textContent = "Preview";
+      previewBtn.addEventListener("click", () => {
+        const previewWindow = window.open(
+          `https://carcassonne.gg/news/?id=${encodeURIComponent(String(source.id))}`,
+          "_blank",
+          "noopener,noreferrer"
+        );
+        if (previewWindow) previewWindow.opener = null;
       });
-      topActions.appendChild(viewBtn);
+      topActions.appendChild(previewBtn);
+    }
+    let clearPostBtn = null;
+    if (isProposalMode) {
+      clearPostBtn = document.createElement("button");
+      clearPostBtn.type = "button";
+      clearPostBtn.className = "cp-btn cp-btn-danger cp-news-clear-btn";
+      clearPostBtn.textContent = "Clear post";
+      topActions.appendChild(clearPostBtn);
     }
     let deleteBtn = null;
     if (!isCreateMode && !isProposalMode) {
@@ -4469,12 +4575,13 @@
     const setSaving = (isSaving, actionLabel = "Saving...") => {
       saveBtn.disabled = !!isSaving;
       cancelBtn.disabled = !!isSaving;
-      if (viewBtn) viewBtn.disabled = !!isSaving;
+      if (previewBtn) previewBtn.disabled = !!isSaving;
+      if (clearPostBtn) clearPostBtn.disabled = !!isSaving;
       if (deleteBtn) deleteBtn.disabled = !!isSaving;
       if (imageFileInput) imageFileInput.disabled = !!isSaving;
       if (imageChooseBtn) imageChooseBtn.disabled = !!isSaving;
       if (descriptionInput?.setDisabled) descriptionInput.setDisabled(!!isSaving);
-      saveBtn.textContent = isSaving ? actionLabel : "Save";
+      saveBtn.textContent = isSaving ? actionLabel : isProposalMode ? "Save draft" : "Save";
     };
 
     const maxMenuHeight = window.matchMedia("(max-width: 600px)").matches ? 220 : 260;
@@ -5763,6 +5870,61 @@
     cancelBtn.addEventListener("click", () => {
       resetCaptainSubview(CAPTAIN_VIEWS.NEWS);
     });
+
+    if (clearPostBtn) {
+      clearPostBtn.addEventListener("click", async () => {
+        setError("");
+        if (!(await confirmClearNewsPost())) return;
+
+        const newsId = String(source?.id || "").trim();
+        if (!newsId) {
+          renderNewsEditForm(
+            null,
+            associationsList,
+            tournamentsList,
+            matchOptionsList,
+            categoriesList,
+            iconsList,
+            streamersList,
+            localWebsitesList,
+            "create",
+            { ...options, justSaved: false, justCleared: true }
+          );
+          return;
+        }
+
+        setSaving(true, "Clearing...");
+        clearPostBtn.textContent = "Clearing...";
+        try {
+          const response = await fetch(`${NEWS_URL}/${encodeURIComponent(newsId)}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result?.ok) {
+            setError(result?.message || "Failed to clear the post.");
+            return;
+          }
+          renderNewsEditForm(
+            null,
+            associationsList,
+            tournamentsList,
+            matchOptionsList,
+            categoriesList,
+            iconsList,
+            streamersList,
+            localWebsitesList,
+            "create",
+            { ...options, justSaved: false, justCleared: true }
+          );
+        } catch (_error) {
+          setError("Failed to clear the post.");
+        } finally {
+          clearPostBtn.textContent = "Clear post";
+          setSaving(false);
+        }
+      });
+    }
 
     if (deleteBtn) {
       deleteBtn.addEventListener("click", async () => {
