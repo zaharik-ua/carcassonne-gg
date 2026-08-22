@@ -187,15 +187,47 @@
           const data = await playersRes.json();
           const profilesPayload = profilesRes.ok ? await profilesRes.json() : {};
           const dbProfiles = Array.isArray(profilesPayload?.profiles) ? profilesPayload.profiles : [];
-          return { data, dbProfiles };
+          const ggRatingLastUpdateDate = String(profilesPayload?.gg_rating_last_update_date || "").trim();
+          return { data, dbProfiles, ggRatingLastUpdateDate };
         });
       }
       return window[cacheKey];
     }
 
+    function formatLastUpdatedDate(value) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || "").trim());
+      if (!match) return "";
+
+      const year = Number(match[1]);
+      const monthIndex = Number(match[2]) - 1;
+      const day = Number(match[3]);
+      const date = new Date(Date.UTC(year, monthIndex, day));
+      if (
+        date.getUTCFullYear() !== year
+        || date.getUTCMonth() !== monthIndex
+        || date.getUTCDate() !== day
+      ) {
+        return "";
+      }
+
+      const lastTwoDigits = day % 100;
+      const suffix = lastTwoDigits >= 11 && lastTwoDigits <= 13
+        ? "th"
+        : day % 10 === 1
+          ? "st"
+          : day % 10 === 2
+            ? "nd"
+            : day % 10 === 3
+              ? "rd"
+              : "th";
+      const month = date.toLocaleDateString("en-GB", { month: "long", timeZone: "UTC" });
+      return `${day}${suffix} of ${month}`;
+    }
+
     function renderTop10(payload) {
       const data = payload?.data || {};
       const dbProfiles = Array.isArray(payload?.dbProfiles) ? payload.dbProfiles : [];
+      const lastUpdatedDate = formatLastUpdatedDate(payload?.ggRatingLastUpdateDate);
       const ggProfiles = Array.isArray(data.gg_profiles) ? data.gg_profiles : [];
       const countries = Array.isArray(data.countries) ? data.countries : [];
       const ggById = new Map(
@@ -293,7 +325,17 @@
 
       const header = document.createElement("div");
       header.className = "header-row";
-      header.innerHTML = '<a href="https://carcassonne.gg/players/" target="_self">See all players</a><div class="last-updated">Last updated: 10th of August</div>';
+      const allPlayersLink = document.createElement("a");
+      allPlayersLink.href = "https://carcassonne.gg/players/";
+      allPlayersLink.target = "_self";
+      allPlayersLink.textContent = "See all players";
+
+      const lastUpdated = document.createElement("div");
+      lastUpdated.className = "last-updated";
+      lastUpdated.textContent = `Last updated: ${lastUpdatedDate || "Not set"}`;
+
+      header.appendChild(allPlayersLink);
+      header.appendChild(lastUpdated);
       card.appendChild(header);
 
       container.appendChild(card);

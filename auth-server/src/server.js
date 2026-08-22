@@ -7762,7 +7762,22 @@ app.get("/profiles/public", (_req, res, next) => {
     `,
     (err, rows) => {
       if (err) return next(err);
-      return res.json({ ok: true, profiles: rows || [] });
+      return db.get(
+        `
+          SELECT setting_value
+          FROM system_settings
+          WHERE setting_key = 'gg_rating_last_update_date'
+          LIMIT 1
+        `,
+        (settingErr, settingRow) => {
+          if (settingErr) return next(settingErr);
+          return res.json({
+            ok: true,
+            gg_rating_last_update_date: normalizeDateOnly(settingRow?.setting_value),
+            profiles: rows || [],
+          });
+        }
+      );
     }
   );
 });
