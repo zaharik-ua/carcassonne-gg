@@ -19013,6 +19013,7 @@ function publicMainPageMatchesHandler(req, res, next) {
     `
       SELECT
         d.id,
+        d.tournament_id,
         d.challenge_period_id,
         d.created_at,
         d.time_utc,
@@ -19031,7 +19032,9 @@ function publicMainPageMatchesHandler(req, res, next) {
         COALESCE(d.is_test, 0) AS is_test,
         d.status,
         cp.name AS challenge_period_name,
-        cp.logo AS challenge_period_logo
+        cp.logo AS challenge_period_logo,
+        cp.status AS challenge_period_status,
+        cp.planning_starts_at AS challenge_period_planning_starts_at
       FROM duels d
       JOIN challenge_periods cp
         ON trim(COALESCE(cp.id, '')) = trim(COALESCE(d.challenge_period_id, ''))
@@ -19058,11 +19061,19 @@ function publicMainPageMatchesHandler(req, res, next) {
         AND d.status IN ('Planned', 'In progress', 'Done', 'Error')
         AND trim(COALESCE(d.time_utc, '')) <> ''
         AND datetime(d.time_utc) IS NOT NULL
-        AND datetime(d.time_utc) >= datetime('now', '-7 days')
-        AND ? = ''
+        AND (
+          (
+            ? = ''
+            AND datetime(d.time_utc) >= datetime('now', '-7 days')
+          )
+          OR (
+            ? <> ''
+            AND upper(trim(COALESCE(d.tournament_id, ''))) = upper(trim(?))
+          )
+        )
       ORDER BY datetime(d.time_utc) DESC, d.id ASC
     `,
-    [tournamentFilter],
+    [tournamentFilter, tournamentFilter, tournamentFilter],
     (challengeDuelsErr, challengeDuelRows) => {
       if (challengeDuelsErr) return next(challengeDuelsErr);
 
@@ -19366,9 +19377,12 @@ function publicMainPageMatchesHandler(req, res, next) {
               }),
               challenge_duels: (challengeDuelRows || []).map((row) => ({
                 id: row.id,
+                tournament_id: row.tournament_id,
                 challenge_period_id: row.challenge_period_id,
                 challenge_period_name: row.challenge_period_name,
                 challenge_period_logo: row.challenge_period_logo,
+                challenge_period_status: row.challenge_period_status,
+                challenge_period_planning_starts_at: row.challenge_period_planning_starts_at,
                 created_at: row.created_at,
                 time_utc: row.time_utc,
                 duel_format: row.duel_format,

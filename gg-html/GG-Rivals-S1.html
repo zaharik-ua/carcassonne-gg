@@ -294,6 +294,24 @@
     display: block;
     line-height: 17px;
   }
+
+  .challenge-duel-status {
+    display: block;
+    margin-top: 1px;
+    color: #666;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 12px;
+    text-transform: uppercase;
+  }
+
+  .challenge-duel-status--in-progress {
+    color: #17824f;
+  }
+
+  .challenge-duel-status--error {
+    color: #b42318;
+  }
   /* End MATCH TABLE STYLES */
 
   /* LINEUP TABLE STYLES */
@@ -1443,6 +1461,7 @@
 
   let matches = [];
   let duels = [];
+  let challengeDuels = [];
   let standings = [];
   let players = [];
   let tournament_players = [];
@@ -1621,10 +1640,40 @@
           time: duel.time || duel.time_utc || "",
           status: normalizeStatus(duel.status)
         }));
+
+      const visibleChallengeStatuses = new Set(["PLANNED", "IN PROGRESS", "DONE", "ERROR"]);
+      challengeDuels = (Array.isArray(data.challenge_duels) ? data.challenge_duels : [])
+        .filter(belongsToCurrentTournament)
+        .filter(duel => visibleChallengeStatuses.has(normalizeStatus(duel.status)))
+        .map(duel => ({
+          ...duel,
+          tournament_id: currentTournamentId,
+          challenge_period_id: String(duel.challenge_period_id || "").trim(),
+          challenge_period_name: String(duel.challenge_period_name || duel.challenge_period_id || "Challenge Period").trim(),
+          challenge_period_status: String(duel.challenge_period_status || "").trim().toLowerCase(),
+          challenge_period_planning_starts_at: duel.challenge_period_planning_starts_at || "",
+          player1_id: duel.player1_id || duel.player_1_id || "",
+          player1: duel.player1 || duel.player_1_name || duel.player_1_id || "",
+          player1_avatar: buildBgaAvatarUrl(
+            duel.player1_id || duel.player_1_id,
+            duel.player1_avatar || duel.player_1_avatar
+          ),
+          player2_id: duel.player2_id || duel.player_2_id || "",
+          player2: duel.player2 || duel.player_2_name || duel.player_2_id || "",
+          player2_avatar: buildBgaAvatarUrl(
+            duel.player2_id || duel.player_2_id,
+            duel.player2_avatar || duel.player_2_avatar
+          ),
+          score1: normalizeScore(duel.score1 ?? duel.dw1),
+          score2: normalizeScore(duel.score2 ?? duel.dw2),
+          time: duel.time || duel.time_utc || "",
+          status: normalizeStatus(duel.status)
+        }));
     } catch (error) {
       console.error("Failed to load Asian Cup matches", error);
       matches = [];
       duels = [];
+      challengeDuels = [];
     }
   }
 
@@ -1867,34 +1916,10 @@
     renderOverviewContent();
     // Players
     renderPlayersTable();
-    const hasCompetitionData = [...matches, ...duels, ...standings]
+    const hasCompetitionData = [...matches, ...duels, ...challengeDuels, ...standings]
       .some(entry => entry && entry.tournament_id === currentTournamentId);
     // Matches
-    if (isLeaguesFormat) {
-      const matchesContainer = document.getElementById("tab-matches-content");
-      matchesContainer.innerHTML = "";
-      relatedLeagues.forEach((league, idx) => {
-        const leagueTournament = tournamentsById[league.tournament_id];
-        const leagueLabel = league.league_name
-          || leagueTournament?.league_name
-          || leagueTournament?.name
-          || league.name
-          || league.tournament_id;
-        const leagueBlock = document.createElement("div");
-        applyElementTheme(leagueBlock, leagueTournament?.style || league.style, currentTournament.style);
-        matchesContainer.appendChild(leagueBlock);
-        if (leagueTournament) {
-          renderMatchesData(leagueTournament, leagueBlock, { reset: true, title: leagueLabel, openFirstIncompleteRound: idx === 0 });
-        } else {
-          const stub = document.createElement("div");
-          stub.className = "overview-about-text";
-          stub.textContent = `${leagueLabel}: data not available yet.`;
-          leagueBlock.appendChild(stub);
-        }
-      });
-    } else if (hasCompetitionData) {
-      renderMatchesData();
-    }
+    renderChallengeDuelsData();
 
     // Stage content
     if (isLeaguesFormat) {
@@ -3166,6 +3191,187 @@
     }
     // Fallback: return as-is
     return s;
+  }
+
+  function parseUtcSortValue(raw) {
+    const value = String(raw || "").trim();
+    if (!value) return Number.POSITIVE_INFINITY;
+    const normalized = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value)
+      ? `${value.replace(" ", "T")}Z`
+      : value;
+    const parsed = Date.parse(normalized);
+    return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+  }
+
+  function renderChallengeDuelsData() {
+    const container = document.getElementById("tab-matches-content");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const visibleStatuses = new Set(["PLANNED", "IN PROGRESS", "DONE", "ERROR"]);
+    const tournamentId = currentTournamentId.toUpperCase();
+    const visibleDuels = (challengeDuels || []).filter(duel => (
+      String(duel?.tournament_id || "").trim().toUpperCase() === tournamentId
+      && visibleStatuses.has(String(duel?.status || "").trim().toUpperCase())
+      && String(duel?.challenge_period_id || "").trim()
+    ));
+
+    if (!visibleDuels.length) {
+      const empty = document.createElement("div");
+      empty.className = "overview-about-text";
+      empty.textContent = "No matches yet.";
+      container.appendChild(empty);
+      return;
+    }
+
+    const periodsById = new Map();
+    visibleDuels.forEach(duel => {
+      const periodId = String(duel.challenge_period_id || "").trim();
+      if (!periodsById.has(periodId)) {
+        periodsById.set(periodId, {
+          id: periodId,
+          name: String(duel.challenge_period_name || periodId).trim(),
+          status: String(duel.challenge_period_status || "").trim().toLowerCase(),
+          planningStartsAt: duel.challenge_period_planning_starts_at || "",
+          duels: []
+        });
+      }
+      periodsById.get(periodId).duels.push(duel);
+    });
+
+    const periods = Array.from(periodsById.values()).sort((first, second) => (
+      parseUtcSortValue(first.planningStartsAt) - parseUtcSortValue(second.planningStartsAt)
+      || first.id.localeCompare(second.id, undefined, { numeric: true, sensitivity: "base" })
+    ));
+    const firstActivePeriodId = periods.find(period => period.status === "active")?.id || null;
+    let openAccordion = null;
+
+    const createPlayerCell = (duel, side) => {
+      const cell = document.createElement("td");
+      cell.className = "player-cell";
+
+      const wrap = document.createElement("div");
+      wrap.style.display = "flex";
+      wrap.style.alignItems = "center";
+      wrap.style.justifyContent = "center";
+      wrap.style.gap = "7px";
+
+      const playerId = String(duel[`player${side}_id`] || "").trim();
+      const playerName = String(duel[`player${side}`] || playerId).trim();
+      const avatarUrl = String(duel[`player${side}_avatar`] || "").trim();
+      const link = document.createElement("a");
+      link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(playerId)}`;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = playerName;
+
+      const avatar = avatarUrl ? document.createElement("img") : null;
+      if (avatar) {
+        avatar.src = avatarUrl;
+        avatar.alt = "";
+        avatar.className = "player-logo";
+      }
+
+      if (side === 1 && avatar) wrap.appendChild(avatar);
+      wrap.appendChild(link);
+      if (side === 2 && avatar) wrap.appendChild(avatar);
+      cell.appendChild(wrap);
+      return cell;
+    };
+
+    periods.forEach(period => {
+      period.duels.sort((first, second) => (
+        parseUtcSortValue(first.time) - parseUtcSortValue(second.time)
+        || String(first.id || "").localeCompare(String(second.id || ""))
+      ));
+
+      const section = document.createElement("div");
+      section.className = "group-section";
+
+      const toggle = document.createElement("div");
+      toggle.className = "accordion-toggle";
+      const label = document.createElement("span");
+      label.textContent = period.name;
+      const chevron = document.createElement("div");
+      chevron.className = "chevron";
+      chevron.innerHTML = '<i class="fas fa-chevron-down"></i>';
+      toggle.appendChild(label);
+      toggle.appendChild(chevron);
+
+      const content = document.createElement("div");
+      content.className = "accordion-content";
+      content.style.maxHeight = "0px";
+
+      const table = document.createElement("table");
+      table.className = "match-table";
+
+      period.duels.forEach(duel => {
+        const row = document.createElement("tr");
+        row.className = "match-row";
+
+        const dateCell = document.createElement("td");
+        dateCell.className = "date-cell";
+        dateCell.textContent = formatMatchTime(duel.time);
+
+        const scoreCell = document.createElement("td");
+        scoreCell.className = "score-cell";
+        const hasScore = duel.score1 !== "" && duel.score1 !== null && duel.score1 !== undefined
+          && duel.score2 !== "" && duel.score2 !== null && duel.score2 !== undefined;
+        const score = document.createElement("span");
+        score.className = "score-line";
+        score.textContent = hasScore ? `${duel.score1} - ${duel.score2}` : "vs";
+        scoreCell.appendChild(score);
+
+        const normalizedStatus = String(duel.status || "").trim().toUpperCase();
+        const statusLabel = document.createElement("span");
+        statusLabel.className = `challenge-duel-status challenge-duel-status--${normalizedStatus.toLowerCase().replace(/\s+/g, "-")}`;
+        statusLabel.textContent = normalizedStatus === "IN PROGRESS"
+          ? "In progress"
+          : normalizedStatus.charAt(0) + normalizedStatus.slice(1).toLowerCase();
+        scoreCell.appendChild(statusLabel);
+
+        row.appendChild(dateCell);
+        row.appendChild(createPlayerCell(duel, 1));
+        row.appendChild(scoreCell);
+        row.appendChild(createPlayerCell(duel, 2));
+        table.appendChild(row);
+      });
+
+      content.appendChild(table);
+      section.appendChild(toggle);
+      section.appendChild(content);
+      container.appendChild(section);
+
+      if (period.id === firstActivePeriodId) {
+        toggle.dataset.shouldOpen = "true";
+        content.dataset.shouldOpen = "true";
+      }
+
+      toggle.addEventListener("click", () => {
+        document.querySelectorAll(".accordion-toggle.open").forEach(openToggle => {
+          if (openToggle === toggle) return;
+          openToggle.classList.remove("open");
+          const openContent = openToggle.nextElementSibling;
+          if (openContent) openContent.style.maxHeight = "0px";
+        });
+
+        const isOpen = toggle.classList.contains("open");
+        if (openAccordion && openAccordion !== content) {
+          openAccordion.style.maxHeight = "0px";
+          openAccordion.previousElementSibling?.classList.remove("open");
+        }
+
+        if (isOpen) {
+          content.style.maxHeight = "0px";
+          toggle.classList.remove("open");
+          openAccordion = null;
+        } else {
+          content.style.maxHeight = `${content.scrollHeight}px`;
+          toggle.classList.add("open");
+          openAccordion = content;
+        }
+      });
+    });
   }
 
   function renderMatchesData(tournamentParam, containerOverride, options = {}) {
