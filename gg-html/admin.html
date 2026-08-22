@@ -1030,6 +1030,30 @@
     return entity.charAt(0).toUpperCase() + entity.slice(1).replace(/_/g, " ");
   }
 
+  function buildBgaAvatarUrl(playerId, avatar) {
+    const playerIdText = String(playerId || "").trim();
+    const avatarText = String(avatar || "").trim();
+    if (!avatarText) return "";
+    if (/^https?:\/\//i.test(avatarText)) return avatarText;
+    if (avatarText === "x00000") {
+      return "https://x.boardgamearena.net/data/avatar/default_184.jpg";
+    }
+
+    const defaultMatch = avatarText.match(/^_def_(\d+)$/);
+    if (defaultMatch) {
+      return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultMatch[1].padStart(4, "0")}.jpg`;
+    }
+
+    if (!/^\d+$/.test(playerIdText)) return "";
+    const playerIdNumber = Number(playerIdText);
+    if (!Number.isFinite(playerIdNumber)) return "";
+
+    const firstFolder = String(Math.floor(playerIdNumber / 100000000));
+    const secondFolder = String(Math.floor(playerIdNumber / 1000000));
+    const thirdFolder = String(Math.floor(playerIdNumber / 1000));
+    return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+  }
+
   function createAvatar(src, alt, isRound) {
     const safeSrc = String(src || "").trim();
     if (!safeSrc) return createPlaceholder(alt, isRound);
@@ -5496,7 +5520,7 @@
         : "Manual");
 
       sectionList.appendChild(createListRow({
-        imageSrc: item.profile_avatar,
+        imageSrc: buildBgaAvatarUrl(item.profile_id, item.profile_avatar),
         imageAlt: titleParts[0] || item?.profile_id || "Profile",
         imageRound: true,
         title: titleParts.join(" • ") || `Profile ${item.profile_id}`,

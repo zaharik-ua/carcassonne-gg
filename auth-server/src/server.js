@@ -46,6 +46,10 @@ import {
   shouldCloseChallengeRequestsForPlayerStatus,
 } from "./challenges.js";
 import { ensureTournamentCasesSchema } from "./tournament-cases.js";
+import {
+  isNewsProposalSubmitter,
+  isOwnEditableNewsProposal,
+} from "./news-proposals.js";
 
 dotenv.config();
 
@@ -218,6 +222,7 @@ const NEWS_EDITOR_AUDIT_FIELDS = [
 ];
 const NEWS_AUDIT_FIELDS = [
   "id",
+  "is_proposal",
   "status",
   "significance",
   "media_type",
@@ -1223,6 +1228,7 @@ async function loadNewsById(newsId) {
     `
       SELECT
         n.id,
+        COALESCE(n.is_proposal, 0) AS is_proposal,
         n.status,
         n.significance,
         n.media_type,
@@ -6107,6 +6113,7 @@ function ensureNewsSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS news (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      is_proposal INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'Draft',
       significance TEXT NOT NULL DEFAULT 'Regular',
       media_type TEXT NOT NULL DEFAULT 'icon',
@@ -6143,6 +6150,7 @@ function ensureNewsSchema() {
         return;
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "news", "is_proposal", "INTEGER NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "news", "status", "TEXT");
       addColumnIfMissing(columns, "news", "significance", "TEXT NOT NULL DEFAULT 'Regular'");
       addColumnIfMissing(columns, "news", "media_type", "TEXT NOT NULL DEFAULT 'icon'");
@@ -6191,6 +6199,7 @@ function ensureNewsSchema() {
         `
           UPDATE news
           SET
+            is_proposal = CASE WHEN COALESCE(is_proposal, 0) = 1 THEN 1 ELSE 0 END,
             significance = CASE
               WHEN lower(trim(COALESCE(significance, ''))) = 'important' THEN 'Important'
               WHEN lower(trim(COALESCE(significance, ''))) = 'major' THEN 'Major'
@@ -14718,6 +14727,35 @@ app.get("/public/news/:id", async (req, res) => {
   }
 });
 
+app.get("/news-tournament-options", async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+  if (!String(req.user?.player_id || "").trim() && Number(req.user?.admin) !== 1) {
+    return res.status(403).json({ ok: false, message: "Current user is not linked to a profile." });
+  }
+
+  try {
+    const rows = await dbAllAsync(
+      `
+        SELECT
+          id,
+          name,
+          short_title,
+          logo,
+          NULLIF(trim(category), '') AS category
+        FROM tournaments
+        WHERE trim(COALESCE(id, '')) <> ''
+        ORDER BY id COLLATE NOCASE ASC
+      `
+    );
+    return res.json({ ok: true, tournaments: rows || [] });
+  } catch (error) {
+    console.error("Failed to load news tournament options", error);
+    return res.status(500).json({ ok: false, message: "Failed to load tournament options" });
+  }
+});
+
 app.get("/news-match-options", async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
@@ -14725,8 +14763,8 @@ app.get("/news-match-options", async (req, res) => {
 
   try {
     const access = await getNewsEditorAccessForUser(req.user);
-    if (!access.isAdmin && !access.isNewsEditor) {
-      return sendNewsEditorAccessDenied(res);
+    if (!access.isAdmin && !access.profileId) {
+      return res.status(403).json({ ok: false, message: "Current user is not linked to a profile." });
     }
 
     const requestedTournamentId = normalizeNullableText(req.query?.tournament_id ?? req.query?.tournament);
@@ -14738,7 +14776,7 @@ app.get("/news-match-options", async (req, res) => {
       params.push(requestedTournamentId);
     }
 
-    if (!access.isAdmin && !access.hasGlobalAccess) {
+    if (!access.isAdmin && access.isNewsEditor && !access.hasGlobalAccess) {
       const tournamentIds = (Array.isArray(access.tournamentIds) ? access.tournamentIds : [])
         .map((item) => String(item || "").trim())
         .filter(Boolean);
@@ -14796,14 +14834,16 @@ app.get("/news", async (req, res) => {
 
   try {
     const access = await getNewsEditorAccessForUser(req.user);
-    if (!access.isAdmin && !access.isNewsEditor) {
-      return sendNewsEditorAccessDenied(res);
+    if (!access.isAdmin && !access.profileId) {
+      return res.status(403).json({ ok: false, message: "Current user is not linked to a profile." });
     }
+    const isProposalSubmitter = isNewsProposalSubmitter(access);
 
     const rows = await dbAllAsync(
       `
         SELECT
           n.id,
+          COALESCE(n.is_proposal, 0) AS is_proposal,
           n.status,
           n.significance,
           n.media_type,
@@ -14846,7 +14886,8 @@ app.get("/news", async (req, res) => {
     const newsItems = [];
     for (const row of rows || []) {
       const fullRow = await loadNewsById(row?.id);
-      if (fullRow && (await canManageNewsItem(access, fullRow))) {
+      const isOwnEditableProposal = isOwnEditableNewsProposal(access, fullRow);
+      if (fullRow && (isOwnEditableProposal || (!isProposalSubmitter && (await canManageNewsItem(access, fullRow))))) {
         newsItems.push(fullRow);
       }
     }
@@ -14864,19 +14905,17 @@ app.post("/news", async (req, res) => {
 
   try {
     const access = await getNewsEditorAccessForUser(req.user);
-    if (!access.isAdmin && !access.isNewsEditor) {
-      return sendNewsEditorAccessDenied(res);
-    }
     if (!access.isAdmin && !access.profileId) {
       return res.status(403).json({ ok: false, message: "Current user is not linked to a profile." });
     }
+    const isProposalSubmission = isNewsProposalSubmitter(access);
 
     const actorPlayerId = String(req.user?.player_id || "").trim() || null;
-    const status = normalizeNewsStatus(req.body?.status);
+    const status = isProposalSubmission ? "Draft" : normalizeNewsStatus(req.body?.status);
     const requestedCategory = normalizeCategoryName(req.body?.category);
     const category = await resolveNewsCategory(requestedCategory);
     const categoryKind = await getNewsCategoryKind(category);
-    let significance = normalizeNewsSignificance(req.body?.significance);
+    let significance = isProposalSubmission ? "Regular" : normalizeNewsSignificance(req.body?.significance);
     if (categoryKind === "youtube") significance = "Regular";
     const mediaType = normalizeNewsMediaType(req.body?.media_type ?? req.body?.mediaType, significance);
     const associationId = categoryKind === "local"
@@ -14974,16 +15013,18 @@ app.post("/news", async (req, res) => {
         return res.status(400).json({ ok: false, message: "youtube_video_id must be a valid YouTube URL or video ID" });
       }
     }
-    const accessError = await validateNewsPayloadAccess(access, {
-      significance,
-      category,
-      association_id: associationId,
-      local_website_id: localWebsiteId,
-      tournament_id: tournamentId,
-      streamer_id: streamerId,
-    });
-    if (accessError) {
-      return res.status(403).json({ ok: false, message: accessError });
+    if (!isProposalSubmission) {
+      const accessError = await validateNewsPayloadAccess(access, {
+        significance,
+        category,
+        association_id: associationId,
+        local_website_id: localWebsiteId,
+        tournament_id: tournamentId,
+        streamer_id: streamerId,
+      });
+      if (accessError) {
+        return res.status(403).json({ ok: false, message: accessError });
+      }
     }
 
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
@@ -14992,6 +15033,7 @@ app.post("/news", async (req, res) => {
       insertResult = await dbRunAsync(
         `
           INSERT INTO news (
+            is_proposal,
             status,
             significance,
             media_type,
@@ -15014,9 +15056,10 @@ app.post("/news", async (req, res) => {
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [
+          isProposalSubmission ? 1 : 0,
           status,
           significance,
           mediaType,
@@ -15074,9 +15117,10 @@ app.patch("/news/:id", async (req, res) => {
 
   try {
     const access = await getNewsEditorAccessForUser(req.user);
-    if (!access.isAdmin && !access.isNewsEditor) {
-      return sendNewsEditorAccessDenied(res);
+    if (!access.isAdmin && !access.profileId) {
+      return res.status(403).json({ ok: false, message: "Current user is not linked to a profile." });
     }
+    const isProposalSubmitter = isNewsProposalSubmitter(access);
 
     const newsId = normalizePositiveInteger(req.params.id);
     const payloadId = normalizePositiveInteger(req.body?.id);
@@ -15092,15 +15136,21 @@ app.patch("/news/:id", async (req, res) => {
     if (!beforeRow) {
       return res.status(404).json({ ok: false, message: "News not found" });
     }
-    if (!(await canManageNewsItem(access, beforeRow))) {
-      return res.status(403).json({ ok: false, message: "You can edit only news within your news editor access." });
+    const isOwnEditableProposal = isOwnEditableNewsProposal(access, beforeRow);
+    if (!isOwnEditableProposal && !(await canManageNewsItem(access, beforeRow))) {
+      return res.status(403).json({
+        ok: false,
+        message: isProposalSubmitter
+          ? "You can edit only your own draft news proposal."
+          : "You can edit only news within your news editor access.",
+      });
     }
 
-    const status = normalizeNewsStatus(req.body?.status);
+    const status = isOwnEditableProposal ? "Draft" : normalizeNewsStatus(req.body?.status);
     const requestedCategory = normalizeCategoryName(req.body?.category);
     const category = await resolveNewsCategory(requestedCategory);
     const categoryKind = await getNewsCategoryKind(category);
-    let significance = normalizeNewsSignificance(req.body?.significance);
+    let significance = isOwnEditableProposal ? "Regular" : normalizeNewsSignificance(req.body?.significance);
     if (categoryKind === "youtube") significance = "Regular";
     const mediaType = normalizeNewsMediaType(req.body?.media_type ?? req.body?.mediaType, significance);
     const associationId = categoryKind === "local"
@@ -15198,16 +15248,18 @@ app.patch("/news/:id", async (req, res) => {
         return res.status(400).json({ ok: false, message: "youtube_video_id must be a valid YouTube URL or video ID" });
       }
     }
-    const accessError = await validateNewsPayloadAccess(access, {
-      significance,
-      category,
-      association_id: associationId,
-      local_website_id: localWebsiteId,
-      tournament_id: tournamentId,
-      streamer_id: streamerId,
-    });
-    if (accessError) {
-      return res.status(403).json({ ok: false, message: accessError });
+    if (!isOwnEditableProposal) {
+      const accessError = await validateNewsPayloadAccess(access, {
+        significance,
+        category,
+        association_id: associationId,
+        local_website_id: localWebsiteId,
+        tournament_id: tournamentId,
+        streamer_id: streamerId,
+      });
+      if (accessError) {
+        return res.status(403).json({ ok: false, message: accessError });
+      }
     }
 
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");

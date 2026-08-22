@@ -3606,8 +3606,16 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
       team2: String(duel?.player_2_name || duel?.player_2_id || "").trim(),
       opponent1_id: String(duel?.player_1_id || "").trim(),
       opponent2_id: String(duel?.player_2_id || "").trim(),
-      flag1: String(duel?.player_1_association_flag || duel?.player_1_avatar || "").trim(),
-      flag2: String(duel?.player_2_association_flag || duel?.player_2_avatar || "").trim(),
+      flag1: String(
+        duel?.player_1_association_flag
+        || buildBgaAvatarUrl(duel?.player_1_id, duel?.player_1_avatar)
+        || ""
+      ).trim(),
+      flag2: String(
+        duel?.player_2_association_flag
+        || buildBgaAvatarUrl(duel?.player_2_id, duel?.player_2_avatar)
+        || ""
+      ).trim(),
       format: String(duel?.duel_format || "").trim(),
       created_at: String(duel?.created_at || "").trim(),
       status: String(duel?.status || "").trim(),

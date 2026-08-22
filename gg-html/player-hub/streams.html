@@ -1024,7 +1024,7 @@
   function createStreamerStaticField(streamer) {
     const field = document.createElement("div");
     field.className = "cp-static-field cp-streamer-field";
-    const avatarUrl = String(streamer?.avatar || "").trim() || buildBgaAvatarUrl(streamer?.profile_id, streamer?.avatar);
+    const avatarUrl = buildBgaAvatarUrl(streamer?.profile_id, streamer?.avatar);
     if (avatarUrl) {
       const img = document.createElement("img");
       img.src = avatarUrl;
@@ -1110,11 +1110,19 @@
     const competitors = isDuel
       ? [
         {
-          logo: String(match?.player_1_association_flag || match?.player_1_avatar || "").trim(),
+          logo: String(
+            match?.player_1_association_flag
+            || buildBgaAvatarUrl(match?.player_1_id, match?.player_1_avatar)
+            || ""
+          ).trim(),
           name: String(match?.player_1_name || match?.player1 || match?.team1 || match?.player_1_id || "").trim() || "-",
         },
         {
-          logo: String(match?.player_2_association_flag || match?.player_2_avatar || "").trim(),
+          logo: String(
+            match?.player_2_association_flag
+            || buildBgaAvatarUrl(match?.player_2_id, match?.player_2_avatar)
+            || ""
+          ).trim(),
           name: String(match?.player_2_name || match?.player2 || match?.team2 || match?.player_2_id || "").trim() || "-",
         },
       ]
@@ -1184,7 +1192,7 @@
   }
 
   function getStreamRowOptions(stream, showStreamerAvatar) {
-    const streamerAvatar = String(stream?.streamer_avatar || "").trim();
+    const streamerAvatar = buildBgaAvatarUrl(stream?.streamer_profile_id, stream?.streamer_avatar);
     return {
       showEdit: true,
       streamId: String(stream?.id || ""),

@@ -52,6 +52,235 @@
     font-size: 14px;
   }
 
+  .news-access-panel {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .news-access-intro,
+  .news-proposal-message {
+    color: #4b5563;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .news-access-checklist {
+    display: grid;
+    gap: 10px;
+  }
+
+  .news-access-step {
+    background: #f8fafc;
+    border: 1px solid #d8dee8;
+    border-radius: 6px;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 22px minmax(0, 1fr);
+    padding: 11px;
+  }
+
+  .news-access-step.is-done {
+    background: #edf8f2;
+    border-color: #b9dfca;
+  }
+
+  .news-access-check {
+    border: 2px solid #aab2bd;
+    border-radius: 50%;
+    box-sizing: border-box;
+    color: transparent;
+    display: grid;
+    font-size: 12px;
+    font-weight: 700;
+    height: 20px;
+    place-items: center;
+    width: 20px;
+  }
+
+  .news-access-step.is-done .news-access-check {
+    background: #198754;
+    border-color: #198754;
+    color: #fff;
+  }
+
+  .news-access-step-main {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .news-access-step-line {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: space-between;
+  }
+
+  .news-access-step-title {
+    color: #172232;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .news-access-hint,
+  .news-access-details {
+    color: #5f6b7a;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .news-access-details {
+    display: grid;
+    gap: 7px;
+  }
+
+  .news-access-details p,
+  .news-access-details ul {
+    margin: 0;
+  }
+
+  .news-access-details ul {
+    display: grid;
+    gap: 4px;
+    padding-left: 18px;
+  }
+
+  .news-access-details a {
+    color: #1a73b7;
+    overflow-wrap: anywhere;
+  }
+
+  .news-access-email-line {
+    color: #5f6b7a;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .news-access-email-chip {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #d6e2f0;
+    border-radius: 4px;
+    color: #222;
+    display: inline-flex;
+    font-size: 13px;
+    font-weight: 600;
+    gap: 6px;
+    margin: 2px 3px;
+    max-width: 100%;
+    padding: 4px 6px;
+    vertical-align: middle;
+  }
+
+  .news-access-email-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .news-access-copy-wrap {
+    display: inline-flex;
+    position: relative;
+  }
+
+  .news-access-copy-btn {
+    height: 24px;
+    min-height: 24px;
+    padding: 0;
+    position: relative;
+    width: 26px;
+  }
+
+  .news-access-copy-btn::before,
+  .news-access-copy-btn::after {
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    box-sizing: border-box;
+    content: "";
+    height: 11px;
+    position: absolute;
+    width: 9px;
+  }
+
+  .news-access-copy-btn::before {
+    left: 8px;
+    opacity: 0.75;
+    top: 5px;
+  }
+
+  .news-access-copy-btn::after {
+    background: #1a73b7;
+    left: 11px;
+    top: 8px;
+  }
+
+  .news-access-copy-tip {
+    background: #222;
+    border-radius: 4px;
+    bottom: calc(100% + 6px);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    left: 50%;
+    line-height: 1.2;
+    opacity: 0;
+    padding: 4px 7px;
+    pointer-events: none;
+    position: absolute;
+    transform: translateX(-50%) translateY(4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    visibility: hidden;
+    white-space: nowrap;
+    z-index: 2;
+  }
+
+  .news-access-copy-tip.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    visibility: visible;
+  }
+
+  .news-google-sign-in {
+    align-items: center;
+    display: inline-flex;
+    gap: 8px;
+  }
+
+  .news-google-sign-in img {
+    height: 17px;
+    width: 17px;
+  }
+
+  .news-proposal-message {
+    background: #f7fbff;
+    border: 1px solid #cfe2f3;
+    border-radius: 6px;
+    grid-column: 1 / -1;
+    padding: 11px 12px;
+  }
+
+  .news-proposal-message.is-saved {
+    background: #edf8f2;
+    border-color: #b9dfca;
+    color: #315d43;
+  }
+
+  .news-empty-state {
+    align-items: flex-start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .news-empty-state .cp-edit-btn {
+    margin-left: 0;
+  }
+
   .cp-edit-btn {
     border: 1px solid #c8ced8;
     background: #fff;
@@ -1158,8 +1387,7 @@
 (function () {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
-  const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
-  const NEWS_TOURNAMENTS_URL = `${TOURNAMENTS_URL}?scope=news`;
+  const NEWS_TOURNAMENTS_URL = `${AUTH_BASE}/news-tournament-options`;
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
   const LOCAL_WEBSITES_URL = `${AUTH_BASE}/local-websites`;
   const CATEGORIES_URL = `${AUTH_BASE}/categories`;
@@ -1171,6 +1399,8 @@
   const IMAGES_URL = `${AUTH_BASE}/images`;
   const IMAGE_UPLOAD_URL = `${AUTH_BASE}/images/upload`;
   const IMAGE_UPLOAD_MAX_BYTES = 64 * 1024 * 1024;
+  const DEFAULT_NEWS_ICON_URL = "https://carcassonne.gg/gallery/world-cup.jpg";
+  const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
   const NEWS_STATUS_OPTIONS = ["Draft", "Published"];
   const NEWS_SIGNIFICANCE_OPTIONS = ["Regular", "Important", "Major"];
   const CAPTAIN_VIEWS = {
@@ -3749,37 +3979,191 @@
     };
   }
  
-  function renderAccessMessage() {
-    contentEl.className = "captain-alert";
-    contentEl.textContent = "Please sign in to view this page.";
-    countEl.textContent = "";
-    hintEl.textContent = "";
+  function getCurrentUserAssociation(user) {
+    return normalizeCode(user?.profile?.association ?? user?.association ?? "");
   }
 
-  function renderStaticInfoSection(title, paragraphs = []) {
-    setPageHeading(title);
+  function openGoogleAuth() {
+    const popup = window.open(
+      `${AUTH_BASE}/auth/google`,
+      "googleAuth",
+      "width=520,height=640,left=100,top=100"
+    );
+    if (!popup) window.location.href = `${AUTH_BASE}/auth/google`;
+  }
+
+  function createNewsAccessStep(titleText, done) {
+    const step = document.createElement("div");
+    step.className = `news-access-step${done ? " is-done" : ""}`;
+    const check = document.createElement("div");
+    check.className = "news-access-check";
+    check.setAttribute("aria-hidden", "true");
+    check.textContent = "✓";
+    step.appendChild(check);
+    const main = document.createElement("div");
+    main.className = "news-access-step-main";
+    step.appendChild(main);
+    const line = document.createElement("div");
+    line.className = "news-access-step-line";
+    main.appendChild(line);
+    const title = document.createElement("div");
+    title.className = "news-access-step-title";
+    title.textContent = titleText;
+    line.appendChild(title);
+    return { step, main, line };
+  }
+
+  function appendNewsAccessEmail(main, email) {
+    const line = document.createElement("div");
+    line.className = "news-access-email-line";
+    line.appendChild(document.createTextNode("Send your email "));
+
+    const chip = document.createElement("span");
+    chip.className = "news-access-email-chip";
+    const emailText = document.createElement("span");
+    emailText.className = "news-access-email-text";
+    emailText.textContent = email;
+    chip.appendChild(emailText);
+
+    const copyWrap = document.createElement("span");
+    copyWrap.className = "news-access-copy-wrap";
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.className = "cp-btn cp-btn-primary news-access-copy-btn";
+    copyButton.setAttribute("aria-label", "Copy email");
+    copyButton.title = "Copy email";
+    const copyTip = document.createElement("span");
+    copyTip.className = "news-access-copy-tip";
+    copyTip.textContent = "Copied";
+    let copyTipTimer = null;
+    const showCopyTip = () => {
+      copyTip.classList.add("show");
+      window.clearTimeout(copyTipTimer);
+      copyTipTimer = window.setTimeout(() => copyTip.classList.remove("show"), 2000);
+    };
+    copyButton.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(email);
+        showCopyTip();
+      } catch (_error) {
+        const input = document.createElement("textarea");
+        input.value = email;
+        input.setAttribute("readonly", "");
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.appendChild(input);
+        input.select();
+        const copied = document.execCommand("copy");
+        input.remove();
+        if (copied) showCopyTip();
+      }
+    });
+    copyWrap.appendChild(copyButton);
+    copyWrap.appendChild(copyTip);
+    chip.appendChild(copyWrap);
+    line.appendChild(chip);
+    line.appendChild(document.createTextNode(" to your association captain."));
+    main.appendChild(line);
+  }
+
+  function appendNewsVerificationDetails(main, user) {
+    const details = document.createElement("div");
+    details.className = "news-access-details";
+    const loginEmail = String(user?.email || "").trim();
+    if (loginEmail) {
+      appendNewsAccessEmail(details, loginEmail);
+    } else {
+      const emailHint = document.createElement("p");
+      emailHint.textContent = "Send the email you use on carcassonne.gg to your association captain.";
+      details.appendChild(emailHint);
+    }
+
+    const captains = document.createElement("p");
+    captains.appendChild(document.createTextNode("Not sure who your captain is? Find them in the "));
+    const captainsLink = document.createElement("a");
+    captainsLink.href = "https://carcassonne.gg/players/?captains=1";
+    captainsLink.target = "_blank";
+    captainsLink.rel = "noopener noreferrer";
+    captainsLink.textContent = "captains list";
+    captains.appendChild(captainsLink);
+    captains.appendChild(document.createTextNode("."));
+    details.appendChild(captains);
+
+    const captainIntro = document.createElement("p");
+    captainIntro.textContent = "Your captain needs to:";
+    details.appendChild(captainIntro);
+    const list = document.createElement("ul");
+    const openPlayersItem = document.createElement("li");
+    openPlayersItem.appendChild(document.createTextNode("Open User Menu → Player Hub → "));
+    const playersLink = document.createElement("a");
+    playersLink.href = "https://carcassonne.gg/player-hub/players/";
+    playersLink.target = "_blank";
+    playersLink.rel = "noopener noreferrer";
+    playersLink.textContent = "Players";
+    openPlayersItem.appendChild(playersLink);
+    openPlayersItem.appendChild(document.createTextNode("."));
+    list.appendChild(openPlayersItem);
+    [
+      "Open your player profile for editing (or create it if needed).",
+      "Add your carcassonne.gg sign-in email to Login Email and save the profile.",
+    ].forEach((text) => {
+      const item = document.createElement("li");
+      item.textContent = text;
+      list.appendChild(item);
+    });
+    details.appendChild(list);
+    const contact = document.createElement("p");
+    contact.textContent = "If you cannot reach a captain, contact carcassonne.gg@gmail.com.";
+    details.appendChild(contact);
+    main.appendChild(details);
+  }
+
+  function renderNewsAccessChecklist(user = null) {
+    const isAuthenticated = !!user;
+    const isLinked = !!getCurrentUserProfileId(user);
+    setPageHeading("My News");
     countEl.textContent = "";
     hintEl.textContent = "";
     addButtonEl.classList.add("cp-hidden");
     clearFilters();
-    contentEl.className = "captain-alert";
+    contentEl.className = "news-access-panel";
     contentEl.innerHTML = "";
 
-    const fragment = document.createDocumentFragment();
-    (Array.isArray(paragraphs) ? paragraphs : []).forEach((text) => {
-      const paragraph = document.createElement("p");
-      if (text instanceof Node) {
-        paragraph.appendChild(text);
-      } else {
-        paragraph.textContent = String(text || "").trim();
-      }
-      paragraph.style.margin = "0 0 10px";
-      fragment.appendChild(paragraph);
-    });
-    if (fragment.childNodes.length && fragment.lastChild?.style) {
-      fragment.lastChild.style.marginBottom = "0";
+    const intro = document.createElement("p");
+    intro.className = "news-access-intro";
+    intro.textContent = "To suggest or create news, please sign in to carcassonne.gg and verify your BGA account.";
+    contentEl.appendChild(intro);
+
+    const checklist = document.createElement("div");
+    checklist.className = "news-access-checklist";
+    const signInStep = createNewsAccessStep("Sign in to the site", isAuthenticated);
+    if (!isAuthenticated) {
+      const signInButton = document.createElement("button");
+      signInButton.type = "button";
+      signInButton.className = "cp-btn cp-btn-secondary news-google-sign-in";
+      signInButton.innerHTML = `<img src="${GOOGLE_ICON_URL}" alt="">Sign in with Google`;
+      signInButton.addEventListener("click", openGoogleAuth);
+      signInStep.line.appendChild(signInButton);
     }
-    contentEl.appendChild(fragment);
+    checklist.appendChild(signInStep.step);
+
+    const bgaStep = createNewsAccessStep("Verify your BGA account", isLinked);
+    if (!isAuthenticated) {
+      const hint = document.createElement("div");
+      hint.className = "news-access-hint";
+      hint.textContent = "Sign in first, then continue here with BGA verification.";
+      bgaStep.main.appendChild(hint);
+    } else if (!isLinked) {
+      appendNewsVerificationDetails(bgaStep.main, user);
+      const checkButton = document.createElement("button");
+      checkButton.type = "button";
+      checkButton.className = "cp-btn cp-btn-primary";
+      checkButton.textContent = "Check verification";
+      checkButton.addEventListener("click", initCaptainPage);
+      bgaStep.line.appendChild(checkButton);
+    }
+    checklist.appendChild(bgaStep.step);
+    contentEl.appendChild(checklist);
   }
 
   function getCurrentUserProfileId(user) {
@@ -3828,7 +4212,18 @@
 
     if (!rows.length) {
       contentEl.className = "captain-alert";
-      contentEl.textContent = "No news yet.";
+      const emptyState = document.createElement("div");
+      emptyState.className = "news-empty-state";
+      const text = document.createElement("span");
+      text.textContent = "No news yet.";
+      const createBtn = document.createElement("button");
+      createBtn.type = "button";
+      createBtn.className = "cp-edit-btn";
+      createBtn.textContent = "Create";
+      createBtn.addEventListener("click", () => openCaptainCreate(CAPTAIN_VIEWS.NEWS));
+      emptyState.appendChild(text);
+      emptyState.appendChild(createBtn);
+      contentEl.appendChild(emptyState);
       return;
     }
 
@@ -3903,6 +4298,7 @@
         meta.appendChild(chip);
       };
       addChip(String(item?.status || "Draft").trim() || "Draft");
+      if (Number(item?.is_proposal) === 1) addChip("Suggested");
       addChip(String(item?.significance || "Regular").trim() || "Regular");
       if (item?.category) addChip(String(item.category).trim());
       const associationId = normalizeCode(item?.association_id);
@@ -3969,11 +4365,12 @@
 
   function renderNewsEditForm(newsItem, associationsList, tournamentsList, matchOptionsList, categoriesList, iconsList, streamersList, localWebsitesList, formMode = "create", options = {}) {
     const isCreateMode = formMode === "create";
+    const isProposalMode = options.proposalMode === true;
     const source = newsItem && typeof newsItem === "object" ? newsItem : {};
     const canUploadSourceImage = options.canUploadSource === true;
     const dropdowns = [];
-    setPageHeading(isCreateMode ? "Create news" : "Edit news");
-    countEl.textContent = isCreateMode ? "Creating news" : `Editing news: ${String(source?.id || "")}`;
+    setPageHeading(isProposalMode ? "Suggest news" : isCreateMode ? "Create news" : "Edit news");
+    countEl.textContent = isProposalMode ? "" : isCreateMode ? "Creating news" : `Editing news: ${String(source?.id || "")}`;
     hintEl.textContent = "";
     contentEl.className = "";
     contentEl.innerHTML = "";
@@ -3983,6 +4380,17 @@
     const form = document.createElement("form");
     form.className = "cp-edit-form cp-news-form";
     form.noValidate = true;
+
+    if (isProposalMode) {
+      const proposalMessage = document.createElement("div");
+      const hasSavedDraft = !!String(source?.id || "").trim();
+      proposalMessage.className = `news-proposal-message${hasSavedDraft ? " is-saved" : ""}`;
+      proposalMessage.setAttribute("role", options.justSaved === true ? "status" : "note");
+      proposalMessage.textContent = hasSavedDraft
+        ? "Your draft has been saved. Our team will review your proposal and contact you once it has been considered. You can continue editing it and save any changes below."
+        : "Have news worth sharing? Submit a draft for publication on carcassonne.gg. Our team will review your proposal and contact you about the next steps.";
+      form.appendChild(proposalMessage);
+    }
 
     const topActions = document.createElement("div");
     topActions.className = "cp-edit-actions";
@@ -3995,9 +4403,20 @@
     cancelBtn.className = "cp-btn cp-btn-secondary";
     cancelBtn.textContent = "Cancel";
     topActions.appendChild(saveBtn);
-    topActions.appendChild(cancelBtn);
+    if (!isProposalMode) topActions.appendChild(cancelBtn);
+    let viewBtn = null;
+    if (isProposalMode && !isCreateMode && String(source?.id || "").trim()) {
+      viewBtn = document.createElement("button");
+      viewBtn.type = "button";
+      viewBtn.className = "cp-btn cp-btn-secondary";
+      viewBtn.textContent = "View";
+      viewBtn.addEventListener("click", () => {
+        window.location.href = `https://carcassonne.gg/news/?id=${encodeURIComponent(String(source.id))}`;
+      });
+      topActions.appendChild(viewBtn);
+    }
     let deleteBtn = null;
-    if (!isCreateMode) {
+    if (!isCreateMode && !isProposalMode) {
       deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
       deleteBtn.className = "cp-btn cp-btn-danger";
@@ -4050,6 +4469,7 @@
     const setSaving = (isSaving, actionLabel = "Saving...") => {
       saveBtn.disabled = !!isSaving;
       cancelBtn.disabled = !!isSaving;
+      if (viewBtn) viewBtn.disabled = !!isSaving;
       if (deleteBtn) deleteBtn.disabled = !!isSaving;
       if (imageFileInput) imageFileInput.disabled = !!isSaving;
       if (imageChooseBtn) imageChooseBtn.disabled = !!isSaving;
@@ -4439,12 +4859,13 @@
     const isAdminNewsUser = options.isAdmin === true;
     const currentUserAuthId = normalizeUserId(options.currentUserAuthId || "");
     const currentProfileId = String(options.currentUserProfileId || "").trim();
+    const currentUserAssociation = normalizeCode(options.currentUserAssociation || "");
     const currentUserNewsEditors = isAdminNewsUser ? [] : (Array.isArray(options.newsEditors) ? options.newsEditors : [])
       .filter((entry) => String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentProfileId);
     const hasGlobalNewsEditorAccess = isAdminNewsUser || currentUserNewsEditors.some((entry) => (
       normalizeNewsEditorAccessType(entry?.access_type) === "global"
     ));
-    const restrictNewsEditorAccess = !isAdminNewsUser && !hasGlobalNewsEditorAccess;
+    const restrictNewsEditorAccess = !isProposalMode && !isAdminNewsUser && !hasGlobalNewsEditorAccess;
       const allowedLocalAssociationIds = new Set(currentUserNewsEditors
         .filter((entry) => normalizeNewsEditorAccessType(entry?.access_type) === "local")
         .map((entry) => normalizeCode(entry?.country_id ?? entry?.countryId))
@@ -4518,7 +4939,7 @@
         .sort((left, right) => left.label.localeCompare(right.label));
       const emptyStreamerOption = { value: "", label: "Not selected", logo: "" };
       const youtubeStreamerOptions = [emptyStreamerOption].concat(streamerRows
-        .filter((item) => isAdminNewsUser || allowedYoutubeStreamerIds.has(String(item.value || "").trim())));
+        .filter((item) => isProposalMode || isAdminNewsUser || allowedYoutubeStreamerIds.has(String(item.value || "").trim())));
       const emptyLocalWebsiteOption = { value: "", label: "Not selected", logo: "" };
       const localWebsiteOptions = [emptyLocalWebsiteOption].concat(localWebsiteRows
         .filter((item) => isAdminNewsUser || !restrictNewsEditorAccess || allowedLocalWebsiteIds.has(String(item.value || "").trim()))
@@ -4548,13 +4969,18 @@
     const isCategoryAllowedForCurrentUser = (categoryName) => {
       const categoryKey = normalizeCategoryKey(categoryName);
       if (!categoryKey) return false;
-        if (categoryKey === "youtube") return isAdminNewsUser || allowedYoutubeStreamerIds.size > 0;
+        if (categoryKey === "youtube") return isProposalMode || isAdminNewsUser || allowedYoutubeStreamerIds.size > 0;
         if (!restrictNewsEditorAccess) return true;
         if (categoryKey === "local") return allowedLocalAssociationIds.size > 0;
         if (categoryKey === "local website") return allowedLocalWebsiteIds.size > 0;
         return allowedTournamentCategoryKeys.has(categoryKey);
       };
     const emptyIconOption = { value: "", label: "Not selected", logo: "" };
+    const defaultIconOption = {
+      value: DEFAULT_NEWS_ICON_URL,
+      label: "Default icon",
+      logo: DEFAULT_NEWS_ICON_URL,
+    };
     const allIconOptions = (Array.isArray(iconsList) ? iconsList : [])
       .map((item) => ({
         value: toApiAbsoluteUrl(item?.icon_link || ""),
@@ -4579,7 +5005,7 @@
         }
         return true;
       });
-      return [emptyIconOption].concat(rows);
+      return [emptyIconOption].concat(rows.length || !isProposalMode || !categoryKey ? rows : [defaultIconOption]);
     };
     const getIconValueFromImageUrl = (imageUrl, options = allIconOptions) => {
       const normalizedImageUrl = toApiAbsoluteUrl(imageUrl);
@@ -4632,14 +5058,21 @@
     const sourceCategoryValue = categoryOptions.some((item) => item.value === requestedInitialCategory)
       ? requestedInitialCategory
       : "";
-    const initialCategoryValue = isCreateMode && !sourceCategoryValue && selectableCategoryOptions.length === 1
-      ? selectableCategoryOptions[0].value
+    const defaultLocalCategory = selectableCategoryOptions.find((item) => normalizeCategoryKey(item.value) === "local")?.value || "";
+    const initialCategoryValue = isCreateMode && !sourceCategoryValue
+      ? isProposalMode && defaultLocalCategory
+        ? defaultLocalCategory
+        : selectableCategoryOptions.length === 1
+          ? selectableCategoryOptions[0].value
+          : ""
       : sourceCategoryValue;
     const initialCategoryKind = getCategoryKindForName(initialCategoryValue || source?.category || "");
     const tournamentOptions = getTournamentOptionsForCategory(initialCategoryValue || source?.category || "");
-    const significanceOptions = (hasGlobalNewsEditorAccess
-      ? NEWS_SIGNIFICANCE_OPTIONS
-      : NEWS_SIGNIFICANCE_OPTIONS.filter((value) => value !== "Major"))
+    const significanceOptions = (isProposalMode
+      ? ["Regular"]
+      : hasGlobalNewsEditorAccess
+        ? NEWS_SIGNIFICANCE_OPTIONS
+        : NEWS_SIGNIFICANCE_OPTIONS.filter((value) => value !== "Major"))
       .map((value) => ({ value, label: value }));
     const requestedInitialSignificance = String(source?.significance || "Regular").trim() || "Regular";
     const initialSignificance = initialCategoryKind === "youtube"
@@ -4656,15 +5089,17 @@
       {
         placeholderLabel: "Select significance",
         searchable: false,
+        disabled: isProposalMode,
         onChange: () => updateConditionalNewsFields(),
       }
     );
     const statusInput = createSingleSelect(
-      String(source?.status || "Draft").trim() || "Draft",
-      NEWS_STATUS_OPTIONS.map((value) => ({ value, label: value })),
+      isProposalMode ? "Draft" : String(source?.status || "Draft").trim() || "Draft",
+      (isProposalMode ? ["Draft"] : NEWS_STATUS_OPTIONS).map((value) => ({ value, label: value })),
       {
         placeholderLabel: "Select status",
         searchable: false,
+        disabled: isProposalMode,
       }
     );
     addRow("Status", statusInput.root);
@@ -4695,13 +5130,13 @@
       {
         placeholderLabel: "Select YouTube channel",
         searchable: false,
-        disabled: !isAdminNewsUser,
+        disabled: !isProposalMode && !isAdminNewsUser,
       }
     );
     const youtubeStreamerRow = addRow("YouTube Channel", youtubeStreamerInput.root);
 
       const associationInput = createSingleSelect(
-        normalizeCode(source?.association_id),
+        normalizeCode(source?.association_id) || (isCreateMode && isProposalMode ? currentUserAssociation : ""),
         localAssociationOptions,
       {
         placeholderLabel: "Select association",
@@ -5071,7 +5506,7 @@
         significanceInput.setValue("Regular");
         newsMediaMode = "icon";
       }
-      significanceInput.setDisabled(isYouTubeCategory);
+      significanceInput.setDisabled(isProposalMode || isYouTubeCategory);
       const significance = String(significanceInput.getValue() || "Regular").trim() || "Regular";
       if (significance !== previousSignificance && significance === "Important") {
         newsMediaMode = "icon";
@@ -5138,7 +5573,7 @@
       }
       if (showYouTubeChannel) {
         const currentStreamerId = youtubeStreamerInput.getValue();
-        const nextStreamerId = isAdminNewsUser
+        const nextStreamerId = isAdminNewsUser || isProposalMode
           ? currentStreamerId
           : selectableYoutubeStreamerOptions.length === 1
             ? selectableYoutubeStreamerOptions[0].value
@@ -5146,7 +5581,7 @@
               ? currentStreamerId
               : "";
         youtubeStreamerInput.setOptions(youtubeStreamerOptions, nextStreamerId);
-        youtubeStreamerInput.setDisabled(!isAdminNewsUser);
+        youtubeStreamerInput.setDisabled(!isProposalMode && !isAdminNewsUser);
       } else {
         youtubeStreamerInput.setOptions(youtubeStreamerOptions, "");
         youtubeStreamerInput.setDisabled(true);
@@ -5207,8 +5642,8 @@
       const useImageUpload = shouldUseNewsImageUpload();
       const useShortDescription = isYouTubeCategory || useImageUpload;
       return {
-        status: statusInput.getValue() || "Draft",
-          significance: significanceInput.getValue() || "Regular",
+        status: isProposalMode ? "Draft" : statusInput.getValue() || "Draft",
+          significance: isProposalMode ? "Regular" : significanceInput.getValue() || "Regular",
           category: categoryInput.getValue() || "",
           association_id: categoryKind === "local" ? associationInput.getValue() || "" : "",
           local_website_id: categoryKind === "local_website" ? Number.parseInt(String(localWebsiteInput.getValue() || "").trim(), 10) : null,
@@ -5389,6 +5824,21 @@
           setError(result?.message || `Failed to ${isEdit ? "update" : "create"} news.`);
           return;
         }
+        if (isProposalMode && result?.news) {
+          renderNewsEditForm(
+            result.news,
+            associationsList,
+            tournamentsList,
+            matchOptionsList,
+            categoriesList,
+            iconsList,
+            streamersList,
+            localWebsitesList,
+            "edit",
+            { ...options, justSaved: true }
+          );
+          return;
+        }
         resetCaptainSubview(CAPTAIN_VIEWS.NEWS);
       } catch (error) {
         setError(error?.message || `Failed to ${isCreateMode ? "create" : "update"} news.`);
@@ -5413,8 +5863,10 @@
       const editNewsId = String(captainPageState.newsId || "").trim();
       let isAdminUser = false;
       let isAuthenticatedUser = false;
+      let currentUser = null;
       let currentUserAuthId = "";
       let currentUserProfileId = "";
+      let currentUserAssociation = "";
       let isNewsEditorUser = false;
 
       try {
@@ -5422,23 +5874,37 @@
         if (meRes.ok) {
           const meData = await meRes.json();
           const meUser = meData?.authenticated ? meData?.user : null;
+          currentUser = meUser;
           isAuthenticatedUser = !!meData?.authenticated;
           isAdminUser = meUser?.isAdmin === true || Number(meUser?.admin) === 1;
           currentUserAuthId = getAuthUserId(meUser);
           currentUserProfileId = getCurrentUserProfileId(meUser);
+          currentUserAssociation = getCurrentUserAssociation(meUser);
         }
       } catch (_error) {
         // keep defaults; access rules below will handle unauthorized state
       }
 
       if (!isAuthenticatedUser) {
-        renderAccessMessage();
+        renderNewsAccessChecklist();
         return;
       }
 
-      const [tournamentsRes, newsEditorsRes] = await Promise.all([
+      if (!currentUserProfileId) {
+        renderNewsAccessChecklist(currentUser);
+        return;
+      }
+
+      const [tournamentsRes, newsEditorsRes, newsRes, associationsRes, categoriesRes, iconsRes, streamersRes, localWebsitesRes, matchOptionsRes] = await Promise.all([
         fetch(NEWS_TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(NEWS_EDITORS_URL, { method: "GET", credentials: "include" }),
+        fetch(NEWS_URL, { method: "GET", credentials: "include" }),
+        fetch(ASSOCIATIONS_URL, { method: "GET", credentials: "include" }),
+        fetch(CATEGORIES_URL, { method: "GET", credentials: "include" }),
+        fetch(ICONS_URL, { method: "GET", credentials: "include" }),
+        fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
+        fetch(LOCAL_WEBSITES_URL, { method: "GET", credentials: "include" }),
+        fetch(NEWS_MATCH_OPTIONS_URL, { method: "GET", credentials: "include" }),
       ]);
       const newsEditorsData = newsEditorsRes?.ok
         ? await newsEditorsRes.json().catch(() => ({}))
@@ -5447,31 +5913,12 @@
       isNewsEditorUser = !!currentUserProfileId && newsEditors.some((entry) => (
         String(entry?.profile_id ?? entry?.player_id ?? "").trim() === currentUserProfileId
       ));
-      const canUseNewsSection = isAdminUser || isNewsEditorUser;
       let tournaments = [];
       if (tournamentsRes?.ok) {
         const tournamentsData = await tournamentsRes.json().catch(() => ({}));
         tournaments = Array.isArray(tournamentsData?.tournaments) ? tournamentsData.tournaments : [];
       }
       setPageHeading(getImmediatePageHeading());
-
-      if (!canUseNewsSection) {
-        renderStaticInfoSection("My News", [
-          "In this section, you can create local news for your association or news for a tournament you organize.",
-          "To get permission to create publications, contact your association captain or email us at carcassonne.gg@gmail.com.",
-        ]);
-        return;
-      }
-
-        const [newsRes, associationsRes, categoriesRes, iconsRes, streamersRes, localWebsitesRes, matchOptionsRes] = await Promise.all([
-          fetch(NEWS_URL, { method: "GET", credentials: "include" }),
-          fetch(ASSOCIATIONS_URL, { method: "GET", credentials: "include" }),
-          fetch(CATEGORIES_URL, { method: "GET", credentials: "include" }),
-          fetch(ICONS_URL, { method: "GET", credentials: "include" }),
-          fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
-          fetch(LOCAL_WEBSITES_URL, { method: "GET", credentials: "include" }),
-          fetch(NEWS_MATCH_OPTIONS_URL, { method: "GET", credentials: "include" }),
-        ]);
       const newsData = newsRes?.ok
         ? await newsRes.json().catch(() => ({}))
         : {};
@@ -5500,6 +5947,35 @@
           ? await matchOptionsRes.json().catch(() => ({}))
           : {};
         const matchOptions = Array.isArray(matchOptionsData?.matches) ? matchOptionsData.matches : [];
+
+      const commonFormOptions = {
+        canUploadSource: isAdminUser,
+        currentUserAuthId,
+        currentUserProfileId,
+        currentUserAssociation,
+        isAdmin: isAdminUser,
+        newsEditors,
+      };
+
+      if (!isAdminUser && !isNewsEditorUser) {
+        addButtonEl.classList.add("cp-hidden");
+        addButtonEl.onclick = null;
+        const savedProposal = newsItems.find((item) => Number(item?.is_proposal) === 1) || newsItems[0] || null;
+        renderNewsEditForm(
+          savedProposal,
+          associations,
+          tournaments,
+          matchOptions,
+          categories,
+          icons,
+          streamers,
+          localWebsites,
+          savedProposal ? "edit" : "create",
+          { ...commonFormOptions, proposalMode: true }
+        );
+        return;
+      }
+
       const associationsById = new Map();
       associations.forEach((item) => {
         const associationId = normalizeCode(item?.id || item?.code);
@@ -5541,13 +6017,7 @@
       }
 
       if (isCreateMode) {
-          renderNewsEditForm(null, associations, tournaments, matchOptions, categories, icons, streamers, localWebsites, "create", {
-            canUploadSource: isAdminUser,
-          currentUserAuthId,
-          currentUserProfileId,
-          isAdmin: isAdminUser,
-          newsEditors,
-        });
+        renderNewsEditForm(null, associations, tournaments, matchOptions, categories, icons, streamers, localWebsites, "create", commonFormOptions);
         return;
       }
 
@@ -5559,13 +6029,7 @@
           countEl.textContent = "";
           return;
         }
-          renderNewsEditForm(newsToEdit, associations, tournaments, matchOptions, categories, icons, streamers, localWebsites, "edit", {
-            canUploadSource: isAdminUser,
-          currentUserAuthId,
-          currentUserProfileId,
-          isAdmin: isAdminUser,
-          newsEditors,
-        });
+        renderNewsEditForm(newsToEdit, associations, tournaments, matchOptions, categories, icons, streamers, localWebsites, "edit", commonFormOptions);
         return;
       }
 
@@ -5586,6 +6050,11 @@
 
   window.addEventListener("gg-auth-state-change", () => {
     initCaptainPage();
+  });
+
+  window.addEventListener("message", (event) => {
+    if (event.origin !== new URL(AUTH_BASE).origin) return;
+    if (event.data?.type === "google-auth-success") initCaptainPage();
   });
 
   window.addEventListener("popstate", () => {

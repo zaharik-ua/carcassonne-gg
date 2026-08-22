@@ -1035,6 +1035,38 @@
     el.style.setProperty('--accent-text-color', theme.text || '#fff');
   }
 
+  function buildBgaAvatarUrl(playerId, avatar) {
+    const playerIdText = String(playerId || "").trim();
+    const avatarText = String(avatar || "").trim();
+    if (!avatarText) return "";
+
+    if (/^https?:\/\//i.test(avatarText)) {
+      return avatarText;
+    }
+
+    if (avatarText === "x00000") {
+      return "https://x.boardgamearena.net/data/avatar/default_184.jpg";
+    }
+
+    const defaultMatch = avatarText.match(/^_def_(\d+)$/);
+    if (defaultMatch) {
+      const defaultAvatarId = defaultMatch[1].padStart(4, "0");
+      return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultAvatarId}.jpg`;
+    }
+
+    if (!playerIdText) return "";
+    if (!/^\d+$/.test(playerIdText)) return "";
+
+    const playerIdNumber = Number(playerIdText);
+    if (!Number.isFinite(playerIdNumber)) return "";
+
+    const firstFolder = String(Math.floor(playerIdNumber / 100000000));
+    const secondFolder = String(Math.floor(playerIdNumber / 1000000));
+    const thirdFolder = String(Math.floor(playerIdNumber / 1000));
+
+    return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+  }
+
   applyTournamentTheme();
 
   function parseRankColorsField(rankColorsValue) {
@@ -1392,7 +1424,10 @@
         duels = data.duels || [];
         standings = data.standings || [];
         matches = data.matches || [];
-        players = data.players || [];
+        players = (Array.isArray(data.players) ? data.players : []).map(player => ({
+          ...player,
+          avatar: buildBgaAvatarUrl(player?.player_id, player?.avatar)
+        }));
         tournament_players = data.tournament_players || [];
         countries = data.countries || [];
         teams = data.teams || [];

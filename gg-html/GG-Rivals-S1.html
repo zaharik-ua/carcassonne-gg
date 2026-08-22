@@ -241,6 +241,8 @@
   .match-table tr.match-row {
     background-color: white;
     border-top: 1px solid #ccc;
+    height: 33px;
+    min-height: 33px;
   }
 
   .match-table td {
@@ -304,6 +306,13 @@
   .match-table tr.match-row.challenge-match-row:focus-visible {
     background-color: #f1f1f1;
     outline: none;
+  }
+
+  .matches-timezone-note {
+    margin: 6px 2px 0;
+    color: #666;
+    font-size: 12px;
+    line-height: 1.3;
   }
 
   .challenge-match-modal-overlay {
@@ -4085,6 +4094,14 @@
         }
       });
     });
+
+    const timezoneNote = document.createElement("div");
+    timezoneNote.className = "matches-timezone-note";
+    const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    timezoneNote.textContent = localTimeZone
+      ? `Times shown in ${localTimeZone}.`
+      : "Times shown in your local time.";
+    container.appendChild(timezoneNote);
   }
 
   function renderMatchesData(tournamentParam, containerOverride, options = {}) {
