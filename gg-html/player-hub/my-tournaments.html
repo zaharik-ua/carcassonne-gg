@@ -5504,7 +5504,6 @@
         if (!isAdminNewsUser && !payload.category) return "Category is required.";
         if (categoryKind === "local" && !payload.association_id) return "Association is required.";
         if (categoryKind === "local_website" && (!Number.isInteger(payload.local_website_id) || payload.local_website_id <= 0)) return "Website is required.";
-        if (categoryKind === "youtube" && (!Number.isInteger(payload.streamer_id) || payload.streamer_id <= 0)) return "YouTube Channel is required.";
       if (categoryKind === "youtube") {
         const youtubeVideoRaw = String(youtubeVideoInput.value || "").trim();
         if (!youtubeVideoRaw) return "YouTube URL or ID is required.";

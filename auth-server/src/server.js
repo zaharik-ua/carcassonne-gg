@@ -14930,8 +14930,9 @@ app.post("/news", async (req, res) => {
     const matchId = categoryKind === "tournament"
       ? normalizeNullableText(req.body?.match_id ?? req.body?.matchId)
       : null;
+    const streamerValue = normalizeNullableText(req.body?.streamer_id ?? req.body?.streamerId);
     const streamerId = categoryKind === "youtube"
-      ? normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId)
+      ? normalizePositiveInteger(streamerValue)
       : null;
     const youtubeVideoValue = normalizeNullableText(req.body?.youtube_video_id ?? req.body?.youtubeVideoId);
     const youtubeVideoId = categoryKind === "youtube"
@@ -14999,12 +15000,14 @@ app.post("/news", async (req, res) => {
       }
     }
     if (categoryKind === "youtube") {
-      if (!streamerId) {
-        return res.status(400).json({ ok: false, message: "streamer_id is required for YouTube news" });
-      }
-      const streamerRow = await loadActiveStreamerById(streamerId);
-      if (!streamerRow) {
+      if (streamerValue && !streamerId) {
         return res.status(400).json({ ok: false, message: "streamer_id must reference an existing active streamer" });
+      }
+      if (streamerId) {
+        const streamerRow = await loadActiveStreamerById(streamerId);
+        if (!streamerRow) {
+          return res.status(400).json({ ok: false, message: "streamer_id must reference an existing active streamer" });
+        }
       }
       if (!youtubeVideoValue) {
         return res.status(400).json({ ok: false, message: "youtube_video_id is required for YouTube news" });
@@ -15165,8 +15168,9 @@ app.patch("/news/:id", async (req, res) => {
     const matchId = categoryKind === "tournament"
       ? normalizeNullableText(req.body?.match_id ?? req.body?.matchId)
       : null;
+    const streamerValue = normalizeNullableText(req.body?.streamer_id ?? req.body?.streamerId);
     const streamerId = categoryKind === "youtube"
-      ? normalizePositiveInteger(req.body?.streamer_id ?? req.body?.streamerId)
+      ? normalizePositiveInteger(streamerValue)
       : null;
     const youtubeVideoValue = normalizeNullableText(req.body?.youtube_video_id ?? req.body?.youtubeVideoId);
     const youtubeVideoId = categoryKind === "youtube"
@@ -15234,12 +15238,14 @@ app.patch("/news/:id", async (req, res) => {
       }
     }
     if (categoryKind === "youtube") {
-      if (!streamerId) {
-        return res.status(400).json({ ok: false, message: "streamer_id is required for YouTube news" });
-      }
-      const streamerRow = await loadActiveStreamerById(streamerId);
-      if (!streamerRow) {
+      if (streamerValue && !streamerId) {
         return res.status(400).json({ ok: false, message: "streamer_id must reference an existing active streamer" });
+      }
+      if (streamerId) {
+        const streamerRow = await loadActiveStreamerById(streamerId);
+        if (!streamerRow) {
+          return res.status(400).json({ ok: false, message: "streamer_id must reference an existing active streamer" });
+        }
       }
       if (!youtubeVideoValue) {
         return res.status(400).json({ ok: false, message: "youtube_video_id is required for YouTube news" });
