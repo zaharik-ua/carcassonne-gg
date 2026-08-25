@@ -230,6 +230,12 @@ export async function publishSecretLineupMatchInTransaction(db, matchId, actorPl
       SELECT
         id,
         tournament_id,
+        COALESCE((
+          SELECT t.ranking
+          FROM tournaments t
+          WHERE upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(matches.tournament_id, '')))
+          LIMIT 1
+        ), 1) AS ranking,
         COALESCE(is_test, 0) AS is_test,
         time_utc,
         lineup_type,
@@ -323,6 +329,7 @@ export async function publishSecretLineupMatchInTransaction(db, matchId, actorPl
           tournament_id,
           match_id,
           is_test,
+          ranking,
           duel_number,
           duel_format,
           time_utc,
@@ -339,11 +346,12 @@ export async function publishSecretLineupMatchInTransaction(db, matchId, actorPl
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, 'Bo3', ?, 0, ?, ?, NULL, NULL, 'Planned', ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, 'Bo3', ?, 0, ?, ?, NULL, NULL, 'Planned', ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO UPDATE SET
           tournament_id = excluded.tournament_id,
           match_id = excluded.match_id,
           is_test = excluded.is_test,
+          ranking = excluded.ranking,
           duel_number = excluded.duel_number,
           duel_format = excluded.duel_format,
           time_utc = excluded.time_utc,
@@ -363,6 +371,7 @@ export async function publishSecretLineupMatchInTransaction(db, matchId, actorPl
         match.tournament_id,
         normalizedMatchId,
         Number(match.is_test) === 1 ? 1 : 0,
+        Number(match.ranking) === 1 ? 1 : 0,
         position,
         match.time_utc,
         entriesByTeam.get(team1).get(position),

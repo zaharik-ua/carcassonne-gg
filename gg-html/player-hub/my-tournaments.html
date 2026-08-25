@@ -6531,6 +6531,17 @@
       })
       .filter((entry) => entry.team_id);
     let disabled = false;
+    const changeHandlers = [];
+    const notifyChange = () => {
+      const values = entries
+        .filter((entry) => entry.team_id)
+        .map((entry) => ({
+          id: entry.id,
+          team_id: entry.team_id,
+          group: String(entry.group || "").trim() || null,
+        }));
+      changeHandlers.forEach((handler) => handler(values));
+    };
 
     const getTeamOptions = () => tournamentTeamIds
       .map((teamId) => teamsById.get(normalizeCode(teamId)) || {
@@ -6587,6 +6598,7 @@
         teamSelect.addEventListener("change", () => {
           entry.team_id = teamSelect.value;
           render();
+          notifyChange();
         });
         teamControl.appendChild(teamSelect.root);
 
@@ -6613,6 +6625,7 @@
         removeButton.addEventListener("click", () => {
           entries.splice(index, 1);
           render();
+          notifyChange();
         });
 
         row.appendChild(teamControl);
@@ -6628,6 +6641,7 @@
       const firstAvailable = getTeamOptions().find((option) => !used.has(normalizeCode(option.value)));
       entries.push({ id: null, team_id: firstAvailable?.value || "", group: "" });
       render();
+      notifyChange();
     });
 
     root.appendChild(head);
@@ -6644,6 +6658,7 @@
         const availableIds = new Set(tournamentTeamIds.map(normalizeCode));
         entries = entries.filter((entry) => availableIds.has(normalizeCode(entry.team_id)));
         render();
+        notifyChange();
       },
       setDisabled(isDisabled) {
         disabled = !!isDisabled;
@@ -6657,6 +6672,9 @@
             team_id: entry.team_id,
             group: String(entry.group || "").trim() || null,
           }));
+      },
+      onChange(handler) {
+        if (typeof handler === "function") changeHandlers.push(handler);
       },
       getValidationError() {
         if (entries.some((entry) => !entry.team_id)) return "Select a team in every standings row.";
@@ -7055,8 +7073,8 @@
     );
     const tournamentFormatField = createTournamentFormRow(
       "Tournament Format",
-      tournament?.tournament_format || "1 Stage",
-      { selectOptions: ["1 Stage", "2 Stages", "3 Stages", "Leagues"] }
+      tournament?.tournament_format || "Free Play",
+      { selectOptions: ["Free Play", "1 Stage", "2 Stages", "3 Stages", "Leagues"] }
     );
     const stage1GroupsField = createTournamentFormRow(
       "Stage 1 Groups",
@@ -7081,6 +7099,13 @@
       tournament?.stage2_format || "Round-robin",
       { selectOptions: stageFormatOptions }
     );
+    const rankingField = createTournamentFormRow(
+      "Ranking",
+      tournament?.ranking === undefined
+        || tournament?.ranking === true
+        || Number(tournament?.ranking) === 1,
+      { type: "checkbox" }
+    );
     const isTestField = createTournamentFormRow(
       "Test tournament",
       tournament?.is_test === true || Number(tournament?.is_test) === 1,
@@ -7103,6 +7128,7 @@
       stage1GroupsField,
       stage1FormatField,
       stage2FormatField,
+      rankingField,
       isTestField,
     ].forEach((field) => form.appendChild(field.row));
 
@@ -7154,7 +7180,10 @@
     };
     const syncConditionalFields = () => {
       const tournamentType = tournamentTypeField.input.value;
+      const tournamentFormat = tournamentFormatField.input.value;
       const isTeams = tournamentType === "Teams";
+      const isFreePlay = tournamentFormat === "Free Play";
+      const hasStage2 = !isFreePlay && tournamentFormat !== "1 Stage";
       const supportsCategory = tournamentType === "Individuals" || isTeams;
       const isRivalsCategory = String(categoryField.input.value || "").trim().toLowerCase() === "rivals";
       const supportsLineup = isTeams || tournamentType === "Clubs";
@@ -7162,6 +7191,7 @@
       const isOfficial = isTeams && subtypeField.input.value === "Official";
       const supportsStage1Standings = isTeams
         && ["Round-robin", "Swiss"].includes(stage1FormatField.input.value);
+      const hasStage1Standings = standingsEditor.getValues().length > 0;
 
       teamTypeField.row.classList.toggle("cp-hidden", !isTeams);
       subtypeField.row.classList.toggle("cp-hidden", !isTeams);
@@ -7169,9 +7199,13 @@
       challengePeriodsSection.classList.toggle("cp-hidden", !supportsCategory || !isRivalsCategory);
       lineupSizeTypeField.row.classList.toggle("cp-hidden", !supportsLineup);
       lineupSizeField.row.classList.toggle("cp-hidden", !(supportsLineup && isFixedLineup));
+      stage1GroupsField.row.classList.toggle("cp-hidden", isFreePlay);
+      stage1FormatField.row.classList.toggle("cp-hidden", isFreePlay);
+      stage2FormatField.row.classList.toggle("cp-hidden", !hasStage2);
       accessUsersEditor.root.classList.toggle("cp-hidden", !isTeams);
       tournamentTeamsEditor.root.classList.toggle("cp-hidden", !isTeams);
       standingsEditor.root.classList.toggle("cp-hidden", !supportsStage1Standings);
+      recalculateButton.classList.toggle("cp-hidden", !hasStage1Standings);
 
       teamTypeField.input.disabled = isBusy || !isTeams;
       subtypeField.input.disabled = isBusy || !isTeams;
@@ -7179,9 +7213,10 @@
       lineupSizeTypeField.input.disabled = isBusy || !supportsLineup;
       lineupSizeField.input.disabled = isBusy || !supportsLineup || !isFixedLineup;
       tournamentFormatField.input.disabled = isBusy;
-      stage1GroupsField.input.disabled = isBusy;
-      stage1FormatField.input.disabled = isBusy;
-      stage2FormatField.input.disabled = isBusy;
+      stage1GroupsField.input.disabled = isBusy || isFreePlay;
+      stage1FormatField.input.disabled = isBusy || isFreePlay;
+      stage2FormatField.input.disabled = isBusy || !hasStage2;
+      recalculateButton.disabled = isBusy || !hasStage1Standings;
       lineupSizeField.input.required = supportsLineup && isFixedLineup;
       accessUsersEditor.setOfficial(isOfficial);
       if (isBusy) accessUsersEditor.setDisabled(true);
@@ -7195,7 +7230,9 @@
     categoryField.input.addEventListener("change", syncConditionalFields);
     subtypeField.input.addEventListener("change", syncConditionalFields);
     lineupSizeTypeField.input.addEventListener("change", syncConditionalFields);
+    tournamentFormatField.input.addEventListener("change", syncConditionalFields);
     stage1FormatField.input.addEventListener("change", syncConditionalFields);
+    standingsEditor.onChange(syncConditionalFields);
     syncConditionalFields();
 
     const setBusy = (busy, action = "") => {
@@ -7246,7 +7283,10 @@
       }
 
       const tournamentType = tournamentTypeField.input.value;
+      const tournamentFormat = tournamentFormatField.input.value;
       const isTeams = tournamentType === "Teams";
+      const isFreePlay = tournamentFormat === "Free Play";
+      const hasStage2 = !isFreePlay && tournamentFormat !== "1 Stage";
       const isOfficial = isTeams && subtypeField.input.value === "Official";
       const supportsCategory = tournamentType === "Individuals" || isTeams;
       const supportsLineup = isTeams || tournamentType === "Clubs";
@@ -7267,10 +7307,11 @@
         player_hub_visibility: visibilityField.input.value,
         lineup_size_type: lineupSizeType,
         lineup_size: lineupSizeType === 1 ? lineupSize : null,
-        tournament_format: tournamentFormatField.input.value,
-        stage1_groups: stage1GroupsField.input.checked,
-        stage1_format: stage1FormatField.input.value,
-        stage2_format: stage2FormatField.input.value,
+        tournament_format: tournamentFormat,
+        stage1_groups: isFreePlay ? false : stage1GroupsField.input.checked,
+        stage1_format: isFreePlay ? "" : stage1FormatField.input.value,
+        stage2_format: hasStage2 ? stage2FormatField.input.value : "",
+        ranking: rankingField.input.checked,
         is_test: isTestField.input.checked,
         about: aboutEditor.getHtml(),
         rules: rulesEditor.getHtml(),

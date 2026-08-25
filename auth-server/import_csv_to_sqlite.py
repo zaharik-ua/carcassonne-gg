@@ -417,6 +417,7 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
         conn.execute("ALTER TABLE duels ADD COLUMN ranking INTEGER NOT NULL DEFAULT 1")
     conn.execute("UPDATE duels SET ranking = 1 WHERE ranking IS NULL")
     duel_columns = _load_columns(conn, "duels")
+    tournament_columns = _load_columns(conn, "tournaments")
     required_columns = {
         "id",
         "tournament_id",
@@ -458,6 +459,19 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
     except ValueError:
         gg_anchors = None
     for item in duels:
+        tournament_ranking = 1
+        if "ranking" in tournament_columns:
+            tournament_row = conn.execute(
+                """
+                SELECT COALESCE(ranking, 1)
+                FROM tournaments
+                WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
+                LIMIT 1
+                """,
+                (item["tournament_id"],),
+            ).fetchone()
+            if tournament_row is not None:
+                tournament_ranking = 1 if str(tournament_row[0]).strip().lower() in {"1", "true", "yes", "on"} else 0
         existing = conn.execute(
             """
             SELECT 1
@@ -494,6 +508,7 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
               rating,
               gg_rating_full,
               gg_rating,
+              ranking,
               status,
               results_last_error,
               results_checked_at,
@@ -504,7 +519,7 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
               created_at,
               updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET
               tournament_id = excluded.tournament_id,
               match_id = excluded.match_id,
@@ -518,6 +533,7 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
               dw2 = NULL,
               rating_full = NULL,
               rating = NULL,
+              ranking = excluded.ranking,
               status = excluded.status,
               results_last_error = NULL,
               results_checked_at = NULL,
@@ -538,6 +554,7 @@ def _upsert_duels(conn: sqlite3.Connection, *, actor_id: str, duels: list[dict[s
                 item["player_2_id"],
                 gg_rating_full,
                 round_gg_rating(gg_rating_full),
+                tournament_ranking,
                 item["status"],
                 actor_id,
                 actor_id,

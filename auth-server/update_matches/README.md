@@ -86,6 +86,7 @@ python3 run_update_matches.py --match-id 20250330UKRPRT
   - `Done` when all non-deleted duels of the match are `Done`
   - `In progress` while the current time is inside the combined duel time window of the match and not all duels are `Done`
   - `Planned` otherwise
+- when a match changes to `Done`, existing team and player standings for its tournament are recalculated; tournaments without standings are skipped
 - `games` rows are upserted by `bga_table_id`
 - before writing either results or errors, the script re-checks the duel and skips it if it became protected during the run
 

@@ -51,6 +51,10 @@ async function createDatabase(t) {
       id TEXT PRIMARY KEY,
       deleted_at TEXT
     );
+    CREATE TABLE tournaments (
+      id TEXT PRIMARY KEY,
+      ranking INTEGER NOT NULL DEFAULT 1
+    );
     CREATE TABLE matches (
       id TEXT PRIMARY KEY,
       tournament_id TEXT,
@@ -72,6 +76,7 @@ async function createDatabase(t) {
       tournament_id TEXT,
       match_id TEXT,
       is_test INTEGER NOT NULL DEFAULT 0,
+      ranking INTEGER NOT NULL DEFAULT 1,
       duel_number INTEGER,
       duel_format TEXT,
       time_utc TEXT,
@@ -94,6 +99,10 @@ async function createDatabase(t) {
 }
 
 async function seedMatch(db, matchId, deadlineUtc) {
+  await run(
+    db,
+    "INSERT OR IGNORE INTO tournaments (id, ranking) VALUES ('TOURNAMENT', 1)"
+  );
   await run(
     db,
     `
@@ -207,13 +216,14 @@ test("publishes five paired duels once when both due lineups exist", async (t) =
   const db = await createDatabase(t);
   const matchId = "due-match";
   await seedMatch(db, matchId, new Date(Date.now() - 60 * 1000).toISOString());
+  await run(db, "UPDATE tournaments SET ranking = 0 WHERE id = 'TOURNAMENT'");
   await seedLineup(db, matchId, "AAA", "a");
   await seedLineup(db, matchId, "BBB", "b");
 
   const [result] = await publishDueSecretLineups(db);
   const duels = await all(
     db,
-    "SELECT duel_number, player_1_id, player_2_id FROM duels WHERE match_id = ? ORDER BY duel_number",
+    "SELECT duel_number, player_1_id, player_2_id, ranking FROM duels WHERE match_id = ? ORDER BY duel_number",
     [matchId]
   );
   const match = await get(
@@ -232,6 +242,7 @@ test("publishes five paired duels once when both due lineups exist", async (t) =
     duel_number: index + 1,
     player_1_id: `a-${index + 1}`,
     player_2_id: `b-${index + 1}`,
+    ranking: 0,
   })));
   assert.equal(secondResult.reason, "already_published");
   assert.equal(duelCount.count, SECRET_LINEUP_SIZE);

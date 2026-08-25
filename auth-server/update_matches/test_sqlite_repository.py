@@ -36,11 +36,17 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
 
                 CREATE TABLE matches (
                   id TEXT PRIMARY KEY,
+                  tournament_id TEXT,
+                  team_1 TEXT,
+                  team_2 TEXT,
+                  stage TEXT,
+                  "group" TEXT,
                   dw1 INTEGER,
                   dw2 INTEGER,
                   gw1 INTEGER,
                   gw2 INTEGER,
                   status TEXT,
+                  deleted_at TEXT,
                   updated_at TEXT
                 );
 
@@ -74,6 +80,27 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
                   player_2_clock INTEGER,
                   status TEXT,
                   deleted_at TEXT
+                );
+
+                CREATE TABLE standings (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  tournament_id TEXT,
+                  stage TEXT,
+                  "group" TEXT,
+                  team_id TEXT,
+                  player_id TEXT,
+                  mp INTEGER NOT NULL DEFAULT 0,
+                  mw INTEGER NOT NULL DEFAULT 0,
+                  ml INTEGER NOT NULL DEFAULT 0,
+                  dw INTEGER,
+                  dl INTEGER,
+                  gw INTEGER NOT NULL DEFAULT 0,
+                  gl INTEGER NOT NULL DEFAULT 0,
+                  mdif INTEGER NOT NULL DEFAULT 0,
+                  ddif INTEGER,
+                  gdif INTEGER NOT NULL DEFAULT 0,
+                  position INTEGER,
+                  updated_at TEXT
                 );
                 """
             )
@@ -161,6 +188,138 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
         self.assertEqual(row["status"], "Done")
         self.assertIsNone(row["results_last_error"])
         self.assertEqual(self._game_count("planned"), 1)
+
+    def test_match_completion_recalculates_existing_team_and_player_standings(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO matches (
+                  id, tournament_id, team_1, team_2, stage, "group", status
+                )
+                VALUES ('standings-match', 'TOURNAMENT-1', 'TEAM-A', 'TEAM-B', 'Stage 1', 'A', 'Planned')
+                """
+            )
+            self._insert_duel(
+                conn,
+                duel_id="standings-duel",
+                status="Planned",
+                deleted_at=None,
+                match_id="standings-match",
+            )
+            conn.executemany(
+                """
+                INSERT INTO standings (
+                  tournament_id, stage, "group", team_id, player_id
+                )
+                VALUES ('TOURNAMENT-1', 'Stage 1', 'A', ?, ?)
+                """,
+                [
+                    ("TEAM-A", None),
+                    ("TEAM-B", None),
+                    (None, "100"),
+                    (None, "200"),
+                ],
+            )
+
+        self.repository.save_match_result(
+            self._request("standings-duel"),
+            MatchUpdateResult(
+                status="success",
+                wins0=2,
+                wins1=0,
+                tables=[self._table()],
+            ),
+        )
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            match = conn.execute(
+                "SELECT status, dw1, dw2, gw1, gw2 FROM matches WHERE id = 'standings-match'"
+            ).fetchone()
+            rows = conn.execute(
+                """
+                SELECT team_id, player_id, mp, mw, ml, dw, dl, gw, gl, mdif, ddif, gdif, position
+                FROM standings
+                WHERE tournament_id = 'TOURNAMENT-1'
+                """
+            ).fetchall()
+
+        self.assertIsNotNone(match)
+        self.assertEqual(dict(match), {"status": "Done", "dw1": 1, "dw2": 0, "gw1": 2, "gw2": 0})
+        standings = {
+            str(row["team_id"] or row["player_id"]): dict(row)
+            for row in rows
+        }
+        self.assertEqual(
+            standings["TEAM-A"],
+            {
+                "team_id": "TEAM-A", "player_id": None,
+                "mp": 1, "mw": 1, "ml": 0, "dw": 1, "dl": 0,
+                "gw": 2, "gl": 0, "mdif": 1, "ddif": 1, "gdif": 2, "position": 1,
+            },
+        )
+        self.assertEqual(
+            standings["TEAM-B"],
+            {
+                "team_id": "TEAM-B", "player_id": None,
+                "mp": 1, "mw": 0, "ml": 1, "dw": 0, "dl": 1,
+                "gw": 0, "gl": 2, "mdif": -1, "ddif": -1, "gdif": -2, "position": 2,
+            },
+        )
+        self.assertEqual(
+            standings["100"],
+            {
+                "team_id": None, "player_id": "100",
+                "mp": 1, "mw": 1, "ml": 0, "dw": None, "dl": None,
+                "gw": 2, "gl": 0, "mdif": 1, "ddif": None, "gdif": 2, "position": 1,
+            },
+        )
+        self.assertEqual(
+            standings["200"],
+            {
+                "team_id": None, "player_id": "200",
+                "mp": 1, "mw": 0, "ml": 1, "dw": None, "dl": None,
+                "gw": 0, "gl": 2, "mdif": -1, "ddif": None, "gdif": -2, "position": 2,
+            },
+        )
+
+    def test_match_completion_skips_recalculation_without_standings(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO matches (
+                  id, tournament_id, team_1, team_2, stage, status
+                )
+                VALUES ('no-standings-match', 'EMPTY-TOURNAMENT', 'TEAM-A', 'TEAM-B', 'Stage 1', 'Planned')
+                """
+            )
+            self._insert_duel(
+                conn,
+                duel_id="no-standings-duel",
+                status="Planned",
+                deleted_at=None,
+                match_id="no-standings-match",
+            )
+
+        self.repository.save_match_result(
+            self._request("no-standings-duel"),
+            MatchUpdateResult(
+                status="success",
+                wins0=2,
+                wins1=0,
+                tables=[self._table()],
+            ),
+        )
+
+        with sqlite3.connect(self.db_path) as conn:
+            match_status = conn.execute(
+                "SELECT status FROM matches WHERE id = 'no-standings-match'"
+            ).fetchone()[0]
+            standings_count = conn.execute(
+                "SELECT COUNT(*) FROM standings WHERE tournament_id = 'EMPTY-TOURNAMENT'"
+            ).fetchone()[0]
+        self.assertEqual(match_status, "Done")
+        self.assertEqual(standings_count, 0)
 
     def _insert_duel(
         self,

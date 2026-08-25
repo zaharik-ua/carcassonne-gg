@@ -133,6 +133,28 @@ class SqliteWtcocRepository:
             self._ensure_wtcoc_match_links_table(conn)
             link_map = self._load_wtcoc_match_link_map(conn, tournament_id)
             gg_anchors, gg_elos_by_player_id = self._load_gg_rating_context(conn)
+            tournament_columns = {
+                str(row["name"] or "").strip().lower()
+                for row in conn.execute("PRAGMA table_info(tournaments)").fetchall()
+                if row["name"] is not None
+            }
+            tournament_ranking = 1
+            if "ranking" in tournament_columns:
+                tournament_row = conn.execute(
+                    """
+                    SELECT COALESCE(ranking, 1)
+                    FROM tournaments
+                    WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
+                    LIMIT 1
+                    """,
+                    (tournament_id,),
+                ).fetchone()
+                if tournament_row is not None:
+                    tournament_ranking = (
+                        1
+                        if str(tournament_row[0]).strip().lower() in {"1", "true", "yes", "on"}
+                        else 0
+                    )
 
             conn.execute("BEGIN IMMEDIATE TRANSACTION")
             try:
@@ -461,6 +483,7 @@ class SqliteWtcocRepository:
                           trim(COALESCE(custom_time, '')) AS custom_time,
                           trim(COALESCE(player_1_id, '')) AS player_1_id,
                           trim(COALESCE(player_2_id, '')) AS player_2_id,
+                          COALESCE(ranking, 1) AS ranking,
                           dw1_import,
                           dw2_import,
                           trim(COALESCE(deleted_at, '')) AS deleted_at
@@ -500,6 +523,7 @@ class SqliteWtcocRepository:
                               rating,
                               gg_rating_full,
                               gg_rating,
+                              ranking,
                               status,
                               results_last_error,
                               results_checked_at,
@@ -510,7 +534,7 @@ class SqliteWtcocRepository:
                               created_at,
                               updated_at
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, ?, ?, 'Planned', NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, ?, ?, ?, 'Planned', NULL, NULL, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                             """,
                             (
                                 item["id"],
@@ -526,6 +550,7 @@ class SqliteWtcocRepository:
                                 item.get("dw2_import") if item.get("import_results_ready") else None,
                                 gg_rating_full,
                                 round_gg_rating(gg_rating_full),
+                                tournament_ranking,
                                 normalized_actor_id,
                                 normalized_actor_id,
                             ),
@@ -541,6 +566,7 @@ class SqliteWtcocRepository:
                         "custom_time": self._normalize_db_value(existing["custom_time"]),
                         "player_1_id": self._normalize_db_value(existing["player_1_id"]),
                         "player_2_id": self._normalize_db_value(existing["player_2_id"]),
+                        "ranking": self._normalize_nullable_number(existing["ranking"]),
                         "deleted_at": self._normalize_db_value(existing["deleted_at"]),
                     }
                     normalized_incoming_duel = {
@@ -552,6 +578,7 @@ class SqliteWtcocRepository:
                         "custom_time": self._normalize_db_value(item["custom_time"]),
                         "player_1_id": self._normalize_db_value(item["player_1_id"]),
                         "player_2_id": self._normalize_db_value(item["player_2_id"]),
+                        "ranking": tournament_ranking,
                         "deleted_at": None,
                     }
                     if item.get("import_results_ready"):
@@ -586,6 +613,7 @@ class SqliteWtcocRepository:
                               custom_time = ?,
                               player_1_id = ?,
                               player_2_id = ?,
+                              ranking = ?,
                               dw1_import = ?,
                               dw2_import = ?,
                               updated_by = ?,
@@ -603,6 +631,7 @@ class SqliteWtcocRepository:
                                 item["custom_time"],
                                 item["player_1_id"],
                                 item["player_2_id"],
+                                tournament_ranking,
                                 item.get("dw1_import"),
                                 item.get("dw2_import"),
                                 normalized_actor_id,
@@ -622,6 +651,7 @@ class SqliteWtcocRepository:
                               custom_time = ?,
                               player_1_id = ?,
                               player_2_id = ?,
+                              ranking = ?,
                               updated_by = ?,
                               deleted_by = NULL,
                               deleted_at = NULL,
@@ -637,6 +667,7 @@ class SqliteWtcocRepository:
                                 item["custom_time"],
                                 item["player_1_id"],
                                 item["player_2_id"],
+                                tournament_ranking,
                                 normalized_actor_id,
                                 item["id"],
                             ),
@@ -689,6 +720,7 @@ class SqliteWtcocRepository:
             ("dw2_import", "INTEGER"),
             ("gg_rating_full", "REAL"),
             ("gg_rating", "INTEGER"),
+            ("ranking", "INTEGER NOT NULL DEFAULT 1"),
         ):
             if column_name not in duel_columns:
                 conn.execute(f"ALTER TABLE duels ADD COLUMN {column_name} {column_type}")

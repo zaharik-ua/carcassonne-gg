@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +21,7 @@ AUTO_RESULT_SYNC_BLOCKED_STATUSES = RESULT_SYNC_PROTECTED_STATUSES | {
     "error",
     "no show",
 }
+_STANDINGS_GAME_SCORE_UNSET = object()
 
 
 def _status_sql(statuses: set[str]) -> str:
@@ -359,6 +361,17 @@ class SqliteMatchRepository(MatchRepository):
 
     @staticmethod
     def _update_match_aggregates(conn: sqlite3.Connection, *, match_id: str) -> None:
+        previous_match = conn.execute(
+            """
+            SELECT tournament_id, status
+            FROM matches
+            WHERE id = ?
+              AND deleted_at IS NULL
+            LIMIT 1
+            """,
+            (match_id,),
+        ).fetchone()
+
         aggregate_row = conn.execute(
             """
             SELECT
@@ -431,6 +444,299 @@ class SqliteMatchRepository(MatchRepository):
                 match_id,
             ),
         )
+
+        transitioned_to_done = (
+            previous_match is not None
+            and str(previous_match["status"] or "").strip().lower() != "done"
+            and next_status == "Done"
+        )
+        tournament_id = (
+            str(previous_match["tournament_id"] or "").strip()
+            if previous_match is not None
+            else ""
+        )
+        if transitioned_to_done and tournament_id:
+            SqliteMatchRepository._recalculate_standings_if_present(
+                conn,
+                tournament_id=tournament_id,
+            )
+
+    @staticmethod
+    def _recalculate_standings_if_present(
+        conn: sqlite3.Connection,
+        *,
+        tournament_id: str,
+    ) -> bool:
+        """BGA-worker equivalent of server.js recalculateTournamentStandings."""
+        has_standings_table = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name = 'standings'
+            LIMIT 1
+            """
+        ).fetchone()
+        if has_standings_table is None:
+            return False
+
+        standings_rows = conn.execute(
+            """
+            SELECT id, stage, "group" AS "group", team_id, player_id
+            FROM standings
+            WHERE upper(trim(COALESCE(tournament_id, ''))) = upper(trim(?))
+              AND (
+                trim(COALESCE(team_id, '')) <> ''
+                OR trim(COALESCE(player_id, '')) <> ''
+              )
+            ORDER BY id ASC
+            """,
+            (tournament_id,),
+        ).fetchall()
+        if not standings_rows:
+            return False
+
+        team_rows: list[dict] = []
+        player_rows: list[dict] = []
+        team_stats_by_key: dict[tuple[str, str], dict] = {}
+        player_stats_by_key: dict[tuple[str, str], dict] = {}
+
+        for row in standings_rows:
+            stage = SqliteMatchRepository._normalize_standings_stage(row["stage"])
+            team_id = str(row["team_id"] or "").strip()
+            player_id = str(row["player_id"] or "").strip()
+            if team_id:
+                stats = SqliteMatchRepository._empty_standings_stats(include_duels=True)
+                entry = {
+                    "id": row["id"],
+                    "stage": stage,
+                    "group": str(row["group"] or "").strip(),
+                    "participant_id": team_id,
+                    "stats": stats,
+                    "type": "team",
+                }
+                team_rows.append(entry)
+                team_stats_by_key[(stage, team_id.upper())] = stats
+            elif player_id:
+                stats = SqliteMatchRepository._empty_standings_stats(include_duels=False)
+                entry = {
+                    "id": row["id"],
+                    "stage": stage,
+                    "group": str(row["group"] or "").strip(),
+                    "participant_id": player_id,
+                    "stats": stats,
+                    "type": "player",
+                }
+                player_rows.append(entry)
+                player_stats_by_key[(stage, player_id)] = stats
+
+        if team_rows:
+            matches = conn.execute(
+                """
+                SELECT stage, team_1, team_2, dw1, dw2, gw1, gw2
+                FROM matches
+                WHERE upper(trim(COALESCE(tournament_id, ''))) = upper(trim(?))
+                  AND lower(trim(COALESCE(status, ''))) = 'done'
+                  AND deleted_at IS NULL
+                  AND trim(COALESCE(team_1, '')) <> ''
+                  AND trim(COALESCE(team_2, '')) <> ''
+                """,
+                (tournament_id,),
+            ).fetchall()
+            for match in matches:
+                stage = SqliteMatchRepository._normalize_standings_stage(match["stage"])
+                team_1 = str(match["team_1"] or "").strip().upper()
+                team_2 = str(match["team_2"] or "").strip().upper()
+                SqliteMatchRepository._apply_standings_result(
+                    team_stats_by_key.get((stage, team_1)),
+                    match["dw1"],
+                    match["dw2"],
+                    match["gw1"],
+                    match["gw2"],
+                )
+                SqliteMatchRepository._apply_standings_result(
+                    team_stats_by_key.get((stage, team_2)),
+                    match["dw2"],
+                    match["dw1"],
+                    match["gw2"],
+                    match["gw1"],
+                )
+
+        if player_rows:
+            duels = conn.execute(
+                """
+                SELECT m.stage, d.player_1_id, d.player_2_id, d.dw1, d.dw2
+                FROM duels d
+                INNER JOIN matches m
+                  ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
+                 AND m.deleted_at IS NULL
+                WHERE upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))
+                  AND lower(trim(COALESCE(m.status, ''))) = 'done'
+                  AND lower(trim(COALESCE(d.status, ''))) IN ('done', 'no show')
+                  AND d.deleted_at IS NULL
+                  AND trim(COALESCE(d.player_1_id, '')) <> ''
+                  AND trim(COALESCE(d.player_2_id, '')) <> ''
+                """,
+                (tournament_id,),
+            ).fetchall()
+            for duel in duels:
+                stage = SqliteMatchRepository._normalize_standings_stage(duel["stage"])
+                player_1_id = str(duel["player_1_id"] or "").strip()
+                player_2_id = str(duel["player_2_id"] or "").strip()
+                SqliteMatchRepository._apply_standings_result(
+                    player_stats_by_key.get((stage, player_1_id)),
+                    duel["dw1"],
+                    duel["dw2"],
+                )
+                SqliteMatchRepository._apply_standings_result(
+                    player_stats_by_key.get((stage, player_2_id)),
+                    duel["dw2"],
+                    duel["dw1"],
+                )
+
+        calculated_rows = [*team_rows, *player_rows]
+        for row in calculated_rows:
+            stats = row["stats"]
+            stats["mdif"] = stats["mw"] - stats["ml"]
+            stats["gdif"] = stats["gw"] - stats["gl"]
+            if row["type"] == "team":
+                stats["ddif"] = stats["dw"] - stats["dl"]
+
+        position_buckets: dict[tuple[str, str, str], list[dict]] = {}
+        for row in calculated_rows:
+            bucket_key = (
+                row["stage"],
+                str(row["group"] or "").strip().lower(),
+                row["type"],
+            )
+            position_buckets.setdefault(bucket_key, []).append(row)
+        for rows in position_buckets.values():
+            rows.sort(key=SqliteMatchRepository._standings_sort_key)
+            for position, row in enumerate(rows, start=1):
+                row["stats"]["position"] = position
+
+        for row in team_rows:
+            stats = row["stats"]
+            conn.execute(
+                """
+                UPDATE standings
+                SET
+                  mp = ?, mw = ?, ml = ?, dw = ?, dl = ?, gw = ?, gl = ?,
+                  mdif = ?, ddif = ?, gdif = ?, position = ?,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (
+                    stats["mp"],
+                    stats["mw"],
+                    stats["ml"],
+                    stats["dw"],
+                    stats["dl"],
+                    stats["gw"],
+                    stats["gl"],
+                    stats["mdif"],
+                    stats["ddif"],
+                    stats["gdif"],
+                    stats["position"],
+                    row["id"],
+                ),
+            )
+
+        for row in player_rows:
+            stats = row["stats"]
+            conn.execute(
+                """
+                UPDATE standings
+                SET
+                  mp = ?, mw = ?, ml = ?, gw = ?, gl = ?,
+                  mdif = ?, gdif = ?, position = ?,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (
+                    stats["mp"],
+                    stats["mw"],
+                    stats["ml"],
+                    stats["gw"],
+                    stats["gl"],
+                    stats["mdif"],
+                    stats["gdif"],
+                    stats["position"],
+                    row["id"],
+                ),
+            )
+        return True
+
+    @staticmethod
+    def _normalize_standings_stage(value: object) -> str:
+        return "Stage 2" if str(value or "").strip().lower() == "stage 2" else "Stage 1"
+
+    @staticmethod
+    def _standings_score(value: object) -> int:
+        try:
+            return max(0, int(float(value)))
+        except (TypeError, ValueError, OverflowError):
+            return 0
+
+    @staticmethod
+    def _empty_standings_stats(*, include_duels: bool) -> dict:
+        return {
+            "mp": 0,
+            "mw": 0,
+            "ml": 0,
+            "dw": 0 if include_duels else None,
+            "dl": 0 if include_duels else None,
+            "gw": 0,
+            "gl": 0,
+            "mdif": 0,
+            "ddif": 0 if include_duels else None,
+            "gdif": 0,
+            "position": None,
+        }
+
+    @staticmethod
+    def _apply_standings_result(
+        stats: dict | None,
+        score_for: object,
+        score_against: object,
+        game_score_for: object = _STANDINGS_GAME_SCORE_UNSET,
+        game_score_against: object = _STANDINGS_GAME_SCORE_UNSET,
+    ) -> None:
+        if stats is None:
+            return
+        own_score = SqliteMatchRepository._standings_score(score_for)
+        opponent_score = SqliteMatchRepository._standings_score(score_against)
+        own_game_score = (
+            own_score
+            if game_score_for is _STANDINGS_GAME_SCORE_UNSET
+            else SqliteMatchRepository._standings_score(game_score_for)
+        )
+        opponent_game_score = (
+            opponent_score
+            if game_score_against is _STANDINGS_GAME_SCORE_UNSET
+            else SqliteMatchRepository._standings_score(game_score_against)
+        )
+        stats["mp"] += 1
+        if own_score > opponent_score:
+            stats["mw"] += 1
+        elif own_score < opponent_score:
+            stats["ml"] += 1
+        stats["gw"] += own_game_score
+        stats["gl"] += opponent_game_score
+        if stats["dw"] is not None and stats["dl"] is not None:
+            stats["dw"] += own_score
+            stats["dl"] += opponent_score
+
+    @staticmethod
+    def _standings_sort_key(row: dict) -> tuple:
+        stats = row["stats"]
+        metrics = ("mw", "ddif", "gdif", "gw") if row["type"] == "team" else ("mw", "gdif", "gw")
+        participant_parts = re.split(r"(\d+)", str(row["participant_id"] or "").casefold())
+        participant_key = tuple(
+            (0, int(part)) if part.isdigit() else (1, part)
+            for part in participant_parts
+        )
+        return (*(-int(stats[metric] or 0) for metric in metrics), participant_key)
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)

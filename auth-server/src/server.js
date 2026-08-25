@@ -385,7 +385,7 @@ const TOURNAMENT_LINEUP_SIZE_TYPES = {
   FIXED: 1,
   FLEXIBLE: 2,
 };
-const TOURNAMENT_FORMATS = ["1 Stage", "2 Stages", "3 Stages", "Leagues"];
+const TOURNAMENT_FORMATS = ["Free Play", "1 Stage", "2 Stages", "3 Stages", "Leagues"];
 const TOURNAMENT_STAGE_FORMATS = [
   "Round-robin",
   "Swiss",
@@ -2689,8 +2689,31 @@ function normalizeTournamentFormat(value) {
 
 function normalizeTournamentStageFormat(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) return "";
   return TOURNAMENT_STAGE_FORMATS.find((format) => format.toLowerCase() === normalized)
     || TOURNAMENT_STAGE_FORMATS[0];
+}
+
+function normalizeTournamentStageSettings(payload = {}, fallback = {}) {
+  const source = (key) => (
+    Object.prototype.hasOwnProperty.call(payload || {}, key)
+      ? payload[key]
+      : fallback?.[key]
+  );
+  const tournamentFormat = normalizeTournamentFormat(source("tournament_format"));
+  const isFreePlay = tournamentFormat === "Free Play";
+  const hasStage2 = !isFreePlay && tournamentFormat !== "1 Stage";
+
+  return {
+    tournamentFormat,
+    stage1Groups: isFreePlay ? 0 : normalizeBooleanInt(source("stage1_groups")),
+    stage1Format: isFreePlay
+      ? ""
+      : normalizeTournamentStageFormat(source("stage1_format")) || TOURNAMENT_STAGE_FORMATS[0],
+    stage2Format: hasStage2
+      ? normalizeTournamentStageFormat(source("stage2_format")) || TOURNAMENT_STAGE_FORMATS[0]
+      : "",
+  };
 }
 
 function normalizeStandingsStage(value) {
@@ -2748,6 +2771,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         t.short_title,
         t.logo,
         t.link,
+        COALESCE(t.ranking, 1) AS ranking,
         COALESCE(t.is_test, 0) AS is_test,
         t.about,
         t.rules,
@@ -2865,6 +2889,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         short_title: row.short_title,
         logo: row.logo,
         link: row.link,
+        ranking: normalizeBooleanInt(row.ranking) === 1,
         is_test: normalizeBooleanInt(row.is_test) === 1,
         about: row.about,
         rules: row.rules,
@@ -3019,6 +3044,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         short_title,
         logo,
         link,
+        COALESCE(ranking, 1) AS ranking,
         COALESCE(is_test, 0) AS is_test,
         about,
         rules,
@@ -3059,6 +3085,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
 
       const tournament = {
         ...row,
+        ranking: normalizeBooleanInt(row.ranking) === 1,
         is_test: normalizeBooleanInt(row.is_test) === 1,
         access_type: normalizeTournamentAccessType(row.access_type),
         subtype: normalizeTournamentAccessType(row.subtype),
@@ -3105,6 +3132,21 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
       );
     }
   );
+}
+
+async function loadTournamentRanking(tournamentId) {
+  const [rawTournamentId, normalizedTournamentId] = getTournamentLookupVariants(tournamentId);
+  if (!rawTournamentId) return 1;
+  const row = await dbGetAsync(
+    `
+      SELECT COALESCE(ranking, 1) AS ranking
+      FROM tournaments
+      WHERE ${buildTournamentLookupWhereClause("id")}
+      LIMIT 1
+    `,
+    [rawTournamentId, normalizedTournamentId || rawTournamentId]
+  );
+  return row ? normalizeBooleanInt(row.ranking) : 1;
 }
 
 function buildTournamentTeamRecordId(tournamentId, teamId) {
@@ -5266,7 +5308,7 @@ function ensureTeamsSchema() {
   });
 }
 
-function ensureTestFlagPropagationSchema() {
+function ensureTournamentFlagPropagationSchema() {
   db.exec(
     `
       UPDATE matches
@@ -5364,6 +5406,54 @@ function ensureTestFlagPropagationSchema() {
         WHERE rowid = NEW.rowid;
       END;
 
+      CREATE TRIGGER IF NOT EXISTS trg_duels_inherit_tournament_ranking_after_insert
+      AFTER INSERT ON duels
+      BEGIN
+        UPDATE duels
+        SET ranking = COALESCE(
+          (
+            SELECT COALESCE(t.ranking, 1)
+            FROM matches m
+            JOIN tournaments t
+              ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(m.tournament_id, '')))
+            WHERE trim(COALESCE(m.id, '')) = trim(COALESCE(NEW.match_id, ''))
+            LIMIT 1
+          ),
+          (
+            SELECT COALESCE(t.ranking, 1)
+            FROM tournaments t
+            WHERE upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(NEW.tournament_id, '')))
+            LIMIT 1
+          ),
+          1
+        )
+        WHERE rowid = NEW.rowid;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_duels_inherit_tournament_ranking_after_parent_update
+      AFTER UPDATE OF tournament_id, match_id ON duels
+      BEGIN
+        UPDATE duels
+        SET ranking = COALESCE(
+          (
+            SELECT COALESCE(t.ranking, 1)
+            FROM matches m
+            JOIN tournaments t
+              ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(m.tournament_id, '')))
+            WHERE trim(COALESCE(m.id, '')) = trim(COALESCE(NEW.match_id, ''))
+            LIMIT 1
+          ),
+          (
+            SELECT COALESCE(t.ranking, 1)
+            FROM tournaments t
+            WHERE upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(NEW.tournament_id, '')))
+            LIMIT 1
+          ),
+          1
+        )
+        WHERE rowid = NEW.rowid;
+      END;
+
       CREATE TRIGGER IF NOT EXISTS trg_duels_sync_after_match_test_update
       AFTER UPDATE OF is_test ON matches
       BEGIN
@@ -5392,7 +5482,7 @@ function ensureTestFlagPropagationSchema() {
     `,
     (error) => {
       if (error) {
-        console.error("Failed to ensure test flag propagation", error);
+        console.error("Failed to ensure tournament flag propagation", error);
       }
     }
   );
@@ -5406,6 +5496,7 @@ function ensureTournamentsSchema() {
       short_title TEXT,
       logo TEXT,
       link TEXT,
+      ranking BOOLEAN NOT NULL DEFAULT 1 CHECK (ranking IN (0, 1)),
       is_test BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1)),
       about TEXT,
       rules TEXT,
@@ -5417,10 +5508,10 @@ function ensureTournamentsSchema() {
       player_hub_visibility TEXT NOT NULL DEFAULT 'Visible',
       lineup_size_type INTEGER NOT NULL DEFAULT 2,
       lineup_size INTEGER,
-      tournament_format TEXT NOT NULL DEFAULT '1 Stage',
+      tournament_format TEXT NOT NULL DEFAULT 'Free Play',
       stage1_groups BOOLEAN NOT NULL DEFAULT 0 CHECK (stage1_groups IN (0, 1)),
-      stage1_format TEXT NOT NULL DEFAULT 'Round-robin',
-      stage2_format TEXT NOT NULL DEFAULT 'Round-robin',
+      stage1_format TEXT NOT NULL DEFAULT '',
+      stage2_format TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -5439,6 +5530,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "short_title", "TEXT");
       addColumnIfMissing(columns, "tournaments", "logo", "TEXT");
       addColumnIfMissing(columns, "tournaments", "link", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "ranking", "BOOLEAN NOT NULL DEFAULT 1 CHECK (ranking IN (0, 1))");
       addColumnIfMissing(columns, "tournaments", "is_test", "BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1))");
       addColumnIfMissing(columns, "tournaments", "about", "TEXT");
       addColumnIfMissing(columns, "tournaments", "rules", "TEXT");
@@ -5450,16 +5542,20 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "player_hub_visibility", "TEXT NOT NULL DEFAULT 'Visible'");
       addColumnIfMissing(columns, "tournaments", "lineup_size_type", "INTEGER NOT NULL DEFAULT 2");
       addColumnIfMissing(columns, "tournaments", "lineup_size", "INTEGER");
-      addColumnIfMissing(columns, "tournaments", "tournament_format", "TEXT NOT NULL DEFAULT '1 Stage'");
+      addColumnIfMissing(columns, "tournaments", "tournament_format", "TEXT NOT NULL DEFAULT 'Free Play'");
       addColumnIfMissing(columns, "tournaments", "stage1_groups", "BOOLEAN NOT NULL DEFAULT 0");
-      addColumnIfMissing(columns, "tournaments", "stage1_format", "TEXT NOT NULL DEFAULT 'Round-robin'");
-      addColumnIfMissing(columns, "tournaments", "stage2_format", "TEXT NOT NULL DEFAULT 'Round-robin'");
+      addColumnIfMissing(columns, "tournaments", "stage1_format", "TEXT NOT NULL DEFAULT ''");
+      addColumnIfMissing(columns, "tournaments", "stage2_format", "TEXT NOT NULL DEFAULT ''");
       addColumnIfMissing(columns, "tournaments", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "tournaments", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       db.run(
         `
           UPDATE tournaments
           SET
+            ranking = CASE
+              WHEN lower(trim(COALESCE(ranking, ''))) IN ('1', 'true', 'yes', 'on') THEN 1
+              ELSE 0
+            END,
             is_test = CASE
               WHEN lower(trim(COALESCE(is_test, ''))) IN ('1', 'true', 'yes', 'on') THEN 1
               ELSE 0
@@ -5489,33 +5585,41 @@ function ensureTournamentsSchema() {
               ELSE 'Visible'
             END,
             tournament_format = CASE lower(trim(COALESCE(tournament_format, '')))
+              WHEN 'free play' THEN 'Free Play'
               WHEN '2 stages' THEN '2 Stages'
               WHEN '3 stages' THEN '3 Stages'
               WHEN 'leagues' THEN 'Leagues'
               ELSE '1 Stage'
             END,
             stage1_groups = CASE
+              WHEN lower(trim(COALESCE(tournament_format, ''))) = 'free play' THEN 0
               WHEN lower(trim(COALESCE(stage1_groups, ''))) IN ('1', 'true', 'yes', 'on', 'groups') THEN 1
               ELSE 0
             END,
-            stage1_format = CASE lower(trim(COALESCE(stage1_format, '')))
-              WHEN 'swiss' THEN 'Swiss'
-              WHEN 'single elimination' THEN 'Single Elimination'
-              WHEN 'double elimination' THEN 'Double Elimination'
-              ELSE 'Round-robin'
+            stage1_format = CASE
+              WHEN lower(trim(COALESCE(tournament_format, ''))) = 'free play' THEN ''
+              ELSE CASE lower(trim(COALESCE(stage1_format, '')))
+                WHEN 'swiss' THEN 'Swiss'
+                WHEN 'single elimination' THEN 'Single Elimination'
+                WHEN 'double elimination' THEN 'Double Elimination'
+                ELSE 'Round-robin'
+              END
             END,
-            stage2_format = CASE lower(trim(COALESCE(stage2_format, '')))
-              WHEN 'swiss' THEN 'Swiss'
-              WHEN 'single elimination' THEN 'Single Elimination'
-              WHEN 'double elimination' THEN 'Double Elimination'
-              ELSE 'Round-robin'
+            stage2_format = CASE
+              WHEN lower(trim(COALESCE(tournament_format, ''))) NOT IN ('2 stages', '3 stages', 'leagues') THEN ''
+              ELSE CASE lower(trim(COALESCE(stage2_format, '')))
+                WHEN 'swiss' THEN 'Swiss'
+                WHEN 'single elimination' THEN 'Single Elimination'
+                WHEN 'double elimination' THEN 'Double Elimination'
+                ELSE 'Round-robin'
+              END
             END
         `,
         (backfillErr) => {
           if (backfillErr) {
             console.error("Failed to backfill tournaments type settings and visibility", backfillErr);
           }
-          ensureTestFlagPropagationSchema();
+          ensureTournamentFlagPropagationSchema();
         }
       );
     });
@@ -11351,6 +11455,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
         throw error;
       }
       const lockedDuelTournamentId = normalizeNullableText(lockedPeriod.rivals_tournament_id);
+      const lockedDuelRanking = await loadTournamentRanking(lockedDuelTournamentId);
       if (!lockedRequest || lockedRequest.status !== "pending" || lockedRequest.awaiting_player_id !== playerId) {
         const error = new Error("Challenge request is no longer pending");
         error.httpStatus = 409;
@@ -11464,6 +11569,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
             UPDATE duels
             SET
               tournament_id = COALESCE(?, tournament_id),
+              ranking = ?,
               duel_format = ?,
               time_utc = ?,
               player_1_id = ?,
@@ -11483,6 +11589,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
           `,
           [
             lockedDuelTournamentId,
+            lockedDuelRanking,
             canonicalFormat,
             acceptedTimeUtc,
             lockedRequest.player_1_id,
@@ -11516,6 +11623,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
               dw2,
               gg_rating_full,
               gg_rating,
+              ranking,
               status,
               created_by,
               updated_by,
@@ -11527,7 +11635,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
               created_at,
               updated_at
             )
-            VALUES (?, ?, NULL, NULL, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, 'Planned', ?, ?, NULL, NULL, ?, ?, 'challenge', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (?, ?, NULL, NULL, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, ?, 'Planned', ?, ?, NULL, NULL, ?, ?, 'challenge', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           `,
           [
             duelId,
@@ -11538,6 +11646,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
             lockedRequest.player_2_id,
             ggRatingFull,
             ggRating,
+            lockedDuelRanking,
             playerId,
             playerId,
             periodId,
@@ -12437,6 +12546,7 @@ app.get("/public/tournaments/:id", (req, res, next) => {
     `
       SELECT
         id,
+        COALESCE(ranking, 1) AS ranking,
         COALESCE(is_test, 0) AS is_test,
         about,
         rules
@@ -12454,6 +12564,7 @@ app.get("/public/tournaments/:id", (req, res, next) => {
         ok: true,
         tournament: {
           ...tournament,
+          ranking: normalizeBooleanInt(tournament.ranking) === 1,
           is_test: normalizeBooleanInt(tournament.is_test) === 1,
         },
       });
@@ -12513,6 +12624,7 @@ app.get("/tournaments", (req, res, next) => {
         t.short_title,
         t.logo,
         t.link,
+        COALESCE(t.ranking, 1) AS ranking,
         COALESCE(t.is_test, 0) AS is_test,
         t.about,
         t.rules,
@@ -12676,6 +12788,7 @@ app.get("/tournaments", (req, res, next) => {
                 short_title: row.short_title,
                 logo: row.logo,
                 link: row.link,
+                ranking: normalizeBooleanInt(row.ranking) === 1,
                 is_test: normalizeBooleanInt(row.is_test) === 1,
                 about: row.about,
                 rules: row.rules,
@@ -12729,6 +12842,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   const shortTitle = String(req.body?.short_title || "").trim() || null;
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
+  const ranking = req.body?.ranking === undefined ? 1 : normalizeBooleanInt(req.body.ranking);
   const isTest = normalizeBooleanInt(req.body?.is_test);
   const about = String(req.body?.about || "").trim() || null;
   const rules = String(req.body?.rules || "").trim() || null;
@@ -12743,10 +12857,12 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
     : null;
-  const tournamentFormat = normalizeTournamentFormat(req.body?.tournament_format);
-  const stage1Groups = normalizeBooleanInt(req.body?.stage1_groups);
-  const stage1Format = normalizeTournamentStageFormat(req.body?.stage1_format);
-  const stage2Format = normalizeTournamentStageFormat(req.body?.stage2_format);
+  const {
+    tournamentFormat,
+    stage1Groups,
+    stage1Format,
+    stage2Format,
+  } = normalizeTournamentStageSettings(req.body);
   const requestedAccessUsers = normalizeTournamentAccessUsers(req.body?.access_users, req.body?.access_user_ids);
   let category = null;
 
@@ -12810,6 +12926,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   short_title,
                   logo,
                   link,
+                  ranking,
                   is_test,
                   about,
                   rules,
@@ -12828,7 +12945,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
               [
                 id,
@@ -12836,6 +12953,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                 shortTitle,
                 logo,
                 link,
+                ranking,
                 isTest,
                 about,
                 rules,
@@ -12897,6 +13015,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
   const shortTitle = String(req.body?.short_title || "").trim() || null;
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
+  const requestedRanking = req.body?.ranking;
   const isTest = normalizeBooleanInt(req.body?.is_test);
   const about = String(req.body?.about || "").trim() || null;
   const rules = String(req.body?.rules || "").trim() || null;
@@ -12910,10 +13029,6 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
   const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
     : null;
-  const tournamentFormat = normalizeTournamentFormat(req.body?.tournament_format);
-  const stage1Groups = normalizeBooleanInt(req.body?.stage1_groups);
-  const stage1Format = normalizeTournamentStageFormat(req.body?.stage1_format);
-  const stage2Format = normalizeTournamentStageFormat(req.body?.stage2_format);
   const requestedAccessUsers = normalizeTournamentAccessUsers(req.body?.access_users, req.body?.access_user_ids);
   let category = null;
 
@@ -12951,7 +13066,14 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
 
   return db.get(
     `
-      SELECT id, team_type
+      SELECT
+        id,
+        team_type,
+        COALESCE(ranking, 1) AS ranking,
+        tournament_format,
+        COALESCE(stage1_groups, 0) AS stage1_groups,
+        stage1_format,
+        stage2_format
       FROM tournaments
       WHERE ${buildTournamentLookupWhereClause("id")}
       LIMIT 1
@@ -12965,6 +13087,15 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
         return res.status(404).json({ ok: false, message: "Tournament not found" });
       }
       const teamType = normalizeTeamType(requestedTeamType || currentRow.team_type);
+      const ranking = requestedRanking === undefined
+        ? normalizeBooleanInt(currentRow.ranking)
+        : normalizeBooleanInt(requestedRanking);
+      const {
+        tournamentFormat,
+        stage1Groups,
+        stage1Format,
+        stage2Format,
+      } = normalizeTournamentStageSettings(req.body, currentRow);
 
       return validateTournamentAccessUserIds(
         subtype === TOURNAMENT_ACCESS_TYPES.OFFICIAL ? requestedAccessUsers : [],
@@ -12984,6 +13115,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                   short_title = ?,
                   logo = ?,
                   link = ?,
+                  ranking = ?,
                   is_test = ?,
                   about = ?,
                   rules = ?,
@@ -13008,6 +13140,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                 shortTitle,
                 logo,
                 link,
+                ranking,
                 isTest,
                 about,
                 rules,
@@ -18076,10 +18209,12 @@ app.post("/duels/bulk-upsert", async (req, res) => {
         toIntOrNull(item?.dw2)
       );
       const { ggRatingFull, ggRating } = calculateGgDuelRating(ggRatingContext, player1, player2);
+      const tournamentId = normalizeText(item?.tournament_id);
       sanitized.push({
         id,
-        tournament_id: normalizeText(item?.tournament_id),
+        tournament_id: tournamentId,
         match_id: null,
+        ranking: await loadTournamentRanking(tournamentId),
         duel_number: duelNumber,
         duel_format: normalizeText(item?.duel_format),
         time_utc: normalizeText(item?.time_utc),
@@ -18115,6 +18250,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
           dw2,
           gg_rating_full,
           gg_rating,
+          ranking,
           status,
           created_by,
           updated_by,
@@ -18123,7 +18259,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
           created_at,
           updated_at
         )
-        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO UPDATE SET
           tournament_id = excluded.tournament_id,
           match_id = NULL,
@@ -18135,6 +18271,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
           player_2_id = excluded.player_2_id,
           dw1 = excluded.dw1,
           dw2 = excluded.dw2,
+          ranking = excluded.ranking,
           status = excluded.status,
           updated_by = excluded.updated_by,
           deleted_by = NULL,
@@ -18159,6 +18296,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
             item.dw2,
             item.gg_rating_full,
             item.gg_rating,
+            item.ranking,
             item.status,
             actorPlayerId,
             actorPlayerId,
@@ -18283,6 +18421,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
             tournament_id: normalizeText(item?.tournament_id) || tournament.id,
             match_id: matchId,
             is_test: normalizeBooleanInt(matchRow.is_test),
+            ranking: tournament.ranking ? 1 : 0,
             duel_number: duelNumber,
             duel_format: normalizeText(item?.duel_format),
             time_utc: normalizeText(item?.time_utc),
@@ -18372,6 +18511,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                   dw2,
                   gg_rating_full,
                   gg_rating,
+                  ranking,
                   status,
                   created_by,
                   updated_by,
@@ -18380,7 +18520,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT(id) DO UPDATE SET
                   tournament_id = excluded.tournament_id,
                   match_id = excluded.match_id,
@@ -18393,6 +18533,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                   player_2_id = excluded.player_2_id,
                   dw1 = excluded.dw1,
                   dw2 = excluded.dw2,
+                  ranking = excluded.ranking,
                   status = excluded.status,
                   updated_by = excluded.updated_by,
                   deleted_by = NULL,
@@ -18419,6 +18560,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                       item.dw2,
                       item.gg_rating_full,
                       item.gg_rating,
+                      item.ranking,
                       item.status,
                       actorPlayerId,
                       actorPlayerId,
