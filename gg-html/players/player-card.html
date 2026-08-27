@@ -1221,6 +1221,53 @@
     };
   }
 
+  function getPlayerMatchStats(profile, playerId, dbPayload) {
+    const pid = String(playerId || "").trim();
+    const storedStats = {
+      total: Number(profile?.matches),
+      won: Number(profile?.wins),
+      lost: Number(profile?.losses),
+    };
+    const hasStoredStats = {
+      total: String(profile?.matches ?? "").trim() !== "" && Number.isFinite(storedStats.total),
+      won: String(profile?.wins ?? "").trim() !== "" && Number.isFinite(storedStats.won),
+      lost: String(profile?.losses ?? "").trim() !== "" && Number.isFinite(storedStats.lost),
+    };
+    const dbStats = { total: 0, won: 0, lost: 0 };
+
+    (Array.isArray(dbPayload?.duels) ? dbPayload.duels : []).forEach((duel) => {
+      if (!duel || String(duel.status || "").trim().toLowerCase() !== "done") return;
+
+      const p1Id = String(firstDefined(duel.player1_id, duel.playerAid) || "").trim();
+      const p2Id = String(firstDefined(duel.player2_id, duel.playerBid) || "").trim();
+      if (p1Id !== pid && p2Id !== pid) return;
+
+      dbStats.total += 1;
+
+      const score1Raw = firstDefined(duel.games_won1, duel.score1, duel.dw1, duel.gwA);
+      const score2Raw = firstDefined(duel.games_won2, duel.score2, duel.dw2, duel.gwB);
+      if (String(score1Raw).trim() === "" || String(score2Raw).trim() === "") return;
+
+      const score1 = Number(score1Raw);
+      const score2 = Number(score2Raw);
+      if (!Number.isFinite(score1) || !Number.isFinite(score2) || score1 === score2) return;
+
+      const playerWon = p1Id === pid ? score1 > score2 : score2 > score1;
+      dbStats[playerWon ? "won" : "lost"] += 1;
+    });
+
+    const formatStat = (key) => {
+      if (!hasStoredStats[key] && dbStats[key] === 0) return "-";
+      return String((hasStoredStats[key] ? storedStats[key] : 0) + dbStats[key]);
+    };
+
+    return {
+      total: formatStat("total"),
+      won: formatStat("won"),
+      lost: formatStat("lost"),
+    };
+  }
+
   function parseDateFromRaw(raw) {
     const s = String(raw || "").trim();
     if (!s) return null;
@@ -3150,6 +3197,7 @@
     }
 
     if (profile) {
+      const matchStats = getPlayerMatchStats(profile, playerId, dbOfficialDuelsPayload);
       const statsWrap = document.createElement("div");
       statsWrap.className = "player-stats";
 
@@ -3198,21 +3246,21 @@
       totalLabel.textContent = "Total";
       const totalValue = document.createElement("span");
       totalValue.className = "player-stats-value total";
-      totalValue.textContent = String(profile.matches ?? "-");
+      totalValue.textContent = matchStats.total;
 
       const winsLabel = document.createElement("span");
       winsLabel.className = "player-stats-label";
       winsLabel.textContent = "Won";
       const winsValue = document.createElement("span");
       winsValue.className = "player-stats-value wins";
-      winsValue.textContent = String(profile.wins ?? "-");
+      winsValue.textContent = matchStats.won;
 
       const lossesLabel = document.createElement("span");
       lossesLabel.className = "player-stats-label";
       lossesLabel.textContent = "Lost";
       const lossesValue = document.createElement("span");
       lossesValue.className = "player-stats-value losses";
-      lossesValue.textContent = String(profile.losses ?? "-");
+      lossesValue.textContent = matchStats.lost;
 
       statsLine.appendChild(totalLabel);
       statsLine.appendChild(totalValue);

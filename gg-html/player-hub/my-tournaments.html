@@ -7076,6 +7076,16 @@
       tournament?.tournament_format || "Free Play",
       { selectOptions: ["Free Play", "1 Stage", "2 Stages", "3 Stages", "Leagues"] }
     );
+    const standingsScoringField = createTournamentFormRow(
+      "Standings scoring",
+      tournament?.standings_scoring || "standard",
+      {
+        selectOptions: [
+          { value: "standard", label: "Standard" },
+          { value: "bounty_tpr", label: "Bounty TPR" },
+        ],
+      }
+    );
     const stage1GroupsField = createTournamentFormRow(
       "Stage 1 Groups",
       tournament?.stage1_groups === true
@@ -7125,6 +7135,7 @@
       lineupSizeTypeField,
       lineupSizeField,
       tournamentFormatField,
+      standingsScoringField,
       stage1GroupsField,
       stage1FormatField,
       stage2FormatField,
@@ -7192,6 +7203,7 @@
       const supportsStage1Standings = isTeams
         && ["Round-robin", "Swiss"].includes(stage1FormatField.input.value);
       const hasStage1Standings = standingsEditor.getValues().length > 0;
+      const usesBountyTpr = String(tournament?.standings_scoring || "").trim().toLowerCase() === "bounty_tpr";
 
       teamTypeField.row.classList.toggle("cp-hidden", !isTeams);
       subtypeField.row.classList.toggle("cp-hidden", !isTeams);
@@ -7205,7 +7217,7 @@
       accessUsersEditor.root.classList.toggle("cp-hidden", !isTeams);
       tournamentTeamsEditor.root.classList.toggle("cp-hidden", !isTeams);
       standingsEditor.root.classList.toggle("cp-hidden", !supportsStage1Standings);
-      recalculateButton.classList.toggle("cp-hidden", !hasStage1Standings);
+      recalculateButton.classList.toggle("cp-hidden", !usesBountyTpr && !hasStage1Standings);
 
       teamTypeField.input.disabled = isBusy || !isTeams;
       subtypeField.input.disabled = isBusy || !isTeams;
@@ -7213,10 +7225,11 @@
       lineupSizeTypeField.input.disabled = isBusy || !supportsLineup;
       lineupSizeField.input.disabled = isBusy || !supportsLineup || !isFixedLineup;
       tournamentFormatField.input.disabled = isBusy;
+      standingsScoringField.input.disabled = isBusy;
       stage1GroupsField.input.disabled = isBusy || isFreePlay;
       stage1FormatField.input.disabled = isBusy || isFreePlay;
       stage2FormatField.input.disabled = isBusy || !hasStage2;
-      recalculateButton.disabled = isBusy || !hasStage1Standings;
+      recalculateButton.disabled = isBusy || (!usesBountyTpr && !hasStage1Standings);
       lineupSizeField.input.required = supportsLineup && isFixedLineup;
       accessUsersEditor.setOfficial(isOfficial);
       if (isBusy) accessUsersEditor.setDisabled(true);
@@ -7308,6 +7321,7 @@
         lineup_size_type: lineupSizeType,
         lineup_size: lineupSizeType === 1 ? lineupSize : null,
         tournament_format: tournamentFormat,
+        standings_scoring: standingsScoringField.input.value,
         stage1_groups: isFreePlay ? false : stage1GroupsField.input.checked,
         stage1_format: isFreePlay ? "" : stage1FormatField.input.value,
         stage2_format: hasStage2 ? stage2FormatField.input.value : "",

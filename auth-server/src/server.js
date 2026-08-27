@@ -50,6 +50,15 @@ import {
   isNewsProposalSubmitter,
   isOwnEditableNewsProposal,
 } from "./news-proposals.js";
+import {
+  calculateAdjustedTpr,
+  calculateBounty,
+  calculateBountyPoints,
+  calculateSmoothedWinRate,
+  calculateTpr,
+  calculateTprConfidence,
+  percentileInclusive as calculatePercentileInclusive,
+} from "./bounty-tpr.js";
 
 dotenv.config();
 
@@ -332,6 +341,10 @@ const TOURNAMENT_TYPES = {
   TEAMS: "Teams",
   CLUBS: "Clubs",
   NATIONAL: "National",
+};
+const STANDINGS_SCORING = {
+  STANDARD: "standard",
+  BOUNTY_TPR: "bounty_tpr",
 };
 const TEAM_TYPES = {
   NATIONAL: "National",
@@ -2602,6 +2615,12 @@ function isValidTeamType(value) {
   return normalized === "national" || normalized === "club";
 }
 
+function normalizeStandingsScoring(value) {
+  return String(value ?? "").trim().toLowerCase() === STANDINGS_SCORING.BOUNTY_TPR
+    ? STANDINGS_SCORING.BOUNTY_TPR
+    : STANDINGS_SCORING.STANDARD;
+}
+
 function normalizeTournamentPlayerHubVisibility(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
   return normalized === "hidden"
@@ -2787,6 +2806,12 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         COALESCE(t.stage1_groups, 0) AS stage1_groups,
         t.stage1_format,
         t.stage2_format,
+        COALESCE(NULLIF(lower(trim(t.standings_scoring)), ''), 'standard') AS standings_scoring,
+        COALESCE(t.tpr_target_games, 10) AS tpr_target_games,
+        COALESCE(t.tpr_smoothing, 0.5) AS tpr_smoothing,
+        COALESCE(t.tpr_benchmark_percentile, 0.75) AS tpr_benchmark_percentile,
+        t.current_tpr_benchmark,
+        t.tpr_calculated_at,
         CASE
           WHEN ? = 1 THEN ?
           WHEN ? > 0 AND EXISTS (
@@ -2905,6 +2930,12 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         stage1_groups: normalizeBooleanInt(row.stage1_groups) === 1,
         stage1_format: normalizeTournamentStageFormat(row.stage1_format),
         stage2_format: normalizeTournamentStageFormat(row.stage2_format),
+        standings_scoring: normalizeStandingsScoring(row.standings_scoring),
+        tpr_target_games: Math.max(1, Number.parseInt(row.tpr_target_games, 10) || 10),
+        tpr_smoothing: Math.max(0, bountyTprNumber(row.tpr_smoothing, 0.5)),
+        tpr_benchmark_percentile: Math.min(1, Math.max(0, bountyTprNumber(row.tpr_benchmark_percentile, 0.75))),
+        current_tpr_benchmark: bountyTprNumber(row.current_tpr_benchmark),
+        tpr_calculated_at: row.tpr_calculated_at || null,
         access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
         has_access: Number(row.has_access) === 1,
         access_via_access_users: Number(row.access_via_access_users) === 1,
@@ -3059,7 +3090,13 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         tournament_format,
         COALESCE(stage1_groups, 0) AS stage1_groups,
         stage1_format,
-        stage2_format
+        stage2_format,
+        COALESCE(NULLIF(lower(trim(standings_scoring)), ''), 'standard') AS standings_scoring,
+        COALESCE(tpr_target_games, 10) AS tpr_target_games,
+        COALESCE(tpr_smoothing, 0.5) AS tpr_smoothing,
+        COALESCE(tpr_benchmark_percentile, 0.75) AS tpr_benchmark_percentile,
+        current_tpr_benchmark,
+        tpr_calculated_at
       FROM tournaments
       WHERE ${buildTournamentLookupWhereClause("id")}
       LIMIT 1
@@ -3099,6 +3136,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         stage1_groups: normalizeBooleanInt(row.stage1_groups) === 1,
         stage1_format: normalizeTournamentStageFormat(row.stage1_format),
         stage2_format: normalizeTournamentStageFormat(row.stage2_format),
+        standings_scoring: normalizeStandingsScoring(row.standings_scoring),
       };
       if (!includeAccessUsers) {
         done(null, tournament);
@@ -3253,6 +3291,16 @@ async function loadStandings(tournamentId, stage = null) {
         s.mdif,
         s.ddif,
         s.gdif,
+        s.starting_elo,
+        s.elo_used,
+        s.smoothed_win_rate,
+        s.tpr,
+        s.tpr_confidence,
+        s.adjusted_tpr,
+        s.bounty,
+        s.opponents_bounty_points,
+        s.points,
+        s.performance_calculated_at,
         s.standing_icon,
         s.position,
         s.position_override,
@@ -3330,10 +3378,302 @@ function compareCalculatedStandings(left, right, type) {
   });
 }
 
+function bountyTprNumber(value, fallback = null) {
+  if (value === null || value === undefined || String(value).trim() === "") return fallback;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function roundBountyTprValue(value, digits = 8) {
+  const numeric = bountyTprNumber(value);
+  if (numeric === null) return null;
+  const multiplier = 10 ** digits;
+  return Math.round((numeric + Number.EPSILON) * multiplier) / multiplier;
+}
+
+async function recalculateBountyTprStandings(tournamentId, settings) {
+  const completedDuels = await dbAllAsync(
+    `
+      SELECT
+        d.id,
+        d.time_utc,
+        d.player_1_id,
+        d.player_2_id,
+        d.dw1,
+        d.dw2,
+        d.player1_elo_before,
+        d.player2_elo_before
+      FROM duels d
+      LEFT JOIN matches m
+        ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
+       AND m.deleted_at IS NULL
+      WHERE upper(trim(COALESCE(NULLIF(trim(d.tournament_id), ''), m.tournament_id, ''))) = upper(trim(?))
+        AND lower(trim(COALESCE(d.status, ''))) = 'done'
+        AND d.deleted_at IS NULL
+        AND trim(COALESCE(d.player_1_id, '')) <> ''
+        AND trim(COALESCE(d.player_2_id, '')) <> ''
+        AND trim(d.player_1_id) <> trim(d.player_2_id)
+        AND d.dw1 IS NOT NULL
+        AND d.dw2 IS NOT NULL
+      ORDER BY
+        CASE WHEN datetime(d.time_utc) IS NULL THEN 1 ELSE 0 END ASC,
+        datetime(d.time_utc) ASC,
+        d.id COLLATE NOCASE ASC
+    `,
+    [tournamentId]
+  );
+
+  const playerIds = Array.from(new Set(
+    completedDuels.flatMap((duel) => [duel.player_1_id, duel.player_2_id])
+      .map((playerId) => String(playerId || "").trim())
+      .filter(Boolean)
+  ));
+
+  if (!playerIds.length) {
+    await dbRunAsync(
+      `
+        UPDATE tournaments
+        SET current_tpr_benchmark = NULL,
+            tpr_calculated_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE upper(trim(id)) = upper(trim(?))
+      `,
+      [tournamentId]
+    );
+    return {
+      tournament_id: tournamentId,
+      scoring: STANDINGS_SCORING.BOUNTY_TPR,
+      completed_duels: 0,
+      created_rows: 0,
+      updated_rows: 0,
+      benchmark_tpr: null,
+    };
+  }
+
+  const profileRows = await dbAllAsync(
+    `
+      SELECT trim(id) AS player_id, gg_elo
+      FROM profiles
+      WHERE deleted_at IS NULL
+        AND trim(COALESCE(id, '')) IN (${playerIds.map(() => "?").join(", ")})
+    `,
+    playerIds
+  );
+  const currentEloByPlayerId = new Map(
+    profileRows.map((row) => [String(row.player_id || "").trim(), bountyTprNumber(row.gg_elo)])
+  );
+  const stateByPlayerId = new Map(playerIds.map((playerId) => [playerId, {
+    playerId,
+    games: 0,
+    wins: 0,
+    losses: 0,
+    gameWins: 0,
+    gameLosses: 0,
+    firstEloBefore: null,
+    opponents: [],
+    defeatedOpponentIds: [],
+  }]));
+
+  for (const duel of completedDuels) {
+    const player1Id = String(duel.player_1_id || "").trim();
+    const player2Id = String(duel.player_2_id || "").trim();
+    const player1 = stateByPlayerId.get(player1Id);
+    const player2 = stateByPlayerId.get(player2Id);
+    if (!player1 || !player2) continue;
+
+    if (player1.firstEloBefore === null) {
+      player1.firstEloBefore = bountyTprNumber(duel.player1_elo_before);
+    }
+    if (player2.firstEloBefore === null) {
+      player2.firstEloBefore = bountyTprNumber(duel.player2_elo_before);
+    }
+
+    const player1Score = Math.max(0, bountyTprNumber(duel.dw1, 0));
+    const player2Score = Math.max(0, bountyTprNumber(duel.dw2, 0));
+    player1.games += 1;
+    player2.games += 1;
+    player1.gameWins += player1Score;
+    player1.gameLosses += player2Score;
+    player2.gameWins += player2Score;
+    player2.gameLosses += player1Score;
+    player1.opponents.push(player2Id);
+    player2.opponents.push(player1Id);
+
+    if (player1Score > player2Score) {
+      player1.wins += 1;
+      player2.losses += 1;
+      player1.defeatedOpponentIds.push(player2Id);
+    } else if (player2Score > player1Score) {
+      player2.wins += 1;
+      player1.losses += 1;
+      player2.defeatedOpponentIds.push(player1Id);
+    }
+  }
+
+  let createdRows = 0;
+  for (const state of stateByPlayerId.values()) {
+    const fallbackElo = currentEloByPlayerId.get(state.playerId) ?? 1500;
+    const startingElo = state.firstEloBefore ?? fallbackElo;
+    const insertResult = await dbRunAsync(
+      `
+        INSERT OR IGNORE INTO standings (
+          tournament_id,
+          stage,
+          player_id,
+          starting_elo,
+          created_at,
+          updated_at
+        )
+        VALUES (?, 'Stage 1', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [tournamentId, state.playerId, startingElo]
+    );
+    createdRows += Number(insertResult?.changes || 0);
+    await dbRunAsync(
+      `
+        UPDATE standings
+        SET starting_elo = COALESCE(starting_elo, ?),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE upper(trim(tournament_id)) = upper(trim(?))
+          AND lower(trim(stage)) = lower('Stage 1')
+          AND trim(player_id) = trim(?)
+          AND team_id IS NULL
+      `,
+      [startingElo, tournamentId, state.playerId]
+    );
+    state.startingElo = startingElo;
+    state.eloUsed = currentEloByPlayerId.get(state.playerId) ?? startingElo;
+  }
+
+  const targetGames = Math.max(1, Math.trunc(bountyTprNumber(settings?.tpr_target_games, 10)));
+  const smoothing = Math.max(0, bountyTprNumber(settings?.tpr_smoothing, 0.5));
+  const benchmarkPercentile = Math.min(
+    1,
+    Math.max(0, bountyTprNumber(settings?.tpr_benchmark_percentile, 0.75))
+  );
+
+  for (const state of stateByPlayerId.values()) {
+    const opponentRatings = state.opponents.map((opponentId) => {
+      const opponent = stateByPlayerId.get(opponentId);
+      return currentEloByPlayerId.get(opponentId) ?? opponent?.startingElo ?? 1500;
+    });
+    state.smoothedWinRate = calculateSmoothedWinRate(state.wins, state.games, smoothing);
+    state.tpr = calculateTpr(opponentRatings, state.smoothedWinRate);
+    state.confidence = calculateTprConfidence(state.games, targetGames);
+    state.adjustedTpr = calculateAdjustedTpr(state.eloUsed, state.tpr, state.confidence);
+  }
+
+  const benchmarkTpr = calculatePercentileInclusive(
+    Array.from(stateByPlayerId.values()).map((state) => state.adjustedTpr),
+    benchmarkPercentile
+  );
+  for (const state of stateByPlayerId.values()) {
+    state.bounty = calculateBounty(state.adjustedTpr, benchmarkTpr);
+  }
+  for (const state of stateByPlayerId.values()) {
+    const calculatedPoints = calculateBountyPoints(
+      state.bounty,
+      state.defeatedOpponentIds.map((opponentId) => stateByPlayerId.get(opponentId)?.bounty)
+    );
+    state.opponentsBountyPoints = calculatedPoints.opponentsPoints;
+    state.points = calculatedPoints.points;
+  }
+
+  const positionedStates = Array.from(stateByPlayerId.values()).sort((left, right) => (
+    right.points - left.points
+    || right.adjustedTpr - left.adjustedTpr
+    || right.wins - left.wins
+    || left.playerId.localeCompare(right.playerId, undefined, { numeric: true, sensitivity: "base" })
+  ));
+  positionedStates.forEach((state, index) => {
+    state.position = index + 1;
+  });
+
+  for (const state of positionedStates) {
+    await dbRunAsync(
+      `
+        UPDATE standings
+        SET
+          mp = ?, mw = ?, ml = ?,
+          gw = ?, gl = ?, mdif = ?, gdif = ?,
+          elo_used = ?, smoothed_win_rate = ?, tpr = ?, tpr_confidence = ?,
+          adjusted_tpr = ?, bounty = ?, opponents_bounty_points = ?, points = ?,
+          position = ?, performance_calculated_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE upper(trim(tournament_id)) = upper(trim(?))
+          AND lower(trim(stage)) = lower('Stage 1')
+          AND trim(player_id) = trim(?)
+          AND team_id IS NULL
+      `,
+      [
+        state.games,
+        state.wins,
+        state.losses,
+        state.gameWins,
+        state.gameLosses,
+        state.wins - state.losses,
+        state.gameWins - state.gameLosses,
+        roundBountyTprValue(state.eloUsed, 2),
+        roundBountyTprValue(state.smoothedWinRate),
+        roundBountyTprValue(state.tpr, 2),
+        roundBountyTprValue(state.confidence),
+        roundBountyTprValue(state.adjustedTpr, 2),
+        roundBountyTprValue(state.bounty),
+        roundBountyTprValue(state.opponentsBountyPoints),
+        roundBountyTprValue(state.points),
+        state.position,
+        tournamentId,
+        state.playerId,
+      ]
+    );
+  }
+
+  await dbRunAsync(
+    `
+      UPDATE tournaments
+      SET current_tpr_benchmark = ?,
+          tpr_calculated_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE upper(trim(id)) = upper(trim(?))
+    `,
+    [roundBountyTprValue(benchmarkTpr, 2), tournamentId]
+  );
+
+  return {
+    tournament_id: tournamentId,
+    scoring: STANDINGS_SCORING.BOUNTY_TPR,
+    completed_duels: completedDuels.length,
+    created_rows: createdRows,
+    updated_rows: positionedStates.length,
+    benchmark_tpr: roundBountyTprValue(benchmarkTpr, 2),
+  };
+}
+
 async function recalculateTournamentStandings(tournamentId) {
   const normalizedTournamentId = normalizeNullableText(tournamentId);
   if (!normalizedTournamentId) {
     throw createTournamentTeamRequestError(400, "tournament_id is required");
+  }
+
+  const tournamentSettings = await dbGetAsync(
+    `
+      SELECT
+        id,
+        COALESCE(NULLIF(lower(trim(standings_scoring)), ''), 'standard') AS standings_scoring,
+        COALESCE(tpr_target_games, 10) AS tpr_target_games,
+        COALESCE(tpr_smoothing, 0.5) AS tpr_smoothing,
+        COALESCE(tpr_benchmark_percentile, 0.75) AS tpr_benchmark_percentile
+      FROM tournaments
+      WHERE upper(trim(id)) = upper(trim(?))
+      LIMIT 1
+    `,
+    [normalizedTournamentId]
+  );
+  if (!tournamentSettings) {
+    throw createTournamentTeamRequestError(404, "Tournament not found");
+  }
+  if (normalizeStandingsScoring(tournamentSettings.standings_scoring) === STANDINGS_SCORING.BOUNTY_TPR) {
+    return recalculateBountyTprStandings(tournamentSettings.id, tournamentSettings);
   }
 
   const standingsRows = await dbAllAsync(
@@ -4805,6 +5145,18 @@ function ensureDuelsSchema() {
             }
           }
         );
+        db.run(
+          `
+            CREATE INDEX IF NOT EXISTS idx_duels_tournament_status
+            ON duels(tournament_id COLLATE NOCASE, status COLLATE NOCASE)
+            WHERE deleted_at IS NULL
+          `,
+          (indexErr) => {
+            if (indexErr) {
+              console.error("Failed to ensure duels tournament/status index", indexErr);
+            }
+          }
+        );
       });
     });
   });
@@ -5512,6 +5864,12 @@ function ensureTournamentsSchema() {
       stage1_groups BOOLEAN NOT NULL DEFAULT 0 CHECK (stage1_groups IN (0, 1)),
       stage1_format TEXT NOT NULL DEFAULT '',
       stage2_format TEXT NOT NULL DEFAULT '',
+      standings_scoring TEXT NOT NULL DEFAULT 'standard' CHECK (standings_scoring IN ('standard', 'bounty_tpr')),
+      tpr_target_games INTEGER NOT NULL DEFAULT 10 CHECK (tpr_target_games > 0),
+      tpr_smoothing REAL NOT NULL DEFAULT 0.5 CHECK (tpr_smoothing >= 0),
+      tpr_benchmark_percentile REAL NOT NULL DEFAULT 0.75 CHECK (tpr_benchmark_percentile >= 0 AND tpr_benchmark_percentile <= 1),
+      current_tpr_benchmark REAL,
+      tpr_calculated_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -5546,6 +5904,12 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "stage1_groups", "BOOLEAN NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "tournaments", "stage1_format", "TEXT NOT NULL DEFAULT ''");
       addColumnIfMissing(columns, "tournaments", "stage2_format", "TEXT NOT NULL DEFAULT ''");
+      addColumnIfMissing(columns, "tournaments", "standings_scoring", "TEXT NOT NULL DEFAULT 'standard'");
+      addColumnIfMissing(columns, "tournaments", "tpr_target_games", "INTEGER NOT NULL DEFAULT 10");
+      addColumnIfMissing(columns, "tournaments", "tpr_smoothing", "REAL NOT NULL DEFAULT 0.5");
+      addColumnIfMissing(columns, "tournaments", "tpr_benchmark_percentile", "REAL NOT NULL DEFAULT 0.75");
+      addColumnIfMissing(columns, "tournaments", "current_tpr_benchmark", "REAL");
+      addColumnIfMissing(columns, "tournaments", "tpr_calculated_at", "TEXT");
       addColumnIfMissing(columns, "tournaments", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "tournaments", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       db.run(
@@ -5613,6 +5977,23 @@ function ensureTournamentsSchema() {
                 WHEN 'double elimination' THEN 'Double Elimination'
                 ELSE 'Round-robin'
               END
+            END,
+            standings_scoring = CASE
+              WHEN lower(trim(COALESCE(standings_scoring, ''))) = 'bounty_tpr' THEN 'bounty_tpr'
+              ELSE 'standard'
+            END,
+            tpr_target_games = CASE
+              WHEN CAST(tpr_target_games AS INTEGER) > 0 THEN CAST(tpr_target_games AS INTEGER)
+              ELSE 10
+            END,
+            tpr_smoothing = CASE
+              WHEN CAST(tpr_smoothing AS REAL) >= 0 THEN CAST(tpr_smoothing AS REAL)
+              ELSE 0.5
+            END,
+            tpr_benchmark_percentile = CASE
+              WHEN CAST(tpr_benchmark_percentile AS REAL) BETWEEN 0 AND 1
+              THEN CAST(tpr_benchmark_percentile AS REAL)
+              ELSE 0.75
             END
         `,
         (backfillErr) => {
@@ -5864,6 +6245,16 @@ function ensureStandingsSchema() {
       mdif INTEGER NOT NULL DEFAULT 0,
       ddif INTEGER NOT NULL DEFAULT 0,
       gdif INTEGER NOT NULL DEFAULT 0,
+      starting_elo REAL,
+      elo_used REAL,
+      smoothed_win_rate REAL,
+      tpr REAL,
+      tpr_confidence REAL,
+      adjusted_tpr REAL,
+      bounty REAL,
+      opponents_bounty_points REAL,
+      points REAL,
+      performance_calculated_at TEXT,
       standing_icon TEXT,
       position INTEGER,
       position_override INTEGER,
@@ -5902,6 +6293,16 @@ function ensureStandingsSchema() {
       addColumnIfMissing(columns, "standings", "mdif", "INTEGER NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "standings", "ddif", "INTEGER NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "standings", "gdif", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(columns, "standings", "starting_elo", "REAL");
+      addColumnIfMissing(columns, "standings", "elo_used", "REAL");
+      addColumnIfMissing(columns, "standings", "smoothed_win_rate", "REAL");
+      addColumnIfMissing(columns, "standings", "tpr", "REAL");
+      addColumnIfMissing(columns, "standings", "tpr_confidence", "REAL");
+      addColumnIfMissing(columns, "standings", "adjusted_tpr", "REAL");
+      addColumnIfMissing(columns, "standings", "bounty", "REAL");
+      addColumnIfMissing(columns, "standings", "opponents_bounty_points", "REAL");
+      addColumnIfMissing(columns, "standings", "points", "REAL");
+      addColumnIfMissing(columns, "standings", "performance_calculated_at", "TEXT");
       addColumnIfMissing(columns, "standings", "standing_icon", "TEXT");
       addColumnIfMissing(columns, "standings", "position", "INTEGER");
       addColumnIfMissing(columns, "standings", "position_override", "INTEGER");
@@ -12640,6 +13041,12 @@ app.get("/tournaments", (req, res, next) => {
         COALESCE(t.stage1_groups, 0) AS stage1_groups,
         t.stage1_format,
         t.stage2_format,
+        COALESCE(NULLIF(lower(trim(t.standings_scoring)), ''), 'standard') AS standings_scoring,
+        COALESCE(t.tpr_target_games, 10) AS tpr_target_games,
+        COALESCE(t.tpr_smoothing, 0.5) AS tpr_smoothing,
+        COALESCE(t.tpr_benchmark_percentile, 0.75) AS tpr_benchmark_percentile,
+        t.current_tpr_benchmark,
+        t.tpr_calculated_at,
         CASE
           WHEN ? = 1 THEN ?
           WHEN ? > 0 AND EXISTS (
@@ -12804,6 +13211,12 @@ app.get("/tournaments", (req, res, next) => {
                 stage1_groups: normalizeBooleanInt(row.stage1_groups) === 1,
                 stage1_format: normalizeTournamentStageFormat(row.stage1_format),
                 stage2_format: normalizeTournamentStageFormat(row.stage2_format),
+                standings_scoring: normalizeStandingsScoring(row.standings_scoring),
+                tpr_target_games: Math.max(1, Number.parseInt(row.tpr_target_games, 10) || 10),
+                tpr_smoothing: Math.max(0, bountyTprNumber(row.tpr_smoothing, 0.5)),
+                tpr_benchmark_percentile: Math.min(1, Math.max(0, bountyTprNumber(row.tpr_benchmark_percentile, 0.75))),
+                current_tpr_benchmark: bountyTprNumber(row.current_tpr_benchmark),
+                tpr_calculated_at: row.tpr_calculated_at || null,
                 access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
                 access_via_access_users: Number(row.access_via_access_users) === 1,
                 captain_team_ids: normalizeTournamentCaptainTeamIds(row.captain_team_ids_csv),
@@ -12846,6 +13259,13 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   const isTest = normalizeBooleanInt(req.body?.is_test);
   const about = String(req.body?.about || "").trim() || null;
   const rules = String(req.body?.rules || "").trim() || null;
+  const standingsScoring = normalizeStandingsScoring(req.body?.standings_scoring);
+  const tprTargetGames = Math.max(1, Number.parseInt(req.body?.tpr_target_games, 10) || 10);
+  const tprSmoothing = Math.max(0, bountyTprNumber(req.body?.tpr_smoothing, 0.5));
+  const tprBenchmarkPercentile = Math.min(
+    1,
+    Math.max(0, bountyTprNumber(req.body?.tpr_benchmark_percentile, 0.75))
+  );
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
   const requestedTeamType = normalizeNullableText(req.body?.team_type);
   const teamType = normalizeTeamType(requestedTeamType);
@@ -12942,10 +13362,14 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   stage1_groups,
                   stage1_format,
                   stage2_format,
+                  standings_scoring,
+                  tpr_target_games,
+                  tpr_smoothing,
+                  tpr_benchmark_percentile,
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
               [
                 id,
@@ -12969,6 +13393,10 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                 stage1Groups,
                 stage1Format,
                 stage2Format,
+                standingsScoring,
+                tprTargetGames,
+                tprSmoothing,
+                tprBenchmarkPercentile,
               ],
               (insertErr) => {
                 if (insertErr) {
@@ -13073,7 +13501,11 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
         tournament_format,
         COALESCE(stage1_groups, 0) AS stage1_groups,
         stage1_format,
-        stage2_format
+        stage2_format,
+        COALESCE(NULLIF(lower(trim(standings_scoring)), ''), 'standard') AS standings_scoring,
+        COALESCE(tpr_target_games, 10) AS tpr_target_games,
+        COALESCE(tpr_smoothing, 0.5) AS tpr_smoothing,
+        COALESCE(tpr_benchmark_percentile, 0.75) AS tpr_benchmark_percentile
       FROM tournaments
       WHERE ${buildTournamentLookupWhereClause("id")}
       LIMIT 1
@@ -13090,6 +13522,27 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
       const ranking = requestedRanking === undefined
         ? normalizeBooleanInt(currentRow.ranking)
         : normalizeBooleanInt(requestedRanking);
+      const standingsScoring = normalizeStandingsScoring(
+        req.body?.standings_scoring ?? currentRow.standings_scoring
+      );
+      const tprTargetGames = Math.max(
+        1,
+        Number.parseInt(req.body?.tpr_target_games ?? currentRow.tpr_target_games, 10) || 10
+      );
+      const tprSmoothing = Math.max(
+        0,
+        bountyTprNumber(req.body?.tpr_smoothing ?? currentRow.tpr_smoothing, 0.5)
+      );
+      const tprBenchmarkPercentile = Math.min(
+        1,
+        Math.max(
+          0,
+          bountyTprNumber(
+            req.body?.tpr_benchmark_percentile ?? currentRow.tpr_benchmark_percentile,
+            0.75
+          )
+        )
+      );
       const {
         tournamentFormat,
         stage1Groups,
@@ -13131,6 +13584,10 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                   stage1_groups = ?,
                   stage1_format = ?,
                   stage2_format = ?,
+                  standings_scoring = ?,
+                  tpr_target_games = ?,
+                  tpr_smoothing = ?,
+                  tpr_benchmark_percentile = ?,
                   updated_at = CURRENT_TIMESTAMP
                 WHERE ${buildTournamentLookupWhereClause("id")}
               `,
@@ -13156,6 +13613,10 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                 stage1Groups,
                 stage1Format,
                 stage2Format,
+                standingsScoring,
+                tprTargetGames,
+                tprSmoothing,
+                tprBenchmarkPercentile,
                 rawTournamentId,
                 normalizedTournamentId || rawTournamentId,
               ],
@@ -13224,14 +13685,29 @@ app.get("/standings", async (req, res) => {
 
   try {
     const tournament = await dbGetAsync(
-      "SELECT id FROM tournaments WHERE upper(trim(id)) = upper(trim(?)) LIMIT 1",
+      `
+        SELECT
+          id,
+          COALESCE(NULLIF(lower(trim(standings_scoring)), ''), 'standard') AS standings_scoring,
+          current_tpr_benchmark,
+          tpr_calculated_at
+        FROM tournaments
+        WHERE upper(trim(id)) = upper(trim(?))
+        LIMIT 1
+      `,
       [tournamentId]
     );
     if (!tournament) {
       return res.status(404).json({ ok: false, message: "Tournament not found" });
     }
     const standings = await loadStandings(tournament.id, requestedStage || null);
-    return res.json({ ok: true, standings });
+    return res.json({
+      ok: true,
+      standings,
+      standings_scoring: normalizeStandingsScoring(tournament.standings_scoring),
+      current_tpr_benchmark: bountyTprNumber(tournament.current_tpr_benchmark),
+      tpr_calculated_at: tournament.tpr_calculated_at || null,
+    });
   } catch (error) {
     console.error("Failed to load standings", error);
     return res.status(500).json({ ok: false, message: "Failed to load standings" });

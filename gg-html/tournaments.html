@@ -985,7 +985,7 @@
     //? "Asian-Cup-2025"
     //? "OCFC-2025"
     //? "CCOQ-2026"
-    ? "UCOC-2026"
+    ? "PCOC-2026"
     //? "UCDTC-2025"
     : window.location.pathname.split('/').filter(Boolean).pop();
   let currentTournament = null;
@@ -3854,7 +3854,9 @@
     // Sort rounds numerically ascending
     const sortedRounds = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
     const roundIndexMap = {};
-    sortedRounds.forEach((r, i) => roundIndexMap[r] = i);
+    // Round Order is a 1-based absolute column number. Keep empty columns when
+    // the first available round starts later (for example, lower bracket at 2).
+    sortedRounds.forEach(r => roundIndexMap[r] = Math.max(0, r - 1));
     
     // Calculate playoff match coordinates
     calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, playoffMatches, currentTournamentId);
@@ -3969,7 +3971,9 @@
       });
       const sortedRounds = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
       const roundIndexMap = {};
-      sortedRounds.forEach((r, i) => roundIndexMap[r] = i);
+      // Use the absolute Round Order across every elimination stage so an
+      // independently rendered lower bracket is aligned with the upper one.
+      sortedRounds.forEach(r => roundIndexMap[r] = Math.max(0, r - 1));
 
       // Compute coordinates for this stage
       calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, stageMatches, currentTournamentId);
