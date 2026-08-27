@@ -1186,9 +1186,10 @@
   function createNumberRow(labelText, value, options) {
     const field = createTextRow(labelText, value, options);
     field.input.type = "number";
-    field.input.inputMode = "numeric";
-    field.input.step = "1";
-    field.input.min = "1";
+    field.input.inputMode = options?.inputMode || "numeric";
+    field.input.step = String(options?.step ?? 1);
+    field.input.min = String(options?.min ?? 1);
+    if (options?.max !== undefined) field.input.max = String(options.max);
     return field;
   }
 
@@ -3949,6 +3950,30 @@
     if (lineupSizeTypeField.select.options[0]) lineupSizeTypeField.select.options[0].textContent = "1 - Fixed";
     if (lineupSizeTypeField.select.options[1]) lineupSizeTypeField.select.options[1].textContent = "2 - Flexible";
     const lineupSizeField = createNumberRow("lineup_size", item?.lineup_size || "");
+    const standingsScoringField = createSelectOptionsRow(
+      "standings_scoring",
+      String(item?.standings_scoring || "standard"),
+      [
+        { value: "standard", label: "Standard" },
+        { value: "bounty_tpr", label: "Bounty TPR" },
+      ],
+      false
+    );
+    const tprTargetGamesField = createNumberRow(
+      "tpr_target_games",
+      item?.tpr_target_games ?? 10,
+      { min: 1, step: 1 }
+    );
+    const tprSmoothingField = createNumberRow(
+      "tpr_smoothing",
+      item?.tpr_smoothing ?? 0.5,
+      { min: 0, step: "any", inputMode: "decimal" }
+    );
+    const tprBenchmarkPercentileField = createNumberRow(
+      "tpr_benchmark_percentile (0–1)",
+      item?.tpr_benchmark_percentile ?? 0.75,
+      { min: 0, max: 1, step: 0.01, inputMode: "decimal" }
+    );
     const rankingField = createCheckboxRow(
       "ranking",
       item?.ranking === undefined || item?.ranking === true || Number(item?.ranking) === 1,
@@ -4028,6 +4053,10 @@
     form.appendChild(playerHubVisibilityField.row);
     form.appendChild(lineupSizeTypeField.row);
     form.appendChild(lineupSizeField.row);
+    form.appendChild(standingsScoringField.row);
+    form.appendChild(tprTargetGamesField.row);
+    form.appendChild(tprSmoothingField.row);
+    form.appendChild(tprBenchmarkPercentileField.row);
     form.appendChild(rankingField.row);
     form.appendChild(isTestField.row);
     form.appendChild(accessUsersField.row);
@@ -4094,6 +4123,17 @@
     lineupSizeTypeField.select.addEventListener("change", toggleLineupSizeState);
     toggleLineupSizeState();
 
+    const toggleStandingsScoringState = () => {
+      const usesBountyTpr = standingsScoringField.select.value === "bounty_tpr";
+      [tprTargetGamesField, tprSmoothingField, tprBenchmarkPercentileField].forEach((field) => {
+        field.row.classList.toggle("hidden", !usesBountyTpr);
+        field.input.disabled = !usesBountyTpr;
+        field.input.required = usesBountyTpr;
+      });
+    };
+    standingsScoringField.select.addEventListener("change", toggleStandingsScoringState);
+    toggleStandingsScoringState();
+
     const actions = document.createElement("div");
     actions.className = "cp-edit-actions";
 
@@ -4136,6 +4176,10 @@
         player_hub_visibility: String(playerHubVisibilityField.select.value || "Visible").trim(),
         lineup_size_type: Number.parseInt(String(lineupSizeTypeField.select.value || "2"), 10) === 1 ? 1 : 2,
         lineup_size: Number.parseInt(String(lineupSizeField.input.value || "").trim(), 10),
+        standings_scoring: String(standingsScoringField.select.value || "standard").trim(),
+        tpr_target_games: Number.parseInt(String(tprTargetGamesField.input.value || "").trim(), 10),
+        tpr_smoothing: Number(String(tprSmoothingField.input.value || "").trim()),
+        tpr_benchmark_percentile: Number(String(tprBenchmarkPercentileField.input.value || "").trim()),
         ranking: rankingField.input.checked,
         is_test: isTestField.input.checked,
         access_users: accessUsersField.getValues(),
@@ -4173,6 +4217,31 @@
         payload.lineup_size = null;
       } else if (!Number.isInteger(payload.lineup_size) || payload.lineup_size <= 0) {
         setStatus("Lineup size must be a positive integer for fixed lineup size.", true);
+        return;
+      }
+      if (
+        payload.standings_scoring === "bounty_tpr"
+        && (!Number.isInteger(payload.tpr_target_games) || payload.tpr_target_games <= 0)
+      ) {
+        setStatus("tpr_target_games must be a positive integer.", true);
+        return;
+      }
+      if (
+        payload.standings_scoring === "bounty_tpr"
+        && (!Number.isFinite(payload.tpr_smoothing) || payload.tpr_smoothing < 0)
+      ) {
+        setStatus("tpr_smoothing must be zero or greater.", true);
+        return;
+      }
+      if (
+        payload.standings_scoring === "bounty_tpr"
+        && (
+          !Number.isFinite(payload.tpr_benchmark_percentile)
+          || payload.tpr_benchmark_percentile < 0
+          || payload.tpr_benchmark_percentile > 1
+        )
+      ) {
+        setStatus("tpr_benchmark_percentile must be between 0 and 1.", true);
         return;
       }
 

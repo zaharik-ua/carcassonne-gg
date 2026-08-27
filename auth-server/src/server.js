@@ -3281,6 +3281,11 @@ async function loadStandings(tournamentId, stage = null) {
         s."group" AS "group",
         s.team_id,
         s.player_id,
+        COALESCE(NULLIF(trim(p.bga_nickname), ''), trim(s.player_id)) AS player_name,
+        p.name AS player_real_name,
+        p.avatar AS player_avatar,
+        COALESCE(NULLIF(trim(pt.flag), ''), NULLIF(trim(pt.logo), ''), NULLIF(trim(a.flag), '')) AS association_flag,
+        COALESCE(NULLIF(trim(a.name), ''), NULLIF(trim(pt.name), ''), NULLIF(trim(p.association), '')) AS association_name,
         s.mp,
         s.mw,
         s.ml,
@@ -3307,6 +3312,15 @@ async function loadStandings(tournamentId, stage = null) {
         s.created_at,
         s.updated_at
       FROM standings s
+      LEFT JOIN profiles p
+        ON trim(COALESCE(p.id, '')) = trim(COALESCE(s.player_id, ''))
+       AND p.deleted_at IS NULL
+      LEFT JOIN associations a
+        ON upper(trim(COALESCE(a.code, ''))) = upper(trim(COALESCE(p.association, '')))
+        OR lower(trim(COALESCE(a.name, ''))) = lower(trim(COALESCE(p.association, '')))
+      LEFT JOIN teams pt
+        ON upper(trim(COALESCE(pt.id, ''))) = upper(trim(COALESCE(p.association, '')))
+        OR lower(trim(COALESCE(pt.name, ''))) = lower(trim(COALESCE(p.association, '')))
       WHERE upper(trim(s.tournament_id)) = upper(trim(?))
         ${stageSql}
       ORDER BY

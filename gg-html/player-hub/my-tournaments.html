@@ -6099,6 +6099,9 @@
         input.value = String(value ?? "");
       }
       if (options.min !== undefined) input.min = String(options.min);
+      if (options.max !== undefined) input.max = String(options.max);
+      if (options.step !== undefined) input.step = String(options.step);
+      if (options.required === true) input.required = true;
       if (options.readOnly) input.readOnly = true;
     }
 
@@ -7086,6 +7089,21 @@
         ],
       }
     );
+    const tprTargetGamesField = createTournamentFormRow(
+      "TPR target games",
+      tournament?.tpr_target_games ?? 10,
+      { type: "number", min: 1, step: 1 }
+    );
+    const tprSmoothingField = createTournamentFormRow(
+      "TPR smoothing",
+      tournament?.tpr_smoothing ?? 0.5,
+      { type: "number", min: 0, step: "any" }
+    );
+    const tprBenchmarkPercentileField = createTournamentFormRow(
+      "TPR benchmark percentile (0–1)",
+      tournament?.tpr_benchmark_percentile ?? 0.75,
+      { type: "number", min: 0, max: 1, step: 0.01 }
+    );
     const stage1GroupsField = createTournamentFormRow(
       "Stage 1 Groups",
       tournament?.stage1_groups === true
@@ -7136,6 +7154,9 @@
       lineupSizeField,
       tournamentFormatField,
       standingsScoringField,
+      tprTargetGamesField,
+      tprSmoothingField,
+      tprBenchmarkPercentileField,
       stage1GroupsField,
       stage1FormatField,
       stage2FormatField,
@@ -7203,7 +7224,8 @@
       const supportsStage1Standings = isTeams
         && ["Round-robin", "Swiss"].includes(stage1FormatField.input.value);
       const hasStage1Standings = standingsEditor.getValues().length > 0;
-      const usesBountyTpr = String(tournament?.standings_scoring || "").trim().toLowerCase() === "bounty_tpr";
+      const usesBountyTpr = String(standingsScoringField.input.value || "").trim().toLowerCase() === "bounty_tpr";
+      const savedWithBountyTpr = String(tournament?.standings_scoring || "").trim().toLowerCase() === "bounty_tpr";
 
       teamTypeField.row.classList.toggle("cp-hidden", !isTeams);
       subtypeField.row.classList.toggle("cp-hidden", !isTeams);
@@ -7217,7 +7239,10 @@
       accessUsersEditor.root.classList.toggle("cp-hidden", !isTeams);
       tournamentTeamsEditor.root.classList.toggle("cp-hidden", !isTeams);
       standingsEditor.root.classList.toggle("cp-hidden", !supportsStage1Standings);
-      recalculateButton.classList.toggle("cp-hidden", !usesBountyTpr && !hasStage1Standings);
+      tprTargetGamesField.row.classList.toggle("cp-hidden", !usesBountyTpr);
+      tprSmoothingField.row.classList.toggle("cp-hidden", !usesBountyTpr);
+      tprBenchmarkPercentileField.row.classList.toggle("cp-hidden", !usesBountyTpr);
+      recalculateButton.classList.toggle("cp-hidden", !savedWithBountyTpr && !hasStage1Standings);
 
       teamTypeField.input.disabled = isBusy || !isTeams;
       subtypeField.input.disabled = isBusy || !isTeams;
@@ -7226,10 +7251,16 @@
       lineupSizeField.input.disabled = isBusy || !supportsLineup || !isFixedLineup;
       tournamentFormatField.input.disabled = isBusy;
       standingsScoringField.input.disabled = isBusy;
+      tprTargetGamesField.input.disabled = isBusy || !usesBountyTpr;
+      tprSmoothingField.input.disabled = isBusy || !usesBountyTpr;
+      tprBenchmarkPercentileField.input.disabled = isBusy || !usesBountyTpr;
+      tprTargetGamesField.input.required = usesBountyTpr;
+      tprSmoothingField.input.required = usesBountyTpr;
+      tprBenchmarkPercentileField.input.required = usesBountyTpr;
       stage1GroupsField.input.disabled = isBusy || isFreePlay;
       stage1FormatField.input.disabled = isBusy || isFreePlay;
       stage2FormatField.input.disabled = isBusy || !hasStage2;
-      recalculateButton.disabled = isBusy || (!usesBountyTpr && !hasStage1Standings);
+      recalculateButton.disabled = isBusy || (!savedWithBountyTpr && !hasStage1Standings);
       lineupSizeField.input.required = supportsLineup && isFixedLineup;
       accessUsersEditor.setOfficial(isOfficial);
       if (isBusy) accessUsersEditor.setDisabled(true);
@@ -7244,6 +7275,7 @@
     subtypeField.input.addEventListener("change", syncConditionalFields);
     lineupSizeTypeField.input.addEventListener("change", syncConditionalFields);
     tournamentFormatField.input.addEventListener("change", syncConditionalFields);
+    standingsScoringField.input.addEventListener("change", syncConditionalFields);
     stage1FormatField.input.addEventListener("change", syncConditionalFields);
     standingsEditor.onChange(syncConditionalFields);
     syncConditionalFields();
@@ -7322,6 +7354,9 @@
         lineup_size: lineupSizeType === 1 ? lineupSize : null,
         tournament_format: tournamentFormat,
         standings_scoring: standingsScoringField.input.value,
+        tpr_target_games: Number.parseInt(tprTargetGamesField.input.value, 10),
+        tpr_smoothing: Number(tprSmoothingField.input.value),
+        tpr_benchmark_percentile: Number(tprBenchmarkPercentileField.input.value),
         stage1_groups: isFreePlay ? false : stage1GroupsField.input.checked,
         stage1_format: isFreePlay ? "" : stage1FormatField.input.value,
         stage2_format: hasStage2 ? stage2FormatField.input.value : "",
@@ -7340,6 +7375,31 @@
       }
       if (lineupSizeType === 1 && (!Number.isInteger(lineupSize) || lineupSize <= 0)) {
         setStatus("Lineup size must be a positive integer.");
+        return;
+      }
+      if (
+        payload.standings_scoring === "bounty_tpr"
+        && (!Number.isInteger(payload.tpr_target_games) || payload.tpr_target_games <= 0)
+      ) {
+        setStatus("TPR target games must be a positive integer.");
+        return;
+      }
+      if (
+        payload.standings_scoring === "bounty_tpr"
+        && (!Number.isFinite(payload.tpr_smoothing) || payload.tpr_smoothing < 0)
+      ) {
+        setStatus("TPR smoothing must be zero or greater.");
+        return;
+      }
+      if (
+        payload.standings_scoring === "bounty_tpr"
+        && (
+          !Number.isFinite(payload.tpr_benchmark_percentile)
+          || payload.tpr_benchmark_percentile < 0
+          || payload.tpr_benchmark_percentile > 1
+        )
+      ) {
+        setStatus("TPR benchmark percentile must be between 0 and 1.");
         return;
       }
       if (isOfficial) {

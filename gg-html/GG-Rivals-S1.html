@@ -1480,11 +1480,12 @@
   const currentTournamentId = "GG-Rivals-S1";
   const API_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const SHOW_FINAL_RANKING = false;
-  const HIDE_STANDING_CONTENT = true;
+  const HIDE_STANDING_CONTENT = false;
   const currentTournament = {
     tournament_id: currentTournamentId,
     name: "GG RIVALS: SEASON 1",
-    type: "TEAM",
+    type: "PLAYER",
+    standings_scoring: "bounty_tpr",
     style: "red",
     tournament_format: "2 Stages",
     stage1_name: "Groups Stage",
@@ -2116,24 +2117,27 @@
       }
 
       const data = await response.json();
-      const teamsById = new Map(
-        (teams || []).map(team => [
-          String(team.team_id || "").trim().toUpperCase(),
-          team
-        ])
-      );
+      const playerDetailsById = new Map();
+      (challengeDuels || []).forEach(duel => {
+        [duel?.player1Details, duel?.player2Details].forEach(details => {
+          const playerId = String(details?.id || "").trim();
+          if (playerId) playerDetailsById.set(playerId, details);
+        });
+      });
       standings = (Array.isArray(data.standings) ? data.standings : [])
-        .filter(row => row && row.team_id && !row.player_id)
+        .filter(row => row && row.player_id && !row.team_id)
         .map(row => {
-          const teamId = String(row.team_id || "").trim();
-          const team = teamsById.get(teamId.toUpperCase());
+          const playerId = String(row.player_id || "").trim();
+          const playerDetails = playerDetailsById.get(playerId);
           return {
             id: row.id,
             tournament_id: row.tournament_id || currentTournamentId,
             stage: row.stage || "Stage 1",
             group: row.group || "",
-            team_id: teamId,
-            team: team?.team || teamId,
+            player_id: playerId,
+            player: String(row.player_name || playerDetails?.nickname || playerId).trim(),
+            association_flag: String(row.association_flag || playerDetails?.flag || "").trim(),
+            association_name: String(row.association_name || playerDetails?.country || "").trim(),
             matches_played: row.mp ?? 0,
             matches_won: row.mw ?? 0,
             matches_lost: row.ml ?? 0,
@@ -2144,6 +2148,7 @@
             matches_difference: row.mdif ?? 0,
             duels_difference: row.ddif ?? 0,
             games_difference: row.gdif ?? 0,
+            points: row.points ?? 0,
             standing_icon: row.standing_icon || null,
             position: row.position_override ?? row.position ?? null
           };
@@ -2892,10 +2897,16 @@
 
     const isTeam = tournament && tournament.type === "TEAM";
     const isIndividualStandings = !isTeam;
+    const isBountyTprStandings = String(tournament?.standings_scoring || "").trim().toLowerCase() === "bounty_tpr";
     const standingsFormatLower = getStandingsFormatForTournamentStage(tournament, stageFilter);
     const isSwissStandings = isIndividualStandings && standingsFormatLower === "swiss";
     const isRoundRobinStandings = isIndividualStandings && standingsFormatLower === "round-robin";
-    const isStage1Groups = (!!tournament && tournament.stage1_groups === "Groups" && (stageFilter ? stageFilter === "Stage 1" : true));
+    const isStage1Groups = !!(
+      tournament
+      && tournament.stage1_groups === "Groups"
+      && groupKeys.length
+      && (stageFilter ? stageFilter === "Stage 1" : true)
+    );
     const isRoundRobinGroups = !!tournament && (tournament.stage1_format === "Round-robin" || tournament.stage1_format === "Swiss");
     if (isStage1Groups && groupKeys.length) {
       const navTabId = tabId || "stage1";
@@ -3228,8 +3239,19 @@
 
       section.appendChild(headerRow);
 
-      // Sort logic: for TEAM, sort by MW, then DW-DL, then GW-GL; for individual by MW, then GW-GL, then GW
-      if (isTeam) {
+      // Bounty TPR standings are ordered by the unscaled Points value.
+      if (isBountyTprStandings) {
+        groupPlayers.sort((a, b) => {
+          const pointsDiff = (Number(b?.points) || 0) - (Number(a?.points) || 0);
+          if (pointsDiff !== 0) return pointsDiff;
+          const winsDiff = (Number(b?.matches_won) || 0) - (Number(a?.matches_won) || 0);
+          if (winsDiff !== 0) return winsDiff;
+          return String(a?.player_id || "").localeCompare(String(b?.player_id || ""), undefined, {
+            numeric: true,
+            sensitivity: "base"
+          });
+        });
+      } else if (isTeam) {
         groupPlayers.sort((a, b) => {
           // MW
           const mwDiff = +b.matches_won - +a.matches_won;
@@ -3275,7 +3297,9 @@
         }
       }
 
-      groupPlayers = applyExplicitPositions(groupPlayers);
+      if (!isBountyTprStandings) {
+        groupPlayers = applyExplicitPositions(groupPlayers);
+      }
 
       // Single table with dynamic columns depending on toggle
       const table = document.createElement("table");
@@ -3304,7 +3328,9 @@
         table.innerHTML = '';
         table.classList.remove('crosstable');
         section.classList.remove('crosstable-active');
-        const metrics = isTeam ? ['MP','MW','ML','DW','DL','GW','GL'] : ['MP','MW','ML','GW','GL'];
+        const metrics = isBountyTprStandings
+          ? ['MP', 'MW', 'ML', 'Points']
+          : (isTeam ? ['MP','MW','ML','DW','DL','GW','GL'] : ['MP','MW','ML','GW','GL']);
 
         const headTr = document.createElement('tr');
         const thPos = document.createElement('th');
@@ -3354,11 +3380,13 @@
             span.textContent = rowData.team || '';
             wrap.appendChild(span);
           } else {
-            const found = players.find(pl => pl.player_id === rowData.player_id);
-            if (found && found.avatar) {
+            const flagUrl = String(rowData?.association_flag || "").trim();
+            if (flagUrl) {
               const img = document.createElement('img');
-              img.src = found.avatar;
-              img.className = 'player-logo';
+              img.src = flagUrl;
+              img.alt = String(rowData?.association_name || "");
+              img.title = String(rowData?.association_name || "");
+              img.className = 'challenge-duel-flag';
               wrap.appendChild(img);
             }
             const a = document.createElement('a');
@@ -3409,22 +3437,33 @@
               tr.appendChild(td);
             });
           } else {
-            const values = [
-              rowData.matches_played,
-              rowData.matches_won,
-              rowData.matches_lost,
-              rowData.games_won,
-              rowData.games_lost
-            ];
+            const values = isBountyTprStandings
+              ? [
+                  rowData.matches_played,
+                  rowData.matches_won,
+                  rowData.matches_lost,
+                  Math.trunc((Number(rowData.points) || 0) * 100)
+                ]
+              : [
+                  rowData.matches_played,
+                  rowData.matches_won,
+                  rowData.matches_lost,
+                  rowData.games_won,
+                  rowData.games_lost
+                ];
             values.forEach((val, i) => {
               const td = document.createElement('td');
               td.textContent = String(val ?? '');
-              if (i === 1) td.style.fontWeight = '600';
+              if ((isBountyTprStandings && i === 3) || (!isBountyTprStandings && i === 1)) {
+                td.style.fontWeight = '600';
+              }
               tr.appendChild(td);
             });
           }
 
           table.appendChild(tr);
+
+          if (isBountyTprStandings) return;
 
           const matchesRow = document.createElement('tr');
           matchesRow.className = 'player-matches-row';
@@ -3477,11 +3516,13 @@
 
       const standingsColumns = isTeam
         ? ['MP','MW','ML','DW','DL','GW','GL']
-        : (isSwissStandings ? ['MP','MW','ML','GW','GL','OMW','OGD','OGW'] : ['MP','MW','ML','GW','GL']);
+        : (isBountyTprStandings
+          ? ['MP', 'MW', 'ML', 'Points']
+          : (isSwissStandings ? ['MP','MW','ML','GW','GL','OMW','OGD','OGW'] : ['MP','MW','ML','GW','GL']));
       fullViewBtn.addEventListener('click', () => {
         openTableFullscreen({
           sourceTable: table,
-          participants,
+          participants: isBountyTprStandings ? [] : participants,
           groupPlayers,
           isTeam,
           group,
@@ -3518,7 +3559,12 @@
     }
 
     let explanation = null;
-    if (tournament && tournament.type === "TEAM") {
+    if (isBountyTprStandings) {
+      explanation = document.createElement("div");
+      explanation.className = "standings-order-info";
+      explanation.innerHTML = "<br>MP: Matches Played &nbsp; MW: Matches Won &nbsp; ML: Matches Lost &nbsp; Points: Bounty Points × 100";
+      container.appendChild(explanation);
+    } else if (tournament && tournament.type === "TEAM") {
       explanation = document.createElement("div");
       explanation.style.fontSize = "13px";
       explanation.innerHTML = `
