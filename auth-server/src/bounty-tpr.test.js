@@ -8,6 +8,7 @@ import {
   calculateSmoothedWinRate,
   calculateTpr,
   calculateTprConfidence,
+  calculateTournamentBountySnapshot,
   percentileInclusive,
 } from "./bounty-tpr.js";
 
@@ -45,4 +46,21 @@ test("points include current defeated-opponent bounties and the player's own bou
     opponentsPoints: 1.85,
     points: 2.45,
   });
+});
+
+test("a hypothetical win produces opponent-specific potential bounty", () => {
+  const calculateDefeatedOpponentBounty = (opponentElo) => {
+    const snapshot = calculateTournamentBountySnapshot([
+      { playerId: "winner", elo: 1500, games: 1, wins: 1, opponentIds: ["opponent"] },
+      { playerId: "opponent", elo: opponentElo, games: 1, wins: 0, opponentIds: ["winner"] },
+      { playerId: "field-a", elo: 1500, games: 1, wins: 1, opponentIds: ["field-b"] },
+      { playerId: "field-b", elo: 1500, games: 1, wins: 0, opponentIds: ["field-a"] },
+    ]);
+    return snapshot.statesByPlayerId.get("opponent")?.bounty;
+  };
+  const lowerRatedBounty = calculateDefeatedOpponentBounty(1200);
+  const higherRatedBounty = calculateDefeatedOpponentBounty(1800);
+  assert.ok(Number.isFinite(lowerRatedBounty));
+  assert.ok(Number.isFinite(higherRatedBounty));
+  assert.ok(higherRatedBounty > lowerRatedBounty);
 });

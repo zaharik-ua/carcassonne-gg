@@ -1010,6 +1010,61 @@
     font-weight: 600;
     white-space: nowrap;
   }
+  .rivals-player-matches-entry {
+    display: grid;
+    grid-template-columns: max-content 50px max-content minmax(92px, 1fr);
+    gap: 7px;
+    width: 100%;
+  }
+  .rivals-player-matches-list {
+    padding-left: 14px;
+  }
+  .rivals-player-matches-entry .player-matches-name {
+    min-width: 0;
+  }
+  .rivals-player-tournament-bounty {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 0 0 8px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid #d7e1ea;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .rivals-player-tournament-bounty__value {
+    margin-left: auto;
+    min-width: 82px;
+    color: #17612e;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .rivals-player-matches-bounty {
+    justify-self: end;
+    min-width: 82px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: #e7f6e7;
+    color: #17612e;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .rivals-player-matches-bounty:empty {
+    visibility: hidden;
+  }
+  @media (max-width: 640px) {
+    .rivals-player-matches-entry {
+      grid-template-columns: minmax(0, 1fr) 42px minmax(0, 1fr);
+    }
+    .rivals-player-matches-bounty {
+      grid-column: 1 / -1;
+      justify-self: end;
+    }
+  }
   .sim-select {
     position: relative;
     display: inline-flex;
@@ -1773,6 +1828,122 @@
     return wrapper;
   }
 
+  function buildRivalsPlayerMatchesBlock({ playerId, tournamentId = null, standingsRows = [] }) {
+    const matchesTournamentId = String(tournamentId || currentTournamentId).trim().toUpperCase();
+    const selectedPlayerId = String(playerId || "").trim();
+    const bountyByPlayerId = new Map(
+      (Array.isArray(standingsRows) ? standingsRows : []).map(row => {
+        const rawBounty = row?.bounty;
+        const bounty = rawBounty === null || rawBounty === undefined || String(rawBounty).trim() === ""
+          ? null
+          : Number(rawBounty);
+        return [String(row?.player_id || "").trim(), bounty];
+      })
+    );
+    const parseMatchTime = value => {
+      const parsed = Date.parse(String(value || "").trim());
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const matchesForPlayer = (challengeDuels || [])
+      .filter(duel => (
+        String(duel?.tournament_id || "").trim().toUpperCase() === matchesTournamentId
+        && (
+          String(duel?.player1_id || "").trim() === selectedPlayerId
+          || String(duel?.player2_id || "").trim() === selectedPlayerId
+        )
+      ))
+      .sort((a, b) => parseMatchTime(b?.time) - parseMatchTime(a?.time));
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "player-matches";
+    const list = document.createElement("div");
+    list.className = "player-matches-list rivals-player-matches-list";
+
+    const playerBountyRow = document.createElement("div");
+    playerBountyRow.className = "rivals-player-tournament-bounty";
+    const playerBountyLabel = document.createElement("span");
+    playerBountyLabel.textContent = "Player tournament bounty";
+    const playerBountyValue = document.createElement("span");
+    playerBountyValue.className = "rivals-player-tournament-bounty__value";
+    const playerBounty = bountyByPlayerId.get(selectedPlayerId);
+    playerBountyValue.textContent = Number.isFinite(playerBounty)
+      ? `${Math.trunc(playerBounty * 100)}%`
+      : "—";
+    playerBountyRow.appendChild(playerBountyLabel);
+    playerBountyRow.appendChild(playerBountyValue);
+    list.appendChild(playerBountyRow);
+
+    if (!matchesForPlayer.length) {
+      const empty = document.createElement("div");
+      empty.textContent = "No matches yet.";
+      list.appendChild(empty);
+    } else {
+      matchesForPlayer.forEach(duel => {
+        const row = document.createElement("div");
+        row.className = "player-matches-entry rivals-player-matches-entry";
+
+        const createPlayer = side => {
+          const player = document.createElement("span");
+          player.className = "player-matches-name";
+          const duelPlayerId = String(duel?.[`player${side}_id`] || "").trim();
+          const playerName = String(duel?.[`player${side}`] || duelPlayerId).trim();
+          const flagUrl = String(duel?.[`player${side}_flag`] || "").trim();
+          const link = document.createElement("a");
+          link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(duelPlayerId)}`;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = playerName;
+          const flag = flagUrl ? document.createElement("img") : null;
+          if (flag) {
+            flag.src = flagUrl;
+            flag.alt = "";
+            flag.className = "player-matches-flag";
+          }
+          if (side === 1 && flag) player.appendChild(flag);
+          player.appendChild(link);
+          if (side === 2 && flag) player.appendChild(flag);
+          return player;
+        };
+
+        const rawScore1 = duel?.score1;
+        const rawScore2 = duel?.score2;
+        const score1 = Number(rawScore1);
+        const score2 = Number(rawScore2);
+        const hasScore = Number.isFinite(score1) && Number.isFinite(score2)
+          && rawScore1 !== null && rawScore1 !== undefined && String(rawScore1).trim() !== ""
+          && rawScore2 !== null && rawScore2 !== undefined && String(rawScore2).trim() !== "";
+        const score = document.createElement("span");
+        score.className = "player-matches-score";
+        score.textContent = hasScore ? `${score1} - ${score2}` : "-";
+
+        const selectedIsPlayer1 = String(duel?.player1_id || "").trim() === selectedPlayerId;
+        const selectedWon = String(duel?.status || "").trim().toUpperCase() === "DONE"
+          && hasScore
+          && (selectedIsPlayer1 ? score1 > score2 : score2 > score1);
+        const defeatedPlayerId = selectedIsPlayer1
+          ? String(duel?.player2_id || "").trim()
+          : String(duel?.player1_id || "").trim();
+        const defeatedPlayerBounty = bountyByPlayerId.get(defeatedPlayerId);
+        const bounty = document.createElement("span");
+        bounty.className = "rivals-player-matches-bounty";
+        if (selectedWon && Number.isFinite(defeatedPlayerBounty)) {
+          const bountyPercent = Math.trunc(defeatedPlayerBounty * 100);
+          bounty.textContent = `Bounty: ${bountyPercent}%`;
+          bounty.title = `Current bounty earned from the defeated opponent: ${bountyPercent}%`;
+        }
+
+        row.appendChild(createPlayer(1));
+        row.appendChild(score);
+        row.appendChild(createPlayer(2));
+        row.appendChild(bounty);
+        list.appendChild(row);
+      });
+    }
+
+    wrapper.appendChild(list);
+    return wrapper;
+  }
+
   function getTournamentStageCount(tournament) {
     const tournamentFormat = String(tournament?.tournament_format || "").trim();
     if (tournamentFormat === "3 Stages") return 3;
@@ -2148,6 +2319,7 @@
             matches_difference: row.mdif ?? 0,
             duels_difference: row.ddif ?? 0,
             games_difference: row.gdif ?? 0,
+            bounty: row.bounty ?? null,
             points: row.points ?? 0,
             standing_icon: row.standing_icon || null,
             position: row.position_override ?? row.position ?? null
@@ -3463,8 +3635,6 @@
 
           table.appendChild(tr);
 
-          if (isBountyTprStandings) return;
-
           const matchesRow = document.createElement('tr');
           matchesRow.className = 'player-matches-row';
           const matchesCell = document.createElement('td');
@@ -3474,14 +3644,20 @@
             (tournament && tournament.tournament_format === "Leagues") ||
             (tournament && tournament.main_tournament_id && tournamentsById[tournament.main_tournament_id]?.tournament_format === "Leagues")
           );
-          const matchesBlock = buildPlayerMatchesBlock({
-            playerId: rowData.player_id,
-            teamName: rowData.team,
-            stageFilter,
-            tournamentId,
-            isTeam,
-            usePlayerAvatars
-          });
+          const matchesBlock = isBountyTprStandings
+            ? buildRivalsPlayerMatchesBlock({
+                playerId: rowData.player_id,
+                tournamentId,
+                standingsRows: standings_list
+              })
+            : buildPlayerMatchesBlock({
+                playerId: rowData.player_id,
+                teamName: rowData.team,
+                stageFilter,
+                tournamentId,
+                isTeam,
+                usePlayerAvatars
+              });
           matchesCell.appendChild(matchesBlock);
           matchesRow.appendChild(matchesCell);
 

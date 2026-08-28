@@ -83,6 +83,51 @@ export function calculateBounty(adjustedTpr, benchmarkTpr) {
   return 1 / (1 + (10 ** ((benchmark - player) / ELO_SCALE)));
 }
 
+export function calculateTournamentBountySnapshot(playerStates, options = {}) {
+  const targetGames = Math.max(1, finiteNumber(options.targetGames, 10));
+  const smoothing = Math.max(0, finiteNumber(options.smoothing, 0.5));
+  const benchmarkPercentile = Math.min(
+    1,
+    Math.max(0, finiteNumber(options.benchmarkPercentile, 0.75))
+  );
+  const statesByPlayerId = new Map();
+
+  (Array.isArray(playerStates) ? playerStates : []).forEach((source) => {
+    const playerId = String(source?.playerId ?? source?.player_id ?? "").trim();
+    if (!playerId || statesByPlayerId.has(playerId)) return;
+    const games = Math.max(0, Math.trunc(finiteNumber(source?.games, 0)));
+    statesByPlayerId.set(playerId, {
+      playerId,
+      elo: finiteNumber(source?.elo, 1500),
+      games,
+      wins: Math.min(games, Math.max(0, finiteNumber(source?.wins, 0))),
+      opponentIds: (Array.isArray(source?.opponentIds) ? source.opponentIds : [])
+        .map((opponentId) => String(opponentId || "").trim())
+        .filter(Boolean),
+    });
+  });
+
+  for (const state of statesByPlayerId.values()) {
+    const opponentRatings = state.opponentIds
+      .map((opponentId) => statesByPlayerId.get(opponentId)?.elo)
+      .filter((rating) => rating !== null && rating !== undefined);
+    state.smoothedWinRate = calculateSmoothedWinRate(state.wins, state.games, smoothing);
+    state.tpr = calculateTpr(opponentRatings, state.smoothedWinRate);
+    state.confidence = calculateTprConfidence(state.games, targetGames);
+    state.adjustedTpr = calculateAdjustedTpr(state.elo, state.tpr, state.confidence);
+  }
+
+  const benchmarkTpr = percentileInclusive(
+    Array.from(statesByPlayerId.values()).map((state) => state.adjustedTpr),
+    benchmarkPercentile
+  );
+  for (const state of statesByPlayerId.values()) {
+    state.bounty = calculateBounty(state.adjustedTpr, benchmarkTpr);
+  }
+
+  return { benchmarkTpr, statesByPlayerId };
+}
+
 export function calculateBountyPoints(ownBounty, defeatedOpponentBounties) {
   const own = finiteNumber(ownBounty, 0);
   const opponents = (Array.isArray(defeatedOpponentBounties) ? defeatedOpponentBounties : [])

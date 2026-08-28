@@ -57,6 +57,7 @@ import {
   calculateSmoothedWinRate,
   calculateTpr,
   calculateTprConfidence,
+  calculateTournamentBountySnapshot,
   percentileInclusive as calculatePercentileInclusive,
 } from "./bounty-tpr.js";
 
@@ -3403,6 +3404,147 @@ function roundBountyTprValue(value, digits = 8) {
   if (numeric === null) return null;
   const multiplier = 10 ** digits;
   return Math.round((numeric + Number.EPSILON) * multiplier) / multiplier;
+}
+
+async function calculatePotentialBountiesForWins(tournamentId, winnerId, opponentIds) {
+  const normalizedTournamentId = normalizeNullableText(tournamentId);
+  const normalizedWinnerId = normalizeNullableText(winnerId);
+  const normalizedOpponentIds = Array.from(new Set(
+    (Array.isArray(opponentIds) ? opponentIds : [])
+      .map(normalizeNullableText)
+      .filter((opponentId) => opponentId && opponentId !== normalizedWinnerId)
+  ));
+  const result = new Map();
+  if (!normalizedTournamentId || !normalizedWinnerId || !normalizedOpponentIds.length) return result;
+
+  const tournament = await dbGetAsync(
+    `
+      SELECT
+        COALESCE(NULLIF(lower(trim(standings_scoring)), ''), 'standard') AS standings_scoring,
+        COALESCE(tpr_target_games, 10) AS tpr_target_games,
+        COALESCE(tpr_smoothing, 0.5) AS tpr_smoothing,
+        COALESCE(tpr_benchmark_percentile, 0.75) AS tpr_benchmark_percentile
+      FROM tournaments
+      WHERE upper(trim(id)) = upper(trim(?))
+      LIMIT 1
+    `,
+    [normalizedTournamentId]
+  );
+  if (normalizeStandingsScoring(tournament?.standings_scoring) !== STANDINGS_SCORING.BOUNTY_TPR) {
+    return result;
+  }
+
+  const completedDuels = await dbAllAsync(
+    `
+      SELECT
+        d.player_1_id,
+        d.player_2_id,
+        d.dw1,
+        d.dw2,
+        d.player1_elo_before,
+        d.player2_elo_before
+      FROM duels d
+      LEFT JOIN matches m
+        ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
+       AND m.deleted_at IS NULL
+      WHERE upper(trim(COALESCE(NULLIF(trim(d.tournament_id), ''), m.tournament_id, ''))) = upper(trim(?))
+        AND lower(trim(COALESCE(d.status, ''))) = 'done'
+        AND d.deleted_at IS NULL
+        AND trim(COALESCE(d.player_1_id, '')) <> ''
+        AND trim(COALESCE(d.player_2_id, '')) <> ''
+        AND trim(d.player_1_id) <> trim(d.player_2_id)
+        AND d.dw1 IS NOT NULL
+        AND d.dw2 IS NOT NULL
+    `,
+    [normalizedTournamentId]
+  );
+  const completedPlayerIds = new Set(
+    completedDuels.flatMap((duel) => [duel.player_1_id, duel.player_2_id])
+      .map((playerId) => String(playerId || "").trim())
+      .filter(Boolean)
+  );
+  const allRelevantPlayerIds = Array.from(new Set([
+    ...completedPlayerIds,
+    normalizedWinnerId,
+    ...normalizedOpponentIds,
+  ]));
+  const profileRows = await dbAllAsync(
+    `
+      SELECT trim(id) AS player_id, gg_elo
+      FROM profiles
+      WHERE deleted_at IS NULL
+        AND trim(COALESCE(id, '')) IN (${allRelevantPlayerIds.map(() => "?").join(", ")})
+    `,
+    allRelevantPlayerIds
+  );
+  const eloByPlayerId = new Map(
+    profileRows.map((row) => [String(row.player_id || "").trim(), bountyTprNumber(row.gg_elo)])
+  );
+  const baseStateByPlayerId = new Map(Array.from(completedPlayerIds).map((playerId) => [playerId, {
+    playerId,
+    games: 0,
+    wins: 0,
+    opponentIds: [],
+    firstEloBefore: null,
+  }]));
+  for (const duel of completedDuels) {
+    const player1Id = String(duel.player_1_id || "").trim();
+    const player2Id = String(duel.player_2_id || "").trim();
+    const player1 = baseStateByPlayerId.get(player1Id);
+    const player2 = baseStateByPlayerId.get(player2Id);
+    if (!player1 || !player2) continue;
+    if (player1.firstEloBefore === null) {
+      player1.firstEloBefore = bountyTprNumber(duel.player1_elo_before);
+    }
+    if (player2.firstEloBefore === null) {
+      player2.firstEloBefore = bountyTprNumber(duel.player2_elo_before);
+    }
+    const player1Score = Math.max(0, bountyTprNumber(duel.dw1, 0));
+    const player2Score = Math.max(0, bountyTprNumber(duel.dw2, 0));
+    player1.games += 1;
+    player2.games += 1;
+    player1.opponentIds.push(player2Id);
+    player2.opponentIds.push(player1Id);
+    if (player1Score > player2Score) player1.wins += 1;
+    if (player2Score > player1Score) player2.wins += 1;
+  }
+
+  const snapshotOptions = {
+    targetGames: Math.max(1, Math.trunc(bountyTprNumber(tournament.tpr_target_games, 10))),
+    smoothing: Math.max(0, bountyTprNumber(tournament.tpr_smoothing, 0.5)),
+    benchmarkPercentile: Math.min(
+      1,
+      Math.max(0, bountyTprNumber(tournament.tpr_benchmark_percentile, 0.75))
+    ),
+  };
+  for (const opponentId of normalizedOpponentIds) {
+    const scenarioPlayerIds = new Set([...completedPlayerIds, normalizedWinnerId, opponentId]);
+    const scenarioStates = Array.from(scenarioPlayerIds).map((playerId) => {
+      const base = baseStateByPlayerId.get(playerId);
+      const state = {
+        playerId,
+        elo: eloByPlayerId.get(playerId) ?? base?.firstEloBefore ?? 1500,
+        games: base?.games || 0,
+        wins: base?.wins || 0,
+        opponentIds: base ? [...base.opponentIds] : [],
+      };
+      if (playerId === normalizedWinnerId) {
+        state.games += 1;
+        state.wins += 1;
+        state.opponentIds.push(opponentId);
+      } else if (playerId === opponentId) {
+        state.games += 1;
+        state.opponentIds.push(normalizedWinnerId);
+      }
+      return state;
+    });
+    const snapshot = calculateTournamentBountySnapshot(scenarioStates, snapshotOptions);
+    const opponentBounty = snapshot.statesByPlayerId.get(opponentId)?.bounty;
+    if (Number.isFinite(opponentBounty)) {
+      result.set(opponentId, roundBountyTprValue(opponentBounty));
+    }
+  }
+  return result;
 }
 
 async function recalculateBountyTprStandings(tournamentId, settings) {
@@ -9371,6 +9513,9 @@ function mapChallengeOpponent(row) {
     is_same_association: Number(row?.is_same_association) === 1,
     has_rivals_match: Number(row?.has_rivals_match) === 1,
     can_invite: Number(row?.can_invite) === 1,
+    potential_bounty_if_current_player_wins: normalizeNumberOrNull(
+      row?.potential_bounty_if_current_player_wins
+    ),
     ...capacity,
   };
 }
@@ -10090,6 +10235,14 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       }
     });
 
+    const potentialBountyByOpponentId = currentProfile
+      ? await calculatePotentialBountiesForWins(
+          period.rivals_tournament_id,
+          playerId,
+          (rows || []).map((row) => row?.player_id)
+        )
+      : new Map();
+
     const blockedCounts = {
       same_association: 0,
       match_limit: 0,
@@ -10130,6 +10283,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         is_same_association: isSameAssociation ? 1 : 0,
         has_rivals_match: hasRivalsMatch ? 1 : 0,
         can_invite: canInvite ? 1 : 0,
+        potential_bounty_if_current_player_wins: potentialBountyByOpponentId.get(opponentId) ?? null,
       });
 
       if (periodStatus === "available") {

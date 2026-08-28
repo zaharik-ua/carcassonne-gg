@@ -1710,6 +1710,29 @@
     font-weight: 500;
   }
 
+  .challenge-opponent-potential-bounty-line {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+  }
+
+  .challenge-opponent-potential-bounty {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    min-height: 22px;
+    padding: 1px 6px;
+    border: 1px solid hsl(var(--challenge-bounty-hue, 60) 62% 27%);
+    border-radius: 5px;
+    background: hsl(var(--challenge-bounty-hue, 60) 66% 37%);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    box-sizing: border-box;
+  }
+
   .challenge-modal-overlay {
     position: fixed;
     inset: 44px 0 0;
@@ -5597,6 +5620,20 @@
     return rank === null ? ggElo : `${ggElo} (#${Math.trunc(rank)})`;
   }
 
+  function createPotentialBountyBadge(value) {
+    const bounty = parseFiniteNumber(value);
+    if (bounty === null) return null;
+    const bountyPercent = Math.trunc(bounty * 100);
+    const colorPercent = Math.min(100, Math.max(0, bounty * 100));
+    const badge = document.createElement("span");
+    badge.className = "challenge-opponent-potential-bounty";
+    badge.style.setProperty("--challenge-bounty-hue", String(Math.round(colorPercent * 1.2)));
+    badge.textContent = `[${bountyPercent}]`;
+    badge.title = `Potential bounty if you defeat this player: ${bountyPercent}%`;
+    badge.setAttribute("aria-label", badge.title);
+    return badge;
+  }
+
   function formatChallengeDuelDateTime(value, timezone) {
     const date = parseUtcDate(value);
     if (!date) return "-";
@@ -6693,6 +6730,16 @@
     const ratings = document.createElement("div");
     ratings.className = "challenge-opponent-ratings";
     row.appendChild(ratings);
+
+    const potentialBountyBadge = createPotentialBountyBadge(
+      opponent?.potential_bounty_if_current_player_wins
+    );
+    if (potentialBountyBadge) {
+      const bountyLine = document.createElement("div");
+      bountyLine.className = "challenge-opponent-potential-bounty-line";
+      bountyLine.appendChild(potentialBountyBadge);
+      ratings.appendChild(bountyLine);
+    }
 
     const ggLine = document.createElement("div");
     ggLine.className = "challenge-opponent-rating-line";
