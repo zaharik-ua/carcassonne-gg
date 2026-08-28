@@ -9513,9 +9513,6 @@ function mapChallengeOpponent(row) {
     is_same_association: Number(row?.is_same_association) === 1,
     has_rivals_match: Number(row?.has_rivals_match) === 1,
     can_invite: Number(row?.can_invite) === 1,
-    potential_bounty_if_current_player_wins: normalizeNumberOrNull(
-      row?.potential_bounty_if_current_player_wins
-    ),
     ...capacity,
   };
 }
@@ -10235,14 +10232,6 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       }
     });
 
-    const potentialBountyByOpponentId = currentProfile
-      ? await calculatePotentialBountiesForWins(
-          period.rivals_tournament_id,
-          playerId,
-          (rows || []).map((row) => row?.player_id)
-        )
-      : new Map();
-
     const blockedCounts = {
       same_association: 0,
       match_limit: 0,
@@ -10283,7 +10272,6 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         is_same_association: isSameAssociation ? 1 : 0,
         has_rivals_match: hasRivalsMatch ? 1 : 0,
         can_invite: canInvite ? 1 : 0,
-        potential_bounty_if_current_player_wins: potentialBountyByOpponentId.get(opponentId) ?? null,
       });
 
       if (periodStatus === "available") {
@@ -10331,6 +10319,59 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
   } catch (error) {
     console.error("Failed to load Challenge eligible opponents", error);
     return res.status(500).json({ ok: false, message: "Failed to load available opponents" });
+  }
+});
+
+app.get("/challenge-periods/:id/potential-bounties", async (req, res) => {
+  res.set("Cache-Control", "private, no-store");
+  const periodId = normalizeNullableText(req.params.id);
+  const playerId = normalizeNullableText(req.user?.player_id);
+  const requestedOpponentIds = (Array.isArray(req.query?.opponent_id)
+    ? req.query.opponent_id
+    : [req.query?.opponent_id]
+  )
+    .flatMap((value) => String(value || "").split(","))
+    .map(normalizeNullableText)
+    .filter(Boolean);
+  const opponentIds = Array.from(new Set(requestedOpponentIds)).slice(0, 500);
+
+  if (!periodId) {
+    return res.status(400).json({ ok: false, message: "Invalid Challenge period id" });
+  }
+  if (!playerId) {
+    return res.status(403).json({ ok: false, message: "Linked player profile is required" });
+  }
+
+  try {
+    const [period, currentProfile] = await Promise.all([
+      loadChallengePeriodById(periodId),
+      loadChallengePlayerProfileContext(playerId),
+    ]);
+    if (!period || !["planning_open", "active", "result_review"].includes(period.status)) {
+      return res.status(404).json({ ok: false, message: "Open Challenge period not found" });
+    }
+    if (!currentProfile) {
+      return res.status(403).json({ ok: false, message: "Linked player profile is required" });
+    }
+    const potentialBounties = await calculatePotentialBountiesForWins(
+      period.rivals_tournament_id,
+      playerId,
+      opponentIds
+    );
+    return res.json({
+      ok: true,
+      period_id: period.id,
+      tournament_id: period.rivals_tournament_id || null,
+      potential_bounties: opponentIds
+        .filter((opponentId) => potentialBounties.has(opponentId))
+        .map((opponentId) => ({
+          player_id: opponentId,
+          bounty: potentialBounties.get(opponentId),
+        })),
+    });
+  } catch (error) {
+    console.error("Failed to calculate potential Challenge bounties", error);
+    return res.status(500).json({ ok: false, message: "Failed to calculate potential bounties" });
   }
 });
 

@@ -1713,6 +1713,7 @@
   .challenge-opponent-potential-bounty-line {
     display: flex;
     justify-content: flex-end;
+    min-height: 22px;
     width: 100%;
   }
 
@@ -1731,6 +1732,13 @@
     font-weight: 700;
     line-height: 1;
     box-sizing: border-box;
+  }
+
+  .challenge-opponent-potential-bounty-spinner {
+    display: block;
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
   }
 
   .challenge-modal-overlay {
@@ -2969,6 +2977,8 @@
   );
   const ENABLE_PLAYER_CHALLENGE_RESULT_EDIT = true;
   const ELIGIBLE_OPPONENTS_PATH = "eligible-opponents";
+  const POTENTIAL_BOUNTIES_PATH = "potential-bounties";
+  const POTENTIAL_BOUNTY_LOADING_URL = "https://carcassonne.gg/gallery/loading-red.gif";
   const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
   const CHALLENGE_PROGRESS_EVENT = "gg-challenge-progress-change";
   const challengeProgressChannel = (() => {
@@ -5634,6 +5644,16 @@
     return badge;
   }
 
+  function createPotentialBountySpinner() {
+    const spinner = document.createElement("img");
+    spinner.className = "challenge-opponent-potential-bounty-spinner";
+    spinner.src = POTENTIAL_BOUNTY_LOADING_URL;
+    spinner.alt = "";
+    spinner.title = "Calculating potential bounty...";
+    spinner.setAttribute("aria-label", spinner.title);
+    return spinner;
+  }
+
   function formatChallengeDuelDateTime(value, timezone) {
     const date = parseUtcDate(value);
     if (!date) return "-";
@@ -6731,13 +6751,13 @@
     ratings.className = "challenge-opponent-ratings";
     row.appendChild(ratings);
 
-    const potentialBountyBadge = createPotentialBountyBadge(
-      opponent?.potential_bounty_if_current_player_wins
-    );
-    if (potentialBountyBadge) {
+    const potentialBountyIndicator = !isCurrentPlayer && opponent?.potential_bounty_loading
+      ? createPotentialBountySpinner()
+      : createPotentialBountyBadge(opponent?.potential_bounty_if_current_player_wins);
+    if (!isCurrentPlayer && potentialBountyIndicator) {
       const bountyLine = document.createElement("div");
       bountyLine.className = "challenge-opponent-potential-bounty-line";
-      bountyLine.appendChild(potentialBountyBadge);
+      bountyLine.appendChild(potentialBountyIndicator);
       ratings.appendChild(bountyLine);
     }
 
@@ -6884,12 +6904,100 @@
     }
 
     opponents.forEach((opponent) => {
+      const opponentId = String(opponent?.player_id || "").trim();
+      const hasPotentialBounty = item.potentialBountiesByPlayerId?.has(opponentId);
       bodyEl.appendChild(createOpponentRow(
-        opponent,
+        {
+          ...opponent,
+          potential_bounty_if_current_player_wins: hasPotentialBounty
+            ? item.potentialBountiesByPlayerId.get(opponentId)
+            : null,
+          potential_bounty_loading: !!item.potentialBountiesLoading && !hasPotentialBounty,
+        },
         item.period,
         item.currentPlayer || null,
         item.eligibility || {}
       ));
+    });
+  }
+
+  function getPotentialBountyOpponentIds(item) {
+    const currentPlayerId = String(item?.currentPlayer?.player_id || "").trim();
+    const opponents = Array.isArray(item?.opponentsByView?.all)
+      ? item.opponentsByView.all
+      : [];
+    return Array.from(new Set(opponents
+      .map((opponent) => String(opponent?.player_id || "").trim())
+      .filter((opponentId) => opponentId && opponentId !== currentPlayerId)));
+  }
+
+  async function loadPotentialBountiesForPeriod(item, loadVersion) {
+    const periodId = String(item?.period?.id || "").trim();
+    const opponentIds = getPotentialBountyOpponentIds(item);
+    if (!periodId || !opponentIds.length) {
+      item.potentialBountiesLoading = false;
+      renderOpponentsForPeriod(item);
+      return;
+    }
+
+    const params = new URLSearchParams();
+    opponentIds.forEach((opponentId) => params.append("opponent_id", opponentId));
+    try {
+      const data = await apiJson(
+        `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(periodId)}/${POTENTIAL_BOUNTIES_PATH}?${params}`,
+        { method: "GET" }
+      );
+      const currentItem = opponentPanels.get(periodId);
+      if (currentItem !== item || item.potentialBountyLoadVersion !== loadVersion) return;
+      item.potentialBountiesByPlayerId = new Map(
+        (Array.isArray(data?.potential_bounties) ? data.potential_bounties : [])
+          .map((entry) => [
+            String(entry?.player_id || "").trim(),
+            parseFiniteNumber(entry?.bounty),
+          ])
+          .filter(([opponentId, bounty]) => opponentId && bounty !== null)
+      );
+    } catch (error) {
+      console.error("Failed to load potential bounties", error);
+    } finally {
+      const currentItem = opponentPanels.get(periodId);
+      if (currentItem === item && item.potentialBountyLoadVersion === loadVersion) {
+        item.potentialBountiesLoading = false;
+        renderOpponentsForPeriod(item);
+      }
+    }
+  }
+
+  function schedulePotentialBountyLoads() {
+    const baseDataStillLoading = Array.from(requestPanels.values())
+      .some((requestItem) => requestItem?.mode === "loading")
+      || Array.from(opponentPanels.values())
+        .some((opponentItem) => !opponentItem?.baseSettled);
+    if (baseDataStillLoading) return;
+
+    opponentPanels.forEach((item, periodId) => {
+      if (!item?.baseLoaded || item.potentialBountiesStarted) return;
+      const canCalculate = !!String(item?.period?.rivals_tournament_id || "").trim()
+        && !!String(item?.currentPlayer?.player_id || "").trim()
+        && getPotentialBountyOpponentIds(item).length > 0;
+      if (!canCalculate) {
+        item.potentialBountiesLoading = false;
+        renderOpponentsForPeriod(item);
+        return;
+      }
+
+      item.potentialBountiesStarted = true;
+      item.potentialBountiesLoading = true;
+      renderOpponentsForPeriod(item);
+      const loadVersion = item.potentialBountyLoadVersion;
+      window.requestAnimationFrame(() => {
+        window.setTimeout(() => {
+          const currentItem = opponentPanels.get(periodId);
+          if (currentItem === item && item.potentialBountyLoadVersion === loadVersion) {
+            loadPotentialBountiesForPeriod(item, loadVersion);
+          }
+        }, 0);
+      });
     });
   }
 
@@ -6900,6 +7008,15 @@
       return;
     }
 
+    const panelItem = opponentPanels.get(periodId);
+    if (panelItem) {
+      panelItem.baseLoaded = false;
+      panelItem.baseSettled = false;
+      panelItem.potentialBountiesStarted = false;
+      panelItem.potentialBountiesLoading = false;
+      panelItem.potentialBountiesByPlayerId = new Map();
+      panelItem.potentialBountyLoadVersion += 1;
+    }
     setOpponentsState(panel, "Loading opponents...", false);
     try {
       const data = await apiJson(
@@ -6925,9 +7042,17 @@
         ),
         all: enrichOpponents(Array.isArray(data?.all_players) ? data.all_players : []),
       };
+      item.baseLoaded = true;
+      item.baseSettled = true;
+      item.potentialBountiesLoading = !!String(period?.rivals_tournament_id || "").trim()
+        && getPotentialBountyOpponentIds(item).length > 0;
       renderOpponentsForPeriod(item);
     } catch (error) {
+      const item = opponentPanels.get(periodId);
+      if (item?.panel === panel) item.baseSettled = true;
       setOpponentsState(panel, error?.message || "Failed to load opponents.", true);
+    } finally {
+      schedulePotentialBountyLoads();
     }
   }
 
@@ -7521,6 +7646,8 @@
       setRequestPanelVisible(panel, !isClosedChallengePeriod(period));
       syncClosedPeriodDisclosure(period, { hasMatch: false, hasRequests: false });
       setRequestsState(panel, error?.message || "Failed to load requests.", true);
+    } finally {
+      schedulePotentialBountyLoads();
     }
   }
 
@@ -8399,6 +8526,12 @@
       currentPlayer: null,
       eligibility: {},
       opponentsByView: { available: [], all: [] },
+      baseLoaded: false,
+      baseSettled: false,
+      potentialBountiesStarted: false,
+      potentialBountiesLoading: false,
+      potentialBountiesByPlayerId: new Map(),
+      potentialBountyLoadVersion: 0,
     };
     const setViewMode = (viewMode) => {
       item.viewMode = viewMode === "all" ? "all" : "available";
