@@ -10322,15 +10322,12 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
   }
 });
 
-app.get("/challenge-periods/:id/potential-bounties", async (req, res) => {
+app.post("/challenge-periods/:id/potential-bounties", async (req, res) => {
   res.set("Cache-Control", "private, no-store");
   const periodId = normalizeNullableText(req.params.id);
   const playerId = normalizeNullableText(req.user?.player_id);
-  const requestedOpponentIds = (Array.isArray(req.query?.opponent_id)
-    ? req.query.opponent_id
-    : [req.query?.opponent_id]
-  )
-    .flatMap((value) => String(value || "").split(","))
+  const rawOpponentIds = req.body?.opponent_ids ?? req.body?.opponentIds;
+  const requestedOpponentIds = (Array.isArray(rawOpponentIds) ? rawOpponentIds : [rawOpponentIds])
     .map(normalizeNullableText)
     .filter(Boolean);
   const opponentIds = Array.from(new Set(requestedOpponentIds)).slice(0, 500);

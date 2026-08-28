@@ -6940,12 +6940,13 @@
       return;
     }
 
-    const params = new URLSearchParams();
-    opponentIds.forEach((opponentId) => params.append("opponent_id", opponentId));
     try {
       const data = await apiJson(
-        `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(periodId)}/${POTENTIAL_BOUNTIES_PATH}?${params}`,
-        { method: "GET" }
+        `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(periodId)}/${POTENTIAL_BOUNTIES_PATH}`,
+        {
+          method: "POST",
+          body: JSON.stringify({ opponent_ids: opponentIds }),
+        }
       );
       const currentItem = opponentPanels.get(periodId);
       if (currentItem !== item || item.potentialBountyLoadVersion !== loadVersion) return;
