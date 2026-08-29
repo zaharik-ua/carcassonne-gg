@@ -3737,9 +3737,8 @@ async function recalculateBountyTprStandings(tournamentId, settings) {
 
   const positionedStates = Array.from(stateByPlayerId.values()).sort((left, right) => (
     right.points - left.points
-    || right.adjustedTpr - left.adjustedTpr
     || right.wins - left.wins
-    || left.playerId.localeCompare(right.playerId, undefined, { numeric: true, sensitivity: "base" })
+    || right.adjustedTpr - left.adjustedTpr
   ));
   positionedStates.forEach((state, index) => {
     state.position = index + 1;
