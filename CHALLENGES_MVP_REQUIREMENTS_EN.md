@@ -213,7 +213,7 @@ Terminal statuses for re-invitation:
 - [x] **CH-OPP-001** The `Open to match` section has a two-option toggle: `Available opponents` and `All players`.
 - [x] **CH-OPP-002** `Available opponents` is selected by default whenever the page or period is opened.
 - [x] **CH-OPP-003** `All players` shows every player whose participation status is `available` and who has a free match slot, including the current player, players from the same association, and players who already have a non-cancelled match with the current player in the linked Rivals tournament.
-- [x] **CH-OPP-004** `Available opponents` uses the same base list but excludes the current player.
+- [x] **CH-OPP-004** `Available opponents` uses the same base list, shows the current player first, and then lists the eligible opponents.
 - [x] **CH-OPP-005** `Available opponents` excludes players from the current player's association.
 - [x] **CH-OPP-006** `Available opponents` excludes players who already have a non-cancelled Challenge duel with the current player in any period of the linked Rivals tournament; for a period without `rivals_tournament_id`, the current period is checked.
 - [x] **CH-OPP-007** In `All players`, the current player's row has no invite action; same-association and already-matched rows show a disabled invite action or a clear reason why they are unavailable.
@@ -500,7 +500,7 @@ This flow is used if players have already played a match, but did not create an 
 - [ ] **CH-E2E-025** Players who already have a non-cancelled duel in an earlier Challenge period of a Rivals tournament cannot create or accept another match with each other in a different period of that tournament.
 - [ ] **CH-E2E-026** A period with `max_pending_requests_per_player = 5` allows an author to have five pending requests and rejects the sixth.
 - [ ] **CH-E2E-027** The player UI shows all matches in the period and the `X / N matches` counter; after a first match below the limit, a player whose status is `available` remains in the `Open to match` list.
-- [ ] **CH-E2E-028** The `Open to match` list opens in `Available opponents` by default, excluding the current player, their association members, and previously used Rivals opponents; switching to `All players` displays those available rows but still prevents an invalid request.
+- [ ] **CH-E2E-028** The `Open to match` list opens in `Available opponents` by default, shows the current player first, and excludes other players from their association and previously used Rivals opponents; switching to `All players` displays every available row but still prevents an invalid request.
 - [ ] **CH-E2E-029** A player with `available` or `not_selected` status opens `Create request`, selects an eligible opponent with `not_selected`, and successfully creates the request; that opponent still does not appear in the `Open to match` list.
 
 ## 21. Data scheme of new DB objects

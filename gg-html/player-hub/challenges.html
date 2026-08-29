@@ -1,4 +1,5 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
 <style>
   :root {
@@ -925,7 +926,7 @@
 
   .challenge-opponents-panel {
     display: grid;
-    gap: 9px;
+    gap: 0;
     padding: 10px 12px;
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -1005,6 +1006,112 @@
     font-size: 12px;
     font-weight: 600;
     white-space: nowrap;
+  }
+
+  .challenge-opponents-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #333;
+    padding: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: color 0.2s ease, transform 0.2s ease;
+  }
+
+  .challenge-opponents-filter-toggle:hover,
+  .challenge-opponents-filter-toggle:focus-visible,
+  .challenge-opponents-filter-toggle.is-active {
+    color: var(--blue);
+    transform: scale(1.05);
+    outline: none;
+  }
+
+  .challenge-opponents-filter-panel {
+    height: 0;
+    margin: 0 -12px;
+    overflow: hidden;
+    border-bottom: 1px solid transparent;
+    background: #f0f6fb;
+    transition: height 0.3s ease, margin-bottom 0.3s ease, border-color 0.3s ease;
+  }
+
+  .challenge-opponents-filter-panel.open {
+    margin-bottom: 9px;
+    border-bottom-color: #b7ccdd;
+  }
+
+  .challenge-opponents-filter-options {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    padding: 8px 12px;
+  }
+
+  .challenge-opponents-filter-field {
+    display: grid;
+    gap: 4px;
+  }
+
+  .challenge-opponents-filter-label {
+    color: #475467;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .challenge-opponents-time-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .challenge-opponents-time-filter {
+    min-height: 28px;
+    max-width: 220px;
+    border: 1px solid #c8d3df;
+    border-radius: 3px;
+    background: #fff;
+    color: #263548;
+    padding: 3px 6px;
+    font: inherit;
+    font-size: 12px;
+    box-sizing: border-box;
+  }
+
+  .challenge-opponents-time-filter:focus-visible {
+    border-color: #88abc8;
+    outline: 2px solid rgba(26, 115, 183, 0.2);
+    outline-offset: 1px;
+  }
+
+  .challenge-opponents-time-clear {
+    appearance: none;
+    min-height: 28px;
+    border: 1px solid #c8d3df;
+    border-radius: 3px;
+    background: #fff;
+    color: #475467;
+    padding: 3px 8px;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .challenge-opponents-time-clear:hover,
+  .challenge-opponents-time-clear:focus-visible {
+    border-color: #88abc8;
+    color: var(--blue);
+    outline: none;
+  }
+
+  .challenge-opponents-time-clear:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
 
   .challenge-opponents-head-controls {
@@ -2767,6 +2874,25 @@
       justify-content: space-between;
     }
 
+    .challenge-panel-wrap.has-opponent-filters .challenge-opponents-head-controls {
+      width: auto;
+      justify-content: flex-end;
+    }
+
+    .challenge-opponents-filter-options {
+      align-items: stretch;
+    }
+
+    .challenge-opponents-filter-field {
+      width: 100%;
+    }
+
+    .challenge-opponents-time-filter {
+      flex: 1 1 auto;
+      max-width: none;
+      font-size: 16px;
+    }
+
     .challenge-opponents-view-toggle {
       min-width: 0;
     }
@@ -3504,6 +3630,95 @@
       : `${raw.replace(" ", "T")}Z`;
     const date = new Date(normalized);
     return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function getChallengeZonedDateTimeParts(value, timezone) {
+    const date = value instanceof Date ? value : parseUtcDate(value);
+    if (!date) return null;
+    try {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone || "UTC",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(date);
+      const numberPart = (type) => Number.parseInt(
+        parts.find((item) => item.type === type)?.value || "",
+        10
+      );
+      const result = {
+        year: numberPart("year"),
+        month: numberPart("month"),
+        day: numberPart("day"),
+        hour: numberPart("hour"),
+        minute: numberPart("minute"),
+        second: numberPart("second"),
+      };
+      return Object.values(result).every(Number.isInteger) ? result : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function toChallengeDatetimeLocal(value, timezone) {
+    const parts = getChallengeZonedDateTimeParts(value, timezone);
+    if (!parts) return "";
+    const pad = (number) => String(number).padStart(2, "0");
+    return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`;
+  }
+
+  function parseChallengeDatetimeLocal(value, timezone) {
+    const raw = String(value || "").trim();
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+    if (!match) return null;
+    const target = {
+      year: Number(match[1]),
+      month: Number(match[2]),
+      day: Number(match[3]),
+      hour: Number(match[4]),
+      minute: Number(match[5]),
+      second: 0,
+    };
+    const targetAsUtc = Date.UTC(
+      target.year,
+      target.month - 1,
+      target.day,
+      target.hour,
+      target.minute,
+      0
+    );
+    if (!Number.isFinite(targetAsUtc)) return null;
+
+    let timestamp = targetAsUtc;
+    for (let iteration = 0; iteration < 4; iteration += 1) {
+      const actual = getChallengeZonedDateTimeParts(new Date(timestamp), timezone);
+      if (!actual) return null;
+      const actualAsUtc = Date.UTC(
+        actual.year,
+        actual.month - 1,
+        actual.day,
+        actual.hour,
+        actual.minute,
+        0
+      );
+      const adjustment = targetAsUtc - actualAsUtc;
+      timestamp += adjustment;
+      if (adjustment === 0) break;
+    }
+
+    const parsed = new Date(timestamp);
+    const verified = getChallengeZonedDateTimeParts(parsed, timezone);
+    const isExact = verified
+      && verified.year === target.year
+      && verified.month === target.month
+      && verified.day === target.day
+      && verified.hour === target.hour
+      && verified.minute === target.minute;
+    return isExact ? parsed : null;
   }
 
   function toDatetimeLocalFromUtc(raw) {
@@ -5752,6 +5967,9 @@
   }
 
   function compareOpponentsByStatusUpdatedAt(a, b) {
+    const aIsCurrentPlayer = !!a?.is_current_player;
+    const bIsCurrentPlayer = !!b?.is_current_player;
+    if (aIsCurrentPlayer !== bIsCurrentPlayer) return aIsCurrentPlayer ? -1 : 1;
     const aUpdatedAt = getOpponentStatusUpdatedAt(a);
     const bUpdatedAt = getOpponentStatusUpdatedAt(b);
     if (aUpdatedAt && bUpdatedAt) {
@@ -6940,6 +7158,23 @@
     bodyEl.appendChild(state);
   }
 
+  function filterOpponentsByMatchStart(opponents, matchStart) {
+    if (!(matchStart instanceof Date) || Number.isNaN(matchStart.getTime())) return opponents;
+    const matchStartMs = matchStart.getTime();
+    const matchEndMs = matchStartMs + (60 * 60 * 1000);
+    return opponents.filter((opponent) => {
+      const availability = Array.isArray(opponent?.availability) ? opponent.availability : [];
+      return availability.some((range) => {
+        const rangeStart = parseUtcDate(range?.start_utc);
+        const rangeEnd = parseUtcDate(range?.end_utc);
+        return rangeStart
+          && rangeEnd
+          && matchStartMs >= rangeStart.getTime()
+          && matchEndMs <= rangeEnd.getTime();
+      });
+    });
+  }
+
   function renderOpponentsForPeriod(item) {
     const panel = item?.panel;
     if (!panel) return;
@@ -6947,9 +7182,14 @@
     panel.querySelectorAll("[data-opponents-view]").forEach((button) => {
       button.setAttribute("aria-pressed", button.dataset.opponentsView === viewMode ? "true" : "false");
     });
-    const opponents = Array.isArray(item?.opponentsByView?.[viewMode])
+    const baseOpponents = Array.isArray(item?.opponentsByView?.[viewMode])
       ? item.opponentsByView[viewMode]
       : [];
+    const opponents = filterOpponentsByMatchStart(baseOpponents, item?.matchStart || null);
+    const filterToggle = panel.querySelector("[data-opponents-filter-toggle]");
+    if (filterToggle) {
+      filterToggle.classList.toggle("is-active", viewMode !== "available" || !!item?.matchStart);
+    }
     const countEl = panel.querySelector("[data-opponents-count]");
     const bodyEl = panel.querySelector("[data-opponents-body]");
     if (countEl) {
@@ -6970,9 +7210,11 @@
     if (!opponents.length) {
       const state = document.createElement("div");
       state.className = "challenge-opponents-state";
-      state.textContent = viewMode === "all"
-        ? "No players are open to match right now."
-        : "No available opponents right now.";
+      state.textContent = item?.matchStart
+        ? "No players can play a one-hour match starting at this time."
+        : (viewMode === "all"
+          ? "No players are open to match right now."
+          : "No available opponents right now.");
       bodyEl.appendChild(state);
       return;
     }
@@ -7132,14 +7374,31 @@
         .sort(compareOpponentsByStatusUpdatedAt);
       const item = opponentPanels.get(periodId);
       if (!item || item.panel !== panel) return;
-      item.currentPlayer = data?.current_player || null;
+      const currentPlayer = data?.current_player || null;
+      const currentPlayerId = String(currentPlayer?.player_id || "").trim();
+      const shouldShowCurrentPlayer = !!currentPlayerId
+        && String(currentPlayer?.period_status || period?.player_status || "").trim() === "available"
+        && !currentPlayer?.is_match_limit_reached;
+      const prependCurrentPlayer = (opponents) => {
+        const list = Array.isArray(opponents) ? opponents : [];
+        if (!shouldShowCurrentPlayer) return list;
+        return [
+          {
+            ...currentPlayer,
+            is_current_player: true,
+            can_invite: false,
+            pending_request_id: null,
+          },
+          ...list.filter((opponent) => String(opponent?.player_id || "").trim() !== currentPlayerId),
+        ];
+      };
+      const availableOpponents = (Array.isArray(data?.available_opponents) ? data.available_opponents : [])
+        .filter((opponent) => !opponent?.pending_request_id);
+      item.currentPlayer = currentPlayer;
       item.eligibility = data?.eligibility || {};
       item.opponentsByView = {
-        available: enrichOpponents(
-          (Array.isArray(data?.available_opponents) ? data.available_opponents : [])
-            .filter((opponent) => !opponent?.pending_request_id)
-        ),
-        all: enrichOpponents(Array.isArray(data?.all_players) ? data.all_players : []),
+        available: enrichOpponents(prependCurrentPlayer(availableOpponents)),
+        all: enrichOpponents(prependCurrentPlayer(data?.all_players)),
       };
       item.baseLoaded = true;
       item.baseSettled = true;
@@ -8591,18 +8850,60 @@
 
   function createOpponentsPanel(period) {
     const wrap = document.createElement("div");
-    wrap.className = "challenge-panel-wrap";
+    wrap.className = "challenge-panel-wrap has-opponent-filters";
     wrap.dataset.challengePeriodOpponents = String(period?.id || "");
 
     const { controls, toggle } = createChallengeSectionHeader(wrap, "Open to match", {
       expanded: !shouldCollapseChallengeActionSections(period),
     });
 
+    const count = document.createElement("div");
+    count.className = "challenge-opponents-count";
+    count.dataset.opponentsCount = "true";
+    controls.appendChild(count);
+
+    const filterToggle = document.createElement("button");
+    filterToggle.type = "button";
+    filterToggle.className = "challenge-opponents-filter-toggle";
+    filterToggle.dataset.opponentsFilterToggle = "true";
+    filterToggle.setAttribute("aria-label", "Toggle Open to match filters");
+    filterToggle.setAttribute("aria-expanded", "false");
+    filterToggle.title = "Filters";
+    const filterIcon = document.createElement("i");
+    filterIcon.className = "fa fa-sliders-h";
+    filterIcon.setAttribute("aria-hidden", "true");
+    filterToggle.appendChild(filterIcon);
+    controls.appendChild(filterToggle);
+
+    const panel = document.createElement("section");
+    panel.className = "challenge-opponents-panel";
+
+    const filterPanel = document.createElement("div");
+    filterPanel.className = "challenge-opponents-filter-panel";
+    filterPanel.id = `challenge-opponents-filters-${++challengeSectionDisclosureIndex}`;
+    filterPanel.setAttribute("aria-hidden", "true");
+    filterPanel.inert = true;
+    filterToggle.setAttribute("aria-controls", filterPanel.id);
+    panel.appendChild(filterPanel);
+
+    const filterOptions = document.createElement("div");
+    filterOptions.className = "challenge-opponents-filter-options";
+    filterPanel.appendChild(filterOptions);
+
+    const viewField = document.createElement("div");
+    viewField.className = "challenge-opponents-filter-field";
+    filterOptions.appendChild(viewField);
+
+    const viewLabel = document.createElement("div");
+    viewLabel.className = "challenge-opponents-filter-label";
+    viewLabel.textContent = "Players";
+    viewField.appendChild(viewLabel);
+
     const viewToggle = document.createElement("div");
     viewToggle.className = "challenge-opponents-view-toggle";
     viewToggle.setAttribute("role", "group");
     viewToggle.setAttribute("aria-label", "Open to match list view");
-    controls.appendChild(viewToggle);
+    viewField.appendChild(viewToggle);
 
     const availableViewButton = document.createElement("button");
     availableViewButton.type = "button";
@@ -8620,13 +8921,43 @@
     allViewButton.textContent = "All players";
     viewToggle.appendChild(allViewButton);
 
-    const count = document.createElement("div");
-    count.className = "challenge-opponents-count";
-    count.dataset.opponentsCount = "true";
-    controls.appendChild(count);
+    const timezone = getPlayerTimezone(period?.player_time_context);
+    const timeField = document.createElement("div");
+    timeField.className = "challenge-opponents-filter-field";
+    filterOptions.appendChild(timeField);
 
-    const panel = document.createElement("section");
-    panel.className = "challenge-opponents-panel";
+    const timeLabel = document.createElement("span");
+    timeLabel.className = "challenge-opponents-filter-label";
+    timeLabel.textContent = `Match start (${timezone})`;
+    timeField.appendChild(timeLabel);
+
+    const timeRow = document.createElement("span");
+    timeRow.className = "challenge-opponents-time-filter-row";
+    timeField.appendChild(timeRow);
+
+    const timeInput = document.createElement("input");
+    timeInput.type = "datetime-local";
+    timeInput.step = "60";
+    timeInput.className = "challenge-opponents-time-filter";
+    timeInput.setAttribute("aria-label", `Match start in ${timezone}`);
+    const periodStart = parseUtcDate(period?.play_starts_at);
+    const periodEnd = parseUtcDate(period?.play_ends_at);
+    if (periodStart) timeInput.min = toChallengeDatetimeLocal(periodStart, timezone);
+    if (periodEnd && (!periodStart || periodEnd.getTime() - (60 * 60 * 1000) >= periodStart.getTime())) {
+      timeInput.max = toChallengeDatetimeLocal(
+        new Date(periodEnd.getTime() - (60 * 60 * 1000)),
+        timezone
+      );
+    }
+    timeRow.appendChild(timeInput);
+
+    const clearTimeButton = document.createElement("button");
+    clearTimeButton.type = "button";
+    clearTimeButton.className = "challenge-opponents-time-clear";
+    clearTimeButton.textContent = "Clear";
+    clearTimeButton.disabled = true;
+    clearTimeButton.title = "Clear match start time";
+    timeRow.appendChild(clearTimeButton);
 
     const body = document.createElement("div");
     body.className = "challenge-opponents-body";
@@ -8638,6 +8969,7 @@
       period,
       panel: wrap,
       viewMode: "available",
+      matchStart: null,
       currentPlayer: null,
       eligibility: {},
       opponentsByView: { available: [], all: [] },
@@ -8654,6 +8986,47 @@
     };
     availableViewButton.addEventListener("click", () => setViewMode("available"));
     allViewButton.addEventListener("click", () => setViewMode("all"));
+
+    const applyTimeFilter = () => {
+      item.matchStart = parseChallengeDatetimeLocal(timeInput.value, timezone);
+      timeInput.setCustomValidity(timeInput.value && !item.matchStart ? "Choose a valid local date and time." : "");
+      clearTimeButton.disabled = !timeInput.value;
+      renderOpponentsForPeriod(item);
+    };
+    timeInput.addEventListener("input", applyTimeFilter);
+    timeInput.addEventListener("change", applyTimeFilter);
+    clearTimeButton.addEventListener("click", () => {
+      timeInput.value = "";
+      applyTimeFilter();
+      timeInput.focus();
+    });
+
+    let isFilterPanelOpen = false;
+    const setFilterPanelOpen = (isOpen) => {
+      isFilterPanelOpen = isOpen;
+      filterToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      filterPanel.setAttribute("aria-hidden", isOpen ? "false" : "true");
+      filterPanel.inert = !isOpen;
+      if (isOpen) {
+        filterPanel.style.height = "0px";
+        filterPanel.classList.add("open");
+        requestAnimationFrame(() => {
+          filterPanel.style.height = `${filterPanel.scrollHeight}px`;
+        });
+      } else {
+        filterPanel.style.height = `${filterPanel.scrollHeight}px`;
+        requestAnimationFrame(() => {
+          filterPanel.style.height = "0px";
+          filterPanel.classList.remove("open");
+        });
+      }
+    };
+    filterToggle.addEventListener("click", () => setFilterPanelOpen(!isFilterPanelOpen));
+    filterPanel.addEventListener("transitionend", (event) => {
+      if (event.propertyName !== "height") return;
+      filterPanel.style.height = isFilterPanelOpen ? "auto" : "0px";
+    });
+
     opponentPanels.set(String(period?.id || ""), item);
     loadOpponentsForPeriod(period, wrap);
     return wrap;

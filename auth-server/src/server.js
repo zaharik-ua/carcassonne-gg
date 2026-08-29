@@ -10279,9 +10279,14 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         if (hasRivalsMatch) blockedCounts.rivals_match += 1;
         if (pendingRequestId) blockedCounts.pending_request += 1;
         if (canListOpponents && !capacity.is_match_limit_reached) {
-          allPlayers.push(mappedOpponent);
-          if (!playerId || (!isCurrentPlayer && !isSameAssociation && !hasRivalsMatch && !pendingRequestId)) {
-            availableOpponents.push(mappedOpponent);
+          if (isCurrentPlayer) {
+            allPlayers.unshift(mappedOpponent);
+            availableOpponents.unshift(mappedOpponent);
+          } else {
+            allPlayers.push(mappedOpponent);
+            if (!playerId || (!isSameAssociation && !hasRivalsMatch && !pendingRequestId)) {
+              availableOpponents.push(mappedOpponent);
+            }
           }
         }
       }
