@@ -1034,19 +1034,42 @@
     font-size: 13px;
     font-weight: 600;
   }
+  .rivals-player-tournament-bounty__heading {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    min-width: 0;
+  }
+  .rivals-bounty-calculation-button {
+    min-height: 20px;
+    padding: 1px 6px;
+    border: 1px solid #b9c5d3;
+    border-radius: 3px;
+    background: transparent;
+    color: #174a7e;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+  .rivals-bounty-calculation-button:hover,
+  .rivals-bounty-calculation-button:focus-visible {
+    border-color: #174a7e;
+    background: #eef5fb;
+    outline: none;
+  }
   .rivals-player-tournament-bounty__value {
     margin-left: auto;
     min-width: 82px;
-    color: #17612e;
+    color: #174a7e;
     text-align: center;
     white-space: nowrap;
   }
   .rivals-player-matches-bounty {
     justify-self: end;
     min-width: 82px;
-    padding: 2px 6px;
-    border-radius: 10px;
-    background: #e7f6e7;
     color: #17612e;
     font-size: 12px;
     font-weight: 600;
@@ -1056,6 +1079,240 @@
   .rivals-player-matches-bounty:empty {
     visibility: hidden;
   }
+  .rivals-player-points-total {
+    width: 100%;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #d7e1ea;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    text-align: left;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+  }
+  .rivals-player-points-total__personal {
+    color: #174a7e;
+  }
+  .rivals-player-points-total__match {
+    color: #17612e;
+  }
+  .rivals-bounty-calculation-overlay {
+    position: fixed;
+    inset: 44px 0 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(24, 31, 41, 0.48);
+    box-sizing: border-box;
+  }
+  .rivals-bounty-calculation-modal {
+    position: relative;
+    width: min(100%, 640px);
+    max-height: min(720px, calc(100vh - 44px - 32px));
+    overflow: auto;
+    padding: 22px 24px 24px;
+    border: 1px solid #d8dee8;
+    border-top: 4px solid var(--main-bg-color);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 16px 36px rgba(15, 28, 48, 0.24);
+    box-sizing: border-box;
+  }
+  .rivals-bounty-calculation-modal__close {
+    position: absolute;
+    top: 7px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #667080;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .rivals-bounty-calculation-modal__close:hover,
+  .rivals-bounty-calculation-modal__close:focus-visible {
+    background: #f1f3f6;
+    color: #172232;
+    outline: none;
+  }
+  .rivals-bounty-calculation-modal__title {
+    margin: 0 34px 4px 0;
+    color: #172232;
+    font-size: 19px;
+    line-height: 1.25;
+  }
+  .rivals-bounty-calculation-modal__subtitle {
+    margin: 0 34px 18px 0;
+    color: #667080;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .rivals-bounty-calculation-loading,
+  .rivals-bounty-calculation-error {
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: #5b6573;
+    font-size: 13px;
+    text-align: center;
+  }
+  .rivals-bounty-calculation-loading img {
+    display: block;
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+  }
+  .rivals-bounty-calculation-error {
+    color: #8b252c;
+  }
+  .rivals-bounty-calculation-summary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border-radius: 5px;
+    background: #eef5fb;
+    color: #263342;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .rivals-bounty-calculation-summary__value {
+    color: #174a7e;
+    font-size: 20px;
+  }
+  .rivals-bounty-calculation-steps {
+    display: grid;
+    gap: 8px;
+  }
+  .rivals-bounty-calculation-step {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 9px;
+    padding: 9px 10px;
+    border: 1px solid #dce3ec;
+    border-radius: 5px;
+    background: #fff;
+  }
+  .rivals-bounty-calculation-step__number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--main-bg-color);
+    color: var(--accent-text-color);
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .rivals-bounty-calculation-step__title {
+    color: #263342;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .rivals-bounty-calculation-step__text {
+    margin-top: 2px;
+    color: #5b6573;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .rivals-bounty-calculation-step__formula {
+    margin-top: 5px;
+    padding: 5px 7px;
+    border-radius: 3px;
+    background: #f3f5f8;
+    color: #172232;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+  }
+  .rivals-bounty-calculation-details-button {
+    margin-top: 7px;
+    min-height: 22px;
+    padding: 2px 7px;
+    border: 1px solid #b9c5d3;
+    border-radius: 3px;
+    background: transparent;
+    color: #174a7e;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+  .rivals-bounty-calculation-details-button:hover,
+  .rivals-bounty-calculation-details-button:focus-visible {
+    border-color: #174a7e;
+    background: #eef5fb;
+    outline: none;
+  }
+  .rivals-bounty-calculation-details {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #dce3ec;
+    color: #354559;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  .rivals-bounty-calculation-details[hidden] {
+    display: none;
+  }
+  .rivals-bounty-calculation-details__formula {
+    margin-top: 5px;
+    padding: 5px 7px;
+    border-radius: 3px;
+    background: #f3f5f8;
+    color: #172232;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .rivals-bounty-calculation-details__applied-rating {
+    margin-top: 8px;
+    font-weight: 600;
+  }
+  .rivals-bounty-calculation-details__results {
+    display: grid;
+    gap: 3px;
+    margin-top: 7px;
+  }
+  .rivals-bounty-calculation-details__result {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .rivals-bounty-calculation-details__result-value {
+    flex: 0 0 auto;
+    color: #174a7e;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .rivals-bounty-calculation-details__average,
+  .rivals-bounty-calculation-details__note {
+    margin-top: 7px;
+  }
+  .rivals-bounty-calculation-details__average {
+    color: #17612e;
+    font-weight: 600;
+  }
+  .rivals-bounty-calculation-details__note {
+    color: #667080;
+  }
   @media (max-width: 640px) {
     .rivals-player-matches-entry {
       grid-template-columns: minmax(0, 1fr) 42px minmax(0, 1fr);
@@ -1063,6 +1320,9 @@
     .rivals-player-matches-bounty {
       grid-column: 1 / -1;
       justify-self: end;
+    }
+    .rivals-bounty-calculation-modal {
+      padding: 20px 14px 18px;
     }
   }
   .sim-select {
@@ -1534,6 +1794,7 @@
   // --- ASIAN CUP 2026 CONFIG ---
   const currentTournamentId = "GG-Rivals-S1";
   const API_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const RIVALS_BOUNTY_LOADING_URL = "https://carcassonne.gg/gallery/loading-red.gif";
   const SHOW_FINAL_RANKING = false;
   const HIDE_STANDING_CONTENT = false;
   const currentTournament = {
@@ -1828,6 +2089,354 @@
     return wrapper;
   }
 
+  function parseRivalsCalculationNumber(value) {
+    if (value === null || value === undefined || String(value).trim() === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function formatRivalsCalculationNumber(value, digits = 2) {
+    const number = parseRivalsCalculationNumber(value);
+    if (number === null) return "—";
+    return new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(number);
+  }
+
+  function formatRivalsElo(value) {
+    const number = parseRivalsCalculationNumber(value);
+    return number === null ? "—" : String(Math.round(number));
+  }
+
+  function formatRivalsCompactDecimal(value, maximumDigits = 3) {
+    const number = parseRivalsCalculationNumber(value);
+    if (number === null) return "—";
+    return String(Number(number.toFixed(maximumDigits)));
+  }
+
+  function createRivalsBountyCalculationStep(index, title, text, formula, detailsContent = null) {
+    const step = document.createElement("div");
+    step.className = "rivals-bounty-calculation-step";
+
+    const number = document.createElement("span");
+    number.className = "rivals-bounty-calculation-step__number";
+    number.textContent = String(index);
+    step.appendChild(number);
+
+    const content = document.createElement("div");
+    const titleElement = document.createElement("div");
+    titleElement.className = "rivals-bounty-calculation-step__title";
+    titleElement.textContent = title;
+    content.appendChild(titleElement);
+
+    const textElement = document.createElement("div");
+    textElement.className = "rivals-bounty-calculation-step__text";
+    textElement.textContent = text;
+    content.appendChild(textElement);
+
+    if (formula) {
+      const formulaElement = document.createElement("div");
+      formulaElement.className = "rivals-bounty-calculation-step__formula";
+      formulaElement.textContent = formula;
+      content.appendChild(formulaElement);
+    }
+
+    if (detailsContent) {
+      const detailsButton = document.createElement("button");
+      detailsButton.type = "button";
+      detailsButton.className = "rivals-bounty-calculation-details-button";
+      detailsButton.textContent = "Calculation details";
+      detailsButton.setAttribute("aria-expanded", "false");
+
+      const details = document.createElement("div");
+      details.className = "rivals-bounty-calculation-details";
+      details.hidden = true;
+      details.appendChild(detailsContent);
+
+      detailsButton.addEventListener("click", () => {
+        const willOpen = details.hidden;
+        details.hidden = !willOpen;
+        detailsButton.setAttribute("aria-expanded", willOpen ? "true" : "false");
+        detailsButton.textContent = willOpen ? "Hide calculation details" : "Calculation details";
+      });
+      content.appendChild(detailsButton);
+      content.appendChild(details);
+    }
+
+    step.appendChild(content);
+    return step;
+  }
+
+  function buildRawTprCalculationDetails(opponents, rawTpr, smoothedWinRate) {
+    const ratedOpponents = (Array.isArray(opponents) ? opponents : [])
+      .filter(opponent => Number.isFinite(opponent?.opponentElo));
+    const root = document.createElement("div");
+    if (!ratedOpponents.length) {
+      root.textContent = "Opponent Elo details are not available.";
+      return root;
+    }
+
+    const intro = document.createElement("div");
+    intro.textContent = "Find rating R whose average expected score against these opponents matches the Win rate (from step 2).";
+    root.appendChild(intro);
+
+    const averageFormula = document.createElement("div");
+    averageFormula.className = "rivals-bounty-calculation-details__formula";
+    averageFormula.textContent = `(${ratedOpponents.map(opponent => (
+      `E(R, ${formatRivalsElo(opponent.opponentElo)})`
+    )).join(" + ")}) ÷ ${ratedOpponents.length} = ${formatRivalsCalculationNumber(smoothedWinRate * 100, 2)}% (Win rate)`;
+    root.appendChild(averageFormula);
+
+    const eloFormula = document.createElement("div");
+    eloFormula.className = "rivals-bounty-calculation-details__formula";
+    eloFormula.textContent = "E(R, opponent Elo) = 1 ÷ (1 + 10^((opponent Elo − R) ÷ 400))";
+    root.appendChild(eloFormula);
+
+    const appliedRating = document.createElement("div");
+    appliedRating.className = "rivals-bounty-calculation-details__applied-rating";
+    appliedRating.textContent = `At R = ${formatRivalsElo(rawTpr)}, the expected scores are:`;
+    root.appendChild(appliedRating);
+
+    const results = document.createElement("div");
+    results.className = "rivals-bounty-calculation-details__results";
+    const expectedScores = ratedOpponents.map(opponent => {
+      const expectedScore = 1 / (1 + (10 ** ((opponent.opponentElo - rawTpr) / 400)));
+      const row = document.createElement("div");
+      row.className = "rivals-bounty-calculation-details__result";
+      const opponentLabel = document.createElement("span");
+      opponentLabel.textContent = `${opponent.opponentName} ${formatRivalsElo(opponent.opponentElo)}`;
+      const expectedValue = document.createElement("span");
+      expectedValue.className = "rivals-bounty-calculation-details__result-value";
+      expectedValue.textContent = `${formatRivalsCalculationNumber(expectedScore * 100, 2)}%`;
+      row.appendChild(opponentLabel);
+      row.appendChild(expectedValue);
+      results.appendChild(row);
+      return expectedScore;
+    });
+    root.appendChild(results);
+
+    const expectedAverage = expectedScores.reduce((sum, score) => sum + score, 0)
+      / expectedScores.length;
+    const average = document.createElement("div");
+    average.className = "rivals-bounty-calculation-details__average";
+    average.textContent = `At R = ${formatRivalsElo(rawTpr)}, the average expected score is ${formatRivalsCalculationNumber(expectedAverage * 100, 2)}% — matches the Win rate from step 2.`;
+    root.appendChild(average);
+
+    const ratingTimeNote = document.createElement("div");
+    ratingTimeNote.className = "rivals-bounty-calculation-details__note";
+    ratingTimeNote.textContent = "* Opponent Elo values are their current ratings when TPR is calculated, not their ratings at the time of the match.";
+    root.appendChild(ratingTimeNote);
+
+    const note = document.createElement("div");
+    note.className = "rivals-bounty-calculation-details__note";
+    note.textContent = "* Which specific opponent was beaten does not change Raw TPR; only the total number of wins and the opponent Elo values are used.";
+    root.appendChild(note);
+    return root;
+  }
+
+  function buildRivalsBountyCalculationContent({ data, playerId, tournamentId }) {
+    const normalizedPlayerId = String(playerId || "").trim();
+    const normalizedTournamentId = String(tournamentId || currentTournamentId).trim().toUpperCase();
+    const standingsRows = Array.isArray(data?.standings) ? data.standings : [];
+    const playerRow = standingsRows.find(row => (
+      String(row?.player_id || "").trim() === normalizedPlayerId
+    ));
+    if (!playerRow) throw new Error("Calculation data for this player is not available.");
+
+    const games = parseRivalsCalculationNumber(playerRow.mp) ?? 0;
+    const wins = parseRivalsCalculationNumber(playerRow.mw) ?? 0;
+    const smoothing = parseRivalsCalculationNumber(data?.tpr_smoothing) ?? 0.5;
+    const targetGames = Math.max(1, Math.trunc(parseRivalsCalculationNumber(data?.tpr_target_games) ?? 10));
+    const benchmarkPercentile = Math.min(
+      1,
+      Math.max(0, parseRivalsCalculationNumber(data?.tpr_benchmark_percentile) ?? 0.75)
+    );
+    const eloUsed = parseRivalsCalculationNumber(playerRow.elo_used);
+    const smoothedWinRate = parseRivalsCalculationNumber(playerRow.smoothed_win_rate);
+    const rawTpr = parseRivalsCalculationNumber(playerRow.tpr);
+    const confidence = parseRivalsCalculationNumber(playerRow.tpr_confidence);
+    const adjustedTpr = parseRivalsCalculationNumber(playerRow.adjusted_tpr);
+    const benchmarkTpr = parseRivalsCalculationNumber(data?.current_tpr_benchmark);
+    const bounty = parseRivalsCalculationNumber(playerRow.bounty);
+    if ([eloUsed, smoothedWinRate, rawTpr, confidence, adjustedTpr, benchmarkTpr, bounty]
+      .some(value => value === null)) {
+      throw new Error("The detailed bounty calculation is not available yet.");
+    }
+
+    const standingsByPlayerId = new Map(standingsRows.map(row => [
+      String(row?.player_id || "").trim(),
+      row,
+    ]));
+    const opponents = (challengeDuels || [])
+      .filter(duel => (
+        String(duel?.tournament_id || "").trim().toUpperCase() === normalizedTournamentId
+        && String(duel?.status || "").trim().toUpperCase() === "DONE"
+        && (
+          String(duel?.player1_id || "").trim() === normalizedPlayerId
+          || String(duel?.player2_id || "").trim() === normalizedPlayerId
+        )
+      ))
+      .map(duel => {
+        const playerIsFirst = String(duel?.player1_id || "").trim() === normalizedPlayerId;
+        const opponentId = String(
+          (playerIsFirst ? duel?.player2_id : duel?.player1_id) || ""
+        ).trim();
+        const opponentName = String(
+          (playerIsFirst ? duel?.player2 : duel?.player1) || ""
+        ).trim() || opponentId;
+        const opponentElo = parseRivalsCalculationNumber(standingsByPlayerId.get(opponentId)?.elo_used);
+        return { opponentName, opponentElo };
+      });
+    const rawTprDetails = buildRawTprCalculationDetails(opponents, rawTpr, smoothedWinRate);
+
+    const root = document.createElement("div");
+    const summary = document.createElement("div");
+    summary.className = "rivals-bounty-calculation-summary";
+    const summaryLabel = document.createElement("span");
+    summaryLabel.textContent = "Current tournament bounty";
+    const summaryValue = document.createElement("span");
+    summaryValue.className = "rivals-bounty-calculation-summary__value";
+    summaryValue.textContent = String(Math.round((bounty + Number.EPSILON) * 100));
+    summary.appendChild(summaryLabel);
+    summary.appendChild(summaryValue);
+    root.appendChild(summary);
+
+    const steps = document.createElement("div");
+    steps.className = "rivals-bounty-calculation-steps";
+    const smoothingDenominator = games + (2 * smoothing);
+    steps.appendChild(createRivalsBountyCalculationStep(
+      1,
+      "Tournament result",
+      "Only completed tournament matches are included.",
+      `${formatRivalsCalculationNumber(wins, 0)} wins from ${formatRivalsCalculationNumber(games, 0)} matches`
+    ));
+    steps.appendChild(createRivalsBountyCalculationStep(
+      2,
+      "Smoothed win rate",
+      "A small adjustment keeps very early results from being treated as fully reliable.",
+      `(${formatRivalsCalculationNumber(wins, 0)} + ${formatRivalsCalculationNumber(smoothing, 1)}) ÷ ${formatRivalsCalculationNumber(smoothingDenominator, 1)} = ${formatRivalsCalculationNumber(smoothedWinRate * 100, 2)}%`
+    ));
+    steps.appendChild(createRivalsBountyCalculationStep(
+      3,
+      "Raw tournament performance",
+      "This is the rating expected to produce that win rate against the opponents already played.",
+      `Raw TPR = ${formatRivalsElo(rawTpr)}`,
+      rawTprDetails
+    ));
+    const confidenceWeight = Math.min(1, Math.max(0, confidence));
+    const eloWeight = 1 - confidenceWeight;
+    steps.appendChild(createRivalsBountyCalculationStep(
+      4,
+      "Reliability adjustment",
+      `Tournament performance is blended with the player's current personal GG Elo. Reliability reaches 100% after ${targetGames} matches.`,
+      `Confidence: ${formatRivalsCalculationNumber(games, 0)} ÷ ${targetGames} = ${Math.round(confidenceWeight * 100)}% · Adjusted TPR: personal GG Elo ${formatRivalsElo(eloUsed)} × ${formatRivalsCompactDecimal(eloWeight)} + raw TPR ${formatRivalsElo(rawTpr)} × ${formatRivalsCompactDecimal(confidenceWeight)} = ${formatRivalsElo(adjustedTpr)}`
+    ));
+    steps.appendChild(createRivalsBountyCalculationStep(
+      5,
+      "Tournament benchmark",
+      `The benchmark is the ${formatRivalsCalculationNumber(benchmarkPercentile * 100, 0)}th percentile of adjusted TPR among tournament participants.`,
+      `Benchmark TPR = ${formatRivalsElo(benchmarkTpr)}`
+    ));
+    steps.appendChild(createRivalsBountyCalculationStep(
+      6,
+      "Bounty",
+      "The adjusted TPR is compared with the tournament benchmark using the Elo curve.",
+      `1 ÷ (1 + 10^((${formatRivalsElo(benchmarkTpr)} − ${formatRivalsElo(adjustedTpr)}) ÷ 400)) × 100 = ${formatRivalsCalculationNumber(bounty * 100, 2)} → ${Math.round((bounty + Number.EPSILON) * 100)}`
+    ));
+    root.appendChild(steps);
+    return root;
+  }
+
+  function openRivalsBountyCalculationModal({ playerId, playerName, tournamentId, returnFocus }) {
+    if (typeof activeRivalsBountyCalculationClose === "function") {
+      activeRivalsBountyCalculationClose();
+    }
+
+    const overlay = document.createElement("div");
+    overlay.className = "rivals-bounty-calculation-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "rivals-bounty-calculation-modal";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", `Bounty calculation for ${playerName || playerId}`);
+
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "rivals-bounty-calculation-modal__close";
+    closeButton.textContent = "×";
+    closeButton.setAttribute("aria-label", "Close calculation");
+    dialog.appendChild(closeButton);
+
+    const title = document.createElement("h2");
+    title.className = "rivals-bounty-calculation-modal__title";
+    title.textContent = `${playerName || playerId} — bounty calculation`;
+    dialog.appendChild(title);
+
+    const subtitle = document.createElement("p");
+    subtitle.className = "rivals-bounty-calculation-modal__subtitle";
+    subtitle.textContent = "How the player's current tournament bounty was calculated.";
+    dialog.appendChild(subtitle);
+
+    const body = document.createElement("div");
+    const loading = document.createElement("div");
+    loading.className = "rivals-bounty-calculation-loading";
+    const spinner = document.createElement("img");
+    spinner.src = RIVALS_BOUNTY_LOADING_URL;
+    spinner.alt = "";
+    const loadingText = document.createElement("span");
+    loadingText.textContent = "Preparing calculation...";
+    loading.appendChild(spinner);
+    loading.appendChild(loadingText);
+    body.appendChild(loading);
+    dialog.appendChild(body);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    const onKeyDown = event => {
+      if (event.key === "Escape" || event.key === "Esc") closeModal();
+    };
+    const closeModal = () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (overlay.parentNode) overlay.remove();
+      if (activeRivalsBountyCalculationClose === closeModal) {
+        activeRivalsBountyCalculationClose = null;
+      }
+      if (returnFocus?.isConnected) returnFocus.focus();
+    };
+    activeRivalsBountyCalculationClose = closeModal;
+    closeButton.addEventListener("click", closeModal);
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay) closeModal();
+    });
+    document.addEventListener("keydown", onKeyDown);
+    closeButton.focus();
+
+    const url = new URL(`${API_BASE}/standings`);
+    url.searchParams.set("tournament_id", tournamentId || currentTournamentId);
+    url.searchParams.set("stage", "Stage 1");
+    fetch(url.toString(), { cache: "no-store" })
+      .then(response => {
+        if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+        return response.json();
+      })
+      .then(data => {
+        if (!overlay.isConnected) return;
+        body.replaceChildren(buildRivalsBountyCalculationContent({
+          data,
+          playerId,
+          tournamentId: tournamentId || currentTournamentId,
+        }));
+      })
+      .catch(error => {
+        if (!overlay.isConnected) return;
+        const errorState = document.createElement("div");
+        errorState.className = "rivals-bounty-calculation-error";
+        errorState.textContent = error?.message || "Failed to prepare the bounty calculation.";
+        body.replaceChildren(errorState);
+      });
+  }
+
   function buildRivalsPlayerMatchesBlock({ playerId, tournamentId = null, standingsRows = [] }) {
     const matchesTournamentId = String(tournamentId || currentTournamentId).trim().toUpperCase();
     const selectedPlayerId = String(playerId || "").trim();
@@ -1844,6 +2453,12 @@
       const parsed = Date.parse(String(value || "").trim());
       return Number.isFinite(parsed) ? parsed : 0;
     };
+    const toDisplayedBountyPoints = value => (
+      Math.round((Number(value) + Number.EPSILON) * 1000) / 10
+    );
+    const formatBountyPoints = value => (
+      Number(value).toFixed(1)
+    );
     const matchesForPlayer = (challengeDuels || [])
       .filter(duel => (
         String(duel?.tournament_id || "").trim().toUpperCase() === matchesTournamentId
@@ -1861,15 +2476,39 @@
 
     const playerBountyRow = document.createElement("div");
     playerBountyRow.className = "rivals-player-tournament-bounty";
+    const playerBountyHeading = document.createElement("div");
+    playerBountyHeading.className = "rivals-player-tournament-bounty__heading";
     const playerBountyLabel = document.createElement("span");
     playerBountyLabel.textContent = "Player tournament bounty";
+    playerBountyHeading.appendChild(playerBountyLabel);
+    const calculationButton = document.createElement("button");
+    calculationButton.type = "button";
+    calculationButton.className = "rivals-bounty-calculation-button";
+    calculationButton.textContent = "Show calculation";
+    const selectedStandingRow = (Array.isArray(standingsRows) ? standingsRows : []).find(row => (
+      String(row?.player_id || "").trim() === selectedPlayerId
+    ));
+    calculationButton.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openRivalsBountyCalculationModal({
+        playerId: selectedPlayerId,
+        playerName: String(selectedStandingRow?.player || selectedPlayerId).trim(),
+        tournamentId: matchesTournamentId,
+        returnFocus: calculationButton,
+      });
+    });
+    playerBountyHeading.appendChild(calculationButton);
     const playerBountyValue = document.createElement("span");
     playerBountyValue.className = "rivals-player-tournament-bounty__value";
     const playerBounty = bountyByPlayerId.get(selectedPlayerId);
+    const totalBountyComponents = Number.isFinite(playerBounty)
+      ? [{ type: "personal", value: toDisplayedBountyPoints(playerBounty) }]
+      : [];
     playerBountyValue.textContent = Number.isFinite(playerBounty)
-      ? `${Math.trunc(playerBounty * 100)}%`
+      ? String(Math.round((playerBounty + Number.EPSILON) * 100))
       : "—";
-    playerBountyRow.appendChild(playerBountyLabel);
+    playerBountyRow.appendChild(playerBountyHeading);
     playerBountyRow.appendChild(playerBountyValue);
     list.appendChild(playerBountyRow);
 
@@ -1927,9 +2566,13 @@
         const bounty = document.createElement("span");
         bounty.className = "rivals-player-matches-bounty";
         if (selectedWon && Number.isFinite(defeatedPlayerBounty)) {
-          const bountyPercent = Math.trunc(defeatedPlayerBounty * 100);
-          bounty.textContent = `Bounty: ${bountyPercent}%`;
-          bounty.title = `Current bounty earned from the defeated opponent: ${bountyPercent}%`;
+          const bountyPoints = Math.round((defeatedPlayerBounty + Number.EPSILON) * 100);
+          totalBountyComponents.push({
+            type: "match",
+            value: toDisplayedBountyPoints(defeatedPlayerBounty),
+          });
+          bounty.textContent = `Bounty: ${bountyPoints}`;
+          bounty.title = `Current bounty points earned from the defeated opponent: ${bountyPoints}`;
         }
 
         row.appendChild(createPlayer(1));
@@ -1939,6 +2582,29 @@
         list.appendChild(row);
       });
     }
+
+    const totalRow = document.createElement("div");
+    totalRow.className = "rivals-player-points-total";
+    if (totalBountyComponents.length) {
+      const total = Math.round(
+        (totalBountyComponents.reduce((sum, component) => sum + component.value, 0) + Number.EPSILON) * 10
+      ) / 10;
+      totalRow.appendChild(document.createTextNode("Total: "));
+      totalBountyComponents.forEach((component, index) => {
+        if (index > 0) totalRow.appendChild(document.createTextNode(" + "));
+        const value = document.createElement("span");
+        value.className = component.type === "personal"
+          ? "rivals-player-points-total__personal"
+          : "rivals-player-points-total__match";
+        value.textContent = formatBountyPoints(component.value);
+        totalRow.appendChild(value);
+      });
+      totalRow.appendChild(document.createTextNode(` = ${formatBountyPoints(total)}`));
+      totalRow.title = "The first value is the player's tournament bounty; the remaining values are bounties from defeated opponents.";
+    } else {
+      totalRow.textContent = "Total: —";
+    }
+    list.appendChild(totalRow);
 
     wrapper.appendChild(list);
     return wrapper;
@@ -2067,6 +2733,7 @@
   let tournamentsById = {};
   let teamsLoaded = false;
   let teamsLoadFailed = false;
+  let activeRivalsBountyCalculationClose = null;
 
   // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
   const BRACKET_MARGIN = 15;
@@ -3614,7 +4281,7 @@
                   rowData.matches_played,
                   rowData.matches_won,
                   rowData.matches_lost,
-                  Math.trunc((Number(rowData.points) || 0) * 100)
+                  Math.round(((Number(rowData.points) || 0) + Number.EPSILON) * 100)
                 ]
               : [
                   rowData.matches_played,

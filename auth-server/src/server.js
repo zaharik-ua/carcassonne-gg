@@ -13880,6 +13880,7 @@ app.get("/tournament-teams", requireAdmin, async (req, res) => {
 });
 
 app.get("/standings", async (req, res) => {
+  res.set("Cache-Control", "no-store");
   const tournamentId = normalizeNullableText(req.query?.tournament_id);
   const requestedStage = normalizeNullableText(req.query?.stage);
   if (!tournamentId) {
@@ -13895,6 +13896,9 @@ app.get("/standings", async (req, res) => {
         SELECT
           id,
           COALESCE(NULLIF(lower(trim(standings_scoring)), ''), 'standard') AS standings_scoring,
+          COALESCE(tpr_target_games, 10) AS tpr_target_games,
+          COALESCE(tpr_smoothing, 0.5) AS tpr_smoothing,
+          COALESCE(tpr_benchmark_percentile, 0.75) AS tpr_benchmark_percentile,
           current_tpr_benchmark,
           tpr_calculated_at
         FROM tournaments
@@ -13911,6 +13915,12 @@ app.get("/standings", async (req, res) => {
       ok: true,
       standings,
       standings_scoring: normalizeStandingsScoring(tournament.standings_scoring),
+      tpr_target_games: Math.max(1, Math.trunc(bountyTprNumber(tournament.tpr_target_games, 10))),
+      tpr_smoothing: Math.max(0, bountyTprNumber(tournament.tpr_smoothing, 0.5)),
+      tpr_benchmark_percentile: Math.min(
+        1,
+        Math.max(0, bountyTprNumber(tournament.tpr_benchmark_percentile, 0.75))
+      ),
       current_tpr_benchmark: bountyTprNumber(tournament.current_tpr_benchmark),
       tpr_calculated_at: tournament.tpr_calculated_at || null,
     });

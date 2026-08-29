@@ -1383,7 +1383,7 @@
     align-items: center;
     justify-content: flex-start;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 0 10px;
     min-width: 0;
   }
 
@@ -1416,6 +1416,20 @@
     color: #333;
     font-size: 12px;
     font-weight: 600;
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+
+  .challenge-request-potential-bounty-line {
+    display: inline-flex;
+    flex: 0 0 100%;
+    align-items: center;
+    gap: 4px;
+    min-height: 22px;
+    width: 100%;
+    color: #475467;
+    font-size: 12px;
+    font-weight: 400;
     line-height: 1.35;
     white-space: nowrap;
   }
@@ -1712,25 +1726,40 @@
 
   .challenge-opponent-potential-bounty-line {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
+    gap: 4px;
     min-height: 22px;
     width: 100%;
+  }
+
+  .challenge-opponent-potential-bounty-label {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 400;
+    white-space: nowrap;
   }
 
   .challenge-opponent-potential-bounty {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 34px;
-    min-height: 22px;
-    padding: 1px 6px;
-    border: 1px solid hsl(var(--challenge-bounty-hue, 60) 62% 27%);
-    border-radius: 5px;
-    background: hsl(var(--challenge-bounty-hue, 60) 66% 37%);
-    color: #fff;
+    padding: 1px 3px;
+    border: 1px solid hsl(
+      var(--challenge-bounty-hue, 165)
+      58%
+      var(--challenge-bounty-border-lightness, 36%)
+    );
+    border-radius: 3px;
+    background: hsl(
+      var(--challenge-bounty-hue, 165)
+      62%
+      var(--challenge-bounty-lightness, 48%)
+    );
+    color: #000;
     font-size: 12px;
-    font-weight: 700;
-    line-height: 1;
+    font-weight: 600;
+    line-height: 1.15;
     box-sizing: border-box;
   }
 
@@ -2979,6 +3008,7 @@
   const ELIGIBLE_OPPONENTS_PATH = "eligible-opponents";
   const POTENTIAL_BOUNTIES_PATH = "potential-bounties";
   const POTENTIAL_BOUNTY_LOADING_URL = "https://carcassonne.gg/gallery/loading-red.gif";
+  const POTENTIAL_BOUNTY_HELP_TEXT = "These are the points you would receive from this opponent if you win. The value is continuously updated based on this player's tournament results, personal GG Elo rating, and the results of other players in the tournament. The exact win value is finalized when all tournament matches are complete.";
   const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
   const CHALLENGE_PROGRESS_EVENT = "gg-challenge-progress-change";
   const challengeProgressChannel = (() => {
@@ -5635,11 +5665,34 @@
     if (bounty === null) return null;
     const bountyPercent = Math.trunc(bounty * 100);
     const colorPercent = Math.min(100, Math.max(0, bounty * 100));
+    let hue;
+    let lightness;
+    if (colorPercent <= 30) {
+      const progress = colorPercent / 30;
+      hue = 205 - (progress * 10);
+      lightness = 92 - (progress * 8);
+    } else if (colorPercent <= 55) {
+      const progress = (colorPercent - 30) / 25;
+      hue = 195 - (progress * 55);
+      lightness = 84 - (progress * 48);
+    } else if (colorPercent <= 75) {
+      const progress = (colorPercent - 55) / 20;
+      hue = 140 - (progress * 8);
+      lightness = 36 - (progress * 3);
+    } else {
+      const progress = (colorPercent - 75) / 25;
+      hue = 132;
+      lightness = 33 - (progress * 3);
+    }
+    hue = Math.round(hue);
+    lightness = Math.round(lightness);
     const badge = document.createElement("span");
     badge.className = "challenge-opponent-potential-bounty";
-    badge.style.setProperty("--challenge-bounty-hue", String(Math.round(colorPercent * 1.2)));
-    badge.textContent = `[${bountyPercent}]`;
-    badge.title = `Potential bounty if you defeat this player: ${bountyPercent}%`;
+    badge.style.setProperty("--challenge-bounty-hue", String(hue));
+    badge.style.setProperty("--challenge-bounty-lightness", `${lightness}%`);
+    badge.style.setProperty("--challenge-bounty-border-lightness", `${Math.max(22, lightness - 12)}%`);
+    badge.textContent = String(bountyPercent);
+    badge.title = POTENTIAL_BOUNTY_HELP_TEXT;
     badge.setAttribute("aria-label", badge.title);
     return badge;
   }
@@ -5649,9 +5702,25 @@
     spinner.className = "challenge-opponent-potential-bounty-spinner";
     spinner.src = POTENTIAL_BOUNTY_LOADING_URL;
     spinner.alt = "";
-    spinner.title = "Calculating potential bounty...";
+    spinner.title = `Calculating potential points. ${POTENTIAL_BOUNTY_HELP_TEXT}`;
     spinner.setAttribute("aria-label", spinner.title);
     return spinner;
+  }
+
+  function createRequestPotentialBountyLine(value, isLoading) {
+    const indicator = isLoading
+      ? createPotentialBountySpinner()
+      : createPotentialBountyBadge(value);
+    if (!indicator) return null;
+
+    const line = document.createElement("div");
+    line.className = "challenge-request-potential-bounty-line";
+    line.title = POTENTIAL_BOUNTY_HELP_TEXT;
+    line.appendChild(indicator);
+    const label = document.createElement("span");
+    label.textContent = "Potential points";
+    line.appendChild(label);
+    return line;
   }
 
   function formatChallengeDuelDateTime(value, timezone) {
@@ -6757,6 +6826,11 @@
     if (!isCurrentPlayer && potentialBountyIndicator) {
       const bountyLine = document.createElement("div");
       bountyLine.className = "challenge-opponent-potential-bounty-line";
+      bountyLine.title = POTENTIAL_BOUNTY_HELP_TEXT;
+      const bountyLabel = document.createElement("span");
+      bountyLabel.className = "challenge-opponent-potential-bounty-label";
+      bountyLabel.textContent = "Potential points:";
+      bountyLine.appendChild(bountyLabel);
       bountyLine.appendChild(potentialBountyIndicator);
       ratings.appendChild(bountyLine);
     }
@@ -6905,14 +6979,17 @@
 
     opponents.forEach((opponent) => {
       const opponentId = String(opponent?.player_id || "").trim();
+      const canCalculatePotentialBounty = opponent?.can_invite === true;
       const hasPotentialBounty = item.potentialBountiesByPlayerId?.has(opponentId);
       bodyEl.appendChild(createOpponentRow(
         {
           ...opponent,
-          potential_bounty_if_current_player_wins: hasPotentialBounty
+          potential_bounty_if_current_player_wins: canCalculatePotentialBounty && hasPotentialBounty
             ? item.potentialBountiesByPlayerId.get(opponentId)
             : null,
-          potential_bounty_loading: !!item.potentialBountiesLoading && !hasPotentialBounty,
+          potential_bounty_loading: canCalculatePotentialBounty
+            && !!item.potentialBountiesLoading
+            && !hasPotentialBounty,
         },
         item.period,
         item.currentPlayer || null,
@@ -6922,13 +6999,30 @@
   }
 
   function getPotentialBountyOpponentIds(item) {
-    const currentPlayerId = String(item?.currentPlayer?.player_id || "").trim();
-    const opponents = Array.isArray(item?.opponentsByView?.all)
-      ? item.opponentsByView.all
+    const periodId = String(item?.period?.id || "").trim();
+    const requestItem = requestPanels.get(periodId);
+    const currentPlayerId = String(
+      item?.currentPlayer?.player_id || requestItem?.currentPlayerId || ""
+    ).trim();
+    const opponents = Array.isArray(item?.opponentsByView?.available)
+      ? item.opponentsByView.available
       : [];
-    return Array.from(new Set(opponents
+    const availableOpponentIds = opponents
+      .filter((opponent) => opponent?.can_invite === true)
       .map((opponent) => String(opponent?.player_id || "").trim())
-      .filter((opponentId) => opponentId && opponentId !== currentPlayerId)));
+      .filter((opponentId) => opponentId && opponentId !== currentPlayerId);
+    const openRequestOpponentIds = requestItem?.mode === "player"
+      ? [
+        ...(Array.isArray(requestItem.incoming) ? requestItem.incoming : []),
+        ...(Array.isArray(requestItem.sent) ? requestItem.sent : []),
+      ]
+        .filter(isOpenChallengeRequest)
+        .map((request) => String(
+          getRequestOtherPlayer(request, currentPlayerId)?.player_id || ""
+        ).trim())
+        .filter((opponentId) => opponentId && opponentId !== currentPlayerId)
+      : [];
+    return Array.from(new Set([...availableOpponentIds, ...openRequestOpponentIds]));
   }
 
   async function loadPotentialBountiesForPeriod(item, loadVersion) {
@@ -6937,6 +7031,7 @@
     if (!periodId || !opponentIds.length) {
       item.potentialBountiesLoading = false;
       renderOpponentsForPeriod(item);
+      renderRequestsForPeriod(requestPanels.get(periodId));
       return;
     }
 
@@ -6965,6 +7060,7 @@
       if (currentItem === item && item.potentialBountyLoadVersion === loadVersion) {
         item.potentialBountiesLoading = false;
         renderOpponentsForPeriod(item);
+        renderRequestsForPeriod(requestPanels.get(periodId));
       }
     }
   }
@@ -6984,12 +7080,14 @@
       if (!canCalculate) {
         item.potentialBountiesLoading = false;
         renderOpponentsForPeriod(item);
+        renderRequestsForPeriod(requestPanels.get(periodId));
         return;
       }
 
       item.potentialBountiesStarted = true;
       item.potentialBountiesLoading = true;
       renderOpponentsForPeriod(item);
+      renderRequestsForPeriod(requestPanels.get(periodId));
       const loadVersion = item.potentialBountyLoadVersion;
       window.requestAnimationFrame(() => {
         window.setTimeout(() => {
@@ -7187,9 +7285,11 @@
     const currentPlayer = getRequestPlayer(request, currentPlayerId);
     const timezone = currentPlayer?.association?.timezone || period?.player_time_context?.timezone || "UTC";
     const timeFlagSrc = currentPlayer?.association?.flag || period?.player_time_context?.association_flag || "";
+    const statusKey = String(request?.status || "").trim();
 
     const head = document.createElement("div");
     head.className = "challenge-request-card-head";
+    let requestPotentialBountyLine = null;
     if (adminView) {
       head.appendChild(createRequestPlayerInline(request?.player_1 || { player_id: request?.player_1_id }));
       const separator = document.createElement("span");
@@ -7204,15 +7304,29 @@
         rank.textContent = `#${Math.trunc(ggRank)}`;
         head.appendChild(rank);
       }
+      const opponentId = String(otherPlayer?.player_id || "").trim();
+      const potentialBountyItem = opponentPanels.get(String(period?.id || "").trim());
+      const shouldShowPotentialBounty = isOpenChallengeRequest(request)
+        && !!String(period?.rivals_tournament_id || "").trim()
+        && !!opponentId;
+      if (shouldShowPotentialBounty) {
+        const hasPotentialBounty = potentialBountyItem?.potentialBountiesByPlayerId?.has(opponentId);
+        requestPotentialBountyLine = createRequestPotentialBountyLine(
+          hasPotentialBounty
+            ? potentialBountyItem.potentialBountiesByPlayerId.get(opponentId)
+            : null,
+          !!potentialBountyItem?.potentialBountiesLoading && !hasPotentialBounty
+        );
+      }
       head.appendChild(createRequestPlayerInline(otherPlayer));
       head.appendChild(createRequestRatingsRow(otherPlayer));
     }
     const status = document.createElement("span");
-    const statusKey = String(request?.status || "").trim();
     const displayStatusKey = request?.hidden_by_creator_at ? "removed" : getRequestDisplayStatusKey(request);
     status.className = `challenge-request-status is-${displayStatusKey}`;
     status.textContent = getRequestStatusLabel(displayStatusKey);
     head.appendChild(status);
+    if (requestPotentialBountyLine) head.appendChild(requestPotentialBountyLine);
     card.appendChild(head);
 
     const meta = document.createElement("div");
