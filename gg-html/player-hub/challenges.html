@@ -650,6 +650,10 @@
     font-weight: 600;
     line-height: 1;
     cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
     transform: translateY(-50%);
     transition: opacity 0.15s ease, background-color 0.15s ease;
   }
@@ -2340,6 +2344,393 @@
     white-space: nowrap;
   }
 
+  .challenge-time-options-control {
+    display: grid;
+    gap: 7px;
+  }
+
+  .challenge-time-options-summary {
+    display: grid;
+    gap: 5px;
+  }
+
+  .challenge-time-option-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px 14px;
+    min-height: 31px;
+    border: 1px solid #d8dee8;
+    border-radius: 4px;
+    background: #f8fafc;
+    color: #2f3947;
+    padding: 5px 8px;
+    font-size: 12px;
+    line-height: 1.35;
+    box-sizing: border-box;
+  }
+
+  .challenge-time-options-button {
+    justify-self: start;
+  }
+
+  .challenge-modal.challenge-time-options-dialog {
+    width: min(980px, calc(100vw - 32px));
+    min-width: min(500px, calc(100vw - 32px));
+    display: grid;
+    gap: 5px;
+  }
+
+  .challenge-time-options-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .challenge-time-options-count {
+    color: #667085;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .challenge-time-options-overview {
+    min-width: 0;
+  }
+
+  .challenge-time-options-detail[hidden],
+  .challenge-time-options-overview[hidden] {
+    display: none;
+  }
+
+  .challenge-time-detail-header {
+    display: block;
+  }
+
+  .challenge-time-window-arrow {
+    appearance: none;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #344054;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .challenge-time-detail-title {
+    display: grid;
+    gap: 2px;
+  }
+
+  .challenge-time-detail-date {
+    color: #172232;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .challenge-time-detail-range {
+    color: #667085;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .challenge-time-overview-calendar .challenge-calendar-event-layer {
+    z-index: 2;
+  }
+
+  .challenge-time-period-region {
+    appearance: none;
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    z-index: 5;
+    display: grid;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    color: #8a94a3;
+    padding: 0;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    box-sizing: border-box;
+    pointer-events: auto;
+  }
+
+  .challenge-time-period-frame {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .challenge-time-period-region:hover,
+  .challenge-time-period-region:focus-visible {
+    background: rgba(26, 115, 183, 0.06);
+    color: #5f6b7a;
+    outline: none;
+  }
+
+  .challenge-time-period-region:disabled {
+    background: transparent;
+    color: #b4bac3;
+    cursor: not-allowed;
+  }
+
+  .challenge-time-period-region.is-selected {
+    background: rgba(26, 115, 183, 0.08);
+    color: var(--blue);
+  }
+
+  .challenge-time-period-region-label {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    gap: 2px;
+    text-align: center;
+  }
+
+  .challenge-time-period-corner {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-color: #aeb6c1;
+    border-style: solid;
+    pointer-events: none;
+  }
+
+  .challenge-time-period-corner.is-top-left {
+    top: 0;
+    left: 0;
+    border-width: 1px 0 0 1px;
+    border-radius: 2px 0 0 0;
+  }
+
+  .challenge-time-period-corner.is-top-right {
+    top: 0;
+    right: 0;
+    border-width: 1px 1px 0 0;
+    border-radius: 0 2px 0 0;
+  }
+
+  .challenge-time-period-corner.is-bottom-left {
+    bottom: 0;
+    left: 0;
+    border-width: 0 0 1px 1px;
+    border-radius: 0 0 0 2px;
+  }
+
+  .challenge-time-period-corner.is-bottom-right {
+    right: 0;
+    bottom: 0;
+    border-width: 0 1px 1px 0;
+    border-radius: 0 0 2px 0;
+  }
+
+  .challenge-time-opponent-range {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    z-index: 3;
+    min-height: 18px;
+    overflow: hidden;
+    border: 1px solid #63b98c;
+    border-left: 4px solid #21a366;
+    border-radius: 4px;
+    background: rgba(223, 243, 232, 0.9);
+    color: #12633e;
+    padding: 3px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+
+  .challenge-time-opponent-range,
+  .challenge-time-detail-opponent-range {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .challenge-time-selected-badges-row {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 22px;
+    pointer-events: none;
+  }
+
+  .challenge-time-selected-badge {
+    flex: 0 0 auto;
+    border-radius: 3px;
+    background: var(--blue);
+    color: #fff;
+    padding: 2px 4px;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .challenge-time-detail-calendar {
+    overflow: hidden;
+  }
+
+  .challenge-time-detail-calendar .challenge-calendar-day-header {
+    min-width: 0;
+  }
+
+  .challenge-time-detail-scroller {
+    height: 348px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .challenge-time-detail-scroller .challenge-calendar-body {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .challenge-time-detail-scroller .challenge-calendar-times,
+  .challenge-time-detail-scroller .challenge-calendar-day-column {
+    height: 1392px;
+  }
+
+  .challenge-time-detail-scroller .challenge-calendar-day-column {
+    min-width: 0;
+    cursor: default;
+    background: repeating-linear-gradient(
+      to bottom,
+      #fff 0,
+      #fff 57px,
+      #e9edf2 57px,
+      #e9edf2 58px
+    );
+  }
+
+  .challenge-time-detail-opponent-lane {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 8px;
+    width: 132px;
+    z-index: 2;
+    border-right: 1px solid #d8dee8;
+    background: rgba(248, 250, 252, 0.72);
+    box-sizing: border-box;
+  }
+
+  .challenge-time-detail-opponent-range {
+    position: absolute;
+    left: 4px;
+    right: 7px;
+    min-height: 26px;
+    border: 1px solid #63b98c;
+    border-left: 4px solid #21a366;
+    border-radius: 4px;
+    background: rgba(223, 243, 232, 0.94);
+    color: #12633e;
+    padding: 4px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.25;
+    box-sizing: border-box;
+    pointer-events: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+  }
+
+  .challenge-time-detail-hour-options {
+    position: absolute;
+    left: 152px;
+    right: 45px;
+    z-index: 3;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(54px, 1fr));
+    gap: 7px;
+    align-items: center;
+    height: 58px;
+    box-sizing: border-box;
+  }
+
+  .challenge-time-slot-btn {
+    appearance: none;
+    min-height: 31px;
+    border: 1px solid #c8ced8;
+    border-radius: 3px;
+    background: #fff;
+    color: #344054;
+    padding: 5px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .challenge-time-slot-btn:hover,
+  .challenge-time-slot-btn:focus-visible {
+    border-color: var(--blue);
+    background: #eef6fc;
+    outline: none;
+  }
+
+  .challenge-time-slot-btn.is-selected {
+    border-color: var(--blue);
+    background: var(--blue);
+    color: #fff;
+  }
+
+  .challenge-time-slot-btn:disabled {
+    border-color: #e1e5ea;
+    background: #f3f4f6;
+    color: #a4acb7;
+    cursor: not-allowed;
+  }
+
+  .challenge-calendar-scroll-btn.challenge-time-window-arrow {
+    display: inline-flex;
+    width: 32px;
+    height: 44px;
+    border: 0;
+    border-radius: 6px;
+    background: rgba(23, 34, 50, 0.52);
+    color: #fff;
+    font-size: 22px;
+    transform: translateY(-50%);
+    right: 5px;
+    left: auto;
+  }
+
+  .challenge-calendar-scroll-btn.challenge-time-window-arrow:active {
+    background: rgba(23, 34, 50, 0.72);
+  }
+
+  .challenge-calendar-scroll-btn.challenge-time-window-arrow:disabled {
+    opacity: 0.18;
+  }
+
+  .challenge-time-window-arrow.is-up {
+    top: calc(50% - 27px);
+  }
+
+  .challenge-time-window-arrow.is-down {
+    top: calc(50% + 27px);
+  }
+
   .challenge-required-mark {
     color: var(--red);
     font-weight: 700;
@@ -2913,6 +3304,10 @@
       padding-left: 58px;
     }
 
+    .challenge-opponent-potential-bounty-line {
+      justify-content: flex-start;
+    }
+
     .challenge-opponent-row > .challenge-btn {
       grid-column: 2;
       grid-row: 1 / span 2;
@@ -3002,6 +3397,10 @@
       min-width: 108px;
     }
 
+    .challenge-calendar-day-header {
+      padding: 4px 5px;
+    }
+
     .challenge-calendar-scroll-btn {
       display: inline-flex;
     }
@@ -3014,6 +3413,44 @@
     .challenge-availability-info:hover .challenge-availability-info-tip,
     .challenge-availability-info:focus-visible .challenge-availability-info-tip {
       transform: translateX(-75%) translateY(0);
+    }
+
+    .challenge-modal.challenge-time-options-dialog {
+      width: min(100%, calc(100vw - 20px));
+      padding: 12px;
+    }
+
+    .challenge-time-detail-hour-options {
+      left: 83px;
+      right: 40px;
+      grid-template-columns: repeat(4, minmax(32px, 1fr));
+      gap: 4px;
+    }
+
+    .challenge-time-detail-opponent-lane {
+      left: 5px;
+      width: 68px;
+    }
+
+    .challenge-time-detail-opponent-range {
+      left: 3px;
+      right: 5px;
+      padding: 3px 4px;
+      font-size: 9px;
+    }
+
+    .challenge-time-detail-calendar .challenge-calendar-header,
+    .challenge-time-detail-scroller .challenge-calendar-body {
+      grid-template-columns: 42px minmax(0, 1fr);
+    }
+
+    .challenge-time-detail-calendar .challenge-calendar-time-label {
+      width: 37px;
+    }
+
+    .challenge-time-slot-btn {
+      font-size: 11px;
+      padding: 5px 1px;
     }
 
     .challenge-request-row input[type="datetime-local"] {
@@ -6314,6 +6751,548 @@
     return row;
   }
 
+  function buildChallengeTimeOptionDays(period, timezone) {
+    const periodStart = parseUtcDate(period?.play_starts_at);
+    const periodEnd = parseUtcDate(period?.play_ends_at);
+    if (!periodStart || !periodEnd || periodStart > periodEnd) return [];
+
+    const stepMs = 15 * 60 * 1000;
+    const firstSlotTime = Math.ceil(periodStart.getTime() / stepMs) * stepMs;
+    const days = [];
+    const daysByKey = new Map();
+    for (let time = firstSlotTime; time <= periodEnd.getTime(); time += stepMs) {
+      const start = new Date(time);
+      const parts = getChallengeZonedDateTimeParts(start, timezone);
+      const dayKey = getChallengeLocalDateKey(start, timezone);
+      if (!parts || !dayKey) continue;
+      let day = daysByKey.get(dayKey);
+      if (!day) {
+        day = {
+          key: dayKey,
+          label: formatChallengeAvailabilityDay(start, timezone),
+          slots: [],
+        };
+        daysByKey.set(dayKey, day);
+        days.push(day);
+      }
+      const hour = parts.hour % 24;
+      const minute = parts.minute;
+      day.slots.push({
+        id: start.toISOString(),
+        start,
+        hour,
+        minute,
+        label: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
+      });
+    }
+    return days;
+  }
+
+  function openChallengeTimeOptionsDialog(period, initialOptions, currentPlayer, opponent, onSelect) {
+    const timezone = String(
+      currentPlayer?.timezone
+      || currentPlayer?.association?.timezone
+      || period?.player_time_context?.timezone
+      || "UTC"
+    ).trim() || "UTC";
+    const todayKey = getChallengeLocalDateKey(new Date(), timezone);
+    const days = buildChallengeTimeOptionDays(period, timezone)
+      .filter((day) => !todayKey || day.key >= todayKey);
+    const validSlotIds = new Set(days.flatMap((day) => day.slots.map((slot) => slot.id)));
+    const selectedOptions = new Set(
+      (Array.isArray(initialOptions) ? initialOptions : [])
+        .map((value) => parseUtcDate(value)?.toISOString() || "")
+        .filter((value) => value && validSlotIds.has(value))
+        .slice(0, 3)
+    );
+    const opponentAvailability = (Array.isArray(opponent?.availability) ? opponent.availability : [])
+      .map((range) => ({
+        start: parseUtcDate(range?.start_utc),
+        end: parseUtcDate(range?.end_utc),
+      }))
+      .filter((range) => range.start && range.end && range.start < range.end);
+    const overviewHourHeight = 22;
+    const detailHourHeight = 58;
+    const dayColumnWidth = window.matchMedia("(max-width: 720px)").matches ? 108 : 150;
+    const minDayColumnWidth = Math.round(dayColumnWidth * 13 / 15);
+    const opponentName = getOpponentDisplayName(opponent);
+    const opponentAvailableLabel = `${opponentName} is available`;
+
+    const overlay = document.createElement("div");
+    overlay.className = "challenge-modal-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "challenge-modal challenge-time-options-dialog";
+    dialog.tabIndex = -1;
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.style.width = `min(calc(100vw - 32px), ${Math.max(
+      500,
+      Math.min(1180, 92 + Math.max(days.length, 1) * dayColumnWidth)
+    )}px)`;
+    overlay.appendChild(dialog);
+
+    const heading = document.createElement("div");
+    heading.className = "challenge-time-options-heading";
+    dialog.appendChild(heading);
+    const title = document.createElement("div");
+    title.className = "challenge-request-title";
+    title.textContent = "Select time options";
+    heading.appendChild(title);
+    const selectedCount = document.createElement("div");
+    selectedCount.className = "challenge-time-options-count";
+    heading.appendChild(selectedCount);
+
+    const overview = document.createElement("div");
+    overview.className = "challenge-time-options-overview";
+    dialog.appendChild(overview);
+
+    const detail = document.createElement("div");
+    detail.className = "challenge-time-options-detail";
+    detail.hidden = true;
+    dialog.appendChild(detail);
+    const detailHeader = document.createElement("div");
+    detailHeader.className = "challenge-time-detail-header";
+    detail.appendChild(detailHeader);
+    const detailTitle = document.createElement("div");
+    detailTitle.className = "challenge-time-detail-title";
+    detailHeader.appendChild(detailTitle);
+    const detailRange = document.createElement("div");
+    detailRange.className = "challenge-time-detail-range";
+    detailTitle.appendChild(detailRange);
+    const detailCalendarWrap = document.createElement("div");
+    detail.appendChild(detailCalendarWrap);
+
+    const footer = document.createElement("div");
+    footer.className = "challenge-calendar-footer";
+    dialog.appendChild(footer);
+    const timezoneNote = document.createElement("div");
+    timezoneNote.className = "challenge-calendar-timezone";
+    timezoneNote.textContent = `Times in ${timezone}`;
+    footer.appendChild(timezoneNote);
+    const message = document.createElement("div");
+    message.className = "challenge-request-message";
+    footer.appendChild(message);
+    const actions = document.createElement("div");
+    actions.className = "challenge-info-actions";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "challenge-btn challenge-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    actions.appendChild(cancelBtn);
+    const selectBtn = document.createElement("button");
+    selectBtn.type = "button";
+    selectBtn.className = "challenge-btn challenge-btn-primary";
+    selectBtn.textContent = "Select";
+    actions.appendChild(selectBtn);
+    dialog.appendChild(actions);
+
+    let activeDay = null;
+    let windowStartHour = 0;
+    let selectionBeforeDetail = null;
+    let detailSelectionIds = new Set();
+
+    const setMessage = (text, tone) => {
+      message.className = `challenge-request-message${tone ? ` is-${tone}` : ""}`;
+      message.textContent = text || "";
+    };
+    const updateSelectionMeta = () => {
+      selectedCount.textContent = `${selectedOptions.size} of 3 selected`;
+      selectBtn.disabled = detail.hidden
+        ? selectedOptions.size === 0
+        : detailSelectionIds.size === 0;
+    };
+    const toggleSlot = (slot) => {
+      if (!slot) return false;
+      if (selectedOptions.has(slot.id)) {
+        selectedOptions.delete(slot.id);
+        detailSelectionIds.delete(slot.id);
+        setMessage("", "");
+      } else if (selectedOptions.size >= 3) {
+        setMessage("You can select up to 3 time options.", "error");
+        return false;
+      } else {
+        selectedOptions.add(slot.id);
+        detailSelectionIds.add(slot.id);
+        setMessage("", "");
+      }
+      updateSelectionMeta();
+      return true;
+    };
+    const appendCalendarTimeLabels = (times, hourHeight, startHour, hoursCount) => {
+      for (let offset = 0; offset < hoursCount; offset += 1) {
+        const hour = startHour + offset;
+        const label = document.createElement("div");
+        label.className = "challenge-calendar-time-label";
+        label.style.top = `${offset * hourHeight + hourHeight / 2}px`;
+        label.textContent = `${String(hour).padStart(2, "0")}:00`;
+        times.appendChild(label);
+      }
+    };
+    const createCalendarFrame = (className) => {
+      const shell = document.createElement("div");
+      shell.className = "challenge-calendar-shell";
+      const calendar = document.createElement("div");
+      calendar.className = `challenge-availability-calendar ${className}`;
+      shell.appendChild(calendar);
+      const inner = document.createElement("div");
+      inner.className = "challenge-calendar-inner";
+      calendar.appendChild(inner);
+      const header = document.createElement("div");
+      header.className = "challenge-calendar-header";
+      inner.appendChild(header);
+      const headerSpacer = document.createElement("div");
+      headerSpacer.className = "challenge-calendar-header-spacer";
+      header.appendChild(headerSpacer);
+      const dayHeaders = document.createElement("div");
+      dayHeaders.className = "challenge-calendar-day-headers";
+      header.appendChild(dayHeaders);
+      const body = document.createElement("div");
+      body.className = "challenge-calendar-body";
+      inner.appendChild(body);
+      const times = document.createElement("div");
+      times.className = "challenge-calendar-times";
+      body.appendChild(times);
+      const dayColumns = document.createElement("div");
+      dayColumns.className = "challenge-calendar-day-columns";
+      body.appendChild(dayColumns);
+      return { shell, calendar, inner, dayHeaders, times, dayColumns };
+    };
+    const appendPeriodCorners = (periodBtn) => {
+      ["top-left", "top-right", "bottom-left", "bottom-right"].forEach((position) => {
+        const corner = document.createElement("span");
+        corner.className = `challenge-time-period-corner is-${position}`;
+        periodBtn.appendChild(corner);
+      });
+    };
+    const appendOpponentAvailability = (layer, day) => {
+      opponentAvailability.forEach((range) => {
+        const coveredSlots = day.slots.filter((slot) => (
+          slot.start >= range.start && slot.start < range.end
+        ));
+        if (!coveredSlots.length) return;
+        const firstSlot = coveredSlots[0];
+        const lastSlot = coveredSlots[coveredSlots.length - 1];
+        const startHour = firstSlot.hour + firstSlot.minute / 60;
+        const endHour = lastSlot.hour + (lastSlot.minute + 15) / 60;
+        const rangeEl = document.createElement("div");
+        rangeEl.className = "challenge-time-opponent-range";
+        rangeEl.style.top = `${startHour * overviewHourHeight}px`;
+        rangeEl.style.height = `${Math.max(18, (endHour - startHour) * overviewHourHeight)}px`;
+        rangeEl.textContent = opponentAvailableLabel;
+        layer.appendChild(rangeEl);
+      });
+    };
+    const appendSelectedMarkers = (layer, day) => {
+      const selectedSlotsByHour = new Map();
+      day.slots.filter((slot) => selectedOptions.has(slot.id)).forEach((slot) => {
+        if (!selectedSlotsByHour.has(slot.hour)) selectedSlotsByHour.set(slot.hour, []);
+        selectedSlotsByHour.get(slot.hour).push(slot);
+      });
+      selectedSlotsByHour.forEach((selectedSlots, hour) => {
+        const badgesRow = document.createElement("div");
+        badgesRow.className = "challenge-time-selected-badges-row";
+        badgesRow.style.top = `${hour * overviewHourHeight}px`;
+        selectedSlots.forEach((slot) => {
+          const badge = document.createElement("span");
+          badge.className = "challenge-time-selected-badge";
+          badge.textContent = slot.label;
+          badgesRow.appendChild(badge);
+        });
+        layer.appendChild(badgesRow);
+      });
+    };
+    const renderOverview = () => {
+      overview.innerHTML = "";
+      const frame = createCalendarFrame("challenge-time-overview-calendar");
+      frame.inner.style.minWidth = `${56 + Math.max(days.length, 1) * dayColumnWidth}px`;
+      frame.dayHeaders.style.gridTemplateColumns = `repeat(${Math.max(days.length, 1)}, minmax(${minDayColumnWidth}px, ${dayColumnWidth}px))`;
+      frame.dayColumns.style.gridTemplateColumns = `repeat(${Math.max(days.length, 1)}, minmax(${minDayColumnWidth}px, ${dayColumnWidth}px))`;
+      appendCalendarTimeLabels(frame.times, overviewHourHeight, 0, 24);
+
+      days.forEach((day) => {
+        const dayHeader = document.createElement("div");
+        dayHeader.className = "challenge-calendar-day-header";
+        dayHeader.textContent = day.label;
+        frame.dayHeaders.appendChild(dayHeader);
+
+        const column = document.createElement("div");
+        column.className = "challenge-calendar-day-column";
+        for (let hour = 0; hour < 24; hour += 1) {
+          const cell = document.createElement("div");
+          const hasSlots = day.slots.some((slot) => slot.hour === hour);
+          cell.className = `challenge-calendar-hour-cell${hasSlots ? "" : " is-blocked"}`;
+          cell.style.top = `${hour * overviewHourHeight}px`;
+          column.appendChild(cell);
+        }
+        const layer = document.createElement("div");
+        layer.className = "challenge-calendar-event-layer";
+        appendOpponentAvailability(layer, day);
+        appendSelectedMarkers(layer, day);
+        [0, 6, 12, 18].forEach((periodStartHour) => {
+          const periodSlots = day.slots.filter((slot) => (
+            slot.hour >= periodStartHour && slot.hour < periodStartHour + 6
+          ));
+          const periodFrame = document.createElement("div");
+          periodFrame.className = "challenge-time-period-frame";
+          periodFrame.style.top = `${periodStartHour * overviewHourHeight + 3}px`;
+          periodFrame.style.height = `${6 * overviewHourHeight - 6}px`;
+          appendPeriodCorners(periodFrame);
+          layer.appendChild(periodFrame);
+          const periodBtn = document.createElement("button");
+          periodBtn.type = "button";
+          periodBtn.className = "challenge-time-period-region";
+          periodBtn.style.top = `${periodStartHour * overviewHourHeight + 3}px`;
+          periodBtn.style.height = `${6 * overviewHourHeight - 6}px`;
+          periodBtn.disabled = !periodSlots.length;
+          periodBtn.setAttribute(
+            "aria-label",
+            `${day.label}, ${String(periodStartHour).padStart(2, "0")}:00 to ${String(periodStartHour + 6).padStart(2, "0")}:00`
+          );
+          const periodLabel = document.createElement("span");
+          periodLabel.className = "challenge-time-period-region-label";
+          const selectLabel = document.createElement("span");
+          selectLabel.textContent = "Choose";
+          periodLabel.appendChild(selectLabel);
+          periodBtn.appendChild(periodLabel);
+          periodBtn.addEventListener("click", () => {
+            selectionBeforeDetail = new Set(selectedOptions);
+            detailSelectionIds = new Set(
+              periodSlots.filter((slot) => selectedOptions.has(slot.id)).map((slot) => slot.id)
+            );
+            activeDay = day;
+            windowStartHour = periodStartHour;
+            overview.hidden = true;
+            detail.hidden = false;
+            selectBtn.textContent = "Next";
+            cancelBtn.textContent = "Back";
+            setMessage("", "");
+            updateSelectionMeta();
+            renderDetail();
+          });
+          layer.appendChild(periodBtn);
+        });
+        column.appendChild(layer);
+        frame.dayColumns.appendChild(column);
+      });
+
+      const previousDaysBtn = document.createElement("button");
+      previousDaysBtn.type = "button";
+      previousDaysBtn.className = "challenge-calendar-scroll-btn is-prev";
+      previousDaysBtn.setAttribute("aria-label", "Scroll to previous days");
+      previousDaysBtn.textContent = "‹";
+      frame.shell.appendChild(previousDaysBtn);
+      const nextDaysBtn = document.createElement("button");
+      nextDaysBtn.type = "button";
+      nextDaysBtn.className = "challenge-calendar-scroll-btn is-next";
+      nextDaysBtn.setAttribute("aria-label", "Scroll to next days");
+      nextDaysBtn.textContent = "›";
+      frame.shell.appendChild(nextDaysBtn);
+      const updateScrollButtons = () => {
+        const maxScrollLeft = Math.max(0, frame.calendar.scrollWidth - frame.calendar.clientWidth);
+        previousDaysBtn.disabled = frame.calendar.scrollLeft <= 1;
+        nextDaysBtn.disabled = frame.calendar.scrollLeft >= maxScrollLeft - 1;
+      };
+      previousDaysBtn.addEventListener("click", () => {
+        frame.calendar.scrollBy({ left: -dayColumnWidth, behavior: "smooth" });
+      });
+      nextDaysBtn.addEventListener("click", () => {
+        frame.calendar.scrollBy({ left: dayColumnWidth, behavior: "smooth" });
+      });
+      frame.calendar.addEventListener("scroll", updateScrollButtons, { passive: true });
+      overview.appendChild(frame.shell);
+      window.requestAnimationFrame(updateScrollButtons);
+    };
+    const renderDetail = () => {
+      if (!activeDay) return;
+      detailCalendarWrap.innerHTML = "";
+
+      const shell = document.createElement("div");
+      shell.className = "challenge-calendar-shell";
+      const calendar = document.createElement("div");
+      calendar.className = "challenge-availability-calendar challenge-time-detail-calendar";
+      shell.appendChild(calendar);
+      const header = document.createElement("div");
+      header.className = "challenge-calendar-header";
+      calendar.appendChild(header);
+      const headerSpacer = document.createElement("div");
+      headerSpacer.className = "challenge-calendar-header-spacer";
+      header.appendChild(headerSpacer);
+      const dayHeaders = document.createElement("div");
+      dayHeaders.className = "challenge-calendar-day-headers";
+      dayHeaders.style.gridTemplateColumns = "minmax(0, 1fr)";
+      header.appendChild(dayHeaders);
+      const dayHeader = document.createElement("div");
+      dayHeader.className = "challenge-calendar-day-header";
+      dayHeader.textContent = activeDay.label;
+      dayHeaders.appendChild(dayHeader);
+
+      const scroller = document.createElement("div");
+      scroller.className = "challenge-time-detail-scroller";
+      calendar.appendChild(scroller);
+      const body = document.createElement("div");
+      body.className = "challenge-calendar-body";
+      scroller.appendChild(body);
+      const times = document.createElement("div");
+      times.className = "challenge-calendar-times";
+      body.appendChild(times);
+      appendCalendarTimeLabels(times, detailHourHeight, 0, 24);
+      const dayColumns = document.createElement("div");
+      dayColumns.className = "challenge-calendar-day-columns";
+      dayColumns.style.gridTemplateColumns = "minmax(0, 1fr)";
+      body.appendChild(dayColumns);
+      const column = document.createElement("div");
+      column.className = "challenge-calendar-day-column";
+
+      const opponentLane = document.createElement("div");
+      opponentLane.className = "challenge-time-detail-opponent-lane";
+      opponentAvailability.forEach((range) => {
+        const coveredSlots = activeDay.slots.filter((slot) => (
+          slot.start >= range.start && slot.start < range.end
+        ));
+        if (!coveredSlots.length) return;
+        const firstSlot = coveredSlots[0];
+        const lastSlot = coveredSlots[coveredSlots.length - 1];
+        const startHour = firstSlot.hour + firstSlot.minute / 60;
+        const endHour = lastSlot.hour + (lastSlot.minute + 15) / 60;
+        const rangeEl = document.createElement("div");
+        rangeEl.className = "challenge-time-detail-opponent-range";
+        rangeEl.style.top = `${startHour * detailHourHeight}px`;
+        rangeEl.style.height = `${Math.max(26, (endHour - startHour) * detailHourHeight)}px`;
+        rangeEl.textContent = opponentAvailableLabel;
+        opponentLane.appendChild(rangeEl);
+      });
+      column.appendChild(opponentLane);
+
+      const slotsByClock = new Map(activeDay.slots.map((slot) => [`${slot.hour}:${slot.minute}`, slot]));
+      for (let hour = 0; hour < 24; hour += 1) {
+        const hourOptions = document.createElement("div");
+        hourOptions.className = "challenge-time-detail-hour-options";
+        hourOptions.style.top = `${hour * detailHourHeight}px`;
+        [0, 15, 30, 45].forEach((minute) => {
+          const slot = slotsByClock.get(`${hour}:${minute}`) || null;
+          const slotBtn = document.createElement("button");
+          slotBtn.type = "button";
+          slotBtn.className = `challenge-time-slot-btn${slot && selectedOptions.has(slot.id) ? " is-selected" : ""}`;
+          slotBtn.textContent = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+          slotBtn.disabled = !slot;
+          slotBtn.setAttribute("aria-pressed", slot && selectedOptions.has(slot.id) ? "true" : "false");
+          if (slot) {
+            slotBtn.addEventListener("click", () => {
+              if (!toggleSlot(slot)) return;
+              const isSelected = selectedOptions.has(slot.id);
+              slotBtn.classList.toggle("is-selected", isSelected);
+              slotBtn.setAttribute("aria-pressed", isSelected ? "true" : "false");
+            });
+          }
+          hourOptions.appendChild(slotBtn);
+        });
+        column.appendChild(hourOptions);
+      }
+      dayColumns.appendChild(column);
+
+      const upBtn = document.createElement("button");
+      upBtn.type = "button";
+      upBtn.className = "challenge-calendar-scroll-btn challenge-time-window-arrow is-up";
+      upBtn.setAttribute("aria-label", "Move period one hour earlier");
+      upBtn.textContent = "↑";
+      shell.appendChild(upBtn);
+      const downBtn = document.createElement("button");
+      downBtn.type = "button";
+      downBtn.className = "challenge-calendar-scroll-btn challenge-time-window-arrow is-down";
+      downBtn.setAttribute("aria-label", "Move period one hour later");
+      downBtn.textContent = "↓";
+      shell.appendChild(downBtn);
+      const updateWindowMeta = () => {
+        detailRange.textContent = `${String(windowStartHour).padStart(2, "0")}:00–${String(windowStartHour + 6).padStart(2, "0")}:00`;
+        upBtn.disabled = windowStartHour <= 0;
+        downBtn.disabled = windowStartHour >= 18;
+      };
+      const syncWindowPosition = () => {
+        windowStartHour = Math.max(0, Math.min(18, Math.round(scroller.scrollTop / detailHourHeight)));
+        updateWindowMeta();
+      };
+      let scrollFrame = null;
+      scroller.addEventListener("scroll", () => {
+        if (scrollFrame !== null) window.cancelAnimationFrame(scrollFrame);
+        scrollFrame = window.requestAnimationFrame(() => {
+          scrollFrame = null;
+          syncWindowPosition();
+        });
+      }, { passive: true });
+      upBtn.addEventListener("click", () => {
+        windowStartHour = Math.max(0, windowStartHour - 1);
+        updateWindowMeta();
+        scroller.scrollTo({ top: windowStartHour * detailHourHeight, behavior: "smooth" });
+      });
+      downBtn.addEventListener("click", () => {
+        windowStartHour = Math.min(18, windowStartHour + 1);
+        updateWindowMeta();
+        scroller.scrollTo({ top: windowStartHour * detailHourHeight, behavior: "smooth" });
+      });
+      detailCalendarWrap.appendChild(shell);
+      scroller.scrollTop = windowStartHour * detailHourHeight;
+      syncWindowPosition();
+    };
+    const showOverview = (options = {}) => {
+      if (options.restoreSelection && selectionBeforeDetail instanceof Set) {
+        selectedOptions.clear();
+        selectionBeforeDetail.forEach((value) => selectedOptions.add(value));
+      }
+      selectionBeforeDetail = null;
+      detailSelectionIds = new Set();
+      activeDay = null;
+      detail.hidden = true;
+      overview.hidden = false;
+      selectBtn.textContent = "Select";
+      cancelBtn.textContent = "Cancel";
+      setMessage("", "");
+      updateSelectionMeta();
+      renderOverview();
+    };
+    const closeDialog = () => {
+      document.removeEventListener("keydown", onKeyDown);
+      overlay.remove();
+    };
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      if (!detail.hidden) showOverview({ restoreSelection: true });
+      else closeDialog();
+    };
+
+    cancelBtn.addEventListener("click", () => {
+      if (!detail.hidden) {
+        showOverview({ restoreSelection: true });
+        return;
+      }
+      closeDialog();
+    });
+    selectBtn.addEventListener("click", () => {
+      if (!detail.hidden) {
+        showOverview();
+        return;
+      }
+      if (!selectedOptions.size) {
+        setMessage("Select at least one time option.", "error");
+        return;
+      }
+      const result = Array.from(selectedOptions).sort((left, right) => Date.parse(left) - Date.parse(right));
+      if (typeof onSelect === "function") onSelect(result);
+      closeDialog();
+    });
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeDialog();
+    });
+    document.addEventListener("keydown", onKeyDown);
+
+    if (!days.length) {
+      setMessage("This Challenge period has no selectable 15-minute time options.", "error");
+    }
+    renderOverview();
+    updateSelectionMeta();
+    document.body.appendChild(overlay);
+    dialog.focus({ preventScroll: true });
+  }
+
   function mapChallengeRequestCandidateToOption(candidate) {
     const playerId = String(candidate?.player_id || "").trim();
     return {
@@ -6326,6 +7305,12 @@
       association_name: String(candidate?.association?.name || "").trim(),
       flag: String(candidate?.association?.flag || "").trim(),
       timezone: String(candidate?.association?.timezone || "UTC").trim() || "UTC",
+      availability: (Array.isArray(candidate?.availability) ? candidate.availability : [])
+        .map((range) => ({
+          start_utc: String(range?.start_utc || "").trim(),
+          end_utc: String(range?.end_utc || "").trim(),
+        }))
+        .filter((range) => range.start_utc && range.end_utc),
       bga_elo: candidate?.bga_elo ?? null,
       gg_elo: candidate?.gg_elo ?? null,
       gg_rank: candidate?.gg_rank ?? null,
@@ -6406,14 +7391,11 @@
         placeholderLabel: "Select player",
         onChange: (nextValue) => {
           selectedOpponent = profileById.get(String(nextValue || "").trim()) || null;
-          updateAllLocalTimes();
+          renderSelectedTimeOptions();
         },
       });
       addChallengeFormRow(form, "Opponent", opponentDropdown.root, { required: true });
 
-      const minTime = toDatetimeLocalFromUtc(period?.play_starts_at);
-      const maxTime = toDatetimeLocalFromUtc(period?.play_ends_at);
-      const timeLocalRows = [];
       const createLocalLine = (player, timeUtc) => {
         const line = document.createElement("span");
         line.className = "challenge-request-local-line";
@@ -6429,36 +7411,50 @@
         line.appendChild(text);
         return line;
       };
-      const refreshLocalRow = (input, local) => {
-        local.innerHTML = "";
-        const timeUtc = toUtcIsoFromDatetimeLocal(input.value);
-        if (!timeUtc) return;
-        local.appendChild(createLocalLine(currentOption, timeUtc));
-        if (selectedOpponent) {
-          local.appendChild(createLocalLine(selectedOpponent, timeUtc));
-        }
-      };
-      const updateAllLocalTimes = () => {
-        timeLocalRows.forEach(({ input, local }) => refreshLocalRow(input, local));
-      };
-      const timeInputs = [1, 2, 3].map((number) => {
-        const input = document.createElement("input");
-        input.type = "datetime-local";
-        input.min = minTime;
-        input.max = maxTime;
-        input.required = number === 1;
-        const row = addChallengeFormRow(form, `Time option ${number}, UTC`, input, { required: number === 1 });
-        const local = document.createElement("div");
-        local.className = "challenge-request-local-time";
-        row.appendChild(local);
-        const refreshLocal = () => {
-          refreshLocalRow(input, local);
-        };
-        input.addEventListener("input", refreshLocal);
-        input.addEventListener("change", refreshLocal);
-        timeLocalRows.push({ input, local });
-        return input;
+      let selectedTimeOptions = [];
+      const timeOptionsControl = document.createElement("div");
+      timeOptionsControl.className = "challenge-time-options-control";
+      const timeOptionsSummary = document.createElement("div");
+      timeOptionsSummary.className = "challenge-time-options-summary";
+      timeOptionsControl.appendChild(timeOptionsSummary);
+      const timeOptionsBtn = document.createElement("button");
+      timeOptionsBtn.type = "button";
+      timeOptionsBtn.className = "challenge-btn challenge-btn-primary challenge-time-options-button";
+      timeOptionsControl.appendChild(timeOptionsBtn);
+      addChallengeFormRow(form, "Time options", timeOptionsControl, { required: true });
+      let submitBtn = null;
+
+      function renderSelectedTimeOptions() {
+        const hasSelectedTime = selectedTimeOptions.length > 0;
+        timeOptionsSummary.innerHTML = "";
+        selectedTimeOptions.forEach((timeUtc) => {
+          const item = document.createElement("div");
+          item.className = "challenge-time-option-summary";
+          item.appendChild(createLocalLine(currentOption, timeUtc));
+          if (selectedOpponent) item.appendChild(createLocalLine(selectedOpponent, timeUtc));
+          timeOptionsSummary.appendChild(item);
+        });
+        timeOptionsBtn.classList.toggle("challenge-btn-primary", !hasSelectedTime);
+        timeOptionsBtn.classList.toggle("challenge-btn-secondary", hasSelectedTime);
+        timeOptionsBtn.textContent = hasSelectedTime
+          ? "Change time option"
+          : "Select time option";
+        if (submitBtn) submitBtn.disabled = !hasSelectedTime;
+      }
+      timeOptionsBtn.addEventListener("click", () => {
+        openChallengeTimeOptionsDialog(
+          period,
+          selectedTimeOptions,
+          currentOption,
+          selectedOpponent,
+          (nextOptions) => {
+            selectedTimeOptions = nextOptions;
+            renderSelectedTimeOptions();
+            setMessage("", "");
+          }
+        );
       });
+      renderSelectedTimeOptions();
 
       const formatWrap = document.createElement("div");
       formatWrap.className = "challenge-request-formats";
@@ -6491,10 +7487,11 @@
 
       const actions = document.createElement("div");
       actions.className = "challenge-request-actions";
-      const submitBtn = document.createElement("button");
+      submitBtn = document.createElement("button");
       submitBtn.type = "submit";
       submitBtn.className = "challenge-btn challenge-btn-primary";
       submitBtn.textContent = "Send invite";
+      submitBtn.disabled = selectedTimeOptions.length === 0;
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";
       cancelBtn.className = "challenge-btn challenge-btn-secondary";
@@ -6516,12 +7513,10 @@
         return baseMessage;
       };
       const setSaving = (isSaving) => {
-        submitBtn.disabled = !!isSaving;
+        submitBtn.disabled = !!isSaving || selectedTimeOptions.length === 0;
         cancelBtn.disabled = !!isSaving;
         opponentDropdown.setDisabled(!!isSaving);
-        timeInputs.forEach((input) => {
-          input.disabled = !!isSaving;
-        });
+        timeOptionsBtn.disabled = !!isSaving;
         bo3Input.disabled = !!isSaving;
         bo5Input.disabled = !!isSaving;
         commentInput.disabled = !!isSaving;
@@ -6531,7 +7526,7 @@
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const player2Id = opponentDropdown.getValue();
-        const timeOptionValues = timeInputs.map((input) => toUtcIsoFromDatetimeLocal(input.value));
+        const timeOptionValues = selectedTimeOptions.slice(0, 3);
         if (!player2Id) {
           setMessage("Choose an opponent.", "error");
           return;
@@ -6541,11 +7536,7 @@
           return;
         }
         if (!timeOptionValues[0]) {
-          setMessage("First time option is required.", "error");
-          return;
-        }
-        if (timeOptionValues[2] && !timeOptionValues[1]) {
-          setMessage("Second time option is required before adding a third option.", "error");
+          setMessage("Select at least one time option.", "error");
           return;
         }
         const filledTimes = timeOptionValues.filter(Boolean);
@@ -7374,31 +8365,14 @@
         .sort(compareOpponentsByStatusUpdatedAt);
       const item = opponentPanels.get(periodId);
       if (!item || item.panel !== panel) return;
-      const currentPlayer = data?.current_player || null;
-      const currentPlayerId = String(currentPlayer?.player_id || "").trim();
-      const shouldShowCurrentPlayer = !!currentPlayerId
-        && String(currentPlayer?.period_status || period?.player_status || "").trim() === "available"
-        && !currentPlayer?.is_match_limit_reached;
-      const prependCurrentPlayer = (opponents) => {
-        const list = Array.isArray(opponents) ? opponents : [];
-        if (!shouldShowCurrentPlayer) return list;
-        return [
-          {
-            ...currentPlayer,
-            is_current_player: true,
-            can_invite: false,
-            pending_request_id: null,
-          },
-          ...list.filter((opponent) => String(opponent?.player_id || "").trim() !== currentPlayerId),
-        ];
-      };
-      const availableOpponents = (Array.isArray(data?.available_opponents) ? data.available_opponents : [])
-        .filter((opponent) => !opponent?.pending_request_id);
-      item.currentPlayer = currentPlayer;
+      item.currentPlayer = data?.current_player || null;
       item.eligibility = data?.eligibility || {};
       item.opponentsByView = {
-        available: enrichOpponents(prependCurrentPlayer(availableOpponents)),
-        all: enrichOpponents(prependCurrentPlayer(data?.all_players)),
+        available: enrichOpponents(
+          (Array.isArray(data?.available_opponents) ? data.available_opponents : [])
+            .filter((opponent) => !opponent?.pending_request_id)
+        ),
+        all: enrichOpponents(Array.isArray(data?.all_players) ? data.all_players : []),
       };
       item.baseLoaded = true;
       item.baseSettled = true;

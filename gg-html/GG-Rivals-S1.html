@@ -1243,6 +1243,12 @@
     overflow-wrap: anywhere;
     font-variant-numeric: tabular-nums;
   }
+  .rivals-bounty-calculation-adjustment {
+    color: #740012;
+  }
+  .rivals-bounty-calculation-step__formula .rivals-bounty-calculation-adjustment {
+    font-weight: 700;
+  }
   .rivals-bounty-calculation-details-button {
     margin-top: 7px;
     min-height: 22px;
@@ -2115,6 +2121,13 @@
     return String(Number(number.toFixed(maximumDigits)));
   }
 
+  function createRivalsCalculationAdjustment(value) {
+    const adjustment = document.createElement("span");
+    adjustment.className = "rivals-bounty-calculation-adjustment";
+    adjustment.textContent = value;
+    return adjustment;
+  }
+
   function createRivalsBountyCalculationStep(index, title, text, formula, detailsContent = null) {
     const step = document.createElement("div");
     step.className = "rivals-bounty-calculation-step";
@@ -2132,13 +2145,21 @@
 
     const textElement = document.createElement("div");
     textElement.className = "rivals-bounty-calculation-step__text";
-    textElement.textContent = text;
+    if (Array.isArray(text)) {
+      textElement.append(...text);
+    } else {
+      textElement.textContent = text;
+    }
     content.appendChild(textElement);
 
     if (formula) {
       const formulaElement = document.createElement("div");
       formulaElement.className = "rivals-bounty-calculation-step__formula";
-      formulaElement.textContent = formula;
+      if (Array.isArray(formula)) {
+        formulaElement.append(...formula);
+      } else {
+        formulaElement.textContent = formula;
+      }
       content.appendChild(formulaElement);
     }
 
@@ -2304,7 +2325,9 @@
 
     const steps = document.createElement("div");
     steps.className = "rivals-bounty-calculation-steps";
-    const smoothingDenominator = games + (2 * smoothing);
+    const smoothingDenominatorAdjustment = 2 * smoothing;
+    const smoothingDisplay = formatRivalsCalculationNumber(smoothing, 1);
+    const smoothingDenominatorAdjustmentDisplay = formatRivalsCompactDecimal(smoothingDenominatorAdjustment);
     steps.appendChild(createRivalsBountyCalculationStep(
       1,
       "Tournament result",
@@ -2314,8 +2337,20 @@
     steps.appendChild(createRivalsBountyCalculationStep(
       2,
       "Smoothed win rate",
-      "A small adjustment keeps very early results from being treated as fully reliable.",
-      `(${formatRivalsCalculationNumber(wins, 0)} + ${formatRivalsCalculationNumber(smoothing, 1)}) ÷ ${formatRivalsCalculationNumber(smoothingDenominator, 1)} = ${formatRivalsCalculationNumber(smoothedWinRate * 100, 2)}%`
+      [
+        "This is the regular win rate with a small adjustment (",
+        createRivalsCalculationAdjustment(smoothingDisplay),
+        " and ",
+        createRivalsCalculationAdjustment(smoothingDenominatorAdjustmentDisplay),
+        ") that keeps very early results from being treated as fully reliable.",
+      ],
+      [
+        `(${formatRivalsCalculationNumber(wins, 0)} + `,
+        createRivalsCalculationAdjustment(smoothingDisplay),
+        `) ÷ (${formatRivalsCalculationNumber(games, 0)} + `,
+        createRivalsCalculationAdjustment(smoothingDenominatorAdjustmentDisplay),
+        `) = ${formatRivalsCalculationNumber(smoothedWinRate * 100, 2)}%`,
+      ]
     ));
     steps.appendChild(createRivalsBountyCalculationStep(
       3,
@@ -4405,7 +4440,7 @@
     if (isBountyTprStandings) {
       explanation = document.createElement("div");
       explanation.className = "standings-order-info";
-      explanation.innerHTML = "<br>MP: Matches Played &nbsp; MW: Matches Won &nbsp; ML: Matches Lost &nbsp; Points: Bounty Points × 100";
+      explanation.innerHTML = "<br>MP: Matches Played &nbsp; MW: Matches Won &nbsp; ML: Matches Lost &nbsp; Points: Σ Defeated Opponents Bounty + My Bounty";
       container.appendChild(explanation);
     } else if (tournament && tournament.type === "TEAM") {
       explanation = document.createElement("div");

@@ -537,6 +537,9 @@
     min-width: 100%;
     overflow: visible;
   }
+  .fullscreen-content .sim-table {
+    overflow: visible;
+  }
 
   /* Player match list (click-to-toggle) */
   .player-row {
@@ -650,7 +653,8 @@
   .sim-select-menu {
     position: absolute;
     left: 0;
-    bottom: calc(100% + 4px);
+    top: calc(100% + 4px);
+    bottom: auto;
     width: auto;
     min-width: 100%;
     max-height: 0;
@@ -692,7 +696,6 @@
   .sim-pending .sim-select-btn { background-color: #ffeaea; border-color: transparent; box-shadow: none; }
   .sim-win .sim-select-btn { background-color: #e7f6e7; border-color: transparent; box-shadow: none; }
   .sim-loss .sim-select-btn { background-color: #ffeaea; border-color: transparent; box-shadow: none; }
-  .sim-select-menu.drop-down { bottom: auto; top: calc(100% + 4px); }
 
   /* Header row above tables (title on left, view toggle on right) */
   .section-header {
@@ -1668,6 +1671,7 @@
             duels_difference: row.ddif ?? 0,
             games_difference: row.gdif ?? 0,
             standing_icon: row.standing_icon || null,
+            position_override: row.position_override ?? null,
             position: row.position_override ?? row.position ?? null
           };
         });
@@ -1817,10 +1821,9 @@
         document.querySelectorAll(".accordion-toggle[data-should-open='true']").forEach(toggle => {
           const content = toggle.nextElementSibling;
           toggle.classList.add("open");
-          content.style.maxHeight = content.scrollHeight + "px";
+          content.style.maxHeight = "none";
           toggle.removeAttribute("data-should-open");
           content.removeAttribute("data-should-open");
-          openAccordion = content;
         });
       } else if (tabId === "stage1") {
         document.getElementById("tab-stage1-content").style.display = "block";
@@ -2515,6 +2518,56 @@
       return statsMap;
     }
 
+    function buildTeamTiebreakStatsForGroup(groupTeams, groupKey) {
+      const statsMap = new Map();
+      const facedOpponents = new Map();
+
+      const addOpponent = (team, opponent) => {
+        if (!team || !opponent || team === opponent) return;
+        const set = facedOpponents.get(team) || new Set();
+        set.add(opponent);
+        facedOpponents.set(team, set);
+      };
+
+      groupTeams.forEach(team => {
+        const key = String(team?.team || '');
+        if (!key) return;
+        statsMap.set(key, {
+          mw: Number(team.matches_won) || 0,
+          dw: Number(team.duels_won) || 0,
+          dl: Number(team.duels_lost) || 0,
+          gw: Number(team.games_won) || 0,
+          gl: Number(team.games_lost) || 0,
+          omw: 0,
+          odd: 0,
+          odw: 0
+        });
+      });
+
+      (matches || []).forEach(match => {
+        if (!match || match.tournament_id !== tournamentId) return;
+        if (!isStageMatch(match.stage || null)) return;
+        if (groupKey && match.group && match.group !== groupKey) return;
+        if (!statsMap.has(match.team1) || !statsMap.has(match.team2)) return;
+        if (!valueHasScore(match.duels_won1) || !valueHasScore(match.duels_won2)) return;
+        addOpponent(match.team1, match.team2);
+        addOpponent(match.team2, match.team1);
+      });
+
+      statsMap.forEach((stat, key) => {
+        const opponents = facedOpponents.get(key) || new Set();
+        opponents.forEach(opponentKey => {
+          const opponent = statsMap.get(opponentKey);
+          if (!opponent) return;
+          stat.omw += opponent.mw;
+          stat.odd += opponent.dw - opponent.dl;
+          stat.odw += opponent.dw;
+        });
+      });
+
+      return statsMap;
+    }
+
     function extractPositionValue(raw) {
       if (raw === null || raw === undefined) return null;
       const str = String(raw).trim();
@@ -2531,7 +2584,7 @@
       const positioned = [];
 
       sortedPlayers.forEach((player, idx) => {
-        const pos = extractPositionValue(player?.position);
+        const pos = extractPositionValue(player?.position_override);
         if (pos !== null) {
           positioned.push({ player, pos, idx });
         }
@@ -2759,24 +2812,27 @@
 
       section.appendChild(headerRow);
 
-      // Sort logic: for TEAM, sort by MW, then DW-DL, then GW-GL; for individual by MW, then GW-GL, then GW
+      // Sort logic: for TEAM, use the Asian Cup tiebreakers; for individual use the format-specific rules.
       if (isTeam) {
+        const derivedStats = buildTeamTiebreakStatsForGroup(groupPlayers, group);
         groupPlayers.sort((a, b) => {
-          // MW
-          const mwDiff = +b.matches_won - +a.matches_won;
+          const aStat = derivedStats.get(String(a.team || '')) || {};
+          const bStat = derivedStats.get(String(b.team || '')) || {};
+          const mwDiff = (bStat.mw || 0) - (aStat.mw || 0);
           if (mwDiff !== 0) return mwDiff;
-          // DW - DL
-          const duelDiffA = (+a.duels_won || 0) - (+a.duels_lost || 0);
-          const duelDiffB = (+b.duels_won || 0) - (+b.duels_lost || 0);
-          const ddDiff = duelDiffB - duelDiffA;
+          const ddDiff = ((bStat.dw || 0) - (bStat.dl || 0)) - ((aStat.dw || 0) - (aStat.dl || 0));
           if (ddDiff !== 0) return ddDiff;
-          // GW - GL
-          const gameDiffA = (+a.games_won || 0) - (+a.games_lost || 0);
-          const gameDiffB = (+b.games_won || 0) - (+b.games_lost || 0);
-          const gdDiff = gameDiffB - gameDiffA;
+          const dwDiff = (bStat.dw || 0) - (aStat.dw || 0);
+          if (dwDiff !== 0) return dwDiff;
+          const gdDiff = ((bStat.gw || 0) - (bStat.gl || 0)) - ((aStat.gw || 0) - (aStat.gl || 0));
           if (gdDiff !== 0) return gdDiff;
-          // GW
-          return (+b.games_won || 0) - (+a.games_won || 0);
+          const gwDiff = (bStat.gw || 0) - (aStat.gw || 0);
+          if (gwDiff !== 0) return gwDiff;
+          const omwDiff = (bStat.omw || 0) - (aStat.omw || 0);
+          if (omwDiff !== 0) return omwDiff;
+          const oddDiff = (bStat.odd || 0) - (aStat.odd || 0);
+          if (oddDiff !== 0) return oddDiff;
+          return (bStat.odw || 0) - (aStat.odw || 0);
         });
       } else {
         const derivedStats = buildDerivedStatsForGroup(groupPlayers, group);
@@ -3007,7 +3063,7 @@
       renderStandingsTable();
 
       const standingsColumns = isTeam
-        ? ['MP','MW','ML','DW','DL','GW','GL']
+        ? ['MP','MW','DD','DW','GD','GW','OMW','ODD','ODW']
         : (isSwissStandings ? ['MP','MW','ML','GW','GL','OMW','OGD','OGW'] : ['MP','MW','ML','GW','GL']);
       fullViewBtn.addEventListener('click', () => {
         openTableFullscreen({
@@ -3051,17 +3107,18 @@
     let explanation = null;
     if (tournament && tournament.type === "TEAM") {
       explanation = document.createElement("div");
-      explanation.style.fontSize = "13px";
+      explanation.className = "standings-order-info";
       explanation.innerHTML = `
         <p>MP: Matches Played MW: Matches Won ML: Matches Lost DW: Duels Won DL: Duels Lost GW: Games Won GL: Games Lost</p>
         <p>The final positions in the group will be determined in the following order:<br>
-          1. Number of MW<br>
-          2. The difference between DW and DL<br>
-          3. The difference between GW and GL<br>
-          4. Number of GW<br>
-          5. Tiebreakers 1–4, but applied only to confrontations between players with equal results<br>
-          6. The difference in points scored in confrontations between players with equal results<br>
-        7. Random draw
+          1. MW (Matches Won) — number of team matches won.<br>
+          2. DD (Duels Difference) — difference between Duels Won and Duels Lost.<br>
+          3. DW (Duels Won) — total number of duels won.<br>
+          4. GD (Games Difference) — difference between Games Won and Games Lost.<br>
+          5. GW (Games Won) — total number of games won.<br>
+          6. OMW (Opponents’ Matches Won) — total number of team matches won by all opponents faced during the Group Stage.<br>
+          7. ODD (Opponents’ Duels Difference) — combined difference between DW and DL of all opponents faced during the Group Stage.<br>
+          8. ODW (Opponents’ Duels Won) — total number of duels won by all opponents faced during the Group Stage.
         </p>
       `;
       container.appendChild(explanation);
@@ -3191,14 +3248,13 @@
       });
 
     // --- BEGIN: Determine which round to open by default ---
-    const forceOpenFirstIncomplete = options.openFirstIncompleteRound === true;
-    const hasOpenRound = tournament.status === "In progress";
+    const shouldOpenFirstIncomplete = options.openFirstIncompleteRound !== false;
     let roundToOpen = null;
     const groupedRounds = Object.keys(groupedByRound).sort(compareRoundValues);
-    if (forceOpenFirstIncomplete || hasOpenRound) {
+    if (shouldOpenFirstIncomplete) {
       for (const round of groupedRounds) {
         const roundMatches = groupedByRound[round];
-        if (roundMatches.some(m => m.status !== "DONE")) {
+        if (roundMatches.some(m => String(m.status || '').trim().toUpperCase() !== "DONE")) {
           roundToOpen = round;
           break;
         }
@@ -3206,7 +3262,29 @@
     }
     // --- END: Determine open round ---
 
-    let openAccordion = null;
+    const closeRound = (roundToggle, roundContent) => {
+      if (!roundToggle || !roundContent) return;
+      roundContent.style.maxHeight = `${roundContent.scrollHeight}px`;
+      roundContent.getBoundingClientRect();
+      requestAnimationFrame(() => {
+        roundContent.style.maxHeight = "0px";
+        roundToggle.classList.remove("open");
+      });
+    };
+
+    const openRound = (roundToggle, roundContent) => {
+      if (!roundToggle || !roundContent) return;
+      roundToggle.classList.add("open");
+      roundContent.style.maxHeight = `${roundContent.scrollHeight}px`;
+      const onTransitionEnd = (event) => {
+        if (event.target !== roundContent || event.propertyName !== "max-height") return;
+        roundContent.removeEventListener("transitionend", onTransitionEnd);
+        if (roundToggle.classList.contains("open")) {
+          roundContent.style.maxHeight = "none";
+        }
+      };
+      roundContent.addEventListener("transitionend", onTransitionEnd);
+    };
 
     for (const round of groupedRounds) {
       const roundMatches = groupedByRound[round];
@@ -3368,24 +3446,38 @@
           if (lineupDiv && iconCell) {
             iconCell.style.cursor = "pointer";
             iconCell.addEventListener("click", () => {
-              // Use offsetHeight to determine expanded state for first click
-              const isExpanded = lineupDiv.offsetHeight > 0;
-              if (isExpanded) {
-                lineupDiv.style.height = "0px";
-                lineupDiv.style.opacity = "0";
-                lineupDiv.style.padding = "0";
-              } else {
-                lineupDiv.style.height = (lineupDiv.scrollHeight + 20) + "px"; // include 10px top + 10px bottom padding
-                lineupDiv.style.opacity = "1";
-                lineupDiv.style.padding = "10px 0";
-              }
-              // Update accordion-content maxHeight after transition
               const accordionContent = iconCell.closest(".accordion-content");
               if (accordionContent) {
-                setTimeout(() => {
-                  accordionContent.style.maxHeight = accordionContent.scrollHeight + "px";
-                }, 310); // match transition duration
+                accordionContent.style.maxHeight = "none";
               }
+
+              const isExpanded = lineupDiv.classList.contains("open");
+              if (isExpanded) {
+                lineupDiv.style.height = `${lineupDiv.scrollHeight}px`;
+                requestAnimationFrame(() => {
+                  lineupDiv.style.height = "0px";
+                  lineupDiv.style.opacity = "0";
+                  lineupDiv.style.padding = "0";
+                  lineupDiv.classList.remove("open");
+                });
+                return;
+              }
+
+              lineupDiv.style.height = "0px";
+              lineupDiv.style.opacity = "0";
+              lineupDiv.style.padding = "10px 0";
+              lineupDiv.classList.add("open");
+              requestAnimationFrame(() => {
+                lineupDiv.style.height = `${lineupDiv.scrollHeight}px`;
+                lineupDiv.style.opacity = "1";
+              });
+              lineupDiv.addEventListener("transitionend", function handler(event) {
+                if (event.target !== lineupDiv || event.propertyName !== "height") return;
+                if (lineupDiv.classList.contains("open")) {
+                  lineupDiv.style.height = "auto";
+                }
+                lineupDiv.removeEventListener("transitionend", handler);
+              });
             });
           }
           // --- END: Add toggle functionality ---
@@ -3424,7 +3516,7 @@
       container.appendChild(section);
 
       // --- BEGIN: Open the first unfinished round ---
-      if ((forceOpenFirstIncomplete || hasOpenRound) && round === roundToOpen) {
+      if (round === roundToOpen) {
         toggle.dataset.shouldOpen = "true";
         content.dataset.shouldOpen = "true";
       }
@@ -3434,26 +3526,16 @@
         // Close all other open toggles
         document.querySelectorAll(".accordion-toggle.open").forEach(openToggle => {
           if (openToggle !== toggle) {
-            openToggle.classList.remove("open");
             const openContent = openToggle.nextElementSibling;
-            if (openContent) openContent.style.maxHeight = "0px";
+            closeRound(openToggle, openContent);
           }
         });
         const isOpen = toggle.classList.contains("open");
 
-        if (openAccordion && openAccordion !== content) {
-          openAccordion.style.maxHeight = "0px";
-          openAccordion.previousElementSibling.classList.remove("open");
-        }
-
         if (isOpen) {
-          content.style.maxHeight = "0px";
-          toggle.classList.remove("open");
-          openAccordion = null;
+          closeRound(toggle, content);
         } else {
-          content.style.maxHeight = content.scrollHeight + "px";
-          toggle.classList.add("open");
-          openAccordion = content;
+          openRound(toggle, content);
         }
       });
     }
@@ -4455,26 +4537,56 @@
     toolbar.appendChild(closeSimBtn);
     content.appendChild(toolbar);
 
+    const fullViewMetricsExplanation = document.createElement('div');
+    fullViewMetricsExplanation.className = 'standings-order-info';
+    fullViewMetricsExplanation.innerHTML = isTeam ? `
+      <p>
+        MP — Matches Played.<br>
+        MW — Matches Won.<br>
+        DD — Duels Difference (DW − DL).<br>
+        DW — Duels Won.<br>
+        GD — Games Difference (GW − GL).<br>
+        GW — Games Won.<br>
+        OMW — Opponents’ Matches Won.<br>
+        ODD — Opponents’ Duels Difference.<br>
+        ODW — Opponents’ Duels Won.
+      </p>
+    ` : '';
+
     const pairKey = (a, b) => [String(a), String(b)].sort().join('|');
-    const dropdownOptions = ['', '2-1', '2-0', '0-2', '1-2'];
+    const dropdownOptions = isTeam
+      ? ['', '5-0', '4-1', '3-2', '2-3', '1-4', '0-5']
+      : ['', '2-1', '2-0', '0-2', '1-2'];
     const simState = new Map();
     let pairCells = new Map();
     let eligibleCells = [];
     let openSimMenus = new Set();
 
     const participantOpponents = new Map();
-    const addOpp = (a, b) => {
+    const facedOpponents = new Map();
+    const addOpp = (map, a, b) => {
       if (!a || !b || a === b) return;
-      const set = participantOpponents.get(a) || new Set();
+      const set = map.get(a) || new Set();
       set.add(b);
-      participantOpponents.set(a, set);
+      map.set(a, set);
     };
     if (isTeam) {
       (matches || [])
         .filter(m => m.tournament_id === tableTournamentId)
         .filter(m => isStageMatchLocal(m.stage || null))
         .filter(m => !group || !m.group || m.group === group)
-        .forEach(m => { addOpp(m.team1, m.team2); addOpp(m.team2, m.team1); });
+        .forEach(m => {
+          addOpp(participantOpponents, m.team1, m.team2);
+          addOpp(participantOpponents, m.team2, m.team1);
+          const hasResult = (
+            m.duels_won1 !== null && m.duels_won1 !== undefined && String(m.duels_won1).trim() !== '' &&
+            m.duels_won2 !== null && m.duels_won2 !== undefined && String(m.duels_won2).trim() !== ''
+          );
+          if (hasResult) {
+            addOpp(facedOpponents, m.team1, m.team2);
+            addOpp(facedOpponents, m.team2, m.team1);
+          }
+        });
     } else {
       (duels || [])
         .filter(m => m.tournament_id === tableTournamentId)
@@ -4483,7 +4595,8 @@
         .forEach(m => {
           const p1 = String(m.player1_id || '');
           const p2 = String(m.player2_id || '');
-          addOpp(p1, p2); addOpp(p2, p1);
+          addOpp(participantOpponents, p1, p2);
+          addOpp(participantOpponents, p2, p1);
         });
     }
 
@@ -4630,15 +4743,35 @@
       }
 
       const derived = new Map();
-      statsMap.forEach((st, key) => derived.set(key, { ...st, omw: 0, ogd: 0, ogw: 0 }));
+      statsMap.forEach((st, key) => derived.set(key, {
+        ...st,
+        omw: 0,
+        odd: 0,
+        odw: 0,
+        ogd: 0,
+        ogw: 0
+      }));
       derived.forEach((st, key) => {
-        const opps = participantOpponents.get(key) || new Set();
+        const opps = new Set(
+          (isTeam ? facedOpponents : participantOpponents).get(key) || []
+        );
+        if (isTeam && applySim) {
+          simState.forEach(res => {
+            if (res.a === key) opps.add(res.b);
+            else if (res.b === key) opps.add(res.a);
+          });
+        }
         opps.forEach(okey => {
           const o = derived.get(okey);
           if (!o) return;
           st.omw += o.mw;
-          st.ogd += (o.gw - o.gl);
-          st.ogw += o.gw;
+          if (isTeam) {
+            st.odd += (o.dw - o.dl);
+            st.odw += o.dw;
+          } else {
+            st.ogd += (o.gw - o.gl);
+            st.ogw += o.gw;
+          }
         });
       });
       return derived;
@@ -4744,9 +4877,17 @@
         if (isTeam) {
           const duelDiff = ((bStat.dw || 0) - (bStat.dl || 0)) - ((aStat.dw || 0) - (aStat.dl || 0));
           if (duelDiff !== 0) return duelDiff;
+          const dwDiff = (bStat.dw || 0) - (aStat.dw || 0);
+          if (dwDiff !== 0) return dwDiff;
           const gameDiff = ((bStat.gw || 0) - (bStat.gl || 0)) - ((aStat.gw || 0) - (aStat.gl || 0));
           if (gameDiff !== 0) return gameDiff;
-          return (bStat.gw || 0) - (aStat.gw || 0);
+          const gwDiff = (bStat.gw || 0) - (aStat.gw || 0);
+          if (gwDiff !== 0) return gwDiff;
+          const omwDiff = (bStat.omw || 0) - (aStat.omw || 0);
+          if (omwDiff !== 0) return omwDiff;
+          const oddDiff = (bStat.odd || 0) - (aStat.odd || 0);
+          if (oddDiff !== 0) return oddDiff;
+          return (bStat.odw || 0) - (aStat.odw || 0);
         }
         const gdDiff = ((bStat.gw || 0) - (bStat.gl || 0)) - ((aStat.gw || 0) - (aStat.gl || 0));
         if (gdDiff !== 0) return gdDiff;
@@ -4878,7 +5019,6 @@
       const headerRow = buildHeader();
       tbl.appendChild(headerRow);
 
-      const totalRows = sortedPlayers.length;
       sortedPlayers.forEach((rowData, idx) => {
         const tr = document.createElement('tr');
         const rowKey = isTeam ? rowData.team : String(rowData.player_id);
@@ -4931,10 +5071,18 @@
         tr.appendChild(tdName);
 
         const st = derivedStats.get(rowKey) || {};
-        const mapVal = { MP: 'mp', MW: 'mw', ML: 'ml', DW: 'dw', DL: 'dl', GW: 'gw', GL: 'gl', OMW: 'omw', OGD: 'ogd', OGW: 'ogw' };
+        const mapVal = {
+          MP: 'mp', MW: 'mw', ML: 'ml', DW: 'dw', DL: 'dl', GW: 'gw', GL: 'gl',
+          OMW: 'omw', ODD: 'odd', ODW: 'odw', OGD: 'ogd', OGW: 'ogw'
+        };
         standingsColumns.forEach(lbl => {
           const td = document.createElement('td');
-          td.textContent = String(st[mapVal[lbl]] ?? '');
+          const value = lbl === 'DD'
+            ? (Number(st.dw) || 0) - (Number(st.dl) || 0)
+            : lbl === 'GD'
+              ? (Number(st.gw) || 0) - (Number(st.gl) || 0)
+              : st[mapVal[lbl]];
+          td.textContent = String(value ?? '');
           tr.appendChild(td);
         });
 
@@ -4978,9 +5126,6 @@
             btn.appendChild(chevron);
             const menu = document.createElement('div');
             menu.className = 'sim-select-menu';
-            if (idx < totalRows - 5) {
-              menu.classList.add('drop-down');
-            }
             dropdownOptions.forEach(opt => {
               const optEl = document.createElement('div');
               optEl.className = 'sim-select-option';
@@ -5010,6 +5155,17 @@
                 menu.style.maxHeight = `${menu.scrollHeight}px`;
                 btn.classList.add('open');
                 openSimMenus.add(menu);
+                requestAnimationFrame(() => {
+                  const contentRect = content.getBoundingClientRect();
+                  const menuRect = menu.getBoundingClientRect();
+                  const bottomGap = 12;
+                  if (menuRect.bottom > contentRect.bottom - bottomGap) {
+                    content.scrollBy({
+                      top: menuRect.bottom - contentRect.bottom + bottomGap,
+                      behavior: 'smooth'
+                    });
+                  }
+                });
               }
             });
             wrapper.appendChild(btn);
@@ -5074,6 +5230,7 @@
       });
 
       content.appendChild(tbl);
+      if (isTeam) content.appendChild(fullViewMetricsExplanation);
     }
 
     function startSimulator() {
