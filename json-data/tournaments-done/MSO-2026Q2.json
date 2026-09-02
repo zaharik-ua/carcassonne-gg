@@ -1,1 +1,1 @@
-{"message":"<HttpError 503 when requesting https://sheets.googleapis.com/v4/spreadsheets/13b2NOXPCbvAaFgMBm1VaOlptWGaiENlHHN_VGjNpirE/values/Matches%21B%3AZ?alt=json returned \"The service is currently unavailable.\". Details: \"The service is currently unavailable.\">","status":"error"}
+{"message":"<HttpError 503 when requesting https://sheets.googleapis.com/v4/spreadsheets/13b2NOXPCbvAaFgMBm1VaOlptWGaiENlHHN_VGjNpirE/values/Duels%21B%3AAA?alt=json returned \"The service is currently unavailable.\". Details: \"The service is currently unavailable.\">","status":"error"}
