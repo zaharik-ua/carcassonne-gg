@@ -355,3 +355,109 @@ test("organizer API completes a Swiss round for 4, 5 and 8 participants", async 
     assert.equal(completed.data.standings.rows.length, participantCount);
   }
 });
+
+test("organizer API previews late entry and rolls back exactly the active Swiss round", async (t) => {
+  const { baseUrl, first } = await startApi(t);
+  const participantIds = [];
+  for (let index = 0; index < 5; index += 1) {
+    const created = await api(baseUrl, `/in-person-tournaments/${first.id}/participants`, {
+      userId: 1,
+      method: "POST",
+      body: JSON.stringify({ name_en: `Late API Player ${index + 1}`, association_id: "UKR" }),
+    });
+    assert.equal(created.response.status, 201);
+    participantIds.push(created.data.participant.id);
+  }
+  await api(baseUrl, `/in-person-tournaments/${first.id}/start-check-in`, {
+    userId: 1,
+    method: "POST",
+    body: "{}",
+  });
+  for (let index = 0; index < participantIds.length; index += 1) {
+    const checkedIn = await api(
+      baseUrl,
+      `/in-person-tournaments/${first.id}/participants/${participantIds[index]}/check-in`,
+      {
+        userId: 1,
+        method: "PATCH",
+        body: JSON.stringify({ checked_in: true, draw_number: index + 2 }),
+      }
+    );
+    assert.equal(checkedIn.response.status, 200);
+  }
+  const confirmed = await api(
+    baseUrl,
+    `/in-person-tournaments/${first.id}/swiss/rounds/confirm`,
+    { userId: 1, method: "POST", body: JSON.stringify({ round_number: 1 }) }
+  );
+  assert.equal(confirmed.response.status, 200);
+  const round = confirmed.data.current_round;
+  const latePayload = {
+    name_en: "Late API Arrival",
+    association_id: "UKR",
+    mode: "pair_with_bye",
+    table_number: 9,
+    starting_participant: "late_participant",
+  };
+  const latePreview = await api(
+    baseUrl,
+    `/in-person-tournaments/${first.id}/participants/late/preview`,
+    { userId: 1, method: "POST", body: JSON.stringify(latePayload) }
+  );
+  assert.equal(latePreview.response.status, 200);
+  assert.equal(latePreview.data.preview.change.type, "replace_bye_with_match");
+  const lateConfirm = await api(
+    baseUrl,
+    `/in-person-tournaments/${first.id}/participants/late/confirm`,
+    {
+      userId: 1,
+      method: "POST",
+      body: JSON.stringify({
+        ...latePayload,
+        bye_match_id: latePreview.data.preview.bye_match.id,
+        expected_round_revision: latePreview.data.preview.round.revision,
+      }),
+    }
+  );
+  assert.equal(lateConfirm.response.status, 201);
+  assert.equal(lateConfirm.data.participant.is_late_entry, true);
+  assert.equal(lateConfirm.data.current_round.matches.some((match) => match.is_bye), false);
+
+  const inactive = await api(
+    baseUrl,
+    `/in-person-tournaments/${first.id}/participants/${participantIds[0]}/status`,
+    {
+      userId: 1,
+      method: "PATCH",
+      body: JSON.stringify({ status: "withdrawn", reason: "API draft no-show" }),
+    }
+  );
+  assert.equal(inactive.response.status, 200);
+  assert.equal(inactive.data.participant.status, "withdrawn");
+  assert.equal(inactive.data.resolution.type, "cancel_draft_round");
+
+  const cancellationPreview = await api(
+    baseUrl,
+    `/in-person-tournaments/${first.id}/swiss/rounds/${round.id}/cancellation-preview`,
+    { userId: 1 }
+  );
+  assert.equal(cancellationPreview.response.status, 200);
+  assert.equal(cancellationPreview.data.preview.round.id, round.id);
+  assert.equal(cancellationPreview.data.preview.completed_results_count, 0);
+  const cancelled = await api(
+    baseUrl,
+    `/in-person-tournaments/${first.id}/swiss/rounds/${round.id}/cancel`,
+    { userId: 1, method: "POST", body: JSON.stringify({ reason: "API recovery" }) }
+  );
+  assert.equal(cancelled.response.status, 200);
+  assert.equal(cancelled.data.cancelled, true);
+  assert.equal(cancelled.data.current_round, null);
+  assert.equal(cancelled.data.tournament.status, "check_in");
+
+  const forbidden = await api(
+    baseUrl,
+    `/in-person-tournaments/${first.id}/participants/late/preview`,
+    { userId: 2, method: "POST", body: JSON.stringify(latePayload) }
+  );
+  assert.equal(forbidden.response.status, 403);
+});

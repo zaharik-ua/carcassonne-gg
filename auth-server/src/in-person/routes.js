@@ -251,6 +251,29 @@ export function registerInPersonRoutes(app, {
     }, logger)
   );
   app.post(
+    "/in-person-tournaments/:tournamentId/participants/late/preview",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const preview = await inPersonService.previewLateParticipant(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.json({ ok: true, preview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/participants/late/confirm",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.confirmLateParticipant(
+        req.inPersonTournamentId,
+        req.body || {},
+        req.user
+      );
+      res.status(201).json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
     "/in-person-tournaments/:tournamentId/participants",
     requireInPersonTournamentAdmin,
     asyncHandler(async (req, res) => {
@@ -271,6 +294,18 @@ export function registerInPersonRoutes(app, {
         req.body || {}
       );
       res.json({ ok: true, participant });
+    }, logger)
+  );
+  app.patch(
+    "/in-person-tournaments/:tournamentId/participants/:participantId/status",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const result = await inPersonService.setParticipantInactive(
+        req.inPersonTournamentId,
+        req.params.participantId,
+        req.body || {}
+      );
+      res.json({ ok: true, ...result });
     }, logger)
   );
   app.delete(
@@ -355,6 +390,30 @@ export function registerInPersonRoutes(app, {
       const overview = await inPersonService.publishSwissRound(
         req.inPersonTournamentId,
         req.params.roundId
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.get(
+    "/in-person-tournaments/:tournamentId/swiss/rounds/:roundId/cancellation-preview",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const preview = await inPersonService.previewSwissRoundCancellation(
+        req.inPersonTournamentId,
+        req.params.roundId
+      );
+      res.json({ ok: true, preview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/swiss/rounds/:roundId/cancel",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.cancelSwissRound(
+        req.inPersonTournamentId,
+        req.params.roundId,
+        req.body || {},
+        req.user
       );
       res.json({ ok: true, ...overview });
     }, logger)

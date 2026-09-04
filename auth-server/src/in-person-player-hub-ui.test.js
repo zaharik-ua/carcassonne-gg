@@ -85,6 +85,30 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.match(inPersonHtml, /round\.progress\.completed === round\.progress\.total/);
 });
 
+test("In-Person page exposes Swiss rollback, inactive-player and late-entry recovery", () => {
+  [
+    "Add late player",
+    "Preview late entry",
+    "Confirm late entry",
+    "Cancel round",
+    "Draft-round no-show",
+    "Withdraw",
+    "Disqualify",
+    "no-show",
+    "These",
+    "results will stop counting",
+  ].forEach((text) => assert.ok(inPersonHtml.includes(text), `missing recovery UI text: ${text}`));
+
+  [
+    /\/participants\/late\/preview/,
+    /\/participants\/late\/confirm/,
+    /\/participants\/\$\{encodeURIComponent\(participant\.id\)\}\/status/,
+    /\/cancellation-preview/,
+    /\/cancel`/,
+    /finish_reason: "no_show"/,
+  ].forEach((pattern) => assert.match(inPersonHtml, pattern));
+});
+
 test("all Player Hub scripts parse after the In-Person additions", () => {
   assertEmbeddedScriptsParse(menuHtml, "Player Hub menu");
   assertEmbeddedScriptsParse(hubHtml, "Player Hub landing");

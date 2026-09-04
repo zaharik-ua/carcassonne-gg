@@ -1032,6 +1032,55 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     return roundNumber;
   }
 
+  function normalizeRequiredReason(value, field = "reason") {
+    const reason = normalizeOptionalText(value);
+    if (!reason) {
+      throw validationError("REASON_REQUIRED", `${field} is required`, { field });
+    }
+    return reason;
+  }
+
+  function normalizeActorUserId(user) {
+    const userId = Number(user?.id ?? user);
+    return Number.isInteger(userId) && userId > 0 ? userId : null;
+  }
+
+  function normalizeLateEntryMode(value) {
+    const mode = normalizeText(value).toLowerCase();
+    if (!["late_bye", "pair_with_bye"].includes(mode)) {
+      throw validationError(
+        "INVALID_LATE_ENTRY_MODE",
+        "mode must be late_bye or pair_with_bye",
+        { field: "mode" }
+      );
+    }
+    return mode;
+  }
+
+  function normalizePositiveTableNumber(value) {
+    const tableNumber = Number(value);
+    if (!Number.isInteger(tableNumber) || tableNumber <= 0) {
+      throw validationError(
+        "INVALID_TABLE_NUMBER",
+        "table_number must be a positive integer",
+        { field: "table_number" }
+      );
+    }
+    return tableNumber;
+  }
+
+  function normalizeLateEntryStarter(value) {
+    const starter = normalizeText(value).toLowerCase();
+    if (!["late_participant", "bye_participant"].includes(starter)) {
+      throw validationError(
+        "INVALID_LATE_ENTRY_STARTER",
+        "starting_participant must be late_participant or bye_participant",
+        { field: "starting_participant" }
+      );
+    }
+    return starter;
+  }
+
   function enrichPairingPlan(plan, participants) {
     const participantById = new Map(participants.map((participant) => [participant.id, participant]));
     return {
@@ -1157,6 +1206,10 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
       can_generate_next_round: !!currentRound
         && currentRound.status === "completed"
         && nextRoundNumber <= swissRoundsCount,
+      can_add_late_participant: rounds.length === 1
+        && currentRound?.round_number === 1
+        && tournamentRow.status === "swiss",
+      can_cancel_current_round: !!currentRound && tournamentRow.status === "swiss",
       swiss_complete: completedRounds >= swissRoundsCount,
     };
   }
@@ -1514,6 +1567,475 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
         };
       });
       return { ...(await getSwissOverview(tournamentId)), ...outcome };
+    });
+  }
+
+  async function previewSwissRoundCancellation(tournamentId, roundId) {
+    const tournament = await requireTournamentRow(tournamentId);
+    if (tournament.status !== "swiss") {
+      throw conflictError(
+        "INVALID_TOURNAMENT_STATUS",
+        "Swiss rollback is available only during the Swiss stage"
+      );
+    }
+    const rounds = await loadSwissRounds(tournament.id);
+    assertSwissRoundSequence(rounds);
+    if (!rounds.length) {
+      throw conflictError("NO_SWISS_ROUND", "There is no active Swiss round to cancel");
+    }
+    const lastRound = rounds[rounds.length - 1];
+    if (lastRound.id !== normalizeText(roundId)) {
+      throw conflictError(
+        "NOT_LAST_SWISS_ROUND",
+        "Only the last active Swiss round can be cancelled",
+        { last_round_id: lastRound.id, last_round_number: lastRound.round_number }
+      );
+    }
+    const previousRevision = await dbGet(
+      db,
+      `
+        SELECT MAX(s.revision) AS revision
+        FROM in_person_standings s
+        JOIN in_person_rounds r ON r.id = s.source_completed_round_id
+        WHERE s.tournament_id = ?
+          AND r.stage = 'swiss'
+          AND r.status = 'completed'
+          AND r.round_number < ?
+      `,
+      [tournament.id, lastRound.round_number]
+    );
+    const resultMatches = lastRound.matches.filter((match) => match.status === "completed");
+    return {
+      round: lastRound,
+      completed_results: resultMatches,
+      completed_results_count: resultMatches.length,
+      previous_standings_revision: Number(previousRevision?.revision || 0),
+      returns_to_check_in: lastRound.round_number === 1,
+      confirmation_required: true,
+    };
+  }
+
+  async function cancelSwissRound(tournamentId, roundId, payload = {}, actor = null) {
+    const cancellationReason = normalizeRequiredReason(payload?.reason, "reason");
+    const actorUserId = normalizeActorUserId(actor);
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        const requestedRound = await requireSwissRoundRow(tournament.id, roundId);
+        if (requestedRound.status === "cancelled") {
+          return {
+            cancelled: false,
+            round_id: requestedRound.id,
+            round_number: Number(requestedRound.round_number),
+          };
+        }
+        if (tournament.status !== "swiss") {
+          throw conflictError(
+            "INVALID_TOURNAMENT_STATUS",
+            "Swiss rollback is available only during the Swiss stage"
+          );
+        }
+        const rounds = await loadSwissRounds(tournament.id);
+        assertSwissRoundSequence(rounds);
+        const lastRound = rounds[rounds.length - 1];
+        if (!lastRound || lastRound.id !== requestedRound.id) {
+          throw conflictError(
+            "NOT_LAST_SWISS_ROUND",
+            "Only the last active Swiss round can be cancelled",
+            lastRound ? {
+              last_round_id: lastRound.id,
+              last_round_number: lastRound.round_number,
+            } : null
+          );
+        }
+
+        await dbRun(
+          db,
+          `
+            UPDATE in_person_matches
+            SET status = 'cancelled',
+                is_bye = CASE WHEN is_bye = 1 THEN 0 ELSE is_bye END,
+                cancelled_at = CURRENT_TIMESTAMP,
+                cancelled_by_user_id = ?, cancellation_reason = ?,
+                revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+            WHERE round_id = ? AND status <> 'cancelled'
+          `,
+          [actorUserId, cancellationReason, requestedRound.id]
+        );
+        await injectFault("swiss_cancellation_after_matches", {
+          tournament_id: tournament.id,
+          round_id: requestedRound.id,
+        });
+        await dbRun(
+          db,
+          `
+            UPDATE in_person_rounds
+            SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP,
+                cancelled_by_user_id = ?, cancellation_reason = ?,
+                revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `,
+          [actorUserId, cancellationReason, requestedRound.id]
+        );
+        const remainingRoundCount = rounds.length - 1;
+        await dbRun(
+          db,
+          `
+            UPDATE in_person_tournaments
+            SET status = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `,
+          [remainingRoundCount ? "swiss" : "check_in", tournament.id]
+        );
+        await injectFault("swiss_cancellation_after_round", {
+          tournament_id: tournament.id,
+          round_id: requestedRound.id,
+        });
+        return {
+          cancelled: true,
+          round_id: requestedRound.id,
+          round_number: Number(requestedRound.round_number),
+        };
+      });
+      return { ...(await getSwissOverview(tournamentId)), ...outcome };
+    });
+  }
+
+  async function findParticipantSwissResolution(tournamentId, participantId) {
+    const row = await dbGet(
+      db,
+      `
+        SELECT
+          m.*,
+          r.id AS active_round_id,
+          r.round_number AS active_round_number,
+          r.status AS active_round_status,
+          pa.name_en AS participant_a_name_en,
+          pa.name_local AS participant_a_name_local,
+          pb.name_en AS participant_b_name_en,
+          pb.name_local AS participant_b_name_local
+        FROM in_person_matches m
+        JOIN in_person_rounds r ON r.id = m.round_id
+        LEFT JOIN in_person_participants pa ON pa.id = m.participant_a_id
+        LEFT JOIN in_person_participants pb ON pb.id = m.participant_b_id
+        WHERE r.tournament_id = ?
+          AND r.stage = 'swiss'
+          AND r.status IN ('draft', 'published')
+          AND m.status <> 'cancelled'
+          AND (m.participant_a_id = ? OR m.participant_b_id = ?)
+        ORDER BY r.round_number DESC, m.id
+        LIMIT 1
+      `,
+      [tournamentId, participantId, participantId]
+    );
+    if (!row || row.status === "completed" || Number(row.is_bye) === 1) return null;
+    const match = serializeSwissMatch(row);
+    const opponentId = row.participant_a_id === participantId
+      ? row.participant_b_id
+      : row.participant_a_id;
+    if (row.active_round_status === "draft") {
+      return {
+        type: "cancel_draft_round",
+        round_id: row.active_round_id,
+        round_number: Number(row.active_round_number),
+        match,
+      };
+    }
+    return {
+      type: "technical_result",
+      round_id: row.active_round_id,
+      round_number: Number(row.active_round_number),
+      match,
+      suggested_winner_participant_id: opponentId,
+    };
+  }
+
+  async function setParticipantInactive(tournamentId, participantId, payload = {}) {
+    const status = normalizeText(payload?.status).toLowerCase();
+    if (!["withdrawn", "disqualified"].includes(status)) {
+      throw validationError(
+        "INVALID_PARTICIPANT_STATUS",
+        "status must be withdrawn or disqualified",
+        { field: "status" }
+      );
+    }
+    const reason = normalizeRequiredReason(payload?.reason, "reason");
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        assertParticipantMutationsAllowed(tournament);
+        if (tournament.status !== "swiss") {
+          throw conflictError(
+            "SWISS_NOT_STARTED",
+            "Use check-in controls before Swiss starts"
+          );
+        }
+        const current = await requireParticipantRow(tournament.id, participantId);
+        const unchanged = current.status === status && current.status_reason === reason;
+        if (!unchanged) {
+          await dbRun(
+            db,
+            `
+              UPDATE in_person_participants
+              SET status = ?, draw_number = NULL, status_reason = ?,
+                  withdrawn_at = CASE WHEN ? = 'withdrawn' THEN CURRENT_TIMESTAMP ELSE NULL END,
+                  disqualified_at = CASE WHEN ? = 'disqualified' THEN CURRENT_TIMESTAMP ELSE NULL END,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND tournament_id = ?
+            `,
+            [status, reason, status, status, current.id, tournament.id]
+          );
+          await touchTournament(tournament.id);
+        }
+        return { changed: !unchanged, participant_id: current.id, status };
+      });
+      const participant = serializeParticipant(
+        await requireParticipantRow(tournamentId, outcome.participant_id)
+      );
+      const resolution = await findParticipantSwissResolution(
+        tournamentId,
+        outcome.participant_id
+      );
+      if (resolution?.type === "technical_result") {
+        resolution.suggested_result = {
+          starting_participant_id: resolution.match.starting_participant_id,
+          result_type: "technical",
+          winner_participant_id: resolution.suggested_winner_participant_id,
+          finish_reason: outcome.status === "withdrawn" ? "withdrawal" : "disqualification",
+        };
+      }
+      return { ...outcome, participant, resolution };
+    });
+  }
+
+  async function buildLateParticipantPreview(tournamentId, payload = {}) {
+    const tournament = await requireTournamentRow(tournamentId);
+    if (tournament.status !== "swiss") {
+      throw conflictError(
+        "INVALID_TOURNAMENT_STATUS",
+        "A late participant can be added only during the Swiss stage"
+      );
+    }
+    const rounds = await loadSwissRounds(tournament.id);
+    assertSwissRoundSequence(rounds);
+    if (rounds.length !== 1 || rounds[0].round_number !== 1) {
+      throw conflictError(
+        "LATE_ENTRY_WINDOW_CLOSED",
+        "A late participant can be added only while round 1 is the last active Swiss round"
+      );
+    }
+    const round = rounds[0];
+    const input = await validateParticipantRelations(
+      normalizeParticipantInput(payload, null, tournament),
+      tournament
+    );
+    await validateParticipantDuplicate(tournament.id, input, {
+      confirmed: payload?.confirm_duplicate === true,
+    });
+    const drawNumber = normalizeDrawNumber(payload?.draw_number) ?? null;
+    if (drawNumber != null) {
+      const duplicate = await dbGet(
+        db,
+        `SELECT id, name_en FROM in_person_participants
+         WHERE tournament_id = ? AND draw_number = ? LIMIT 1`,
+        [tournament.id, drawNumber]
+      );
+      if (duplicate) {
+        throw conflictError("DRAW_NUMBER_TAKEN", "This draw number is already assigned", {
+          draw_number: drawNumber,
+          participant: { id: duplicate.id, name_en: duplicate.name_en },
+        });
+      }
+    }
+
+    const mode = normalizeLateEntryMode(payload?.mode);
+    const preview = {
+      tournament_revision: Number(tournament.revision),
+      round: {
+        id: round.id,
+        round_number: round.round_number,
+        status: round.status,
+        revision: round.revision,
+      },
+      participant: { ...input, draw_number: drawNumber },
+      mode,
+      reopens_completed_round: round.status === "completed",
+      confirmation_required: true,
+    };
+    if (mode === "late_bye") {
+      return {
+        ...preview,
+        change: { type: "create_late_bye" },
+      };
+    }
+
+    const byeMatches = round.matches
+      .filter((match) => match.is_bye)
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const requestedByeMatchId = normalizeOptionalText(payload?.bye_match_id);
+    const byeMatch = requestedByeMatchId
+      ? byeMatches.find((match) => match.id === requestedByeMatchId)
+      : byeMatches[0];
+    if (!byeMatch) {
+      throw conflictError(
+        "FIRST_ROUND_BYE_NOT_FOUND",
+        "pair_with_bye requires an active bye in the first Swiss round"
+      );
+    }
+    const tableNumber = normalizePositiveTableNumber(payload?.table_number);
+    const occupiedTable = round.matches.find((match) => match.table_number === tableNumber);
+    if (occupiedTable) {
+      throw conflictError("TABLE_NUMBER_TAKEN", "This table number is already used in the round", {
+        table_number: tableNumber,
+        match_id: occupiedTable.id,
+      });
+    }
+    const startingParticipant = normalizeLateEntryStarter(payload?.starting_participant);
+    return {
+      ...preview,
+      bye_match: byeMatch,
+      table_number: tableNumber,
+      starting_participant: startingParticipant,
+      change: {
+        type: "replace_bye_with_match",
+        bye_participant_id: byeMatch.participant_a_id,
+        bye_participant_name_en: byeMatch.participant_a_name_en,
+      },
+    };
+  }
+
+  async function previewLateParticipant(tournamentId, payload = {}) {
+    return buildLateParticipantPreview(tournamentId, payload);
+  }
+
+  async function confirmLateParticipant(tournamentId, payload = {}, actor = null) {
+    const actorUserId = normalizeActorUserId(actor);
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const preview = await buildLateParticipantPreview(tournamentId, payload);
+        if (
+          payload?.expected_round_revision !== undefined
+          && Number(payload.expected_round_revision) !== Number(preview.round.revision)
+        ) {
+          throw conflictError(
+            "LATE_ENTRY_PREVIEW_STALE",
+            "The first round changed after the late-entry preview. Preview it again."
+          );
+        }
+        const participantId = `ipp_${idFactory()}`;
+        const participant = preview.participant;
+        await dbRun(
+          db,
+          `
+            INSERT INTO in_person_participants (
+              id, tournament_id, name_en, name_local, bga_nickname,
+              association_id, city_id, status, draw_number, checked_in_at,
+              is_late_entry, late_entry_mode, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'checked_in', ?, CURRENT_TIMESTAMP,
+              1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `,
+          [
+            participantId,
+            tournamentId,
+            participant.name_en,
+            participant.name_local,
+            participant.bga_nickname,
+            participant.association_id,
+            participant.city_id,
+            participant.draw_number,
+            preview.mode,
+          ]
+        );
+
+        let matchId;
+        if (preview.mode === "pair_with_bye") {
+          await dbRun(
+            db,
+            `
+              UPDATE in_person_matches
+              SET status = 'cancelled', is_bye = 0, cancelled_at = CURRENT_TIMESTAMP,
+                  cancelled_by_user_id = ?,
+                  cancellation_reason = 'Replaced by late participant match',
+                  revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND round_id = ? AND status <> 'cancelled'
+            `,
+            [actorUserId, preview.bye_match.id, preview.round.id]
+          );
+          matchId = `ipm_${idFactory()}`;
+          const startingParticipantId = preview.starting_participant === "late_participant"
+            ? participantId
+            : preview.bye_match.participant_a_id;
+          await dbRun(
+            db,
+            `
+              INSERT INTO in_person_matches (
+                id, round_id, table_number, participant_a_id, participant_b_id,
+                starting_participant_id, status, is_bye, revision,
+                created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, 'scheduled', 0, 1,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `,
+            [
+              matchId,
+              preview.round.id,
+              preview.table_number,
+              preview.bye_match.participant_a_id,
+              participantId,
+              startingParticipantId,
+            ]
+          );
+        } else {
+          matchId = `ipm_${idFactory()}`;
+          await dbRun(
+            db,
+            `
+              INSERT INTO in_person_matches (
+                id, round_id, table_number, participant_a_id, participant_b_id,
+                starting_participant_id, status, is_bye, result_type,
+                winner_participant_id, loser_participant_id, revision,
+                created_at, updated_at
+              ) VALUES (?, ?, NULL, ?, NULL, NULL, 'completed', 1, 'bye', ?, NULL, 1,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `,
+            [matchId, preview.round.id, participantId, participantId]
+          );
+        }
+        await injectFault("late_participant_after_match", {
+          tournament_id: tournamentId,
+          participant_id: participantId,
+          match_id: matchId,
+        });
+        await dbRun(
+          db,
+          `
+            UPDATE in_person_rounds
+            SET status = CASE WHEN status = 'completed' THEN 'published' ELSE status END,
+                completed_at = CASE WHEN status = 'completed' THEN NULL ELSE completed_at END,
+                revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `,
+          [preview.round.id]
+        );
+        await touchTournament(tournamentId);
+        return {
+          participant_id: participantId,
+          match_id: matchId,
+          mode: preview.mode,
+          round_id: preview.round.id,
+        };
+      });
+      const [participantRow, overview] = await Promise.all([
+        requireParticipantRow(tournamentId, outcome.participant_id),
+        getSwissOverview(tournamentId),
+      ]);
+      const match = overview.current_round?.matches.find((entry) => entry.id === outcome.match_id) || null;
+      return {
+        ...overview,
+        ...outcome,
+        participant: serializeParticipant(participantRow),
+        match,
+        created: true,
+      };
     });
   }
 
@@ -1894,8 +2416,10 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
   return {
     addTournamentAdmin,
     archiveCity: (cityId) => setCityArchived(cityId, true),
+    cancelSwissRound,
     cancelTournament,
     completeSwissRound,
+    confirmLateParticipant,
     confirmSwissRound,
     createCity,
     createParticipantCity,
@@ -1911,7 +2435,9 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     listParticipantCities,
     listTournamentAdmins,
     listTournaments,
+    previewLateParticipant,
     previewSwissRound,
+    previewSwissRoundCancellation,
     publishTournament,
     publishSwissRound,
     removeTournamentAdmin,
@@ -1919,6 +2445,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     restoreCity: (cityId) => setCityArchived(cityId, false),
     saveSwissMatchResult,
     setParticipantCheckIn,
+    setParticipantInactive,
     startCheckIn,
     updateCity,
     updateParticipant,

@@ -426,6 +426,22 @@
     padding-left: 18px;
   }
 
+  .ip-recovery {
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid #efb4ae;
+    border-radius: 6px;
+    background: #fff6f5;
+    color: #7a271a;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .ip-recovery strong {
+    display: block;
+    margin-bottom: 4px;
+  }
+
   .ip-check-control {
     flex: 0 0 auto;
   }
@@ -644,7 +660,10 @@
     <section id="ipPlayersPanel" class="ip-card">
       <div class="ip-toolbar">
         <strong>Players</strong>
-        <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
+        <div class="ip-actions">
+          <button id="ipAddLatePlayerBtn" class="ip-btn primary ip-hidden" type="button">Add late player</button>
+          <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
+        </div>
       </div>
       <div id="ipPlayerFormMount"></div>
       <div id="ipPlayersList" class="ip-list"></div>
@@ -672,6 +691,7 @@
       </div>
       <div id="ipSwissSummary" class="ip-swiss-summary"></div>
       <div id="ipSwissPreview" class="ip-swiss-preview"></div>
+      <div id="ipSwissRecovery"></div>
       <div id="ipSwissMatches" class="ip-swiss-matches"></div>
     </section>
 
@@ -719,11 +739,13 @@
   const playerFormMount = document.getElementById("ipPlayerFormMount");
   const readinessEl = document.getElementById("ipReadiness");
   const addPlayerBtn = document.getElementById("ipAddPlayerBtn");
+  const addLatePlayerBtn = document.getElementById("ipAddLatePlayerBtn");
   const startCheckInBtn = document.getElementById("ipStartCheckInBtn");
   const refreshBtn = document.getElementById("ipRefreshBtn");
   const swissActions = document.getElementById("ipSwissActions");
   const swissSummary = document.getElementById("ipSwissSummary");
   const swissPreview = document.getElementById("ipSwissPreview");
+  const swissRecovery = document.getElementById("ipSwissRecovery");
   const swissMatches = document.getElementById("ipSwissMatches");
   const standingsEl = document.getElementById("ipStandings");
   const standingsMeta = document.getElementById("ipStandingsMeta");
@@ -1102,6 +1124,7 @@
       participantLocation(participant),
       participant.bga_nickname ? `BGA: ${participant.bga_nickname}` : "",
       participant.status,
+      participant.status_reason,
       participant.draw_number == null ? "" : `#${participant.draw_number}`,
     ].filter(Boolean).join(" • ");
   }
@@ -1115,6 +1138,8 @@
     const tournament = state.overview?.tournament;
     addPlayerBtn.disabled = !!tournament?.has_started_swiss
       || ["cancelled", "completed"].includes(String(tournament?.status || ""));
+    addLatePlayerBtn.classList.toggle("ip-hidden", !state.swiss?.can_add_late_participant);
+    addLatePlayerBtn.disabled = !state.swiss?.can_add_late_participant;
     if (!participants.length) {
       const empty = document.createElement("div");
       empty.className = "ip-empty";
@@ -1138,6 +1163,21 @@
       const actions = document.createElement("div");
       actions.className = "ip-actions";
       actions.appendChild(createButton("Edit", "ip-btn", () => openPlayerForm(participant)));
+      if (
+        tournament?.status === "swiss"
+        && ["registered", "checked_in"].includes(participant.status)
+      ) {
+        actions.appendChild(createButton(
+          "Withdraw",
+          "ip-btn danger",
+          () => deactivateParticipant(participant, "withdrawn")
+        ));
+        actions.appendChild(createButton(
+          "Disqualify",
+          "ip-btn danger",
+          () => deactivateParticipant(participant, "disqualified")
+        ));
+      }
       const deleteButton = createButton("Delete", "ip-btn danger", () => deletePlayer(participant));
       deleteButton.disabled = participant.has_matches || !!tournament?.has_started_swiss;
       actions.appendChild(deleteButton);
@@ -1265,6 +1305,251 @@
     } catch (error) {
       setStatus(error.message || "Failed to delete player.", "error");
     }
+  }
+
+  async function deactivateParticipant(participant, nextStatus) {
+    const label = nextStatus === "disqualified" ? "disqualify" : "withdraw";
+    const reason = window.prompt(`Reason to ${label} ${participant.name_en}:`, "");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setStatus("A reason is required.", "error");
+      return;
+    }
+    try {
+      const data = await apiJson(
+        tournamentUrl(`/participants/${encodeURIComponent(participant.id)}/status`),
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: nextStatus, reason: reason.trim() }),
+        }
+      );
+      const resolution = data.resolution;
+      if (resolution?.type === "technical_result") {
+        const finishLabel = nextStatus === "disqualified" ? "disqualification" : "withdrawal";
+        const shouldRecord = window.confirm(
+          `${participant.name_en} has an unfinished match in round ${resolution.round_number}. `
+          + `Record a technical ${finishLabel} win for the opponent now?`
+        );
+        if (shouldRecord) {
+          await apiJson(
+            tournamentUrl(`/swiss/matches/${encodeURIComponent(resolution.match.id)}/result`),
+            {
+              method: "PUT",
+              body: JSON.stringify({
+                ...resolution.suggested_result,
+                admin_note: reason.trim(),
+              }),
+            }
+          );
+        }
+      }
+      await loadOverview();
+      if (resolution?.type === "cancel_draft_round") {
+        state.activeTab = "swiss";
+        renderWorkspace();
+        setStatus(
+          `${participant.name_en} marked ${nextStatus}. Cancel draft round ${resolution.round_number} and regenerate it.`,
+          "success"
+        );
+      } else {
+        setStatus(`${participant.name_en} marked ${nextStatus}.`, "success");
+      }
+    } catch (error) {
+      setStatus(error.message || `Failed to ${label} player.`, "error");
+    }
+  }
+
+  function openLatePlayerForm() {
+    const tournament = state.overview?.tournament;
+    const firstRound = state.swiss?.current_round;
+    if (!tournament || !state.swiss?.can_add_late_participant || !firstRound) return;
+    state.playerFormController?.abort();
+    const formController = new AbortController();
+    state.playerFormController = formController;
+    playerFormMount.innerHTML = "";
+    const form = document.createElement("form");
+    form.className = "ip-form";
+    const nameEn = createField("Name (English) *");
+    const nameLocal = createField("Name (local)");
+    const bgaNickname = createField("BGA nickname");
+    const drawNumber = createField("Draw number (optional)", "number");
+    drawNumber.input.min = "1";
+    drawNumber.input.step = "1";
+    const mode = createSelectField(
+      "Late-entry mode *",
+      [
+        { value: "late_bye", label: "Give the late player a bye win" },
+        { value: "pair_with_bye", label: "Pair with the current bye recipient" },
+      ],
+      "late_bye"
+    );
+    const nextTableNumber = Math.max(
+      0,
+      ...(firstRound.matches || []).map((match) => Number(match.table_number || 0))
+    ) + 1;
+    const tableNumber = createField("New match table *", "number");
+    tableNumber.input.min = "1";
+    tableNumber.input.step = "1";
+    tableNumber.input.value = String(nextTableNumber);
+    const starter = createSelectField(
+      "Starting player *",
+      [
+        { value: "late_participant", label: "Late player starts" },
+        { value: "bye_participant", label: "Bye recipient starts" },
+      ],
+      "late_participant"
+    );
+    const cityInlineMount = document.createElement("div");
+    cityInlineMount.className = "ip-city-inline-mount";
+    let location;
+    if (tournament.scope === "international") {
+      location = createSelectField(
+        "Country / association *",
+        [{ value: "", label: "Select country..." }].concat(state.associations.map((association) => ({
+          value: association.id,
+          label: [association.flag, association.name].filter(Boolean).join(" • "),
+        }))),
+        ""
+      );
+    } else {
+      location = createCityPickerField("", {
+        signal: formController.signal,
+        onAddNew: () => mountInlineCityCreator(tournament, location, cityInlineMount),
+      });
+    }
+    const getLocationValue = () => (
+      tournament.scope === "international" ? location.select.value : location.getValue()
+    );
+    const previewMount = document.createElement("div");
+    previewMount.className = "ip-form-actions";
+
+    form.appendChild(nameEn.field);
+    form.appendChild(nameLocal.field);
+    form.appendChild(bgaNickname.field);
+    form.appendChild(location.field);
+    form.appendChild(drawNumber.field);
+    form.appendChild(mode.field);
+    form.appendChild(tableNumber.field);
+    form.appendChild(starter.field);
+    if (tournament.scope === "local") form.appendChild(cityInlineMount);
+    const actions = document.createElement("div");
+    actions.className = "ip-form-actions";
+    const previewButton = document.createElement("button");
+    previewButton.type = "submit";
+    previewButton.className = "ip-btn primary";
+    previewButton.textContent = "Preview late entry";
+    actions.appendChild(previewButton);
+    actions.appendChild(createButton("Cancel", "ip-btn", () => {
+      formController.abort();
+      if (state.playerFormController === formController) state.playerFormController = null;
+      playerFormMount.innerHTML = "";
+      setStatus("");
+    }));
+    form.appendChild(actions);
+    form.appendChild(previewMount);
+
+    const updateModeFields = () => {
+      const pairsWithBye = mode.select.value === "pair_with_bye";
+      tableNumber.field.classList.toggle("ip-hidden", !pairsWithBye);
+      starter.field.classList.toggle("ip-hidden", !pairsWithBye);
+      previewMount.innerHTML = "";
+    };
+    mode.select.addEventListener("change", updateModeFields);
+    updateModeFields();
+
+    const buildPayload = (confirmDuplicate = false) => ({
+      name_en: String(nameEn.input.value || "").trim(),
+      name_local: String(nameLocal.input.value || "").trim() || null,
+      bga_nickname: String(bgaNickname.input.value || "").trim() || null,
+      association_id: tournament.scope === "international" ? getLocationValue() : null,
+      city_id: tournament.scope === "local" ? getLocationValue() : null,
+      draw_number: drawNumber.input.value === "" ? null : Number(drawNumber.input.value),
+      mode: mode.select.value,
+      table_number: mode.select.value === "pair_with_bye" ? Number(tableNumber.input.value) : null,
+      starting_participant: mode.select.value === "pair_with_bye" ? starter.select.value : null,
+      confirm_duplicate: confirmDuplicate,
+    });
+
+    async function requestPreview(confirmDuplicate) {
+      previewButton.disabled = true;
+      previewMount.innerHTML = "";
+      try {
+        const payload = buildPayload(confirmDuplicate);
+        const data = await apiJson(tournamentUrl("/participants/late/preview"), {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        const preview = data.preview;
+        const box = document.createElement("div");
+        box.className = "ip-readiness";
+        const title = document.createElement("strong");
+        title.textContent = preview.mode === "late_bye"
+          ? `${preview.participant.name_en} will receive a bye win in round 1.`
+          : `${preview.participant.name_en} will play ${preview.change.bye_participant_name_en} at table ${preview.table_number}.`;
+        const hint = document.createElement("div");
+        hint.className = "ip-hint";
+        hint.textContent = preview.reopens_completed_round
+          ? "Round 1 will return to Published and standings must be rebuilt."
+          : "Round 1 standings must be completed or rebuilt after this change.";
+        const confirm = createButton("Confirm late entry", "ip-btn primary", async () => {
+          confirm.disabled = true;
+          try {
+            const confirmed = await apiJson(tournamentUrl("/participants/late/confirm"), {
+              method: "POST",
+              body: JSON.stringify({
+                ...payload,
+                expected_round_revision: preview.round.revision,
+                bye_match_id: preview.bye_match?.id || null,
+              }),
+            });
+            formController.abort();
+            if (state.playerFormController === formController) state.playerFormController = null;
+            playerFormMount.innerHTML = "";
+            await loadOverview();
+            state.activeTab = "swiss";
+            renderWorkspace();
+            setStatus(
+              `${confirmed.participant.name_en} added to round 1. Complete the round to rebuild standings.`,
+              "success"
+            );
+          } catch (error) {
+            setStatus(error.message || "Failed to add late participant.", "error");
+            confirm.disabled = false;
+          }
+        });
+        box.appendChild(title);
+        box.appendChild(hint);
+        box.appendChild(confirm);
+        previewMount.appendChild(box);
+        setStatus("Late-entry preview is ready.", "success");
+      } catch (error) {
+        if (error.code === "DUPLICATE_PARTICIPANT" && !confirmDuplicate) {
+          const names = (error.details?.candidates || []).map((candidate) => (
+            `${candidate.name_en} (${candidate.id})`
+          )).join("\n");
+          if (window.confirm(`Possible duplicate:\n${names}\n\nContinue as a genuine namesake?`)) {
+            previewButton.disabled = false;
+            await requestPreview(true);
+            return;
+          }
+        } else {
+          setStatus(error.message || "Failed to preview late participant.", "error");
+        }
+      } finally {
+        previewButton.disabled = false;
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!nameEn.input.value.trim() || !getLocationValue()) {
+        setStatus("English name and location are required.", "error");
+        return;
+      }
+      await requestPreview(false);
+    });
+    playerFormMount.appendChild(form);
+    nameEn.input.focus();
   }
 
   function renderReadiness() {
@@ -1562,6 +1847,86 @@
     }
   }
 
+  function cancellationResultLabel(match) {
+    if (match.is_bye) return `${swissParticipantName(match, "a")}: bye win`;
+    const winner = match.winner_participant_id === match.participant_a_id
+      ? swissParticipantName(match, "a")
+      : swissParticipantName(match, "b");
+    const score = match.result_type === "points"
+      ? `${match.points_a}:${match.points_b}`
+      : String(match.finish_reason || match.result_type || "result").replace(/_/g, " ");
+    return `Table ${match.table_number}: ${score}, winner ${winner}`;
+  }
+
+  async function cancelLastSwissRound(round, button) {
+    button.disabled = true;
+    try {
+      const data = await apiJson(
+        tournamentUrl(`/swiss/rounds/${encodeURIComponent(round.id)}/cancellation-preview`)
+      );
+      const preview = data.preview;
+      const reason = window.prompt(`Reason for cancelling Swiss round ${round.round_number}:`, "");
+      if (reason === null) return;
+      if (!reason.trim()) {
+        setStatus("A cancellation reason is required.", "error");
+        return;
+      }
+      const resultLines = (preview.completed_results || []).map(cancellationResultLabel);
+      const consequence = resultLines.length
+        ? `\n\nThese ${resultLines.length} results will stop counting:\n${resultLines.join("\n")}`
+        : "\n\nThe round has no completed results.";
+      const standings = preview.previous_standings_revision
+        ? `Standings will return to revision ${preview.previous_standings_revision}.`
+        : "There will be no active standings revision.";
+      if (!window.confirm(
+        `Cancel exactly Swiss round ${round.round_number}?${consequence}\n\n${standings}`
+      )) return;
+      const cancelled = await apiJson(
+        tournamentUrl(`/swiss/rounds/${encodeURIComponent(round.id)}/cancel`),
+        { method: "POST", body: JSON.stringify({ reason: reason.trim() }) }
+      );
+      adoptSwissResponse(cancelled);
+      await loadOverview();
+      setStatus(
+        `Swiss round ${round.round_number} cancelled. You can correct the previous state and regenerate it.`,
+        "success"
+      );
+    } catch (error) {
+      setStatus(error.message || "Failed to cancel Swiss round.", "error");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function recordNoShow(match, absentParticipantId, button) {
+    const absentIsA = absentParticipantId === match.participant_a_id;
+    const absentName = absentIsA ? swissParticipantName(match, "a") : swissParticipantName(match, "b");
+    const winnerId = absentIsA ? match.participant_b_id : match.participant_a_id;
+    if (!window.confirm(`Record ${absentName} as a no-show and give the opponent a technical win?`)) return;
+    button.disabled = true;
+    try {
+      const data = await apiJson(
+        tournamentUrl(`/swiss/matches/${encodeURIComponent(match.id)}/result`),
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            starting_participant_id: match.starting_participant_id,
+            result_type: "technical",
+            winner_participant_id: winnerId,
+            finish_reason: "no_show",
+            admin_note: `${absentName} did not appear`,
+          }),
+        }
+      );
+      adoptSwissResponse(data);
+      renderWorkspace();
+      setStatus(`No-show recorded for ${absentName}.`, "success");
+    } catch (error) {
+      setStatus(error.message || "Failed to record no-show.", "error");
+      button.disabled = false;
+    }
+  }
+
   function createResultForm(match) {
     const form = document.createElement("form");
     form.className = "ip-result-form";
@@ -1626,6 +1991,14 @@
     save.className = "ip-btn primary";
     save.textContent = match.status === "completed" ? "Update result" : "Save result";
     actions.appendChild(save);
+    const noShowA = createButton(`${swissParticipantName(match, "a")} no-show`, "ip-btn danger", () => (
+      recordNoShow(match, match.participant_a_id, noShowA)
+    ));
+    const noShowB = createButton(`${swissParticipantName(match, "b")} no-show`, "ip-btn danger", () => (
+      recordNoShow(match, match.participant_b_id, noShowB)
+    ));
+    actions.appendChild(noShowA);
+    actions.appendChild(noShowB);
     form.appendChild(actions);
 
     const updateFields = () => {
@@ -1763,6 +2136,7 @@
 
   function renderSwiss() {
     swissActions.innerHTML = "";
+    swissRecovery.innerHTML = "";
     renderSwissSummary();
     renderSwissPreview();
     renderSwissMatches();
@@ -1795,6 +2169,27 @@
       badge.className = "ip-badge";
       badge.textContent = "Swiss complete";
       swissActions.appendChild(badge);
+    }
+    if (round && swiss.can_cancel_current_round) {
+      const cancel = createButton(
+        `Cancel round ${round.round_number}`,
+        "ip-btn danger",
+        () => cancelLastSwissRound(round, cancel)
+      );
+      swissActions.appendChild(cancel);
+      if (round.status === "draft") {
+        const note = document.createElement("div");
+        note.className = "ip-recovery";
+        const title = document.createElement("strong");
+        title.textContent = "Draft-round no-show";
+        const text = document.createElement("span");
+        text.textContent = round.round_number === 1
+          ? "Cancel this draft, remove the player's check-in, then regenerate the round."
+          : "Mark the player withdrawn, cancel this draft, then regenerate the round.";
+        note.appendChild(title);
+        note.appendChild(text);
+        swissRecovery.appendChild(note);
+      }
     }
   }
 
@@ -1956,6 +2351,7 @@
   tournamentSelect.addEventListener("change", () => selectTournament(tournamentSelect.value));
   refreshBtn.addEventListener("click", loadAll);
   addPlayerBtn.addEventListener("click", () => openPlayerForm());
+  addLatePlayerBtn.addEventListener("click", openLatePlayerForm);
   startCheckInBtn.addEventListener("click", async () => {
     startCheckInBtn.disabled = true;
     try {

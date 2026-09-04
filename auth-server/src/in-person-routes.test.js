@@ -19,8 +19,10 @@ function createService() {
   return {
     addTournamentAdmin: async () => ({}),
     archiveCity: async () => ({}),
+    cancelSwissRound: async () => ({}),
     cancelTournament: async () => ({}),
     completeSwissRound: async () => ({}),
+    confirmLateParticipant: async () => ({}),
     confirmSwissRound: async () => ({}),
     createCity: async () => ({}),
     createParticipantCity: async () => ({}),
@@ -37,7 +39,9 @@ function createService() {
     listParticipantCities: async () => [],
     listTournamentAdmins: async () => [],
     listTournaments: async () => [],
+    previewLateParticipant: async () => ({}),
     previewSwissRound: async () => ({}),
+    previewSwissRoundCancellation: async () => ({}),
     publishTournament: async () => ({}),
     publishSwissRound: async () => ({}),
     removeTournamentAdmin: async () => ({}),
@@ -45,6 +49,7 @@ function createService() {
     restoreCity: async () => ({}),
     saveSwissMatchResult: async () => ({}),
     setParticipantCheckIn: async () => ({}),
+    setParticipantInactive: async () => ({}),
     startCheckIn: async () => ({}),
     updateCity: async () => ({}),
     updateParticipant: async () => ({}),
@@ -66,7 +71,7 @@ test("always registers protected global and tournament routes", () => {
   });
 
   assert.deepEqual(result, { registered: true });
-  assert.equal(app.routes.length, 34);
+  assert.equal(app.routes.length, 39);
   assert.equal(app.routes[0].method, "GET");
   assert.equal(app.routes[0].path, "/in-person-tournaments/_foundation");
   assert.equal(app.routes[0].handlers[0], requireAdmin);
@@ -119,5 +124,20 @@ test("always registers protected global and tournament routes", () => {
   )));
   assert.ok(app.routes.some((route) => (
     route.method === "POST" && route.path.endsWith("/complete")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "GET" && route.path.endsWith("/cancellation-preview")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/cancel") && route.path.includes("/swiss/")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/participants/late/preview")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/participants/late/confirm")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "PATCH" && route.path.endsWith("/status")
   )));
 });
