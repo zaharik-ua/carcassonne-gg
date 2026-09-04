@@ -672,3 +672,40 @@ test("organizer API runs a manual playoff through Final and technical Bronze", a
   assert.ok(completed.data.placements.first);
   assert.ok(completed.data.placements.third);
 });
+
+test("public tournament API is anonymous, cache-revalidated and revision-aware", async (t) => {
+  const { baseUrl, first } = await startApi(t);
+  const publicList = await api(baseUrl, "/public/in-person-tournaments");
+  assert.equal(publicList.response.status, 200);
+  assert.equal(publicList.data.tournaments.some((entry) => entry.id === first.id), true);
+  assert.match(publicList.response.headers.get("cache-control") || "", /max-age=15/);
+
+  const initial = await api(baseUrl, `/public/in-person-tournaments/${first.id}`);
+  assert.equal(initial.response.status, 200);
+  assert.equal(initial.data.tournament.id, first.id);
+  assert.ok(initial.data.revision);
+  assert.ok(initial.data.updated_at);
+  assert.doesNotMatch(JSON.stringify(initial.data), /admin_user_ids|admins|admin_note/);
+  const etag = initial.response.headers.get("etag");
+  assert.ok(etag);
+
+  const notModified = await fetch(`${baseUrl}/public/in-person-tournaments/${first.slug}`, {
+    headers: { "If-None-Match": etag },
+  });
+  assert.equal(notModified.status, 304);
+
+  const created = await api(baseUrl, `/in-person-tournaments/${first.id}/participants`, {
+    userId: 1,
+    method: "POST",
+    body: JSON.stringify({ name_en: "Public revision player", association_id: "UKR" }),
+  });
+  assert.equal(created.response.status, 201);
+  const refreshed = await fetch(`${baseUrl}/public/in-person-tournaments/${first.id}`, {
+    headers: { "If-None-Match": etag },
+  });
+  assert.equal(refreshed.status, 200);
+  assert.notEqual(refreshed.headers.get("etag"), etag);
+  const refreshedData = await refreshed.json();
+  assert.ok(refreshedData.revision > initial.data.revision);
+  assert.equal(refreshedData.players.length, 1);
+});

@@ -41,7 +41,6 @@ test("In-Person page contains participant registration and check-in flows", () =
     "City icon URL",
     "Country / association",
     "Check-in and draw numbers",
-    "Gaps and a missing #1 are allowed.",
     "Possible duplicate:",
     "Ready to form the first Swiss round.",
   ].forEach((text) => assert.ok(inPersonHtml.includes(text), `missing In-Person UI text: ${text}`));
@@ -54,6 +53,12 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.match(inPersonHtml, /\/start-check-in/);
   assert.match(inPersonHtml, /\/check-in/);
   assert.match(inPersonHtml, /confirm_duplicate: confirmDuplicate/);
+  assert.match(inPersonHtml, /function openCheckInModal/);
+  assert.match(inPersonHtml, /checkedIn\.checked = true/);
+  assert.match(inPersonHtml, /DRAW_NUMBER_TAKEN/);
+  assert.match(inPersonHtml, /ip-draw-number-display/);
+  assert.match(inPersonHtml, /ip-draw-number::-webkit-inner-spin-button/);
+  assert.doesNotMatch(inPersonHtml, /Gaps and a missing #1 are allowed\./);
   assert.match(inPersonHtml, /@media \(max-width: 720px\)/);
   assert.match(inPersonHtml, /min-height: 44px/);
 });

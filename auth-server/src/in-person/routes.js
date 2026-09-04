@@ -27,6 +27,16 @@ function asyncHandler(handler, logger) {
   };
 }
 
+function setPublicCacheHeaders(res) {
+  res.set("Cache-Control", "public, max-age=15, stale-while-revalidate=30");
+  res.vary("Accept-Encoding");
+}
+
+function publicTournamentEtag(aggregate) {
+  const tournamentId = String(aggregate?.tournament?.id || "unknown").replace(/[^a-zA-Z0-9_-]/g, "");
+  return `W/\"in-person-${tournamentId}-${Number(aggregate?.revision || 0)}\"`;
+}
+
 export function registerInPersonRoutes(app, {
   db,
   service,
@@ -48,6 +58,29 @@ export function registerInPersonRoutes(app, {
   }
 
   const inPersonService = service || createInPersonService({ db });
+
+  app.get(
+    "/public/in-person-tournaments",
+    asyncHandler(async (_req, res) => {
+      const tournaments = await inPersonService.listPublicTournaments();
+      setPublicCacheHeaders(res);
+      res.json({ ok: true, tournaments });
+    }, logger)
+  );
+  app.get(
+    "/public/in-person-tournaments/:identifier",
+    asyncHandler(async (req, res) => {
+      const aggregate = await inPersonService.getPublicTournamentAggregate(req.params.identifier);
+      const etag = publicTournamentEtag(aggregate);
+      setPublicCacheHeaders(res);
+      res.set("ETag", etag);
+      if (req.get("If-None-Match") === etag) {
+        res.status(304).end();
+        return;
+      }
+      res.json({ ok: true, ...aggregate });
+    }, logger)
+  );
 
   app.get("/in-person-tournaments/_foundation", requireAdmin, (_req, res) => {
     res.json({ ok: true, feature: "in_person_tournaments", status: "foundation" });

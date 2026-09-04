@@ -35,11 +35,16 @@ function createService() {
       tournament: {}, participants: [], counters: {}, readiness: {},
     }),
     getPlayoffOverview: async () => ({}),
+    getPublicTournamentAggregate: async () => ({
+      revision: 1,
+      tournament: { id: "ipt_public" },
+    }),
     getSwissOverview: async () => ({}),
     getTournament: async () => ({}),
     listAccessibleTournaments: async () => [],
     listCities: async () => [],
     listParticipantCities: async () => [],
+    listPublicTournaments: async () => [],
     listTournamentAdmins: async () => [],
     listTournaments: async () => [],
     previewLateParticipant: async () => ({}),
@@ -79,13 +84,27 @@ test("always registers protected global and tournament routes", () => {
   });
 
   assert.deepEqual(result, { registered: true });
-  assert.equal(app.routes.length, 48);
-  assert.equal(app.routes[0].method, "GET");
-  assert.equal(app.routes[0].path, "/in-person-tournaments/_foundation");
-  assert.equal(app.routes[0].handlers[0], requireAdmin);
-  assert.equal(app.routes[1].method, "GET");
-  assert.equal(app.routes[1].path, "/in-person-tournaments/:tournamentId/_foundation");
-  assert.equal(app.routes[1].handlers[0], requireInPersonTournamentAdmin);
+  assert.equal(app.routes.length, 50);
+  const globalFoundation = app.routes.find((route) => (
+    route.path === "/in-person-tournaments/_foundation"
+  ));
+  assert.equal(globalFoundation.method, "GET");
+  assert.equal(globalFoundation.handlers[0], requireAdmin);
+  const tournamentFoundation = app.routes.find((route) => (
+    route.path === "/in-person-tournaments/:tournamentId/_foundation"
+  ));
+  assert.equal(tournamentFoundation.method, "GET");
+  assert.equal(tournamentFoundation.handlers[0], requireInPersonTournamentAdmin);
+  const publicListRoute = app.routes.find((route) => (
+    route.path === "/public/in-person-tournaments"
+  ));
+  const publicAggregateRoute = app.routes.find((route) => (
+    route.path === "/public/in-person-tournaments/:identifier"
+  ));
+  assert.ok(publicListRoute);
+  assert.ok(publicAggregateRoute);
+  assert.notEqual(publicListRoute.handlers[0], requireAdmin);
+  assert.notEqual(publicAggregateRoute.handlers[0], requireInPersonTournamentAdmin);
   const accessibleRoute = app.routes.find((route) => route.path === "/in-person-tournaments/accessible");
   assert.equal(accessibleRoute.handlers[0], requireAuthenticated);
   app.routes.filter((route) => (

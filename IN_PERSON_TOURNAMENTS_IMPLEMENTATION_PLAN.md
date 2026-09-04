@@ -513,6 +513,8 @@ Gate: публічний глядач бачить актуальні дані �
 
 Покриття: `IPT-PUB-*`, `IPT-UI-009..011`; `UH-32`, `UH-39`, `UH-40` залишається поза MVP.
 
+Статус на 2026-09-05: етап реалізовано. Додано анонімний public aggregate API за tournament ID або slug з allowlist-серіалізацією, `revision`/`updated_at`, коротким HTTP cache policy та ETag revalidation; draft/cancelled rounds, скасовані турніри й admin-only поля у public response не потрапляють. Створено shared renderer `gg-html/in-person/in-person-tournament.html` з постійними вкладками `Playoffs`/`Swiss`/`Rounds`/`Players`, empty states, localized-name fallback, позначкою streaming table №1, responsive bracket/tables і безпечним text-node rendering. `UA/Ukraine-2025/ua2026.html` переведено на цей renderer та зафіксовано на турнірі `ipt_d8937ade-73e7-4a5c-9472-a46c21c73740`; дані завантажуються з API, а не з JSON export. Додано privacy, anonymous HTTP/cache, publish/result/rollback revision, regenerated-round і mobile/desktop smoke regression-тести. Повний backend suite: 128/128 tests passed.
+
 ### Етап 9. End-to-end hardening і release
 
 Автоматизація:

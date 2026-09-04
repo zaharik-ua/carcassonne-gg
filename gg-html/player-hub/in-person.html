@@ -247,15 +247,15 @@
   }
 
   .ip-btn {
-    min-height: 38px;
+    min-height: 23px;
     border: 1px solid #c8ced8;
-    border-radius: 4px;
-    padding: 7px 12px;
+    border-radius: 3px;
+    padding: 3px 8px;
     background: #eef2f6;
     color: #2f3947;
     font: inherit;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
     cursor: pointer;
   }
 
@@ -451,14 +451,105 @@
     flex: 0 0 auto;
   }
 
-  .ip-check-control input[type="checkbox"] {
+  .ip-draw-number-display {
+    min-width: 32px;
+    color: #344054;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: right;
+  }
+
+  .ip-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(24, 31, 41, 0.42);
+  }
+
+  .ip-modal-dialog {
+    width: 100%;
+    max-width: 420px;
+    box-sizing: border-box;
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid var(--ip-line);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 16px 36px rgba(15, 28, 48, 0.22);
+  }
+
+  .ip-modal-title {
+    color: #222;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .ip-modal-player {
+    color: #4b5563;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .ip-modal-fields {
+    display: grid;
+    gap: 12px;
+  }
+
+  .ip-checkin-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #344054;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .ip-checkin-checkbox input {
     width: 20px;
     height: 20px;
     margin: 0;
   }
 
+  .ip-modal-warning {
+    min-height: 17px;
+    color: var(--ip-danger);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .ip-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
   .ip-draw-number {
     width: 82px;
+  }
+
+  .ip-modal-dialog .ip-draw-number {
+    width: 80px;
+    height: 80px;
+    min-height: 80px;
+    padding: 8px;
+    appearance: textfield;
+    -moz-appearance: textfield;
+    font-size: 32px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .ip-modal-dialog .ip-draw-number::-webkit-inner-spin-button,
+  .ip-modal-dialog .ip-draw-number::-webkit-outer-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
   }
 
   .ip-swiss-summary,
@@ -749,10 +840,7 @@
 
     <section id="ipCheckInPanel" class="ip-card ip-hidden">
       <div class="ip-toolbar">
-        <div>
-          <strong>Check-in and draw numbers</strong>
-          <div class="ip-hint">Draw numbers must be unique positive integers. Gaps and a missing #1 are allowed.</div>
-        </div>
+        <strong>Check-in and draw numbers</strong>
         <button id="ipStartCheckInBtn" class="ip-btn primary ip-hidden" type="button">Start check-in</button>
       </div>
       <div id="ipReadiness"></div>
@@ -1220,14 +1308,10 @@
       || "—";
   }
 
-  function participantMeta(participant) {
+  function playerMeta(participant) {
     return [
-      participant.name_local,
-      participantLocation(participant),
+      participant.city_name_local || participant.city_name_en || "—",
       participant.bga_nickname ? `BGA: ${participant.bga_nickname}` : "",
-      participant.status,
-      participant.status_reason,
-      participant.draw_number == null ? "" : `#${participant.draw_number}`,
     ].filter(Boolean).join(" • ");
   }
 
@@ -1256,10 +1340,10 @@
       main.className = "ip-person";
       const name = document.createElement("div");
       name.className = "ip-person-name";
-      name.textContent = participant.name_en;
+      name.textContent = participant.name_local || participant.name_en;
       const meta = document.createElement("div");
       meta.className = "ip-person-meta";
-      meta.textContent = participantMeta(participant);
+      meta.textContent = playerMeta(participant);
       main.appendChild(name);
       main.appendChild(meta);
       const actions = document.createElement("div");
@@ -1317,7 +1401,7 @@
     const save = document.createElement("button");
     save.type = "submit";
     save.className = "ip-btn primary";
-    save.textContent = participant ? "Save" : "Add player";
+    save.textContent = participant ? "Save" : "Create";
     actions.appendChild(save);
     actions.appendChild(createButton("Cancel", "ip-btn", () => {
       formController.abort();
@@ -1701,6 +1785,167 @@
     readinessEl.appendChild(box);
   }
 
+  function openCheckInModal(participant) {
+    const tournament = state.overview?.tournament;
+    const editable = tournament?.status === "check_in" && !tournament?.has_started_swiss;
+    if (!editable) return;
+
+    const overlay = document.createElement("div");
+    overlay.className = "ip-modal-overlay";
+
+    const form = document.createElement("form");
+    form.className = "ip-modal-dialog";
+    form.setAttribute("role", "dialog");
+    form.setAttribute("aria-modal", "true");
+    form.setAttribute("aria-labelledby", "ipCheckInModalTitle");
+
+    const title = document.createElement("div");
+    title.id = "ipCheckInModalTitle";
+    title.className = "ip-modal-title";
+    title.textContent = participant.status === "checked_in" ? "Edit check-in" : "Player check-in";
+
+    const player = document.createElement("div");
+    player.className = "ip-modal-player";
+    player.textContent = participant.name_local || participant.name_en;
+
+    const fields = document.createElement("div");
+    fields.className = "ip-modal-fields";
+
+    const checkedInLabel = document.createElement("label");
+    checkedInLabel.className = "ip-checkin-checkbox";
+    const checkedIn = document.createElement("input");
+    checkedIn.type = "checkbox";
+    checkedIn.checked = true;
+    const checkedInText = document.createElement("span");
+    checkedInText.textContent = "Player checked in";
+    checkedInLabel.appendChild(checkedIn);
+    checkedInLabel.appendChild(checkedInText);
+
+    const drawNumber = createField("Draw number", "number");
+    drawNumber.input.min = "1";
+    drawNumber.input.step = "1";
+    drawNumber.input.inputMode = "numeric";
+    drawNumber.input.classList.add("ip-draw-number");
+    drawNumber.input.value = participant.draw_number == null ? "" : String(participant.draw_number);
+
+    const warning = document.createElement("div");
+    warning.className = "ip-modal-warning";
+    warning.setAttribute("role", "alert");
+    warning.setAttribute("aria-live", "polite");
+
+    const actions = document.createElement("div");
+    actions.className = "ip-modal-actions";
+    const cancel = createButton("Cancel", "ip-btn", () => closeModal());
+    const save = document.createElement("button");
+    save.type = "submit";
+    save.className = "ip-btn primary";
+    save.textContent = "Save";
+    actions.appendChild(cancel);
+    actions.appendChild(save);
+
+    fields.appendChild(checkedInLabel);
+    fields.appendChild(drawNumber.field);
+    form.appendChild(title);
+    form.appendChild(player);
+    form.appendChild(fields);
+    form.appendChild(warning);
+    form.appendChild(actions);
+    overlay.appendChild(form);
+
+    let saving = false;
+
+    function closeModal() {
+      if (saving) return;
+      document.removeEventListener("keydown", handleEscape);
+      overlay.remove();
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") closeModal();
+    }
+
+    function validateDrawNumber() {
+      warning.textContent = "";
+      if (!checkedIn.checked || drawNumber.input.value.trim() === "") return true;
+      const value = Number(drawNumber.input.value);
+      if (!Number.isInteger(value) || value <= 0) {
+        warning.textContent = "Draw number must be a positive integer.";
+        return false;
+      }
+      const owner = (state.overview?.participants || []).find((candidate) => (
+        String(candidate.id) !== String(participant.id)
+        && candidate.draw_number != null
+        && Number(candidate.draw_number) === value
+      ));
+      if (owner) {
+        warning.textContent = `Draw number ${value} is already used by ${owner.name_local || owner.name_en}.`;
+        return false;
+      }
+      return true;
+    }
+
+    function syncForm() {
+      drawNumber.input.disabled = saving || !checkedIn.checked;
+      checkedIn.disabled = saving;
+      cancel.disabled = saving;
+      const valid = validateDrawNumber();
+      save.disabled = saving || !valid;
+      return valid;
+    }
+
+    checkedIn.addEventListener("change", syncForm);
+    drawNumber.input.addEventListener("input", syncForm);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal();
+    });
+    document.addEventListener("keydown", handleEscape);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!validateDrawNumber()) {
+        syncForm();
+        return;
+      }
+      saving = true;
+      save.textContent = "Saving...";
+      syncForm();
+      try {
+        await apiJson(tournamentUrl(`/participants/${encodeURIComponent(participant.id)}/check-in`), {
+          method: "PATCH",
+          body: JSON.stringify({
+            checked_in: checkedIn.checked,
+            draw_number: checkedIn.checked && drawNumber.input.value !== ""
+              ? Number(drawNumber.input.value)
+              : null,
+          }),
+        });
+        await loadOverview();
+        saving = false;
+        closeModal();
+        setStatus(`Check-in saved for ${participant.name_en}.`, "success");
+      } catch (error) {
+        saving = false;
+        save.textContent = "Save";
+        if (error.code === "DRAW_NUMBER_TAKEN") {
+          const owner = error.details?.participant;
+          const ownerName = owner?.name_local || owner?.name_en;
+          warning.textContent = ownerName
+            ? `This draw number is already used by ${ownerName}.`
+            : "This draw number is already used by another player.";
+        } else {
+          warning.textContent = error.message || "Failed to save check-in.";
+        }
+        drawNumber.input.disabled = !checkedIn.checked;
+        checkedIn.disabled = false;
+        cancel.disabled = false;
+        save.disabled = false;
+      }
+    });
+
+    document.body.appendChild(overlay);
+    syncForm();
+    checkedIn.focus();
+  }
+
   function renderCheckIn() {
     checkInList.innerHTML = "";
     const tournament = state.overview?.tournament;
@@ -1725,54 +1970,32 @@
       main.className = "ip-person";
       const name = document.createElement("div");
       name.className = "ip-person-name";
-      name.textContent = participant.name_en;
+      name.textContent = participant.name_local || participant.name_en;
       const meta = document.createElement("div");
       meta.className = "ip-person-meta";
-      meta.textContent = participantMeta(participant);
+      meta.textContent = playerMeta(participant);
       main.appendChild(name);
       main.appendChild(meta);
 
       const controls = document.createElement("div");
       controls.className = "ip-check-control";
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = participant.status === "checked_in";
-      checkbox.disabled = !editable;
-      checkbox.setAttribute("aria-label", `Check in ${participant.name_en}`);
-      const number = document.createElement("input");
-      number.type = "number";
-      number.min = "1";
-      number.step = "1";
-      number.inputMode = "numeric";
-      number.placeholder = "Draw #";
-      number.className = "ip-input ip-draw-number";
-      number.value = participant.draw_number == null ? "" : String(participant.draw_number);
-      number.disabled = !editable || !checkbox.checked;
-      checkbox.addEventListener("change", () => {
-        number.disabled = !checkbox.checked;
-        if (!checkbox.checked) number.value = "";
-      });
-      const save = createButton("Save", "ip-btn", async () => {
-        save.disabled = true;
-        try {
-          await apiJson(tournamentUrl(`/participants/${encodeURIComponent(participant.id)}/check-in`), {
-            method: "PATCH",
-            body: JSON.stringify({
-              checked_in: checkbox.checked,
-              draw_number: checkbox.checked && number.value !== "" ? Number(number.value) : null,
-            }),
-          });
-          await loadOverview();
-          setStatus(`Check-in saved for ${participant.name_en}.`, "success");
-        } catch (error) {
-          setStatus(error.message || "Failed to save check-in.", "error");
-          save.disabled = false;
-        }
-      });
-      save.disabled = !editable;
-      controls.appendChild(checkbox);
-      controls.appendChild(number);
-      controls.appendChild(save);
+      if (participant.status === "checked_in") {
+        const number = document.createElement("div");
+        number.className = "ip-draw-number-display";
+        number.textContent = participant.draw_number == null ? "—" : String(participant.draw_number);
+        number.setAttribute(
+          "aria-label",
+          participant.draw_number == null ? "Draw number not set" : `Draw number ${participant.draw_number}`
+        );
+        controls.appendChild(number);
+      }
+      const action = createButton(
+        participant.status === "checked_in" ? "Edit" : "Check-in",
+        participant.status === "checked_in" ? "ip-btn" : "ip-btn primary",
+        () => openCheckInModal(participant)
+      );
+      action.disabled = !editable;
+      controls.appendChild(action);
       row.appendChild(main);
       row.appendChild(controls);
       checkInList.appendChild(row);

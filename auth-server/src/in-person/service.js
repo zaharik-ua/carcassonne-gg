@@ -12,6 +12,14 @@ import {
   getPlayoffRoundLabel,
   InPersonPlayoffError,
 } from "./playoff.js";
+import {
+  publicPlayoffPlacements,
+  serializePublicMatch,
+  serializePublicParticipant,
+  serializePublicRound,
+  serializePublicStanding,
+  serializePublicTournament,
+} from "./public.js";
 import { TOURNAMENT_ENTITY_TYPES } from "./schema.js";
 import {
   conflictError,
@@ -2924,6 +2932,99 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     });
   }
 
+  async function listPublicTournaments() {
+    const rows = await dbAll(
+      db,
+      `${TOURNAMENT_SELECT}
+       WHERE t.published_at IS NOT NULL
+         AND t.status NOT IN ('draft', 'cancelled')
+       ORDER BY t.start_date DESC, lower(t.name_en), t.id`
+    );
+    return rows.map(serializePublicTournament);
+  }
+
+  async function getPublicTournamentRow(identifier) {
+    const normalizedIdentifier = normalizeText(identifier);
+    if (!normalizedIdentifier) {
+      throw validationError("INVALID_TOURNAMENT_IDENTIFIER", "Tournament id or slug is required");
+    }
+    const row = await dbGet(
+      db,
+      `${TOURNAMENT_SELECT}
+       WHERE (t.id = ? OR lower(trim(t.slug)) = lower(trim(?)))
+         AND t.published_at IS NOT NULL
+         AND t.status NOT IN ('draft', 'cancelled')
+       LIMIT 1`,
+      [normalizedIdentifier, normalizedIdentifier]
+    );
+    if (!row) throw notFoundError("PUBLIC_TOURNAMENT_NOT_FOUND", "Published tournament not found");
+    return row;
+  }
+
+  async function loadPublicRounds(tournamentId, stage) {
+    const rows = await dbAll(
+      db,
+      `
+        SELECT *
+        FROM in_person_rounds
+        WHERE tournament_id = ?
+          AND stage = ?
+          AND status IN ('published', 'completed')
+        ORDER BY
+          CASE WHEN stage = 'swiss' THEN round_number ELSE round_order END,
+          CASE WHEN round_key = 'bronze_medal_match' THEN 0 ELSE 1 END,
+          round_key,
+          id
+      `,
+      [tournamentId, stage]
+    );
+    const rounds = [];
+    for (const row of rows) {
+      const matchRows = await dbAll(
+        db,
+        `${PLAYOFF_MATCH_SELECT}
+         WHERE m.round_id = ? AND m.status <> 'cancelled'
+         ORDER BY
+           CASE WHEN m.bracket_position IS NULL THEN 1 ELSE 0 END,
+           m.bracket_position,
+           CASE WHEN m.table_number IS NULL THEN 1 ELSE 0 END,
+           m.table_number,
+           m.id`,
+        [row.id]
+      );
+      rounds.push(serializePublicRound(row, matchRows.map(serializePublicMatch)));
+    }
+    return rounds;
+  }
+
+  async function getPublicTournamentAggregate(identifier) {
+    const tournamentRow = await getPublicTournamentRow(identifier);
+    const [participantRows, swissRounds, playoffRounds, standings] = await Promise.all([
+      loadParticipantRows(tournamentRow.id),
+      loadPublicRounds(tournamentRow.id, "swiss"),
+      loadPublicRounds(tournamentRow.id, "playoff"),
+      loadLatestSwissStandings(tournamentRow.id),
+    ]);
+    return {
+      revision: Number(tournamentRow.revision),
+      updated_at: tournamentRow.updated_at,
+      tournament: serializePublicTournament(tournamentRow),
+      players: participantRows.map(serializePublicParticipant),
+      swiss: {
+        standings: {
+          revision: Number(standings.revision || 0),
+          calculated_at: standings.calculated_at || null,
+          rows: standings.rows.map(serializePublicStanding),
+        },
+        rounds: swissRounds,
+      },
+      playoff: {
+        rounds: playoffRounds,
+        placements: publicPlayoffPlacements(playoffRounds),
+      },
+    };
+  }
+
   async function listParticipantCities(tournamentId) {
     const tournament = await requireTournamentRow(tournamentId);
     if (tournament.scope !== "local") return [];
@@ -3316,11 +3417,13 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     getCity,
     getParticipantsOverview,
     getPlayoffOverview,
+    getPublicTournamentAggregate,
     getSwissOverview,
     getTournament,
     listAccessibleTournaments,
     listCities,
     listParticipantCities,
+    listPublicTournaments,
     listTournamentAdmins,
     listTournaments,
     previewLateParticipant,
