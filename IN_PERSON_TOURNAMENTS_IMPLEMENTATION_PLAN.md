@@ -372,6 +372,8 @@ Gate: pure engine повністю проходить unit/golden tests до п�
 
 Покриття: `IPT-SWP-*`, `IPT-RES-*`, `IPT-STD-*`; `UH-13`, `UH-15`, `UH-17`, `UH-18`, `UH-19`, `UH-43`.
 
+Статус на 2026-09-04: етап реалізовано без підключення до HTTP або БД. Додано pure result validator, повний перерахунок `swiss_standard_v1`, перший раунд із compact draw-number list, наступні раунди з score-group preferences, глобальною перевіркою можливості уникнути rematch, starter balance та детермінованими warning reasons. Golden fixture відтворює 37 фінальних standings і перший раунд ЧУ-2025; окремий performance test формує пари для 256 учасників. Повний backend suite: 96/96 tests passed.
+
 ### Етап 5. Swiss workflow API та UI
 
 Backend commands:

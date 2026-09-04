@@ -69,6 +69,8 @@ npm start
 - `/in-person-tournaments/:id/participants/:participantId/check-in` — підтвердження участі та номер жеребкування;
 - `/in-person-tournaments/:id/check-in-readiness` — готовність до першого Swiss-раунду.
 
+Pure engine очного турніру розміщений у `src/in-person/engine.js`. Він не читає й не змінює БД: окремо валідує результати, рахує `swiss_standard_v1` та формує перший/наступні Swiss-раунди. Контракт input/output, формула Sonneborn–Berger і порядок deterministic fallback описані в `docs/in-person-engine.md`. Підключення engine до mutating API виконується на наступному етапі.
+
 ## 5) Реверс-проксі (nginx приклад)
 
 Ідея: фронтенд і auth-server мають бути на одному домені (`carcassonne.gg`), тоді cookie працюють стабільніше.
