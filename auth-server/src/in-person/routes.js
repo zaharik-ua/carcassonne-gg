@@ -441,6 +441,17 @@ export function registerInPersonRoutes(app, {
       res.json({ ok: true, ...overview });
     }, logger)
   );
+  app.post(
+    "/in-person-tournaments/:tournamentId/swiss/rounds/:roundId/reopen",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.reopenSwissRound(
+        req.inPersonTournamentId,
+        req.params.roundId
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
 
   logger?.info?.("[in-person] Admin, participant and Swiss routes registered");
   return { registered: true };

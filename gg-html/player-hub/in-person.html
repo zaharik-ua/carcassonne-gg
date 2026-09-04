@@ -1168,24 +1168,6 @@
       const actions = document.createElement("div");
       actions.className = "ip-actions";
       actions.appendChild(createButton("Edit", "ip-btn", () => openPlayerForm(participant)));
-      if (
-        tournament?.status === "swiss"
-        && ["registered", "checked_in"].includes(participant.status)
-      ) {
-        actions.appendChild(createButton(
-          "Withdraw",
-          "ip-btn danger",
-          () => deactivateParticipant(participant, "withdrawn")
-        ));
-        actions.appendChild(createButton(
-          "Disqualify",
-          "ip-btn danger",
-          () => deactivateParticipant(participant, "disqualified")
-        ));
-      }
-      const deleteButton = createButton("Delete", "ip-btn danger", () => deletePlayer(participant));
-      deleteButton.disabled = participant.has_matches || !!tournament?.has_started_swiss;
-      actions.appendChild(deleteButton);
       row.appendChild(main);
       row.appendChild(actions);
       playersList.appendChild(row);
@@ -1246,6 +1228,30 @@
       playerFormMount.innerHTML = "";
       setStatus("");
     }));
+    if (participant) {
+      if (
+        tournament.status === "swiss"
+        && ["registered", "checked_in"].includes(participant.status)
+      ) {
+        actions.appendChild(createButton(
+          "Withdraw",
+          "ip-btn danger",
+          () => deactivateParticipant(participant, "withdrawn")
+        ));
+        actions.appendChild(createButton(
+          "Disqualify",
+          "ip-btn danger",
+          () => deactivateParticipant(participant, "disqualified")
+        ));
+      }
+      const deleteButton = createButton(
+        "Delete",
+        "ip-btn danger",
+        () => deletePlayer(participant)
+      );
+      deleteButton.disabled = participant.has_matches || !!tournament.has_started_swiss;
+      actions.appendChild(deleteButton);
+    }
     form.appendChild(actions);
 
     async function saveParticipant(confirmDuplicate) {
@@ -1853,6 +1859,29 @@
     }
   }
 
+  async function reopenCompletedSwissRound(round, button) {
+    if (!window.confirm(
+      `Undo completion of Swiss round ${round.round_number}? `
+      + "Its results will become editable and standings will return to the previous revision."
+    )) return;
+    button.disabled = true;
+    try {
+      const data = await apiJson(
+        tournamentUrl(`/swiss/rounds/${encodeURIComponent(round.id)}/reopen`),
+        { method: "POST", body: "{}" }
+      );
+      adoptSwissResponse(data);
+      renderWorkspace();
+      setStatus(
+        `Swiss round ${round.round_number} reopened. Edit its results, then complete it again.`,
+        "success"
+      );
+    } catch (error) {
+      setStatus(error.message || "Failed to reopen the completed Swiss round.", "error");
+      button.disabled = false;
+    }
+  }
+
   function cancellationResultLabel(match) {
     if (match.is_bye) return `${swissParticipantName(match, "a")}: bye win`;
     const winner = match.winner_participant_id === match.participant_a_id
@@ -2164,17 +2193,27 @@
     ) {
       const complete = createButton("Complete round", "ip-btn primary", () => completeSwissRound(round, complete));
       swissActions.appendChild(complete);
-    } else if (round?.status === "completed" && swiss.can_generate_next_round) {
-      swissActions.appendChild(createButton(
-        `Preview round ${swiss.next_round_number}`,
-        "ip-btn primary",
-        previewNextSwissRound
-      ));
-    } else if (swiss.swiss_complete) {
-      const badge = document.createElement("span");
-      badge.className = "ip-badge";
-      badge.textContent = "Swiss complete";
-      swissActions.appendChild(badge);
+    } else if (round?.status === "completed") {
+      if (swiss.can_reopen_current_round) {
+        const reopen = createButton(
+          "Undo complete round",
+          "ip-btn",
+          () => reopenCompletedSwissRound(round, reopen)
+        );
+        swissActions.appendChild(reopen);
+      }
+      if (swiss.can_generate_next_round) {
+        swissActions.appendChild(createButton(
+          `Preview round ${swiss.next_round_number}`,
+          "ip-btn primary",
+          previewNextSwissRound
+        ));
+      } else if (swiss.swiss_complete) {
+        const badge = document.createElement("span");
+        badge.className = "ip-badge";
+        badge.textContent = "Swiss complete";
+        swissActions.appendChild(badge);
+      }
     }
     if (round && swiss.can_cancel_current_round) {
       const cancel = createButton(

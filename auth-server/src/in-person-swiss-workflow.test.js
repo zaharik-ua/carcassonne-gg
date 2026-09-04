@@ -165,6 +165,58 @@ test("confirms and publishes a Swiss preview in one retry-safe command", async (
   assert.equal(overview.rounds.length, 1);
 });
 
+test("reopens the last completed round before the next round is formed", async (t) => {
+  const { db, service } = await createContext(t);
+  const { tournament } = await createReadyTournament(service, 4, "reopen-complete");
+  let overview = await service.confirmSwissRound(tournament.id, {
+    round_number: 1,
+    publish: true,
+  });
+  const roundId = overview.current_round.id;
+  await saveRoundResults(service, tournament.id, overview.current_round);
+  overview = await service.completeSwissRound(tournament.id, roundId);
+  assert.equal(overview.current_round.status, "completed");
+  assert.equal(overview.can_reopen_current_round, true);
+  assert.equal(overview.standings.revision, 1);
+
+  overview = await service.reopenSwissRound(tournament.id, roundId);
+  assert.equal(overview.reopened, true);
+  assert.equal(overview.current_round.status, "published");
+  assert.equal(overview.current_round.progress.completed, overview.current_round.progress.total);
+  assert.equal(overview.can_generate_next_round, false);
+  assert.equal(overview.can_reopen_current_round, false);
+  assert.equal(overview.standings.revision, 0);
+  assert.equal(
+    (await get(db, "SELECT completed_at FROM in_person_rounds WHERE id = ?", [roundId])).completed_at,
+    null
+  );
+
+  const retry = await service.reopenSwissRound(tournament.id, roundId);
+  assert.equal(retry.reopened, false);
+  const match = retry.current_round.matches.find((entry) => !entry.is_bye);
+  const correctedWinner = match.winner_participant_id === match.participant_a_id
+    ? match.participant_b_id
+    : match.participant_a_id;
+  await service.saveSwissMatchResult(tournament.id, match.id, {
+    starting_participant_id: match.starting_participant_id,
+    result_type: "simple",
+    winner_participant_id: correctedWinner,
+    admin_note: "Corrected after reopening",
+  });
+  overview = await service.completeSwissRound(tournament.id, roundId);
+  assert.equal(overview.standings.revision, 2);
+
+  overview = await service.confirmSwissRound(tournament.id, {
+    round_number: 2,
+    publish: true,
+  });
+  assert.equal(overview.current_round.round_number, 2);
+  await assert.rejects(
+    service.reopenSwissRound(tournament.id, roundId),
+    (error) => error?.code === "NEXT_ROUND_ALREADY_FORMED"
+  );
+});
+
 test("rejects invalid or incomplete results and reports missing tables", async (t) => {
   const { service } = await createContext(t);
   const { tournament } = await createReadyTournament(service, 4, "validation");

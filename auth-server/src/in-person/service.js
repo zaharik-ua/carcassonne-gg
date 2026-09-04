@@ -1206,6 +1206,9 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
       can_generate_next_round: !!currentRound
         && currentRound.status === "completed"
         && nextRoundNumber <= swissRoundsCount,
+      can_reopen_current_round: !!currentRound
+        && currentRound.status === "completed"
+        && tournamentRow.status === "swiss",
       can_add_late_participant: rounds.length === 1
         && currentRound?.round_number === 1
         && tournamentRow.status === "swiss",
@@ -1598,6 +1601,68 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           completed: true,
           round_id: round.id,
           standings_revision: standingsRevision,
+        };
+      });
+      return { ...(await getSwissOverview(tournamentId)), ...outcome };
+    });
+  }
+
+  async function reopenSwissRound(tournamentId, roundId) {
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        if (tournament.status !== "swiss") {
+          throw conflictError(
+            "INVALID_TOURNAMENT_STATUS",
+            "A completed Swiss round can be reopened only during the Swiss stage"
+          );
+        }
+        const requestedRound = await requireSwissRoundRow(tournament.id, roundId);
+        const rounds = await loadSwissRounds(tournament.id);
+        assertSwissRoundSequence(rounds);
+        const lastRound = rounds[rounds.length - 1];
+        if (!lastRound || lastRound.id !== requestedRound.id) {
+          throw conflictError(
+            "NEXT_ROUND_ALREADY_FORMED",
+            "Cancel the later Swiss round before reopening this completed round",
+            lastRound ? {
+              last_round_id: lastRound.id,
+              last_round_number: lastRound.round_number,
+            } : null
+          );
+        }
+        if (lastRound.status === "published") {
+          return {
+            reopened: false,
+            round_id: lastRound.id,
+            round_number: Number(lastRound.round_number),
+          };
+        }
+        if (lastRound.status !== "completed") {
+          throw conflictError(
+            "ROUND_NOT_COMPLETED",
+            "Only the last completed Swiss round can be reopened"
+          );
+        }
+        await dbRun(
+          db,
+          `
+            UPDATE in_person_rounds
+            SET status = 'published', completed_at = NULL,
+                revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `,
+          [lastRound.id]
+        );
+        await injectFault("swiss_round_after_reopen", {
+          tournament_id: tournament.id,
+          round_id: lastRound.id,
+        });
+        await touchTournament(tournament.id);
+        return {
+          reopened: true,
+          round_id: lastRound.id,
+          round_number: Number(lastRound.round_number),
         };
       });
       return { ...(await getSwissOverview(tournamentId)), ...outcome };
@@ -2484,6 +2549,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     previewSwissRoundCancellation,
     publishTournament,
     publishSwissRound,
+    reopenSwissRound,
     removeTournamentAdmin,
     replaceTournamentAdmins,
     restoreCity: (cityId) => setCityArchived(cityId, false),

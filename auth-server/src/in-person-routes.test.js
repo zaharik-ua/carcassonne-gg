@@ -44,6 +44,7 @@ function createService() {
     previewSwissRoundCancellation: async () => ({}),
     publishTournament: async () => ({}),
     publishSwissRound: async () => ({}),
+    reopenSwissRound: async () => ({}),
     removeTournamentAdmin: async () => ({}),
     replaceTournamentAdmins: async () => [],
     restoreCity: async () => ({}),
@@ -71,7 +72,7 @@ test("always registers protected global and tournament routes", () => {
   });
 
   assert.deepEqual(result, { registered: true });
-  assert.equal(app.routes.length, 39);
+  assert.equal(app.routes.length, 40);
   assert.equal(app.routes[0].method, "GET");
   assert.equal(app.routes[0].path, "/in-person-tournaments/_foundation");
   assert.equal(app.routes[0].handlers[0], requireAdmin);
@@ -124,6 +125,9 @@ test("always registers protected global and tournament routes", () => {
   )));
   assert.ok(app.routes.some((route) => (
     route.method === "POST" && route.path.endsWith("/complete")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/reopen")
   )));
   assert.ok(app.routes.some((route) => (
     route.method === "GET" && route.path.endsWith("/cancellation-preview")

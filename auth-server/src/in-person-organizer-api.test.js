@@ -353,6 +353,23 @@ test("organizer API completes a Swiss round for 4, 5 and 8 participants", async 
     assert.equal(completed.response.status, 200);
     assert.equal(completed.data.swiss_complete, true);
     assert.equal(completed.data.standings.rows.length, participantCount);
+    if (participantCount === 4) {
+      const reopened = await api(
+        baseUrl,
+        `/in-person-tournaments/${tournamentId}/swiss/rounds/${round.id}/reopen`,
+        { userId: 1, method: "POST", body: "{}" }
+      );
+      assert.equal(reopened.response.status, 200);
+      assert.equal(reopened.data.current_round.status, "published");
+      assert.equal(reopened.data.standings.revision, 0);
+      const recompleted = await api(
+        baseUrl,
+        `/in-person-tournaments/${tournamentId}/swiss/rounds/${round.id}/complete`,
+        { userId: 1, method: "POST", body: "{}" }
+      );
+      assert.equal(recompleted.response.status, 200);
+      assert.equal(recompleted.data.standings.revision, 2);
+    }
   }
 });
 

@@ -425,6 +425,7 @@ Gate: повний Swiss можна провести через Player Hub бе�
   - `late_bye`, лише якщо активного bye немає;
   - обов'язковий `pair_with_bye` із скасуванням початкової bye-перемоги, якщо активний bye є;
 - повторне завершення першого раунду та standings rebuild.
+- скасування `Complete round` для останнього завершеного раунду до формування наступного зі збереженням пар і результатів для редагування.
 
 Тести:
 
@@ -434,12 +435,13 @@ Gate: повний Swiss можна провести через Player Hub бе�
 - withdrawn participant не отримує opponent;
 - late participant обома автоматично визначеними режимами: `late_bye` без активного bye та `pair_with_bye` за його наявності;
 - draft no-show і published no-show.
+- reopen completed round, виправлення результату, повторний complete та блокування reopen після формування наступного раунду.
 
 Gate: організатор може без ручного SQL виправити Swiss-помилку з погоджених MVP unhappy scenarios.
 
 Покриття: `IPT-WDR-*`, `IPT-RBK-*`, `IPT-LAT-*`; `UH-01`, `UH-02`, `UH-08..11`, `UH-16`.
 
-Статус на 2026-09-04: етап реалізовано. Додано preview і атомарне скасування рівно одного останнього Swiss-раунду з обов'язковою причиною, повернення до попередньої active standings revision, послідовний rollback та повторну генерацію нового active-запису з тим самим номером. Організатор може withdraw/disqualify учасника; незавершений draft вимагає rollback, а для published матчу UI пропонує явний technical result із `withdrawal`/`disqualification` або окремий `no_show`. Late participant має preview/confirm з автоматичним вибором режиму: `pair_with_bye` обов'язковий за наявності активного bye, інакше використовується `late_bye`; підтримано вибір вільного столу/першого гравця, повторне відкриття завершеного першого раунду та rebuild standings. Додано service, API, authorization, UI parsing та fault-injection regression-тести. Основний Swiss UI об'єднує підтвердження і публікацію pairings в одну дію `Confirm and publish`. Повний backend suite: 112/112 tests passed.
+Статус на 2026-09-04: етап реалізовано. Додано preview і атомарне скасування рівно одного останнього Swiss-раунду з обов'язковою причиною, повернення до попередньої active standings revision, послідовний rollback та повторну генерацію нового active-запису з тим самим номером. Окрема дія `Undo complete round` повторно відкриває останній завершений раунд до формування наступного, зберігає його пари й результати для редагування та тимчасово повертає standings до попередньої revision. Організатор може withdraw/disqualify учасника; ці небезпечні дії разом із `Delete` розміщені у формі `Edit`, незавершений draft вимагає rollback, а для published матчу UI пропонує явний technical result із `withdrawal`/`disqualification` або окремий `no_show`. Late participant має preview/confirm з автоматичним вибором режиму: `pair_with_bye` обов'язковий за наявності активного bye, інакше використовується `late_bye`; підтримано вибір вільного столу/першого гравця, повторне відкриття завершеного першого раунду та rebuild standings. Додано service, API, authorization, UI parsing та fault-injection regression-тести. Основний Swiss UI об'єднує підтвердження і публікацію pairings в одну дію `Confirm and publish`. Повний backend suite: 114/114 tests passed.
 
 ### Етап 7. Плейоф
 

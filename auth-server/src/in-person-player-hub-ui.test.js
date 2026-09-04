@@ -66,6 +66,7 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
     "Publish round",
     "Save result",
     "Complete round",
+    "Undo complete round",
     "Swiss standings",
     "Solkoff1",
     "Solkoff2",
@@ -79,11 +80,27 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
     /\/publish`/,
     /\/result`/,
     /\/complete`/,
+    /\/reopen`/,
   ].forEach((pattern) => assert.match(inPersonHtml, pattern));
   assert.match(inPersonHtml, /data-ip-tab="swiss"/);
   assert.match(inPersonHtml, /data-ip-tab="standings"/);
   assert.match(inPersonHtml, /round\.progress\.completed === round\.progress\.total/);
   assert.match(inPersonHtml, /round_number: preview\.round_number, publish: true/);
+});
+
+test("participant row actions are moved into the Edit form", () => {
+  const listRenderer = inPersonHtml.slice(
+    inPersonHtml.indexOf("function renderPlayers()"),
+    inPersonHtml.indexOf("function openPlayerForm")
+  );
+  const editForm = inPersonHtml.slice(
+    inPersonHtml.indexOf("function openPlayerForm"),
+    inPersonHtml.indexOf("async function deletePlayer")
+  );
+  ["Withdraw", "Disqualify", "Delete"].forEach((label) => {
+    assert.equal(listRenderer.includes(`\"${label}\"`), false, `${label} must not be in the player row`);
+    assert.equal(editForm.includes(`\"${label}\"`), true, `${label} must be in the Edit form`);
+  });
 });
 
 test("In-Person page exposes Swiss rollback, inactive-player and late-entry recovery", () => {
