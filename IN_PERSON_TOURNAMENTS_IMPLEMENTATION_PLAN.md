@@ -65,7 +65,7 @@ Pure-функції result/standings/pairing/playoff не повинні зал�
 - `slug` є окремим унікальним case-insensitive полем публічного URL і після публікації не змінюється звичайним редагуванням.
 - API-поле `association_id` містить `associations.code`, тому реалізація не повинна шукати неіснуючу колонку `associations.id`.
 
-### 3.3. Транзакції та idempotency
+### 3.3. Транзакції та безпечні повторні запити
 
 Одна транзакція охоплює кожну складену команду:
 
@@ -76,7 +76,7 @@ Pure-функції result/standings/pairing/playoff не повинні зал�
 - збереження результату та перенесення учасника в наступний playoff match;
 - атомарну зміну трансляційного столу №1.
 
-Для повторів одного запиту з тим самим idempotency key додати технічну таблицю `in_person_idempotency_keys`. Вона не є audit trail і зберігає лише ключ, тип команди, tournament/user ID, статус та мінімальний response snapshot/ідентифікатори створених записів.
+Загальну таблицю `in_person_idempotency_keys` у MVP не створювати. Повторну генерацію раунду захищають транзакція та унікальність одного нескасованого раунду з конкретним номером; повторний запит повертає вже створений раунд. Результат матчу зберігається retry-safe командою з поточним повним значенням, після невизначеної відповіді клієнт перечитує серверний стан. Окрему модель idempotency keys можна додати після MVP для складніших конкурентних команд.
 
 ### 3.4. Поточний результат матчу
 
@@ -171,12 +171,6 @@ MVP не додає до раунду `version`, `replaces_round_id`, `pairing_a
 - calculated timestamp;
 - primary key `(tournament_id, revision, participant_id)`.
 
-`in_person_idempotency_keys`
-
-- command key, command type, tournament ID, actor user ID;
-- state/result reference, created/expiry timestamps;
-- unique `(command_type, actor_user_id, command_key)`.
-
 ### 4.3. Обмеження та indexes
 
 Обов'язково протестувати:
@@ -270,6 +264,8 @@ Mutations захищає наявний `requireAdmin`.
 Gate: усі наявні backend-тести зелені; row counts і доступи після тестової міграції збігаються.
 
 Покриття: `IPT-ARC-*`, `IPT-ACL-*`, `IPT-DB-*`, частина `IPT-NFR-*`; `UH-34`.
+
+Статус на 2026-09-04: етап реалізовано. Додано модулі schema/access/routes, атомарну перебудову `tournament_access_users`, explicit type predicate в усіх legacy queries, permission middleware, вимкнений за замовчуванням feature gate, regression-тести та [production migration runbook](docs/in-person-schema-migration.md). Загальна таблиця idempotency keys не створюється. Backend suite після змін: 51/51 tests passed.
 
 ### Етап 2. Admin CRUD і базове налаштування
 
@@ -381,7 +377,7 @@ Backend commands:
 - save results;
 - complete round і write standings revision;
 - блокування next round до завершення поточного;
-- idempotency для double click/network retry;
+- retry-safe поведінка для double click/network retry без загальної idempotency-таблиці;
 - атомарність generation та standings update.
 
 Player Hub:
@@ -553,7 +549,7 @@ PR 3 і PR 4 можна виконувати паралельно після с�
 Обов'язкові automated integration/E2E tests:
 
 - rollback/results: `UH-01`, `UH-02`, `UH-16`;
-- idempotency/atomicity/validation: `UH-05`, `UH-06`, `UH-07`, `UH-17`, `UH-18`, `UH-19`, `UH-31`;
+- retry safety/atomicity/validation: `UH-05`, `UH-06`, `UH-07`, `UH-17`, `UH-18`, `UH-19`, `UH-31`;
 - roster exceptions: `UH-08`, `UH-09`, `UH-10`, `UH-11`, `UH-27`, `UH-28`, `UH-29`, `UH-37`, `UH-43`;
 - pairing: `UH-13`, `UH-15`;
 - playoff: `UH-22`, `UH-23`, `UH-25`, `UH-26`, `UH-39`, `UH-41`, `UH-42`;
@@ -569,7 +565,7 @@ PR 3 і PR 4 можна виконувати паралельно після с�
 | Частково застосована schema при старті | Versioned transaction migration, server readiness тільки після успіху schema setup |
 | Помилка Swiss algorithm на edge cases | Один фіксований deterministic engine без випадковості, ЧУ-2025 golden fixture, small exhaustive fixtures; не деплоїти зміну алгоритму під час активного турніру |
 | Неправильні standings після rollback | Source of truth — active completed matches; rebuild із нуля та revision acceptance tests |
-| Дублювання результату через поганий інтернет у залі | Idempotency key, server-confirmed state, retry-safe UI |
+| Дублювання результату через поганий інтернет у залі | Retry-safe запис повного поточного результату, server-confirmed state і повторне читання актуального матчу |
 | Розбіжність Player Hub і public page | Один aggregate/service layer, revision-based refresh, відсутність generated JSON |
 | Подальше розростання `server.js` | Новий route/service/repository module замість inline implementation |
 | Frontend не потрапив у production разом із backend | Явний CMS/snippet release checklist і smoke verification кожного з трьох UI-контурів |

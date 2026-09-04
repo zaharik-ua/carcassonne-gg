@@ -46,6 +46,9 @@ import {
   shouldCloseChallengeRequestsForPlayerStatus,
 } from "./challenges.js";
 import { ensureTournamentCasesSchema } from "./tournament-cases.js";
+import { ensureInPersonSchema } from "./in-person/schema.js";
+import { createRequireInPersonTournamentAdmin } from "./in-person/access.js";
+import { registerInPersonRoutes } from "./in-person/routes.js";
 import {
   isNewsProposalSubmitter,
   isOwnEditableNewsProposal,
@@ -101,6 +104,7 @@ const FRONTEND_ORIGINS = Array.from(
 const PRIMARY_FRONTEND_ORIGIN = FRONTEND_ORIGINS[0];
 const DB_PATH = process.env.DB_PATH || "./data/auth.sqlite";
 const UPLOADS_DIR = process.env.UPLOADS_DIR || "./uploads";
+const IN_PERSON_TOURNAMENTS_ENABLED = process.env.IN_PERSON_TOURNAMENTS_ENABLED || "false";
 const isProd = process.env.NODE_ENV === "production";
 const SITE_BASE_URL = process.env.SITE_BASE_URL || "https://carcassonne.gg";
 const cookieSameSite = process.env.COOKIE_SAME_SITE || (isProd ? "none" : "lax");
@@ -124,6 +128,28 @@ const uploadsRootDir = path.isAbsolute(UPLOADS_DIR)
 
 const db = new sqlite3.Database(dbFullPath);
 db.configure("busyTimeout", 5000);
+
+let resolveInPersonSchemaReady;
+let rejectInPersonSchemaReady;
+let inPersonSchemaScheduled = false;
+const inPersonSchemaReady = new Promise((resolve, reject) => {
+  resolveInPersonSchemaReady = resolve;
+  rejectInPersonSchemaReady = reject;
+});
+
+function scheduleInPersonSchema() {
+  if (inPersonSchemaScheduled) return;
+  inPersonSchemaScheduled = true;
+  ensureInPersonSchema(db)
+    .then(resolveInPersonSchemaReady)
+    .catch(rejectInPersonSchemaReady);
+}
+
+function failInPersonSchema(error) {
+  if (inPersonSchemaScheduled) return;
+  inPersonSchemaScheduled = true;
+  rejectInPersonSchemaReady(error);
+}
 
 function logUpdaterOutput(context, output) {
   const label = String(context || "").trim() || "runUpdater";
@@ -2818,12 +2844,14 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
           WHEN ? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau_access
-            WHERE upper(trim(tau_access.tournament_id)) = upper(trim(t.id))
+            WHERE tau_access.tournament_entity_type = 'tournament'
+              AND upper(trim(tau_access.tournament_id)) = upper(trim(t.id))
               AND tau_access.user_id = ?
           ) THEN (
             SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
             FROM tournament_access_users tau
-            WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
+            WHERE tau.tournament_entity_type = 'tournament'
+              AND upper(trim(tau.tournament_id)) = upper(trim(t.id))
               AND tau.user_id = ?
             LIMIT 1
           )
@@ -2841,7 +2869,8 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
           WHEN ? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau
-            WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
+            WHERE tau.tournament_entity_type = 'tournament'
+              AND upper(trim(tau.tournament_id)) = upper(trim(t.id))
               AND tau.user_id = ?
           ) THEN 1
           WHEN trim(?) <> '' AND EXISTS (
@@ -2856,7 +2885,8 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
           WHEN ? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau
-            WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
+            WHERE tau.tournament_entity_type = 'tournament'
+              AND upper(trim(tau.tournament_id)) = upper(trim(t.id))
               AND tau.user_id = ?
           ) THEN 1
           ELSE 0
@@ -3014,7 +3044,8 @@ function replaceTournamentAccessUsers(tournamentId, userIds, done) {
   db.run(
     `
       DELETE FROM tournament_access_users
-      WHERE upper(trim(tournament_id)) = upper(trim(?))
+      WHERE tournament_entity_type = 'tournament'
+        AND upper(trim(tournament_id)) = upper(trim(?))
     `,
     [normalizedTournamentId],
     (deleteErr) => {
@@ -3030,13 +3061,14 @@ function replaceTournamentAccessUsers(tournamentId, userIds, done) {
 
       const stmt = db.prepare(`
         INSERT INTO tournament_access_users (
+          tournament_entity_type,
           tournament_id,
           user_id,
           role,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES ('tournament', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
 
       let pending = normalizedUsers.length;
@@ -3150,7 +3182,8 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
             user_id,
             COALESCE(NULLIF(lower(trim(role)), ''), ?) AS role
           FROM tournament_access_users
-          WHERE upper(trim(tournament_id)) = upper(trim(?))
+          WHERE tournament_entity_type = 'tournament'
+            AND upper(trim(tournament_id)) = upper(trim(?))
           ORDER BY user_id ASC
         `,
         [TOURNAMENT_ACCESS_ROLES.CAPTAIN, normalizedTournamentId],
@@ -6162,34 +6195,6 @@ function ensureTournamentsSchema() {
   });
 }
 
-function ensureTournamentAccessUsersSchema() {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS tournament_access_users (
-      tournament_id TEXT NOT NULL,
-      user_id INTEGER NOT NULL,
-      role TEXT NOT NULL DEFAULT 'captain',
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (tournament_id, user_id)
-    )
-  `, (createErr) => {
-    if (createErr) {
-      console.error("Failed to ensure tournament_access_users schema", createErr);
-      return;
-    }
-    db.all("PRAGMA table_info(tournament_access_users)", (pragmaErr, columns) => {
-      if (pragmaErr) {
-        console.error("Failed to inspect tournament_access_users schema", pragmaErr);
-        return;
-      }
-      if (!Array.isArray(columns) || columns.length === 0) return;
-      addColumnIfMissing(columns, "tournament_access_users", "role", "TEXT NOT NULL DEFAULT 'captain'");
-      addColumnIfMissing(columns, "tournament_access_users", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-      addColumnIfMissing(columns, "tournament_access_users", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-    });
-  });
-}
-
 function ensureTournamentTeamIndexes() {
   db.run(
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_teams_tournament_team ON tournament_teams(tournament_id COLLATE NOCASE, team_id COLLATE NOCASE)",
@@ -7672,6 +7677,40 @@ function logUserBgaLinkAudit({ actor, userId, oldBgaId, source }, done = () => {
   });
 }
 
+function scheduleApplicationSchemas() {
+  ensureProfilesSchema();
+  ensureAssociationsSchema();
+  ensureMatchesSchema();
+  ensureDuelsSchema();
+  ensureSecretLineupsSchema(db).catch((error) => {
+    console.error("Failed to ensure secret lineups schema", error);
+  });
+  ensureDuelFormatsSchema();
+  ensureSystemSettingsSchema();
+  ensureGamesSchema();
+  ensureChallengesSchema();
+  ensureTeamsSchema();
+  ensureTournamentsSchema();
+  ensureTournamentTeamsSchema();
+  ensureTournamentPlayersSchema();
+  ensureStandingsSchema();
+  ensureFriendlyFindSchema();
+  ensureStreamersSchema();
+  ensureLocalWebsitesSchema();
+  ensureNewsEditorsSchema();
+  ensureNewsSchema();
+  ensureIconsSchema();
+  ensureCategoriesSchema();
+  ensureImagesSchema({ db, addColumnIfMissing });
+  ensureStreamsSchema();
+  ensureMobileMenuItemsSchema();
+  ensureAuditTrailSchema();
+  ensureTournamentCasesSchema(db).catch((error) => {
+    console.error("Failed to ensure tournament_cases schema", error);
+  });
+  scheduleInPersonSchema();
+}
+
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -7694,6 +7733,7 @@ db.serialize(() => {
     (profilesCheckErr, profilesTable) => {
       if (profilesCheckErr) {
         console.error("Failed to check profiles table", profilesCheckErr);
+        failInPersonSchema(profilesCheckErr);
         return;
       }
 
@@ -7702,6 +7742,7 @@ db.serialize(() => {
         (linksCheckErr, legacyTable) => {
           if (linksCheckErr) {
             console.error("Failed to check user_player_links table", linksCheckErr);
+            failInPersonSchema(linksCheckErr);
             return;
           }
 
@@ -7711,9 +7752,10 @@ db.serialize(() => {
             db.run("ALTER TABLE user_player_links RENAME TO profiles", (renameErr) => {
               if (renameErr) {
                 console.error("Failed to rename user_player_links to profiles", renameErr);
+                failInPersonSchema(renameErr);
                 return;
               }
-              ensureProfilesSchema();
+              scheduleApplicationSchemas();
             });
             return;
           }
@@ -7747,38 +7789,7 @@ db.serialize(() => {
             )
           `);
 
-          ensureProfilesSchema();
-
-          ensureAssociationsSchema();
-          ensureMatchesSchema();
-          ensureDuelsSchema();
-          ensureSecretLineupsSchema(db).catch((error) => {
-            console.error("Failed to ensure secret lineups schema", error);
-          });
-          ensureDuelFormatsSchema();
-          ensureSystemSettingsSchema();
-          ensureGamesSchema();
-          ensureChallengesSchema();
-          ensureTeamsSchema();
-          ensureTournamentsSchema();
-          ensureTournamentAccessUsersSchema();
-          ensureTournamentTeamsSchema();
-          ensureTournamentPlayersSchema();
-          ensureStandingsSchema();
-          ensureFriendlyFindSchema();
-          ensureStreamersSchema();
-          ensureLocalWebsitesSchema();
-          ensureNewsEditorsSchema();
-          ensureNewsSchema();
-          ensureIconsSchema();
-          ensureCategoriesSchema();
-          ensureImagesSchema({ db, addColumnIfMissing });
-          ensureStreamsSchema();
-          ensureMobileMenuItemsSchema();
-          ensureAuditTrailSchema();
-          ensureTournamentCasesSchema(db).catch((error) => {
-            console.error("Failed to ensure tournament_cases schema", error);
-          });
+          scheduleApplicationSchemas();
         }
       );
     }
@@ -8027,6 +8038,14 @@ function requireAdmin(req, res, next) {
   }
   return next();
 }
+
+const requireInPersonTournamentAdmin = createRequireInPersonTournamentAdmin({ db });
+
+registerInPersonRoutes(app, {
+  enabled: IN_PERSON_TOURNAMENTS_ENABLED,
+  requireAdmin,
+  requireInPersonTournamentAdmin,
+});
 
 function requireActorAuthenticated(req, res, next) {
   if (!req.actorUser) {
@@ -13201,7 +13220,8 @@ app.get("/tournaments", (req, res, next) => {
           OR (? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau_filter
-            WHERE upper(trim(tau_filter.tournament_id)) = upper(trim(t.id))
+            WHERE tau_filter.tournament_entity_type = 'tournament'
+              AND upper(trim(tau_filter.tournament_id)) = upper(trim(t.id))
               AND tau_filter.user_id = ?
           ))
           OR (trim(?) <> '' AND EXISTS (
@@ -13262,12 +13282,14 @@ app.get("/tournaments", (req, res, next) => {
           WHEN ? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau_access
-            WHERE upper(trim(tau_access.tournament_id)) = upper(trim(t.id))
+            WHERE tau_access.tournament_entity_type = 'tournament'
+              AND upper(trim(tau_access.tournament_id)) = upper(trim(t.id))
               AND tau_access.user_id = ?
           ) THEN (
             SELECT COALESCE(NULLIF(lower(trim(tau_role.role)), ''), ?)
             FROM tournament_access_users tau_role
-            WHERE upper(trim(tau_role.tournament_id)) = upper(trim(t.id))
+            WHERE tau_role.tournament_entity_type = 'tournament'
+              AND upper(trim(tau_role.tournament_id)) = upper(trim(t.id))
               AND tau_role.user_id = ?
             LIMIT 1
           )
@@ -13282,7 +13304,8 @@ app.get("/tournaments", (req, res, next) => {
         (
           SELECT GROUP_CONCAT(tau.user_id)
           FROM tournament_access_users tau
-          WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
+          WHERE tau.tournament_entity_type = 'tournament'
+            AND upper(trim(tau.tournament_id)) = upper(trim(t.id))
         ) AS access_user_ids_csv,
         (
           SELECT GROUP_CONCAT(
@@ -13290,13 +13313,15 @@ app.get("/tournaments", (req, res, next) => {
             '|'
           )
           FROM tournament_access_users tau
-          WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
+          WHERE tau.tournament_entity_type = 'tournament'
+            AND upper(trim(tau.tournament_id)) = upper(trim(t.id))
         ) AS access_users_csv,
         CASE
           WHEN ? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau_current
-            WHERE upper(trim(tau_current.tournament_id)) = upper(trim(t.id))
+            WHERE tau_current.tournament_entity_type = 'tournament'
+              AND upper(trim(tau_current.tournament_id)) = upper(trim(t.id))
               AND tau_current.user_id = ?
           ) THEN 1
           ELSE 0
@@ -19375,7 +19400,8 @@ app.get("/matches", (req, res, next) => {
             OR (? > 0 AND EXISTS (
               SELECT 1
               FROM tournament_access_users tau
-              WHERE upper(trim(tau.tournament_id)) = upper(trim(t.id))
+              WHERE tau.tournament_entity_type = 'tournament'
+                AND upper(trim(tau.tournament_id)) = upper(trim(t.id))
                 AND tau.user_id = ?
             ))
             OR (trim(?) <> '' AND EXISTS (
@@ -19400,7 +19426,8 @@ app.get("/matches", (req, res, next) => {
         OR COALESCE((
           SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
           FROM tournament_access_users tau
-          WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
+          WHERE tau.tournament_entity_type = 'tournament'
+            AND upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
             AND tau.user_id = ?
           LIMIT 1
         ), '') = ?
@@ -19409,7 +19436,8 @@ app.get("/matches", (req, res, next) => {
           AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau
-            WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
+            WHERE tau.tournament_entity_type = 'tournament'
+              AND upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
               AND tau.user_id = ?
           )
           AND (
@@ -19533,7 +19561,8 @@ app.get("/matches", (req, res, next) => {
           (
             SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
             FROM tournament_access_users tau
-            WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
+            WHERE tau.tournament_entity_type = 'tournament'
+              AND upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
               AND tau.user_id = ?
             LIMIT 1
           ),
@@ -19551,7 +19580,8 @@ app.get("/matches", (req, res, next) => {
           WHEN ? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau_current
-            WHERE upper(trim(tau_current.tournament_id)) = upper(trim(m.tournament_id))
+            WHERE tau_current.tournament_entity_type = 'tournament'
+              AND upper(trim(tau_current.tournament_id)) = upper(trim(m.tournament_id))
               AND tau_current.user_id = ?
           ) THEN 1
           ELSE 0
@@ -19736,7 +19766,8 @@ app.get("/matches", (req, res, next) => {
           (
             SELECT COALESCE(NULLIF(lower(trim(tau.role)), ''), ?)
             FROM tournament_access_users tau
-            WHERE upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
+            WHERE tau.tournament_entity_type = 'tournament'
+              AND upper(trim(tau.tournament_id)) = upper(trim(m.tournament_id))
               AND tau.user_id = ?
             LIMIT 1
           ),
@@ -19754,7 +19785,8 @@ app.get("/matches", (req, res, next) => {
           WHEN ? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau_current
-            WHERE upper(trim(tau_current.tournament_id)) = upper(trim(m.tournament_id))
+            WHERE tau_current.tournament_entity_type = 'tournament'
+              AND upper(trim(tau_current.tournament_id)) = upper(trim(m.tournament_id))
               AND tau_current.user_id = ?
           ) THEN 1
           ELSE 0
@@ -25115,6 +25147,14 @@ app.post("/auth/logout", (req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Auth server running on port ${PORT}`);
-});
+inPersonSchemaReady
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Auth server running on port ${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error("Failed to initialize in-person schema; server will not start", error);
+    process.exitCode = 1;
+    db.close(() => {});
+  });
