@@ -142,6 +142,29 @@ test("runs the full two-round Swiss lifecycle for 4, 5 and 8 participants", asyn
   }
 });
 
+test("confirms and publishes a Swiss preview in one retry-safe command", async (t) => {
+  const { service } = await createContext(t);
+  const { tournament } = await createReadyTournament(service, 4, "confirm-publish");
+  await service.previewSwissRound(tournament.id, { round_number: 1 });
+  let overview = await service.confirmSwissRound(tournament.id, {
+    round_number: 1,
+    publish: true,
+  });
+  assert.equal(overview.created, true);
+  assert.equal(overview.published, true);
+  assert.equal(overview.current_round.status, "published");
+  const roundId = overview.current_round.id;
+
+  overview = await service.confirmSwissRound(tournament.id, {
+    round_number: 1,
+    publish: true,
+  });
+  assert.equal(overview.created, false);
+  assert.equal(overview.published, false);
+  assert.equal(overview.current_round.id, roundId);
+  assert.equal(overview.rounds.length, 1);
+});
+
 test("rejects invalid or incomplete results and reports missing tables", async (t) => {
   const { service } = await createContext(t);
   const { tournament } = await createReadyTournament(service, 4, "validation");

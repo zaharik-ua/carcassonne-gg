@@ -388,10 +388,15 @@ test("organizer API previews late entry and rolls back exactly the active Swiss 
   const confirmed = await api(
     baseUrl,
     `/in-person-tournaments/${first.id}/swiss/rounds/confirm`,
-    { userId: 1, method: "POST", body: JSON.stringify({ round_number: 1 }) }
+    {
+      userId: 1,
+      method: "POST",
+      body: JSON.stringify({ round_number: 1, publish: true }),
+    }
   );
   assert.equal(confirmed.response.status, 200);
   const round = confirmed.data.current_round;
+  assert.equal(round.status, "published");
   const latePayload = {
     name_en: "Late API Arrival",
     association_id: "UKR",
@@ -434,7 +439,7 @@ test("organizer API previews late entry and rolls back exactly the active Swiss 
   );
   assert.equal(inactive.response.status, 200);
   assert.equal(inactive.data.participant.status, "withdrawn");
-  assert.equal(inactive.data.resolution.type, "cancel_draft_round");
+  assert.equal(inactive.data.resolution.type, "technical_result");
 
   const cancellationPreview = await api(
     baseUrl,

@@ -62,7 +62,7 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   [
     "Swiss rounds",
     "Preview first round",
-    "Confirm pairings",
+    "Confirm and publish",
     "Publish round",
     "Save result",
     "Complete round",
@@ -83,6 +83,7 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.match(inPersonHtml, /data-ip-tab="swiss"/);
   assert.match(inPersonHtml, /data-ip-tab="standings"/);
   assert.match(inPersonHtml, /round\.progress\.completed === round\.progress\.total/);
+  assert.match(inPersonHtml, /round_number: preview\.round_number, publish: true/);
 });
 
 test("In-Person page exposes Swiss rollback, inactive-player and late-entry recovery", () => {
@@ -90,6 +91,7 @@ test("In-Person page exposes Swiss rollback, inactive-player and late-entry reco
     "Add late player",
     "Preview late entry",
     "Confirm late entry",
+    "will be paired with the current bye recipient",
     "Cancel round",
     "Draft-round no-show",
     "Withdraw",
@@ -107,6 +109,7 @@ test("In-Person page exposes Swiss rollback, inactive-player and late-entry reco
     /\/cancel`/,
     /finish_reason: "no_show"/,
   ].forEach((pattern) => assert.match(inPersonHtml, pattern));
+  assert.doesNotMatch(inPersonHtml, /Late-entry mode \*/);
 });
 
 test("all Player Hub scripts parse after the In-Person additions", () => {

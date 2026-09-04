@@ -266,16 +266,16 @@ test("withdrawal and published no-show use explicit technical results", async (t
   );
 });
 
-test("adds late participants with a second bye or by replacing the original bye", async (t) => {
+test("automatically gives a late bye or replaces the existing first-round bye", async (t) => {
   const lateByeContext = await createContext(t);
   const lateByeTournament = await createReadyTournament(
     lateByeContext.service,
-    5,
+    4,
     "late-bye",
     2
   );
   let overview = await completeRound(lateByeContext.service, lateByeTournament.tournament.id, 1);
-  assert.equal(overview.current_round.matches.filter((match) => match.is_bye).length, 1);
+  assert.equal(overview.current_round.matches.filter((match) => match.is_bye).length, 0);
   const lateByePayload = {
     name_en: "Late Bye Player",
     association_id: "UKR",
@@ -292,14 +292,14 @@ test("adds late participants with a second bye or by replacing the original bye"
     { id: 1 }
   );
   assert.equal(overview.current_round.status, "published");
-  assert.equal(overview.current_round.matches.filter((match) => match.is_bye).length, 2);
+  assert.equal(overview.current_round.matches.filter((match) => match.is_bye).length, 1);
   assert.equal(overview.standings.revision, 0);
   overview = await lateByeContext.service.completeSwissRound(
     lateByeTournament.tournament.id,
     overview.current_round.id
   );
-  assert.equal(overview.standings.rows.length, 6);
-  assert.equal(overview.standings.rows.reduce((sum, row) => sum + row.bye_count, 0), 2);
+  assert.equal(overview.standings.rows.length, 5);
+  assert.equal(overview.standings.rows.reduce((sum, row) => sum + row.bye_count, 0), 1);
 
   const pairedContext = await createContext(t);
   const pairedTournament = await createReadyTournament(
@@ -323,6 +323,16 @@ test("adds late participants with a second bye or by replacing the original bye"
   const pairPreview = await pairedContext.service.previewLateParticipant(
     pairedTournament.tournament.id,
     pairPayload
+  );
+  await assert.rejects(
+    pairedContext.service.previewLateParticipant(pairedTournament.tournament.id, {
+      ...pairPayload,
+      mode: "late_bye",
+    }),
+    (error) => (
+      error?.code === "LATE_ENTRY_MODE_REQUIRED"
+      && error?.details?.required_mode === "pair_with_bye"
+    )
   );
   assert.equal(pairPreview.bye_match.id, originalBye.id);
   overview = await pairedContext.service.confirmLateParticipant(
@@ -352,7 +362,7 @@ test("Swiss cancellation and late entry roll back atomically after injected faul
       if (point === failAt) throw new Error(`injected ${point}`);
     },
   });
-  const { tournament } = await createReadyTournament(service, 5, "atomic", 2);
+  const { tournament } = await createReadyTournament(service, 4, "atomic", 2);
   let overview = await completeRound(service, tournament.id, 1);
   const roundId = overview.current_round.id;
 

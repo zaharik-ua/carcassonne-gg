@@ -1219,6 +1219,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
   }
 
   async function confirmSwissRound(tournamentId, payload = {}) {
+    const publishImmediately = payload?.publish === true;
     return enqueueMutation(async () => {
       const outcome = await transaction(async () => {
         const tournament = await requireTournamentRow(tournamentId);
@@ -1228,7 +1229,27 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
         const fallbackRoundNumber = incompleteRound?.round_number || rounds.length + 1;
         const roundNumber = normalizeRequestedRoundNumber(payload?.round_number, fallbackRoundNumber);
         const existingRound = rounds.find((round) => round.round_number === roundNumber);
-        if (existingRound) return { created: false, round_id: existingRound.id };
+        if (existingRound) {
+          if (publishImmediately && existingRound.status === "draft") {
+            await dbRun(
+              db,
+              `
+                UPDATE in_person_rounds
+                SET status = 'published', published_at = CURRENT_TIMESTAMP,
+                    revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+              `,
+              [existingRound.id]
+            );
+            await touchTournament(tournament.id);
+            return { created: false, published: true, round_id: existingRound.id };
+          }
+          return {
+            created: false,
+            published: false,
+            round_id: existingRound.id,
+          };
+        }
 
         const plan = await buildSwissPairingPlan(tournament.id, roundNumber);
         const roundId = `ipr_${idFactory()}`;
@@ -1236,10 +1257,19 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           db,
           `
             INSERT INTO in_person_rounds (
-              id, tournament_id, stage, round_number, status, revision, created_at, updated_at
-            ) VALUES (?, ?, 'swiss', ?, 'draft', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              id, tournament_id, stage, round_number, status, revision,
+              published_at, created_at, updated_at
+            ) VALUES (?, ?, 'swiss', ?, ?, 1,
+              CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END,
+              CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           `,
-          [roundId, tournament.id, roundNumber]
+          [
+            roundId,
+            tournament.id,
+            roundNumber,
+            publishImmediately ? "published" : "draft",
+            publishImmediately ? 1 : 0,
+          ]
         );
         await injectFault("swiss_round_after_insert", { tournament_id: tournament.id, round_id: roundId });
 
@@ -1287,7 +1317,11 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           `,
           [tournament.id]
         );
-        return { created: true, round_id: roundId };
+        return {
+          created: true,
+          published: publishImmediately,
+          round_id: roundId,
+        };
       });
       const overview = await getSwissOverview(tournamentId);
       return { ...overview, ...outcome };
@@ -1848,7 +1882,20 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
       }
     }
 
-    const mode = normalizeLateEntryMode(payload?.mode);
+    const byeMatches = round.matches
+      .filter((match) => match.is_bye)
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const mode = byeMatches.length ? "pair_with_bye" : "late_bye";
+    const requestedMode = normalizeOptionalText(payload?.mode);
+    if (requestedMode && normalizeLateEntryMode(requestedMode) !== mode) {
+      throw conflictError(
+        "LATE_ENTRY_MODE_REQUIRED",
+        mode === "pair_with_bye"
+          ? "The late participant must be paired with the active first-round bye recipient"
+          : "A late participant receives a bye because the first round has no active bye",
+        { required_mode: mode }
+      );
+    }
     const preview = {
       tournament_revision: Number(tournament.revision),
       round: {
@@ -1869,9 +1916,6 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
       };
     }
 
-    const byeMatches = round.matches
-      .filter((match) => match.is_bye)
-      .sort((left, right) => left.id.localeCompare(right.id));
     const requestedByeMatchId = normalizeOptionalText(payload?.bye_match_id);
     const byeMatch = requestedByeMatchId
       ? byeMatches.find((match) => match.id === requestedByeMatchId)

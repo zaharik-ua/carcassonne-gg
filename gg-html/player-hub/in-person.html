@@ -421,6 +421,11 @@
     color: var(--ip-success);
   }
 
+  .ip-late-mode {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
   .ip-readiness ul {
     margin: 6px 0 0;
     padding-left: 18px;
@@ -1375,14 +1380,21 @@
     const drawNumber = createField("Draw number (optional)", "number");
     drawNumber.input.min = "1";
     drawNumber.input.step = "1";
-    const mode = createSelectField(
-      "Late-entry mode *",
-      [
-        { value: "late_bye", label: "Give the late player a bye win" },
-        { value: "pair_with_bye", label: "Pair with the current bye recipient" },
-      ],
-      "late_bye"
-    );
+    const activeByeMatch = (firstRound.matches || []).find((match) => match.is_bye) || null;
+    const automaticMode = activeByeMatch ? "pair_with_bye" : "late_bye";
+    const modeNotice = document.createElement("div");
+    modeNotice.className = "ip-readiness ip-late-mode";
+    const modeTitle = document.createElement("strong");
+    modeTitle.textContent = activeByeMatch
+      ? "The late player will be paired with the current bye recipient."
+      : "The late player will receive a bye win.";
+    const modeHint = document.createElement("div");
+    modeHint.className = "ip-hint";
+    modeHint.textContent = activeByeMatch
+      ? `${swissParticipantName(activeByeMatch, "a")} currently has the bye in round 1.`
+      : "Round 1 has no active bye, so existing matches stay unchanged.";
+    modeNotice.appendChild(modeTitle);
+    modeNotice.appendChild(modeHint);
     const nextTableNumber = Math.max(
       0,
       ...(firstRound.matches || []).map((match) => Number(match.table_number || 0))
@@ -1428,7 +1440,7 @@
     form.appendChild(bgaNickname.field);
     form.appendChild(location.field);
     form.appendChild(drawNumber.field);
-    form.appendChild(mode.field);
+    form.appendChild(modeNotice);
     form.appendChild(tableNumber.field);
     form.appendChild(starter.field);
     if (tournament.scope === "local") form.appendChild(cityInlineMount);
@@ -1448,14 +1460,8 @@
     form.appendChild(actions);
     form.appendChild(previewMount);
 
-    const updateModeFields = () => {
-      const pairsWithBye = mode.select.value === "pair_with_bye";
-      tableNumber.field.classList.toggle("ip-hidden", !pairsWithBye);
-      starter.field.classList.toggle("ip-hidden", !pairsWithBye);
-      previewMount.innerHTML = "";
-    };
-    mode.select.addEventListener("change", updateModeFields);
-    updateModeFields();
+    tableNumber.field.classList.toggle("ip-hidden", automaticMode !== "pair_with_bye");
+    starter.field.classList.toggle("ip-hidden", automaticMode !== "pair_with_bye");
 
     const buildPayload = (confirmDuplicate = false) => ({
       name_en: String(nameEn.input.value || "").trim(),
@@ -1464,9 +1470,9 @@
       association_id: tournament.scope === "international" ? getLocationValue() : null,
       city_id: tournament.scope === "local" ? getLocationValue() : null,
       draw_number: drawNumber.input.value === "" ? null : Number(drawNumber.input.value),
-      mode: mode.select.value,
-      table_number: mode.select.value === "pair_with_bye" ? Number(tableNumber.input.value) : null,
-      starting_participant: mode.select.value === "pair_with_bye" ? starter.select.value : null,
+      mode: automaticMode,
+      table_number: automaticMode === "pair_with_bye" ? Number(tableNumber.input.value) : null,
+      starting_participant: automaticMode === "pair_with_bye" ? starter.select.value : null,
       confirm_duplicate: confirmDuplicate,
     });
 
@@ -1796,11 +1802,11 @@
     try {
       const data = await apiJson(tournamentUrl("/swiss/rounds/confirm"), {
         method: "POST",
-        body: JSON.stringify({ round_number: preview.round_number }),
+        body: JSON.stringify({ round_number: preview.round_number, publish: true }),
       });
       adoptSwissResponse(data);
       renderWorkspace();
-      setStatus(`Round ${preview.round_number} pairings confirmed as a draft.`, "success");
+      setStatus(`Round ${preview.round_number} pairings confirmed and published.`, "success");
     } catch (error) {
       setStatus(error.message || "Failed to confirm Swiss pairings.", "error");
       button.disabled = false;
@@ -2092,7 +2098,7 @@
     });
     const actions = document.createElement("div");
     actions.className = "ip-swiss-action-row";
-    const confirm = createButton("Confirm pairings", "ip-btn primary", () => confirmSwissPreview(confirm));
+    const confirm = createButton("Confirm and publish", "ip-btn primary", () => confirmSwissPreview(confirm));
     const cancel = createButton("Discard preview", "ip-btn", () => {
       state.pairingPreview = null;
       renderSwiss();
