@@ -298,6 +298,8 @@ Gate: адміністратор сайту може створити повні
 
 Покриття: `IPT-TRN-*`, `IPT-CITY-*`, `IPT-CFG-*`, `IPT-UI-001/002/008`; `UH-20`, `UH-29`, `UH-37` для admin selectors.
 
+Статус на 2026-09-04: етап реалізовано. Додано admin API для міст і очних турнірів, conditional validation, server-generated IDs, стабільний slug, date periods, publish/cancel-before-start, блокування формату після старту Swiss та атомарне керування адміністраторами через `tournament_access_users`. У глобальну адмінку додано розділ `In-Person Tournaments` із create/edit формою, inline-створенням міста, playoff preview, user picker і переходами до майбутніх Player Hub/public сторінок. Повний backend suite після змін: 62/62 tests passed.
+
 ### Етап 3. Player Hub shell, participants і check-in
 
 Backend:

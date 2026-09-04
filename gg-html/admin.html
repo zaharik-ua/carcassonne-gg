@@ -458,6 +458,42 @@
     font-weight: 700;
   }
 
+  .in-person-preview {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #f8fafc;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .in-person-inline-city {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #f8fafc;
+  }
+
+  .in-person-links {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .in-person-links a {
+    color: var(--primary);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
   .admin-picker {
     display: grid;
     gap: 8px;
@@ -639,6 +675,10 @@
     .admin-script-stats {
       grid-template-columns: 1fr;
     }
+
+    .in-person-inline-city {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
 
@@ -687,6 +727,10 @@
   const CATEGORIES_URL = `${AUTH_BASE}/categories`;
   const LOCAL_WEBSITES_URL = `${AUTH_BASE}/local-websites`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const IN_PERSON_TOURNAMENTS_URL = `${AUTH_BASE}/in-person-tournaments`;
+  const CITIES_URL = `${AUTH_BASE}/cities`;
+  const IN_PERSON_PLAYER_HUB_URL = window.IN_PERSON_PLAYER_HUB_URL || "/player-hub/in-person/";
+  const IN_PERSON_PUBLIC_BASE_URL = window.IN_PERSON_PUBLIC_BASE_URL || "/in-person-tournaments/";
   const TOURNAMENT_TEAMS_URL = `${AUTH_BASE}/tournament-teams`;
   const CHALLENGE_PERIODS_URL = `${AUTH_BASE}/challenge-periods`;
   const USERS_URL = `${AUTH_BASE}/users`;
@@ -765,6 +809,24 @@
       buttonLabel: "Edit",
       createLabel: "Create",
       load: () => apiJson(TOURNAMENTS_URL, { method: "GET" }).then((data) => data.tournaments || []),
+    },
+    inPersonTournaments: {
+      key: "inPersonTournaments",
+      title: "In-Person Tournaments",
+      buttonLabel: "Edit",
+      createLabel: "Create",
+      load: () => Promise.all([
+        apiJson(IN_PERSON_TOURNAMENTS_URL, { method: "GET" }),
+        apiJson(ASSOCIATIONS_URL, { method: "GET" }),
+        apiJson(`${CITIES_URL}?include_archived=1`, { method: "GET" }),
+        apiJson(USER_OPTIONS_URL, { method: "GET" }),
+      ]).then(([tournamentsData, associationsData, citiesData, usersData]) => {
+        state.associations = Array.isArray(associationsData?.associations) ? associationsData.associations : [];
+        state.cities = Array.isArray(citiesData?.cities) ? citiesData.cities : [];
+        state.userOptions = Array.isArray(usersData?.users) ? usersData.users : [];
+        state.userOptionsLoaded = true;
+        return tournamentsData.tournaments || [];
+      }),
     },
     challengePeriods: {
       key: "challengePeriods",
@@ -869,6 +931,8 @@
     newsEditorsHideAuto: false,
     mobileMenuItems: [],
     tournaments: [],
+    inPersonTournaments: [],
+    cities: [],
     challengePeriods: [],
     duelFormats: [],
     maintenanceScripts: [],
@@ -3882,6 +3946,498 @@
     }
   }
 
+  function getInPersonPlayoffPreview(firstRound) {
+    const previews = {
+      round_of_32: {
+        participants: 32,
+        rounds: ["Round of 32", "Round of 16", "Quarter-final", "Semi-final", "Bronze medal match", "Final"],
+      },
+      round_of_16: {
+        participants: 16,
+        rounds: ["Round of 16", "Quarter-final", "Semi-final", "Bronze medal match", "Final"],
+      },
+      quarter_final: {
+        participants: 8,
+        rounds: ["Quarter-final", "Semi-final", "Bronze medal match", "Final"],
+      },
+      semi_final: {
+        participants: 4,
+        rounds: ["Semi-final", "Bronze medal match", "Final"],
+      },
+    };
+    return previews[String(firstRound || "").trim()] || previews.quarter_final;
+  }
+
+  function slugifyInPersonTournament(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .replace(/-{2,}/g, "-");
+  }
+
+  function getInPersonUserPickerOptions() {
+    return state.userOptions.map((user) => {
+      const labelParts = [];
+      if (user?.name) labelParts.push(String(user.name).trim());
+      if (user?.bga_nickname) labelParts.push(`BGA: ${String(user.bga_nickname).trim()}`);
+      if (user?.email) labelParts.push(String(user.email).trim());
+      const label = labelParts.filter(Boolean).join(" • ") || `User #${user.id}`;
+      return { value: String(user.id), label: `${user.id} - ${label}` };
+    });
+  }
+
+  async function openInPersonTournamentForm(mode, item, anchorRow) {
+    try {
+      await ensureUserOptionsLoaded();
+      if (!Array.isArray(state.associations) || !state.associations.length) {
+        const data = await apiJson(ASSOCIATIONS_URL, { method: "GET" });
+        state.associations = Array.isArray(data?.associations) ? data.associations : [];
+      }
+      if (!Array.isArray(state.cities) || !state.cities.length) {
+        const data = await apiJson(`${CITIES_URL}?include_archived=1`, { method: "GET" });
+        state.cities = Array.isArray(data?.cities) ? data.cities : [];
+      }
+    } catch (error) {
+      setStatus(error?.message || "Failed to load In-Person references.", true);
+      return;
+    }
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+    const isReadOnly = mode === "edit" && ["cancelled", "completed"].includes(String(item?.status || ""));
+    const isFormatLocked = mode === "edit" && Number(item?.has_started_swiss) === 1;
+    const isSlugLocked = mode === "edit" && !!item?.published_at;
+
+    const idField = mode === "edit" ? createTextRow("id", item?.id || "", { readOnly: true }) : null;
+    const statusField = mode === "edit" ? createTextRow("status", item?.status || "draft", { readOnly: true }) : null;
+    const nameEnField = createTextRow("Name (English) *", item?.name_en || "");
+    const nameLocalField = createTextRow("Name (local)", item?.name_local || "");
+    const slugField = createTextRow("Public slug *", item?.slug || "", { readOnly: isSlugLocked });
+    const scopeField = createSelectOptionsRow(
+      "Scope *",
+      item?.scope || "international",
+      [
+        { value: "international", label: "International" },
+        { value: "local", label: "Local" },
+      ],
+      isReadOnly
+    );
+    const associationField = createSelectOptionsRow(
+      "Country / association *",
+      item?.association_id || "",
+      [{ value: "", label: "Select association..." }].concat(
+        state.associations.map((association) => ({
+          value: String(association?.id || ""),
+          label: [association?.flag, association?.name, association?.id].filter(Boolean).join(" • "),
+        }))
+      ),
+      isReadOnly
+    );
+    const localSubtypeField = createSelectOptionsRow(
+      "Local type *",
+      item?.local_subtype || "final",
+      [
+        { value: "final", label: "Final" },
+        { value: "qualifier", label: "Qualifier" },
+      ],
+      isReadOnly
+    );
+    const cityField = createSelectOptionsRow("Qualifier city *", item?.qualifier_city_id || "", [], isReadOnly);
+    const startDateField = createDateRow("Start date *", item?.start_date || "");
+    const endDateField = createDateRow("End date", item?.end_date || item?.start_date || "");
+    const organizerNameField = createTextRow("Organizer name *", item?.organizer_name || "");
+    const organizerUrlField = createTextRow("Organizer URL", item?.organizer_url || "");
+    organizerUrlField.input.type = "url";
+    const rulesUrlField = createTextRow("Rules URL", item?.rules_url || "");
+    rulesUrlField.input.type = "url";
+    const swissRoundsField = createNumberRow(
+      "Swiss rounds count *",
+      item?.swiss_rounds_count || 5,
+      { min: 1, step: 1 }
+    );
+    const playoffFirstRoundField = createSelectOptionsRow(
+      "Playoff first round *",
+      item?.playoff_first_round || "quarter_final",
+      [
+        { value: "round_of_32", label: "Round of 32" },
+        { value: "round_of_16", label: "Round of 16" },
+        { value: "quarter_final", label: "Quarter-final" },
+        { value: "semi_final", label: "Semi-final" },
+      ],
+      isFormatLocked || isReadOnly
+    );
+    const adminsField = createUserPickerRow(
+      "Tournament admins",
+      getInPersonUserPickerOptions(),
+      Array.isArray(item?.admin_user_ids) ? item.admin_user_ids : []
+    );
+    adminsField.row.classList.add("cp-edit-row-full");
+
+    const playoffPreview = document.createElement("p");
+    playoffPreview.className = "in-person-preview";
+    const updatePlayoffPreview = () => {
+      const preview = getInPersonPlayoffPreview(playoffFirstRoundField.select.value);
+      playoffPreview.textContent = `Playoff: ${preview.participants} players • ${preview.rounds.join(" → ")}. Bronze medal match is always included.`;
+    };
+    playoffFirstRoundField.select.addEventListener("change", updatePlayoffPreview);
+    updatePlayoffPreview();
+
+    const fixedSettings = document.createElement("p");
+    fixedSettings.className = "in-person-preview";
+    fixedSettings.textContent = "Fixed MVP settings: Swiss + Single Elimination • manual draw numbers • Wins, Solkoff1, Solkoff2, VP difference, Sonneborn–Berger, bye, stable ID.";
+
+    const addCityBtn = document.createElement("button");
+    addCityBtn.type = "button";
+    addCityBtn.className = "cp-btn cp-btn-secondary";
+    addCityBtn.textContent = "Add city";
+    cityField.row.appendChild(addCityBtn);
+
+    const inlineCity = document.createElement("div");
+    inlineCity.className = "in-person-inline-city hidden";
+    const cityNameEnField = createTextRow("New city: name (English) *", "");
+    const cityNameLocalField = createTextRow("New city: name (local)", "");
+    const inlineCityActions = document.createElement("div");
+    inlineCityActions.className = "cp-edit-actions";
+    const saveCityBtn = document.createElement("button");
+    saveCityBtn.type = "button";
+    saveCityBtn.className = "cp-btn cp-btn-primary";
+    saveCityBtn.textContent = "Create city";
+    const cancelCityBtn = document.createElement("button");
+    cancelCityBtn.type = "button";
+    cancelCityBtn.className = "cp-btn cp-btn-secondary";
+    cancelCityBtn.textContent = "Cancel";
+    inlineCityActions.appendChild(saveCityBtn);
+    inlineCityActions.appendChild(cancelCityBtn);
+    inlineCity.appendChild(cityNameEnField.row);
+    inlineCity.appendChild(cityNameLocalField.row);
+    inlineCity.appendChild(inlineCityActions);
+
+    const updateCityOptions = (selectedCityId) => {
+      const associationId = String(associationField.select.value || "").trim().toUpperCase();
+      const selectedId = String(selectedCityId ?? cityField.select.value ?? "");
+      cityField.select.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Select city...";
+      cityField.select.appendChild(placeholder);
+      state.cities
+        .filter((city) => {
+          const sameAssociation = String(city?.association_id || "").trim().toUpperCase() === associationId;
+          return sameAssociation && (!city?.archived || String(city.id) === selectedId);
+        })
+        .sort((left, right) => String(left?.name_en || "").localeCompare(String(right?.name_en || "")))
+        .forEach((city) => {
+          const option = document.createElement("option");
+          option.value = String(city.id || "");
+          option.textContent = [
+            city.name_en,
+            city.name_local,
+            city.archived ? "archived" : "",
+          ].filter(Boolean).join(" • ");
+          if (option.value === selectedId) option.selected = true;
+          cityField.select.appendChild(option);
+        });
+    };
+
+    const updateConditionalFields = () => {
+      const isLocal = scopeField.select.value === "local";
+      const isQualifier = isLocal && localSubtypeField.select.value === "qualifier";
+      associationField.row.classList.toggle("hidden", !isLocal);
+      associationField.select.disabled = isReadOnly || !isLocal;
+      localSubtypeField.row.classList.toggle("hidden", !isLocal);
+      localSubtypeField.select.disabled = isReadOnly || !isLocal;
+      cityField.row.classList.toggle("hidden", !isQualifier);
+      cityField.select.disabled = isReadOnly || !isQualifier;
+      addCityBtn.disabled = isReadOnly || !isQualifier || !associationField.select.value;
+      if (!isQualifier) inlineCity.classList.add("hidden");
+      updateCityOptions(item?.qualifier_city_id || cityField.select.value);
+    };
+    scopeField.select.addEventListener("change", updateConditionalFields);
+    associationField.select.addEventListener("change", () => {
+      updateCityOptions("");
+      updateConditionalFields();
+    });
+    localSubtypeField.select.addEventListener("change", updateConditionalFields);
+    updateConditionalFields();
+
+    let generatedSlug = !slugField.input.value;
+    nameEnField.input.addEventListener("input", () => {
+      if (mode === "create" && (generatedSlug || !slugField.input.value)) {
+        slugField.input.value = slugifyInPersonTournament(nameEnField.input.value);
+        generatedSlug = true;
+      }
+    });
+    slugField.input.addEventListener("input", () => {
+      generatedSlug = !slugField.input.value;
+    });
+    startDateField.input.addEventListener("change", () => {
+      if (!endDateField.input.value || endDateField.input.value < startDateField.input.value) {
+        endDateField.input.value = startDateField.input.value;
+      }
+    });
+
+    addCityBtn.addEventListener("click", () => {
+      inlineCity.classList.toggle("hidden");
+      if (!inlineCity.classList.contains("hidden")) cityNameEnField.input.focus();
+    });
+    cancelCityBtn.addEventListener("click", () => inlineCity.classList.add("hidden"));
+    saveCityBtn.addEventListener("click", async () => {
+      const associationId = String(associationField.select.value || "").trim();
+      const nameEn = String(cityNameEnField.input.value || "").trim();
+      if (!associationId || !nameEn) {
+        setStatus("Select an association and enter the English city name.", true);
+        return;
+      }
+      saveCityBtn.disabled = true;
+      try {
+        const data = await apiJson(CITIES_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            association_id: associationId,
+            name_en: nameEn,
+            name_local: String(cityNameLocalField.input.value || "").trim() || null,
+          }),
+        });
+        state.cities.push(data.city);
+        updateCityOptions(data.city.id);
+        inlineCity.classList.add("hidden");
+        cityNameEnField.input.value = "";
+        cityNameLocalField.input.value = "";
+        setStatus("City created and selected.", false);
+      } catch (error) {
+        setStatus(error?.message || "Failed to create city.", true);
+      } finally {
+        saveCityBtn.disabled = false;
+      }
+    });
+
+    if (idField) form.appendChild(idField.row);
+    if (statusField) form.appendChild(statusField.row);
+    form.appendChild(nameEnField.row);
+    form.appendChild(nameLocalField.row);
+    form.appendChild(slugField.row);
+    form.appendChild(scopeField.row);
+    form.appendChild(associationField.row);
+    form.appendChild(localSubtypeField.row);
+    form.appendChild(cityField.row);
+    form.appendChild(inlineCity);
+    form.appendChild(startDateField.row);
+    form.appendChild(endDateField.row);
+    form.appendChild(organizerNameField.row);
+    form.appendChild(organizerUrlField.row);
+    form.appendChild(rulesUrlField.row);
+    form.appendChild(swissRoundsField.row);
+    form.appendChild(playoffFirstRoundField.row);
+    form.appendChild(playoffPreview);
+    form.appendChild(fixedSettings);
+    form.appendChild(adminsField.row);
+
+    if (mode === "edit") {
+      const links = document.createElement("div");
+      links.className = "in-person-links";
+      const hubLink = document.createElement("a");
+      hubLink.href = `${IN_PERSON_PLAYER_HUB_URL}?tournament=${encodeURIComponent(item.id)}`;
+      hubLink.textContent = "Open in Player Hub";
+      const publicLink = document.createElement("a");
+      publicLink.href = `${IN_PERSON_PUBLIC_BASE_URL.replace(/\/+$/, "")}/${encodeURIComponent(item.slug)}/`;
+      publicLink.textContent = "Open public page";
+      links.appendChild(hubLink);
+      links.appendChild(publicLink);
+      form.appendChild(links);
+    }
+
+    const editableControls = [
+      nameEnField.input,
+      nameLocalField.input,
+      slugField.input,
+      startDateField.input,
+      endDateField.input,
+      organizerNameField.input,
+      organizerUrlField.input,
+      rulesUrlField.input,
+      swissRoundsField.input,
+    ];
+    if (isReadOnly) {
+      editableControls.forEach((control) => { control.disabled = true; });
+      scopeField.select.disabled = true;
+      associationField.select.disabled = true;
+      localSubtypeField.select.disabled = true;
+      cityField.select.disabled = true;
+      playoffFirstRoundField.select.disabled = true;
+      adminsField.setDisabled(true);
+    } else if (isFormatLocked) {
+      swissRoundsField.input.disabled = true;
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+    if (!isReadOnly) {
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "submit";
+      saveBtn.className = "cp-btn cp-btn-primary";
+      saveBtn.textContent = mode === "create" ? "Create" : "Save";
+      actions.appendChild(saveBtn);
+    }
+
+    if (mode === "edit" && item?.status === "draft") {
+      const publishBtn = document.createElement("button");
+      publishBtn.type = "button";
+      publishBtn.className = "cp-btn cp-btn-secondary";
+      publishBtn.textContent = "Publish";
+      publishBtn.addEventListener("click", async () => {
+        publishBtn.disabled = true;
+        try {
+          await apiJson(`${IN_PERSON_TOURNAMENTS_URL}/${encodeURIComponent(item.id)}/publish`, {
+            method: "POST",
+            body: "{}",
+          });
+          closeInlineForm();
+          await loadSectionData("inPersonTournaments");
+          renderSection();
+          setStatus("In-Person tournament published.", false);
+        } catch (error) {
+          setStatus(error?.message || "Failed to publish tournament.", true);
+          publishBtn.disabled = false;
+        }
+      });
+      actions.appendChild(publishBtn);
+    }
+
+    if (
+      mode === "edit"
+      && !item?.has_started_swiss
+      && ["draft", "registration", "check_in"].includes(String(item?.status || ""))
+    ) {
+      const cancelTournamentBtn = document.createElement("button");
+      cancelTournamentBtn.type = "button";
+      cancelTournamentBtn.className = "cp-btn cp-btn-secondary";
+      cancelTournamentBtn.textContent = "Cancel tournament";
+      cancelTournamentBtn.addEventListener("click", async () => {
+        if (!window.confirm("Cancel this In-Person tournament? It will no longer be public.")) return;
+        cancelTournamentBtn.disabled = true;
+        try {
+          await apiJson(`${IN_PERSON_TOURNAMENTS_URL}/${encodeURIComponent(item.id)}/cancel`, {
+            method: "POST",
+            body: "{}",
+          });
+          closeInlineForm();
+          await loadSectionData("inPersonTournaments");
+          renderSection();
+          setStatus("In-Person tournament cancelled.", false);
+        } catch (error) {
+          setStatus(error?.message || "Failed to cancel tournament.", true);
+          cancelTournamentBtn.disabled = false;
+        }
+      });
+      actions.appendChild(cancelTournamentBtn);
+    }
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "cp-btn cp-btn-secondary";
+    closeBtn.textContent = mode === "create" ? "Cancel" : "Close";
+    closeBtn.addEventListener("click", () => {
+      if (mode === "create") {
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+      } else {
+        closeInlineForm();
+      }
+      setStatus("", false);
+    });
+    actions.appendChild(closeBtn);
+    form.appendChild(actions);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (isReadOnly) return;
+      const scope = scopeField.select.value;
+      const localSubtype = scope === "local" ? localSubtypeField.select.value : null;
+      const payload = {
+        slug: String(slugField.input.value || "").trim().toLowerCase(),
+        name_en: String(nameEnField.input.value || "").trim(),
+        name_local: String(nameLocalField.input.value || "").trim() || null,
+        scope,
+        association_id: scope === "local" ? associationField.select.value : null,
+        local_subtype: localSubtype,
+        qualifier_city_id: scope === "local" && localSubtype === "qualifier"
+          ? cityField.select.value
+          : null,
+        start_date: startDateField.input.value,
+        end_date: endDateField.input.value || startDateField.input.value,
+        organizer_name: String(organizerNameField.input.value || "").trim(),
+        organizer_url: String(organizerUrlField.input.value || "").trim() || null,
+        rules_url: String(rulesUrlField.input.value || "").trim() || null,
+        swiss_rounds_count: Number(swissRoundsField.input.value),
+        playoff_first_round: playoffFirstRoundField.select.value,
+        admin_user_ids: adminsField.getValues(),
+      };
+      if (!payload.name_en || !payload.slug || !payload.start_date || !payload.organizer_name) {
+        setStatus("English name, slug, start date and organizer are required.", true);
+        return;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.start_date) || !/^\d{4}-\d{2}-\d{2}$/.test(payload.end_date)) {
+        setStatus("Enter a valid date or date period.", true);
+        return;
+      }
+      if (payload.end_date < payload.start_date) {
+        setStatus("End date cannot be earlier than start date.", true);
+        return;
+      }
+      if (!Number.isInteger(payload.swiss_rounds_count) || payload.swiss_rounds_count <= 0) {
+        setStatus("Swiss rounds count must be a positive integer.", true);
+        return;
+      }
+      if (scope === "local" && !payload.association_id) {
+        setStatus("Select a country / association for a local tournament.", true);
+        return;
+      }
+      if (scope === "local" && localSubtype === "qualifier" && !payload.qualifier_city_id) {
+        setStatus("Select a city for a local qualifier.", true);
+        return;
+      }
+
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      try {
+        if (mode === "create") {
+          await apiJson(IN_PERSON_TOURNAMENTS_URL, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+        } else {
+          await apiJson(`${IN_PERSON_TOURNAMENTS_URL}/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+        }
+        if (mode === "create") {
+          sectionForm.classList.add("hidden");
+          sectionForm.innerHTML = "";
+        } else {
+          closeInlineForm();
+        }
+        await loadSectionData("inPersonTournaments");
+        renderSection();
+        setStatus(mode === "create" ? "In-Person tournament created." : "In-Person tournament updated.", false);
+      } catch (error) {
+        setStatus(error?.message || "Failed to save In-Person tournament.", true);
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    });
+
+    if (mode === "create") {
+      closeInlineForm();
+      showCreateForm(form);
+    } else if (anchorRow) {
+      mountDetailForm(form, anchorRow);
+    }
+  }
+
   async function openTournamentForm(mode, item, anchorRow) {
     let tournamentTeams = [];
     try {
@@ -5645,6 +6201,50 @@
     });
   }
 
+  function renderInPersonTournaments() {
+    sectionTitle.textContent = "In-Person Tournaments";
+    sectionCreateBtn.textContent = "Create";
+    sectionCreateBtn.classList.remove("hidden");
+    sectionCreateBtn.onclick = () => openInPersonTournamentForm("create", null, null);
+
+    if (!state.inPersonTournaments.length) {
+      renderListEmpty("No In-Person tournaments yet.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    state.inPersonTournaments.forEach((item) => {
+      const location = item.scope === "international"
+        ? "International"
+        : [
+          item.local_subtype === "qualifier" ? "Local qualifier" : "Local final",
+          item.association_name || item.association_id,
+          item.qualifier_city_name_en,
+        ].filter(Boolean).join(" • ");
+      const dates = item.start_date === item.end_date
+        ? item.start_date
+        : `${item.start_date} – ${item.end_date}`;
+      const adminsCount = Array.isArray(item.admin_user_ids) ? item.admin_user_ids.length : 0;
+      const subtitle = [
+        String(item.status || "draft").toUpperCase(),
+        location,
+        dates,
+        `${item.swiss_rounds_count} Swiss rounds`,
+        `${item.playoff_preview?.participant_count || "?"}-player playoff`,
+        `${adminsCount} admin${adminsCount === 1 ? "" : "s"}`,
+      ].filter(Boolean).join(" • ");
+      sectionList.appendChild(createListRow({
+        imageSrc: "",
+        imageAlt: item.name_en || item.slug,
+        imageRound: false,
+        title: item.name_en || item.slug,
+        subtitle,
+        buttonLabel: item.status === "cancelled" || item.status === "completed" ? "View" : "Edit",
+        onClick: (row) => openInPersonTournamentForm("edit", item, row),
+      }));
+    });
+  }
+
   function renderChallengePeriods() {
     sectionTitle.textContent = "Challenge Periods";
     sectionCreateBtn.textContent = "Create";
@@ -5850,6 +6450,7 @@
     if (state.activeSection === "mobileMenuItems") renderMobileMenuItems();
     if (state.activeSection === "newsEditors") renderNewsEditors();
     if (state.activeSection === "tournaments") renderTournaments();
+    if (state.activeSection === "inPersonTournaments") renderInPersonTournaments();
     if (state.activeSection === "challengePeriods") renderChallengePeriods();
     if (state.activeSection === "duelFormats") renderDuelFormats();
     if (state.activeSection === "maintenanceScripts") renderMaintenanceScripts();
