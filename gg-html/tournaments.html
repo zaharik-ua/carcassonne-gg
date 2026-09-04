@@ -76,6 +76,135 @@
     color: #333;
   }
 
+  .overview-about-text .news-accordion-group,
+  .overview-about-text .news-accordion-block,
+  .overview-about-text .news-spoiler-block {
+    margin: 10px 0;
+  }
+
+  .overview-about-text .news-accordion-group {
+    display: grid;
+    gap: 5px;
+  }
+
+  .overview-about-text .news-accordion-group > .news-accordion-block {
+    margin: 0;
+  }
+
+  .overview-about-text .news-accordion-toggle,
+  .overview-about-text .news-spoiler-toggle {
+    align-items: center;
+    box-sizing: border-box;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .overview-about-text .news-accordion-toggle::-webkit-details-marker,
+  .overview-about-text .news-spoiler-toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .overview-about-text .news-accordion-toggle {
+    align-items: center;
+    background-color: var(--main-bg-color);
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    color: var(--accent-text-color);
+    display: flex;
+    font-size: 15px;
+    justify-content: space-between;
+    padding: 4px 10px;
+    transition: background-color 0.2s ease;
+  }
+
+  .overview-about-text .news-accordion-toggle:hover,
+  .overview-about-text .news-accordion-toggle:focus-visible {
+    background-color: var(--hover-bg-color);
+    outline: none;
+  }
+
+  .overview-about-text .news-accordion-chevron {
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-left: 10px;
+  }
+
+  .overview-about-text .news-accordion-chevron i {
+    transition: transform 0.3s ease;
+  }
+
+  .overview-about-text .news-accordion-block.is-open .news-accordion-chevron i,
+  .overview-about-text .news-accordion-block[open]:not(.is-animating) .news-accordion-chevron i {
+    transform: rotate(180deg);
+  }
+
+  .overview-about-text .news-accordion-content {
+    border: 1px solid #dbe2ea;
+    border-top: 0;
+    border-radius: 0 0 2px 2px;
+    overflow: hidden;
+    padding: 0 12px;
+    transition: max-height 0.3s ease;
+  }
+
+  .overview-about-text .news-accordion-content::before,
+  .overview-about-text .news-accordion-content::after {
+    content: "";
+    display: block;
+    height: 10px;
+  }
+
+  .overview-about-text .news-spoiler-toggle {
+    background: transparent;
+    border: 1px solid #b9c5d3;
+    border-radius: 3px;
+    color: #174a7e;
+    display: inline-flex;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    min-height: 22px;
+    padding: 2px 7px;
+  }
+
+  .overview-about-text .news-spoiler-toggle:hover,
+  .overview-about-text .news-spoiler-toggle:focus-visible {
+    background: #eef5fb;
+    border-color: #174a7e;
+    outline: none;
+  }
+
+  .overview-about-text .news-spoiler-label-open,
+  .overview-about-text .news-spoiler-block.is-open .news-spoiler-label-closed,
+  .overview-about-text .news-spoiler-block[open]:not(.is-animating) .news-spoiler-label-closed {
+    display: none;
+  }
+
+  .overview-about-text .news-spoiler-block.is-open .news-spoiler-label-open,
+  .overview-about-text .news-spoiler-block[open]:not(.is-animating) .news-spoiler-label-open {
+    display: inline;
+  }
+
+  .overview-about-text .news-spoiler-content {
+    border-top: 1px solid #dce3ec;
+    margin-top: 0;
+    overflow: hidden;
+    padding-top: 0;
+    transition: max-height 0.3s ease, margin-top 0.3s ease;
+  }
+
+  .overview-about-text .news-spoiler-content::before {
+    content: "";
+    display: block;
+    height: 8px;
+  }
+
+  .overview-about-text .news-spoiler-block.is-open .news-spoiler-content,
+  .overview-about-text .news-spoiler-block[open]:not(.is-animating) .news-spoiler-content {
+    margin-top: 8px;
+  }
+
   .group-table {
     width: 100%;
     border-collapse: collapse;
@@ -1307,6 +1436,14 @@
     return getStageLabel(tournament, 1);
   }
 
+  function hasLeaguesStage(tournament) {
+    if (!tournament) return false;
+    const tournamentFormat = String(tournament.tournament_format || "").trim();
+    const stage1Format = String(tournament.stage1_format || "").trim();
+    return tournamentFormat === "Leagues"
+      || (tournamentFormat === "2 Stages" && stage1Format === "Leagues");
+  }
+
   function getStandingsFormatForTournamentStage(tournament, stageFilter = null) {
     if (!tournament) return "";
     const stageFormats = [1, 2, 3]
@@ -1436,6 +1573,83 @@
       });
   }
 
+  const tournamentRichTextAnimationTimers = new WeakMap();
+
+  function setTournamentRichTextExpandableState(details, shouldOpen, animate = true) {
+    if (!details) return;
+    details.dataset.newsExpandableState = shouldOpen ? "open" : "closed";
+    const content = Array.from(details.children).find(child => child.classList?.contains(
+      details.classList.contains("news-accordion-block") ? "news-accordion-content" : "news-spoiler-content"
+    )) || null;
+    if (!content) {
+      details.open = shouldOpen;
+      return;
+    }
+    const previousTimer = tournamentRichTextAnimationTimers.get(details);
+    if (previousTimer) window.clearTimeout(previousTimer);
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+    if (!animate || reduceMotion) {
+      details.open = shouldOpen;
+      details.classList.toggle("is-open", shouldOpen);
+      details.classList.remove("is-animating");
+      content.style.maxHeight = shouldOpen ? "none" : "";
+      return;
+    }
+    details.classList.add("is-animating");
+    if (shouldOpen) {
+      details.open = true;
+      details.classList.remove("is-open");
+      content.style.maxHeight = "0px";
+      void content.offsetHeight;
+      details.classList.add("is-open");
+      content.style.maxHeight = `${content.scrollHeight}px`;
+    } else {
+      content.style.maxHeight = `${content.scrollHeight}px`;
+      void content.offsetHeight;
+      details.classList.remove("is-open");
+      content.style.maxHeight = "0px";
+    }
+    const timer = window.setTimeout(() => {
+      details.classList.remove("is-animating");
+      if (details.dataset.newsExpandableState === "open") {
+        details.open = true;
+        content.style.maxHeight = "none";
+      } else {
+        details.open = false;
+        content.style.maxHeight = "";
+      }
+      tournamentRichTextAnimationTimers.delete(details);
+    }, 320);
+    tournamentRichTextAnimationTimers.set(details, timer);
+  }
+
+  function initializeTournamentRichTextExpandableBlocks(container) {
+    if (!container) return;
+    container.querySelectorAll("details.news-accordion-block,details.news-spoiler-block").forEach(details => {
+      details.removeAttribute("name");
+      setTournamentRichTextExpandableState(details, details.open, false);
+      const summary = details.querySelector(":scope > summary");
+      if (!summary) return;
+      summary.addEventListener("click", event => {
+        event.preventDefault();
+        const willOpen = details.dataset.newsExpandableState !== "open";
+        if (willOpen && details.classList.contains("news-accordion-block")) {
+          const group = details.closest(".news-accordion-group");
+          Array.from(group?.children || []).forEach(sibling => {
+            if (
+              sibling !== details
+              && sibling.classList?.contains("news-accordion-block")
+              && sibling.dataset.newsExpandableState === "open"
+            ) {
+              setTournamentRichTextExpandableState(sibling, false);
+            }
+          });
+        }
+        setTournamentRichTextExpandableState(details, willOpen);
+      });
+    });
+  }
+
   function initAndRenderTournamentContent(currentTournament) {
     // --- INIT TOURNAMENT CONTENT ---
     // Dynamically create tabs and content containers based on tournament configuration
@@ -1453,7 +1667,10 @@
     const tournament_format = currentTournament.tournament_format || "";
     const rules = currentTournament.rules || "";
     const isLeaguesFormat = tournament_format === "Leagues";
-    const relatedLeagues = isLeaguesFormat ? getLeaguesForTournament(currentTournamentId) : [];
+    const hasLeaguesFirstStage = tournament_format === "2 Stages"
+      && currentTournament.stage1_format === "Leagues";
+    const hasLeagueTabs = isLeaguesFormat || hasLeaguesFirstStage;
+    const relatedLeagues = hasLeagueTabs ? getLeaguesForTournament(currentTournamentId) : [];
     const leaguesWrapper = document.getElementById("tab-leagues-wrapper");
     leaguesWrapper.innerHTML = "";
     const leagueContentIds = [];
@@ -1471,7 +1688,12 @@
 
     let stage2Tab = null;
 
-    if (isLeaguesFormat) {
+    if (hasLeagueTabs) {
+      if (hasLeaguesFirstStage) {
+        stage2Tab = { id: "stage2", label: getStage2Label(currentTournament) };
+        tabDefs.push(stage2Tab);
+      }
+
       relatedLeagues.forEach((league, idx) => {
         const leagueTournament = tournamentsById[league.tournament_id];
         const leagueLabel = league.league_name
@@ -1615,9 +1837,16 @@
     // Players
     renderPlayersTable();
     // Matches
-    if (isLeaguesFormat) {
+    if (hasLeagueTabs) {
       const matchesContainer = document.getElementById("tab-matches-content");
       matchesContainer.innerHTML = "";
+      if (hasLeaguesFirstStage) {
+        renderMatchesData(currentTournament, matchesContainer, {
+          reset: false,
+          title: getStage2Label(currentTournament),
+          openFirstIncompleteRound: true
+        });
+      }
       relatedLeagues.forEach((league, idx) => {
         const leagueTournament = tournamentsById[league.tournament_id];
         const leagueLabel = league.league_name
@@ -1642,7 +1871,7 @@
     }
 
     // Stage content
-    if (isLeaguesFormat) {
+    if (hasLeagueTabs) {
       relatedLeagues.forEach(league => {
         const contentId = `tab-league-${league.tournament_id}-content`;
         const contentNode = document.getElementById(contentId);
@@ -1748,6 +1977,9 @@
           contentNode.textContent = "League data not available.";
         }
       });
+      if (stage2Tab) {
+        renderStage2ContentForTournament(currentTournament, document.getElementById("tab-stage2-content"));
+      }
     } else {
       renderStage1ContentForTournament(currentTournament, document.getElementById("tab-stage1-content"), { tabId: "stage1" });
       if (stage2Tab) {
@@ -1759,7 +1991,11 @@
     if (rulesTab) {
       const rulesContainer = document.getElementById("tab-rules-content");
       rulesContainer.innerHTML = "";
-      rulesContainer.innerHTML = `<div style="font-size:14px;">${currentTournament.rules}</div>`;
+      const rulesContent = document.createElement("div");
+      rulesContent.className = "overview-about-text";
+      rulesContent.innerHTML = currentTournament.rules;
+      initializeTournamentRichTextExpandableBlocks(rulesContent);
+      rulesContainer.appendChild(rulesContent);
     }
 
     // Teams content (if present)
@@ -1931,6 +2167,7 @@
       const content = document.createElement("div");
       content.innerHTML = currentTournament.about;
       content.className = "overview-about-text";
+      initializeTournamentRichTextExpandableBlocks(content);
       section.appendChild(content);
       container.appendChild(section);
     }
@@ -2644,8 +2881,8 @@
           matchesCell.colSpan = metrics.length + 2;
           const usePlayerAvatars = !isTeam && (
             (tournament && tournament.type === "COC") ||
-            (tournament && tournament.tournament_format === "Leagues") ||
-            (tournament && tournament.main_tournament_id && tournamentsById[tournament.main_tournament_id]?.tournament_format === "Leagues")
+            hasLeaguesStage(tournament) ||
+            (tournament && tournament.main_tournament_id && hasLeaguesStage(tournamentsById[tournament.main_tournament_id]))
           );
           const matchesBlock = buildPlayerMatchesBlock({
             playerId: rowData.player_id,
@@ -4681,8 +4918,8 @@
         matchesCell.colSpan = 2 + standingsColumns.length + colParticipants.length;
         const usePlayerAvatars = !isTeam && (
           (contextTournament && contextTournament.type === "COC") ||
-          (contextTournament && contextTournament.tournament_format === "Leagues") ||
-          (contextTournament && contextTournament.main_tournament_id && tournamentsById[contextTournament.main_tournament_id]?.tournament_format === "Leagues")
+          hasLeaguesStage(contextTournament) ||
+          (contextTournament && contextTournament.main_tournament_id && hasLeaguesStage(tournamentsById[contextTournament.main_tournament_id]))
         );
         const matchesBlock = buildPlayerMatchesBlock({
           playerId: rowData.player_id,

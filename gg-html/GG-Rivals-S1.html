@@ -150,6 +150,139 @@
     font-weight: 600;
   }
 
+  .overview-about-text .news-accordion-group,
+  .overview-about-text .news-accordion-block,
+  .overview-about-text .news-spoiler-block {
+    margin: 10px 0;
+  }
+
+  .overview-about-text .news-accordion-group {
+    display: grid;
+    gap: 5px;
+  }
+
+  .overview-about-text .news-accordion-group > .news-accordion-block {
+    margin: 0;
+  }
+
+  .overview-about-text .news-accordion-toggle,
+  .overview-about-text .news-spoiler-toggle {
+    align-items: center;
+    box-sizing: border-box;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .overview-about-text .news-accordion-toggle::-webkit-details-marker,
+  .overview-about-text .news-spoiler-toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .overview-about-text .news-accordion-toggle {
+    align-items: center;
+    background-color: var(--main-bg-color);
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    color: var(--accent-text-color);
+    display: flex;
+    font-size: 15px;
+    font-weight: 400;
+    justify-content: space-between;
+    padding: 4px 10px;
+    transition: background-color 0.2s ease;
+  }
+
+  .overview-about-text .news-accordion-toggle:hover,
+  .overview-about-text .news-accordion-toggle:focus-visible {
+    background-color: var(--hover-bg-color);
+    outline: none;
+  }
+
+  .overview-about-text .news-accordion-chevron {
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-left: 10px;
+  }
+
+  .overview-about-text .news-accordion-chevron i {
+    transition: transform 0.3s ease;
+  }
+
+  .overview-about-text .news-accordion-block.is-open .news-accordion-chevron i,
+  .overview-about-text .news-accordion-block[open]:not(.is-animating) .news-accordion-chevron i {
+    transform: rotate(180deg);
+  }
+
+  .overview-about-text .news-accordion-content {
+    border: 1px solid #dbe2ea;
+    border-top: 0;
+    border-radius: 0 0 2px 2px;
+    overflow: hidden;
+    padding: 0 12px;
+    transition: max-height 0.3s ease;
+  }
+
+  .overview-about-text .news-accordion-content::before,
+  .overview-about-text .news-accordion-content::after {
+    content: "";
+    display: block;
+    height: 10px;
+  }
+
+  .overview-about-text .news-spoiler-toggle {
+    background: transparent;
+    border: 1px solid #b9c5d3;
+    border-radius: 3px;
+    color: #174a7e;
+    display: inline-flex;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    min-height: 22px;
+    padding: 2px 7px;
+  }
+
+  .overview-about-text .news-spoiler-toggle:hover,
+  .overview-about-text .news-spoiler-toggle:focus-visible {
+    background: #eef5fb;
+    border-color: #174a7e;
+    outline: none;
+  }
+
+  .overview-about-text .news-spoiler-label-open {
+    display: none;
+  }
+
+  .overview-about-text .news-spoiler-block.is-open .news-spoiler-label-closed,
+  .overview-about-text .news-spoiler-block[open]:not(.is-animating) .news-spoiler-label-closed {
+    display: none;
+  }
+
+  .overview-about-text .news-spoiler-block.is-open .news-spoiler-label-open,
+  .overview-about-text .news-spoiler-block[open]:not(.is-animating) .news-spoiler-label-open {
+    display: inline;
+  }
+
+  .overview-about-text .news-spoiler-content {
+    border-top: 1px solid #dce3ec;
+    margin-top: 0;
+    overflow: hidden;
+    padding-top: 0;
+    transition: max-height 0.3s ease, margin-top 0.3s ease;
+  }
+
+  .overview-about-text .news-spoiler-content::before {
+    content: "";
+    display: block;
+    height: 8px;
+  }
+
+  .overview-about-text .news-spoiler-block.is-open .news-spoiler-content,
+  .overview-about-text .news-spoiler-block[open]:not(.is-animating) .news-spoiler-content {
+    margin-top: 8px;
+  }
+
   .group-table {
     width: 100%;
     border-collapse: collapse;
@@ -2563,7 +2696,7 @@
           const playerName = String(duel?.[`player${side}`] || duelPlayerId).trim();
           const flagUrl = String(duel?.[`player${side}_flag`] || "").trim();
           const link = document.createElement("a");
-          link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(duelPlayerId)}`;
+          link.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(duelPlayerId)}`;
           link.target = "_blank";
           link.rel = "noopener noreferrer";
           link.textContent = playerName;
@@ -3356,6 +3489,86 @@
     showTab(defaultTabId);
   }
 
+  const richTextExpandableAnimationTimers = new WeakMap();
+
+  function setRichTextExpandableState(details, shouldOpen, animate = true) {
+    if (!details) return;
+    details.dataset.newsExpandableState = shouldOpen ? "open" : "closed";
+    const content = Array.from(details.children).find(child => child.classList?.contains(
+      details.classList.contains("news-accordion-block") ? "news-accordion-content" : "news-spoiler-content"
+    )) || null;
+    if (!content) {
+      details.open = shouldOpen;
+      return;
+    }
+
+    const previousTimer = richTextExpandableAnimationTimers.get(details);
+    if (previousTimer) window.clearTimeout(previousTimer);
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+    if (!animate || reduceMotion) {
+      details.open = shouldOpen;
+      details.classList.toggle("is-open", shouldOpen);
+      details.classList.remove("is-animating");
+      content.style.maxHeight = shouldOpen ? "none" : "";
+      return;
+    }
+
+    details.classList.add("is-animating");
+    if (shouldOpen) {
+      details.open = true;
+      details.classList.remove("is-open");
+      content.style.maxHeight = "0px";
+      void content.offsetHeight;
+      details.classList.add("is-open");
+      content.style.maxHeight = `${content.scrollHeight}px`;
+    } else {
+      content.style.maxHeight = `${content.scrollHeight}px`;
+      void content.offsetHeight;
+      details.classList.remove("is-open");
+      content.style.maxHeight = "0px";
+    }
+
+    const timer = window.setTimeout(() => {
+      details.classList.remove("is-animating");
+      if (details.dataset.newsExpandableState === "open") {
+        details.open = true;
+        content.style.maxHeight = "none";
+      } else {
+        details.open = false;
+        content.style.maxHeight = "";
+      }
+      richTextExpandableAnimationTimers.delete(details);
+    }, 320);
+    richTextExpandableAnimationTimers.set(details, timer);
+  }
+
+  function initializeRichTextExpandableBlocks(container) {
+    if (!container) return;
+    container.querySelectorAll("details.news-accordion-block,details.news-spoiler-block").forEach(details => {
+      details.removeAttribute("name");
+      setRichTextExpandableState(details, details.open, false);
+      const summary = details.querySelector(":scope > summary");
+      if (!summary) return;
+      summary.addEventListener("click", event => {
+        event.preventDefault();
+        const willOpen = details.dataset.newsExpandableState !== "open";
+        if (willOpen && details.classList.contains("news-accordion-block")) {
+          const group = details.closest(".news-accordion-group");
+          Array.from(group?.children || []).forEach(sibling => {
+            if (
+              sibling !== details
+              && sibling.classList?.contains("news-accordion-block")
+              && sibling.dataset.newsExpandableState === "open"
+            ) {
+              setRichTextExpandableState(sibling, false);
+            }
+          });
+        }
+        setRichTextExpandableState(details, willOpen);
+      });
+    });
+  }
+
   function renderRulesContent() {
     const rulesContainer = document.getElementById("tab-rules-content");
     if (!rulesContainer) return;
@@ -3369,6 +3582,7 @@
     const rulesContent = document.createElement("div");
     rulesContent.className = "overview-about-text";
     rulesContent.innerHTML = rulesHtml;
+    initializeRichTextExpandableBlocks(rulesContent);
     rulesContainer.appendChild(rulesContent);
   }
 
@@ -3470,7 +3684,7 @@
 
         if (playerEntry.player) {
           const playerLink = document.createElement("a");
-          playerLink.href = `https://boardgamearena.com/player?id=${encodeURIComponent(playerEntry.player_id)}`;
+          playerLink.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(playerEntry.player_id)}`;
           playerLink.target = "_blank";
           playerLink.rel = "noopener noreferrer";
           playerLink.textContent = playerEntry.player;
@@ -3598,6 +3812,7 @@
       const content = document.createElement("div");
       content.innerHTML = currentTournament.about;
       content.className = "overview-about-text";
+      initializeRichTextExpandableBlocks(content);
       section.appendChild(content);
       container.appendChild(section);
     }
@@ -3687,7 +3902,7 @@
       }
 
       const a = document.createElement("a");
-      a.href = `https://boardgamearena.com/player?id=${p.player_id}`;
+      a.href = `https://carcassonne.gg/player/?id=${p.player_id}`;
       a.target = "_blank";
       a.textContent = p.player || "";
       wrap.appendChild(a);
@@ -4264,7 +4479,7 @@
               wrap.appendChild(img);
             }
             const a = document.createElement('a');
-            a.href = `https://boardgamearena.com/player?id=${rowData.player_id}`;
+            a.href = `https://carcassonne.gg/player/?id=${rowData.player_id}`;
             a.target = '_blank';
             a.textContent = rowData.player || '';
             wrap.appendChild(a);
@@ -4913,7 +5128,7 @@
       const playerName = String(duel[`player${side}`] || playerId).trim();
       const flagUrl = String(duel[`player${side}_flag`] || "").trim();
       const link = document.createElement("a");
-      link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(playerId)}`;
+      link.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(playerId)}`;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.textContent = playerName;
@@ -5191,7 +5406,7 @@
 
               const player1NameCell = document.createElement("td");
               player1NameCell.style.textAlign = "left";
-              player1NameCell.innerHTML = `<a href="https://boardgamearena.com/player?id=${duel.player1_id}" target="_blank" class="lineup-player">${duel.player1}</a>`;
+              player1NameCell.innerHTML = `<a href="https://carcassonne.gg/player/?id=${duel.player1_id}" target="_blank" class="lineup-player">${duel.player1}</a>`;
 
               // --- center cell: score or vs ---
               const centerCell = document.createElement("td");
@@ -5205,7 +5420,7 @@
               // --- player2: name cell then icon cell (name | icon) ---
               const player2NameCell = document.createElement("td");
               player2NameCell.style.textAlign = "right";
-              player2NameCell.innerHTML = `<a href="https://boardgamearena.com/player?id=${duel.player2_id}" target="_blank" class="lineup-player">${duel.player2}</a>`;
+              player2NameCell.innerHTML = `<a href="https://carcassonne.gg/player/?id=${duel.player2_id}" target="_blank" class="lineup-player">${duel.player2}</a>`;
 
               const player2IconCell = document.createElement("td");
               player2IconCell.innerHTML = player2Avatar ? `<img src="${player2Avatar}" class="player-logo">` : "";
@@ -5268,12 +5483,12 @@
           const player1Cell = `<td class="player-cell">
             <div style="display:flex; align-items:center; justify-content:center; gap:7px;">
               ${player1Logo ? `<img src="${player1Logo}" class="player-logo">` : ""}
-              <a href="https://boardgamearena.com/player?id=${g.player1_id}" target="_blank">${g.player1}</a>
+              <a href="https://carcassonne.gg/player/?id=${g.player1_id}" target="_blank">${g.player1}</a>
             </div>
           </td>`;
           const player2Cell = `<td class="player-cell">
             <div style="display:flex; align-items:center; justify-content:center; gap:7px;">
-              <a href="https://boardgamearena.com/player?id=${g.player2_id}" target="_blank">${g.player2}</a>
+              <a href="https://carcassonne.gg/player/?id=${g.player2_id}" target="_blank">${g.player2}</a>
               ${player2Logo ? `<img src="${player2Logo}" class="player-logo">` : ""}
             </div>
           </td>`;
@@ -5852,7 +6067,7 @@
           }
           const player1Link = document.createElement("a");
           if (m.player1_id) {
-            player1Link.href = `https://boardgamearena.com/player?id=${m.player1_id}`;
+            player1Link.href = `https://carcassonne.gg/player/?id=${m.player1_id}`;
             player1Link.target = "_blank";
           } else {
             player1Link.removeAttribute("href");
@@ -5884,7 +6099,7 @@
           }
           const player2Link = document.createElement("a");
           if (m.player2_id) {
-            player2Link.href = `https://boardgamearena.com/player?id=${m.player2_id}`;
+            player2Link.href = `https://carcassonne.gg/player/?id=${m.player2_id}`;
             player2Link.target = "_blank";
           } else {
             player2Link.removeAttribute("href");
@@ -6793,7 +7008,7 @@
             wrap.appendChild(img);
           }
           const a = document.createElement('a');
-          a.href = `https://boardgamearena.com/player?id=${rowData.player_id}`;
+          a.href = `https://carcassonne.gg/player/?id=${rowData.player_id}`;
           a.target = '_blank';
           a.textContent = rowData.player || '';
           wrap.appendChild(a);

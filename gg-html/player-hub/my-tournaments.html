@@ -513,6 +513,141 @@
     top: 6px;
   }
 
+  .news-accordion-group,
+  .news-accordion-block,
+  .news-spoiler-block {
+    margin: 10px 0;
+  }
+
+  .news-accordion-group {
+    display: grid;
+    gap: 5px;
+  }
+
+  .news-accordion-group > .news-accordion-block {
+    margin: 0;
+  }
+
+  .news-accordion-toggle,
+  .news-spoiler-toggle {
+    align-items: center;
+    box-sizing: border-box;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .news-accordion-toggle::-webkit-details-marker,
+  .news-spoiler-toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .news-accordion-toggle {
+    align-items: center;
+    background: #800020;
+    border-radius: 3px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    color: #fff;
+    display: flex;
+    font-size: 15px;
+    justify-content: space-between;
+    padding: 5px 10px;
+  }
+
+  .news-accordion-toggle:hover,
+  .news-accordion-toggle:focus-visible {
+    background: #a00028;
+    outline: none;
+  }
+
+  .news-accordion-title {
+    min-width: 0;
+  }
+
+  .news-accordion-chevron {
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-left: 10px;
+  }
+
+  .news-accordion-chevron i {
+    transition: transform 0.3s ease;
+  }
+
+  .news-accordion-block.is-open .news-accordion-chevron i,
+  .news-accordion-block[open]:not(.is-animating) .news-accordion-chevron i {
+    transform: rotate(180deg);
+  }
+
+  .news-accordion-content {
+    border: 1px solid #dbe2ea;
+    border-top: 0;
+    border-radius: 0 0 3px 3px;
+    overflow: hidden;
+    padding: 0 12px;
+    transition: max-height 0.3s ease;
+  }
+
+  .news-accordion-content::before,
+  .news-accordion-content::after {
+    content: "";
+    display: block;
+    height: 10px;
+  }
+
+  .news-spoiler-toggle {
+    background: transparent;
+    border: 1px solid #b9c5d3;
+    border-radius: 3px;
+    color: #174a7e;
+    display: inline-flex;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    min-height: 24px;
+    padding: 4px 8px;
+  }
+
+  .news-spoiler-toggle:hover,
+  .news-spoiler-toggle:focus-visible {
+    background: #eef5fb;
+    border-color: #174a7e;
+    outline: none;
+  }
+
+  .news-spoiler-label-open {
+    display: none;
+  }
+
+  .news-spoiler-block.is-open .news-spoiler-label-closed,
+  .news-spoiler-block[open]:not(.is-animating) .news-spoiler-label-closed {
+    display: none;
+  }
+
+  .news-spoiler-block.is-open .news-spoiler-label-open,
+  .news-spoiler-block[open]:not(.is-animating) .news-spoiler-label-open {
+    display: inline;
+  }
+
+  .news-spoiler-content {
+    border-top: 1px solid #dce3ec;
+    margin-top: 0;
+    overflow: hidden;
+    padding-top: 0;
+    transition: max-height 0.3s ease, margin-top 0.3s ease;
+  }
+
+  .news-spoiler-content::before {
+    content: "";
+    display: block;
+    height: 8px;
+  }
+
+  .news-spoiler-block.is-open .news-spoiler-content,
+  .news-spoiler-block[open]:not(.is-animating) .news-spoiler-content {
+    margin-top: 8px;
+  }
+
   .cp-news-desc img {
     display: none;
   }
@@ -681,6 +816,143 @@
   }
 
   .cp-news-editor-area .cp-news-quote-remove:disabled {
+    color: #98a2b3;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  .cp-news-editor-area .news-accordion-block,
+  .cp-news-editor-area .news-spoiler-block {
+    position: relative;
+  }
+
+  .cp-news-editor-area .news-accordion-toggle {
+    padding-right: 132px;
+  }
+
+  .cp-news-editor-area .news-spoiler-toggle {
+    padding-right: 42px;
+  }
+
+  .cp-news-editor-area .news-accordion-title,
+  .cp-news-editor-area .news-spoiler-label-closed,
+  .cp-news-editor-area .news-spoiler-label-open,
+  .cp-news-editor-area .news-accordion-content,
+  .cp-news-editor-area .news-spoiler-content {
+    outline: none;
+  }
+
+  .cp-news-editor-area .news-accordion-title,
+  .cp-news-editor-area .news-spoiler-label-closed,
+  .cp-news-editor-area .news-spoiler-label-open {
+    cursor: text;
+    user-select: text;
+  }
+
+  .cp-news-editor-area .news-accordion-title:focus,
+  .cp-news-editor-area .news-spoiler-label-closed:focus,
+  .cp-news-editor-area .news-spoiler-label-open:focus {
+    box-shadow: inset 0 -1px 0 currentColor;
+  }
+
+  .cp-news-editor-area .news-spoiler-toggle {
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px 10px;
+  }
+
+  .cp-news-editor-area .news-spoiler-content {
+    background: #f8fbff;
+    border: 1px solid #d8e4f0;
+    border-left: 3px solid #c5d9eb;
+    border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(15, 28, 48, 0.05);
+    margin-top: 0;
+    padding: 0 12px;
+  }
+
+  .cp-news-editor-area .news-spoiler-content::before,
+  .cp-news-editor-area .news-spoiler-content::after {
+    content: "";
+    display: block;
+    height: 10px;
+  }
+
+  .cp-news-editor-area .news-spoiler-block.is-open .news-spoiler-content,
+  .cp-news-editor-area .news-spoiler-block[open]:not(.is-animating) .news-spoiler-content {
+    margin-top: 7px;
+  }
+
+  .cp-news-editor-area .news-spoiler-label-closed,
+  .cp-news-editor-area .news-spoiler-label-open,
+  .cp-news-editor-area .news-spoiler-block.is-open .news-spoiler-label-closed,
+  .cp-news-editor-area .news-spoiler-block.is-open .news-spoiler-label-open,
+  .cp-news-editor-area .news-spoiler-block[open] .news-spoiler-label-closed,
+  .cp-news-editor-area .news-spoiler-block[open] .news-spoiler-label-open {
+    display: inline-flex;
+  }
+
+  .cp-news-editor-area .news-spoiler-label-closed::before {
+    color: #667085;
+    content: "Closed: ";
+    font-weight: 400;
+    margin-right: 4px;
+  }
+
+  .cp-news-editor-area .news-spoiler-label-open::before {
+    color: #667085;
+    content: "Open: ";
+    font-weight: 400;
+    margin-right: 4px;
+  }
+
+  .cp-news-editor-area .cp-news-accordion-controls {
+    align-items: center;
+    display: flex;
+    gap: 3px;
+    position: absolute;
+    right: 7px;
+    top: 5px;
+    z-index: 2;
+  }
+
+  .cp-news-editor-area .cp-news-structure-action,
+  .cp-news-editor-area .cp-news-structure-remove {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    color: #667085;
+    cursor: pointer;
+    display: inline-flex;
+    height: 24px;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    width: 24px;
+  }
+
+  .cp-news-editor-area .news-spoiler-toggle > .cp-news-structure-remove {
+    position: absolute;
+    right: 7px;
+    top: 5px;
+    z-index: 2;
+  }
+
+  .cp-news-editor-area .cp-news-structure-action:hover,
+  .cp-news-editor-area .cp-news-structure-action:focus-visible {
+    border-color: #1a73b7;
+    color: #1a73b7;
+  }
+
+  .cp-news-editor-area .cp-news-structure-remove:hover,
+  .cp-news-editor-area .cp-news-structure-remove:focus-visible {
+    border-color: #b42318;
+    color: #b42318;
+  }
+
+  .cp-news-editor-area .cp-news-structure-action:disabled,
+  .cp-news-editor-area .cp-news-structure-remove:disabled {
     color: #98a2b3;
     cursor: not-allowed;
     opacity: 0.7;
@@ -2102,6 +2374,7 @@
     if (!raw) return "";
     const preserveEmptyQuotes = options.preserveEmptyQuotes === true;
     const preserveSelectionMarkers = options.preserveSelectionMarkers === true;
+    const preserveEditorState = options.preserveEditorState === true;
     const allowedTags = new Set(["P", "BR", "STRONG", "EM", "A", "OL", "UL", "LI", "IMG"]);
     const template = document.createElement("template");
     template.innerHTML = raw;
@@ -2148,6 +2421,34 @@
       )
     );
 
+    const isNewsAccordionBlockElement = (node) => (
+      node?.nodeType === Node.ELEMENT_NODE
+      && (
+        node.classList?.contains("news-accordion-block")
+        || String(node.getAttribute?.("data-news-accordion") || "").trim().toLowerCase() === "true"
+      )
+    );
+
+    const isNewsAccordionGroupElement = (node) => (
+      node?.nodeType === Node.ELEMENT_NODE
+      && (
+        node.classList?.contains("news-accordion-group")
+        || String(node.getAttribute?.("data-news-accordion-group") || "").trim().toLowerCase() === "true"
+      )
+    );
+
+    const isNewsSpoilerBlockElement = (node) => (
+      node?.nodeType === Node.ELEMENT_NODE
+      && (
+        node.classList?.contains("news-spoiler-block")
+        || String(node.getAttribute?.("data-news-spoiler") || "").trim().toLowerCase() === "true"
+      )
+    );
+
+    const normalizeExpandableLabel = (node, fallback) => (
+      String(node?.textContent || "").replace(/\s+/g, " ").trim() || fallback
+    );
+
     const getTextWithLineBreaks = (node) => {
       const blockTags = new Set(["DIV", "P", "LI", "BLOCKQUOTE"]);
       const collect = (currentNode, parts = []) => {
@@ -2157,7 +2458,7 @@
             return;
           }
           if (child.nodeType !== Node.ELEMENT_NODE) return;
-          if (child.matches?.(".cp-news-quote-remove")) return;
+          if (child.matches?.(".cp-news-quote-remove,.cp-news-structure-remove")) return;
           if (child.tagName?.toUpperCase() === "BR") {
             parts.push("\n");
             return;
@@ -2337,6 +2638,81 @@
       return quoteBlock;
     };
 
+    const sanitizeNewsExpandableBlock = (node, type) => {
+      const isAccordion = type === "accordion";
+      const details = document.createElement("details");
+      details.className = isAccordion ? "news-accordion-block" : "news-spoiler-block";
+      details.dataset[isAccordion ? "newsAccordion" : "newsSpoiler"] = "true";
+      const editorState = String(node.getAttribute?.("data-news-expandable-state") || "")
+        .trim()
+        .toLowerCase();
+      if (
+        preserveEditorState
+        && (
+          editorState === "open"
+          || node.classList?.contains("is-open")
+          || (node.hasAttribute?.("open") && !node.classList?.contains("is-animating"))
+        )
+      ) {
+        details.open = true;
+      }
+
+      const summary = document.createElement("summary");
+      summary.className = isAccordion ? "news-accordion-toggle" : "news-spoiler-toggle";
+      if (isAccordion) {
+        const sourceTitle = node.querySelector?.(".news-accordion-title") || node.querySelector?.("summary");
+        const title = document.createElement("span");
+        title.className = "news-accordion-title";
+        title.textContent = normalizeExpandableLabel(sourceTitle, "Accordion title");
+        const chevron = document.createElement("span");
+        chevron.className = "news-accordion-chevron";
+        chevron.setAttribute("aria-hidden", "true");
+        chevron.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
+        summary.appendChild(title);
+        summary.appendChild(chevron);
+      } else {
+        const closedLabel = document.createElement("span");
+        closedLabel.className = "news-spoiler-label-closed";
+        closedLabel.textContent = normalizeExpandableLabel(
+          node.querySelector?.(".news-spoiler-label-closed"),
+          "Show details"
+        );
+        const openLabel = document.createElement("span");
+        openLabel.className = "news-spoiler-label-open";
+        openLabel.textContent = normalizeExpandableLabel(
+          node.querySelector?.(".news-spoiler-label-open"),
+          "Hide details"
+        );
+        summary.appendChild(closedLabel);
+        summary.appendChild(openLabel);
+      }
+
+      const contentClass = isAccordion ? "news-accordion-content" : "news-spoiler-content";
+      const sourceContent = node.querySelector?.(`.${contentClass}`) || null;
+      const content = document.createElement("div");
+      content.className = contentClass;
+      content.innerHTML = sourceContent
+        ? sanitizeNewsDescriptionHtml(sourceContent.innerHTML, options)
+        : "";
+      if (!content.innerHTML.trim()) content.innerHTML = "<p><br></p>";
+
+      details.appendChild(summary);
+      details.appendChild(content);
+      return details;
+    };
+
+    const sanitizeNewsAccordionGroup = (node) => {
+      const group = document.createElement("div");
+      group.className = "news-accordion-group";
+      group.dataset.newsAccordionGroup = "true";
+      Array.from(node?.children || []).forEach((child) => {
+        if (!isNewsAccordionBlockElement(child)) return;
+        const section = sanitizeNewsExpandableBlock(child, "accordion");
+        if (section) group.appendChild(section);
+      });
+      return group.children.length ? group : null;
+    };
+
     const sanitizeNode = (node) => {
       if (node.nodeType === Node.TEXT_NODE) {
         return document.createTextNode(node.textContent || "");
@@ -2350,6 +2726,19 @@
         marker.dataset.newsSelectionMarker = String(node.getAttribute("data-news-selection-marker") || "");
         marker.setAttribute("aria-hidden", "true");
         return marker;
+      }
+      if (isNewsAccordionGroupElement(node)) {
+        return sanitizeNewsAccordionGroup(node);
+      }
+      if (isNewsAccordionBlockElement(node)) {
+        const group = document.createElement("div");
+        group.className = "news-accordion-group";
+        group.dataset.newsAccordionGroup = "true";
+        group.appendChild(sanitizeNewsExpandableBlock(node, "accordion"));
+        return group;
+      }
+      if (isNewsSpoilerBlockElement(node)) {
+        return sanitizeNewsExpandableBlock(node, "spoiler");
       }
       if (
         isNewsQuoteBlockElement(node)
@@ -2432,9 +2821,12 @@
     const isTopLevelBlock = (node) => {
       if (node?.nodeType !== Node.ELEMENT_NODE) return false;
       const tagName = node.tagName.toUpperCase();
-      return ["P", "OL", "UL", "H2"].includes(tagName)
+      return ["P", "OL", "UL", "H2", "DETAILS"].includes(tagName)
         || node.classList?.contains("news-quote-block")
-        || node.classList?.contains("news-section-title");
+        || node.classList?.contains("news-section-title")
+        || node.classList?.contains("news-accordion-group")
+        || node.classList?.contains("news-accordion-block")
+        || node.classList?.contains("news-spoiler-block");
     };
 
     const hasParagraphContent = (paragraph) => !!(
@@ -2506,14 +2898,18 @@
     });
     const hasQuoteBlock = !!output.querySelector(".news-quote-block");
     const hasSectionTitle = !!output.querySelector(".news-section-title");
+    const hasExpandableBlock = !!output.querySelector(".news-accordion-group,.news-accordion-block,.news-spoiler-block");
     const hasSelectionMarker = preserveSelectionMarkers && !!output.querySelector("[data-news-selection-marker]");
-    if (!output.textContent.trim() && !output.querySelector("img") && !hasQuoteBlock && !hasSectionTitle && !hasSelectionMarker) return "";
+    if (!output.textContent.trim() && !output.querySelector("img") && !hasQuoteBlock && !hasSectionTitle && !hasExpandableBlock && !hasSelectionMarker) return "";
     if (
-      (output.textContent.trim() || output.querySelector("img") || hasQuoteBlock || hasSectionTitle || hasSelectionMarker)
+      (output.textContent.trim() || output.querySelector("img") || hasQuoteBlock || hasSectionTitle || hasExpandableBlock || hasSelectionMarker)
       && !Array.from(output.children).some((child) => (
-        ["P", "OL", "UL", "H2"].includes(child.tagName.toUpperCase())
+        ["P", "OL", "UL", "H2", "DETAILS"].includes(child.tagName.toUpperCase())
         || child.classList?.contains("news-quote-block")
         || child.classList?.contains("news-section-title")
+        || child.classList?.contains("news-accordion-group")
+        || child.classList?.contains("news-accordion-block")
+        || child.classList?.contains("news-spoiler-block")
       ))
     ) {
       const paragraph = document.createElement("p");
@@ -2925,6 +3321,182 @@
       editor.querySelectorAll(".news-quote-block").forEach(enhanceQuoteBlock);
     };
 
+    const getExpandableBlockFromNode = (node) => {
+      const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+      const block = element?.closest?.(".news-accordion-block,.news-spoiler-block") || null;
+      return block && editor.contains(block) ? block : null;
+    };
+
+    const getAccordionGroupFromNode = (node) => {
+      const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+      const group = element?.closest?.(".news-accordion-group") || null;
+      return group && editor.contains(group) ? group : null;
+    };
+
+    const getAccordionSections = (group) => Array.from(group?.children || []).filter((child) => (
+      child.classList?.contains("news-accordion-block")
+    ));
+
+    const createStructureActionButton = (action, label, textValue) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "cp-news-structure-action";
+      button.contentEditable = "false";
+      button.dataset.newsAccordionAction = action;
+      button.title = label;
+      button.setAttribute("aria-label", label);
+      button.textContent = textValue;
+      return button;
+    };
+
+    const createStructureRemoveButton = (label) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "cp-news-structure-action cp-news-structure-remove";
+      button.contentEditable = "false";
+      button.dataset.newsAccordionAction = "remove";
+      button.title = `Remove ${label}`;
+      button.setAttribute("aria-label", `Remove ${label}`);
+      const icon = document.createElement("i");
+      icon.className = "fa-solid fa-xmark";
+      button.appendChild(icon);
+      return button;
+    };
+
+    const updateAccordionControls = (group) => {
+      const sections = getAccordionSections(group);
+      const isBusy = externallyDisabled || pendingImageUploads > 0;
+      sections.forEach((section, index) => {
+        const controls = section.querySelector(":scope > summary > .cp-news-accordion-controls");
+        if (!controls) return;
+        const upButton = controls.querySelector('[data-news-accordion-action="up"]');
+        const downButton = controls.querySelector('[data-news-accordion-action="down"]');
+        const addButton = controls.querySelector('[data-news-accordion-action="add"]');
+        const removeButton = controls.querySelector('[data-news-accordion-action="remove"]');
+        if (upButton) upButton.disabled = isBusy || index === 0;
+        if (downButton) downButton.disabled = isBusy || index === sections.length - 1;
+        if (addButton) addButton.disabled = isBusy;
+        if (removeButton) removeButton.disabled = isBusy;
+      });
+    };
+
+    const expandableAnimationTimers = new WeakMap();
+    const setEditorExpandableState = (block, shouldOpen, animate = true) => {
+      if (!block) return;
+      block.dataset.newsExpandableState = shouldOpen ? "open" : "closed";
+      const content = Array.from(block.children).find((child) => child.classList?.contains(
+        block.classList.contains("news-accordion-block") ? "news-accordion-content" : "news-spoiler-content"
+      )) || null;
+      if (!content) {
+        block.open = shouldOpen;
+        return;
+      }
+
+      const previousTimer = expandableAnimationTimers.get(block);
+      if (previousTimer) window.clearTimeout(previousTimer);
+      const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+      if (!animate || reduceMotion) {
+        block.open = shouldOpen;
+        block.classList.toggle("is-open", shouldOpen);
+        block.classList.remove("is-animating");
+        content.style.maxHeight = shouldOpen ? "none" : "";
+        return;
+      }
+
+      block.classList.add("is-animating");
+      if (shouldOpen) {
+        block.open = true;
+        block.classList.remove("is-open");
+        content.style.maxHeight = "0px";
+        void content.offsetHeight;
+        block.classList.add("is-open");
+        content.style.maxHeight = `${content.scrollHeight}px`;
+      } else {
+        content.style.maxHeight = `${content.scrollHeight}px`;
+        void content.offsetHeight;
+        block.classList.remove("is-open");
+        content.style.maxHeight = "0px";
+      }
+
+      const timer = window.setTimeout(() => {
+        block.classList.remove("is-animating");
+        if (block.dataset.newsExpandableState === "open") {
+          block.open = true;
+          content.style.maxHeight = "none";
+        } else {
+          block.open = false;
+          content.style.maxHeight = "";
+        }
+        expandableAnimationTimers.delete(block);
+      }, 320);
+      expandableAnimationTimers.set(block, timer);
+    };
+
+    const enhanceExpandableBlock = (block) => {
+      if (!block) return;
+      const isAccordion = block.classList.contains("news-accordion-block");
+      block.dataset[isAccordion ? "newsAccordion" : "newsSpoiler"] = "true";
+      block.removeAttribute("name");
+      block.contentEditable = "false";
+
+      const summary = Array.from(block.children).find((child) => child.tagName?.toUpperCase() === "SUMMARY") || null;
+      const content = Array.from(block.children).find((child) => child.classList?.contains(
+        isAccordion ? "news-accordion-content" : "news-spoiler-content"
+      )) || null;
+      if (!summary || !content) return;
+
+      summary.contentEditable = "false";
+      const editableSelectors = isAccordion
+        ? [".news-accordion-title"]
+        : [".news-spoiler-label-closed", ".news-spoiler-label-open"];
+      editableSelectors.forEach((selector) => {
+        const field = summary.querySelector(selector);
+        if (!field) return;
+        field.contentEditable = externallyDisabled || pendingImageUploads > 0 ? "false" : "true";
+        field.spellcheck = true;
+        field.tabIndex = 0;
+      });
+      content.contentEditable = externallyDisabled || pendingImageUploads > 0 ? "false" : "true";
+      content.spellcheck = true;
+
+      if (isAccordion) {
+        let controls = Array.from(summary.children).find((child) => child.classList?.contains("cp-news-accordion-controls")) || null;
+        if (!controls) {
+          controls = document.createElement("span");
+          controls.className = "cp-news-accordion-controls";
+          controls.contentEditable = "false";
+          controls.appendChild(createStructureActionButton("add", "Add linked accordion section", "+"));
+          controls.appendChild(createStructureActionButton("up", "Move accordion section up", "▲"));
+          controls.appendChild(createStructureActionButton("down", "Move accordion section down", "▼"));
+          controls.appendChild(createStructureRemoveButton("accordion section"));
+          summary.appendChild(controls);
+        }
+      } else {
+        let removeButton = Array.from(summary.children).find((child) => child.classList?.contains("cp-news-structure-remove")) || null;
+        if (!removeButton) {
+          removeButton = createStructureRemoveButton("spoiler");
+          summary.appendChild(removeButton);
+        }
+        removeButton.disabled = externallyDisabled || pendingImageUploads > 0;
+      }
+
+      block.classList.toggle("is-open", block.open);
+      block.dataset.newsExpandableState = block.open ? "open" : "closed";
+      block.classList.remove("is-animating");
+      content.style.maxHeight = block.open ? "none" : "";
+    };
+
+    const enhanceExpandableBlocksInEditor = () => {
+      editor.querySelectorAll(".news-accordion-group").forEach((group) => {
+        group.dataset.newsAccordionGroup = "true";
+        group.contentEditable = "false";
+        getAccordionSections(group).forEach(enhanceExpandableBlock);
+        updateAccordionControls(group);
+      });
+      editor.querySelectorAll(".news-spoiler-block").forEach(enhanceExpandableBlock);
+      editor.querySelectorAll(".news-accordion-group,.news-spoiler-block").forEach(ensureEditableParagraphAfter);
+    };
+
     const appendTextWithLineBreaksToNode = (node, text) => {
       String(text || "").split(/\n/).forEach((line, index) => {
         if (index > 0) node.appendChild(document.createElement("br"));
@@ -3134,6 +3706,191 @@
       }
     };
 
+    const createExpandableBlock = (type, selectedHtml = "") => {
+      const isAccordion = type === "accordion";
+      const block = document.createElement("details");
+      block.className = isAccordion ? "news-accordion-block" : "news-spoiler-block";
+      block.dataset[isAccordion ? "newsAccordion" : "newsSpoiler"] = "true";
+      block.open = true;
+
+      const summary = document.createElement("summary");
+      summary.className = isAccordion ? "news-accordion-toggle" : "news-spoiler-toggle";
+      if (isAccordion) {
+        const title = document.createElement("span");
+        title.className = "news-accordion-title";
+        title.textContent = "Accordion title";
+        const chevron = document.createElement("span");
+        chevron.className = "news-accordion-chevron";
+        chevron.setAttribute("aria-hidden", "true");
+        chevron.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
+        summary.appendChild(title);
+        summary.appendChild(chevron);
+      } else {
+        const closedLabel = document.createElement("span");
+        closedLabel.className = "news-spoiler-label-closed";
+        closedLabel.textContent = "Show details";
+        const openLabel = document.createElement("span");
+        openLabel.className = "news-spoiler-label-open";
+        openLabel.textContent = "Hide details";
+        summary.appendChild(closedLabel);
+        summary.appendChild(openLabel);
+      }
+
+      const content = document.createElement("div");
+      content.className = isAccordion ? "news-accordion-content" : "news-spoiler-content";
+      content.innerHTML = sanitizeNewsDescriptionHtml(selectedHtml) || "<p><br></p>";
+      block.appendChild(summary);
+      block.appendChild(content);
+      enhanceExpandableBlock(block);
+      return block;
+    };
+
+    const createAccordionGroup = (section) => {
+      const group = document.createElement("div");
+      group.className = "news-accordion-group";
+      group.dataset.newsAccordionGroup = "true";
+      group.contentEditable = "false";
+      if (section) group.appendChild(section);
+      return group;
+    };
+
+    const ensureEditableParagraphAfter = (block) => {
+      if (!block?.parentNode) return null;
+      let nextNode = block.nextSibling;
+      while (nextNode?.nodeType === Node.TEXT_NODE && !String(nextNode.textContent || "").trim()) {
+        nextNode = nextNode.nextSibling;
+      }
+      if (nextNode) return null;
+      const paragraph = document.createElement("p");
+      paragraph.appendChild(document.createElement("br"));
+      block.parentNode.insertBefore(paragraph, block.nextSibling);
+      return paragraph;
+    };
+
+    const getSelectedSafeHtml = (range) => {
+      if (!range || range.collapsed) return "";
+      const selected = document.createElement("div");
+      selected.appendChild(range.cloneContents());
+      return sanitizeNewsDescriptionHtml(selected.innerHTML);
+    };
+
+    const focusExpandableField = (block, selector, selectText = false) => {
+      const field = block?.querySelector?.(selector) || null;
+      if (!field) return;
+      const details = field.closest("details");
+      const isContentField = field.classList.contains("news-accordion-content")
+        || field.classList.contains("news-spoiler-content");
+      if (details && isContentField && details.dataset.newsExpandableState !== "open") {
+        if (details.classList.contains("news-accordion-block")) {
+          const group = getAccordionGroupFromNode(details);
+          getAccordionSections(group).forEach((sibling) => {
+            if (sibling !== details && sibling.dataset.newsExpandableState === "open") {
+              setEditorExpandableState(sibling, false);
+            }
+          });
+        }
+        setEditorExpandableState(details, true);
+      }
+      const range = document.createRange();
+      range.selectNodeContents(field);
+      if (!selectText) range.collapse(false);
+      const isLabelField = field.matches?.(
+        ".news-accordion-title,.news-spoiler-label-closed,.news-spoiler-label-open"
+      );
+      if (isLabelField) {
+        try {
+          field.focus({ preventScroll: true });
+        } catch (_error) {
+          field.focus();
+        }
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      } else {
+        restoreSelectionRange(range);
+      }
+      savedEditorRange = range.cloneRange();
+    };
+
+    const insertDescriptionExpandableBlock = (type) => {
+      const targetRange = rememberEditorSelection()
+        || (savedEditorRange ? savedEditorRange.cloneRange() : null);
+      const block = createExpandableBlock(type, getSelectedSafeHtml(targetRange));
+      const insertionNode = type === "accordion" ? createAccordionGroup(block) : block;
+      insertBlockAtCurrentSelection(insertionNode);
+      ensureEditableParagraphAfter(insertionNode);
+      setEditorExpandableState(block, true, false);
+      if (type === "accordion") {
+        focusExpandableField(block, ".news-accordion-title", true);
+        updateAccordionControls(insertionNode);
+        setEditorStatus("Independent accordion added. Use + to add linked sections.");
+      } else {
+        focusExpandableField(block, ".news-spoiler-label-closed", true);
+        setEditorStatus("Spoiler added. Edit both button labels, then add its content.");
+      }
+      setSelectedImage(null);
+      updateToolbarState();
+    };
+
+    const addLinkedAccordionSection = (block) => {
+      const group = getAccordionGroupFromNode(block);
+      if (!group) return;
+      const newSection = createExpandableBlock("accordion");
+      group.insertBefore(newSection, block.nextSibling);
+      getAccordionSections(group).forEach((section) => {
+        if (section !== newSection && section.dataset.newsExpandableState === "open") {
+          setEditorExpandableState(section, false);
+        }
+      });
+      setEditorExpandableState(newSection, true);
+      updateAccordionControls(group);
+      focusExpandableField(newSection, ".news-accordion-title", true);
+      setEditorStatus("Linked accordion section added.");
+      updateToolbarState();
+    };
+
+    const moveAccordionSection = (block, direction) => {
+      const group = getAccordionGroupFromNode(block);
+      if (!group) return;
+      const sections = getAccordionSections(group);
+      const index = sections.indexOf(block);
+      if (direction === "up" && index > 0) {
+        group.insertBefore(block, sections[index - 1]);
+      } else if (direction === "down" && index >= 0 && index < sections.length - 1) {
+        group.insertBefore(sections[index + 1], block);
+      } else {
+        return;
+      }
+      updateAccordionControls(group);
+      focusExpandableField(block, ".news-accordion-title");
+      setEditorStatus(`Accordion section moved ${direction}.`);
+      updateToolbarState();
+    };
+
+    const removeExpandableBlock = (block) => {
+      const targetBlock = block && editor.contains(block) ? block : null;
+      if (!targetBlock) return;
+      const isAccordion = targetBlock.classList.contains("news-accordion-block");
+      const group = isAccordion ? getAccordionGroupFromNode(targetBlock) : null;
+      const sections = getAccordionSections(group);
+      const sectionIndex = sections.indexOf(targetBlock);
+      const focusSection = sections[sectionIndex + 1] || sections[sectionIndex - 1] || null;
+      if (isAccordion && group && sections.length === 1) {
+        group.remove();
+      } else {
+        targetBlock.remove();
+      }
+      if (!editor.children.length) editor.innerHTML = "<p><br></p>";
+      if (group?.isConnected) updateAccordionControls(group);
+      if (focusSection?.isConnected) {
+        focusExpandableField(focusSection, ".news-accordion-title");
+      } else {
+        placeCaretAtEnd();
+      }
+      updateToolbarState();
+      setEditorStatus(`${isAccordion ? "Accordion section" : "Spoiler"} removed.`);
+    };
+
     const removeQuoteBlock = (quoteBlock) => {
       const targetBlock = quoteBlock && editor.contains(quoteBlock) ? quoteBlock : null;
       if (!targetBlock) return;
@@ -3230,6 +3987,7 @@
         : range.startContainer.parentElement;
       const block = element?.closest?.(".news-section-title,h1,h2,h3,h4,h5,h6,p,div") || null;
       if (!block || block === editor || !editor.contains(block)) return null;
+      if (block.matches?.(".news-accordion-group,.news-accordion-content,.news-spoiler-content,.news-accordion-block,.news-spoiler-block")) return null;
       if (getQuoteBlockFromNode(block)) return null;
       if (block.querySelector?.("img")) return null;
       return block;
@@ -3699,6 +4457,20 @@
         onClick: () => insertDescriptionQuote(),
       },
       {
+        key: "accordion",
+        label: "Accordion",
+        iconClass: "fa-solid fa-bars-staggered",
+        title: "Add independent accordion",
+        onClick: () => insertDescriptionExpandableBlock("accordion"),
+      },
+      {
+        key: "spoiler",
+        label: "Spoiler",
+        iconClass: "fa-solid fa-eye",
+        title: "Add spoiler",
+        onClick: () => insertDescriptionExpandableBlock("spoiler"),
+      },
+      {
         key: "image",
         label: "Image",
         iconClass: "fa-solid fa-image",
@@ -3750,9 +4522,11 @@
       editor.innerHTML = sanitizeNewsDescriptionHtml(editor.innerHTML, {
         preserveEmptyQuotes: true,
         preserveSelectionMarkers: !!markerState,
+        preserveEditorState: true,
       }) || "<p><br></p>";
       selectedImageNode = null;
       enhanceQuoteBlocksInEditor();
+      enhanceExpandableBlocksInEditor();
       if (markerState && !restoreSelectionFromMarkers(markerState)) {
         placeCaretAtEnd();
       }
@@ -3840,6 +4614,15 @@
       editor.querySelectorAll(".cp-news-quote-remove").forEach((button) => {
         button.disabled = isBusy;
       });
+      editor.querySelectorAll(".cp-news-structure-action").forEach((button) => {
+        button.disabled = isBusy;
+      });
+      editor.querySelectorAll(".news-accordion-group").forEach(updateAccordionControls);
+      editor.querySelectorAll(
+        ".news-accordion-title,.news-spoiler-label-closed,.news-spoiler-label-open,.news-accordion-content,.news-spoiler-content"
+      ).forEach((field) => {
+        field.contentEditable = isBusy ? "false" : "true";
+      });
       imageFileInput.disabled = isBusy;
       editor.contentEditable = isBusy ? "false" : "true";
       updateFloatingToolbarState(activeRange);
@@ -3858,6 +4641,20 @@
       const activeRange = getSelectionRange();
       const activeQuoteAuthor = getQuoteFieldFromRange(activeRange, ".news-quote-author");
       const activeQuoteText = getQuoteFieldFromRange(activeRange, ".news-quote-text");
+      const activeExpandableLabel = activeRange
+        ? getElementFromRangeNode(activeRange.startContainer)?.closest?.(
+          ".news-accordion-title,.news-spoiler-label-closed,.news-spoiler-label-open"
+        )
+        : null;
+      if (event.key === "Enter" && activeExpandableLabel && editor.contains(activeExpandableLabel)) {
+        event.preventDefault();
+        const block = getExpandableBlockFromNode(activeExpandableLabel);
+        const contentSelector = block?.classList.contains("news-accordion-block")
+          ? ".news-accordion-content"
+          : ".news-spoiler-content";
+        focusExpandableField(block, contentSelector);
+        return;
+      }
       if (event.key === "Enter" && activeQuoteAuthor) {
         event.preventDefault();
         focusQuoteField(getQuoteBlockFromNode(activeQuoteAuthor), ".news-quote-text");
@@ -3964,6 +4761,11 @@
       updateToolbarState();
     });
     editor.addEventListener("mousedown", (event) => {
+      const structureActionButton = event.target?.closest?.(".cp-news-structure-action") || null;
+      if (structureActionButton && editor.contains(structureActionButton)) {
+        event.preventDefault();
+        return;
+      }
       const quoteRemoveButton = event.target?.closest?.(".cp-news-quote-remove") || null;
       if (quoteRemoveButton && editor.contains(quoteRemoveButton)) {
         event.preventDefault();
@@ -3971,6 +4773,46 @@
       }
     });
     editor.addEventListener("click", (event) => {
+      const structureActionButton = event.target?.closest?.(".cp-news-structure-action") || null;
+      if (structureActionButton && editor.contains(structureActionButton)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const block = getExpandableBlockFromNode(structureActionButton);
+        const action = String(structureActionButton.dataset.newsAccordionAction || "remove");
+        if (action === "add") {
+          addLinkedAccordionSection(block);
+        } else if (action === "up" || action === "down") {
+          moveAccordionSection(block, action);
+        } else {
+          removeExpandableBlock(block);
+        }
+        return;
+      }
+      const expandableLabel = event.target?.closest?.(
+        ".news-accordion-title,.news-spoiler-label-closed,.news-spoiler-label-open"
+      ) || null;
+      if (expandableLabel && editor.contains(expandableLabel)) {
+        event.preventDefault();
+        rememberEditorSelection();
+        setSelectedImage(null);
+        return;
+      }
+      const expandableSummary = event.target?.closest?.(".news-accordion-toggle,.news-spoiler-toggle") || null;
+      if (expandableSummary && editor.contains(expandableSummary)) {
+        event.preventDefault();
+        const block = getExpandableBlockFromNode(expandableSummary);
+        const willOpen = block?.dataset.newsExpandableState !== "open";
+        if (willOpen && block?.classList.contains("news-accordion-block")) {
+          const group = getAccordionGroupFromNode(block);
+          getAccordionSections(group).forEach((openBlock) => {
+            if (openBlock !== block && openBlock.dataset.newsExpandableState === "open") {
+              setEditorExpandableState(openBlock, false);
+            }
+          });
+        }
+        setEditorExpandableState(block, willOpen);
+        return;
+      }
       const quoteRemoveButton = event.target?.closest?.(".cp-news-quote-remove") || null;
       if (quoteRemoveButton && editor.contains(quoteRemoveButton)) {
         event.preventDefault();
@@ -3986,7 +4828,8 @@
       rememberEditorSelection();
       setSelectedImage(null);
     });
-    editor.addEventListener("blur", () => {
+    editor.addEventListener("blur", (event) => {
+      if (event.relatedTarget && editor.contains(event.relatedTarget)) return;
       if (!isLinkDialogOpen && !isImagePickerOpen) {
         normalizeEditorHtml();
         hideFloatingToolbar();
@@ -4001,6 +4844,11 @@
     });
 
     enhanceQuoteBlocksInEditor();
+    enhanceExpandableBlocksInEditor();
+    const firstExpandableBlock = editor.querySelector(".news-accordion-block,.news-spoiler-block");
+    if (firstExpandableBlock && !editor.querySelector(".news-accordion-block[open],.news-spoiler-block[open]")) {
+      setEditorExpandableState(firstExpandableBlock, true, false);
+    }
     root.appendChild(toolbar);
     root.appendChild(floatingToolbar);
     root.appendChild(imageFileInput);
