@@ -479,6 +479,8 @@ Gate: повний playoff із Bronze можна провести через Pl
 
 Покриття: `IPT-POF-*`, `IPT-TBL-*`; `UH-22`, `UH-23`, `UH-25`, `UH-26`, `UH-39`, `UH-41`, `UH-42`.
 
+Статус на 2026-09-04: етап реалізовано. Додано pure builder повної single-elimination сітки для `Round of 32`/`Round of 16`/`Quarter-final`/`Semi-final` із наперед створеними stable match IDs, winner routing до наступного раунду та loser routing із півфіналів до обов'язкового `Bronze medal match`. Organizer API підтримує ручне заповнення всіх слотів без top-N restriction, preview/confirm, публікацію наступних раундів, редаговані унікальні номери столів, атомарну дію `Make streaming table`, усі result modes, безпечне виправлення предка лише до зіграного descendant та завершення турніру тільки після Final і Bronze. У Player Hub додано вкладку `Playoff` із фінальними Swiss standings у selector-ах, manual bracket setup, visual progression, table/result controls, технічним Bronze result і поясненням причин блокування. Fault-injection тести підтверджують атомарність створення сітки, winner propagation і перестановки table №1. Повний backend suite: 120/120 tests passed.
+
 ### Етап 8. Публічна сторінка
 
 Backend:

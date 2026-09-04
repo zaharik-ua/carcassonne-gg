@@ -21,8 +21,10 @@ function createService() {
     archiveCity: async () => ({}),
     cancelSwissRound: async () => ({}),
     cancelTournament: async () => ({}),
+    completePlayoff: async () => ({}),
     completeSwissRound: async () => ({}),
     confirmLateParticipant: async () => ({}),
+    confirmPlayoff: async () => ({}),
     confirmSwissRound: async () => ({}),
     createCity: async () => ({}),
     createParticipantCity: async () => ({}),
@@ -32,6 +34,7 @@ function createService() {
     getParticipantsOverview: async () => ({
       tournament: {}, participants: [], counters: {}, readiness: {},
     }),
+    getPlayoffOverview: async () => ({}),
     getSwissOverview: async () => ({}),
     getTournament: async () => ({}),
     listAccessibleTournaments: async () => [],
@@ -40,15 +43,19 @@ function createService() {
     listTournamentAdmins: async () => [],
     listTournaments: async () => [],
     previewLateParticipant: async () => ({}),
+    previewPlayoff: async () => ({}),
     previewSwissRound: async () => ({}),
     previewSwissRoundCancellation: async () => ({}),
     publishTournament: async () => ({}),
+    publishPlayoffRound: async () => ({}),
     publishSwissRound: async () => ({}),
     reopenSwissRound: async () => ({}),
     removeTournamentAdmin: async () => ({}),
     replaceTournamentAdmins: async () => [],
     restoreCity: async () => ({}),
     saveSwissMatchResult: async () => ({}),
+    savePlayoffMatchResult: async () => ({}),
+    setPlayoffMatchTable: async () => ({}),
     setParticipantCheckIn: async () => ({}),
     setParticipantInactive: async () => ({}),
     startCheckIn: async () => ({}),
@@ -72,7 +79,7 @@ test("always registers protected global and tournament routes", () => {
   });
 
   assert.deepEqual(result, { registered: true });
-  assert.equal(app.routes.length, 40);
+  assert.equal(app.routes.length, 48);
   assert.equal(app.routes[0].method, "GET");
   assert.equal(app.routes[0].path, "/in-person-tournaments/_foundation");
   assert.equal(app.routes[0].handlers[0], requireAdmin);
@@ -90,6 +97,7 @@ test("always registers protected global and tournament routes", () => {
       && !route.path.endsWith("/start-check-in")
       && !route.path.endsWith("/check-in-readiness")
       && !route.path.includes("/swiss")
+      && !route.path.includes("/playoff")
       && route.path !== "/in-person-tournaments/accessible"
       && !route.path.endsWith("/_foundation")
     )
@@ -102,6 +110,7 @@ test("always registers protected global and tournament routes", () => {
     || route.path.endsWith("/start-check-in")
     || route.path.endsWith("/check-in-readiness")
     || route.path.includes("/swiss")
+    || route.path.includes("/playoff")
   )).forEach((route) => {
     assert.equal(
       route.handlers[0],
@@ -143,5 +152,17 @@ test("always registers protected global and tournament routes", () => {
   )));
   assert.ok(app.routes.some((route) => (
     route.method === "PATCH" && route.path.endsWith("/status")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/playoff/preview")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/playoff/confirm")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/streaming-table")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "PUT" && route.path.includes("/playoff/matches/") && route.path.endsWith("/result")
   )));
 });

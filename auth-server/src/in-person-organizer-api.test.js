@@ -483,3 +483,192 @@ test("organizer API previews late entry and rolls back exactly the active Swiss 
   );
   assert.equal(forbidden.response.status, 403);
 });
+
+test("organizer API runs a manual playoff through Final and technical Bronze", async (t) => {
+  const { baseUrl } = await startApi(t);
+  const createdTournament = await api(baseUrl, "/in-person-tournaments", {
+    userId: 3,
+    method: "POST",
+    body: JSON.stringify({
+      slug: "api-playoff",
+      name_en: "API Playoff",
+      scope: "international",
+      start_date: "2026-12-20",
+      end_date: "2026-12-20",
+      organizer_name: "Organizer",
+      swiss_rounds_count: 1,
+      playoff_first_round: "semi_final",
+      admin_user_ids: [1],
+    }),
+  });
+  assert.equal(createdTournament.response.status, 201);
+  const tournamentId = createdTournament.data.tournament.id;
+  await api(baseUrl, `/in-person-tournaments/${tournamentId}/publish`, {
+    userId: 3,
+    method: "POST",
+    body: "{}",
+  });
+
+  const participantIds = [];
+  for (let index = 0; index < 4; index += 1) {
+    const created = await api(baseUrl, `/in-person-tournaments/${tournamentId}/participants`, {
+      userId: 1,
+      method: "POST",
+      body: JSON.stringify({ name_en: `Playoff API Player ${index + 1}`, association_id: "UKR" }),
+    });
+    assert.equal(created.response.status, 201);
+    participantIds.push(created.data.participant.id);
+  }
+  await api(baseUrl, `/in-person-tournaments/${tournamentId}/start-check-in`, {
+    userId: 1,
+    method: "POST",
+    body: "{}",
+  });
+  for (let index = 0; index < participantIds.length; index += 1) {
+    const checkedIn = await api(
+      baseUrl,
+      `/in-person-tournaments/${tournamentId}/participants/${participantIds[index]}/check-in`,
+      {
+        userId: 1,
+        method: "PATCH",
+        body: JSON.stringify({ checked_in: true, draw_number: index + 1 }),
+      }
+    );
+    assert.equal(checkedIn.response.status, 200);
+  }
+  const swissConfirmed = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/swiss/rounds/confirm`,
+    { userId: 1, method: "POST", body: JSON.stringify({ round_number: 1, publish: true }) }
+  );
+  for (const match of swissConfirmed.data.current_round.matches) {
+    const saved = await api(
+      baseUrl,
+      `/in-person-tournaments/${tournamentId}/swiss/matches/${match.id}/result`,
+      {
+        userId: 1,
+        method: "PUT",
+        body: JSON.stringify({
+          starting_participant_id: match.starting_participant_id,
+          result_type: "simple",
+          winner_participant_id: match.participant_a_id,
+        }),
+      }
+    );
+    assert.equal(saved.response.status, 200);
+  }
+  const swissCompleted = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/swiss/rounds/${swissConfirmed.data.current_round.id}/complete`,
+    { userId: 1, method: "POST", body: "{}" }
+  );
+  assert.equal(swissCompleted.data.swiss_complete, true);
+
+  const forbidden = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/playoff`,
+    { userId: 2 }
+  );
+  assert.equal(forbidden.response.status, 403);
+  const preview = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/playoff/preview`,
+    {
+      userId: 1,
+      method: "POST",
+      body: JSON.stringify({ participant_ids: participantIds }),
+    }
+  );
+  assert.equal(preview.response.status, 200);
+  assert.equal(preview.data.preview.rounds.length, 3);
+  let playoff = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/playoff/confirm`,
+    {
+      userId: 1,
+      method: "POST",
+      body: JSON.stringify({
+        participant_ids: participantIds,
+        expected_tournament_revision: preview.data.preview.tournament_revision,
+        expected_standings_revision: preview.data.preview.standings_revision,
+      }),
+    }
+  );
+  assert.equal(playoff.response.status, 200);
+  const semifinals = playoff.data.rounds.find((round) => round.round_key === "semi_final");
+  const streamingSwap = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/playoff/matches/${semifinals.matches[1].id}/streaming-table`,
+    { userId: 1, method: "POST", body: "{}" }
+  );
+  assert.equal(streamingSwap.response.status, 200);
+  assert.equal(
+    streamingSwap.data.rounds.find((round) => round.round_key === "semi_final")
+      .matches.find((match) => match.id === semifinals.matches[1].id).table_number,
+    1
+  );
+
+  for (const match of semifinals.matches) {
+    playoff = await api(
+      baseUrl,
+      `/in-person-tournaments/${tournamentId}/playoff/matches/${match.id}/result`,
+      {
+        userId: 1,
+        method: "PUT",
+        body: JSON.stringify({
+          starting_participant_id: match.participant_a_id,
+          result_type: "simple",
+          winner_participant_id: match.participant_a_id,
+        }),
+      }
+    );
+    assert.equal(playoff.response.status, 200);
+  }
+  const earlyComplete = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/playoff/complete`,
+    { userId: 1, method: "POST", body: "{}" }
+  );
+  assert.equal(earlyComplete.response.status, 409);
+  assert.equal(earlyComplete.data.code, "PLAYOFF_MEDAL_MATCHES_INCOMPLETE");
+
+  for (const roundKey of ["final", "bronze_medal_match"]) {
+    const round = playoff.data.rounds.find((entry) => entry.round_key === roundKey);
+    const published = await api(
+      baseUrl,
+      `/in-person-tournaments/${tournamentId}/playoff/rounds/${round.id}/publish`,
+      { userId: 1, method: "POST", body: "{}" }
+    );
+    assert.equal(published.response.status, 200);
+    const match = published.data.rounds.find((entry) => entry.round_key === roundKey).matches[0];
+    const resultPayload = roundKey === "bronze_medal_match"
+      ? {
+          starting_participant_id: match.participant_a_id,
+          result_type: "technical",
+          winner_participant_id: match.participant_b_id,
+          finish_reason: "no_show",
+        }
+      : {
+          starting_participant_id: match.participant_a_id,
+          result_type: "points",
+          points_a: 77,
+          points_b: 77,
+        };
+    playoff = await api(
+      baseUrl,
+      `/in-person-tournaments/${tournamentId}/playoff/matches/${match.id}/result`,
+      { userId: 1, method: "PUT", body: JSON.stringify(resultPayload) }
+    );
+    assert.equal(playoff.response.status, 200);
+  }
+  assert.equal(playoff.data.can_complete, true);
+  const completed = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/playoff/complete`,
+    { userId: 1, method: "POST", body: "{}" }
+  );
+  assert.equal(completed.response.status, 200);
+  assert.equal(completed.data.tournament.status, "completed");
+  assert.ok(completed.data.placements.first);
+  assert.ok(completed.data.placements.third);
+});

@@ -7,6 +7,11 @@ import {
   pairNextSwissRound,
   validateMatchResult,
 } from "./engine.js";
+import {
+  buildPlayoffBracket,
+  getPlayoffRoundLabel,
+  InPersonPlayoffError,
+} from "./playoff.js";
 import { TOURNAMENT_ENTITY_TYPES } from "./schema.js";
 import {
   conflictError,
@@ -225,6 +230,78 @@ function serializeSwissStanding(row) {
   };
 }
 
+function serializePlayoffMatch(row) {
+  if (!row) return null;
+  return {
+    ...serializeSwissMatch(row),
+    bracket_position: row.bracket_position == null ? null : Number(row.bracket_position),
+    next_match_for_winner_id: row.next_match_for_winner_id || null,
+    next_match_for_winner_slot: row.next_match_for_winner_slot || null,
+    next_match_for_loser_id: row.next_match_for_loser_id || null,
+    next_match_for_loser_slot: row.next_match_for_loser_slot || null,
+  };
+}
+
+function serializePlayoffRound(row, matches = []) {
+  if (!row) return null;
+  const activeMatches = matches.filter((match) => match.status !== "cancelled");
+  const completedMatches = activeMatches.filter((match) => match.status === "completed");
+  const tableNumbers = activeMatches.map((match) => match.table_number);
+  const missingParticipants = activeMatches.filter((match) => (
+    !match.participant_a_id || !match.participant_b_id
+  ));
+  const missingTables = activeMatches.filter((match) => match.table_number == null);
+  const duplicateTables = tableNumbers.filter((tableNumber, index) => (
+    tableNumber != null && tableNumbers.indexOf(tableNumber) !== index
+  ));
+  const streamingTables = activeMatches.filter((match) => match.table_number === 1);
+  const publishBlockers = [];
+  if (missingParticipants.length) {
+    publishBlockers.push({
+      code: "PLAYOFF_PARTICIPANTS_PENDING",
+      message: "Both participants must be known for every match.",
+      match_ids: missingParticipants.map((match) => match.id),
+    });
+  }
+  if (missingTables.length) {
+    publishBlockers.push({
+      code: "PLAYOFF_TABLES_INCOMPLETE",
+      message: "Every match needs a positive table number.",
+      match_ids: missingTables.map((match) => match.id),
+    });
+  }
+  if (duplicateTables.length) {
+    publishBlockers.push({
+      code: "DUPLICATE_PLAYOFF_TABLE",
+      message: "Table numbers must be unique within the round.",
+      table_numbers: [...new Set(duplicateTables)],
+    });
+  }
+  if (streamingTables.length !== 1) {
+    publishBlockers.push({
+      code: "STREAMING_TABLE_REQUIRED",
+      message: "Exactly one match in the round must use streaming table 1.",
+    });
+  }
+  return {
+    id: row.id,
+    tournament_id: row.tournament_id,
+    round_key: row.round_key,
+    round_label: getPlayoffRoundLabel(row.round_key),
+    round_order: Number(row.round_order),
+    status: row.status,
+    revision: Number(row.revision),
+    published_at: row.published_at || null,
+    completed_at: row.completed_at || null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    progress: { completed: completedMatches.length, total: activeMatches.length },
+    can_publish: row.status === "draft" && publishBlockers.length === 0,
+    publish_blockers: publishBlockers,
+    matches: activeMatches,
+  };
+}
+
 const TOURNAMENT_SELECT = `
   SELECT
     t.*,
@@ -286,6 +363,8 @@ const SWISS_MATCH_SELECT = `
   LEFT JOIN in_person_participants pa ON pa.id = m.participant_a_id
   LEFT JOIN in_person_participants pb ON pb.id = m.participant_b_id
 `;
+
+const PLAYOFF_MATCH_SELECT = SWISS_MATCH_SELECT;
 
 export function createInPersonService({ db, idFactory = randomUUID, faultInjector = null } = {}) {
   if (!db) throw new Error("db is required");
@@ -1849,6 +1928,51 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     };
   }
 
+  async function findParticipantPlayoffResolution(tournamentId, participantId) {
+    const row = await dbGet(
+      db,
+      `
+        SELECT
+          m.*,
+          r.id AS active_round_id,
+          r.round_key AS active_round_key,
+          r.status AS active_round_status,
+          pa.name_en AS participant_a_name_en,
+          pa.name_local AS participant_a_name_local,
+          pb.name_en AS participant_b_name_en,
+          pb.name_local AS participant_b_name_local
+        FROM in_person_matches m
+        JOIN in_person_rounds r ON r.id = m.round_id
+        LEFT JOIN in_person_participants pa ON pa.id = m.participant_a_id
+        LEFT JOIN in_person_participants pb ON pb.id = m.participant_b_id
+        WHERE r.tournament_id = ?
+          AND r.stage = 'playoff'
+          AND r.status IN ('draft', 'published')
+          AND m.status = 'scheduled'
+          AND m.participant_a_id IS NOT NULL
+          AND m.participant_b_id IS NOT NULL
+          AND (m.participant_a_id = ? OR m.participant_b_id = ?)
+        ORDER BY r.round_order, m.bracket_position, m.id
+        LIMIT 1
+      `,
+      [tournamentId, participantId, participantId]
+    );
+    if (!row) return null;
+    const match = serializePlayoffMatch(row);
+    const opponentId = row.participant_a_id === participantId
+      ? row.participant_b_id
+      : row.participant_a_id;
+    return {
+      type: "technical_result",
+      stage: "playoff",
+      round_id: row.active_round_id,
+      round_key: row.active_round_key,
+      round_label: getPlayoffRoundLabel(row.active_round_key),
+      match,
+      suggested_winner_participant_id: opponentId,
+    };
+  }
+
   async function setParticipantInactive(tournamentId, participantId, payload = {}) {
     const status = normalizeText(payload?.status).toLowerCase();
     if (!["withdrawn", "disqualified"].includes(status)) {
@@ -1863,10 +1987,10 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
       const outcome = await transaction(async () => {
         const tournament = await requireTournamentRow(tournamentId);
         assertParticipantMutationsAllowed(tournament);
-        if (tournament.status !== "swiss") {
+        if (!["swiss", "playoff"].includes(tournament.status)) {
           throw conflictError(
-            "SWISS_NOT_STARTED",
-            "Use check-in controls before Swiss starts"
+            "TOURNAMENT_STAGE_NOT_ACTIVE",
+            "A participant can be withdrawn or disqualified only during Swiss or playoff"
           );
         }
         const current = await requireParticipantRow(tournament.id, participantId);
@@ -1886,18 +2010,23 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           );
           await touchTournament(tournament.id);
         }
-        return { changed: !unchanged, participant_id: current.id, status };
+        return {
+          changed: !unchanged,
+          participant_id: current.id,
+          status,
+          tournament_stage: tournament.status,
+        };
       });
       const participant = serializeParticipant(
         await requireParticipantRow(tournamentId, outcome.participant_id)
       );
-      const resolution = await findParticipantSwissResolution(
-        tournamentId,
-        outcome.participant_id
-      );
+      const resolution = outcome.tournament_stage === "playoff"
+        ? await findParticipantPlayoffResolution(tournamentId, outcome.participant_id)
+        : await findParticipantSwissResolution(tournamentId, outcome.participant_id);
       if (resolution?.type === "technical_result") {
         resolution.suggested_result = {
-          starting_participant_id: resolution.match.starting_participant_id,
+          starting_participant_id: resolution.match.starting_participant_id
+            || resolution.match.participant_a_id,
           result_type: "technical",
           winner_participant_id: resolution.suggested_winner_participant_id,
           finish_reason: outcome.status === "withdrawn" ? "withdrawal" : "disqualification",
@@ -2145,6 +2274,653 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
         match,
         created: true,
       };
+    });
+  }
+
+  async function loadPlayoffMatchRows(roundId) {
+    const rows = await dbAll(
+      db,
+      `${PLAYOFF_MATCH_SELECT}
+       WHERE m.round_id = ? AND m.status <> 'cancelled'
+       ORDER BY m.bracket_position, m.id`,
+      [roundId]
+    );
+    return rows.map(serializePlayoffMatch);
+  }
+
+  async function loadPlayoffRounds(tournamentId) {
+    const rows = await dbAll(
+      db,
+      `
+        SELECT *
+        FROM in_person_rounds
+        WHERE tournament_id = ? AND stage = 'playoff' AND status <> 'cancelled'
+        ORDER BY round_order, round_key, id
+      `,
+      [tournamentId]
+    );
+    const rounds = [];
+    for (const row of rows) {
+      rounds.push(serializePlayoffRound(row, await loadPlayoffMatchRows(row.id)));
+    }
+    return rounds;
+  }
+
+  async function requirePlayoffRoundRow(tournamentId, roundId) {
+    const row = await dbGet(
+      db,
+      `SELECT * FROM in_person_rounds
+       WHERE id = ? AND tournament_id = ? AND stage = 'playoff' LIMIT 1`,
+      [normalizeText(roundId), tournamentId]
+    );
+    if (!row) throw notFoundError("PLAYOFF_ROUND_NOT_FOUND", "Playoff round not found");
+    return row;
+  }
+
+  async function requirePlayoffMatchRow(tournamentId, matchId) {
+    const row = await dbGet(
+      db,
+      `
+        SELECT m.*, r.tournament_id, r.round_key, r.round_order,
+               r.status AS round_status
+        FROM in_person_matches m
+        JOIN in_person_rounds r ON r.id = m.round_id
+        WHERE m.id = ? AND r.tournament_id = ? AND r.stage = 'playoff'
+        LIMIT 1
+      `,
+      [normalizeText(matchId), tournamentId]
+    );
+    if (!row) throw notFoundError("PLAYOFF_MATCH_NOT_FOUND", "Playoff match not found");
+    return row;
+  }
+
+  function playoffPlacements(rounds) {
+    const finalMatch = rounds.find((round) => round.round_key === "final")?.matches?.[0];
+    const bronzeMatch = rounds.find((round) => (
+      round.round_key === "bronze_medal_match"
+    ))?.matches?.[0];
+    if (finalMatch?.status !== "completed" || bronzeMatch?.status !== "completed") return null;
+    return {
+      first: finalMatch.winner_participant_id,
+      second: finalMatch.loser_participant_id,
+      third: bronzeMatch.winner_participant_id,
+      fourth: bronzeMatch.loser_participant_id,
+    };
+  }
+
+  async function getPlayoffOverview(tournamentId) {
+    const tournamentRow = await requireTournamentRow(tournamentId);
+    const [rounds, standings, participantRows, swissRounds] = await Promise.all([
+      loadPlayoffRounds(tournamentRow.id),
+      loadLatestSwissStandings(tournamentRow.id),
+      loadParticipantRows(tournamentRow.id),
+      loadSwissRounds(tournamentRow.id),
+    ]);
+    const expectedSwissRounds = Number(tournamentRow.swiss_rounds_count);
+    const lastSwissRound = swissRounds[swissRounds.length - 1] || null;
+    const swissComplete = swissRounds.length === expectedSwissRounds
+      && swissRounds.every((round) => round.status === "completed")
+      && standings.revision > 0
+      && standings.source_completed_round_id === lastSwissRound?.id;
+    const placements = playoffPlacements(rounds);
+    const finalComplete = rounds.find((round) => round.round_key === "final")
+      ?.matches?.every((match) => match.status === "completed") || false;
+    const bronzeComplete = rounds.find((round) => round.round_key === "bronze_medal_match")
+      ?.matches?.every((match) => match.status === "completed") || false;
+    return {
+      tournament: serializeOrganizerTournament(tournamentRow),
+      first_round: tournamentRow.playoff_first_round,
+      participant_count: Number(getPlayoffPreview(tournamentRow.playoff_first_round)?.participant_count || 0),
+      standings,
+      eligible_participants: participantRows
+        .filter((participant) => !["withdrawn", "disqualified"].includes(participant.status))
+        .map(serializeParticipant),
+      rounds,
+      placements,
+      can_start: tournamentRow.status === "swiss" && swissComplete && rounds.length === 0,
+      can_complete: tournamentRow.status === "playoff" && finalComplete && bronzeComplete,
+      completion_blockers: [
+        ...(!finalComplete ? ["Final must be completed."] : []),
+        ...(!bronzeComplete ? ["Bronze medal match must be completed."] : []),
+      ],
+      swiss_complete: swissComplete,
+    };
+  }
+
+  function normalizePlayoffParticipantIds(payload = {}) {
+    if (Array.isArray(payload?.participant_ids)) return payload.participant_ids;
+    if (Array.isArray(payload?.slots)) {
+      return payload.slots
+        .slice()
+        .sort((left, right) => Number(left?.slot_number || 0) - Number(right?.slot_number || 0))
+        .map((slot) => slot?.participant_id);
+    }
+    return payload?.participant_ids;
+  }
+
+  async function buildPlayoffPreview(tournamentId, payload = {}) {
+    const tournament = await requireTournamentRow(tournamentId);
+    if (tournament.status !== "swiss") {
+      throw conflictError(
+        "INVALID_TOURNAMENT_STATUS",
+        "The playoff can start only after the Swiss stage"
+      );
+    }
+    const [existingRounds, swissRounds, standings, participantRows] = await Promise.all([
+      loadPlayoffRounds(tournament.id),
+      loadSwissRounds(tournament.id),
+      loadLatestSwissStandings(tournament.id),
+      loadParticipantRows(tournament.id),
+    ]);
+    if (existingRounds.length) {
+      throw conflictError("PLAYOFF_ALREADY_CREATED", "The playoff bracket is already created");
+    }
+    const expectedSwissRounds = Number(tournament.swiss_rounds_count);
+    const lastSwissRound = swissRounds[swissRounds.length - 1] || null;
+    if (
+      swissRounds.length !== expectedSwissRounds
+      || swissRounds.some((round) => round.status !== "completed")
+    ) {
+      throw conflictError(
+        "SWISS_NOT_COMPLETE",
+        `Complete all ${expectedSwissRounds} Swiss rounds before starting the playoff`
+      );
+    }
+    if (!standings.revision || standings.source_completed_round_id !== lastSwissRound?.id) {
+      throw conflictError(
+        "STANDINGS_NOT_CURRENT",
+        "Final Swiss standings must be rebuilt before starting the playoff"
+      );
+    }
+    let bracket;
+    try {
+      bracket = buildPlayoffBracket({
+        first_round: tournament.playoff_first_round,
+        participant_ids: normalizePlayoffParticipantIds(payload),
+      });
+    } catch (error) {
+      if (error instanceof InPersonPlayoffError) {
+        throw validationError(error.code, error.message, error.details);
+      }
+      throw error;
+    }
+    const participantsById = new Map(participantRows.map((participant) => [participant.id, participant]));
+    const unknownParticipantIds = bracket.participant_ids.filter((participantId) => (
+      !participantsById.has(participantId)
+    ));
+    if (unknownParticipantIds.length) {
+      throw validationError(
+        "UNKNOWN_PLAYOFF_PARTICIPANT",
+        "Every playoff slot must reference a participant from this tournament",
+        { participant_ids: unknownParticipantIds }
+      );
+    }
+    const inactiveParticipants = bracket.participant_ids
+      .map((participantId) => participantsById.get(participantId))
+      .filter((participant) => ["withdrawn", "disqualified"].includes(participant.status));
+    if (inactiveParticipants.length) {
+      throw conflictError(
+        "INACTIVE_PLAYOFF_PARTICIPANT",
+        "Withdrawn or disqualified participants must be replaced before starting the playoff",
+        {
+          participants: inactiveParticipants.map((participant) => ({
+            id: participant.id,
+            name_en: participant.name_en,
+            status: participant.status,
+          })),
+        }
+      );
+    }
+    return {
+      ...bracket,
+      tournament_revision: Number(tournament.revision),
+      standings_revision: Number(standings.revision),
+      confirmation_required: true,
+      rounds: bracket.rounds.map((round) => ({
+        ...round,
+        matches: round.matches.map((match) => ({
+          ...match,
+          participant_a_name_en: participantsById.get(match.participant_a_id)?.name_en || null,
+          participant_b_name_en: participantsById.get(match.participant_b_id)?.name_en || null,
+        })),
+      })),
+    };
+  }
+
+  async function previewPlayoff(tournamentId, payload = {}) {
+    return buildPlayoffPreview(tournamentId, payload);
+  }
+
+  async function confirmPlayoff(tournamentId, payload = {}) {
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        const existingRounds = await loadPlayoffRounds(tournament.id);
+        if (existingRounds.length) {
+          return { created: false };
+        }
+        const preview = await buildPlayoffPreview(tournament.id, payload);
+        if (
+          payload?.expected_tournament_revision !== undefined
+          && Number(payload.expected_tournament_revision) !== preview.tournament_revision
+        ) {
+          throw conflictError(
+            "PLAYOFF_PREVIEW_STALE",
+            "The tournament changed after this playoff preview. Preview the bracket again."
+          );
+        }
+        if (
+          payload?.expected_standings_revision !== undefined
+          && Number(payload.expected_standings_revision) !== preview.standings_revision
+        ) {
+          throw conflictError(
+            "PLAYOFF_PREVIEW_STALE",
+            "Swiss standings changed after this playoff preview. Preview the bracket again."
+          );
+        }
+        const roundIds = new Map();
+        const matchIds = new Map();
+        preview.rounds.forEach((round) => {
+          roundIds.set(round.round_key, `ipr_${idFactory()}`);
+          round.matches.forEach((match) => matchIds.set(match.key, `ipm_${idFactory()}`));
+        });
+        for (const round of preview.rounds) {
+          const isFirstRound = round.round_key === preview.first_round;
+          await dbRun(
+            db,
+            `
+              INSERT INTO in_person_rounds (
+                id, tournament_id, stage, round_key, round_order, status,
+                revision, published_at, created_at, updated_at
+              ) VALUES (?, ?, 'playoff', ?, ?, ?, 1,
+                CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `,
+            [
+              roundIds.get(round.round_key),
+              tournament.id,
+              round.round_key,
+              round.round_order,
+              isFirstRound ? "published" : "draft",
+              isFirstRound ? 1 : 0,
+            ]
+          );
+        }
+        for (const round of preview.rounds) {
+          for (const match of round.matches) {
+            await dbRun(
+              db,
+              `
+                INSERT INTO in_person_matches (
+                  id, round_id, bracket_position, table_number,
+                  participant_a_id, participant_b_id, status, is_bye, revision,
+                  created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'scheduled', 0, 1,
+                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              `,
+              [
+                matchIds.get(match.key),
+                roundIds.get(round.round_key),
+                match.bracket_position,
+                match.table_number,
+                match.participant_a_id,
+                match.participant_b_id,
+              ]
+            );
+          }
+        }
+        for (const round of preview.rounds) {
+          for (const match of round.matches) {
+            await dbRun(
+              db,
+              `
+                UPDATE in_person_matches
+                SET next_match_for_winner_id = ?, next_match_for_winner_slot = ?,
+                    next_match_for_loser_id = ?, next_match_for_loser_slot = ?
+                WHERE id = ?
+              `,
+              [
+                match.next_match_for_winner_key
+                  ? matchIds.get(match.next_match_for_winner_key)
+                  : null,
+                match.next_match_for_winner_slot,
+                match.next_match_for_loser_key
+                  ? matchIds.get(match.next_match_for_loser_key)
+                  : null,
+                match.next_match_for_loser_slot,
+                matchIds.get(match.key),
+              ]
+            );
+          }
+        }
+        await injectFault("playoff_after_bracket_insert", { tournament_id: tournament.id });
+        await dbRun(
+          db,
+          `UPDATE in_person_tournaments
+           SET status = 'playoff', revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [tournament.id]
+        );
+        return { created: true };
+      });
+      return { ...(await getPlayoffOverview(tournamentId)), ...outcome };
+    });
+  }
+
+  function assertPlayoffRoundPublishable(round) {
+    if (round.publish_blockers?.length) {
+      const firstBlocker = round.publish_blockers[0];
+      throw conflictError(firstBlocker.code, firstBlocker.message, {
+        blockers: round.publish_blockers,
+      });
+    }
+  }
+
+  async function publishPlayoffRound(tournamentId, roundId) {
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        if (tournament.status !== "playoff") {
+          throw conflictError("INVALID_TOURNAMENT_STATUS", "The tournament is not in the playoff stage");
+        }
+        const row = await requirePlayoffRoundRow(tournament.id, roundId);
+        if (["published", "completed"].includes(row.status)) {
+          return { published: false, round_id: row.id };
+        }
+        if (row.status !== "draft") {
+          throw conflictError("INVALID_ROUND_STATUS", "Only a draft playoff round can be published");
+        }
+        const round = serializePlayoffRound(row, await loadPlayoffMatchRows(row.id));
+        assertPlayoffRoundPublishable(round);
+        await dbRun(
+          db,
+          `UPDATE in_person_rounds
+           SET status = 'published', published_at = CURRENT_TIMESTAMP,
+               revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [row.id]
+        );
+        await touchTournament(tournament.id);
+        return { published: true, round_id: row.id };
+      });
+      return { ...(await getPlayoffOverview(tournamentId)), ...outcome };
+    });
+  }
+
+  async function setPlayoffMatchTable(tournamentId, matchId, payload = {}) {
+    const tableNumber = normalizePositiveTableNumber(payload?.table_number);
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        if (tournament.status !== "playoff") {
+          throw conflictError("INVALID_TOURNAMENT_STATUS", "Playoff tables can be changed only during the playoff");
+        }
+        const match = await requirePlayoffMatchRow(tournament.id, matchId);
+        if (!["draft", "published"].includes(match.round_status) || match.status === "completed") {
+          throw conflictError(
+            "PLAYOFF_TABLE_LOCKED",
+            "A playoff table cannot be changed after this match has a result"
+          );
+        }
+        const currentTableNumber = match.table_number == null ? null : Number(match.table_number);
+        if (currentTableNumber === tableNumber) {
+          return { changed: false, match_id: match.id };
+        }
+        const occupied = await dbGet(
+          db,
+          `SELECT id, status, table_number FROM in_person_matches
+           WHERE round_id = ? AND status <> 'cancelled' AND table_number = ? AND id <> ? LIMIT 1`,
+          [match.round_id, tableNumber, match.id]
+        );
+        if (occupied?.status === "completed") {
+          throw conflictError(
+            "PLAYOFF_TABLE_LOCKED",
+            "The requested table belongs to a match that already has a result",
+            { match_id: occupied.id, table_number: tableNumber }
+          );
+        }
+        if (match.round_status === "published" && currentTableNumber === 1 && !occupied) {
+          throw conflictError(
+            "STREAMING_TABLE_REQUIRED",
+            "A published playoff round must keep exactly one streaming table 1"
+          );
+        }
+        await dbRun(db, "UPDATE in_person_matches SET table_number = NULL WHERE id = ?", [match.id]);
+        if (occupied) {
+          await dbRun(
+            db,
+            `UPDATE in_person_matches
+             SET table_number = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [currentTableNumber, occupied.id]
+          );
+        }
+        await dbRun(
+          db,
+          `UPDATE in_person_matches
+           SET table_number = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [tableNumber, match.id]
+        );
+        await injectFault("playoff_after_table_swap", {
+          tournament_id: tournament.id,
+          match_id: match.id,
+          occupied_match_id: occupied?.id || null,
+        });
+        await touchTournament(tournament.id);
+        return { changed: true, match_id: match.id, swapped_match_id: occupied?.id || null };
+      });
+      return { ...(await getPlayoffOverview(tournamentId)), ...outcome };
+    });
+  }
+
+  async function completedPlayoffDescendants(tournamentId, rootMatchId) {
+    const rows = await dbAll(
+      db,
+      `
+        SELECT m.id, m.status, m.next_match_for_winner_id, m.next_match_for_loser_id,
+               r.round_key
+        FROM in_person_matches m
+        JOIN in_person_rounds r ON r.id = m.round_id
+        WHERE r.tournament_id = ? AND r.stage = 'playoff' AND m.status <> 'cancelled'
+      `,
+      [tournamentId]
+    );
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const root = byId.get(rootMatchId);
+    const queue = [root?.next_match_for_winner_id, root?.next_match_for_loser_id].filter(Boolean);
+    const seen = new Set();
+    const completed = [];
+    while (queue.length) {
+      const id = queue.shift();
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const row = byId.get(id);
+      if (!row) continue;
+      if (row.status === "completed") completed.push({ id: row.id, round_key: row.round_key });
+      queue.push(row.next_match_for_winner_id, row.next_match_for_loser_id);
+    }
+    return completed;
+  }
+
+  async function propagatePlayoffParticipant(targetMatchId, targetSlot, participantId) {
+    if (!targetMatchId || !targetSlot) return;
+    if (!["participant_a", "participant_b"].includes(targetSlot)) {
+      throw conflictError("INVALID_PLAYOFF_ROUTE", "The playoff bracket contains an invalid target slot");
+    }
+    const target = await dbGet(db, "SELECT * FROM in_person_matches WHERE id = ? LIMIT 1", [targetMatchId]);
+    if (!target || target.status === "cancelled") {
+      throw conflictError("INVALID_PLAYOFF_ROUTE", "The playoff bracket target match is unavailable");
+    }
+    if (target.status === "completed") {
+      throw conflictError(
+        "PLAYOFF_DESCENDANT_PLAYED",
+        "The result cannot be corrected because a dependent playoff match has already been played",
+        { descendant_match_ids: [target.id] }
+      );
+    }
+    const otherSlot = targetSlot === "participant_a" ? "participant_b_id" : "participant_a_id";
+    if (target[otherSlot] === participantId) {
+      throw conflictError(
+        "PLAYOFF_PROPAGATION_CONFLICT",
+        "A participant cannot occupy both slots of a playoff match",
+        { match_id: target.id, participant_id: participantId }
+      );
+    }
+    const column = `${targetSlot}_id`;
+    await dbRun(
+      db,
+      `UPDATE in_person_matches
+       SET ${column} = ?, starting_participant_id = NULL,
+           revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [participantId, target.id]
+    );
+  }
+
+  async function savePlayoffMatchResult(tournamentId, matchId, payload = {}) {
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        if (tournament.status !== "playoff") {
+          throw conflictError("INVALID_TOURNAMENT_STATUS", "Playoff results are read-only outside the playoff stage");
+        }
+        const match = await requirePlayoffMatchRow(tournament.id, matchId);
+        if (match.status === "cancelled") {
+          throw conflictError("MATCH_CANCELLED", "A cancelled match cannot receive a result");
+        }
+        if (!match.participant_a_id || !match.participant_b_id) {
+          throw conflictError(
+            "PLAYOFF_PARTICIPANTS_PENDING",
+            "Both playoff participants must be known before entering a result"
+          );
+        }
+        const startingParticipantId = normalizeText(
+          payload?.starting_participant_id ?? match.starting_participant_id
+        );
+        let canonical;
+        try {
+          canonical = validateMatchResult(
+            { ...match, starting_participant_id: startingParticipantId },
+            payload
+          );
+        } catch (error) {
+          throwEngineError(error);
+        }
+        if (canonicalResultEquals(match, canonical, startingParticipantId)) {
+          return { changed: false, match_id: match.id };
+        }
+        if (!["published", "completed"].includes(match.round_status)) {
+          throw conflictError("ROUND_NOT_PUBLISHED", "Publish the playoff round before entering results");
+        }
+        if (match.status === "completed") {
+          const playedDescendants = await completedPlayoffDescendants(tournament.id, match.id);
+          if (playedDescendants.length) {
+            throw conflictError(
+              "PLAYOFF_DESCENDANT_PLAYED",
+              "The result cannot be corrected because a dependent playoff match has already been played",
+              { descendants: playedDescendants }
+            );
+          }
+        }
+        await dbRun(
+          db,
+          `
+            UPDATE in_person_matches
+            SET starting_participant_id = ?, status = ?, is_bye = 0, result_type = ?,
+                points_a = ?, points_b = ?, winner_participant_id = ?, loser_participant_id = ?,
+                finish_reason = ?, admin_note = ?, revision = revision + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `,
+          [
+            startingParticipantId,
+            canonical.status,
+            canonical.result_type,
+            canonical.points_a,
+            canonical.points_b,
+            canonical.winner_participant_id,
+            canonical.loser_participant_id,
+            canonical.finish_reason,
+            canonical.admin_note,
+            match.id,
+          ]
+        );
+        await injectFault("playoff_result_after_match", {
+          tournament_id: tournament.id,
+          match_id: match.id,
+        });
+        await propagatePlayoffParticipant(
+          match.next_match_for_winner_id,
+          match.next_match_for_winner_slot,
+          canonical.winner_participant_id
+        );
+        await propagatePlayoffParticipant(
+          match.next_match_for_loser_id,
+          match.next_match_for_loser_slot,
+          canonical.loser_participant_id
+        );
+        const remaining = await dbGet(
+          db,
+          `SELECT COUNT(*) AS count FROM in_person_matches
+           WHERE round_id = ? AND status <> 'cancelled' AND status <> 'completed'`,
+          [match.round_id]
+        );
+        if (Number(remaining?.count || 0) === 0) {
+          await dbRun(
+            db,
+            `UPDATE in_person_rounds
+             SET status = 'completed', completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+                 revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [match.round_id]
+          );
+        }
+        await touchTournament(tournament.id);
+        return { changed: true, match_id: match.id };
+      });
+      const overview = await getPlayoffOverview(tournamentId);
+      const match = overview.rounds
+        .flatMap((round) => round.matches)
+        .find((entry) => entry.id === outcome.match_id) || null;
+      return { ...overview, ...outcome, match };
+    });
+  }
+
+  async function completePlayoff(tournamentId) {
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        if (tournament.status === "completed") return { completed: false };
+        if (tournament.status !== "playoff") {
+          throw conflictError("INVALID_TOURNAMENT_STATUS", "The tournament is not in the playoff stage");
+        }
+        const rounds = await loadPlayoffRounds(tournament.id);
+        const finalMatch = rounds.find((round) => round.round_key === "final")?.matches?.[0];
+        const bronzeMatch = rounds.find((round) => (
+          round.round_key === "bronze_medal_match"
+        ))?.matches?.[0];
+        const missing = [];
+        if (finalMatch?.status !== "completed") missing.push("final");
+        if (bronzeMatch?.status !== "completed") missing.push("bronze_medal_match");
+        if (missing.length) {
+          throw conflictError(
+            "PLAYOFF_MEDAL_MATCHES_INCOMPLETE",
+            "Complete both Final and Bronze medal match before completing the tournament",
+            { missing_round_keys: missing }
+          );
+        }
+        await dbRun(
+          db,
+          `UPDATE in_person_tournaments
+           SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
+               revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [tournament.id]
+        );
+        return { completed: true };
+      });
+      return { ...(await getPlayoffOverview(tournamentId)), ...outcome };
     });
   }
 
@@ -2527,8 +3303,10 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     archiveCity: (cityId) => setCityArchived(cityId, true),
     cancelSwissRound,
     cancelTournament,
+    completePlayoff,
     completeSwissRound,
     confirmLateParticipant,
+    confirmPlayoff,
     confirmSwissRound,
     createCity,
     createParticipantCity,
@@ -2537,6 +3315,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     deleteParticipant,
     getCity,
     getParticipantsOverview,
+    getPlayoffOverview,
     getSwissOverview,
     getTournament,
     listAccessibleTournaments,
@@ -2545,15 +3324,19 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     listTournamentAdmins,
     listTournaments,
     previewLateParticipant,
+    previewPlayoff,
     previewSwissRound,
     previewSwissRoundCancellation,
     publishTournament,
+    publishPlayoffRound,
     publishSwissRound,
     reopenSwissRound,
     removeTournamentAdmin,
     replaceTournamentAdmins,
     restoreCity: (cityId) => setCityArchived(cityId, false),
     saveSwissMatchResult,
+    savePlayoffMatchResult,
+    setPlayoffMatchTable,
     setParticipantCheckIn,
     setParticipantInactive,
     startCheckIn,

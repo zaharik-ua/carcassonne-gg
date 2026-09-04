@@ -129,6 +129,30 @@ test("In-Person page exposes Swiss rollback, inactive-player and late-entry reco
   assert.doesNotMatch(inPersonHtml, /Late-entry mode \*/);
 });
 
+test("In-Person page contains manual playoff setup, progression and medal completion", () => {
+  [
+    "Single-elimination playoff",
+    "Manual ${playoff.participant_count}-player bracket setup",
+    "Preview playoff bracket",
+    "Confirm and start playoff",
+    "Make streaming table",
+    "Bronze medal match",
+    "Complete tournament",
+    "dependent match has already been played",
+  ].forEach((text) => assert.ok(inPersonHtml.includes(text), `missing playoff UI text: ${text}`));
+
+  [
+    /data-ip-tab="playoff"/,
+    /\/playoff\/preview/,
+    /\/playoff\/confirm/,
+    /\/playoff\/rounds\/\$\{encodeURIComponent\(round\.id\)\}\/publish/,
+    /\/playoff\/matches\/\$\{encodeURIComponent\(match\.id\)\}\/table/,
+    /\/streaming-table/,
+    /createResultForm\(match, \{ stage: "playoff" \}\)/,
+    /\/playoff\/complete/,
+  ].forEach((pattern) => assert.match(inPersonHtml, pattern));
+});
+
 test("all Player Hub scripts parse after the In-Person additions", () => {
   assertEmbeddedScriptsParse(menuHtml, "Player Hub menu");
   assertEmbeddedScriptsParse(hubHtml, "Player Hub landing");

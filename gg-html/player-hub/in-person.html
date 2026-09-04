@@ -590,6 +590,69 @@
     text-align: left;
   }
 
+  .ip-playoff-setup,
+  .ip-playoff-preview,
+  .ip-playoff-completion {
+    margin-top: 10px;
+  }
+
+  .ip-playoff-setup .ip-result-wide {
+    grid-column: 1 / -1;
+  }
+
+  .ip-playoff-slots {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 12px;
+    margin-top: 10px;
+  }
+
+  .ip-playoff-bracket-scroll {
+    margin-top: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .ip-playoff-bracket {
+    width: max-content;
+    min-width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .ip-playoff-round {
+    width: 280px;
+    flex: 0 0 280px;
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--ip-line);
+    border-radius: 6px;
+    background: #f8fafc;
+  }
+
+  .ip-playoff-round-head,
+  .ip-playoff-table-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .ip-playoff-table-control {
+    margin-top: 9px;
+    padding-top: 9px;
+    border-top: 1px solid #e4e8ef;
+  }
+
+  .ip-streaming {
+    color: #9a3412;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
   @media (max-width: 720px) {
     .ip-head,
     .ip-toolbar,
@@ -631,6 +694,15 @@
     .ip-result-form {
       grid-template-columns: 1fr;
     }
+
+    .ip-playoff-slots {
+      grid-template-columns: 1fr;
+    }
+
+    .ip-playoff-round {
+      width: 250px;
+      flex-basis: 250px;
+    }
   }
 </style>
 
@@ -660,6 +732,7 @@
       <button class="ip-tab" type="button" data-ip-tab="check-in">Check-in</button>
       <button class="ip-tab" type="button" data-ip-tab="swiss">Swiss</button>
       <button class="ip-tab" type="button" data-ip-tab="standings">Standings</button>
+      <button class="ip-tab" type="button" data-ip-tab="playoff">Playoff</button>
     </div>
 
     <section id="ipPlayersPanel" class="ip-card">
@@ -709,6 +782,21 @@
       </div>
       <div id="ipStandings"></div>
     </section>
+
+    <section id="ipPlayoffPanel" class="ip-card ip-hidden">
+      <div class="ip-toolbar">
+        <div>
+          <strong>Single-elimination playoff</strong>
+          <div class="ip-hint">Fill every first-round slot manually, then run Final and Bronze medal match.</div>
+        </div>
+        <div id="ipPlayoffActions" class="ip-actions"></div>
+      </div>
+      <div id="ipPlayoffSummary" class="ip-swiss-summary"></div>
+      <div id="ipPlayoffSetup" class="ip-playoff-setup"></div>
+      <div id="ipPlayoffPreview" class="ip-playoff-preview"></div>
+      <div id="ipPlayoffBracket"></div>
+      <div id="ipPlayoffCompletion" class="ip-playoff-completion"></div>
+    </section>
   </div>
 </div>
 
@@ -725,7 +813,9 @@
     selectedTournamentId: "",
     overview: null,
     swiss: null,
+    playoff: null,
     pairingPreview: null,
+    playoffPreview: null,
     activeTab: "players",
     playerFormController: null,
   };
@@ -739,6 +829,7 @@
   const checkInPanel = document.getElementById("ipCheckInPanel");
   const swissPanel = document.getElementById("ipSwissPanel");
   const standingsPanel = document.getElementById("ipStandingsPanel");
+  const playoffPanel = document.getElementById("ipPlayoffPanel");
   const playersList = document.getElementById("ipPlayersList");
   const checkInList = document.getElementById("ipCheckInList");
   const playerFormMount = document.getElementById("ipPlayerFormMount");
@@ -754,6 +845,12 @@
   const swissMatches = document.getElementById("ipSwissMatches");
   const standingsEl = document.getElementById("ipStandings");
   const standingsMeta = document.getElementById("ipStandingsMeta");
+  const playoffActions = document.getElementById("ipPlayoffActions");
+  const playoffSummary = document.getElementById("ipPlayoffSummary");
+  const playoffSetup = document.getElementById("ipPlayoffSetup");
+  const playoffPreview = document.getElementById("ipPlayoffPreview");
+  const playoffBracket = document.getElementById("ipPlayoffBracket");
+  const playoffCompletion = document.getElementById("ipPlayoffCompletion");
 
   class ApiError extends Error {
     constructor(response, payload) {
@@ -1230,7 +1327,7 @@
     }));
     if (participant) {
       if (
-        tournament.status === "swiss"
+        ["swiss", "playoff"].includes(tournament.status)
         && ["registered", "checked_in"].includes(participant.status)
       ) {
         actions.appendChild(createButton(
@@ -1337,13 +1434,17 @@
       const resolution = data.resolution;
       if (resolution?.type === "technical_result") {
         const finishLabel = nextStatus === "disqualified" ? "disqualification" : "withdrawal";
+        const matchLabel = resolution.stage === "playoff"
+          ? resolution.round_label
+          : `round ${resolution.round_number}`;
         const shouldRecord = window.confirm(
-          `${participant.name_en} has an unfinished match in round ${resolution.round_number}. `
+          `${participant.name_en} has an unfinished match in ${matchLabel}. `
           + `Record a technical ${finishLabel} win for the opponent now?`
         );
         if (shouldRecord) {
+          const resultStage = resolution.stage === "playoff" ? "playoff" : "swiss";
           await apiJson(
-            tournamentUrl(`/swiss/matches/${encodeURIComponent(resolution.match.id)}/result`),
+            tournamentUrl(`/${resultStage}/matches/${encodeURIComponent(resolution.match.id)}/result`),
             {
               method: "PUT",
               body: JSON.stringify({
@@ -1746,7 +1847,9 @@
     starter.className = "ip-person-meta";
     starter.textContent = match.is_bye
       ? `${swissParticipantName(match, "a")} receives one win.`
-      : `Starts: ${match.starting_participant_id === match.participant_a_id
+      : !match.starting_participant_id
+        ? "Starting player not set."
+        : `Starts: ${match.starting_participant_id === match.participant_a_id
         ? swissParticipantName(match, "a")
         : swissParticipantName(match, "b")}`;
     card.appendChild(starter);
@@ -1780,6 +1883,14 @@
   function adoptSwissResponse(data) {
     state.swiss = data;
     state.pairingPreview = null;
+    if (state.overview && data?.tournament) state.overview.tournament = data.tournament;
+    const index = state.tournaments.findIndex((item) => item.id === data?.tournament?.id);
+    if (index >= 0) state.tournaments[index] = { ...state.tournaments[index], ...data.tournament };
+  }
+
+  function adoptPlayoffResponse(data) {
+    state.playoff = data;
+    state.playoffPreview = null;
     if (state.overview && data?.tournament) state.overview.tournament = data.tournament;
     const index = state.tournaments.findIndex((item) => item.id === data?.tournament?.id);
     if (index >= 0) state.tournaments[index] = { ...state.tournaments[index], ...data.tournament };
@@ -1933,7 +2044,7 @@
     }
   }
 
-  async function recordNoShow(match, absentParticipantId, button) {
+  async function recordNoShow(match, absentParticipantId, button, stage = "swiss") {
     const absentIsA = absentParticipantId === match.participant_a_id;
     const absentName = absentIsA ? swissParticipantName(match, "a") : swissParticipantName(match, "b");
     const winnerId = absentIsA ? match.participant_b_id : match.participant_a_id;
@@ -1941,7 +2052,7 @@
     button.disabled = true;
     try {
       const data = await apiJson(
-        tournamentUrl(`/swiss/matches/${encodeURIComponent(match.id)}/result`),
+        tournamentUrl(`/${stage}/matches/${encodeURIComponent(match.id)}/result`),
         {
           method: "PUT",
           body: JSON.stringify({
@@ -1953,7 +2064,8 @@
           }),
         }
       );
-      adoptSwissResponse(data);
+      if (stage === "playoff") adoptPlayoffResponse(data);
+      else adoptSwissResponse(data);
       renderWorkspace();
       setStatus(`No-show recorded for ${absentName}.`, "success");
     } catch (error) {
@@ -1962,7 +2074,7 @@
     }
   }
 
-  function createResultForm(match) {
+  function createResultForm(match, { stage = "swiss" } = {}) {
     const form = document.createElement("form");
     form.className = "ip-result-form";
     const playerOptions = [
@@ -2027,10 +2139,10 @@
     save.textContent = match.status === "completed" ? "Update result" : "Save result";
     actions.appendChild(save);
     const noShowA = createButton(`${swissParticipantName(match, "a")} no-show`, "ip-btn danger", () => (
-      recordNoShow(match, match.participant_a_id, noShowA)
+      recordNoShow(match, match.participant_a_id, noShowA, stage)
     ));
     const noShowB = createButton(`${swissParticipantName(match, "b")} no-show`, "ip-btn danger", () => (
-      recordNoShow(match, match.participant_b_id, noShowB)
+      recordNoShow(match, match.participant_b_id, noShowB, stage)
     ));
     actions.appendChild(noShowA);
     actions.appendChild(noShowB);
@@ -2075,10 +2187,11 @@
       save.disabled = true;
       try {
         const data = await apiJson(
-          tournamentUrl(`/swiss/matches/${encodeURIComponent(match.id)}/result`),
+          tournamentUrl(`/${stage}/matches/${encodeURIComponent(match.id)}/result`),
           { method: "PUT", body: JSON.stringify(payload) }
         );
-        adoptSwissResponse(data);
+        if (stage === "playoff") adoptPlayoffResponse(data);
+        else adoptSwissResponse(data);
         renderWorkspace();
         setStatus(`Result saved for table ${match.table_number}.`, "success");
       } catch (error) {
@@ -2291,6 +2404,378 @@
     standingsEl.appendChild(scroll);
   }
 
+  function playoffParticipantName(participantId) {
+    const participant = (state.overview?.participants || []).find((entry) => (
+      entry.id === participantId
+    ));
+    return participant?.name_en || participantId || "—";
+  }
+
+  function renderPlayoffSummary() {
+    playoffSummary.innerHTML = "";
+    const playoff = state.playoff;
+    if (!playoff) return;
+    const completedRounds = (playoff.rounds || []).filter((round) => round.status === "completed").length;
+    playoffSummary.appendChild(createSwissStat(
+      String(playoff.participant_count || 0),
+      "First-round slots"
+    ));
+    playoffSummary.appendChild(createSwissStat(
+      `${completedRounds} / ${(playoff.rounds || []).length}`,
+      "Rounds completed"
+    ));
+    playoffSummary.appendChild(createSwissStat(
+      playoff.placements ? "Medals decided" : "In progress",
+      "Playoff state"
+    ));
+  }
+
+  function renderPlayoffSetup() {
+    playoffSetup.innerHTML = "";
+    const playoff = state.playoff;
+    if (!playoff || state.playoffPreview || playoff.rounds?.length) return;
+    if (!playoff.can_start) {
+      const box = document.createElement("div");
+      box.className = "ip-readiness";
+      const title = document.createElement("strong");
+      title.textContent = playoff.swiss_complete
+        ? "Playoff setup is unavailable in the current tournament status."
+        : "Complete every configured Swiss round before setting up the playoff.";
+      box.appendChild(title);
+      playoffSetup.appendChild(box);
+      return;
+    }
+
+    const form = document.createElement("form");
+    form.className = "ip-form";
+    const intro = document.createElement("div");
+    intro.className = "ip-result-wide";
+    const introTitle = document.createElement("strong");
+    introTitle.textContent = `Manual ${playoff.participant_count}-player bracket setup`;
+    const introHint = document.createElement("div");
+    introHint.className = "ip-hint";
+    introHint.textContent = "Swiss position is shown for reference only; any active tournament participant may be selected.";
+    intro.appendChild(introTitle);
+    intro.appendChild(introHint);
+    form.appendChild(intro);
+
+    const standingsByParticipant = new Map(
+      (playoff.standings?.rows || []).map((standing) => [standing.participant_id, standing.position])
+    );
+    const options = [{ value: "", label: "Select participant..." }].concat(
+      (playoff.eligible_participants || []).map((participant) => ({
+        value: participant.id,
+        label: [
+          standingsByParticipant.has(participant.id)
+            ? `#${standingsByParticipant.get(participant.id)}`
+            : "Unranked",
+          participant.name_en,
+          participant.bga_nickname ? `BGA: ${participant.bga_nickname}` : "",
+        ].filter(Boolean).join(" • "),
+      }))
+    );
+    const slots = document.createElement("div");
+    slots.className = "ip-playoff-slots ip-result-wide";
+    const selects = [];
+    for (let index = 0; index < Number(playoff.participant_count || 0); index += 1) {
+      const slot = createSelectField(`Slot ${index + 1}`, options, "");
+      selects.push(slot.select);
+      slots.appendChild(slot.field);
+    }
+    form.appendChild(slots);
+    const actions = document.createElement("div");
+    actions.className = "ip-form-actions";
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "ip-btn primary";
+    submit.textContent = "Preview playoff bracket";
+    actions.appendChild(submit);
+    form.appendChild(actions);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const participantIds = selects.map((select) => select.value);
+      if (participantIds.some((participantId) => !participantId)) {
+        setStatus("Fill every first-round playoff slot.", "error");
+        return;
+      }
+      const duplicates = participantIds.filter((participantId, index) => (
+        participantIds.indexOf(participantId) !== index
+      ));
+      if (duplicates.length) {
+        setStatus(`A participant cannot occupy multiple slots: ${playoffParticipantName(duplicates[0])}.`, "error");
+        return;
+      }
+      submit.disabled = true;
+      try {
+        const data = await apiJson(tournamentUrl("/playoff/preview"), {
+          method: "POST",
+          body: JSON.stringify({ participant_ids: participantIds }),
+        });
+        state.playoffPreview = data.preview;
+        renderPlayoff();
+        setStatus("Playoff bracket preview is ready.", "success");
+      } catch (error) {
+        setStatus(error.message || "Failed to preview the playoff bracket.", "error");
+        submit.disabled = false;
+      }
+    });
+    playoffSetup.appendChild(form);
+  }
+
+  function renderPlayoffPreview() {
+    playoffPreview.innerHTML = "";
+    const preview = state.playoffPreview;
+    if (!preview) return;
+    const box = document.createElement("div");
+    box.className = "ip-readiness";
+    const head = document.createElement("div");
+    head.className = "ip-preview-head";
+    const title = document.createElement("strong");
+    title.textContent = `${preview.participant_count}-player playoff preview`;
+    const badge = document.createElement("span");
+    badge.className = "ip-badge";
+    badge.textContent = `${preview.rounds.length} rounds`;
+    head.appendChild(title);
+    head.appendChild(badge);
+    box.appendChild(head);
+    const rounds = document.createElement("div");
+    rounds.className = "ip-hint";
+    rounds.textContent = preview.rounds.map((round) => round.round_label).join(" → ");
+    box.appendChild(rounds);
+    const firstRound = preview.rounds.find((round) => round.round_key === preview.first_round);
+    (firstRound?.matches || []).forEach((match) => {
+      box.appendChild(createPairingCard(match, { preview: true }));
+    });
+    const actions = document.createElement("div");
+    actions.className = "ip-swiss-action-row";
+    const confirm = createButton("Confirm and start playoff", "ip-btn primary", async () => {
+      confirm.disabled = true;
+      try {
+        const data = await apiJson(tournamentUrl("/playoff/confirm"), {
+          method: "POST",
+          body: JSON.stringify({
+            participant_ids: preview.participant_ids,
+            expected_tournament_revision: preview.tournament_revision,
+            expected_standings_revision: preview.standings_revision,
+          }),
+        });
+        adoptPlayoffResponse(data);
+        renderWorkspace();
+        setStatus("Playoff bracket confirmed and first round published.", "success");
+      } catch (error) {
+        setStatus(error.message || "Failed to start the playoff.", "error");
+        confirm.disabled = false;
+      }
+    });
+    const discard = createButton("Discard preview", "ip-btn", () => {
+      state.playoffPreview = null;
+      renderPlayoff();
+      setStatus("");
+    });
+    actions.appendChild(confirm);
+    actions.appendChild(discard);
+    box.appendChild(actions);
+    playoffPreview.appendChild(box);
+  }
+
+  async function publishPlayoffRound(round, button) {
+    button.disabled = true;
+    try {
+      const data = await apiJson(
+        tournamentUrl(`/playoff/rounds/${encodeURIComponent(round.id)}/publish`),
+        { method: "POST", body: "{}" }
+      );
+      adoptPlayoffResponse(data);
+      renderWorkspace();
+      setStatus(`${round.round_label} published.`, "success");
+    } catch (error) {
+      setStatus(error.message || `Failed to publish ${round.round_label}.`, "error");
+      button.disabled = false;
+    }
+  }
+
+  function appendPlayoffTableControls(card, round, match) {
+    const controls = document.createElement("div");
+    controls.className = "ip-playoff-table-control";
+    const number = document.createElement("input");
+    number.type = "number";
+    number.min = "1";
+    number.step = "1";
+    number.className = "ip-input ip-draw-number";
+    number.value = match.table_number == null ? "" : String(match.table_number);
+    number.setAttribute("aria-label", `Table for ${round.round_label} match ${match.bracket_position}`);
+    const actions = document.createElement("div");
+    actions.className = "ip-actions";
+    const save = createButton("Save table", "ip-btn", async () => {
+      save.disabled = true;
+      try {
+        const data = await apiJson(
+          tournamentUrl(`/playoff/matches/${encodeURIComponent(match.id)}/table`),
+          { method: "PATCH", body: JSON.stringify({ table_number: Number(number.value) }) }
+        );
+        adoptPlayoffResponse(data);
+        renderWorkspace();
+        setStatus(`Table updated for ${round.round_label}.`, "success");
+      } catch (error) {
+        setStatus(error.message || "Failed to update the playoff table.", "error");
+        save.disabled = false;
+      }
+    });
+    const streaming = createButton("Make streaming table", "ip-btn", async () => {
+      streaming.disabled = true;
+      try {
+        const data = await apiJson(
+          tournamentUrl(`/playoff/matches/${encodeURIComponent(match.id)}/streaming-table`),
+          { method: "POST", body: "{}" }
+        );
+        adoptPlayoffResponse(data);
+        renderWorkspace();
+        setStatus(`${round.round_label} streaming table updated.`, "success");
+      } catch (error) {
+        setStatus(error.message || "Failed to update the streaming table.", "error");
+        streaming.disabled = false;
+      }
+    });
+    const editable = state.playoff?.tournament?.status === "playoff"
+      && ["draft", "published"].includes(round.status)
+      && match.status !== "completed";
+    number.disabled = !editable;
+    save.disabled = !editable;
+    streaming.disabled = !editable || match.table_number === 1;
+    actions.appendChild(save);
+    if (match.table_number !== 1) actions.appendChild(streaming);
+    else {
+      const marker = document.createElement("span");
+      marker.className = "ip-streaming";
+      marker.textContent = "Streaming table";
+      actions.appendChild(marker);
+    }
+    controls.appendChild(number);
+    controls.appendChild(actions);
+    card.appendChild(controls);
+  }
+
+  function renderPlayoffBracket() {
+    playoffBracket.innerHTML = "";
+    const rounds = state.playoff?.rounds || [];
+    if (!rounds.length) return;
+    const hint = document.createElement("div");
+    hint.className = "ip-hint";
+    hint.textContent = "A completed ancestor can be corrected only while every dependent match is still unplayed. If a dependent match has already been played, the correction is blocked.";
+    playoffBracket.appendChild(hint);
+    const scroll = document.createElement("div");
+    scroll.className = "ip-playoff-bracket-scroll";
+    const bracket = document.createElement("div");
+    bracket.className = "ip-playoff-bracket";
+    rounds.forEach((round) => {
+      const column = document.createElement("section");
+      column.className = "ip-playoff-round";
+      const head = document.createElement("div");
+      head.className = "ip-playoff-round-head";
+      const title = document.createElement("strong");
+      title.textContent = round.round_label;
+      const badge = document.createElement("span");
+      badge.className = "ip-badge";
+      badge.textContent = round.status;
+      head.appendChild(title);
+      head.appendChild(badge);
+      column.appendChild(head);
+      if (round.status === "draft") {
+        const publish = createButton("Publish round", "ip-btn primary", () => (
+          publishPlayoffRound(round, publish)
+        ));
+        publish.disabled = !round.can_publish;
+        column.appendChild(publish);
+        if (round.publish_blockers?.length) {
+          const reason = document.createElement("div");
+          reason.className = "ip-hint";
+          reason.textContent = round.publish_blockers.map((blocker) => blocker.message).join(" ");
+          column.appendChild(reason);
+        }
+      }
+      (round.matches || []).forEach((match) => {
+        const card = createPairingCard(match);
+        appendPlayoffTableControls(card, round, match);
+        if (
+          ["published", "completed"].includes(round.status)
+          && match.participant_a_id
+          && match.participant_b_id
+          && state.playoff?.tournament?.status === "playoff"
+        ) {
+          card.appendChild(createResultForm(match, { stage: "playoff" }));
+        }
+        column.appendChild(card);
+      });
+      bracket.appendChild(column);
+    });
+    scroll.appendChild(bracket);
+    playoffBracket.appendChild(scroll);
+  }
+
+  function renderPlayoffCompletion() {
+    playoffCompletion.innerHTML = "";
+    playoffActions.innerHTML = "";
+    const playoff = state.playoff;
+    if (!playoff?.rounds?.length) return;
+    if (playoff.tournament?.status === "completed" && playoff.placements) {
+      const box = document.createElement("div");
+      box.className = "ip-readiness ready";
+      const title = document.createElement("strong");
+      title.textContent = "Tournament completed";
+      const places = document.createElement("div");
+      places.textContent = [
+        `1st ${playoffParticipantName(playoff.placements.first)}`,
+        `2nd ${playoffParticipantName(playoff.placements.second)}`,
+        `3rd ${playoffParticipantName(playoff.placements.third)}`,
+        `4th ${playoffParticipantName(playoff.placements.fourth)}`,
+      ].join(" • ");
+      box.appendChild(title);
+      box.appendChild(places);
+      playoffCompletion.appendChild(box);
+      return;
+    }
+    const complete = createButton("Complete tournament", "ip-btn primary", async () => {
+      complete.disabled = true;
+      try {
+        const data = await apiJson(tournamentUrl("/playoff/complete"), {
+          method: "POST",
+          body: "{}",
+        });
+        adoptPlayoffResponse(data);
+        renderWorkspace();
+        setStatus("Tournament completed. Final placements are locked.", "success");
+      } catch (error) {
+        setStatus(error.message || "Failed to complete the tournament.", "error");
+        complete.disabled = false;
+      }
+    });
+    complete.disabled = !playoff.can_complete;
+    playoffActions.appendChild(complete);
+    if (!playoff.can_complete && playoff.completion_blockers?.length) {
+      const box = document.createElement("div");
+      box.className = "ip-readiness";
+      const title = document.createElement("strong");
+      title.textContent = "Tournament cannot be completed yet.";
+      const list = document.createElement("ul");
+      playoff.completion_blockers.forEach((message) => {
+        const item = document.createElement("li");
+        item.textContent = message;
+        list.appendChild(item);
+      });
+      box.appendChild(title);
+      box.appendChild(list);
+      playoffCompletion.appendChild(box);
+    }
+  }
+
+  function renderPlayoff() {
+    renderPlayoffSummary();
+    renderPlayoffSetup();
+    renderPlayoffPreview();
+    renderPlayoffBracket();
+    renderPlayoffCompletion();
+  }
+
   function renderWorkspace() {
     if (!state.overview) {
       workspace.classList.add("ip-hidden");
@@ -2303,6 +2788,7 @@
     renderCheckIn();
     renderSwiss();
     renderStandings();
+    renderPlayoff();
     document.querySelectorAll("[data-ip-tab]").forEach((button) => {
       button.classList.toggle("active", button.dataset.ipTab === state.activeTab);
     });
@@ -2310,13 +2796,16 @@
     checkInPanel.classList.toggle("ip-hidden", state.activeTab !== "check-in");
     swissPanel.classList.toggle("ip-hidden", state.activeTab !== "swiss");
     standingsPanel.classList.toggle("ip-hidden", state.activeTab !== "standings");
+    playoffPanel.classList.toggle("ip-hidden", state.activeTab !== "playoff");
   }
 
   async function loadOverview() {
     if (!state.selectedTournamentId) {
       state.overview = null;
       state.swiss = null;
+      state.playoff = null;
       state.pairingPreview = null;
+      state.playoffPreview = null;
       renderWorkspace();
       return;
     }
@@ -2324,12 +2813,15 @@
     const requests = [
       apiJson(tournamentUrl("/participants")),
       apiJson(tournamentUrl("/swiss")),
+      apiJson(tournamentUrl("/playoff")),
     ];
     if (selected?.scope === "local") requests.push(apiJson(tournamentUrl("/participant-cities")));
-    const [overview, swissData, citiesData] = await Promise.all(requests);
+    const [overview, swissData, playoffData, citiesData] = await Promise.all(requests);
     state.overview = overview;
     state.swiss = swissData;
+    state.playoff = playoffData;
     state.pairingPreview = null;
+    state.playoffPreview = null;
     state.cities = Array.isArray(citiesData?.cities) ? citiesData.cities : [];
     renderWorkspace();
   }
@@ -2347,7 +2839,9 @@
     } catch (error) {
       state.overview = null;
       state.swiss = null;
+      state.playoff = null;
       state.pairingPreview = null;
+      state.playoffPreview = null;
       renderWorkspace();
       setStatus(error.message || "Failed to load tournament.", "error");
     }
@@ -2376,6 +2870,7 @@
       else {
         state.overview = null;
         state.swiss = null;
+        state.playoff = null;
         renderWorkspace();
         setStatus("");
       }
@@ -2383,6 +2878,7 @@
       state.tournaments = [];
       state.overview = null;
       state.swiss = null;
+      state.playoff = null;
       renderTournamentSelector();
       setStatus(
         error.status === 401 ? "Sign in to open In-Person tournaments." : error.message,

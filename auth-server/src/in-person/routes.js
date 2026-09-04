@@ -453,6 +453,92 @@ export function registerInPersonRoutes(app, {
     }, logger)
   );
 
-  logger?.info?.("[in-person] Admin, participant and Swiss routes registered");
+  app.get(
+    "/in-person-tournaments/:tournamentId/playoff",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.getPlayoffOverview(req.inPersonTournamentId);
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/playoff/preview",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const preview = await inPersonService.previewPlayoff(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.json({ ok: true, preview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/playoff/confirm",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.confirmPlayoff(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/playoff/rounds/:roundId/publish",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.publishPlayoffRound(
+        req.inPersonTournamentId,
+        req.params.roundId
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.patch(
+    "/in-person-tournaments/:tournamentId/playoff/matches/:matchId/table",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.setPlayoffMatchTable(
+        req.inPersonTournamentId,
+        req.params.matchId,
+        req.body || {}
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/playoff/matches/:matchId/streaming-table",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.setPlayoffMatchTable(
+        req.inPersonTournamentId,
+        req.params.matchId,
+        { table_number: 1 }
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.put(
+    "/in-person-tournaments/:tournamentId/playoff/matches/:matchId/result",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.savePlayoffMatchResult(
+        req.inPersonTournamentId,
+        req.params.matchId,
+        req.body || {}
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/playoff/complete",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.completePlayoff(req.inPersonTournamentId);
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+
+  logger?.info?.("[in-person] Admin, participant, Swiss and playoff routes registered");
   return { registered: true };
 }
