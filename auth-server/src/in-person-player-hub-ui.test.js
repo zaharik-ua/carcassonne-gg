@@ -58,6 +58,33 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.match(inPersonHtml, /min-height: 44px/);
 });
 
+test("In-Person page contains the complete Swiss organizer workflow", () => {
+  [
+    "Swiss rounds",
+    "Preview first round",
+    "Confirm pairings",
+    "Publish round",
+    "Save result",
+    "Complete round",
+    "Swiss standings",
+    "Solkoff1",
+    "Solkoff2",
+    "VP difference",
+  ].forEach((text) => assert.ok(inPersonHtml.includes(text), `missing Swiss UI text: ${text}`));
+
+  [
+    /\/swiss"/,
+    /\/swiss\/rounds\/preview/,
+    /\/swiss\/rounds\/confirm/,
+    /\/publish`/,
+    /\/result`/,
+    /\/complete`/,
+  ].forEach((pattern) => assert.match(inPersonHtml, pattern));
+  assert.match(inPersonHtml, /data-ip-tab="swiss"/);
+  assert.match(inPersonHtml, /data-ip-tab="standings"/);
+  assert.match(inPersonHtml, /round\.progress\.completed === round\.progress\.total/);
+});
+
 test("all Player Hub scripts parse after the In-Person additions", () => {
   assertEmbeddedScriptsParse(menuHtml, "Player Hub menu");
   assertEmbeddedScriptsParse(hubHtml, "Player Hub landing");

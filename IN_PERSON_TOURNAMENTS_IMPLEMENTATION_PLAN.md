@@ -409,6 +409,8 @@ Gate: повний Swiss можна провести через Player Hub бе�
 
 Покриття: `IPT-LIF-*`, основні `IPT-API-*`, `IPT-NFR-001/002`; `UH-05`, `UH-06`, `UH-13`, `UH-15`, `UH-17..19`, `UH-31`.
 
+Статус на 2026-09-04: етап реалізовано. Додано organizer API для Swiss overview, preview/confirm, publish, повного retry-safe збереження result/starter і атомарного complete зі standings revision. Генерація draft round та всіх matches виконується однією транзакцією; повторні confirm/publish/complete повертають актуальний server state без дублів. У Player Hub додано вкладки `Swiss` і `Standings`, pairing warnings, current-round dashboard, ввід результатів по столах, progress, завершення та генерацію наступного раунду. Інтеграційні сценарії проходять для 4, 5 і 8 учасників; fault-injection тести підтверджують відсутність partial round/match/standings writes. Повний backend suite: 103/103 tests passed.
+
 ### Етап 6. Swiss exceptions і rollback
 
 Реалізувати:

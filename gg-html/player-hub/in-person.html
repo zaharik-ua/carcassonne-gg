@@ -440,6 +440,135 @@
     width: 82px;
   }
 
+  .ip-swiss-summary,
+  .ip-swiss-preview,
+  .ip-swiss-matches {
+    display: grid;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .ip-swiss-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ip-swiss-stat,
+  .ip-match-card {
+    padding: 10px;
+    border: 1px solid var(--ip-line);
+    border-radius: 6px;
+    background: #fff;
+  }
+
+  .ip-swiss-stat strong {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 15px;
+  }
+
+  .ip-preview-head,
+  .ip-match-head,
+  .ip-match-players,
+  .ip-swiss-action-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .ip-preview-head,
+  .ip-match-head {
+    margin-bottom: 7px;
+  }
+
+  .ip-match-players {
+    justify-content: flex-start;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .ip-match-versus {
+    color: var(--ip-muted);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+
+  .ip-warning-list {
+    display: flex;
+    gap: 5px;
+    margin-top: 7px;
+    flex-wrap: wrap;
+  }
+
+  .ip-warning {
+    border-radius: 999px;
+    padding: 3px 8px;
+    background: #fff1cc;
+    color: #7a4b00;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .ip-result-form {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e4e8ef;
+  }
+
+  .ip-result-form .ip-form-actions,
+  .ip-result-form .ip-result-wide {
+    grid-column: 1 / -1;
+  }
+
+  .ip-result-form .ip-input,
+  .ip-result-form .ip-select {
+    min-height: 34px;
+    padding: 5px 7px;
+    font-size: 12px;
+  }
+
+  .ip-standings-scroll {
+    margin-top: 10px;
+    overflow-x: auto;
+    border: 1px solid var(--ip-line);
+    border-radius: 6px;
+  }
+
+  .ip-standings-table {
+    width: 100%;
+    min-width: 650px;
+    border-collapse: collapse;
+    background: #fff;
+    font-size: 12px;
+  }
+
+  .ip-standings-table th,
+  .ip-standings-table td {
+    padding: 9px 10px;
+    border-top: 1px solid #e4e8ef;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .ip-standings-table thead th {
+    border-top: 0;
+    background: #f8fafc;
+    color: #475467;
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+
+  .ip-standings-table th:nth-child(2),
+  .ip-standings-table td:nth-child(2) {
+    width: 100%;
+    text-align: left;
+  }
+
   @media (max-width: 720px) {
     .ip-head,
     .ip-toolbar,
@@ -476,6 +605,11 @@
       width: auto;
       min-height: 44px;
     }
+
+    .ip-swiss-summary,
+    .ip-result-form {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
 
@@ -483,7 +617,7 @@
   <div class="ip-head">
     <div>
       <h1 class="ip-title">In-Person Tournaments</h1>
-      <div class="ip-subtitle">Register players, complete check-in and assign draw numbers.</div>
+      <div class="ip-subtitle">Register players, run Swiss rounds and review standings.</div>
     </div>
     <button id="ipRefreshBtn" class="ip-btn" type="button">Refresh</button>
   </div>
@@ -503,6 +637,8 @@
     <div class="ip-tabs" role="tablist">
       <button class="ip-tab active" type="button" data-ip-tab="players">Players</button>
       <button class="ip-tab" type="button" data-ip-tab="check-in">Check-in</button>
+      <button class="ip-tab" type="button" data-ip-tab="swiss">Swiss</button>
+      <button class="ip-tab" type="button" data-ip-tab="standings">Standings</button>
     </div>
 
     <section id="ipPlayersPanel" class="ip-card">
@@ -525,6 +661,29 @@
       <div id="ipReadiness"></div>
       <div id="ipCheckInList" class="ip-list"></div>
     </section>
+
+    <section id="ipSwissPanel" class="ip-card ip-hidden">
+      <div class="ip-toolbar">
+        <div>
+          <strong>Swiss rounds</strong>
+          <div class="ip-hint">Preview pairings, publish a round, then enter every table result.</div>
+        </div>
+        <div id="ipSwissActions" class="ip-actions"></div>
+      </div>
+      <div id="ipSwissSummary" class="ip-swiss-summary"></div>
+      <div id="ipSwissPreview" class="ip-swiss-preview"></div>
+      <div id="ipSwissMatches" class="ip-swiss-matches"></div>
+    </section>
+
+    <section id="ipStandingsPanel" class="ip-card ip-hidden">
+      <div class="ip-toolbar">
+        <div>
+          <strong>Swiss standings</strong>
+          <div id="ipStandingsMeta" class="ip-hint"></div>
+        </div>
+      </div>
+      <div id="ipStandings"></div>
+    </section>
   </div>
 </div>
 
@@ -540,6 +699,8 @@
     cities: [],
     selectedTournamentId: "",
     overview: null,
+    swiss: null,
+    pairingPreview: null,
     activeTab: "players",
     playerFormController: null,
   };
@@ -551,6 +712,8 @@
   const countersEl = document.getElementById("ipCounters");
   const playersPanel = document.getElementById("ipPlayersPanel");
   const checkInPanel = document.getElementById("ipCheckInPanel");
+  const swissPanel = document.getElementById("ipSwissPanel");
+  const standingsPanel = document.getElementById("ipStandingsPanel");
   const playersList = document.getElementById("ipPlayersList");
   const checkInList = document.getElementById("ipCheckInList");
   const playerFormMount = document.getElementById("ipPlayerFormMount");
@@ -558,6 +721,12 @@
   const addPlayerBtn = document.getElementById("ipAddPlayerBtn");
   const startCheckInBtn = document.getElementById("ipStartCheckInBtn");
   const refreshBtn = document.getElementById("ipRefreshBtn");
+  const swissActions = document.getElementById("ipSwissActions");
+  const swissSummary = document.getElementById("ipSwissSummary");
+  const swissPreview = document.getElementById("ipSwissPreview");
+  const swissMatches = document.getElementById("ipSwissMatches");
+  const standingsEl = document.getElementById("ipStandings");
+  const standingsMeta = document.getElementById("ipStandingsMeta");
 
   class ApiError extends Error {
     constructor(response, payload) {
@@ -1103,6 +1272,14 @@
     const readiness = state.overview?.readiness;
     if (!readiness) return;
     const box = document.createElement("div");
+    if (state.overview?.tournament?.has_started_swiss) {
+      box.className = "ip-readiness ready";
+      const locked = document.createElement("strong");
+      locked.textContent = "Check-in and draw numbers are locked after Swiss starts.";
+      box.appendChild(locked);
+      readinessEl.appendChild(box);
+      return;
+    }
     box.className = `ip-readiness${readiness.ready ? " ready" : ""}`;
     const title = document.createElement("strong");
     title.textContent = readiness.ready
@@ -1204,6 +1381,476 @@
     });
   }
 
+  function swissParticipantName(match, side) {
+    const id = match?.[`participant_${side}_id`];
+    return match?.[`participant_${side}_name_en`]
+      || (state.overview?.participants || []).find((participant) => participant.id === id)?.name_en
+      || id
+      || "—";
+  }
+
+  function createSwissStat(value, label) {
+    const card = document.createElement("div");
+    card.className = "ip-swiss-stat";
+    const strong = document.createElement("strong");
+    strong.textContent = String(value);
+    const hint = document.createElement("div");
+    hint.className = "ip-hint";
+    hint.textContent = label;
+    card.appendChild(strong);
+    card.appendChild(hint);
+    return card;
+  }
+
+  function warningLabel(code) {
+    const labels = {
+      rematch: "Rematch unavoidable",
+      starter_3_in_a_row: "Third identical start role",
+      starter_imbalance: "Starter imbalance",
+    };
+    return labels[String(code || "")] || String(code || "Pairing warning").replace(/_/g, " ");
+  }
+
+  function createPairingCard(match, { preview = false } = {}) {
+    const card = document.createElement("div");
+    card.className = "ip-match-card";
+    const head = document.createElement("div");
+    head.className = "ip-match-head";
+    const table = document.createElement("strong");
+    table.textContent = match.is_bye ? "Bye" : `Table ${match.table_number}`;
+    const status = document.createElement("span");
+    status.className = "ip-badge";
+    status.textContent = match.is_bye
+      ? "Completed"
+      : preview
+        ? "Preview"
+        : String(match.status || "scheduled");
+    head.appendChild(table);
+    head.appendChild(status);
+
+    const players = document.createElement("div");
+    players.className = "ip-match-players";
+    const playerA = document.createElement("span");
+    playerA.textContent = swissParticipantName(match, "a");
+    players.appendChild(playerA);
+    if (!match.is_bye) {
+      const versus = document.createElement("span");
+      versus.className = "ip-match-versus";
+      versus.textContent = "vs";
+      const playerB = document.createElement("span");
+      playerB.textContent = swissParticipantName(match, "b");
+      players.appendChild(versus);
+      players.appendChild(playerB);
+    }
+    card.appendChild(head);
+    card.appendChild(players);
+
+    const starter = document.createElement("div");
+    starter.className = "ip-person-meta";
+    starter.textContent = match.is_bye
+      ? `${swissParticipantName(match, "a")} receives one win.`
+      : `Starts: ${match.starting_participant_id === match.participant_a_id
+        ? swissParticipantName(match, "a")
+        : swissParticipantName(match, "b")}`;
+    card.appendChild(starter);
+
+    if (match.status === "completed" && !match.is_bye) {
+      const result = document.createElement("div");
+      result.className = "ip-person-meta";
+      const winnerName = match.winner_participant_id === match.participant_a_id
+        ? swissParticipantName(match, "a")
+        : swissParticipantName(match, "b");
+      result.textContent = match.result_type === "points"
+        ? `Result: ${match.points_a}:${match.points_b} • Winner: ${winnerName}`
+        : `Result: ${String(match.result_type || "win").replace(/_/g, " ")} • Winner: ${winnerName}`;
+      card.appendChild(result);
+    }
+
+    if (match.warnings?.length) {
+      const warnings = document.createElement("div");
+      warnings.className = "ip-warning-list";
+      match.warnings.forEach((code) => {
+        const warning = document.createElement("span");
+        warning.className = "ip-warning";
+        warning.textContent = warningLabel(code);
+        warnings.appendChild(warning);
+      });
+      card.appendChild(warnings);
+    }
+    return card;
+  }
+
+  function adoptSwissResponse(data) {
+    state.swiss = data;
+    state.pairingPreview = null;
+    if (state.overview && data?.tournament) state.overview.tournament = data.tournament;
+    const index = state.tournaments.findIndex((item) => item.id === data?.tournament?.id);
+    if (index >= 0) state.tournaments[index] = { ...state.tournaments[index], ...data.tournament };
+  }
+
+  async function previewNextSwissRound() {
+    const roundNumber = state.swiss?.next_round_number || 1;
+    setStatus(`Building round ${roundNumber} preview...`);
+    try {
+      const data = await apiJson(tournamentUrl("/swiss/rounds/preview"), {
+        method: "POST",
+        body: JSON.stringify({ round_number: roundNumber }),
+      });
+      state.pairingPreview = data.preview;
+      renderSwiss();
+      setStatus(`Round ${roundNumber} preview is ready.`, "success");
+    } catch (error) {
+      setStatus(error.message || "Failed to preview Swiss pairings.", "error");
+    }
+  }
+
+  async function confirmSwissPreview(button) {
+    const preview = state.pairingPreview;
+    if (!preview) return;
+    button.disabled = true;
+    try {
+      const data = await apiJson(tournamentUrl("/swiss/rounds/confirm"), {
+        method: "POST",
+        body: JSON.stringify({ round_number: preview.round_number }),
+      });
+      adoptSwissResponse(data);
+      renderWorkspace();
+      setStatus(`Round ${preview.round_number} pairings confirmed as a draft.`, "success");
+    } catch (error) {
+      setStatus(error.message || "Failed to confirm Swiss pairings.", "error");
+      button.disabled = false;
+    }
+  }
+
+  async function publishSwissRound(round, button) {
+    if (!window.confirm(`Publish Swiss round ${round.round_number}? Pairings will become active.`)) return;
+    button.disabled = true;
+    try {
+      const data = await apiJson(
+        tournamentUrl(`/swiss/rounds/${encodeURIComponent(round.id)}/publish`),
+        { method: "POST", body: "{}" }
+      );
+      adoptSwissResponse(data);
+      renderWorkspace();
+      setStatus(`Swiss round ${round.round_number} published.`, "success");
+    } catch (error) {
+      setStatus(error.message || "Failed to publish Swiss round.", "error");
+      button.disabled = false;
+    }
+  }
+
+  async function completeSwissRound(round, button) {
+    if (!window.confirm(`Complete Swiss round ${round.round_number} and calculate standings?`)) return;
+    button.disabled = true;
+    try {
+      const data = await apiJson(
+        tournamentUrl(`/swiss/rounds/${encodeURIComponent(round.id)}/complete`),
+        { method: "POST", body: "{}" }
+      );
+      adoptSwissResponse(data);
+      renderWorkspace();
+      setStatus(`Swiss round ${round.round_number} completed. Standings updated.`, "success");
+    } catch (error) {
+      const missing = error.details?.missing_table_numbers || [];
+      setStatus(
+        missing.length
+          ? `${error.message} Missing tables: ${missing.join(", ")}.`
+          : error.message || "Failed to complete Swiss round.",
+        "error"
+      );
+      button.disabled = false;
+    }
+  }
+
+  function createResultForm(match) {
+    const form = document.createElement("form");
+    form.className = "ip-result-form";
+    const playerOptions = [
+      { value: match.participant_a_id, label: swissParticipantName(match, "a") },
+      { value: match.participant_b_id, label: swissParticipantName(match, "b") },
+    ];
+    const starter = createSelectField(
+      "Starting player",
+      playerOptions,
+      match.starting_participant_id
+    );
+    const resultType = createSelectField(
+      "Result type",
+      [
+        { value: "points", label: "Points" },
+        { value: "simple", label: "Win / loss" },
+        { value: "time_forfeit", label: "Time forfeit" },
+        { value: "technical", label: "Technical" },
+      ],
+      match.result_type || "points"
+    );
+    const pointsA = createField(`${swissParticipantName(match, "a")} points`, "number");
+    pointsA.input.min = "0";
+    pointsA.input.step = "1";
+    pointsA.input.value = match.points_a == null ? "" : String(match.points_a);
+    const pointsB = createField(`${swissParticipantName(match, "b")} points`, "number");
+    pointsB.input.min = "0";
+    pointsB.input.step = "1";
+    pointsB.input.value = match.points_b == null ? "" : String(match.points_b);
+    const winner = createSelectField(
+      "Winner",
+      [{ value: "", label: "Select winner..." }].concat(playerOptions),
+      match.winner_participant_id || ""
+    );
+    const finishReason = createSelectField(
+      "Technical reason",
+      [
+        { value: "", label: "Select reason..." },
+        { value: "withdrawal", label: "Withdrawal" },
+        { value: "disqualification", label: "Disqualification" },
+        { value: "no_show", label: "No-show" },
+        { value: "admin_decision", label: "Admin decision" },
+      ],
+      match.finish_reason || ""
+    );
+    const note = createField("Admin note");
+    note.field.classList.add("ip-result-wide");
+    note.input.value = match.admin_note || "";
+
+    form.appendChild(starter.field);
+    form.appendChild(resultType.field);
+    form.appendChild(pointsA.field);
+    form.appendChild(pointsB.field);
+    form.appendChild(winner.field);
+    form.appendChild(finishReason.field);
+    form.appendChild(note.field);
+    const actions = document.createElement("div");
+    actions.className = "ip-form-actions";
+    const save = document.createElement("button");
+    save.type = "submit";
+    save.className = "ip-btn primary";
+    save.textContent = match.status === "completed" ? "Update result" : "Save result";
+    actions.appendChild(save);
+    form.appendChild(actions);
+
+    const updateFields = () => {
+      const type = resultType.select.value;
+      const usesPoints = type === "points";
+      const usesWinner = type !== "points";
+      pointsA.field.classList.toggle("ip-hidden", !usesPoints);
+      pointsB.field.classList.toggle("ip-hidden", !usesPoints);
+      winner.field.classList.toggle("ip-hidden", !usesWinner);
+      finishReason.field.classList.toggle("ip-hidden", type !== "technical");
+    };
+    resultType.select.addEventListener("change", updateFields);
+    updateFields();
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const type = resultType.select.value;
+      if (type === "points" && (pointsA.input.value === "" || pointsB.input.value === "")) {
+        setStatus("Enter points for both players.", "error");
+        return;
+      }
+      if (type !== "points" && !winner.select.value) {
+        setStatus("Select the winner.", "error");
+        return;
+      }
+      if (type === "technical" && !finishReason.select.value) {
+        setStatus("Select the technical finish reason.", "error");
+        return;
+      }
+      const payload = {
+        starting_participant_id: starter.select.value,
+        result_type: type,
+        points_a: type === "points" ? Number(pointsA.input.value) : null,
+        points_b: type === "points" ? Number(pointsB.input.value) : null,
+        winner_participant_id: type === "points" ? null : winner.select.value,
+        finish_reason: type === "technical" ? finishReason.select.value : null,
+        admin_note: String(note.input.value || "").trim() || null,
+      };
+      save.disabled = true;
+      try {
+        const data = await apiJson(
+          tournamentUrl(`/swiss/matches/${encodeURIComponent(match.id)}/result`),
+          { method: "PUT", body: JSON.stringify(payload) }
+        );
+        adoptSwissResponse(data);
+        renderWorkspace();
+        setStatus(`Result saved for table ${match.table_number}.`, "success");
+      } catch (error) {
+        setStatus(error.message || `Failed to save table ${match.table_number}.`, "error");
+        save.disabled = false;
+      }
+    });
+    return form;
+  }
+
+  function renderSwissSummary() {
+    swissSummary.innerHTML = "";
+    const swiss = state.swiss;
+    if (!swiss) return;
+    const current = swiss.current_round;
+    swissSummary.appendChild(createSwissStat(
+      current ? `Round ${current.round_number}` : "Not started",
+      "Current round"
+    ));
+    swissSummary.appendChild(createSwissStat(
+      `${swiss.completed_rounds || 0} / ${swiss.swiss_rounds_count || 0}`,
+      "Rounds completed"
+    ));
+    swissSummary.appendChild(createSwissStat(
+      current ? `${current.progress.completed} / ${current.progress.total}` : "0 / 0",
+      "Tables completed"
+    ));
+  }
+
+  function renderSwissPreview() {
+    swissPreview.innerHTML = "";
+    const preview = state.pairingPreview;
+    if (!preview) return;
+    const header = document.createElement("div");
+    header.className = "ip-preview-head";
+    const title = document.createElement("strong");
+    title.textContent = `Round ${preview.round_number} pairing preview`;
+    const warningCount = document.createElement("span");
+    warningCount.className = "ip-badge";
+    warningCount.textContent = `${preview.warnings?.length || 0} warnings`;
+    header.appendChild(title);
+    header.appendChild(warningCount);
+    swissPreview.appendChild(header);
+    (preview.matches || []).forEach((match) => {
+      swissPreview.appendChild(createPairingCard(match, { preview: true }));
+    });
+    const actions = document.createElement("div");
+    actions.className = "ip-swiss-action-row";
+    const confirm = createButton("Confirm pairings", "ip-btn primary", () => confirmSwissPreview(confirm));
+    const cancel = createButton("Discard preview", "ip-btn", () => {
+      state.pairingPreview = null;
+      renderSwiss();
+      setStatus("");
+    });
+    actions.appendChild(confirm);
+    actions.appendChild(cancel);
+    swissPreview.appendChild(actions);
+  }
+
+  function renderSwissMatches() {
+    swissMatches.innerHTML = "";
+    const round = state.swiss?.current_round;
+    if (!round) {
+      const empty = document.createElement("div");
+      empty.className = "ip-empty";
+      empty.textContent = state.overview?.tournament?.status === "check_in"
+        ? "Complete check-in, then preview the first Swiss round."
+        : "Swiss rounds have not started.";
+      swissMatches.appendChild(empty);
+      return;
+    }
+    const heading = document.createElement("div");
+    heading.className = "ip-preview-head";
+    const title = document.createElement("strong");
+    title.textContent = `Round ${round.round_number} tables`;
+    const progress = document.createElement("span");
+    progress.className = "ip-badge";
+    progress.textContent = `${round.progress.completed}/${round.progress.total} completed`;
+    heading.appendChild(title);
+    heading.appendChild(progress);
+    swissMatches.appendChild(heading);
+    (round.matches || []).forEach((match) => {
+      const card = createPairingCard(match);
+      if (!match.is_bye && round.status === "published") {
+        card.appendChild(createResultForm(match));
+      }
+      swissMatches.appendChild(card);
+    });
+  }
+
+  function renderSwiss() {
+    swissActions.innerHTML = "";
+    renderSwissSummary();
+    renderSwissPreview();
+    renderSwissMatches();
+    const swiss = state.swiss;
+    if (!swiss || state.pairingPreview) return;
+    const round = swiss.current_round;
+    if (!round && swiss.can_generate_first_round && state.overview?.readiness?.ready) {
+      swissActions.appendChild(createButton(
+        "Preview first round",
+        "ip-btn primary",
+        previewNextSwissRound
+      ));
+    } else if (round?.status === "draft") {
+      const publish = createButton("Publish round", "ip-btn primary", () => publishSwissRound(round, publish));
+      swissActions.appendChild(publish);
+    } else if (
+      round?.status === "published"
+      && round.progress.completed === round.progress.total
+    ) {
+      const complete = createButton("Complete round", "ip-btn primary", () => completeSwissRound(round, complete));
+      swissActions.appendChild(complete);
+    } else if (round?.status === "completed" && swiss.can_generate_next_round) {
+      swissActions.appendChild(createButton(
+        `Preview round ${swiss.next_round_number}`,
+        "ip-btn primary",
+        previewNextSwissRound
+      ));
+    } else if (swiss.swiss_complete) {
+      const badge = document.createElement("span");
+      badge.className = "ip-badge";
+      badge.textContent = "Swiss complete";
+      swissActions.appendChild(badge);
+    }
+  }
+
+  function renderStandings() {
+    standingsEl.innerHTML = "";
+    const standings = state.swiss?.standings;
+    const rows = standings?.rows || [];
+    standingsMeta.textContent = standings?.revision
+      ? `Revision ${standings.revision} • updated after the latest completed round`
+      : "Standings appear after the first completed Swiss round.";
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "ip-empty";
+      empty.textContent = "No Swiss standings yet.";
+      standingsEl.appendChild(empty);
+      return;
+    }
+    const scroll = document.createElement("div");
+    scroll.className = "ip-standings-scroll";
+    const table = document.createElement("table");
+    table.className = "ip-standings-table";
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    ["#", "Player", "Wins", "Solkoff1", "Solkoff2", "VP difference"].forEach((label) => {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = label;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    const tbody = document.createElement("tbody");
+    rows.forEach((standing) => {
+      const row = document.createElement("tr");
+      const values = [
+        standing.position,
+        standing.participant_name_en || standing.bga_nickname || standing.participant_id,
+        standing.wins,
+        standing.solkoff1,
+        standing.solkoff2,
+        Number(standing.vp_difference) > 0
+          ? `+${standing.vp_difference}`
+          : standing.vp_difference,
+      ];
+      values.forEach((value) => {
+        const cell = document.createElement("td");
+        cell.textContent = String(value ?? "");
+        row.appendChild(cell);
+      });
+      tbody.appendChild(row);
+    });
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+    standingsEl.appendChild(scroll);
+  }
+
   function renderWorkspace() {
     if (!state.overview) {
       workspace.classList.add("ip-hidden");
@@ -1214,24 +1861,35 @@
     renderCounters();
     renderPlayers();
     renderCheckIn();
+    renderSwiss();
+    renderStandings();
     document.querySelectorAll("[data-ip-tab]").forEach((button) => {
       button.classList.toggle("active", button.dataset.ipTab === state.activeTab);
     });
     playersPanel.classList.toggle("ip-hidden", state.activeTab !== "players");
     checkInPanel.classList.toggle("ip-hidden", state.activeTab !== "check-in");
+    swissPanel.classList.toggle("ip-hidden", state.activeTab !== "swiss");
+    standingsPanel.classList.toggle("ip-hidden", state.activeTab !== "standings");
   }
 
   async function loadOverview() {
     if (!state.selectedTournamentId) {
       state.overview = null;
+      state.swiss = null;
+      state.pairingPreview = null;
       renderWorkspace();
       return;
     }
     const selected = selectedTournament();
-    const requests = [apiJson(tournamentUrl("/participants"))];
+    const requests = [
+      apiJson(tournamentUrl("/participants")),
+      apiJson(tournamentUrl("/swiss")),
+    ];
     if (selected?.scope === "local") requests.push(apiJson(tournamentUrl("/participant-cities")));
-    const [overview, citiesData] = await Promise.all(requests);
+    const [overview, swissData, citiesData] = await Promise.all(requests);
     state.overview = overview;
+    state.swiss = swissData;
+    state.pairingPreview = null;
     state.cities = Array.isArray(citiesData?.cities) ? citiesData.cities : [];
     renderWorkspace();
   }
@@ -1248,6 +1906,8 @@
       await loadOverview();
     } catch (error) {
       state.overview = null;
+      state.swiss = null;
+      state.pairingPreview = null;
       renderWorkspace();
       setStatus(error.message || "Failed to load tournament.", "error");
     }
@@ -1275,12 +1935,14 @@
       if (state.selectedTournamentId) await selectTournament(state.selectedTournamentId);
       else {
         state.overview = null;
+        state.swiss = null;
         renderWorkspace();
         setStatus("");
       }
     } catch (error) {
       state.tournaments = [];
       state.overview = null;
+      state.swiss = null;
       renderTournamentSelector();
       setStatus(
         error.status === 401 ? "Sign in to open In-Person tournaments." : error.message,

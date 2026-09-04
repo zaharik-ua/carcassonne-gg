@@ -68,6 +68,16 @@ npm start
 - `/in-person-tournaments/:id/start-check-in` — початок check-in;
 - `/in-person-tournaments/:id/participants/:participantId/check-in` — підтвердження участі та номер жеребкування;
 - `/in-person-tournaments/:id/check-in-readiness` — готовність до першого Swiss-раунду.
+- `GET /in-person-tournaments/:id/swiss` — поточний Swiss-раунд, прогрес і остання актуальна standings revision;
+- `POST /in-person-tournaments/:id/swiss/rounds/preview` — детермінований preview першого або наступного раунду з warnings;
+- `POST /in-person-tournaments/:id/swiss/rounds/confirm` — атомарно створює draft round і matches, повторний запит повертає вже створений раунд;
+- `POST /in-person-tournaments/:id/swiss/rounds/:roundId/publish` — публікує раунд retry-safe;
+- `PUT /in-person-tournaments/:id/swiss/matches/:matchId/result` — зберігає повний поточний result/starter;
+- `POST /in-person-tournaments/:id/swiss/rounds/:roundId/complete` — атомарно завершує раунд і записує нову standings revision.
+
+Swiss organizer endpoints захищені `requireInPersonTournamentAdmin`. Формування нового раунду
+заблоковане, доки поточний не завершено; загальна idempotency-таблиця не використовується.
+Детальний контракт: [`../docs/in-person-swiss-workflow.md`](../docs/in-person-swiss-workflow.md).
 
 Pure engine очного турніру розміщений у `src/in-person/engine.js`. Він не читає й не змінює БД: окремо валідує результати, рахує `swiss_standard_v1` та формує перший/наступні Swiss-раунди. Контракт input/output, формула Sonneborn–Berger і порядок deterministic fallback описані в `docs/in-person-engine.md`. Підключення engine до mutating API виконується на наступному етапі.
 

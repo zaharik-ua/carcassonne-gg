@@ -246,3 +246,112 @@ test("assigned organizer creates a city with the local tournament country enforc
   );
   assert.equal(forbidden.response.status, 403);
 });
+
+test("organizer API completes a Swiss round for 4, 5 and 8 participants", async (t) => {
+  const { baseUrl } = await startApi(t);
+  for (const participantCount of [4, 5, 8]) {
+    const createdTournament = await api(baseUrl, "/in-person-tournaments", {
+      userId: 3,
+      method: "POST",
+      body: JSON.stringify({
+        slug: `api-swiss-${participantCount}`,
+        name_en: `API Swiss ${participantCount}`,
+        scope: "international",
+        start_date: "2026-10-20",
+        end_date: "2026-10-20",
+        organizer_name: "Organizer",
+        swiss_rounds_count: 1,
+        playoff_first_round: participantCount >= 8 ? "quarter_final" : "semi_final",
+        admin_user_ids: [1],
+      }),
+    });
+    assert.equal(createdTournament.response.status, 201);
+    const tournamentId = createdTournament.data.tournament.id;
+    const published = await api(baseUrl, `/in-person-tournaments/${tournamentId}/publish`, {
+      userId: 3,
+      method: "POST",
+      body: "{}",
+    });
+    assert.equal(published.response.status, 200);
+
+    const participantIds = [];
+    for (let index = 0; index < participantCount; index += 1) {
+      const createdParticipant = await api(
+        baseUrl,
+        `/in-person-tournaments/${tournamentId}/participants`,
+        {
+          userId: 1,
+          method: "POST",
+          body: JSON.stringify({
+            name_en: `API Player ${participantCount}-${index + 1}`,
+            association_id: "UKR",
+          }),
+        }
+      );
+      assert.equal(createdParticipant.response.status, 201);
+      participantIds.push(createdParticipant.data.participant.id);
+    }
+    await api(baseUrl, `/in-person-tournaments/${tournamentId}/start-check-in`, {
+      userId: 1,
+      method: "POST",
+      body: "{}",
+    });
+    for (let index = 0; index < participantIds.length; index += 1) {
+      const checkIn = await api(
+        baseUrl,
+        `/in-person-tournaments/${tournamentId}/participants/${participantIds[index]}/check-in`,
+        {
+          userId: 1,
+          method: "PATCH",
+          body: JSON.stringify({ checked_in: true, draw_number: index + 2 }),
+        }
+      );
+      assert.equal(checkIn.response.status, 200);
+    }
+
+    const preview = await api(
+      baseUrl,
+      `/in-person-tournaments/${tournamentId}/swiss/rounds/preview`,
+      { userId: 1, method: "POST", body: JSON.stringify({ round_number: 1 }) }
+    );
+    assert.equal(preview.response.status, 200);
+    assert.equal(preview.data.preview.matches.length, Math.ceil(participantCount / 2));
+    const confirmed = await api(
+      baseUrl,
+      `/in-person-tournaments/${tournamentId}/swiss/rounds/confirm`,
+      { userId: 1, method: "POST", body: JSON.stringify({ round_number: 1 }) }
+    );
+    assert.equal(confirmed.response.status, 200);
+    const round = confirmed.data.current_round;
+    const publishedRound = await api(
+      baseUrl,
+      `/in-person-tournaments/${tournamentId}/swiss/rounds/${round.id}/publish`,
+      { userId: 1, method: "POST", body: "{}" }
+    );
+    assert.equal(publishedRound.response.status, 200);
+    for (const match of publishedRound.data.current_round.matches.filter((entry) => !entry.is_bye)) {
+      const result = await api(
+        baseUrl,
+        `/in-person-tournaments/${tournamentId}/swiss/matches/${match.id}/result`,
+        {
+          userId: 1,
+          method: "PUT",
+          body: JSON.stringify({
+            starting_participant_id: match.starting_participant_id,
+            result_type: "simple",
+            winner_participant_id: match.participant_a_id,
+          }),
+        }
+      );
+      assert.equal(result.response.status, 200);
+    }
+    const completed = await api(
+      baseUrl,
+      `/in-person-tournaments/${tournamentId}/swiss/rounds/${round.id}/complete`,
+      { userId: 1, method: "POST", body: "{}" }
+    );
+    assert.equal(completed.response.status, 200);
+    assert.equal(completed.data.swiss_complete, true);
+    assert.equal(completed.data.standings.rows.length, participantCount);
+  }
+});

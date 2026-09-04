@@ -318,6 +318,71 @@ export function registerInPersonRoutes(app, {
     }, logger)
   );
 
-  logger?.info?.("[in-person] Admin and participant routes registered");
+  app.get(
+    "/in-person-tournaments/:tournamentId/swiss",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.getSwissOverview(req.inPersonTournamentId);
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/swiss/rounds/preview",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const preview = await inPersonService.previewSwissRound(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.json({ ok: true, preview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/swiss/rounds/confirm",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.confirmSwissRound(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/swiss/rounds/:roundId/publish",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.publishSwissRound(
+        req.inPersonTournamentId,
+        req.params.roundId
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.put(
+    "/in-person-tournaments/:tournamentId/swiss/matches/:matchId/result",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.saveSwissMatchResult(
+        req.inPersonTournamentId,
+        req.params.matchId,
+        req.body || {}
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/swiss/rounds/:roundId/complete",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.completeSwissRound(
+        req.inPersonTournamentId,
+        req.params.roundId
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+
+  logger?.info?.("[in-person] Admin, participant and Swiss routes registered");
   return { registered: true };
 }
