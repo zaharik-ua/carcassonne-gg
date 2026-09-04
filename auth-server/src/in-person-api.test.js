@@ -43,7 +43,6 @@ async function startApi(t) {
     next();
   };
   registerInPersonRoutes(app, {
-    enabled: true,
     db,
     requireAdmin,
     requireInPersonTournamentAdmin: requireAdmin,

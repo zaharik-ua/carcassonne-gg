@@ -1,10 +1,6 @@
 import { createInPersonService } from "./service.js";
 import { InPersonError } from "./validation.js";
 
-function normalizeFeatureFlag(value) {
-  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
-}
-
 function parseBoolean(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
 }
@@ -32,24 +28,18 @@ function asyncHandler(handler, logger) {
 }
 
 export function registerInPersonRoutes(app, {
-  enabled = false,
   db,
   service,
   requireAdmin,
   requireInPersonTournamentAdmin,
   logger = console,
 } = {}) {
-  const featureEnabled = normalizeFeatureFlag(enabled);
-  if (!featureEnabled) {
-    logger?.info?.("[in-person] Routes disabled by feature gate");
-    return { enabled: false };
-  }
   if (typeof requireAdmin !== "function") {
-    throw new Error("requireAdmin middleware is required when in-person routes are enabled");
+    throw new Error("requireAdmin middleware is required for in-person routes");
   }
   if (typeof requireInPersonTournamentAdmin !== "function") {
     throw new Error(
-      "requireInPersonTournamentAdmin middleware is required when in-person routes are enabled"
+      "requireInPersonTournamentAdmin middleware is required for in-person routes"
     );
   }
 
@@ -220,6 +210,6 @@ export function registerInPersonRoutes(app, {
     }, logger)
   );
 
-  logger?.info?.("[in-person] Admin CRUD routes enabled");
-  return { enabled: true };
+  logger?.info?.("[in-person] Admin CRUD routes registered");
+  return { registered: true };
 }

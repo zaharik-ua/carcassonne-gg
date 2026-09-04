@@ -104,7 +104,6 @@ const FRONTEND_ORIGINS = Array.from(
 const PRIMARY_FRONTEND_ORIGIN = FRONTEND_ORIGINS[0];
 const DB_PATH = process.env.DB_PATH || "./data/auth.sqlite";
 const UPLOADS_DIR = process.env.UPLOADS_DIR || "./uploads";
-const IN_PERSON_TOURNAMENTS_ENABLED = process.env.IN_PERSON_TOURNAMENTS_ENABLED || "false";
 const isProd = process.env.NODE_ENV === "production";
 const SITE_BASE_URL = process.env.SITE_BASE_URL || "https://carcassonne.gg";
 const cookieSameSite = process.env.COOKIE_SAME_SITE || (isProd ? "none" : "lax");
@@ -8042,7 +8041,6 @@ function requireAdmin(req, res, next) {
 const requireInPersonTournamentAdmin = createRequireInPersonTournamentAdmin({ db });
 
 registerInPersonRoutes(app, {
-  enabled: IN_PERSON_TOURNAMENTS_ENABLED,
   db,
   requireAdmin,
   requireInPersonTournamentAdmin,

@@ -49,11 +49,10 @@ npm start
 - `GOOGLE_CLIENT_SECRET` - з Google Cloud
 - `GOOGLE_CALLBACK_URL` - напр. `https://carcassonne.gg/auth/google/callback`
 - `DB_PATH` - шлях до SQLite, напр. `./data/auth.sqlite`
-- `IN_PERSON_TOURNAMENTS_ENABLED` - feature gate для admin API очних турнірів і міст; за замовчуванням `false`
 - `PYTHON_BIN` - Python executable для maintenance-скриптів, за замовчуванням `python3`
 - `NODE_ENV=production` - для secure cookie у проді
 
-Коли `IN_PERSON_TOURNAMENTS_ENABLED=true`, глобальному адміністратору доступні:
+Глобальному адміністратору доступні такі endpoints очних турнірів:
 
 - `/cities` — список, створення, редагування, архівація та відновлення міст;
 - `/in-person-tournaments` — список і створення очних турнірів;

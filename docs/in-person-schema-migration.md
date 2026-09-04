@@ -9,7 +9,7 @@
 - primary key змінюється з `(tournament_id, user_id)` на `(tournament_entity_type, tournament_id, user_id)`;
 - усі наявні access rows переносяться з типом `tournament` без зміни ролі або timestamps;
 - server починає слухати HTTP port лише після успішного завершення критичної міграції;
-- `IN_PERSON_TOURNAMENTS_ENABLED` за замовчуванням вимкнений, тому foundation route не публікується під час міграції.
+- in-person routes реєструються під час запуску, але admin endpoints захищені обов'язковою авторизацією глобального адміністратора.
 
 ## Перед deploy
 
@@ -39,7 +39,7 @@
 
 ## Deploy і перевірка
 
-1. Deploy backend із `IN_PERSON_TOURNAMENTS_ENABLED=false`.
+1. Deploy backend і не надсилати mutating-запити до завершення startup migration.
 2. Запустити auth-server і перевірити structured log `[in-person] Schema foundation ready`.
 3. Переконатися, що log містить очікувану кількість `accessRows`.
 4. Виконати перевірки:
@@ -66,7 +66,7 @@
    - Player Hub показує старі матчі без змін;
    - користувач без доступу не отримує доступ до official tournament.
 
-6. Лише після smoke checks можна окремим deploy/config change увімкнути feature gate, коли з'являться routes наступних етапів.
+6. Після smoke checks перевірити, що неавторизований запит до `/in-person-tournaments` повертає `401`, а не `404`.
 
 ## Rollback
 

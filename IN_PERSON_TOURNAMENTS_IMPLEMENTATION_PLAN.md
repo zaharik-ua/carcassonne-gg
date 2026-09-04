@@ -250,7 +250,7 @@ Mutations захищає наявний `requireAdmin`.
 - мігрувати `tournament_access_users` на polymorphic key;
 - додати type predicate до кожного старого query;
 - реалізувати permission helper для in-person domain;
-- зареєструвати routes за feature gate або залишити їх недоступними без даних;
+- зареєструвати routes після успішної schema migration та захистити їх permission middleware;
 - додати structured logs без audit events.
 
 Тести:
@@ -265,7 +265,7 @@ Gate: усі наявні backend-тести зелені; row counts і дос�
 
 Покриття: `IPT-ARC-*`, `IPT-ACL-*`, `IPT-DB-*`, частина `IPT-NFR-*`; `UH-34`.
 
-Статус на 2026-09-04: етап реалізовано. Додано модулі schema/access/routes, атомарну перебудову `tournament_access_users`, explicit type predicate в усіх legacy queries, permission middleware, вимкнений за замовчуванням feature gate, regression-тести та [production migration runbook](docs/in-person-schema-migration.md). Загальна таблиця idempotency keys не створюється. Backend suite після змін: 51/51 tests passed.
+Статус на 2026-09-04: етап реалізовано. Додано модулі schema/access/routes, атомарну перебудову `tournament_access_users`, explicit type predicate в усіх legacy queries, permission middleware, regression-тести та [production migration runbook](docs/in-person-schema-migration.md). In-person routes реєструються завжди й захищені middleware; окремого ENV feature flag немає. Загальна таблиця idempotency keys не створюється.
 
 ### Етап 2. Admin CRUD і базове налаштування
 
@@ -298,7 +298,7 @@ Gate: адміністратор сайту може створити повні
 
 Покриття: `IPT-TRN-*`, `IPT-CITY-*`, `IPT-CFG-*`, `IPT-UI-001/002/008`; `UH-20`, `UH-29`, `UH-37` для admin selectors.
 
-Статус на 2026-09-04: етап реалізовано. Додано admin API для міст і очних турнірів, conditional validation, server-generated IDs, стабільний slug, date periods, publish/cancel-before-start, блокування формату після старту Swiss та атомарне керування адміністраторами через `tournament_access_users`. У глобальну адмінку додано розділ `In-Person Tournaments` із create/edit формою, inline-створенням міста, playoff preview, user picker і переходами до майбутніх Player Hub/public сторінок. Повний backend suite після змін: 62/62 tests passed.
+Статус на 2026-09-04: етап реалізовано. Додано admin API для міст і очних турнірів, conditional validation, server-generated IDs, стабільний slug, date periods, publish/cancel-before-start, блокування формату після старту Swiss та атомарне керування адміністраторами через `tournament_access_users`. У глобальну адмінку додано розділ `In-Person Tournaments` із create/edit формою, inline-створенням міста, playoff preview, user picker і переходами до майбутніх Player Hub/public сторінок. Повний backend suite після видалення ENV feature flag: 61/61 tests passed.
 
 ### Етап 3. Player Hub shell, participants і check-in
 
