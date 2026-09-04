@@ -194,3 +194,55 @@ test("participant API returns duplicate details and check-in readiness", async (
   assert.equal(readiness.data.readiness.ready, true);
   assert.equal(readiness.data.counters.without_draw_number, 0);
 });
+
+test("assigned organizer creates a city with the local tournament country enforced", async (t) => {
+  const { baseUrl } = await startApi(t);
+  const localTournament = await api(baseUrl, "/in-person-tournaments", {
+    userId: 3,
+    method: "POST",
+    body: JSON.stringify({
+      slug: "local-city-api",
+      name_en: "Local City API",
+      scope: "local",
+      association_id: "UKR",
+      local_subtype: "final",
+      start_date: "2026-10-12",
+      end_date: "2026-10-12",
+      organizer_name: "Organizer",
+      swiss_rounds_count: 5,
+      playoff_first_round: "semi_final",
+      admin_user_ids: [1],
+    }),
+  });
+  assert.equal(localTournament.response.status, 201);
+  const tournamentId = localTournament.data.tournament.id;
+
+  const created = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/participant-cities`,
+    {
+      userId: 1,
+      method: "POST",
+      body: JSON.stringify({
+        association_id: "OTHER",
+        name_en: "Lviv",
+        name_local: "Львів",
+        icon_url: "https://example.com/lviv.svg",
+      }),
+    }
+  );
+  assert.equal(created.response.status, 201);
+  assert.equal(created.data.city.association_id, "UKR");
+  assert.equal(created.data.city.icon_url, "https://example.com/lviv.svg");
+
+  const forbidden = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/participant-cities`,
+    {
+      userId: 2,
+      method: "POST",
+      body: JSON.stringify({ name_en: "Forbidden city" }),
+    }
+  );
+  assert.equal(forbidden.response.status, 403);
+});

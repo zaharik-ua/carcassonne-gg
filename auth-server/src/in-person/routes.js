@@ -231,6 +231,17 @@ export function registerInPersonRoutes(app, {
       res.json({ ok: true, cities });
     }, logger)
   );
+  app.post(
+    "/in-person-tournaments/:tournamentId/participant-cities",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const city = await inPersonService.createParticipantCity(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.status(201).json({ ok: true, city });
+    }, logger)
+  );
   app.get(
     "/in-person-tournaments/:tournamentId/participants",
     requireInPersonTournamentAdmin,

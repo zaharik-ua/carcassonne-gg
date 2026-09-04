@@ -95,10 +95,23 @@ test("creates, updates, archives and restores cities with association-scoped uni
     association_id: "ukr",
     name_en: "Kyiv",
     name_local: "Київ",
+    icon_url: "https://example.com/kyiv.svg",
   });
   assert.match(kyiv.id, /^city_/);
   assert.equal(kyiv.association_id, "UKR");
   assert.equal(kyiv.archived, false);
+  assert.equal(kyiv.icon_url, "https://example.com/kyiv.svg");
+
+  const updatedKyiv = await service.updateCity(kyiv.id, {
+    name_local: "Київ — столиця",
+    icon_url: "https://example.com/kyiv.png",
+  });
+  assert.equal(updatedKyiv.name_local, "Київ — столиця");
+  assert.equal(updatedKyiv.icon_url, "https://example.com/kyiv.png");
+  await assert.rejects(
+    service.updateCity(kyiv.id, { icon_url: "javascript:alert(1)" }),
+    (error) => error?.code === "INVALID_URL"
+  );
 
   await assert.rejects(
     service.createCity({ association_id: "UKR", name_en: " kyiv " }),

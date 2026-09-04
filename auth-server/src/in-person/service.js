@@ -64,6 +64,7 @@ function serializeCity(row) {
     association_flag: row.association_flag || null,
     name_en: row.name_en,
     name_local: row.name_local || null,
+    icon_url: row.icon_url || null,
     archived: !!row.archived_at,
     archived_at: row.archived_at || null,
     created_at: row.created_at,
@@ -130,6 +131,7 @@ function serializeParticipant(row) {
     city_id: row.city_id || null,
     city_name_en: row.city_name_en || null,
     city_name_local: row.city_name_local || null,
+    city_icon_url: row.city_icon_url || null,
     city_association_id: row.city_association_id || null,
     status: row.status,
     draw_number: row.draw_number == null ? null : Number(row.draw_number),
@@ -182,6 +184,7 @@ const PARTICIPANT_SELECT = `
     a.flag AS association_flag,
     c.name_en AS city_name_en,
     c.name_local AS city_name_local,
+    c.icon_url AS city_icon_url,
     c.association_id AS city_association_id,
     CASE WHEN EXISTS (
       SELECT 1
@@ -881,10 +884,16 @@ export function createInPersonService({ db, idFactory = randomUUID } = {}) {
         db,
         `
           INSERT INTO cities (
-            id, association_id, name_en, name_local, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            id, association_id, name_en, name_local, icon_url, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
-        [cityId, validated.association_id, validated.name_en, validated.name_local]
+        [
+          cityId,
+          validated.association_id,
+          validated.name_en,
+          validated.name_local,
+          validated.icon_url,
+        ]
       );
       return getCity(cityId);
     }));
@@ -899,12 +908,48 @@ export function createInPersonService({ db, idFactory = randomUUID } = {}) {
         db,
         `
           UPDATE cities
-          SET association_id = ?, name_en = ?, name_local = ?, updated_at = CURRENT_TIMESTAMP
+          SET association_id = ?, name_en = ?, name_local = ?, icon_url = ?,
+              updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `,
-        [input.association_id, input.name_en, input.name_local, current.id]
+        [input.association_id, input.name_en, input.name_local, input.icon_url, current.id]
       );
       return getCity(current.id);
+    }));
+  }
+
+  async function createParticipantCity(tournamentId, payload) {
+    return enqueueMutation(() => transaction(async () => {
+      const tournament = await requireTournamentRow(tournamentId);
+      assertParticipantMutationsAllowed(tournament);
+      if (tournament.scope !== "local" || !tournament.association_id) {
+        throw conflictError(
+          "CITY_CREATION_LOCAL_ONLY",
+          "Participant cities can be created only for a local tournament"
+        );
+      }
+      const input = normalizeCityInput({
+        ...(payload || {}),
+        association_id: tournament.association_id,
+      });
+      const validated = await validateCityRelations(input);
+      const cityId = `city_${idFactory()}`;
+      await dbRun(
+        db,
+        `
+          INSERT INTO cities (
+            id, association_id, name_en, name_local, icon_url, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        [
+          cityId,
+          validated.association_id,
+          validated.name_en,
+          validated.name_local,
+          validated.icon_url,
+        ]
+      );
+      return getCity(cityId);
     }));
   }
 
@@ -1151,6 +1196,7 @@ export function createInPersonService({ db, idFactory = randomUUID } = {}) {
     archiveCity: (cityId) => setCityArchived(cityId, true),
     cancelTournament,
     createCity,
+    createParticipantCity,
     createParticipant,
     createTournament,
     deleteParticipant,

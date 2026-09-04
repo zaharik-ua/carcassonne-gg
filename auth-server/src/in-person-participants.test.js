@@ -130,6 +130,31 @@ test("validates international and local participant locations", async (t) => {
   );
 });
 
+test("creates a participant city in the local tournament association", async (t) => {
+  const { service } = await createDatabase(t);
+  const local = await createPublishedTournament(service, {
+    slug: "local-city-create",
+    scope: "local",
+    association_id: "UKR",
+    local_subtype: "final",
+  });
+  const city = await service.createParticipantCity(local.id, {
+    association_id: "POL",
+    name_en: "Lviv",
+    name_local: "Львів",
+    icon_url: "https://example.com/lviv.svg",
+  });
+  assert.equal(city.association_id, "UKR", "client association must be ignored");
+  assert.equal(city.icon_url, "https://example.com/lviv.svg");
+  assert.deepEqual((await service.listParticipantCities(local.id)).map((item) => item.id), [city.id]);
+
+  const international = await createPublishedTournament(service, { slug: "no-local-cities" });
+  await assert.rejects(
+    service.createParticipantCity(international.id, { name_en: "Nowhere" }),
+    (error) => error?.code === "CITY_CREATION_LOCAL_ONLY"
+  );
+});
+
 test("warns about duplicate participants and supports an explicit namesake confirmation", async (t) => {
   const { service } = await createDatabase(t);
   const tournament = await createPublishedTournament(service, { slug: "duplicates" });

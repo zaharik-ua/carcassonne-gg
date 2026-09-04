@@ -754,6 +754,21 @@
       createLabel: "Create",
       load: () => apiJson(ASSOCIATIONS_URL, { method: "GET" }).then((data) => data.associations || []),
     },
+    cities: {
+      key: "cities",
+      title: "Cities",
+      buttonLabel: "Edit",
+      createLabel: "Create",
+      load: () => Promise.all([
+        apiJson(`${CITIES_URL}?include_archived=1`, { method: "GET" }),
+        apiJson(ASSOCIATIONS_URL, { method: "GET" }),
+      ]).then(([citiesData, associationsData]) => {
+        state.associations = Array.isArray(associationsData?.associations)
+          ? associationsData.associations
+          : [];
+        return citiesData.cities || [];
+      }),
+    },
     teams: {
       key: "teams",
       title: "Teams",
@@ -2942,6 +2957,122 @@
     }
   }
 
+  function openCityForm(mode, item, anchorRow) {
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+
+    const idField = mode === "edit" ? createTextRow("id", item?.id || "", { readOnly: true }) : null;
+    const associationField = createSelectOptionsRow(
+      "Country / association *",
+      item?.association_id || "",
+      [{ value: "", label: "Select association..." }].concat(
+        state.associations.map((association) => ({
+          value: String(association?.id || ""),
+          label: [association?.flag, association?.name, association?.id].filter(Boolean).join(" • "),
+        }))
+      )
+    );
+    const nameEnField = createTextRow("Name (English) *", item?.name_en || "");
+    const nameLocalField = createTextRow("Name (local)", item?.name_local || "");
+    const iconUrlField = createTextRow("City icon URL", item?.icon_url || "");
+    iconUrlField.input.type = "url";
+
+    if (idField) form.appendChild(idField.row);
+    form.appendChild(associationField.row);
+    form.appendChild(nameEnField.row);
+    form.appendChild(nameLocalField.row);
+    form.appendChild(iconUrlField.row);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = mode === "create" ? "Create" : "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => {
+      if (mode === "create") {
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+      } else {
+        closeInlineForm();
+      }
+      setStatus("", false);
+    });
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+
+    if (mode === "edit") {
+      const archiveBtn = document.createElement("button");
+      archiveBtn.type = "button";
+      archiveBtn.className = "cp-btn cp-btn-secondary";
+      archiveBtn.textContent = item?.archived ? "Restore" : "Archive";
+      archiveBtn.addEventListener("click", async () => {
+        archiveBtn.disabled = true;
+        try {
+          await apiJson(
+            item?.archived
+              ? `${CITIES_URL}/${encodeURIComponent(item.id)}/restore`
+              : `${CITIES_URL}/${encodeURIComponent(item.id)}`,
+            { method: item?.archived ? "POST" : "DELETE", body: item?.archived ? "{}" : undefined }
+          );
+          closeInlineForm();
+          await loadSectionData("cities");
+          renderSection();
+          setStatus(item?.archived ? "City restored." : "City archived.", false);
+        } catch (error) {
+          setStatus(error?.message || "Failed to change city status.", true);
+          archiveBtn.disabled = false;
+        }
+      });
+      actions.appendChild(archiveBtn);
+    }
+    form.appendChild(actions);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = {
+        association_id: String(associationField.select.value || "").trim(),
+        name_en: String(nameEnField.input.value || "").trim(),
+        name_local: String(nameLocalField.input.value || "").trim() || null,
+        icon_url: String(iconUrlField.input.value || "").trim() || null,
+      };
+      if (!payload.association_id || !payload.name_en) {
+        setStatus("Country and English city name are required.", true);
+        return;
+      }
+      saveBtn.disabled = true;
+      try {
+        await apiJson(
+          mode === "create" ? CITIES_URL : `${CITIES_URL}/${encodeURIComponent(item.id)}`,
+          { method: mode === "create" ? "POST" : "PATCH", body: JSON.stringify(payload) }
+        );
+        if (mode === "create") {
+          sectionForm.classList.add("hidden");
+          sectionForm.innerHTML = "";
+        } else {
+          closeInlineForm();
+        }
+        await loadSectionData("cities");
+        renderSection();
+        setStatus(mode === "create" ? "City created." : "City updated.", false);
+      } catch (error) {
+        setStatus(error?.message || "Failed to save city.", true);
+        saveBtn.disabled = false;
+      }
+    });
+
+    if (mode === "create") {
+      closeInlineForm();
+      showCreateForm(form);
+    } else if (anchorRow) {
+      mountDetailForm(form, anchorRow);
+    }
+  }
+
   function openTeamForm(mode, item, anchorRow) {
     const form = document.createElement("form");
     form.className = "cp-edit-form";
@@ -4100,6 +4231,8 @@
     inlineCity.className = "in-person-inline-city hidden";
     const cityNameEnField = createTextRow("New city: name (English) *", "");
     const cityNameLocalField = createTextRow("New city: name (local)", "");
+    const cityIconUrlField = createTextRow("New city: icon URL", "");
+    cityIconUrlField.input.type = "url";
     const inlineCityActions = document.createElement("div");
     inlineCityActions.className = "cp-edit-actions";
     const saveCityBtn = document.createElement("button");
@@ -4114,6 +4247,7 @@
     inlineCityActions.appendChild(cancelCityBtn);
     inlineCity.appendChild(cityNameEnField.row);
     inlineCity.appendChild(cityNameLocalField.row);
+    inlineCity.appendChild(cityIconUrlField.row);
     inlineCity.appendChild(inlineCityActions);
 
     const updateCityOptions = (selectedCityId) => {
@@ -4200,6 +4334,7 @@
             association_id: associationId,
             name_en: nameEn,
             name_local: String(cityNameLocalField.input.value || "").trim() || null,
+            icon_url: String(cityIconUrlField.input.value || "").trim() || null,
           }),
         });
         state.cities.push(data.city);
@@ -4207,6 +4342,7 @@
         inlineCity.classList.add("hidden");
         cityNameEnField.input.value = "";
         cityNameLocalField.input.value = "";
+        cityIconUrlField.input.value = "";
         setStatus("City created and selected.", false);
       } catch (error) {
         setStatus(error?.message || "Failed to create city.", true);
@@ -5877,6 +6013,35 @@
     });
   }
 
+  function renderCities() {
+    sectionTitle.textContent = "Cities";
+    sectionCreateBtn.textContent = "Create";
+    sectionCreateBtn.classList.remove("hidden");
+    sectionCreateBtn.onclick = () => openCityForm("create", null, null);
+
+    if (!state.cities.length) {
+      renderListEmpty("No cities yet.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    state.cities.forEach((item) => {
+      sectionList.appendChild(createListRow({
+        imageSrc: item.icon_url,
+        imageAlt: item.name_en || item.id,
+        imageRound: false,
+        title: item.name_en || item.id,
+        subtitle: [
+          item.name_local,
+          item.association_name || item.association_id,
+          item.archived ? "ARCHIVED" : "",
+        ].filter(Boolean).join(" • "),
+        buttonLabel: "Edit",
+        onClick: (row) => openCityForm("edit", item, row),
+      }));
+    });
+  }
+
   function renderTeams() {
     sectionTitle.textContent = "Teams";
     sectionCreateBtn.textContent = "Create";
@@ -6442,6 +6607,7 @@
 
     sectionCard.classList.remove("hidden");
     if (state.activeSection === "associations") renderAssociations();
+    if (state.activeSection === "cities") renderCities();
     if (state.activeSection === "teams") renderTeams();
     if (state.activeSection === "streamers") renderStreamers();
     if (state.activeSection === "icons") renderIcons();

@@ -101,6 +101,151 @@
     flex: 1 1 320px;
   }
 
+  .ip-city-picker {
+    position: relative;
+  }
+
+  .ip-city-picker-btn {
+    width: 100%;
+    min-height: 38px;
+    box-sizing: border-box;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 7px 9px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #fff;
+    color: var(--ip-text);
+    font: inherit;
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .ip-city-picker-btn.open {
+    border-color: var(--ip-primary);
+  }
+
+  .ip-city-picker-value,
+  .ip-city-option-label {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ip-city-picker-value span,
+  .ip-city-option-label span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ip-city-picker-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    left: 0;
+    z-index: 30;
+    display: none;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+  }
+
+  .ip-city-picker-menu.open {
+    display: block;
+  }
+
+  .ip-city-search {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 7px;
+    border-bottom: 1px solid #e4e8ef;
+    background: #fff;
+  }
+
+  .ip-city-option {
+    width: 100%;
+    min-height: 38px;
+    box-sizing: border-box;
+    border: 0;
+    border-top: 1px solid #edf1f6;
+    padding: 7px 9px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #fff;
+    color: var(--ip-text);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .ip-city-option:hover,
+  .ip-city-option.active {
+    background: var(--ip-primary-soft);
+  }
+
+  .ip-city-option.add-new {
+    color: #155986;
+    font-weight: 700;
+  }
+
+  .ip-city-icon {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    border-radius: 4px;
+    object-fit: contain;
+  }
+
+  .ip-inline-city {
+    grid-column: 1 / -1;
+    width: 100%;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 12px;
+    padding: 12px;
+    border: 1px solid #a9cce4;
+    border-radius: 6px;
+    background: #f4f9fd;
+  }
+
+  .ip-inline-city-title,
+  .ip-inline-city-actions {
+    grid-column: 1 / -1;
+  }
+
+  .ip-inline-city-title {
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .ip-inline-city-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .ip-readonly {
+    background: #eef2f6;
+    color: var(--ip-muted);
+  }
+
+  .ip-city-inline-mount {
+    grid-column: 1 / -1;
+  }
+
   .ip-btn {
     min-height: 38px;
     border: 1px solid #c8ced8;
@@ -322,6 +467,10 @@
       grid-template-columns: 1fr;
     }
 
+    .ip-inline-city {
+      grid-template-columns: 1fr;
+    }
+
     .ip-draw-number {
       flex: 1 1 auto;
       width: auto;
@@ -392,6 +541,7 @@
     selectedTournamentId: "",
     overview: null,
     activeTab: "players",
+    playerFormController: null,
   };
 
   const tournamentSelect = document.getElementById("ipTournamentSelect");
@@ -493,6 +643,215 @@
     return { field, select };
   }
 
+  function cityLabel(city) {
+    return [city?.name_en, city?.name_local].filter(Boolean).join(" • ") || String(city?.id || "");
+  }
+
+  function appendCityLabel(container, city, fallbackText) {
+    container.innerHTML = "";
+    if (city?.icon_url) {
+      const icon = document.createElement("img");
+      icon.className = "ip-city-icon";
+      icon.src = city.icon_url;
+      icon.alt = "";
+      icon.addEventListener("error", () => icon.remove(), { once: true });
+      container.appendChild(icon);
+    }
+    const text = document.createElement("span");
+    text.textContent = city ? cityLabel(city) : fallbackText;
+    container.appendChild(text);
+  }
+
+  function createCityPickerField(initialValue, { onAddNew, signal } = {}) {
+    const field = document.createElement("div");
+    field.className = "ip-field";
+    const label = document.createElement("label");
+    label.textContent = "City *";
+    const root = document.createElement("div");
+    root.className = "ip-city-picker";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ip-city-picker-btn";
+    const selectedContent = document.createElement("span");
+    selectedContent.className = "ip-city-picker-value";
+    const chevron = document.createElement("span");
+    chevron.textContent = "▾";
+    button.appendChild(selectedContent);
+    button.appendChild(chevron);
+
+    const menu = document.createElement("div");
+    menu.className = "ip-city-picker-menu";
+    const searchWrap = document.createElement("div");
+    searchWrap.className = "ip-city-search";
+    const searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.className = "ip-input";
+    searchInput.placeholder = "Type to filter cities...";
+    searchWrap.appendChild(searchInput);
+    menu.appendChild(searchWrap);
+
+    let value = String(initialValue || "").trim();
+    let filterQuery = "";
+    const findCity = (cityId) => state.cities.find((city) => (
+      String(city?.id || "") === String(cityId || "")
+    )) || null;
+    const renderButton = () => {
+      const city = findCity(value);
+      if (!city) value = "";
+      appendCityLabel(selectedContent, city, "Select city...");
+      selectedContent.style.color = city ? "" : "#999";
+    };
+    const close = () => {
+      menu.classList.remove("open");
+      button.classList.remove("open");
+    };
+    const setValue = (nextValue) => {
+      value = findCity(nextValue) ? String(nextValue) : "";
+      renderButton();
+      renderOptions();
+    };
+    const createOption = (city) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = `ip-city-option${String(city.id) === value ? " active" : ""}`;
+      const optionLabel = document.createElement("span");
+      optionLabel.className = "ip-city-option-label";
+      appendCityLabel(optionLabel, city, city.id);
+      option.appendChild(optionLabel);
+      option.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setValue(city.id);
+        close();
+      });
+      return option;
+    };
+    const renderOptions = () => {
+      menu.querySelectorAll(".ip-city-option").forEach((node) => node.remove());
+      const query = filterQuery.trim().toLocaleLowerCase("en");
+      state.cities
+        .slice()
+        .sort((left, right) => cityLabel(left).localeCompare(cityLabel(right)))
+        .filter((city) => !query || `${cityLabel(city)} ${city.id}`.toLocaleLowerCase("en").includes(query))
+        .forEach((city) => menu.appendChild(createOption(city)));
+      const addNew = document.createElement("button");
+      addNew.type = "button";
+      addNew.className = "ip-city-option add-new";
+      addNew.textContent = "+ Add new city";
+      addNew.addEventListener("click", (event) => {
+        event.stopPropagation();
+        close();
+        if (typeof onAddNew === "function") onAddNew();
+      });
+      menu.appendChild(addNew);
+    };
+    const open = () => {
+      filterQuery = "";
+      searchInput.value = "";
+      renderOptions();
+      menu.classList.add("open");
+      button.classList.add("open");
+      try {
+        searchInput.focus({ preventScroll: true });
+      } catch (_error) {
+        searchInput.focus();
+      }
+    };
+
+    searchInput.addEventListener("click", (event) => event.stopPropagation());
+    searchInput.addEventListener("keydown", (event) => event.stopPropagation());
+    searchInput.addEventListener("input", () => {
+      filterQuery = searchInput.value;
+      renderOptions();
+    });
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menu.classList.contains("open")) close();
+      else open();
+    });
+    document.addEventListener("click", (event) => {
+      if (!root.contains(event.target)) close();
+    }, signal ? { signal } : undefined);
+
+    renderButton();
+    renderOptions();
+    root.appendChild(button);
+    root.appendChild(menu);
+    field.appendChild(label);
+    field.appendChild(root);
+    return {
+      field,
+      getValue: () => value,
+      setValue,
+      refresh: () => {
+        renderButton();
+        renderOptions();
+      },
+    };
+  }
+
+  function mountInlineCityCreator(tournament, picker, mount) {
+    mount.innerHTML = "";
+    const wrap = document.createElement("div");
+    wrap.className = "ip-inline-city";
+    const title = document.createElement("div");
+    title.className = "ip-inline-city-title";
+    title.textContent = "Add new city";
+    const country = createField("Country / association");
+    country.input.value = [
+      tournament.association_name,
+      tournament.association_id,
+    ].filter(Boolean).join(" • ");
+    country.input.readOnly = true;
+    country.input.classList.add("ip-readonly");
+    const nameEn = createField("City name (English) *");
+    const nameLocal = createField("City name (local)");
+    const iconUrl = createField("City icon URL", "url");
+    iconUrl.input.placeholder = "https://...";
+    const actions = document.createElement("div");
+    actions.className = "ip-inline-city-actions";
+    const create = createButton("Create and select", "ip-btn primary", async () => {
+      const englishName = String(nameEn.input.value || "").trim();
+      if (!englishName) {
+        setStatus("English city name is required.", "error");
+        nameEn.input.focus();
+        return;
+      }
+      create.disabled = true;
+      try {
+        const data = await apiJson(tournamentUrl("/participant-cities"), {
+          method: "POST",
+          body: JSON.stringify({
+            name_en: englishName,
+            name_local: String(nameLocal.input.value || "").trim() || null,
+            icon_url: String(iconUrl.input.value || "").trim() || null,
+          }),
+        });
+        state.cities.push(data.city);
+        picker.refresh();
+        picker.setValue(data.city.id);
+        mount.innerHTML = "";
+        setStatus("City created and selected.", "success");
+      } catch (error) {
+        setStatus(error.message || "Failed to create city.", "error");
+        create.disabled = false;
+      }
+    });
+    const cancel = createButton("Cancel", "ip-btn", () => {
+      mount.innerHTML = "";
+      setStatus("");
+    });
+    actions.appendChild(create);
+    actions.appendChild(cancel);
+    wrap.appendChild(title);
+    wrap.appendChild(country.field);
+    wrap.appendChild(nameEn.field);
+    wrap.appendChild(nameLocal.field);
+    wrap.appendChild(iconUrl.field);
+    wrap.appendChild(actions);
+    mount.appendChild(wrap);
+    nameEn.input.focus();
+  }
+
   function renderTournamentSelector() {
     tournamentSelect.innerHTML = "";
     if (!state.tournaments.length) {
@@ -579,6 +938,8 @@
   }
 
   function renderPlayers() {
+    state.playerFormController?.abort();
+    state.playerFormController = null;
     playerFormMount.innerHTML = "";
     playersList.innerHTML = "";
     const participants = state.overview?.participants || [];
@@ -620,6 +981,9 @@
   function openPlayerForm(participant = null) {
     const tournament = state.overview?.tournament;
     if (!tournament) return;
+    state.playerFormController?.abort();
+    const formController = new AbortController();
+    state.playerFormController = formController;
     playerFormMount.innerHTML = "";
     const form = document.createElement("form");
     form.className = "ip-form";
@@ -629,27 +993,32 @@
     nameLocal.input.value = participant?.name_local || "";
     const bgaNickname = createField("BGA nickname");
     bgaNickname.input.value = participant?.bga_nickname || "";
-    const location = tournament.scope === "international"
-      ? createSelectField(
+    const cityInlineMount = document.createElement("div");
+    cityInlineMount.className = "ip-city-inline-mount";
+    let location;
+    if (tournament.scope === "international") {
+      location = createSelectField(
         "Country / association *",
         [{ value: "", label: "Select country..." }].concat(state.associations.map((association) => ({
           value: association.id,
           label: [association.flag, association.name].filter(Boolean).join(" • "),
         }))),
         participant?.association_id || ""
-      )
-      : createSelectField(
-        "City *",
-        [{ value: "", label: "Select city..." }].concat(state.cities.map((city) => ({
-          value: city.id,
-          label: [city.name_en, city.name_local].filter(Boolean).join(" • "),
-        }))),
-        participant?.city_id || ""
       );
+    } else {
+      location = createCityPickerField(participant?.city_id || "", {
+        signal: formController.signal,
+        onAddNew: () => mountInlineCityCreator(tournament, location, cityInlineMount),
+      });
+    }
+    const getLocationValue = () => (
+      tournament.scope === "international" ? location.select.value : location.getValue()
+    );
     form.appendChild(nameEn.field);
     form.appendChild(nameLocal.field);
     form.appendChild(bgaNickname.field);
     form.appendChild(location.field);
+    if (tournament.scope === "local") form.appendChild(cityInlineMount);
     const actions = document.createElement("div");
     actions.className = "ip-form-actions";
     const save = document.createElement("button");
@@ -658,6 +1027,8 @@
     save.textContent = participant ? "Save" : "Add player";
     actions.appendChild(save);
     actions.appendChild(createButton("Cancel", "ip-btn", () => {
+      formController.abort();
+      if (state.playerFormController === formController) state.playerFormController = null;
       playerFormMount.innerHTML = "";
       setStatus("");
     }));
@@ -668,8 +1039,8 @@
         name_en: String(nameEn.input.value || "").trim(),
         name_local: String(nameLocal.input.value || "").trim() || null,
         bga_nickname: String(bgaNickname.input.value || "").trim() || null,
-        association_id: tournament.scope === "international" ? location.select.value : null,
-        city_id: tournament.scope === "local" ? location.select.value : null,
+        association_id: tournament.scope === "international" ? getLocationValue() : null,
+        city_id: tournament.scope === "local" ? getLocationValue() : null,
         confirm_duplicate: confirmDuplicate,
       };
       save.disabled = true;
@@ -680,6 +1051,8 @@
             : tournamentUrl("/participants"),
           { method: participant ? "PATCH" : "POST", body: JSON.stringify(payload) }
         );
+        formController.abort();
+        if (state.playerFormController === formController) state.playerFormController = null;
         playerFormMount.innerHTML = "";
         await loadOverview();
         setStatus(participant ? "Player updated." : "Player added.", "success");
@@ -702,7 +1075,7 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!nameEn.input.value.trim() || !location.select.value) {
+      if (!nameEn.input.value.trim() || !getLocationValue()) {
         setStatus("English name and location are required.", "error");
         return;
       }

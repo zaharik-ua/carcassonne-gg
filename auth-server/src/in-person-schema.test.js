@@ -172,6 +172,41 @@ test("creates the in-person foundation without versioning or idempotency tables"
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'in_person_idempotency_keys'"
   );
   assert.equal(idempotencyTable, null);
+
+  const cityColumns = new Set(
+    (await all(db, "PRAGMA table_info(cities)")).map((column) => column.name)
+  );
+  assert.equal(cityColumns.has("icon_url"), true);
+});
+
+test("adds icon_url to an existing cities table without losing city data", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, `
+    INSERT INTO associations (code, name) VALUES ('UKR', 'Ukraine');
+    CREATE TABLE cities (
+      id TEXT PRIMARY KEY,
+      association_id TEXT NOT NULL,
+      name_en TEXT NOT NULL,
+      name_local TEXT,
+      archived_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT INTO cities (id, association_id, name_en, name_local)
+    VALUES ('legacy-kyiv', 'UKR', 'Kyiv', 'Київ');
+  `);
+
+  await ensureInPersonSchema(db, { logger: silentLogger });
+  const city = await get(
+    db,
+    "SELECT id, name_en, name_local, icon_url FROM cities WHERE id = 'legacy-kyiv'"
+  );
+  assert.deepEqual(city, {
+    id: "legacy-kyiv",
+    name_en: "Kyiv",
+    name_local: "Київ",
+    icon_url: null,
+  });
 });
 
 test("keeps access isolated when both tournament domains use the same id", async (t) => {

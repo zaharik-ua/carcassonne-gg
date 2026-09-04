@@ -64,7 +64,7 @@ npm start
 
 - `/in-person-tournaments/accessible` — доступні для проведення турніри;
 - `/in-person-tournaments/:id/participants` — склад, counters і readiness;
-- `/in-person-tournaments/:id/participant-cities` — міста допустимої асоціації локального турніру;
+- `/in-person-tournaments/:id/participant-cities` — список і створення міст у зафіксованій асоціації локального турніру;
 - `/in-person-tournaments/:id/start-check-in` — початок check-in;
 - `/in-person-tournaments/:id/participants/:participantId/check-in` — підтвердження участі та номер жеребкування;
 - `/in-person-tournaments/:id/check-in-readiness` — готовність до першого Swiss-раунду.

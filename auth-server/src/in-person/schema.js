@@ -165,6 +165,7 @@ async function ensureInPersonTables(db) {
         association_id TEXT NOT NULL COLLATE NOCASE,
         name_en TEXT NOT NULL CHECK (length(trim(name_en)) > 0),
         name_local TEXT,
+        icon_url TEXT,
         archived_at TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -454,6 +455,24 @@ async function ensureInPersonTables(db) {
   }
 }
 
+async function ensureCityExtensions(db) {
+  try {
+    await dbExec(db, "BEGIN IMMEDIATE TRANSACTION");
+    const columns = await dbAll(db, "PRAGMA table_info(cities)");
+    if (!columns.some((column) => String(column?.name || "") === "icon_url")) {
+      await dbExec(db, "ALTER TABLE cities ADD COLUMN icon_url TEXT");
+    }
+    await dbExec(db, `
+      INSERT OR IGNORE INTO in_person_schema_migrations (version, name)
+      VALUES (2, 'city_icon_url');
+      COMMIT;
+    `);
+  } catch (error) {
+    await rollbackQuietly(db);
+    throw error;
+  }
+}
+
 async function ensureInPersonTriggersAndAccessIndexes(db) {
   try {
     await dbExec(db, `
@@ -704,6 +723,7 @@ async function ensureInPersonTriggersAndAccessIndexes(db) {
 export async function ensureInPersonSchema(db, { logger = console } = {}) {
   const accessMigration = await migrateTournamentAccessUsers(db);
   await ensureInPersonTables(db);
+  await ensureCityExtensions(db);
   await ensureInPersonTriggersAndAccessIndexes(db);
   logger?.info?.("[in-person] Schema foundation ready", {
     accessTableMigrated: accessMigration.migrated,

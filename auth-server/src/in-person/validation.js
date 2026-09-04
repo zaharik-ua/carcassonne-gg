@@ -99,6 +99,7 @@ export function normalizeCityInput(payload, current = null) {
   const associationId = normalizeText(selectValue(payload, current, "association_id"));
   const nameEn = normalizeText(selectValue(payload, current, "name_en"));
   const nameLocal = normalizeOptionalText(selectValue(payload, current, "name_local"));
+  const iconUrl = normalizeUrl(selectValue(payload, current, "icon_url"), "icon_url");
 
   if (!associationId) {
     throw validationError("ASSOCIATION_REQUIRED", "association_id is required", {
@@ -108,7 +109,12 @@ export function normalizeCityInput(payload, current = null) {
   if (!nameEn) {
     throw validationError("CITY_NAME_REQUIRED", "name_en is required", { field: "name_en" });
   }
-  return { association_id: associationId, name_en: nameEn, name_local: nameLocal };
+  return {
+    association_id: associationId,
+    name_en: nameEn,
+    name_local: nameLocal,
+    icon_url: iconUrl,
+  };
 }
 
 export function normalizeTournamentInput(payload, current = null) {

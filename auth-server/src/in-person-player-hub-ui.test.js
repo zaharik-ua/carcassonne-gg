@@ -35,6 +35,11 @@ test("In-Person page contains participant registration and check-in flows", () =
   [
     "In-Person Tournaments",
     "Add player",
+    "+ Add new city",
+    "City name (English) *",
+    "City name (local)",
+    "City icon URL",
+    "Country / association",
     "Check-in and draw numbers",
     "Gaps and a missing #1 are allowed.",
     "Possible duplicate:",
@@ -43,6 +48,9 @@ test("In-Person page contains participant registration and check-in flows", () =
 
   assert.match(inPersonHtml, /\/participants/);
   assert.match(inPersonHtml, /\/participant-cities/);
+  assert.match(inPersonHtml, /method: "POST"/);
+  assert.match(inPersonHtml, /function createCityPickerField/);
+  assert.match(inPersonHtml, /country\.input\.readOnly = true/);
   assert.match(inPersonHtml, /\/start-check-in/);
   assert.match(inPersonHtml, /\/check-in/);
   assert.match(inPersonHtml, /confirm_duplicate: confirmDuplicate/);
