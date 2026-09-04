@@ -31,11 +31,15 @@ export function registerInPersonRoutes(app, {
   db,
   service,
   requireAdmin,
+  requireAuthenticated,
   requireInPersonTournamentAdmin,
   logger = console,
 } = {}) {
   if (typeof requireAdmin !== "function") {
     throw new Error("requireAdmin middleware is required for in-person routes");
+  }
+  if (typeof requireAuthenticated !== "function") {
+    throw new Error("requireAuthenticated middleware is required for in-person routes");
   }
   if (typeof requireInPersonTournamentAdmin !== "function") {
     throw new Error(
@@ -59,6 +63,15 @@ export function registerInPersonRoutes(app, {
         tournament_id: req.inPersonTournamentId,
       });
     }
+  );
+
+  app.get(
+    "/in-person-tournaments/accessible",
+    requireAuthenticated,
+    asyncHandler(async (req, res) => {
+      const tournaments = await inPersonService.listAccessibleTournaments(req.user);
+      res.json({ ok: true, tournaments });
+    }, logger)
   );
 
   app.get(
@@ -210,6 +223,90 @@ export function registerInPersonRoutes(app, {
     }, logger)
   );
 
-  logger?.info?.("[in-person] Admin CRUD routes registered");
+  app.get(
+    "/in-person-tournaments/:tournamentId/participant-cities",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const cities = await inPersonService.listParticipantCities(req.inPersonTournamentId);
+      res.json({ ok: true, cities });
+    }, logger)
+  );
+  app.get(
+    "/in-person-tournaments/:tournamentId/participants",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.getParticipantsOverview(req.inPersonTournamentId);
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/participants",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const participant = await inPersonService.createParticipant(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.status(201).json({ ok: true, participant });
+    }, logger)
+  );
+  app.patch(
+    "/in-person-tournaments/:tournamentId/participants/:participantId",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const participant = await inPersonService.updateParticipant(
+        req.inPersonTournamentId,
+        req.params.participantId,
+        req.body || {}
+      );
+      res.json({ ok: true, participant });
+    }, logger)
+  );
+  app.delete(
+    "/in-person-tournaments/:tournamentId/participants/:participantId",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      await inPersonService.deleteParticipant(
+        req.inPersonTournamentId,
+        req.params.participantId
+      );
+      res.json({ ok: true });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/start-check-in",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const tournament = await inPersonService.startCheckIn(req.inPersonTournamentId);
+      res.json({ ok: true, tournament });
+    }, logger)
+  );
+  app.patch(
+    "/in-person-tournaments/:tournamentId/participants/:participantId/check-in",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const participant = await inPersonService.setParticipantCheckIn(
+        req.inPersonTournamentId,
+        req.params.participantId,
+        req.body || {}
+      );
+      res.json({ ok: true, participant });
+    }, logger)
+  );
+  app.get(
+    "/in-person-tournaments/:tournamentId/check-in-readiness",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.getParticipantsOverview(req.inPersonTournamentId);
+      res.json({
+        ok: true,
+        tournament: overview.tournament,
+        counters: overview.counters,
+        readiness: overview.readiness,
+      });
+    }, logger)
+  );
+
+  logger?.info?.("[in-person] Admin and participant routes registered");
   return { registered: true };
 }

@@ -45,6 +45,7 @@ async function startApi(t) {
   registerInPersonRoutes(app, {
     db,
     requireAdmin,
+    requireAuthenticated: requireAdmin,
     requireInPersonTournamentAdmin: requireAdmin,
     logger: silentLogger,
   });

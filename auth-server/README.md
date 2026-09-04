@@ -60,6 +60,15 @@ npm start
 - `/in-person-tournaments/:id/publish` і `/cancel` — явні lifecycle-команди;
 - `/in-person-tournaments/:id/admins` — керування організаторами турніру.
 
+Призначеному організатору або глобальному адміністратору доступні:
+
+- `/in-person-tournaments/accessible` — доступні для проведення турніри;
+- `/in-person-tournaments/:id/participants` — склад, counters і readiness;
+- `/in-person-tournaments/:id/participant-cities` — міста допустимої асоціації локального турніру;
+- `/in-person-tournaments/:id/start-check-in` — початок check-in;
+- `/in-person-tournaments/:id/participants/:participantId/check-in` — підтвердження участі та номер жеребкування;
+- `/in-person-tournaments/:id/check-in-readiness` — готовність до першого Swiss-раунду.
+
 ## 5) Реверс-проксі (nginx приклад)
 
 Ідея: фронтенд і auth-server мають бути на одному домені (`carcassonne.gg`), тоді cookie працюють стабільніше.

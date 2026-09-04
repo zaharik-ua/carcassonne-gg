@@ -158,6 +158,7 @@
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const IN_PERSON_TOURNAMENTS_URL = `${AUTH_BASE}/in-person-tournaments/accessible`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
   const STATIC_SECTION_ITEMS = [
     {
@@ -179,6 +180,13 @@
       view: "my-tournaments",
       label: "My Tournaments",
       subtitle: "View your tournaments",
+      icon: "https://carcassonne.gg/gallery/tournament.svg",
+    },
+    {
+      type: "view",
+      view: "in-person",
+      label: "In-Person",
+      subtitle: "Manage in-person tournaments",
       icon: "https://carcassonne.gg/gallery/tournament.svg",
     },
     {
@@ -258,6 +266,7 @@
   function canSeeTournament(tournament, authState) {
     if (isTournamentHiddenInPlayerHub(tournament)) return false;
     if (!authState?.isAuthenticatedUser) return false;
+    if (!authState.hasLinkedBgaId) return false;
     const accessType = getTournamentSubtype(tournament);
     if (authState.isAdminUser) return true;
     if (accessType === "Friendly") return !!authState.isCaptainUser;
@@ -420,6 +429,7 @@
 
   async function init() {
     let tournaments = [];
+    let inPersonTournaments = [];
     let isAuthenticatedUser = false;
     let isCaptainUser = false;
     let isAdminUser = false;
@@ -429,9 +439,10 @@
     let isStreamerUser = false;
 
     try {
-      const [meRes, tournamentsRes, streamersRes] = await Promise.all([
+      const [meRes, tournamentsRes, inPersonTournamentsRes, streamersRes] = await Promise.all([
         fetch(ME_URL, { method: "GET", credentials: "include" }),
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
+        fetch(IN_PERSON_TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
       ]);
 
@@ -455,6 +466,13 @@
         tournaments = Array.isArray(tournamentsData?.tournaments) ? tournamentsData.tournaments : [];
       }
 
+      if (inPersonTournamentsRes.ok) {
+        const inPersonData = await inPersonTournamentsRes.json().catch(() => ({}));
+        inPersonTournaments = Array.isArray(inPersonData?.tournaments)
+          ? inPersonData.tournaments
+          : [];
+      }
+
       if (streamersRes.ok) {
         const streamersData = await streamersRes.json().catch(() => ({}));
         const streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
@@ -467,7 +485,12 @@
       tournaments = [];
     }
 
-    if (!isAuthenticatedUser || !hasLinkedBgaId) {
+    if (!isAuthenticatedUser) {
+      renderNoProfileInfoCard();
+      return;
+    }
+
+    if (!hasLinkedBgaId && !isAdminUser && !inPersonTournaments.length) {
       renderNoProfileInfoCard();
       return;
     }
@@ -476,6 +499,7 @@
       .filter((tournament) => canSeeTournament(tournament, {
         currentUserAuthId,
         isAuthenticatedUser,
+        hasLinkedBgaId,
         isCaptainUser,
         isAdminUser,
       }))
@@ -489,11 +513,18 @@
       .filter((item) => item.id && item.label)
       .concat(
         STATIC_SECTION_ITEMS.filter((item) => {
+          if (item.view === "in-person") {
+            return isAdminUser || inPersonTournaments.length > 0;
+          }
+          if (item.view === "my-tournaments" || item.view === "nationals") {
+            return isAdminUser;
+          }
+          if (!hasLinkedBgaId) return false;
           if (isAdminUser) return true;
           if (item.view === "players" || item.view === "friendly-find") return isCaptainUser;
           if (item.view === "streams") return isStreamerUser;
-          if (item.view === "news" || item.view === "my-tournaments") return isAuthenticatedUser;
-          if (item.view === "nationals" || item.view === "challenges") {
+          if (item.view === "news") return isAuthenticatedUser;
+          if (item.view === "challenges") {
             return isAuthenticatedUser && hasLinkedBgaId;
           }
           return false;

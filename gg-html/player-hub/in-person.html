@@ -1,0 +1,945 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --ip-bg: #f5f7fb;
+    --ip-card: #fff;
+    --ip-text: #1f2937;
+    --ip-muted: #667085;
+    --ip-line: #d8dee8;
+    --ip-primary: #1a73b7;
+    --ip-primary-soft: #e7f1f9;
+    --ip-danger: #b42318;
+    --ip-success: #19733d;
+    --ip-warning-bg: #fff8e8;
+  }
+
+  body {
+    margin: 0;
+    background: var(--ip-bg);
+    color: var(--ip-text);
+    font-family: "Montserrat", sans-serif;
+  }
+
+  .ip-wrap {
+    display: grid;
+    gap: 12px;
+    margin: 0 8px 16px;
+  }
+
+  .ip-card {
+    padding: 12px;
+    border: 1px solid var(--ip-line);
+    border-radius: 7px;
+    background: var(--ip-card);
+    box-shadow: 0 1px 2px rgba(18, 31, 53, 0.05);
+  }
+
+  .ip-head,
+  .ip-toolbar,
+  .ip-row,
+  .ip-actions,
+  .ip-check-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ip-head,
+  .ip-toolbar,
+  .ip-row {
+    justify-content: space-between;
+  }
+
+  .ip-title {
+    margin: 0;
+    font-size: 21px;
+    line-height: 1.25;
+  }
+
+  .ip-subtitle,
+  .ip-meta,
+  .ip-empty,
+  .ip-hint {
+    color: var(--ip-muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .ip-status {
+    min-height: 18px;
+    font-size: 13px;
+  }
+
+  .ip-status.error {
+    color: var(--ip-danger);
+  }
+
+  .ip-status.success {
+    color: var(--ip-success);
+  }
+
+  .ip-hidden {
+    display: none !important;
+  }
+
+  .ip-select,
+  .ip-input {
+    width: 100%;
+    min-height: 38px;
+    box-sizing: border-box;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 7px 9px;
+    background: #fff;
+    color: var(--ip-text);
+    font: inherit;
+    font-size: 14px;
+  }
+
+  .ip-tournament-select {
+    flex: 1 1 320px;
+  }
+
+  .ip-btn {
+    min-height: 38px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 7px 12px;
+    background: #eef2f6;
+    color: #2f3947;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .ip-btn.primary {
+    border-color: var(--ip-primary);
+    background: var(--ip-primary);
+    color: #fff;
+  }
+
+  .ip-btn.danger {
+    color: var(--ip-danger);
+  }
+
+  .ip-btn:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  .ip-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    border-radius: 999px;
+    padding: 2px 9px;
+    background: var(--ip-primary-soft);
+    color: #155986;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .ip-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 4px;
+    border: 1px solid var(--ip-line);
+    border-radius: 6px;
+    background: #fff;
+  }
+
+  .ip-tab {
+    flex: 1 1 0;
+    min-height: 38px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #445063;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .ip-tab.active {
+    background: var(--ip-primary-soft);
+    color: #155986;
+  }
+
+  .ip-counters {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .ip-counter {
+    padding: 10px;
+    border: 1px solid var(--ip-line);
+    border-radius: 5px;
+    background: #fff;
+  }
+
+  .ip-counter-value {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .ip-counter-label {
+    margin-top: 2px;
+    color: var(--ip-muted);
+    font-size: 11px;
+  }
+
+  .ip-list {
+    margin-top: 10px;
+    overflow: hidden;
+    border: 1px solid var(--ip-line);
+    border-radius: 6px;
+    background: #fff;
+  }
+
+  .ip-row {
+    min-height: 54px;
+    padding: 7px 9px;
+    border-top: 1px solid #e4e8ef;
+  }
+
+  .ip-row:first-child {
+    border-top: 0;
+  }
+
+  .ip-person {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .ip-person-name {
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ip-person-meta {
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+    color: var(--ip-muted);
+    font-size: 11px;
+  }
+
+  .ip-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 12px;
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid var(--ip-line);
+    border-radius: 6px;
+    background: #fff;
+  }
+
+  .ip-field {
+    display: grid;
+    gap: 4px;
+  }
+
+  .ip-field label {
+    color: #344054;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .ip-form-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .ip-readiness {
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid #f0c36c;
+    border-radius: 5px;
+    background: var(--ip-warning-bg);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .ip-readiness.ready {
+    border-color: #9bc9aa;
+    background: #effaf2;
+    color: var(--ip-success);
+  }
+
+  .ip-readiness ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+  }
+
+  .ip-check-control {
+    flex: 0 0 auto;
+  }
+
+  .ip-check-control input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    margin: 0;
+  }
+
+  .ip-draw-number {
+    width: 82px;
+  }
+
+  @media (max-width: 720px) {
+    .ip-head,
+    .ip-toolbar,
+    .ip-row {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .ip-actions,
+    .ip-check-control {
+      width: 100%;
+    }
+
+    .ip-actions .ip-btn,
+    .ip-check-control .ip-btn {
+      flex: 1 1 auto;
+      min-height: 44px;
+    }
+
+    .ip-counters {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ip-form {
+      grid-template-columns: 1fr;
+    }
+
+    .ip-draw-number {
+      flex: 1 1 auto;
+      width: auto;
+      min-height: 44px;
+    }
+  }
+</style>
+
+<div class="ip-wrap">
+  <div class="ip-head">
+    <div>
+      <h1 class="ip-title">In-Person Tournaments</h1>
+      <div class="ip-subtitle">Register players, complete check-in and assign draw numbers.</div>
+    </div>
+    <button id="ipRefreshBtn" class="ip-btn" type="button">Refresh</button>
+  </div>
+
+  <div id="ipStatus" class="ip-status"></div>
+
+  <div id="ipTournamentCard" class="ip-card">
+    <div class="ip-toolbar">
+      <select id="ipTournamentSelect" class="ip-select ip-tournament-select" aria-label="In-Person tournament"></select>
+    </div>
+    <div id="ipTournamentMeta" class="ip-meta"></div>
+  </div>
+
+  <div id="ipWorkspace" class="ip-hidden">
+    <div class="ip-counters" id="ipCounters"></div>
+
+    <div class="ip-tabs" role="tablist">
+      <button class="ip-tab active" type="button" data-ip-tab="players">Players</button>
+      <button class="ip-tab" type="button" data-ip-tab="check-in">Check-in</button>
+    </div>
+
+    <section id="ipPlayersPanel" class="ip-card">
+      <div class="ip-toolbar">
+        <strong>Players</strong>
+        <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
+      </div>
+      <div id="ipPlayerFormMount"></div>
+      <div id="ipPlayersList" class="ip-list"></div>
+    </section>
+
+    <section id="ipCheckInPanel" class="ip-card ip-hidden">
+      <div class="ip-toolbar">
+        <div>
+          <strong>Check-in and draw numbers</strong>
+          <div class="ip-hint">Draw numbers must be unique positive integers. Gaps and a missing #1 are allowed.</div>
+        </div>
+        <button id="ipStartCheckInBtn" class="ip-btn primary ip-hidden" type="button">Start check-in</button>
+      </div>
+      <div id="ipReadiness"></div>
+      <div id="ipCheckInList" class="ip-list"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const ACCESSIBLE_URL = `${AUTH_BASE}/in-person-tournaments/accessible`;
+  const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
+
+  const state = {
+    tournaments: [],
+    associations: [],
+    cities: [],
+    selectedTournamentId: "",
+    overview: null,
+    activeTab: "players",
+  };
+
+  const tournamentSelect = document.getElementById("ipTournamentSelect");
+  const tournamentMeta = document.getElementById("ipTournamentMeta");
+  const workspace = document.getElementById("ipWorkspace");
+  const statusEl = document.getElementById("ipStatus");
+  const countersEl = document.getElementById("ipCounters");
+  const playersPanel = document.getElementById("ipPlayersPanel");
+  const checkInPanel = document.getElementById("ipCheckInPanel");
+  const playersList = document.getElementById("ipPlayersList");
+  const checkInList = document.getElementById("ipCheckInList");
+  const playerFormMount = document.getElementById("ipPlayerFormMount");
+  const readinessEl = document.getElementById("ipReadiness");
+  const addPlayerBtn = document.getElementById("ipAddPlayerBtn");
+  const startCheckInBtn = document.getElementById("ipStartCheckInBtn");
+  const refreshBtn = document.getElementById("ipRefreshBtn");
+
+  class ApiError extends Error {
+    constructor(response, payload) {
+      super(payload?.message || `Request failed (${response.status})`);
+      this.status = response.status;
+      this.code = payload?.code || "";
+      this.details = payload?.details || null;
+    }
+  }
+
+  async function apiJson(url, options = {}) {
+    const response = await fetch(url, {
+      credentials: "include",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok === false) throw new ApiError(response, payload);
+    return payload;
+  }
+
+  function setStatus(message, type = "") {
+    statusEl.textContent = message || "";
+    statusEl.className = `ip-status${type ? ` ${type}` : ""}`;
+  }
+
+  function selectedTournament() {
+    return state.tournaments.find((item) => item.id === state.selectedTournamentId) || null;
+  }
+
+  function tournamentUrl(path = "") {
+    return `${AUTH_BASE}/in-person-tournaments/${encodeURIComponent(state.selectedTournamentId)}${path}`;
+  }
+
+  function formatDates(tournament) {
+    if (!tournament?.start_date) return "";
+    return tournament.start_date === tournament.end_date
+      ? tournament.start_date
+      : `${tournament.start_date} – ${tournament.end_date}`;
+  }
+
+  function createButton(label, className, onClick) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className || "ip-btn";
+    button.textContent = label;
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  function createField(labelText, type = "text") {
+    const field = document.createElement("div");
+    field.className = "ip-field";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const input = document.createElement("input");
+    input.type = type;
+    input.className = "ip-input";
+    field.appendChild(label);
+    field.appendChild(input);
+    return { field, input };
+  }
+
+  function createSelectField(labelText, options, value) {
+    const field = document.createElement("div");
+    field.className = "ip-field";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const select = document.createElement("select");
+    select.className = "ip-select";
+    (options || []).forEach((entry) => {
+      const option = document.createElement("option");
+      option.value = String(entry.value ?? "");
+      option.textContent = String(entry.label ?? entry.value ?? "");
+      if (option.value === String(value ?? "")) option.selected = true;
+      select.appendChild(option);
+    });
+    field.appendChild(label);
+    field.appendChild(select);
+    return { field, select };
+  }
+
+  function renderTournamentSelector() {
+    tournamentSelect.innerHTML = "";
+    if (!state.tournaments.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No In-Person tournaments available";
+      tournamentSelect.appendChild(option);
+      tournamentSelect.disabled = true;
+      tournamentMeta.textContent = "You are not assigned as an administrator of an active In-Person tournament.";
+      workspace.classList.add("ip-hidden");
+      return;
+    }
+    tournamentSelect.disabled = false;
+    state.tournaments.forEach((tournament) => {
+      const option = document.createElement("option");
+      option.value = tournament.id;
+      option.textContent = `${tournament.name_en} • ${formatDates(tournament)}`;
+      if (tournament.id === state.selectedTournamentId) option.selected = true;
+      tournamentSelect.appendChild(option);
+    });
+  }
+
+  function renderTournamentMeta() {
+    const tournament = state.overview?.tournament || selectedTournament();
+    if (!tournament) {
+      tournamentMeta.textContent = "";
+      return;
+    }
+    const location = tournament.scope === "international"
+      ? "International"
+      : [
+        tournament.local_subtype === "qualifier" ? "Local qualifier" : "Local final",
+        tournament.association_name || tournament.association_id,
+        tournament.qualifier_city_name_en,
+      ].filter(Boolean).join(" • ");
+    tournamentMeta.textContent = [
+      String(tournament.status || "").toUpperCase(),
+      location,
+      formatDates(tournament),
+      `${tournament.swiss_rounds_count} Swiss rounds`,
+    ].filter(Boolean).join(" • ");
+  }
+
+  function renderCounters() {
+    const counters = state.overview?.counters || {};
+    const items = [
+      [counters.registered || 0, "Roster"],
+      [counters.checked_in || 0, "Checked-in"],
+      [counters.without_draw_number || 0, "Without number"],
+      [counters.withdrawn_disqualified || 0, "Withdrawn / DQ"],
+    ];
+    countersEl.innerHTML = "";
+    items.forEach(([value, label]) => {
+      const card = document.createElement("div");
+      card.className = "ip-counter";
+      const number = document.createElement("div");
+      number.className = "ip-counter-value";
+      number.textContent = String(value);
+      const text = document.createElement("div");
+      text.className = "ip-counter-label";
+      text.textContent = label;
+      card.appendChild(number);
+      card.appendChild(text);
+      countersEl.appendChild(card);
+    });
+  }
+
+  function participantLocation(participant) {
+    return participant.city_name_en
+      || participant.city_name_local
+      || participant.association_name
+      || participant.association_id
+      || "—";
+  }
+
+  function participantMeta(participant) {
+    return [
+      participant.name_local,
+      participantLocation(participant),
+      participant.bga_nickname ? `BGA: ${participant.bga_nickname}` : "",
+      participant.status,
+      participant.draw_number == null ? "" : `#${participant.draw_number}`,
+    ].filter(Boolean).join(" • ");
+  }
+
+  function renderPlayers() {
+    playerFormMount.innerHTML = "";
+    playersList.innerHTML = "";
+    const participants = state.overview?.participants || [];
+    const tournament = state.overview?.tournament;
+    addPlayerBtn.disabled = !!tournament?.has_started_swiss
+      || ["cancelled", "completed"].includes(String(tournament?.status || ""));
+    if (!participants.length) {
+      const empty = document.createElement("div");
+      empty.className = "ip-empty";
+      empty.textContent = "No players registered yet.";
+      playersList.appendChild(empty);
+      return;
+    }
+    participants.forEach((participant) => {
+      const row = document.createElement("div");
+      row.className = "ip-row";
+      const main = document.createElement("div");
+      main.className = "ip-person";
+      const name = document.createElement("div");
+      name.className = "ip-person-name";
+      name.textContent = participant.name_en;
+      const meta = document.createElement("div");
+      meta.className = "ip-person-meta";
+      meta.textContent = participantMeta(participant);
+      main.appendChild(name);
+      main.appendChild(meta);
+      const actions = document.createElement("div");
+      actions.className = "ip-actions";
+      actions.appendChild(createButton("Edit", "ip-btn", () => openPlayerForm(participant)));
+      const deleteButton = createButton("Delete", "ip-btn danger", () => deletePlayer(participant));
+      deleteButton.disabled = participant.has_matches || !!tournament?.has_started_swiss;
+      actions.appendChild(deleteButton);
+      row.appendChild(main);
+      row.appendChild(actions);
+      playersList.appendChild(row);
+    });
+  }
+
+  function openPlayerForm(participant = null) {
+    const tournament = state.overview?.tournament;
+    if (!tournament) return;
+    playerFormMount.innerHTML = "";
+    const form = document.createElement("form");
+    form.className = "ip-form";
+    const nameEn = createField("Name (English) *");
+    nameEn.input.value = participant?.name_en || "";
+    const nameLocal = createField("Name (local)");
+    nameLocal.input.value = participant?.name_local || "";
+    const bgaNickname = createField("BGA nickname");
+    bgaNickname.input.value = participant?.bga_nickname || "";
+    const location = tournament.scope === "international"
+      ? createSelectField(
+        "Country / association *",
+        [{ value: "", label: "Select country..." }].concat(state.associations.map((association) => ({
+          value: association.id,
+          label: [association.flag, association.name].filter(Boolean).join(" • "),
+        }))),
+        participant?.association_id || ""
+      )
+      : createSelectField(
+        "City *",
+        [{ value: "", label: "Select city..." }].concat(state.cities.map((city) => ({
+          value: city.id,
+          label: [city.name_en, city.name_local].filter(Boolean).join(" • "),
+        }))),
+        participant?.city_id || ""
+      );
+    form.appendChild(nameEn.field);
+    form.appendChild(nameLocal.field);
+    form.appendChild(bgaNickname.field);
+    form.appendChild(location.field);
+    const actions = document.createElement("div");
+    actions.className = "ip-form-actions";
+    const save = document.createElement("button");
+    save.type = "submit";
+    save.className = "ip-btn primary";
+    save.textContent = participant ? "Save" : "Add player";
+    actions.appendChild(save);
+    actions.appendChild(createButton("Cancel", "ip-btn", () => {
+      playerFormMount.innerHTML = "";
+      setStatus("");
+    }));
+    form.appendChild(actions);
+
+    async function saveParticipant(confirmDuplicate) {
+      const payload = {
+        name_en: String(nameEn.input.value || "").trim(),
+        name_local: String(nameLocal.input.value || "").trim() || null,
+        bga_nickname: String(bgaNickname.input.value || "").trim() || null,
+        association_id: tournament.scope === "international" ? location.select.value : null,
+        city_id: tournament.scope === "local" ? location.select.value : null,
+        confirm_duplicate: confirmDuplicate,
+      };
+      save.disabled = true;
+      try {
+        await apiJson(
+          participant
+            ? tournamentUrl(`/participants/${encodeURIComponent(participant.id)}`)
+            : tournamentUrl("/participants"),
+          { method: participant ? "PATCH" : "POST", body: JSON.stringify(payload) }
+        );
+        playerFormMount.innerHTML = "";
+        await loadOverview();
+        setStatus(participant ? "Player updated." : "Player added.", "success");
+      } catch (error) {
+        if (error.code === "DUPLICATE_PARTICIPANT" && !confirmDuplicate) {
+          const candidates = (error.details?.candidates || []).map((candidate) => (
+            `${candidate.name_en} • ${participantLocation(candidate)}${candidate.bga_nickname ? ` • BGA: ${candidate.bga_nickname}` : ""} • ID: ${candidate.id}`
+          )).join("\n");
+          if (window.confirm(`Possible duplicate:\n${candidates}\n\nAdd this person as a genuine namesake?`)) {
+            save.disabled = false;
+            await saveParticipant(true);
+            return;
+          }
+        } else {
+          setStatus(error.message || "Failed to save player.", "error");
+        }
+        save.disabled = false;
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!nameEn.input.value.trim() || !location.select.value) {
+        setStatus("English name and location are required.", "error");
+        return;
+      }
+      await saveParticipant(false);
+    });
+    playerFormMount.appendChild(form);
+    nameEn.input.focus();
+  }
+
+  async function deletePlayer(participant) {
+    if (!window.confirm(`Delete ${participant.name_en} from this tournament?`)) return;
+    try {
+      await apiJson(tournamentUrl(`/participants/${encodeURIComponent(participant.id)}`), {
+        method: "DELETE",
+      });
+      await loadOverview();
+      setStatus("Player deleted.", "success");
+    } catch (error) {
+      setStatus(error.message || "Failed to delete player.", "error");
+    }
+  }
+
+  function renderReadiness() {
+    readinessEl.innerHTML = "";
+    const readiness = state.overview?.readiness;
+    if (!readiness) return;
+    const box = document.createElement("div");
+    box.className = `ip-readiness${readiness.ready ? " ready" : ""}`;
+    const title = document.createElement("strong");
+    title.textContent = readiness.ready
+      ? "Ready to form the first Swiss round."
+      : "Not ready for the first Swiss round.";
+    box.appendChild(title);
+    if (readiness.issues?.length) {
+      const list = document.createElement("ul");
+      readiness.issues.forEach((issue) => {
+        const item = document.createElement("li");
+        const missingPlayers = issue.code === "MISSING_DRAW_NUMBERS"
+          ? (issue.participants || []).map((participant) => participant.name_en).filter(Boolean)
+          : [];
+        item.textContent = missingPlayers.length
+          ? `${issue.message} ${missingPlayers.join(", ")}.`
+          : issue.message;
+        list.appendChild(item);
+      });
+      box.appendChild(list);
+    }
+    readinessEl.appendChild(box);
+  }
+
+  function renderCheckIn() {
+    checkInList.innerHTML = "";
+    const tournament = state.overview?.tournament;
+    const participants = (state.overview?.participants || []).filter((participant) => (
+      participant.status === "registered" || participant.status === "checked_in"
+    ));
+    startCheckInBtn.classList.toggle("ip-hidden", tournament?.status !== "registration");
+    startCheckInBtn.disabled = (state.overview?.counters?.registered || 0) < 2;
+    renderReadiness();
+    if (!participants.length) {
+      const empty = document.createElement("div");
+      empty.className = "ip-empty";
+      empty.textContent = "Register players before check-in.";
+      checkInList.appendChild(empty);
+      return;
+    }
+    const editable = tournament?.status === "check_in" && !tournament?.has_started_swiss;
+    participants.forEach((participant) => {
+      const row = document.createElement("div");
+      row.className = "ip-row";
+      const main = document.createElement("div");
+      main.className = "ip-person";
+      const name = document.createElement("div");
+      name.className = "ip-person-name";
+      name.textContent = participant.name_en;
+      const meta = document.createElement("div");
+      meta.className = "ip-person-meta";
+      meta.textContent = participantMeta(participant);
+      main.appendChild(name);
+      main.appendChild(meta);
+
+      const controls = document.createElement("div");
+      controls.className = "ip-check-control";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = participant.status === "checked_in";
+      checkbox.disabled = !editable;
+      checkbox.setAttribute("aria-label", `Check in ${participant.name_en}`);
+      const number = document.createElement("input");
+      number.type = "number";
+      number.min = "1";
+      number.step = "1";
+      number.inputMode = "numeric";
+      number.placeholder = "Draw #";
+      number.className = "ip-input ip-draw-number";
+      number.value = participant.draw_number == null ? "" : String(participant.draw_number);
+      number.disabled = !editable || !checkbox.checked;
+      checkbox.addEventListener("change", () => {
+        number.disabled = !checkbox.checked;
+        if (!checkbox.checked) number.value = "";
+      });
+      const save = createButton("Save", "ip-btn", async () => {
+        save.disabled = true;
+        try {
+          await apiJson(tournamentUrl(`/participants/${encodeURIComponent(participant.id)}/check-in`), {
+            method: "PATCH",
+            body: JSON.stringify({
+              checked_in: checkbox.checked,
+              draw_number: checkbox.checked && number.value !== "" ? Number(number.value) : null,
+            }),
+          });
+          await loadOverview();
+          setStatus(`Check-in saved for ${participant.name_en}.`, "success");
+        } catch (error) {
+          setStatus(error.message || "Failed to save check-in.", "error");
+          save.disabled = false;
+        }
+      });
+      save.disabled = !editable;
+      controls.appendChild(checkbox);
+      controls.appendChild(number);
+      controls.appendChild(save);
+      row.appendChild(main);
+      row.appendChild(controls);
+      checkInList.appendChild(row);
+    });
+  }
+
+  function renderWorkspace() {
+    if (!state.overview) {
+      workspace.classList.add("ip-hidden");
+      return;
+    }
+    workspace.classList.remove("ip-hidden");
+    renderTournamentMeta();
+    renderCounters();
+    renderPlayers();
+    renderCheckIn();
+    document.querySelectorAll("[data-ip-tab]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.ipTab === state.activeTab);
+    });
+    playersPanel.classList.toggle("ip-hidden", state.activeTab !== "players");
+    checkInPanel.classList.toggle("ip-hidden", state.activeTab !== "check-in");
+  }
+
+  async function loadOverview() {
+    if (!state.selectedTournamentId) {
+      state.overview = null;
+      renderWorkspace();
+      return;
+    }
+    const selected = selectedTournament();
+    const requests = [apiJson(tournamentUrl("/participants"))];
+    if (selected?.scope === "local") requests.push(apiJson(tournamentUrl("/participant-cities")));
+    const [overview, citiesData] = await Promise.all(requests);
+    state.overview = overview;
+    state.cities = Array.isArray(citiesData?.cities) ? citiesData.cities : [];
+    renderWorkspace();
+  }
+
+  async function selectTournament(tournamentId) {
+    state.selectedTournamentId = String(tournamentId || "");
+    const url = new URL(window.location.href);
+    if (state.selectedTournamentId) url.searchParams.set("tournament", state.selectedTournamentId);
+    else url.searchParams.delete("tournament");
+    window.history.replaceState({}, "", url.toString());
+    renderTournamentSelector();
+    setStatus("");
+    try {
+      await loadOverview();
+    } catch (error) {
+      state.overview = null;
+      renderWorkspace();
+      setStatus(error.message || "Failed to load tournament.", "error");
+    }
+  }
+
+  async function loadAll() {
+    refreshBtn.disabled = true;
+    setStatus("Loading...");
+    try {
+      const [accessibleData, associationsData] = await Promise.all([
+        apiJson(ACCESSIBLE_URL),
+        apiJson(ASSOCIATIONS_URL),
+      ]);
+      state.tournaments = Array.isArray(accessibleData?.tournaments) ? accessibleData.tournaments : [];
+      state.associations = Array.isArray(associationsData?.associations) ? associationsData.associations : [];
+      const requestedId = new URL(window.location.href).searchParams.get("tournament") || "";
+      const preservedId = state.tournaments.some((item) => item.id === state.selectedTournamentId)
+        ? state.selectedTournamentId
+        : "";
+      state.selectedTournamentId = state.tournaments.some((item) => item.id === requestedId)
+        ? requestedId
+        : preservedId || state.tournaments[0]?.id || "";
+      renderTournamentSelector();
+      renderTournamentMeta();
+      if (state.selectedTournamentId) await selectTournament(state.selectedTournamentId);
+      else {
+        state.overview = null;
+        renderWorkspace();
+        setStatus("");
+      }
+    } catch (error) {
+      state.tournaments = [];
+      state.overview = null;
+      renderTournamentSelector();
+      setStatus(
+        error.status === 401 ? "Sign in to open In-Person tournaments." : error.message,
+        "error"
+      );
+    } finally {
+      refreshBtn.disabled = false;
+    }
+  }
+
+  tournamentSelect.addEventListener("change", () => selectTournament(tournamentSelect.value));
+  refreshBtn.addEventListener("click", loadAll);
+  addPlayerBtn.addEventListener("click", () => openPlayerForm());
+  startCheckInBtn.addEventListener("click", async () => {
+    startCheckInBtn.disabled = true;
+    try {
+      await apiJson(tournamentUrl("/start-check-in"), { method: "POST", body: "{}" });
+      await loadOverview();
+      setStatus("Check-in started.", "success");
+    } catch (error) {
+      setStatus(error.message || "Failed to start check-in.", "error");
+      startCheckInBtn.disabled = false;
+    }
+  });
+  document.querySelectorAll("[data-ip-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeTab = button.dataset.ipTab;
+      renderWorkspace();
+    });
+  });
+  window.addEventListener("gg-auth-state-change", loadAll);
+
+  loadAll();
+})();
+</script>

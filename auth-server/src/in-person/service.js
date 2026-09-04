@@ -6,7 +6,10 @@ import {
   InPersonError,
   normalizeAdminUserIds,
   normalizeCityInput,
+  normalizeDrawNumber,
   normalizeOptionalText,
+  normalizeParticipantInput,
+  normalizeRequiredBoolean,
   normalizeTournamentInput,
   normalizeText,
   notFoundError,
@@ -45,6 +48,9 @@ function mapDatabaseError(error) {
     || (message.includes("cities.association_id") && message.includes("cities.name_en"))
   ) {
     return conflictError("DUPLICATE_CITY", "An active city with this English name already exists in the association");
+  }
+  if (message.includes("in_person_participants.tournament_id, in_person_participants.draw_number")) {
+    return conflictError("DRAW_NUMBER_TAKEN", "This draw number is already assigned in the tournament");
   }
   return error;
 }
@@ -103,6 +109,42 @@ function serializeTournament(row, admins = []) {
   };
 }
 
+function serializeOrganizerTournament(row) {
+  const tournament = serializeTournament(row, []);
+  delete tournament.admins;
+  delete tournament.admin_user_ids;
+  return { ...tournament, access_role: "admin" };
+}
+
+function serializeParticipant(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    tournament_id: row.tournament_id,
+    name_en: row.name_en,
+    name_local: row.name_local || null,
+    bga_nickname: row.bga_nickname || null,
+    association_id: row.association_id || null,
+    association_name: row.association_name || null,
+    association_flag: row.association_flag || null,
+    city_id: row.city_id || null,
+    city_name_en: row.city_name_en || null,
+    city_name_local: row.city_name_local || null,
+    city_association_id: row.city_association_id || null,
+    status: row.status,
+    draw_number: row.draw_number == null ? null : Number(row.draw_number),
+    checked_in_at: row.checked_in_at || null,
+    withdrawn_at: row.withdrawn_at || null,
+    disqualified_at: row.disqualified_at || null,
+    status_reason: row.status_reason || null,
+    is_late_entry: Number(row.is_late_entry) === 1,
+    late_entry_mode: row.late_entry_mode || null,
+    has_matches: Number(row.has_matches) === 1,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
 const TOURNAMENT_SELECT = `
   SELECT
     t.*,
@@ -131,6 +173,25 @@ const CITY_SELECT = `
   FROM cities c
   JOIN associations a
     ON upper(trim(a.code)) = upper(trim(c.association_id))
+`;
+
+const PARTICIPANT_SELECT = `
+  SELECT
+    p.*,
+    a.name AS association_name,
+    a.flag AS association_flag,
+    c.name_en AS city_name_en,
+    c.name_local AS city_name_local,
+    c.association_id AS city_association_id,
+    CASE WHEN EXISTS (
+      SELECT 1
+      FROM in_person_matches m
+      WHERE m.participant_a_id = p.id OR m.participant_b_id = p.id
+    ) THEN 1 ELSE 0 END AS has_matches
+  FROM in_person_participants p
+  LEFT JOIN associations a
+    ON upper(trim(a.code)) = upper(trim(p.association_id))
+  LEFT JOIN cities c ON c.id = p.city_id
 `;
 
 export function createInPersonService({ db, idFactory = randomUUID } = {}) {
@@ -343,6 +404,451 @@ export function createInPersonService({ db, idFactory = randomUUID } = {}) {
     return rows.map((row) => serializeTournament(row, adminsByTournament.get(row.id) || []));
   }
 
+  async function listAccessibleTournaments(user) {
+    const userId = Number(user?.id);
+    if (!Number.isInteger(userId) || userId <= 0) return [];
+    const params = [];
+    let accessFilter = "t.status <> 'cancelled'";
+    if (Number(user?.admin) !== 1 && user?.isAdmin !== true) {
+      accessFilter += `
+        AND EXISTS (
+          SELECT 1
+          FROM tournament_access_users tau
+          WHERE tau.tournament_entity_type = 'in_person_tournament'
+            AND tau.tournament_id = t.id
+            AND tau.user_id = ?
+            AND lower(trim(tau.role)) = 'admin'
+        )
+      `;
+      params.push(userId);
+    }
+    const rows = await dbAll(
+      db,
+      `${TOURNAMENT_SELECT} WHERE ${accessFilter}
+       ORDER BY t.start_date DESC, lower(t.name_en), t.id`,
+      params
+    );
+    return rows.map(serializeOrganizerTournament);
+  }
+
+  async function loadParticipantRows(tournamentId) {
+    return dbAll(
+      db,
+      `${PARTICIPANT_SELECT}
+       WHERE p.tournament_id = ?
+       ORDER BY
+         CASE p.status
+           WHEN 'checked_in' THEN 0
+           WHEN 'registered' THEN 1
+           WHEN 'withdrawn' THEN 2
+           ELSE 3
+         END,
+         CASE WHEN p.draw_number IS NULL THEN 1 ELSE 0 END,
+         p.draw_number,
+         lower(p.name_en),
+         p.id`,
+      [tournamentId]
+    );
+  }
+
+  async function getParticipantRow(tournamentId, participantId) {
+    return dbGet(
+      db,
+      `${PARTICIPANT_SELECT} WHERE p.tournament_id = ? AND p.id = ? LIMIT 1`,
+      [tournamentId, normalizeText(participantId)]
+    );
+  }
+
+  async function requireParticipantRow(tournamentId, participantId) {
+    const row = await getParticipantRow(tournamentId, participantId);
+    if (!row) throw notFoundError("PARTICIPANT_NOT_FOUND", "Participant not found");
+    return row;
+  }
+
+  function participantCounters(participants) {
+    const activeRoster = participants.filter((participant) => (
+      participant.status === "registered" || participant.status === "checked_in"
+    ));
+    const checkedIn = participants.filter((participant) => participant.status === "checked_in");
+    const withdrawnDisqualified = participants.filter((participant) => (
+      participant.status === "withdrawn" || participant.status === "disqualified"
+    ));
+    return {
+      total: participants.length,
+      registered: activeRoster.length,
+      awaiting_check_in: participants.filter((participant) => participant.status === "registered").length,
+      checked_in: checkedIn.length,
+      without_draw_number: checkedIn.filter((participant) => participant.draw_number == null).length,
+      withdrawn_disqualified: withdrawnDisqualified.length,
+    };
+  }
+
+  function firstRoundReadiness(tournament, participants) {
+    const counters = participantCounters(participants);
+    const missingDrawNumbers = participants
+      .filter((participant) => participant.status === "checked_in" && participant.draw_number == null)
+      .map((participant) => ({ id: participant.id, name_en: participant.name_en }));
+    const minimumCheckedIn = Number(getPlayoffPreview(tournament.playoff_first_round)?.participant_count || 0);
+    const issues = [];
+    if (tournament.status !== "check_in") {
+      issues.push({ code: "CHECK_IN_NOT_STARTED", message: "Start check-in before forming the first round." });
+    }
+    if (tournament.has_started_swiss) {
+      issues.push({ code: "FIRST_ROUND_ALREADY_CREATED", message: "The first Swiss round already exists." });
+    }
+    if (counters.checked_in < minimumCheckedIn) {
+      issues.push({
+        code: "NOT_ENOUGH_CHECKED_IN",
+        message: `At least ${minimumCheckedIn} checked-in participants are required by the playoff configuration.`,
+        required: minimumCheckedIn,
+        actual: counters.checked_in,
+      });
+    }
+    if (missingDrawNumbers.length) {
+      issues.push({
+        code: "MISSING_DRAW_NUMBERS",
+        message: `${missingDrawNumbers.length} checked-in participant(s) have no draw number.`,
+        participants: missingDrawNumbers,
+      });
+    }
+    return {
+      ready: issues.length === 0,
+      locked: !!tournament.has_started_swiss,
+      minimum_checked_in: minimumCheckedIn,
+      checked_in: counters.checked_in,
+      missing_draw_numbers: missingDrawNumbers,
+      issues,
+    };
+  }
+
+  async function getParticipantsOverview(tournamentId) {
+    const tournamentRow = await requireTournamentRow(tournamentId);
+    const participants = (await loadParticipantRows(tournamentRow.id)).map(serializeParticipant);
+    const tournament = serializeOrganizerTournament(tournamentRow);
+    return {
+      tournament,
+      participants,
+      counters: participantCounters(participants),
+      readiness: firstRoundReadiness(tournament, participants),
+    };
+  }
+
+  async function validateParticipantRelations(input, tournament, current = null) {
+    if (tournament.scope === "international") {
+      const association = await findAssociation(input.association_id);
+      return { ...input, association_id: association.code, city_id: null };
+    }
+    const city = await dbGet(db, `SELECT * FROM cities WHERE id = ? LIMIT 1`, [input.city_id]);
+    if (!city) {
+      throw validationError("UNKNOWN_PARTICIPANT_CITY", "city_id must reference an existing city", {
+        field: "city_id",
+      });
+    }
+    const sameCurrentCity = current && current.city_id === city.id;
+    if (city.archived_at && !sameCurrentCity) {
+      throw conflictError("CITY_ARCHIVED", "An archived city cannot be selected for a participant");
+    }
+    if (
+      normalizeText(city.association_id).toUpperCase()
+      !== normalizeText(tournament.association_id).toUpperCase()
+    ) {
+      throw validationError(
+        "PARTICIPANT_CITY_ASSOCIATION_MISMATCH",
+        "Participant city must belong to the local tournament association",
+        { field: "city_id" }
+      );
+    }
+    return { ...input, association_id: null, city_id: city.id };
+  }
+
+  function normalizeDuplicateValue(value) {
+    return normalizeText(value).toLocaleLowerCase("en").replace(/\s+/g, " ");
+  }
+
+  async function validateParticipantDuplicate(
+    tournamentId,
+    input,
+    { excludeParticipantId = null, confirmed = false } = {}
+  ) {
+    const rows = await loadParticipantRows(tournamentId);
+    const normalizedName = normalizeDuplicateValue(input.name_en);
+    const normalizedBga = normalizeDuplicateValue(input.bga_nickname);
+    const candidates = rows
+      .filter((row) => row.id !== excludeParticipantId)
+      .map((row) => {
+        const reasons = [];
+        if (normalizedName && normalizeDuplicateValue(row.name_en) === normalizedName) {
+          reasons.push("name_en");
+        }
+        if (normalizedBga && normalizeDuplicateValue(row.bga_nickname) === normalizedBga) {
+          reasons.push("bga_nickname");
+        }
+        return reasons.length ? { ...serializeParticipant(row), duplicate_fields: reasons } : null;
+      })
+      .filter(Boolean);
+    if (candidates.length && !confirmed) {
+      throw conflictError(
+        "DUPLICATE_PARTICIPANT",
+        "A possible duplicate participant already exists. Confirm only for a genuine namesake.",
+        { candidates, confirmation_field: "confirm_duplicate" }
+      );
+    }
+  }
+
+  async function touchTournament(tournamentId) {
+    await dbRun(
+      db,
+      `UPDATE in_person_tournaments
+       SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [tournamentId]
+    );
+  }
+
+  function assertParticipantMutationsAllowed(tournament) {
+    if (["cancelled", "completed"].includes(tournament.status)) {
+      throw conflictError("TOURNAMENT_READ_ONLY", "Cancelled or completed tournaments are read-only");
+    }
+  }
+
+  async function createParticipant(tournamentId, payload) {
+    return enqueueMutation(() => transaction(async () => {
+      const tournament = await requireTournamentRow(tournamentId);
+      assertParticipantMutationsAllowed(tournament);
+      if (Number(tournament.has_started_swiss) === 1) {
+        throw conflictError(
+          "LATE_ENTRY_REQUIRED",
+          "After the first Swiss round is created, use the dedicated late participant operation"
+        );
+      }
+      const input = await validateParticipantRelations(
+        normalizeParticipantInput(payload, null, tournament),
+        tournament
+      );
+      await validateParticipantDuplicate(tournament.id, input, {
+        confirmed: payload?.confirm_duplicate === true,
+      });
+      const participantId = `ipp_${idFactory()}`;
+      await dbRun(
+        db,
+        `
+          INSERT INTO in_person_participants (
+            id, tournament_id, name_en, name_local, bga_nickname,
+            association_id, city_id, status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'registered', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        [
+          participantId,
+          tournament.id,
+          input.name_en,
+          input.name_local,
+          input.bga_nickname,
+          input.association_id,
+          input.city_id,
+        ]
+      );
+      await touchTournament(tournament.id);
+      return serializeParticipant(await requireParticipantRow(tournament.id, participantId));
+    }));
+  }
+
+  async function updateParticipant(tournamentId, participantId, payload) {
+    return enqueueMutation(() => transaction(async () => {
+      const tournament = await requireTournamentRow(tournamentId);
+      assertParticipantMutationsAllowed(tournament);
+      const current = await requireParticipantRow(tournament.id, participantId);
+      if (payload?.id !== undefined && normalizeText(payload.id) !== current.id) {
+        throw validationError("PARTICIPANT_ID_IMMUTABLE", "Participant id cannot be changed");
+      }
+      const input = await validateParticipantRelations(
+        normalizeParticipantInput(payload, current, tournament),
+        tournament,
+        current
+      );
+      await validateParticipantDuplicate(tournament.id, input, {
+        excludeParticipantId: current.id,
+        confirmed: payload?.confirm_duplicate === true,
+      });
+      await dbRun(
+        db,
+        `
+          UPDATE in_person_participants
+          SET name_en = ?, name_local = ?, bga_nickname = ?, association_id = ?, city_id = ?,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND tournament_id = ?
+        `,
+        [
+          input.name_en,
+          input.name_local,
+          input.bga_nickname,
+          input.association_id,
+          input.city_id,
+          current.id,
+          tournament.id,
+        ]
+      );
+      await touchTournament(tournament.id);
+      return serializeParticipant(await requireParticipantRow(tournament.id, current.id));
+    }));
+  }
+
+  async function deleteParticipant(tournamentId, participantId) {
+    return enqueueMutation(() => transaction(async () => {
+      const tournament = await requireTournamentRow(tournamentId);
+      assertParticipantMutationsAllowed(tournament);
+      const current = await requireParticipantRow(tournament.id, participantId);
+      if (Number(tournament.has_started_swiss) === 1 || Number(current.has_matches) === 1) {
+        throw conflictError(
+          "PARTICIPANT_DELETE_LOCKED",
+          "A participant cannot be deleted after the first round or after appearing in a match"
+        );
+      }
+      await dbRun(
+        db,
+        `DELETE FROM in_person_participants WHERE id = ? AND tournament_id = ?`,
+        [current.id, tournament.id]
+      );
+      await touchTournament(tournament.id);
+      return { id: current.id };
+    }));
+  }
+
+  async function startCheckIn(tournamentId) {
+    return enqueueMutation(() => transaction(async () => {
+      const tournament = await requireTournamentRow(tournamentId);
+      assertParticipantMutationsAllowed(tournament);
+      if (tournament.status === "check_in") return serializeOrganizerTournament(tournament);
+      if (tournament.status !== "registration") {
+        throw conflictError(
+          "INVALID_TOURNAMENT_STATUS",
+          "Publish the tournament before starting check-in"
+        );
+      }
+      const roster = await dbGet(
+        db,
+        `
+          SELECT COUNT(*) AS count
+          FROM in_person_participants
+          WHERE tournament_id = ? AND status IN ('registered', 'checked_in')
+        `,
+        [tournament.id]
+      );
+      if (Number(roster?.count || 0) < 2) {
+        throw conflictError(
+          "NOT_ENOUGH_REGISTERED_PARTICIPANTS",
+          "At least two registered participants are required to start check-in"
+        );
+      }
+      await dbRun(
+        db,
+        `
+          UPDATE in_person_tournaments
+          SET status = 'check_in', revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [tournament.id]
+      );
+      return serializeOrganizerTournament(await requireTournamentRow(tournament.id));
+    }));
+  }
+
+  async function setParticipantCheckIn(tournamentId, participantId, payload) {
+    const checkedIn = normalizeRequiredBoolean(payload?.checked_in, "checked_in");
+    const requestedDrawNumber = normalizeDrawNumber(payload?.draw_number);
+    return enqueueMutation(() => transaction(async () => {
+      const tournament = await requireTournamentRow(tournamentId);
+      assertParticipantMutationsAllowed(tournament);
+      if (tournament.status !== "check_in") {
+        throw conflictError("CHECK_IN_NOT_STARTED", "Start tournament check-in before confirming participants");
+      }
+      if (Number(tournament.has_started_swiss) === 1) {
+        throw conflictError(
+          "CHECK_IN_LOCKED",
+          "Check-in and draw numbers are locked after the first Swiss round is created"
+        );
+      }
+      const current = await requireParticipantRow(tournament.id, participantId);
+      if (["withdrawn", "disqualified"].includes(current.status)) {
+        throw conflictError(
+          "PARTICIPANT_INACTIVE",
+          "A withdrawn or disqualified participant cannot be checked in"
+        );
+      }
+      const drawNumber = checkedIn
+        ? (requestedDrawNumber === undefined ? current.draw_number : requestedDrawNumber)
+        : null;
+      if (drawNumber != null) {
+        const duplicate = await dbGet(
+          db,
+          `
+            SELECT id, name_en
+            FROM in_person_participants
+            WHERE tournament_id = ? AND draw_number = ? AND id <> ?
+            LIMIT 1
+          `,
+          [tournament.id, drawNumber, current.id]
+        );
+        if (duplicate) {
+          throw conflictError("DRAW_NUMBER_TAKEN", "This draw number is already assigned", {
+            draw_number: drawNumber,
+            participant: { id: duplicate.id, name_en: duplicate.name_en },
+          });
+        }
+      }
+      await dbRun(
+        db,
+        `
+          UPDATE in_person_participants
+          SET status = ?, draw_number = ?,
+              checked_in_at = CASE
+                WHEN ? = 1 THEN COALESCE(checked_in_at, CURRENT_TIMESTAMP)
+                ELSE NULL
+              END,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND tournament_id = ?
+        `,
+        [checkedIn ? "checked_in" : "registered", drawNumber, checkedIn ? 1 : 0, current.id, tournament.id]
+      );
+      await touchTournament(tournament.id);
+      return serializeParticipant(await requireParticipantRow(tournament.id, current.id));
+    }));
+  }
+
+  async function listParticipantCities(tournamentId) {
+    const tournament = await requireTournamentRow(tournamentId);
+    if (tournament.scope !== "local") return [];
+    return listCities({ associationId: tournament.association_id, includeArchived: false });
+  }
+
+  async function validateExistingParticipantLocations(tournamentId, input) {
+    const rows = await dbAll(
+      db,
+      `
+        SELECT p.id, p.name_en, p.association_id, p.city_id, c.association_id AS city_association_id
+        FROM in_person_participants p
+        LEFT JOIN cities c ON c.id = p.city_id
+        WHERE p.tournament_id = ?
+      `,
+      [tournamentId]
+    );
+    const conflicts = rows.filter((row) => {
+      if (input.scope === "international") {
+        return !row.association_id || !!row.city_id;
+      }
+      return !!row.association_id
+        || !row.city_id
+        || normalizeText(row.city_association_id).toUpperCase()
+          !== normalizeText(input.association_id).toUpperCase();
+    });
+    if (conflicts.length) {
+      throw conflictError(
+        "PARTICIPANT_LOCATIONS_CONFLICT",
+        "Tournament scope or association conflicts with existing participant locations",
+        { participants: conflicts.map((row) => ({ id: row.id, name_en: row.name_en })) }
+      );
+    }
+  }
+
   async function listCities({ associationId = null, includeArchived = false } = {}) {
     const filters = [];
     const params = [];
@@ -475,6 +981,7 @@ export function createInPersonService({ db, idFactory = randomUUID } = {}) {
         throw conflictError("TOURNAMENT_READ_ONLY", "Cancelled or completed tournaments are read-only");
       }
       const input = await validateTournamentRelations(normalizeTournamentInput(payload, current), current);
+      await validateExistingParticipantLocations(current.id, input);
       if (current.published_at && input.slug !== current.slug) {
         throw conflictError("SLUG_IMMUTABLE", "slug cannot be changed after publication");
       }
@@ -644,17 +1151,25 @@ export function createInPersonService({ db, idFactory = randomUUID } = {}) {
     archiveCity: (cityId) => setCityArchived(cityId, true),
     cancelTournament,
     createCity,
+    createParticipant,
     createTournament,
+    deleteParticipant,
     getCity,
+    getParticipantsOverview,
     getTournament,
+    listAccessibleTournaments,
     listCities,
+    listParticipantCities,
     listTournamentAdmins,
     listTournaments,
     publishTournament,
     removeTournamentAdmin,
     replaceTournamentAdmins,
     restoreCity: (cityId) => setCityArchived(cityId, false),
+    setParticipantCheckIn,
+    startCheckIn,
     updateCity,
+    updateParticipant,
     updateTournament,
   };
 }

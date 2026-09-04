@@ -332,6 +332,8 @@ Gate: склад ЧУ-2026 можна повністю внести, check-in п
 
 Покриття: `IPT-PLY-*`, `IPT-CHK-*`, `IPT-UI-003..007`; `UH-07`, `UH-27`, `UH-28`, `UH-37`, `UH-43`.
 
+Статус на 2026-09-04: етап реалізовано. Організатор бачить лише призначені йому нескасовані `in_person_tournaments`; global admin бачить усі нескасовані. Додано CRUD учасників із conditional country/city validation, попередження про можливий дубль із явним підтвердженням справжнього тезки, check-in, унікальні додатні draw numbers без вимоги неперервної послідовності, counters і readiness першого Swiss-раунду. У Player Hub додано conditional розділ `In-Person`, tournament selector та мобільні screens `Players`/`Check-in`; `My Tournaments` і `Nationals` поки доступні лише global admin. Повний backend suite: 73/73 tests passed.
+
 ### Етап 4. Pure tournament engine
 
 Реалізувати без HTTP/UI:

@@ -198,6 +198,7 @@
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const IN_PERSON_TOURNAMENTS_URL = `${AUTH_BASE}/in-person-tournaments/accessible`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
   const STATIC_SECTION_ITEMS = [
     {
@@ -216,6 +217,12 @@
       type: "view",
       view: "my-tournaments",
       label: "My Tournaments",
+      icon: "https://carcassonne.gg/gallery/tournament.svg",
+    },
+    {
+      type: "view",
+      view: "in-person",
+      label: "In-Person",
       icon: "https://carcassonne.gg/gallery/tournament.svg",
     },
     {
@@ -341,6 +348,7 @@
       view === "players"
       || view === "friendly-find"
       || view === "my-tournaments"
+      || view === "in-person"
       || view === "streams"
       || view === "news"
       || view === "nationals"
@@ -486,6 +494,7 @@
 
   async function init() {
     let tournaments = [];
+    let inPersonTournaments = [];
     let isAuthenticatedUser = false;
     let isCaptainUser = false;
     let isAdminUser = false;
@@ -494,9 +503,10 @@
     let hasLinkedBgaId = false;
     let isStreamerUser = false;
     try {
-      const [meRes, tournamentsRes, streamersRes] = await Promise.all([
+      const [meRes, tournamentsRes, inPersonTournamentsRes, streamersRes] = await Promise.all([
         fetch(ME_URL, { method: "GET", credentials: "include" }),
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
+        fetch(IN_PERSON_TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
       ]);
       if (meRes.ok) {
@@ -519,6 +529,10 @@
           tournaments = data.tournaments;
         }
       }
+      if (inPersonTournamentsRes.ok) {
+        const data = await inPersonTournamentsRes.json().catch(() => ({}));
+        inPersonTournaments = Array.isArray(data?.tournaments) ? data.tournaments : [];
+      }
       if (streamersRes.ok) {
         const streamersData = await streamersRes.json().catch(() => ({}));
         const streamers = Array.isArray(streamersData?.streamers) ? streamersData.streamers : [];
@@ -530,7 +544,7 @@
       tournaments = [];
     }
 
-    if (!isAuthenticatedUser || !hasLinkedBgaId) {
+    if (!isAuthenticatedUser) {
       renderDesktop([]);
       renderMobile([]);
       return;
@@ -553,11 +567,18 @@
     }))
       .filter((item) => item.id && item.label)
       .concat(STATIC_SECTION_ITEMS.filter((item) => {
+        if (item.view === "in-person") {
+          return isAdminUser || inPersonTournaments.length > 0;
+        }
+        if (item.view === "my-tournaments" || item.view === "nationals") {
+          return isAdminUser;
+        }
+        if (!hasLinkedBgaId) return false;
         if (isAdminUser) return true;
         if (item.view === "players" || item.view === "friendly-find") return isCaptainUser;
         if (item.view === "streams") return isStreamerUser;
-        if (item.view === "news" || item.view === "my-tournaments") return isAuthenticatedUser;
-        if (item.view === "nationals" || item.view === "challenges") {
+        if (item.view === "news") return isAuthenticatedUser;
+        if (item.view === "challenges") {
           return isAuthenticatedUser && hasLinkedBgaId;
         }
         return false;

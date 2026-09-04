@@ -8043,6 +8043,7 @@ const requireInPersonTournamentAdmin = createRequireInPersonTournamentAdmin({ db
 registerInPersonRoutes(app, {
   db,
   requireAdmin,
+  requireAuthenticated,
   requireInPersonTournamentAdmin,
 });
 

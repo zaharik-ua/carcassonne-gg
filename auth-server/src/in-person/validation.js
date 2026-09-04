@@ -234,3 +234,65 @@ export function normalizeAdminUserIds(value) {
   });
   return result;
 }
+
+export function normalizeParticipantInput(payload, current = null, tournament = null) {
+  const nameEn = normalizeText(selectValue(payload, current, "name_en"));
+  const nameLocal = normalizeOptionalText(selectValue(payload, current, "name_local"));
+  const bgaNickname = normalizeOptionalText(selectValue(payload, current, "bga_nickname"));
+  const scope = normalizeText(tournament?.scope).toLowerCase();
+  let associationId = normalizeOptionalText(selectValue(payload, current, "association_id"));
+  let cityId = normalizeOptionalText(selectValue(payload, current, "city_id"));
+
+  if (!nameEn) {
+    throw validationError("PARTICIPANT_NAME_REQUIRED", "name_en is required", {
+      field: "name_en",
+    });
+  }
+  if (scope === "international") {
+    if (!associationId) {
+      throw validationError(
+        "PARTICIPANT_ASSOCIATION_REQUIRED",
+        "association_id is required for an international tournament participant",
+        { field: "association_id" }
+      );
+    }
+    cityId = null;
+  } else if (scope === "local") {
+    if (!cityId) {
+      throw validationError(
+        "PARTICIPANT_CITY_REQUIRED",
+        "city_id is required for a local tournament participant",
+        { field: "city_id" }
+      );
+    }
+    associationId = null;
+  } else {
+    throw validationError("INVALID_TOURNAMENT_SCOPE", "Tournament scope is invalid");
+  }
+
+  return {
+    name_en: nameEn,
+    name_local: nameLocal,
+    bga_nickname: bgaNickname,
+    association_id: associationId,
+    city_id: cityId,
+  };
+}
+
+export function normalizeDrawNumber(value) {
+  if (value === undefined) return undefined;
+  if (value === null || normalizeText(value) === "") return null;
+  const drawNumber = Number(value);
+  if (!Number.isInteger(drawNumber) || drawNumber <= 0) {
+    throw validationError("INVALID_DRAW_NUMBER", "draw_number must be a positive integer", {
+      field: "draw_number",
+    });
+  }
+  return drawNumber;
+}
+
+export function normalizeRequiredBoolean(value, field) {
+  if (value === true || value === 1 || value === "1" || value === "true") return true;
+  if (value === false || value === 0 || value === "0" || value === "false") return false;
+  throw validationError("INVALID_BOOLEAN", `${field} must be true or false`, { field });
+}
