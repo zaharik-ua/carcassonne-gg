@@ -148,10 +148,10 @@ Pure-функції result/standings/pairing/playoff не повинні зал�
 - stage `swiss`/`playoff`;
 - Swiss round number або playoff round key/order;
 - status `draft`/`published`/`completed`/`cancelled`;
-- version, `replaces_round_id`;
-- pairing algorithm version, seed та input standings revision;
 - publication/completion/cancellation metadata;
 - timestamps.
+
+MVP не додає до раунду `version`, `replaces_round_id`, `pairing_algorithm_version`, `seed` або `input_standings_revision`. Повторно згенерований раунд є новим active-записом із тим самим номером; скасований запис лишається в БД без явного version lineage.
 
 `in_person_matches`
 
@@ -188,7 +188,7 @@ Pure-функції result/standings/pairing/playoff не повинні зал�
 - один active participant не може двічі бути в одному раунді;
 - унікальний active table number у межах раунду;
 - рівно один table №1 у кожному опублікованому playoff round;
-- один active Swiss round number/version;
+- один нескасований Swiss round із конкретним номером;
 - cancelled matches і rounds не входять до active read models;
 - winner, loser і starter належать учасникам матчу;
 - result-mode fields взаємовиключні.
@@ -229,7 +229,7 @@ Mutations захищає наявний `requireAdmin`.
 - public list опублікованих in-person tournaments;
 - aggregate `GET /public/in-person-tournaments/:slug`;
 - response містить tournament metadata, players, current Swiss standings, published active rounds і playoff bracket;
-- response не містить user IDs, admin notes, draft/cancelled rounds, старі regenerated versions або cancelled tournament;
+- response не містить user IDs, admin notes, draft/cancelled rounds або cancelled tournament;
 - top-level `revision`/`updated_at` підтримує короткий cache/revalidation.
 
 ## 6. Етапи реалізації
@@ -363,13 +363,13 @@ Gate: склад ЧУ-2026 можна повністю внести, check-in п
 - table-driven unit tests кожного result mode і validation error;
 - gaps `2,3,5,8`, missing №1, odd list;
 - rematch avoidance, starter streak, withdrawal, odd/even pools;
-- deterministic result для однакового input/version/seed;
+- deterministic result для однакового актуального стану турніру без випадкового seed;
 - regression fixture ЧУ-2025;
 - performance test на 256 participants.
 
 Gate: pure engine повністю проходить unit/golden tests до підключення mutating routes.
 
-Покриття: `IPT-SWP-*`, `IPT-RES-*`, `IPT-STD-*`; `UH-13`, `UH-15`, `UH-17`, `UH-18`, `UH-19`, `UH-33`, `UH-43`.
+Покриття: `IPT-SWP-*`, `IPT-RES-*`, `IPT-STD-*`; `UH-13`, `UH-15`, `UH-17`, `UH-18`, `UH-19`, `UH-43`.
 
 ### Етап 5. Swiss workflow API та UI
 
@@ -404,7 +404,7 @@ Player Hub:
 
 Gate: повний Swiss можна провести через Player Hub без прямого доступу до БД.
 
-Покриття: `IPT-LIF-*`, основні `IPT-API-*`, `IPT-NFR-001/002`; `UH-05`, `UH-06`, `UH-13`, `UH-15`, `UH-17..19`, `UH-31`, `UH-33`.
+Покриття: `IPT-LIF-*`, основні `IPT-API-*`, `IPT-NFR-001/002`; `UH-05`, `UH-06`, `UH-13`, `UH-15`, `UH-17..19`, `UH-31`.
 
 ### Етап 6. Swiss exceptions і rollback
 
@@ -413,7 +413,7 @@ Gate: повний Swiss можна провести через Player Hub бе�
 - cancel exactly one last Swiss round із preview результатів;
 - повернення standings на попередню revision;
 - послідовне повторне скасування для повернення ще на один раунд;
-- regenerated version/replaces link тільки для admin UI;
+- створення нового active-запису з тим самим номером під час повторної генерації, без `version`/`replaces_round_id` та UI історії версій;
 - withdrawal між раундами;
 - withdrawal/no-show під час незавершеного матчу;
 - late participant у першому раунді:
@@ -476,7 +476,7 @@ Backend:
 
 - public aggregate serializer;
 - revision/updated timestamp;
-- exclusion draft/cancelled/old versions/admin fields;
+- exclusion draft/cancelled/admin fields;
 - cache policy з короткою revalidation.
 
 Frontend:
@@ -555,11 +555,11 @@ PR 3 і PR 4 можна виконувати паралельно після с�
 - rollback/results: `UH-01`, `UH-02`, `UH-16`;
 - idempotency/atomicity/validation: `UH-05`, `UH-06`, `UH-07`, `UH-17`, `UH-18`, `UH-19`, `UH-31`;
 - roster exceptions: `UH-08`, `UH-09`, `UH-10`, `UH-11`, `UH-27`, `UH-28`, `UH-29`, `UH-37`, `UH-43`;
-- pairing: `UH-13`, `UH-15`, `UH-33`;
+- pairing: `UH-13`, `UH-15`;
 - playoff: `UH-22`, `UH-23`, `UH-25`, `UH-26`, `UH-39`, `UH-41`, `UH-42`;
 - public/domain isolation: `UH-32`, `UH-34`.
 
-Не реалізовувати спеціальні flows для `UH-03`, `UH-04`, `UH-12`, `UH-14`, `UH-21`, `UH-24`, `UH-30`, `UH-35`, `UH-36`, `UH-38`, `UH-40`. Базові DB constraints і безпечне блокування можуть лишатися, але окремі recovery/UX-сценарії не повинні розширювати scope MVP.
+Не реалізовувати спеціальні flows для `UH-03`, `UH-04`, `UH-12`, `UH-14`, `UH-21`, `UH-24`, `UH-30`, `UH-33`, `UH-35`, `UH-36`, `UH-38`, `UH-40`. Базові DB constraints і безпечне блокування можуть лишатися, але окремі recovery/UX-сценарії не повинні розширювати scope MVP.
 
 ## 9. Основні ризики
 
@@ -567,7 +567,7 @@ PR 3 і PR 4 можна виконувати паралельно після с�
 |---|---|
 | Змішування доступів двох типів tournament | Окремий migration PR, type predicate у кожному legacy query, collision tests однакових ID |
 | Частково застосована schema при старті | Versioned transaction migration, server readiness тільки після успіху schema setup |
-| Помилка Swiss algorithm на edge cases | Pure engine, deterministic seed/version, ЧУ-2025 golden fixture, small exhaustive fixtures |
+| Помилка Swiss algorithm на edge cases | Один фіксований deterministic engine без випадковості, ЧУ-2025 golden fixture, small exhaustive fixtures; не деплоїти зміну алгоритму під час активного турніру |
 | Неправильні standings після rollback | Source of truth — active completed matches; rebuild із нуля та revision acceptance tests |
 | Дублювання результату через поганий інтернет у залі | Idempotency key, server-confirmed state, retry-safe UI |
 | Розбіжність Player Hub і public page | Один aggregate/service layer, revision-based refresh, відсутність generated JSON |
