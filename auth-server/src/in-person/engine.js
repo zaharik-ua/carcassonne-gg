@@ -187,7 +187,23 @@ export function validateMatchResult(match, input = {}) {
       );
     }
   } else {
-    rejectFields(input, ["points_a", "points_b"], resultType);
+    if (resultType === "time_forfeit") {
+      const hasPointsA = hasValue(input?.points_a);
+      const hasPointsB = hasValue(input?.points_b);
+      if (hasPointsA !== hasPointsB) {
+        engineError(
+          "POINTS_REQUIRED",
+          "points_a and points_b must be provided together for a time forfeit",
+          { fields: ["points_a", "points_b"] }
+        );
+      }
+      if (hasPointsA && hasPointsB) {
+        pointsA = normalizePoints(input.points_a, "points_a");
+        pointsB = normalizePoints(input.points_b, "points_b");
+      }
+    } else {
+      rejectFields(input, ["points_a", "points_b"], resultType);
+    }
     winnerParticipantId = requireWinner(input, participantAId, participantBId);
     if (resultType === "time_forfeit") {
       const suppliedReason = String(input?.finish_reason || "").trim().toLowerCase();
@@ -365,7 +381,7 @@ export function calculateSwissStandings({ participants = [], rounds = [] } = {})
       winner.sonneborn_berger += loser.wins;
       winner.wins += 1;
 
-      if (normalized.result_type === "points") {
+      if (normalized.points_a != null && normalized.points_b != null) {
         participantA.vp_difference += normalized.points_a - normalized.points_b;
         participantB.vp_difference += normalized.points_b - normalized.points_a;
       }

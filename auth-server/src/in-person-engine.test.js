@@ -78,8 +78,13 @@ test("validates every MVP result mode and derives winner and loser", () => {
     },
     {
       name: "time forfeit",
-      input: { result_type: "time_forfeit", winner_participant_id: "p1" },
-      expected: { winner: "p1", loser: "p2", reason: "time_forfeit", points: [null, null] },
+      input: {
+        result_type: "time_forfeit",
+        points_a: 64,
+        points_b: 81,
+        winner_participant_id: "p1",
+      },
+      expected: { winner: "p1", loser: "p2", reason: "time_forfeit", points: [64, 81] },
     },
     ...["withdrawal", "disqualification", "no_show", "admin_decision"].map((finishReason) => ({
       name: `technical ${finishReason}`,
@@ -185,6 +190,15 @@ test("rejects invalid and mutually exclusive result fields", () => {
       match: normalMatch(),
       input: { result_type: "time_forfeit", winner_participant_id: "somebody-else" },
     },
+    {
+      code: "POINTS_REQUIRED",
+      match: normalMatch(),
+      input: {
+        result_type: "time_forfeit",
+        points_a: 70,
+        winner_participant_id: "p1",
+      },
+    },
   ];
 
   cases.forEach(({ code, match, input }) => {
@@ -193,6 +207,24 @@ test("rejects invalid and mutually exclusive result fields", () => {
       (error) => error instanceof InPersonEngineError && error.code === code
     );
   });
+});
+
+test("time-forfeit points affect VP difference independently of the winner", () => {
+  const match = completeMatch(normalMatch(), {
+    result_type: "time_forfeit",
+    points_a: 64,
+    points_b: 81,
+    winner_participant_id: "p1",
+  });
+  const standings = calculateSwissStandings({
+    participants: [{ id: "p1" }, { id: "p2" }],
+    rounds: [completedRound(1, [match])],
+  });
+
+  assert.equal(standings.find((row) => row.participant_id === "p1").wins, 1);
+  assert.equal(standings.find((row) => row.participant_id === "p1").vp_difference, -17);
+  assert.equal(standings.find((row) => row.participant_id === "p2").wins, 0);
+  assert.equal(standings.find((row) => row.participant_id === "p2").vp_difference, 17);
 });
 
 test("calculates swiss_standard_v1 and ignores cancelled or incomplete rounds", () => {

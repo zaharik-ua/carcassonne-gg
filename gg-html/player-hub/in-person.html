@@ -1,4 +1,5 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
 <style>
   :root {
@@ -14,10 +15,7 @@
     --ip-warning-bg: #fff8e8;
   }
 
-  body {
-    margin: 0;
-    background: var(--ip-bg);
-    color: var(--ip-text);
+   body {
     font-family: "Montserrat", sans-serif;
   }
 
@@ -97,8 +95,45 @@
     font-size: 14px;
   }
 
-  .ip-tournament-select {
-    flex: 1 1 320px;
+  .ip-tournament-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .ip-tournament-name {
+    min-width: 0;
+    margin: 0;
+    font-size: 20px;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+
+  .ip-tournament-meta {
+    margin-top: 5px;
+  }
+
+  .ip-tournament-switcher {
+    flex: 0 0 auto;
+  }
+
+  .ip-tournament-switch-btn {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+  }
+
+  .ip-tournament-switcher .ip-city-picker-menu {
+    right: 0;
+    left: auto;
+    width: min(360px, calc(100vw - 32px));
+  }
+
+  .ip-tournament-switcher .ip-city-option {
+    white-space: normal;
   }
 
   .ip-city-picker {
@@ -318,6 +353,10 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .ip-player-counters {
+    margin-top: 10px;
   }
 
   .ip-counter {
@@ -564,12 +603,271 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .ip-swiss-table-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 10px;
+  }
+
   .ip-swiss-stat,
   .ip-match-card {
     padding: 10px;
     border: 1px solid var(--ip-line);
     border-radius: 6px;
     background: #fff;
+  }
+
+  .ip-swiss-table-card {
+    width: 100%;
+    min-width: 0;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    color: var(--ip-text);
+    font: inherit;
+    text-align: left;
+  }
+
+  button.ip-swiss-table-card {
+    cursor: pointer;
+  }
+
+  button.ip-swiss-table-card:hover,
+  button.ip-swiss-table-card:focus-visible {
+    border-color: var(--ip-primary);
+    box-shadow: 0 0 0 2px var(--ip-primary-soft);
+    outline: 0;
+  }
+
+  .ip-swiss-table-card.completed {
+    border-color: #9bc9aa;
+    background: #effaf2;
+  }
+
+  .ip-swiss-table-number {
+    color: var(--ip-muted);
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .ip-swiss-table-players {
+    min-height: 0;
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 5px;
+    padding: 8px 0 2px;
+  }
+
+  .ip-swiss-table-player {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
+  }
+
+  .ip-swiss-table-player.winner {
+    font-weight: 700;
+  }
+
+  .ip-swiss-table-player-name {
+    min-width: 0;
+    max-width: 100%;
+    display: block;
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .ip-swiss-table-player.winner .ip-swiss-table-player-name {
+    font-weight: 700;
+  }
+
+  .ip-time-lost-icon {
+    position: relative;
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    box-sizing: border-box;
+    border: 2px solid var(--ip-danger);
+    border-radius: 50%;
+  }
+
+  .ip-time-lost-icon::before,
+  .ip-time-lost-icon::after {
+    position: absolute;
+    content: "";
+    background: var(--ip-danger);
+    transform-origin: bottom center;
+  }
+
+  .ip-time-lost-icon::before {
+    top: 2px;
+    left: 4px;
+    width: 2px;
+    height: 4px;
+  }
+
+  .ip-time-lost-icon::after {
+    top: 5px;
+    left: 5px;
+    width: 4px;
+    height: 2px;
+    transform: rotate(25deg);
+    transform-origin: left center;
+  }
+
+  .ip-starting-player-icon {
+    width: 12px;
+    height: 12px;
+    display: inline-block;
+    margin-right: 6px;
+    object-fit: contain;
+    vertical-align: -1px;
+  }
+
+  .ip-swiss-table-versus {
+    color: var(--ip-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .ip-swiss-table-versus.result {
+    color: var(--ip-success);
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .ip-match-result-dialog {
+    max-width: 520px;
+  }
+
+  .ip-swiss-result-form {
+    display: grid;
+    gap: 14px;
+  }
+
+  .ip-swiss-score-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 18px;
+    align-items: end;
+  }
+
+  .ip-swiss-score-player {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+    align-self: stretch;
+    align-content: end;
+    text-align: center;
+  }
+
+  .ip-swiss-score-player-name {
+    overflow-wrap: anywhere;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.25;
+  }
+
+  .ip-swiss-score-player.winner .ip-swiss-score-player-name {
+    font-weight: 700;
+  }
+
+  .ip-swiss-score-won {
+    min-height: 20px;
+    justify-self: center;
+    visibility: hidden;
+    color: var(--ip-success);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 20px;
+  }
+
+  .ip-swiss-score-won.visible {
+    visibility: visible;
+  }
+
+  .ip-swiss-score-input {
+    width: 112px;
+    height: 112px;
+    min-height: 112px;
+    justify-self: center;
+    padding: 8px;
+    appearance: textfield;
+    -moz-appearance: textfield;
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .ip-swiss-score-input::-webkit-inner-spin-button,
+  .ip-swiss-score-input::-webkit-outer-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+  }
+
+  .ip-swiss-result-controls {
+    display: grid;
+    gap: 10px;
+  }
+
+  .ip-swiss-result-control {
+    display: grid;
+    grid-template-columns: 118px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ip-swiss-result-control label {
+    color: #344054;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .ip-admin-note-toggle {
+    width: max-content;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--ip-primary);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .ip-swiss-admin-note {
+    display: grid;
+    gap: 4px;
+  }
+
+  .ip-swiss-admin-note label {
+    color: #344054;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  @media (max-width: 420px) {
+    .ip-swiss-score-input {
+      width: 96px;
+      height: 96px;
+      min-height: 96px;
+    }
+
+    .ip-swiss-result-control {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
   }
 
   .ip-swiss-stat strong {
@@ -809,15 +1107,26 @@
   <div id="ipStatus" class="ip-status"></div>
 
   <div id="ipTournamentCard" class="ip-card">
-    <div class="ip-toolbar">
-      <select id="ipTournamentSelect" class="ip-select ip-tournament-select" aria-label="In-Person tournament"></select>
+    <div class="ip-tournament-heading">
+      <h2 id="ipTournamentName" class="ip-tournament-name"></h2>
+      <div id="ipTournamentSwitcher" class="ip-city-picker ip-tournament-switcher ip-hidden">
+        <button
+          id="ipTournamentSwitchBtn"
+          class="ip-btn ip-tournament-switch-btn"
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+        >
+          <span>Switch tournament</span>
+          <span aria-hidden="true">▾</span>
+        </button>
+        <div id="ipTournamentMenu" class="ip-city-picker-menu" role="listbox"></div>
+      </div>
     </div>
-    <div id="ipTournamentMeta" class="ip-meta"></div>
+    <div id="ipTournamentMeta" class="ip-meta ip-tournament-meta"></div>
   </div>
 
   <div id="ipWorkspace" class="ip-hidden">
-    <div class="ip-counters" id="ipCounters"></div>
-
     <div class="ip-tabs" role="tablist">
       <button class="ip-tab active" type="button" data-ip-tab="players">Players</button>
       <button class="ip-tab" type="button" data-ip-tab="check-in">Check-in</button>
@@ -834,6 +1143,7 @@
           <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
         </div>
       </div>
+      <div class="ip-counters ip-player-counters" id="ipCounters"></div>
       <div id="ipPlayerFormMount"></div>
       <div id="ipPlayersList" class="ip-list"></div>
     </section>
@@ -849,10 +1159,7 @@
 
     <section id="ipSwissPanel" class="ip-card ip-hidden">
       <div class="ip-toolbar">
-        <div>
-          <strong>Swiss rounds</strong>
-          <div class="ip-hint">Preview pairings, publish a round, then enter every table result.</div>
-        </div>
+        <strong>Swiss rounds</strong>
         <div id="ipSwissActions" class="ip-actions"></div>
       </div>
       <div id="ipSwissSummary" class="ip-swiss-summary"></div>
@@ -893,6 +1200,7 @@
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ACCESSIBLE_URL = `${AUTH_BASE}/in-person-tournaments/accessible`;
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
+  const STARTING_PLAYER_ICON_URL = "https://carcassonne.gg/gallery/blue-mipple-no-bg-small.png";
 
   const state = {
     tournaments: [],
@@ -908,7 +1216,10 @@
     playerFormController: null,
   };
 
-  const tournamentSelect = document.getElementById("ipTournamentSelect");
+  const tournamentName = document.getElementById("ipTournamentName");
+  const tournamentSwitcher = document.getElementById("ipTournamentSwitcher");
+  const tournamentSwitchBtn = document.getElementById("ipTournamentSwitchBtn");
+  const tournamentMenu = document.getElementById("ipTournamentMenu");
   const tournamentMeta = document.getElementById("ipTournamentMeta");
   const workspace = document.getElementById("ipWorkspace");
   const statusEl = document.getElementById("ipStatus");
@@ -1022,6 +1333,111 @@
     field.appendChild(label);
     field.appendChild(select);
     return { field, select };
+  }
+
+  function createMenuSelectField(labelText, options, initialValue, { signal } = {}) {
+    const field = document.createElement("div");
+    field.className = "ip-field";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const root = document.createElement("div");
+    root.className = "ip-city-picker ip-menu-picker";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ip-city-picker-btn";
+    button.setAttribute("aria-haspopup", "listbox");
+    button.setAttribute("aria-expanded", "false");
+    const selectedContent = document.createElement("span");
+    selectedContent.className = "ip-city-picker-value";
+    const selectedText = document.createElement("span");
+    const chevron = document.createElement("span");
+    chevron.textContent = "▾";
+    selectedContent.appendChild(selectedText);
+    button.appendChild(selectedContent);
+    button.appendChild(chevron);
+
+    const menu = document.createElement("div");
+    menu.className = "ip-city-picker-menu";
+    menu.setAttribute("role", "listbox");
+    const normalizedOptions = (options || []).map((entry) => ({
+      value: String(entry.value ?? ""),
+      label: String(entry.label ?? entry.value ?? ""),
+    }));
+    let value = String(initialValue ?? "");
+    let disabled = false;
+    const changeListeners = [];
+
+    const close = () => {
+      menu.classList.remove("open");
+      button.classList.remove("open");
+      button.setAttribute("aria-expanded", "false");
+    };
+    const renderButton = () => {
+      const selected = normalizedOptions.find((entry) => entry.value === value)
+        || normalizedOptions[0]
+        || { value: "", label: "—" };
+      value = selected.value;
+      selectedText.textContent = selected.label || "—";
+      selectedContent.style.color = selected.value ? "" : "#999";
+    };
+    const setValue = (nextValue, { notify = false } = {}) => {
+      const next = String(nextValue ?? "");
+      value = normalizedOptions.some((entry) => entry.value === next) ? next : "";
+      renderButton();
+      renderOptions();
+      if (notify) changeListeners.forEach((listener) => listener());
+    };
+    const renderOptions = () => {
+      menu.innerHTML = "";
+      normalizedOptions.forEach((entry) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = `ip-city-option${entry.value === value ? " active" : ""}`;
+        option.textContent = entry.label || "—";
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", entry.value === value ? "true" : "false");
+        option.addEventListener("click", () => {
+          setValue(entry.value, { notify: true });
+          close();
+        });
+        menu.appendChild(option);
+      });
+    };
+    const open = () => {
+      if (disabled) return;
+      renderOptions();
+      menu.classList.add("open");
+      button.classList.add("open");
+      button.setAttribute("aria-expanded", "true");
+    };
+    const setDisabled = (nextDisabled) => {
+      disabled = !!nextDisabled;
+      button.disabled = disabled;
+      if (disabled) close();
+    };
+
+    button.addEventListener("click", () => {
+      if (menu.classList.contains("open")) close();
+      else open();
+    });
+    document.addEventListener("click", (event) => {
+      if (!root.contains(event.target)) close();
+    }, signal ? { signal } : undefined);
+
+    renderButton();
+    renderOptions();
+    root.appendChild(button);
+    root.appendChild(menu);
+    field.appendChild(label);
+    field.appendChild(root);
+    return {
+      field,
+      button,
+      getValue: () => value,
+      setValue,
+      setDisabled,
+      onChange: (listener) => changeListeners.push(listener),
+    };
   }
 
   function cityLabel(city) {
@@ -1233,34 +1649,57 @@
     nameEn.input.focus();
   }
 
-  function renderTournamentSelector() {
-    tournamentSelect.innerHTML = "";
+  function closeTournamentMenu() {
+    tournamentMenu.classList.remove("open");
+    tournamentSwitchBtn.classList.remove("open");
+    tournamentSwitchBtn.setAttribute("aria-expanded", "false");
+  }
+
+  function renderTournamentSwitcher() {
+    tournamentMenu.innerHTML = "";
     if (!state.tournaments.length) {
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = "No In-Person tournaments available";
-      tournamentSelect.appendChild(option);
-      tournamentSelect.disabled = true;
+      tournamentName.textContent = "No In-Person tournaments available";
+      tournamentSwitcher.classList.add("ip-hidden");
       tournamentMeta.textContent = "You are not assigned as an administrator of an active In-Person tournament.";
       workspace.classList.add("ip-hidden");
       return;
     }
-    tournamentSelect.disabled = false;
+    const selected = selectedTournament();
+    tournamentName.textContent = selected?.name_local || selected?.name_en || "In-Person tournament";
+    tournamentSwitcher.classList.toggle("ip-hidden", state.tournaments.length <= 1);
     state.tournaments.forEach((tournament) => {
-      const option = document.createElement("option");
-      option.value = tournament.id;
-      option.textContent = `${tournament.name_en} • ${formatDates(tournament)}`;
-      if (tournament.id === state.selectedTournamentId) option.selected = true;
-      tournamentSelect.appendChild(option);
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = `ip-city-option${tournament.id === state.selectedTournamentId ? " active" : ""}`;
+      option.textContent = [
+        tournament.name_local || tournament.name_en,
+        formatDates(tournament),
+      ].filter(Boolean).join(" • ");
+      option.setAttribute("role", "option");
+      option.setAttribute(
+        "aria-selected",
+        tournament.id === state.selectedTournamentId ? "true" : "false"
+      );
+      option.addEventListener("click", () => {
+        closeTournamentMenu();
+        if (tournament.id !== state.selectedTournamentId) selectTournament(tournament.id);
+      });
+      tournamentMenu.appendChild(option);
     });
+    closeTournamentMenu();
   }
 
   function renderTournamentMeta() {
-    const tournament = state.overview?.tournament || selectedTournament();
+    const overviewTournament = state.overview?.tournament;
+    const tournament = overviewTournament?.id === state.selectedTournamentId
+      ? overviewTournament
+      : selectedTournament();
     if (!tournament) {
+      tournamentName.textContent = "";
       tournamentMeta.textContent = "";
       return;
     }
+    tournamentName.textContent = tournament.name_local || tournament.name_en || "In-Person tournament";
     const location = tournament.scope === "international"
       ? "International"
       : [
@@ -1268,11 +1707,13 @@
         tournament.association_name || tournament.association_id,
         tournament.qualifier_city_name_en,
       ].filter(Boolean).join(" • ");
+    const playoffParticipantCount = Number(tournament.playoff_preview?.participant_count || 0);
     tournamentMeta.textContent = [
       String(tournament.status || "").toUpperCase(),
       location,
       formatDates(tournament),
       `${tournament.swiss_rounds_count} Swiss rounds`,
+      playoffParticipantCount ? `${playoffParticipantCount} players advance to playoff` : "",
     ].filter(Boolean).join(" • ");
   }
 
@@ -2004,8 +2445,11 @@
 
   function swissParticipantName(match, side) {
     const id = match?.[`participant_${side}_id`];
-    return match?.[`participant_${side}_name_en`]
-      || (state.overview?.participants || []).find((participant) => participant.id === id)?.name_en
+    const participant = (state.overview?.participants || []).find((entry) => entry.id === id);
+    return participant?.name_local
+      || match?.[`participant_${side}_name_local`]
+      || participant?.name_en
+      || match?.[`participant_${side}_name_en`]
       || id
       || "—";
   }
@@ -2030,6 +2474,83 @@
       starter_imbalance: "Starter imbalance",
     };
     return labels[String(code || "")] || String(code || "Pairing warning").replace(/_/g, " ");
+  }
+
+  function swissTableResult(match) {
+    if (match.is_bye) return "Bye";
+    if (match.status !== "completed") return "vs";
+    if (match.points_a != null && match.points_b != null) {
+      return `${match.points_a} : ${match.points_b}`;
+    }
+    if (match.winner_participant_id === match.participant_a_id) return "1 : 0";
+    if (match.winner_participant_id === match.participant_b_id) return "0 : 1";
+    return "Result";
+  }
+
+  function createSwissTablePlayer(match, side) {
+    const participantId = match[`participant_${side}_id`];
+    const player = document.createElement("div");
+    player.className = `ip-swiss-table-player${
+      match.status === "completed" && match.winner_participant_id === participantId ? " winner" : ""
+    }`;
+    const name = document.createElement("span");
+    name.className = "ip-swiss-table-player-name";
+    if (match.starting_participant_id === participantId) {
+      const starter = document.createElement("img");
+      starter.className = "ip-starting-player-icon";
+      starter.src = STARTING_PLAYER_ICON_URL;
+      starter.alt = "Starts";
+      starter.title = "Starting player";
+      name.appendChild(starter);
+    }
+    name.appendChild(document.createTextNode(swissParticipantName(match, side)));
+    player.appendChild(name);
+    const lostOnTime = match.result_type === "time_forfeit"
+      && (match.loser_participant_id === participantId
+        || (!match.loser_participant_id
+          && match.winner_participant_id
+          && match.winner_participant_id !== participantId));
+    if (lostOnTime) {
+      const clock = document.createElement("span");
+      clock.className = "ip-time-lost-icon";
+      clock.title = "Lost on time";
+      clock.setAttribute("aria-label", "Lost on time");
+      player.appendChild(clock);
+    }
+    return player;
+  }
+
+  function createSwissTableCard(match, { onClick = null } = {}) {
+    const interactive = typeof onClick === "function";
+    const card = document.createElement(interactive ? "button" : "article");
+    if (interactive) card.type = "button";
+    card.className = `ip-match-card ip-swiss-table-card${
+      match.status === "completed" ? " completed" : ""
+    }`;
+
+    const table = document.createElement("div");
+    table.className = "ip-swiss-table-number";
+    table.textContent = match.is_bye ? "Bye" : String(match.table_number);
+    card.appendChild(table);
+
+    const players = document.createElement("div");
+    players.className = "ip-swiss-table-players";
+    players.appendChild(createSwissTablePlayer(match, "a"));
+    const versus = document.createElement("div");
+    versus.className = `ip-swiss-table-versus${match.status === "completed" ? " result" : ""}`;
+    versus.textContent = swissTableResult(match);
+    players.appendChild(versus);
+    if (!match.is_bye) players.appendChild(createSwissTablePlayer(match, "b"));
+    card.appendChild(players);
+
+    if (interactive) {
+      card.setAttribute(
+        "aria-label",
+        `Edit table ${match.table_number}: ${swissParticipantName(match, "a")} versus ${swissParticipantName(match, "b")}`
+      );
+      card.addEventListener("click", onClick);
+    }
+    return card;
   }
 
   function createPairingCard(match, { preview = false } = {}) {
@@ -2083,7 +2604,7 @@
       const winnerName = match.winner_participant_id === match.participant_a_id
         ? swissParticipantName(match, "a")
         : swissParticipantName(match, "b");
-      result.textContent = match.result_type === "points"
+      result.textContent = match.points_a != null && match.points_b != null
         ? `Result: ${match.points_a}:${match.points_b} • Winner: ${winnerName}`
         : `Result: ${String(match.result_type || "win").replace(/_/g, " ")} • Winner: ${winnerName}`;
       card.appendChild(result);
@@ -2221,7 +2742,7 @@
     const winner = match.winner_participant_id === match.participant_a_id
       ? swissParticipantName(match, "a")
       : swissParticipantName(match, "b");
-    const score = match.result_type === "points"
+    const score = match.points_a != null && match.points_b != null
       ? `${match.points_a}:${match.points_b}`
       : String(match.finish_reason || match.result_type || "result").replace(/_/g, " ");
     return `Table ${match.table_number}: ${score}, winner ${winner}`;
@@ -2297,9 +2818,275 @@
     }
   }
 
-  function createResultForm(match, { stage = "swiss" } = {}) {
+  function openSwissResultModal(match) {
+    const overlay = document.createElement("div");
+    overlay.className = "ip-modal-overlay";
+    const pickerController = new AbortController();
+
+    const dialog = document.createElement("div");
+    dialog.className = "ip-modal-dialog ip-match-result-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-labelledby", "ipMatchResultModalTitle");
+
+    const title = document.createElement("div");
+    title.id = "ipMatchResultModalTitle";
+    title.className = "ip-modal-title";
+    title.textContent = `Table ${match.table_number}`;
+    const error = document.createElement("div");
+    error.className = "ip-modal-warning";
+    error.setAttribute("role", "alert");
+    error.setAttribute("aria-live", "polite");
+
+    function closeModal() {
+      pickerController.abort();
+      document.removeEventListener("keydown", handleEscape);
+      overlay.remove();
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") closeModal();
+    }
+
+    const form = createSwissResultForm(match, {
+      errorTarget: error,
+      onCancel: closeModal,
+      onSaved: closeModal,
+      signal: pickerController.signal,
+    });
+    dialog.appendChild(title);
+    dialog.appendChild(form);
+    overlay.appendChild(dialog);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal();
+    });
+    document.addEventListener("keydown", handleEscape);
+    document.body.appendChild(overlay);
+    form.querySelector(".ip-swiss-score-input:not(:disabled), select")?.focus();
+  }
+
+  function createSwissResultForm(
+    match,
+    { errorTarget = null, onCancel = null, onSaved = null, signal = null } = {}
+  ) {
+    const form = document.createElement("form");
+    form.className = "ip-swiss-result-form";
+    form.noValidate = true;
+
+    const playerOptions = [
+      { value: match.participant_a_id, label: swissParticipantName(match, "a") },
+      { value: match.participant_b_id, label: swissParticipantName(match, "b") },
+    ];
+    const initialScore = (side) => {
+      const participantId = match[`participant_${side}_id`];
+      const points = match[`points_${side}`];
+      if (points != null) return String(points);
+      if (match.status === "completed" && match.winner_participant_id) {
+        return match.winner_participant_id === participantId ? "1" : "0";
+      }
+      return "";
+    };
+    const createScorePlayer = (side) => {
+      const participantId = match[`participant_${side}_id`];
+      const summary = document.createElement("div");
+      summary.className = "ip-swiss-score-player";
+      summary.dataset.participantId = participantId;
+      const name = document.createElement("label");
+      name.className = "ip-swiss-score-player-name";
+      name.htmlFor = `ipSwissScore${side.toUpperCase()}`;
+      name.textContent = swissParticipantName(match, side);
+      const won = document.createElement("div");
+      won.className = "ip-swiss-score-won";
+      won.textContent = "Won";
+      const input = document.createElement("input");
+      input.id = `ipSwissScore${side.toUpperCase()}`;
+      input.type = "number";
+      input.min = "0";
+      input.step = "1";
+      input.inputMode = "numeric";
+      input.autocomplete = "off";
+      input.className = "ip-input ip-swiss-score-input";
+      input.value = initialScore(side);
+      summary.appendChild(name);
+      return { participantId, summary, input, won };
+    };
+
+    const scoreA = createScorePlayer("a");
+    const scoreB = createScorePlayer("b");
+    const scoreGrid = document.createElement("div");
+    scoreGrid.className = "ip-swiss-score-grid";
+    scoreGrid.appendChild(scoreA.summary);
+    scoreGrid.appendChild(scoreB.summary);
+    scoreGrid.appendChild(scoreA.input);
+    scoreGrid.appendChild(scoreB.input);
+    scoreGrid.appendChild(scoreA.won);
+    scoreGrid.appendChild(scoreB.won);
+
+    const controls = document.createElement("div");
+    controls.className = "ip-swiss-result-controls";
+    const starter = createMenuSelectField(
+      "Starting player:",
+      playerOptions,
+      match.starting_participant_id || match.participant_a_id,
+      { signal }
+    );
+    starter.field.className = "ip-swiss-result-control";
+    const initialTimeLostParticipantId = match.result_type === "time_forfeit"
+      ? match.loser_participant_id
+        || (match.winner_participant_id === match.participant_a_id
+          ? match.participant_b_id
+          : match.participant_a_id)
+      : "";
+    const timeLost = createMenuSelectField(
+      "Time lost:",
+      [{ value: "", label: "—" }].concat(playerOptions),
+      initialTimeLostParticipantId,
+      { signal }
+    );
+    timeLost.field.className = "ip-swiss-result-control";
+    controls.appendChild(starter.field);
+    controls.appendChild(timeLost.field);
+
+    const note = createField("Admin note");
+    note.field.className = "ip-swiss-admin-note";
+    note.input.value = match.admin_note || "";
+    const noteToggle = createButton("Add admin note", "ip-admin-note-toggle", () => {
+      noteToggle.classList.add("ip-hidden");
+      note.field.classList.remove("ip-hidden");
+      note.input.focus();
+    });
+    if (match.admin_note) noteToggle.classList.add("ip-hidden");
+    else note.field.classList.add("ip-hidden");
+
+    const actions = document.createElement("div");
+    actions.className = "ip-modal-actions";
+    const cancel = createButton("Cancel", "ip-btn", () => {
+      if (typeof onCancel === "function") onCancel();
+    });
+    const save = document.createElement("button");
+    save.type = "submit";
+    save.className = "ip-btn primary";
+    save.textContent = "Save";
+    actions.appendChild(cancel);
+    actions.appendChild(save);
+
+    form.appendChild(scoreGrid);
+    form.appendChild(controls);
+    form.appendChild(noteToggle);
+    form.appendChild(note.field);
+    if (errorTarget) form.appendChild(errorTarget);
+    form.appendChild(actions);
+
+    let saving = false;
+    const validScore = (input) => {
+      if (input.value === "") return false;
+      const value = Number(input.value);
+      return Number.isInteger(value) && value >= 0;
+    };
+    const currentWinnerId = () => {
+      if (timeLost.getValue() === match.participant_a_id) return match.participant_b_id;
+      if (timeLost.getValue() === match.participant_b_id) return match.participant_a_id;
+      if (!validScore(scoreA.input) || !validScore(scoreB.input)) return "";
+      const pointsA = Number(scoreA.input.value);
+      const pointsB = Number(scoreB.input.value);
+      if (pointsA > pointsB) return match.participant_a_id;
+      if (pointsB > pointsA) return match.participant_b_id;
+      if (starter.getValue() === match.participant_a_id) return match.participant_b_id;
+      if (starter.getValue() === match.participant_b_id) return match.participant_a_id;
+      return "";
+    };
+    const syncForm = () => {
+      const winnerId = currentWinnerId();
+      [scoreA, scoreB].forEach((score) => {
+        const isWinner = score.participantId === winnerId;
+        score.summary.classList.toggle("winner", isWinner);
+        score.won.classList.toggle("visible", isWinner);
+      });
+      scoreA.input.disabled = saving;
+      scoreB.input.disabled = saving;
+      starter.setDisabled(saving);
+      timeLost.setDisabled(saving);
+      note.input.disabled = saving;
+      noteToggle.disabled = saving;
+      cancel.disabled = saving;
+      save.disabled = saving
+        || !starter.getValue()
+        || !validScore(scoreA.input)
+        || !validScore(scoreB.input);
+    };
+
+    scoreA.input.addEventListener("input", () => syncForm());
+    scoreB.input.addEventListener("input", () => syncForm());
+    starter.onChange(() => syncForm());
+    timeLost.onChange(() => syncForm());
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (errorTarget) errorTarget.textContent = "";
+      if (!starter.getValue()) {
+        if (errorTarget) errorTarget.textContent = "Select the starting player.";
+        return;
+      }
+      const timeLostParticipantId = timeLost.getValue();
+      if (!validScore(scoreA.input) || !validScore(scoreB.input)) {
+        if (errorTarget) errorTarget.textContent = "Enter a non-negative whole-number score for both players.";
+        return;
+      }
+      const payload = timeLostParticipantId
+        ? {
+          starting_participant_id: starter.getValue(),
+          result_type: "time_forfeit",
+          points_a: Number(scoreA.input.value),
+          points_b: Number(scoreB.input.value),
+          winner_participant_id: timeLostParticipantId === match.participant_a_id
+            ? match.participant_b_id
+            : match.participant_a_id,
+          finish_reason: "time_forfeit",
+          admin_note: String(note.input.value || "").trim() || null,
+        }
+        : {
+          starting_participant_id: starter.getValue(),
+          result_type: "points",
+          points_a: Number(scoreA.input.value),
+          points_b: Number(scoreB.input.value),
+          admin_note: String(note.input.value || "").trim() || null,
+        };
+      saving = true;
+      save.textContent = "Saving...";
+      syncForm();
+      try {
+        const data = await apiJson(
+          tournamentUrl(`/swiss/matches/${encodeURIComponent(match.id)}/result`),
+          { method: "PUT", body: JSON.stringify(payload) }
+        );
+        adoptSwissResponse(data);
+        renderWorkspace();
+        setStatus(`Result saved for table ${match.table_number}.`, "success");
+        if (typeof onSaved === "function") onSaved();
+      } catch (error) {
+        saving = false;
+        save.textContent = "Save";
+        if (errorTarget) errorTarget.textContent = error.message || `Failed to save table ${match.table_number}.`;
+        syncForm();
+      }
+    });
+
+    syncForm();
+    return form;
+  }
+
+  function createResultForm(
+    match,
+    { stage = "swiss", modal = false, errorTarget = null, onCancel = null, onSaved = null } = {}
+  ) {
     const form = document.createElement("form");
     form.className = "ip-result-form";
+    const reportError = (message) => {
+      if (errorTarget) errorTarget.textContent = message;
+      else setStatus(message, "error");
+    };
+    const clearError = () => {
+      if (errorTarget) errorTarget.textContent = "";
+    };
     const playerOptions = [
       { value: match.participant_a_id, label: swissParticipantName(match, "a") },
       { value: match.participant_b_id, label: swissParticipantName(match, "b") },
@@ -2359,16 +3146,21 @@
     const save = document.createElement("button");
     save.type = "submit";
     save.className = "ip-btn primary";
-    save.textContent = match.status === "completed" ? "Update result" : "Save result";
+    save.textContent = modal ? "Save" : match.status === "completed" ? "Update result" : "Save result";
+    if (modal && typeof onCancel === "function") {
+      actions.appendChild(createButton("Cancel", "ip-btn", onCancel));
+    }
     actions.appendChild(save);
-    const noShowA = createButton(`${swissParticipantName(match, "a")} no-show`, "ip-btn danger", () => (
-      recordNoShow(match, match.participant_a_id, noShowA, stage)
-    ));
-    const noShowB = createButton(`${swissParticipantName(match, "b")} no-show`, "ip-btn danger", () => (
-      recordNoShow(match, match.participant_b_id, noShowB, stage)
-    ));
-    actions.appendChild(noShowA);
-    actions.appendChild(noShowB);
+    if (!modal) {
+      const noShowA = createButton(`${swissParticipantName(match, "a")} no-show`, "ip-btn danger", () => (
+        recordNoShow(match, match.participant_a_id, noShowA, stage)
+      ));
+      const noShowB = createButton(`${swissParticipantName(match, "b")} no-show`, "ip-btn danger", () => (
+        recordNoShow(match, match.participant_b_id, noShowB, stage)
+      ));
+      actions.appendChild(noShowA);
+      actions.appendChild(noShowB);
+    }
     form.appendChild(actions);
 
     const updateFields = () => {
@@ -2385,17 +3177,18 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      clearError();
       const type = resultType.select.value;
       if (type === "points" && (pointsA.input.value === "" || pointsB.input.value === "")) {
-        setStatus("Enter points for both players.", "error");
+        reportError("Enter points for both players.");
         return;
       }
       if (type !== "points" && !winner.select.value) {
-        setStatus("Select the winner.", "error");
+        reportError("Select the winner.");
         return;
       }
       if (type === "technical" && !finishReason.select.value) {
-        setStatus("Select the technical finish reason.", "error");
+        reportError("Select the technical finish reason.");
         return;
       }
       const payload = {
@@ -2417,8 +3210,9 @@
         else adoptSwissResponse(data);
         renderWorkspace();
         setStatus(`Result saved for table ${match.table_number}.`, "success");
+        if (typeof onSaved === "function") onSaved();
       } catch (error) {
-        setStatus(error.message || `Failed to save table ${match.table_number}.`, "error");
+        reportError(error.message || `Failed to save table ${match.table_number}.`);
         save.disabled = false;
       }
     });
@@ -2438,10 +3232,19 @@
       `${swiss.completed_rounds || 0} / ${swiss.swiss_rounds_count || 0}`,
       "Rounds completed"
     ));
+    const tableProgress = swissTableProgress(current);
     swissSummary.appendChild(createSwissStat(
-      current ? `${current.progress.completed} / ${current.progress.total}` : "0 / 0",
+      `${tableProgress.completed} / ${tableProgress.total}`,
       "Tables completed"
     ));
+  }
+
+  function swissTableProgress(round) {
+    const tables = (round?.matches || []).filter((match) => !match.is_bye);
+    return {
+      completed: tables.filter((match) => match.status === "completed").length,
+      total: tables.length,
+    };
   }
 
   function renderSwissPreview() {
@@ -2452,15 +3255,15 @@
     header.className = "ip-preview-head";
     const title = document.createElement("strong");
     title.textContent = `Round ${preview.round_number} pairing preview`;
-    const warningCount = document.createElement("span");
-    warningCount.className = "ip-badge";
-    warningCount.textContent = `${preview.warnings?.length || 0} warnings`;
     header.appendChild(title);
-    header.appendChild(warningCount);
+    const warningCount = preview.warnings?.length || 0;
+    if (warningCount > 0) {
+      const warningBadge = document.createElement("span");
+      warningBadge.className = "ip-badge";
+      warningBadge.textContent = `${warningCount} warnings`;
+      header.appendChild(warningBadge);
+    }
     swissPreview.appendChild(header);
-    (preview.matches || []).forEach((match) => {
-      swissPreview.appendChild(createPairingCard(match, { preview: true }));
-    });
     const actions = document.createElement("div");
     actions.className = "ip-swiss-action-row";
     const confirm = createButton("Confirm and publish", "ip-btn primary", () => confirmSwissPreview(confirm));
@@ -2472,12 +3275,18 @@
     actions.appendChild(confirm);
     actions.appendChild(cancel);
     swissPreview.appendChild(actions);
+    const grid = document.createElement("div");
+    grid.className = "ip-swiss-table-grid";
+    (preview.matches || []).forEach((match) => {
+      grid.appendChild(createSwissTableCard(match));
+    });
+    swissPreview.appendChild(grid);
   }
 
   function renderSwissMatches() {
     swissMatches.innerHTML = "";
-    const round = state.swiss?.current_round;
-    if (!round) {
+    const rounds = state.swiss?.rounds || [];
+    if (!rounds.length) {
       const empty = document.createElement("div");
       empty.className = "ip-empty";
       empty.textContent = state.overview?.tournament?.status === "check_in"
@@ -2486,22 +3295,25 @@
       swissMatches.appendChild(empty);
       return;
     }
-    const heading = document.createElement("div");
-    heading.className = "ip-preview-head";
-    const title = document.createElement("strong");
-    title.textContent = `Round ${round.round_number} tables`;
-    const progress = document.createElement("span");
-    progress.className = "ip-badge";
-    progress.textContent = `${round.progress.completed}/${round.progress.total} completed`;
-    heading.appendChild(title);
-    heading.appendChild(progress);
-    swissMatches.appendChild(heading);
-    (round.matches || []).forEach((match) => {
-      const card = createPairingCard(match);
-      if (!match.is_bye && round.status === "published") {
-        card.appendChild(createResultForm(match));
-      }
-      swissMatches.appendChild(card);
+    rounds.forEach((round) => {
+      const section = document.createElement("section");
+      section.className = "ip-swiss-round";
+      const heading = document.createElement("div");
+      heading.className = "ip-preview-head";
+      const title = document.createElement("strong");
+      title.textContent = `Round ${round.round_number} tables`;
+      heading.appendChild(title);
+      section.appendChild(heading);
+      const grid = document.createElement("div");
+      grid.className = "ip-swiss-table-grid";
+      (round.matches || []).forEach((match) => {
+        const onClick = !match.is_bye && round.status === "published"
+          ? () => openSwissResultModal(match)
+          : null;
+        grid.appendChild(createSwissTableCard(match, { onClick }));
+      });
+      section.appendChild(grid);
+      swissMatches.appendChild(section);
     });
   }
 
@@ -3055,7 +3867,8 @@
     if (state.selectedTournamentId) url.searchParams.set("tournament", state.selectedTournamentId);
     else url.searchParams.delete("tournament");
     window.history.replaceState({}, "", url.toString());
-    renderTournamentSelector();
+    renderTournamentSwitcher();
+    renderTournamentMeta();
     setStatus("");
     try {
       await loadOverview();
@@ -3087,7 +3900,7 @@
       state.selectedTournamentId = state.tournaments.some((item) => item.id === requestedId)
         ? requestedId
         : preservedId || state.tournaments[0]?.id || "";
-      renderTournamentSelector();
+      renderTournamentSwitcher();
       renderTournamentMeta();
       if (state.selectedTournamentId) await selectTournament(state.selectedTournamentId);
       else {
@@ -3102,7 +3915,7 @@
       state.overview = null;
       state.swiss = null;
       state.playoff = null;
-      renderTournamentSelector();
+      renderTournamentSwitcher();
       setStatus(
         error.status === 401 ? "Sign in to open In-Person tournaments." : error.message,
         "error"
@@ -3112,7 +3925,19 @@
     }
   }
 
-  tournamentSelect.addEventListener("change", () => selectTournament(tournamentSelect.value));
+  tournamentSwitchBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const isOpen = tournamentMenu.classList.contains("open");
+    closeTournamentMenu();
+    if (!isOpen) {
+      tournamentMenu.classList.add("open");
+      tournamentSwitchBtn.classList.add("open");
+      tournamentSwitchBtn.setAttribute("aria-expanded", "true");
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!tournamentSwitcher.contains(event.target)) closeTournamentMenu();
+  });
   refreshBtn.addEventListener("click", loadAll);
   addPlayerBtn.addEventListener("click", () => openPlayerForm());
   addLatePlayerBtn.addEventListener("click", openLatePlayerForm);
