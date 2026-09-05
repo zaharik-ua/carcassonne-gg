@@ -122,6 +122,7 @@ export function buildPlayoffBracket({ first_round: firstRound, participant_ids: 
   const firstMainIndex = MAIN_ROUND_KEYS.indexOf(normalizedFirstRound);
   const mainRoundKeys = MAIN_ROUND_KEYS.slice(firstMainIndex);
   const orderedRoundKeys = getPlayoffRoundKeys(normalizedFirstRound);
+  const medalRoundOrder = mainRoundKeys.length;
   const roundsByKey = new Map();
 
   orderedRoundKeys.forEach((roundKey, index) => {
@@ -134,7 +135,7 @@ export function buildPlayoffBracket({ first_round: firstRound, participant_ids: 
       key: matchKey(roundKey, matchIndex + 1),
       round_key: roundKey,
       bracket_position: matchIndex + 1,
-      table_number: matchIndex + 1,
+      table_number: roundKey === "bronze_medal_match" ? 2 : matchIndex + 1,
       participant_a_id: null,
       participant_b_id: null,
       next_match_for_winner_key: null,
@@ -145,7 +146,9 @@ export function buildPlayoffBracket({ first_round: firstRound, participant_ids: 
     roundsByKey.set(roundKey, {
       round_key: roundKey,
       round_label: getPlayoffRoundLabel(roundKey),
-      round_order: index + 1,
+      round_order: ["bronze_medal_match", "final"].includes(roundKey)
+        ? medalRoundOrder
+        : index + 1,
       matches,
     });
   });

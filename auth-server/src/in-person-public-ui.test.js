@@ -19,7 +19,6 @@ function extractBlock(html, startPattern, endPattern) {
 }
 
 const rendererJs = extractBlock(ua2026Html, "<script>", "</script>");
-const ua2025Css = extractBlock(ua2025Html, "<style>", "</style>");
 const ua2026Css = extractBlock(ua2026Html, "<style>", "</style>");
 const ua2025Shell = extractBlock(ua2025Html, "<!-- HTML -->", "<!-- СКРИПТ -->");
 const ua2026Shell = extractBlock(ua2026Html, "<!-- HTML -->", "<!-- СКРИПТ -->");
@@ -29,15 +28,14 @@ function createRendererHarness(pathname = "/") {
   return new Function(
     "window",
     "document",
-    `${rendererJs}\nreturn { findDefaultOpenSwissRound };`
+    `${rendererJs}\nreturn { findDefaultOpenSwissRound, buildPublicPlayoffRounds };`
   )(
     { location: { pathname } },
     { addEventListener() {} }
   );
 }
 
-test("UA 2026 preserves the UA 2025 visual shell and stylesheet", () => {
-  assert.equal(normalizeFormatting(ua2026Css), normalizeFormatting(ua2025Css));
+test("UA 2026 preserves the UA 2025 visual shell and core stylesheet", () => {
   assert.equal(normalizeFormatting(ua2026Shell), normalizeFormatting(ua2025Shell));
   assert.match(ua2026Css, /\.group-table\s*\{/);
   assert.match(ua2026Css, /\.match-table\s*\{/);
@@ -104,6 +102,56 @@ test("Rounds tab opens the latest active Swiss round but none after the final ro
   ], 5), "", "all configured Swiss rounds have been played");
   assert.match(rendererJs, /toggle\.dataset\.round = round/);
   assert.match(rendererJs, /toggle\.dataset\.round === defaultOpenSwissRound/);
+});
+
+test("Swiss standings render as one uninterrupted table", () => {
+  assert.match(rendererJs, /wrapper\.appendChild\(makeTable\(sorted\)\)/);
+  assert.doesNotMatch(rendererJs, /const halves =/);
+  assert.doesNotMatch(rendererJs, /leftTable|rightTable/);
+});
+
+test("Swiss standings use the same maximum width as the Rounds tab", () => {
+  assert.match(
+    ua2026Css,
+    /#tab-players-content,\s*#tab-matches-content,\s*#tab-stage1-content\s*\{\s*max-width:\s*1000px;/
+  );
+});
+
+test("Playoffs keep the complete bracket visible when only the active round is public", () => {
+  const { buildPublicPlayoffRounds } = createRendererHarness();
+  const quarterFinals = {
+    id: "quarter-final",
+    round_key: "quarter_final",
+    round_label: "Quarter-final",
+    round_order: 1,
+    status: "published",
+    matches: Array.from({ length: 4 }, (_, index) => ({
+      id: `quarter-${index + 1}`,
+      bracket_position: index + 1,
+      table_number: index + 1,
+      participant_a_id: `player-${(index * 2) + 1}`,
+      participant_b_id: `player-${(index * 2) + 2}`,
+      winner_participant_id: index === 0 ? "player-1" : null,
+      next_match_for_winner_id: `hidden-semi-${Math.floor(index / 2) + 1}`,
+      status: index === 0 ? "completed" : "scheduled",
+    })),
+  };
+  const rounds = buildPublicPlayoffRounds([quarterFinals], "quarter_final");
+
+  assert.deepEqual(
+    rounds.map((round) => round.round_key),
+    ["quarter_final", "semi_final", "bronze_medal_match", "final"]
+  );
+  assert.deepEqual(rounds.map((round) => round.matches.length), [4, 2, 1, 1]);
+  assert.equal(rounds[0].matches[0].next_match_for_winner_id, rounds[1].matches[0].id);
+  assert.equal(rounds[1].matches[0].participant_a_id, "player-1");
+  assert.match(rendererJs, /playoffs = publicPlayoffRounds/);
+  assert.match(rendererJs, /p1Name && playoffStarter === "A"/);
+  assert.match(ua2026Css, /#playoff-bracket\s*\{[\s\S]*?margin:\s*0 auto;/);
+  assert.match(rendererJs, /const bracketWidth = maxCordLeft \+ MATCH_WIDTH \+ BRACKET_MARGIN/);
+  assert.match(rendererJs, /legend\.style\.width = `\$\{bracketWidth\}px`/);
+  assert.match(rendererJs, /legend\.style\.paddingLeft = `\$\{BRACKET_MARGIN\}px`/);
+  assert.match(rendererJs, /legend\.style\.margin = "6px auto 8px"/);
 });
 
 test("UA 2026 stays self-contained and handles stages that have not started", () => {

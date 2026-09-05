@@ -517,6 +517,18 @@ export function registerInPersonRoutes(app, {
     }, logger)
   );
   app.post(
+    "/in-person-tournaments/:tournamentId/playoff/reset",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.resetPlayoff(
+        req.inPersonTournamentId,
+        req.body || {},
+        req.user
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
     "/in-person-tournaments/:tournamentId/playoff/rounds/:roundId/publish",
     requireInPersonTournamentAdmin,
     asyncHandler(async (req, res) => {

@@ -80,6 +80,11 @@ test("In-Person tournament header uses a conditional custom switcher", () => {
   assert.match(inPersonHtml, /`\$\{tournament\.swiss_rounds_count\} Swiss rounds`/);
   assert.match(inPersonHtml, /tournament\.playoff_preview\?\.participant_count/);
   assert.match(inPersonHtml, /players advance to playoff/);
+  const tournamentMetaRenderer = inPersonHtml.slice(
+    inPersonHtml.indexOf("function renderTournamentMeta()"),
+    inPersonHtml.indexOf("function renderCounters()")
+  );
+  assert.doesNotMatch(tournamentMetaRenderer, /tournament\.status|tournament\.scope|formatDates\(tournament\)/);
 });
 
 test("In-Person page contains the complete Swiss organizer workflow", () => {
@@ -178,7 +183,16 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
       < swissPreviewRenderer.indexOf("(preview.matches || []).forEach"),
     "Swiss preview actions must be rendered above the tables"
   );
+  assert.match(swissPreviewRenderer, /createSwissTableCard\(match, \{ showRecord: true \}\)/);
+  assert.match(inPersonHtml, /function swissParticipantRecord\(participantId\)[\s\S]*?record\.wins \+= 1[\s\S]*?record\.losses \+= 1/);
+  assert.match(inPersonHtml, /recordEl\.textContent = `\$\{record\.wins\} – \$\{record\.losses\}`/);
+  assert.match(inPersonHtml, /recordEl\.title = "Wins – losses"/);
   assert.match(inPersonHtml, /round\.progress\.completed === round\.progress\.total/);
+  const completeRoundFlow = inPersonHtml.slice(
+    inPersonHtml.indexOf("async function completeSwissRound"),
+    inPersonHtml.indexOf("function cancellationResultLabel")
+  );
+  assert.doesNotMatch(completeRoundFlow, /window\.confirm/);
   assert.match(inPersonHtml, /function swissTableProgress\(round\)[\s\S]*?filter\(\(match\) => !match\.is_bye\)/);
   assert.match(inPersonHtml, /const rounds = state\.swiss\?\.rounds \|\| \[\];[\s\S]*?rounds\.forEach\(\(round\) =>/);
   const swissMatchesRenderer = inPersonHtml.slice(
@@ -186,7 +200,17 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
     inPersonHtml.indexOf("function renderSwiss()")
   );
   assert.doesNotMatch(swissMatchesRenderer, /progress\.textContent|heading\.appendChild\(progress\)/);
+  assert.doesNotMatch(swissMatchesRenderer, /showRecord: true/);
+  assert.match(
+    swissMatchesRenderer,
+    /\.sort\(\(left, right\) => Number\(right\.round_number\) - Number\(left\.round_number\)\)/
+  );
+  assert.match(
+    swissMatchesRenderer,
+    /Number\(left\.table_number \?\? Number\.MAX_SAFE_INTEGER\)[\s\S]*?- Number\(right\.table_number \?\? Number\.MAX_SAFE_INTEGER\)/
+  );
   assert.match(inPersonHtml, /round_number: preview\.round_number, publish: true/);
+  assert.doesNotMatch(inPersonHtml, /ipStandingsMeta|updated after the latest completed round/);
 });
 
 test("participant row actions are moved into the Edit form", () => {
@@ -228,30 +252,130 @@ test("In-Person page exposes Swiss rollback, inactive-player and late-entry reco
     /finish_reason: "no_show"/,
   ].forEach((pattern) => assert.match(inPersonHtml, pattern));
   assert.doesNotMatch(inPersonHtml, /Late-entry mode \*/);
+  const cancellationFlow = inPersonHtml.slice(
+    inPersonHtml.indexOf("function openSwissRoundCancellationModal"),
+    inPersonHtml.indexOf("async function recordNoShow")
+  );
+  assert.match(cancellationFlow, /ip-modal-overlay/);
+  assert.match(cancellationFlow, /ip-cancellation-results/);
+  assert.match(cancellationFlow, /Cancelled by tournament organizer/);
+  assert.doesNotMatch(cancellationFlow, /window\.(prompt|confirm)/);
 });
 
-test("In-Person page contains manual playoff setup, progression and medal completion", () => {
+test("In-Person page uses an interactive playoff bracket and result modal", () => {
   [
     "Single-elimination playoff",
-    "Manual ${playoff.participant_count}-player bracket setup",
-    "Preview playoff bracket",
-    "Confirm and start playoff",
-    "Make streaming table",
+    "Select both players for this first-round match.",
+    "Save players",
+    "Auto-seed",
+    "Start playoff",
+    "Back to Swiss",
+    "Reset playoff bracket",
+    "Publish medal round",
+    "Click a published match to enter or correct its result.",
     "Bronze medal match",
     "Complete tournament",
-    "dependent match has already been played",
   ].forEach((text) => assert.ok(inPersonHtml.includes(text), `missing playoff UI text: ${text}`));
 
   [
     /data-ip-tab="playoff"/,
+    /function buildEmptyPlayoffRounds/,
+    /table_number: roundKey === "bronze_medal_match" \? 2 : matchIndex \+ 1/,
+    /function playoffSetupParticipantName/,
+    /`#\$\{position\} • \$\{name\}`/,
+    /function openPlayoffParticipantModal/,
+    /swissPosition\(left\.id\) - swissPosition\(right\.id\)/,
+    /function playoffSeedOrder/,
+    /function seedPlayoffFromSwiss/,
+    /function playoffTableNumber/,
+    /function returnPlayoffSetupToSwiss/,
+    /function resetPlayoffBracket/,
+    /function layoutPlayoffRounds/,
+    /function appendPlayoffConnector/,
+    /className = "ip-playoff-connector"/,
     /\/playoff\/preview/,
     /\/playoff\/confirm/,
+    /\/playoff\/reset/,
     /\/playoff\/rounds\/\$\{encodeURIComponent\(round\.id\)\}\/publish/,
+    /function openPlayoffResultModal/,
+    /function createPlayoffTableEditor/,
+    /stage: "playoff"/,
+    /tournamentUrl\(`\/\$\{stage\}\/matches\/\$\{encodeURIComponent\(match\.id\)\}\/result`\)/,
     /\/playoff\/matches\/\$\{encodeURIComponent\(match\.id\)\}\/table/,
     /\/streaming-table/,
-    /createResultForm\(match, \{ stage: "playoff" \}\)/,
     /\/playoff\/complete/,
   ].forEach((pattern) => assert.match(inPersonHtml, pattern));
+
+  [
+    "Fill every first-round slot manually, then run Final and Bronze medal match.",
+    "First-round slots",
+    "Playoff state",
+    "Manual ${playoff.participant_count}-player bracket setup",
+  ].forEach((text) => assert.ok(!inPersonHtml.includes(text), `obsolete playoff UI text: ${text}`));
+  assert.ok(!inPersonHtml.includes("Click a first-round match to select its players."));
+  assert.ok(!inPersonHtml.includes("Tournament cannot be completed yet."));
+  assert.ok(!inPersonHtml.includes("Final must be completed."));
+  assert.ok(!inPersonHtml.includes("Bronze medal match must be completed."));
+  assert.doesNotMatch(inPersonHtml, /id="ipPlayoffSummary"|id="ipPlayoffSetup"|id="ipPlayoffPreview"/);
+
+  const seedOrderSource = inPersonHtml.slice(
+    inPersonHtml.indexOf("function playoffSeedOrder"),
+    inPersonHtml.indexOf("function seedPlayoffFromSwiss")
+  );
+  const playoffSeedOrder = new Function(`${seedOrderSource}; return playoffSeedOrder;`)();
+  assert.deepEqual(playoffSeedOrder(4), [1, 4, 2, 3]);
+  assert.deepEqual(playoffSeedOrder(8), [1, 8, 4, 5, 2, 7, 3, 6]);
+  assert.deepEqual(playoffSeedOrder(16), [
+    1, 16, 8, 9, 4, 13, 5, 12, 2, 15, 7, 10, 3, 14, 6, 11,
+  ]);
+  assert.deepEqual(playoffSeedOrder(32), [
+    1, 32, 16, 17, 8, 25, 9, 24, 4, 29, 13, 20, 5, 28, 12, 21,
+    2, 31, 15, 18, 7, 26, 10, 23, 3, 30, 14, 19, 6, 27, 11, 22,
+  ]);
+
+  const participantModal = inPersonHtml.slice(
+    inPersonHtml.indexOf("function openPlayoffParticipantModal"),
+    inPersonHtml.indexOf("async function startPlayoffFromBracket")
+  );
+  assert.doesNotMatch(participantModal, /!participantAId \|\| !participantBId/);
+  assert.doesNotMatch(participantModal, /error\.textContent = "Select both players\."/);
+  assert.match(participantModal, /participantAId && participantAId === participantBId/);
+
+  const bracketMatchRenderer = inPersonHtml.slice(
+    inPersonHtml.indexOf("function createPlayoffBracketMatch"),
+    inPersonHtml.indexOf("function layoutPlayoffRounds")
+  );
+  assert.match(
+    bracketMatchRenderer,
+    /isSetupMatch[\s\S]*?playoffSetupParticipantName\(participantId\)/
+  );
+
+  const playoffLayout = inPersonHtml.slice(
+    inPersonHtml.indexOf("function layoutPlayoffRounds"),
+    inPersonHtml.indexOf("function appendPlayoffConnector")
+  );
+  assert.match(
+    playoffLayout,
+    /table_number: playoffTableNumber\(round\.round_key, match\.table_number\)/
+  );
+
+  const resultModal = inPersonHtml.slice(
+    inPersonHtml.indexOf("function openMatchResultModal"),
+    inPersonHtml.indexOf("function openSwissResultModal")
+  );
+  assert.match(
+    resultModal,
+    /!\["final", "bronze_medal_match"\]\.includes\(round\.round_key\)/
+  );
+  const playoffActionsRenderer = inPersonHtml.slice(
+    inPersonHtml.indexOf("function renderPlayoffActions"),
+    inPersonHtml.indexOf("function renderPlayoffBracket")
+  );
+  assert.match(playoffActionsRenderer, /new Set\(\["final", "bronze_medal_match"\]\)/);
+  assert.match(playoffActionsRenderer, /"Publish medal round"/);
+  assert.match(playoffActionsRenderer, /state\.swiss\?\.can_reopen_current_round/);
+  assert.match(playoffActionsRenderer, /playoff\.can_reset/);
+  assert.match(inPersonHtml, /Array\.isArray\(data\.participant_ids\)/);
 });
 
 test("all Player Hub scripts parse after the In-Person additions", () => {

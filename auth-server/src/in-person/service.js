@@ -285,7 +285,15 @@ function serializePlayoffRound(row, matches = []) {
       table_numbers: [...new Set(duplicateTables)],
     });
   }
-  if (streamingTables.length !== 1) {
+  if (
+    row.round_key === "bronze_medal_match"
+    && activeMatches.some((match) => match.table_number !== 2)
+  ) {
+    publishBlockers.push({
+      code: "BRONZE_TABLE_REQUIRED",
+      message: "The Bronze medal match must use table 2.",
+    });
+  } else if (row.round_key !== "bronze_medal_match" && streamingTables.length !== 1) {
     publishBlockers.push({
       code: "STREAMING_TABLE_REQUIRED",
       message: "Exactly one match in the round must use streaming table 1.",
@@ -2375,6 +2383,9 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
       ?.matches?.every((match) => match.status === "completed") || false;
     const bronzeComplete = rounds.find((round) => round.round_key === "bronze_medal_match")
       ?.matches?.every((match) => match.status === "completed") || false;
+    const hasCompletedPlayoffMatch = rounds.some((round) => (
+      round.matches?.some((match) => match.status === "completed")
+    ));
     return {
       tournament: serializeOrganizerTournament(tournamentRow),
       first_round: tournamentRow.playoff_first_round,
@@ -2386,6 +2397,9 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
       rounds,
       placements,
       can_start: tournamentRow.status === "swiss" && swissComplete && rounds.length === 0,
+      can_reset: tournamentRow.status === "playoff"
+        && rounds.length > 0
+        && !hasCompletedPlayoffMatch,
       can_complete: tournamentRow.status === "playoff" && finalComplete && bronzeComplete,
       completion_blockers: [
         ...(!finalComplete ? ["Final must be completed."] : []),
@@ -2632,24 +2646,162 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           throw conflictError("INVALID_TOURNAMENT_STATUS", "The tournament is not in the playoff stage");
         }
         const row = await requirePlayoffRoundRow(tournament.id, roundId);
-        if (["published", "completed"].includes(row.status)) {
-          return { published: false, round_id: row.id };
+        const isMedalRound = ["final", "bronze_medal_match"].includes(row.round_key);
+        const targetRows = isMedalRound
+          ? await dbAll(
+            db,
+            `SELECT * FROM in_person_rounds
+             WHERE tournament_id = ? AND stage = 'playoff'
+               AND round_key IN ('final', 'bronze_medal_match')
+               AND status <> 'cancelled'
+             ORDER BY round_key, id`,
+            [tournament.id]
+          )
+          : [row];
+        if (isMedalRound && targetRows.length !== 2) {
+          throw conflictError(
+            "PLAYOFF_MEDAL_ROUND_INCOMPLETE",
+            "Final and Bronze medal match must be published together"
+          );
         }
-        if (row.status !== "draft") {
-          throw conflictError("INVALID_ROUND_STATUS", "Only a draft playoff round can be published");
+        const draftRows = [];
+        for (const targetRow of targetRows) {
+          if (["published", "completed"].includes(targetRow.status)) continue;
+          if (targetRow.status !== "draft") {
+            throw conflictError("INVALID_ROUND_STATUS", "Only a draft playoff round can be published");
+          }
+          const round = serializePlayoffRound(
+            targetRow,
+            await loadPlayoffMatchRows(targetRow.id)
+          );
+          assertPlayoffRoundPublishable(round);
+          draftRows.push(targetRow);
         }
-        const round = serializePlayoffRound(row, await loadPlayoffMatchRows(row.id));
-        assertPlayoffRoundPublishable(round);
+        for (const draftRow of draftRows) {
+          await dbRun(
+            db,
+            `UPDATE in_person_rounds
+             SET status = 'published', published_at = CURRENT_TIMESTAMP,
+                 revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [draftRow.id]
+          );
+        }
+        if (draftRows.length) await touchTournament(tournament.id);
+        return {
+          published: draftRows.length > 0,
+          round_id: row.id,
+          round_ids: targetRows.map((targetRow) => targetRow.id),
+        };
+      });
+      return { ...(await getPlayoffOverview(tournamentId)), ...outcome };
+    });
+  }
+
+  async function resetPlayoff(tournamentId, payload = {}, actor = null) {
+    const reason = normalizeRequiredReason(payload?.reason, "reason");
+    const actorUserId = normalizeActorUserId(actor);
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        if (tournament.status !== "playoff") {
+          throw conflictError(
+            "INVALID_TOURNAMENT_STATUS",
+            "The playoff bracket can be reset only during the playoff stage"
+          );
+        }
+        const completedMatches = await dbAll(
+          db,
+          `
+            SELECT m.id, m.table_number, r.round_key
+            FROM in_person_matches m
+            JOIN in_person_rounds r ON r.id = m.round_id
+            WHERE r.tournament_id = ?
+              AND r.stage = 'playoff'
+              AND r.status <> 'cancelled'
+              AND m.status = 'completed'
+            ORDER BY r.round_order, r.round_key, m.bracket_position, m.id
+          `,
+          [tournament.id]
+        );
+        if (completedMatches.length) {
+          throw conflictError(
+            "PLAYOFF_RESULTS_EXIST",
+            "The playoff bracket cannot be reset after a result has been entered",
+            {
+              matches: completedMatches.map((match) => ({
+                id: match.id,
+                round_key: match.round_key,
+                table_number: match.table_number == null ? null : Number(match.table_number),
+              })),
+            }
+          );
+        }
+        const activeRound = await dbGet(
+          db,
+          `SELECT id FROM in_person_rounds
+           WHERE tournament_id = ? AND stage = 'playoff' AND status <> 'cancelled'
+           LIMIT 1`,
+          [tournament.id]
+        );
+        if (!activeRound) {
+          throw conflictError("PLAYOFF_NOT_CREATED", "There is no active playoff bracket to reset");
+        }
+        const firstRoundMatches = await dbAll(
+          db,
+          `
+            SELECT m.participant_a_id, m.participant_b_id
+            FROM in_person_matches m
+            JOIN in_person_rounds r ON r.id = m.round_id
+            WHERE r.tournament_id = ?
+              AND r.stage = 'playoff'
+              AND r.round_key = ?
+              AND r.status <> 'cancelled'
+              AND m.status <> 'cancelled'
+            ORDER BY m.bracket_position, m.id
+          `,
+          [tournament.id, tournament.playoff_first_round]
+        );
+        const participantIds = firstRoundMatches.flatMap((match) => ([
+          match.participant_a_id,
+          match.participant_b_id,
+        ]));
         await dbRun(
           db,
-          `UPDATE in_person_rounds
-           SET status = 'published', published_at = CURRENT_TIMESTAMP,
-               revision = revision + 1, updated_at = CURRENT_TIMESTAMP
-           WHERE id = ?`,
-          [row.id]
+          `
+            UPDATE in_person_matches
+            SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP,
+                cancelled_by_user_id = ?, cancellation_reason = ?,
+                revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+            WHERE round_id IN (
+              SELECT id FROM in_person_rounds
+              WHERE tournament_id = ? AND stage = 'playoff' AND status <> 'cancelled'
+            )
+              AND status <> 'cancelled'
+          `,
+          [actorUserId, reason, tournament.id]
         );
-        await touchTournament(tournament.id);
-        return { published: true, round_id: row.id };
+        await injectFault("playoff_reset_after_matches", { tournament_id: tournament.id });
+        await dbRun(
+          db,
+          `
+            UPDATE in_person_rounds
+            SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP,
+                cancelled_by_user_id = ?, cancellation_reason = ?,
+                revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+            WHERE tournament_id = ? AND stage = 'playoff' AND status <> 'cancelled'
+          `,
+          [actorUserId, reason, tournament.id]
+        );
+        await dbRun(
+          db,
+          `UPDATE in_person_tournaments
+           SET status = 'swiss', revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [tournament.id]
+        );
+        await injectFault("playoff_reset_after_rounds", { tournament_id: tournament.id });
+        return { reset: true, participant_ids: participantIds };
       });
       return { ...(await getPlayoffOverview(tournamentId)), ...outcome };
     });
@@ -2671,6 +2823,18 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           );
         }
         const currentTableNumber = match.table_number == null ? null : Number(match.table_number);
+        const fixedMedalTableNumber = match.round_key === "final"
+          ? 1
+          : match.round_key === "bronze_medal_match"
+            ? 2
+            : null;
+        if (fixedMedalTableNumber !== null && tableNumber !== fixedMedalTableNumber) {
+          throw conflictError(
+            "PLAYOFF_MEDAL_TABLE_LOCKED",
+            `${getPlayoffRoundLabel(match.round_key)} must use table ${fixedMedalTableNumber}`,
+            { round_key: match.round_key, table_number: fixedMedalTableNumber }
+          );
+        }
         if (currentTableNumber === tableNumber) {
           return { changed: false, match_id: match.id };
         }
@@ -3434,6 +3598,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     publishPlayoffRound,
     publishSwissRound,
     reopenSwissRound,
+    resetPlayoff,
     removeTournamentAdmin,
     replaceTournamentAdmins,
     restoreCity: (cityId) => setCityArchived(cityId, false),

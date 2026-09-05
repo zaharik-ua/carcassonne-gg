@@ -473,6 +473,70 @@ async function ensureCityExtensions(db) {
   }
 }
 
+async function ensurePlayoffMedalTableAssignments(db) {
+  const existingMigration = await dbGet(
+    db,
+    "SELECT version FROM in_person_schema_migrations WHERE version = 3"
+  );
+  if (existingMigration) return { migrated: false, updatedRows: 0 };
+
+  const targetRow = await dbGet(
+    db,
+    `
+      SELECT COUNT(*) AS count
+      FROM in_person_matches m
+      JOIN in_person_rounds r ON r.id = m.round_id
+      WHERE r.stage = 'playoff'
+        AND m.status <> 'cancelled'
+        AND (
+          (r.round_key = 'final' AND (m.table_number IS NULL OR m.table_number <> 1))
+          OR
+          (r.round_key = 'bronze_medal_match' AND (m.table_number IS NULL OR m.table_number <> 2))
+        )
+    `
+  );
+  const updatedRows = Number(targetRow?.count || 0);
+
+  try {
+    await dbExec(db, `
+      BEGIN IMMEDIATE TRANSACTION;
+
+      UPDATE in_person_matches
+      SET table_number = 1,
+          revision = revision + 1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE status <> 'cancelled'
+        AND (table_number IS NULL OR table_number <> 1)
+        AND round_id IN (
+          SELECT id
+          FROM in_person_rounds
+          WHERE stage = 'playoff' AND round_key = 'final'
+        );
+
+      UPDATE in_person_matches
+      SET table_number = 2,
+          revision = revision + 1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE status <> 'cancelled'
+        AND (table_number IS NULL OR table_number <> 2)
+        AND round_id IN (
+          SELECT id
+          FROM in_person_rounds
+          WHERE stage = 'playoff' AND round_key = 'bronze_medal_match'
+        );
+
+      INSERT INTO in_person_schema_migrations (version, name)
+      VALUES (3, 'playoff_medal_table_assignments');
+
+      COMMIT;
+    `);
+  } catch (error) {
+    await rollbackQuietly(db);
+    throw error;
+  }
+  return { migrated: true, updatedRows };
+}
+
 async function ensureInPersonTriggersAndAccessIndexes(db) {
   try {
     await dbExec(db, `
@@ -724,11 +788,13 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
   const accessMigration = await migrateTournamentAccessUsers(db);
   await ensureInPersonTables(db);
   await ensureCityExtensions(db);
+  const playoffMedalTableMigration = await ensurePlayoffMedalTableAssignments(db);
   await ensureInPersonTriggersAndAccessIndexes(db);
   logger?.info?.("[in-person] Schema foundation ready", {
     accessTableMigrated: accessMigration.migrated,
     accessTableCreated: accessMigration.created,
     accessRows: accessMigration.rowsAfter,
+    playoffMedalTablesUpdated: playoffMedalTableMigration.updatedRows,
   });
-  return { accessMigration };
+  return { accessMigration, playoffMedalTableMigration };
 }

@@ -121,11 +121,16 @@ test("builds complete deterministic playoff structures for every supported first
       ["bronze_medal_match", "final"]
     );
     const semifinals = bracket.rounds.find((round) => round.round_key === "semi_final");
+    const final = bracket.rounds.find((round) => round.round_key === "final");
+    const bronze = bracket.rounds.find((round) => round.round_key === "bronze_medal_match");
     assert.deepEqual(
       semifinals.matches.map((match) => match.next_match_for_loser_key),
       ["bronze_medal_match:1", "bronze_medal_match:1"]
     );
-    bracket.rounds.forEach((round) => {
+    assert.equal(final.round_order, bronze.round_order);
+    assert.equal(final.matches[0].table_number, 1);
+    assert.equal(bronze.matches[0].table_number, 2);
+    bracket.rounds.filter((round) => round.round_key !== "bronze_medal_match").forEach((round) => {
       assert.equal(round.matches.filter((match) => match.table_number === 1).length, 1);
     });
   });
@@ -148,6 +153,66 @@ test("rejects missing and duplicate manual first-round slots", () => {
       error?.code === "DUPLICATE_PLAYOFF_PARTICIPANT"
       && error?.details?.duplicates?.[0]?.slots?.join(",") === "1,3"
     )
+  );
+});
+
+test("resets an unplayed playoff bracket and blocks reset after the first result", async (t) => {
+  const { db, service } = await createContext(t);
+  const { tournament, participants } = await createSwissCompleteTournament(service, "reset");
+  const participantIds = participants.map((participant) => participant.id);
+  let preview = await service.previewPlayoff(tournament.id, { participant_ids: participantIds });
+  let overview = await service.confirmPlayoff(tournament.id, {
+    participant_ids: participantIds,
+    expected_tournament_revision: preview.tournament_revision,
+    expected_standings_revision: preview.standings_revision,
+  });
+  assert.equal(overview.can_reset, true);
+
+  overview = await service.resetPlayoff(
+    tournament.id,
+    { reason: "Correct playoff setup" },
+    { id: 1 }
+  );
+  assert.equal(overview.reset, true);
+  assert.equal(overview.tournament.status, "swiss");
+  assert.equal(overview.rounds.length, 0);
+  assert.equal(overview.can_start, true);
+  assert.deepEqual(overview.participant_ids, participantIds);
+  const cancelledRounds = await all(
+    db,
+    `SELECT status, cancelled_by_user_id, cancellation_reason
+     FROM in_person_rounds
+     WHERE tournament_id = ? AND stage = 'playoff'`,
+    [tournament.id]
+  );
+  assert.equal(cancelledRounds.length, 3);
+  cancelledRounds.forEach((round) => {
+    assert.equal(round.status, "cancelled");
+    assert.equal(round.cancelled_by_user_id, 1);
+    assert.equal(round.cancellation_reason, "Correct playoff setup");
+  });
+
+  preview = await service.previewPlayoff(tournament.id, { participant_ids: participantIds });
+  overview = await service.confirmPlayoff(tournament.id, {
+    participant_ids: participantIds,
+    expected_tournament_revision: preview.tournament_revision,
+    expected_standings_revision: preview.standings_revision,
+  });
+  const semifinal = overview.rounds.find((round) => round.round_key === "semi_final");
+  const firstMatch = semifinal.matches[0];
+  overview = await service.savePlayoffMatchResult(
+    tournament.id,
+    firstMatch.id,
+    simpleResult(firstMatch, firstMatch.participant_a_id)
+  );
+  assert.equal(overview.can_reset, false);
+  await assert.rejects(
+    service.resetPlayoff(
+      tournament.id,
+      { reason: "Too late" },
+      { id: 1 }
+    ),
+    (error) => error?.code === "PLAYOFF_RESULTS_EXIST"
   );
 });
 
@@ -199,6 +264,12 @@ test("runs the playoff, swaps streaming table, propagates corrections and requir
   );
   let finalMatch = overview.rounds.find((round) => round.round_key === "final").matches[0];
   let bronzeMatch = overview.rounds.find((round) => round.round_key === "bronze_medal_match").matches[0];
+  assert.equal(finalMatch.table_number, 1);
+  assert.equal(bronzeMatch.table_number, 2);
+  assert.equal(
+    overview.rounds.find((round) => round.round_key === "final").round_order,
+    overview.rounds.find((round) => round.round_key === "bronze_medal_match").round_order
+  );
   assert.deepEqual(
     [finalMatch.participant_a_id, finalMatch.participant_b_id],
     [semiOne.participant_a_id, semiTwo.participant_a_id]
@@ -220,7 +291,23 @@ test("runs the playoff, swaps streaming table, propagates corrections and requir
 
   const finalRound = overview.rounds.find((round) => round.round_key === "final");
   overview = await service.publishPlayoffRound(tournament.id, finalRound.id);
+  assert.equal(
+    overview.rounds.find((round) => round.round_key === "final").status,
+    "published"
+  );
+  assert.equal(
+    overview.rounds.find((round) => round.round_key === "bronze_medal_match").status,
+    "published"
+  );
   finalMatch = overview.rounds.find((round) => round.round_key === "final").matches[0];
+  await assert.rejects(
+    service.setPlayoffMatchTable(tournament.id, finalMatch.id, { table_number: 2 }),
+    (error) => error?.code === "PLAYOFF_MEDAL_TABLE_LOCKED"
+  );
+  await assert.rejects(
+    service.setPlayoffMatchTable(tournament.id, bronzeMatch.id, { table_number: 1 }),
+    (error) => error?.code === "PLAYOFF_MEDAL_TABLE_LOCKED"
+  );
   await service.savePlayoffMatchResult(
     tournament.id,
     finalMatch.id,

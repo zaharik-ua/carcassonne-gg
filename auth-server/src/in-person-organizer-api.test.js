@@ -595,6 +595,43 @@ test("organizer API runs a manual playoff through Final and technical Bronze", a
     }
   );
   assert.equal(playoff.response.status, 200);
+  assert.equal(playoff.data.can_reset, true);
+  const resetPlayoff = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/playoff/reset`,
+    {
+      userId: 1,
+      method: "POST",
+      body: JSON.stringify({ reason: "Correct playoff setup" }),
+    }
+  );
+  assert.equal(resetPlayoff.response.status, 200);
+  assert.equal(resetPlayoff.data.tournament.status, "swiss");
+  assert.equal(resetPlayoff.data.rounds.length, 0);
+  assert.deepEqual(resetPlayoff.data.participant_ids, participantIds);
+  const secondPreview = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/playoff/preview`,
+    {
+      userId: 1,
+      method: "POST",
+      body: JSON.stringify({ participant_ids: participantIds }),
+    }
+  );
+  playoff = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/playoff/confirm`,
+    {
+      userId: 1,
+      method: "POST",
+      body: JSON.stringify({
+        participant_ids: participantIds,
+        expected_tournament_revision: secondPreview.data.preview.tournament_revision,
+        expected_standings_revision: secondPreview.data.preview.standings_revision,
+      }),
+    }
+  );
+  assert.equal(playoff.response.status, 200);
   const semifinals = playoff.data.rounds.find((round) => round.round_key === "semi_final");
   const streamingSwap = await api(
     baseUrl,

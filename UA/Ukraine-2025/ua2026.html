@@ -173,6 +173,7 @@
     position: relative;
     flex-wrap: nowrap;
     flex: 1 0 auto;
+    margin: 0 auto;
   }
 
   .playoff-scroll-wrapper {
@@ -261,9 +262,10 @@
     margin: 0 auto;
   }
 
-  /* Max width for Players and Matches */
+  /* Keep Players, Swiss standings and Rounds at the same content width */
   #tab-players-content,
-  #tab-matches-content {
+  #tab-matches-content,
+  #tab-stage1-content {
     max-width: 1000px;
   }
 </style>
@@ -372,9 +374,119 @@
     final: { order: 5, ua: "Фінал", en: "Final" },
   };
 
+  const PLAYOFF_MAIN_ROUNDS = [
+    "round_of_32",
+    "round_of_16",
+    "quarter_final",
+    "semi_final",
+    "final",
+  ];
+
+  function buildPublicPlayoffRounds(publishedRounds, configuredFirstRound) {
+    const sourceRounds = Array.isArray(publishedRounds) ? publishedRounds : [];
+    if (!sourceRounds.length) return [];
+    const firstRound = String(configuredFirstRound || sourceRounds[0]?.round_key || "");
+    const firstRoundIndex = PLAYOFF_MAIN_ROUNDS.indexOf(firstRound);
+    if (firstRoundIndex < 0) return sourceRounds;
+
+    const mainRoundKeys = PLAYOFF_MAIN_ROUNDS.slice(firstRoundIndex);
+    const orderedRoundKeys = [
+      ...mainRoundKeys.slice(0, -1),
+      "bronze_medal_match",
+      "final",
+    ];
+    const participantCount = 2 ** (PLAYOFF_MAIN_ROUNDS.length - firstRoundIndex);
+    const sourceRoundsByKey = new Map(sourceRounds.map(round => [round.round_key, round]));
+
+    const rounds = orderedRoundKeys.map(roundKey => {
+      const sourceRound = sourceRoundsByKey.get(roundKey) || null;
+      const sourceMatches = Array.isArray(sourceRound?.matches) ? sourceRound.matches : [];
+      const mainRoundIndex = mainRoundKeys.indexOf(roundKey);
+      const expectedMatchCount = mainRoundIndex < 0
+        ? 1
+        : participantCount / (2 ** (mainRoundIndex + 1));
+      const highestBracketPosition = sourceMatches.reduce((highest, match, matchIndex) => (
+        Math.max(highest, Number(match.bracket_position || matchIndex + 1))
+      ), 0);
+      const matchCount = Math.max(expectedMatchCount, highestBracketPosition);
+      const sourceMatchesByPosition = new Map(sourceMatches.map((match, matchIndex) => (
+        [Number(match.bracket_position || matchIndex + 1), match]
+      )));
+      const matches = Array.from({ length: matchCount }, (_, matchIndex) => {
+        const bracketPosition = matchIndex + 1;
+        const sourceMatch = sourceMatchesByPosition.get(bracketPosition);
+        if (sourceMatch) return { ...sourceMatch };
+        return {
+          id: `public-playoff-${roundKey}-${bracketPosition}`,
+          bracket_position: bracketPosition,
+          table_number: roundKey === "bronze_medal_match" ? 2 : bracketPosition,
+          participant_a_id: null,
+          participant_b_id: null,
+          next_match_for_winner_id: null,
+          next_match_for_loser_id: null,
+          status: "scheduled",
+        };
+      });
+      const meta = PLAYOFF_ROUND_META[roundKey];
+      return {
+        ...(sourceRound || {}),
+        id: sourceRound?.id || `public-playoff-round-${roundKey}`,
+        round_key: roundKey,
+        round_label: sourceRound?.round_label || meta?.en || roundKey,
+        round_order: meta?.order || sourceRound?.round_order || 0,
+        status: sourceRound?.status || "draft",
+        matches,
+      };
+    });
+
+    const roundsByKey = new Map(rounds.map(round => [round.round_key, round]));
+    const visibleMatchIds = new Set(rounds.flatMap(round => round.matches.map(match => match.id)));
+    const placeParticipant = (match, slot, participantId) => {
+      const field = `${slot}_id`;
+      if (participantId && !match[field]) match[field] = participantId;
+    };
+
+    mainRoundKeys.slice(0, -1).forEach((roundKey, roundIndex) => {
+      const round = roundsByKey.get(roundKey);
+      const nextRound = roundsByKey.get(mainRoundKeys[roundIndex + 1]);
+      (round?.matches || []).forEach((match, matchIndex) => {
+        const targetMatch = nextRound?.matches?.[Math.floor(matchIndex / 2)];
+        if (!targetMatch) return;
+        const targetSlot = matchIndex % 2 === 0 ? "participant_a" : "participant_b";
+        if (!visibleMatchIds.has(match.next_match_for_winner_id)) {
+          match.next_match_for_winner_id = targetMatch.id;
+        }
+        if (match.status === "completed") {
+          placeParticipant(targetMatch, targetSlot, match.winner_participant_id);
+        }
+        if (roundKey === "semi_final") {
+          const bronzeMatch = roundsByKey.get("bronze_medal_match")?.matches?.[0];
+          if (!bronzeMatch) return;
+          if (!visibleMatchIds.has(match.next_match_for_loser_id)) {
+            match.next_match_for_loser_id = bronzeMatch.id;
+          }
+          const loserParticipantId = match.loser_participant_id
+            || (match.winner_participant_id === match.participant_a_id
+              ? match.participant_b_id
+              : match.winner_participant_id === match.participant_b_id
+                ? match.participant_a_id
+                : null);
+          if (match.status === "completed") {
+            placeParticipant(bronzeMatch, targetSlot, loserParticipantId);
+          }
+        }
+      });
+    });
+    return rounds;
+  }
+
   function adaptPublicTournament(data) {
     currentTournament = data?.tournament || null;
     const publicSwissRounds = Array.isArray(data?.swiss?.rounds) ? data.swiss.rounds : [];
+    const publicPlayoffRounds = buildPublicPlayoffRounds(
+      data?.playoff?.rounds,
+      currentTournament?.playoff_first_round
+    );
     defaultOpenSwissRound = findDefaultOpenSwissRound(
       publicSwissRounds,
       currentTournament?.swiss_rounds_count
@@ -430,7 +542,7 @@
         vp_diff: row.vp_difference,
       }));
 
-    playoffs = (Array.isArray(data?.playoff?.rounds) ? data.playoff.rounds : [])
+    playoffs = publicPlayoffRounds
       .flatMap(round => {
         const meta = PLAYOFF_ROUND_META[round.round_key]
           || { order: Number(round.round_order || 0), ua: round.round_label || "", en: round.round_label || "" };
@@ -703,7 +815,7 @@
   }
 
   function renderStandingsData(standings_list, containerOverride) {
-    // --- RENDER SWISS STANDINGS (UA2025 format), split into two equal tables ---
+    // --- RENDER SWISS STANDINGS (UA2025 format) as one continuous table ---
     const container = containerOverride || document.getElementById("tab-standing-content");
     container.innerHTML = '';
 
@@ -717,22 +829,13 @@
     }
 
     const sorted = [...data].sort((a, b) => Number(a.rank) - Number(b.rank));
-    const mid = Math.ceil(sorted.length / 2);
-    const halves = [sorted.slice(0, mid), sorted.slice(mid)];
 
     const wrapper = document.createElement("div");
     wrapper.className = "group-section";
-    wrapper.style.display = "flex";
-    wrapper.style.flexWrap = "wrap";
-    wrapper.style.gap = "16px";
-    // Prevent equal-height stretching between the two tables (Safari fix)
-    wrapper.style.alignItems = "flex-start";
 
     const makeTable = (rows) => {
       const table = document.createElement("table");
       table.className = "group-table";
-      table.style.flex = "1 1 420px";
-      table.style.minWidth = "280px";
     table.innerHTML = `
       <tr>
         <th style=\"width:10%; min-width:40px;\">#</th>
@@ -775,14 +878,11 @@
       return table;
     };
 
-    const leftTable = makeTable(halves[0]);
-    const rightTable = makeTable(halves[1]);
-    wrapper.appendChild(leftTable);
-    if (halves[1].length) wrapper.appendChild(rightTable);
+    wrapper.appendChild(makeTable(sorted));
 
     container.appendChild(wrapper);
 
-    // Explanatory legend centered below the tables
+    // Explanatory legend centered below the table
     const legend = document.createElement("div");
     legend.style.textAlign = "center";
     legend.style.fontSize = "13px";
@@ -1272,7 +1372,7 @@
           player1Info.appendChild(player1Link);
           // Add mipple icon to the actual starting player.
           const playoffStarter = String(m.starter || "").trim().toUpperCase();
-          if (p1Name && playoffStarter !== "B") {
+          if (p1Name && playoffStarter === "A") {
             const p1Mipple = document.createElement("img");
             p1Mipple.src = "https://carcassonne.gg/gallery/blue-mipple-no-bg-small.png";
             p1Mipple.alt = "A";
@@ -1432,11 +1532,12 @@
     // Build layout and UI for playoff bracket including match positions, labels, and connectors
     let container;
     let bracketDiv;
+    let legend;
     if (containerOverride) {
       container = containerOverride;
       container.innerHTML = '';
       // Add legend above bracket
-      const legend = document.createElement("div");
+      legend = document.createElement("div");
       legend.style.display = "flex";
       legend.style.alignItems = "center";
       legend.style.gap = "6px";
@@ -1465,7 +1566,7 @@
       container = document.getElementById("playoff-bracket");
       container.innerHTML = '';
       // Add legend above bracket
-      const legend = document.createElement("div");
+      legend = document.createElement("div");
       legend.style.display = "flex";
       legend.style.alignItems = "center";
       legend.style.gap = "6px";
@@ -1511,7 +1612,13 @@
     container.style.height = `${maxCordBottom + BRACKET_MARGIN}px`;
     // Set container's fixed width based on the maximum cord_left plus MATCH_WIDTH + BRACKET_MARGIN
     const maxCordLeft = Math.max(...allMatches.map(m => m.cord_left || 0));
-    container.style.width = `${maxCordLeft + MATCH_WIDTH + BRACKET_MARGIN}px`;
+    const bracketWidth = maxCordLeft + MATCH_WIDTH + BRACKET_MARGIN;
+    container.style.width = `${bracketWidth}px`;
+    legend.style.width = `${bracketWidth}px`;
+    legend.style.maxWidth = "100%";
+    legend.style.boxSizing = "border-box";
+    legend.style.paddingLeft = `${BRACKET_MARGIN}px`;
+    legend.style.margin = "6px auto 8px";
 
     // --- HOVER HIGHLIGHT LOGIC ---
     // After rendering all matches, add hover event for .match-row-winner and .match-row-loser

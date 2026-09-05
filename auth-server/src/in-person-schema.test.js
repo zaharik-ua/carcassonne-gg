@@ -209,6 +209,41 @@ test("adds icon_url to an existing cities table without losing city data", async
   });
 });
 
+test("repairs legacy Final and Bronze medal match table assignments", async (t) => {
+  const db = await createDatabase(t);
+  await ensureInPersonSchema(db, { logger: silentLogger });
+  await insertInternationalTournament(db, "legacy-medal-tables");
+  await exec(db, `
+    INSERT INTO in_person_rounds (
+      id, tournament_id, stage, round_key, round_order, status
+    ) VALUES
+      ('legacy-final', 'legacy-medal-tables', 'playoff', 'final', 4, 'draft'),
+      ('legacy-bronze', 'legacy-medal-tables', 'playoff', 'bronze_medal_match', 4, 'draft');
+
+    INSERT INTO in_person_matches (
+      id, round_id, bracket_position, table_number
+    ) VALUES
+      ('legacy-final-match', 'legacy-final', 1, 7),
+      ('legacy-bronze-match', 'legacy-bronze', 1, 1);
+
+    DELETE FROM in_person_schema_migrations WHERE version = 3;
+  `);
+
+  const result = await ensureInPersonSchema(db, { logger: silentLogger });
+  assert.equal(result.playoffMedalTableMigration.migrated, true);
+  assert.equal(result.playoffMedalTableMigration.updatedRows, 2);
+  const matches = await all(
+    db,
+    `SELECT id, table_number FROM in_person_matches
+     WHERE id IN ('legacy-final-match', 'legacy-bronze-match')
+     ORDER BY id`
+  );
+  assert.deepEqual(matches, [
+    { id: "legacy-bronze-match", table_number: 2 },
+    { id: "legacy-final-match", table_number: 1 },
+  ]);
+});
+
 test("keeps access isolated when both tournament domains use the same id", async (t) => {
   const db = await createDatabase(t);
   await exec(db, `
