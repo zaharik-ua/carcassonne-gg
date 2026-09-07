@@ -28,7 +28,7 @@ function createRendererHarness(pathname = "/") {
   return new Function(
     "window",
     "document",
-    `${rendererJs}\nreturn { findDefaultOpenSwissRound, buildPublicPlayoffRounds };`
+    `${rendererJs}\nreturn { findDefaultOpenSwissRound, matchPointsValue, matchTimeLostSide, buildPublicPlayoffRounds };`
   )(
     { location: { pathname } },
     { addEventListener() {} }
@@ -104,6 +104,39 @@ test("Rounds tab opens the latest active Swiss round but none after the final ro
   assert.match(rendererJs, /toggle\.dataset\.round === defaultOpenSwissRound/);
 });
 
+test("Rounds preserve time-forfeit winners and mark the timed-out side", () => {
+  const { matchPointsValue, matchTimeLostSide } = createRendererHarness();
+  const timeForfeit = {
+    status: "completed",
+    result_type: "time_forfeit",
+    participant_a_id: "player-a",
+    participant_b_id: "player-b",
+    winner_participant_id: "player-a",
+    loser_participant_id: "player-b",
+    points_a: 40,
+    points_b: 80,
+  };
+  assert.equal(matchPointsValue(timeForfeit, "a"), "40");
+  assert.equal(matchPointsValue(timeForfeit, "b"), "80");
+  assert.equal(matchTimeLostSide(timeForfeit), "B");
+  assert.equal(matchTimeLostSide({
+    finish_reason: "time_forfeit",
+    participant_a_id: "player-a",
+    participant_b_id: "player-b",
+    winner_participant_id: "player-b",
+  }), "A", "infer the loser when the public result omits loser_participant_id");
+  assert.equal(matchTimeLostSide({ result_type: "points" }), "");
+  assert.match(rendererJs, /winner_id: match\.winner_participant_id \|\| ""/);
+  assert.match(rendererJs, /time_lost: matchTimeLostSide\(match\)/);
+  assert.match(rendererJs, /const isWinnerA = winnerId \? winnerId === p1Id/);
+  assert.match(rendererJs, /playerName\.style\.fontWeight = isWinner \? "600" : "400"/);
+  assert.match(rendererJs, /if \(timeLost === "A"\) appendTimeForfeitIcon\(\)/);
+  assert.match(rendererJs, /if \(timeLost === "B"\) appendTimeForfeitIcon\(\)/);
+  assert.match(rendererJs, /clock\.className = "match-time-forfeit-icon"/);
+  assert.match(ua2026Css, /\.match-time-forfeit-icon\s*\{[\s\S]*?border:\s*2px solid #b42318;/);
+  assert.match(ua2026Css, /\.match-time-forfeit-icon::before,[\s\S]*?\.match-time-forfeit-icon::after/);
+});
+
 test("Swiss standings render as one uninterrupted table", () => {
   assert.match(rendererJs, /wrapper\.appendChild\(makeTable\(sorted\)\)/);
   assert.doesNotMatch(rendererJs, /const halves =/);
@@ -146,7 +179,7 @@ test("Playoffs keep the complete bracket visible when only the active round is p
   assert.equal(rounds[0].matches[0].next_match_for_winner_id, rounds[1].matches[0].id);
   assert.equal(rounds[1].matches[0].participant_a_id, "player-1");
   assert.match(rendererJs, /playoffs = publicPlayoffRounds/);
-  assert.match(rendererJs, /p1Name && playoffStarter === "A"/);
+  assert.match(rendererJs, /p1Name && playoffStarter !== "B"/);
   assert.match(ua2026Css, /#playoff-bracket\s*\{[\s\S]*?margin:\s*0 auto;/);
   assert.match(rendererJs, /const bracketWidth = maxCordLeft \+ MATCH_WIDTH \+ BRACKET_MARGIN/);
   assert.match(rendererJs, /legend\.style\.width = `\$\{bracketWidth\}px`/);

@@ -63,6 +63,7 @@ import {
   calculateTournamentBountySnapshot,
   percentileInclusive as calculatePercentileInclusive,
 } from "./bounty-tpr.js";
+import { buildUsersListFilter } from "./users-list-filters.js";
 
 dotenv.config();
 
@@ -17834,9 +17835,18 @@ app.get("/users", requireAdmin, (req, res, next) => {
   const limit = allowedPageSizes.has(parsedLimit) ? parsedLimit : 10;
   const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const offset = (page - 1) * limit;
+  const { whereSql, params: whereParams } = buildUsersListFilter(req.query);
 
   return db.get(
-    "SELECT COUNT(*) AS total FROM users",
+    `
+      SELECT COUNT(*) AS total
+      FROM users u
+      LEFT JOIN profiles p
+        ON p.id = u.bga_id
+       AND p.deleted_at IS NULL
+      ${whereSql}
+    `,
+    whereParams,
     (countErr, countRow) => {
       if (countErr) return next(countErr);
       const total = Number(countRow?.total || 0);
@@ -17861,11 +17871,12 @@ app.get("/users", requireAdmin, (req, res, next) => {
           LEFT JOIN profiles p
             ON p.id = u.bga_id
            AND p.deleted_at IS NULL
+          ${whereSql}
           ORDER BY datetime(COALESCE(u.last_login, u.updated_at, u.created_at)) DESC, u.id ASC
           LIMIT ?
           OFFSET ?
         `,
-        [limit, total > 0 ? safeOffset : offset],
+        [...whereParams, limit, total > 0 ? safeOffset : offset],
         (err, rows) => {
           if (err) return next(err);
           return res.json({

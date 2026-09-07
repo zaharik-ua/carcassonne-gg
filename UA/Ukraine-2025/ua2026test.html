@@ -323,7 +323,7 @@
 
   // --- TOURNAMENT DATA SOURCE ---
   const API_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
-  const currentTournamentId = "ipt_903cf128-924f-4f7a-9bad-51f5aa7646e5";
+  const currentTournamentId = "ipt_d8937ade-73e7-4a5c-9472-a46c21c73740";
   let currentTournament = null;
 
   // Use English for pages whose URL contains an /en/ path segment.
@@ -735,13 +735,6 @@
       } else if (tabId === "stage2") {
         document.getElementById("tab-stage2-content").style.display = "block";
       }
-
-      // Keep the active tab in the URL so this exact view can be shared/opened directly.
-      if (tabId) {
-        const url = new URL(window.location.href);
-        url.searchParams.set("tab", tabId);
-        window.history.replaceState(null, "", url.toString());
-      }
     }
     // Attach click listeners
     tabContainer.querySelectorAll(".tab").forEach(tabEl => {
@@ -887,6 +880,14 @@
     container.innerHTML = '';
 
     const data = Array.isArray(standings_list) ? standings_list : [];
+    if (!data.length) {
+      renderEmptyState(container, t(
+        "Турнірна таблиця з’явиться після завершення першого раунду.",
+        "Standings will appear after the first completed round."
+      ));
+      return;
+    }
+
     const sorted = [...data].sort((a, b) => Number(a.rank) - Number(b.rank));
 
     const wrapper = document.createElement("div");
