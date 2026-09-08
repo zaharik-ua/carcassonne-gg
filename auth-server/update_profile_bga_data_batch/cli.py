@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 try:
@@ -12,6 +13,17 @@ except ImportError:  # pragma: no cover
         return None
 
 from .service import ProfileBgaDataBatchService
+
+
+PROGRESS_EVENT_PREFIX = "BGA_PROFILE_BATCH_EVENT "
+
+
+def emit_batch_progress(event: dict) -> None:
+    print(
+        f"{PROGRESS_EVENT_PREFIX}{json.dumps(event, ensure_ascii=False, separators=(',', ':'))}",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,6 +79,7 @@ def main() -> int:
         service.run_all(
             limit=args.limit,
             stop_after_consecutive_failures=args.stop_after_consecutive_failures,
+            on_batch=emit_batch_progress,
         )
         if args.all
         else service.run(limit=args.limit, player_ids=args.player_id)

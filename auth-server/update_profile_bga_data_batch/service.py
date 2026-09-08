@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import sys
 from pathlib import Path
+from typing import Callable
 
 from update_profile_bga_data.service import ProfileBgaDataUpdateService
 from update_profile_bga_data.sqlite_repository import SqliteProfileBgaDataRepository
@@ -70,7 +71,13 @@ class ProfileBgaDataBatchService:
 
         return summary
 
-    def run_all(self, *, limit: int, stop_after_consecutive_failures: int = 5) -> dict:
+    def run_all(
+        self,
+        *,
+        limit: int,
+        stop_after_consecutive_failures: int = 5,
+        on_batch: Callable[[dict], None] | None = None,
+    ) -> dict:
         batch_limit = max(1, int(limit))
         failure_limit = max(1, int(stop_after_consecutive_failures))
         processed_ids: set[str] = set()
@@ -116,7 +123,7 @@ class ProfileBgaDataBatchService:
                 summary["ok"] = False
 
             batch_results = list(batch_summary.get("results") or [])
-            summary["results"].append({
+            batch_result = {
                 "batch": int(summary["batches"]),
                 "requested": int(batch_summary.get("requested", 0)),
                 "processed": int(batch_summary.get("processed", 0)),
@@ -125,7 +132,10 @@ class ProfileBgaDataBatchService:
                 "unchanged": int(batch_summary.get("unchanged", 0)),
                 "failed": int(batch_summary.get("failed", 0)),
                 "results": batch_results,
-            })
+            }
+            summary["results"].append(batch_result)
+            if on_batch is not None:
+                on_batch({"type": "batch", **batch_result})
 
             batch_processed = int(batch_summary.get("processed", 0))
             batch_failed = int(batch_summary.get("failed", 0))

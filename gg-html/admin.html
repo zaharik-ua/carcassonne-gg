@@ -690,6 +690,51 @@
     font-weight: 700;
   }
 
+  .admin-script-progress {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: #fafbfd;
+  }
+
+  .admin-script-progress progress {
+    width: 100%;
+    height: 12px;
+  }
+
+  .admin-script-batches {
+    display: grid;
+    gap: 6px;
+  }
+
+  .admin-script-batch {
+    padding: 8px 10px;
+    border: 1px solid #d9e0ea;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .admin-script-batch.error {
+    border-color: #efb7b7;
+    background: #fff7f7;
+  }
+
+  .admin-script-batch-title {
+    font-weight: 700;
+  }
+
+  .admin-script-batch-errors {
+    display: grid;
+    gap: 3px;
+    margin-top: 5px;
+    color: var(--danger);
+    overflow-wrap: anywhere;
+  }
+
   @media (max-width: 640px) {
     .cp-edit-form {
       grid-template-columns: 1fr;
@@ -788,6 +833,7 @@
   const DUEL_FORMATS_URL = `${AUTH_BASE}/duel-formats`;
   const SYSTEM_SETTINGS_URL = `${AUTH_BASE}/system-settings`;
   const PROFILE_GG_ELO_SCRIPT_URL = `${AUTH_BASE}/admin-scripts/profile-gg-elo`;
+  const PROFILE_BGA_DATA_SCRIPT_URL = `${AUTH_BASE}/admin-scripts/profile-bga-data`;
   const STREAMER_SCOREBOARD_STYLE_OPTIONS = ["Default", "Nallerheim"];
 
   const SECTION_CONFIG = {
@@ -917,6 +963,11 @@
           id: "profile-gg-elo",
           title: "Recalculate Player GG Elo Ratings",
           description: "Check eligible ranked duels and update player GG Elo ratings.",
+        },
+        {
+          id: "profile-bga-data",
+          title: "Refresh BGA Profile Data",
+          description: "Update BGA nickname, avatar and Removed status for eligible player profiles in batches.",
         },
       ]),
     },
@@ -5969,6 +6020,323 @@
     });
   }
 
+  function openProfileBgaDataScriptForm(_item, anchorRow) {
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+    if (!mountDetailForm(form, anchorRow, { toggleSameRow: true })) return;
+
+    const batchSizeField = createNumberRow("Batch size", 20, { min: 1, max: 100, step: 1 });
+    const failureLimitField = createNumberRow("Stop after consecutive failures", 5, {
+      min: 1,
+      max: 100,
+      step: 1,
+    });
+    const includeRemovedField = createCheckboxRow(
+      "Removed profiles",
+      false,
+      "Include profiles already marked Removed"
+    );
+    form.appendChild(batchSizeField.row);
+    form.appendChild(failureLimitField.row);
+    form.appendChild(includeRemovedField.row);
+
+    const note = document.createElement("p");
+    note.className = "admin-script-note";
+    note.textContent = "Preview counts eligible profiles without changing them. The update changes BGA nickname, avatar and status; there is no dry-run for the update itself.";
+    form.appendChild(note);
+
+    const resultMount = document.createElement("div");
+    resultMount.className = "admin-script-result";
+    form.appendChild(resultMount);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+
+    const previewBtn = document.createElement("button");
+    previewBtn.type = "submit";
+    previewBtn.className = "cp-btn cp-btn-secondary";
+    previewBtn.textContent = "Preview Players";
+
+    const runBtn = document.createElement("button");
+    runBtn.type = "button";
+    runBtn.className = "cp-btn cp-btn-primary hidden";
+    runBtn.textContent = "Refresh BGA Data";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "cp-btn cp-btn-secondary";
+    closeBtn.textContent = "Close";
+
+    actions.appendChild(previewBtn);
+    actions.appendChild(runBtn);
+    actions.appendChild(closeBtn);
+    form.appendChild(actions);
+
+    let checkedPreview = null;
+    let previewRunning = false;
+    let pollTimer = null;
+
+    const getOptions = () => ({
+      batch_size: Number(batchSizeField.input.value),
+      stop_after_consecutive_failures: Number(failureLimitField.input.value),
+      include_removed: includeRemovedField.input.checked,
+    });
+
+    const getOptionsSignature = () => JSON.stringify(getOptions());
+
+    const applyJobOptions = (job) => {
+      if (!job?.options) return;
+      batchSizeField.input.value = String(Number(job.options.batch_size) || 20);
+      failureLimitField.input.value = String(Number(job.options.stop_after_consecutive_failures) || 5);
+      includeRemovedField.input.checked = job.options.include_removed === true;
+    };
+
+    const showMessage = (message, type) => {
+      const messageEl = document.createElement("p");
+      messageEl.className = `admin-script-message${type ? ` ${type}` : ""}`;
+      messageEl.textContent = message;
+      resultMount.appendChild(messageEl);
+    };
+
+    const setControlsForJob = (job) => {
+      const running = job?.status === "running";
+      batchSizeField.input.disabled = running || previewRunning;
+      failureLimitField.input.disabled = running || previewRunning;
+      includeRemovedField.input.disabled = running || previewRunning;
+      previewBtn.disabled = running || previewRunning;
+      runBtn.disabled = running || previewRunning;
+      previewBtn.textContent = previewRunning ? "Counting..." : "Preview Players";
+      runBtn.textContent = running ? "Refreshing..." : "Refresh BGA Data";
+      closeBtn.disabled = previewRunning;
+    };
+
+    const renderPreview = (preview) => {
+      resultMount.innerHTML = "";
+      const candidateCount = Math.max(0, Number(preview?.candidate_count) || 0);
+      const estimatedBatches = Math.max(0, Number(preview?.estimated_batches) || 0);
+      showMessage(
+        `${candidateCount} eligible player${candidateCount === 1 ? "" : "s"} found in ${estimatedBatches} expected batch${estimatedBatches === 1 ? "" : "es"}.`,
+        candidateCount > 0 ? "success" : ""
+      );
+    };
+
+    const renderJob = (job) => {
+      resultMount.innerHTML = "";
+      if (!job) return;
+
+      const candidateCount = Math.max(0, Number(job?.candidate_count) || 0);
+      const processed = Math.max(0, Number(job?.processed) || 0);
+      const batches = Array.isArray(job?.batches) ? job.batches : [];
+      const status = String(job?.status || "");
+
+      if (status === "running") {
+        showMessage(`BGA profile data update is running: ${processed} of ${candidateCount} players processed.`, "");
+      } else if (status === "completed") {
+        showMessage(`BGA profile data update completed: ${processed} of ${candidateCount} players processed.`, "success");
+      } else if (status === "completed_with_errors") {
+        showMessage(
+          job?.error || `BGA profile data update completed with errors: ${processed} of ${candidateCount} players processed.`,
+          "error"
+        );
+      } else {
+        showMessage(job?.error || "BGA profile data update failed.", "error");
+      }
+
+      const progressWrap = document.createElement("div");
+      progressWrap.className = "admin-script-progress";
+      const progress = document.createElement("progress");
+      progress.max = Math.max(1, candidateCount);
+      progress.value = Math.min(processed, progress.max);
+      progressWrap.appendChild(progress);
+
+      const totals = document.createElement("div");
+      totals.className = "admin-script-note";
+      const summary = job?.summary || {};
+      totals.textContent = status === "running"
+        ? `${batches.length} batch${batches.length === 1 ? "" : "es"} completed.`
+        : `Updated ${Number(summary.updated) || 0} • Unchanged ${Number(summary.unchanged) || 0} • Removed ${Number(summary.removed) || 0} • Failed ${Number(summary.failed) || 0}`;
+      progressWrap.appendChild(totals);
+
+      const batchList = document.createElement("div");
+      batchList.className = "admin-script-batches";
+      batches.forEach((batch) => {
+        const processedInBatch = Math.max(0, Number(batch?.processed) || 0);
+        const failedInBatch = Math.max(0, Number(batch?.failed) || 0);
+        const successfulInBatch = Math.max(0, processedInBatch - failedInBatch);
+        const batchEl = document.createElement("div");
+        batchEl.className = `admin-script-batch${failedInBatch > 0 ? " error" : ""}`;
+
+        const title = document.createElement("div");
+        title.className = "admin-script-batch-title";
+        title.textContent = `Batch ${Number(batch?.batch) || batchList.children.length + 1}: ${successfulInBatch} of ${processedInBatch} completed successfully.`;
+        batchEl.appendChild(title);
+
+        const details = document.createElement("div");
+        details.textContent = `Updated ${Number(batch?.updated) || 0} • Unchanged ${Number(batch?.unchanged) || 0} • Removed ${Number(batch?.removed) || 0} • Failed ${failedInBatch}`;
+        batchEl.appendChild(details);
+
+        const errors = (Array.isArray(batch?.results) ? batch.results : []).filter((result) => result?.ok !== true);
+        if (errors.length) {
+          const errorsEl = document.createElement("div");
+          errorsEl.className = "admin-script-batch-errors";
+          errors.forEach((error) => {
+            const errorEl = document.createElement("div");
+            errorEl.textContent = `${String(error?.player_id || "Unknown player")}: ${String(error?.message || "Unknown error")}`;
+            errorsEl.appendChild(errorEl);
+          });
+          batchEl.appendChild(errorsEl);
+        }
+
+        batchList.appendChild(batchEl);
+      });
+
+      if (!batches.length && status === "running") {
+        const waiting = document.createElement("div");
+        waiting.className = "admin-script-note";
+        waiting.textContent = "Starting the BGA session and waiting for the first batch...";
+        batchList.appendChild(waiting);
+      }
+      progressWrap.appendChild(batchList);
+      resultMount.appendChild(progressWrap);
+    };
+
+    const stopPolling = () => {
+      if (pollTimer !== null) window.clearTimeout(pollTimer);
+      pollTimer = null;
+    };
+
+    const pollJob = async () => {
+      stopPolling();
+      if (!form.isConnected) return;
+      try {
+        const response = await apiJson(`${PROFILE_BGA_DATA_SCRIPT_URL}/status`, { method: "GET" });
+        const job = response?.job || null;
+        applyJobOptions(job);
+        renderJob(job);
+        setControlsForJob(job);
+        if (job?.status === "running") {
+          setStatus(`BGA profile data: ${Number(job.processed) || 0} of ${Number(job.candidate_count) || 0} processed.`, false);
+          pollTimer = window.setTimeout(pollJob, 1000);
+        } else if (job?.status === "completed") {
+          checkedPreview = null;
+          runBtn.classList.add("hidden");
+          setStatus("BGA profile data update completed.", false);
+        } else if (job) {
+          checkedPreview = null;
+          runBtn.classList.add("hidden");
+          setStatus(job?.error || "BGA profile data update completed with errors.", true);
+        }
+      } catch (error) {
+        if (!form.isConnected) return;
+        resultMount.innerHTML = "";
+        showMessage(error?.message || "Failed to load BGA profile data job status.", "error");
+        setControlsForJob(null);
+        setStatus("Failed to load BGA profile data job status.", true);
+      }
+    };
+
+    const invalidatePreview = () => {
+      if (previewRunning) return;
+      checkedPreview = null;
+      runBtn.classList.add("hidden");
+      resultMount.innerHTML = "";
+    };
+    batchSizeField.input.addEventListener("input", invalidatePreview);
+    failureLimitField.input.addEventListener("input", invalidatePreview);
+    includeRemovedField.input.addEventListener("change", invalidatePreview);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      previewRunning = true;
+      let activeJob = null;
+      setControlsForJob(null);
+      checkedPreview = null;
+      runBtn.classList.add("hidden");
+      resultMount.innerHTML = "";
+      try {
+        const response = await apiJson(`${PROFILE_BGA_DATA_SCRIPT_URL}/preview`, {
+          method: "POST",
+          body: JSON.stringify(getOptions()),
+        });
+        if (response?.job?.status === "running") {
+          activeJob = response.job;
+          applyJobOptions(response.job);
+          renderJob(response.job);
+          pollTimer = window.setTimeout(pollJob, 1000);
+          return;
+        }
+        checkedPreview = {
+          ...response.preview,
+          signature: getOptionsSignature(),
+        };
+        renderPreview(checkedPreview);
+        runBtn.classList.toggle("hidden", Number(checkedPreview.candidate_count) <= 0);
+        setStatus("BGA profile data preview completed.", false);
+      } catch (error) {
+        showMessage(error?.message || "Failed to preview BGA profile data candidates.", "error");
+        setStatus("Failed to preview BGA profile data candidates.", true);
+      } finally {
+        previewRunning = false;
+        setControlsForJob(activeJob);
+      }
+    });
+
+    runBtn.addEventListener("click", async () => {
+      if (!checkedPreview || checkedPreview.signature !== getOptionsSignature()) return;
+      const candidateCount = Math.max(0, Number(checkedPreview.candidate_count) || 0);
+      if (!window.confirm(`Refresh BGA data for ${candidateCount} eligible player${candidateCount === 1 ? "" : "s"}?`)) return;
+
+      runBtn.disabled = true;
+      previewBtn.disabled = true;
+      try {
+        const response = await apiJson(`${PROFILE_BGA_DATA_SCRIPT_URL}/run`, {
+          method: "POST",
+          body: JSON.stringify(getOptions()),
+        });
+        checkedPreview = null;
+        runBtn.classList.add("hidden");
+        applyJobOptions(response?.job || null);
+        renderJob(response?.job || null);
+        setControlsForJob(response?.job || null);
+        if (response?.job?.status === "running") {
+          setStatus(response.message || "BGA profile data update started.", false);
+          pollTimer = window.setTimeout(pollJob, 500);
+        } else {
+          setStatus(response.message || "No eligible BGA profiles found.", false);
+        }
+      } catch (error) {
+        resultMount.innerHTML = "";
+        showMessage(error?.message || "Failed to start the BGA profile data update.", "error");
+        setControlsForJob(null);
+        setStatus("Failed to start the BGA profile data update.", true);
+      }
+    });
+
+    closeBtn.addEventListener("click", () => {
+      stopPolling();
+      closeInlineForm();
+      setStatus("", false);
+    });
+
+    setControlsForJob(null);
+    apiJson(`${PROFILE_BGA_DATA_SCRIPT_URL}/status`, { method: "GET" })
+      .then((response) => {
+        if (!form.isConnected || !response?.job) return;
+        applyJobOptions(response.job);
+        renderJob(response.job);
+        setControlsForJob(response.job);
+        if (response.job.status === "running") {
+          setStatus(`BGA profile data: ${Number(response.job.processed) || 0} of ${Number(response.job.candidate_count) || 0} processed.`, false);
+          pollTimer = window.setTimeout(pollJob, 1000);
+        }
+      })
+      .catch((error) => {
+        if (!form.isConnected) return;
+        resultMount.innerHTML = "";
+        showMessage(error?.message || "Failed to load the latest BGA profile data job.", "error");
+      });
+  }
+
   function openUserView(item, anchorRow) {
     const view = document.createElement("div");
     view.className = "cp-edit-form";
@@ -6594,7 +6962,10 @@
         title: item.title || item.id,
         subtitle: item.description || "",
         buttonLabel: "Run",
-        onClick: (row) => openProfileGgEloScriptForm(item, row),
+        onClick: (row) => {
+          if (item.id === "profile-bga-data") openProfileBgaDataScriptForm(item, row);
+          else openProfileGgEloScriptForm(item, row);
+        },
       }));
     });
   }

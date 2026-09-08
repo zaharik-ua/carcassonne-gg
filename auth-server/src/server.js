@@ -1,5 +1,6 @@
 import path from "node:path";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
@@ -64,6 +65,11 @@ import {
   percentileInclusive as calculatePercentileInclusive,
 } from "./bounty-tpr.js";
 import { buildUsersListFilter } from "./users-list-filters.js";
+import {
+  buildProfileBgaDataScriptArgs,
+  normalizeProfileBgaDataOptions,
+  parseProfileBgaDataProgressLine,
+} from "./profile-bga-data-admin.js";
 
 dotenv.config();
 
@@ -462,6 +468,10 @@ const SYSTEM_SETTING_DEFINITIONS = [
 const SYSTEM_SETTING_KEYS = new Set(SYSTEM_SETTING_DEFINITIONS.map((setting) => setting.key));
 const PROFILE_GG_ELO_SCRIPT_ID = "profile-gg-elo";
 let profileGgEloScriptRunning = false;
+const PROFILE_BGA_DATA_SCRIPT_ID = "profile-bga-data";
+let profileBgaDataJob = null;
+let profileBgaDataProcess = null;
+let profileBgaDataJobStarting = false;
 
 function quoteSqlIdentifier(identifier) {
   return `"${String(identifier || "").replaceAll('"', '""')}"`;
@@ -2527,7 +2537,7 @@ function execFileAsync(file, args = [], options = {}) {
   });
 }
 
-function parseProfileGgEloScriptOutput(output) {
+function parseScriptJsonOutput(output) {
   const text = String(output || "").trim();
   if (!text) return null;
   try {
@@ -2563,7 +2573,7 @@ async function runProfileGgEloScript({ dryRun }) {
       `admin-script:${PROFILE_GG_ELO_SCRIPT_ID}:${dryRun ? "check" : "run"}`,
       [stdout, stderr].map((part) => String(part || "").trim()).filter(Boolean).join("\n")
     );
-    const payload = parseProfileGgEloScriptOutput(stdout);
+    const payload = parseScriptJsonOutput(stdout);
     if (!payload || payload.ok !== true) {
       throw new Error("GG Elo script returned an invalid response");
     }
@@ -2579,11 +2589,218 @@ async function runProfileGgEloScript({ dryRun }) {
       stderr: String(error?.stderr || "").trim(),
       message: error?.message || null,
     });
-    const payload = parseProfileGgEloScriptOutput(error?.stdout);
+    const payload = parseScriptJsonOutput(error?.stdout);
     const scriptError = new Error(payload?.message || "Failed to execute the GG Elo script");
     scriptError.cause = error;
     throw scriptError;
   }
+}
+
+async function countEligibleProfileBgaDataProfiles({ include_removed: includeRemoved }) {
+  const whereParts = [
+    "deleted_at IS NULL",
+    "trim(COALESCE(id, '')) <> ''",
+    "trim(COALESCE(bga_nickname, '')) <> ''",
+    "trim(COALESCE(id, '')) GLOB '[0-9]*'",
+  ];
+  if (!includeRemoved) {
+    whereParts.push("COALESCE(NULLIF(trim(status), ''), 'Active') <> 'Removed'");
+  }
+
+  const row = await dbGetAsync(
+    `SELECT COUNT(*) AS total FROM profiles WHERE ${whereParts.join(" AND ")}`
+  );
+  return Math.max(0, Number(row?.total) || 0);
+}
+
+function sanitizeProfileBgaDataBatchEvent(event) {
+  const results = Array.isArray(event?.results)
+    ? event.results.map((item) => ({
+      index: Number(item?.index) || null,
+      player_id: String(item?.player_id || "").trim(),
+      ok: item?.ok === true,
+      status: String(item?.status || "").trim() || null,
+      updated: item?.updated === true,
+      message: String(item?.message || "").trim() || null,
+    })).filter((item) => item.ok !== true)
+    : [];
+  return {
+    type: "batch",
+    batch: Math.max(1, Number(event?.batch) || 1),
+    requested: Math.max(0, Number(event?.requested) || 0),
+    processed: Math.max(0, Number(event?.processed) || 0),
+    updated: Math.max(0, Number(event?.updated) || 0),
+    removed: Math.max(0, Number(event?.removed) || 0),
+    unchanged: Math.max(0, Number(event?.unchanged) || 0),
+    failed: Math.max(0, Number(event?.failed) || 0),
+    results,
+  };
+}
+
+function sanitizeProfileBgaDataSummary(summary) {
+  if (!summary || typeof summary !== "object") return null;
+  return {
+    ok: summary.ok === true,
+    mode: String(summary.mode || "all"),
+    batch_limit: Math.max(1, Number(summary.batch_limit) || 1),
+    batches: Math.max(0, Number(summary.batches) || 0),
+    requested: Math.max(0, Number(summary.requested) || 0),
+    processed: Math.max(0, Number(summary.processed) || 0),
+    updated: Math.max(0, Number(summary.updated) || 0),
+    removed: Math.max(0, Number(summary.removed) || 0),
+    unchanged: Math.max(0, Number(summary.unchanged) || 0),
+    failed: Math.max(0, Number(summary.failed) || 0),
+    stopped_early: summary.stopped_early === true,
+    stop_reason: String(summary.stop_reason || ""),
+    skipped_failed_player_ids: Array.isArray(summary.skipped_failed_player_ids)
+      ? summary.skipped_failed_player_ids.map((value) => String(value || "").trim()).filter(Boolean)
+      : [],
+  };
+}
+
+function getProfileBgaDataJobSnapshot() {
+  if (!profileBgaDataJob) return null;
+  return {
+    id: profileBgaDataJob.id,
+    script_id: PROFILE_BGA_DATA_SCRIPT_ID,
+    status: profileBgaDataJob.status,
+    started_at: profileBgaDataJob.started_at,
+    finished_at: profileBgaDataJob.finished_at,
+    options: profileBgaDataJob.options,
+    candidate_count: profileBgaDataJob.candidate_count,
+    batches: profileBgaDataJob.batches,
+    processed: profileBgaDataJob.processed,
+    summary: profileBgaDataJob.summary,
+    error: profileBgaDataJob.error,
+  };
+}
+
+function appendProfileBgaDataStderrLine(job, line) {
+  const text = String(line || "").trim();
+  if (!text) return;
+  const progress = parseProfileBgaDataProgressLine(text);
+  if (progress) {
+    const batch = sanitizeProfileBgaDataBatchEvent(progress);
+    const existingIndex = job.batches.findIndex((item) => Number(item?.batch) === batch.batch);
+    if (existingIndex >= 0) job.batches.splice(existingIndex, 1, batch);
+    else job.batches.push(batch);
+    job.batches.sort((left, right) => Number(left.batch) - Number(right.batch));
+    job.processed = job.batches.reduce((total, item) => total + (Number(item?.processed) || 0), 0);
+    return;
+  }
+  logUpdaterOutput(`admin-script:${PROFILE_BGA_DATA_SCRIPT_ID}`, text);
+}
+
+function startProfileBgaDataJob(options, candidateCount) {
+  const authServerRoot = path.resolve(__dirname, "..");
+  const runnerScriptPath = path.resolve(authServerRoot, "scripts", "run_update_profile_bga_data_batch.sh");
+  const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
+  const job = {
+    id: randomUUID(),
+    status: candidateCount > 0 ? "running" : "completed",
+    started_at: new Date().toISOString(),
+    finished_at: candidateCount > 0 ? null : new Date().toISOString(),
+    options,
+    candidate_count: candidateCount,
+    batches: [],
+    processed: 0,
+    summary: candidateCount > 0 ? null : {
+      ok: true,
+      mode: "all",
+      batch_limit: options.batch_size,
+      batches: 0,
+      requested: 0,
+      processed: 0,
+      updated: 0,
+      removed: 0,
+      unchanged: 0,
+      failed: 0,
+      stopped_early: false,
+      stop_reason: "",
+      results: [],
+    },
+    error: null,
+  };
+  profileBgaDataJob = job;
+
+  if (candidateCount === 0) return job;
+
+  const child = spawn(
+    "/bin/bash",
+    [runnerScriptPath, ...buildProfileBgaDataScriptArgs(dbFullPath, options)],
+    {
+      cwd: authServerRoot,
+      env: { ...process.env, PYTHON_BIN: pythonBin },
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+  profileBgaDataProcess = child;
+
+  let stdout = "";
+  let stderrBuffer = "";
+  let finalized = false;
+
+  const finalize = ({ code = null, signal = null, processError = null } = {}) => {
+    if (finalized) return;
+    finalized = true;
+    if (stderrBuffer.trim()) appendProfileBgaDataStderrLine(job, stderrBuffer);
+    stderrBuffer = "";
+
+    const rawSummary = parseScriptJsonOutput(stdout);
+    const summary = sanitizeProfileBgaDataSummary(rawSummary);
+    if (Array.isArray(rawSummary?.results)) {
+      rawSummary.results.forEach((event) => {
+        if (!event || typeof event !== "object" || !event.batch) return;
+        const batch = sanitizeProfileBgaDataBatchEvent(event);
+        if (!job.batches.some((item) => Number(item?.batch) === batch.batch)) {
+          job.batches.push(batch);
+        }
+      });
+      job.batches.sort((left, right) => Number(left.batch) - Number(right.batch));
+    }
+    job.finished_at = new Date().toISOString();
+    job.summary = summary;
+    if (summary) {
+      job.processed = Math.max(job.processed, Number(summary.processed) || 0);
+      const failed = Math.max(0, Number(summary.failed) || 0);
+      job.status = failed > 0 || summary.stopped_early ? "completed_with_errors" : "completed";
+      job.error = summary.stopped_early
+        ? String(summary.stop_reason || "The BGA profile data job stopped early.")
+        : failed > 0
+          ? `${failed} player update${failed === 1 ? "" : "s"} failed.`
+          : null;
+    } else {
+      job.status = "failed";
+      job.error = processError?.message
+        || (code === 0
+          ? "BGA profile data script did not start; another batch update may already hold the lock."
+          : `BGA profile data script exited without a valid summary${code === null ? "" : ` (code ${code})`}${signal ? `, signal ${signal}` : ""}.`);
+    }
+    if (profileBgaDataProcess === child) profileBgaDataProcess = null;
+  };
+
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    stdout += String(chunk || "");
+  });
+
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => {
+    stderrBuffer += String(chunk || "");
+    const lines = stderrBuffer.split(/\r?\n/);
+    stderrBuffer = lines.pop() || "";
+    lines.forEach((line) => appendProfileBgaDataStderrLine(job, line));
+  });
+
+  child.on("error", (error) => {
+    console.error("Failed to start profile BGA data admin script", error);
+    finalize({ processError: error });
+  });
+  child.on("close", (code, signal) => {
+    finalize({ code, signal });
+  });
+
+  return job;
 }
 
 function hasNonEmptyValue(value) {
@@ -13052,6 +13269,73 @@ app.patch("/system-settings/:key", requireAdmin, async (req, res) => {
   } catch (error) {
     console.error("Failed to update system setting", error);
     return res.status(500).json({ ok: false, message: "Failed to update system setting" });
+  }
+});
+
+app.post("/admin-scripts/profile-bga-data/preview", requireAdmin, async (req, res) => {
+  let options;
+  try {
+    options = normalizeProfileBgaDataOptions(req.body || {});
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error?.message || "Invalid BGA profile data settings" });
+  }
+
+  try {
+    const candidateCount = await countEligibleProfileBgaDataProfiles(options);
+    return res.json({
+      ok: true,
+      preview: {
+        candidate_count: candidateCount,
+        estimated_batches: candidateCount > 0 ? Math.ceil(candidateCount / options.batch_size) : 0,
+        options,
+      },
+      job: getProfileBgaDataJobSnapshot(),
+    });
+  } catch (error) {
+    console.error("Failed to preview profile BGA data candidates", error);
+    return res.status(500).json({ ok: false, message: "Failed to count eligible BGA profiles" });
+  }
+});
+
+app.get("/admin-scripts/profile-bga-data/status", requireAdmin, (_req, res) => {
+  return res.json({ ok: true, job: getProfileBgaDataJobSnapshot() });
+});
+
+app.post("/admin-scripts/profile-bga-data/run", requireAdmin, async (req, res) => {
+  let options;
+  try {
+    options = normalizeProfileBgaDataOptions(req.body || {});
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error?.message || "Invalid BGA profile data settings" });
+  }
+
+  if (profileBgaDataJobStarting || profileBgaDataJob?.status === "running") {
+    return res.status(409).json({
+      ok: false,
+      message: "The BGA profile data script is already running",
+      job: getProfileBgaDataJobSnapshot(),
+    });
+  }
+
+  profileBgaDataJobStarting = true;
+  try {
+    const candidateCount = await countEligibleProfileBgaDataProfiles(options);
+    startProfileBgaDataJob(options, candidateCount);
+    return res.status(candidateCount > 0 ? 202 : 200).json({
+      ok: true,
+      message: candidateCount > 0
+        ? `BGA profile data update started for ${candidateCount} player(s).`
+        : "No eligible BGA profiles found.",
+      job: getProfileBgaDataJobSnapshot(),
+    });
+  } catch (error) {
+    console.error("Failed to start profile BGA data admin script", error);
+    return res.status(500).json({
+      ok: false,
+      message: error?.message || "Failed to start the BGA profile data script",
+    });
+  } finally {
+    profileBgaDataJobStarting = false;
   }
 });
 

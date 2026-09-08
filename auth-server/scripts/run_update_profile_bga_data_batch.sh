@@ -10,5 +10,5 @@ cd "${AUTH_SERVER_DIR}"
 /usr/bin/flock -n -E 0 "${LOCK_FILE}" bash -lc '
   set -euo pipefail
   cd "'"${AUTH_SERVER_DIR}"'"
-  python3 run_update_profile_bga_data_batch.py "$@"
+  "${PYTHON_BIN:-python3}" run_update_profile_bga_data_batch.py "$@"
 ' bash "$@"
