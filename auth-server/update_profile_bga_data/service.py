@@ -53,6 +53,7 @@ class ProfileBgaDataUpdateService:
                 "bga_nickname": after.get("bga_nickname"),
                 "avatar": after.get("avatar"),
                 "status": after.get("status"),
+                "bga_data_updated_at": after.get("bga_data_updated_at"),
             },
             "message": result.message or ("Player marked as Removed." if result.status == "removed" else "BGA data updated."),
         }

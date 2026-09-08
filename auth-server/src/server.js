@@ -70,6 +70,7 @@ import {
   normalizeProfileBgaDataOptions,
   parseProfileBgaDataProgressLine,
 } from "./profile-bga-data-admin.js";
+import { createAdminScriptRunStore } from "./admin-script-run-store.js";
 
 dotenv.config();
 
@@ -134,6 +135,7 @@ const uploadsRootDir = path.isAbsolute(UPLOADS_DIR)
 
 const db = new sqlite3.Database(dbFullPath);
 db.configure("busyTimeout", 5000);
+const adminScriptRunStore = createAdminScriptRunStore(db);
 
 let resolveInPersonSchemaReady;
 let rejectInPersonSchemaReady;
@@ -472,6 +474,31 @@ const PROFILE_BGA_DATA_SCRIPT_ID = "profile-bga-data";
 let profileBgaDataJob = null;
 let profileBgaDataProcess = null;
 let profileBgaDataJobStarting = false;
+let profileBgaDataStoreReadyPromise = null;
+let profileBgaDataPersistenceQueue = Promise.resolve();
+
+function ensureProfileBgaDataStoreReady() {
+  if (profileBgaDataStoreReadyPromise) return profileBgaDataStoreReadyPromise;
+  profileBgaDataStoreReadyPromise = adminScriptRunStore.ensureSchema()
+    .then(() => adminScriptRunStore.interruptRunningRuns(
+      PROFILE_BGA_DATA_SCRIPT_ID,
+      "The auth server restarted before the BGA profile data update finished."
+    ))
+    .catch((error) => {
+      profileBgaDataStoreReadyPromise = null;
+      throw error;
+    });
+  return profileBgaDataStoreReadyPromise;
+}
+
+function enqueueProfileBgaDataPersistence(operation) {
+  const execute = () => Promise.resolve().then(operation);
+  const task = profileBgaDataPersistenceQueue.then(execute, execute);
+  profileBgaDataPersistenceQueue = task.catch((error) => {
+    console.error("Failed to persist profile BGA data job progress", error);
+  });
+  return task;
+}
 
 function quoteSqlIdentifier(identifier) {
   return `"${String(identifier || "").replaceAll('"', '""')}"`;
@@ -2596,7 +2623,10 @@ async function runProfileGgEloScript({ dryRun }) {
   }
 }
 
-async function countEligibleProfileBgaDataProfiles({ include_removed: includeRemoved }) {
+async function countEligibleProfileBgaDataProfiles({
+  include_removed: includeRemoved,
+  bga_data_updated_before: bgaDataUpdatedBefore,
+}) {
   const whereParts = [
     "deleted_at IS NULL",
     "trim(COALESCE(id, '')) <> ''",
@@ -2606,9 +2636,19 @@ async function countEligibleProfileBgaDataProfiles({ include_removed: includeRem
   if (!includeRemoved) {
     whereParts.push("COALESCE(NULLIF(trim(status), ''), 'Active') <> 'Removed'");
   }
+  const params = [];
+  if (bgaDataUpdatedBefore) {
+    whereParts.push(`(
+      NULLIF(trim(COALESCE(bga_data_updated_at, '')), '') IS NULL
+      OR datetime(bga_data_updated_at) IS NULL
+      OR datetime(bga_data_updated_at) < datetime(?)
+    )`);
+    params.push(bgaDataUpdatedBefore);
+  }
 
   const row = await dbGetAsync(
-    `SELECT COUNT(*) AS total FROM profiles WHERE ${whereParts.join(" AND ")}`
+    `SELECT COUNT(*) AS total FROM profiles WHERE ${whereParts.join(" AND ")}`,
+    params
   );
   return Math.max(0, Number(row?.total) || 0);
 }
@@ -2672,7 +2712,14 @@ function getProfileBgaDataJobSnapshot() {
     processed: profileBgaDataJob.processed,
     summary: profileBgaDataJob.summary,
     error: profileBgaDataJob.error,
+    requested_by_user_id: profileBgaDataJob.requested_by_user_id,
   };
+}
+
+async function loadLatestProfileBgaDataJobSnapshot() {
+  if (profileBgaDataJob) return getProfileBgaDataJobSnapshot();
+  await ensureProfileBgaDataStoreReady();
+  return adminScriptRunStore.loadLatestRun(PROFILE_BGA_DATA_SCRIPT_ID);
 }
 
 function appendProfileBgaDataStderrLine(job, line) {
@@ -2686,17 +2733,22 @@ function appendProfileBgaDataStderrLine(job, line) {
     else job.batches.push(batch);
     job.batches.sort((left, right) => Number(left.batch) - Number(right.batch));
     job.processed = job.batches.reduce((total, item) => total + (Number(item?.processed) || 0), 0);
+    enqueueProfileBgaDataPersistence(async () => {
+      await adminScriptRunStore.saveBatch(job.id, batch);
+      await adminScriptRunStore.saveRun(job);
+    });
     return;
   }
   logUpdaterOutput(`admin-script:${PROFILE_BGA_DATA_SCRIPT_ID}`, text);
 }
 
-function startProfileBgaDataJob(options, candidateCount) {
+async function startProfileBgaDataJob(options, candidateCount, requestedByUserId = null) {
   const authServerRoot = path.resolve(__dirname, "..");
   const runnerScriptPath = path.resolve(authServerRoot, "scripts", "run_update_profile_bga_data_batch.sh");
   const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
   const job = {
     id: randomUUID(),
+    script_id: PROFILE_BGA_DATA_SCRIPT_ID,
     status: candidateCount > 0 ? "running" : "completed",
     started_at: new Date().toISOString(),
     finished_at: candidateCount > 0 ? null : new Date().toISOString(),
@@ -2720,8 +2772,19 @@ function startProfileBgaDataJob(options, candidateCount) {
       results: [],
     },
     error: null,
+    requested_by_user_id: Number.isInteger(Number(requestedByUserId)) && Number(requestedByUserId) > 0
+      ? Number(requestedByUserId)
+      : null,
   };
   profileBgaDataJob = job;
+
+  try {
+    await ensureProfileBgaDataStoreReady();
+    await adminScriptRunStore.createRun(job);
+  } catch (error) {
+    if (profileBgaDataJob === job) profileBgaDataJob = null;
+    throw error;
+  }
 
   if (candidateCount === 0) return job;
 
@@ -2777,6 +2840,12 @@ function startProfileBgaDataJob(options, candidateCount) {
           : `BGA profile data script exited without a valid summary${code === null ? "" : ` (code ${code})`}${signal ? `, signal ${signal}` : ""}.`);
     }
     if (profileBgaDataProcess === child) profileBgaDataProcess = null;
+    enqueueProfileBgaDataPersistence(async () => {
+      for (const batch of job.batches) {
+        await adminScriptRunStore.saveBatch(job.id, batch);
+      }
+      await adminScriptRunStore.saveRun(job);
+    });
   };
 
   child.stdout.setEncoding("utf8");
@@ -4861,6 +4930,7 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         instagram TEXT,
         contact_email TEXT,
         avatar TEXT,
+        bga_data_updated_at TEXT,
         bga_elo INTEGER,
         bga_elo_updated_at TEXT,
         gg_elo REAL,
@@ -4891,6 +4961,7 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         instagram,
         contact_email,
         avatar,
+        bga_data_updated_at,
         bga_elo,
         bga_elo_updated_at,
         gg_elo,
@@ -4921,6 +4992,7 @@ function rebuildProfilesTableWithoutAdminColumn(done = () => {}) {
         instagram,
         contact_email,
         avatar,
+        NULL,
         bga_elo,
         bga_elo_updated_at,
         gg_elo,
@@ -5062,6 +5134,7 @@ function ensureProfilesSchema() {
       addColumnIfMissing(currentColumns, "profiles", "instagram", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "contact_email", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "avatar", "TEXT");
+      addColumnIfMissing(currentColumns, "profiles", "bga_data_updated_at", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "bga_elo", "INTEGER");
       addColumnIfMissing(currentColumns, "profiles", "bga_elo_updated_at", "TEXT");
       addColumnIfMissing(currentColumns, "profiles", "gg_elo", "REAL");
@@ -7895,6 +7968,9 @@ function logUserBgaLinkAudit({ actor, userId, oldBgaId, source }, done = () => {
 }
 
 function scheduleApplicationSchemas() {
+  ensureProfileBgaDataStoreReady().catch((error) => {
+    console.error("Failed to ensure admin script run schema", error);
+  });
   ensureProfilesSchema();
   ensureAssociationsSchema();
   ensureMatchesSchema();
@@ -7993,6 +8069,7 @@ db.serialize(() => {
               instagram TEXT,
               contact_email TEXT,
               avatar TEXT,
+              bga_data_updated_at TEXT,
               bga_elo INTEGER,
               bga_elo_updated_at TEXT,
               gg_elo REAL,
@@ -8632,6 +8709,7 @@ app.get("/profiles/public", (_req, res, next) => {
         p.id,
         p.bga_nickname,
         p.avatar,
+        p.bga_data_updated_at,
         p.bga_elo,
         p.bga_elo_updated_at,
         p.gg_elo,
@@ -13282,6 +13360,7 @@ app.post("/admin-scripts/profile-bga-data/preview", requireAdmin, async (req, re
 
   try {
     const candidateCount = await countEligibleProfileBgaDataProfiles(options);
+    const latestJob = await loadLatestProfileBgaDataJobSnapshot();
     return res.json({
       ok: true,
       preview: {
@@ -13289,7 +13368,7 @@ app.post("/admin-scripts/profile-bga-data/preview", requireAdmin, async (req, re
         estimated_batches: candidateCount > 0 ? Math.ceil(candidateCount / options.batch_size) : 0,
         options,
       },
-      job: getProfileBgaDataJobSnapshot(),
+      job: latestJob,
     });
   } catch (error) {
     console.error("Failed to preview profile BGA data candidates", error);
@@ -13297,8 +13376,14 @@ app.post("/admin-scripts/profile-bga-data/preview", requireAdmin, async (req, re
   }
 });
 
-app.get("/admin-scripts/profile-bga-data/status", requireAdmin, (_req, res) => {
-  return res.json({ ok: true, job: getProfileBgaDataJobSnapshot() });
+app.get("/admin-scripts/profile-bga-data/status", requireAdmin, async (_req, res) => {
+  try {
+    const job = await loadLatestProfileBgaDataJobSnapshot();
+    return res.json({ ok: true, job });
+  } catch (error) {
+    console.error("Failed to load profile BGA data admin script status", error);
+    return res.status(500).json({ ok: false, message: "Failed to load BGA profile data job status" });
+  }
 });
 
 app.post("/admin-scripts/profile-bga-data/run", requireAdmin, async (req, res) => {
@@ -13309,18 +13394,26 @@ app.post("/admin-scripts/profile-bga-data/run", requireAdmin, async (req, res) =
     return res.status(400).json({ ok: false, message: error?.message || "Invalid BGA profile data settings" });
   }
 
-  if (profileBgaDataJobStarting || profileBgaDataJob?.status === "running") {
+  let activeJob = null;
+  try {
+    activeJob = await loadLatestProfileBgaDataJobSnapshot();
+  } catch (error) {
+    console.error("Failed to check existing profile BGA data admin script", error);
+    return res.status(500).json({ ok: false, message: "Failed to check the BGA profile data job status" });
+  }
+
+  if (profileBgaDataJobStarting || activeJob?.status === "running") {
     return res.status(409).json({
       ok: false,
       message: "The BGA profile data script is already running",
-      job: getProfileBgaDataJobSnapshot(),
+      job: activeJob,
     });
   }
 
   profileBgaDataJobStarting = true;
   try {
     const candidateCount = await countEligibleProfileBgaDataProfiles(options);
-    startProfileBgaDataJob(options, candidateCount);
+    await startProfileBgaDataJob(options, candidateCount, req.user?.id);
     return res.status(candidateCount > 0 ? 202 : 200).json({
       ok: true,
       message: candidateCount > 0

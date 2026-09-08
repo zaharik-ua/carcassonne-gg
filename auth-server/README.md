@@ -523,3 +523,31 @@ sudo systemctl status publish-secret-lineups.timer
 ```bash
 journalctl -u publish-secret-lineups.service -n 100 --no-pager
 ```
+
+## 16) Оновлення BGA-даних профілів з Admin
+
+Maintenance script `profile-bga-data` зберігає кожен запуск і результати пачок у
+SQLite-таблицях `admin_script_runs` та `admin_script_run_batches`. Сторінка Admin
+відновлює останній запуск після перезавантаження. Незавершений запуск після
+рестарту auth-server позначається як `interrupted`.
+
+Останні запуски:
+
+```bash
+sqlite3 /home/carcassonne-gg/auth-server/data/auth.sqlite "SELECT id, script_id, status, candidate_count, processed, started_at, finished_at, error FROM admin_script_runs WHERE script_id = 'profile-bga-data' ORDER BY datetime(started_at) DESC;"
+```
+
+Пачки конкретного запуску:
+
+```bash
+sqlite3 /home/carcassonne-gg/auth-server/data/auth.sqlite "SELECT batch_number, requested, processed, updated, unchanged, removed, failed, results_json FROM admin_script_run_batches WHERE run_id = 'RUN_ID' ORDER BY batch_number;"
+```
+
+У `profiles.bga_data_updated_at` записується UTC-час останнього успішного
+отримання BGA-даних для профілю, навіть якщо nickname, avatar або status не
+змінилися. Помилка BGA-запиту цю дату не оновлює.
+
+Опція `bga_data_updated_before` обмежує запуск профілями, для яких
+`bga_data_updated_at` порожнє або строго раніше заданого UTC date/time. Профілі,
+оновлені в момент відсічення або після нього, пропускаються. Порожня опція не
+застосовує фільтр за датою.

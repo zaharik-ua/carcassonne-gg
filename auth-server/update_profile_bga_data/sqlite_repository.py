@@ -59,6 +59,7 @@ class SqliteProfileBgaDataRepository:
                   bga_nickname = ?,
                   avatar = ?,
                   status = COALESCE(?, status),
+                  bga_data_updated_at = CURRENT_TIMESTAMP,
                   updated_at = CURRENT_TIMESTAMP
                 WHERE trim(COALESCE(id, '')) = trim(?)
                   AND deleted_at IS NULL
@@ -79,7 +80,8 @@ class SqliteProfileBgaDataRepository:
                   trim(id) AS id,
                   NULLIF(trim(COALESCE(bga_nickname, '')), '') AS bga_nickname,
                   NULLIF(trim(COALESCE(avatar, '')), '') AS avatar,
-                  COALESCE(NULLIF(trim(status), ''), 'Active') AS status
+                  COALESCE(NULLIF(trim(status), ''), 'Active') AS status,
+                  bga_data_updated_at
                 FROM profiles
                 WHERE trim(COALESCE(id, '')) = trim(?)
                   AND deleted_at IS NULL
@@ -114,4 +116,6 @@ class SqliteProfileBgaDataRepository:
             }
             if "avatar" not in columns:
                 conn.execute("ALTER TABLE profiles ADD COLUMN avatar TEXT")
+            if "bga_data_updated_at" not in columns:
+                conn.execute("ALTER TABLE profiles ADD COLUMN bga_data_updated_at TEXT")
             conn.commit()

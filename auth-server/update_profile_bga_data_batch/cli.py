@@ -45,6 +45,14 @@ def parse_args() -> argparse.Namespace:
         help="Include profiles that already have status Removed.",
     )
     parser.add_argument(
+        "--bga-data-updated-before",
+        default=None,
+        help=(
+            "Process only profiles whose BGA data was never refreshed or was refreshed "
+            "before this ISO-8601 UTC date/time."
+        ),
+    )
+    parser.add_argument(
         "--player-id",
         action="append",
         default=[],
@@ -71,6 +79,7 @@ def main() -> int:
     service = ProfileBgaDataBatchService(
         db_path=db_path,
         include_removed=bool(args.include_removed),
+        bga_data_updated_before=args.bga_data_updated_before,
     )
     if args.all and args.player_id:
         raise SystemExit("--all cannot be used together with --player-id.")

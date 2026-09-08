@@ -9,6 +9,22 @@ function parseIntegerOption(value, fallback, { name, min, max }) {
   return normalized;
 }
 
+function parseOptionalDateTimeOption(value, { name }) {
+  if (value === undefined || value === null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? `${raw}T00:00:00Z`
+    : /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)
+      ? raw
+      : `${raw}Z`;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) {
+    throw new RangeError(`${name} must be a valid date/time`);
+  }
+  return date.toISOString();
+}
+
 export function normalizeProfileBgaDataOptions(input = {}) {
   return {
     batch_size: parseIntegerOption(input?.batch_size, 20, {
@@ -28,6 +44,9 @@ export function normalizeProfileBgaDataOptions(input = {}) {
     include_removed: input?.include_removed === true
       || input?.include_removed === 1
       || String(input?.include_removed || "").trim().toLowerCase() === "true",
+    bga_data_updated_before: parseOptionalDateTimeOption(input?.bga_data_updated_before, {
+      name: "bga_data_updated_before",
+    }),
   };
 }
 
@@ -42,6 +61,9 @@ export function buildProfileBgaDataScriptArgs(dbPath, options) {
     "--stop-after-consecutive-failures",
     String(normalized.stop_after_consecutive_failures),
     ...(normalized.include_removed ? ["--include-removed"] : []),
+    ...(normalized.bga_data_updated_before
+      ? ["--bga-data-updated-before", normalized.bga_data_updated_before]
+      : []),
   ];
 }
 

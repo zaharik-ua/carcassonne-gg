@@ -2,17 +2,28 @@ from __future__ import annotations
 
 import sqlite3
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from update_profile_bga_data.service import ProfileBgaDataUpdateService
 from update_profile_bga_data.sqlite_repository import SqliteProfileBgaDataRepository
 
 
 class ProfileBgaDataBatchService:
-    def __init__(self, *, db_path: str, include_removed: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        db_path: str,
+        include_removed: bool = False,
+        bga_data_updated_before: str | None = None,
+    ) -> None:
+        from update_profile_bga_data.service import ProfileBgaDataUpdateService
+
         self.db_path = str(Path(db_path).resolve())
         self.include_removed = bool(include_removed)
+        self.bga_data_updated_before = self._normalize_updated_before(
+            bga_data_updated_before
+        )
         self.repository = SqliteProfileBgaDataRepository(self.db_path)
         self.single_service = ProfileBgaDataUpdateService(repository=self.repository)
 
@@ -33,6 +44,7 @@ class ProfileBgaDataBatchService:
             "removed": 0,
             "unchanged": 0,
             "failed": 0,
+            "bga_data_updated_before": self.bga_data_updated_before,
             "results": [],
         }
 
@@ -100,6 +112,7 @@ class ProfileBgaDataBatchService:
             "stop_reason": "",
             "processed_player_ids": 0,
             "skipped_failed_player_ids": [],
+            "bga_data_updated_before": self.bga_data_updated_before,
             "results": [],
         }
 
@@ -203,6 +216,15 @@ class ProfileBgaDataBatchService:
 
         if not self.include_removed:
             where_parts.append("COALESCE(NULLIF(trim(status), ''), 'Active') <> 'Removed'")
+        if self.bga_data_updated_before:
+            where_parts.append(
+                "("
+                "NULLIF(trim(COALESCE(bga_data_updated_at, '')), '') IS NULL "
+                "OR datetime(bga_data_updated_at) IS NULL "
+                "OR datetime(bga_data_updated_at) < datetime(?)"
+                ")"
+            )
+            params.append(self.bga_data_updated_before)
         if normalized_exclude_ids:
             placeholders = ", ".join("?" for _ in normalized_exclude_ids)
             where_parts.append(f"trim(id) NOT IN ({placeholders})")
@@ -214,8 +236,8 @@ class ProfileBgaDataBatchService:
             FROM profiles
             WHERE {' AND '.join(where_parts)}
             ORDER BY
-              CASE WHEN updated_at IS NULL OR trim(updated_at) = '' THEN 0 ELSE 1 END ASC,
-              datetime(COALESCE(updated_at, '1970-01-01 00:00:00')) ASC,
+              CASE WHEN bga_data_updated_at IS NULL OR trim(bga_data_updated_at) = '' THEN 0 ELSE 1 END ASC,
+              datetime(COALESCE(bga_data_updated_at, '1970-01-01 00:00:00')) ASC,
               rowid ASC
             LIMIT ?
         """
@@ -225,3 +247,17 @@ class ProfileBgaDataBatchService:
             rows = conn.execute(sql, params).fetchall()
 
         return [str(row["player_id"]).strip() for row in rows if str(row["player_id"]).strip()]
+
+    @staticmethod
+    def _normalize_updated_before(value: str | None) -> str | None:
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        normalized = f"{raw}T00:00:00+00:00" if len(raw) == 10 else raw.replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ValueError("bga_data_updated_before must be a valid ISO-8601 date/time") from exc
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")

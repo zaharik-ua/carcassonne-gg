@@ -1094,13 +1094,17 @@
   }
 
   function apiJson(url, options) {
+    const requestOptions = options || {};
+    const headers = {
+      ...(requestOptions.headers || {}),
+    };
+    if (requestOptions.body != null && !Object.keys(headers).some((name) => name.toLowerCase() === "content-type")) {
+      headers["Content-Type"] = "application/json";
+    }
     return fetch(url, {
       credentials: "include",
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(options && options.headers ? options.headers : {}),
-      },
+      ...requestOptions,
+      headers,
     }).then(async (response) => {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.ok === false) {
@@ -6036,13 +6040,18 @@
       false,
       "Include profiles already marked Removed"
     );
+    const updatedBeforeField = createDateTimeUtcRow(
+      "Refresh if last BGA update was before (UTC)",
+      ""
+    );
     form.appendChild(batchSizeField.row);
     form.appendChild(failureLimitField.row);
     form.appendChild(includeRemovedField.row);
+    form.appendChild(updatedBeforeField.row);
 
     const note = document.createElement("p");
     note.className = "admin-script-note";
-    note.textContent = "Preview counts eligible profiles without changing them. The update changes BGA nickname, avatar and status; there is no dry-run for the update itself.";
+    note.textContent = "Preview counts eligible profiles without changing them. Profiles without a BGA update date are always eligible. When a cutoff is set, profiles refreshed at or after it are skipped. Leave it empty to apply no date filter.";
     form.appendChild(note);
 
     const resultMount = document.createElement("div");
@@ -6075,11 +6084,14 @@
     let checkedPreview = null;
     let previewRunning = false;
     let pollTimer = null;
+    let lastJob = null;
+    let pollingFailureCount = 0;
 
     const getOptions = () => ({
       batch_size: Number(batchSizeField.input.value),
       stop_after_consecutive_failures: Number(failureLimitField.input.value),
       include_removed: includeRemovedField.input.checked,
+      bga_data_updated_before: dateTimeUtcInputToIso(updatedBeforeField.input.value) || null,
     });
 
     const getOptionsSignature = () => JSON.stringify(getOptions());
@@ -6089,6 +6101,7 @@
       batchSizeField.input.value = String(Number(job.options.batch_size) || 20);
       failureLimitField.input.value = String(Number(job.options.stop_after_consecutive_failures) || 5);
       includeRemovedField.input.checked = job.options.include_removed === true;
+      updatedBeforeField.input.value = formatDateTimeUtcInput(job.options.bga_data_updated_before || "");
     };
 
     const showMessage = (message, type) => {
@@ -6098,11 +6111,22 @@
       resultMount.appendChild(messageEl);
     };
 
+    const showPollingWarning = (message) => {
+      let warning = resultMount.querySelector(".admin-script-poll-warning");
+      if (!warning) {
+        warning = document.createElement("p");
+        warning.className = "admin-script-message error admin-script-poll-warning";
+        resultMount.appendChild(warning);
+      }
+      warning.textContent = message;
+    };
+
     const setControlsForJob = (job) => {
       const running = job?.status === "running";
       batchSizeField.input.disabled = running || previewRunning;
       failureLimitField.input.disabled = running || previewRunning;
       includeRemovedField.input.disabled = running || previewRunning;
+      updatedBeforeField.input.disabled = running || previewRunning;
       previewBtn.disabled = running || previewRunning;
       runBtn.disabled = running || previewRunning;
       previewBtn.textContent = previewRunning ? "Counting..." : "Preview Players";
@@ -6123,6 +6147,7 @@
     const renderJob = (job) => {
       resultMount.innerHTML = "";
       if (!job) return;
+      lastJob = job;
 
       const candidateCount = Math.max(0, Number(job?.candidate_count) || 0);
       const processed = Math.max(0, Number(job?.processed) || 0);
@@ -6142,6 +6167,15 @@
         showMessage(job?.error || "BGA profile data update failed.", "error");
       }
 
+      const runMeta = document.createElement("p");
+      runMeta.className = "admin-script-note";
+      const runMetaParts = [];
+      if (job?.started_at) runMetaParts.push(`Started ${formatDate(job.started_at)}`);
+      if (job?.finished_at) runMetaParts.push(`Finished ${formatDate(job.finished_at)}`);
+      if (job?.id) runMetaParts.push(`Run ${String(job.id).slice(0, 8)}`);
+      runMeta.textContent = runMetaParts.join(" • ");
+      if (runMeta.textContent) resultMount.appendChild(runMeta);
+
       const progressWrap = document.createElement("div");
       progressWrap.className = "admin-script-progress";
       const progress = document.createElement("progress");
@@ -6152,9 +6186,15 @@
       const totals = document.createElement("div");
       totals.className = "admin-script-note";
       const summary = job?.summary || {};
+      const batchTotals = batches.reduce((totals, batch) => ({
+        updated: totals.updated + (Number(batch?.updated) || 0),
+        unchanged: totals.unchanged + (Number(batch?.unchanged) || 0),
+        removed: totals.removed + (Number(batch?.removed) || 0),
+        failed: totals.failed + (Number(batch?.failed) || 0),
+      }), { updated: 0, unchanged: 0, removed: 0, failed: 0 });
       totals.textContent = status === "running"
         ? `${batches.length} batch${batches.length === 1 ? "" : "es"} completed.`
-        : `Updated ${Number(summary.updated) || 0} • Unchanged ${Number(summary.unchanged) || 0} • Removed ${Number(summary.removed) || 0} • Failed ${Number(summary.failed) || 0}`;
+        : `Updated ${Number(summary.updated ?? batchTotals.updated) || 0} • Unchanged ${Number(summary.unchanged ?? batchTotals.unchanged) || 0} • Removed ${Number(summary.removed ?? batchTotals.removed) || 0} • Failed ${Number(summary.failed ?? batchTotals.failed) || 0}`;
       progressWrap.appendChild(totals);
 
       const batchList = document.createElement("div");
@@ -6211,6 +6251,7 @@
       try {
         const response = await apiJson(`${PROFILE_BGA_DATA_SCRIPT_URL}/status`, { method: "GET" });
         const job = response?.job || null;
+        pollingFailureCount = 0;
         applyJobOptions(job);
         renderJob(job);
         setControlsForJob(job);
@@ -6228,10 +6269,12 @@
         }
       } catch (error) {
         if (!form.isConnected) return;
-        resultMount.innerHTML = "";
-        showMessage(error?.message || "Failed to load BGA profile data job status.", "error");
-        setControlsForJob(null);
-        setStatus("Failed to load BGA profile data job status.", true);
+        pollingFailureCount += 1;
+        showPollingWarning(`${error?.message || "Failed to load BGA profile data job status."} Retrying automatically…`);
+        setControlsForJob(lastJob);
+        setStatus("Connection to the BGA profile data job was interrupted. Retrying…", true);
+        const retryDelay = Math.min(10000, 1000 * (2 ** Math.min(pollingFailureCount, 3)));
+        pollTimer = window.setTimeout(pollJob, retryDelay);
       }
     };
 
@@ -6244,6 +6287,7 @@
     batchSizeField.input.addEventListener("input", invalidatePreview);
     failureLimitField.input.addEventListener("input", invalidatePreview);
     includeRemovedField.input.addEventListener("change", invalidatePreview);
+    updatedBeforeField.input.addEventListener("input", invalidatePreview);
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -6305,10 +6349,22 @@
           setStatus(response.message || "No eligible BGA profiles found.", false);
         }
       } catch (error) {
-        resultMount.innerHTML = "";
-        showMessage(error?.message || "Failed to start the BGA profile data update.", "error");
-        setControlsForJob(null);
-        setStatus("Failed to start the BGA profile data update.", true);
+        lastJob = {
+          id: "",
+          status: "running",
+          options: getOptions(),
+          candidate_count: candidateCount,
+          processed: 0,
+          batches: [],
+          summary: null,
+          error: null,
+        };
+        renderJob(lastJob);
+        showPollingWarning(`${error?.message || "The start response was interrupted."} Checking persisted job status…`);
+        setControlsForJob(lastJob);
+        setStatus("The start response was interrupted. Checking whether the job started…", true);
+        pollingFailureCount = 0;
+        pollTimer = window.setTimeout(pollJob, 1000);
       }
     });
 
@@ -6332,8 +6388,9 @@
       })
       .catch((error) => {
         if (!form.isConnected) return;
-        resultMount.innerHTML = "";
-        showMessage(error?.message || "Failed to load the latest BGA profile data job.", "error");
+        showPollingWarning(`${error?.message || "Failed to load the latest BGA profile data job."} Retrying automatically…`);
+        pollingFailureCount = 1;
+        pollTimer = window.setTimeout(pollJob, 2000);
       });
   }
 
