@@ -31,3 +31,6 @@ class MatchRepository(ABC):
     @abstractmethod
     def save_match_error(self, match: MatchUpdateRequest, message: str) -> None:
         """Persist an update failure."""
+
+    def finish_update_run(self) -> None:
+        """Run optional work that should happen once after a complete BGA batch."""

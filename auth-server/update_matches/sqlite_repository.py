@@ -5,6 +5,7 @@ import sqlite3
 from datetime import datetime, timezone
 from math import floor, isfinite
 from pathlib import Path
+from typing import Callable
 
 from .models import MatchUpdateRequest, MatchUpdateResult
 from .repository import MatchRepository, TARGET_EMPTY_FINISHED, TARGET_FINISHED_PENDING, TARGET_ONGOING
@@ -34,8 +35,10 @@ AUTO_RESULT_SYNC_BLOCKED_STATUS_SQL = _status_sql(AUTO_RESULT_SYNC_BLOCKED_STATU
 
 
 class SqliteMatchRepository(MatchRepository):
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str, gg_elo_recalculator: Callable[[], object] | None = None) -> None:
         self.db_path = str(Path(db_path).resolve())
+        self._gg_elo_recalculator = gg_elo_recalculator or self._recalculate_profile_gg_elo
+        self._ranked_duel_completed = False
         self._ensure_schema()
 
     def fetch_duel_by_id(self, *, duel_id: str) -> list[MatchUpdateRequest]:
@@ -170,6 +173,7 @@ class SqliteMatchRepository(MatchRepository):
                   l.id,
                   l.tournament_id,
                   l.status,
+                  COALESCE(l.ranking, 0) AS ranking,
                   l.deleted_at,
                   l.time_utc,
                   COALESCE(df.games_to_win, ?) AS games_to_win
@@ -312,6 +316,22 @@ class SqliteMatchRepository(MatchRepository):
                 )
 
             conn.commit()
+
+            if transitioned_to_done and int(current["ranking"] or 0) == 1:
+                self._ranked_duel_completed = True
+
+    def finish_update_run(self) -> None:
+        if not self._ranked_duel_completed:
+            return
+        self._gg_elo_recalculator()
+        self._ranked_duel_completed = False
+
+    def _recalculate_profile_gg_elo(self) -> object:
+        from update_profile_gg_elo.service import ProfileGgEloUpdateService
+        from update_profile_gg_elo.sqlite_repository import SqliteProfileGgEloRepository
+
+        repository = SqliteProfileGgEloRepository(self.db_path)
+        return ProfileGgEloUpdateService(repository=repository).run(dry_run=False)
 
     def save_match_error(self, match: MatchUpdateRequest, message: str) -> None:
         with self._connect() as conn:

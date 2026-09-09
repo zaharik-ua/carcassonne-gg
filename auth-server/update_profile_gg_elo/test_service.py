@@ -81,6 +81,9 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
                   ('after-delta', NULL, '2026_summer_challenge_3', '2026-02-10T10:00:00Z', '200', '100', 1, 0, 'Bo1', 1, 'Done', NULL),
                   ('ranking-zero', 'Asian-Cup-2026', NULL, '2026-02-10T11:00:00Z', '100', '200', 1, 0, 'Bo1', 0, 'Done', NULL),
                   ('not-done-with-score', 'Asian-Cup-2026', NULL, '2026-02-10T12:00:00Z', '100', '200', 1, 0, 'Bo1', 1, 'Planned', NULL),
+                  ('error-with-score', 'Asian-Cup-2026', NULL, '2026-02-10T13:00:00Z', '100', '200', 1, 0, 'Bo1', 1, 'Error', NULL),
+                  ('in-progress-with-score', 'Asian-Cup-2026', NULL, '2026-02-10T14:00:00Z', '100', '200', 1, 0, 'Bo1', 1, 'In progress', NULL),
+                  ('cancelled-with-score', 'Asian-Cup-2026', NULL, '2026-02-10T15:00:00Z', '100', '200', 1, 0, 'Bo1', 1, 'Cancelled', NULL),
                   ('unknown-player', 'Asian-Cup-2026', NULL, '2026-02-11T10:00:00Z', '100', '999', 1, 0, 'Bo1', 1, 'Done', NULL),
                   ('deleted-duel', 'Asian-Cup-2026', NULL, '2026-02-12T10:00:00Z', '100', '200', 1, 0, 'Bo1', 1, 'Done', '2026-02-12');
                 """
@@ -189,6 +192,9 @@ class ProfileGgEloUpdateServiceTest(unittest.TestCase):
 
         self.assertIsNone(duels_by_id["ranking-zero"][1])
         self.assertIsNone(duels_by_id["not-done-with-score"][1])
+        self.assertIsNone(duels_by_id["error-with-score"][1])
+        self.assertIsNone(duels_by_id["in-progress-with-score"][1])
+        self.assertIsNone(duels_by_id["cancelled-with-score"][1])
         self.assertIsNone(duels_by_id["unknown-player"][1])
 
         with sqlite3.connect(self.db_path) as conn:

@@ -78,6 +78,7 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
                   duel_format TEXT,
                   dw1 INTEGER,
                   dw2 INTEGER,
+                  ranking INTEGER NOT NULL DEFAULT 1,
                   player1_elo_before REAL,
                   player2_elo_before REAL,
                   status TEXT,
@@ -155,7 +156,11 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
                     match_id="match-done" if duel_id == "done" else "match-1",
                 )
 
-        self.repository = SqliteMatchRepository(str(self.db_path))
+        self.gg_elo_recalculations = []
+        self.repository = SqliteMatchRepository(
+            str(self.db_path),
+            gg_elo_recalculator=lambda: self.gg_elo_recalculations.append("run"),
+        )
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -222,6 +227,52 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
         self.assertEqual(row["status"], "Done")
         self.assertIsNone(row["results_last_error"])
         self.assertEqual(self._game_count("planned"), 1)
+
+    def test_ranked_done_transition_queues_one_gg_elo_recalculation(self) -> None:
+        self.repository.save_match_result(
+            self._request("planned"),
+            MatchUpdateResult(
+                status="success",
+                wins0=2,
+                wins1=0,
+                tables=[self._table()],
+            ),
+        )
+
+        self.assertEqual(self.gg_elo_recalculations, [])
+        self.repository.finish_update_run()
+        self.assertEqual(self.gg_elo_recalculations, ["run"])
+        self.repository.finish_update_run()
+        self.assertEqual(self.gg_elo_recalculations, ["run"])
+
+    def test_unranked_done_transition_does_not_queue_gg_elo_recalculation(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("UPDATE duels SET ranking = 0 WHERE id = 'planned'")
+
+        self.repository.save_match_result(
+            self._request("planned"),
+            MatchUpdateResult(
+                status="success",
+                wins0=2,
+                wins1=0,
+                tables=[self._table()],
+            ),
+        )
+        self.repository.finish_update_run()
+
+        self.assertEqual(self.gg_elo_recalculations, [])
+
+    def test_ranked_non_done_updates_do_not_queue_gg_elo_recalculation(self) -> None:
+        incomplete_result = MatchUpdateResult(
+            status="success",
+            wins0=1,
+            wins1=0,
+            tables=[self._table()],
+        )
+        self.repository.save_match_result(self._request("planned"), incomplete_result)
+        self.repository.finish_update_run()
+
+        self.assertEqual(self.gg_elo_recalculations, [])
 
     def test_match_completion_recalculates_existing_team_and_player_standings(self) -> None:
         with sqlite3.connect(self.db_path) as conn:

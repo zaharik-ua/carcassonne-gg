@@ -72,6 +72,10 @@ import {
   parseProfileBgaDataProgressLine,
 } from "./profile-bga-data-admin.js";
 import { createAdminScriptRunStore } from "./admin-script-run-store.js";
+import {
+  didRankedDuelTransitionToDone,
+  isCompletedRankedDuel,
+} from "./profile-gg-elo-trigger.js";
 
 dotenv.config();
 
@@ -471,6 +475,8 @@ const SYSTEM_SETTING_DEFINITIONS = [
 const SYSTEM_SETTING_KEYS = new Set(SYSTEM_SETTING_DEFINITIONS.map((setting) => setting.key));
 const PROFILE_GG_ELO_SCRIPT_ID = "profile-gg-elo";
 let profileGgEloScriptRunning = false;
+let profileGgEloAutoRunQueued = false;
+let profileGgEloAutoRunPromise = null;
 const PROFILE_BGA_DATA_SCRIPT_ID = "profile-bga-data";
 let profileBgaDataJob = null;
 let profileBgaDataProcess = null;
@@ -2622,6 +2628,38 @@ async function runProfileGgEloScript({ dryRun }) {
     scriptError.cause = error;
     throw scriptError;
   }
+}
+
+function drainProfileGgEloAutoRuns() {
+  if (profileGgEloScriptRunning || profileGgEloAutoRunPromise || !profileGgEloAutoRunQueued) {
+    return profileGgEloAutoRunPromise;
+  }
+
+  profileGgEloAutoRunPromise = (async () => {
+    while (profileGgEloAutoRunQueued) {
+      profileGgEloAutoRunQueued = false;
+      profileGgEloScriptRunning = true;
+      try {
+        await runProfileGgEloScript({ dryRun: false });
+      } catch (error) {
+        console.error("Automatic Profile GG Elo recalculation failed", error);
+      } finally {
+        profileGgEloScriptRunning = false;
+      }
+    }
+  })().finally(() => {
+    profileGgEloAutoRunPromise = null;
+    if (profileGgEloAutoRunQueued && !profileGgEloScriptRunning) {
+      void drainProfileGgEloAutoRuns();
+    }
+  });
+
+  return profileGgEloAutoRunPromise;
+}
+
+function scheduleProfileGgEloAutoRecalculation() {
+  profileGgEloAutoRunQueued = true;
+  void drainProfileGgEloAutoRuns();
 }
 
 async function countEligibleProfileBgaDataProfiles({
@@ -11583,6 +11621,10 @@ app.patch("/challenge-periods/:id/matches/:duelId", requireAdmin, async (req, re
       throw error;
     }
 
+    if (didRankedDuelTransitionToDone(beforeDuel.status, afterDuel?.status, afterDuel?.ranking)) {
+      scheduleProfileGgEloAutoRecalculation();
+    }
+
     logAuditEvent({
       ...getAuditActor(req.user),
       event_type: "challenge_duel.updated_by_admin",
@@ -13514,6 +13556,7 @@ app.post("/admin-scripts/profile-gg-elo/check", requireAdmin, async (req, res) =
     return res.status(500).json({ ok: false, message: error?.message || "Failed to check GG Elo duels" });
   } finally {
     profileGgEloScriptRunning = false;
+    void drainProfileGgEloAutoRuns();
   }
 });
 
@@ -13559,6 +13602,7 @@ app.post("/admin-scripts/profile-gg-elo/run", requireAdmin, async (req, res) => 
     });
   } finally {
     profileGgEloScriptRunning = false;
+    void drainProfileGgEloAutoRuns();
   }
 });
 
@@ -18505,6 +18549,7 @@ app.post("/duels/:id/games/save", (req, res) => {
         d.player_1_id,
         d.player_2_id,
         d.status AS duel_status,
+        COALESCE(d.ranking, 0) AS ranking,
         d.challenge_period_id,
         d.challenge_request_id,
         d.source_type,
@@ -18726,6 +18771,10 @@ app.post("/duels/:id/games/save", (req, res) => {
                 [recomputedDuel.matchId]
               )
             : null;
+
+          if (isCompletedRankedDuel(savedDuel?.status, savedDuel?.ranking ?? duelRow.ranking)) {
+            scheduleProfileGgEloAutoRecalculation();
+          }
 
           return res.json({
             ok: true,
@@ -19370,6 +19419,20 @@ app.post("/duels/bulk-upsert", async (req, res) => {
       return res.json({ ok: true, duels: [] });
     }
 
+    let previousDuels = [];
+    try {
+      previousDuels = await dbAllAsync(
+        `SELECT id, status FROM duels WHERE id IN (${sanitized.map(() => "?").join(", ")})`,
+        sanitized.map((item) => item.id)
+      );
+    } catch (error) {
+      console.error("Failed to load existing standalone duels", error);
+      return res.status(500).json({ ok: false, message: "Failed to save duels" });
+    }
+    const previousStatusesByDuelId = new Map(
+      previousDuels.map((duel) => [String(duel?.id || "").trim(), duel?.status])
+    );
+
     return db.serialize(() => {
       db.run("BEGIN IMMEDIATE TRANSACTION");
       const stmt = db.prepare(`
@@ -19458,6 +19521,13 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                   return loadDuelsByIds(sanitized.map((item) => item.id), (loadErr, rows) => {
                     if (loadErr) {
                       return res.status(500).json({ ok: false, message: "Failed to load saved duels" });
+                    }
+                    if ((rows || []).some((duel) => didRankedDuelTransitionToDone(
+                      previousStatusesByDuelId.get(String(duel?.id || "").trim()),
+                      duel?.status,
+                      duel?.ranking
+                    ))) {
+                      scheduleProfileGgEloAutoRecalculation();
                     }
                     return res.json({ ok: true, duels: rows || [] });
                   });
@@ -19728,6 +19798,19 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                               });
                             }))
                             .then((savedDuels) => {
+                              const previousStatusesByDuelId = new Map(
+                                (previousLineups || []).map((duel) => [
+                                  String(duel?.id || "").trim(),
+                                  duel?.status,
+                                ])
+                              );
+                              if ((savedDuels || []).some((duel) => didRankedDuelTransitionToDone(
+                                previousStatusesByDuelId.get(String(duel?.id || "").trim()),
+                                duel?.status,
+                                duel?.ranking
+                              ))) {
+                                scheduleProfileGgEloAutoRecalculation();
+                              }
                               const action = previousLineups.length ? "update" : "create";
                               const eventType = previousLineups.length ? "lineups.updated" : "lineups.created";
                               const changes = previousLineups.length

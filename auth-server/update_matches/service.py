@@ -19,6 +19,24 @@ class MatchUpdateService:
         match_id: str | None = None,
         duel_id: str | None = None,
     ) -> dict:
+        try:
+            return self._run(
+                targets=targets,
+                total_limit=total_limit,
+                match_id=match_id,
+                duel_id=duel_id,
+            )
+        finally:
+            self.repository.finish_update_run()
+
+    def _run(
+        self,
+        *,
+        targets: list[str],
+        total_limit: int | None = None,
+        match_id: str | None = None,
+        duel_id: str | None = None,
+    ) -> dict:
         if duel_id:
             return self._run_duel(duel_id=duel_id)
         if match_id:
