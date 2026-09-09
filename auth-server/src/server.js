@@ -33,6 +33,7 @@ import {
   buildChallengeMatchCapacity,
   buildChallengeMatchProgress,
   closeChallengePendingRequestsAfterAccept,
+  didChallengeDuelTransitionToDone,
   ensureChallengePeriodConfigurationSchema,
   ensureChallengePeriodPlayersSchema,
   isChallengeMatchSlotStatus,
@@ -4216,14 +4217,22 @@ async function recalculateTournamentStandings(tournamentId) {
   if (playerRows.length) {
     const duels = await dbAllAsync(
       `
-        SELECT m.stage, d.player_1_id, d.player_2_id, d.dw1, d.dw2
+        SELECT
+          COALESCE(NULLIF(trim(m.stage), ''), 'Stage 1') AS stage,
+          d.player_1_id,
+          d.player_2_id,
+          d.dw1,
+          d.dw2
         FROM duels d
-        INNER JOIN matches m
+        LEFT JOIN matches m
           ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
          AND m.deleted_at IS NULL
-        WHERE upper(trim(m.tournament_id)) = upper(trim(?))
-          AND lower(trim(COALESCE(m.status, ''))) = 'done'
+        WHERE upper(trim(COALESCE(NULLIF(trim(d.tournament_id), ''), m.tournament_id, ''))) = upper(trim(?))
           AND lower(trim(COALESCE(d.status, ''))) IN ('done', 'no show')
+          AND (
+            trim(COALESCE(d.match_id, '')) = ''
+            OR lower(trim(COALESCE(m.status, ''))) = 'done'
+          )
           AND d.deleted_at IS NULL
           AND trim(COALESCE(d.player_1_id, '')) <> ''
           AND trim(COALESCE(d.player_2_id, '')) <> ''
@@ -11558,6 +11567,16 @@ app.patch("/challenge-periods/:id/matches/:duelId", requireAdmin, async (req, re
 
       afterDuel = await loadChallengeDuelById(periodId, duelId, { includeDeleted: true });
       afterRequest = await loadChallengeRequestById(periodId, requestId);
+      const transitionedToDone = didChallengeDuelTransitionToDone(
+        beforeDuel.status,
+        afterDuel?.status
+      );
+      const rivalsTournamentId = normalizeNullableText(
+        period.rivals_tournament_id || afterDuel?.tournament_id || beforeDuel.tournament_id
+      );
+      if (transitionedToDone && rivalsTournamentId) {
+        await recalculateTournamentStandings(rivalsTournamentId);
+      }
       await dbRunAsync("COMMIT");
     } catch (error) {
       await dbRunAsync("ROLLBACK").catch(() => {});
@@ -18489,7 +18508,7 @@ app.post("/duels/:id/games/save", (req, res) => {
         d.challenge_period_id,
         d.challenge_request_id,
         d.source_type,
-        m.tournament_id,
+        COALESCE(NULLIF(trim(d.tournament_id), ''), m.tournament_id) AS tournament_id,
         m.team_1,
         m.team_2,
         m.status AS match_status
@@ -18668,6 +18687,15 @@ app.post("/duels/:id/games/save", (req, res) => {
           const recomputedDuel = await recomputeDuelAggregates(duelId, actorPlayerId);
           if (recomputedDuel?.matchId) {
             await recomputeMatchAggregates(recomputedDuel.matchId, actorPlayerId);
+          }
+          if (
+            isChallengeDuel
+            && String(recomputedDuel?.status || "").trim().toLowerCase() === "done"
+            && duelRow.tournament_id
+          ) {
+            // Completed result edits can change standings inputs even when the duel
+            // was already marked Done by the preceding admin metadata update.
+            await recalculateTournamentStandings(duelRow.tournament_id);
           }
           await dbRunAsync("COMMIT");
 

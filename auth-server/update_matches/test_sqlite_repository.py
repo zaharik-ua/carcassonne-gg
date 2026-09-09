@@ -23,9 +23,15 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
                 """
                 CREATE TABLE profiles (
                   id TEXT,
-                  bga_nickname TEXT
+                  bga_nickname TEXT,
+                  gg_elo REAL,
+                  deleted_at TEXT
                 );
-                INSERT INTO profiles VALUES ('100', 'Alpha'), ('200', 'Beta');
+                INSERT INTO profiles VALUES
+                  ('100', 'Alpha', 1600, NULL),
+                  ('200', 'Beta', 1500, NULL),
+                  ('300', 'Gamma', 1700, NULL),
+                  ('400', 'Delta', 1400, NULL);
 
                 CREATE TABLE duel_formats (
                   format TEXT,
@@ -50,8 +56,20 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
                   updated_at TEXT
                 );
 
+                CREATE TABLE tournaments (
+                  id TEXT PRIMARY KEY,
+                  standings_scoring TEXT NOT NULL DEFAULT 'standard',
+                  tpr_target_games INTEGER NOT NULL DEFAULT 10,
+                  tpr_smoothing REAL NOT NULL DEFAULT 0.5,
+                  tpr_benchmark_percentile REAL NOT NULL DEFAULT 0.75,
+                  current_tpr_benchmark REAL,
+                  tpr_calculated_at TEXT,
+                  updated_at TEXT
+                );
+
                 CREATE TABLE duels (
                   id TEXT PRIMARY KEY,
+                  tournament_id TEXT,
                   match_id TEXT,
                   duel_number INTEGER,
                   player_1_id TEXT,
@@ -60,6 +78,8 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
                   duel_format TEXT,
                   dw1 INTEGER,
                   dw2 INTEGER,
+                  player1_elo_before REAL,
+                  player2_elo_before REAL,
                   status TEXT,
                   results_last_error TEXT,
                   results_checked_at TEXT,
@@ -99,9 +119,23 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
                   mdif INTEGER NOT NULL DEFAULT 0,
                   ddif INTEGER,
                   gdif INTEGER NOT NULL DEFAULT 0,
+                  starting_elo REAL,
+                  elo_used REAL,
+                  smoothed_win_rate REAL,
+                  tpr REAL,
+                  tpr_confidence REAL,
+                  adjusted_tpr REAL,
+                  bounty REAL,
+                  opponents_bounty_points REAL,
+                  points REAL,
+                  performance_calculated_at TEXT,
                   position INTEGER,
+                  created_at TEXT,
                   updated_at TEXT
                 );
+                CREATE UNIQUE INDEX idx_test_standings_tournament_stage_player
+                  ON standings(tournament_id, stage, player_id)
+                  WHERE player_id IS NOT NULL AND team_id IS NULL;
                 """
             )
             for duel_id, status, deleted_at in [
@@ -321,6 +355,201 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
         self.assertEqual(match_status, "Done")
         self.assertEqual(standings_count, 0)
 
+    def test_standalone_rivals_completion_recalculates_bounty_standings(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO tournaments (
+                  id,
+                  standings_scoring,
+                  tpr_target_games,
+                  tpr_smoothing,
+                  tpr_benchmark_percentile,
+                  updated_at
+                )
+                VALUES ('RIVALS-1', 'bounty_tpr', 10, 0.5, 0.75, CURRENT_TIMESTAMP)
+                """
+            )
+            self._insert_duel(
+                conn,
+                duel_id="rivals-completing",
+                status="Planned",
+                deleted_at=None,
+                match_id=None,
+                tournament_id="RIVALS-1",
+            )
+            for duel_id, status, player_1_id, player_2_id, dw1, dw2 in [
+                ("rivals-error", "Error", "100", "300", 2, 0),
+                ("rivals-in-progress", "In progress", "200", "300", 2, 0),
+                ("rivals-cancelled", "Cancelled", "100", "400", 2, 0),
+            ]:
+                self._insert_duel(
+                    conn,
+                    duel_id=duel_id,
+                    status=status,
+                    deleted_at=None,
+                    match_id=None,
+                    tournament_id="RIVALS-1",
+                    player_1_id=player_1_id,
+                    player_2_id=player_2_id,
+                    dw1=dw1,
+                    dw2=dw2,
+                )
+
+        self.repository.save_match_result(
+            self._request("rivals-completing"),
+            MatchUpdateResult(
+                status="success",
+                wins0=2,
+                wins1=0,
+                tables=[self._table()],
+            ),
+        )
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT
+                  player_id, mp, mw, ml, gw, gl, mdif, gdif, position,
+                  smoothed_win_rate, tpr, tpr_confidence, adjusted_tpr, bounty, points
+                FROM standings
+                WHERE tournament_id = 'RIVALS-1'
+                ORDER BY position ASC
+                """
+            ).fetchall()
+            tournament = conn.execute(
+                """
+                SELECT current_tpr_benchmark, tpr_calculated_at
+                FROM tournaments
+                WHERE id = 'RIVALS-1'
+                """
+            ).fetchone()
+
+        self.assertEqual([row["player_id"] for row in rows], ["100", "200"])
+        self.assertEqual(
+            [
+                (row["player_id"], row["mp"], row["mw"], row["ml"], row["gw"], row["gl"], row["mdif"], row["gdif"])
+                for row in rows
+            ],
+            [
+                ("100", 1, 1, 0, 2, 0, 1, 2),
+                ("200", 1, 0, 1, 0, 2, -1, -2),
+            ],
+        )
+        self.assertAlmostEqual(rows[0]["smoothed_win_rate"], 0.75)
+        self.assertAlmostEqual(rows[0]["tpr"], 1690.85)
+        self.assertAlmostEqual(rows[0]["tpr_confidence"], 0.1)
+        self.assertAlmostEqual(rows[0]["adjusted_tpr"], 1609.08)
+        self.assertAlmostEqual(rows[0]["bounty"], 0.5424128)
+        self.assertAlmostEqual(rows[0]["points"], 0.91756422)
+        self.assertAlmostEqual(rows[1]["bounty"], 0.37515142)
+        self.assertAlmostEqual(rows[1]["points"], 0.37515142)
+        self.assertAlmostEqual(tournament["current_tpr_benchmark"], 1579.54)
+        self.assertIsNotNone(tournament["tpr_calculated_at"])
+
+    def test_standalone_rivals_completion_recalculates_standard_standings(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO tournaments (id, standings_scoring) VALUES ('RIVALS-STANDARD', 'standard')"
+            )
+            conn.executemany(
+                """
+                INSERT INTO standings (tournament_id, stage, player_id)
+                VALUES ('RIVALS-STANDARD', 'Stage 1', ?)
+                """,
+                [("100",), ("200",)],
+            )
+            self._insert_duel(
+                conn,
+                duel_id="rivals-standard-completing",
+                status="Planned",
+                deleted_at=None,
+                match_id=None,
+                tournament_id="RIVALS-STANDARD",
+            )
+
+        self.repository.save_match_result(
+            self._request("rivals-standard-completing"),
+            MatchUpdateResult(
+                status="success",
+                wins0=2,
+                wins1=0,
+                tables=[self._table()],
+            ),
+        )
+
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT player_id, mp, mw, ml, gw, gl, position
+                FROM standings
+                WHERE tournament_id = 'RIVALS-STANDARD'
+                ORDER BY position ASC
+                """
+            ).fetchall()
+        self.assertEqual(
+            rows,
+            [
+                ("100", 1, 1, 0, 2, 0, 1),
+                ("200", 1, 0, 1, 0, 2, 2),
+            ],
+        )
+
+    def test_standalone_rivals_non_done_updates_do_not_recalculate_standings(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO tournaments (
+                  id,
+                  standings_scoring,
+                  current_tpr_benchmark,
+                  updated_at
+                )
+                VALUES ('RIVALS-2', 'bounty_tpr', 777, CURRENT_TIMESTAMP)
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO standings (
+                  tournament_id, stage, player_id, mp, points, created_at, updated_at
+                )
+                VALUES ('RIVALS-2', 'Stage 1', '100', 9, 9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """
+            )
+            self._insert_duel(
+                conn,
+                duel_id="rivals-incomplete",
+                status="Planned",
+                deleted_at=None,
+                match_id=None,
+                tournament_id="RIVALS-2",
+            )
+
+        request = self._request("rivals-incomplete")
+        incomplete_result = MatchUpdateResult(
+            status="success",
+            wins0=1,
+            wins1=0,
+            tables=[self._table()],
+        )
+        self.repository.save_match_result(request, incomplete_result)
+        self.assertEqual(self._load_duel("rivals-incomplete")["status"], "In progress")
+
+        request.end_date = self.current_start_ts - 1
+        self.repository.save_match_result(request, incomplete_result)
+        self.assertEqual(self._load_duel("rivals-incomplete")["status"], "Error")
+
+        with sqlite3.connect(self.db_path) as conn:
+            standing = conn.execute(
+                "SELECT mp, points FROM standings WHERE tournament_id = 'RIVALS-2' AND player_id = '100'"
+            ).fetchone()
+            benchmark = conn.execute(
+                "SELECT current_tpr_benchmark FROM tournaments WHERE id = 'RIVALS-2'"
+            ).fetchone()[0]
+        self.assertEqual(standing, (9, 9.0))
+        self.assertEqual(benchmark, 777.0)
+
     def _insert_duel(
         self,
         conn: sqlite3.Connection,
@@ -328,12 +557,18 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
         duel_id: str,
         status: str,
         deleted_at: str | None,
-        match_id: str = "match-1",
+        match_id: str | None = "match-1",
+        tournament_id: str | None = None,
+        player_1_id: str = "100",
+        player_2_id: str = "200",
+        dw1: int | None = None,
+        dw2: int | None = None,
     ) -> None:
         conn.execute(
             """
             INSERT INTO duels (
               id,
+              tournament_id,
               match_id,
               duel_number,
               player_1_id,
@@ -351,13 +586,14 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
             VALUES (
               ?,
               ?,
+              ?,
               1,
-              '100',
-              '200',
+              ?,
+              ?,
               ?,
               'Bo3',
-              NULL,
-              NULL,
+              ?,
+              ?,
               ?,
               'old-error',
               'old-check',
@@ -365,7 +601,18 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
               'old-update'
             )
             """,
-            (duel_id, match_id, self.past_time, status, deleted_at),
+            (
+                duel_id,
+                tournament_id,
+                match_id,
+                player_1_id,
+                player_2_id,
+                self.past_time,
+                dw1,
+                dw2,
+                status,
+                deleted_at,
+            ),
         )
 
     def _request(self, duel_id: str) -> MatchUpdateRequest:

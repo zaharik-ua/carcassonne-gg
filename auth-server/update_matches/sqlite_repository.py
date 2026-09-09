@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from datetime import datetime, timezone
+from math import floor, isfinite
 from pathlib import Path
 
 from .models import MatchUpdateRequest, MatchUpdateResult
@@ -167,6 +168,7 @@ class SqliteMatchRepository(MatchRepository):
                 """
                 SELECT
                   l.id,
+                  l.tournament_id,
                   l.status,
                   l.deleted_at,
                   l.time_utc,
@@ -297,6 +299,17 @@ class SqliteMatchRepository(MatchRepository):
 
             if parent_match_id:
                 self._update_match_aggregates(conn, match_id=parent_match_id)
+
+            transitioned_to_done = (
+                str(current["status"] or "").strip().lower() != "done"
+                and next_status == "Done"
+            )
+            direct_tournament_id = str(current["tournament_id"] or "").strip()
+            if transitioned_to_done and direct_tournament_id and not parent_match_id:
+                self._recalculate_standings_if_present(
+                    conn,
+                    tournament_id=direct_tournament_id,
+                )
 
             conn.commit()
 
@@ -480,6 +493,61 @@ class SqliteMatchRepository(MatchRepository):
         if has_standings_table is None:
             return False
 
+        has_tournaments_table = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name = 'tournaments'
+            LIMIT 1
+            """
+        ).fetchone()
+        if has_tournaments_table is not None:
+            tournament_columns = {
+                str(row["name"] or "").strip().lower()
+                for row in conn.execute("PRAGMA table_info(tournaments)").fetchall()
+            }
+            if "standings_scoring" in tournament_columns:
+                target_games_sql = (
+                    "COALESCE(tpr_target_games, 10)"
+                    if "tpr_target_games" in tournament_columns
+                    else "10"
+                )
+                smoothing_sql = (
+                    "COALESCE(tpr_smoothing, 0.5)"
+                    if "tpr_smoothing" in tournament_columns
+                    else "0.5"
+                )
+                benchmark_percentile_sql = (
+                    "COALESCE(tpr_benchmark_percentile, 0.75)"
+                    if "tpr_benchmark_percentile" in tournament_columns
+                    else "0.75"
+                )
+                tournament_settings = conn.execute(
+                    f"""
+                    SELECT
+                      COALESCE(NULLIF(lower(trim(standings_scoring)), ''), 'standard') AS standings_scoring,
+                      {target_games_sql} AS tpr_target_games,
+                      {smoothing_sql} AS tpr_smoothing,
+                      {benchmark_percentile_sql} AS tpr_benchmark_percentile
+                    FROM tournaments
+                    WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
+                    LIMIT 1
+                    """,
+                    (tournament_id,),
+                ).fetchone()
+                if (
+                    tournament_settings is not None
+                    and str(tournament_settings["standings_scoring"] or "").strip().lower()
+                    == "bounty_tpr"
+                ):
+                    return SqliteMatchRepository._recalculate_bounty_tpr_standings(
+                        conn,
+                        tournament_id=tournament_id,
+                        settings=tournament_settings,
+                        tournament_columns=tournament_columns,
+                    )
+
         standings_rows = conn.execute(
             """
             SELECT id, stage, "group" AS "group", team_id, player_id
@@ -565,14 +633,22 @@ class SqliteMatchRepository(MatchRepository):
         if player_rows:
             duels = conn.execute(
                 """
-                SELECT m.stage, d.player_1_id, d.player_2_id, d.dw1, d.dw2
+                SELECT
+                  COALESCE(NULLIF(trim(m.stage), ''), 'Stage 1') AS stage,
+                  d.player_1_id,
+                  d.player_2_id,
+                  d.dw1,
+                  d.dw2
                 FROM duels d
-                INNER JOIN matches m
+                LEFT JOIN matches m
                   ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
                  AND m.deleted_at IS NULL
-                WHERE upper(trim(COALESCE(m.tournament_id, ''))) = upper(trim(?))
-                  AND lower(trim(COALESCE(m.status, ''))) = 'done'
+                WHERE upper(trim(COALESCE(NULLIF(trim(d.tournament_id), ''), m.tournament_id, ''))) = upper(trim(?))
                   AND lower(trim(COALESCE(d.status, ''))) IN ('done', 'no show')
+                  AND (
+                    trim(COALESCE(d.match_id, '')) = ''
+                    OR lower(trim(COALESCE(m.status, ''))) = 'done'
+                  )
                   AND d.deleted_at IS NULL
                   AND trim(COALESCE(d.player_1_id, '')) <> ''
                   AND trim(COALESCE(d.player_2_id, '')) <> ''
@@ -666,6 +742,424 @@ class SqliteMatchRepository(MatchRepository):
                 ),
             )
         return True
+
+    @staticmethod
+    def _recalculate_bounty_tpr_standings(
+        conn: sqlite3.Connection,
+        *,
+        tournament_id: str,
+        settings: sqlite3.Row,
+        tournament_columns: set[str],
+    ) -> bool:
+        """Reproduce the Rivals Bounty/TPR standings calculation used by server.js."""
+        standings_columns = {
+            str(row["name"] or "").strip().lower()
+            for row in conn.execute("PRAGMA table_info(standings)").fetchall()
+        }
+        required_standings_columns = {
+            "tournament_id",
+            "stage",
+            "team_id",
+            "player_id",
+            "mp",
+            "mw",
+            "ml",
+            "gw",
+            "gl",
+            "mdif",
+            "gdif",
+            "starting_elo",
+            "elo_used",
+            "smoothed_win_rate",
+            "tpr",
+            "tpr_confidence",
+            "adjusted_tpr",
+            "bounty",
+            "opponents_bounty_points",
+            "points",
+            "performance_calculated_at",
+            "position",
+            "created_at",
+            "updated_at",
+        }
+        if not required_standings_columns.issubset(standings_columns):
+            return False
+
+        duel_columns = {
+            str(row["name"] or "").strip().lower()
+            for row in conn.execute("PRAGMA table_info(duels)").fetchall()
+        }
+        player1_elo_sql = "d.player1_elo_before" if "player1_elo_before" in duel_columns else "NULL"
+        player2_elo_sql = "d.player2_elo_before" if "player2_elo_before" in duel_columns else "NULL"
+        completed_duels = conn.execute(
+            f"""
+            SELECT
+              d.id,
+              d.time_utc,
+              d.player_1_id,
+              d.player_2_id,
+              d.dw1,
+              d.dw2,
+              {player1_elo_sql} AS player1_elo_before,
+              {player2_elo_sql} AS player2_elo_before
+            FROM duels d
+            LEFT JOIN matches m
+              ON trim(COALESCE(m.id, '')) = trim(COALESCE(d.match_id, ''))
+             AND m.deleted_at IS NULL
+            WHERE upper(trim(COALESCE(NULLIF(trim(d.tournament_id), ''), m.tournament_id, ''))) = upper(trim(?))
+              AND lower(trim(COALESCE(d.status, ''))) = 'done'
+              AND d.deleted_at IS NULL
+              AND trim(COALESCE(d.player_1_id, '')) <> ''
+              AND trim(COALESCE(d.player_2_id, '')) <> ''
+              AND trim(d.player_1_id) <> trim(d.player_2_id)
+              AND d.dw1 IS NOT NULL
+              AND d.dw2 IS NOT NULL
+            ORDER BY
+              CASE WHEN datetime(d.time_utc) IS NULL THEN 1 ELSE 0 END ASC,
+              datetime(d.time_utc) ASC,
+              d.id COLLATE NOCASE ASC
+            """,
+            (tournament_id,),
+        ).fetchall()
+
+        player_ids = list(dict.fromkeys(
+            str(player_id or "").strip()
+            for duel in completed_duels
+            for player_id in (duel["player_1_id"], duel["player_2_id"])
+            if str(player_id or "").strip()
+        ))
+        if not player_ids:
+            updates: list[str] = []
+            if "current_tpr_benchmark" in tournament_columns:
+                updates.append("current_tpr_benchmark = NULL")
+            if "tpr_calculated_at" in tournament_columns:
+                updates.append("tpr_calculated_at = CURRENT_TIMESTAMP")
+            if "updated_at" in tournament_columns:
+                updates.append("updated_at = CURRENT_TIMESTAMP")
+            if updates:
+                conn.execute(
+                    f"""
+                    UPDATE tournaments
+                    SET {', '.join(updates)}
+                    WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
+                    """,
+                    [tournament_id],
+                )
+            return True
+
+        profile_columns = {
+            str(row["name"] or "").strip().lower()
+            for row in conn.execute("PRAGMA table_info(profiles)").fetchall()
+        }
+        current_elo_by_player_id: dict[str, float | None] = {}
+        if "gg_elo" in profile_columns:
+            deleted_filter = "AND deleted_at IS NULL" if "deleted_at" in profile_columns else ""
+            placeholders = ", ".join("?" for _ in player_ids)
+            profile_rows = conn.execute(
+                f"""
+                SELECT trim(id) AS player_id, gg_elo
+                FROM profiles
+                WHERE trim(COALESCE(id, '')) IN ({placeholders})
+                  {deleted_filter}
+                """,
+                player_ids,
+            ).fetchall()
+            current_elo_by_player_id = {
+                str(row["player_id"] or "").strip(): SqliteMatchRepository._bounty_number(row["gg_elo"])
+                for row in profile_rows
+            }
+
+        states_by_player_id: dict[str, dict] = {
+            player_id: {
+                "player_id": player_id,
+                "games": 0,
+                "wins": 0,
+                "losses": 0,
+                "game_wins": 0,
+                "game_losses": 0,
+                "first_elo_before": None,
+                "opponents": [],
+                "defeated_opponent_ids": [],
+            }
+            for player_id in player_ids
+        }
+
+        for duel in completed_duels:
+            player1_id = str(duel["player_1_id"] or "").strip()
+            player2_id = str(duel["player_2_id"] or "").strip()
+            player1 = states_by_player_id.get(player1_id)
+            player2 = states_by_player_id.get(player2_id)
+            if player1 is None or player2 is None:
+                continue
+            if player1["first_elo_before"] is None:
+                player1["first_elo_before"] = SqliteMatchRepository._bounty_number(
+                    duel["player1_elo_before"]
+                )
+            if player2["first_elo_before"] is None:
+                player2["first_elo_before"] = SqliteMatchRepository._bounty_number(
+                    duel["player2_elo_before"]
+                )
+            player1_score = max(0.0, SqliteMatchRepository._bounty_number(duel["dw1"], 0.0))
+            player2_score = max(0.0, SqliteMatchRepository._bounty_number(duel["dw2"], 0.0))
+            player1["games"] += 1
+            player2["games"] += 1
+            player1["game_wins"] += player1_score
+            player1["game_losses"] += player2_score
+            player2["game_wins"] += player2_score
+            player2["game_losses"] += player1_score
+            player1["opponents"].append(player2_id)
+            player2["opponents"].append(player1_id)
+            if player1_score > player2_score:
+                player1["wins"] += 1
+                player2["losses"] += 1
+                player1["defeated_opponent_ids"].append(player2_id)
+            elif player2_score > player1_score:
+                player2["wins"] += 1
+                player1["losses"] += 1
+                player2["defeated_opponent_ids"].append(player1_id)
+
+        for state in states_by_player_id.values():
+            current_elo = current_elo_by_player_id.get(state["player_id"])
+            fallback_elo = current_elo if current_elo is not None else 1500.0
+            starting_elo = (
+                state["first_elo_before"]
+                if state["first_elo_before"] is not None
+                else fallback_elo
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO standings (
+                  tournament_id,
+                  stage,
+                  player_id,
+                  starting_elo,
+                  created_at,
+                  updated_at
+                )
+                VALUES (?, 'Stage 1', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                (tournament_id, state["player_id"], starting_elo),
+            )
+            conn.execute(
+                """
+                UPDATE standings
+                SET starting_elo = COALESCE(starting_elo, ?),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE upper(trim(tournament_id)) = upper(trim(?))
+                  AND lower(trim(stage)) = lower('Stage 1')
+                  AND trim(player_id) = trim(?)
+                  AND team_id IS NULL
+                """,
+                (starting_elo, tournament_id, state["player_id"]),
+            )
+            state["starting_elo"] = starting_elo
+            state["elo_used"] = current_elo if current_elo is not None else starting_elo
+
+        target_games = max(
+            1,
+            int(SqliteMatchRepository._bounty_number(settings["tpr_target_games"], 10.0)),
+        )
+        smoothing = max(
+            0.0,
+            SqliteMatchRepository._bounty_number(settings["tpr_smoothing"], 0.5),
+        )
+        benchmark_percentile = min(
+            1.0,
+            max(
+                0.0,
+                SqliteMatchRepository._bounty_number(
+                    settings["tpr_benchmark_percentile"],
+                    0.75,
+                ),
+            ),
+        )
+
+        for state in states_by_player_id.values():
+            opponent_ratings = []
+            for opponent_id in state["opponents"]:
+                opponent_current_elo = current_elo_by_player_id.get(opponent_id)
+                if opponent_current_elo is not None:
+                    opponent_ratings.append(opponent_current_elo)
+                else:
+                    opponent_ratings.append(states_by_player_id[opponent_id]["starting_elo"])
+            state["smoothed_win_rate"] = SqliteMatchRepository._calculate_smoothed_win_rate(
+                state["wins"],
+                state["games"],
+                smoothing,
+            )
+            state["tpr"] = SqliteMatchRepository._calculate_tpr(
+                opponent_ratings,
+                state["smoothed_win_rate"],
+            )
+            state["tpr_confidence"] = min(1.0, state["games"] / target_games)
+            state["adjusted_tpr"] = state["elo_used"] + state["tpr_confidence"] * (
+                state["tpr"] - state["elo_used"]
+            )
+
+        benchmark_tpr = SqliteMatchRepository._percentile_inclusive(
+            [state["adjusted_tpr"] for state in states_by_player_id.values()],
+            benchmark_percentile,
+        )
+        for state in states_by_player_id.values():
+            state["bounty"] = 1.0 / (
+                1.0 + (10.0 ** ((benchmark_tpr - state["adjusted_tpr"]) / 400.0))
+            )
+        for state in states_by_player_id.values():
+            state["opponents_bounty_points"] = sum(
+                states_by_player_id[opponent_id]["bounty"]
+                for opponent_id in state["defeated_opponent_ids"]
+            )
+            state["points"] = state["bounty"] + state["opponents_bounty_points"]
+
+        positioned_states = sorted(
+            states_by_player_id.values(),
+            key=lambda state: (
+                -state["points"],
+                -state["wins"],
+                -state["adjusted_tpr"],
+            ),
+        )
+        for position, state in enumerate(positioned_states, start=1):
+            state["position"] = position
+            conn.execute(
+                """
+                UPDATE standings
+                SET
+                  mp = ?, mw = ?, ml = ?,
+                  gw = ?, gl = ?, mdif = ?, gdif = ?,
+                  elo_used = ?, smoothed_win_rate = ?, tpr = ?, tpr_confidence = ?,
+                  adjusted_tpr = ?, bounty = ?, opponents_bounty_points = ?, points = ?,
+                  position = ?, performance_calculated_at = CURRENT_TIMESTAMP,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE upper(trim(tournament_id)) = upper(trim(?))
+                  AND lower(trim(stage)) = lower('Stage 1')
+                  AND trim(player_id) = trim(?)
+                  AND team_id IS NULL
+                """,
+                (
+                    state["games"],
+                    state["wins"],
+                    state["losses"],
+                    state["game_wins"],
+                    state["game_losses"],
+                    state["wins"] - state["losses"],
+                    state["game_wins"] - state["game_losses"],
+                    SqliteMatchRepository._round_bounty_value(state["elo_used"], 2),
+                    SqliteMatchRepository._round_bounty_value(state["smoothed_win_rate"]),
+                    SqliteMatchRepository._round_bounty_value(state["tpr"], 2),
+                    SqliteMatchRepository._round_bounty_value(state["tpr_confidence"]),
+                    SqliteMatchRepository._round_bounty_value(state["adjusted_tpr"], 2),
+                    SqliteMatchRepository._round_bounty_value(state["bounty"]),
+                    SqliteMatchRepository._round_bounty_value(state["opponents_bounty_points"]),
+                    SqliteMatchRepository._round_bounty_value(state["points"]),
+                    state["position"],
+                    tournament_id,
+                    state["player_id"],
+                ),
+            )
+
+        tournament_updates: list[str] = []
+        tournament_params: list[object] = []
+        if "current_tpr_benchmark" in tournament_columns:
+            tournament_updates.append("current_tpr_benchmark = ?")
+            tournament_params.append(
+                SqliteMatchRepository._round_bounty_value(benchmark_tpr, 2)
+            )
+        if "tpr_calculated_at" in tournament_columns:
+            tournament_updates.append("tpr_calculated_at = CURRENT_TIMESTAMP")
+        if "updated_at" in tournament_columns:
+            tournament_updates.append("updated_at = CURRENT_TIMESTAMP")
+        if tournament_updates:
+            conn.execute(
+                f"""
+                UPDATE tournaments
+                SET {', '.join(tournament_updates)}
+                WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
+                """,
+                [*tournament_params, tournament_id],
+            )
+        return True
+
+    @staticmethod
+    def _bounty_number(value: object, fallback: float | None = None) -> float | None:
+        if value is None or str(value).strip() == "":
+            return fallback
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return fallback
+        return numeric if isfinite(numeric) else fallback
+
+    @staticmethod
+    def _calculate_smoothed_win_rate(wins: object, games: object, smoothing: object) -> float:
+        normalized_games = max(0, int(SqliteMatchRepository._bounty_number(games, 0.0)))
+        normalized_wins = min(
+            normalized_games,
+            max(0.0, SqliteMatchRepository._bounty_number(wins, 0.0)),
+        )
+        normalized_smoothing = max(
+            0.0,
+            SqliteMatchRepository._bounty_number(smoothing, 0.5),
+        )
+        denominator = normalized_games + (2.0 * normalized_smoothing)
+        return 0.5 if denominator <= 0 else (normalized_wins + normalized_smoothing) / denominator
+
+    @staticmethod
+    def _calculate_tpr(opponent_ratings: list[float], target_score: object) -> float:
+        ratings = [
+            rating
+            for value in opponent_ratings
+            if (rating := SqliteMatchRepository._bounty_number(value)) is not None
+        ]
+        if not ratings:
+            raise ValueError("Cannot calculate TPR without opponent ratings")
+        epsilon = 2.220446049250313e-16
+        target = min(
+            1.0 - epsilon,
+            max(epsilon, SqliteMatchRepository._bounty_number(target_score, 0.5)),
+        )
+        low = min(ratings) - 10000.0
+        high = max(ratings) + 10000.0
+        for _iteration in range(100):
+            candidate = (low + high) / 2.0
+            expected_average = sum(
+                1.0 / (1.0 + (10.0 ** ((opponent_rating - candidate) / 400.0)))
+                for opponent_rating in ratings
+            ) / len(ratings)
+            if expected_average < target:
+                low = candidate
+            else:
+                high = candidate
+        return (low + high) / 2.0
+
+    @staticmethod
+    def _percentile_inclusive(values: list[float], percentile: object) -> float:
+        sorted_values = sorted(
+            value
+            for raw_value in values
+            if (value := SqliteMatchRepository._bounty_number(raw_value)) is not None
+        )
+        if not sorted_values:
+            raise ValueError("Cannot calculate a percentile without values")
+        normalized_percentile = min(
+            1.0,
+            max(0.0, SqliteMatchRepository._bounty_number(percentile, 0.75)),
+        )
+        position = (len(sorted_values) - 1) * normalized_percentile
+        lower_index = floor(position)
+        upper_index = -floor(-position)
+        fraction = position - lower_index
+        return sorted_values[lower_index] + (
+            sorted_values[upper_index] - sorted_values[lower_index]
+        ) * fraction
+
+    @staticmethod
+    def _round_bounty_value(value: object, digits: int = 8) -> float | None:
+        numeric = SqliteMatchRepository._bounty_number(value)
+        if numeric is None:
+            return None
+        multiplier = 10 ** digits
+        return floor((numeric + 2.220446049250313e-16) * multiplier + 0.5) / multiplier
 
     @staticmethod
     def _normalize_standings_stage(value: object) -> str:

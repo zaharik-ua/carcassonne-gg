@@ -11,6 +11,7 @@ import {
   buildChallengeMatchCapacity,
   buildChallengeMatchProgress,
   closeChallengePendingRequestsAfterAccept,
+  didChallengeDuelTransitionToDone,
   ensureChallengePeriodConfigurationSchema,
   ensureChallengePeriodPlayersSchema,
   getChallengeFormatDurationMinutes,
@@ -412,6 +413,16 @@ test("defines Rivals-wide pair blocking statuses", () => {
   });
   ["Cancelled", "", null].forEach((status) => {
     assert.equal(isChallengeRivalsPairDuelStatus(status), false, `${status} must not block the pair`);
+  });
+});
+
+test("triggers Rivals standings only when a Challenge duel transitions to Done", () => {
+  ["Error", "In progress", "Cancelled", "Planned", ""].forEach((status) => {
+    assert.equal(didChallengeDuelTransitionToDone(status, "Done"), true);
+  });
+  assert.equal(didChallengeDuelTransitionToDone("Done", "Done"), false);
+  ["Error", "In progress", "Cancelled", "Planned", ""].forEach((status) => {
+    assert.equal(didChallengeDuelTransitionToDone("Planned", status), false);
   });
 });
 

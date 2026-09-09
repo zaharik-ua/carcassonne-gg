@@ -76,6 +76,11 @@ export function isChallengeMatchSlotStatus(status) {
   return CHALLENGE_MATCH_SLOT_DUEL_STATUSES.has(String(status || "").trim());
 }
 
+export function didChallengeDuelTransitionToDone(previousStatus, nextStatus) {
+  return String(previousStatus || "").trim().toLowerCase() !== "done"
+    && String(nextStatus || "").trim().toLowerCase() === "done";
+}
+
 export function isChallengeRivalsPairDuelStatus(status) {
   return CHALLENGE_RIVALS_PAIR_DUEL_STATUSES.has(String(status || "").trim());
 }
