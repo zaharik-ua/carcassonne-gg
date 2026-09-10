@@ -14,10 +14,6 @@ It writes:
 - `duels.results_checked_at`
 - `games`
 
-For completed tables, `GET /public/games/:tableId/carcassonne-lab` loads the
-authenticated BGA replay on demand, redirects to CarcassonneLab, and caches the
-generated URL in `games.carcassonne_lab_url`.
-
 It persists sync errors into:
 - `duels.results_last_error`
 

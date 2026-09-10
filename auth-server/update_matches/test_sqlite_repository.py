@@ -165,16 +165,6 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def test_ensure_schema_adds_carcassonne_lab_cache_columns(self) -> None:
-        with sqlite3.connect(self.db_path) as conn:
-            columns = {
-                str(row[1])
-                for row in conn.execute("PRAGMA table_info(games)").fetchall()
-            }
-
-        self.assertIn("carcassonne_lab_url", columns)
-        self.assertIn("carcassonne_lab_generated_at", columns)
-
     def test_fetch_matches_to_update_skips_protected_duels(self) -> None:
         batch = self.repository.fetch_matches_to_update(target=TARGET_FINISHED_PENDING, limit=20)
 
