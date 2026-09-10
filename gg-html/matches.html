@@ -1978,9 +1978,13 @@ function createMatchElement(match, options = {}) {
   toggleBtn.appendChild(chevronIcon);
   const matchId = String(match?.id || "").trim();
   const matchLineups = Array.isArray(match?.lineupsData) ? match.lineupsData.filter(Boolean) : [];
+  const legacyLineupsHtml = typeof match?.lineups === "string" ? match.lineups.trim() : "";
   let lineupDiv = null;
   if (matchId && matchLineups.length > 0) {
     lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon, match.status, match.elo_updated_at, getMatchNewsItems(match));
+    bindLineupToggle(matchId, lineupDiv, chevronIcon, toggleBtn);
+  } else if (matchId && legacyLineupsHtml) {
+    lineupDiv = createLegacyLineupPanel(matchId, legacyLineupsHtml, chevronIcon);
     bindLineupToggle(matchId, lineupDiv, chevronIcon, toggleBtn);
   }
   
@@ -3303,6 +3307,27 @@ function createGameBadgesWrap(duel) {
   });
 
   return wrap.childNodes.length ? wrap : null;
+}
+
+function createLegacyLineupPanel(matchId, rawHtml, chevronIcon) {
+  const lineupPanel = document.createElement("div");
+  lineupPanel.className = "lineup";
+
+  const lineupBody = document.createElement("div");
+  lineupBody.className = "lineup__overview";
+  lineupBody.innerHTML = rawHtml;
+  lineupBody.querySelectorAll('a[target="_blank"]').forEach((link) => {
+    link.rel = "noopener noreferrer";
+  });
+  lineupPanel.appendChild(lineupBody);
+
+  if (openLineupsSet.has(matchId)) {
+    lineupPanel.classList.add("open");
+    lineupPanel.style.height = "auto";
+    chevronIcon.style.transform = "rotate(0deg)";
+  }
+
+  return lineupPanel;
 }
 
 function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloUpdatedAt = "", newsItems = []) {

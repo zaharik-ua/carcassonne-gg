@@ -76,6 +76,12 @@ import {
   didRankedDuelTransitionToDone,
   isCompletedRankedDuel,
 } from "./profile-gg-elo-trigger.js";
+import {
+  normalizeBgaTableId,
+  normalizeCarcassonneLabUrl,
+  parseCarcassonneLabScriptOutput,
+  renderCarcassonneLabErrorPage,
+} from "./carcassonne-lab.js";
 
 dotenv.config();
 
@@ -2569,6 +2575,44 @@ function execFileAsync(file, args = [], options = {}) {
       resolve({ stdout, stderr });
     });
   });
+}
+
+const carcassonneLabGenerationJobs = new Map();
+let carcassonneLabGenerationQueue = Promise.resolve();
+
+async function runCarcassonneLabGenerator(tableId) {
+  const authServerRoot = path.resolve(__dirname, "..");
+  const scriptPath = path.resolve(authServerRoot, "get_carcassonne_lab_url.py");
+  const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
+  const { stdout, stderr } = await execFileAsync(
+    pythonBin,
+    [scriptPath, "--table-id", tableId],
+    {
+      cwd: authServerRoot,
+      env: process.env,
+      timeout: 3 * 60 * 1000,
+      maxBuffer: 1024 * 1024,
+    }
+  );
+  if (String(stderr || "").trim()) {
+    logUpdaterOutput(`carcassonne-lab:${tableId}`, stderr);
+  }
+  return parseCarcassonneLabScriptOutput(stdout);
+}
+
+function enqueueCarcassonneLabGeneration(tableId) {
+  const existingJob = carcassonneLabGenerationJobs.get(tableId);
+  if (existingJob) return existingJob;
+
+  const job = carcassonneLabGenerationQueue
+    .catch(() => {})
+    .then(() => runCarcassonneLabGenerator(tableId))
+    .finally(() => {
+      carcassonneLabGenerationJobs.delete(tableId);
+    });
+  carcassonneLabGenerationQueue = job.catch(() => {});
+  carcassonneLabGenerationJobs.set(tableId, job);
+  return job;
 }
 
 function parseScriptJsonOutput(output) {
@@ -5814,6 +5858,8 @@ function ensureGamesSchema() {
       player_1_clock INTEGER NOT NULL DEFAULT 0,
       player_2_clock INTEGER NOT NULL DEFAULT 0,
       status TEXT,
+      carcassonne_lab_url TEXT,
+      carcassonne_lab_generated_at TEXT,
       deleted_at TEXT
     )
   `, (createErr) => {
@@ -5843,6 +5889,8 @@ function ensureGamesSchema() {
       addColumnIfMissing(columns, "games", "player_1_clock", "INTEGER NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "games", "player_2_clock", "INTEGER NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "games", "status", "TEXT");
+      addColumnIfMissing(columns, "games", "carcassonne_lab_url", "TEXT");
+      addColumnIfMissing(columns, "games", "carcassonne_lab_generated_at", "TEXT");
       addColumnIfMissing(columns, "games", "deleted_at", "TEXT");
       if (columns.some((column) => column.name === "bga_flags")) {
         db.run("ALTER TABLE games DROP COLUMN bga_flags", (dropErr) => {
@@ -21646,6 +21694,65 @@ app.get("/public/team-official-matches/filters", async (_req, res, next) => {
     });
   } catch (error) {
     return next(error);
+  }
+});
+
+app.get("/public/games/:tableId/carcassonne-lab", async (req, res) => {
+  const tableId = normalizeBgaTableId(req.params.tableId);
+  res.set("Cache-Control", "no-store");
+
+  if (!tableId) {
+    return res.status(400).type("html").send(renderCarcassonneLabErrorPage({
+      tableId: req.params.tableId,
+      message: "Invalid Board Game Arena table number.",
+    }));
+  }
+
+  try {
+    const game = await dbGetAsync(
+      `
+        SELECT
+          g.bga_table_id,
+          g.carcassonne_lab_url
+        FROM games g
+        INNER JOIN duels d
+          ON trim(COALESCE(d.id, '')) = trim(COALESCE(g.duel_id, ''))
+         AND d.deleted_at IS NULL
+        WHERE trim(COALESCE(g.bga_table_id, '')) = trim(?)
+          AND g.deleted_at IS NULL
+        LIMIT 1
+      `,
+      [tableId]
+    );
+    if (!game) {
+      return res.status(404).type("html").send(renderCarcassonneLabErrorPage({
+        tableId,
+        message: "This BGA table is not available in the Carcassonne.GG match database.",
+      }));
+    }
+
+    const cachedUrl = normalizeCarcassonneLabUrl(game.carcassonne_lab_url);
+    if (cachedUrl) return res.redirect(302, cachedUrl);
+
+    const url = await enqueueCarcassonneLabGeneration(tableId);
+    await dbRunAsync(
+      `
+        UPDATE games
+        SET
+          carcassonne_lab_url = ?,
+          carcassonne_lab_generated_at = CURRENT_TIMESTAMP
+        WHERE trim(COALESCE(bga_table_id, '')) = trim(?)
+          AND deleted_at IS NULL
+      `,
+      [url, tableId]
+    );
+    return res.redirect(302, url);
+  } catch (error) {
+    console.error(`Failed to generate CarcassonneLab replay for BGA table ${tableId}`, error);
+    return res.status(502).type("html").send(renderCarcassonneLabErrorPage({
+      tableId,
+      message: error?.message || "Could not load this replay from Board Game Arena.",
+    }));
   }
 });
 

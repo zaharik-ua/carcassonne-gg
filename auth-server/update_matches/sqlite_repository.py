@@ -1306,6 +1306,10 @@ class SqliteMatchRepository(MatchRepository):
                 conn.execute("ALTER TABLE matches ADD COLUMN gw2_import INTEGER")
             if "deleted_at" not in game_columns:
                 conn.execute("ALTER TABLE games ADD COLUMN deleted_at TEXT")
+            if "carcassonne_lab_url" not in game_columns:
+                conn.execute("ALTER TABLE games ADD COLUMN carcassonne_lab_url TEXT")
+            if "carcassonne_lab_generated_at" not in game_columns:
+                conn.execute("ALTER TABLE games ADD COLUMN carcassonne_lab_generated_at TEXT")
             conn.commit()
 
     @staticmethod

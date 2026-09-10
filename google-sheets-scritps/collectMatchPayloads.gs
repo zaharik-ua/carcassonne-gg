@@ -34,6 +34,10 @@ function collectMatchPayloads(data, rowNumbers, options = {}) {
     }
 
     if (!player1 || !player2 || !player1Id || !player2Id || !startDate || !endDate) continue;
+    if (
+      !(startDate instanceof Date) || isNaN(startDate.getTime()) ||
+      !(endDate instanceof Date) || isNaN(endDate.getTime())
+    ) continue;
 
     const startTimestamp = toUtcTimestamp(startDate);
     const endTimestamp = toUtcTimestamp(endDate);
