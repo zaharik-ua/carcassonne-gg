@@ -296,32 +296,27 @@ def _response_players(response: object) -> list[dict]:
     return players if isinstance(players, list) else []
 
 
-def fetch_bga_replay_logs(
-    table_id: object,
-    *,
-    request: Callable[..., dict] | None = None,
-    sleep: Callable[[float], None] = time.sleep,
-) -> list[dict]:
-    logs, _players = fetch_bga_replay(
-        table_id,
-        request=request,
-        sleep=sleep,
+def _is_replay_access_error(error: Exception) -> bool:
+    message = str(error or "").strip().lower()
+    return any(
+        marker in message
+        for marker in (
+            "invalid session",
+            "not logged",
+            "not authorized",
+            "access denied",
+            "need to be registered",
+            "played at least 2 games",
+        )
     )
-    return logs
 
 
-def fetch_bga_replay(
-    table_id: object,
+def _fetch_bga_replay_once(
+    normalized_table_id: str,
     *,
-    request: Callable[..., dict] | None = None,
-    sleep: Callable[[float], None] = time.sleep,
+    request: Callable[..., dict],
+    sleep: Callable[[float], None],
 ) -> tuple[list[dict], list[dict]]:
-    normalized_table_id = normalize_table_id(table_id)
-    if request is None:
-        from .http_session import request_json
-
-        request = request_json
-
     logs_path = "/archive/archive/logs.html"
     logs_params = {"table": normalized_table_id, "translated": "true"}
 
@@ -353,6 +348,55 @@ def fetch_bga_replay(
             sleep(0.5 * (attempt + 1))
 
     raise CarcassonneLabReplayError(error_message)
+
+
+def fetch_bga_replay_logs(
+    table_id: object,
+    *,
+    request: Callable[..., dict] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> list[dict]:
+    logs, _players = fetch_bga_replay(
+        table_id,
+        request=request,
+        sleep=sleep,
+    )
+    return logs
+
+
+def fetch_bga_replay(
+    table_id: object,
+    *,
+    request: Callable[..., dict] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    rotate_session: Callable[..., object] | None = None,
+) -> tuple[list[dict], list[dict]]:
+    normalized_table_id = normalize_table_id(table_id)
+    if request is None:
+        from .http_session import request_json, rotate_http_session
+
+        request = request_json
+        if rotate_session is None:
+            rotate_session = rotate_http_session
+
+    try:
+        return _fetch_bga_replay_once(
+            normalized_table_id,
+            request=request,
+            sleep=sleep,
+        )
+    except CarcassonneLabReplayError as exc:
+        # BGA reports replay authorization failures as HTTP 200 / status 0, so
+        # request_json cannot detect them via a 401/403. Mirror the match fetcher:
+        # refresh/rotate the authenticated account and retry once.
+        if rotate_session is None or not _is_replay_access_error(exc):
+            raise
+        rotate_session(reason=f"carcassonne_lab_access_{normalized_table_id}")
+        return _fetch_bga_replay_once(
+            normalized_table_id,
+            request=request,
+            sleep=sleep,
+        )
 
 
 def generate_carcassonne_lab_url(table_id: object) -> str:

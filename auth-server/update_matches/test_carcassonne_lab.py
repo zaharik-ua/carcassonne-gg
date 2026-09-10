@@ -7,6 +7,7 @@ from .carcassonne_lab import (
     build_carcassonne_lab_url,
     encode_movement,
     encode_tile_types,
+    fetch_bga_replay,
     fetch_bga_replay_logs,
     normalize_table_id,
 )
@@ -140,6 +141,32 @@ class CarcassonneLabTest(unittest.TestCase):
                 request=lambda *_args, **_kwargs: {"status": "0", "error": "Invalid session"},
                 sleep=lambda _seconds: None,
             )
+
+    def test_refreshes_authenticated_session_after_replay_access_error(self) -> None:
+        responses = iter(
+            [
+                {
+                    "status": "0",
+                    "error": (
+                        "Sorry, you need to be registered more than 24 hours "
+                        "and have played at least 2 games to access this feature."
+                    ),
+                },
+                {"status": "1", "data": {"logs": [{"data": []}], "players": []}},
+            ]
+        )
+        rotations: list[str] = []
+
+        logs, players = fetch_bga_replay(
+            "913515989",
+            request=lambda *_args, **_kwargs: next(responses),
+            sleep=lambda _seconds: None,
+            rotate_session=lambda *, reason: rotations.append(reason),
+        )
+
+        self.assertEqual(logs, [{"data": []}])
+        self.assertEqual(players, [])
+        self.assertEqual(rotations, ["carcassonne_lab_access_913515989"])
 
 
 if __name__ == "__main__":

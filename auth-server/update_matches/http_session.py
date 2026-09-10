@@ -94,10 +94,15 @@ def refresh_http_session(reason: str = "startup", *, rotate_account: bool = Fals
         for attempt in range(1, attempts + 1):
             try:
                 with driver_manager.use_driver(f"http_refresh_{int(time.time())}") as driver:
+                    # /gamestats is public and can return a request token for an
+                    # anonymous visitor.  That token is enough for getGames, but
+                    # not for protected endpoints such as completed-game replays.
+                    # Always visit the account page so login_if_needed can verify
+                    # that the browser has an authenticated BGA session first.
+                    if rotate_account or credential_index != _credential_index:
+                        driver.delete_all_cookies()
+                    login_if_needed(driver, credential)
                     driver.get(f"{BASE_URL}/gamestats")
-                    if "/account" in driver.current_url:
-                        login_if_needed(driver, credential)
-                        driver.get(f"{BASE_URL}/gamestats")
 
                     token = None
                     try:
