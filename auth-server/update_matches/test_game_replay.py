@@ -11,6 +11,8 @@ from .game_replay import (
     LOGS_PATH,
     BgaReplayError,
     GameNotFoundError,
+    build_carcassonne_lab_url,
+    ensure_game_replays_schema,
     fetch_and_store_game_replay,
 )
 
@@ -56,6 +58,10 @@ class GameReplayTest(unittest.TestCase):
         self.assertEqual(result["meeple_count"], 1)
         self.assertFalse(result["archive_requested"])
         self.assertEqual(result["players"][0]["meeple_color"], "red")
+        self.assertEqual(
+            result["carcassonne_lab_url"],
+            "https://www.carcassonnelab.com/#/0/0/Fg/34L5?players=Alpha&colors=red",
+        )
 
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -66,6 +72,7 @@ class GameReplayTest(unittest.TestCase):
 
         self.assertEqual(stored["bga_table_id"], "913515989")
         self.assertEqual(stored["status"], "ready")
+        self.assertEqual(stored["carcassonne_lab_url"], result["carcassonne_lab_url"])
         events = json.loads(stored["events_json"])
         self.assertEqual(
             events[0],
@@ -106,6 +113,71 @@ class GameReplayTest(unittest.TestCase):
             ],
         )
         self.assertTrue(any(row[2] == "games" and row[3] == "game_id" for row in foreign_keys))
+
+    def test_lab_url_uses_first_move_player_order_and_matching_colors(self) -> None:
+        events = [
+            {
+                "type": "playTile",
+                "player_id": "200",
+                "player_name": "Beta Player",
+                "tile_type": 17,
+                "x": 0,
+                "y": 1,
+                "rotation": 0,
+            },
+            {
+                "type": "playTile",
+                "player_id": "100",
+                "player_name": "Alpha",
+                "tile_type": 4,
+                "x": -1,
+                "y": 1,
+                "rotation": 2,
+            },
+        ]
+        players = [
+            {"player_id": "100", "player_name": "Alpha", "meeple_color": "red"},
+            {"player_id": "200", "player_name": "Beta Player", "meeple_color": "blue"},
+        ]
+
+        url = build_carcassonne_lab_url(events, players)
+
+        self.assertIsNotNone(url)
+        self.assertIn("?players=Beta%20Player,Alpha&colors=blue,red", url)
+
+    def test_lab_url_is_not_created_when_a_player_color_is_missing(self) -> None:
+        self.assertIsNone(build_carcassonne_lab_url(
+            [
+                {
+                    "type": "playTile",
+                    "player_id": "100",
+                    "player_name": "Alpha",
+                    "tile_type": 17,
+                    "x": 0,
+                    "y": 1,
+                    "rotation": 0,
+                }
+            ],
+            [{"player_id": "100", "player_name": "Alpha", "meeple_color": None}],
+        ))
+
+    def test_existing_replay_table_gets_lab_url_column(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE game_replays (
+                  game_id TEXT PRIMARY KEY,
+                  bga_table_id TEXT NOT NULL
+                )
+                """
+            )
+            ensure_game_replays_schema(conn)
+            columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(game_replays)").fetchall()
+            }
+
+        self.assertIn("carcassonne_lab_url", columns)
 
     def test_requests_archive_and_polls_until_logs_are_ready(self) -> None:
         calls: list[str] = []

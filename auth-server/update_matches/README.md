@@ -96,7 +96,9 @@ python3 get_game_replay.py '<games.id>' --db-path /absolute/path/to/auth.sqlite
 parser changes. `events_json` contains ordered `playTile` and `playPartisan`
 events. `players_json` contains player ids, names, BGA color hex values, and
 normalized meeple color names (`black`, `blue`, `green`, `red`, or `yellow`).
-Failures are saved as `status = 'error'` with `last_error`.
+`carcassonne_lab_url` contains the encoded CarcassonneLab replay URL when all
+required moves and player colors were found. Failures are saved as
+`status = 'error'` with `last_error`.
 
 ## Selection rules
 

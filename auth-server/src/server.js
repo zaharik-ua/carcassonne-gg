@@ -1984,21 +1984,26 @@ function loadGamesByDuelIds(duelIds, callback) {
   return db.all(
     `
       SELECT
-        id,
-        duel_id,
-        bga_table_id,
-        game_number,
-        player_1_score,
-        player_2_score,
-        player_1_rank,
-        player_2_rank,
-        player_1_clock,
-        player_2_clock,
-        status
-      FROM games
-      WHERE trim(COALESCE(duel_id, '')) IN (${placeholders})
-        AND deleted_at IS NULL
-      ORDER BY duel_id COLLATE NOCASE ASC, game_number ASC, id ASC
+        g.id,
+        g.duel_id,
+        g.bga_table_id,
+        g.game_number,
+        g.player_1_score,
+        g.player_2_score,
+        g.player_1_rank,
+        g.player_2_rank,
+        g.player_1_clock,
+        g.player_2_clock,
+        g.status,
+        gr.carcassonne_lab_url
+      FROM games g
+      LEFT JOIN game_replays gr
+        ON gr.game_id = g.id
+       AND gr.status = 'ready'
+       AND trim(COALESCE(gr.carcassonne_lab_url, '')) <> ''
+      WHERE trim(COALESCE(g.duel_id, '')) IN (${placeholders})
+        AND g.deleted_at IS NULL
+      ORDER BY g.duel_id COLLATE NOCASE ASC, g.game_number ASC, g.id ASC
     `,
     normalizedIds,
     callback
@@ -5869,6 +5874,50 @@ function ensureGamesSchema() {
   });
 }
 
+function ensureGameReplaysSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS game_replays (
+      game_id TEXT PRIMARY KEY,
+      bga_table_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      logs_json TEXT,
+      events_json TEXT,
+      players_json TEXT,
+      carcassonne_lab_url TEXT,
+      event_count INTEGER NOT NULL DEFAULT 0,
+      tile_count INTEGER NOT NULL DEFAULT 0,
+      meeple_count INTEGER NOT NULL DEFAULT 0,
+      archive_requested INTEGER NOT NULL DEFAULT 0,
+      fetched_at TEXT,
+      last_attempt_at TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (game_id) REFERENCES games(id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+    )
+  `, (createErr) => {
+    if (createErr) {
+      console.error("Failed to ensure game_replays schema", createErr);
+      return;
+    }
+    db.all("PRAGMA table_info(game_replays)", (pragmaErr, columns) => {
+      if (pragmaErr) {
+        console.error("Failed to inspect game_replays schema", pragmaErr);
+        return;
+      }
+      if (!Array.isArray(columns) || columns.length === 0) return;
+      addColumnIfMissing(columns, "game_replays", "carcassonne_lab_url", "TEXT");
+    });
+    db.run(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_game_replays_bga_table_id ON game_replays(bga_table_id)",
+      (indexErr) => {
+        if (indexErr) console.error("Failed to ensure idx_game_replays_bga_table_id", indexErr);
+      }
+    );
+  });
+}
+
 function expirePendingChallengeRequestsForClosedPeriods() {
   const expiringStatuses = Array.from(CHALLENGE_PERIOD_PENDING_EXPIRING_STATUSES);
   db.run(
@@ -8028,6 +8077,7 @@ function scheduleApplicationSchemas() {
   ensureDuelFormatsSchema();
   ensureSystemSettingsSchema();
   ensureGamesSchema();
+  ensureGameReplaysSchema();
   ensureChallengesSchema();
   ensureTeamsSchema();
   ensureTournamentsSchema();
@@ -21786,6 +21836,7 @@ app.get("/public/challenge-duels", async (req, res, next) => {
     player_1_clock: row.player_1_clock,
     player_2_clock: row.player_2_clock,
     status: row.status,
+    carcassonne_lab_url: row.carcassonne_lab_url || null,
   });
 
   try {

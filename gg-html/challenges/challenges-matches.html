@@ -591,6 +591,19 @@ code {
     color: #8c6418;
   }
 
+  .challenge-match-result__game--lab {
+    align-items: center;
+    gap: 4px;
+  }
+
+  .challenge-match-result__game-lab-icon {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    border-radius: 2px;
+    object-fit: contain;
+  }
+
   .challenge-match-result__game-clock {
     font-size: 10px;
     line-height: 1;
@@ -1403,6 +1416,7 @@ code {
 
 <script>
 const MATCHES_URL = "https://api.carcassonne.gg/public/challenge-duels";
+const CARCASSONNE_LAB_ICON_URL = "https://www.carcassonnelab.com/icons/icon-192.png";
 const RESULTS_PAGE_SIZE_OPTIONS = [15, 30, 50];
 const resultsPaginationState = {
   pageSize: 15,
@@ -1437,6 +1451,19 @@ function hasValue(value) {
 
 function isTruthyOne(value) {
   return value === 1 || value === true || String(value || "").trim() === "1";
+}
+
+function getCarcassonneLabUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" || url.hostname !== "www.carcassonnelab.com") return "";
+    if (!url.hash.startsWith("#/")) return "";
+    return url.href;
+  } catch (_error) {
+    return "";
+  }
 }
 
 function readChallengeDuelsFiltersFromUrl() {
@@ -1654,8 +1681,9 @@ function createChallengeMatchResult(match) {
       const tableId = String(game?.bga_table_id || "").trim();
       const player1Clock = isTruthyOne(game?.player_1_clock);
       const player2Clock = isTruthyOne(game?.player_2_clock);
+      const carcassonneLabUrl = getCarcassonneLabUrl(game?.carcassonne_lab_url);
       return hasValue(player1Score) && hasValue(player2Score)
-        ? { player1Score, player2Score, player1Clock, player2Clock, tableId }
+        ? { player1Score, player2Score, player1Clock, player2Clock, tableId, carcassonneLabUrl }
         : null;
     })
     .filter(Boolean);
@@ -1724,6 +1752,26 @@ function createChallengeMatchResult(match) {
         badge.title = "Open game on Board Game Arena";
       }
       gameScores.appendChild(badge);
+
+      if (game.carcassonneLabUrl) {
+        const labBadge = badge.cloneNode(true);
+        const labIcon = document.createElement("img");
+        labBadge.classList.add("challenge-match-result__game--lab");
+        labBadge.href = game.carcassonneLabUrl;
+        labBadge.target = "_blank";
+        labBadge.rel = "noopener noreferrer";
+        labBadge.title = "Review game in CarcassonneLab";
+        labBadge.setAttribute(
+          "aria-label",
+          `Review game ${badge.textContent.trim()} in CarcassonneLab`
+        );
+        labIcon.className = "challenge-match-result__game-lab-icon";
+        labIcon.src = CARCASSONNE_LAB_ICON_URL;
+        labIcon.alt = "";
+        labIcon.loading = "lazy";
+        labBadge.prepend(labIcon);
+        gameScores.appendChild(labBadge);
+      }
     });
     result.appendChild(gameScores);
   }

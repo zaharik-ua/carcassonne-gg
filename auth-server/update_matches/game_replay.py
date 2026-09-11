@@ -7,11 +7,17 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 
 LOGS_PATH = "/archive/archive/logs.html"
 ARCHIVE_REQUEST_PATH = "/gamereview/gamereview/requestTableArchive.html"
 MISSING_ARCHIVE_MESSAGE = "Cannot find gamenotifs log file"
+CARCASSONNE_LAB_URL = "https://www.carcassonnelab.com/"
+CARCASSONNE_LAB_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+CARCASSONNE_LAB_BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+CARCASSONNE_LAB_TILE_TYPE_BASE = 24
+CARCASSONNE_LAB_STARTING_TILE_TYPE = 15
 MEEPLE_COLOR_NAMES = {
     "000000": "black",
     "0000ff": "blue",
@@ -48,6 +54,7 @@ def ensure_game_replays_schema(conn: sqlite3.Connection) -> None:
           logs_json TEXT,
           events_json TEXT,
           players_json TEXT,
+          carcassonne_lab_url TEXT,
           event_count INTEGER NOT NULL DEFAULT 0,
           tile_count INTEGER NOT NULL DEFAULT 0,
           meeple_count INTEGER NOT NULL DEFAULT 0,
@@ -65,6 +72,12 @@ def ensure_game_replays_schema(conn: sqlite3.Connection) -> None:
           ON game_replays(bga_table_id);
         """
     )
+    columns = {
+        str(row[1])
+        for row in conn.execute("PRAGMA table_info(game_replays)").fetchall()
+    }
+    if "carcassonne_lab_url" not in columns:
+        conn.execute("ALTER TABLE game_replays ADD COLUMN carcassonne_lab_url TEXT")
 
 
 def fetch_and_store_game_replay(
@@ -112,7 +125,8 @@ def fetch_and_store_game_replay(
         cached = conn.execute(
             """
             SELECT game_id, bga_table_id, status, event_count, tile_count,
-                   meeple_count, archive_requested, fetched_at, players_json
+                   meeple_count, archive_requested, fetched_at, players_json,
+                   carcassonne_lab_url
             FROM game_replays
             WHERE game_id = ?
             """,
@@ -161,6 +175,7 @@ def fetch_and_store_game_replay(
         events = normalize_replay_events(logs)
         players = normalize_replay_players(logs, response_players, events)
         _add_player_colors_to_events(events, players)
+        carcassonne_lab_url = build_carcassonne_lab_url(events, players)
         tile_count = sum(event["type"] == "playTile" for event in events)
         meeple_count = sum(event["type"] == "playPartisan" for event in events)
         fetched_at = _utc_now()
@@ -174,6 +189,7 @@ def fetch_and_store_game_replay(
                     logs_json = ?,
                     events_json = ?,
                     players_json = ?,
+                    carcassonne_lab_url = ?,
                     event_count = ?,
                     tile_count = ?,
                     meeple_count = ?,
@@ -187,6 +203,7 @@ def fetch_and_store_game_replay(
                     _to_json(logs),
                     _to_json(events),
                     _to_json(players),
+                    carcassonne_lab_url,
                     len(events),
                     tile_count,
                     meeple_count,
@@ -206,6 +223,7 @@ def fetch_and_store_game_replay(
             "tile_count": tile_count,
             "meeple_count": meeple_count,
             "players": players,
+            "carcassonne_lab_url": carcassonne_lab_url,
             "archive_requested": archive_requested,
             "fetched_at": fetched_at,
             "cached": False,
@@ -354,7 +372,7 @@ def normalize_replay_players(
                 add_player(
                     _first_value(raw_player, "player_id", "player", "id") or fallback_id,
                     _first_value(raw_player, "player_name", "name"),
-                    _first_value(raw_player, "color", "player_color"),
+                    _first_value(raw_player, "color_hex", "color", "player_color"),
                 )
             else:
                 add_player(fallback_id, raw_player)
@@ -365,7 +383,7 @@ def normalize_replay_players(
             add_player(
                 _first_value(raw_player, "player_id", "player", "id"),
                 _first_value(raw_player, "player_name", "name"),
-                _first_value(raw_player, "color", "player_color"),
+                _first_value(raw_player, "color_hex", "color", "player_color"),
             )
 
     for event in events:
@@ -382,6 +400,126 @@ def normalize_replay_players(
             )
 
     return list(players_by_id.values())
+
+
+def build_carcassonne_lab_url(
+    events: list[dict[str, Any]],
+    players: list[dict[str, Any]],
+) -> str | None:
+    player_details = {
+        str(player.get("player_id") or ""): player
+        for player in players
+        if player.get("player_id")
+    }
+    player_ids: list[str] = []
+    player_names: list[str] = []
+    player_colors: list[str] = []
+    tile_types = [CARCASSONNE_LAB_STARTING_TILE_TYPE]
+    movements: list[dict[str, int]] = []
+
+    for event in events:
+        event_type = str(event.get("type") or "")
+        if event_type == "playPartisan":
+            if not movements:
+                continue
+            position = _optional_int(event.get("position"))
+            if position is not None:
+                movements[-1]["meeple_position"] = position
+            continue
+        if event_type != "playTile":
+            continue
+
+        tile_type = _optional_int(event.get("tile_type"))
+        col = _optional_int(event.get("x"))
+        row = _optional_int(event.get("y"))
+        rotation = _optional_int(event.get("rotation"))
+        player_id = _optional_text(event.get("player_id"))
+        if tile_type is None or col is None or row is None or rotation is None or not player_id:
+            return None
+        if not 1 <= tile_type <= CARCASSONNE_LAB_TILE_TYPE_BASE:
+            return None
+
+        if player_id not in player_ids:
+            details = player_details.get(player_id, {})
+            player_name = (
+                _optional_text(event.get("player_name"))
+                or _optional_text(details.get("player_name"))
+                or player_id
+            )
+            player_color = _optional_text(details.get("meeple_color"))
+            if not player_color:
+                return None
+            player_ids.append(player_id)
+            player_names.append(player_name)
+            player_colors.append(player_color)
+
+        tile_types.append(tile_type)
+        movements.append(
+            {
+                "col": col,
+                "row": row,
+                "rotation": rotation,
+                "meeple_position": 0,
+            }
+        )
+
+    if not movements or not player_ids:
+        return None
+
+    try:
+        encoded_tiles = _encode_carcassonne_lab_tile_types(tile_types)
+        encoded_movements = "".join(
+            _encode_carcassonne_lab_movement(movement)
+            for movement in movements
+        )
+    except (IndexError, ValueError):
+        return None
+
+    encoded_players = ",".join(_encode_uri_component(name) for name in player_names)
+    encoded_colors = ",".join(_encode_uri_component(color) for color in player_colors)
+    return (
+        f"{CARCASSONNE_LAB_URL}#/0/0/{encoded_tiles}/{encoded_movements}"
+        f"?players={encoded_players}&colors={encoded_colors}"
+    )
+
+
+def _encode_carcassonne_lab_tile_types(tile_types: list[int]) -> str:
+    decimal_value = 0
+    for tile_type in tile_types:
+        decimal_value = (
+            decimal_value * CARCASSONNE_LAB_TILE_TYPE_BASE
+            + tile_type
+            - 1
+        )
+    octal_value = format(decimal_value, "o")
+    if len(octal_value) % 2:
+        octal_value = f"0{octal_value}"
+    return "".join(
+        CARCASSONNE_LAB_BASE64_ALPHABET[int(octal_value[index:index + 2], 8)]
+        for index in range(0, len(octal_value), 2)
+    )
+
+
+def _encode_carcassonne_lab_movement(movement: dict[str, int]) -> str:
+    col = movement["col"]
+    row = movement["row"]
+    rotation = movement["rotation"]
+    if col < 0:
+        rotation += 16
+    if row < 0:
+        rotation += 32
+    if rotation < 0:
+        raise ValueError("CarcassonneLab rotation must not be negative")
+    return (
+        f"{CARCASSONNE_LAB_ALPHABET[abs(col)]}"
+        f"{CARCASSONNE_LAB_ALPHABET[abs(row)]}"
+        f"{CARCASSONNE_LAB_ALPHABET[rotation]}"
+        f"{movement['meeple_position']}"
+    )
+
+
+def _encode_uri_component(value: str) -> str:
+    return quote(value, safe="~()*!.'-_")
 
 
 def _add_player_colors_to_events(
@@ -529,6 +667,7 @@ def _summary_from_row(row: sqlite3.Row, *, cached: bool) -> dict[str, Any]:
         "tile_count": row["tile_count"],
         "meeple_count": row["meeple_count"],
         "players": _from_json(row["players_json"], []),
+        "carcassonne_lab_url": row["carcassonne_lab_url"],
         "archive_requested": bool(row["archive_requested"]),
         "fetched_at": row["fetched_at"],
         "cached": cached,
