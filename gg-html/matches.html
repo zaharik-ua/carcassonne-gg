@@ -1123,31 +1123,9 @@ code {
 
   .lineup__games {
     display: inline-flex;
-    flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 4px;
     margin-left: 8px;
-    vertical-align: middle;
-  }
-
-  .lineup__games-row {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .lineup__games-source-icon {
-    width: 14px;
-    height: 14px;
-    flex: 0 0 14px;
-    border-radius: 2px;
-    object-fit: contain;
-  }
-
-  .lineup__games-links {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
     flex-wrap: wrap;
   }
 
@@ -1444,6 +1422,7 @@ code {
 let openLineupsSet = new Set();
 const BGA_ICON_URL = "https://carcassonne.gg/gallery/bga-logo.png";
 const CARCASSONNE_LAB_ICON_URL = "https://carcassonne.gg/gallery/carcassonne-lab-icon.png";
+const CHALLENGE_DUELS_URL = "https://api.carcassonne.gg/public/challenge-duels";
 const openMatchId = new URLSearchParams(window.location.search).get("open");
 if (openMatchId) {
   openMatchId.split(',').forEach(id => openLineupsSet.add(id));
@@ -1966,6 +1945,38 @@ function openChallengeMatchModal(match, returnFocus) {
   closeButton.focus({ preventScroll: true });
 }
 
+async function fetchFreshChallengeMatch(match) {
+  const matchId = String(match?.id || "").trim();
+  if (!matchId) return match;
+
+  try {
+    const params = new URLSearchParams({ duel_id: matchId });
+    const response = await fetch(`${CHALLENGE_DUELS_URL}?${params.toString()}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const payload = await response.json();
+    const freshDuel = (Array.isArray(payload?.duels) ? payload.duels : [])
+      .find((duel) => String(duel?.id || "").trim() === matchId);
+    if (!freshDuel) return match;
+
+    return {
+      ...match,
+      format: String(freshDuel?.duel_format || match?.format || "").trim(),
+      status: String(freshDuel?.status || match?.status || "").trim(),
+      gw1: freshDuel?.dw1 ?? match?.gw1,
+      gw2: freshDuel?.dw2 ?? match?.gw2,
+      games: Array.isArray(freshDuel?.games)
+        ? freshDuel.games.filter(Boolean)
+        : (Array.isArray(match?.games) ? match.games : []),
+    };
+  } catch (error) {
+    console.warn("⚠️ Failed to refresh challenge match details:", error && error.message ? error.message : error);
+    return match;
+  }
+}
+
 function bindChallengeMatchDetails(container, match) {
   if (match?.source_type !== "challenge") return;
   container.classList.add("challenge-match-row");
@@ -1974,9 +1985,20 @@ function bindChallengeMatchDetails(container, match) {
   container.setAttribute("aria-haspopup", "dialog");
   container.setAttribute("aria-label", `Show match details: ${match?.team1 || "Player 1"} versus ${match?.team2 || "Player 2"}`);
 
-  const activate = (event) => {
+  let activationInProgress = false;
+  const activate = async (event) => {
     if (event.target instanceof Element && event.target.closest("a, button, input, select, textarea")) return;
-    openChallengeMatchModal(match, container);
+    if (activationInProgress) return;
+
+    activationInProgress = true;
+    container.setAttribute("aria-busy", "true");
+    try {
+      const freshMatch = await fetchFreshChallengeMatch(match);
+      if (container.isConnected) openChallengeMatchModal(freshMatch, container);
+    } finally {
+      activationInProgress = false;
+      container.removeAttribute("aria-busy");
+    }
   };
   container.addEventListener("click", activate);
   container.addEventListener("keydown", (event) => {
@@ -3392,30 +3414,6 @@ function createGameBadgesWrap(duel) {
   const wrap = document.createElement("span");
   wrap.className = "lineup__games";
 
-  const bgaRow = document.createElement("span");
-  bgaRow.className = "lineup__games-row";
-  const bgaIcon = document.createElement("img");
-  bgaIcon.className = "lineup__games-source-icon";
-  bgaIcon.src = BGA_ICON_URL;
-  bgaIcon.alt = "BGA";
-  bgaIcon.loading = "lazy";
-  const bgaLinks = document.createElement("span");
-  bgaLinks.className = "lineup__games-links";
-  bgaRow.appendChild(bgaIcon);
-  bgaRow.appendChild(bgaLinks);
-
-  const labRow = document.createElement("span");
-  labRow.className = "lineup__games-row";
-  const labIcon = document.createElement("img");
-  labIcon.className = "lineup__games-source-icon";
-  labIcon.src = CARCASSONNE_LAB_ICON_URL;
-  labIcon.alt = "CarcassonneLab";
-  labIcon.loading = "lazy";
-  const labLinks = document.createElement("span");
-  labLinks.className = "lineup__games-links";
-  labRow.appendChild(labIcon);
-  labRow.appendChild(labLinks);
-
   games.forEach((game) => {
     const badge = createGameBadge(game);
     if (!badge) return;
@@ -3427,30 +3425,13 @@ function createGameBadgesWrap(duel) {
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.appendChild(badge);
-      bgaLinks.appendChild(link);
-    } else {
-      bgaLinks.appendChild(badge);
+      wrap.appendChild(link);
+      return;
     }
 
-    const carcassonneLabUrl = getCarcassonneLabUrl(game?.carcassonne_lab_url);
-    if (carcassonneLabUrl) {
-      const labLink = document.createElement("a");
-      labLink.className = "lineup__game-link";
-      labLink.href = carcassonneLabUrl;
-      labLink.target = "_blank";
-      labLink.rel = "noopener noreferrer";
-      labLink.title = "Review game in CarcassonneLab";
-      labLink.setAttribute(
-        "aria-label",
-        `Review game ${badge.textContent.trim()} in CarcassonneLab`
-      );
-      labLink.appendChild(badge.cloneNode(true));
-      labLinks.appendChild(labLink);
-    }
+    wrap.appendChild(badge);
   });
 
-  if (bgaLinks.childNodes.length) wrap.appendChild(bgaRow);
-  if (labLinks.childNodes.length) wrap.appendChild(labRow);
   return wrap.childNodes.length ? wrap : null;
 }
 

@@ -21720,6 +21720,7 @@ app.get("/public/challenge-duels", async (req, res, next) => {
   const associationFilter = normalizeText(req?.query?.association).toUpperCase();
   const playerFilter = normalizeText(req?.query?.player);
   const periodFilter = normalizeText(req?.query?.challenge_period || req?.query?.challengePeriod || req?.query?.period);
+  const duelFilter = normalizeText(req?.query?.duel_id || req?.query?.duelId || req?.query?.duel);
   const rawResultsPageSize = parseInt(normalizeText(req?.query?.results_page_size), 10);
   const rawResultsPage = parseInt(normalizeText(req?.query?.results_page), 10);
   const resultsPageSize = Number.isInteger(rawResultsPageSize) && rawResultsPageSize > 0
@@ -21777,6 +21778,11 @@ app.get("/public/challenge-duels", async (req, res, next) => {
   if (periodFilter) {
     filterClauses.push("trim(COALESCE(d.challenge_period_id, '')) = trim(?)");
     filterParams.push(periodFilter);
+  }
+
+  if (duelFilter) {
+    filterClauses.push("trim(COALESCE(d.id, '')) = trim(?)");
+    filterParams.push(duelFilter);
   }
 
   const whereSql = filterClauses.join("\n          AND ");

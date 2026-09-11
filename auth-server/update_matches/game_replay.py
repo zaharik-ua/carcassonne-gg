@@ -366,12 +366,17 @@ def fetch_and_store_game_replay_with_account_rotation(
                 poll_delay=poll_delay,
                 sleep=sleep,
             )
-        except GameReplayError:
+        except GameReplayError as replay_error:
             if attempt + 1 >= attempts:
                 raise
-            account_rotator(
-                reason=f"game_replay_retry_{attempt + 2}_of_{attempts}"
-            )
+            try:
+                account_rotator(
+                    reason=f"game_replay_retry_{attempt + 2}_of_{attempts}"
+                )
+            except Exception as rotation_error:
+                raise GameReplayError(
+                    f"{replay_error}; failed to switch BGA account: {rotation_error}"
+                ) from rotation_error
 
     raise GameReplayError(f"Failed to fetch replay for game {game_id}")
 

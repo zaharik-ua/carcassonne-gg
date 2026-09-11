@@ -94,13 +94,23 @@ def refresh_http_session(
     cycle = _credential_cycle(credentials, rotate_account=rotate_account)
     last_error: Exception | None = None
 
-    for credential_index, credential in cycle:
+    for cycle_position, (credential_index, credential) in enumerate(cycle):
         recovered_after_driver_recreate = False
         for attempt in range(1, attempts + 1):
             try:
                 with driver_manager.use_driver(f"http_refresh_{int(time.time())}") as driver:
+                    switching_account = rotate_account or cycle_position > 0
+                    if switching_account:
+                        driver.get(BASE_URL)
+                        try:
+                            driver.execute_script(
+                                "window.localStorage.clear(); window.sessionStorage.clear();"
+                            )
+                        except Exception:
+                            pass
+                        driver.delete_all_cookies()
                     driver.get(f"{BASE_URL}/gamestats")
-                    if require_login or "/account" in driver.current_url:
+                    if switching_account or require_login or "/account" in driver.current_url:
                         login_if_needed(driver, credential)
                         driver.get(f"{BASE_URL}/gamestats")
 
