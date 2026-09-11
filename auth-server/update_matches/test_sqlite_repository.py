@@ -84,6 +84,7 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
                   status TEXT,
                   results_last_error TEXT,
                   results_checked_at TEXT,
+                  source_type TEXT,
                   deleted_at TEXT,
                   updated_at TEXT
                 );
@@ -226,6 +227,43 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
         self.assertEqual(row["dw2"], 0)
         self.assertEqual(row["status"], "Done")
         self.assertIsNone(row["results_last_error"])
+        self.assertEqual(self._game_count("planned"), 1)
+
+    def test_new_challenge_game_is_returned_for_replay_only_once(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            self._insert_duel(
+                conn,
+                duel_id="challenge",
+                status="Planned",
+                deleted_at=None,
+                match_id=None,
+                source_type="challenge",
+            )
+
+        result = MatchUpdateResult(
+            status="success",
+            wins0=1,
+            wins1=0,
+            tables=[self._table("987654321")],
+        )
+
+        first_game_ids = self.repository.save_match_result(self._request("challenge"), result)
+        second_game_ids = self.repository.save_match_result(self._request("challenge"), result)
+
+        self.assertEqual(first_game_ids, ["challenge-987654321"])
+        self.assertEqual(second_game_ids, [])
+
+    def test_new_non_challenge_game_is_not_returned_for_replay(self) -> None:
+        result = MatchUpdateResult(
+            status="success",
+            wins0=1,
+            wins1=0,
+            tables=[self._table("987654322")],
+        )
+
+        game_ids = self.repository.save_match_result(self._request("planned"), result)
+
+        self.assertEqual(game_ids, [])
         self.assertEqual(self._game_count("planned"), 1)
 
     def test_ranked_done_transition_queues_one_gg_elo_recalculation(self) -> None:
@@ -614,6 +652,7 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
         player_2_id: str = "200",
         dw1: int | None = None,
         dw2: int | None = None,
+        source_type: str | None = None,
     ) -> None:
         conn.execute(
             """
@@ -631,6 +670,7 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
               status,
               results_last_error,
               results_checked_at,
+              source_type,
               deleted_at,
               updated_at
             )
@@ -649,6 +689,7 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
               'old-error',
               'old-check',
               ?,
+              ?,
               'old-update'
             )
             """,
@@ -662,6 +703,7 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
                 dw1,
                 dw2,
                 status,
+                source_type,
                 deleted_at,
             ),
         )
@@ -681,10 +723,10 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
         )
 
     @staticmethod
-    def _table() -> MatchTable:
+    def _table(table_id: str = "123456789") -> MatchTable:
         return MatchTable(
-            id="123456789",
-            url="https://boardgamearena.com/table?table=123456789",
+            id=table_id,
+            url=f"https://boardgamearena.com/table?table={table_id}",
             score0="90",
             score1="80",
             rank0="1",

@@ -68,11 +68,18 @@ Manual test for one match:
 python3 run_update_matches.py --match-id 20250330UKRPRT
 ```
 
-## Manual replay command
+## Automatic replay import for new challenge games
 
-Replay import is intentionally manual-only while this feature is a PoC.
-`run_update_matches.py` and `update-duels.timer` never create or retry
-`game_replays` records.
+When `run_update_matches.py` receives a BGA game that is not yet present in
+`games`, it immediately imports that game's replay if the parent duel has
+`source_type = 'challenge'`. Updating an existing game does not fetch its
+replay again. Replay failures are logged and stored in `game_replays` without
+rolling back the successfully imported game or duel result.
+
+Periodic scanning and retrying of games without a ready replay is not part of
+this flow yet.
+
+## Manual replay command
 
 The replay script accepts the exact primary key from `games.id`, reads that
 row's `bga_table_id`, logs in with the configured BGA server account, and stores
