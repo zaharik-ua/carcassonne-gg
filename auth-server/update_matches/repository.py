@@ -32,9 +32,5 @@ class MatchRepository(ABC):
     def save_match_error(self, match: MatchUpdateRequest, message: str) -> None:
         """Persist an update failure."""
 
-    def fetch_game_ids_pending_replay(self, *, limit: int) -> list[str]:
-        """Return completed GG game ids whose BGA replay is not stored yet."""
-        return []
-
     def finish_update_run(self) -> None:
         """Run optional work that should happen once after a complete BGA batch."""

@@ -422,29 +422,6 @@ code {
 
   .challenge-match-result__games {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-  }
-
-  .challenge-match-result__games-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-  }
-
-  .challenge-match-result__games-source-icon {
-    width: 16px;
-    height: 16px;
-    flex: 0 0 16px;
-    border-radius: 2px;
-    object-fit: contain;
-  }
-
-  .challenge-match-result__games-links {
-    display: flex;
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
@@ -1420,9 +1397,6 @@ code {
 
 <script>
 let openLineupsSet = new Set();
-const BGA_ICON_URL = "https://carcassonne.gg/gallery/bga-logo.png";
-const CARCASSONNE_LAB_ICON_URL = "https://carcassonne.gg/gallery/carcassonne-lab-icon.png";
-const CHALLENGE_DUELS_URL = "https://api.carcassonne.gg/public/challenge-duels";
 const openMatchId = new URLSearchParams(window.location.search).get("open");
 if (openMatchId) {
   openMatchId.split(',').forEach(id => openLineupsSet.add(id));
@@ -1467,19 +1441,6 @@ function normalizeBadgeColor(value) {
   if (value === null || value === undefined) return "";
   const normalized = String(value).trim().replace(/^#/, "");
   return /^[0-9a-fA-F]{6}$/.test(normalized) ? `#${normalized}` : "";
-}
-
-function getCarcassonneLabUrl(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "https:" || url.hostname !== "www.carcassonnelab.com") return "";
-    if (!url.hash.startsWith("#/")) return "";
-    return url.href;
-  } catch (_error) {
-    return "";
-  }
 }
 
 // Build rating stars element (1-5 grey stars, 6 = 5 gold stars)
@@ -1754,11 +1715,10 @@ function createChallengeMatchResult(match) {
       const tableId = String(game?.bga_table_id || "").trim();
       const player1Clock = isTruthyOne(game?.player_1_clock);
       const player2Clock = isTruthyOne(game?.player_2_clock);
-      const carcassonneLabUrl = getCarcassonneLabUrl(game?.carcassonne_lab_url);
       const hasPlayer1Score = player1Score !== null && player1Score !== undefined && String(player1Score).trim() !== "";
       const hasPlayer2Score = player2Score !== null && player2Score !== undefined && String(player2Score).trim() !== "";
       return hasPlayer1Score && hasPlayer2Score
-        ? { player1Score, player2Score, player1Clock, player2Clock, tableId, carcassonneLabUrl }
+        ? { player1Score, player2Score, player1Clock, player2Clock, tableId }
         : null;
     })
     .filter(Boolean);
@@ -1800,30 +1760,6 @@ function createChallengeMatchResult(match) {
   if (games.length) {
     const gameScores = document.createElement("div");
     gameScores.className = "challenge-match-result__games";
-    const bgaRow = document.createElement("div");
-    const bgaLinks = document.createElement("div");
-    const bgaIcon = document.createElement("img");
-    bgaRow.className = "challenge-match-result__games-row";
-    bgaLinks.className = "challenge-match-result__games-links";
-    bgaIcon.className = "challenge-match-result__games-source-icon";
-    bgaIcon.src = BGA_ICON_URL;
-    bgaIcon.alt = "BGA";
-    bgaIcon.loading = "lazy";
-    bgaRow.appendChild(bgaIcon);
-    bgaRow.appendChild(bgaLinks);
-
-    const labRow = document.createElement("div");
-    const labLinks = document.createElement("div");
-    const labIcon = document.createElement("img");
-    labRow.className = "challenge-match-result__games-row";
-    labLinks.className = "challenge-match-result__games-links";
-    labIcon.className = "challenge-match-result__games-source-icon";
-    labIcon.src = CARCASSONNE_LAB_ICON_URL;
-    labIcon.alt = "CarcassonneLab";
-    labIcon.loading = "lazy";
-    labRow.appendChild(labIcon);
-    labRow.appendChild(labLinks);
-
     games.forEach((game) => {
       const badge = document.createElement(game.tableId ? "a" : "span");
       badge.className = "challenge-match-result__game";
@@ -1854,27 +1790,8 @@ function createChallengeMatchResult(match) {
         badge.rel = "noopener noreferrer";
         badge.title = "Open game on Board Game Arena";
       }
-      bgaLinks.appendChild(badge);
-
-      if (game.carcassonneLabUrl) {
-        const labBadge = document.createElement("a");
-        labBadge.className = badge.className;
-        Array.from(badge.childNodes).forEach((node) => {
-          labBadge.appendChild(node.cloneNode(true));
-        });
-        labBadge.href = game.carcassonneLabUrl;
-        labBadge.target = "_blank";
-        labBadge.rel = "noopener noreferrer";
-        labBadge.title = "Review game in CarcassonneLab";
-        labBadge.setAttribute(
-          "aria-label",
-          `Review game ${badge.textContent.trim()} in CarcassonneLab`
-        );
-        labLinks.appendChild(labBadge);
-      }
+      gameScores.appendChild(badge);
     });
-    gameScores.appendChild(bgaRow);
-    if (labLinks.childNodes.length) gameScores.appendChild(labRow);
     result.appendChild(gameScores);
   }
 
@@ -1945,38 +1862,6 @@ function openChallengeMatchModal(match, returnFocus) {
   closeButton.focus({ preventScroll: true });
 }
 
-async function fetchFreshChallengeMatch(match) {
-  const matchId = String(match?.id || "").trim();
-  if (!matchId) return match;
-
-  try {
-    const params = new URLSearchParams({ duel_id: matchId });
-    const response = await fetch(`${CHALLENGE_DUELS_URL}?${params.toString()}`, {
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const payload = await response.json();
-    const freshDuel = (Array.isArray(payload?.duels) ? payload.duels : [])
-      .find((duel) => String(duel?.id || "").trim() === matchId);
-    if (!freshDuel) return match;
-
-    return {
-      ...match,
-      format: String(freshDuel?.duel_format || match?.format || "").trim(),
-      status: String(freshDuel?.status || match?.status || "").trim(),
-      gw1: freshDuel?.dw1 ?? match?.gw1,
-      gw2: freshDuel?.dw2 ?? match?.gw2,
-      games: Array.isArray(freshDuel?.games)
-        ? freshDuel.games.filter(Boolean)
-        : (Array.isArray(match?.games) ? match.games : []),
-    };
-  } catch (error) {
-    console.warn("⚠️ Failed to refresh challenge match details:", error && error.message ? error.message : error);
-    return match;
-  }
-}
-
 function bindChallengeMatchDetails(container, match) {
   if (match?.source_type !== "challenge") return;
   container.classList.add("challenge-match-row");
@@ -1985,20 +1870,9 @@ function bindChallengeMatchDetails(container, match) {
   container.setAttribute("aria-haspopup", "dialog");
   container.setAttribute("aria-label", `Show match details: ${match?.team1 || "Player 1"} versus ${match?.team2 || "Player 2"}`);
 
-  let activationInProgress = false;
-  const activate = async (event) => {
+  const activate = (event) => {
     if (event.target instanceof Element && event.target.closest("a, button, input, select, textarea")) return;
-    if (activationInProgress) return;
-
-    activationInProgress = true;
-    container.setAttribute("aria-busy", "true");
-    try {
-      const freshMatch = await fetchFreshChallengeMatch(match);
-      if (container.isConnected) openChallengeMatchModal(freshMatch, container);
-    } finally {
-      activationInProgress = false;
-      container.removeAttribute("aria-busy");
-    }
+    openChallengeMatchModal(match, container);
   };
   container.addEventListener("click", activate);
   container.addEventListener("keydown", (event) => {

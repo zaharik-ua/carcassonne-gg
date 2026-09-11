@@ -68,18 +68,11 @@ Manual test for one match:
 python3 run_update_matches.py --match-id 20250330UKRPRT
 ```
 
-## Automatic replay archive
-
-Every match-update run also selects completed `Finished`/`Conceded` GG games
-whose replay is not ready yet. It downloads and persists up to
-`GAME_REPLAY_BATCH_SIZE` histories (default: `100`). Failed histories remain in
-the queue and are retried by a later run. If BGA rejects a replay request, the
-same game is retried with the next configured reserve account.
-
-The normal game API reads the stored replay record URL and derived statistics;
-opening a replay on the site does not make a new request to BGA.
-
 ## Manual replay command
+
+Replay import is intentionally manual-only while this feature is a PoC.
+`run_update_matches.py` and `update-duels.timer` never create or retry
+`game_replays` records.
 
 The replay script accepts the exact primary key from `games.id`, reads that
 row's `bga_table_id`, logs in with the configured BGA server account, and stores
