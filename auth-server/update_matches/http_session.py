@@ -78,7 +78,12 @@ def _credential_cycle(credentials: list[BGACredential], *, rotate_account: bool)
     return ordered
 
 
-def refresh_http_session(reason: str = "startup", *, rotate_account: bool = False) -> tuple[requests.Session, str]:
+def refresh_http_session(
+    reason: str = "startup",
+    *,
+    rotate_account: bool = False,
+    require_login: bool = False,
+) -> tuple[requests.Session, str]:
     global _session, _token, _last_refresh, _credential_index, _credential_label
 
     credentials = get_bga_credentials()
@@ -95,7 +100,7 @@ def refresh_http_session(reason: str = "startup", *, rotate_account: bool = Fals
             try:
                 with driver_manager.use_driver(f"http_refresh_{int(time.time())}") as driver:
                     driver.get(f"{BASE_URL}/gamestats")
-                    if "/account" in driver.current_url:
+                    if require_login or "/account" in driver.current_url:
                         login_if_needed(driver, credential)
                         driver.get(f"{BASE_URL}/gamestats")
 

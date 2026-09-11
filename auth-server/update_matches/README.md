@@ -67,6 +67,35 @@ Manual test for one match:
 python3 run_update_matches.py --match-id 20250330UKRPRT
 ```
 
+## Manual replay PoC
+
+The replay script accepts the exact primary key from `games.id`, reads that
+row's `bga_table_id`, logs in with the configured BGA server account, and stores
+the raw BGA archive plus normalized tile/meeple events in `game_replays`.
+
+From the `auth-server` directory:
+
+```bash
+python3 get_game_replay.py '<games.id>'
+```
+
+To fetch an already stored replay again:
+
+```bash
+python3 get_game_replay.py '<games.id>' --force
+```
+
+The database path is read from `AUTH_SQLITE_PATH`, then `DB_PATH`, and otherwise
+defaults to `auth-server/data/auth.sqlite`. It can also be provided explicitly:
+
+```bash
+python3 get_game_replay.py '<games.id>' --db-path /absolute/path/to/auth.sqlite
+```
+
+`game_replays.logs_json` keeps the original `data.logs` response for later
+parser changes. `events_json` contains ordered `playTile` and `playPartisan`
+events. Failures are saved as `status = 'error'` with `last_error`.
+
 ## Selection rules
 
 - `finished_pending`: duel already ended, status is not `Done`, `Error`, or `No Show`, and it is still eligible for result sync
