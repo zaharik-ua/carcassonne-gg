@@ -1995,12 +1995,15 @@ function loadGamesByDuelIds(duelIds, callback) {
         g.player_1_clock,
         g.player_2_clock,
         g.status,
-        gr.carcassonne_lab_url
+        gr.carcassonne_lab_url,
+        gr.board_stats_json,
+        gr.meeple_stats_json,
+        gr.scoring_json,
+        gr.player_time_json
       FROM games g
       LEFT JOIN game_replays gr
         ON gr.game_id = g.id
        AND gr.status = 'ready'
-       AND trim(COALESCE(gr.carcassonne_lab_url, '')) <> ''
       WHERE trim(COALESCE(g.duel_id, '')) IN (${placeholders})
         AND g.deleted_at IS NULL
       ORDER BY g.duel_id COLLATE NOCASE ASC, g.game_number ASC, g.id ASC
@@ -5884,6 +5887,10 @@ function ensureGameReplaysSchema() {
       events_json TEXT,
       players_json TEXT,
       carcassonne_lab_url TEXT,
+      board_stats_json TEXT,
+      meeple_stats_json TEXT,
+      scoring_json TEXT,
+      player_time_json TEXT,
       event_count INTEGER NOT NULL DEFAULT 0,
       tile_count INTEGER NOT NULL DEFAULT 0,
       meeple_count INTEGER NOT NULL DEFAULT 0,
@@ -5908,6 +5915,10 @@ function ensureGameReplaysSchema() {
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
       addColumnIfMissing(columns, "game_replays", "carcassonne_lab_url", "TEXT");
+      addColumnIfMissing(columns, "game_replays", "board_stats_json", "TEXT");
+      addColumnIfMissing(columns, "game_replays", "meeple_stats_json", "TEXT");
+      addColumnIfMissing(columns, "game_replays", "scoring_json", "TEXT");
+      addColumnIfMissing(columns, "game_replays", "player_time_json", "TEXT");
     });
     db.run(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_game_replays_bga_table_id ON game_replays(bga_table_id)",
@@ -21837,6 +21848,10 @@ app.get("/public/challenge-duels", async (req, res, next) => {
     player_2_clock: row.player_2_clock,
     status: row.status,
     carcassonne_lab_url: row.carcassonne_lab_url || null,
+    board_stats: parseJsonOrNull(row.board_stats_json),
+    meeple_stats: parseJsonOrNull(row.meeple_stats_json),
+    scoring: parseJsonOrNull(row.scoring_json),
+    player_time: parseJsonOrNull(row.player_time_json),
   });
 
   try {

@@ -1,15 +1,33 @@
 from __future__ import annotations
 
-from .config import MATCH_UPDATE_BATCH_SIZE
-from .match_fetcher import get_games_batch
+from collections.abc import Callable
+
+from .config import GAME_REPLAY_BATCH_SIZE, MATCH_UPDATE_BATCH_SIZE
+from .game_replay import fetch_and_store_game_replay_with_account_rotation
 from .models import MatchUpdateRequest
 from .repository import KNOWN_TARGETS, MatchRepository
 
 
 class MatchUpdateService:
-    def __init__(self, repository: MatchRepository, batch_size: int = MATCH_UPDATE_BATCH_SIZE) -> None:
+    def __init__(
+        self,
+        repository: MatchRepository,
+        batch_size: int = MATCH_UPDATE_BATCH_SIZE,
+        *,
+        replay_batch_size: int = GAME_REPLAY_BATCH_SIZE,
+        replay_fetcher: Callable[[str], object] | None = None,
+        games_fetcher: Callable[[list[MatchUpdateRequest]], list] | None = None,
+    ) -> None:
         self.repository = repository
         self.batch_size = batch_size
+        self.replay_batch_size = max(1, int(replay_batch_size))
+        self.games_fetcher = games_fetcher or self._get_games_batch
+        db_path = str(getattr(repository, "db_path", "") or "").strip()
+        self.replay_fetcher = replay_fetcher
+        if self.replay_fetcher is None and db_path:
+            self.replay_fetcher = lambda game_id: (
+                fetch_and_store_game_replay_with_account_rotation(db_path, game_id)
+            )
 
     def run(
         self,
@@ -20,12 +38,14 @@ class MatchUpdateService:
         duel_id: str | None = None,
     ) -> dict:
         try:
-            return self._run(
+            summary = self._run(
                 targets=targets,
                 total_limit=total_limit,
                 match_id=match_id,
                 duel_id=duel_id,
             )
+            self._sync_pending_game_replays(summary)
+            return summary
         finally:
             self.repository.finish_update_run()
 
@@ -66,7 +86,7 @@ class MatchUpdateService:
                 for match in batch:
                     seen_ids.add(str(match.match_id))
 
-                results = get_games_batch(batch)
+                results = self.games_fetcher(batch)
                 for match, result in zip(batch, results):
                     summary["processed"] += 1
                     if result.status == "success":
@@ -94,7 +114,7 @@ class MatchUpdateService:
         if not batch:
             return summary
 
-        results = get_games_batch(batch)
+        results = self.games_fetcher(batch)
         for match, result in zip(batch, results):
             summary["processed"] += 1
             if result.status == "success":
@@ -116,7 +136,7 @@ class MatchUpdateService:
         if not batch:
             return summary
 
-        results = get_games_batch(batch)
+        results = self.games_fetcher(batch)
         for match, result in zip(batch, results):
             summary["processed"] += 1
             if result.status == "success":
@@ -130,3 +150,42 @@ class MatchUpdateService:
     @staticmethod
     def _drop_already_seen(batch: list[MatchUpdateRequest], seen_ids: set[str]) -> list[MatchUpdateRequest]:
         return [match for match in batch if str(match.match_id) not in seen_ids]
+
+    @staticmethod
+    def _get_games_batch(batch: list[MatchUpdateRequest]) -> list:
+        from .match_fetcher import get_games_batch
+
+        return get_games_batch(batch)
+
+    def _sync_pending_game_replays(self, summary: dict) -> None:
+        summary.update({
+            "replays_processed": 0,
+            "replays_ready": 0,
+            "replays_failed": 0,
+        })
+        if self.replay_fetcher is None:
+            return
+
+        try:
+            game_ids = self.repository.fetch_game_ids_pending_replay(
+                limit=self.replay_batch_size
+            )
+        except Exception as exc:
+            summary["replays_scan_error"] = str(exc) or exc.__class__.__name__
+            print(
+                f"⚠️ Failed to find completed games pending replay sync: {exc}",
+                flush=True,
+            )
+            return
+
+        for game_id in game_ids:
+            summary["replays_processed"] += 1
+            try:
+                self.replay_fetcher(game_id)
+                summary["replays_ready"] += 1
+            except Exception as exc:
+                summary["replays_failed"] += 1
+                print(
+                    f"⚠️ Replay sync failed for game {game_id}: {exc}",
+                    flush=True,
+                )

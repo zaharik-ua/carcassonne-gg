@@ -919,9 +919,18 @@
   }
 
   .challenge-panel-wrap {
+    position: relative;
     display: grid;
     gap: 0;
     width: 98%;
+  }
+
+  .challenge-panel-wrap.has-open-duel-edit {
+    z-index: 40;
+  }
+
+  .challenge-panel-wrap.has-open-duel-edit .challenge-section-collapsible {
+    overflow: visible;
   }
 
   .challenge-panel-wrap[hidden] {
@@ -4617,6 +4626,11 @@
     const root = document.createElement("div");
     root.className = "challenge-duel-edit";
 
+    const setMenuLayerOpen = (isOpen) => {
+      root.closest(".challenge-panel-wrap")
+        ?.classList.toggle("has-open-duel-edit", !!isOpen);
+    };
+
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "challenge-btn challenge-btn-small challenge-btn-secondary challenge-duel-edit-btn";
@@ -4638,9 +4652,11 @@
       menu.classList.remove("open");
       btn.classList.remove("open");
       btn.setAttribute("aria-expanded", "false");
+      setMenuLayerOpen(false);
     };
     const open = () => {
       closeAllDropdowns();
+      setMenuLayerOpen(true);
       menu.classList.add("open");
       btn.classList.add("open");
       btn.setAttribute("aria-expanded", "true");

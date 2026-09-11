@@ -555,6 +555,29 @@ code {
 
   .challenge-match-result__games {
     display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .challenge-match-result__games-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .challenge-match-result__games-source-icon {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    border-radius: 2px;
+    object-fit: contain;
+  }
+
+  .challenge-match-result__games-links {
+    display: flex;
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
@@ -589,19 +612,6 @@ code {
     gap: 3px;
     background: #f3e4c4;
     color: #8c6418;
-  }
-
-  .challenge-match-result__game--lab {
-    align-items: center;
-    gap: 4px;
-  }
-
-  .challenge-match-result__game-lab-icon {
-    width: 14px;
-    height: 14px;
-    flex: 0 0 14px;
-    border-radius: 2px;
-    object-fit: contain;
   }
 
   .challenge-match-result__game-clock {
@@ -1416,7 +1426,8 @@ code {
 
 <script>
 const MATCHES_URL = "https://api.carcassonne.gg/public/challenge-duels";
-const CARCASSONNE_LAB_ICON_URL = "https://www.carcassonnelab.com/icons/icon-192.png";
+const BGA_ICON_URL = "https://carcassonne.gg/gallery/bga-logo.png";
+const CARCASSONNE_LAB_ICON_URL = "https://carcassonne.gg/gallery/carcassonne-lab-icon.png";
 const RESULTS_PAGE_SIZE_OPTIONS = [15, 30, 50];
 const resultsPaginationState = {
   pageSize: 15,
@@ -1724,6 +1735,30 @@ function createChallengeMatchResult(match) {
   if (games.length) {
     const gameScores = document.createElement("div");
     gameScores.className = "challenge-match-result__games";
+    const bgaRow = document.createElement("div");
+    const bgaLinks = document.createElement("div");
+    const bgaIcon = document.createElement("img");
+    bgaRow.className = "challenge-match-result__games-row";
+    bgaLinks.className = "challenge-match-result__games-links";
+    bgaIcon.className = "challenge-match-result__games-source-icon";
+    bgaIcon.src = BGA_ICON_URL;
+    bgaIcon.alt = "BGA";
+    bgaIcon.loading = "lazy";
+    bgaRow.appendChild(bgaIcon);
+    bgaRow.appendChild(bgaLinks);
+
+    const labRow = document.createElement("div");
+    const labLinks = document.createElement("div");
+    const labIcon = document.createElement("img");
+    labRow.className = "challenge-match-result__games-row";
+    labLinks.className = "challenge-match-result__games-links";
+    labIcon.className = "challenge-match-result__games-source-icon";
+    labIcon.src = CARCASSONNE_LAB_ICON_URL;
+    labIcon.alt = "CarcassonneLab";
+    labIcon.loading = "lazy";
+    labRow.appendChild(labIcon);
+    labRow.appendChild(labLinks);
+
     games.forEach((game) => {
       const badge = document.createElement(game.tableId ? "a" : "span");
       badge.className = "challenge-match-result__game";
@@ -1751,12 +1786,14 @@ function createChallengeMatchResult(match) {
         badge.rel = "noopener noreferrer";
         badge.title = "Open game on Board Game Arena";
       }
-      gameScores.appendChild(badge);
+      bgaLinks.appendChild(badge);
 
       if (game.carcassonneLabUrl) {
-        const labBadge = badge.cloneNode(true);
-        const labIcon = document.createElement("img");
-        labBadge.classList.add("challenge-match-result__game--lab");
+        const labBadge = document.createElement("a");
+        labBadge.className = badge.className;
+        Array.from(badge.childNodes).forEach((node) => {
+          labBadge.appendChild(node.cloneNode(true));
+        });
         labBadge.href = game.carcassonneLabUrl;
         labBadge.target = "_blank";
         labBadge.rel = "noopener noreferrer";
@@ -1765,14 +1802,11 @@ function createChallengeMatchResult(match) {
           "aria-label",
           `Review game ${badge.textContent.trim()} in CarcassonneLab`
         );
-        labIcon.className = "challenge-match-result__game-lab-icon";
-        labIcon.src = CARCASSONNE_LAB_ICON_URL;
-        labIcon.alt = "";
-        labIcon.loading = "lazy";
-        labBadge.prepend(labIcon);
-        gameScores.appendChild(labBadge);
+        labLinks.appendChild(labBadge);
       }
     });
+    gameScores.appendChild(bgaRow);
+    if (labLinks.childNodes.length) gameScores.appendChild(labRow);
     result.appendChild(gameScores);
   }
 

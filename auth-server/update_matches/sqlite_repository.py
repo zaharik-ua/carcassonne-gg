@@ -7,6 +7,7 @@ from math import floor, isfinite
 from pathlib import Path
 from typing import Callable
 
+from .game_replay import ensure_game_replays_schema
 from .models import MatchUpdateRequest, MatchUpdateResult
 from .repository import MatchRepository, TARGET_EMPTY_FINISHED, TARGET_FINISHED_PENDING, TARGET_ONGOING
 
@@ -325,6 +326,32 @@ class SqliteMatchRepository(MatchRepository):
             return
         self._gg_elo_recalculator()
         self._ranked_duel_completed = False
+
+    def fetch_game_ids_pending_replay(self, *, limit: int) -> list[str]:
+        with self._connect() as conn:
+            ensure_game_replays_schema(conn)
+            rows = conn.execute(
+                """
+                SELECT g.id
+                FROM games g
+                JOIN duels l ON l.id = g.duel_id
+                LEFT JOIN game_replays gr ON gr.game_id = g.id
+                WHERE trim(COALESCE(g.deleted_at, '')) = ''
+                  AND trim(COALESCE(l.deleted_at, '')) = ''
+                  AND lower(trim(COALESCE(g.status, ''))) IN ('finished', 'conceded')
+                  AND trim(COALESCE(g.bga_table_id, '')) <> ''
+                  AND trim(g.bga_table_id) NOT GLOB '*[^0-9]*'
+                  AND COALESCE(gr.status, '') <> 'ready'
+                ORDER BY
+                  datetime(COALESCE(l.time_utc, '1970-01-01 00:00:00')) ASC,
+                  COALESCE(g.game_number, 999999) ASC,
+                  g.id ASC
+                LIMIT ?
+                """,
+                (max(1, int(limit)),),
+            ).fetchall()
+            conn.commit()
+        return [str(row["id"]) for row in rows]
 
     def _recalculate_profile_gg_elo(self) -> object:
         from update_profile_gg_elo.service import ProfileGgEloUpdateService

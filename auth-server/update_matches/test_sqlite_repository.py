@@ -601,6 +601,44 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
         self.assertEqual(standing, (9, 9.0))
         self.assertEqual(benchmark, 777.0)
 
+    def test_fetches_only_completed_games_without_ready_replay(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO duels (id, time_utc, deleted_at) VALUES (?, ?, NULL)",
+                ("replay-duel", self.past_time),
+            )
+            conn.executemany(
+                """
+                INSERT INTO games (id, duel_id, bga_table_id, game_number, status, deleted_at)
+                VALUES (?, 'replay-duel', ?, ?, ?, ?)
+                """,
+                [
+                    ("ready-later", "900000001", 1, "Finished", None),
+                    ("conceded", "900000002", 2, "Conceded", None),
+                    ("ongoing", "900000003", 3, "In progress", None),
+                    ("invalid-table", "not-a-number", 4, "Finished", None),
+                    ("deleted-game", "900000005", 5, "Finished", "2026-01-01"),
+                ],
+            )
+
+        self.assertEqual(
+            self.repository.fetch_game_ids_pending_replay(limit=100),
+            ["ready-later", "conceded"],
+        )
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO game_replays (game_id, bga_table_id, status)
+                VALUES ('ready-later', '900000001', 'ready')
+                """
+            )
+
+        self.assertEqual(
+            self.repository.fetch_game_ids_pending_replay(limit=100),
+            ["conceded"],
+        )
+
     def _insert_duel(
         self,
         conn: sqlite3.Connection,

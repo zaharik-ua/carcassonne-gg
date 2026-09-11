@@ -11,7 +11,11 @@ from .game_replay import (
     LOGS_PATH,
     BgaReplayError,
     GameNotFoundError,
+    build_board_stats,
     build_carcassonne_lab_url,
+    build_meeple_stats,
+    build_player_time_stats,
+    build_scoring_stats,
     ensure_game_replays_schema,
     fetch_and_store_game_replay,
 )
@@ -56,6 +60,11 @@ class GameReplayTest(unittest.TestCase):
         self.assertEqual(result["status"], "ready")
         self.assertEqual(result["tile_count"], 1)
         self.assertEqual(result["meeple_count"], 1)
+        self.assertEqual(result["board_stats"]["final_bounds"]["width"], 3)
+        self.assertEqual(result["board_stats"]["final_bounds"]["height"], 4)
+        self.assertEqual(result["meeple_stats"]["total_placements"], 1)
+        self.assertEqual(result["scoring"]["totals"]["cities"], 4)
+        self.assertEqual(result["player_time"]["players"][0]["duration_seconds"], 20)
         self.assertFalse(result["archive_requested"])
         self.assertEqual(result["players"][0]["meeple_color"], "red")
         self.assertEqual(
@@ -75,9 +84,9 @@ class GameReplayTest(unittest.TestCase):
         self.assertEqual(stored["carcassonne_lab_url"], result["carcassonne_lab_url"])
         events = json.loads(stored["events_json"])
         self.assertEqual(
-            events[0],
+            events[1],
             {
-                "seq": 1,
+                "seq": 2,
                 "type": "playTile",
                 "player_id": "100",
                 "player_name": "Alpha",
@@ -90,10 +99,14 @@ class GameReplayTest(unittest.TestCase):
                 "meeple_color": "red",
             },
         )
-        self.assertEqual(events[1]["position"], 5)
-        self.assertEqual(events[1]["player_id"], "100")
-        self.assertEqual(events[1]["tile_event_seq"], 1)
-        self.assertEqual(events[1]["meeple_color"], "red")
+        self.assertEqual(events[0]["type"], "pickTile")
+        self.assertEqual(events[0]["tile_id"], 7)
+        self.assertEqual(events[0]["tile_type"], 17)
+        self.assertEqual(events[0]["player_id"], "100")
+        self.assertEqual(events[2]["position"], 5)
+        self.assertEqual(events[2]["player_id"], "100")
+        self.assertEqual(events[2]["tile_event_seq"], 2)
+        self.assertEqual(events[2]["meeple_color"], "red")
         players = json.loads(stored["players_json"])
         self.assertEqual(
             players,
@@ -112,7 +125,169 @@ class GameReplayTest(unittest.TestCase):
                 },
             ],
         )
+        self.assertEqual(
+            json.loads(stored["board_stats_json"])["final_bounds"],
+            {
+                "min_x": -2,
+                "max_x": 0,
+                "min_y": 0,
+                "max_y": 3,
+                "width": 3,
+                "height": 4,
+            },
+        )
+        self.assertEqual(json.loads(stored["meeple_stats_json"])["total_placements"], 1)
+        self.assertEqual(json.loads(stored["scoring_json"])["totals"]["cities"], 4)
+        self.assertEqual(
+            json.loads(stored["player_time_json"])["source"],
+            "newActivePlayer.time",
+        )
         self.assertTrue(any(row[2] == "games" and row[3] == "game_id" for row in foreign_keys))
+
+    def test_builds_board_expansion_history(self) -> None:
+        board = build_board_stats(
+            [
+                {"seq": 1, "type": "playTile", "x": 1, "y": 0},
+                {"seq": 2, "type": "playTile", "x": 1, "y": -2},
+                {"seq": 3, "type": "playTile", "x": 0, "y": -1},
+            ]
+        )
+
+        self.assertEqual(board["placed_tile_count"], 3)
+        self.assertEqual(board["tile_count_including_start"], 4)
+        self.assertEqual(
+            board["final_bounds"],
+            {
+                "min_x": 0,
+                "max_x": 1,
+                "min_y": -2,
+                "max_y": 0,
+                "width": 2,
+                "height": 3,
+            },
+        )
+        self.assertEqual([event["move_number"] for event in board["expansion_events"]], [1, 2])
+
+    def test_groups_feature_scores_and_player_turn_time(self) -> None:
+        players = [
+            {"player_id": "100", "player_name": "Alpha"},
+            {"player_id": "200", "player_name": "Beta"},
+        ]
+        logs = [
+            {
+                "data": [
+                    {"type": "newActivePlayer", "time": 1_700_000_000, "args": {"player_id": "100"}},
+                    {
+                        "type": "scoreRoad",
+                        "time": 1_700_000_004,
+                        "args": {"player_id": "100", "points": "5"},
+                    },
+                    {"type": "newActivePlayer", "time": 1_700_000_010, "args": {"player_id": "200"}},
+                    {
+                        "type": "scoreFeature",
+                        "time": 1_700_000_014,
+                        "args": {"player_id": "200", "feature": "cloister", "score": "9"},
+                    },
+                    {"type": "replay_has_ended", "time": 1_700_000_025, "args": {}},
+                ]
+            }
+        ]
+
+        scoring = build_scoring_stats(logs, players)
+        timing = build_player_time_stats(logs, players)
+
+        self.assertEqual(scoring["totals"]["roads"], 5)
+        self.assertEqual(scoring["totals"]["monasteries"], 9)
+        self.assertEqual(scoring["players"][0]["total_points"], 5)
+        self.assertEqual(scoring["players"][1]["total_points"], 9)
+        self.assertEqual(timing["game_duration_seconds"], 25)
+        self.assertEqual(timing["players"][0]["duration_seconds"], 10)
+        self.assertEqual(timing["players"][1]["duration_seconds"], 15)
+
+    def test_parses_real_bga_realizations_returns_and_active_player_time(self) -> None:
+        players = [
+            {"player_id": "100", "player_name": "Alpha"},
+            {"player_id": "200", "player_name": "Beta"},
+        ]
+        logs = [
+            {
+                "time": "1700000000",
+                "data": [{
+                    "type": "gameStateChange",
+                    "args": {"type": "activeplayer", "active_player": "100"},
+                }],
+            },
+            {
+                "time": "1700000010",
+                "data": [{
+                    "type": "gameStateChange",
+                    "args": {"type": "activeplayer", "active_player": "200"},
+                }],
+            },
+            {
+                "time": "1700000025",
+                "data": [
+                    {
+                        "type": "realizationAchieved",
+                        "log": "${player_name} achieved a ${real_type}",
+                        "args": {
+                            "real_id": "city-1",
+                            "real_type": "city",
+                            "tile_to_value": {"1": 2, "2": 2},
+                            "winners": [100],
+                            "part_to_recover": {"100": {"normal": 1}},
+                        },
+                    },
+                    {
+                        "type": "winPoints",
+                        "log": "${player_name} wins ${points} points",
+                        "args": {"player_id": 100, "points": 4, "score": 4},
+                    },
+                    {
+                        "type": "gameStateChange",
+                        "args": {"type": "activeplayer", "active_player": "100"},
+                    },
+                ],
+            },
+            {
+                "time": "1700000030",
+                "data": [{
+                    "type": "realizationAchieved",
+                    "log": "This fields is feeding ${city_nbr} cities and worth ${points} points",
+                    "args": {
+                        "real_id": "field-1",
+                        "real_type": "field",
+                        "points": 3,
+                        "tile_to_value": {"7": 3},
+                        "winners": [200],
+                    },
+                }],
+            },
+        ]
+        placements = [
+            {"type": "playPartisan", "player_id": "100"},
+            {"type": "playPartisan", "player_id": "100"},
+            {"type": "playPartisan", "player_id": "200"},
+        ]
+
+        scoring = build_scoring_stats(logs, players)
+        meeples = build_meeple_stats(placements, players, logs)
+        timing = build_player_time_stats(logs, players)
+
+        self.assertEqual(scoring["totals"]["cities"], 4)
+        self.assertEqual(scoring["totals"]["fields"], 3)
+        self.assertEqual(scoring["players"][0]["total_points"], 4)
+        self.assertEqual(scoring["players"][1]["total_points"], 3)
+        self.assertEqual(
+            [event["phase"] for event in scoring["events"]],
+            ["completed", "end_game"],
+        )
+        self.assertEqual(meeples["total_placements"], 3)
+        self.assertEqual(meeples["total_returns"], 1)
+        self.assertEqual(meeples["remaining_on_board_at_end"], 2)
+        self.assertEqual(timing["source"], "gameStateChange.active_player/time")
+        self.assertEqual(timing["players"][0]["duration_seconds"], 15)
+        self.assertEqual(timing["players"][1]["duration_seconds"], 15)
 
     def test_lab_url_uses_first_move_player_order_and_matching_colors(self) -> None:
         events = [
@@ -161,7 +336,7 @@ class GameReplayTest(unittest.TestCase):
             [{"player_id": "100", "player_name": "Alpha", "meeple_color": None}],
         ))
 
-    def test_existing_replay_table_gets_lab_url_column(self) -> None:
+    def test_existing_replay_table_gets_derived_history_columns(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 """
@@ -177,7 +352,15 @@ class GameReplayTest(unittest.TestCase):
                 for row in conn.execute("PRAGMA table_info(game_replays)").fetchall()
             }
 
-        self.assertIn("carcassonne_lab_url", columns)
+        self.assertTrue(
+            {
+                "carcassonne_lab_url",
+                "board_stats_json",
+                "meeple_stats_json",
+                "scoring_json",
+                "player_time_json",
+            }.issubset(columns)
+        )
 
     def test_requests_archive_and_polls_until_logs_are_ready(self) -> None:
         calls: list[str] = []
@@ -249,6 +432,38 @@ class GameReplayTest(unittest.TestCase):
         self.assertTrue(result["cached"])
         self.assertEqual(calls, [])
 
+    def test_ready_replay_backfills_derived_history_without_bga_request(self) -> None:
+        fetch_and_store_game_replay(
+            self.db_path,
+            "game-row-1",
+            request=lambda *_args, **_kwargs: self._successful_payload(),
+            authenticate=lambda: None,
+        )
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                UPDATE game_replays
+                SET board_stats_json = NULL,
+                    meeple_stats_json = NULL,
+                    scoring_json = NULL,
+                    player_time_json = NULL
+                WHERE game_id = 'game-row-1'
+                """
+            )
+
+        calls: list[str] = []
+        result = fetch_and_store_game_replay(
+            self.db_path,
+            "game-row-1",
+            request=lambda *_args, **_kwargs: calls.append("request"),
+            authenticate=lambda: calls.append("authenticate"),
+        )
+
+        self.assertTrue(result["cached"])
+        self.assertEqual(calls, [])
+        self.assertEqual(result["board_stats"]["final_bounds"]["width"], 3)
+        self.assertEqual(result["scoring"]["totals"]["cities"], 4)
+
     def test_missing_game_is_rejected(self) -> None:
         with self.assertRaisesRegex(GameNotFoundError, "Game not found"):
             fetch_and_store_game_replay(
@@ -272,6 +487,7 @@ class GameReplayTest(unittest.TestCase):
                         "data": [
                             {
                                 "type": "gameStateChange",
+                                "time": 1_700_000_000,
                                 "args": {
                                     "args": {
                                         "result": [
@@ -282,7 +498,18 @@ class GameReplayTest(unittest.TestCase):
                                 },
                             },
                             {
+                                "type": "newActivePlayer",
+                                "time": 1_700_000_001,
+                                "args": {"player_id": "100"},
+                            },
+                            {
+                                "type": "pickTile",
+                                "time": 1_700_000_002,
+                                "args": {"id": 7, "type": "17"},
+                            },
+                            {
                                 "type": "playTile",
+                                "time": 1_700_000_011,
                                 "args": [
                                     {
                                         "piece": "tile",
@@ -297,7 +524,23 @@ class GameReplayTest(unittest.TestCase):
                             },
                             {
                                 "type": "playPartisan",
+                                "time": 1_700_000_012,
                                 "args": [{"piece": "partisan", "pos": "5"}],
+                            },
+                            {
+                                "type": "scoreFeature",
+                                "time": 1_700_000_013,
+                                "args": {
+                                    "player_id": "100",
+                                    "player_name": "Alpha",
+                                    "feature": "city",
+                                    "points": "4",
+                                },
+                            },
+                            {
+                                "type": "replay_has_ended",
+                                "time": 1_700_000_021,
+                                "args": {},
                             },
                         ]
                     }

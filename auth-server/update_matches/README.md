@@ -13,6 +13,7 @@ It writes:
 - `duels.status`
 - `duels.results_checked_at`
 - `games`
+- `game_replays`
 
 It persists sync errors into:
 - `duels.results_last_error`
@@ -67,7 +68,18 @@ Manual test for one match:
 python3 run_update_matches.py --match-id 20250330UKRPRT
 ```
 
-## Manual replay PoC
+## Automatic replay archive
+
+Every match-update run also selects completed `Finished`/`Conceded` GG games
+whose replay is not ready yet. It downloads and persists up to
+`GAME_REPLAY_BATCH_SIZE` histories (default: `100`). Failed histories remain in
+the queue and are retried by a later run. If BGA rejects a replay request, the
+same game is retried with the next configured reserve account.
+
+The normal game API reads the stored replay record URL and derived statistics;
+opening a replay on the site does not make a new request to BGA.
+
+## Manual replay command
 
 The replay script accepts the exact primary key from `games.id`, reads that
 row's `bga_table_id`, logs in with the configured BGA server account, and stores
@@ -93,12 +105,30 @@ python3 get_game_replay.py '<games.id>' --db-path /absolute/path/to/auth.sqlite
 ```
 
 `game_replays.logs_json` keeps the original `data.logs` response for later
-parser changes. `events_json` contains ordered `playTile` and `playPartisan`
-events. `players_json` contains player ids, names, BGA color hex values, and
-normalized meeple color names (`black`, `blue`, `green`, `red`, or `yellow`).
-`carcassonne_lab_url` contains the encoded CarcassonneLab replay URL when all
-required moves and player colors were found. Failures are saved as
-`status = 'error'` with `last_error`.
+parser changes. `events_json` contains ordered `pickTile`, `playTile`, and
+`playPartisan` events. `players_json` contains player ids, names, BGA color hex
+values, and normalized meeple color names (`black`, `blue`, `green`, `red`, or
+`yellow`). `carcassonne_lab_url` contains the encoded CarcassonneLab replay URL
+when all required moves and player colors were found.
+
+The replay import also stores compact derived history data:
+
+- `board_stats_json`: final board bounds and every move that expanded them;
+- `meeple_stats_json`: placements, recovered meeples, and meeples remaining on
+  the board, both in total and per player;
+- `scoring_json`: scoring events and totals for fields, cities, roads, and
+  monasteries (including BGA `cloister`/`abbey` aliases);
+- `player_time_json`: total game duration and active turn time per player,
+  derived from notification `time` values. `newActivePlayer` timestamps are
+  preferred, followed by `gameStateChange.active_player`; `playTile`
+  timestamps are the final fallback.
+
+Full board snapshots are intentionally not duplicated after every turn: the
+ordered tile/meeple events together with the stored raw realization events can
+reconstruct any intermediate state, while `board_stats_json` stores the compact
+expansion history.
+
+Failures are saved as `status = 'error'` with `last_error`.
 
 ## Selection rules
 
