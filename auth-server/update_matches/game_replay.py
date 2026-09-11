@@ -334,27 +334,42 @@ def fetch_and_store_game_replay_with_account_rotation(
     db_path: str | Path,
     game_id: str,
     *,
+    force: bool = False,
+    poll_attempts: int = 10,
+    poll_delay: float = 1.0,
+    sleep: Sleep = time.sleep,
     max_account_attempts: int | None = None,
+    replay_fetcher: Callable[..., dict[str, Any]] | None = None,
+    account_rotator: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     """Fetch a replay and rotate through configured BGA accounts on failure."""
-    from .bga_login import get_bga_credentials
-    from .http_session import rotate_http_session
+    if replay_fetcher is None:
+        replay_fetcher = fetch_and_store_game_replay
+    if account_rotator is None:
+        from .http_session import rotate_http_session
 
-    credential_count = len(get_bga_credentials())
-    attempts = max_account_attempts if max_account_attempts is not None else credential_count
+        account_rotator = rotate_http_session
+    if max_account_attempts is None:
+        from .bga_login import get_bga_credentials
+
+        max_account_attempts = len(get_bga_credentials())
+    attempts = max_account_attempts
     attempts = max(1, int(attempts or 1))
 
     for attempt in range(attempts):
         try:
-            return fetch_and_store_game_replay(
+            return replay_fetcher(
                 db_path,
                 game_id,
-                force=attempt > 0,
+                force=force or attempt > 0,
+                poll_attempts=poll_attempts,
+                poll_delay=poll_delay,
+                sleep=sleep,
             )
         except GameReplayError:
             if attempt + 1 >= attempts:
                 raise
-            rotate_http_session(
+            account_rotator(
                 reason=f"game_replay_retry_{attempt + 2}_of_{attempts}"
             )
 

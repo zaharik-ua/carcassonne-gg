@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from . import game_replay as game_replay_module
 from .game_replay import (
     ARCHIVE_REQUEST_PATH,
     LOGS_PATH,
@@ -412,6 +413,39 @@ class GameReplayTest(unittest.TestCase):
                 "SELECT status, last_error FROM game_replays WHERE game_id = 'game-row-1'"
             ).fetchone()
         self.assertEqual(row, ("error", "Replay access denied"))
+
+    def test_replay_limit_rotates_through_reserve_accounts(self) -> None:
+        fetch_results: list[object] = [
+            BgaReplayError("You have reached a limit (replay)"),
+            {"status": "ready", "game_id": "game-row-1"},
+        ]
+        fetch_calls: list[dict] = []
+        rotation_reasons: list[str] = []
+
+        def fetch_replay(*_args, **kwargs):
+            fetch_calls.append(kwargs)
+            result = fetch_results.pop(0)
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        result = game_replay_module.fetch_and_store_game_replay_with_account_rotation(
+            self.db_path,
+            "game-row-1",
+            poll_attempts=4,
+            poll_delay=0.25,
+            sleep=lambda _delay: None,
+            max_account_attempts=2,
+            replay_fetcher=fetch_replay,
+            account_rotator=lambda *, reason: rotation_reasons.append(reason),
+        )
+
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(len(fetch_calls), 2)
+        self.assertFalse(fetch_calls[0]["force"])
+        self.assertTrue(fetch_calls[1]["force"])
+        self.assertEqual(fetch_calls[1]["poll_attempts"], 4)
+        self.assertEqual(rotation_reasons, ["game_replay_retry_2_of_2"])
 
     def test_ready_replay_is_reused_without_authentication(self) -> None:
         fetch_and_store_game_replay(

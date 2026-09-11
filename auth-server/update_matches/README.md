@@ -97,6 +97,10 @@ To fetch an already stored replay again:
 python3 get_game_replay.py '<games.id>' --force
 ```
 
+The manual command tries the primary account first and automatically switches
+through every configured `BGA_EMAIL_N` / `BGA_PASSWORD_N` reserve account when
+BGA rejects the replay request (for example, after `limit (replay)`).
+
 The database path is read from `AUTH_SQLITE_PATH`, then `DB_PATH`, and otherwise
 defaults to `auth-server/data/auth.sqlite`. It can also be provided explicitly:
 

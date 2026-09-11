@@ -1123,9 +1123,31 @@ code {
 
   .lineup__games {
     display: inline-flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     gap: 4px;
     margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  .lineup__games-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .lineup__games-source-icon {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    border-radius: 2px;
+    object-fit: contain;
+  }
+
+  .lineup__games-links {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     flex-wrap: wrap;
   }
 
@@ -3370,6 +3392,30 @@ function createGameBadgesWrap(duel) {
   const wrap = document.createElement("span");
   wrap.className = "lineup__games";
 
+  const bgaRow = document.createElement("span");
+  bgaRow.className = "lineup__games-row";
+  const bgaIcon = document.createElement("img");
+  bgaIcon.className = "lineup__games-source-icon";
+  bgaIcon.src = BGA_ICON_URL;
+  bgaIcon.alt = "BGA";
+  bgaIcon.loading = "lazy";
+  const bgaLinks = document.createElement("span");
+  bgaLinks.className = "lineup__games-links";
+  bgaRow.appendChild(bgaIcon);
+  bgaRow.appendChild(bgaLinks);
+
+  const labRow = document.createElement("span");
+  labRow.className = "lineup__games-row";
+  const labIcon = document.createElement("img");
+  labIcon.className = "lineup__games-source-icon";
+  labIcon.src = CARCASSONNE_LAB_ICON_URL;
+  labIcon.alt = "CarcassonneLab";
+  labIcon.loading = "lazy";
+  const labLinks = document.createElement("span");
+  labLinks.className = "lineup__games-links";
+  labRow.appendChild(labIcon);
+  labRow.appendChild(labLinks);
+
   games.forEach((game) => {
     const badge = createGameBadge(game);
     if (!badge) return;
@@ -3381,13 +3427,30 @@ function createGameBadgesWrap(duel) {
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.appendChild(badge);
-      wrap.appendChild(link);
-      return;
+      bgaLinks.appendChild(link);
+    } else {
+      bgaLinks.appendChild(badge);
     }
 
-    wrap.appendChild(badge);
+    const carcassonneLabUrl = getCarcassonneLabUrl(game?.carcassonne_lab_url);
+    if (carcassonneLabUrl) {
+      const labLink = document.createElement("a");
+      labLink.className = "lineup__game-link";
+      labLink.href = carcassonneLabUrl;
+      labLink.target = "_blank";
+      labLink.rel = "noopener noreferrer";
+      labLink.title = "Review game in CarcassonneLab";
+      labLink.setAttribute(
+        "aria-label",
+        `Review game ${badge.textContent.trim()} in CarcassonneLab`
+      );
+      labLink.appendChild(badge.cloneNode(true));
+      labLinks.appendChild(labLink);
+    }
   });
 
+  if (bgaLinks.childNodes.length) wrap.appendChild(bgaRow);
+  if (labLinks.childNodes.length) wrap.appendChild(labRow);
   return wrap.childNodes.length ? wrap : null;
 }
 

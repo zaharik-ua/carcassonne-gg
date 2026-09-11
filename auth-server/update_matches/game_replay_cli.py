@@ -12,7 +12,10 @@ except ImportError:  # pragma: no cover
     def load_dotenv() -> None:
         return None
 
-from .game_replay import GameReplayError, fetch_and_store_game_replay
+from .game_replay import (
+    GameReplayError,
+    fetch_and_store_game_replay_with_account_rotation,
+)
 
 
 def _default_db_path() -> Path:
@@ -53,7 +56,7 @@ def main() -> int:
     load_dotenv()
     args = parse_args()
     try:
-        summary = fetch_and_store_game_replay(
+        summary = fetch_and_store_game_replay_with_account_rotation(
             args.db_path,
             args.game_id,
             force=args.force,

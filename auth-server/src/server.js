@@ -20670,6 +20670,11 @@ function publicMainPageMatchesHandler(req, res, next) {
             player_1_clock: row.player_1_clock,
             player_2_clock: row.player_2_clock,
             status: row.status,
+            carcassonne_lab_url: row.carcassonne_lab_url || null,
+            board_stats: parseJsonOrNull(row.board_stats_json),
+            meeple_stats: parseJsonOrNull(row.meeple_stats_json),
+            scoring: parseJsonOrNull(row.scoring_json),
+            player_time: parseJsonOrNull(row.player_time_json),
           });
         });
 
