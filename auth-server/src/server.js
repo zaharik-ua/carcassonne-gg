@@ -5883,7 +5883,6 @@ function ensureGameReplaysSchema() {
       game_id TEXT PRIMARY KEY,
       bga_table_id TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
-      logs_json TEXT,
       events_json TEXT,
       players_json TEXT,
       carcassonne_lab_url TEXT,
@@ -5891,10 +5890,6 @@ function ensureGameReplaysSchema() {
       meeple_stats_json TEXT,
       scoring_json TEXT,
       player_time_json TEXT,
-      event_count INTEGER NOT NULL DEFAULT 0,
-      tile_count INTEGER NOT NULL DEFAULT 0,
-      meeple_count INTEGER NOT NULL DEFAULT 0,
-      archive_requested INTEGER NOT NULL DEFAULT 0,
       fetched_at TEXT,
       last_attempt_at TEXT,
       last_error TEXT,
@@ -5919,6 +5914,23 @@ function ensureGameReplaysSchema() {
       addColumnIfMissing(columns, "game_replays", "meeple_stats_json", "TEXT");
       addColumnIfMissing(columns, "game_replays", "scoring_json", "TEXT");
       addColumnIfMissing(columns, "game_replays", "player_time_json", "TEXT");
+      [
+        "logs_json",
+        "event_count",
+        "tile_count",
+        "meeple_count",
+        "archive_requested",
+      ].forEach((columnName) => {
+        if (!columns.some((column) => column.name === columnName)) return;
+        db.run(
+          `ALTER TABLE game_replays DROP COLUMN ${quoteSqlIdentifier(columnName)}`,
+          (dropErr) => {
+            if (dropErr) {
+              console.error(`Failed to drop game_replays.${columnName}`, dropErr);
+            }
+          }
+        );
+      });
     });
     db.run(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_game_replays_bga_table_id ON game_replays(bga_table_id)",

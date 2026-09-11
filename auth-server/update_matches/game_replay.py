@@ -32,6 +32,13 @@ SCORE_FEATURE_ALIASES = {
     "roads": ("road", "roads"),
     "monasteries": ("monastery", "monasteries", "cloister", "cloisters", "abbey", "abbeys"),
 }
+LEGACY_GAME_REPLAY_COLUMNS = (
+    "logs_json",
+    "event_count",
+    "tile_count",
+    "meeple_count",
+    "archive_requested",
+)
 
 RequestJson = Callable[..., dict[str, Any]]
 Authenticate = Callable[[], Any]
@@ -58,7 +65,6 @@ def ensure_game_replays_schema(conn: sqlite3.Connection) -> None:
           game_id TEXT PRIMARY KEY,
           bga_table_id TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'pending',
-          logs_json TEXT,
           events_json TEXT,
           players_json TEXT,
           carcassonne_lab_url TEXT,
@@ -66,10 +72,6 @@ def ensure_game_replays_schema(conn: sqlite3.Connection) -> None:
           meeple_stats_json TEXT,
           scoring_json TEXT,
           player_time_json TEXT,
-          event_count INTEGER NOT NULL DEFAULT 0,
-          tile_count INTEGER NOT NULL DEFAULT 0,
-          meeple_count INTEGER NOT NULL DEFAULT 0,
-          archive_requested INTEGER NOT NULL DEFAULT 0,
           fetched_at TEXT,
           last_attempt_at TEXT,
           last_error TEXT,
@@ -97,6 +99,9 @@ def ensure_game_replays_schema(conn: sqlite3.Connection) -> None:
     for column in text_columns:
         if column not in columns:
             conn.execute(f"ALTER TABLE game_replays ADD COLUMN {column} TEXT")
+    for column in LEGACY_GAME_REPLAY_COLUMNS:
+        if column in columns:
+            conn.execute(f"ALTER TABLE game_replays DROP COLUMN {column}")
 
 
 def fetch_and_store_game_replay(
@@ -143,65 +148,43 @@ def fetch_and_store_game_replay(
 
         cached = conn.execute(
             """
-            SELECT game_id, bga_table_id, status, event_count, tile_count,
-                   meeple_count, archive_requested, fetched_at, players_json,
+            SELECT game_id, bga_table_id, status, fetched_at, players_json,
                    carcassonne_lab_url, board_stats_json, meeple_stats_json,
-                   scoring_json, player_time_json, logs_json, events_json
+                   scoring_json, player_time_json, events_json
             FROM game_replays
             WHERE game_id = ?
             """,
             (normalized_game_id,),
         ).fetchone()
         if cached is not None and cached["status"] == "ready" and not force:
-            derived_columns = (
-                "board_stats_json",
-                "meeple_stats_json",
-                "scoring_json",
-                "player_time_json",
+            stored_board_stats = _from_json(cached["board_stats_json"], {})
+            has_compact_board_stats = (
+                isinstance(stored_board_stats, dict)
+                and set(stored_board_stats) == {"width", "height"}
             )
-            if all(cached[column] is not None for column in derived_columns):
+            if has_compact_board_stats:
                 return _summary_from_row(cached, cached=True)
 
-            stored_logs = _from_json(cached["logs_json"], [])
             stored_events = _from_json(cached["events_json"], [])
-            stored_players = _from_json(cached["players_json"], [])
-            if isinstance(stored_logs, list):
-                if not isinstance(stored_events, list) or not stored_events:
-                    stored_events = normalize_replay_events(stored_logs)
-                if not isinstance(stored_players, list) or not stored_players:
-                    stored_players = normalize_replay_players(stored_logs, [], stored_events)
-                _add_player_colors_to_events(stored_events, stored_players)
-                derived_values = {
-                    "board_stats_json": _to_json(build_board_stats(stored_events)),
-                    "meeple_stats_json": _to_json(
-                        build_meeple_stats(stored_events, stored_players, stored_logs)
-                    ),
-                    "scoring_json": _to_json(build_scoring_stats(stored_logs, stored_players)),
-                    "player_time_json": _to_json(build_player_time_stats(stored_logs, stored_players)),
-                }
+            if isinstance(stored_events, list):
+                board_stats_json = _to_json(build_board_stats(stored_events))
                 conn.execute(
                     """
                     UPDATE game_replays
-                    SET board_stats_json = ?,
-                        meeple_stats_json = ?,
-                        scoring_json = ?,
-                        player_time_json = ?,
-                        updated_at = ?
+                    SET board_stats_json = ?, updated_at = ?
                     WHERE game_id = ?
                     """,
                     (
-                        derived_values["board_stats_json"],
-                        derived_values["meeple_stats_json"],
-                        derived_values["scoring_json"],
-                        derived_values["player_time_json"],
+                        board_stats_json,
                         _utc_now(),
                         normalized_game_id,
                     ),
                 )
                 conn.commit()
                 cached_values = dict(cached)
-                cached_values.update(derived_values)
+                cached_values["board_stats_json"] = board_stats_json
                 return _summary_from_row(cached_values, cached=True)
+            return _summary_from_row(cached, cached=True)
 
         attempted_at = _utc_now()
         conn.execute(
@@ -230,7 +213,7 @@ def fetch_and_store_game_replay(
 
     try:
         authenticate()
-        logs, response_players, archive_requested = fetch_bga_replay(
+        logs, response_players = fetch_bga_replay(
             table_id,
             request=request,
             poll_attempts=poll_attempts,
@@ -245,8 +228,6 @@ def fetch_and_store_game_replay(
         meeple_stats = build_meeple_stats(events, players, logs)
         scoring = build_scoring_stats(logs, players)
         player_time = build_player_time_stats(logs, players)
-        tile_count = sum(event["type"] == "playTile" for event in events)
-        meeple_count = sum(event["type"] == "playPartisan" for event in events)
         fetched_at = _utc_now()
 
         with sqlite3.connect(path) as conn:
@@ -255,7 +236,6 @@ def fetch_and_store_game_replay(
                 """
                 UPDATE game_replays
                 SET status = 'ready',
-                    logs_json = ?,
                     events_json = ?,
                     players_json = ?,
                     carcassonne_lab_url = ?,
@@ -263,17 +243,12 @@ def fetch_and_store_game_replay(
                     meeple_stats_json = ?,
                     scoring_json = ?,
                     player_time_json = ?,
-                    event_count = ?,
-                    tile_count = ?,
-                    meeple_count = ?,
-                    archive_requested = ?,
                     fetched_at = ?,
                     last_error = NULL,
                     updated_at = ?
                 WHERE game_id = ?
                 """,
                 (
-                    _to_json(logs),
                     _to_json(events),
                     _to_json(players),
                     carcassonne_lab_url,
@@ -281,10 +256,6 @@ def fetch_and_store_game_replay(
                     _to_json(meeple_stats),
                     _to_json(scoring),
                     _to_json(player_time),
-                    len(events),
-                    tile_count,
-                    meeple_count,
-                    int(archive_requested),
                     fetched_at,
                     fetched_at,
                     normalized_game_id,
@@ -296,16 +267,12 @@ def fetch_and_store_game_replay(
             "game_id": normalized_game_id,
             "bga_table_id": table_id,
             "status": "ready",
-            "event_count": len(events),
-            "tile_count": tile_count,
-            "meeple_count": meeple_count,
             "players": players,
             "carcassonne_lab_url": carcassonne_lab_url,
             "board_stats": board_stats,
             "meeple_stats": meeple_stats,
             "scoring": scoring,
             "player_time": player_time,
-            "archive_requested": archive_requested,
             "fetched_at": fetched_at,
             "cached": False,
         }
@@ -388,12 +355,12 @@ def fetch_bga_replay(
     poll_attempts: int = 10,
     poll_delay: float = 1.0,
     sleep: Sleep = time.sleep,
-) -> tuple[list[Any], Any, bool]:
+) -> tuple[list[Any], Any]:
     params = {"table": table_id, "translated": "true"}
     payload = request(LOGS_PATH, params=params)
     logs = _extract_logs(payload)
     if logs is not None:
-        return logs, _extract_players(payload), False
+        return logs, _extract_players(payload)
 
     error_message = _response_error(payload)
     if MISSING_ARCHIVE_MESSAGE not in error_message:
@@ -411,7 +378,7 @@ def fetch_bga_replay(
         payload = request(LOGS_PATH, params=params)
         logs = _extract_logs(payload)
         if logs is not None:
-            return logs, _extract_players(payload), True
+            return logs, _extract_players(payload)
         last_error = _response_error(payload) or "BGA did not return replay logs yet"
 
     raise BgaReplayError(
@@ -498,11 +465,8 @@ def normalize_replay_events(logs: list[Any]) -> list[dict[str, Any]]:
 
 
 def build_board_stats(events: list[dict[str, Any]]) -> dict[str, Any]:
-    """Build compact board bounds without duplicating the full board per move."""
+    """Return final board dimensions, including the starting tile at (0, 0)."""
     bounds = {"min_x": 0, "max_x": 0, "min_y": 0, "max_y": 0}
-    expansion_events: list[dict[str, Any]] = []
-    placed_tile_count = 0
-    unpositioned_tile_count = 0
 
     for event in events:
         if str(event.get("type") or "") != "playTile":
@@ -510,42 +474,15 @@ def build_board_stats(events: list[dict[str, Any]]) -> dict[str, Any]:
         x = _optional_int(event.get("x"))
         y = _optional_int(event.get("y"))
         if x is None or y is None:
-            unpositioned_tile_count += 1
             continue
-        placed_tile_count += 1
-        previous = dict(bounds)
         bounds["min_x"] = min(bounds["min_x"], x)
         bounds["max_x"] = max(bounds["max_x"], x)
         bounds["min_y"] = min(bounds["min_y"], y)
         bounds["max_y"] = max(bounds["max_y"], y)
-        if bounds != previous:
-            expansion_events.append(
-                {
-                    "move_number": placed_tile_count,
-                    "tile_event_seq": _optional_int(event.get("seq")),
-                    "x": x,
-                    "y": y,
-                    **bounds,
-                    "width": bounds["max_x"] - bounds["min_x"] + 1,
-                    "height": bounds["max_y"] - bounds["min_y"] + 1,
-                }
-            )
 
     return {
-        "starting_tile": {
-            "tile_type": CARCASSONNE_LAB_STARTING_TILE_TYPE,
-            "x": 0,
-            "y": 0,
-        },
-        "placed_tile_count": placed_tile_count,
-        "tile_count_including_start": placed_tile_count + 1,
-        "unpositioned_tile_count": unpositioned_tile_count,
-        "final_bounds": {
-            **bounds,
-            "width": bounds["max_x"] - bounds["min_x"] + 1,
-            "height": bounds["max_y"] - bounds["min_y"] + 1,
-        },
-        "expansion_events": expansion_events,
+        "width": bounds["max_x"] - bounds["min_x"] + 1,
+        "height": bounds["max_y"] - bounds["min_y"] + 1,
     }
 
 
@@ -1450,16 +1387,12 @@ def _summary_from_row(row: sqlite3.Row, *, cached: bool) -> dict[str, Any]:
         "game_id": row["game_id"],
         "bga_table_id": row["bga_table_id"],
         "status": row["status"],
-        "event_count": row["event_count"],
-        "tile_count": row["tile_count"],
-        "meeple_count": row["meeple_count"],
         "players": _from_json(row["players_json"], []),
         "carcassonne_lab_url": row["carcassonne_lab_url"],
         "board_stats": _from_json(row["board_stats_json"], {}),
         "meeple_stats": _from_json(row["meeple_stats_json"], {}),
         "scoring": _from_json(row["scoring_json"], {}),
         "player_time": _from_json(row["player_time_json"], {}),
-        "archive_requested": bool(row["archive_requested"]),
         "fetched_at": row["fetched_at"],
         "cached": cached,
     }

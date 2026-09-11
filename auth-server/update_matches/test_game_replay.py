@@ -9,6 +9,7 @@ from pathlib import Path
 from . import game_replay as game_replay_module
 from .game_replay import (
     ARCHIVE_REQUEST_PATH,
+    LEGACY_GAME_REPLAY_COLUMNS,
     LOGS_PATH,
     BgaReplayError,
     GameNotFoundError,
@@ -59,14 +60,10 @@ class GameReplayTest(unittest.TestCase):
 
         self.assertEqual(auth_calls, ["authenticated"])
         self.assertEqual(result["status"], "ready")
-        self.assertEqual(result["tile_count"], 1)
-        self.assertEqual(result["meeple_count"], 1)
-        self.assertEqual(result["board_stats"]["final_bounds"]["width"], 3)
-        self.assertEqual(result["board_stats"]["final_bounds"]["height"], 4)
+        self.assertEqual(result["board_stats"], {"width": 3, "height": 4})
         self.assertEqual(result["meeple_stats"]["total_placements"], 1)
         self.assertEqual(result["scoring"]["totals"]["cities"], 4)
         self.assertEqual(result["player_time"]["players"][0]["duration_seconds"], 20)
-        self.assertFalse(result["archive_requested"])
         self.assertEqual(result["players"][0]["meeple_color"], "red")
         self.assertEqual(
             result["carcassonne_lab_url"],
@@ -82,6 +79,11 @@ class GameReplayTest(unittest.TestCase):
 
         self.assertEqual(stored["bga_table_id"], "913515989")
         self.assertEqual(stored["status"], "ready")
+        self.assertNotIn("logs_json", stored.keys())
+        self.assertNotIn("event_count", stored.keys())
+        self.assertNotIn("tile_count", stored.keys())
+        self.assertNotIn("meeple_count", stored.keys())
+        self.assertNotIn("archive_requested", stored.keys())
         self.assertEqual(stored["carcassonne_lab_url"], result["carcassonne_lab_url"])
         events = json.loads(stored["events_json"])
         self.assertEqual(
@@ -127,15 +129,8 @@ class GameReplayTest(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            json.loads(stored["board_stats_json"])["final_bounds"],
-            {
-                "min_x": -2,
-                "max_x": 0,
-                "min_y": 0,
-                "max_y": 3,
-                "width": 3,
-                "height": 4,
-            },
+            json.loads(stored["board_stats_json"]),
+            {"width": 3, "height": 4},
         )
         self.assertEqual(json.loads(stored["meeple_stats_json"])["total_placements"], 1)
         self.assertEqual(json.loads(stored["scoring_json"])["totals"]["cities"], 4)
@@ -145,7 +140,7 @@ class GameReplayTest(unittest.TestCase):
         )
         self.assertTrue(any(row[2] == "games" and row[3] == "game_id" for row in foreign_keys))
 
-    def test_builds_board_expansion_history(self) -> None:
+    def test_builds_only_final_board_dimensions(self) -> None:
         board = build_board_stats(
             [
                 {"seq": 1, "type": "playTile", "x": 1, "y": 0},
@@ -154,20 +149,7 @@ class GameReplayTest(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(board["placed_tile_count"], 3)
-        self.assertEqual(board["tile_count_including_start"], 4)
-        self.assertEqual(
-            board["final_bounds"],
-            {
-                "min_x": 0,
-                "max_x": 1,
-                "min_y": -2,
-                "max_y": 0,
-                "width": 2,
-                "height": 3,
-            },
-        )
-        self.assertEqual([event["move_number"] for event in board["expansion_events"]], [1, 2])
+        self.assertEqual(board, {"width": 2, "height": 3})
 
     def test_groups_feature_scores_and_player_turn_time(self) -> None:
         players = [
@@ -337,14 +319,35 @@ class GameReplayTest(unittest.TestCase):
             [{"player_id": "100", "player_name": "Alpha", "meeple_color": None}],
         ))
 
-    def test_existing_replay_table_gets_derived_history_columns(self) -> None:
+    def test_existing_replay_table_gets_derived_columns_and_drops_legacy_columns(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 """
                 CREATE TABLE game_replays (
                   game_id TEXT PRIMARY KEY,
-                  bga_table_id TEXT NOT NULL
+                  bga_table_id TEXT NOT NULL,
+                  status TEXT NOT NULL DEFAULT 'pending',
+                  logs_json TEXT,
+                  events_json TEXT,
+                  players_json TEXT,
+                  event_count INTEGER NOT NULL DEFAULT 0,
+                  tile_count INTEGER NOT NULL DEFAULT 0,
+                  meeple_count INTEGER NOT NULL DEFAULT 0,
+                  archive_requested INTEGER NOT NULL DEFAULT 0,
+                  fetched_at TEXT,
+                  last_attempt_at TEXT,
+                  last_error TEXT,
+                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO game_replays (
+                  game_id, bga_table_id, status, logs_json,
+                  event_count, tile_count, meeple_count, archive_requested
+                ) VALUES ('game-row-1', '913515989', 'ready', '[]', 3, 1, 1, 1)
                 """
             )
             ensure_game_replays_schema(conn)
@@ -362,6 +365,12 @@ class GameReplayTest(unittest.TestCase):
                 "player_time_json",
             }.issubset(columns)
         )
+        self.assertTrue(set(LEGACY_GAME_REPLAY_COLUMNS).isdisjoint(columns))
+        with sqlite3.connect(self.db_path) as conn:
+            migrated = conn.execute(
+                "SELECT game_id, bga_table_id, status FROM game_replays"
+            ).fetchone()
+        self.assertEqual(migrated, ("game-row-1", "913515989", "ready"))
 
     def test_requests_archive_and_polls_until_logs_are_ready(self) -> None:
         calls: list[str] = []
@@ -379,7 +388,7 @@ class GameReplayTest(unittest.TestCase):
             return log_responses.pop(0)
 
         delays: list[float] = []
-        result = fetch_and_store_game_replay(
+        fetch_and_store_game_replay(
             self.db_path,
             "game-row-1",
             request=request,
@@ -394,7 +403,6 @@ class GameReplayTest(unittest.TestCase):
             [LOGS_PATH, ARCHIVE_REQUEST_PATH, LOGS_PATH, LOGS_PATH],
         )
         self.assertEqual(delays, [0.25])
-        self.assertTrue(result["archive_requested"])
 
     def test_bga_error_is_persisted(self) -> None:
         def request(_path, params=None, **_kwargs):
@@ -466,7 +474,41 @@ class GameReplayTest(unittest.TestCase):
         self.assertTrue(result["cached"])
         self.assertEqual(calls, [])
 
-    def test_ready_replay_backfills_derived_history_without_bga_request(self) -> None:
+    def test_ready_replay_compacts_legacy_board_stats_without_bga_request(self) -> None:
+        fetch_and_store_game_replay(
+            self.db_path,
+            "game-row-1",
+            request=lambda *_args, **_kwargs: self._successful_payload(),
+            authenticate=lambda: None,
+        )
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                UPDATE game_replays
+                SET board_stats_json = ?
+                WHERE game_id = 'game-row-1'
+                """,
+                (json.dumps({"final_bounds": {"width": 99, "height": 99}}),),
+            )
+
+        calls: list[str] = []
+        result = fetch_and_store_game_replay(
+            self.db_path,
+            "game-row-1",
+            request=lambda *_args, **_kwargs: calls.append("request"),
+            authenticate=lambda: calls.append("authenticate"),
+        )
+
+        self.assertTrue(result["cached"])
+        self.assertEqual(calls, [])
+        self.assertEqual(result["board_stats"], {"width": 3, "height": 4})
+        with sqlite3.connect(self.db_path) as conn:
+            stored = conn.execute(
+                "SELECT board_stats_json FROM game_replays WHERE game_id = 'game-row-1'"
+            ).fetchone()[0]
+        self.assertEqual(json.loads(stored), {"width": 3, "height": 4})
+
+    def test_ready_replay_does_not_refetch_missing_derived_data_without_force(self) -> None:
         fetch_and_store_game_replay(
             self.db_path,
             "game-row-1",
@@ -495,8 +537,10 @@ class GameReplayTest(unittest.TestCase):
 
         self.assertTrue(result["cached"])
         self.assertEqual(calls, [])
-        self.assertEqual(result["board_stats"]["final_bounds"]["width"], 3)
-        self.assertEqual(result["scoring"]["totals"]["cities"], 4)
+        self.assertEqual(result["board_stats"], {"width": 3, "height": 4})
+        self.assertEqual(result["meeple_stats"], {})
+        self.assertEqual(result["scoring"], {})
+        self.assertEqual(result["player_time"], {})
 
     def test_missing_game_is_rejected(self) -> None:
         with self.assertRaisesRegex(GameNotFoundError, "Game not found"):

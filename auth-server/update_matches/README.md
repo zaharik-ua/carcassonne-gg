@@ -101,16 +101,17 @@ defaults to `auth-server/data/auth.sqlite`. It can also be provided explicitly:
 python3 get_game_replay.py '<games.id>' --db-path /absolute/path/to/auth.sqlite
 ```
 
-`game_replays.logs_json` keeps the original `data.logs` response for later
-parser changes. `events_json` contains ordered `pickTile`, `playTile`, and
-`playPartisan` events. `players_json` contains player ids, names, BGA color hex
-values, and normalized meeple color names (`black`, `blue`, `green`, `red`, or
-`yellow`). `carcassonne_lab_url` contains the encoded CarcassonneLab replay URL
-when all required moves and player colors were found.
+Raw BGA logs are parsed in memory and are not stored. `events_json` contains
+ordered `pickTile`, `playTile`, and `playPartisan` events. `players_json`
+contains player ids, names, BGA color hex values, and normalized meeple color
+names (`black`, `blue`, `green`, `red`, or `yellow`). `carcassonne_lab_url`
+contains the encoded CarcassonneLab replay URL when all required moves and
+player colors were found.
 
 The replay import also stores compact derived history data:
 
-- `board_stats_json`: final board bounds and every move that expanded them;
+- `board_stats_json`: final board `width` and `height`, including the starting
+  tile;
 - `meeple_stats_json`: placements, recovered meeples, and meeples remaining on
   the board, both in total and per player;
 - `scoring_json`: scoring events and totals for fields, cities, roads, and
@@ -120,10 +121,8 @@ The replay import also stores compact derived history data:
   preferred, followed by `gameStateChange.active_player`; `playTile`
   timestamps are the final fallback.
 
-Full board snapshots are intentionally not duplicated after every turn: the
-ordered tile/meeple events together with the stored raw realization events can
-reconstruct any intermediate state, while `board_stats_json` stores the compact
-expansion history.
+The ordered tile/meeple events can reconstruct intermediate board states.
+`board_stats_json` stores only the final dimensions.
 
 Failures are saved as `status = 'error'` with `last_error`.
 
