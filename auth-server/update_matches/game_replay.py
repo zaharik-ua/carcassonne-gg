@@ -12,6 +12,13 @@ from typing import Any
 LOGS_PATH = "/archive/archive/logs.html"
 ARCHIVE_REQUEST_PATH = "/gamereview/gamereview/requestTableArchive.html"
 MISSING_ARCHIVE_MESSAGE = "Cannot find gamenotifs log file"
+MEEPLE_COLOR_NAMES = {
+    "000000": "black",
+    "0000ff": "blue",
+    "008000": "green",
+    "ff0000": "red",
+    "ffa500": "yellow",
+}
 
 RequestJson = Callable[..., dict[str, Any]]
 Authenticate = Callable[[], Any]
@@ -105,7 +112,7 @@ def fetch_and_store_game_replay(
         cached = conn.execute(
             """
             SELECT game_id, bga_table_id, status, event_count, tile_count,
-                   meeple_count, archive_requested, fetched_at
+                   meeple_count, archive_requested, fetched_at, players_json
             FROM game_replays
             WHERE game_id = ?
             """,
@@ -144,7 +151,7 @@ def fetch_and_store_game_replay(
 
     try:
         authenticate()
-        logs, players, archive_requested = fetch_bga_replay(
+        logs, response_players, archive_requested = fetch_bga_replay(
             table_id,
             request=request,
             poll_attempts=poll_attempts,
@@ -152,6 +159,8 @@ def fetch_and_store_game_replay(
             sleep=sleep,
         )
         events = normalize_replay_events(logs)
+        players = normalize_replay_players(logs, response_players, events)
+        _add_player_colors_to_events(events, players)
         tile_count = sum(event["type"] == "playTile" for event in events)
         meeple_count = sum(event["type"] == "playPartisan" for event in events)
         fetched_at = _utc_now()
@@ -196,6 +205,7 @@ def fetch_and_store_game_replay(
             "event_count": len(events),
             "tile_count": tile_count,
             "meeple_count": meeple_count,
+            "players": players,
             "archive_requested": archive_requested,
             "fetched_at": fetched_at,
             "cached": False,
@@ -310,6 +320,108 @@ def normalize_replay_events(logs: list[Any]) -> list[dict[str, Any]]:
     return events
 
 
+def normalize_replay_players(
+    logs: list[Any],
+    response_players: Any,
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    players_by_id: dict[str, dict[str, Any]] = {}
+
+    def add_player(player_id: Any, player_name: Any = None, color: Any = None) -> None:
+        normalized_id = _optional_text(player_id)
+        if not normalized_id:
+            return
+        player = players_by_id.setdefault(
+            normalized_id,
+            {
+                "player_id": normalized_id,
+                "player_name": None,
+                "color_hex": None,
+                "meeple_color": None,
+            },
+        )
+        normalized_name = _optional_text(player_name)
+        if normalized_name:
+            player["player_name"] = normalized_name
+        color_hex = _normalize_color_hex(color)
+        if color_hex:
+            player["color_hex"] = color_hex
+            player["meeple_color"] = MEEPLE_COLOR_NAMES.get(color_hex)
+
+    if isinstance(response_players, dict):
+        for fallback_id, raw_player in response_players.items():
+            if isinstance(raw_player, dict):
+                add_player(
+                    _first_value(raw_player, "player_id", "player", "id") or fallback_id,
+                    _first_value(raw_player, "player_name", "name"),
+                    _first_value(raw_player, "color", "player_color"),
+                )
+            else:
+                add_player(fallback_id, raw_player)
+    elif isinstance(response_players, list):
+        for raw_player in response_players:
+            if not isinstance(raw_player, dict):
+                continue
+            add_player(
+                _first_value(raw_player, "player_id", "player", "id"),
+                _first_value(raw_player, "player_name", "name"),
+                _first_value(raw_player, "color", "player_color"),
+            )
+
+    for event in events:
+        add_player(event.get("player_id"), event.get("player_name"))
+
+    for raw_event in _iter_log_events(logs):
+        if str(raw_event.get("type") or "") != "gameStateChange":
+            continue
+        for state_player in _game_state_players(raw_event.get("args")):
+            add_player(
+                _first_value(state_player, "player_id", "player", "id"),
+                _first_value(state_player, "player_name", "name"),
+                _first_value(state_player, "color", "player_color"),
+            )
+
+    return list(players_by_id.values())
+
+
+def _add_player_colors_to_events(
+    events: list[dict[str, Any]],
+    players: list[dict[str, Any]],
+) -> None:
+    colors_by_id = {
+        str(player["player_id"]): player
+        for player in players
+        if player.get("player_id") and player.get("color_hex")
+    }
+    for event in events:
+        player = colors_by_id.get(str(event.get("player_id") or ""))
+        if not player:
+            continue
+        event["color_hex"] = player["color_hex"]
+        event["meeple_color"] = player["meeple_color"]
+
+
+def _game_state_players(raw_args: Any) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    for outer_args in _event_args(raw_args):
+        result_candidates = [outer_args.get("result")]
+        nested_args = outer_args.get("args")
+        if isinstance(nested_args, dict):
+            result_candidates.append(nested_args.get("result"))
+
+        for result in result_candidates:
+            if isinstance(result, list):
+                found.extend(item for item in result if isinstance(item, dict))
+            elif isinstance(result, dict):
+                for fallback_id, item in result.items():
+                    if not isinstance(item, dict):
+                        continue
+                    if not _first_value(item, "player_id", "player", "id"):
+                        item = {**item, "player_id": fallback_id}
+                    found.append(item)
+    return found
+
+
 def _iter_log_events(logs: list[Any]):
     for line in logs:
         if not isinstance(line, dict):
@@ -385,6 +497,21 @@ def _optional_text(value: Any) -> str | None:
     return text or None
 
 
+def _first_value(source: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = source.get(key)
+        if value is not None and str(value).strip() != "":
+            return value
+    return None
+
+
+def _normalize_color_hex(value: Any) -> str | None:
+    color = str(value or "").strip().lower().removeprefix("#")
+    if len(color) != 6 or any(character not in "0123456789abcdef" for character in color):
+        return None
+    return color
+
+
 def _to_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
@@ -401,7 +528,17 @@ def _summary_from_row(row: sqlite3.Row, *, cached: bool) -> dict[str, Any]:
         "event_count": row["event_count"],
         "tile_count": row["tile_count"],
         "meeple_count": row["meeple_count"],
+        "players": _from_json(row["players_json"], []),
         "archive_requested": bool(row["archive_requested"]),
         "fetched_at": row["fetched_at"],
         "cached": cached,
     }
+
+
+def _from_json(value: Any, default: Any) -> Any:
+    if not isinstance(value, str) or not value:
+        return default
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError):
+        return default

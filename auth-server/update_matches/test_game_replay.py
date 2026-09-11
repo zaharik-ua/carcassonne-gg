@@ -55,6 +55,7 @@ class GameReplayTest(unittest.TestCase):
         self.assertEqual(result["tile_count"], 1)
         self.assertEqual(result["meeple_count"], 1)
         self.assertFalse(result["archive_requested"])
+        self.assertEqual(result["players"][0]["meeple_color"], "red")
 
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -78,11 +79,32 @@ class GameReplayTest(unittest.TestCase):
                 "y": 3,
                 "orientation": 4,
                 "rotation": 3,
+                "color_hex": "ff0000",
+                "meeple_color": "red",
             },
         )
         self.assertEqual(events[1]["position"], 5)
         self.assertEqual(events[1]["player_id"], "100")
         self.assertEqual(events[1]["tile_event_seq"], 1)
+        self.assertEqual(events[1]["meeple_color"], "red")
+        players = json.loads(stored["players_json"])
+        self.assertEqual(
+            players,
+            [
+                {
+                    "player_id": "100",
+                    "player_name": "Alpha",
+                    "color_hex": "ff0000",
+                    "meeple_color": "red",
+                },
+                {
+                    "player_id": "200",
+                    "player_name": "Beta",
+                    "color_hex": "0000ff",
+                    "meeple_color": "blue",
+                },
+            ],
+        )
         self.assertTrue(any(row[2] == "games" and row[3] == "game_id" for row in foreign_keys))
 
     def test_requests_archive_and_polls_until_logs_are_ready(self) -> None:
@@ -169,10 +191,24 @@ class GameReplayTest(unittest.TestCase):
         return {
             "status": 1,
             "data": {
-                "players": {"100": {"name": "Alpha", "color": "ff0000"}},
+                "players": {
+                    "100": {"name": "Alpha"},
+                    "200": {"name": "Beta"},
+                },
                 "logs": [
                     {
                         "data": [
+                            {
+                                "type": "gameStateChange",
+                                "args": {
+                                    "args": {
+                                        "result": [
+                                            {"player": "100", "color": "#ff0000"},
+                                            {"id": "200", "color": "0000ff"},
+                                        ]
+                                    }
+                                },
+                            },
                             {
                                 "type": "playTile",
                                 "args": [

@@ -94,7 +94,9 @@ python3 get_game_replay.py '<games.id>' --db-path /absolute/path/to/auth.sqlite
 
 `game_replays.logs_json` keeps the original `data.logs` response for later
 parser changes. `events_json` contains ordered `playTile` and `playPartisan`
-events. Failures are saved as `status = 'error'` with `last_error`.
+events. `players_json` contains player ids, names, BGA color hex values, and
+normalized meeple color names (`black`, `blue`, `green`, `red`, or `yellow`).
+Failures are saved as `status = 'error'` with `last_error`.
 
 ## Selection rules
 
