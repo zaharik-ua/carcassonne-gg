@@ -303,8 +303,8 @@ class GameReplayTest(unittest.TestCase):
         self.assertIsNotNone(url)
         self.assertIn("?players=Beta%20Player,Alpha&colors=blue,red", url)
 
-    def test_lab_url_is_not_created_when_a_player_color_is_missing(self) -> None:
-        self.assertIsNone(build_carcassonne_lab_url(
+    def test_lab_url_uses_red_and_green_when_player_colors_are_missing(self) -> None:
+        url = build_carcassonne_lab_url(
             [
                 {
                     "type": "playTile",
@@ -314,10 +314,25 @@ class GameReplayTest(unittest.TestCase):
                     "x": 0,
                     "y": 1,
                     "rotation": 0,
+                },
+                {
+                    "type": "playTile",
+                    "player_id": "200",
+                    "player_name": "Beta",
+                    "tile_type": 4,
+                    "x": 0,
+                    "y": 2,
+                    "rotation": 1,
                 }
             ],
-            [{"player_id": "100", "player_name": "Alpha", "meeple_color": None}],
-        ))
+            [
+                {"player_id": "100", "player_name": "Alpha", "meeple_color": None},
+                {"player_id": "200", "player_name": "Beta", "meeple_color": None},
+            ],
+        )
+
+        self.assertIsNotNone(url)
+        self.assertTrue(url.endswith("?players=Alpha,Beta&colors=red,green"))
 
     def test_existing_replay_table_gets_derived_columns_and_drops_legacy_columns(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
@@ -507,6 +522,50 @@ class GameReplayTest(unittest.TestCase):
                 "SELECT board_stats_json FROM game_replays WHERE game_id = 'game-row-1'"
             ).fetchone()[0]
         self.assertEqual(json.loads(stored), {"width": 3, "height": 4})
+
+    def test_ready_replay_builds_missing_lab_url_without_bga_request(self) -> None:
+        fetch_and_store_game_replay(
+            self.db_path,
+            "game-row-1",
+            request=lambda *_args, **_kwargs: self._successful_payload(),
+            authenticate=lambda: None,
+        )
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                UPDATE game_replays
+                SET carcassonne_lab_url = NULL,
+                    players_json = ?
+                WHERE game_id = 'game-row-1'
+                """,
+                (json.dumps([
+                    {
+                        "player_id": "100",
+                        "player_name": "Alpha",
+                        "color_hex": None,
+                        "meeple_color": None,
+                    }
+                ]),),
+            )
+
+        calls: list[str] = []
+        result = fetch_and_store_game_replay(
+            self.db_path,
+            "game-row-1",
+            request=lambda *_args, **_kwargs: calls.append("request"),
+            authenticate=lambda: calls.append("authenticate"),
+        )
+
+        self.assertTrue(result["cached"])
+        self.assertEqual(calls, [])
+        self.assertTrue(result["carcassonne_lab_url"].endswith(
+            "?players=Alpha&colors=red"
+        ))
+        with sqlite3.connect(self.db_path) as conn:
+            stored = conn.execute(
+                "SELECT carcassonne_lab_url FROM game_replays WHERE game_id = 'game-row-1'"
+            ).fetchone()[0]
+        self.assertEqual(stored, result["carcassonne_lab_url"])
 
     def test_ready_replay_does_not_refetch_missing_derived_data_without_force(self) -> None:
         fetch_and_store_game_replay(

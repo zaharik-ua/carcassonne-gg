@@ -19,6 +19,7 @@ CARCASSONNE_LAB_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrst
 CARCASSONNE_LAB_BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 CARCASSONNE_LAB_TILE_TYPE_BASE = 24
 CARCASSONNE_LAB_STARTING_TILE_TYPE = 15
+CARCASSONNE_LAB_FALLBACK_COLORS = ("red", "green")
 MEEPLE_COLOR_NAMES = {
     "000000": "black",
     "0000ff": "blue",
@@ -157,34 +158,54 @@ def fetch_and_store_game_replay(
             (normalized_game_id,),
         ).fetchone()
         if cached is not None and cached["status"] == "ready" and not force:
+            cached_values = dict(cached)
             stored_board_stats = _from_json(cached["board_stats_json"], {})
             has_compact_board_stats = (
                 isinstance(stored_board_stats, dict)
                 and set(stored_board_stats) == {"width", "height"}
             )
-            if has_compact_board_stats:
-                return _summary_from_row(cached, cached=True)
-
             stored_events = _from_json(cached["events_json"], [])
-            if isinstance(stored_events, list):
-                board_stats_json = _to_json(build_board_stats(stored_events))
+            stored_players = _from_json(cached["players_json"], [])
+            needs_update = False
+
+            if not has_compact_board_stats and isinstance(stored_events, list):
+                cached_values["board_stats_json"] = _to_json(
+                    build_board_stats(stored_events)
+                )
+                needs_update = True
+
+            if (
+                not _optional_text(cached["carcassonne_lab_url"])
+                and isinstance(stored_events, list)
+                and isinstance(stored_players, list)
+            ):
+                carcassonne_lab_url = build_carcassonne_lab_url(
+                    stored_events,
+                    stored_players,
+                )
+                if carcassonne_lab_url:
+                    cached_values["carcassonne_lab_url"] = carcassonne_lab_url
+                    needs_update = True
+
+            if needs_update:
                 conn.execute(
                     """
                     UPDATE game_replays
-                    SET board_stats_json = ?, updated_at = ?
+                    SET board_stats_json = ?,
+                        carcassonne_lab_url = ?,
+                        updated_at = ?
                     WHERE game_id = ?
                     """,
                     (
-                        board_stats_json,
+                        cached_values["board_stats_json"],
+                        cached_values["carcassonne_lab_url"],
                         _utc_now(),
                         normalized_game_id,
                     ),
                 )
                 conn.commit()
-                cached_values = dict(cached)
-                cached_values["board_stats_json"] = board_stats_json
-                return _summary_from_row(cached_values, cached=True)
-            return _summary_from_row(cached, cached=True)
+
+            return _summary_from_row(cached_values, cached=True)
 
         attempted_at = _utc_now()
         conn.execute(
@@ -939,6 +960,8 @@ def build_carcassonne_lab_url(
                 or player_id
             )
             player_color = _optional_text(details.get("meeple_color"))
+            if not player_color and len(player_ids) < len(CARCASSONNE_LAB_FALLBACK_COLORS):
+                player_color = CARCASSONNE_LAB_FALLBACK_COLORS[len(player_ids)]
             if not player_color:
                 return None
             player_ids.append(player_id)

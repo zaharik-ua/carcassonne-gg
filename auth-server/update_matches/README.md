@@ -113,7 +113,9 @@ ordered `pickTile`, `playTile`, and `playPartisan` events. `players_json`
 contains player ids, names, BGA color hex values, and normalized meeple color
 names (`black`, `blue`, `green`, `red`, or `yellow`). `carcassonne_lab_url`
 contains the encoded CarcassonneLab replay URL when all required moves and
-player colors were found.
+player ids were found. If BGA does not provide colors, the URL uses `red` and
+`green` in first-move player order; the unknown fields in `players_json` remain
+`null`.
 
 The replay import also stores compact derived history data:
 
