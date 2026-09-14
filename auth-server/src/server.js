@@ -444,6 +444,7 @@ const TOURNAMENT_LINEUP_SIZE_TYPES = {
   FIXED: 1,
   FLEXIBLE: 2,
 };
+const DEFAULT_TOURNAMENT_TEAM_SIZE = 10;
 const TOURNAMENT_FORMATS = ["Free Play", "1 Stage", "2 Stages", "3 Stages", "Leagues"];
 const TOURNAMENT_STAGE_FORMATS = [
   "Round-robin",
@@ -3066,6 +3067,16 @@ function normalizeTournamentLineupSize(value) {
   return Number.isInteger(normalized) && normalized > 0 ? normalized : null;
 }
 
+function isValidTournamentTeamSize(value) {
+  const normalized = Number(value);
+  return Number.isInteger(normalized) && normalized > 0;
+}
+
+function normalizeTournamentTeamSize(value, fallback = DEFAULT_TOURNAMENT_TEAM_SIZE) {
+  if (isValidTournamentTeamSize(value)) return Number(value);
+  return isValidTournamentTeamSize(fallback) ? Number(fallback) : DEFAULT_TOURNAMENT_TEAM_SIZE;
+}
+
 function normalizeTournamentFormat(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
   return TOURNAMENT_FORMATS.find((format) => format.toLowerCase() === normalized)
@@ -3168,6 +3179,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
         t.lineup_size,
+        COALESCE(t.team_size, 10) AS team_size,
         t.tournament_format,
         COALESCE(t.stage1_groups, 0) AS stage1_groups,
         t.stage1_format,
@@ -3296,6 +3308,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
         lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
         lineup_size: normalizeTournamentLineupSize(row.lineup_size),
+        team_size: normalizeTournamentTeamSize(row.team_size),
         tournament_format: normalizeTournamentFormat(row.tournament_format),
         stage1_groups: normalizeBooleanInt(row.stage1_groups) === 1,
         stage1_format: normalizeTournamentStageFormat(row.stage1_format),
@@ -3459,6 +3472,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         COALESCE(NULLIF(trim(player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(lineup_size_type, ?) AS lineup_size_type,
         lineup_size,
+        COALESCE(team_size, 10) AS team_size,
         tournament_format,
         COALESCE(stage1_groups, 0) AS stage1_groups,
         stage1_format,
@@ -3504,6 +3518,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
         lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
         lineup_size: normalizeTournamentLineupSize(row.lineup_size),
+        team_size: normalizeTournamentTeamSize(row.team_size),
         tournament_format: normalizeTournamentFormat(row.tournament_format),
         stage1_groups: normalizeBooleanInt(row.stage1_groups) === 1,
         stage1_format: normalizeTournamentStageFormat(row.stage1_format),
@@ -6467,6 +6482,7 @@ function ensureTournamentsSchema() {
       player_hub_visibility TEXT NOT NULL DEFAULT 'Visible',
       lineup_size_type INTEGER NOT NULL DEFAULT 2,
       lineup_size INTEGER,
+      team_size INTEGER NOT NULL DEFAULT 10 CHECK (team_size > 0),
       tournament_format TEXT NOT NULL DEFAULT 'Free Play',
       stage1_groups BOOLEAN NOT NULL DEFAULT 0 CHECK (stage1_groups IN (0, 1)),
       stage1_format TEXT NOT NULL DEFAULT '',
@@ -6507,6 +6523,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "player_hub_visibility", "TEXT NOT NULL DEFAULT 'Visible'");
       addColumnIfMissing(columns, "tournaments", "lineup_size_type", "INTEGER NOT NULL DEFAULT 2");
       addColumnIfMissing(columns, "tournaments", "lineup_size", "INTEGER");
+      addColumnIfMissing(columns, "tournaments", "team_size", "INTEGER NOT NULL DEFAULT 10 CHECK (team_size > 0)");
       addColumnIfMissing(columns, "tournaments", "tournament_format", "TEXT NOT NULL DEFAULT 'Free Play'");
       addColumnIfMissing(columns, "tournaments", "stage1_groups", "BOOLEAN NOT NULL DEFAULT 0");
       addColumnIfMissing(columns, "tournaments", "stage1_format", "TEXT NOT NULL DEFAULT ''");
@@ -6554,6 +6571,10 @@ function ensureTournamentsSchema() {
             player_hub_visibility = CASE
               WHEN lower(trim(COALESCE(player_hub_visibility, ''))) = 'hidden' THEN 'Hidden'
               ELSE 'Visible'
+            END,
+            team_size = CASE
+              WHEN CAST(COALESCE(team_size, 0) AS INTEGER) > 0 THEN CAST(team_size AS INTEGER)
+              ELSE 10
             END,
             tournament_format = CASE lower(trim(COALESCE(tournament_format, '')))
               WHEN 'free play' THEN 'Free Play'
@@ -13806,6 +13827,7 @@ app.get("/tournaments", (req, res, next) => {
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
         t.lineup_size,
+        COALESCE(t.team_size, 10) AS team_size,
         t.tournament_format,
         COALESCE(t.stage1_groups, 0) AS stage1_groups,
         t.stage1_format,
@@ -13991,6 +14013,7 @@ app.get("/tournaments", (req, res, next) => {
                 player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
                 lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
                 lineup_size: normalizeTournamentLineupSize(row.lineup_size),
+                team_size: normalizeTournamentTeamSize(row.team_size),
                 tournament_format: normalizeTournamentFormat(row.tournament_format),
                 stage1_groups: normalizeBooleanInt(row.stage1_groups) === 1,
                 stage1_format: normalizeTournamentStageFormat(row.stage1_format),
@@ -14061,6 +14084,8 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
     : null;
+  const hasTeamSize = Object.prototype.hasOwnProperty.call(req.body || {}, "team_size");
+  const teamSize = normalizeTournamentTeamSize(req.body?.team_size);
   const {
     tournamentFormat,
     stage1Groups,
@@ -14088,6 +14113,9 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   }
   if (lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED && !lineupSize) {
     return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
+  }
+  if (hasTeamSize && !isValidTournamentTeamSize(req.body?.team_size)) {
+    return res.status(400).json({ ok: false, message: "team_size must be a positive integer" });
   }
   if (
     requestedCategory
@@ -14142,6 +14170,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   player_hub_visibility,
                   lineup_size_type,
                   lineup_size,
+                  team_size,
                   tournament_format,
                   stage1_groups,
                   stage1_format,
@@ -14153,7 +14182,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
               [
                 id,
@@ -14173,6 +14202,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                 playerHubVisibility,
                 lineupSizeType,
                 lineupSize,
+                teamSize,
                 tournamentFormat,
                 stage1Groups,
                 stage1Format,
@@ -14239,6 +14269,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
   const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
     : null;
+  const hasTeamSizeUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, "team_size");
   const canManageAccessUsers = canManageTournamentAccessUsers(req.user);
   const includesAccessUsersUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, "access_users")
     || Object.prototype.hasOwnProperty.call(req.body || {}, "access_user_ids");
@@ -14276,6 +14307,9 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
   if (lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED && !lineupSize) {
     return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
   }
+  if (hasTeamSizeUpdate && !isValidTournamentTeamSize(req.body?.team_size)) {
+    return res.status(400).json({ ok: false, message: "team_size must be a positive integer" });
+  }
   if (
     requestedCategory
     && (tournamentType === TOURNAMENT_TYPES.INDIVIDUALS || tournamentType === TOURNAMENT_TYPES.TEAMS)
@@ -14294,6 +14328,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
         COALESCE(ranking, 1) AS ranking,
         about,
         rules,
+        COALESCE(team_size, 10) AS team_size,
         tournament_format,
         COALESCE(stage1_groups, 0) AS stage1_groups,
         stage1_format,
@@ -14321,6 +14356,9 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
       // The compact admin editor does not send the rich-text fields managed in My Tournaments.
       const about = resolveTournamentTextPatch(req.body, currentRow, "about");
       const rules = resolveTournamentTextPatch(req.body, currentRow, "rules");
+      const teamSize = normalizeTournamentTeamSize(
+        hasTeamSizeUpdate ? req.body.team_size : currentRow.team_size
+      );
       const standingsScoring = normalizeStandingsScoring(
         req.body?.standings_scoring ?? currentRow.standings_scoring
       );
@@ -14379,6 +14417,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                   player_hub_visibility = ?,
                   lineup_size_type = ?,
                   lineup_size = ?,
+                  team_size = ?,
                   tournament_format = ?,
                   stage1_groups = ?,
                   stage1_format = ?,
@@ -14408,6 +14447,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                 playerHubVisibility,
                 lineupSizeType,
                 lineupSize,
+                teamSize,
                 tournamentFormat,
                 stage1Groups,
                 stage1Format,
@@ -15094,8 +15134,12 @@ app.put("/tournament-players", requireAuthenticated, async (req, res) => {
       ...(captainId ? [captainId] : []),
       ...normalizedRequestedIds.filter((playerId) => playerId !== captainId),
     ];
-    if (playerIds.length > 10) {
-      return res.status(400).json({ ok: false, message: "A team can have at most 10 players" });
+    const teamSize = normalizeTournamentTeamSize(access.tournament?.team_size);
+    if (playerIds.length > teamSize) {
+      return res.status(400).json({
+        ok: false,
+        message: `A team can have at most ${teamSize} players`,
+      });
     }
 
     if (playerIds.length) {

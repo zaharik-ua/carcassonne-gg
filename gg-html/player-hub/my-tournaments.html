@@ -7899,6 +7899,11 @@
       tournament?.team_type || "National",
       { selectOptions: ["National", "Club"] }
     );
+    const teamSizeField = createTournamentFormRow(
+      "Team size",
+      tournament?.team_size ?? 10,
+      { type: "number", min: 1, step: 1 }
+    );
     const categoryField = createTournamentFormRow(
       "Category",
       tournament?.category || "",
@@ -8002,6 +8007,7 @@
       linkField,
       tournamentTypeField,
       teamTypeField,
+      teamSizeField,
       categoryField,
       subtypeField,
       visibilityField,
@@ -8083,6 +8089,7 @@
       const savedWithBountyTpr = String(tournament?.standings_scoring || "").trim().toLowerCase() === "bounty_tpr";
 
       teamTypeField.row.classList.toggle("cp-hidden", !isTeams);
+      teamSizeField.row.classList.toggle("cp-hidden", !isTeams);
       subtypeField.row.classList.toggle("cp-hidden", !isTeams);
       categoryField.row.classList.toggle("cp-hidden", !supportsCategory);
       challengePeriodsSection.classList.toggle("cp-hidden", !supportsCategory || !isRivalsCategory);
@@ -8100,6 +8107,7 @@
       recalculateButton.classList.toggle("cp-hidden", !savedWithBountyTpr && !hasStage1Standings);
 
       teamTypeField.input.disabled = isBusy || !isTeams;
+      teamSizeField.input.disabled = isBusy || !isTeams;
       subtypeField.input.disabled = isBusy || !isTeams;
       categoryField.input.disabled = isBusy || !supportsCategory;
       lineupSizeTypeField.input.disabled = isBusy || !supportsLineup;
@@ -8117,6 +8125,7 @@
       stage2FormatField.input.disabled = isBusy || !hasStage2;
       recalculateButton.disabled = isBusy || (!savedWithBountyTpr && !hasStage1Standings);
       lineupSizeField.input.required = supportsLineup && isFixedLineup;
+      teamSizeField.input.required = isTeams;
       accessUsersEditor.setOfficial(isOfficial);
       accessUsersEditor.setDisabled(isBusy || !canManageAccessUsers);
       tournamentTeamsEditor.setTeamType(teamTypeField.input.value);
@@ -8194,6 +8203,7 @@
         && ["Round-robin", "Swiss"].includes(stage1FormatField.input.value);
       const lineupSizeType = supportsLineup && lineupSizeTypeField.input.value === "1" ? 1 : 2;
       const lineupSize = Number.parseInt(lineupSizeField.input.value, 10);
+      const teamSize = Number(teamSizeField.input.value);
       const payload = {
         id: tournamentId,
         name: String(nameField.input.value || "").trim(),
@@ -8207,6 +8217,7 @@
         player_hub_visibility: visibilityField.input.value,
         lineup_size_type: lineupSizeType,
         lineup_size: lineupSizeType === 1 ? lineupSize : null,
+        team_size: teamSize,
         tournament_format: tournamentFormat,
         standings_scoring: standingsScoringField.input.value,
         tpr_target_games: Number.parseInt(tprTargetGamesField.input.value, 10),
@@ -8232,6 +8243,10 @@
       }
       if (lineupSizeType === 1 && (!Number.isInteger(lineupSize) || lineupSize <= 0)) {
         setStatus("Lineup size must be a positive integer.");
+        return;
+      }
+      if (isTeams && (!Number.isInteger(teamSize) || teamSize <= 0)) {
+        setStatus("Team size must be a positive integer.");
         return;
       }
       if (

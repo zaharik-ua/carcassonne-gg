@@ -2657,10 +2657,16 @@
     return wrap;
   }
 
+  function getTournamentTeamSize(value) {
+    const size = Number(value);
+    return Number.isInteger(size) && size > 0 ? size : 10;
+  }
+
   function openManageTournamentTeamModal(team, allProfiles, tournamentId) {
     const teamId = normalizeCode(team?.team_id);
     const teamName = String(team?.team_name || teamId || "Team").trim();
     const captainId = String(team?.captain_id || "").trim();
+    const maxPlayers = getTournamentTeamSize(team?.team_size);
     const initialPlayers = Array.isArray(team?.players) ? team.players : [];
     const initialPlayerIds = initialPlayers
       .map((player) => String(player?.player_id || player?.id || "").trim())
@@ -2668,8 +2674,8 @@
     let selectedIds = [
       ...(captainId ? [captainId] : []),
       ...initialPlayerIds.filter((playerId) => playerId !== captainId),
-    ].slice(0, 10);
-    while (selectedIds.length < 10) selectedIds.push("");
+    ].slice(0, maxPlayers);
+    while (selectedIds.length < maxPlayers) selectedIds.push("");
 
     const overlay = document.createElement("div");
     overlay.className = "cp-team-modal-overlay";
@@ -2854,22 +2860,20 @@
     return row;
   }
 
-  function renderTournamentPlayersSection(team, allProfiles, tournamentId, options = {}) {
+  function renderTournamentPlayersSection(team, allProfiles, tournamentId) {
     const section = document.createElement("div");
     section.className = "captain-section-shell";
     const header = document.createElement("div");
     header.className = "cp-team-section-head";
     header.appendChild(renderSectionTitle(`Players: ${String(team?.team_name || team?.team_id || "Team").trim()}`));
-    if (options.isGlobalAdmin === true) {
-      const manageButton = document.createElement("button");
-      manageButton.type = "button";
-      manageButton.className = "cp-edit-btn";
-      manageButton.textContent = "Manage team";
-      manageButton.addEventListener("click", () => {
-        openManageTournamentTeamModal(team, allProfiles, tournamentId);
-      });
-      header.appendChild(manageButton);
-    }
+    const manageButton = document.createElement("button");
+    manageButton.type = "button";
+    manageButton.className = "cp-edit-btn";
+    manageButton.textContent = "Manage team";
+    manageButton.addEventListener("click", () => {
+      openManageTournamentTeamModal(team, allProfiles, tournamentId);
+    });
+    header.appendChild(manageButton);
     section.appendChild(header);
 
     const list = document.createElement("div");
@@ -4696,10 +4700,9 @@
     const tournamentTeams = Array.isArray(options.tournamentTeams) ? options.tournamentTeams : [];
     tournamentTeams.forEach((team) => {
       contentEl.appendChild(renderTournamentPlayersSection(
-        team,
+        { ...team, team_size: options.teamSize },
         Array.isArray(options.allProfiles) ? options.allProfiles : [],
-        String(options.tournamentId || "").trim(),
-        { isGlobalAdmin: options.isGlobalAdmin === true }
+        String(options.tournamentId || "").trim()
       ));
     });
   }
@@ -8666,7 +8669,7 @@
           tournamentTeams: tournamentTeamsWithPlayers,
           allProfiles,
           tournamentId: String(currentTournament?.id || requestedTournamentId || "").trim(),
-          isGlobalAdmin: isAdminUser,
+          teamSize: currentTournament?.team_size,
           emptyMatchesMessage: currentTournamentAccess.accessType === "Official"
             ? "No matches found for this tournament."
             : isAdminErrorMatchesFilter
