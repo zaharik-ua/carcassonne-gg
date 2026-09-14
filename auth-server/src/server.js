@@ -76,6 +76,7 @@ import {
   didRankedDuelTransitionToDone,
   isCompletedRankedDuel,
 } from "./profile-gg-elo-trigger.js";
+import { resolveTournamentTextPatch } from "./tournament-update.js";
 
 dotenv.config();
 
@@ -342,6 +343,7 @@ const MATCH_AUDIT_FIELDS = [
   "round_short_name",
   "match_short_name",
   "third_place_match",
+  "main_event",
   "knockout_id",
   "next_game_win",
   "next_game_lose",
@@ -5320,6 +5322,7 @@ function ensureMatchesSchema() {
       addColumnIfMissing(currentColumns, "matches", "round_short_name", "TEXT");
       addColumnIfMissing(currentColumns, "matches", "match_short_name", "TEXT");
       addColumnIfMissing(currentColumns, "matches", "third_place_match", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "main_event", "INTEGER NOT NULL DEFAULT 0 CHECK (main_event IN (0, 1))");
       addColumnIfMissing(currentColumns, "matches", "knockout_id", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "next_game_win", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "next_game_lose", "INTEGER");
@@ -5382,6 +5385,7 @@ function ensureMatchesSchema() {
           round_short_name TEXT,
           match_short_name TEXT,
           third_place_match INTEGER,
+          main_event INTEGER NOT NULL DEFAULT 0 CHECK (main_event IN (0, 1)),
           knockout_id INTEGER,
           next_game_win INTEGER,
           next_game_lose INTEGER,
@@ -5431,6 +5435,7 @@ function ensureMatchesSchema() {
           round_short_name,
           match_short_name,
           third_place_match,
+          main_event,
           knockout_id,
           next_game_win,
           next_game_lose,
@@ -5480,6 +5485,7 @@ function ensureMatchesSchema() {
           ${selectExpr("round_short_name")},
           ${selectExpr("match_short_name")},
           ${selectExpr("third_place_match")},
+          ${selectExpr("main_event", "0")},
           ${selectExpr("knockout_id")},
           ${selectExpr("next_game_win")},
           ${selectExpr("next_game_lose")},
@@ -14194,8 +14200,6 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
   const link = String(req.body?.link || "").trim() || null;
   const requestedRanking = req.body?.ranking;
   const isTest = normalizeBooleanInt(req.body?.is_test);
-  const about = String(req.body?.about || "").trim() || null;
-  const rules = String(req.body?.rules || "").trim() || null;
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
   const requestedTeamType = normalizeNullableText(req.body?.team_type);
   const requestedCategory = normalizeCategoryName(req.body?.category);
@@ -14247,6 +14251,8 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
         id,
         team_type,
         COALESCE(ranking, 1) AS ranking,
+        about,
+        rules,
         tournament_format,
         COALESCE(stage1_groups, 0) AS stage1_groups,
         stage1_format,
@@ -14271,6 +14277,9 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
       const ranking = requestedRanking === undefined
         ? normalizeBooleanInt(currentRow.ranking)
         : normalizeBooleanInt(requestedRanking);
+      // The compact admin editor does not send the rich-text fields managed in My Tournaments.
+      const about = resolveTournamentTextPatch(req.body, currentRow, "about");
+      const rules = resolveTournamentTextPatch(req.body, currentRow, "rules");
       const standingsScoring = normalizeStandingsScoring(
         req.body?.standings_scoring ?? currentRow.standings_scoring
       );
@@ -20115,6 +20124,7 @@ app.get("/matches", (req, res, next) => {
         m.round_short_name,
         m.match_short_name,
         m.third_place_match,
+        COALESCE(m.main_event, 0) AS main_event,
         m.knockout_id,
         m.next_game_win,
         m.next_game_lose,
@@ -20276,6 +20286,7 @@ app.get("/matches", (req, res, next) => {
           round_short_name: row.round_short_name,
           match_short_name: row.match_short_name,
           third_place_match: row.third_place_match,
+          main_event: normalizeBooleanInt(row.main_event) === 1,
           knockout_id: row.knockout_id,
           next_game_win: row.next_game_win,
           next_game_lose: row.next_game_lose,
@@ -20320,6 +20331,7 @@ app.get("/matches", (req, res, next) => {
         m.round_short_name,
         m.match_short_name,
         m.third_place_match,
+        COALESCE(m.main_event, 0) AS main_event,
         m.knockout_id,
         m.next_game_win,
         m.next_game_lose,
@@ -20454,6 +20466,7 @@ app.get("/matches", (req, res, next) => {
         round_short_name: row.round_short_name,
         match_short_name: row.match_short_name,
         third_place_match: row.third_place_match,
+        main_event: normalizeBooleanInt(row.main_event) === 1,
         knockout_id: row.knockout_id,
         next_game_win: row.next_game_win,
         next_game_lose: row.next_game_lose,
@@ -20621,6 +20634,7 @@ function publicMainPageMatchesHandler(req, res, next) {
         m.round_short_name,
         m.match_short_name,
         m.third_place_match,
+        COALESCE(m.main_event, 0) AS main_event,
         m.knockout_id,
         m.next_game_win,
         m.next_game_lose,
@@ -20868,6 +20882,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 match_short_name: row.match_short_name,
                 round: buildRoundLabel(row),
                 third_place_match: row.third_place_match,
+                main_event: normalizeBooleanInt(row.main_event) === 1,
                 knockout_stage: Number(row.third_place_match) ? "third_place" : "",
                 knockout_id: row.knockout_id,
                 next_game_win: row.next_game_win,
@@ -23007,6 +23022,7 @@ app.post("/matches", (req, res) => {
   const roundShortName = normalizeText(payload.round_short_name);
   const matchShortName = normalizeText(payload.match_short_name);
   const thirdPlaceMatch = parseBooleanInteger(payload.third_place_match);
+  const mainEvent = parseBooleanInteger(payload.main_event);
   const team1LineupAdded = 0;
   const team2LineupAdded = 0;
   const knockoutId = parseIntOrNull(payload.knockout_id);
@@ -23101,6 +23117,7 @@ app.post("/matches", (req, res) => {
                 round_short_name = ?,
                 match_short_name = ?,
                 third_place_match = ?,
+                main_event = ?,
                 knockout_id = ?,
                 next_game_win = ?,
                 next_game_lose = ?,
@@ -23138,6 +23155,7 @@ app.post("/matches", (req, res) => {
               roundShortName,
               matchShortName,
               thirdPlaceMatch,
+              mainEvent,
               knockoutId,
               nextGameWin,
               nextGameLose,
@@ -23196,6 +23214,7 @@ app.post("/matches", (req, res) => {
                       round_short_name,
                       match_short_name,
                       third_place_match,
+                      main_event,
                       knockout_id,
                       next_game_win,
                       next_game_lose,
@@ -23261,6 +23280,7 @@ app.post("/matches", (req, res) => {
             round_short_name,
             match_short_name,
             third_place_match,
+            main_event,
             knockout_id,
             next_game_win,
             next_game_lose,
@@ -23270,7 +23290,7 @@ app.post("/matches", (req, res) => {
             created_by,
             updated_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           matchId,
@@ -23298,6 +23318,7 @@ app.post("/matches", (req, res) => {
           roundShortName,
           matchShortName,
           thirdPlaceMatch,
+          mainEvent,
           knockoutId,
           nextGameWin,
           nextGameLose,
@@ -23348,6 +23369,7 @@ app.post("/matches", (req, res) => {
                 round_short_name,
                 match_short_name,
                 third_place_match,
+                main_event,
                 knockout_id,
                 next_game_win,
                 next_game_lose,
@@ -23468,6 +23490,7 @@ app.patch("/matches/:id", (req, res) => {
         round_short_name,
         match_short_name,
         third_place_match,
+        main_event,
         knockout_id,
         next_game_win,
         next_game_lose,
@@ -23595,6 +23618,9 @@ app.patch("/matches/:id", (req, res) => {
       const roundShortName = normalizeText(payload.round_short_name);
       const matchShortName = normalizeText(payload.match_short_name);
       const thirdPlaceMatch = parseBooleanInteger(payload.third_place_match);
+      const mainEvent = Object.prototype.hasOwnProperty.call(payload, "main_event")
+        ? parseBooleanInteger(payload.main_event)
+        : parseBooleanInteger(existingRow.main_event);
       const team1LineupAdded = parseBooleanInteger(existingRow.team_1_lineup_added);
       const team2LineupAdded = parseBooleanInteger(existingRow.team_2_lineup_added);
       const knockoutId = parseIntOrNull(payload.knockout_id);
@@ -23645,6 +23671,7 @@ app.patch("/matches/:id", (req, res) => {
             round_short_name = ?,
             match_short_name = ?,
             third_place_match = ?,
+            main_event = ?,
             knockout_id = ?,
             next_game_win = ?,
             next_game_lose = ?,
@@ -23685,6 +23712,7 @@ app.patch("/matches/:id", (req, res) => {
           roundShortName,
           matchShortName,
           thirdPlaceMatch,
+          mainEvent,
           knockoutId,
           nextGameWin,
           nextGameLose,
@@ -23778,6 +23806,7 @@ app.patch("/matches/:id", (req, res) => {
                   round_short_name,
                   match_short_name,
                   third_place_match,
+                  main_event,
                   knockout_id,
                   next_game_win,
                   next_game_lose,

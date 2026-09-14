@@ -4829,6 +4829,7 @@
           round_short_name: "",
           match_short_name: "",
           third_place_match: 0,
+          main_event: 0,
           knockout_id: null,
           next_game_win: null,
           next_game_lose: null,
@@ -5274,6 +5275,13 @@
     const thirdPlaceMatchControl = document.createElement("label");
     thirdPlaceMatchControl.className = "cp-edit-checkbox";
     thirdPlaceMatchControl.appendChild(thirdPlaceMatchInput);
+    const mainEventInput = document.createElement("input");
+    mainEventInput.type = "checkbox";
+    mainEventInput.checked = ["1", "true", "yes"].includes(String(source?.main_event ?? "").trim().toLowerCase());
+    mainEventInput.setAttribute("aria-label", "Main Event");
+    const mainEventControl = document.createElement("label");
+    mainEventControl.className = "cp-edit-checkbox";
+    mainEventControl.appendChild(mainEventInput);
     const team1LineupAddedInput = document.createElement("input");
     team1LineupAddedInput.type = "checkbox";
     team1LineupAddedInput.checked = ["1", "true", "yes"].includes(String(source?.team_1_lineup_added ?? "").trim().toLowerCase());
@@ -5322,6 +5330,7 @@
     addRowTo(advancedFieldsWrap, "Round Short Name", roundShortNameInput);
     addRowTo(advancedFieldsWrap, "Match Short Name", matchShortNameInput);
     addRowTo(advancedFieldsWrap, "Third Place Match", thirdPlaceMatchControl);
+    addRowTo(advancedFieldsWrap, "Main Event", mainEventControl);
     addRowTo(advancedFieldsWrap, "Team 1 Lineup Added", team1LineupAddedControl);
     addRowTo(advancedFieldsWrap, "Team 2 Lineup Added", team2LineupAddedControl);
     addRowTo(advancedFieldsWrap, "Knockout ID", knockoutIdInput);
@@ -7779,6 +7788,7 @@
         roundShortNameInput,
         matchShortNameInput,
         thirdPlaceMatchInput,
+        mainEventInput,
         knockoutIdInput,
         nextGameWinInput,
         nextGameLoseInput,
@@ -7814,6 +7824,7 @@
         roundShortNameInput,
         matchShortNameInput,
         thirdPlaceMatchInput,
+        mainEventInput,
         knockoutIdInput,
         nextGameWinInput,
         nextGameLoseInput,
@@ -8026,6 +8037,7 @@
         round_short_name: String(roundShortNameInput.value || "").trim() || null,
         match_short_name: String(matchShortNameInput.value || "").trim() || null,
         third_place_match: thirdPlaceMatchInput.checked,
+        main_event: mainEventInput.checked,
         knockout_id: parseNullableInt(knockoutIdInput.value),
         next_game_win: parseNullableInt(nextGameWinInput.value),
         next_game_lose: parseNullableInt(nextGameLoseInput.value),

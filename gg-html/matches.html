@@ -625,6 +625,199 @@ code {
     .challenge-match-card__vs::after { grid-column: 3; grid-row: 2; }
   }
 
+  .main-event-card {
+    border: 1px solid #c7d7e4;
+    box-shadow: 0 5px 16px rgba(31, 63, 88, 0.14);
+  }
+
+  .main-event-match {
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    border-top: 1px solid #c7d7e4;
+  }
+
+  .main-event-stage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(76px, auto) minmax(0, 1fr);
+    align-items: stretch;
+    gap: 22px;
+    min-height: 142px;
+    padding: 18px 28px 14px;
+    box-sizing: border-box;
+  }
+
+  .main-event-competitor {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    text-align: center;
+  }
+
+  .main-event-competitor__logo {
+    width: 56px;
+    height: 56px;
+    object-fit: contain;
+  }
+
+  .main-event-competitor__fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #edf2f6;
+    color: #627283;
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .main-event-competitor__name {
+    max-width: 100%;
+    overflow: hidden;
+    color: #172232;
+    font-size: 18px;
+    line-height: 1.2;
+    font-weight: 700;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  a.main-event-competitor__name:hover,
+  a.main-event-competitor__name:focus-visible {
+    color: #0277BD;
+    outline: none;
+  }
+
+  .main-event-center {
+    display: grid;
+    grid-template-rows: auto minmax(12px, 1fr) auto minmax(12px, 1fr);
+    justify-items: center;
+    align-self: stretch;
+    min-width: 76px;
+  }
+
+  .main-event-center__info {
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-height: 30px;
+  }
+
+  .main-event-center__info .match-rating {
+    margin-bottom: 0;
+  }
+
+  .main-event-center__info .match-rating .material-icons-round {
+    font-size: 11px;
+    line-height: 10px;
+  }
+
+  .main-event-center__time {
+    color: #333;
+    font-size: 13px;
+    line-height: 1.2;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .main-event-center__vs {
+    grid-row: 3;
+    color: #8b1e2d;
+    font-size: 18px;
+    line-height: 1;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .main-event-center::before,
+  .main-event-center::after {
+    content: "";
+    width: 1px;
+    align-self: stretch;
+    margin: 5px 0;
+    background: #d8dee8;
+  }
+
+  .main-event-center::before { grid-row: 2; }
+  .main-event-center::after { grid-row: 4; }
+
+  .main-event-actions {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 12px;
+    border-top: 1px solid #e2e7ec;
+    background: #f8fafc;
+    box-sizing: border-box;
+  }
+
+  .main-event-lineups-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 0;
+    background: transparent;
+    color: #263647;
+    padding: 5px 4px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .main-event-lineups-button:hover,
+  .main-event-lineups-button:focus-visible {
+    color: #0277BD;
+    outline: none;
+  }
+
+  .main-event-actions__streams {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  @media (max-width: 600px) {
+    .main-event-stage {
+      grid-template-columns: minmax(0, 1fr) 60px minmax(0, 1fr);
+      gap: 8px;
+      min-height: 126px;
+      padding: 14px 8px 10px;
+    }
+
+    .main-event-competitor__logo {
+      width: 44px;
+      height: 44px;
+    }
+
+    .main-event-competitor__name {
+      font-size: 15px;
+      white-space: normal;
+    }
+
+    .main-event-center,
+    .main-event-center__time {
+      min-width: 0;
+    }
+
+    .main-event-center__time {
+      font-size: 11px;
+    }
+
+    .main-event-actions {
+      min-height: 38px;
+      padding: 4px 8px;
+    }
+  }
+
   .match-time {
     width: 46px;
     min-width: 46px;
@@ -2038,6 +2231,153 @@ function getMatchNewsItems(match) {
   return [];
 }
 
+function createMainEventCompetitor(match, side, isDuel) {
+  const competitor = document.createElement("div");
+  competitor.className = `main-event-competitor main-event-competitor--${side}`;
+
+  const isFirst = side === "left";
+  const name = String((isFirst ? match?.team1 : match?.team2) || "").trim();
+  const imageUrl = String((isFirst ? match?.flag1 : match?.flag2) || "").trim();
+  if (imageUrl) {
+    const image = document.createElement("img");
+    image.className = "main-event-competitor__logo";
+    image.src = imageUrl;
+    image.alt = name;
+    competitor.appendChild(image);
+  } else {
+    const fallback = document.createElement("span");
+    fallback.className = "main-event-competitor__logo main-event-competitor__fallback";
+    fallback.textContent = name.slice(0, 1).toUpperCase() || "?";
+    fallback.setAttribute("aria-hidden", "true");
+    competitor.appendChild(fallback);
+  }
+
+  const playerId = String((isFirst ? match?.opponent1_id : match?.opponent2_id) || "").trim();
+  const nameElement = document.createElement(isDuel && playerId ? "a" : "span");
+  nameElement.className = "main-event-competitor__name";
+  nameElement.textContent = name;
+  if (nameElement instanceof HTMLAnchorElement) {
+    nameElement.href = match?.source_type === "challenge"
+      ? `https://carcassonne.gg/player/?id=${encodeURIComponent(playerId)}`
+      : `https://boardgamearena.com/player?id=${encodeURIComponent(playerId)}`;
+    nameElement.target = "_blank";
+    nameElement.rel = "noopener noreferrer";
+  }
+  competitor.appendChild(nameElement);
+
+  return competitor;
+}
+
+function createMainEventElement(match, options = {}) {
+  const { isToday = false, tournamentType = match?.tournament_type } = options;
+  const wrapper = document.createElement("div");
+  wrapper.className = "main-event-match-wrapper";
+
+  const matchContainer = document.createElement("div");
+  matchContainer.className = "main-event-match";
+  matchContainer.dataset.id = String(match?.id || "");
+
+  const stage = document.createElement("div");
+  stage.className = "main-event-stage";
+  const isDuel = isDuelTournament(tournamentType);
+  stage.appendChild(createMainEventCompetitor(match, "left", isDuel));
+
+  const center = document.createElement("div");
+  center.className = "main-event-center";
+  const centerInfo = document.createElement("div");
+  centerInfo.className = "main-event-center__info";
+  const rating = createRatingElement(match?.rating, {
+    isGgRating: match?.source_type === "challenge",
+  });
+  if (rating) centerInfo.appendChild(rating);
+
+  const time = document.createElement("div");
+  time.className = "main-event-center__time";
+  const dateObj = new Date(parseUtcTimestamp(match?.time));
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dayLabel = `${String(dateObj.getDate()).padStart(2, "0")} ${monthNames[dateObj.getMonth()]}`;
+  const timeLabel = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  time.textContent = isToday ? timeLabel : `${dayLabel} ${timeLabel}`;
+  centerInfo.appendChild(time);
+  center.appendChild(centerInfo);
+
+  const versus = document.createElement("div");
+  versus.className = "main-event-center__vs";
+  versus.textContent = "VS";
+  center.appendChild(versus);
+  stage.appendChild(center);
+  stage.appendChild(createMainEventCompetitor(match, "right", isDuel));
+  matchContainer.appendChild(stage);
+
+  const matchId = String(match?.id || "").trim();
+  const matchLineups = Array.isArray(match?.lineupsData) ? match.lineupsData.filter(Boolean) : [];
+  const legacyLineupsHtml = typeof match?.lineups === "string" ? match.lineups.trim() : "";
+  let lineupPanel = null;
+  let lineupsButton = null;
+  if (!isDuel && matchId && (matchLineups.length > 0 || legacyLineupsHtml)) {
+    lineupsButton = document.createElement("button");
+    lineupsButton.type = "button";
+    lineupsButton.className = "main-event-lineups-button";
+    const lineupsLabel = document.createElement("span");
+    lineupsLabel.textContent = "Lineups";
+    const chevronIcon = document.createElement("i");
+    chevronIcon.className = "fas fa-chevron-down";
+    chevronIcon.style.transition = "transform 0.3s ease";
+    chevronIcon.style.transform = "rotate(180deg)";
+    chevronIcon.style.fontSize = "12px";
+    lineupsButton.appendChild(lineupsLabel);
+    lineupsButton.appendChild(chevronIcon);
+    lineupPanel = matchLineups.length > 0
+      ? createLineupPanel(matchId, matchLineups, chevronIcon, match.status, match.elo_updated_at, getMatchNewsItems(match))
+      : createLegacyLineupPanel(matchId, legacyLineupsHtml, chevronIcon);
+    bindLineupToggle(matchId, lineupPanel, chevronIcon, lineupsButton);
+  }
+
+  const streamsWrap = document.createElement("div");
+  streamsWrap.className = "main-event-actions__streams";
+  if (String(match?.status || "").trim().toUpperCase() === "IN PROGRESS") {
+    const liveIcon = document.createElement("img");
+    liveIcon.className = "live-icon";
+    liveIcon.src = "https://carcassonne.gg/gallery_gen/f4d6792e3ac5f7356502e64aefa51f32_60x28_fit.png";
+    liveIcon.alt = "LIVE";
+    streamsWrap.appendChild(liveIcon);
+  }
+  if (!streamsOff && Array.isArray(match?.streamers)) {
+    const streamUrls = Array.isArray(match?.streams) ? match.streams : [];
+    match.streamers.forEach((iconUrl, index) => {
+      const normalizedIconUrl = String(iconUrl || "").trim();
+      if (!normalizedIconUrl) return;
+      const icon = document.createElement("img");
+      icon.className = "stream-icon";
+      icon.src = normalizedIconUrl;
+      icon.alt = "Stream";
+      const streamUrl = String(streamUrls[index] || "").trim();
+      if (streamUrl) {
+        const link = document.createElement("a");
+        link.href = streamUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.appendChild(icon);
+        streamsWrap.appendChild(link);
+      } else {
+        streamsWrap.appendChild(icon);
+      }
+    });
+  }
+
+  if (lineupsButton || streamsWrap.childNodes.length > 0) {
+    const actions = document.createElement("div");
+    actions.className = "main-event-actions";
+    if (lineupsButton) actions.appendChild(lineupsButton);
+    actions.appendChild(streamsWrap);
+    matchContainer.appendChild(actions);
+  }
+
+  wrapper.appendChild(matchContainer);
+  if (lineupPanel) wrapper.appendChild(lineupPanel);
+  return wrapper;
+}
+
 function createMatchElement(match, options = {}) {
   const { showRating = false, isToday = false } = options;
   // Only for TEAM tournaments
@@ -2573,6 +2913,12 @@ function isMatchHidden(match) {
   return raw === "yes";
 }
 
+function isMainEventMatch(match) {
+  if (!match) return false;
+  if (match.main_event === true || match.main_event === 1) return true;
+  return ["1", "true", "yes", "on"].includes(String(match.main_event ?? "").trim().toLowerCase());
+}
+
 function isTestEntity(entity) {
   if (!entity) return false;
   if (entity.is_test === true || entity.is_test === 1) return true;
@@ -2677,6 +3023,27 @@ function renderEventsCard(container, events) {
   container.appendChild(card);
 }
 
+function renderMainEventCards(container, matches, tournaments, options = {}) {
+  if (!Array.isArray(matches) || matches.length === 0) return;
+  const tournamentsByName = new Map((tournaments || []).map((tournament) => [tournament.name, tournament]));
+  matches.forEach((match) => {
+    const tournament = tournamentsByName.get(match.tournament) || {
+      name: match.tournament,
+      logo: match.tournament_logo,
+      link: match.tournament_link,
+      type: match.tournament_type,
+    };
+    const card = document.createElement("div");
+    card.className = "tournament-card main-event-card";
+    card.appendChild(createTournamentHeader(tournament));
+    card.appendChild(createMainEventElement(match, {
+      isToday: options.isToday === true,
+      tournamentType: tournament.type || match.tournament_type,
+    }));
+    container.appendChild(card);
+  });
+}
+
 function renderSection(container, title, tournaments, matches, events, options = {}) {
   const { renderEventsLast = false, showScheduleControls = false } = options;
   const visibleMatches = getRenderableMatches(matches);
@@ -2697,8 +3064,14 @@ function renderSection(container, title, tournaments, matches, events, options =
     return copy;
   };
   const sortedVisibleMatches = sortMatchesForSection(visibleMatches);
+  const mainEventMatches = (isToday || isUpcoming)
+    ? sortedVisibleMatches.filter(isMainEventMatch)
+    : [];
+  const regularMatches = (isToday || isUpcoming)
+    ? sortedVisibleMatches.filter((match) => !isMainEventMatch(match))
+    : sortedVisibleMatches;
   const tournamentsWithSortTime = (tournaments || []).map((tournament) => {
-    const tournamentMatches = sortedVisibleMatches.filter(m => m.tournament === tournament.name);
+    const tournamentMatches = regularMatches.filter(m => m.tournament === tournament.name);
     const sourcePriority = tournamentMatches.length
       ? Math.max(...tournamentMatches.map(match => Number(match?.source_priority || 0)))
       : Number.NEGATIVE_INFINITY;
@@ -2825,6 +3198,7 @@ function renderSection(container, title, tournaments, matches, events, options =
     sectionTitle.appendChild(toggle);
   }
   container.appendChild(sectionTitle);
+  renderMainEventCards(container, mainEventMatches, tournaments, { isToday });
   if (!renderEventsLast) {
     renderEventsCard(container, visibleEvents);
   }
@@ -2838,7 +3212,7 @@ function renderSection(container, title, tournaments, matches, events, options =
     const tMap = new Map((tournaments || []).map(t => [t.name, t]));
 
     // Sort matches by time ascending (UTC)
-    const matchesSorted = sortedVisibleMatches.slice();
+    const matchesSorted = regularMatches.slice();
 
     matchesSorted.forEach((match, idx) => {
       // Divider between matches (show before each, including first, to match spec ordering)
@@ -2882,7 +3256,7 @@ function renderSection(container, title, tournaments, matches, events, options =
 
   // Default (Event mode and other sections): per-tournament cards
   sortedTournaments.forEach(tournament => {
-    const filtered = sortedVisibleMatches.filter(m => m.tournament === tournament.name);
+    const filtered = regularMatches.filter(m => m.tournament === tournament.name);
     if (filtered.length === 0) return;
 
     const card = document.createElement("div");
@@ -3785,6 +4159,8 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
       time: formatUtcIsoAsLegacyTime(match?.time_utc),
       team1: String(match?.team_1_name || match?.team_1 || "").trim(),
       team2: String(match?.team_2_name || match?.team_2 || "").trim(),
+      opponent1_id: String(match?.opponent1_id || match?.team_1 || "").trim(),
+      opponent2_id: String(match?.opponent2_id || match?.team_2 || "").trim(),
       flag1: String(match?.team_1_flag || "").trim(),
       flag2: String(match?.team_2_flag || "").trim(),
       status: String(match?.status || "").trim(),
@@ -3793,6 +4169,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
       gw1: match?.gw1,
       gw2: match?.gw2,
       rating: match?.rating,
+      main_event: isMainEventMatch(match),
       badge_name: String(match?.badge_name || "").trim(),
       badge_color: String(match?.badge_color || "").trim(),
       streams: Array.isArray(match?.streams)
