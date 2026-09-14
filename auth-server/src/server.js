@@ -77,6 +77,10 @@ import {
   isCompletedRankedDuel,
 } from "./profile-gg-elo-trigger.js";
 import { resolveTournamentTextPatch } from "./tournament-update.js";
+import {
+  canManageTournamentAccessUsers,
+  createRequireTournamentAdmin,
+} from "./tournament-admin-access.js";
 
 dotenv.config();
 
@@ -8460,6 +8464,7 @@ function requireAdmin(req, res, next) {
 }
 
 const requireInPersonTournamentAdmin = createRequireInPersonTournamentAdmin({ db });
+const requireTournamentAdmin = createRequireTournamentAdmin({ db });
 
 registerInPersonRoutes(app, {
   db,
@@ -13726,11 +13731,25 @@ app.get("/tournaments", (req, res, next) => {
   const includeAccessUsers = Number(req.user?.admin) === 1;
   const userId = getTournamentAccessUserId(req.user);
   const currentProfileId = getTournamentAccessProfileId(req.user);
+  const requestedScope = String(req.query?.scope || "").trim().toLowerCase();
+  const includeMyTournamentsScope = !includeAccessUsers && requestedScope === "my-tournaments";
   const includeNewsEditorScope = !includeAccessUsers
-    && String(req.query?.scope || "").trim().toLowerCase() === "news"
+    && requestedScope === "news"
     && !!currentProfileId;
   const visibilitySql = includeAccessUsers
     ? ""
+    : includeMyTournamentsScope
+      ? `
+        WHERE ? > 0
+          AND EXISTS (
+            SELECT 1
+            FROM tournament_access_users tau_filter
+            WHERE tau_filter.tournament_entity_type = 'tournament'
+              AND upper(trim(tau_filter.tournament_id)) = upper(trim(t.id))
+              AND tau_filter.user_id = ?
+              AND COALESCE(NULLIF(lower(trim(tau_filter.role)), ''), ?) = ?
+          )
+      `
     : `
       WHERE
         (
@@ -13894,17 +13913,27 @@ app.get("/tournaments", (req, res, next) => {
           userId,
           userId,
           currentProfileId,
-          TOURNAMENT_PLAYER_HUB_VISIBILITY.VISIBLE,
-          TOURNAMENT_PLAYER_HUB_VISIBILITY.VISIBLE,
-          TOURNAMENT_ACCESS_TYPES.FRIENDLY,
-          TOURNAMENT_ACCESS_TYPES.FRIENDLY,
-          userId,
-          userId,
-          currentProfileId,
-          currentProfileId,
-        ].concat(includeNewsEditorScope
-          ? [currentProfileId, NEWS_EDITOR_ACCESS_TYPES.GLOBAL, NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT]
-          : []),
+        ].concat(
+          includeMyTournamentsScope
+            ? [
+                userId,
+                userId,
+                TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+                TOURNAMENT_ACCESS_ROLES.ADMIN,
+              ]
+            : [
+                TOURNAMENT_PLAYER_HUB_VISIBILITY.VISIBLE,
+                TOURNAMENT_PLAYER_HUB_VISIBILITY.VISIBLE,
+                TOURNAMENT_ACCESS_TYPES.FRIENDLY,
+                TOURNAMENT_ACCESS_TYPES.FRIENDLY,
+                userId,
+                userId,
+                currentProfileId,
+                currentProfileId,
+              ].concat(includeNewsEditorScope
+                ? [currentProfileId, NEWS_EDITOR_ACCESS_TYPES.GLOBAL, NEWS_EDITOR_ACCESS_TYPES.TOURNAMENT]
+                : [])
+        ),
     (err, rows) => {
       if (err) return next(err);
       return db.all(
@@ -14191,7 +14220,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   );
 });
 
-app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
+app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
   const tournamentId = normalizeNullableText(req.params.id);
   const payloadId = normalizeNullableText(req.body?.id);
   const name = String(req.body?.name || "").trim();
@@ -14210,8 +14239,20 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
   const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
     : null;
-  const requestedAccessUsers = normalizeTournamentAccessUsers(req.body?.access_users, req.body?.access_user_ids);
+  const canManageAccessUsers = canManageTournamentAccessUsers(req.user);
+  const includesAccessUsersUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, "access_users")
+    || Object.prototype.hasOwnProperty.call(req.body || {}, "access_user_ids");
+  const requestedAccessUsers = canManageAccessUsers
+    ? normalizeTournamentAccessUsers(req.body?.access_users, req.body?.access_user_ids)
+    : [];
   let category = null;
+
+  if (!canManageAccessUsers && includesAccessUsersUpdate) {
+    return res.status(403).json({
+      ok: false,
+      message: "Only global admins can edit tournament access users",
+    });
+  }
 
   try {
     category = await resolveTournamentCategory(tournamentType, requestedCategory);
@@ -14391,25 +14432,30 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
                   return res.status(404).json({ ok: false, message: "Tournament not found" });
                 }
 
+                const commitTournamentUpdate = () => db.run("COMMIT", (commitErr) => {
+                  if (commitErr) {
+                    db.run("ROLLBACK");
+                    return res.status(500).json({ ok: false, message: "Failed to update tournament" });
+                  }
+
+                  return loadTournamentRowById(currentRow.id, canManageAccessUsers, (selectErr, row) => {
+                    if (selectErr) {
+                      return res.status(500).json({ ok: false, message: "Failed to load tournament" });
+                    }
+                    return res.json({ ok: true, tournament: row || null });
+                  });
+                });
+
+                if (!canManageAccessUsers) {
+                  return commitTournamentUpdate();
+                }
+
                 return replaceTournamentAccessUsers(currentRow.id, accessUsers, (accessErr) => {
                   if (accessErr) {
                     db.run("ROLLBACK");
                     return res.status(500).json({ ok: false, message: "Failed to save tournament access users" });
                   }
-
-                  return db.run("COMMIT", (commitErr) => {
-                    if (commitErr) {
-                      db.run("ROLLBACK");
-                      return res.status(500).json({ ok: false, message: "Failed to update tournament" });
-                    }
-
-                    return loadTournamentRowById(currentRow.id, true, (selectErr, row) => {
-                      if (selectErr) {
-                        return res.status(500).json({ ok: false, message: "Failed to load tournament" });
-                      }
-                      return res.json({ ok: true, tournament: row || null });
-                    });
-                  });
+                  return commitTournamentUpdate();
                 });
               }
             );
@@ -14420,7 +14466,7 @@ app.patch("/tournaments/:id", requireAdmin, async (req, res) => {
   );
 });
 
-app.get("/tournament-teams", requireAdmin, async (req, res) => {
+app.get("/tournament-teams", requireTournamentAdmin, async (req, res) => {
   try {
     const tournamentId = normalizeNullableText(req.query?.tournament_id);
     const tournamentTeams = await loadTournamentTeams(tournamentId);
@@ -14482,7 +14528,7 @@ app.get("/standings", async (req, res) => {
   }
 });
 
-app.post("/standings/recalculate", requireAdmin, async (req, res) => {
+app.post("/standings/recalculate", requireTournamentAdmin, async (req, res) => {
   const tournamentId = normalizeNullableText(req.body?.tournament_id);
   if (!tournamentId) {
     return res.status(400).json({ ok: false, message: "tournament_id is required" });
@@ -14524,7 +14570,7 @@ app.post("/standings/recalculate", requireAdmin, async (req, res) => {
   }
 });
 
-app.put("/standings", requireAdmin, async (req, res) => {
+app.put("/standings", requireTournamentAdmin, async (req, res) => {
   const tournamentId = normalizeNullableText(req.body?.tournament_id);
   const requestedStage = normalizeNullableText(req.body?.stage) || STANDINGS_STAGES[0];
   const requestedStandings = Array.isArray(req.body?.standings) ? req.body.standings : null;
@@ -14825,7 +14871,7 @@ app.patch("/tournament-teams/:id", requireAdmin, async (req, res) => {
   }
 });
 
-app.put("/tournament-teams", requireAdmin, async (req, res) => {
+app.put("/tournament-teams", requireTournamentAdmin, async (req, res) => {
   const tournamentId = normalizeNullableText(req.body?.tournament_id);
   const requestedTeams = Array.isArray(req.body?.teams)
     ? req.body.teams

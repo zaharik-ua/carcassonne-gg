@@ -21,13 +21,14 @@ function assertEmbeddedScriptsParse(html, label) {
   scripts.forEach((match) => assert.doesNotThrow(() => new Function(match[1])));
 }
 
-test("Player Hub exposes In-Person only to global admins or assigned organizers", () => {
+test("Player Hub exposes managed sections to their assigned admins", () => {
   [menuHtml, hubHtml].forEach((html) => {
     assert.match(html, /label: "In-Person"/);
     assert.match(html, /\/in-person-tournaments\/accessible/);
     assert.match(html, /item\.view === "in-person".*isAdminUser \|\| inPersonTournaments\.length > 0/s);
-    assert.match(html, /item\.view === "my-tournaments" \|\| item\.view === "nationals"/);
-    assert.match(html, /return isAdminUser/);
+    assert.match(html, /scope=my-tournaments/);
+    assert.match(html, /item\.view === "my-tournaments"[\s\S]*?return hasTournamentAdminAccess/);
+    assert.match(html, /item\.view === "nationals"[\s\S]*?return isAdminUser/);
   });
 });
 

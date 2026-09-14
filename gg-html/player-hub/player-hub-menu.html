@@ -198,6 +198,7 @@
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
   const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const MY_TOURNAMENTS_URL = `${TOURNAMENTS_URL}?scope=my-tournaments`;
   const IN_PERSON_TOURNAMENTS_URL = `${AUTH_BASE}/in-person-tournaments/accessible`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
   const STATIC_SECTION_ITEMS = [
@@ -494,6 +495,7 @@
 
   async function init() {
     let tournaments = [];
+    let managedTournaments = [];
     let inPersonTournaments = [];
     let isAuthenticatedUser = false;
     let isCaptainUser = false;
@@ -503,9 +505,10 @@
     let hasLinkedBgaId = false;
     let isStreamerUser = false;
     try {
-      const [meRes, tournamentsRes, inPersonTournamentsRes, streamersRes] = await Promise.all([
+      const [meRes, tournamentsRes, managedTournamentsRes, inPersonTournamentsRes, streamersRes] = await Promise.all([
         fetch(ME_URL, { method: "GET", credentials: "include" }),
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
+        fetch(MY_TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(IN_PERSON_TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
       ]);
@@ -529,6 +532,10 @@
           tournaments = data.tournaments;
         }
       }
+      if (managedTournamentsRes.ok) {
+        const data = await managedTournamentsRes.json().catch(() => ({}));
+        managedTournaments = Array.isArray(data?.tournaments) ? data.tournaments : [];
+      }
       if (inPersonTournamentsRes.ok) {
         const data = await inPersonTournamentsRes.json().catch(() => ({}));
         inPersonTournaments = Array.isArray(data?.tournaments) ? data.tournaments : [];
@@ -550,6 +557,10 @@
       return;
     }
 
+    const hasTournamentAdminAccess = isAdminUser || managedTournaments.some((tournament) => (
+      String(tournament?.access_role || "").trim().toLowerCase() === "admin"
+    ));
+
     const items = tournaments
       .filter((tournament) => canSeeTournament(tournament, {
         currentUserAuthId,
@@ -570,7 +581,10 @@
         if (item.view === "in-person") {
           return isAdminUser || inPersonTournaments.length > 0;
         }
-        if (item.view === "my-tournaments" || item.view === "nationals") {
+        if (item.view === "my-tournaments") {
+          return hasTournamentAdminAccess;
+        }
+        if (item.view === "nationals") {
           return isAdminUser;
         }
         if (!hasLinkedBgaId) return false;
