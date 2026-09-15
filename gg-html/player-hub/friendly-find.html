@@ -354,6 +354,75 @@
     color: #666;
   }
 
+  .cp-friendly-section {
+    display: grid;
+    gap: 6px;
+  }
+
+  .cp-friendly-section-heading {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    padding: 0 2px;
+  }
+
+  .cp-friendly-section-title {
+    color: #222;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .cp-friendly-section-toggle {
+    appearance: none;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    border: 1px solid #c9d5e2;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #fff 0%, #f3f7fb 100%);
+    box-shadow: 0 1px 2px rgba(15, 28, 48, 0.08);
+    color: #2f6f9f;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .cp-friendly-section-toggle:hover,
+  .cp-friendly-section-toggle:focus-visible {
+    border-color: #88abc8;
+    background: #edf5fb;
+    box-shadow: 0 2px 5px rgba(26, 115, 183, 0.14);
+    color: #1a73b7;
+    outline: none;
+  }
+
+  .cp-friendly-section-toggle:focus-visible {
+    outline: 2px solid rgba(26, 115, 183, 0.24);
+    outline-offset: 2px;
+  }
+
+  .cp-friendly-section-toggle-icon {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.3s ease;
+  }
+
+  .cp-friendly-section-toggle[aria-expanded="true"] .cp-friendly-section-toggle-icon {
+    transform: rotate(180deg);
+  }
+
+  .cp-friendly-section-content[hidden] {
+    display: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cp-friendly-section-toggle-icon {
+      transition: none;
+    }
+  }
+
   .cp-static-field {
     width: 100%;
     min-height: 30px;
@@ -796,6 +865,19 @@
     return dates[0] || "";
   }
 
+  function getFriendlyFindTodayUtc() {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(now.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function isArchivedFriendlyFindRequest(entry, today = getFriendlyFindTodayUtc()) {
+    const dates = parseFriendlyFindDates(entry?.dates);
+    return dates.length > 0 && dates.every((dateValue) => dateValue < today);
+  }
+
   function getViewerTimeZone() {
     try {
       return String(Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim();
@@ -966,24 +1048,79 @@
 
   function renderFriendlyFindSection(titleText, entries, teamsById, emptyText, options = {}) {
     const sectionWrap = document.createElement("div");
-    sectionWrap.style.display = "grid";
-    sectionWrap.style.gap = "6px";
-    sectionWrap.appendChild(renderSectionTitle(titleText));
+    sectionWrap.className = "cp-friendly-section";
+
+    const isCollapsible = options.collapsible === true;
+    const isInitiallyExpanded = options.expanded !== false;
+    let contentWrap = sectionWrap;
+
+    if (isCollapsible) {
+      const heading = document.createElement("div");
+      heading.className = "cp-friendly-section-heading";
+
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "cp-friendly-section-toggle";
+      toggle.setAttribute("aria-expanded", isInitiallyExpanded ? "true" : "false");
+      toggle.setAttribute("aria-label", `${isInitiallyExpanded ? "Hide" : "Show"} ${titleText}`);
+      toggle.title = `${isInitiallyExpanded ? "Hide" : "Show"} ${titleText}`;
+
+      const toggleIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      toggleIcon.classList.add("cp-friendly-section-toggle-icon");
+      toggleIcon.setAttribute("viewBox", "0 0 20 20");
+      toggleIcon.setAttribute("fill", "none");
+      toggleIcon.setAttribute("aria-hidden", "true");
+      const togglePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      togglePath.setAttribute("d", "m5 7.5 5 5 5-5");
+      togglePath.setAttribute("stroke", "currentColor");
+      togglePath.setAttribute("stroke-width", "2");
+      togglePath.setAttribute("stroke-linecap", "round");
+      togglePath.setAttribute("stroke-linejoin", "round");
+      toggleIcon.appendChild(togglePath);
+      toggle.appendChild(toggleIcon);
+      heading.appendChild(toggle);
+
+      const title = renderSectionTitle(titleText);
+      title.className = "cp-friendly-section-title";
+      title.style.padding = "";
+      heading.appendChild(title);
+      sectionWrap.appendChild(heading);
+
+      contentWrap = document.createElement("div");
+      contentWrap.className = "cp-friendly-section-content";
+      contentWrap.id = `cp-friendly-section-${String(titleText || "section").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      contentWrap.hidden = !isInitiallyExpanded;
+      toggle.setAttribute("aria-controls", contentWrap.id);
+      toggle.addEventListener("click", () => {
+        const isExpanded = toggle.getAttribute("aria-expanded") === "true";
+        const nextExpanded = !isExpanded;
+        toggle.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+        toggle.setAttribute("aria-label", `${nextExpanded ? "Hide" : "Show"} ${titleText}`);
+        toggle.title = `${nextExpanded ? "Hide" : "Show"} ${titleText}`;
+        contentWrap.hidden = !nextExpanded;
+      });
+      sectionWrap.appendChild(contentWrap);
+    } else {
+      sectionWrap.appendChild(renderSectionTitle(titleText));
+    }
 
     if (!Array.isArray(entries) || !entries.length) {
       const empty = document.createElement("div");
       empty.className = "cp-friendly-empty";
       empty.textContent = emptyText;
-      sectionWrap.appendChild(empty);
+      contentWrap.appendChild(empty);
       return sectionWrap;
     }
 
     const list = document.createElement("div");
     list.className = "captain-list";
     entries.forEach((entry) => {
-      list.appendChild(createFriendlyFindRow(entry, teamsById, options));
+      const rowOptions = typeof options.getRowOptions === "function"
+        ? options.getRowOptions(entry)
+        : options;
+      list.appendChild(createFriendlyFindRow(entry, teamsById, rowOptions));
     });
-    sectionWrap.appendChild(list);
+    contentWrap.appendChild(list);
     return sectionWrap;
   }
 
@@ -995,6 +1132,8 @@
     contentEl.style.gap = "20px";
 
     const ownAssociationCode = normalizeCode(associationCode);
+    const today = getFriendlyFindTodayUtc();
+    const allRequests = Array.isArray(requests) ? requests : [];
     const sortByFirstDateAsc = (a, b) => {
       const dateA = getFriendlyFindFirstDate(a);
       const dateB = getFriendlyFindFirstDate(b);
@@ -1003,10 +1142,14 @@
       if (!dateA && dateB) return 1;
       return String(a?.id || "").localeCompare(String(b?.id || ""));
     };
-    const ownRequests = (Array.isArray(requests) ? requests : [])
+    const archivedRequests = allRequests
+      .filter((entry) => isArchivedFriendlyFindRequest(entry, today))
+      .sort(sortByFirstDateAsc);
+    const activeRequests = allRequests.filter((entry) => !isArchivedFriendlyFindRequest(entry, today));
+    const ownRequests = activeRequests
       .filter((entry) => normalizeCode(entry?.team) === ownAssociationCode)
       .sort(sortByFirstDateAsc);
-    const opponentRequests = (Array.isArray(requests) ? requests : [])
+    const opponentRequests = activeRequests
       .filter((entry) => normalizeCode(entry?.team) !== ownAssociationCode)
       .sort(sortByFirstDateAsc);
 
@@ -1018,6 +1161,15 @@
       renderFriendlyFindSection("Available Opponents", opponentRequests, teamsById, "No available opponents yet.", {
         showCaptains: true,
         captainsByTeam,
+      })
+    );
+    contentEl.appendChild(
+      renderFriendlyFindSection("Archive", archivedRequests, teamsById, "No archived match requests yet.", {
+        collapsible: true,
+        expanded: false,
+        getRowOptions: (entry) => normalizeCode(entry?.team) === ownAssociationCode
+          ? { canEdit: true }
+          : { showCaptains: true, captainsByTeam },
       })
     );
 

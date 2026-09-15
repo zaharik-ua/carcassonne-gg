@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from update_profile_bga_data.sqlite_repository import SqliteProfileBgaDataRepository
 from update_profile_bga_data_batch.service import ProfileBgaDataBatchService
 
 
@@ -62,6 +63,48 @@ class ProfileBgaDataBatchServiceTest(unittest.TestCase):
             set(service._fetch_player_ids(limit=20)),
             {"101", "102", "103", "104"},
         )
+
+    def test_run_marks_every_profile_in_batch_updated_including_failures(self):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("UPDATE profiles SET bga_data_updated_at = NULL")
+            conn.commit()
+
+        class StubSingleService:
+            def run_for_player(self, player_id):
+                if player_id == "102":
+                    return {
+                        "ok": False,
+                        "player_id": player_id,
+                        "status": "error",
+                        "message": "BGA request failed",
+                    }
+                return {
+                    "ok": True,
+                    "player_id": player_id,
+                    "status": "success",
+                    "updated": False,
+                    "message": "BGA data unchanged",
+                }
+
+        service = self.create_selector()
+        service.repository = SqliteProfileBgaDataRepository(self.db_path)
+        service.single_service = StubSingleService()
+
+        summary = service.run(limit=2, player_ids=["101", "102"])
+
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT id, bga_data_updated_at FROM profiles ORDER BY id"
+            ).fetchall()
+        timestamps = {row[0]: row[1] for row in rows}
+
+        self.assertEqual(summary["processed"], 2)
+        self.assertEqual(summary["failed"], 1)
+        self.assertIsNotNone(timestamps["101"])
+        self.assertIsNotNone(timestamps["102"])
+        self.assertEqual(timestamps["101"], timestamps["102"])
+        self.assertIsNone(timestamps["103"])
+        self.assertIsNone(timestamps["104"])
 
 
 if __name__ == "__main__":

@@ -81,6 +81,7 @@ class ProfileBgaDataBatchService:
                 "message": result.get("message"),
             })
 
+        self.repository.mark_batch_updated(target_ids)
         return summary
 
     def run_all(

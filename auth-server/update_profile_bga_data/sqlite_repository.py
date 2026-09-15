@@ -68,6 +68,33 @@ class SqliteProfileBgaDataRepository:
             )
             conn.commit()
 
+    def mark_batch_updated(self, player_ids: list[str]) -> int:
+        normalized_player_ids = list(
+            dict.fromkeys(
+                str(player_id).strip()
+                for player_id in player_ids
+                if str(player_id).strip()
+            )
+        )
+        if not normalized_player_ids:
+            return 0
+
+        placeholders = ", ".join("?" for _ in normalized_player_ids)
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"""
+                UPDATE profiles
+                SET
+                  bga_data_updated_at = CURRENT_TIMESTAMP,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE trim(COALESCE(id, '')) IN ({placeholders})
+                  AND deleted_at IS NULL
+                """,
+                normalized_player_ids,
+            )
+            conn.commit()
+        return max(0, int(cursor.rowcount))
+
     def load_profile_snapshot(self, player_id: str) -> dict | None:
         normalized_player_id = str(player_id or "").strip()
         if not normalized_player_id:

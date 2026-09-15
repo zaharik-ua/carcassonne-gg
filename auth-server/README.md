@@ -543,9 +543,9 @@ sqlite3 /home/carcassonne-gg/auth-server/data/auth.sqlite "SELECT id, script_id,
 sqlite3 /home/carcassonne-gg/auth-server/data/auth.sqlite "SELECT batch_number, requested, processed, updated, unchanged, removed, failed, results_json FROM admin_script_run_batches WHERE run_id = 'RUN_ID' ORDER BY batch_number;"
 ```
 
-У `profiles.bga_data_updated_at` записується UTC-час останнього успішного
-отримання BGA-даних для профілю, навіть якщо nickname, avatar або status не
-змінилися. Помилка BGA-запиту цю дату не оновлює.
+Після завершення кожної пачки в `profiles.bga_data_updated_at` записується
+UTC-час обробки для всіх профілів цієї пачки, навіть якщо nickname, avatar або
+status не змінилися чи BGA-запит завершився помилкою.
 
 Опція `bga_data_updated_before` обмежує запуск профілями, для яких
 `bga_data_updated_at` порожнє або строго раніше заданого UTC date/time. Профілі,

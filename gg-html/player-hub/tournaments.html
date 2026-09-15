@@ -566,6 +566,10 @@
     justify-content: center;
   }
 
+  .cp-team-modal-overlay--manage-team {
+    padding-top: 64px;
+  }
+
   .cp-team-modal {
     width: min(100%, 520px);
     margin: auto 0;
@@ -587,6 +591,10 @@
   .cp-team-modal-fields {
     display: grid;
     gap: 8px;
+  }
+
+  .cp-team-modal-fields--players {
+    gap: 5px;
   }
 
   .cp-team-modal-field {
@@ -2678,14 +2686,14 @@
     while (selectedIds.length < maxPlayers) selectedIds.push("");
 
     const overlay = document.createElement("div");
-    overlay.className = "cp-team-modal-overlay";
+    overlay.className = "cp-team-modal-overlay cp-team-modal-overlay--manage-team";
     const modal = document.createElement("div");
     modal.className = "cp-team-modal";
     const title = document.createElement("div");
     title.className = "cp-team-modal-title";
     title.textContent = `Manage team: ${teamName}`;
     const fields = document.createElement("div");
-    fields.className = "cp-team-modal-fields";
+    fields.className = "cp-team-modal-fields cp-team-modal-fields--players";
     const error = document.createElement("div");
     error.className = "cp-edit-error cp-hidden";
     const actions = document.createElement("div");
