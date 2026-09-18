@@ -14654,19 +14654,16 @@ app.put("/standings", requireTournamentAdmin, async (req, res) => {
     const seenIds = new Set();
     for (const requestedEntry of requestedStandings) {
       const teamIdKey = normalizeNullableText(requestedEntry?.team_id ?? requestedEntry?.teamId)?.toUpperCase();
-      if (!teamIdKey) {
-        return res.status(400).json({ ok: false, message: "team_id is required in every standings row" });
-      }
-      if (!canonicalTeamIds.has(teamIdKey)) {
+      if (teamIdKey && !canonicalTeamIds.has(teamIdKey)) {
         return res.status(400).json({
           ok: false,
           message: `team_id must reference a tournament team: ${teamIdKey}`,
         });
       }
-      if (seenTeamIds.has(teamIdKey)) {
+      if (teamIdKey && seenTeamIds.has(teamIdKey)) {
         return res.status(400).json({ ok: false, message: `Duplicate team_id: ${canonicalTeamIds.get(teamIdKey)}` });
       }
-      seenTeamIds.add(teamIdKey);
+      if (teamIdKey) seenTeamIds.add(teamIdKey);
       const parsedId = Number.parseInt(String(requestedEntry?.id ?? "").trim(), 10);
       const id = Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
       if (id && seenIds.has(id)) {
@@ -14675,7 +14672,7 @@ app.put("/standings", requireTournamentAdmin, async (req, res) => {
       if (id) seenIds.add(id);
       entries.push({
         id,
-        team_id: canonicalTeamIds.get(teamIdKey),
+        team_id: teamIdKey ? canonicalTeamIds.get(teamIdKey) : null,
         group: normalizeNullableText(requestedEntry?.group),
       });
     }
@@ -14686,13 +14683,12 @@ app.put("/standings", requireTournamentAdmin, async (req, res) => {
         FROM standings
         WHERE upper(trim(tournament_id)) = upper(trim(?))
           AND lower(trim(stage)) = lower(trim(?))
-          AND team_id IS NOT NULL
           AND player_id IS NULL
       `,
       [tournament.id, stage]
     );
     const existingById = new Map(existingRows.map((row) => [Number(row.id), row]));
-    const existingByTeamId = new Map(existingRows.map((row) => [
+    const existingByTeamId = new Map(existingRows.filter((row) => row.team_id).map((row) => [
       String(row.team_id || "").trim().toUpperCase(),
       row,
     ]));
@@ -14717,7 +14713,7 @@ app.put("/standings", requireTournamentAdmin, async (req, res) => {
       for (const entry of entries) {
         const matchedRow = entry.id
           ? existingById.get(entry.id)
-          : existingByTeamId.get(String(entry.team_id).trim().toUpperCase());
+          : entry.team_id ? existingByTeamId.get(entry.team_id.trim().toUpperCase()) : null;
         if (matchedRow && !retainedIds.has(Number(matchedRow.id))) {
           retainedIds.add(Number(matchedRow.id));
           await dbRunAsync(

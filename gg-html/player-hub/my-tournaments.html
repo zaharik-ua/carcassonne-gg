@@ -7381,16 +7381,14 @@
           team_id: String(entry?.team_id ?? entry?.teamId ?? "").trim(),
           group: String(entry?.group ?? "").trim(),
         };
-      })
-      .filter((entry) => entry.team_id);
+      });
     let disabled = false;
     const changeHandlers = [];
     const notifyChange = () => {
       const values = entries
-        .filter((entry) => entry.team_id)
         .map((entry) => ({
           id: entry.id,
-          team_id: entry.team_id,
+          team_id: entry.team_id || null,
           group: String(entry.group || "").trim() || null,
         }));
       changeHandlers.forEach((handler) => handler(values));
@@ -7444,7 +7442,7 @@
         }
         const teamSelect = createTournamentDropdown(
           entry.team_id,
-          [{ value: "", label: "Select team", logo: "" }].concat(availableTeamOptions),
+          [{ value: "", label: "No team (placeholder)", logo: "" }].concat(availableTeamOptions),
           { searchable: true, showLogo: true }
         );
         teamSelect.setDisabled(disabled);
@@ -7486,7 +7484,7 @@
         row.appendChild(removeButton);
         list.appendChild(row);
       });
-      addButton.disabled = disabled || entries.length >= teamOptions.length;
+      addButton.disabled = disabled;
     };
 
     addButton.addEventListener("click", () => {
@@ -7509,7 +7507,7 @@
           .map((entry) => String(entry?.team_id ?? entry?.teamId ?? "").trim())
           .filter(Boolean);
         const availableIds = new Set(tournamentTeamIds.map(normalizeCode));
-        entries = entries.filter((entry) => availableIds.has(normalizeCode(entry.team_id)));
+        entries = entries.filter((entry) => !entry.team_id || availableIds.has(normalizeCode(entry.team_id)));
         render();
         notifyChange();
       },
@@ -7519,10 +7517,9 @@
       },
       getValues() {
         return entries
-          .filter((entry) => entry.team_id)
           .map((entry) => ({
             id: entry.id,
-            team_id: entry.team_id,
+            team_id: entry.team_id || null,
             group: String(entry.group || "").trim() || null,
           }));
       },
@@ -7530,8 +7527,7 @@
         if (typeof handler === "function") changeHandlers.push(handler);
       },
       getValidationError() {
-        if (entries.some((entry) => !entry.team_id)) return "Select a team in every standings row.";
-        const teamIds = entries.map((entry) => normalizeCode(entry.team_id));
+        const teamIds = entries.map((entry) => normalizeCode(entry.team_id)).filter(Boolean);
         if (new Set(teamIds).size !== teamIds.length) return "The same team cannot be selected twice in standings.";
         return "";
       },
@@ -7748,7 +7744,7 @@
           ? tournamentTeamsData.tournament_teams
           : [],
         standings: Array.isArray(standingsData?.standings)
-          ? standingsData.standings.filter((entry) => entry?.team_id && !entry?.player_id)
+          ? standingsData.standings.filter((entry) => !entry?.player_id)
           : [],
         canManageAccessUsers,
       });

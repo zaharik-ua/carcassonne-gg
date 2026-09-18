@@ -992,10 +992,17 @@
   }
   .match-meta-chip {
     display: inline-block;
-    padding: 1px 4px;
+    padding: 1px 4px 3px 4px;
     border-radius: 1px;
-    margin-right: 2px;
+    margin-right: 5px;
     box-shadow: 0 0 0 1px rgba(0,0,0,0.05) inset;
+  }
+  .match-meta-number {
+    background-color: #939393;
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 8px;
+    line-height: 10px;
   }
   .match-meta-format {
     background-color: #d7eaff; /* default light blue */
@@ -3768,12 +3775,20 @@
         // Add meta labels above match box
         const hasTime = m.time !== null && m.time !== undefined && String(m.time).trim() !== "";
         const isCOC = tournamentType !== "TEAM"; // COC-type brackets use duels data
-        if (hasTime || (isCOC && m.duel_format)) {
+        const hasKnockoutId = m.knockout_id !== null && m.knockout_id !== undefined && String(m.knockout_id).trim() !== "";
+        if (hasTime || (isCOC && m.duel_format) || hasKnockoutId) {
           const metaWrap = document.createElement("div");
           metaWrap.className = "match-meta-wrapper";
           metaWrap.style.left = `${m.cord_left + 2}px`;
           metaWrap.style.top = `${Math.max(0, topOffset - 14)}px`;
           metaWrap.style.width = `${MATCH_WIDTH}px`;
+
+          if (hasKnockoutId) {
+            const matchNumber = document.createElement("span");
+            matchNumber.className = "match-meta-chip match-meta-number";
+            matchNumber.textContent = String(m.knockout_id).trim();
+            metaWrap.appendChild(matchNumber);
+          }
 
           if (isCOC && m.duel_format) {
             const fmt = document.createElement("span");
