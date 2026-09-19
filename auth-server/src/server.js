@@ -3168,6 +3168,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         t.logo,
         t.link,
         COALESCE(t.ranking, 1) AS ranking,
+        t.registration_ends_at,
         COALESCE(t.is_test, 0) AS is_test,
         t.about,
         t.rules,
@@ -3297,6 +3298,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         logo: row.logo,
         link: row.link,
         ranking: normalizeBooleanInt(row.ranking) === 1,
+        registration_ends_at: row.registration_ends_at || null,
         is_test: normalizeBooleanInt(row.is_test) === 1,
         about: row.about,
         rules: row.rules,
@@ -3461,6 +3463,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         logo,
         link,
         COALESCE(ranking, 1) AS ranking,
+        registration_ends_at,
         COALESCE(is_test, 0) AS is_test,
         about,
         rules,
@@ -3509,6 +3512,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
       const tournament = {
         ...row,
         ranking: normalizeBooleanInt(row.ranking) === 1,
+        registration_ends_at: row.registration_ends_at || null,
         is_test: normalizeBooleanInt(row.is_test) === 1,
         access_type: normalizeTournamentAccessType(row.access_type),
         subtype: normalizeTournamentAccessType(row.subtype),
@@ -6471,6 +6475,7 @@ function ensureTournamentsSchema() {
       logo TEXT,
       link TEXT,
       ranking BOOLEAN NOT NULL DEFAULT 1 CHECK (ranking IN (0, 1)),
+      registration_ends_at TEXT,
       is_test BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1)),
       about TEXT,
       rules TEXT,
@@ -6512,6 +6517,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "logo", "TEXT");
       addColumnIfMissing(columns, "tournaments", "link", "TEXT");
       addColumnIfMissing(columns, "tournaments", "ranking", "BOOLEAN NOT NULL DEFAULT 1 CHECK (ranking IN (0, 1))");
+      addColumnIfMissing(columns, "tournaments", "registration_ends_at", "TEXT");
       addColumnIfMissing(columns, "tournaments", "is_test", "BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1))");
       addColumnIfMissing(columns, "tournaments", "about", "TEXT");
       addColumnIfMissing(columns, "tournaments", "rules", "TEXT");
@@ -13723,6 +13729,7 @@ app.get("/public/tournaments/:id", (req, res, next) => {
       SELECT
         id,
         COALESCE(ranking, 1) AS ranking,
+        registration_ends_at,
         COALESCE(is_test, 0) AS is_test,
         about,
         rules
@@ -13816,6 +13823,7 @@ app.get("/tournaments", (req, res, next) => {
         t.logo,
         t.link,
         COALESCE(t.ranking, 1) AS ranking,
+        t.registration_ends_at,
         COALESCE(t.is_test, 0) AS is_test,
         t.about,
         t.rules,
@@ -14002,6 +14010,7 @@ app.get("/tournaments", (req, res, next) => {
                 logo: row.logo,
                 link: row.link,
                 ranking: normalizeBooleanInt(row.ranking) === 1,
+                registration_ends_at: row.registration_ends_at || null,
                 is_test: normalizeBooleanInt(row.is_test) === 1,
                 about: row.about,
                 rules: row.rules,
@@ -14063,6 +14072,10 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const ranking = req.body?.ranking === undefined ? 1 : normalizeBooleanInt(req.body.ranking);
+  const registrationEndsAt = normalizeUtcTimestamp(req.body?.registration_ends_at);
+  if (normalizeNullableText(req.body?.registration_ends_at) && !registrationEndsAt) {
+    return res.status(400).json({ ok: false, message: "registration_ends_at must be a valid date and time" });
+  }
   const isTest = normalizeBooleanInt(req.body?.is_test);
   const about = String(req.body?.about || "").trim() || null;
   const rules = String(req.body?.rules || "").trim() || null;
@@ -14159,6 +14172,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   logo,
                   link,
                   ranking,
+                  registration_ends_at,
                   is_test,
                   about,
                   rules,
@@ -14182,7 +14196,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
               [
                 id,
@@ -14191,6 +14205,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                 logo,
                 link,
                 ranking,
+                registrationEndsAt,
                 isTest,
                 about,
                 rules,
@@ -14258,6 +14273,11 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
   const logo = String(req.body?.logo || "").trim() || null;
   const link = String(req.body?.link || "").trim() || null;
   const requestedRanking = req.body?.ranking;
+  const hasRegistrationEndsAtUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, "registration_ends_at");
+  const requestedRegistrationEndsAt = normalizeUtcTimestamp(req.body?.registration_ends_at);
+  if (normalizeNullableText(req.body?.registration_ends_at) && !requestedRegistrationEndsAt) {
+    return res.status(400).json({ ok: false, message: "registration_ends_at must be a valid date and time" });
+  }
   const isTest = normalizeBooleanInt(req.body?.is_test);
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
   const requestedTeamType = normalizeNullableText(req.body?.team_type);
@@ -14326,6 +14346,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
         id,
         team_type,
         COALESCE(ranking, 1) AS ranking,
+        registration_ends_at,
         about,
         rules,
         COALESCE(team_size, 10) AS team_size,
@@ -14349,6 +14370,9 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
       if (!currentRow) {
         return res.status(404).json({ ok: false, message: "Tournament not found" });
       }
+      const registrationEndsAt = hasRegistrationEndsAtUpdate
+        ? requestedRegistrationEndsAt
+        : currentRow.registration_ends_at;
       const teamType = normalizeTeamType(requestedTeamType || currentRow.team_type);
       const ranking = requestedRanking === undefined
         ? normalizeBooleanInt(currentRow.ranking)
@@ -14406,6 +14430,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                   logo = ?,
                   link = ?,
                   ranking = ?,
+                  registration_ends_at = ?,
                   is_test = ?,
                   about = ?,
                   rules = ?,
@@ -14436,6 +14461,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                 logo,
                 link,
                 ranking,
+                registrationEndsAt,
                 isTest,
                 about,
                 rules,

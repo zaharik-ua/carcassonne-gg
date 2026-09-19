@@ -85,6 +85,29 @@
     min-width: 0;
   }
 
+  .cp-advanced-toggle {
+    all: unset;
+    box-sizing: border-box;
+    justify-self: start;
+    color: var(--primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .cp-advanced-toggle:hover,
+  .cp-advanced-toggle:focus-visible {
+    text-decoration: underline;
+  }
+
+  .cp-advanced-fields {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: inherit;
+    gap: 8px 12px;
+    min-width: 0;
+  }
+
   .cp-edit-row label {
     font-size: 12px;
     font-weight: 600;
@@ -7990,6 +8013,11 @@
         || Number(tournament?.ranking) === 1,
       { type: "checkbox" }
     );
+    const registrationEndsAtField = createTournamentFormRow(
+      "Registration ends at, UTC",
+      toDatetimeLocalFromUtc(tournament?.registration_ends_at),
+      { type: "datetime-local", name: "registration_ends_at" }
+    );
     const isTestField = createTournamentFormRow(
       "Test tournament",
       tournament?.is_test === true || Number(tournament?.is_test) === 1,
@@ -8001,6 +8029,37 @@
       shortTitleField,
       logoField,
       linkField,
+    ].forEach((field) => form.appendChild(field.row));
+
+    const advancedToggleWrap = document.createElement("div");
+    advancedToggleWrap.style.gridColumn = "1 / -1";
+    const advancedToggleBtn = document.createElement("button");
+    advancedToggleBtn.type = "button";
+    advancedToggleBtn.className = "cp-advanced-toggle";
+    advancedToggleBtn.textContent = "Show advanced settings";
+    advancedToggleBtn.setAttribute("aria-expanded", "false");
+    advancedToggleBtn.setAttribute("aria-controls", "tournamentAdvancedSettings");
+    advancedToggleWrap.appendChild(advancedToggleBtn);
+    form.appendChild(advancedToggleWrap);
+
+    const advancedFieldsWrap = document.createElement("div");
+    advancedFieldsWrap.id = "tournamentAdvancedSettings";
+    advancedFieldsWrap.className = "cp-advanced-fields cp-hidden";
+    form.appendChild(advancedFieldsWrap);
+
+    const setAdvancedExpanded = (expanded) => {
+      advancedFieldsWrap.classList.toggle("cp-hidden", !expanded);
+      advancedToggleBtn.textContent = expanded ? "Hide advanced settings" : "Show advanced settings";
+      advancedToggleBtn.setAttribute("aria-expanded", String(expanded));
+    };
+    advancedToggleBtn.addEventListener("click", () => {
+      setAdvancedExpanded(advancedFieldsWrap.classList.contains("cp-hidden"));
+    });
+    form.addEventListener("invalid", (event) => {
+      if (advancedFieldsWrap.contains(event.target)) setAdvancedExpanded(true);
+    }, true);
+
+    [
       tournamentTypeField,
       teamTypeField,
       teamSizeField,
@@ -8018,8 +8077,9 @@
       stage1FormatField,
       stage2FormatField,
       rankingField,
+      registrationEndsAtField,
       isTestField,
-    ].forEach((field) => form.appendChild(field.row));
+    ].forEach((field) => advancedFieldsWrap.appendChild(field.row));
 
     const aboutField = createTournamentRichTextField("About", tournament?.about || "", {
       placeholder: "Write formatted tournament information...",
@@ -8034,7 +8094,7 @@
     form.appendChild(rulesField.row);
 
     const challengePeriodsSection = createRivalsChallengePeriodsSection(tournament);
-    form.appendChild(challengePeriodsSection);
+    advancedFieldsWrap.appendChild(challengePeriodsSection);
 
     const accessUsersEditor = createTournamentAccessUsersEditor(
       references.users,
@@ -8223,6 +8283,7 @@
         stage1_format: isFreePlay ? "" : stage1FormatField.input.value,
         stage2_format: hasStage2 ? stage2FormatField.input.value : "",
         ranking: rankingField.input.checked,
+        registration_ends_at: toUtcIsoFromDatetimeLocal(registrationEndsAtField.input.value),
         is_test: isTestField.input.checked,
         about: aboutEditor.getHtml(),
         rules: rulesEditor.getHtml(),
