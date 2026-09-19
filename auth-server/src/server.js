@@ -25142,8 +25142,13 @@ app.patch("/profiles/:playerId", (req, res) => {
   const userAssociation = String(req.user.association || "").trim().toLowerCase();
 
   const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const hasBgaNicknameInPayload = Object.prototype.hasOwnProperty.call(payload, "bga_nickname");
   const hasAssociationInPayload = Object.prototype.hasOwnProperty.call(payload, "association");
   const hasTeamCaptainInPayload = Object.prototype.hasOwnProperty.call(payload, "team_captain");
+
+  if (hasBgaNicknameInPayload && !isAdmin) {
+    return res.status(403).json({ ok: false, message: "Only global admins can edit BGA nickname" });
+  }
 
   const normalizeText = (value) => {
     const v = String(value ?? "").trim();
@@ -25158,6 +25163,7 @@ app.patch("/profiles/:playerId", (req, res) => {
   };
 
   const profilePatch = {
+    bga_nickname: hasBgaNicknameInPayload ? normalizeText(payload.bga_nickname) : null,
     name: normalizeText(payload.name),
     status: normalizeText(payload.status) || "Active",
     master_title: normalizeBool(payload.master_title) ? 1 : 0,
@@ -25171,6 +25177,10 @@ app.patch("/profiles/:playerId", (req, res) => {
     instagram: normalizeText(payload.instagram),
     contact_email: normalizeText(payload.contact_email),
   };
+
+  if (hasBgaNicknameInPayload && !profilePatch.bga_nickname) {
+    return res.status(400).json({ ok: false, message: "bga_nickname cannot be empty" });
+  }
 
   if (profilePatch.master_title === 1 && !profilePatch.master_title_date) {
     return res.status(400).json({
@@ -25229,6 +25239,7 @@ app.patch("/profiles/:playerId", (req, res) => {
       ? `
           UPDATE profiles
           SET
+            bga_nickname = COALESCE(?, bga_nickname),
             name = ?,
             status = ?,
             master_title = ?,
@@ -25285,6 +25296,7 @@ app.patch("/profiles/:playerId", (req, res) => {
 
     const params = isAdmin
       ? [
+          allowedPatch.bga_nickname,
           allowedPatch.name,
           allowedPatch.status,
           allowedPatch.master_title,
@@ -25329,7 +25341,7 @@ app.patch("/profiles/:playerId", (req, res) => {
           requestedPlayerId,
         ];
 
-    const runUpdate = () => db.get(
+    const updateProfile = () => db.get(
       `
         SELECT
           id,
@@ -25434,6 +25446,31 @@ app.patch("/profiles/:playerId", (req, res) => {
         });
       }
     );
+
+    const runUpdate = () => {
+      if (!hasBgaNicknameInPayload) return updateProfile();
+
+      return db.get(
+        `
+          SELECT id
+          FROM profiles
+          WHERE lower(COALESCE(bga_nickname, '')) = lower(?)
+            AND id <> ?
+            AND deleted_at IS NULL
+          LIMIT 1
+        `,
+        [allowedPatch.bga_nickname, requestedPlayerId],
+        (dupNicknameErr, dupNicknameRow) => {
+          if (dupNicknameErr) {
+            return res.status(500).json({ ok: false, message: "Failed to validate BGA nickname uniqueness" });
+          }
+          if (dupNicknameRow) {
+            return res.status(409).json({ ok: false, message: "BGA nickname is already used by another profile" });
+          }
+          return updateProfile();
+        }
+      );
+    };
 
     const nextEmail = typeof allowedPatch.email === "string" ? String(allowedPatch.email || "").trim() : null;
     if (!nextEmail) {

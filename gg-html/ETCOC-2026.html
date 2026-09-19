@@ -1765,7 +1765,6 @@
     try {
       const url = new URL(`${API_BASE}/standings`);
       url.searchParams.set("tournament_id", currentTournamentId);
-      url.searchParams.set("stage", "Stage 1");
       const response = await fetch(url.toString());
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`);
@@ -1779,7 +1778,7 @@
         ])
       );
       standings = (Array.isArray(data.standings) ? data.standings : [])
-        .filter(row => row && row.team_id && !row.player_id)
+        .filter(row => row && typeof row === "object")
         .map(row => {
           const teamId = String(row.team_id || "").trim();
           const team = teamsById.get(teamId.toUpperCase());
@@ -1789,7 +1788,9 @@
             stage: row.stage || "Stage 1",
             group: row.group || "",
             team_id: teamId,
-            team: team?.team || teamId,
+            team: teamId ? (team?.team || teamId) : "",
+            player_id: String(row.player_id || "").trim(),
+            player: row.player_id ? (row.player_name || String(row.player_id)) : "",
             matches_played: row.mp ?? 0,
             matches_won: row.mw ?? 0,
             matches_lost: row.ml ?? 0,
@@ -2662,7 +2663,7 @@
       container.appendChild(nav);
     }
 
-    const iterateKeys = groupKeys.length ? groupKeys : Object.keys(grouped);
+    const iterateKeys = groupKeys.concat(Object.keys(grouped).filter(key => !groupKeys.includes(key)));
     function parsePrimaryMetrics(row) {
       return {
         mw: Number(row && row.matches_won) || 0,
@@ -3138,7 +3139,7 @@
           wrap.style.alignItems = 'center';
           wrap.style.gap = '7px';
 
-          if (isTeam) {
+          if (isTeam && rowData.team_id) {
             const found = teams.find(t => t.team === rowData.team);
             if (found && found.logo) {
               const img = document.createElement('img');
@@ -3149,7 +3150,7 @@
             const span = document.createElement('span');
             span.textContent = rowData.team || '';
             wrap.appendChild(span);
-          } else {
+          } else if (!isTeam && rowData.player_id) {
             const found = players.find(pl => pl.player_id === rowData.player_id);
             if (found && found.avatar) {
               const img = document.createElement('img');
@@ -3320,14 +3321,13 @@
       explanation.innerHTML = `
         <p>MP: Matches Played MW: Matches Won ML: Matches Lost DW: Duels Won DL: Duels Lost GW: Games Won GL: Games Lost</p>
         <p>The final positions in the group will be determined in the following order:<br>
-          1. MW (Matches Won) — number of team matches won.<br>
-          2. DD (Duels Difference) — difference between Duels Won and Duels Lost.<br>
-          3. DW (Duels Won) — total number of duels won.<br>
-          4. GD (Games Difference) — difference between Games Won and Games Lost.<br>
-          5. GW (Games Won) — total number of games won.<br>
-          6. OMW (Opponents’ Matches Won) — total number of team matches won by all opponents faced during the Group Stage.<br>
-          7. ODD (Opponents’ Duels Difference) — combined difference between DW and DL of all opponents faced during the Group Stage.<br>
-          8. ODW (Opponents’ Duels Won) — total number of duels won by all opponents faced during the Group Stage.
+          1. Number of MW<br>
+          2. The difference between DW and DL<br>
+          3. The difference between GW and GL<br>
+          4. Number of GW<br>
+          5. Tiebreakers 1–4, but applied only to confrontations between players with equal results<br>
+          6. The difference in points scored in confrontations between players with equal results<br>
+          7. Random draw
         </p>
       `;
       container.appendChild(explanation);
@@ -3765,6 +3765,14 @@
     const stage1Html = (typeof tournament.stage1_html === "string") ? tournament.stage1_html.trim() : "";
     const tournamentId = tournament.tournament_id;
 
+    const stageStandings = standings.filter(row => (
+      row.tournament_id === tournamentId && row.stage === "Stage 1"
+    ));
+    if (stageStandings.length) {
+      renderStandingsData(stageStandings, container, tournament, { stage: "Stage 1", tabId });
+      return;
+    }
+
     if (stage1Html) {
       container.innerHTML = stage1Html;
       return;
@@ -3936,6 +3944,13 @@
     container.innerHTML = "";
     const tournamentId = tournament.tournament_id;
     const stageLabel = `Stage ${stageNumber}`;
+    const stageStandings = standings.filter(row => (
+      row.tournament_id === tournamentId && row.stage === stageLabel
+    ));
+    if (stageStandings.length) {
+      renderStandingsData(stageStandings, container, tournament, { stage: stageLabel });
+      return;
+    }
     const stageFormat = getStageFormatForTournament(tournament, stageNumber);
     const stageMatches = (tournament.type === "TEAM" ? matches : duels).filter(
       d => d.tournament_id === tournamentId && d.stage === stageLabel
@@ -5251,7 +5266,7 @@
         wrap.style.display = 'flex';
         wrap.style.alignItems = 'center';
         wrap.style.gap = '7px';
-        if (isTeam) {
+        if (isTeam && rowData.team_id) {
           const tm = teams.find(t => t.team === rowData.team);
           if (tm?.logo) {
             const img = document.createElement('img');
@@ -5262,7 +5277,7 @@
           const span = document.createElement('span');
           span.textContent = rowData.team || '';
           wrap.appendChild(span);
-        } else {
+        } else if (!isTeam && rowData.player_id) {
           const pl = players.find(p => p.player_id === rowData.player_id);
           if (pl?.avatar) {
             const img = document.createElement('img');

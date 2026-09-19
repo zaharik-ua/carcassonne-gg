@@ -1838,6 +1838,11 @@
       ])
     );
 
+    const bgaNicknameInput = isGlobalAdmin
+      ? addTextField("BGA nickname", "bga_nickname", profile?.bga_nickname)
+      : null;
+    if (bgaNicknameInput) bgaNicknameInput.required = true;
+
     const emailInput = addTextField("Login Email", "email", profile?.email, "email");
     if (isOwnProfile) {
       emailInput.readOnly = true;
@@ -2052,6 +2057,7 @@
           const refreshResult = await triggerPlayerBgaDataRefresh(playerId, {
             onProfile: (nextProfile) => {
               applyProfileBgaPayload(profile, nextProfile);
+              if (bgaNicknameInput) bgaNicknameInput.value = String(profile?.bga_nickname || "");
               if (profile.bga_nickname) {
                 setPageHeading(profile.bga_nickname);
               }
@@ -2107,6 +2113,11 @@
       event.preventDefault();
       setError("");
 
+      if (bgaNicknameInput && !bgaNicknameInput.value.trim()) {
+        setError("BGA nickname is required.");
+        return;
+      }
+
       if (masterInput.checked && !String(masterDateInput.value || "").trim()) {
         setError("Master title date is required when Master is enabled.");
         return;
@@ -2124,6 +2135,7 @@
         master_title: !!masterInput.checked,
         master_title_date: masterInput.checked ? String(masterDateInput.value || "").trim() : null,
       };
+      if (bgaNicknameInput) payload.bga_nickname = bgaNicknameInput.value.trim();
 
       setSaving(true);
       try {
