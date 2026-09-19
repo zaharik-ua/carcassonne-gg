@@ -2684,6 +2684,9 @@
       ...initialPlayerIds.filter((playerId) => playerId !== captainId),
     ].slice(0, maxPlayers);
     while (selectedIds.length < maxPlayers) selectedIds.push("");
+    const registeredPlayerIds = new Set(selectedIds.filter(Boolean));
+    const registrationEndsAt = Date.parse(String(team?.registration_ends_at || ""));
+    const replacementClosedMessage = "Player replacements are closed after registration ends.";
 
     const overlay = document.createElement("div");
     overlay.className = "cp-team-modal-overlay cp-team-modal-overlay--manage-team";
@@ -2758,9 +2761,14 @@
       selectedIds.forEach((selectedId, index) => {
         const field = document.createElement("div");
         field.className = "cp-team-modal-field";
+        const isRegisteredPlayerLocked = team?.can_edit_registered_players !== true
+          && Number.isFinite(registrationEndsAt)
+          && registrationEndsAt <= Date.now()
+          && registeredPlayerIds.has(selectedId);
+        if (isRegisteredPlayerLocked) field.title = replacementClosedMessage;
         const inlineArea = document.createElement("div");
         const dropdown = createTournamentPlayerDropdown(selectedId, playerOptions, {
-          disabled: !!captainId && index === 0,
+          disabled: isRegisteredPlayerLocked || (!!captainId && index === 0),
           signal: fieldsController.signal,
           onBeforeOpen: () => dropdowns.forEach((entry) => entry.close()),
           onChange: (nextValue) => {
@@ -2786,6 +2794,9 @@
             inlineArea.innerHTML = "";
           },
         });
+        if (isRegisteredPlayerLocked) {
+          dropdown.root.querySelector("button").title = replacementClosedMessage;
+        }
         dropdowns.push(dropdown);
         field.appendChild(dropdown.root);
         field.appendChild(inlineArea);
@@ -4708,7 +4719,12 @@
     const tournamentTeams = Array.isArray(options.tournamentTeams) ? options.tournamentTeams : [];
     tournamentTeams.forEach((team) => {
       contentEl.appendChild(renderTournamentPlayersSection(
-        { ...team, team_size: options.teamSize },
+        {
+          ...team,
+          team_size: options.teamSize,
+          registration_ends_at: options.registrationEndsAt,
+          can_edit_registered_players: options.canEditRegisteredPlayers,
+        },
         Array.isArray(options.allProfiles) ? options.allProfiles : [],
         String(options.tournamentId || "").trim()
       ));
@@ -8367,6 +8383,7 @@
       }
 
       let tournamentTeamsWithPlayers = [];
+      let canEditRegisteredPlayers = false;
       if (
         activeView === CAPTAIN_VIEWS.MATCHES
         && currentTournament
@@ -8380,6 +8397,7 @@
           );
           if (tournamentPlayersResponse.ok) {
             const tournamentPlayersData = await tournamentPlayersResponse.json().catch(() => ({}));
+            canEditRegisteredPlayers = tournamentPlayersData?.can_access_all_teams === true;
             tournamentTeamsWithPlayers = Array.isArray(tournamentPlayersData?.tournament_teams)
               ? tournamentPlayersData.tournament_teams
               : [];
@@ -8678,6 +8696,8 @@
           allProfiles,
           tournamentId: String(currentTournament?.id || requestedTournamentId || "").trim(),
           teamSize: currentTournament?.team_size,
+          registrationEndsAt: currentTournament?.registration_ends_at,
+          canEditRegisteredPlayers,
           emptyMatchesMessage: currentTournamentAccess.accessType === "Official"
             ? "No matches found for this tournament."
             : isAdminErrorMatchesFilter

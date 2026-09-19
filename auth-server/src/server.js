@@ -77,6 +77,7 @@ import {
   isCompletedRankedDuel,
 } from "./profile-gg-elo-trigger.js";
 import { resolveTournamentTextPatch } from "./tournament-update.js";
+import { getTournamentRosterUpdateError } from "./tournament-roster.js";
 import {
   canManageTournamentAccessUsers,
   createRequireTournamentAdmin,
@@ -15198,6 +15199,23 @@ app.put("/tournament-players", requireAuthenticated, async (req, res) => {
 
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
     try {
+      const existingPlayers = await dbAllAsync(
+        `
+          SELECT player_id
+          FROM tournament_players
+          WHERE upper(trim(tournament_id)) = upper(trim(?))
+            AND upper(trim(team_id)) = upper(trim(?))
+        `,
+        [tournamentTeam.tournament_id, tournamentTeam.team_id]
+      );
+      const rosterError = getTournamentRosterUpdateError({
+        registrationEndsAt: access.tournament.registration_ends_at,
+        isAdmin: access.canAccessAllTeams,
+        existingPlayerIds: existingPlayers.map((player) => player.player_id),
+        playerIds,
+      });
+      if (rosterError) throw createTournamentTeamRequestError(403, rosterError);
+
       await dbRunAsync(
         `
           DELETE FROM tournament_players
