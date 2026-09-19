@@ -4336,8 +4336,8 @@
     const team2Id = readMatchTeam2(match);
     const team1 = teamsById.get(team1Id) || null;
     const team2 = teamsById.get(team2Id) || null;
-    const team1Name = team1?.name || team1Id || "-";
-    const team2Name = team2?.name || team2Id || "-";
+    const team1Name = team1?.name || team1Id || "TBD";
+    const team2Name = team2?.name || team2Id || "TBD";
     const timeLabel = options.hideTime === true ? "" : formatMatchTime(match?.time_utc ?? match?.time);
     const isPlannedMatch = isPlannedMatchStatus(match?.status);
     const isErrorMatch = String(match?.status || "").trim().toLowerCase() === "error";
@@ -4793,6 +4793,7 @@
   function renderMatchEditForm(match, teamsById, editContext, formMode) {
     const isCreateMode = formMode === "create";
     const isGlobalAdmin = !!editContext?.isGlobalAdmin;
+    const canSaveMatchWithMissingTeams = isGlobalAdmin || editContext?.canManagePlaceholderMatches === true;
     const canTriggerResultsRefresh = isGlobalAdmin && !isCreateMode;
     const allProfiles = Array.isArray(editContext?.profiles) ? editContext.profiles : [];
     const currentTournament = editContext?.tournament || null;
@@ -5164,8 +5165,9 @@
       label: team.name,
       logo: team.logo,
     }));
-    const team1Options = [{ value: "", label: "Select team", logo: "" }].concat(teamOptions);
-    const team2Options = [{ value: "", label: "Select team", logo: "" }].concat(teamOptions);
+    const emptyTeamLabel = canSaveMatchWithMissingTeams ? "TBD (team not decided)" : "Select team";
+    const team1Options = [{ value: "", label: emptyTeamLabel, logo: "" }].concat(teamOptions);
+    const team2Options = [{ value: "", label: emptyTeamLabel, logo: "" }].concat(teamOptions);
     const team1Input = createDropdown(readMatchTeam1(source), team1Options, { showLogo: true, allowEmpty: true, searchable: true });
     const team2Input = createDropdown(readMatchTeam2(source), team2Options, { showLogo: true, allowEmpty: true, searchable: true });
     const lockedTeamField = String(editContext?.lockedTeamField || "").trim();
@@ -5179,6 +5181,13 @@
     }
     addRow("Team 1", team1Input.root);
     addRow("Team 2", team2Input.root);
+    if (canSaveMatchWithMissingTeams) {
+      const placeholderHint = document.createElement("div");
+      placeholderHint.className = "captain-sub";
+      placeholderHint.style.gridColumn = "1 / -1";
+      placeholderHint.textContent = "Leave either or both teams as TBD to save the match. You can assign teams later.";
+      form.appendChild(placeholderHint);
+    }
 
     const timeInput = document.createElement("input");
     timeInput.type = "datetime-local";
@@ -5295,7 +5304,11 @@
       return input;
     };
 
-    const stageInput = createTextInput("stage");
+    const stageInput = createDropdown(readSourceText("stage"), [
+      { value: "", label: "Not selected" },
+      { value: "Stage 1", label: "Stage 1" },
+      { value: "Stage 2", label: "Stage 2" },
+    ], { allowEmpty: true });
     const groupInput = createTextInput("group");
     const roundNameInput = createTextInput("round_name");
     const roundOrderInput = createNumberInput("round_order");
@@ -5356,7 +5369,7 @@
     metadataInput.readOnly = true;
     metadataInput.classList.add("cp-readonly-input");
 
-    addRowTo(advancedFieldsWrap, "Stage", stageInput);
+    addRowTo(advancedFieldsWrap, "Stage", stageInput.root);
     addRowTo(advancedFieldsWrap, "Group", groupInput);
     addRowTo(advancedFieldsWrap, "Round Name", roundNameInput);
     addRowTo(advancedFieldsWrap, "Round Order", roundOrderInput);
@@ -7807,6 +7820,7 @@
       lineupTypeInput.setDisabled(true);
       deadlineHoursInput.setDisabled(true);
       statusInput.setDisabled(true);
+      stageInput.setDisabled(true);
       setNativeControlDisabled(timeInput, true);
       setNativeControlDisabled(duelsInput, true);
       setNativeControlDisabled(dw1Input, true);
@@ -7814,7 +7828,6 @@
       setNativeControlDisabled(gw1Input, true);
       setNativeControlDisabled(gw2Input, true);
       [
-        stageInput,
         groupInput,
         roundNameInput,
         roundOrderInput,
@@ -7843,6 +7856,8 @@
       deadlineHoursInput.setTitle(readOnlyMatchTooltip);
       statusInput.setDisabled(true);
       statusInput.setTitle(readOnlyMatchTooltip);
+      stageInput.setDisabled(true);
+      stageInput.setTitle(readOnlyMatchTooltip);
       setNativeControlDisabled(timeInput, true, readOnlyMatchTooltip);
       setNativeControlDisabled(duelsInput, true, readOnlyMatchTooltip);
       setNativeControlDisabled(dw1Input, true, readOnlyMatchTooltip);
@@ -7850,7 +7865,6 @@
       setNativeControlDisabled(gw1Input, true, readOnlyMatchTooltip);
       setNativeControlDisabled(gw2Input, true, readOnlyMatchTooltip);
       [
-        stageInput,
         groupInput,
         roundNameInput,
         roundOrderInput,
@@ -8014,8 +8028,6 @@
       const validationErrors = [];
       const team1Value = team1Input.getValue();
       const team2Value = team2Input.getValue();
-      const canSaveMatchWithMissingTeams = isGlobalAdmin && !isCreateMode;
-
       if ((!team1Value || !team2Value) && !canSaveMatchWithMissingTeams) {
         validationErrors.push("Team 1 and Team 2 are required.");
       }
@@ -8063,7 +8075,7 @@
         dw2: parseNullableInt(dw2Input.value),
         gw1: parseNullableInt(gw1Input.value),
         gw2: parseNullableInt(gw2Input.value),
-        stage: String(stageInput.value || "").trim() || null,
+        stage: String(stageInput.getValue() || "").trim() || null,
         group: String(groupInput.value || "").trim() || null,
         round_name: String(roundNameInput.value || "").trim() || null,
         round_order: parseNullableInt(roundOrderInput.value),
@@ -8139,6 +8151,7 @@
             setError(result?.message || "Failed to save match.");
             return;
           }
+          payload.id = String(result?.match?.id || payload.id || "").trim();
         }
 
         if (lineupsEnabled) {
@@ -8600,6 +8613,7 @@
             lineups: [],
             tournament: currentTournament,
             isGlobalAdmin: isAdminUser,
+            canManagePlaceholderMatches: currentTournamentAccess.accessType === "Official" && canManageClosedTournamentMatches,
           },
           "create"
         );
@@ -8682,6 +8696,7 @@
             tournament: currentTournament,
             lineupsOnly: currentTournamentAccess.accessType === "Official" && !canManageClosedTournamentMatches,
             isGlobalAdmin: isAdminUser,
+            canManagePlaceholderMatches: currentTournamentAccess.accessType === "Official" && canManageClosedTournamentMatches,
             canEditResults,
             canShowExpiredResultsWarning,
           },

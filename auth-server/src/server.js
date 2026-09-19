@@ -21036,8 +21036,8 @@ function publicMainPageMatchesHandler(req, res, next) {
                 next_game_win: row.next_game_win,
                 next_game_lose: row.next_game_lose,
                 multiple_elimination_stage: row.multiple_elimination_stage,
-                team1: row.team_1_name || row.team_1,
-                team2: row.team_2_name || row.team_2,
+                team1: normalizeText(row.team_1_name || row.team_1) || "TBD",
+                team2: normalizeText(row.team_2_name || row.team_2) || "TBD",
                 duels_won1: row.dw1 ?? "",
                 duels_won2: row.dw2 ?? "",
                 games_won1: row.gw1 ?? "",
@@ -23112,10 +23112,7 @@ app.post("/matches", (req, res) => {
   const tournamentId = normalizeText(payload.tournament_id) || "Friendly-Matches";
   const team1 = normalizeCode(payload.team_1);
   const team2 = normalizeCode(payload.team_2);
-  if (!team1 || !team2) {
-    return res.status(400).json({ ok: false, message: "team_1 and team_2 are required" });
-  }
-  if (team1 === team2) {
+  if (team1 && team2 && team1 === team2) {
     return res.status(400).json({ ok: false, message: "team_1 and team_2 must be different" });
   }
   const timeUtc = parseUtcIsoOrNull(payload.time_utc);
@@ -23158,7 +23155,7 @@ app.post("/matches", (req, res) => {
     team1,
     team2,
     new Date().toISOString(),
-  );
+  ) || `match-${randomUUID()}`;
   const matchId = idFromPayload || generatedId;
 
   return loadTournamentAccessForUser(tournamentId, req.user, (tournamentErr, tournament) => {
@@ -23182,6 +23179,11 @@ app.post("/matches", (req, res) => {
       if (!isAdmin && isTeamCaptain && (!userAssociation || team1 !== userAssociation)) {
         return res.status(403).json({ ok: false, message: "Captain can create matches only for own team as team_1" });
       }
+    }
+
+    const canSaveMatchWithMissingTeams = isAdmin || (isClosedTournament && canManageClosedTournamentMatches);
+    if ((!team1 || !team2) && !canSaveMatchWithMissingTeams) {
+      return res.status(400).json({ ok: false, message: "team_1 and team_2 are required" });
     }
 
     const lineupTypeRaw = String(payload.lineup_type || "").trim() || "Open";
@@ -23688,7 +23690,10 @@ app.patch("/matches/:id", (req, res) => {
 
       const team1 = normalizeCode(payload.team_1);
       const team2 = normalizeCode(payload.team_2);
-      const canSaveMatchWithMissingTeams = isAdmin;
+      const canSaveMatchWithMissingTeams = isAdmin || (
+        normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) === TOURNAMENT_ACCESS_TYPES.OFFICIAL
+        && canManageClosedTournamentMatches
+      );
       if ((!team1 || !team2) && !canSaveMatchWithMissingTeams) {
         return res.status(400).json({ ok: false, message: "team_1 and team_2 are required" });
       }
