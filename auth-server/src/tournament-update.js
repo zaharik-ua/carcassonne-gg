@@ -5,3 +5,10 @@ export function resolveTournamentTextPatch(payload, currentTournament, fieldName
 
   return String(payload?.[fieldName] || "").trim() || null;
 }
+
+export function normalizeTournamentLineupType(tournamentType, lineupType) {
+  const supportsLineup = ["teams", "clubs"].includes(String(tournamentType || "").trim().toLowerCase());
+  return supportsLineup && String(lineupType || "").trim().toLowerCase() === "blind"
+    ? "Blind"
+    : "Open";
+}

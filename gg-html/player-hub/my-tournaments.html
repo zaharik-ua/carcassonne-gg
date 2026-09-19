@@ -7938,6 +7938,11 @@
       tournament?.player_hub_visibility || "Visible",
       { selectOptions: ["Visible", "Hidden"] }
     );
+    const lineupTypeField = createTournamentFormRow(
+      "Lineup Type",
+      tournament?.lineup_type || "Open",
+      { selectOptions: ["Open", "Blind"] }
+    );
     const lineupSizeTypeField = createTournamentFormRow(
       "Lineup size type",
       String(tournament?.lineup_size_type || 2),
@@ -8066,6 +8071,7 @@
       categoryField,
       subtypeField,
       visibilityField,
+      lineupTypeField,
       lineupSizeTypeField,
       lineupSizeField,
       tournamentFormatField,
@@ -8149,6 +8155,7 @@
       subtypeField.row.classList.toggle("cp-hidden", !isTeams);
       categoryField.row.classList.toggle("cp-hidden", !supportsCategory);
       challengePeriodsSection.classList.toggle("cp-hidden", !supportsCategory || !isRivalsCategory);
+      lineupTypeField.row.classList.toggle("cp-hidden", !supportsLineup);
       lineupSizeTypeField.row.classList.toggle("cp-hidden", !supportsLineup);
       lineupSizeField.row.classList.toggle("cp-hidden", !(supportsLineup && isFixedLineup));
       stage1GroupsField.row.classList.toggle("cp-hidden", isFreePlay);
@@ -8166,6 +8173,7 @@
       teamSizeField.input.disabled = isBusy || !isTeams;
       subtypeField.input.disabled = isBusy || !isTeams;
       categoryField.input.disabled = isBusy || !supportsCategory;
+      lineupTypeField.input.disabled = isBusy || !supportsLineup;
       lineupSizeTypeField.input.disabled = isBusy || !supportsLineup;
       lineupSizeField.input.disabled = isBusy || !supportsLineup || !isFixedLineup;
       tournamentFormatField.input.disabled = isBusy;
@@ -8271,6 +8279,7 @@
         category: supportsCategory ? categoryField.input.value : null,
         subtype: isTeams ? subtypeField.input.value : null,
         player_hub_visibility: visibilityField.input.value,
+        lineup_type: supportsLineup ? lineupTypeField.input.value : "Open",
         lineup_size_type: lineupSizeType,
         lineup_size: lineupSizeType === 1 ? lineupSize : null,
         team_size: teamSize,

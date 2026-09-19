@@ -76,7 +76,7 @@ import {
   didRankedDuelTransitionToDone,
   isCompletedRankedDuel,
 } from "./profile-gg-elo-trigger.js";
-import { resolveTournamentTextPatch } from "./tournament-update.js";
+import { normalizeTournamentLineupType, resolveTournamentTextPatch } from "./tournament-update.js";
 import { getTournamentRosterUpdateError } from "./tournament-roster.js";
 import {
   canManageTournamentAccessUsers,
@@ -3179,6 +3179,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         t.team_type,
         NULLIF(trim(t.category), '') AS category,
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
+        t.lineup_type,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
         t.lineup_size,
         COALESCE(t.team_size, 10) AS team_size,
@@ -3309,6 +3310,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         team_type: normalizeTeamType(row.team_type),
         category: normalizeTournamentCategory(row.tournament_type, row.category),
         player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
+        lineup_type: normalizeTournamentLineupType(row.tournament_type, row.lineup_type),
         lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
         lineup_size: normalizeTournamentLineupSize(row.lineup_size),
         team_size: normalizeTournamentTeamSize(row.team_size),
@@ -3474,6 +3476,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         team_type,
         NULLIF(trim(category), '') AS category,
         COALESCE(NULLIF(trim(player_hub_visibility), ''), ?) AS player_hub_visibility,
+        lineup_type,
         COALESCE(lineup_size_type, ?) AS lineup_size_type,
         lineup_size,
         COALESCE(team_size, 10) AS team_size,
@@ -3521,6 +3524,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         team_type: normalizeTeamType(row.team_type),
         category: normalizeTournamentCategory(row.tournament_type, row.category),
         player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
+        lineup_type: normalizeTournamentLineupType(row.tournament_type, row.lineup_type),
         lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
         lineup_size: normalizeTournamentLineupSize(row.lineup_size),
         team_size: normalizeTournamentTeamSize(row.team_size),
@@ -6486,6 +6490,7 @@ function ensureTournamentsSchema() {
       subtype TEXT,
       access_type TEXT NOT NULL DEFAULT 'Friendly',
       player_hub_visibility TEXT NOT NULL DEFAULT 'Visible',
+      lineup_type TEXT NOT NULL DEFAULT 'Open' CHECK (lineup_type IN ('Open', 'Blind')),
       lineup_size_type INTEGER NOT NULL DEFAULT 2,
       lineup_size INTEGER,
       team_size INTEGER NOT NULL DEFAULT 10 CHECK (team_size > 0),
@@ -6528,6 +6533,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "subtype", "TEXT");
       addColumnIfMissing(columns, "tournaments", "access_type", "TEXT NOT NULL DEFAULT 'Friendly'");
       addColumnIfMissing(columns, "tournaments", "player_hub_visibility", "TEXT NOT NULL DEFAULT 'Visible'");
+      addColumnIfMissing(columns, "tournaments", "lineup_type", "TEXT NOT NULL DEFAULT 'Open' CHECK (lineup_type IN ('Open', 'Blind'))");
       addColumnIfMissing(columns, "tournaments", "lineup_size_type", "INTEGER NOT NULL DEFAULT 2");
       addColumnIfMissing(columns, "tournaments", "lineup_size", "INTEGER");
       addColumnIfMissing(columns, "tournaments", "team_size", "INTEGER NOT NULL DEFAULT 10 CHECK (team_size > 0)");
@@ -13834,6 +13840,7 @@ app.get("/tournaments", (req, res, next) => {
         t.team_type,
         NULLIF(trim(t.category), '') AS category,
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
+        t.lineup_type,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
         t.lineup_size,
         COALESCE(t.team_size, 10) AS team_size,
@@ -14021,6 +14028,7 @@ app.get("/tournaments", (req, res, next) => {
                 team_type: normalizeTeamType(row.team_type),
                 category: normalizeTournamentCategory(row.tournament_type, row.category),
                 player_hub_visibility: normalizeTournamentPlayerHubVisibility(row.player_hub_visibility),
+                lineup_type: normalizeTournamentLineupType(row.tournament_type, row.lineup_type),
                 lineup_size_type: normalizeTournamentLineupSizeType(row.lineup_size_type),
                 lineup_size: normalizeTournamentLineupSize(row.lineup_size),
                 team_size: normalizeTournamentTeamSize(row.team_size),
@@ -14088,6 +14096,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
     Math.max(0, bountyTprNumber(req.body?.tpr_benchmark_percentile, 0.75))
   );
   const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
+  const lineupType = normalizeTournamentLineupType(tournamentType, req.body?.lineup_type);
   const requestedTeamType = normalizeNullableText(req.body?.team_type);
   const teamType = normalizeTeamType(requestedTeamType);
   const requestedCategory = normalizeCategoryName(req.body?.category);
@@ -14183,6 +14192,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   subtype,
                   access_type,
                   player_hub_visibility,
+                  lineup_type,
                   lineup_size_type,
                   lineup_size,
                   team_size,
@@ -14197,7 +14207,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
               [
                 id,
@@ -14216,6 +14226,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                 subtype,
                 accessType,
                 playerHubVisibility,
+                lineupType,
                 lineupSizeType,
                 lineupSize,
                 teamSize,
@@ -14350,6 +14361,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
         registration_ends_at,
         about,
         rules,
+        lineup_type,
         COALESCE(team_size, 10) AS team_size,
         tournament_format,
         COALESCE(stage1_groups, 0) AS stage1_groups,
@@ -14371,6 +14383,10 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
       if (!currentRow) {
         return res.status(404).json({ ok: false, message: "Tournament not found" });
       }
+      const lineupType = normalizeTournamentLineupType(
+        tournamentType,
+        req.body?.lineup_type ?? currentRow.lineup_type
+      );
       const registrationEndsAt = hasRegistrationEndsAtUpdate
         ? requestedRegistrationEndsAt
         : currentRow.registration_ends_at;
@@ -14441,6 +14457,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                   subtype = ?,
                   access_type = ?,
                   player_hub_visibility = ?,
+                  lineup_type = ?,
                   lineup_size_type = ?,
                   lineup_size = ?,
                   team_size = ?,
@@ -14472,6 +14489,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                 subtype,
                 accessType,
                 playerHubVisibility,
+                lineupType,
                 lineupSizeType,
                 lineupSize,
                 teamSize,
@@ -23102,34 +23120,6 @@ app.post("/matches", (req, res) => {
   }
   const timeUtc = parseUtcIsoOrNull(payload.time_utc);
 
-  const lineupTypeRaw = String(payload.lineup_type || "").trim() || "Open";
-  const lineupType = isBlindLineupType(lineupTypeRaw) ? "Blind" : lineupTypeRaw;
-  if (lineupType !== "Open" && lineupType !== "Blind") {
-    return res.status(400).json({ ok: false, message: "lineup_type must be Open or Blind" });
-  }
-
-  const lineupDeadlineHoursRaw = parseIntOrNull(payload.lineup_deadline_h);
-  const allowedDeadlineHours = new Set([6, 12, 24, 48]);
-  const lineupDeadlineHours = lineupType === "Open"
-    ? null
-    : (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24);
-  if (lineupType === "Blind" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
-    return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Blind lineup" });
-  }
-  const lineupDeadlineUtc = lineupType === "Open"
-    ? null
-    : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
-  if (lineupType === "Blind" && timeUtc && !lineupDeadlineUtc) {
-    return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
-  }
-
-  const numberOfDuels = lineupType === "Blind"
-    ? SECRET_LINEUP_SIZE
-    : parseIntOrNull(payload.number_of_duels);
-  if (!Number.isInteger(numberOfDuels) || numberOfDuels <= 0) {
-    return res.status(400).json({ ok: false, message: "number_of_duels must be a positive integer" });
-  }
-
   const status = normalizeText(payload.status) || "Planned";
   if (status !== "Planned" && status !== "Done") {
     return res.status(400).json({ ok: false, message: "status must be Planned or Done" });
@@ -23192,6 +23182,37 @@ app.post("/matches", (req, res) => {
       if (!isAdmin && isTeamCaptain && (!userAssociation || team1 !== userAssociation)) {
         return res.status(403).json({ ok: false, message: "Captain can create matches only for own team as team_1" });
       }
+    }
+
+    const lineupTypeRaw = String(payload.lineup_type || "").trim() || "Open";
+    const lineupType = normalizeTournamentLineupType(tournament.tournament_type, tournament.lineup_type) === "Blind"
+      || isBlindLineupType(lineupTypeRaw)
+      ? "Blind"
+      : lineupTypeRaw;
+    if (lineupType !== "Open" && lineupType !== "Blind") {
+      return res.status(400).json({ ok: false, message: "lineup_type must be Open or Blind" });
+    }
+
+    const lineupDeadlineHoursRaw = parseIntOrNull(payload.lineup_deadline_h);
+    const allowedDeadlineHours = new Set([6, 12, 24, 48]);
+    const lineupDeadlineHours = lineupType === "Open"
+      ? null
+      : (Number.isInteger(lineupDeadlineHoursRaw) ? lineupDeadlineHoursRaw : 24);
+    if (lineupType === "Blind" && !allowedDeadlineHours.has(lineupDeadlineHours)) {
+      return res.status(400).json({ ok: false, message: "lineup_deadline_h must be one of 6, 12, 24, 48 for Blind lineup" });
+    }
+    const lineupDeadlineUtc = lineupType === "Open"
+      ? null
+      : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
+    if (lineupType === "Blind" && timeUtc && !lineupDeadlineUtc) {
+      return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
+    }
+
+    const numberOfDuels = lineupType === "Blind"
+      ? SECRET_LINEUP_SIZE
+      : parseIntOrNull(payload.number_of_duels);
+    if (!Number.isInteger(numberOfDuels) || numberOfDuels <= 0) {
+      return res.status(400).json({ ok: false, message: "number_of_duels must be a positive integer" });
     }
 
     return db.get(

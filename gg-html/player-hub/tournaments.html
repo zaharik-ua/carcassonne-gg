@@ -4796,6 +4796,9 @@
     const canTriggerResultsRefresh = isGlobalAdmin && !isCreateMode;
     const allProfiles = Array.isArray(editContext?.profiles) ? editContext.profiles : [];
     const currentTournament = editContext?.tournament || null;
+    const isTournamentBlindLineup = ["Teams", "Clubs"].includes(currentTournament?.tournament_type)
+      && isBlindLineupType(currentTournament?.lineup_type);
+    const isLineupTypeLockedByTournament = isCreateMode && isTournamentBlindLineup;
     const isLineupsOnly = editContext?.lineupsOnly === true;
     const isReadOnlyNonPlanned = !isCreateMode && !isGlobalAdmin && !isPlannedMatchStatus(match?.status);
     const canShowEditResultsButton = !isCreateMode && isCompletedMatchStatus(match?.status);
@@ -4837,7 +4840,7 @@
           proposed_time_utc: "",
           proposed_time_by_team_id: "",
           proposed_time_status: "",
-          lineup_type: "Open",
+          lineup_type: isTournamentBlindLineup ? "Blind" : "Open",
           lineup_deadline_h: 24,
           lineup_deadline_utc: null,
           team_1_lineup_added: false,
@@ -5221,8 +5224,12 @@
       [
         { value: "Open", label: "Open" },
         { value: "Blind", label: "Blind" },
-      ]
+      ],
+      { disabled: isLineupTypeLockedByTournament }
     );
+    if (isLineupTypeLockedByTournament) {
+      lineupTypeInput.setTitle("Blind lineups are required for this tournament.");
+    }
     addRow("Lineup Type", lineupTypeInput.root);
     form.appendChild(localTimeBox);
 

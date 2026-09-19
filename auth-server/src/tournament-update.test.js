@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveTournamentTextPatch } from "./tournament-update.js";
+import { normalizeTournamentLineupType, resolveTournamentTextPatch } from "./tournament-update.js";
+
+test("tournament Blind lineups apply only to Teams and Clubs", () => {
+  for (const tournamentType of ["Teams", "Clubs"]) {
+    assert.equal(normalizeTournamentLineupType(tournamentType, "Blind"), "Blind");
+    assert.equal(normalizeTournamentLineupType(tournamentType, "Open"), "Open");
+    assert.equal(normalizeTournamentLineupType(tournamentType, undefined), "Open");
+  }
+  for (const tournamentType of ["Individuals", "National", undefined]) {
+    assert.equal(normalizeTournamentLineupType(tournamentType, "Blind"), "Open");
+  }
+});
 
 test("preserves tournament text fields omitted from a partial update", () => {
   const currentTournament = {
