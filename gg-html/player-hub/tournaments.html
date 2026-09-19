@@ -23,10 +23,53 @@
 
   .captain-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
     justify-content: space-between;
     gap: 10px;
   }
+
+  .captain-head-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .captain-admin-mode {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .captain-admin-mode input {
+    appearance: none;
+    width: 34px;
+    height: 20px;
+    margin: 0;
+    padding: 3px;
+    border-radius: 10px;
+    background: #b8bec7;
+    cursor: inherit;
+  }
+
+  .captain-admin-mode input::before {
+    content: "";
+    display: block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.15s;
+  }
+
+  .captain-admin-mode input:checked { background: var(--primary); }
+  .captain-admin-mode input:checked::before { transform: translateX(14px); }
+  .captain-admin-mode input:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+  .captain-admin-mode:has(input:disabled) { cursor: default; opacity: 0.7; }
 
   .captain-filters {
     display: grid;
@@ -1807,7 +1850,11 @@
 <div class="captain-wrap">
   <div class="captain-head">
     <div class="captain-title"></div>
-    <div>
+    <div class="captain-head-actions">
+      <label id="captainAdminModeControl" class="captain-admin-mode cp-hidden">
+        <input id="captainAdminMode" type="checkbox" role="switch">
+        <span>Admin mode</span>
+      </label>
       <span id="captainCount" class="captain-sub"></span>
       <button id="captainAddButton" class="cp-edit-btn cp-hidden" type="button">Create</button>
     </div>
@@ -1863,6 +1910,9 @@
   const filtersEl = document.getElementById("captainFilters");
   const hintEl = document.getElementById("captainHint");
   const titleEl = document.querySelector(".captain-title");
+  const adminModeControlEl = document.getElementById("captainAdminModeControl");
+  const adminModeEl = document.getElementById("captainAdminMode");
+  const adminModePreferences = new Map();
   let isCaptainPageInitializing = false;
   let captainPageRefreshQueued = false;
   let matchesListContext = null;
@@ -2151,6 +2201,8 @@
   }
 
   function renderCaptainLoadingState() {
+    adminModeControlEl.classList.add("cp-hidden");
+    adminModeEl.onchange = null;
     clearFilters();
     hintEl.textContent = "";
     countEl.textContent = "";
@@ -3963,6 +4015,39 @@
     return !!association && (association === team1 || association === team2);
   }
 
+  function getTournamentAdminMode(tournamentAccess, authState, preference) {
+    const available = !!authState.isAdminUser
+      || tournamentAccess.currentUserEntry?.role === "admin"
+      || tournamentAccess.accessRole === "admin";
+    const isCaptain = tournamentAccess.captainTeamIds.length > 0
+      || (!!authState.captainAssociationCode && (
+        tournamentAccess.currentUserEntry?.role === "captain"
+        || tournamentAccess.accessRole === "captain"
+        || (authState.isCaptainUser && (
+          tournamentAccess.accessType !== "Official" || tournamentAccess.accessViaAccessUsers
+        ))
+      ));
+    return {
+      available,
+      isCaptain,
+      locked: available && !isCaptain,
+      enabled: available && (!isCaptain || preference === true),
+    };
+  }
+
+  function renderTournamentAdminMode(mode, preferenceKey) {
+    adminModeControlEl.classList.toggle("cp-hidden", !mode.available);
+    adminModeEl.checked = mode.enabled;
+    adminModeEl.disabled = mode.locked;
+    adminModeControlEl.title = mode.locked ? "Admin mode is required because you are not a team captain in this tournament." : "";
+    adminModeEl.onchange = () => {
+      if (!mode.available || mode.locked) return;
+      adminModePreferences.set(preferenceKey, adminModeEl.checked);
+      MATCH_SECTION_KEYS.forEach((key) => { matchesPaginationState[key].currentPage = 1; });
+      resetCaptainSubview(CAPTAIN_VIEWS.MATCHES);
+    };
+  }
+
   function isTournamentHiddenInPlayerHub(tournament) {
     return String(tournament?.player_hub_visibility || "").trim().toLowerCase() === "hidden";
   }
@@ -4055,6 +4140,7 @@
     const sectionKey = MATCH_SECTION_KEYS.includes(options.sectionKey) ? options.sectionKey : "";
     if (tournamentId) url.searchParams.set("tournament_id", tournamentId);
     if (association) url.searchParams.set("association", association);
+    if (Array.isArray(options.teamIds)) url.searchParams.set("team_ids", options.teamIds.join("|"));
     if (status) url.searchParams.set("status", status);
     url.searchParams.set("today_start", new Date(getStartOfTodayLocal()).toISOString());
     if (sectionKey) url.searchParams.set("section", sectionKey);
@@ -4347,8 +4433,10 @@
     const team2Id = readMatchTeam2(match);
     const team1 = teamsById.get(team1Id) || null;
     const team2 = teamsById.get(team2Id) || null;
-    const team1Name = team1?.name || team1Id || "TBD";
-    const team2Name = team2?.name || team2Id || "TBD";
+    const team1Hint = String(match?.team_1_hint || "").trim();
+    const team2Hint = String(match?.team_2_hint || "").trim();
+    const team1Name = team1?.name || team1Id || (team1Hint ? `TBD (${team1Hint})` : "TBD");
+    const team2Name = team2?.name || team2Id || (team2Hint ? `TBD (${team2Hint})` : "TBD");
     const timeLabel = options.hideTime === true ? "" : formatMatchTime(match?.time_utc ?? match?.time);
     const isPlannedMatch = isPlannedMatchStatus(match?.status);
     const isErrorMatch = String(match?.status || "").trim().toLowerCase() === "error";
@@ -8422,8 +8510,20 @@
         isCaptainUser,
         isAdminUser,
       });
-      const currentTournamentRole = currentTournamentAccess.accessRole;
-      const canManageClosedTournamentMatches = currentTournamentAccess.canManage;
+      const adminModePreferenceKey = JSON.stringify([currentUserAuthId, requestedTournamentId]);
+      const adminMode = getTournamentAdminMode(currentTournamentAccess, {
+        isAdminUser, isCaptainUser, captainAssociationCode,
+      }, adminModePreferences.get(adminModePreferenceKey));
+      const captainView = adminMode.available && !adminMode.enabled;
+      const canManageClosedTournamentMatches = currentTournamentAccess.canManage && !(
+        captainView && currentTournamentAccess.accessType === "Official"
+      );
+      // Keep real authorization for access checks; use the selected role for the UI below.
+      isAdminUser = isAdminUser && adminMode.enabled;
+      if (captainView) {
+        associationCode = captainAssociationCode;
+        isCaptainUser = adminMode.isCaptain;
+      }
       setPageHeading(getImmediatePageHeading(currentTournament));
       if (
         activeView === CAPTAIN_VIEWS.MATCHES
@@ -8437,6 +8537,8 @@
         );
         return;
       }
+
+      if (currentTournament) renderTournamentAdminMode(adminMode, adminModePreferenceKey);
 
       let tournamentTeamsWithPlayers = [];
       let canEditRegisteredPlayers = false;
@@ -8453,10 +8555,16 @@
           );
           if (tournamentPlayersResponse.ok) {
             const tournamentPlayersData = await tournamentPlayersResponse.json().catch(() => ({}));
-            canEditRegisteredPlayers = tournamentPlayersData?.can_access_all_teams === true;
+            canEditRegisteredPlayers = tournamentPlayersData?.can_access_all_teams === true && !captainView;
             tournamentTeamsWithPlayers = Array.isArray(tournamentPlayersData?.tournament_teams)
               ? tournamentPlayersData.tournament_teams
               : [];
+            if (captainView) {
+              tournamentTeamsWithPlayers = tournamentTeamsWithPlayers.filter((team) => (
+                currentTournamentAccess.captainTeamIds.includes(normalizeCode(team?.team_id))
+                || (!!currentUserPlayerId && String(team?.captain_id || "").trim() === currentUserPlayerId)
+              ));
+            }
           }
         } catch (_error) {
           tournamentTeamsWithPlayers = [];
@@ -8479,6 +8587,12 @@
       const isAdminErrorMatchesFilter = friendlyMatchesAdminAssociation === ADMIN_MATCH_FILTER_ERROR;
       const matchesRequestOptions = {
         tournamentId: requestedTournamentId,
+        ...(captainView && currentTournamentAccess.accessType === "Official" ? {
+          teamIds: Array.from(new Set([
+            ...currentTournamentAccess.captainTeamIds,
+            ...(currentTournamentAccess.accessViaAccessUsers && captainAssociationCode ? [captainAssociationCode] : []),
+          ])),
+        } : {}),
         association: isAdminErrorMatchesFilter
           ? ""
           : (
@@ -8701,10 +8815,7 @@
           && (matchTeam1 === captainAssociationCode || matchTeam2 === captainAssociationCode);
         const isClosedTournamentCaptainResultsEditor = currentTournamentAccess.accessType === "Official"
           && !canManageClosedTournamentMatches
-          && (
-            String(currentTournamentAccess?.currentUserEntry?.role || "").trim().toLowerCase() === "captain"
-            || currentTournamentRole === "captain"
-          )
+          && adminMode.isCaptain
           && canOfficialCaptainAccessMatch(
             currentTournamentAccess,
             captainAssociationCode,
@@ -8766,7 +8877,7 @@
         });
       }
 
-      if (associationOverride) {
+      if (associationOverride && !captainView) {
         hintEl.textContent = activeView === CAPTAIN_VIEWS.MATCHES && isAdminUser
           ? (
               associationOverride === ADMIN_MATCH_FILTER_ERROR

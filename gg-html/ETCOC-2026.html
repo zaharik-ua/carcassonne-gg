@@ -3478,6 +3478,10 @@
       return compareRoundValues(a.round, b.round);
     });
 
+    groupedRounds.forEach(round => {
+      round.matches.sort((a, b) => compareRoundValues(a.group, b.group));
+    });
+
     // --- BEGIN: Determine which round to open by default ---
     const shouldOpenFirstIncomplete = options.openFirstIncompleteRound !== false;
     let roundToOpen = null;

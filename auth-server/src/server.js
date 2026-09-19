@@ -20105,6 +20105,9 @@ app.get("/matches", (req, res, next) => {
     : "";
   const requestedTournamentId = String(req.query?.tournament_id || req.query?.tournament || "").trim();
   const requestedAssociation = String(req.query?.association || "").trim().toUpperCase();
+  const requestedTeamIds = Object.prototype.hasOwnProperty.call(req.query || {}, "team_ids")
+    ? normalizeTournamentCaptainTeamIds(req.query.team_ids)
+    : null;
   const requestedStatus = String(req.query?.status || "").trim().toLowerCase();
   const todayStartRaw = String(req.query?.today_start || "").trim();
   const todayStartTs = Date.parse(todayStartRaw);
@@ -20217,6 +20220,15 @@ app.get("/matches", (req, res, next) => {
   if (requestedStatus === "error") {
     baseWhereClauses.push("lower(trim(COALESCE(m.status, ''))) = ?");
     baseWhereParams.push("error");
+  }
+  // An additional display filter; the authorization predicates still apply.
+  if (requestedTeamIds) {
+    const teamPlaceholders = requestedTeamIds.map(() => "?").join(", ");
+    baseWhereClauses.push(requestedTeamIds.length ? `(
+      upper(trim(COALESCE(m.team_1, ''))) IN (${teamPlaceholders})
+      OR upper(trim(COALESCE(m.team_2, ''))) IN (${teamPlaceholders})
+    )` : "0 = 1");
+    baseWhereParams.push(...requestedTeamIds, ...requestedTeamIds);
   }
   const sectionVisibilityParams = isAdmin
     ? []
