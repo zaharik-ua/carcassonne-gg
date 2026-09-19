@@ -163,6 +163,39 @@ test("matches can be created with either team missing, with or without a date", 
   assert.equal((await ctx.publicMatches()).matches.length, 4);
 });
 
+test("bracket hints persist, can be cleared, and only replace unassigned teams in ETCOC", async (t) => {
+  const ctx = await createContext(t);
+  const created = await ctx.create(tournamentAdmin, {
+    team_1_hint: "  Winner of Group A  ", team_2_hint: "Winner of Group B",
+  });
+  assert.equal(created.status, 201);
+  assert.equal(created.match.team_1_hint, "Winner of Group A");
+  assert.equal(created.match.team_2_hint, "Winner of Group B");
+  assert.equal((await ctx.savedMatches())[0].team_1_hint, "Winner of Group A");
+
+  const html = readFileSync(new URL("../../gg-html/ETCOC-2026.html", import.meta.url), "utf8");
+  const displaySource = html.slice(html.indexOf("  function getPlayoffTeamDisplay("), html.indexOf("  function renderPlayoffMatches("));
+  const getDisplay = new Function(`${displaySource}; return getPlayoffTeamDisplay;`)();
+  let match = (await ctx.publicMatches()).matches[0];
+  assert.deepEqual(getDisplay(match, 1), { label: "Winner of Group A", isPlaceholder: true });
+  assert.deepEqual(getDisplay(match, 2), { label: "Winner of Group B", isPlaceholder: true });
+
+  const edited = await ctx.update(tournamentAdmin, created.match.id, { team_2_hint: "  " });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.match.team_1_hint, "Winner of Group A", "omitted hints must survive older clients");
+  assert.equal(edited.match.team_2_hint, null);
+  match = (await ctx.publicMatches()).matches[0];
+  assert.deepEqual(getDisplay(match, 2), { label: "", isPlaceholder: true });
+
+  const assigned = await ctx.update(tournamentAdmin, created.match.id, { team_1: "UKR" });
+  assert.equal(assigned.status, 200);
+  match = (await ctx.publicMatches()).matches[0];
+  assert.deepEqual(getDisplay(match, 1), { label: "Ukraine", isPlaceholder: false });
+  assert.equal(match.team_1_hint, "Winner of Group A");
+  assert.deepEqual(getDisplay({ team1: "TBD" }, 1), { label: "", isPlaceholder: true });
+  assert.deepEqual(getDisplay({ team1: "Poland" }, 1), { label: "Poland", isPlaceholder: false });
+});
+
 test("placeholder support preserves match access and duplicate-team validation", async (t) => {
   const ctx = await createContext(t);
   assert.equal((await ctx.create(null)).status, 401);

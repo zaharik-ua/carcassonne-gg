@@ -1130,6 +1130,10 @@
     margin-right: 0px;
     border-radius: 2px;
   }
+
+  .bracket-team-hint {
+    font-style: italic;
+  }
   
   .match-box a {
     color: #333333;
@@ -3448,21 +3452,38 @@
     const tournamentId = tournament.tournament_id;
     const matchesToRender = tournament.type === "TEAM" ? matches : duels;
 
-    const groupedByRound = {};
+    const groupedByRound = new Map();
     matchesToRender
       .filter(match => match.tournament_id === tournamentId)
       .forEach(match => {
-        if (!groupedByRound[match.round]) groupedByRound[match.round] = [];
-        groupedByRound[match.round].push(match);
+        const stage = String(match.stage || "Stage 1").trim() || "Stage 1";
+        const round = match.round || "Matches";
+        const key = JSON.stringify([stage, round]);
+        if (!groupedByRound.has(key)) {
+          groupedByRound.set(key, { stage, round, matches: [] });
+        }
+        groupedByRound.get(key).matches.push(match);
       });
+
+    const groupedRounds = Array.from(groupedByRound.values()).sort((a, b) => {
+      const stageDifference = compareRoundValues(a.stage, b.stage);
+      if (stageDifference !== 0) return stageDifference;
+      if (a.stage === "Stage 2") {
+        const orderDifference = compareRoundValues(
+          String(a.matches[0].round_order ?? ""),
+          String(b.matches[0].round_order ?? "")
+        );
+        if (orderDifference !== 0) return orderDifference;
+      }
+      return compareRoundValues(a.round, b.round);
+    });
 
     // --- BEGIN: Determine which round to open by default ---
     const shouldOpenFirstIncomplete = options.openFirstIncompleteRound !== false;
     let roundToOpen = null;
-    const groupedRounds = Object.keys(groupedByRound).sort(compareRoundValues);
     if (shouldOpenFirstIncomplete) {
       for (const round of groupedRounds) {
-        const roundMatches = groupedByRound[round];
+        const roundMatches = round.matches;
         if (roundMatches.some(m => String(m.status || '').trim().toUpperCase() !== "DONE")) {
           roundToOpen = round;
           break;
@@ -3495,8 +3516,8 @@
       roundContent.addEventListener("transitionend", onTransitionEnd);
     };
 
-    for (const round of groupedRounds) {
-      const roundMatches = groupedByRound[round];
+    for (const roundGroup of groupedRounds) {
+      const { round, matches: roundMatches } = roundGroup;
       const section = document.createElement("div");
       section.className = "group-section";
 
@@ -3725,7 +3746,7 @@
       container.appendChild(section);
 
       // --- BEGIN: Open the first unfinished round ---
-      if (round === roundToOpen) {
+      if (roundGroup === roundToOpen) {
         toggle.dataset.shouldOpen = "true";
         content.dataset.shouldOpen = "true";
       }
@@ -3980,6 +4001,14 @@
   // Calculate coordinates for playoff bracket matches (layout logic)
   function calculatePlayoffMatchCoordinates(groupedByRound, sortedRounds, roundIndexMap, playoffMatches, currentTournamentId) {
 
+    // The API orders matches by time/UUID, so establish bracket order before placing them.
+    sortedRounds.forEach(round => {
+      groupedByRound[round].sort((a, b) => compareRoundValues(
+        a.knockout_id ?? a.game_id,
+        b.knockout_id ?? b.game_id
+      ));
+    });
+
     // 1. Find the round with the maximum number of matches
     const maxMatchRound = sortedRounds.reduce((maxRound, r) => {
       return (groupedByRound[r].length > groupedByRound[maxRound]?.length || !maxRound) ? r : maxRound;
@@ -4095,10 +4124,21 @@
     }
   }
 
+  function getPlayoffTeamDisplay(match, side) {
+    const name = String(match?.[`team${side}`] || "").trim();
+    const teamKey = `team_${side}`;
+    const hasTeam = Object.prototype.hasOwnProperty.call(match, teamKey)
+      ? !!String(match[teamKey] || "").trim()
+      : !!name && name.toUpperCase() !== "TBD";
+    return {
+      label: hasTeam ? name : String(match?.[`team_${side}_hint`] || "").trim(),
+      isPlaceholder: !hasTeam,
+    };
+  }
+
   function renderPlayoffMatches(groupedByRound, sortedRounds, roundIndexMap, tournamentType, container){
     sortedRounds.forEach((roundNum, colIndex) => {
       const matches = groupedByRound[roundNum];
-      matches.sort((a, b) => Number(a.game_id) - Number(b.game_id));
 
       // Додаємо назву раунду (label) і, якщо є, дати (після двокрапки)
       const rawRound = matches.find(m => m.knockout_stage !== "third_place")?.round || `Round ${roundNum}`;
@@ -4218,11 +4258,13 @@
         const opponent2Div = document.createElement("div");
 
         if (tournamentType === "TEAM") {
+          const team1Display = getPlayoffTeamDisplay(m, 1);
+          const team2Display = getPlayoffTeamDisplay(m, 2);
           // додаємо плейофф матчі з командами
           opponent1Div.className = m.duels_won1 > m.duels_won2 ? "match-row-winner" : "match-row-loser";
           // Team 1: logo + name
           let team1Logo = null;
-          const team1Avatar = teams.find(tm => tm.team === m.team1)?.logo;
+          const team1Avatar = !team1Display.isPlaceholder && teams.find(tm => tm.team === m.team1)?.logo;
           if (team1Avatar) {
             team1Logo = document.createElement("img");
             team1Logo.src = team1Avatar;
@@ -4233,7 +4275,8 @@
           team1Info.style.alignItems = "center";
           if (team1Logo) team1Info.appendChild(team1Logo);
           const team1Name = document.createElement("span");
-          team1Name.textContent = m.team1;
+          team1Name.textContent = team1Display.label;
+          team1Name.classList.toggle("bracket-team-hint", team1Display.isPlaceholder);
           team1Name.style.maxWidth = `${MATCH_WIDTH - 60}px`;
           team1Name.style.display = "inline-block";
           team1Name.style.whiteSpace = "nowrap";
@@ -4245,11 +4288,11 @@
           opponent1Div.appendChild(team1Info);
           opponent1Div.appendChild(score1Span);
           // Add data-opponent-name attribute
-          opponent1Div.setAttribute("data-opponent-name", m.team1);
+          if (!team1Display.isPlaceholder) opponent1Div.setAttribute("data-opponent-name", m.team1);
           opponent2Div.className = m.duels_won1 < m.duels_won2 ? "match-row-winner" : "match-row-loser";
           // Team 2: logo + name
           let team2Logo = null;
-          const team2Avatar = teams.find(tm => tm.team === m.team2)?.logo;
+          const team2Avatar = !team2Display.isPlaceholder && teams.find(tm => tm.team === m.team2)?.logo;
           if (team2Avatar) {
             team2Logo = document.createElement("img");
             team2Logo.src = team2Avatar;
@@ -4260,7 +4303,8 @@
           team2Info.style.alignItems = "center";
           if (team2Logo) team2Info.appendChild(team2Logo);
           const team2Name = document.createElement("span");
-          team2Name.textContent = m.team2;
+          team2Name.textContent = team2Display.label;
+          team2Name.classList.toggle("bracket-team-hint", team2Display.isPlaceholder);
           team2Name.style.maxWidth = `${MATCH_WIDTH - 60}px`;
           team2Name.style.display = "inline-block";
           team2Name.style.whiteSpace = "nowrap";
@@ -4272,7 +4316,7 @@
           opponent2Div.appendChild(team2Info);
           opponent2Div.appendChild(score2Span);
           // Add data-opponent-name attribute
-          opponent2Div.setAttribute("data-opponent-name", m.team2);  
+          if (!team2Display.isPlaceholder) opponent2Div.setAttribute("data-opponent-name", m.team2);
         } else {
 
           // додаємо плейофф матчі з гравцями

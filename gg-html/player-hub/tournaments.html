@@ -800,6 +800,17 @@
     margin-bottom: 0;
   }
 
+  .cp-team-hint-field {
+    margin-top: 5px;
+  }
+
+  .cp-field-info {
+    margin-left: 5px;
+    color: #667286;
+    font-size: 11px;
+    cursor: help;
+  }
+
   .cp-edit-row input,
   .cp-edit-row select,
   .cp-edit-row textarea {
@@ -5179,15 +5190,32 @@
       team2Input.setDisabled(true);
       team2Input.setTitle("Your captain team cannot be changed.");
     }
-    addRow("Team 1", team1Input.root);
-    addRow("Team 2", team2Input.root);
-    if (canSaveMatchWithMissingTeams) {
-      const placeholderHint = document.createElement("div");
-      placeholderHint.className = "captain-sub";
-      placeholderHint.style.gridColumn = "1 / -1";
-      placeholderHint.textContent = "Leave either or both teams as TBD to save the match. You can assign teams later.";
-      form.appendChild(placeholderHint);
-    }
+    const team1Row = addRow("Team 1", team1Input.root);
+    const team2Row = addRow("Team 2", team2Input.root);
+    const createBracketHintField = (teamRow, teamInput, side) => {
+      teamRow.style.alignSelf = "start";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.id = `cp-team-${side}-hint`;
+      input.value = String(source?.[`team_${side}_hint`] || "");
+      input.placeholder = "e.g. Winner of Group A";
+      input.setAttribute("aria-label", `Team ${side} bracket hint`);
+      const row = addRowTo(teamRow, "Bracket hint", input);
+      row.classList.add("cp-team-hint-field");
+      const label = row.querySelector("label");
+      label.htmlFor = input.id;
+      const info = document.createElement("span");
+      info.className = "cp-field-info fa-solid fa-circle-info";
+      info.tabIndex = 0;
+      info.title = "Optional text shown in the playoff bracket until a team is selected. Leave empty to show a blank slot.";
+      info.setAttribute("aria-label", info.title);
+      label.appendChild(info);
+      const refresh = () => row.classList.toggle("cp-hidden", !canSaveMatchWithMissingTeams || !!teamInput.getValue());
+      refresh();
+      return { input, refresh };
+    };
+    const team1Hint = createBracketHintField(team1Row, team1Input, 1);
+    const team2Hint = createBracketHintField(team2Row, team2Input, 2);
 
     const timeInput = document.createElement("input");
     timeInput.type = "datetime-local";
@@ -7801,10 +7829,12 @@
       localTimeText2.textContent = `Local time: ${formatTeamLocalTime(team2Meta?.timezone, timeUtc)}`;
     };
     team1Input.setOnChange(() => {
+      team1Hint.refresh();
       refreshLocalTimes();
       syncLineupsByRules();
     });
     team2Input.setOnChange(() => {
+      team2Hint.refresh();
       refreshLocalTimes();
       syncLineupsByRules();
     });
@@ -7821,6 +7851,8 @@
       deadlineHoursInput.setDisabled(true);
       statusInput.setDisabled(true);
       stageInput.setDisabled(true);
+      setNativeControlDisabled(team1Hint.input, true);
+      setNativeControlDisabled(team2Hint.input, true);
       setNativeControlDisabled(timeInput, true);
       setNativeControlDisabled(duelsInput, true);
       setNativeControlDisabled(dw1Input, true);
@@ -7858,6 +7890,8 @@
       statusInput.setTitle(readOnlyMatchTooltip);
       stageInput.setDisabled(true);
       stageInput.setTitle(readOnlyMatchTooltip);
+      setNativeControlDisabled(team1Hint.input, true, readOnlyMatchTooltip);
+      setNativeControlDisabled(team2Hint.input, true, readOnlyMatchTooltip);
       setNativeControlDisabled(timeInput, true, readOnlyMatchTooltip);
       setNativeControlDisabled(duelsInput, true, readOnlyMatchTooltip);
       setNativeControlDisabled(dw1Input, true, readOnlyMatchTooltip);
@@ -8065,6 +8099,8 @@
         tournament_id: String(source?.tournament_id || currentTournamentId),
         team_1: normalizeCode(team1Value),
         team_2: normalizeCode(team2Value),
+        team_1_hint: team1Hint.input.value.trim() || null,
+        team_2_hint: team2Hint.input.value.trim() || null,
         time_utc: timeUtc,
         lineup_type: lineupType,
         lineup_deadline_h: lineupType === "Open" ? null : deadlineHours,

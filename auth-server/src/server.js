@@ -335,6 +335,8 @@ const MATCH_AUDIT_FIELDS = [
   "number_of_duels",
   "team_1",
   "team_2",
+  "team_1_hint",
+  "team_2_hint",
   "status",
   "dw1",
   "dw2",
@@ -5358,6 +5360,8 @@ function ensureMatchesSchema() {
       addColumnIfMissing(currentColumns, "matches", "badge_name", "TEXT");
       addColumnIfMissing(currentColumns, "matches", "badge_color", "TEXT");
       addColumnIfMissing(currentColumns, "matches", "metadata", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "team_1_hint", "TEXT");
+      addColumnIfMissing(currentColumns, "matches", "team_2_hint", "TEXT");
     };
 
     const timeUtcColumn = columns.find((col) => col.name === "time_utc");
@@ -5389,6 +5393,8 @@ function ensureMatchesSchema() {
           number_of_duels INTEGER,
           team_1 TEXT,
           team_2 TEXT,
+          team_1_hint TEXT,
+          team_2_hint TEXT,
           status TEXT,
           dw1 INTEGER,
           dw2 INTEGER,
@@ -5439,6 +5445,8 @@ function ensureMatchesSchema() {
           number_of_duels,
           team_1,
           team_2,
+          team_1_hint,
+          team_2_hint,
           status,
           dw1,
           dw2,
@@ -5489,6 +5497,8 @@ function ensureMatchesSchema() {
           ${selectExpr("number_of_duels")},
           ${selectExpr("team_1")},
           ${selectExpr("team_2")},
+          ${selectExpr("team_1_hint")},
+          ${selectExpr("team_2_hint")},
           ${selectExpr("status")},
           ${selectExpr("dw1")},
           ${selectExpr("dw2")},
@@ -20258,6 +20268,8 @@ app.get("/matches", (req, res, next) => {
         m.number_of_duels,
         m.team_1,
         m.team_2,
+        m.team_1_hint,
+        m.team_2_hint,
         m.status,
         m.dw1,
         m.dw2,
@@ -20420,6 +20432,8 @@ app.get("/matches", (req, res, next) => {
           number_of_duels: row.number_of_duels,
           team_1: row.team_1,
           team_2: row.team_2,
+          team_1_hint: row.team_1_hint,
+          team_2_hint: row.team_2_hint,
           status: row.status,
           dw1: row.dw1,
           dw2: row.dw2,
@@ -20465,6 +20479,8 @@ app.get("/matches", (req, res, next) => {
         m.number_of_duels,
         m.team_1,
         m.team_2,
+        m.team_1_hint,
+        m.team_2_hint,
         m.status,
         m.dw1,
         m.dw2,
@@ -20600,6 +20616,8 @@ app.get("/matches", (req, res, next) => {
         number_of_duels: row.number_of_duels,
         team_1: row.team_1,
         team_2: row.team_2,
+        team_1_hint: row.team_1_hint,
+        team_2_hint: row.team_2_hint,
         status: row.status,
         dw1: row.dw1,
         dw2: row.dw2,
@@ -20768,6 +20786,8 @@ function publicMainPageMatchesHandler(req, res, next) {
         m.number_of_duels,
         m.team_1,
         m.team_2,
+        m.team_1_hint,
+        m.team_2_hint,
         m.status,
         m.dw1,
         m.dw2,
@@ -21011,6 +21031,8 @@ function publicMainPageMatchesHandler(req, res, next) {
                 number_of_duels: row.number_of_duels,
                 team_1: row.team_1,
                 team_2: row.team_2,
+                team_1_hint: row.team_1_hint,
+                team_2_hint: row.team_2_hint,
                 team_1_name: row.team_1_name,
                 team_1_flag: row.team_1_flag,
                 team_2_name: row.team_2_name,
@@ -23112,6 +23134,8 @@ app.post("/matches", (req, res) => {
   const tournamentId = normalizeText(payload.tournament_id) || "Friendly-Matches";
   const team1 = normalizeCode(payload.team_1);
   const team2 = normalizeCode(payload.team_2);
+  const team1Hint = normalizeText(payload.team_1_hint);
+  const team2Hint = normalizeText(payload.team_2_hint);
   if (team1 && team2 && team1 === team2) {
     return res.status(400).json({ ok: false, message: "team_1 and team_2 must be different" });
   }
@@ -23257,6 +23281,8 @@ app.post("/matches", (req, res) => {
                 number_of_duels = ?,
                 team_1 = ?,
                 team_2 = ?,
+                team_1_hint = ?,
+                team_2_hint = ?,
                 status = ?,
                 dw1 = ?,
                 dw2 = ?,
@@ -23295,6 +23321,8 @@ app.post("/matches", (req, res) => {
               numberOfDuels,
               team1,
               team2,
+              team1Hint,
+              team2Hint,
               status,
               normalizedMatchScores.dw1,
               normalizedMatchScores.dw2,
@@ -23353,6 +23381,8 @@ app.post("/matches", (req, res) => {
                       number_of_duels,
                       team_1,
                       team_2,
+                      team_1_hint,
+                      team_2_hint,
                       status,
                       dw1,
                       dw2,
@@ -23420,6 +23450,8 @@ app.post("/matches", (req, res) => {
             number_of_duels,
             team_1,
             team_2,
+            team_1_hint,
+            team_2_hint,
             status,
             dw1,
             dw2,
@@ -23443,7 +23475,7 @@ app.post("/matches", (req, res) => {
             created_by,
             updated_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           matchId,
@@ -23458,6 +23490,8 @@ app.post("/matches", (req, res) => {
           numberOfDuels,
           team1,
           team2,
+          team1Hint,
+          team2Hint,
           status,
           normalizedMatchScores.dw1,
           normalizedMatchScores.dw2,
@@ -23508,6 +23542,8 @@ app.post("/matches", (req, res) => {
                 number_of_duels,
                 team_1,
                 team_2,
+                team_1_hint,
+                team_2_hint,
                 status,
                 dw1,
                 dw2,
@@ -23629,6 +23665,8 @@ app.patch("/matches/:id", (req, res) => {
         number_of_duels,
         team_1,
         team_2,
+        team_1_hint,
+        team_2_hint,
         status,
         dw1,
         dw2,
@@ -23690,6 +23728,12 @@ app.patch("/matches/:id", (req, res) => {
 
       const team1 = normalizeCode(payload.team_1);
       const team2 = normalizeCode(payload.team_2);
+      const team1Hint = Object.prototype.hasOwnProperty.call(payload, "team_1_hint")
+        ? normalizeText(payload.team_1_hint)
+        : normalizeText(existingRow.team_1_hint);
+      const team2Hint = Object.prototype.hasOwnProperty.call(payload, "team_2_hint")
+        ? normalizeText(payload.team_2_hint)
+        : normalizeText(existingRow.team_2_hint);
       const canSaveMatchWithMissingTeams = isAdmin || (
         normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) === TOURNAMENT_ACCESS_TYPES.OFFICIAL
         && canManageClosedTournamentMatches
@@ -23803,6 +23847,8 @@ app.patch("/matches/:id", (req, res) => {
             is_test = ?,
             team_1 = ?,
             team_2 = ?,
+            team_1_hint = ?,
+            team_2_hint = ?,
             time_utc = ?,
             proposed_time_utc = ?,
             proposed_time_by_team_id = ?,
@@ -23844,6 +23890,8 @@ app.patch("/matches/:id", (req, res) => {
           tournament.is_test ? 1 : 0,
           team1,
           team2,
+          team1Hint,
+          team2Hint,
           timeUtc,
           proposedTimeUtc,
           proposedTimeByTeamId,
@@ -23948,6 +23996,8 @@ app.patch("/matches/:id", (req, res) => {
                   number_of_duels,
                   team_1,
                   team_2,
+                  team_1_hint,
+                  team_2_hint,
                   status,
                   dw1,
                   dw2,
