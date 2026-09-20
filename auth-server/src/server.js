@@ -22698,7 +22698,7 @@ function resolveOfficialMatchCaptainTeamId(tournament, userAssociation, team1Val
   if (normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) !== TOURNAMENT_ACCESS_TYPES.OFFICIAL) {
     return null;
   }
-  if (!tournament?.has_access || tournament?.access_role !== TOURNAMENT_ACCESS_ROLES.CAPTAIN) {
+  if (!tournament?.has_access) {
     return null;
   }
 
@@ -22710,7 +22710,13 @@ function resolveOfficialMatchCaptainTeamId(tournament, userAssociation, team1Val
       .filter((teamId) => allowedMatchTeams.has(teamId))
   );
   const association = String(userAssociation || "").trim().toUpperCase();
-  if (tournament?.access_via_access_users === true && allowedMatchTeams.has(association)) {
+  // Admin is the effective access role even when the user also captains a team.
+  // Only the legacy captain role may use association membership as a fallback.
+  if (
+    tournament?.access_role === TOURNAMENT_ACCESS_ROLES.CAPTAIN
+    && tournament?.access_via_access_users === true
+    && allowedMatchTeams.has(association)
+  ) {
     candidates.add(association);
   }
   return candidates.size === 1 ? Array.from(candidates)[0] : null;
