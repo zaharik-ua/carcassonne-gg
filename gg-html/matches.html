@@ -1314,6 +1314,123 @@ code {
     flex-wrap: wrap;
   }
 
+  .lineup__gg-duel {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border: 0;
+    border-bottom: 1px solid #e1e4e8;
+    background: transparent;
+    color: #222;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background-color 0.18s ease;
+  }
+
+  .lineup__gg-duel:hover,
+  .lineup__gg-duel:focus-visible {
+    background: #e8eef4;
+    outline: none;
+  }
+
+  .lineup__gg-duel-rating {
+    min-height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    padding-right: 8px;
+    border-right: 1px solid #c9cfd6;
+  }
+
+  .lineup__gg-duel-rating .match-rating {
+    margin-bottom: 0;
+  }
+
+  .lineup__gg-duel-player {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .lineup__gg-duel-player--right {
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  .lineup__gg-duel-avatar {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    border-radius: 3px;
+    background: #e6e9ed;
+    object-fit: cover;
+  }
+
+  .lineup__gg-duel-avatar-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #657180;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .lineup__gg-duel-name {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .lineup__gg-duel-result {
+    min-width: 40px;
+    color: #333;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 600px) {
+    .lineup__gg-duel {
+      grid-template-columns: 46px minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 5px;
+      padding: 7px 5px;
+    }
+
+    .lineup__gg-duel-rating {
+      padding-right: 5px;
+    }
+
+    .lineup__gg-duel-player {
+      gap: 4px;
+    }
+
+    .lineup__gg-duel-avatar {
+      width: 19px;
+      height: 19px;
+      flex-basis: 19px;
+    }
+
+    .lineup__gg-duel-name,
+    .lineup__gg-duel-result {
+      font-size: 12px;
+    }
+
+    .lineup__gg-duel-result {
+      min-width: 32px;
+    }
+  }
+
   .lineup__games {
     display: inline-flex;
     align-items: center;
@@ -1704,6 +1821,15 @@ function createMatchRatingElement(match) {
   return createRatingElement(hasGgRating ? ggRating : match?.rating, {
     isGgRating: hasGgRating,
   });
+}
+
+function hasMatchGgRating(match) {
+  const rating = Number(match?.gg_rating);
+  return Number.isInteger(rating) && rating > 0;
+}
+
+function shouldUseDatabaseGgLineup(match) {
+  return match?.source_type === "database" && hasMatchGgRating(match);
 }
 
 function createMatchFormatBadge(formatValue, badgeClass = "match-format-badge") {
@@ -2337,7 +2463,9 @@ function createMainEventElement(match, options = {}) {
     lineupsButton.appendChild(lineupsLabel);
     lineupsButton.appendChild(chevronIcon);
     lineupPanel = matchLineups.length > 0
-      ? createLineupPanel(matchId, matchLineups, chevronIcon, match.status, match.elo_updated_at, getMatchNewsItems(match))
+      ? createLineupPanel(matchId, matchLineups, chevronIcon, match.status, match.elo_updated_at, getMatchNewsItems(match), {
+          useDatabaseGgLayout: shouldUseDatabaseGgLineup(match),
+        })
       : createLegacyLineupPanel(matchId, legacyLineupsHtml, chevronIcon);
     bindLineupToggle(matchId, lineupPanel, chevronIcon, lineupsButton);
   }
@@ -2412,7 +2540,9 @@ function createMatchElement(match, options = {}) {
   const legacyLineupsHtml = typeof match?.lineups === "string" ? match.lineups.trim() : "";
   let lineupDiv = null;
   if (matchId && matchLineups.length > 0) {
-    lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon, match.status, match.elo_updated_at, getMatchNewsItems(match));
+    lineupDiv = createLineupPanel(matchId, matchLineups, chevronIcon, match.status, match.elo_updated_at, getMatchNewsItems(match), {
+      useDatabaseGgLayout: shouldUseDatabaseGgLineup(match),
+    });
     bindLineupToggle(matchId, lineupDiv, chevronIcon, toggleBtn);
   } else if (matchId && legacyLineupsHtml) {
     lineupDiv = createLegacyLineupPanel(matchId, legacyLineupsHtml, chevronIcon);
@@ -3793,7 +3923,115 @@ function createLegacyLineupPanel(matchId, rawHtml, chevronIcon) {
   return lineupPanel;
 }
 
-function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloUpdatedAt = "", newsItems = []) {
+function getLineupDuelPlayerDetails(duel, side) {
+  const savedDetails = duel?.[`player${side}Details`] || {};
+  const id = String(savedDetails?.id || duel?.[`player_${side}_id`] || "").trim();
+  return {
+    id,
+    nickname: String(savedDetails?.nickname || duel?.[`player_${side}_name`] || id || "Unknown player").trim(),
+    name: String(savedDetails?.name || duel?.[`player_${side}_real_name`] || "").trim(),
+    avatar: String(
+      savedDetails?.avatar
+      || buildBgaAvatarUrl(id, duel?.[`player_${side}_avatar`])
+      || ""
+    ).trim(),
+    flag: String(savedDetails?.flag || duel?.[`player_${side}_association_flag`] || "").trim(),
+    country: String(
+      savedDetails?.country
+      || duel?.[`player_${side}_association_name`]
+      || duel?.[`player_${side}_country`]
+      || ""
+    ).trim(),
+    elo: savedDetails?.elo ?? duel?.[`player_${side}_gg_elo`] ?? null,
+    rank: savedDetails?.rank ?? duel?.[`player_${side}_gg_rank`] ?? null,
+    bgaElo: savedDetails?.bgaElo
+      ?? duel?.[`player_${side}_bga_elo`]
+      ?? duel?.[`player_${side}_elo`]
+      ?? null,
+  };
+}
+
+function createDatabaseGgLineupPlayer(duel, side) {
+  const player = getLineupDuelPlayerDetails(duel, side);
+  const playerElement = document.createElement("span");
+  playerElement.className = `lineup__gg-duel-player lineup__gg-duel-player--${side === 1 ? "left" : "right"}`;
+
+  const avatar = player.avatar
+    ? document.createElement("img")
+    : document.createElement("span");
+  avatar.className = "lineup__gg-duel-avatar";
+  if (player.avatar) {
+    avatar.src = player.avatar;
+    avatar.alt = "";
+    avatar.loading = "lazy";
+  } else {
+    avatar.classList.add("lineup__gg-duel-avatar-fallback");
+    avatar.textContent = getPlayerInitials(player);
+    avatar.setAttribute("aria-hidden", "true");
+  }
+
+  const nickname = document.createElement("span");
+  nickname.className = "lineup__gg-duel-name";
+  nickname.textContent = player.nickname;
+
+  if (side === 1) {
+    playerElement.appendChild(avatar);
+    playerElement.appendChild(nickname);
+  } else {
+    playerElement.appendChild(nickname);
+    playerElement.appendChild(avatar);
+  }
+
+  return playerElement;
+}
+
+function createDatabaseGgLineupRow(duel) {
+  const player1 = getLineupDuelPlayerDetails(duel, 1);
+  const player2 = getLineupDuelPlayerDetails(duel, 2);
+  const hasDuelScore = hasValue(duel?.dw1) && hasValue(duel?.dw2);
+  const resultLabel = hasDuelScore ? `${duel.dw1} - ${duel.dw2}` : "vs";
+
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "lineup__gg-duel";
+  row.setAttribute("aria-label", `${player1.nickname} ${resultLabel} ${player2.nickname}`);
+
+  const rating = document.createElement("span");
+  rating.className = "lineup__gg-duel-rating";
+  const ratingElement = createMatchRatingElement(duel);
+  if (ratingElement) {
+    rating.appendChild(ratingElement);
+  } else {
+    rating.textContent = "—";
+  }
+
+  const result = document.createElement("span");
+  result.className = "lineup__gg-duel-result";
+  result.textContent = resultLabel;
+
+  row.appendChild(rating);
+  row.appendChild(createDatabaseGgLineupPlayer(duel, 1));
+  row.appendChild(result);
+  row.appendChild(createDatabaseGgLineupPlayer(duel, 2));
+  row.addEventListener("click", () => {
+    openChallengeMatchModal({
+      id: duel?.id,
+      team1: player1.nickname,
+      team2: player2.nickname,
+      format: duel?.duel_format,
+      status: duel?.status,
+      gw1: duel?.dw1,
+      gw2: duel?.dw2,
+      games: Array.isArray(duel?.games) ? duel.games.filter(Boolean) : [],
+      player1Details: player1,
+      player2Details: player2,
+    }, row);
+  });
+
+  return row;
+}
+
+function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloUpdatedAt = "", newsItems = [], options = {}) {
   const lineupPanel = document.createElement("div");
   lineupPanel.className = "lineup";
 
@@ -3801,6 +4039,11 @@ function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloU
   lineupBody.className = "lineup__overview";
 
   sortLineups(lineups).forEach((duel) => {
+    if (options.useDatabaseGgLayout) {
+      lineupBody.appendChild(createDatabaseGgLineupRow(duel));
+      return;
+    }
+
     const row = document.createElement("div");
     row.className = "lineup__row";
     const shouldShowElo = String(matchStatus || "").trim().toLowerCase() !== "done";
@@ -4016,7 +4259,10 @@ function getChallengePlayerDetails(duel, side, playerDetailsById) {
     country: String(indexed?.country || duel?.[`player_${side}_association_name`] || duel?.[`player_${side}_country`] || "").trim(),
     elo: indexed?.elo ?? duel?.[`player_${side}_gg_elo`] ?? null,
     rank: indexed?.rank ?? duel?.[`player_${side}_gg_rank`] ?? null,
-    bgaElo: indexed?.bgaElo ?? duel?.[`player_${side}_bga_elo`] ?? null,
+    bgaElo: indexed?.bgaElo
+      ?? duel?.[`player_${side}_bga_elo`]
+      ?? duel?.[`player_${side}_elo`]
+      ?? null,
   };
 }
 
@@ -4057,7 +4303,11 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
     const matchId = String(duel?.match_id || "").trim();
     if (!matchId) return;
     if (!duelsByMatchId.has(matchId)) duelsByMatchId.set(matchId, []);
-    duelsByMatchId.get(matchId).push(duel);
+    duelsByMatchId.get(matchId).push({
+      ...duel,
+      player1Details: getChallengePlayerDetails(duel, 1, playerDetailsById),
+      player2Details: getChallengePlayerDetails(duel, 2, playerDetailsById),
+    });
   });
 
   (Array.isArray(data?.challenge_duels) ? data.challenge_duels : []).forEach((duel) => {
@@ -4178,6 +4428,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
       gw2: match?.gw2,
       rating: match?.rating,
       gg_rating: match?.gg_rating,
+      source_type: "database",
       main_event: isMainEventMatch(match),
       badge_name: String(match?.badge_name || "").trim(),
       badge_color: String(match?.badge_color || "").trim(),

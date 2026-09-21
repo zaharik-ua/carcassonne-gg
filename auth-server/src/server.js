@@ -21121,6 +21121,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 dw1: row.dw1,
                 dw2: row.dw2,
                 rating: row.rating,
+                gg_rating: row.gg_rating,
                 is_test: normalizeBooleanInt(row.is_test) === 1,
                 status: row.status,
                 games: gamesByDuelId.get(String(row.id || "").trim()) || [],
@@ -21205,6 +21206,7 @@ function publicMainPageMatchesHandler(req, res, next) {
               d.dw1,
               d.dw2,
               d.rating,
+              d.gg_rating,
               COALESCE(d.is_test, 0) AS is_test,
               d.status
             FROM duels d

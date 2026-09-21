@@ -43,6 +43,7 @@ async function createContext(t) {
   `);
   const handlers = {};
   const auditEvents = [];
+  let publicDuelRows = [];
   const emptyRelatedRows = (_ids, done) => done(null, []);
   const dependencies = {
     app: {
@@ -54,7 +55,9 @@ async function createContext(t) {
     db: {
       get: db.get.bind(db), run: db.run.bind(db), serialize: db.serialize.bind(db),
       all(sql, params, done) {
-        if (sql.includes("FROM duels d")) return done(null, []);
+        if (sql.includes("FROM duels d")) {
+          return done(null, sql.includes("JOIN challenge_periods cp") ? [] : publicDuelRows);
+        }
         return db.all(sql, params, done);
       },
     },
@@ -95,6 +98,7 @@ async function createContext(t) {
     create: (user, payload = {}) => request("POST /matches", { user, body: { ...matchPayload, ...payload } }),
     update: (user, id, payload = {}) => request("PATCH /matches/:id", { user, params: { id }, body: { ...matchPayload, ...payload } }),
     publicMatches: () => request("GET /public/main-page-matches", { query: { tournament_id: "T", include_bracket: "true" } }),
+    setPublicDuels: (rows) => { publicDuelRows = rows; },
     setMatchGgRating: (id, ggRating) => run("UPDATE matches SET gg_rating = ? WHERE id = ?", [ggRating, id]),
     savedMatches: () => all("SELECT * FROM matches ORDER BY id"),
     auditEvents,
@@ -128,15 +132,27 @@ test("placeholder matches persist with unique IDs and appear in the public tourn
   assert.deepEqual(feed.teams, []);
 });
 
-test("public tournament feed exposes the GG rating stored on matches", async (t) => {
+test("public tournament feed exposes the GG ratings stored on matches and duels", async (t) => {
   const ctx = await createContext(t);
   const created = await ctx.create(globalAdmin);
   await ctx.setMatchGgRating(created.match.id, 5);
+  ctx.setPublicDuels([{
+    id: "duel-1",
+    match_id: created.match.id,
+    player_1_id: "p1",
+    player_1_name: "Player 1",
+    player_2_id: "p2",
+    player_2_name: "Player 2",
+    gg_rating: 4,
+  }]);
 
   const feed = await ctx.publicMatches();
   assert.equal(feed.ok, true);
   assert.equal(feed.matches.length, 1);
   assert.equal(feed.matches[0].gg_rating, 5);
+  assert.equal(feed.duels.length, 1);
+  assert.equal(feed.duels[0].gg_rating, 4);
+  assert.match(publicHandler, /d\.rating,\s+d\.gg_rating,\s+COALESCE\(d\.is_test/);
 });
 
 test("tournament admins can edit placeholders and assign teams in stages", async (t) => {
