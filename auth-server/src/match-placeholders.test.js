@@ -28,6 +28,10 @@ async function createContext(t) {
   t.after(() => new Promise((resolve, reject) => db.close((error) => error ? reject(error) : resolve())));
   const exec = (sql) => new Promise((resolve, reject) => db.exec(sql, (error) => error ? reject(error) : resolve()));
   const all = (sql, params = []) => new Promise((resolve, reject) => db.all(sql, params, (error, rows) => error ? reject(error) : resolve(rows)));
+  const run = (sql, params = []) => new Promise((resolve, reject) => db.run(sql, params, function onRun(error) {
+    if (error) reject(error);
+    else resolve(this);
+  }));
   await exec(`
     ${source.match(/CREATE TABLE matches \([\s\S]*?\n        \);/)[0]}
     CREATE TABLE tournaments (id TEXT PRIMARY KEY, name TEXT, short_title TEXT, logo TEXT, link TEXT, tournament_type TEXT);
@@ -91,6 +95,7 @@ async function createContext(t) {
     create: (user, payload = {}) => request("POST /matches", { user, body: { ...matchPayload, ...payload } }),
     update: (user, id, payload = {}) => request("PATCH /matches/:id", { user, params: { id }, body: { ...matchPayload, ...payload } }),
     publicMatches: () => request("GET /public/main-page-matches", { query: { tournament_id: "T", include_bracket: "true" } }),
+    setMatchGgRating: (id, ggRating) => run("UPDATE matches SET gg_rating = ? WHERE id = ?", [ggRating, id]),
     savedMatches: () => all("SELECT * FROM matches ORDER BY id"),
     auditEvents,
   };
@@ -121,6 +126,17 @@ test("placeholder matches persist with unique IDs and appear in the public tourn
     assert.equal(match.knockout_id, 7);
   }
   assert.deepEqual(feed.teams, []);
+});
+
+test("public tournament feed exposes the GG rating stored on matches", async (t) => {
+  const ctx = await createContext(t);
+  const created = await ctx.create(globalAdmin);
+  await ctx.setMatchGgRating(created.match.id, 5);
+
+  const feed = await ctx.publicMatches();
+  assert.equal(feed.ok, true);
+  assert.equal(feed.matches.length, 1);
+  assert.equal(feed.matches[0].gg_rating, 5);
 });
 
 test("tournament admins can edit placeholders and assign teams in stages", async (t) => {

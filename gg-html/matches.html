@@ -1695,6 +1695,17 @@ function createRatingElement(rating, { isGgRating = false } = {}) {
   return wrap;
 }
 
+function createMatchRatingElement(match) {
+  const ggRating = (match?.gg_rating === null || match?.gg_rating === undefined || match?.gg_rating === "")
+    ? null
+    : parseInt(match.gg_rating, 10);
+  const hasGgRating = Number.isInteger(ggRating) && ggRating > 0;
+
+  return createRatingElement(hasGgRating ? ggRating : match?.rating, {
+    isGgRating: hasGgRating,
+  });
+}
+
 function createMatchFormatBadge(formatValue, badgeClass = "match-format-badge") {
   const rawFormat = typeof formatValue === "string" ? formatValue.trim() : "";
   const formatKey = rawFormat.toLowerCase();
@@ -2286,9 +2297,7 @@ function createMainEventElement(match, options = {}) {
   center.className = "main-event-center";
   const centerInfo = document.createElement("div");
   centerInfo.className = "main-event-center__info";
-  const rating = createRatingElement(match?.rating, {
-    isGgRating: match?.source_type === "challenge",
-  });
+  const rating = createMatchRatingElement(match);
   if (rating) centerInfo.appendChild(rating);
 
   const time = document.createElement("div");
@@ -2430,7 +2439,7 @@ function createMatchElement(match, options = {}) {
 
       // Optional rating stars above time (create DOM to avoid nesting issues)
       if (showRating) {
-        const ratingEl = createRatingElement(match.rating);
+        const ratingEl = createMatchRatingElement(match);
         if (ratingEl) timeDiv.appendChild(ratingEl);
       }
       const timeTextEl = document.createElement("div");
@@ -2536,7 +2545,7 @@ function createMatchElement(match, options = {}) {
 
       // Optional rating stars above time (create DOM to avoid nesting issues)
       if (showRating) {
-        const ratingEl = createRatingElement(match.rating);
+        const ratingEl = createMatchRatingElement(match);
         if (ratingEl) timeDiv.appendChild(ratingEl);
       }
       const timeTextEl = document.createElement("div");
@@ -2607,9 +2616,7 @@ function createDuelElement(match, options = {}) {
 
   // Optional rating stars above time for Today duel matches (create DOM)
   if (showRating) {
-    const ratingEl = createRatingElement(match.rating, {
-      isGgRating: match.source_type === "challenge",
-    });
+    const ratingEl = createMatchRatingElement(match);
     if (ratingEl) timeDiv.appendChild(ratingEl);
   }
   const timeTextEl = document.createElement("div");
@@ -4103,7 +4110,8 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
       gw1: duel?.dw1,
       gw2: duel?.dw2,
       games: Array.isArray(duel?.games) ? duel.games.filter(Boolean) : [],
-      rating: duel?.gg_rating,
+      rating: duel?.rating,
+      gg_rating: duel?.gg_rating,
       streams: Array.isArray(duel?.streams)
         ? duel.streams.map((value) => String(value || "").trim()).filter(Boolean)
         : [],
@@ -4169,6 +4177,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
       gw1: match?.gw1,
       gw2: match?.gw2,
       rating: match?.rating,
+      gg_rating: match?.gg_rating,
       main_event: isMainEventMatch(match),
       badge_name: String(match?.badge_name || "").trim(),
       badge_color: String(match?.badge_color || "").trim(),
