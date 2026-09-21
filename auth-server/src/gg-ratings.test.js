@@ -20,7 +20,7 @@ async function database(t) {
   t.after(() => new Promise((resolve) => db.close(resolve)));
   await exec(db, `
     CREATE TABLE profiles (id TEXT PRIMARY KEY, gg_elo REAL, deleted_at TEXT);
-    CREATE TABLE tournaments (id TEXT PRIMARY KEY, ranking INTEGER, tournament_type TEXT, deleted_at TEXT);
+    CREATE TABLE tournaments (id TEXT PRIMARY KEY, ranking INTEGER, tournament_type TEXT);
     CREATE TABLE matches (id TEXT PRIMARY KEY, tournament_id TEXT, deleted_at TEXT, updated_at TEXT DEFAULT 'old');
     CREATE TABLE duels (
       id TEXT PRIMARY KEY, tournament_id TEXT, match_id TEXT, is_test INTEGER,
@@ -31,7 +31,7 @@ async function database(t) {
     );
     INSERT INTO profiles (id, gg_elo) VALUES ('p1',1000),('p2',1200),('p3',1400),('p4',1600),('p5',1800);
     INSERT INTO profiles VALUES ('deleted',9999,'deleted');
-    INSERT INTO tournaments VALUES ('T',1,'Teams',NULL),('U',0,'Teams',NULL),('I',1,'Individuals',NULL);
+    INSERT INTO tournaments VALUES ('T',1,'Teams'),('U',0,'Teams'),('I',1,'Individuals');
     INSERT INTO matches (id,tournament_id) VALUES ('m','T'),('unranked','U'),('individual','I');
   `);
   await ensureGgRatingsSchema(db);

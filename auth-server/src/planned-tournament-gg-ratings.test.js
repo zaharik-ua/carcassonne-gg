@@ -12,13 +12,14 @@ async function fixture(t) {
   await exec(db, `
     CREATE TABLE profiles (id TEXT PRIMARY KEY, gg_elo REAL, deleted_at TEXT);
     INSERT INTO profiles VALUES ('a',1800,NULL), ('b',1800,NULL);
-    CREATE TABLE tournaments (id TEXT PRIMARY KEY, ranking INTEGER, tournament_type TEXT, deleted_at TEXT);
-    INSERT INTO tournaments VALUES ('T',1,'Teams',NULL),('U',0,'Teams',NULL),('I',1,'Individuals',NULL),('X',1,'Teams','deleted');
+    -- tournaments has no deleted_at column in the production schema.
+    CREATE TABLE tournaments (id TEXT PRIMARY KEY, ranking INTEGER, tournament_type TEXT);
+    INSERT INTO tournaments VALUES ('T',1,'Teams'),('U',0,'Teams'),('I',1,'Individuals');
     CREATE TABLE matches (id TEXT PRIMARY KEY, tournament_id TEXT, status TEXT, deleted_at TEXT, updated_at TEXT DEFAULT 'old', updated_by TEXT DEFAULT 'keeper');
     INSERT INTO matches (id,tournament_id,status,deleted_at) VALUES
       ('team','T','Planned',NULL), ('unranked','U','Planned',NULL), ('done','T','Done',NULL),
       ('empty','T','Planned',NULL), ('missing','T','Planned',NULL), ('individual','I','Planned',NULL),
-      ('deleted','T','Planned','deleted'), ('deleted-tournament','X','Planned',NULL);
+      ('deleted','T','Planned','deleted'), ('missing-tournament','X','Planned',NULL);
     CREATE TABLE duels (
       id TEXT PRIMARY KEY, tournament_id TEXT, match_id TEXT, status TEXT,
       player_1_id TEXT DEFAULT 'a', player_2_id TEXT DEFAULT 'b', deleted_at TEXT,
@@ -30,7 +31,7 @@ async function fixture(t) {
       ('done','T','team','Done',NULL), ('individual','I',NULL,'Planned',NULL),
       ('deleted','T','team','Planned','deleted'), ('deleted-parent','T','deleted','Planned',NULL),
       ('orphan','T','absent','Planned',NULL), ('no-tournament',NULL,NULL,'Planned',NULL),
-      ('deleted-tournament','X','deleted-tournament','Planned',NULL), ('in-progress','T',NULL,'In progress',NULL),
+      ('missing-tournament','X','missing-tournament','Planned',NULL), ('in-progress','T',NULL,'In progress',NULL),
       ('inherited',NULL,'team','Planned',NULL), ('missing','T','missing','Planned',NULL);
     UPDATE duels SET player_2_id='absent' WHERE id='missing';
     CREATE TABLE audit_trail (id INTEGER PRIMARY KEY);

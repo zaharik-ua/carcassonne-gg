@@ -105,7 +105,6 @@ export async function updateMatchGgRating(db, matchId) {
     FROM matches m
     LEFT JOIN tournaments t
       ON upper(trim(t.id)) = upper(trim(m.tournament_id))
-      AND t.deleted_at IS NULL
     WHERE m.id = ? AND m.deleted_at IS NULL
   `, [matchId]);
   if (!match) return null;
@@ -121,4 +120,3 @@ export async function updateMatchGgRating(db, matchId) {
   await run(db, "UPDATE matches SET gg_rating = ? WHERE id = ?", [ggRating, matchId]);
   return ggRating;
 }
-
