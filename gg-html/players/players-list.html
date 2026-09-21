@@ -285,15 +285,6 @@
     vertical-align: middle;
     background: #fff;
   }
-  .masters-table tbody tr.player-row:hover {
-    background-color: #e6f2ff;
-  }
-  .masters-table tbody tr.player-row:hover td {
-    background-color: #e6f2ff;
-  }
-  .masters-table tbody tr.player-row {
-    cursor: pointer;
-  }
   .masters-table .col-player {
     width: 100%;
   }
@@ -309,6 +300,9 @@
   }
   .player-cell .player-text { line-height: 1.1; }
   .player-cell .player-nick { font-size: 16px; font-weight: normal; color: #333; }
+  .player-cell a.player-nick { text-decoration: none; }
+  .player-cell a.player-nick:hover,
+  .player-cell a.player-nick:focus-visible { color: #0277BD; text-decoration: none; }
   .player-cell .player-name { font-size: 14px; color: #555; }
   .player-cell .player-achievements img { height: 20px; margin-left: 4px; }
 </style>
@@ -447,9 +441,13 @@
     const textContainer = document.createElement("div");
     textContainer.className = "player-text";
 
-    const nick = document.createElement("div");
+    const nick = document.createElement(player.profile ? "a" : "div");
     nick.className = "player-nick";
     nick.textContent = player.player || "";
+    if (player.profile) {
+      nick.href = player.profile;
+      nick.target = "_self";
+    }
 
     const name = document.createElement("div");
     name.className = "player-name";
@@ -517,10 +515,6 @@
       }
     }
     tr.appendChild(tdElo);
-
-    if (player.profile) {
-      tr.dataset.profile = player.profile;
-    }
 
     return tr;
   }
@@ -627,13 +621,7 @@
     const pagePlayers = players.slice(startIndex, startIndex + playersPaginationState.pageSize);
     pagePlayers.forEach((player, index) => {
       const tr = createPlayerElement(player, startIndex + index);
-      tr.classList.add("player-row");
       tbody.appendChild(tr);
-
-      tr.addEventListener("click", (e) => {
-        if (e.target.closest("a")) return;
-        if (tr.dataset.profile) window.location.href = tr.dataset.profile;
-      });
     });
     table.appendChild(tbody);
 

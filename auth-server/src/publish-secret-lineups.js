@@ -1,3 +1,4 @@
+import { ensureGgRatingsSchema } from "./gg-ratings.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
@@ -21,6 +22,7 @@ db.configure("busyTimeout", 5000);
 
 try {
   await ensureSecretLineupsSchema(db);
+  await ensureGgRatingsSchema(db);
   const results = await publishDueSecretLineups(db);
   const publishedCount = results.filter((result) => result?.published).length;
   console.log(JSON.stringify({

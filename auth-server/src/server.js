@@ -1,3 +1,8 @@
+import {
+  calculateGgDuelRating,
+  loadGgRatingContext as loadGgRatingContextFromDb,
+  updateMatchGgRating,
+} from "./gg-ratings.js";
 import path from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -2191,75 +2196,8 @@ function calculateDuelRating(ratingFull) {
   return Math.round(ratingFull);
 }
 
-function percentileInclusive(sortedValues, percentile) {
-  if (!Array.isArray(sortedValues) || !sortedValues.length) return null;
-  const position = (sortedValues.length - 1) * percentile;
-  const lowerIndex = Math.floor(position);
-  const upperIndex = Math.ceil(position);
-  const lowerValue = sortedValues[lowerIndex];
-  const upperValue = sortedValues[upperIndex];
-  return lowerValue + ((upperValue - lowerValue) * (position - lowerIndex));
-}
-
-function buildGgRatingContext(profileRows) {
-  const ggEloByPlayerId = new Map();
-  const ratingList = [];
-  (Array.isArray(profileRows) ? profileRows : []).forEach((row) => {
-    const playerId = String(row?.id || "").trim();
-    const rawRating = row?.gg_elo;
-    if (!playerId || rawRating === null || rawRating === undefined || String(rawRating).trim() === "") return;
-    const rating = Number(rawRating);
-    if (!Number.isFinite(rating)) return;
-    ggEloByPlayerId.set(playerId, rating);
-    ratingList.push(rating);
-  });
-  ratingList.sort((a, b) => a - b);
-  return {
-    ggEloByPlayerId,
-    lowAnchor: percentileInclusive(ratingList, 0.15),
-    highAnchor: percentileInclusive(ratingList, 0.95),
-  };
-}
-
 async function loadGgRatingContext() {
-  const rows = await dbAllAsync(
-    `
-      SELECT id, gg_elo
-      FROM profiles
-      WHERE deleted_at IS NULL
-        AND gg_elo IS NOT NULL
-        AND trim(CAST(gg_elo AS TEXT)) <> ''
-    `
-  );
-  return buildGgRatingContext(rows);
-}
-
-function calculateGgDuelRating(context, player1Id, player2Id) {
-  const playerRatingA = context?.ggEloByPlayerId?.get(String(player1Id || "").trim());
-  const playerRatingB = context?.ggEloByPlayerId?.get(String(player2Id || "").trim());
-  const lowAnchor = context?.lowAnchor;
-  const highAnchor = context?.highAnchor;
-  if (![playerRatingA, playerRatingB, lowAnchor, highAnchor].every(Number.isFinite)) {
-    return { ggRatingFull: null, ggRating: null };
-  }
-
-  const ratingSpan = Math.max(highAnchor - lowAnchor, 1);
-  const differenceScale = ratingSpan * 0.4375;
-  const maximumScore = 5.49;
-  const curvePower = 0.8;
-  const closenessBonus = 0.15;
-  const matchAverage = (playerRatingA + playerRatingB) / 2;
-  const normalizedStrength = Math.min(1, Math.max(0, (matchAverage - lowAnchor) / ratingSpan));
-  const closeness = 1 - Math.min(1, Math.abs(playerRatingA - playerRatingB) / differenceScale);
-  const calculatedScore = Math.min(
-    maximumScore,
-    maximumScore * (normalizedStrength ** curvePower)
-      + closenessBonus * normalizedStrength * (closeness ** curvePower)
-  );
-  const ggRatingFull = playerRatingA >= highAnchor && playerRatingB >= highAnchor
-    ? 6
-    : calculatedScore;
-  return { ggRatingFull, ggRating: Math.round(ggRatingFull) };
+  return loadGgRatingContextFromDb(db);
 }
 
 function calculateMatchRating(duelRatingFullValues) {
@@ -2346,6 +2284,7 @@ async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
     [normalizedMatchId]
   );
   const { matchRating } = await recomputeDuelRatingsForMatch(normalizedMatchId);
+  await updateMatchGgRating(db, normalizedMatchId);
 
   const aggregateRow = await dbGetAsync(
     `
@@ -5340,6 +5279,7 @@ function ensureMatchesSchema() {
       addColumnIfMissing(currentColumns, "matches", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(currentColumns, "matches", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(currentColumns, "matches", "rating", "INTEGER");
+      addColumnIfMissing(currentColumns, "matches", "gg_rating", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "dw1_import", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "dw2_import", "INTEGER");
       addColumnIfMissing(currentColumns, "matches", "gw1_import", "INTEGER");
@@ -5411,6 +5351,7 @@ function ensureMatchesSchema() {
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           rating INTEGER,
+          gg_rating INTEGER,
           stage TEXT,
           "group" TEXT,
           round_name TEXT,
@@ -5463,6 +5404,7 @@ function ensureMatchesSchema() {
           created_at,
           updated_at,
           rating,
+          gg_rating,
           stage,
           "group",
           round_name,
@@ -5515,6 +5457,7 @@ function ensureMatchesSchema() {
           ${selectExpr("created_at", "CURRENT_TIMESTAMP")},
           ${selectExpr("updated_at", "CURRENT_TIMESTAMP")},
           ${selectExpr("rating")},
+          ${selectExpr("gg_rating")},
           ${selectExpr("stage")},
           ${selectExpr("group")},
           ${selectExpr("round_name")},
@@ -12720,7 +12663,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
         const { ggRatingFull, ggRating } = calculateGgDuelRating(
           ggRatingContext,
           lockedRequest.player_1_id,
-          lockedRequest.player_2_id
+          lockedRequest.player_2_id,
+          lockedDuelRanking
         );
         await dbRunAsync(
           `
@@ -19634,13 +19578,14 @@ app.post("/duels/bulk-upsert", async (req, res) => {
         toIntOrNull(item?.dw1),
         toIntOrNull(item?.dw2)
       );
-      const { ggRatingFull, ggRating } = calculateGgDuelRating(ggRatingContext, player1, player2);
       const tournamentId = normalizeText(item?.tournament_id);
+      const ranking = await loadTournamentRanking(tournamentId);
+      const { ggRatingFull, ggRating } = calculateGgDuelRating(ggRatingContext, player1, player2, ranking);
       sanitized.push({
         id,
         tournament_id: tournamentId,
         match_id: null,
-        ranking: await loadTournamentRanking(tournamentId),
+        ranking,
         duel_number: duelNumber,
         duel_format: normalizeText(item?.duel_format),
         time_utc: normalizeText(item?.time_utc),
@@ -19712,6 +19657,14 @@ app.post("/duels/bulk-upsert", async (req, res) => {
           dw1 = excluded.dw1,
           dw2 = excluded.dw2,
           ranking = excluded.ranking,
+          gg_rating_full = CASE
+            WHEN lower(trim(COALESCE(excluded.status, 'Planned'))) = 'planned'
+              AND NULLIF(trim(excluded.tournament_id), '') IS NOT NULL
+            THEN excluded.gg_rating_full ELSE duels.gg_rating_full END,
+          gg_rating = CASE
+            WHEN lower(trim(COALESCE(excluded.status, 'Planned'))) = 'planned'
+              AND NULLIF(trim(excluded.tournament_id), '') IS NOT NULL
+            THEN excluded.gg_rating ELSE duels.gg_rating END,
           status = excluded.status,
           updated_by = excluded.updated_by,
           deleted_by = NULL,
@@ -19862,7 +19815,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
             toIntOrNull(item?.dw1),
             toIntOrNull(item?.dw2)
           );
-          const { ggRatingFull, ggRating } = calculateGgDuelRating(ggRatingContext, player1, player2);
+          const { ggRatingFull, ggRating } = calculateGgDuelRating(ggRatingContext, player1, player2, tournament.ranking ? 1 : 0);
           sanitized.push({
             id,
             tournament_id: normalizeText(item?.tournament_id) || tournament.id,
@@ -19981,6 +19934,14 @@ app.post("/duels/bulk-upsert", async (req, res) => {
                   dw1 = excluded.dw1,
                   dw2 = excluded.dw2,
                   ranking = excluded.ranking,
+                  gg_rating_full = CASE
+                    WHEN lower(trim(COALESCE(excluded.status, 'Planned'))) = 'planned'
+                      AND NULLIF(trim(excluded.tournament_id), '') IS NOT NULL
+                    THEN excluded.gg_rating_full ELSE duels.gg_rating_full END,
+                  gg_rating = CASE
+                    WHEN lower(trim(COALESCE(excluded.status, 'Planned'))) = 'planned'
+                      AND NULLIF(trim(excluded.tournament_id), '') IS NOT NULL
+                    THEN excluded.gg_rating ELSE duels.gg_rating END,
                   status = excluded.status,
                   updated_by = excluded.updated_by,
                   deleted_by = NULL,

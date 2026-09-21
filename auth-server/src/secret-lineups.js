@@ -1,3 +1,5 @@
+import { calculateGgDuelRating, loadGgRatingContext, updateMatchGgRating } from "./gg-ratings.js";
+
 export const SECRET_LINEUP_SIZE = 5;
 
 export function isBlindLineupType(value) {
@@ -319,7 +321,11 @@ export async function publishSecretLineupMatchInTransaction(db, matchId, actorPl
     return { published: false, reason: "incomplete_lineup" };
   }
 
+  const ggRatingContext = await loadGgRatingContext(db);
   for (let position = 1; position <= SECRET_LINEUP_SIZE; position += 1) {
+    const { ggRatingFull, ggRating } = calculateGgDuelRating(
+      ggRatingContext, entriesByTeam.get(team1).get(position), entriesByTeam.get(team2).get(position), match.ranking
+    );
     const duelId = buildPublishedDuelId(normalizedMatchId, position);
     await dbRun(
       db,
@@ -330,6 +336,8 @@ export async function publishSecretLineupMatchInTransaction(db, matchId, actorPl
           match_id,
           is_test,
           ranking,
+          gg_rating_full,
+          gg_rating,
           duel_number,
           duel_format,
           time_utc,
@@ -346,12 +354,14 @@ export async function publishSecretLineupMatchInTransaction(db, matchId, actorPl
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, 'Bo3', ?, 0, ?, ?, NULL, NULL, 'Planned', ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Bo3', ?, 0, ?, ?, NULL, NULL, 'Planned', ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO UPDATE SET
           tournament_id = excluded.tournament_id,
           match_id = excluded.match_id,
           is_test = excluded.is_test,
           ranking = excluded.ranking,
+          gg_rating_full = excluded.gg_rating_full,
+          gg_rating = excluded.gg_rating,
           duel_number = excluded.duel_number,
           duel_format = excluded.duel_format,
           time_utc = excluded.time_utc,
@@ -372,6 +382,8 @@ export async function publishSecretLineupMatchInTransaction(db, matchId, actorPl
         normalizedMatchId,
         Number(match.is_test) === 1 ? 1 : 0,
         Number(match.ranking) === 1 ? 1 : 0,
+        ggRatingFull,
+        ggRating,
         position,
         match.time_utc,
         entriesByTeam.get(team1).get(position),
@@ -397,6 +409,7 @@ export async function publishSecretLineupMatchInTransaction(db, matchId, actorPl
     `,
     [actorPlayerId, normalizedMatchId]
   );
+  await updateMatchGgRating(db, normalizedMatchId);
   const publishedMatch = await dbGet(
     db,
     "SELECT lineups_published_at FROM matches WHERE trim(COALESCE(id, '')) = trim(?) LIMIT 1",

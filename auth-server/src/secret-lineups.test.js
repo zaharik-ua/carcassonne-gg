@@ -49,15 +49,19 @@ async function createDatabase(t) {
   await exec(db, `
     CREATE TABLE profiles (
       id TEXT PRIMARY KEY,
+      gg_elo REAL,
       deleted_at TEXT
     );
     CREATE TABLE tournaments (
       id TEXT PRIMARY KEY,
-      ranking INTEGER NOT NULL DEFAULT 1
+      ranking INTEGER NOT NULL DEFAULT 1,
+      tournament_type TEXT DEFAULT 'Teams',
+      deleted_at TEXT
     );
     CREATE TABLE matches (
       id TEXT PRIMARY KEY,
       tournament_id TEXT,
+      gg_rating INTEGER,
       is_test INTEGER NOT NULL DEFAULT 0,
       time_utc TEXT,
       lineup_type TEXT,
@@ -77,6 +81,8 @@ async function createDatabase(t) {
       match_id TEXT,
       is_test INTEGER NOT NULL DEFAULT 0,
       ranking INTEGER NOT NULL DEFAULT 1,
+      gg_rating_full REAL,
+      gg_rating INTEGER,
       duel_number INTEGER,
       duel_format TEXT,
       time_utc TEXT,
@@ -266,4 +272,30 @@ test("waits for a missing lineup after the deadline and publishes as soon as it 
 
   assert.equal(publishedResult.published, true);
   assert.equal(publishedDuelCount.count, SECRET_LINEUP_SIZE);
+});
+
+test("Blind publication persists GG ratings for ranked duels and their Team match", async (t) => {
+  const db = await createDatabase(t);
+  await seedMatch(db, "ranked", new Date(Date.now() - 60 * 1000).toISOString());
+  await seedLineup(db, "ranked", "AAA", "a");
+  await seedLineup(db, "ranked", "BBB", "b");
+  await run(db, "UPDATE profiles SET gg_elo = 1800");
+  const result = await publishSecretLineupMatch(db, "ranked");
+  assert.equal(result.published, true);
+  const duels = await all(db, "SELECT gg_rating_full,gg_rating FROM duels WHERE match_id='ranked'");
+  assert.equal(duels.length, SECRET_LINEUP_SIZE);
+  assert.ok(duels.every((duel) => duel.gg_rating_full === 6 && duel.gg_rating === 6));
+  assert.equal((await get(db, "SELECT gg_rating FROM matches WHERE id='ranked'")).gg_rating,6);
+});
+
+test("Blind publication leaves ratings NULL for non-ranking tournaments even with player Elo", async (t) => {
+  const db = await createDatabase(t);
+  await seedMatch(db, "unranked", new Date(Date.now() - 60 * 1000).toISOString());
+  await seedLineup(db, "unranked", "AAA", "a");
+  await seedLineup(db, "unranked", "BBB", "b");
+  await run(db, "UPDATE profiles SET gg_elo = 1800");
+  await run(db, "UPDATE tournaments SET ranking=0");
+  assert.equal((await publishSecretLineupMatch(db, "unranked")).published,true);
+  assert.ok((await all(db,"SELECT gg_rating_full,gg_rating FROM duels")).every((duel) => duel.gg_rating_full === null && duel.gg_rating === null));
+  assert.equal((await get(db,"SELECT gg_rating FROM matches WHERE id='unranked'")).gg_rating,null);
 });

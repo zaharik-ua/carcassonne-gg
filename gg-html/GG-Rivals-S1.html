@@ -4180,7 +4180,8 @@
         return Number.isFinite(ts) ? ts : 0;
       };
 
-      const candidates = (duels || []).filter(duel => {
+      const liveDuels = isBountyTprStandings ? challengeDuels : duels;
+      const candidates = (liveDuels || []).filter(duel => {
         if (!duel || duel.tournament_id !== tournamentId) return false;
         if (!isStageMatch(duel.stage || null)) return false;
         if (!isInProgressStatus(duel.status)) return false;

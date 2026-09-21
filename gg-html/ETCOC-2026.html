@@ -1166,6 +1166,12 @@
 
   /* Responsive: Limit width of time cell on mobile */
   @media (max-width: 768px) {
+    .group-table .standing-desktop-only {
+      display: none;
+    }
+    .fullscreen-content .group-table .standing-desktop-only {
+      display: table-cell;
+    }
     .match-table td.date-cell {
       max-width: 60px;
       overflow: hidden;
@@ -2592,6 +2598,19 @@
     }
   }
 
+  function getTeamStandingsTiebreakersHtml() {
+    return `
+      <p>The final positions in the group will be determined in the following order:<br>
+        1. Number of MW<br>
+        2. The difference between DW and DL<br>
+        3. The difference between GW and GL<br>
+        4. Number of GW<br>
+        5. Tiebreakers 1–4, but applied only to confrontations between teams with equal results<br>
+        6. Random draw
+      </p>
+    `;
+  }
+
   function renderStandingsData(standings_list, containerOverride, tournamentContext, options = {}) {
     // --- RENDER STANDINGS ---
     // Build standings tables grouped by group, sorted and styled with logos
@@ -3118,6 +3137,9 @@
         metrics.forEach(lbl => {
           const th = document.createElement('th');
           th.className = 'standing-metric-col';
+          if (isTeam && (lbl === 'GW' || lbl === 'GL')) {
+            th.classList.add('standing-desktop-only');
+          }
           th.textContent = lbl;
           headTr.appendChild(th);
         });
@@ -3205,6 +3227,9 @@
             ];
             values.forEach((val, i) => {
               const td = document.createElement('td');
+              if (metrics[i] === 'GW' || metrics[i] === 'GL') {
+                td.classList.add('standing-desktop-only');
+              }
               td.textContent = String(val ?? '');
               if (i === 1) td.style.fontWeight = '600';
               tr.appendChild(td);
@@ -3277,7 +3302,7 @@
       renderStandingsTable();
 
       const standingsColumns = isTeam
-        ? ['MP','MW','DD','DW','GD','GW','OMW','ODD','ODW']
+        ? ['MP','MW','ML','DW','DL','GW','GL','GD']
         : (isSwissStandings ? ['MP','MW','ML','GW','GL','OMW','OGD','OGW'] : ['MP','MW','ML','GW','GL']);
       fullViewBtn.addEventListener('click', () => {
         openTableFullscreen({
@@ -3324,15 +3349,7 @@
       explanation.className = "standings-order-info";
       explanation.innerHTML = `
         <p>MP: Matches Played MW: Matches Won ML: Matches Lost DW: Duels Won DL: Duels Lost GW: Games Won GL: Games Lost</p>
-        <p>The final positions in the group will be determined in the following order:<br>
-          1. Number of MW<br>
-          2. The difference between DW and DL<br>
-          3. The difference between GW and GL<br>
-          4. Number of GW<br>
-          5. Tiebreakers 1–4, but applied only to confrontations between players with equal results<br>
-          6. The difference in points scored in confrontations between players with equal results<br>
-          7. Random draw
-        </p>
+        ${getTeamStandingsTiebreakersHtml()}
       `;
       container.appendChild(explanation);
     } else if (isIndividualStandings) {
@@ -4815,13 +4832,12 @@
       <p>
         MP — Matches Played.<br>
         MW — Matches Won.<br>
-        DD — Duels Difference (DW − DL).<br>
+        ML — Matches Lost.<br>
         DW — Duels Won.<br>
-        GD — Games Difference (GW − GL).<br>
+        DL — Duels Lost.<br>
         GW — Games Won.<br>
-        OMW — Opponents’ Matches Won.<br>
-        ODD — Opponents’ Duels Difference.<br>
-        ODW — Opponents’ Duels Won.
+        GL — Games Lost.<br>
+        GD — Games Difference (GW − GL).
       </p>
     ` : '';
 
