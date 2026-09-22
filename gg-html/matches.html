@@ -1249,7 +1249,7 @@ code {
   }
 
   .lineup__overview {
-      padding: 10px 12px 10px 15px;
+      padding: 5px 12px;
       line-height: 22px;
   }
 
@@ -1317,15 +1317,16 @@ code {
   .lineup__gg-duel {
     width: 100%;
     display: grid;
-    grid-template-columns: 54px minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: 46px minmax(0, 1fr);
     align-items: center;
-    gap: 8px;
-    padding: 7px 8px;
+    gap: 7px;
+    padding: 5px 0;
     border: 0;
     border-bottom: 1px solid #e1e4e8;
     background: transparent;
     color: #222;
     font: inherit;
+    line-height: 18px;
     text-align: left;
     cursor: pointer;
     box-sizing: border-box;
@@ -1338,13 +1339,17 @@ code {
     outline: none;
   }
 
+  .lineup__overview--database-gg > .lineup__gg-duel:last-of-type {
+    border-bottom: 0;
+  }
+
   .lineup__gg-duel-rating {
-    min-height: 24px;
+    min-height: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
     align-self: stretch;
-    padding-right: 8px;
+    padding-right: 4px;
     border-right: 1px solid #c9cfd6;
   }
 
@@ -1352,25 +1357,42 @@ code {
     margin-bottom: 0;
   }
 
+  .lineup__gg-duel-rating .match-rating .material-icons-round {
+    font-size: 9px;
+    line-height: 9px;
+    letter-spacing: -1px;
+  }
+
   .lineup__gg-duel-player {
     min-width: 0;
     display: flex;
+    flex: 0 1 auto;
     align-items: center;
     gap: 7px;
   }
 
   .lineup__gg-duel-player--right {
-    justify-content: flex-end;
-    text-align: right;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .lineup__gg-duel-matchup {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    overflow: hidden;
   }
 
   .lineup__gg-duel-avatar {
-    width: 22px;
-    height: 22px;
-    flex: 0 0 22px;
-    border-radius: 3px;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border: 0.5px solid #444;
+    border-radius: 2px;
     background: #e6e9ed;
     object-fit: cover;
+    box-sizing: border-box;
   }
 
   .lineup__gg-duel-avatar-fallback {
@@ -1385,14 +1407,14 @@ code {
   .lineup__gg-duel-name {
     min-width: 0;
     overflow: hidden;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 15px;
+    font-weight: 400;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .lineup__gg-duel-result {
-    min-width: 40px;
+    flex: 0 0 auto;
     color: #333;
     font-size: 13px;
     font-weight: 700;
@@ -1401,34 +1423,79 @@ code {
   }
 
   @media (max-width: 600px) {
+    .lineup__overview--database-gg {
+      padding-left: 0;
+      padding-right: 0;
+    }
+
     .lineup__gg-duel {
-      grid-template-columns: 46px minmax(0, 1fr) auto minmax(0, 1fr);
-      gap: 5px;
-      padding: 7px 5px;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 7px;
+      padding: 2px 7px;
     }
 
     .lineup__gg-duel-rating {
-      padding-right: 5px;
+      padding-right: 2px;
+    }
+
+    .lineup__gg-duel-rating .match-rating {
+      display: grid;
+      grid-template-columns: repeat(6, 4.5px);
+      justify-content: center;
+      row-gap: 1px;
+    }
+
+    .lineup__gg-duel-rating .match-rating .material-icons-round {
+      width: 9px;
+      font-size: 9px;
+      line-height: 8px;
+      letter-spacing: 0;
+    }
+
+    .lineup__gg-duel-rating .match-rating .material-icons-round:nth-child(1) {
+      grid-column: 1 / span 2;
+      grid-row: 1;
+    }
+
+    .lineup__gg-duel-rating .match-rating .material-icons-round:nth-child(2) {
+      grid-column: 3 / span 2;
+      grid-row: 1;
+    }
+
+    .lineup__gg-duel-rating .match-rating .material-icons-round:nth-child(3) {
+      grid-column: 5 / span 2;
+      grid-row: 1;
+    }
+
+    .lineup__gg-duel-rating .match-rating .material-icons-round:nth-child(4) {
+      grid-column: 2 / span 2;
+      grid-row: 2;
+    }
+
+    .lineup__gg-duel-rating .match-rating .material-icons-round:nth-child(5) {
+      grid-column: 4 / span 2;
+      grid-row: 2;
     }
 
     .lineup__gg-duel-player {
-      gap: 4px;
+      gap: 5px;
+    }
+
+    .lineup__gg-duel-matchup {
+      gap: 7px;
     }
 
     .lineup__gg-duel-avatar {
-      width: 19px;
-      height: 19px;
-      flex-basis: 19px;
+      width: 15px;
+      height: 15px;
+      flex-basis: 15px;
     }
 
     .lineup__gg-duel-name,
     .lineup__gg-duel-result {
-      font-size: 12px;
+      font-size: 13px;
     }
 
-    .lineup__gg-duel-result {
-      min-width: 32px;
-    }
   }
 
   .lineup__games {
@@ -1778,11 +1845,11 @@ function normalizeBadgeColor(value) {
   return /^[0-9a-fA-F]{6}$/.test(normalized) ? `#${normalized}` : "";
 }
 
-// Build rating stars element (1-5 grey stars, 6 = 5 gold stars)
-function createRatingElement(rating, { isGgRating = false } = {}) {
+// Build rating stars element (0 = 5 empty stars, 1-5 filled stars, 6 = 5 gold stars)
+function createRatingElement(rating, { isGgRating = false, allowZeroGgRating = false } = {}) {
   const rNum = (rating === null || rating === undefined || rating === "") ? null : parseInt(rating, 10);
   if (!Number.isInteger(rNum)) return null;
-  if (isGgRating && rNum === 0) return null;
+  if (isGgRating && rNum === 0 && !allowZeroGgRating) return null;
 
   const wrap = document.createElement("div");
   wrap.className = "match-rating"
@@ -1820,6 +1887,20 @@ function createMatchRatingElement(match) {
 
   return createRatingElement(hasGgRating ? ggRating : match?.rating, {
     isGgRating: hasGgRating,
+  });
+}
+
+function createDuelRatingElement(duel) {
+  const rawGgRating = duel?.gg_rating;
+  const hasGgRatingValue = rawGgRating !== null
+    && rawGgRating !== undefined
+    && String(rawGgRating).trim() !== "";
+  const ggRating = hasGgRatingValue ? parseInt(rawGgRating, 10) : null;
+  const useGgRating = Number.isInteger(ggRating) && ggRating >= 0;
+
+  return createRatingElement(useGgRating ? ggRating : duel?.rating, {
+    isGgRating: useGgRating,
+    allowZeroGgRating: true,
   });
 }
 
@@ -3998,7 +4079,7 @@ function createDatabaseGgLineupRow(duel) {
 
   const rating = document.createElement("span");
   rating.className = "lineup__gg-duel-rating";
-  const ratingElement = createMatchRatingElement(duel);
+  const ratingElement = createDuelRatingElement(duel);
   if (ratingElement) {
     rating.appendChild(ratingElement);
   } else {
@@ -4009,10 +4090,14 @@ function createDatabaseGgLineupRow(duel) {
   result.className = "lineup__gg-duel-result";
   result.textContent = resultLabel;
 
+  const matchup = document.createElement("span");
+  matchup.className = "lineup__gg-duel-matchup";
+  matchup.appendChild(createDatabaseGgLineupPlayer(duel, 1));
+  matchup.appendChild(result);
+  matchup.appendChild(createDatabaseGgLineupPlayer(duel, 2));
+
   row.appendChild(rating);
-  row.appendChild(createDatabaseGgLineupPlayer(duel, 1));
-  row.appendChild(result);
-  row.appendChild(createDatabaseGgLineupPlayer(duel, 2));
+  row.appendChild(matchup);
   row.addEventListener("click", () => {
     openChallengeMatchModal({
       id: duel?.id,
@@ -4037,6 +4122,9 @@ function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloU
 
   const lineupBody = document.createElement("div");
   lineupBody.className = "lineup__overview";
+  if (options.useDatabaseGgLayout) {
+    lineupBody.classList.add("lineup__overview--database-gg");
+  }
 
   sortLineups(lineups).forEach((duel) => {
     if (options.useDatabaseGgLayout) {
@@ -4139,7 +4227,9 @@ function createLineupPanel(matchId, lineups, chevronIcon, matchStatus = "", eloU
   }
 
   const eloUpdatedLabel = formatEloUpdatedAtLabel(eloUpdatedAt);
-  if (String(matchStatus || "").trim().toLowerCase() !== "done" && eloUpdatedLabel) {
+  if (!options.useDatabaseGgLayout
+      && String(matchStatus || "").trim().toLowerCase() !== "done"
+      && eloUpdatedLabel) {
     const info = document.createElement("div");
     info.className = "lineup__elo-updated";
 

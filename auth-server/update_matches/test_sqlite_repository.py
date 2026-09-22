@@ -229,7 +229,7 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
         self.assertIsNone(row["results_last_error"])
         self.assertEqual(self._game_count("planned"), 1)
 
-    def test_new_challenge_game_is_returned_for_replay_only_once(self) -> None:
+    def test_new_ranked_challenge_game_is_returned_for_replay_only_once(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
             self._insert_duel(
                 conn,
@@ -253,12 +253,29 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
         self.assertEqual(first_game_ids, ["challenge-987654321"])
         self.assertEqual(second_game_ids, [])
 
-    def test_new_non_challenge_game_is_not_returned_for_replay(self) -> None:
+    def test_new_ranked_non_challenge_game_is_returned_for_replay_only_once(self) -> None:
         result = MatchUpdateResult(
             status="success",
             wins0=1,
             wins1=0,
             tables=[self._table("987654322")],
+        )
+
+        first_game_ids = self.repository.save_match_result(self._request("planned"), result)
+        second_game_ids = self.repository.save_match_result(self._request("planned"), result)
+
+        self.assertEqual(first_game_ids, ["planned-987654322"])
+        self.assertEqual(second_game_ids, [])
+
+    def test_new_unranked_game_is_not_returned_for_replay(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("UPDATE duels SET ranking = 0 WHERE id = 'planned'")
+
+        result = MatchUpdateResult(
+            status="success",
+            wins0=1,
+            wins1=0,
+            tables=[self._table("987654323")],
         )
 
         game_ids = self.repository.save_match_result(self._request("planned"), result)

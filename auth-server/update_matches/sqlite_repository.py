@@ -174,7 +174,6 @@ class SqliteMatchRepository(MatchRepository):
                   l.id,
                   l.tournament_id,
                   l.status,
-                  l.source_type,
                   COALESCE(l.ranking, 0) AS ranking,
                   l.deleted_at,
                   l.time_utc,
@@ -243,7 +242,7 @@ class SqliteMatchRepository(MatchRepository):
             parent_match_id = str(match_row["match_id"]).strip() if match_row and match_row["match_id"] is not None else ""
 
             incoming_ids = []
-            is_challenge = str(current["source_type"] or "").strip().lower() == "challenge"
+            is_ranked = int(current["ranking"] or 0) == 1
             for index, table in enumerate(result.tables, start=1):
                 game_id = f"{match.match_id}-{table.id}"
                 incoming_ids.append(str(table.id))
@@ -300,7 +299,7 @@ class SqliteMatchRepository(MatchRepository):
                         table.status,
                     ),
                 )
-                if is_challenge and existing_game is None:
+                if is_ranked and existing_game is None:
                     created_replay_game_ids.append(game_id)
 
             if incoming_ids:

@@ -2905,6 +2905,55 @@
       };
     }
 
+    function findLiveMatchScoreForTeam(teamName, groupKey) {
+      const normalizedTeamName = String(teamName || '').trim().toLowerCase();
+      if (!normalizedTeamName) return null;
+
+      const normalizeGroupKey = (value) => String(value || '').trim().toLowerCase();
+      const targetGroup = normalizeGroupKey(groupKey);
+      const normalizeTeamName = (value) => String(value || '').trim().toLowerCase();
+
+      const parseTime = (timeValue) => {
+        if (!timeValue) return 0;
+        const timestamp = Date.parse(
+          String(timeValue).replace(/(\d{2})\.(\d{2})\.(\d{4}) (.*)/, '$2/$1/$3 $4')
+        );
+        return Number.isFinite(timestamp) ? timestamp : 0;
+      };
+
+      const candidates = (matches || []).filter(match => {
+        if (!match || match.tournament_id !== tournamentId) return false;
+        if (!isStageMatch(match.stage || null)) return false;
+        if (!isInProgressStatus(match.status)) return false;
+        if (
+          targetGroup
+          && normalizeGroupKey(match.group)
+          && normalizeGroupKey(match.group) !== targetGroup
+        ) {
+          return false;
+        }
+        return (
+          normalizeTeamName(match.team1) === normalizedTeamName
+          || normalizeTeamName(match.team2) === normalizedTeamName
+        );
+      });
+
+      if (!candidates.length) return null;
+
+      const liveMatch = candidates.reduce((latest, candidate) => (
+        !latest || parseTime(candidate.time) >= parseTime(latest.time) ? candidate : latest
+      ), null);
+      const score1 = parseScoreValue(liveMatch.duels_won1);
+      const score2 = parseScoreValue(liveMatch.duels_won2);
+      if (score1 === null || score2 === null) return null;
+
+      const teamIsFirst = normalizeTeamName(liveMatch.team1) === normalizedTeamName;
+      return {
+        self: teamIsFirst ? score1 : score2,
+        opp: teamIsFirst ? score2 : score1
+      };
+    }
+
     function applyCOCHeadToHeadTiebreak(playersInGroup, groupKey) {
       if (!Array.isArray(playersInGroup) || playersInGroup.length < 2) return;
 
@@ -3176,6 +3225,16 @@
             const span = document.createElement('span');
             span.textContent = rowData.team || '';
             wrap.appendChild(span);
+            const liveScore = findLiveMatchScoreForTeam(rowData.team, group);
+            if (liveScore) {
+              const badge = document.createElement('span');
+              const scoreState =
+                liveScore.self > liveScore.opp ? 'win' :
+                liveScore.self < liveScore.opp ? 'lose' : 'draw';
+              badge.className = `live-duel-score live-duel-score--${scoreState}`;
+              badge.textContent = `${liveScore.self}-${liveScore.opp}`;
+              wrap.appendChild(badge);
+            }
           } else if (!isTeam && rowData.player_id) {
             const found = players.find(pl => pl.player_id === rowData.player_id);
             if (found && found.avatar) {
