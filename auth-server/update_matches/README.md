@@ -68,13 +68,13 @@ Manual test for one match:
 python3 run_update_matches.py --match-id 20250330UKRPRT
 ```
 
-## Automatic replay import for new challenge games
+## Automatic replay import for new ranked games
 
 When `run_update_matches.py` receives a BGA game that is not yet present in
 `games`, it immediately imports that game's replay if the parent duel has
-`source_type = 'challenge'`. Updating an existing game does not fetch its
-replay again. Replay failures are logged and stored in `game_replays` without
-rolling back the successfully imported game or duel result.
+`ranking = 1`. Updating an existing game does not fetch its replay again.
+Replay failures are logged and stored in `game_replays` without rolling back
+the successfully imported game or duel result.
 
 Periodic scanning and retrying of games without a ready replay is not part of
 this flow yet.
@@ -107,6 +107,18 @@ defaults to `auth-server/data/auth.sqlite`. It can also be provided explicitly:
 ```bash
 python3 get_game_replay.py '<games.id>' --db-path /absolute/path/to/auth.sqlite
 ```
+
+To import replays for every active game in every active duel of one match, use
+the match primary key:
+
+```bash
+python3 get_match_game_replays.py '<matches.id>'
+```
+
+Ready replays are reused without another BGA request. Add `--force` to fetch
+them again. The command continues after individual game failures, prints a JSON
+summary, and exits with a non-zero status if any game failed or had no
+`bga_table_id`.
 
 Raw BGA logs are parsed in memory and are not stored. `events_json` contains
 ordered `pickTile`, `playTile`, and `playPartisan` events. `players_json`
