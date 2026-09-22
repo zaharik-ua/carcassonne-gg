@@ -108,17 +108,27 @@ defaults to `auth-server/data/auth.sqlite`. It can also be provided explicitly:
 python3 get_game_replay.py '<games.id>' --db-path /absolute/path/to/auth.sqlite
 ```
 
-To import replays for every active game in every active duel of one match, use
-the match primary key:
+To import replays for every active game in every active duel of one match, run
+the production wrapper with the match primary key:
 
 ```bash
-python3 get_match_game_replays.py '<matches.id>'
+/home/carcassonne-gg/auth-server/scripts/run_match_game_replays.sh MATCH_ID
+```
+
+The equivalent direct command, matching `update-duels.service`, is:
+
+```bash
+cd /home/carcassonne-gg/auth-server
+./.venv/bin/python -m update_matches.match_game_replay_cli \
+  --db-path /home/carcassonne-gg/auth-server/data/auth.sqlite \
+  MATCH_ID
 ```
 
 Ready replays are reused without another BGA request. Add `--force` to fetch
 them again. The command continues after individual game failures, prints a JSON
 summary, and exits with a non-zero status if any game failed or had no
-`bga_table_id`.
+`bga_table_id`. The wrapper uses the same lock as `update-duels.service`, so it
+does not run concurrently with the automatic match updater.
 
 Raw BGA logs are parsed in memory and are not stored. `events_json` contains
 ordered `pickTile`, `playTile`, and `playPartisan` events. `players_json`
