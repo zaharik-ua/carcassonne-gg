@@ -10,6 +10,7 @@ import {
   DEFAULT_MAX_PENDING_REQUESTS_PER_PLAYER,
   buildChallengeMatchCapacity,
   buildChallengeMatchProgress,
+  buildChallengeTournamentProgress,
   closeChallengePendingRequestsAfterAccept,
   didChallengeDuelTransitionToDone,
   ensureChallengePeriodConfigurationSchema,
@@ -22,6 +23,7 @@ import {
   loadChallengeBlockingRivalsPairDuel,
   loadChallengeMatchCapacities,
   loadChallengeScheduleConflict,
+  loadChallengeTournamentProgress,
   resolveMaxMatchesPerPlayer,
   resolveMaxPendingRequestsPerPlayer,
   shouldCloseChallengeRequestsForPlayerStatus,
@@ -213,6 +215,89 @@ test("normalizes Challenge period limits with stable defaults", () => {
   assert.equal(resolveMaxPendingRequestsPerPlayer(undefined), DEFAULT_MAX_PENDING_REQUESTS_PER_PLAYER);
   assert.equal(resolveMaxPendingRequestsPerPlayer("5"), 5);
   assert.equal(resolveMaxPendingRequestsPerPlayer(""), null);
+});
+
+test("tracks a player's completed matches against the linked tournament TPR target", () => {
+  assert.deepEqual(buildChallengeTournamentProgress(9, 10), {
+    tournament_matches_played_count: 9,
+    tpr_target_games: 10,
+    tournament_matches_remaining: 1,
+    is_tpr_target_reached: false,
+  });
+  assert.deepEqual(buildChallengeTournamentProgress(10, 10), {
+    tournament_matches_played_count: 10,
+    tpr_target_games: 10,
+    tournament_matches_remaining: 0,
+    is_tpr_target_reached: true,
+  });
+  assert.deepEqual(buildChallengeTournamentProgress(12, 10), {
+    tournament_matches_played_count: 12,
+    tpr_target_games: 10,
+    tournament_matches_remaining: 0,
+    is_tpr_target_reached: true,
+  });
+  assert.deepEqual(buildChallengeTournamentProgress(12, null, false), {
+    tournament_matches_played_count: 12,
+    tpr_target_games: null,
+    tournament_matches_remaining: null,
+    is_tpr_target_reached: false,
+  });
+});
+
+test("counts only scored Done matches in the linked tournament toward its TPR target", async (t) => {
+  const db = new sqlite3.Database(":memory:");
+  t.after(() => close(db));
+  await exec(db, `
+    CREATE TABLE tournaments (id TEXT PRIMARY KEY, tpr_target_games INTEGER);
+    CREATE TABLE matches (id TEXT PRIMARY KEY, tournament_id TEXT, deleted_at TEXT);
+    CREATE TABLE duels (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT,
+      match_id TEXT,
+      player_1_id TEXT,
+      player_2_id TEXT,
+      status TEXT,
+      dw1 INTEGER,
+      dw2 INTEGER,
+      deleted_at TEXT
+    );
+    INSERT INTO tournaments VALUES ('RIVALS-1', 2);
+    INSERT INTO matches VALUES ('match-1', 'RIVALS-1', NULL);
+    INSERT INTO duels VALUES
+      ('direct-done', 'RIVALS-1', NULL, 'p1', 'p2', 'Done', 2, 0, NULL),
+      ('match-done', NULL, 'match-1', 'p3', 'p1', 'done', 1, 2, NULL),
+      ('planned', 'RIVALS-1', NULL, 'p1', 'p4', 'Planned', NULL, NULL, NULL),
+      ('unscored', 'RIVALS-1', NULL, 'p1', 'p5', 'Done', NULL, NULL, NULL),
+      ('deleted', 'RIVALS-1', NULL, 'p1', 'p6', 'Done', 2, 1, CURRENT_TIMESTAMP),
+      ('self-match', 'RIVALS-1', NULL, 'p1', 'p1', 'Done', 2, 1, NULL),
+      ('missing-opponent', 'RIVALS-1', NULL, 'p1', NULL, 'Done', 2, 1, NULL),
+      ('other', 'RIVALS-2', NULL, 'p1', 'p7', 'Done', 2, 1, NULL);
+  `);
+
+  assert.deepEqual(
+    await loadChallengeTournamentProgress(db, {
+      rivalsTournamentId: "rivals-1",
+      playerId: "p1",
+    }),
+    {
+      tournament_matches_played_count: 2,
+      tpr_target_games: 2,
+      tournament_matches_remaining: 0,
+      is_tpr_target_reached: true,
+    }
+  );
+  assert.deepEqual(
+    await loadChallengeTournamentProgress(db, {
+      rivalsTournamentId: "missing",
+      playerId: "p1",
+    }),
+    {
+      tournament_matches_played_count: 0,
+      tpr_target_games: null,
+      tournament_matches_remaining: null,
+      is_tpr_target_reached: false,
+    }
+  );
 });
 
 test("checks pending-request limits using the configured period value", () => {

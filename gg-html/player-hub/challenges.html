@@ -3627,6 +3627,12 @@
     },
   };
   const LOCKED_PERIOD_STATUS_COPY = {
+    tpr_target_reached: {
+      label: "Tournament target reached",
+      tone: "played",
+      note: "You have played all matches allowed by this tournament's TPR target.",
+      editable: false,
+    },
     matches_scheduled: {
       label: "Matches scheduled",
       tone: "scheduled",
@@ -6138,9 +6144,28 @@
     return getChallengeMatchCount(period) >= getChallengeMatchLimit(period);
   }
 
+  function getChallengeTournamentTarget(period) {
+    const value = Number.parseInt(String(period?.tpr_target_games ?? ""), 10);
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+
+  function getChallengeTournamentPlayedMatchCount(period) {
+    const value = Number.parseInt(String(period?.tournament_matches_played_count ?? "0"), 10);
+    return Number.isInteger(value) && value > 0 ? value : 0;
+  }
+
+  function isChallengeTournamentTargetReached(period) {
+    if (typeof period?.is_tpr_target_reached === "boolean") {
+      return period.is_tpr_target_reached;
+    }
+    const target = getChallengeTournamentTarget(period);
+    return target !== null && getChallengeTournamentPlayedMatchCount(period) >= target;
+  }
+
   function shouldCollapseChallengeActionSections(period) {
     return normalizeStatus(period?.player_status) === "unavailable"
-      || isChallengeMatchLimitReached(period);
+      || isChallengeMatchLimitReached(period)
+      || isChallengeTournamentTargetReached(period);
   }
 
   function applyChallengeActionSectionDefaults(period, options = {}) {
@@ -6160,6 +6185,7 @@
   }
 
   function getLockedChallengePeriodStatus(period) {
+    if (isChallengeTournamentTargetReached(period)) return "tpr_target_reached";
     if (!isChallengeMatchLimitReached(period)) return "";
     const matchesLimit = getChallengeMatchLimit(period);
     const allMatchesPlayed = period?.is_match_limit_played === true
@@ -6172,6 +6198,19 @@
     showChallengeInfoDialog(
       "Match limit reached",
       `You already have ${matchLimit} ${matchLimit === 1 ? "match" : "matches"} counting toward this period's limit.`
+    );
+  }
+
+  function getChallengeTprTargetReachedMessage(period, subject = "You") {
+    const target = getChallengeTournamentTarget(period) || 10;
+    return `${subject} ${subject === "You" ? "have" : "has"} already played ${target} `
+      + `${target === 1 ? "match" : "matches"} in this tournament and reached its TPR target.`;
+  }
+
+  function showChallengeTprTargetReachedDialog(period, subject = "You") {
+    showChallengeInfoDialog(
+      "Tournament target reached",
+      `${getChallengeTprTargetReachedMessage(period, subject)} New Challenge requests and availability changes are closed.`
     );
   }
 
@@ -7360,6 +7399,9 @@
         const reasons = Array.isArray(eligibilityData?.eligibility?.reasons)
           ? eligibilityData.eligibility.reasons
           : [];
+        if (reasons.includes("current_player_tpr_target_reached")) {
+          throw new Error(getChallengeTprTargetReachedMessage(eligibilityData?.period || period));
+        }
         if (reasons.includes("current_player_match_limit")) {
           throw new Error("You have reached the Challenge match limit for this period.");
         }
@@ -7973,6 +8015,8 @@
     row.dataset.associationId = String(opponent?.association?.id || "");
     const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
     const canCreateRequests = !!eligibility?.can_create_requests;
+    const currentPlayerAtTprTarget = reasons.includes("current_player_tpr_target_reached")
+      || isChallengeTournamentTargetReached(period);
     const currentPlayerAtMatchLimit = reasons.includes("current_player_match_limit")
       || isChallengeMatchLimitReached(period);
     const opponentId = String(opponent?.player_id || "").trim();
@@ -7983,11 +8027,16 @@
       || (!!getPlayerAssociationKey(opponent) && getPlayerAssociationKey(opponent) === getPlayerAssociationKey(currentPlayer))
     );
     const opponentAtMatchLimit = !!opponent?.is_match_limit_reached;
+    const opponentAtTprTarget = !!opponent?.is_tpr_target_reached;
     const hasRivalsMatch = !!opponent?.has_rivals_match;
     const hasPendingRequest = !!opponent?.pending_request_id;
     const opponentCanInvite = typeof opponent?.can_invite === "boolean"
       ? opponent.can_invite
-      : !opponentAtMatchLimit && !isSameAssociation && !hasRivalsMatch && !hasPendingRequest;
+      : !opponentAtMatchLimit
+        && !opponentAtTprTarget
+        && !isSameAssociation
+        && !hasRivalsMatch
+        && !hasPendingRequest;
 
     const left = document.createElement("div");
     left.className = "challenge-opponent-left";
@@ -8085,7 +8134,9 @@
     inviteBtn.setAttribute("aria-disabled", isInviteAvailable ? "false" : "true");
     inviteBtn.textContent = window.matchMedia("(max-width: 720px)").matches ? "Invite" : "Invite to match";
     if (!isInviteAvailable) {
-      if (currentPlayerAtMatchLimit) inviteBtn.title = "You have reached this period's match limit.";
+      if (currentPlayerAtTprTarget) inviteBtn.title = getChallengeTprTargetReachedMessage(period);
+      else if (opponentAtTprTarget) inviteBtn.title = getChallengeTprTargetReachedMessage(opponent, "This player");
+      else if (currentPlayerAtMatchLimit) inviteBtn.title = "You have reached this period's match limit.";
       else if (opponentAtMatchLimit) inviteBtn.title = "This player has reached the match limit.";
       else if (isSameAssociation) inviteBtn.title = "Players from the same association cannot play each other.";
       else if (hasRivalsMatch) inviteBtn.title = "You already played this opponent in the linked Rivals tournament.";
@@ -8095,6 +8146,14 @@
     }
     inviteBtn.addEventListener("click", () => {
       const openInvite = (requestingPlayer) => {
+        if (currentPlayerAtTprTarget) {
+          showChallengeTprTargetReachedDialog(period);
+          return;
+        }
+        if (opponentAtTprTarget) {
+          showChallengeTprTargetReachedDialog(opponent, "This player");
+          return;
+        }
         if (currentPlayerAtMatchLimit) {
           showChallengeMatchLimitReachedDialog(period);
           return;
@@ -8150,6 +8209,9 @@
   function getEligibilityStateText(eligibility) {
     const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
     if (reasons.includes("period_closed")) return "Requests closed for this period.";
+    if (reasons.includes("current_player_tpr_target_reached")) {
+      return "You have reached this tournament's TPR target. New Challenge requests are closed.";
+    }
     return "";
   }
 
@@ -8381,6 +8443,21 @@
         .sort(compareOpponentsByStatusUpdatedAt);
       const item = opponentPanels.get(periodId);
       if (!item || item.panel !== panel) return;
+      if (data?.period) {
+        [
+          "matches_count",
+          "matches_limit",
+          "matches_remaining",
+          "is_match_limit_reached",
+          "tournament_matches_played_count",
+          "tpr_target_games",
+          "tournament_matches_remaining",
+          "is_tpr_target_reached",
+        ].forEach((field) => {
+          if (data.period[field] !== undefined) period[field] = data.period[field];
+        });
+      }
+      applyChallengeActionSectionDefaults(period);
       item.currentPlayer = data?.current_player || null;
       item.eligibility = data?.eligibility || {};
       item.opponentsByView = {
@@ -8589,15 +8666,29 @@
 
     const canAct = String(request?.status || "") === "pending" && ["planning_open", "active"].includes(String(period?.status || ""));
     const isAwaitingCurrentPlayer = String(request?.awaiting_player_id || "") === String(currentPlayerId || "");
+    const tournamentTargetReached = isChallengeTournamentTargetReached(period);
     const actions = document.createElement("div");
     actions.className = "challenge-request-actions-inline";
     if (canAct && isAwaitingCurrentPlayer) {
-      actions.appendChild(createActionButton("Accept", "challenge-btn-primary", () => {
-        openAcceptRequestForm(period, request, currentPlayerId);
-      }));
-      actions.appendChild(createActionButton("New time", "challenge-btn-secondary", () => {
-        openCounterRequestForm(period, request, currentPlayerId);
-      }));
+      if (tournamentTargetReached) {
+        ["Accept", "New time"].forEach((label) => {
+          const unavailableButton = createActionButton(
+            label,
+            "challenge-btn-secondary challenge-btn-unavailable",
+            () => showChallengeTprTargetReachedDialog(period)
+          );
+          unavailableButton.setAttribute("aria-disabled", "true");
+          unavailableButton.title = getChallengeTprTargetReachedMessage(period);
+          actions.appendChild(unavailableButton);
+        });
+      } else {
+        actions.appendChild(createActionButton("Accept", "challenge-btn-primary", () => {
+          openAcceptRequestForm(period, request, currentPlayerId);
+        }));
+        actions.appendChild(createActionButton("New time", "challenge-btn-secondary", () => {
+          openCounterRequestForm(period, request, currentPlayerId);
+        }));
+      }
       actions.appendChild(createActionButton("Decline", "challenge-btn-danger", (event) => {
         openDeclineRequestDialog(period, request, event.currentTarget);
       }));
@@ -8703,10 +8794,12 @@
   function createNewChallengeRequestButton(period, currentPlayerId, pendingSentCount) {
     const pendingRequestLimit = getChallengePendingRequestLimit(period);
     const hasFreeMatchSlot = !isChallengeMatchLimitReached(period);
+    const isTournamentTargetAvailable = !isChallengeTournamentTargetReached(period);
     const participationStatus = normalizeStatus(period?.player_status);
     const isParticipationEligible = participationStatus !== "unavailable";
     const isRequestLimitAvailable = pendingSentCount < pendingRequestLimit;
-    const isCreationAvailable = hasFreeMatchSlot
+    const isCreationAvailable = isTournamentTargetAvailable
+      && hasFreeMatchSlot
       && isParticipationEligible
       && isRequestLimitAvailable;
     const button = createActionButton(
@@ -8716,6 +8809,10 @@
         : "challenge-btn-secondary challenge-btn-unavailable",
       () => {
         const openRequest = () => {
+          if (!isTournamentTargetAvailable) {
+            showChallengeTprTargetReachedDialog(period);
+            return;
+          }
           if (!hasFreeMatchSlot) {
             showChallengeMatchLimitReachedDialog(period);
             return;
@@ -8743,7 +8840,8 @@
     );
     button.setAttribute("aria-disabled", isCreationAvailable ? "false" : "true");
     if (!isCreationAvailable) {
-      if (!hasFreeMatchSlot) button.title = "You have reached this period's match limit.";
+      if (!isTournamentTargetAvailable) button.title = getChallengeTprTargetReachedMessage(period);
+      else if (!hasFreeMatchSlot) button.title = "You have reached this period's match limit.";
       else if (!isParticipationEligible) button.title = "Your status is Not playing this week.";
       else button.title = `You already have ${pendingRequestLimit} pending match requests.`;
     }
@@ -8940,6 +9038,10 @@
           "matches_limit",
           "matches_remaining",
           "is_match_limit_reached",
+          "tournament_matches_played_count",
+          "tpr_target_games",
+          "tournament_matches_remaining",
+          "is_tpr_target_reached",
         ].forEach((field) => {
           if (data.period[field] !== undefined) period[field] = data.period[field];
         });

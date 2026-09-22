@@ -37,6 +37,7 @@ import {
   CHALLENGE_RIVALS_PAIR_DUEL_STATUSES,
   buildChallengeMatchCapacity,
   buildChallengeMatchProgress,
+  buildChallengeTournamentProgress,
   closeChallengePendingRequestsAfterAccept,
   didChallengeDuelTransitionToDone,
   ensureChallengePeriodConfigurationSchema,
@@ -48,6 +49,7 @@ import {
   loadChallengeBlockingRivalsPairDuel,
   loadChallengeMatchCapacities,
   loadChallengeScheduleConflict,
+  loadChallengeTournamentProgress,
   resolveMaxMatchesPerPlayer,
   resolveMaxPendingRequestsPerPlayer,
   shouldCloseChallengeRequestsForPlayerStatus,
@@ -9920,6 +9922,11 @@ function mapChallengeOpponent(row) {
   const associationId = normalizeNullableText(row?.association_id);
   const associationName = normalizeNullableText(row?.association_name);
   const capacity = buildChallengeMatchCapacity(row?.matches_count, row?.matches_limit);
+  const tournamentProgress = buildChallengeTournamentProgress(
+    row?.tournament_matches_played_count,
+    row?.tpr_target_games,
+    row?.tpr_target_games !== null && row?.tpr_target_games !== undefined
+  );
   return {
     player_id: normalizeNullableText(row?.player_id),
     bga_nickname: normalizeNullableText(row?.bga_nickname),
@@ -9946,6 +9953,7 @@ function mapChallengeOpponent(row) {
     has_rivals_match: Number(row?.has_rivals_match) === 1,
     can_invite: Number(row?.can_invite) === 1,
     ...capacity,
+    ...tournamentProgress,
   };
 }
 
@@ -10122,6 +10130,26 @@ async function loadChallengeMatchCapacityForPlayer(period, playerId, options = {
   });
   return capacities[normalizedPlayerId]
     || buildChallengeMatchCapacity(0, period?.max_matches_per_player);
+}
+
+async function loadChallengeTournamentProgressForPlayer(period, playerId) {
+  const tournamentId = normalizeNullableText(period?.rivals_tournament_id);
+  const normalizedPlayerId = normalizeNullableText(playerId);
+  return loadChallengeTournamentProgress(db, {
+    rivalsTournamentId: tournamentId,
+    playerId: normalizedPlayerId,
+  });
+}
+
+function createChallengeTprTargetReachedError(progress, subject = "You") {
+  const targetGames = Math.max(1, Number.parseInt(progress?.tpr_target_games, 10) || 10);
+  const error = new Error(
+    `${subject} ${subject === "You" ? "have" : "has"} already played ${targetGames} `
+      + `${targetGames === 1 ? "match" : "matches"} in this tournament and reached its TPR target`
+  );
+  error.httpStatus = 409;
+  error.code = "challenge_tpr_target_reached";
+  return error;
 }
 
 async function loadChallengeBlockingRivalsDuel(period, player1Id, player2Id, options = {}) {
@@ -10383,6 +10411,13 @@ function mapChallengePeriodForPlayer(row) {
     row?.matches_played_count,
     row?.max_matches_per_player
   );
+  const tournamentProgress = buildChallengeTournamentProgress(
+    row?.tournament_matches_played_count,
+    row?.tpr_target_games,
+    !!normalizeNullableText(row?.rivals_tournament_id)
+      && row?.tpr_target_games !== null
+      && row?.tpr_target_games !== undefined
+  );
 
   return {
     id: row.id,
@@ -10400,6 +10435,7 @@ function mapChallengePeriodForPlayer(row) {
     result_review_ends_at: row.result_review_ends_at,
     player_status: playerStatus,
     ...progress,
+    ...tournamentProgress,
     has_sent_request: Number(row.has_sent_request) === 1,
     availability: mapChallengeAvailability(row),
   };
@@ -10470,6 +10506,10 @@ app.get("/challenge-periods/player", async (req, res) => {
           cp.play_starts_at,
           cp.play_ends_at,
           cp.result_review_ends_at,
+          CASE
+            WHEN rivals_tournament.id IS NULL THEN NULL
+            ELSE COALESCE(rivals_tournament.tpr_target_games, 10)
+          END AS tpr_target_games,
           COALESCE(cpp.status, 'not_selected') AS player_status,
           EXISTS (
             SELECT 1
@@ -10496,6 +10536,27 @@ app.get("/challenge-periods/player", async (req, res) => {
               AND played_duel.status = 'Done'
               AND (played_duel.player_1_id = ? OR played_duel.player_2_id = ?)
           ) AS matches_played_count,
+          (
+            SELECT COUNT(*)
+            FROM duels tournament_duel
+            LEFT JOIN matches tournament_match
+              ON trim(COALESCE(tournament_match.id, '')) = trim(COALESCE(tournament_duel.match_id, ''))
+             AND tournament_match.deleted_at IS NULL
+            WHERE rivals_tournament.id IS NOT NULL
+              AND upper(trim(COALESCE(
+                NULLIF(trim(tournament_duel.tournament_id), ''),
+                tournament_match.tournament_id,
+                ''
+              ))) = upper(trim(rivals_tournament.id))
+              AND lower(trim(COALESCE(tournament_duel.status, ''))) = 'done'
+              AND tournament_duel.deleted_at IS NULL
+              AND tournament_duel.dw1 IS NOT NULL
+              AND tournament_duel.dw2 IS NOT NULL
+              AND trim(COALESCE(tournament_duel.player_1_id, '')) <> ''
+              AND trim(COALESCE(tournament_duel.player_2_id, '')) <> ''
+              AND trim(tournament_duel.player_1_id) <> trim(tournament_duel.player_2_id)
+              AND (tournament_duel.player_1_id = ? OR tournament_duel.player_2_id = ?)
+          ) AS tournament_matches_played_count,
           cpp.availability_start_1_utc,
           cpp.availability_end_1_utc,
           cpp.availability_start_2_utc,
@@ -10506,10 +10567,22 @@ app.get("/challenge-periods/player", async (req, res) => {
         LEFT JOIN challenge_period_players cpp
           ON cpp.period_id = cp.id
          AND cpp.player_id = ?
+        LEFT JOIN tournaments rivals_tournament
+          ON upper(trim(COALESCE(rivals_tournament.id, ''))) = upper(trim(COALESCE(cp.rivals_tournament_id, '')))
         WHERE cp.status IN ('draft', 'planning_open', 'active', 'result_review')
         ORDER BY datetime(cp.planning_starts_at) DESC, datetime(cp.play_starts_at) DESC, cp.id ASC
       `,
-      [playerId, ...slotStatuses, playerId, playerId, playerId, playerId, playerId]
+      [
+        playerId,
+        ...slotStatuses,
+        playerId,
+        playerId,
+        playerId,
+        playerId,
+        playerId,
+        playerId,
+        playerId,
+      ]
     );
     return res.json({
       ok: true,
@@ -10545,10 +10618,12 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
     const currentStatus = normalizeChallengePlayerPeriodStatus(currentPeriodStatus?.status);
     const currentMatchesCount = currentMatchProgress.matches_count;
     const currentCapacity = buildChallengeMatchCapacity(currentMatchesCount, period.max_matches_per_player);
+    const currentTournamentProgress = await loadChallengeTournamentProgressForPlayer(period, playerId);
     const canCreateRequests = ["planning_open", "active"].includes(period.status)
       && !!currentProfile
       && isChallengePlayerRequestEligibleStatus(currentStatus)
-      && !currentCapacity.is_match_limit_reached;
+      && !currentCapacity.is_match_limit_reached
+      && !currentTournamentProgress.is_tpr_target_reached;
     const canListOpponents = ["planning_open", "active"].includes(period.status);
     const eligibilityReasons = [];
     if (!["planning_open", "active"].includes(period.status)) eligibilityReasons.push("period_closed");
@@ -10557,6 +10632,9 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       eligibilityReasons.push("current_player_unavailable");
     }
     if (currentCapacity.is_match_limit_reached) eligibilityReasons.push("current_player_match_limit");
+    if (currentTournamentProgress.is_tpr_target_reached) {
+      eligibilityReasons.push("current_player_tpr_target_reached");
+    }
 
     const slotStatuses = Array.from(CHALLENGE_MATCH_SLOT_DUEL_STATUSES);
     const pairStatuses = Array.from(CHALLENGE_RIVALS_PAIR_DUEL_STATUSES);
@@ -10564,7 +10642,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       ? "upper(trim(COALESCE(pair_period.rivals_tournament_id, ''))) = upper(trim(?))"
       : "pair_duel.challenge_period_id = ?";
     const pairScopeValue = normalizeNullableText(period.rivals_tournament_id) || periodId;
-    const [rows, pairRows, pendingRows] = await Promise.all([
+    const [rows, pairRows, pendingRows, tournamentProgressRows] = await Promise.all([
       dbAllAsync(
       `
         SELECT
@@ -10645,6 +10723,50 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         `,
         [periodId, playerId, playerId]
       ) : Promise.resolve([]),
+      period.rivals_tournament_id ? dbAllAsync(
+        `
+          SELECT tournament_player.player_id, COUNT(*) AS tournament_matches_played_count
+          FROM (
+            SELECT trim(tournament_duel.player_1_id) AS player_id
+            FROM duels tournament_duel
+            LEFT JOIN matches tournament_match
+              ON trim(COALESCE(tournament_match.id, '')) = trim(COALESCE(tournament_duel.match_id, ''))
+             AND tournament_match.deleted_at IS NULL
+            WHERE upper(trim(COALESCE(
+                NULLIF(trim(tournament_duel.tournament_id), ''),
+                tournament_match.tournament_id,
+                ''
+              ))) = upper(trim(?))
+              AND lower(trim(COALESCE(tournament_duel.status, ''))) = 'done'
+              AND tournament_duel.deleted_at IS NULL
+              AND tournament_duel.dw1 IS NOT NULL
+              AND tournament_duel.dw2 IS NOT NULL
+              AND trim(COALESCE(tournament_duel.player_1_id, '')) <> ''
+              AND trim(COALESCE(tournament_duel.player_2_id, '')) <> ''
+              AND trim(tournament_duel.player_1_id) <> trim(tournament_duel.player_2_id)
+            UNION ALL
+            SELECT trim(tournament_duel.player_2_id) AS player_id
+            FROM duels tournament_duel
+            LEFT JOIN matches tournament_match
+              ON trim(COALESCE(tournament_match.id, '')) = trim(COALESCE(tournament_duel.match_id, ''))
+             AND tournament_match.deleted_at IS NULL
+            WHERE upper(trim(COALESCE(
+                NULLIF(trim(tournament_duel.tournament_id), ''),
+                tournament_match.tournament_id,
+                ''
+              ))) = upper(trim(?))
+              AND lower(trim(COALESCE(tournament_duel.status, ''))) = 'done'
+              AND tournament_duel.deleted_at IS NULL
+              AND tournament_duel.dw1 IS NOT NULL
+              AND tournament_duel.dw2 IS NOT NULL
+              AND trim(COALESCE(tournament_duel.player_1_id, '')) <> ''
+              AND trim(COALESCE(tournament_duel.player_2_id, '')) <> ''
+              AND trim(tournament_duel.player_1_id) <> trim(tournament_duel.player_2_id)
+          ) tournament_player
+          GROUP BY tournament_player.player_id
+        `,
+        [period.rivals_tournament_id, period.rivals_tournament_id]
+      ) : Promise.resolve([]),
     ]);
 
     const pairOpponentIds = new Set();
@@ -10663,10 +10785,17 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         pendingRequestByOpponentId.set(opponentId, normalizeNullableText(row?.id));
       }
     });
+    const tournamentMatchesPlayedByPlayerId = new Map(
+      (tournamentProgressRows || []).map((row) => [
+        normalizeNullableText(row?.player_id),
+        Math.max(0, Number(row?.tournament_matches_played_count) || 0),
+      ])
+    );
 
     const blockedCounts = {
       same_association: 0,
       match_limit: 0,
+      tpr_target_reached: 0,
       rivals_match: 0,
       pending_request: 0,
       current_player_ineligible: canCreateRequests ? 0 : 1,
@@ -10687,9 +10816,15 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       const hasRivalsMatch = pairOpponentIds.has(opponentId);
       const pendingRequestId = pendingRequestByOpponentId.get(opponentId) || null;
       const capacity = buildChallengeMatchCapacity(row?.matches_count, period.max_matches_per_player);
+      const tournamentProgress = buildChallengeTournamentProgress(
+        tournamentMatchesPlayedByPlayerId.get(opponentId) || 0,
+        currentTournamentProgress.tpr_target_games,
+        currentTournamentProgress.tpr_target_games !== null
+      );
       const periodStatus = normalizeChallengePlayerPeriodStatus(row?.period_player_status);
       const opponentCanBeRequested = isChallengePlayerRequestEligibleStatus(periodStatus)
-        && !capacity.is_match_limit_reached;
+        && !capacity.is_match_limit_reached
+        && !tournamentProgress.is_tpr_target_reached;
       const canInvite = canCreateRequests
         && opponentCanBeRequested
         && !isCurrentPlayer
@@ -10698,6 +10833,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         && !pendingRequestId;
       const mappedOpponent = mapChallengeOpponent({
         ...row,
+        ...tournamentProgress,
         matches_limit: period.max_matches_per_player,
         pending_request_id: pendingRequestId,
         is_current_player: isCurrentPlayer ? 1 : 0,
@@ -10709,15 +10845,19 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       if (periodStatus === "available") {
         if (isSameAssociation) blockedCounts.same_association += 1;
         if (capacity.is_match_limit_reached) blockedCounts.match_limit += 1;
+        if (tournamentProgress.is_tpr_target_reached) blockedCounts.tpr_target_reached += 1;
         if (hasRivalsMatch) blockedCounts.rivals_match += 1;
         if (pendingRequestId) blockedCounts.pending_request += 1;
         if (canListOpponents && !capacity.is_match_limit_reached) {
           if (isCurrentPlayer) {
             allPlayers.unshift(mappedOpponent);
-            availableOpponents.unshift(mappedOpponent);
+            if (!tournamentProgress.is_tpr_target_reached) availableOpponents.unshift(mappedOpponent);
           } else {
             allPlayers.push(mappedOpponent);
-            if (!playerId || (!isSameAssociation && !hasRivalsMatch && !pendingRequestId)) {
+            if (
+              !tournamentProgress.is_tpr_target_reached
+              && (!playerId || (!isSameAssociation && !hasRivalsMatch && !pendingRequestId))
+            ) {
               availableOpponents.push(mappedOpponent);
             }
           }
@@ -10734,9 +10874,11 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         player_status: currentStatus,
         matches_count: currentMatchesCount,
         matches_played_count: currentMatchProgress.matches_played_count,
+        ...currentTournamentProgress,
       }),
       current_player: currentProfile ? mapChallengeOpponent({
         ...currentProfile,
+        ...currentTournamentProgress,
         period_player_status: currentStatus,
         matches_count: currentMatchesCount,
         matches_limit: period.max_matches_per_player,
@@ -10890,6 +11032,8 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
         opponentPeriodStatus,
         currentCapacity,
         opponentCapacity,
+        currentTournamentProgress,
+        opponentTournamentProgress,
         blockingPairDuel,
         pendingCreatedCount,
       ] = await Promise.all([
@@ -10897,6 +11041,8 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
         loadChallengePeriodPlayerStatus(periodId, player2Id),
         loadChallengeMatchCapacityForPlayer(lockedPeriod, player1Id),
         loadChallengeMatchCapacityForPlayer(lockedPeriod, player2Id),
+        loadChallengeTournamentProgressForPlayer(lockedPeriod, player1Id),
+        loadChallengeTournamentProgressForPlayer(lockedPeriod, player2Id),
         loadChallengeBlockingRivalsDuel(lockedPeriod, player1Id, player2Id),
         dbGetAsync(
           `
@@ -10922,6 +11068,9 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
         error.httpStatus = 409;
         throw error;
       }
+      if (currentTournamentProgress.is_tpr_target_reached) {
+        throw createChallengeTprTargetReachedError(currentTournamentProgress);
+      }
       if (!isChallengePlayerRequestEligibleStatus(opponentStatus)) {
         const error = new Error("Opponent is not playing in this Challenge period");
         error.httpStatus = 409;
@@ -10931,6 +11080,9 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
         const error = new Error("Opponent has reached the Challenge match limit for this period");
         error.httpStatus = 409;
         throw error;
+      }
+      if (opponentTournamentProgress.is_tpr_target_reached) {
+        throw createChallengeTprTargetReachedError(opponentTournamentProgress, "Opponent");
       }
       if (blockingPairDuel) {
         const error = new Error("You already have a Challenge match with this opponent in the linked Rivals tournament");
@@ -11010,7 +11162,11 @@ app.post("/challenge-periods/:id/requests", requireAuthenticated, async (req, re
       return res.status(409).json({ ok: false, message: "A pending Challenge request already exists for this pair" });
     }
     if (error?.httpStatus) {
-      return res.status(error.httpStatus).json({ ok: false, message: error.message || "Failed to create Challenge request" });
+      return res.status(error.httpStatus).json({
+        ok: false,
+        ...(error.code ? { code: error.code } : {}),
+        message: error.message || "Failed to create Challenge request",
+      });
     }
     console.error("Failed to create Challenge request", error);
     return res.status(500).json({ ok: false, message: "Failed to create Challenge request" });
@@ -11048,6 +11204,7 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
     if (!period || !["planning_open", "active", "result_review"].includes(period.status)) {
       return res.status(404).json({ ok: false, message: "Open Challenge period not found" });
     }
+    const tournamentProgress = await loadChallengeTournamentProgressForPlayer(period, playerId);
     const periodWithCapacity = {
       ...period,
       ...buildChallengeMatchProgress(
@@ -11055,6 +11212,7 @@ app.get("/challenge-periods/:id/requests", requireAuthenticated, async (req, res
         currentMatchProgress.matches_played_count,
         period.max_matches_per_player
       ),
+      ...tournamentProgress,
     };
 
     const rows = await dbAllAsync(
@@ -12137,6 +12295,19 @@ app.patch("/challenge-periods/:id/requests/:requestId/counter", requireAuthentic
     if (beforeRow.status !== "pending") {
       return res.status(409).json({ ok: false, message: "Only pending requests can be changed" });
     }
+    const otherPlayerId = beforeRow.player_1_id === playerId
+      ? beforeRow.player_2_id
+      : beforeRow.player_1_id;
+    const [currentTournamentProgress, opponentTournamentProgress] = await Promise.all([
+      loadChallengeTournamentProgressForPlayer(period, playerId),
+      loadChallengeTournamentProgressForPlayer(period, otherPlayerId),
+    ]);
+    if (currentTournamentProgress.is_tpr_target_reached) {
+      throw createChallengeTprTargetReachedError(currentTournamentProgress);
+    }
+    if (opponentTournamentProgress.is_tpr_target_reached) {
+      throw createChallengeTprTargetReachedError(opponentTournamentProgress, "Opponent");
+    }
     const outOfRangeOption = timeOptions.find((timeOption) => timeOption && !isChallengeTimeWithinPeriod(timeOption, period));
     if (outOfRangeOption) {
       return res.status(400).json({ ok: false, message: "Time options must be within the Challenge playing window" });
@@ -12185,6 +12356,13 @@ app.patch("/challenge-periods/:id/requests/:requestId/counter", requireAuthentic
     });
     return res.json({ ok: true, challenge_request: mapChallengeRequest(afterRow) });
   } catch (error) {
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({
+        ok: false,
+        ...(error.code ? { code: error.code } : {}),
+        message: error.message || "Failed to update Challenge request",
+      });
+    }
     console.error("Failed to update Challenge request", error);
     return res.status(500).json({ ok: false, message: "Failed to update Challenge request" });
   }
@@ -12551,6 +12729,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
         player2PeriodStatus,
         player1Capacity,
         player2Capacity,
+        player1TournamentProgress,
+        player2TournamentProgress,
         blockingPairDuel,
         scheduleConflict,
       ] = await Promise.all([
@@ -12558,6 +12738,8 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
         loadChallengePeriodPlayerStatus(periodId, lockedRequest.player_2_id),
         loadChallengeMatchCapacityForPlayer(lockedPeriod, lockedRequest.player_1_id),
         loadChallengeMatchCapacityForPlayer(lockedPeriod, lockedRequest.player_2_id),
+        loadChallengeTournamentProgressForPlayer(lockedPeriod, lockedRequest.player_1_id),
+        loadChallengeTournamentProgressForPlayer(lockedPeriod, lockedRequest.player_2_id),
         loadChallengeBlockingRivalsDuel(
           lockedPeriod,
           lockedRequest.player_1_id,
@@ -12586,6 +12768,18 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
         const error = new Error("One of the players has reached the Challenge match limit for this period");
         error.httpStatus = 409;
         throw error;
+      }
+      if (player1TournamentProgress.is_tpr_target_reached) {
+        throw createChallengeTprTargetReachedError(
+          player1TournamentProgress,
+          lockedRequest.player_1_id === playerId ? "You" : "Opponent"
+        );
+      }
+      if (player2TournamentProgress.is_tpr_target_reached) {
+        throw createChallengeTprTargetReachedError(
+          player2TournamentProgress,
+          lockedRequest.player_2_id === playerId ? "You" : "Opponent"
+        );
       }
       if (blockingPairDuel) {
         const error = new Error("These players already have a Challenge match in the linked Rivals tournament");
@@ -12811,6 +13005,10 @@ app.patch("/challenge-periods/:id/player-availability", requireAuthenticated, as
     if (!period || !["planning_open", "active"].includes(period.status)) {
       return res.status(404).json({ ok: false, message: "Editable Challenge period not found" });
     }
+    const tournamentProgress = await loadChallengeTournamentProgressForPlayer(period, playerId);
+    if (tournamentProgress.is_tpr_target_reached) {
+      throw createChallengeTprTargetReachedError(tournamentProgress);
+    }
     if (normalizeChallengePlayerPeriodStatus(beforeRow?.status) !== "available") {
       return res.status(409).json({ ok: false, message: "Set your period status to Open to match first" });
     }
@@ -12866,6 +13064,13 @@ app.patch("/challenge-periods/:id/player-availability", requireAuthenticated, as
       },
     });
   } catch (error) {
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({
+        ok: false,
+        ...(error.code ? { code: error.code } : {}),
+        message: error.message || "Failed to update playing periods",
+      });
+    }
     console.error("Failed to update Challenge player availability", error);
     return res.status(500).json({ ok: false, message: "Failed to update playing periods" });
   }
@@ -12894,6 +13099,10 @@ app.patch("/challenge-periods/:id/player-status", requireAuthenticated, async (r
     const period = await loadChallengePeriodById(periodId);
     if (!period || !["planning_open", "active"].includes(period.status)) {
       return res.status(404).json({ ok: false, message: "Editable Challenge period not found" });
+    }
+    const tournamentProgress = await loadChallengeTournamentProgressForPlayer(period, playerId);
+    if (tournamentProgress.is_tpr_target_reached) {
+      throw createChallengeTprTargetReachedError(tournamentProgress);
     }
 
     const beforeRow = await loadChallengePeriodPlayerStatus(periodId, playerId);
@@ -12986,6 +13195,13 @@ app.patch("/challenge-periods/:id/player-status", requireAuthenticated, async (r
       },
     });
   } catch (error) {
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({
+        ok: false,
+        ...(error.code ? { code: error.code } : {}),
+        message: error.message || "Failed to update Challenge status",
+      });
+    }
     console.error("Failed to update Challenge player period status", error);
     return res.status(500).json({ ok: false, message: "Failed to update Challenge status" });
   }

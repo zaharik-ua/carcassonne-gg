@@ -1,5 +1,6 @@
 export const DEFAULT_MAX_MATCHES_PER_PLAYER = 1;
 export const DEFAULT_MAX_PENDING_REQUESTS_PER_PLAYER = 3;
+export const DEFAULT_TPR_TARGET_GAMES = 10;
 
 export const CHALLENGE_PERIOD_STATUSES = new Set([
   "draft",
@@ -174,6 +175,83 @@ export function buildChallengeMatchProgress(matchesCount, matchesPlayedCount, co
     is_match_limit_played: capacity.is_match_limit_reached
       && playedCount >= capacity.matches_limit,
   };
+}
+
+export function buildChallengeTournamentProgress(
+  matchesPlayedCount,
+  configuredTargetGames,
+  hasLinkedTournament = true
+) {
+  const parsedPlayedCount = Number(matchesPlayedCount);
+  const playedCount = Number.isFinite(parsedPlayedCount) && parsedPlayedCount > 0
+    ? Math.floor(parsedPlayedCount)
+    : 0;
+  if (!hasLinkedTournament) {
+    return {
+      tournament_matches_played_count: playedCount,
+      tpr_target_games: null,
+      tournament_matches_remaining: null,
+      is_tpr_target_reached: false,
+    };
+  }
+  const targetGames = resolvePositiveInteger(
+    configuredTargetGames,
+    DEFAULT_TPR_TARGET_GAMES
+  ) || DEFAULT_TPR_TARGET_GAMES;
+  return {
+    tournament_matches_played_count: playedCount,
+    tpr_target_games: targetGames,
+    tournament_matches_remaining: Math.max(0, targetGames - playedCount),
+    is_tpr_target_reached: playedCount >= targetGames,
+  };
+}
+
+export async function loadChallengeTournamentProgress(db, options = {}) {
+  const tournamentId = normalizeChallengeIdentifier(options.rivalsTournamentId);
+  const playerId = normalizeChallengeIdentifier(options.playerId);
+  if (!tournamentId || !playerId) {
+    return buildChallengeTournamentProgress(0, null, false);
+  }
+  const row = await dbGet(
+    db,
+    `
+      SELECT
+        t.id AS rivals_tournament_id,
+        COALESCE(t.tpr_target_games, ${DEFAULT_TPR_TARGET_GAMES}) AS tpr_target_games,
+        (
+          SELECT COUNT(*)
+          FROM duels tournament_duel
+          LEFT JOIN matches tournament_match
+            ON trim(COALESCE(tournament_match.id, '')) = trim(COALESCE(tournament_duel.match_id, ''))
+           AND tournament_match.deleted_at IS NULL
+          WHERE upper(trim(COALESCE(
+              NULLIF(trim(tournament_duel.tournament_id), ''),
+              tournament_match.tournament_id,
+              ''
+            ))) = upper(trim(t.id))
+            AND lower(trim(COALESCE(tournament_duel.status, ''))) = 'done'
+            AND tournament_duel.deleted_at IS NULL
+            AND tournament_duel.dw1 IS NOT NULL
+            AND tournament_duel.dw2 IS NOT NULL
+            AND trim(COALESCE(tournament_duel.player_1_id, '')) <> ''
+            AND trim(COALESCE(tournament_duel.player_2_id, '')) <> ''
+            AND trim(tournament_duel.player_1_id) <> trim(tournament_duel.player_2_id)
+            AND (
+              trim(COALESCE(tournament_duel.player_1_id, '')) = trim(?)
+              OR trim(COALESCE(tournament_duel.player_2_id, '')) = trim(?)
+            )
+        ) AS tournament_matches_played_count
+      FROM tournaments t
+      WHERE upper(trim(COALESCE(t.id, ''))) = upper(trim(?))
+      LIMIT 1
+    `,
+    [playerId, playerId, tournamentId]
+  );
+  return buildChallengeTournamentProgress(
+    row?.tournament_matches_played_count,
+    row?.tpr_target_games,
+    !!row?.rivals_tournament_id
+  );
 }
 
 function normalizeChallengeIdentifier(value) {
