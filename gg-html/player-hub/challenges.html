@@ -3628,9 +3628,9 @@
   };
   const LOCKED_PERIOD_STATUS_COPY = {
     tpr_target_reached: {
-      label: "Tournament target reached",
+      label: "TPR target reached",
       tone: "played",
-      note: "You have played all matches allowed by this tournament's TPR target.",
+      note: "TPR target reached.",
       editable: false,
     },
     matches_scheduled: {
@@ -6204,12 +6204,12 @@
   function getChallengeTprTargetReachedMessage(period, subject = "You") {
     const target = getChallengeTournamentTarget(period) || 10;
     return `${subject} ${subject === "You" ? "have" : "has"} already played ${target} `
-      + `${target === 1 ? "match" : "matches"} in this tournament and reached its TPR target.`;
+      + `${target === 1 ? "match" : "matches"} in this tournament.`;
   }
 
   function showChallengeTprTargetReachedDialog(period, subject = "You") {
     showChallengeInfoDialog(
-      "Tournament target reached",
+      "TPR target reached",
       `${getChallengeTprTargetReachedMessage(period, subject)} New Challenge requests and availability changes are closed.`
     );
   }
@@ -8135,7 +8135,7 @@
     inviteBtn.textContent = window.matchMedia("(max-width: 720px)").matches ? "Invite" : "Invite to match";
     if (!isInviteAvailable) {
       if (currentPlayerAtTprTarget) inviteBtn.title = getChallengeTprTargetReachedMessage(period);
-      else if (opponentAtTprTarget) inviteBtn.title = getChallengeTprTargetReachedMessage(opponent, "This player");
+      else if (opponentAtTprTarget) inviteBtn.title = getChallengeTprTargetReachedMessage(period, "This player");
       else if (currentPlayerAtMatchLimit) inviteBtn.title = "You have reached this period's match limit.";
       else if (opponentAtMatchLimit) inviteBtn.title = "This player has reached the match limit.";
       else if (isSameAssociation) inviteBtn.title = "Players from the same association cannot play each other.";
@@ -8209,10 +8209,13 @@
   function getEligibilityStateText(eligibility) {
     const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
     if (reasons.includes("period_closed")) return "Requests closed for this period.";
-    if (reasons.includes("current_player_tpr_target_reached")) {
-      return "You have reached this tournament's TPR target. New Challenge requests are closed.";
-    }
     return "";
+  }
+
+  function getEligibilityNoticeText(eligibility, period) {
+    const reasons = Array.isArray(eligibility?.reasons) ? eligibility.reasons : [];
+    if (!reasons.includes("current_player_tpr_target_reached")) return "";
+    return `${getChallengeTprTargetReachedMessage(period)} New Challenge requests are closed.`;
   }
 
   function setOpponentsState(panel, text, isError) {
@@ -8274,6 +8277,14 @@
       state.textContent = eligibilityText;
       bodyEl.appendChild(state);
       return;
+    }
+
+    const eligibilityNotice = getEligibilityNoticeText(item?.eligibility, item?.period);
+    if (eligibilityNotice) {
+      const notice = document.createElement("div");
+      notice.className = "challenge-opponents-state";
+      notice.textContent = eligibilityNotice;
+      bodyEl.appendChild(notice);
     }
 
     if (!opponents.length) {
@@ -9766,7 +9777,9 @@
       btnEl.setAttribute("aria-disabled", editable ? "false" : "true");
       textEl.textContent = status.label;
       noteEl.textContent = lockedStatusValue
-        ? status.note
+        ? (lockedStatusValue === "tpr_target_reached"
+          ? getChallengeTprTargetReachedMessage(period)
+          : status.note)
         : noteOverride || (periodAllowsManualStatus
         ? status.note
         : String(period?.status || "") === "draft"

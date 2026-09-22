@@ -20,7 +20,28 @@ test("Challenge player UI locks actions and collapses action sections at the tou
   );
   assert.match(html, /current_player_tpr_target_reached/);
   assert.match(html, /opponentAtTprTarget/);
-  assert.match(html, /Tournament target reached/);
+  assert.match(html, /TPR target reached/);
+  assert.match(html, /already played \$\{target\}/);
+});
+
+test("Open to match remains browseable after the current player reaches the TPR target", () => {
+  const stateStart = html.indexOf("  function getEligibilityStateText(");
+  const noticeStart = html.indexOf("  function getEligibilityNoticeText(", stateStart);
+  const renderStart = html.indexOf("  function renderOpponentsForPeriod(", noticeStart);
+  const nextFunction = html.indexOf("\n  function ", renderStart + 1);
+  assert.ok(stateStart >= 0 && noticeStart > stateStart && renderStart > noticeStart);
+  assert.doesNotMatch(
+    html.slice(stateStart, noticeStart),
+    /current_player_tpr_target_reached/
+  );
+  assert.match(
+    html.slice(noticeStart, renderStart),
+    /current_player_tpr_target_reached/
+  );
+  assert.match(
+    html.slice(renderStart, nextFunction),
+    /getEligibilityNoticeText[\s\S]*?opponents\.forEach/
+  );
 });
 
 test("Challenge API enforces the TPR target for availability and request workflows", () => {
