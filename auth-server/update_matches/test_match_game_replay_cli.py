@@ -90,6 +90,8 @@ class MatchGameReplayCliTest(unittest.TestCase):
                 "cached": 1,
                 "failed": 0,
                 "skipped": 1,
+                "stopped_early": False,
+                "remaining": 0,
                 "errors": [
                     {
                         "game_id": "game-no-table",
@@ -100,7 +102,7 @@ class MatchGameReplayCliTest(unittest.TestCase):
             },
         )
 
-    def test_continues_after_replay_failure(self) -> None:
+    def test_stops_after_one_game_exhausts_account_rotation(self) -> None:
         def fetch_replay(_db_path: str, game_id: str, **_kwargs):
             if game_id == "game-1":
                 raise RuntimeError("BGA failed")
@@ -112,12 +114,36 @@ class MatchGameReplayCliTest(unittest.TestCase):
             replay_fetcher=fetch_replay,
         )
 
+        self.assertEqual(summary["status"], "stopped")
+        self.assertEqual(summary["processed"], 1)
+        self.assertEqual(summary["ready"], 0)
+        self.assertEqual(summary["failed"], 1)
+        self.assertEqual(summary["skipped"], 0)
+        self.assertTrue(summary["stopped_early"])
+        self.assertEqual(summary["remaining"], 2)
+        self.assertEqual(summary["errors"][0]["game_id"], "game-1")
+        self.assertEqual(summary["errors"][0]["error"], "BGA failed")
+
+    def test_failure_limit_can_be_increased_to_continue(self) -> None:
+        def fetch_replay(_db_path: str, game_id: str, **_kwargs):
+            if game_id == "game-1":
+                raise RuntimeError("BGA failed")
+            return {"status": "ready", "cached": False}
+
+        summary = match_game_replay_cli.fetch_and_store_match_game_replays(
+            self.db_path,
+            "match-1",
+            max_failed_games=2,
+            replay_fetcher=fetch_replay,
+        )
+
+        self.assertEqual(summary["status"], "partial")
         self.assertEqual(summary["processed"], 2)
         self.assertEqual(summary["ready"], 1)
         self.assertEqual(summary["failed"], 1)
         self.assertEqual(summary["skipped"], 1)
-        self.assertEqual(summary["errors"][0]["game_id"], "game-1")
-        self.assertEqual(summary["errors"][0]["error"], "BGA failed")
+        self.assertFalse(summary["stopped_early"])
+        self.assertEqual(summary["remaining"], 0)
 
     def test_missing_or_deleted_match_is_rejected(self) -> None:
         for match_id in ("missing", "deleted-match"):
@@ -136,6 +162,7 @@ class MatchGameReplayCliTest(unittest.TestCase):
             force=False,
             poll_attempts=10,
             poll_delay=1.0,
+            max_failed_games=1,
         )
         with (
             patch.object(match_game_replay_cli, "parse_args", return_value=args),

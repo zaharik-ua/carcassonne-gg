@@ -117,9 +117,10 @@ cd /home/carcassonne-gg/auth-server
 ```
 
 Ready replays are reused without another BGA request. Add `--force` to fetch
-them again. The command continues after individual game failures, prints a JSON
-summary, and exits with a non-zero status if any game failed or had no
-`bga_table_id`.
+them again. By default, the command stops as soon as one game has failed after
+trying every configured BGA account. Use `--max-failed-games N` to permit more
+failed games before stopping. It prints a JSON summary and exits with a non-zero
+status if any game failed or had no `bga_table_id`.
 
 Raw BGA logs are parsed in memory and are not stored. `events_json` contains
 ordered `pickTile`, `playTile`, and `playPartisan` events. `players_json`

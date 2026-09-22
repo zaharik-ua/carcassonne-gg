@@ -55,6 +55,15 @@ def parse_args() -> argparse.Namespace:
         default=1.0,
         help="Seconds between archive checks",
     )
+    parser.add_argument(
+        "--max-failed-games",
+        type=int,
+        default=1,
+        help=(
+            "Stop after this many games fail after trying all configured BGA accounts "
+            "(default: 1)"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -65,6 +74,7 @@ def fetch_and_store_match_game_replays(
     force: bool = False,
     poll_attempts: int = 10,
     poll_delay: float = 1.0,
+    max_failed_games: int = 1,
     replay_fetcher: ReplayFetcher = fetch_and_store_game_replay_with_account_rotation,
 ) -> dict[str, Any]:
     normalized_match_id = str(match_id or "").strip()
@@ -74,6 +84,8 @@ def fetch_and_store_match_game_replays(
         raise ValueError("poll_attempts must be at least 1")
     if poll_delay < 0:
         raise ValueError("poll_delay must not be negative")
+    if max_failed_games < 1:
+        raise ValueError("max_failed_games must be at least 1")
 
     path = Path(db_path).expanduser()
     with sqlite3.connect(path) as conn:
@@ -122,9 +134,11 @@ def fetch_and_store_match_game_replays(
         "cached": 0,
         "failed": 0,
         "skipped": 0,
+        "stopped_early": False,
+        "remaining": 0,
         "errors": [],
     }
-    for game in games:
+    for game_index, game in enumerate(games):
         game_id = str(game["game_id"] or "").strip()
         duel_id = str(game["duel_id"] or "").strip()
         bga_table_id = str(game["bga_table_id"] or "").strip()
@@ -161,8 +175,13 @@ def fetch_and_store_match_game_replays(
                     "error": str(exc) or exc.__class__.__name__,
                 }
             )
+            if summary["failed"] >= max_failed_games:
+                summary["status"] = "stopped"
+                summary["stopped_early"] = True
+                summary["remaining"] = len(games) - game_index - 1
+                break
 
-    if summary["failed"] or summary["skipped"]:
+    if summary["status"] != "stopped" and (summary["failed"] or summary["skipped"]):
         summary["status"] = "partial"
     return summary
 
@@ -177,6 +196,7 @@ def main() -> int:
             force=args.force,
             poll_attempts=args.poll_attempts,
             poll_delay=args.poll_delay,
+            max_failed_games=args.max_failed_games,
         )
     except (MatchNotFoundError, OSError, sqlite3.Error, ValueError) as exc:
         print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False, indent=2))
