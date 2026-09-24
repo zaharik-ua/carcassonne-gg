@@ -128,6 +128,32 @@ enqueue_historical_game_replay(
 )
 ```
 
+### One-off existing replay backfill
+
+After deploying the replay queue schema, preview the one-off cleanup/backfill:
+
+```bash
+./.venv/bin/python backfill_existing_game_replays.py
+```
+
+The command reports changes without writing by default. Apply it only after a
+production SQLite backup:
+
+```bash
+./.venv/bin/python backfill_existing_game_replays.py \
+  --apply \
+  --batch-id legacy-ready-backfill
+```
+
+The transaction deletes `error` replay rows, normalizes every existing `ready`
+row and schedules ready fallback-color rows as due `historical` color refreshes.
+The existing `color_source` is authoritative: `fallback` rows are scheduled and
+`bga` rows remain final. The script reads but never updates `color_source`, and
+it never reschedules a fallback row whose single color refresh has already run.
+Derived values recoverable from normalized events and players are rebuilt.
+Existing scoring and player-time JSON are preserved because those values cannot
+be reconstructed exactly after legacy raw logs have been removed.
+
 ### systemd timers
 
 The repository contains a shared template service and two independent timers:
