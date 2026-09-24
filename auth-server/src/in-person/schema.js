@@ -184,6 +184,7 @@ async function ensureInPersonTables(db) {
         slug TEXT NOT NULL COLLATE NOCASE,
         name_en TEXT NOT NULL CHECK (length(trim(name_en)) > 0),
         name_local TEXT,
+        logo_url TEXT,
         scope TEXT NOT NULL CHECK (scope IN ('international', 'local')),
         association_id TEXT COLLATE NOCASE,
         local_subtype TEXT CHECK (local_subtype IN ('final', 'qualifier')),
@@ -471,6 +472,27 @@ async function ensureCityExtensions(db) {
     await rollbackQuietly(db);
     throw error;
   }
+}
+
+async function ensureTournamentLogoExtension(db) {
+  let added = false;
+  try {
+    await dbExec(db, "BEGIN IMMEDIATE TRANSACTION");
+    const columns = await dbAll(db, "PRAGMA table_info(in_person_tournaments)");
+    if (!columns.some((column) => String(column?.name || "") === "logo_url")) {
+      await dbExec(db, "ALTER TABLE in_person_tournaments ADD COLUMN logo_url TEXT");
+      added = true;
+    }
+    await dbExec(db, `
+      INSERT OR IGNORE INTO in_person_schema_migrations (version, name)
+      VALUES (4, 'tournament_logo_url');
+      COMMIT;
+    `);
+  } catch (error) {
+    await rollbackQuietly(db);
+    throw error;
+  }
+  return { added };
 }
 
 async function ensurePlayoffMedalTableAssignments(db) {
@@ -789,12 +811,14 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
   await ensureInPersonTables(db);
   await ensureCityExtensions(db);
   const playoffMedalTableMigration = await ensurePlayoffMedalTableAssignments(db);
+  const tournamentLogoMigration = await ensureTournamentLogoExtension(db);
   await ensureInPersonTriggersAndAccessIndexes(db);
   logger?.info?.("[in-person] Schema foundation ready", {
     accessTableMigrated: accessMigration.migrated,
     accessTableCreated: accessMigration.created,
     accessRows: accessMigration.rowsAfter,
+    tournamentLogoColumnAdded: tournamentLogoMigration.added,
     playoffMedalTablesUpdated: playoffMedalTableMigration.updatedRows,
   });
-  return { accessMigration, playoffMedalTableMigration };
+  return { accessMigration, tournamentLogoMigration, playoffMedalTableMigration };
 }

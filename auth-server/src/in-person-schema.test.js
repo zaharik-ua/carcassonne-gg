@@ -177,6 +177,15 @@ test("creates the in-person foundation without versioning or idempotency tables"
     (await all(db, "PRAGMA table_info(cities)")).map((column) => column.name)
   );
   assert.equal(cityColumns.has("icon_url"), true);
+
+  const tournamentColumns = new Set(
+    (await all(db, "PRAGMA table_info(in_person_tournaments)")).map((column) => column.name)
+  );
+  assert.equal(tournamentColumns.has("logo_url"), true);
+  assert.deepEqual(
+    await get(db, "SELECT name FROM in_person_schema_migrations WHERE version = 4"),
+    { name: "tournament_logo_url" }
+  );
 });
 
 test("adds icon_url to an existing cities table without losing city data", async (t) => {
@@ -207,6 +216,55 @@ test("adds icon_url to an existing cities table without losing city data", async
     name_local: "Київ",
     icon_url: null,
   });
+});
+
+test("adds logo_url to an existing in-person tournament table without losing data", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, `
+    CREATE TABLE in_person_tournaments (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL,
+      name_en TEXT NOT NULL,
+      name_local TEXT,
+      scope TEXT NOT NULL,
+      association_id TEXT,
+      local_subtype TEXT,
+      qualifier_city_id TEXT,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      organizer_name TEXT NOT NULL,
+      organizer_url TEXT,
+      rules_url TEXT,
+      swiss_rounds_count INTEGER NOT NULL,
+      playoff_first_round TEXT NOT NULL,
+      draw_mode TEXT NOT NULL DEFAULT 'manual_draw_numbers',
+      swiss_tiebreak_profile TEXT NOT NULL DEFAULT 'swiss_standard_v1',
+      status TEXT NOT NULL DEFAULT 'draft',
+      revision INTEGER NOT NULL DEFAULT 1,
+      published_at TEXT,
+      completed_at TEXT,
+      cancelled_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT INTO in_person_tournaments (
+      id, slug, name_en, scope, start_date, end_date,
+      organizer_name, swiss_rounds_count, playoff_first_round
+    ) VALUES (
+      'legacy-logo', 'legacy-logo', 'Legacy logo tournament', 'international',
+      '2026-09-06', '2026-09-06', 'Legacy organizer', 5, 'quarter_final'
+    );
+  `);
+
+  const firstResult = await ensureInPersonSchema(db, { logger: silentLogger });
+  assert.equal(firstResult.tournamentLogoMigration.added, true);
+  assert.deepEqual(
+    await get(db, "SELECT id, name_en, logo_url FROM in_person_tournaments WHERE id = 'legacy-logo'"),
+    { id: "legacy-logo", name_en: "Legacy logo tournament", logo_url: null }
+  );
+
+  const secondResult = await ensureInPersonSchema(db, { logger: silentLogger });
+  assert.equal(secondResult.tournamentLogoMigration.added, false);
 });
 
 test("repairs legacy Final and Bronze medal match table assignments", async (t) => {

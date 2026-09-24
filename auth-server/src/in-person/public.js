@@ -7,6 +7,7 @@ export function serializePublicTournament(row) {
     slug: row.slug,
     name_en: row.name_en,
     name_local: row.name_local || null,
+    logo_url: row.logo_url || null,
     scope: row.scope,
     association_id: row.association_id || null,
     association_name: row.association_name || null,

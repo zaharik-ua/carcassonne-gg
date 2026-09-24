@@ -30,6 +30,8 @@ test("admin form contains conditional location, date period, format, admins and 
     "Organizer name *",
     "Organizer URL",
     "Rules URL",
+    "Tournament logo URL",
+    "https://carcassonne.gg/gallery/asian-cup-logo.png",
     "Swiss rounds count *",
     "Playoff first round *",
     "Tournament admins",
@@ -38,6 +40,11 @@ test("admin form contains conditional location, date period, format, admins and 
     "New city: icon URL",
     "Bronze medal match is always included",
   ].forEach((label) => assert.ok(adminHtml.includes(label), `missing admin UI text: ${label}`));
+  assert.match(adminHtml, /logo_url: String\(logoUrlField\.input\.value/);
+  assert.match(adminHtml, /imageSrc: item\.logo_url \|\| ""/);
+  assert.match(adminHtml, /canEditCompletedLogo/);
+  assert.match(adminHtml, /"Save logo"/);
+  assert.match(adminHtml, /"Tournament logo updated\."/);
 });
 
 test("the embedded admin script parses after In-Person UI changes", () => {

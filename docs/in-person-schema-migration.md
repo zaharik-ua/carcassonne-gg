@@ -8,6 +8,8 @@
 - `tournament_access_users` отримує `tournament_entity_type`;
 - primary key змінюється з `(tournament_id, user_id)` на `(tournament_entity_type, tournament_id, user_id)`;
 - усі наявні access rows переносяться з типом `tournament` без зміни ролі або timestamps;
+- startup migration `4 / tournament_logo_url` ідемпотентно додає nullable
+  `in_person_tournaments.logo_url` для вже створених баз;
 - server починає слухати HTTP port лише після успішного завершення критичної міграції;
 - in-person routes реєструються під час запуску, але admin endpoints захищені обов'язковою авторизацією глобального адміністратора.
 
@@ -51,6 +53,7 @@
    ```sql
    PRAGMA integrity_check;
    PRAGMA table_info(tournament_access_users);
+   PRAGMA table_info(in_person_tournaments);
 
    SELECT tournament_entity_type, lower(trim(role)) AS role, COUNT(*)
    FROM tournament_access_users
@@ -62,6 +65,7 @@
    ```
 
    Під час першої міграції останній запит має повернути `0`, бо production in-person records ще не створювались.
+   У `PRAGMA table_info(in_person_tournaments)` має бути nullable колонка `logo_url`.
 
 5. Виконати smoke checks старих flow:
 

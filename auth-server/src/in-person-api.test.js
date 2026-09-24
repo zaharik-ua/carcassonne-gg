@@ -96,6 +96,7 @@ test("stage-two admin API creates a qualifier, assigns an organizer and publishe
       organizer_name: "Carcassonne Ukraine",
       organizer_url: "https://carcassonne.com.ua",
       rules_url: "https://carcassonne.com.ua/rules",
+      logo_url: "https://carcassonne.gg/gallery/asian-cup-logo.png",
       swiss_rounds_count: 6,
       playoff_first_round: "quarter_final",
       admin_user_ids: [1],
@@ -118,6 +119,10 @@ test("stage-two admin API creates a qualifier, assigns an organizer and publishe
   assert.equal(listResponse.response.status, 200);
   assert.equal(listResponse.data.tournaments.length, 1);
   assert.equal(listResponse.data.tournaments[0].qualifier_city_name_en, "Kyiv");
+  assert.equal(
+    listResponse.data.tournaments[0].logo_url,
+    "https://carcassonne.gg/gallery/asian-cup-logo.png"
+  );
 
   const invalidPatch = await api(
     baseUrl,

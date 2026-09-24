@@ -99,6 +99,7 @@ function serializeTournament(row, admins = []) {
     slug: row.slug,
     name_en: row.name_en,
     name_local: row.name_local || null,
+    logo_url: row.logo_url || null,
     scope: row.scope,
     association_id: row.association_id || null,
     association_name: row.association_name || null,
@@ -3536,11 +3537,11 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
         db,
         `
           INSERT INTO in_person_tournaments (
-            id, slug, name_en, name_local, scope, association_id, local_subtype,
+            id, slug, name_en, name_local, logo_url, scope, association_id, local_subtype,
             qualifier_city_id, start_date, end_date, organizer_name, organizer_url,
             rules_url, swiss_rounds_count, playoff_first_round, draw_mode,
             swiss_tiebreak_profile, status, revision, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1,
             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [
@@ -3548,6 +3549,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           validated.slug,
           validated.name_en,
           validated.name_local,
+          validated.logo_url,
           validated.scope,
           validated.association_id,
           validated.local_subtype,
@@ -3574,8 +3576,26 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
       if (payload?.id !== undefined && normalizeText(payload.id) !== current.id) {
         throw validationError("TOURNAMENT_ID_IMMUTABLE", "Tournament id cannot be changed");
       }
-      if (["cancelled", "completed"].includes(current.status)) {
+      if (current.status === "cancelled") {
         throw conflictError("TOURNAMENT_READ_ONLY", "Cancelled or completed tournaments are read-only");
+      }
+      if (current.status === "completed") {
+        const payloadKeys = Object.keys(payload || {});
+        if (payloadKeys.length !== 1 || payloadKeys[0] !== "logo_url") {
+          throw conflictError(
+            "TOURNAMENT_READ_ONLY",
+            "Only the tournament logo can be changed after completion"
+          );
+        }
+        const input = normalizeTournamentInput(payload, current);
+        await dbRun(
+          db,
+          `UPDATE in_person_tournaments
+           SET logo_url = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [input.logo_url, current.id]
+        );
+        return getTournament(current.id);
       }
       const input = await validateTournamentRelations(normalizeTournamentInput(payload, current), current);
       await validateExistingParticipantLocations(current.id, input);
@@ -3599,7 +3619,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
         db,
         `
           UPDATE in_person_tournaments
-          SET slug = ?, name_en = ?, name_local = ?, scope = ?, association_id = ?,
+          SET slug = ?, name_en = ?, name_local = ?, logo_url = ?, scope = ?, association_id = ?,
               local_subtype = ?, qualifier_city_id = ?, start_date = ?, end_date = ?,
               organizer_name = ?, organizer_url = ?, rules_url = ?, swiss_rounds_count = ?,
               playoff_first_round = ?, draw_mode = ?, swiss_tiebreak_profile = ?,
@@ -3610,6 +3630,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           input.slug,
           input.name_en,
           input.name_local,
+          input.logo_url,
           input.scope,
           input.association_id,
           input.local_subtype,

@@ -77,6 +77,8 @@ test("In-Person page lists accessible tournaments and opens a dedicated tourname
   assert.match(inPersonHtml, /function renderTournamentList\(\)/);
   assert.match(inPersonHtml, /pageHeader\.classList\.toggle\("ip-hidden", isDetailView\)/);
   assert.match(inPersonHtml, /row\.className = "ip-tournament-list-row"/);
+  assert.match(inPersonHtml, /logo\.className = "ip-tournament-list-logo"/);
+  assert.match(inPersonHtml, /logo\.src = tournament\.logo_url/);
   assert.match(inPersonHtml, /view\.textContent = "View"/);
   assert.match(inPersonHtml, /viewUrl\.searchParams\.set\("tournament", tournament\.id\)/);
   assert.match(inPersonHtml, /view\.href = viewUrl\.toString\(\)/);
@@ -95,17 +97,36 @@ test("In-Person page lists accessible tournaments and opens a dedicated tourname
     inPersonHtml.indexOf('id="ipTournamentCard"'),
     inPersonHtml.indexOf('id="ipStatus"')
   );
+  assert.match(tournamentCardMarkup, /id="ipTournamentLogo"/);
   assert.match(tournamentCardMarkup, /id="ipTournamentName"/);
   assert.match(tournamentCardMarkup, /id="ipRefreshBtn"/);
+  assert.match(tournamentCardMarkup, /id="ipPlayoffCompletion"/);
   assert.ok(
     inPersonHtml.indexOf('id="ipTournamentCard"') < inPersonHtml.indexOf('id="ipStatus"'),
     "the selected tournament card must be above status and workspace content"
   );
+  assert.ok(
+    inPersonHtml.indexOf('id="ipPlayoffCompletion"') < inPersonHtml.indexOf('id="ipWorkspace"'),
+    "final placements must be rendered above the tabbed workspace"
+  );
+  assert.equal((inPersonHtml.match(/id="ipPlayoffCompletion"/g) || []).length, 1);
   const tournamentMetaRenderer = inPersonHtml.slice(
     inPersonHtml.indexOf("function renderTournamentMeta()"),
     inPersonHtml.indexOf("function renderCounters()")
   );
+  assert.match(tournamentMetaRenderer, /tournament\.logo_url/);
   assert.doesNotMatch(tournamentMetaRenderer, /tournament\.status|tournament\.scope|formatDates\(tournament\)/);
+
+  const tournamentListRenderer = inPersonHtml.slice(
+    inPersonHtml.indexOf("function renderTournamentList()"),
+    inPersonHtml.indexOf("function renderTournamentMeta()")
+  );
+  const listBadgeValues = tournamentListRenderer.slice(
+    tournamentListRenderer.indexOf('meta.className = "ip-tournament-list-meta"'),
+    tournamentListRenderer.indexOf("].filter(Boolean).forEach")
+  );
+  assert.doesNotMatch(listBadgeValues, /tournament\.id/);
+  assert.match(listBadgeValues, /formatDates\(tournament\)[\s\S]*?tournament\.scope[\s\S]*?tournament\.status/);
 });
 
 test("In-Person page contains the complete Swiss organizer workflow", () => {

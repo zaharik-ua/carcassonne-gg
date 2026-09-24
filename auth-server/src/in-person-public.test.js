@@ -56,6 +56,7 @@ async function createTournament(service, suffix, { publish = true } = {}) {
     organizer_name: "Public organizer",
     organizer_url: "https://example.com/organizer",
     rules_url: "https://example.com/rules",
+    logo_url: "https://example.com/tournament-logo.png",
     swiss_rounds_count: 1,
     playoff_first_round: "semi_final",
     admin_user_ids: [1],
@@ -107,6 +108,7 @@ test("public serializers use an allowlist and exclude admin-only tournament fiel
     id: "ipt_public",
     slug: "public",
     name_en: "Public",
+    logo_url: "https://example.com/tournament-logo.png",
     scope: "international",
     start_date: "2026-01-01",
     end_date: "2026-01-01",
@@ -120,6 +122,7 @@ test("public serializers use an allowlist and exclude admin-only tournament fiel
     cancellation_reason: "private",
   });
   const json = JSON.stringify(serialized);
+  assert.equal(serialized.logo_url, "https://example.com/tournament-logo.png");
   assert.doesNotMatch(json, /admin_user_ids|admins|private@example|cancellation_reason/);
 });
 
@@ -180,6 +183,7 @@ test("public aggregate hides drafts, cancelled history and private result fields
   );
   assert.equal(aggregate.players[0].name_local?.startsWith("Гравець"), true);
   assert.equal(aggregate.tournament.organizer_url, "https://example.com/organizer");
+  assert.equal(aggregate.tournament.logo_url, "https://example.com/tournament-logo.png");
 });
 
 test("public reads follow active revisions after rollback and exclude cancelled tournaments", async (t) => {

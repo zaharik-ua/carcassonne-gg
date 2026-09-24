@@ -113,6 +113,24 @@
     gap: 12px;
   }
 
+  .ip-tournament-brand {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .ip-tournament-logo {
+    width: 64px;
+    height: 64px;
+    flex: 0 0 64px;
+    object-fit: contain;
+  }
+
+  .ip-tournament-summary {
+    min-width: 0;
+  }
+
   .ip-tournament-name {
     min-width: 0;
     margin: 0;
@@ -158,6 +176,15 @@
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.04em;
+    overflow: hidden;
+  }
+
+  .ip-tournament-list-logo {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 4px;
+    object-fit: contain;
   }
 
   .ip-tournament-list-main {
@@ -1099,8 +1126,12 @@
     text-align: left;
   }
 
-  .ip-playoff-completion {
+  .ip-tournament-completion {
     margin-top: 10px;
+  }
+
+  .ip-tournament-completion:empty {
+    display: none;
   }
 
   .ip-playoff-bracket-scroll {
@@ -1307,10 +1338,16 @@
 
   <div id="ipTournamentCard" class="ip-card ip-hidden">
     <div class="ip-tournament-heading">
-      <h1 id="ipTournamentName" class="ip-tournament-name"></h1>
+      <div class="ip-tournament-brand">
+        <img id="ipTournamentLogo" class="ip-tournament-logo ip-hidden" alt="">
+        <div class="ip-tournament-summary">
+          <h1 id="ipTournamentName" class="ip-tournament-name"></h1>
+          <div id="ipTournamentMeta" class="ip-meta ip-tournament-meta"></div>
+        </div>
+      </div>
       <button id="ipRefreshBtn" class="ip-btn" type="button">Refresh</button>
     </div>
-    <div id="ipTournamentMeta" class="ip-meta ip-tournament-meta"></div>
+    <div id="ipPlayoffCompletion" class="ip-tournament-completion"></div>
   </div>
 
   <div id="ipStatus" class="ip-status"></div>
@@ -1374,7 +1411,6 @@
         <div id="ipPlayoffActions" class="ip-actions"></div>
       </div>
       <div id="ipPlayoffBracket"></div>
-      <div id="ipPlayoffCompletion" class="ip-playoff-completion"></div>
     </section>
   </div>
 </div>
@@ -1403,6 +1439,7 @@
   const tournamentList = document.getElementById("ipTournamentList");
   const tournamentCard = document.getElementById("ipTournamentCard");
   const pageHeader = document.getElementById("ipPageHeader");
+  const tournamentLogo = document.getElementById("ipTournamentLogo");
   const tournamentName = document.getElementById("ipTournamentName");
   const tournamentMeta = document.getElementById("ipTournamentMeta");
   const workspace = document.getElementById("ipWorkspace");
@@ -1430,6 +1467,11 @@
   const playoffActions = document.getElementById("ipPlayoffActions");
   const playoffBracket = document.getElementById("ipPlayoffBracket");
   const playoffCompletion = document.getElementById("ipPlayoffCompletion");
+
+  tournamentLogo.addEventListener("error", () => {
+    tournamentLogo.classList.add("ip-hidden");
+    tournamentLogo.removeAttribute("src");
+  });
 
   class ApiError extends Error {
     constructor(response, payload) {
@@ -1853,7 +1895,19 @@
 
       const icon = document.createElement("div");
       icon.className = "ip-tournament-list-icon";
-      icon.textContent = "T";
+      if (tournament.logo_url) {
+        const logo = document.createElement("img");
+        logo.className = "ip-tournament-list-logo";
+        logo.src = tournament.logo_url;
+        logo.alt = "";
+        logo.addEventListener("error", () => {
+          logo.remove();
+          icon.textContent = "T";
+        }, { once: true });
+        icon.appendChild(logo);
+      } else {
+        icon.textContent = "T";
+      }
 
       const main = document.createElement("div");
       main.className = "ip-tournament-list-main";
@@ -1863,7 +1917,6 @@
       const meta = document.createElement("div");
       meta.className = "ip-tournament-list-meta";
       [
-        tournament.id,
         formatDates(tournament),
         tournament.scope,
         tournament.status,
@@ -1896,11 +1949,23 @@
       ? overviewTournament
       : selectedTournament();
     if (!tournament) {
+      tournamentLogo.classList.add("ip-hidden");
+      tournamentLogo.removeAttribute("src");
+      tournamentLogo.alt = "";
       tournamentName.textContent = "";
       tournamentMeta.textContent = "";
       return;
     }
-    tournamentName.textContent = tournament.name_local || tournament.name_en || "In-Person tournament";
+    const displayName = tournament.name_local || tournament.name_en || "In-Person tournament";
+    const logoUrl = String(tournament.logo_url || "").trim();
+    tournamentName.textContent = displayName;
+    tournamentLogo.classList.toggle("ip-hidden", !logoUrl);
+    tournamentLogo.alt = logoUrl ? `${displayName} logo` : "";
+    if (logoUrl && tournamentLogo.getAttribute("src") !== logoUrl) {
+      tournamentLogo.src = logoUrl;
+    } else if (!logoUrl) {
+      tournamentLogo.removeAttribute("src");
+    }
     const playoffParticipantCount = Number(tournament.playoff_preview?.participant_count || 0);
     tournamentMeta.textContent = [
       `${tournament.swiss_rounds_count} Swiss rounds`,

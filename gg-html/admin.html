@@ -4504,6 +4504,7 @@
     const form = document.createElement("form");
     form.className = "cp-edit-form";
     const isReadOnly = mode === "edit" && ["cancelled", "completed"].includes(String(item?.status || ""));
+    const canEditCompletedLogo = mode === "edit" && String(item?.status || "") === "completed";
     const isFormatLocked = mode === "edit" && Number(item?.has_started_swiss) === 1;
     const isSlugLocked = mode === "edit" && !!item?.published_at;
 
@@ -4549,6 +4550,9 @@
     organizerUrlField.input.type = "url";
     const rulesUrlField = createTextRow("Rules URL", item?.rules_url || "");
     rulesUrlField.input.type = "url";
+    const logoUrlField = createTextRow("Tournament logo URL", item?.logo_url || "");
+    logoUrlField.input.type = "url";
+    logoUrlField.input.placeholder = "https://carcassonne.gg/gallery/asian-cup-logo.png";
     const swissRoundsField = createNumberRow(
       "Swiss rounds count *",
       item?.swiss_rounds_count || 5,
@@ -4730,6 +4734,7 @@
     form.appendChild(organizerNameField.row);
     form.appendChild(organizerUrlField.row);
     form.appendChild(rulesUrlField.row);
+    form.appendChild(logoUrlField.row);
     form.appendChild(swissRoundsField.row);
     form.appendChild(playoffFirstRoundField.row);
     form.appendChild(playoffPreview);
@@ -4759,10 +4764,12 @@
       organizerNameField.input,
       organizerUrlField.input,
       rulesUrlField.input,
+      logoUrlField.input,
       swissRoundsField.input,
     ];
     if (isReadOnly) {
       editableControls.forEach((control) => { control.disabled = true; });
+      logoUrlField.input.disabled = !canEditCompletedLogo;
       scopeField.select.disabled = true;
       associationField.select.disabled = true;
       localSubtypeField.select.disabled = true;
@@ -4775,11 +4782,13 @@
 
     const actions = document.createElement("div");
     actions.className = "cp-edit-actions";
-    if (!isReadOnly) {
+    if (!isReadOnly || canEditCompletedLogo) {
       const saveBtn = document.createElement("button");
       saveBtn.type = "submit";
       saveBtn.className = "cp-btn cp-btn-primary";
-      saveBtn.textContent = mode === "create" ? "Create" : "Save";
+      saveBtn.textContent = canEditCompletedLogo
+        ? "Save logo"
+        : mode === "create" ? "Create" : "Save";
       actions.appendChild(saveBtn);
     }
 
@@ -4854,7 +4863,27 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (isReadOnly) return;
+      if (isReadOnly) {
+        if (!canEditCompletedLogo) return;
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
+        try {
+          await apiJson(`${IN_PERSON_TOURNAMENTS_URL}/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              logo_url: String(logoUrlField.input.value || "").trim() || null,
+            }),
+          });
+          closeInlineForm();
+          await loadSectionData("inPersonTournaments");
+          renderSection();
+          setStatus("Tournament logo updated.", false);
+        } catch (error) {
+          setStatus(error?.message || "Failed to update tournament logo.", true);
+          if (submitBtn) submitBtn.disabled = false;
+        }
+        return;
+      }
       const scope = scopeField.select.value;
       const localSubtype = scope === "local" ? localSubtypeField.select.value : null;
       const payload = {
@@ -4872,6 +4901,7 @@
         organizer_name: String(organizerNameField.input.value || "").trim(),
         organizer_url: String(organizerUrlField.input.value || "").trim() || null,
         rules_url: String(rulesUrlField.input.value || "").trim() || null,
+        logo_url: String(logoUrlField.input.value || "").trim() || null,
         swiss_rounds_count: Number(swissRoundsField.input.value),
         playoff_first_round: playoffFirstRoundField.select.value,
         admin_user_ids: adminsField.getValues(),
@@ -7146,7 +7176,7 @@
         `${adminsCount} admin${adminsCount === 1 ? "" : "s"}`,
       ].filter(Boolean).join(" • ");
       sectionList.appendChild(createListRow({
-        imageSrc: "",
+        imageSrc: item.logo_url || "",
         imageAlt: item.name_en || item.slug,
         imageRound: false,
         title: item.name_en || item.slug,

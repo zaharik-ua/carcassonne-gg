@@ -121,6 +121,7 @@ export function normalizeTournamentInput(payload, current = null) {
   const slug = normalizeSlug(selectValue(payload, current, "slug"));
   const nameEn = normalizeText(selectValue(payload, current, "name_en"));
   const nameLocal = normalizeOptionalText(selectValue(payload, current, "name_local"));
+  const logoUrl = normalizeUrl(selectValue(payload, current, "logo_url"), "logo_url");
   const scope = normalizeText(selectValue(payload, current, "scope", "international")).toLowerCase();
   let associationId = normalizeOptionalText(selectValue(payload, current, "association_id"));
   let localSubtype = normalizeOptionalText(selectValue(payload, current, "local_subtype"));
@@ -198,6 +199,7 @@ export function normalizeTournamentInput(payload, current = null) {
     slug,
     name_en: nameEn,
     name_local: nameLocal,
+    logo_url: logoUrl,
     scope,
     association_id: associationId,
     local_subtype: localSubtype,

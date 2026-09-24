@@ -82,6 +82,7 @@ function tournamentPayload(overrides = {}) {
     organizer_name: "Carcassonne Ukraine",
     organizer_url: "https://carcassonne.com.ua",
     rules_url: "https://carcassonne.com.ua/rules",
+    logo_url: "https://carcassonne.gg/gallery/asian-cup-logo.png",
     swiss_rounds_count: 6,
     playoff_first_round: "quarter_final",
     admin_user_ids: [1, 2],
@@ -142,6 +143,7 @@ test("creates international, local final and local qualifier tournament configur
   assert.match(international.id, /^ipt_/);
   assert.equal(international.status, "draft");
   assert.equal(international.association_id, null);
+  assert.equal(international.logo_url, "https://carcassonne.gg/gallery/asian-cup-logo.png");
   assert.equal(international.admins.length, 2);
   assert.deepEqual(international.playoff_preview, {
     participant_count: 8,
@@ -193,6 +195,10 @@ test("rejects invalid conditional fields, periods, URLs and duplicate slugs", as
     service.createTournament(tournamentPayload({ organizer_url: "javascript:alert(1)" })),
     (error) => error?.code === "INVALID_URL"
   );
+  await assert.rejects(
+    service.createTournament(tournamentPayload({ logo_url: "javascript:alert(1)" })),
+    (error) => error?.code === "INVALID_URL" && error?.details?.field === "logo_url"
+  );
 
   await service.createTournament(tournamentPayload());
   await assert.rejects(
@@ -229,6 +235,23 @@ test("publishes a draft, locks its slug and cancels only before Swiss starts", a
   await assert.rejects(
     service.cancelTournament(created.id),
     (error) => error?.status === 409 && error?.code === "TOURNAMENT_ALREADY_STARTED"
+  );
+
+  await run(
+    db,
+    "UPDATE in_person_tournaments SET status = 'completed' WHERE id = ?",
+    [created.id]
+  );
+  const brandedCompleted = await service.updateTournament(created.id, {
+    logo_url: "https://example.com/completed-logo.png",
+  });
+  assert.equal(brandedCompleted.logo_url, "https://example.com/completed-logo.png");
+  await assert.rejects(
+    service.updateTournament(created.id, {
+      logo_url: "https://example.com/other-logo.png",
+      name_en: "Changed after completion",
+    }),
+    (error) => error?.status === 409 && error?.code === "TOURNAMENT_READ_ONLY"
   );
 });
 
