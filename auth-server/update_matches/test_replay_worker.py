@@ -296,7 +296,7 @@ class ReplayWorkerTest(unittest.TestCase):
 
         second = self._run(
             archive_then_ready,
-            queue_class="historical",
+            queue_class="archive-follow-up",
             limit=1,
             now=self.now + timedelta(minutes=2),
         )
@@ -309,6 +309,61 @@ class ReplayWorkerTest(unittest.TestCase):
         self.assertEqual(completed["color_refresh_count"], 1)
         self.assertIsNone(completed["retry_reason"])
         self.assertIsNone(completed["next_attempt_at"])
+
+    def test_archive_follow_up_uses_historical_budget_and_ignores_backlog(self) -> None:
+        self._add_game("archive-follow-up", "101")
+        self._queue(
+            "archive-follow-up",
+            status="ready",
+            retry_reason="colors",
+            queue_class="historical",
+            color_source="fallback",
+            archive_requested_at=self.now - timedelta(minutes=2),
+        )
+        self._add_game("ordinary-backlog", "102")
+        self._queue(
+            "ordinary-backlog",
+            queue_class="historical",
+            next_attempt_at=self.now - timedelta(hours=1),
+        )
+        calls: list[tuple[str, str]] = []
+
+        def ready(_path: str, game_id: str, **kwargs):
+            calls.append((game_id, kwargs["request_class"]))
+            return {"color_source": "bga", "account_label": "account-a"}
+
+        summary = self._run(
+            ready,
+            queue_class="archive-follow-up",
+            account_labels=["account-a", "account-b"],
+        )
+
+        self.assertEqual(summary["queue_class"], "archive-follow-up")
+        self.assertEqual(summary["due"], 1)
+        self.assertEqual(summary["processed"], 1)
+        self.assertEqual(summary["remaining"], 0)
+        self.assertEqual(calls, [("archive-follow-up", "historical")])
+        self.assertEqual(self._replay("ordinary-backlog")["retry_reason"], "initial")
+
+    def test_archive_follow_up_waits_for_fresh_work(self) -> None:
+        self._add_game("fresh", "100")
+        self._queue("fresh", queue_class="fresh")
+        self._add_game("archive-follow-up", "101")
+        self._queue(
+            "archive-follow-up",
+            retry_reason="archive",
+            queue_class="historical",
+            archive_requested_at=self.now - timedelta(minutes=2),
+        )
+
+        summary = self._run(
+            lambda *_args, **_kwargs: self.fail("archive follow-up must wait"),
+            queue_class="archive-follow-up",
+        )
+
+        self.assertEqual(summary["status"], "stopped")
+        self.assertEqual(summary["stop_reason"], "fresh_priority")
+        self.assertEqual(summary["processed"], 0)
 
     def test_color_refresh_becomes_manual_if_requested_archive_is_still_missing(self) -> None:
         self._add_game("game-1", "101")
@@ -693,6 +748,7 @@ class ReplayWorkerTest(unittest.TestCase):
         next_attempt_at: datetime | None | object = ...,
         color_source: str | None = None,
         color_refresh_count: int = 0,
+        archive_requested_at: datetime | None = None,
         lease_owner: str | None = None,
         lease_until: datetime | None = None,
     ) -> None:
@@ -708,8 +764,8 @@ class ReplayWorkerTest(unittest.TestCase):
                 INSERT INTO game_replays (
                   game_id, bga_table_id, status, retry_reason, queue_class,
                   queued_at, next_attempt_at, color_source, color_refresh_count,
-                  lease_owner, lease_until
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  archive_requested_at, lease_owner, lease_until
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     game_id,
@@ -721,6 +777,7 @@ class ReplayWorkerTest(unittest.TestCase):
                     self._timestamp(next_attempt_at) if next_attempt_at else None,
                     color_source,
                     color_refresh_count,
+                    self._timestamp(archive_requested_at) if archive_requested_at else None,
                     lease_owner,
                     self._timestamp(lease_until) if lease_until else None,
                 ),

@@ -103,6 +103,14 @@ Historical work uses the same engine and state machine:
 python3 retry_pending_game_replays.py --queue-class historical --limit 3
 ```
 
+Requested historical archives have a dedicated execution mode. It leaves the
+stored queue class and request budget as `historical` and ignores ordinary
+historical backlog:
+
+```bash
+python3 retry_pending_game_replays.py --queue-class archive-follow-up --limit 3
+```
+
 The worker takes a non-blocking `flock` next to the SQLite database and also
 leases each selected row. This prevents overlapping runs from processing the
 same game; an expired lease can be reclaimed. A run performs at most three
@@ -159,22 +167,28 @@ be reconstructed exactly after legacy raw logs have been removed.
 
 ### systemd timers
 
-The repository contains a shared template service and two independent timers:
+The repository contains a shared template service and three independent timers:
 
 - `systemd/bga-replay-worker@.service`;
 - `systemd/bga-replay-fresh.timer` — every two minutes;
-- `systemd/bga-replay-historical.timer` — every two minutes;
+- `systemd/bga-replay-archive-follow-up.timer` — every minute, but only for due
+  historical rows whose BGA archive has already been requested;
+- `systemd/bga-replay-historical.timer` — every 30 minutes;
 - `systemd/bga-replay-worker.logrotate`.
 
-Install the units without enabling either timer first:
+Install the units without enabling the timers first:
 
 ```bash
 sudo cp systemd/bga-replay-worker@.service /etc/systemd/system/
 sudo cp systemd/bga-replay-fresh.timer /etc/systemd/system/
+sudo cp systemd/bga-replay-archive-follow-up.timer /etc/systemd/system/
 sudo cp systemd/bga-replay-historical.timer /etc/systemd/system/
 sudo cp systemd/bga-replay-worker.logrotate /etc/logrotate.d/bga-replay-worker
 sudo systemctl daemon-reload
-sudo systemctl disable --now bga-replay-fresh.timer bga-replay-historical.timer
+sudo systemctl disable --now \
+  bga-replay-fresh.timer \
+  bga-replay-archive-follow-up.timer \
+  bga-replay-historical.timer
 ```
 
 Preview the due queue and rolling request usage without contacting BGA:
@@ -216,20 +230,25 @@ sudo systemctl list-timers --all bga-replay-fresh.timer
 tail -n 100 /var/log/carcassonne/bga-replay-worker.log
 ```
 
-Enable historical separately only after fresh has run successfully:
+Enable the archive follow-up lane and historical separately only after fresh
+has run successfully:
 
 ```bash
-sudo systemctl enable --now bga-replay-historical.timer
+sudo systemctl enable --now \
+  bga-replay-archive-follow-up.timer \
+  bga-replay-historical.timer
 sudo systemctl list-timers --all \
-  bga-replay-fresh.timer bga-replay-historical.timer
+  bga-replay-fresh.timer \
+  bga-replay-archive-follow-up.timer \
+  bga-replay-historical.timer
 ```
 
 Timer frequency does not grant request capacity. Every service invocation still
 uses `--limit 3`, the worker state machine, the shared lock, fresh priority, and
-the persistent rolling budget. Due archive rechecks run before untouched
-historical backlog so the configured two-minute archive window is meaningful.
-Both lanes write to
-`/var/log/carcassonne/bga-replay-worker.log`.
+the persistent rolling budget. The archive follow-up lane does not change
+`game_replays.queue_class`: its BGA requests remain `historical` for budgets and
+metrics, and it never processes untouched historical backlog. All lanes write
+to `/var/log/carcassonne/bga-replay-worker.log`.
 
 ### Admin monitoring and overrides
 

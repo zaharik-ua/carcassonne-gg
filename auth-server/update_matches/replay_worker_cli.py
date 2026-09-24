@@ -42,9 +42,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--queue-class",
-        choices=("fresh", "historical"),
+        choices=("fresh", "historical", "archive-follow-up"),
         default="fresh",
-        help="Queue lane to process (default: fresh)",
+        help="Worker lane to process (default: fresh)",
     )
     parser.add_argument(
         "--limit",

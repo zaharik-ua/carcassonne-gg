@@ -17,16 +17,25 @@ class ReplayWorkerSystemdTest(unittest.TestCase):
         self.assertIn("data/auth.sqlite", unit)
         self.assertIn("bga-replay-worker.log", unit)
 
-    def test_fresh_and_historical_timers_are_independent(self) -> None:
+    def test_replay_timers_are_independent(self) -> None:
         fresh = (SYSTEMD_DIR / "bga-replay-fresh.timer").read_text()
         historical = (SYSTEMD_DIR / "bga-replay-historical.timer").read_text()
+        archive_follow_up = (
+            SYSTEMD_DIR / "bga-replay-archive-follow-up.timer"
+        ).read_text()
 
         self.assertIn("OnUnitInactiveSec=2min", fresh)
         self.assertIn("Unit=bga-replay-worker@fresh.service", fresh)
-        self.assertIn("OnUnitInactiveSec=2min", historical)
+        self.assertIn("OnUnitInactiveSec=30min", historical)
         self.assertIn("Unit=bga-replay-worker@historical.service", historical)
+        self.assertIn("OnUnitInactiveSec=1min", archive_follow_up)
+        self.assertIn(
+            "Unit=bga-replay-worker@archive-follow-up.service",
+            archive_follow_up,
+        )
         self.assertIn("WantedBy=timers.target", fresh)
         self.assertIn("WantedBy=timers.target", historical)
+        self.assertIn("WantedBy=timers.target", archive_follow_up)
 
 
 if __name__ == "__main__":

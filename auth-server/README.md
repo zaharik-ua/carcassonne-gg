@@ -597,11 +597,13 @@ status не змінилися чи BGA-запит завершився поми
 
 ## 17) Systemd timers для BGA replay
 
-Replay-черга має спільний шаблонний service і два незалежні timers:
+Replay-черга має спільний шаблонний service і три незалежні timers:
 
 - `systemd/bga-replay-worker@.service`;
 - `systemd/bga-replay-fresh.timer` — кожні 2 хвилини;
-- `systemd/bga-replay-historical.timer` — кожні 2 хвилини.
+- `systemd/bga-replay-archive-follow-up.timer` — щохвилини, лише для historical
+  записів, для яких уже було замовлено BGA-архів;
+- `systemd/bga-replay-historical.timer` — кожні 30 хвилин.
 
 Початкове встановлення навмисно не вмикає timers:
 
@@ -609,10 +611,14 @@ Replay-черга має спільний шаблонний service і два �
 cd /home/carcassonne-gg/auth-server
 sudo cp systemd/bga-replay-worker@.service /etc/systemd/system/
 sudo cp systemd/bga-replay-fresh.timer /etc/systemd/system/
+sudo cp systemd/bga-replay-archive-follow-up.timer /etc/systemd/system/
 sudo cp systemd/bga-replay-historical.timer /etc/systemd/system/
 sudo cp systemd/bga-replay-worker.logrotate /etc/logrotate.d/bga-replay-worker
 sudo systemctl daemon-reload
-sudo systemctl disable --now bga-replay-fresh.timer bga-replay-historical.timer
+sudo systemctl disable --now \
+  bga-replay-fresh.timer \
+  bga-replay-archive-follow-up.timer \
+  bga-replay-historical.timer
 ```
 
 Спочатку потрібно перевірити чергу й бюджет та виконати один ручний smoke test:
@@ -628,16 +634,22 @@ sudo systemctl disable --now bga-replay-fresh.timer bga-replay-historical.timer
 sudo systemctl enable --now bga-replay-fresh.timer
 ```
 
-Historical вмикається окремо після спостереження за fresh:
+Archive follow-up і historical вмикаються окремо після спостереження за fresh:
 
 ```bash
-sudo systemctl enable --now bga-replay-historical.timer
+sudo systemctl enable --now \
+  bga-replay-archive-follow-up.timer \
+  bga-replay-historical.timer
 ```
 
-Обидва режими використовують спільний lock, персистентний rolling budget і не
+Усі режими використовують спільний lock, персистентний rolling budget і не
 виконують більше трьох `logs.html` за один запуск. Лог записується до
 `/var/log/carcassonne/bga-replay-worker.log`. Детальні preview-запити до SQLite
 наведені в `update_matches/README.md`.
+
+`archive-follow-up` не змінює `game_replays.queue_class`: записи та BGA-запити
+залишаються `historical`, тому не використовують fresh reserve. Цей режим не
+обробляє звичайний historical backlog і завжди поступається due fresh-записам.
 
 Затримка повторної перевірки щойно замовленого BGA-архіву зберігається в
 `system_settings` під ключем `bga_replay_archive_retry_minutes`. Початкове

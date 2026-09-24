@@ -26,7 +26,7 @@ from .game_replay import (
 )
 
 
-QUEUE_CLASSES = frozenset({"fresh", "historical"})
+WORKER_MODES = frozenset({"fresh", "historical", "archive-follow-up"})
 RETRY_REASONS = frozenset({"initial", "archive", "colors"})
 DEFAULT_RUN_LIMIT = 3
 MAX_RUN_LIMIT = 3
@@ -214,7 +214,8 @@ def run_replay_worker(
     replay_fetcher: ReplayFetcher = fetch_and_store_game_replay,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    normalized_queue_class = _normalize_queue_class(queue_class)
+    worker_mode = _normalize_worker_mode(queue_class)
+    handles_historical = worker_mode in {"historical", "archive-follow-up"}
     if not 1 <= int(limit) <= MAX_RUN_LIMIT:
         raise ValueError(f"limit must be between 1 and {MAX_RUN_LIMIT}")
     if lease_seconds < 1:
@@ -229,8 +230,8 @@ def run_replay_worker(
 
     summary: dict[str, Any] = {
         "status": "ok",
-        "queue_class": normalized_queue_class,
-        "due": count_due_replays(path, queue_class=normalized_queue_class, now=run_now),
+        "queue_class": worker_mode,
+        "due": count_due_replays(path, queue_class=worker_mode, now=run_now),
         "processed": 0,
         "requests": 0,
         "ready_bga_colors": 0,
@@ -245,14 +246,14 @@ def run_replay_worker(
     }
 
     while summary["processed"] < int(limit):
-        if normalized_queue_class == "historical" and has_due_fresh_replay(
+        if handles_historical and has_due_fresh_replay(
             path, now=run_now
         ):
             _stop_summary(summary, "fresh_priority")
             break
 
         available_accounts = configured_accounts
-        if normalized_queue_class == "historical":
+        if handles_historical:
             available_accounts = [
                 label
                 for label in configured_accounts
@@ -264,7 +265,7 @@ def run_replay_worker(
 
         job = _claim_due_replay(
             path,
-            queue_class=normalized_queue_class,
+            worker_mode=worker_mode,
             lease_owner=owner,
             lease_seconds=lease_seconds,
             excluded_game_ids=processed_game_ids,
@@ -279,7 +280,7 @@ def run_replay_worker(
         if _finish_recovered_job(path, job=job, now=run_now, summary=summary):
             continue
 
-        if normalized_queue_class == "historical" and has_due_fresh_replay(
+        if handles_historical and has_due_fresh_replay(
             path, now=run_now
         ):
             _release_job(path, job=job, now=run_now, keep_due=True)
@@ -291,14 +292,14 @@ def run_replay_worker(
                 str(path),
                 job.game_id,
                 force=job.retry_reason == "colors",
-                request_class=normalized_queue_class,
+                request_class=job.queue_class,
                 account_labels=available_accounts,
                 color_refresh=job.retry_reason == "colors",
                 preserve_existing_fallback=job.retry_reason == "colors",
             )
             summary["requests"] += 1
             account_label = _optional_text(result.get("account_label"))
-            if normalized_queue_class == "historical" and account_label:
+            if job.queue_class == "historical" and account_label:
                 historical_accounts_used.add(account_label)
             _complete_successful_job(
                 path,
@@ -362,7 +363,7 @@ def run_replay_worker(
 
     summary["remaining"] = count_due_replays(
         path,
-        queue_class=normalized_queue_class,
+        queue_class=worker_mode,
         now=run_now,
     )
     return summary
@@ -374,24 +375,33 @@ def count_due_replays(
     queue_class: str,
     now: datetime | None = None,
 ) -> int:
-    normalized_queue_class = _normalize_queue_class(queue_class)
+    worker_mode = _normalize_worker_mode(queue_class)
+    stored_queue_class = (
+        "historical" if worker_mode == "archive-follow-up" else worker_mode
+    )
+    archive_follow_up_sql = (
+        "AND gr.archive_requested_at IS NOT NULL"
+        if worker_mode == "archive-follow-up"
+        else ""
+    )
     at = _format_timestamp(now or datetime.now(timezone.utc))
     with sqlite3.connect(Path(db_path).expanduser()) as conn:
         ensure_game_replays_schema(conn)
         return int(
             conn.execute(
-                """
+                f"""
                 SELECT COUNT(*)
                 FROM game_replays gr
                 JOIN games g ON g.id = gr.game_id
                 WHERE gr.queue_class = ?
                   AND gr.retry_reason IN ('initial', 'archive', 'colors')
+                  {archive_follow_up_sql}
                   AND gr.next_attempt_at IS NOT NULL
                   AND datetime(gr.next_attempt_at) <= datetime(?)
                   AND gr.status IN ('pending', 'ready', 'fetching', 'error')
                   AND trim(COALESCE(g.deleted_at, '')) = ''
                 """,
-                (normalized_queue_class, at),
+                (stored_queue_class, at),
             ).fetchone()[0]
         )
 
@@ -424,7 +434,7 @@ def replay_worker_lock(lock_path: str | Path) -> Iterator[None]:
 def _claim_due_replay(
     db_path: Path,
     *,
-    queue_class: str,
+    worker_mode: str,
     lease_owner: str,
     lease_seconds: int,
     excluded_game_ids: set[str],
@@ -432,6 +442,14 @@ def _claim_due_replay(
 ) -> ReplayQueueJob | None:
     at = _format_timestamp(now)
     lease_until = _format_timestamp(now + timedelta(seconds=lease_seconds))
+    stored_queue_class = (
+        "historical" if worker_mode == "archive-follow-up" else worker_mode
+    )
+    archive_follow_up_sql = (
+        "AND gr.archive_requested_at IS NOT NULL"
+        if worker_mode == "archive-follow-up"
+        else ""
+    )
     with sqlite3.connect(db_path, timeout=30) as conn:
         conn.row_factory = sqlite3.Row
         ensure_game_replays_schema(conn)
@@ -439,7 +457,7 @@ def _claim_due_replay(
         conn.execute("BEGIN IMMEDIATE")
         try:
             excluded_sql = ""
-            params: list[Any] = [queue_class, at, at]
+            params: list[Any] = [stored_queue_class, at, at]
             if excluded_game_ids:
                 excluded_sql = (
                     "AND gr.game_id NOT IN ("
@@ -462,6 +480,7 @@ def _claim_due_replay(
                 JOIN games g ON g.id = gr.game_id
                 WHERE gr.queue_class = ?
                   AND gr.retry_reason IN ('initial', 'archive', 'colors')
+                  {archive_follow_up_sql}
                   AND gr.next_attempt_at IS NOT NULL
                   AND datetime(gr.next_attempt_at) <= datetime(?)
                   AND gr.status IN ('pending', 'ready', 'fetching', 'error')
@@ -784,11 +803,11 @@ def _resolve_account_labels(account_labels: list[str] | None) -> list[str]:
     return [credential.label for credential in get_bga_credentials()]
 
 
-def _normalize_queue_class(value: str) -> str:
+def _normalize_worker_mode(value: str) -> str:
     normalized = str(value or "").strip().lower()
-    if normalized not in QUEUE_CLASSES:
+    if normalized not in WORKER_MODES:
         raise ValueError(
-            f"queue_class must be one of {', '.join(sorted(QUEUE_CLASSES))}"
+            f"queue_class must be one of {', '.join(sorted(WORKER_MODES))}"
         )
     return normalized
 
