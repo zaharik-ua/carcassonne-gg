@@ -454,8 +454,7 @@ def fetch_and_store_game_replay(
     request_class: str = "manual",
     account_labels: list[str] | None = None,
     account_label: str | None = None,
-    standby_account_labels: list[str] | None = None,
-    standby_guard_account_labels: list[str] | None = None,
+    account_priority_tiers: list[list[str]] | None = None,
     budget_limits: ReplayBudgetLimits | None = None,
     budget_now: datetime | None = None,
     color_refresh: bool = False,
@@ -583,29 +582,30 @@ def fetch_and_store_game_replay(
         account_label=account_label,
         use_injected_account=request is not None and authenticate is not None,
     )
-    if standby_account_labels is None and standby_guard_account_labels is None:
+    if account_priority_tiers is None:
         if account_labels is None and not _optional_text(account_label) and not (
             request is not None and authenticate is not None
         ):
             from .bga_login import get_bga_credentials
 
             configured_credentials = get_bga_credentials()
-            standby_account_labels = [
-                credential.label
+            levels = sorted({
+                credential.replay_standby_level
                 for credential in configured_credentials
-                if credential.replay_standby
-            ]
-            standby_guard_account_labels = [
-                credential.label
-                for credential in configured_credentials
-                if not credential.replay_standby
+            })
+            account_priority_tiers = [
+                [
+                    credential.label
+                    for credential in configured_credentials
+                    if credential.replay_standby_level == level
+                ]
+                for level in levels
             ]
     try:
         reservation = reserve_replay_request(
             path,
             account_labels=resolved_account_labels,
-            standby_account_labels=standby_account_labels or (),
-            standby_guard_account_labels=standby_guard_account_labels or (),
+            account_priority_tiers=account_priority_tiers or (),
             bga_table_id=table_id,
             request_class=request_class,
             limits=budget_limits,

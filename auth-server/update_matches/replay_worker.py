@@ -226,8 +226,7 @@ def run_replay_worker(
     owner = lease_owner or _default_lease_owner()
     (
         configured_accounts,
-        standby_accounts,
-        standby_guard_accounts,
+        account_priority_tiers,
     ) = _resolve_account_configuration(account_labels)
     historical_accounts_used: set[str] = set()
     processed_game_ids: set[str] = set()
@@ -298,8 +297,7 @@ def run_replay_worker(
                 force=job.retry_reason == "colors",
                 request_class=job.queue_class,
                 account_labels=available_accounts,
-                standby_account_labels=standby_accounts,
-                standby_guard_account_labels=standby_guard_accounts,
+                account_priority_tiers=account_priority_tiers,
                 color_refresh=job.retry_reason == "colors",
                 preserve_existing_fallback=job.retry_reason == "colors",
             )
@@ -803,17 +801,24 @@ def _stop_summary(summary: dict[str, Any], reason: str) -> None:
 
 def _resolve_account_configuration(
     account_labels: list[str] | None,
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[list[str]]]:
     if account_labels is not None:
         labels = [str(label).strip() for label in account_labels if str(label).strip()]
-        return labels, [], []
+        return labels, []
     from .bga_login import get_bga_credentials
 
     credentials = get_bga_credentials()
     labels = [credential.label for credential in credentials]
-    standby = [credential.label for credential in credentials if credential.replay_standby]
-    guards = [credential.label for credential in credentials if not credential.replay_standby]
-    return labels, standby, guards
+    levels = sorted({credential.replay_standby_level for credential in credentials})
+    tiers = [
+        [
+            credential.label
+            for credential in credentials
+            if credential.replay_standby_level == level
+        ]
+        for level in levels
+    ]
+    return labels, tiers
 
 
 def _normalize_worker_mode(value: str) -> str:

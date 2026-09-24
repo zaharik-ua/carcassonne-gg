@@ -70,8 +70,9 @@ function timestampIsActive(value, now) {
   return Number.isFinite(timestamp) && timestamp > now.getTime();
 }
 
-function isReplayStandbyAccountLabel(value) {
-  return /^reserve4:/.test(String(value || "").trim());
+function replayStandbyLevel(value) {
+  const match = /^reserve([45]):/.exec(String(value || "").trim());
+  return match ? Number(match[1]) - 3 : 0;
 }
 
 function timestampHasStarted(value, now) {
@@ -313,13 +314,24 @@ export async function loadReplayBudgetAdminState({
   const stateByAccount = new Map(
     accountStateRows.map((row) => [normalizeText(row.account_label), row])
   );
-  const configuredGuardLabels = configuredLabels.filter(
-    (label) => !isReplayStandbyAccountLabel(label)
-  );
-  const standbyEligible = configuredGuardLabels.length > 0
-    && configuredGuardLabels.every((label) => (
-      timestampIsActive(stateByAccount.get(label)?.cooldown_until, currentTime)
-    ));
+  const configuredLabelsByLevel = new Map();
+  configuredLabels.forEach((label) => {
+    const level = replayStandbyLevel(label);
+    if (!configuredLabelsByLevel.has(level)) configuredLabelsByLevel.set(level, []);
+    configuredLabelsByLevel.get(level).push(label);
+  });
+  const standbyEligibility = new Map();
+  [1, 2].forEach((level) => {
+    const guardLabels = Array.from(configuredLabelsByLevel.entries())
+      .filter(([candidateLevel]) => candidateLevel < level)
+      .flatMap(([, labels]) => labels);
+    standbyEligibility.set(
+      level,
+      guardLabels.length > 0 && guardLabels.every((label) => (
+        timestampIsActive(stateByAccount.get(label)?.cooldown_until, currentTime)
+      ))
+    );
+  });
   const activeOverrideByAccount = new Map();
   activeOverrideRows.forEach((row) => {
     const label = normalizeText(row.account_label);
@@ -341,11 +353,13 @@ export async function loadReplayBudgetAdminState({
     );
     const accountState = stateByAccount.get(accountLabel) || {};
     const cooldownActive = timestampIsActive(accountState.cooldown_until, currentTime);
+    const standbyLevel = replayStandbyLevel(accountLabel);
     return {
       account_label: accountLabel,
       configured: configuredLabels.includes(accountLabel),
-      standby: isReplayStandbyAccountLabel(accountLabel),
-      standby_eligible: isReplayStandbyAccountLabel(accountLabel) && standbyEligible,
+      standby: standbyLevel > 0,
+      standby_level: standbyLevel,
+      standby_eligible: standbyLevel > 0 && standbyEligibility.get(standbyLevel) === true,
       usage,
       limits: {
         base_total_limit: baseLimits.total_limit,

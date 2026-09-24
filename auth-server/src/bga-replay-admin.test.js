@@ -39,6 +39,8 @@ const ENV = {
   BGA_PASSWORD_3: "secret-3",
   BGA_EMAIL_4: "reserve4@example.com",
   BGA_PASSWORD_4: "secret-4",
+  BGA_EMAIL_5: "reserve5@example.com",
+  BGA_PASSWORD_5: "secret-5",
   BGA_REPLAY_TOTAL_LIMIT: "80",
   BGA_REPLAY_FRESH_RESERVE: "50",
   BGA_REPLAY_HISTORICAL_LIMIT: "30",
@@ -65,6 +67,7 @@ test("uses the same masked labels and configurable limits as the replay gateway"
     "reserve2:re***@example.com",
     "reserve3:re***@example.com",
     "reserve4:re***@example.com",
+    "reserve5:re***@example.com",
   ]);
   assert.deepEqual(getReplayBudgetLimits(ENV), {
     total_limit: 80,
@@ -73,6 +76,42 @@ test("uses the same masked labels and configurable limits as the replay gateway"
     max_total_limit: 100,
     window_hours: 24,
   });
+});
+
+test("activates standby tiers only after every earlier configured tier is cooling down", async (t) => {
+  const db = await createDatabase(t);
+  const now = new Date("2026-09-24T12:00:00Z");
+  const labels = getConfiguredReplayAccountLabels(ENV);
+  const firstStandbyLabel = labels[3];
+  const secondStandbyLabel = labels[4];
+
+  for (const accountLabel of labels.slice(0, 3)) {
+    await new Promise((resolve, reject) => {
+      db.run(`
+        INSERT INTO bga_replay_account_state (account_label, cooldown_until)
+        VALUES (?, '2026-09-24 13:00:00')
+      `, [accountLabel], (error) => (error ? reject(error) : resolve()));
+    });
+  }
+
+  let state = await loadReplayBudgetAdminState({ db, env: ENV, now });
+  let firstStandby = state.accounts.find((item) => item.account_label === firstStandbyLabel);
+  let secondStandby = state.accounts.find((item) => item.account_label === secondStandbyLabel);
+  assert.equal(firstStandby.standby_level, 1);
+  assert.equal(firstStandby.standby_eligible, true);
+  assert.equal(secondStandby.standby_level, 2);
+  assert.equal(secondStandby.standby_eligible, false);
+
+  await new Promise((resolve, reject) => {
+    db.run(`
+      INSERT INTO bga_replay_account_state (account_label, cooldown_until)
+      VALUES (?, '2026-09-24 13:00:00')
+    `, [firstStandbyLabel], (error) => (error ? reject(error) : resolve()));
+  });
+
+  state = await loadReplayBudgetAdminState({ db, env: ENV, now });
+  secondStandby = state.accounts.find((item) => item.account_label === secondStandbyLabel);
+  assert.equal(secondStandby.standby_eligible, true);
 });
 
 test("validates dynamic override limits, accounts, expiry and reason", () => {

@@ -26,7 +26,8 @@ class ReplayWorkerSystemdTest(unittest.TestCase):
 
         self.assertIn("OnUnitInactiveSec=2min", fresh)
         self.assertIn("Unit=bga-replay-worker@fresh.service", fresh)
-        self.assertIn("OnUnitInactiveSec=30min", historical)
+        self.assertIn("OnBootSec=15min", historical)
+        self.assertIn("OnUnitInactiveSec=15min", historical)
         self.assertIn("Unit=bga-replay-worker@historical.service", historical)
         self.assertIn("OnUnitInactiveSec=1min", archive_follow_up)
         self.assertIn(

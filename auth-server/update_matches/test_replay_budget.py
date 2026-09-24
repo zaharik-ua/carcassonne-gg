@@ -207,8 +207,10 @@ class ReplayBudgetTest(unittest.TestCase):
         reservation = reserve_replay_request(
             self.db_path,
             account_labels=["account-a", "account-b", "account-c", "account-d"],
-            standby_account_labels=["account-d"],
-            standby_guard_account_labels=["account-a", "account-b", "account-c"],
+            account_priority_tiers=[
+                ["account-a", "account-b", "account-c"],
+                ["account-d"],
+            ],
             bga_table_id="standby-blocked",
             request_class="manual",
             now=self.now,
@@ -228,8 +230,10 @@ class ReplayBudgetTest(unittest.TestCase):
         reservation = reserve_replay_request(
             self.db_path,
             account_labels=["account-c", "account-d"],
-            standby_account_labels=["account-d"],
-            standby_guard_account_labels=["account-a", "account-b", "account-c"],
+            account_priority_tiers=[
+                ["account-a", "account-b", "account-c"],
+                ["account-d"],
+            ],
             bga_table_id="one-guard-available",
             request_class="manual",
             now=self.now + timedelta(minutes=1),
@@ -251,8 +255,10 @@ class ReplayBudgetTest(unittest.TestCase):
             # The worker may already have removed used guard accounts from the
             # candidates, so the full guard set is supplied separately.
             account_labels=["account-d"],
-            standby_account_labels=["account-d"],
-            standby_guard_account_labels=["account-a", "account-b", "account-c"],
+            account_priority_tiers=[
+                ["account-a", "account-b", "account-c"],
+                ["account-d"],
+            ],
             bga_table_id="all-guards-cooldown",
             request_class="manual",
             now=self.now + timedelta(minutes=1),
@@ -281,12 +287,94 @@ class ReplayBudgetTest(unittest.TestCase):
             reserve_replay_request(
                 self.db_path,
                 account_labels=["account-a", "account-b", "account-c", "account-d"],
-                standby_account_labels=["account-d"],
-                standby_guard_account_labels=["account-a", "account-b", "account-c"],
+                account_priority_tiers=[
+                    ["account-a", "account-b", "account-c"],
+                    ["account-d"],
+                ],
                 bga_table_id="standby-still-blocked",
                 request_class="manual",
                 limits=limits,
                 now=self.now + timedelta(minutes=1),
+            )
+
+    def test_second_standby_requires_primary_and_first_standby_cooldown(self) -> None:
+        tiers = [
+            ["account-a", "account-b", "account-c"],
+            ["account-d"],
+            ["account-e"],
+        ]
+        for account_label in ("account-a", "account-b", "account-c"):
+            mark_replay_account_cooldown(
+                self.db_path,
+                account_label=account_label,
+                error="limit (replay)",
+                now=self.now,
+            )
+
+        first_standby = reserve_replay_request(
+            self.db_path,
+            account_labels=["account-d", "account-e"],
+            account_priority_tiers=tiers,
+            bga_table_id="first-standby",
+            request_class="manual",
+            now=self.now + timedelta(minutes=1),
+        )
+        self.assertEqual(first_standby.account_label, "account-d")
+
+        mark_replay_account_cooldown(
+            self.db_path,
+            account_label="account-d",
+            error="limit (replay)",
+            now=self.now,
+        )
+        second_standby = reserve_replay_request(
+            self.db_path,
+            account_labels=["account-d", "account-e"],
+            account_priority_tiers=tiers,
+            bga_table_id="second-standby",
+            request_class="manual",
+            now=self.now + timedelta(minutes=1),
+        )
+        self.assertEqual(second_standby.account_label, "account-e")
+
+    def test_second_standby_is_not_unlocked_by_first_standby_budget_exhaustion(self) -> None:
+        limits = ReplayBudgetLimits(
+            total_limit=1,
+            fresh_reserve=0,
+            historical_limit=1,
+            max_total_limit=1,
+        )
+        tiers = [
+            ["account-a", "account-b", "account-c"],
+            ["account-d"],
+            ["account-e"],
+        ]
+        for account_label in ("account-a", "account-b", "account-c"):
+            mark_replay_account_cooldown(
+                self.db_path,
+                account_label=account_label,
+                error="limit (replay)",
+                now=self.now,
+            )
+        reserve_replay_request(
+            self.db_path,
+            account_labels=["account-d"],
+            account_priority_tiers=tiers,
+            bga_table_id="first-standby-budget",
+            request_class="manual",
+            limits=limits,
+            now=self.now + timedelta(minutes=1),
+        )
+
+        with self.assertRaises(ReplayBudgetUnavailableError):
+            reserve_replay_request(
+                self.db_path,
+                account_labels=["account-d", "account-e"],
+                account_priority_tiers=tiers,
+                bga_table_id="second-standby-blocked",
+                request_class="manual",
+                limits=limits,
+                now=self.now + timedelta(minutes=2),
             )
 
     def test_overrides_expand_only_the_configured_limits_and_replace_previous(self) -> None:

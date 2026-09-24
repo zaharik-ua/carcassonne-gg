@@ -603,7 +603,7 @@ Replay-черга має спільний шаблонний service і три �
 - `systemd/bga-replay-fresh.timer` — кожні 2 хвилини;
 - `systemd/bga-replay-archive-follow-up.timer` — щохвилини, лише для historical
   записів, для яких уже було замовлено BGA-архів;
-- `systemd/bga-replay-historical.timer` — кожні 30 хвилин.
+- `systemd/bga-replay-historical.timer` — кожні 15 хвилин.
 
 Початкове встановлення навмисно не вмикає timers:
 

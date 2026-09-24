@@ -1,9 +1,9 @@
 [Unit]
-Description=Process historical Carcassonne GG BGA replay queue every 30 minutes
+Description=Process historical Carcassonne GG BGA replay queue every 15 minutes
 
 [Timer]
-OnBootSec=30min
-OnUnitInactiveSec=30min
+OnBootSec=15min
+OnUnitInactiveSec=15min
 AccuracySec=1min
 Unit=bga-replay-worker@historical.service
 

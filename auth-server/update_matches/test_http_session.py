@@ -102,6 +102,14 @@ class HttpSessionTest(unittest.TestCase):
                 "secret",
                 "reserve4:four",
                 replay_standby=True,
+                replay_standby_level=1,
+            ),
+            BGACredential(
+                "five@example.com",
+                "secret",
+                "reserve5:five",
+                replay_standby=True,
+                replay_standby_level=2,
             ),
         ]
 
@@ -114,6 +122,11 @@ class HttpSessionTest(unittest.TestCase):
             rotate_account=False,
             account_label="reserve4:four",
         )
+        second_standby_selected = http_session._credential_cycle(
+            credentials,
+            rotate_account=False,
+            account_label="reserve5:five",
+        )
 
         self.assertEqual([credential.label for _, credential in automatic], [
             "primary:one",
@@ -122,6 +135,10 @@ class HttpSessionTest(unittest.TestCase):
         self.assertEqual(
             [credential.label for _, credential in explicitly_selected],
             ["reserve4:four"],
+        )
+        self.assertEqual(
+            [credential.label for _, credential in second_standby_selected],
+            ["reserve5:five"],
         )
 
     def test_missing_request_token_retries_refresh_before_succeeding(self) -> None:

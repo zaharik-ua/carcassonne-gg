@@ -7405,10 +7405,13 @@
     ]);
     (data.accounts || []).forEach((account) => {
       const row = document.createElement("tr");
+      const standbyGuards = Number(account.standby_level) === 2
+        ? "accounts 1–4"
+        : "accounts 1–3";
       const accountDetail = account.standby
         ? (account.standby_eligible
-          ? "Standby • eligible (accounts 1–3 are in cooldown)"
-          : "Standby • waiting for cooldown on accounts 1–3")
+          ? `Standby ${account.standby_level} • eligible (${standbyGuards} are in cooldown)`
+          : `Standby ${account.standby_level} • waiting for cooldown on ${standbyGuards}`)
         : (account.configured ? "Configured" : "Historical record");
       const accountCell = replayCell(account.account_label, accountDetail);
       accountCell.firstChild.className = "replay-account-label";

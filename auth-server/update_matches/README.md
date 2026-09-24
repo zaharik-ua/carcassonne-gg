@@ -36,6 +36,8 @@ BGA_EMAIL_3=...
 BGA_PASSWORD_3=...
 BGA_EMAIL_4=...
 BGA_PASSWORD_4=...
+BGA_EMAIL_5=...
+BGA_PASSWORD_5=...
 BGA_REPLAY_TOTAL_LIMIT=80
 BGA_REPLAY_FRESH_RESERVE=50
 BGA_REPLAY_HISTORICAL_LIMIT=30
@@ -47,10 +49,11 @@ CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
 Notes:
 
-- Accounts 1–3 form the normal shared replay-account pool. Account 4 is a
-  standby: the replay gateway can select it only while all configured accounts
-  1–3 have an active cooldown. Exhausting their local request budgets does not
-  unlock account 4.
+- Accounts 1–3 form the normal shared replay-account pool. Account 4 is the
+  first standby and can be selected only while all configured accounts 1–3
+  have an active cooldown. Account 5 is the second standby and can be selected
+  only while all configured accounts 1–4 have an active cooldown. Exhausting
+  an earlier tier's local request budget does not unlock the next tier.
 - Before every `logs.html` request, the gateway chooses an available account
   with the lowest rolling-24h usage; ties use round-robin ordering.
 - During an HTTP-session refresh, Selenium waits up to 10 seconds for
@@ -180,7 +183,7 @@ The repository contains a shared template service and three independent timers:
 - `systemd/bga-replay-fresh.timer` — every two minutes;
 - `systemd/bga-replay-archive-follow-up.timer` — every minute, but only for due
   historical rows whose BGA archive has already been requested;
-- `systemd/bga-replay-historical.timer` — every 30 minutes;
+- `systemd/bga-replay-historical.timer` — every 15 minutes;
 - `systemd/bga-replay-worker.logrotate`.
 
 Install the units without enabling the timers first:

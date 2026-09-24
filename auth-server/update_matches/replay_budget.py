@@ -117,8 +117,7 @@ def reserve_replay_request(
     db_path: str | Path,
     *,
     account_labels: Iterable[str],
-    standby_account_labels: Iterable[str] = (),
-    standby_guard_account_labels: Iterable[str] = (),
+    account_priority_tiers: Iterable[Iterable[str]] = (),
     bga_table_id: str,
     request_class: str,
     limits: ReplayBudgetLimits | None = None,
@@ -126,8 +125,13 @@ def reserve_replay_request(
 ) -> ReplayRequestReservation:
     normalized_class = _normalize_request_class(request_class)
     normalized_labels = _normalize_account_labels(account_labels)
-    standby_labels = set(_normalize_account_labels(standby_account_labels))
-    standby_guard_labels = _normalize_account_labels(standby_guard_account_labels)
+    priority_tiers = [
+        tier
+        for tier in (
+            _normalize_account_labels(values) for values in account_priority_tiers
+        )
+        if tier
+    ]
     if not normalized_labels:
         raise ReplayBudgetUnavailableError("No BGA replay accounts are configured")
 
@@ -140,7 +144,10 @@ def reserve_replay_request(
         conn.execute("BEGIN IMMEDIATE")
         try:
             state_labels = _normalize_account_labels(
-                [*normalized_labels, *standby_guard_labels]
+                [
+                    *normalized_labels,
+                    *(label for tier in priority_tiers for label in tier),
+                ]
             )
             for label in state_labels:
                 conn.execute(
@@ -167,14 +174,20 @@ def reserve_replay_request(
                     and _is_future_timestamp(state["cooldown_until"], attempted_at)
                 )
 
-            standby_is_eligible = (
-                not standby_guard_labels
-                or all(cooldown_by_label.get(label, False) for label in standby_guard_labels)
-            )
+            eligible_priority_labels: set[str] | None = None
+            if priority_tiers:
+                eligible_priority_labels = set()
+                for tier in priority_tiers:
+                    if any(not cooldown_by_label.get(label, False) for label in tier):
+                        eligible_priority_labels = set(tier)
+                        break
 
             candidates: list[tuple] = []
             for label_index, label in enumerate(normalized_labels):
-                if label in standby_labels and not standby_is_eligible:
+                if (
+                    eligible_priority_labels is not None
+                    and label not in eligible_priority_labels
+                ):
                     continue
                 if cooldown_by_label.get(label, False):
                     continue
