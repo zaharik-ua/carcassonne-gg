@@ -71,16 +71,36 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.equal((inPersonHtml.match(/id="ipCounters"/g) || []).length, 1);
 });
 
-test("In-Person tournament header uses a conditional custom switcher", () => {
+test("In-Person page lists accessible tournaments and opens a dedicated tournament view", () => {
+  assert.match(inPersonHtml, /id="ipTournamentList" class="ip-tournament-list"/);
+  assert.match(inPersonHtml, /id="ipPageHeader" class="ip-head"/);
+  assert.match(inPersonHtml, /function renderTournamentList\(\)/);
+  assert.match(inPersonHtml, /pageHeader\.classList\.toggle\("ip-hidden", isDetailView\)/);
+  assert.match(inPersonHtml, /row\.className = "ip-tournament-list-row"/);
+  assert.match(inPersonHtml, /view\.textContent = "View"/);
+  assert.match(inPersonHtml, /viewUrl\.searchParams\.set\("tournament", tournament\.id\)/);
+  assert.match(inPersonHtml, /view\.href = viewUrl\.toString\(\)/);
   assert.match(inPersonHtml, /id="ipTournamentName"/);
-  assert.match(inPersonHtml, />Switch tournament</);
-  assert.match(inPersonHtml, /id="ipTournamentMenu" class="ip-city-picker-menu"/);
-  assert.match(inPersonHtml, /tournamentSwitcher\.classList\.toggle\("ip-hidden", state\.tournaments\.length <= 1\)/);
-  assert.match(inPersonHtml, /option\.className = `ip-city-option/);
+  assert.doesNotMatch(inPersonHtml, /Switch tournament/);
+  assert.doesNotMatch(inPersonHtml, /id="ipTournamentSwitcher"|id="ipTournamentSwitchBtn"|id="ipTournamentMenu"/);
   assert.doesNotMatch(inPersonHtml, /id="ipTournamentSelect"/);
+  assert.match(
+    inPersonHtml,
+    /state\.selectedTournamentId = state\.tournaments\.some\(\(item\) => item\.id === requestedId\)[\s\S]*?\? requestedId[\s\S]*?: "";/
+  );
   assert.match(inPersonHtml, /`\$\{tournament\.swiss_rounds_count\} Swiss rounds`/);
   assert.match(inPersonHtml, /tournament\.playoff_preview\?\.participant_count/);
   assert.match(inPersonHtml, /players advance to playoff/);
+  const tournamentCardMarkup = inPersonHtml.slice(
+    inPersonHtml.indexOf('id="ipTournamentCard"'),
+    inPersonHtml.indexOf('id="ipStatus"')
+  );
+  assert.match(tournamentCardMarkup, /id="ipTournamentName"/);
+  assert.match(tournamentCardMarkup, /id="ipRefreshBtn"/);
+  assert.ok(
+    inPersonHtml.indexOf('id="ipTournamentCard"') < inPersonHtml.indexOf('id="ipStatus"'),
+    "the selected tournament card must be above status and workspace content"
+  );
   const tournamentMetaRenderer = inPersonHtml.slice(
     inPersonHtml.indexOf("function renderTournamentMeta()"),
     inPersonHtml.indexOf("function renderCounters()")
@@ -157,6 +177,8 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.match(inPersonHtml, /\.ip-swiss-score-won\s*\{[\s\S]*?font-size: 15px;/);
   assert.doesNotMatch(inPersonHtml, /\.ip-admin-note-toggle\s*\{[\s\S]*?text-decoration:\s*underline/);
   assert.match(swissResultForm, /timeLost\.onChange\(\(\) => syncForm\(\)\)/);
+  assert.match(swissResultForm, /match\.status === "completed"[\s\S]*?"Reset result"/);
+  assert.match(swissResultForm, /\{ method: "DELETE" \}/);
   assert.doesNotMatch(swissResultForm, /setForfeitScore|scoreLocked/);
   assert.match(swissResultForm, /result_type: "time_forfeit",[\s\S]*?points_a: Number\(scoreA\.input\.value\),[\s\S]*?points_b: Number\(scoreB\.input\.value\)/);
   assert.ok(
@@ -276,6 +298,7 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     "Click a published match to enter or correct its result.",
     "Bronze medal match",
     "Complete tournament",
+    "Reset result",
   ].forEach((text) => assert.ok(inPersonHtml.includes(text), `missing playoff UI text: ${text}`));
 
   [
@@ -306,6 +329,11 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     /\/streaming-table/,
     /\/playoff\/complete/,
   ].forEach((pattern) => assert.match(inPersonHtml, pattern));
+
+  assert.match(
+    inPersonHtml,
+    /\.ip-playoff-bracket-scroll\s*\{[\s\S]*?width: 100%;[\s\S]*?min-width: 0;[\s\S]*?max-width: 100%;[\s\S]*?overflow-x: auto;/
+  );
 
   [
     "Fill every first-round slot manually, then run Final and Bronze medal match.",

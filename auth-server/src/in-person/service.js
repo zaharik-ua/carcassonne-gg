@@ -1469,6 +1469,22 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
       && fields.every((field) => (match[field] ?? null) === (canonical[field] ?? null));
   }
 
+  async function clearStoredMatchResult(matchId) {
+    await dbRun(
+      db,
+      `
+        UPDATE in_person_matches
+        SET status = 'scheduled', result_type = NULL,
+            points_a = NULL, points_b = NULL,
+            winner_participant_id = NULL, loser_participant_id = NULL,
+            finish_reason = NULL, admin_note = NULL,
+            revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [matchId]
+    );
+  }
+
   async function saveSwissMatchResult(tournamentId, matchId, payload = {}) {
     return enqueueMutation(async () => {
       const outcome = await transaction(async () => {
@@ -1568,6 +1584,82 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
         }
         await touchTournament(tournament.id);
         return { changed: true, match_id: match.id };
+      });
+      const overview = await getSwissOverview(tournamentId);
+      const match = overview.rounds
+        .flatMap((round) => round.matches)
+        .find((entry) => entry.id === outcome.match_id) || null;
+      return { ...overview, ...outcome, match };
+    });
+  }
+
+  async function resetSwissMatchResult(tournamentId, matchId) {
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        if (tournament.status !== "swiss") {
+          throw conflictError(
+            "INVALID_TOURNAMENT_STATUS",
+            "Swiss results can be reset only during the Swiss stage"
+          );
+        }
+        const match = await dbGet(
+          db,
+          `
+            SELECT m.*, r.status AS round_status, r.round_number
+            FROM in_person_matches m
+            JOIN in_person_rounds r ON r.id = m.round_id
+            WHERE m.id = ? AND r.tournament_id = ? AND r.stage = 'swiss'
+            LIMIT 1
+          `,
+          [normalizeText(matchId), tournament.id]
+        );
+        if (!match) throw notFoundError("SWISS_MATCH_NOT_FOUND", "Swiss match not found");
+        if (match.status === "cancelled") {
+          throw conflictError("MATCH_CANCELLED", "A cancelled match result cannot be reset");
+        }
+        if (Number(match.is_bye) === 1) {
+          throw conflictError("BYE_RESULT_LOCKED", "A system bye result cannot be reset");
+        }
+        if (match.status !== "completed") {
+          return { reset: false, match_id: match.id };
+        }
+        if (match.round_status === "completed") {
+          const laterRound = await dbGet(
+            db,
+            `
+              SELECT id
+              FROM in_person_rounds
+              WHERE tournament_id = ? AND stage = 'swiss' AND status <> 'cancelled'
+                AND round_number > ?
+              LIMIT 1
+            `,
+            [tournament.id, match.round_number]
+          );
+          if (laterRound) {
+            throw conflictError(
+              "RESULT_LOCKED",
+              "A completed result is locked after the next Swiss round is formed"
+            );
+          }
+        } else if (match.round_status !== "published") {
+          throw conflictError("INVALID_ROUND_STATUS", "Only a published result can be reset");
+        }
+        await clearStoredMatchResult(match.id);
+        if (match.round_status === "completed") {
+          await dbRun(
+            db,
+            `
+              UPDATE in_person_rounds
+              SET status = 'published', completed_at = NULL,
+                  revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `,
+            [match.round_id]
+          );
+        }
+        await touchTournament(tournament.id);
+        return { reset: true, match_id: match.id };
       });
       const overview = await getSwissOverview(tournamentId);
       const match = overview.rounds
@@ -2950,6 +3042,34 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     );
   }
 
+  async function clearPropagatedPlayoffParticipant(targetMatchId, targetSlot, participantId) {
+    if (!targetMatchId || !targetSlot || !participantId) return;
+    if (!["participant_a", "participant_b"].includes(targetSlot)) {
+      throw conflictError("INVALID_PLAYOFF_ROUTE", "The playoff bracket contains an invalid target slot");
+    }
+    const target = await dbGet(db, "SELECT * FROM in_person_matches WHERE id = ? LIMIT 1", [targetMatchId]);
+    if (!target || target.status === "cancelled") {
+      throw conflictError("INVALID_PLAYOFF_ROUTE", "The playoff bracket target match is unavailable");
+    }
+    if (target.status === "completed") {
+      throw conflictError(
+        "PLAYOFF_DESCENDANT_PLAYED",
+        "The result cannot be reset because a dependent playoff match has already been played",
+        { descendant_match_ids: [target.id] }
+      );
+    }
+    const column = `${targetSlot}_id`;
+    if (target[column] !== participantId) return;
+    await dbRun(
+      db,
+      `UPDATE in_person_matches
+       SET ${column} = NULL, starting_participant_id = NULL,
+           revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [target.id]
+    );
+  }
+
   async function savePlayoffMatchResult(tournamentId, matchId, payload = {}) {
     return enqueueMutation(async () => {
       const outcome = await transaction(async () => {
@@ -3050,6 +3170,66 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
         }
         await touchTournament(tournament.id);
         return { changed: true, match_id: match.id };
+      });
+      const overview = await getPlayoffOverview(tournamentId);
+      const match = overview.rounds
+        .flatMap((round) => round.matches)
+        .find((entry) => entry.id === outcome.match_id) || null;
+      return { ...overview, ...outcome, match };
+    });
+  }
+
+  async function resetPlayoffMatchResult(tournamentId, matchId) {
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        if (tournament.status !== "playoff") {
+          throw conflictError(
+            "INVALID_TOURNAMENT_STATUS",
+            "Playoff results can be reset only during the playoff stage"
+          );
+        }
+        const match = await requirePlayoffMatchRow(tournament.id, matchId);
+        if (match.status === "cancelled") {
+          throw conflictError("MATCH_CANCELLED", "A cancelled match result cannot be reset");
+        }
+        if (match.status !== "completed") {
+          return { reset: false, match_id: match.id };
+        }
+        if (!["published", "completed"].includes(match.round_status)) {
+          throw conflictError("ROUND_NOT_PUBLISHED", "Only a published playoff result can be reset");
+        }
+        const playedDescendants = await completedPlayoffDescendants(tournament.id, match.id);
+        if (playedDescendants.length) {
+          throw conflictError(
+            "PLAYOFF_DESCENDANT_PLAYED",
+            "The result cannot be reset because a dependent playoff match has already been played",
+            { descendants: playedDescendants }
+          );
+        }
+        await clearStoredMatchResult(match.id);
+        await clearPropagatedPlayoffParticipant(
+          match.next_match_for_winner_id,
+          match.next_match_for_winner_slot,
+          match.winner_participant_id
+        );
+        await clearPropagatedPlayoffParticipant(
+          match.next_match_for_loser_id,
+          match.next_match_for_loser_slot,
+          match.loser_participant_id
+        );
+        if (match.round_status === "completed") {
+          await dbRun(
+            db,
+            `UPDATE in_person_rounds
+             SET status = 'published', completed_at = NULL,
+                 revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [match.round_id]
+          );
+        }
+        await touchTournament(tournament.id);
+        return { reset: true, match_id: match.id };
       });
       const overview = await getPlayoffOverview(tournamentId);
       const match = overview.rounds
@@ -3598,7 +3778,9 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     publishPlayoffRound,
     publishSwissRound,
     reopenSwissRound,
+    resetPlayoffMatchResult,
     resetPlayoff,
+    resetSwissMatchResult,
     removeTournamentAdmin,
     replaceTournamentAdmins,
     restoreCity: (cityId) => setCityArchived(cityId, false),

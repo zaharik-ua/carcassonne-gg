@@ -266,6 +266,55 @@ test("withdrawal and published no-show use explicit technical results", async (t
   );
 });
 
+test("resets a Swiss match result without changing its pairing", async (t) => {
+  const { service } = await createContext(t);
+  const { tournament } = await createReadyTournament(service, 4, "reset-result");
+  const round = await createPublishedRound(service, tournament.id, 1);
+  const original = round.matches[0];
+  let overview = await service.saveSwissMatchResult(tournament.id, original.id, {
+    starting_participant_id: original.starting_participant_id,
+    result_type: "points",
+    points_a: 88,
+    points_b: 74,
+    admin_note: "Entered on the wrong table",
+  });
+  assert.equal(
+    overview.current_round.matches.find((match) => match.id === original.id).status,
+    "completed"
+  );
+
+  overview = await service.resetSwissMatchResult(tournament.id, original.id);
+  const resetMatch = overview.current_round.matches.find((match) => match.id === original.id);
+  assert.equal(overview.reset, true);
+  assert.equal(resetMatch.status, "scheduled");
+  assert.equal(resetMatch.participant_a_id, original.participant_a_id);
+  assert.equal(resetMatch.participant_b_id, original.participant_b_id);
+  assert.equal(resetMatch.starting_participant_id, original.starting_participant_id);
+  assert.equal(resetMatch.result_type, null);
+  assert.equal(resetMatch.points_a, null);
+  assert.equal(resetMatch.points_b, null);
+  assert.equal(resetMatch.winner_participant_id, null);
+  assert.equal(resetMatch.loser_participant_id, null);
+  assert.equal(resetMatch.admin_note, null);
+  assert.equal(overview.current_round.progress.completed, 0);
+
+  overview = await service.resetSwissMatchResult(tournament.id, original.id);
+  assert.equal(overview.reset, false, "repeating the reset is safe");
+
+  const byeContext = await createContext(t);
+  const byeTournament = await createReadyTournament(byeContext.service, 5, "reset-bye");
+  const byeRound = await createPublishedRound(
+    byeContext.service,
+    byeTournament.tournament.id,
+    1
+  );
+  const byeMatch = byeRound.matches.find((match) => match.is_bye);
+  await assert.rejects(
+    byeContext.service.resetSwissMatchResult(byeTournament.tournament.id, byeMatch.id),
+    (error) => error?.code === "BYE_RESULT_LOCKED"
+  );
+});
+
 test("automatically gives a late bye or replaces the existing first-round bye", async (t) => {
   const lateByeContext = await createContext(t);
   const lateByeTournament = await createReadyTournament(

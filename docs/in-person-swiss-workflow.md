@@ -20,8 +20,15 @@
 - `PUT /in-person-tournaments/:id/swiss/matches/:matchId/result` приймає повний
   поточний стан результату: `starting_participant_id`, `result_type`, відповідні
   points або winner, optional `finish_reason` та `admin_note`.
+- `DELETE /in-person-tournaments/:id/swiss/matches/:matchId/result` скидає
+  помилково внесений результат: повертає матч у `scheduled`, очищає points,
+  winner/loser, result type, finish reason та admin note, але не змінює пару,
+  номер столу або першого гравця.
 - `POST /in-person-tournaments/:id/swiss/rounds/:roundId/complete` перевіряє всі
   столи, завершує раунд і записує нову standings revision в одній транзакції.
+- `DELETE /in-person-tournaments/:id/playoff/matches/:matchId/result` виконує те
+  саме для плейоф і додатково прибирає перенесених winner/loser із незавершених
+  залежних матчів.
 
 ## Invariants і retry
 
@@ -30,6 +37,10 @@
 - Наступний раунд не формується до `completed` попереднього та актуальної standings
   revision, створеної саме ним.
 - Bye створюється як уже завершений system result і не редагується.
+- System bye не можна скинути. Swiss-result не можна скинути після формування
+  наступного Swiss-раунду.
+- Результат плейоф можна скинути лише доки жоден залежний матч ще не завершений;
+  якщо раунд був `completed`, він атомарно повертається у `published`.
 - Повторний `confirm` з тим самим `round_number` повертає наявний round.
 - Повторні `publish` і `complete` повертають поточний стан без нової мутації.
 - Повторне збереження ідентичного повного result не збільшує revision.
@@ -48,6 +59,10 @@ Fault-injection integration tests переривають обидва сцена
 
 Вкладка `Swiss` показує поточний раунд, кількість завершених раундів і столів,
 pairing preview з warning reasons, publish, форми result/starter та complete action.
+Для завершеного звичайного матчу форма також показує `Reset result` із
+підтвердженням; після успішного скидання UI одразу перечитує отриманий серверний
+стан. Сітка плейоф не розширює батьківський блок: ширша схема доступна через
+горизонтальний scroll усередині вкладки.
 Вкладка `Standings` читає останню актуальну revision. Видимі поля ранжування:
 `Wins`, `Solkoff1`, `Solkoff2`, `VP difference`; внутрішні Sonneborn–Berger, bye flag
 і stable ID не показуються.

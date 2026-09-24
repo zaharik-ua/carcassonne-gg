@@ -279,6 +279,32 @@ test("runs the playoff, swaps streaming table, propagates corrections and requir
     [semiOne.participant_b_id, semiTwo.participant_b_id]
   );
 
+  overview = await service.resetPlayoffMatchResult(tournament.id, semiOne.id);
+  const resetSemifinal = overview.rounds
+    .find((round) => round.round_key === "semi_final")
+    .matches.find((match) => match.id === semiOne.id);
+  assert.equal(overview.reset, true);
+  assert.equal(
+    overview.rounds.find((round) => round.round_key === "semi_final").status,
+    "published"
+  );
+  assert.equal(resetSemifinal.status, "scheduled");
+  assert.equal(resetSemifinal.result_type, null);
+  finalMatch = overview.rounds.find((round) => round.round_key === "final").matches[0];
+  bronzeMatch = overview.rounds.find((round) => round.round_key === "bronze_medal_match").matches[0];
+  assert.equal(finalMatch.participant_a_id, null);
+  assert.equal(bronzeMatch.participant_a_id, null);
+
+  overview = await service.savePlayoffMatchResult(
+    tournament.id,
+    semiOne.id,
+    simpleResult(semiOne, semiOne.participant_a_id)
+  );
+  assert.equal(
+    overview.rounds.find((round) => round.round_key === "semi_final").status,
+    "completed"
+  );
+
   overview = await service.savePlayoffMatchResult(
     tournament.id,
     semiOne.id,
@@ -319,6 +345,14 @@ test("runs the playoff, swaps streaming table, propagates corrections and requir
       semiOne.id,
       simpleResult(semiOne, semiOne.participant_a_id, "Too late")
     ),
+    (error) => (
+      error?.status === 409
+      && error?.code === "PLAYOFF_DESCENDANT_PLAYED"
+      && error?.details?.descendants?.some((descendant) => descendant.round_key === "final")
+    )
+  );
+  await assert.rejects(
+    service.resetPlayoffMatchResult(tournament.id, semiOne.id),
     (error) => (
       error?.status === 409
       && error?.code === "PLAYOFF_DESCENDANT_PLAYED"

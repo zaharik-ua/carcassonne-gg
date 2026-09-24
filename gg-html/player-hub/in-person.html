@@ -22,7 +22,18 @@
   .ip-wrap {
     display: grid;
     gap: 12px;
+    min-width: 0;
+    max-width: 100%;
     margin: 0 8px 16px;
+  }
+
+  .ip-wrap > *,
+  #ipWorkspace,
+  #ipPlayoffPanel,
+  #ipPlayoffBracket {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   .ip-card {
@@ -114,26 +125,87 @@
     margin-top: 5px;
   }
 
-  .ip-tournament-switcher {
-    flex: 0 0 auto;
+  .ip-tournament-list {
+    overflow: hidden;
+    border: 1px solid var(--ip-line);
+    border-radius: 6px;
+    background: var(--ip-card);
   }
 
-  .ip-tournament-switch-btn {
-    min-height: 34px;
+  .ip-tournament-list-row {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .ip-tournament-list-row:first-child {
+    border-top: 0;
+  }
+
+  .ip-tournament-list-icon {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #f3f4f6;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  .ip-tournament-list-main {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .ip-tournament-list-title {
+    color: var(--ip-text);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .ip-tournament-list-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .ip-tournament-list-chip {
+    min-height: 22px;
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    padding: 0 8px;
+    border: 1px solid #dbe2ea;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #475467;
+    font-size: 11px;
+    font-weight: 600;
     white-space: nowrap;
   }
 
-  .ip-tournament-switcher .ip-city-picker-menu {
-    right: 0;
-    left: auto;
-    width: min(360px, calc(100vw - 32px));
+  .ip-tournament-list-empty {
+    padding: 12px;
   }
 
-  .ip-tournament-switcher .ip-city-option {
-    white-space: normal;
+  .ip-tournament-view-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0;
+    text-decoration: none;
   }
 
   .ip-city-picker {
@@ -573,6 +645,10 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+  }
+
+  .ip-reset-result-btn {
+    margin-right: auto;
   }
 
   .ip-cancellation-dialog {
@@ -1028,9 +1104,14 @@
   }
 
   .ip-playoff-bracket-scroll {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     margin-top: 10px;
     overflow-x: auto;
     overflow-y: hidden;
+    overscroll-behavior-x: contain;
     padding-bottom: 6px;
   }
 
@@ -1203,39 +1284,38 @@
       grid-template-columns: 1fr;
     }
 
+    .ip-tournament-list-row {
+      grid-template-columns: 44px minmax(0, 1fr);
+    }
+
+    .ip-tournament-view-btn {
+      grid-column: 1 / -1;
+      justify-self: end;
+      min-height: 23px;
+    }
+
   }
 </style>
 
 <div class="ip-wrap">
-  <div class="ip-head">
+  <div id="ipPageHeader" class="ip-head">
     <div>
       <h1 class="ip-title">In-Person Tournaments</h1>
       <div class="ip-subtitle">Register players, run Swiss rounds and review standings.</div>
     </div>
-    <button id="ipRefreshBtn" class="ip-btn" type="button">Refresh</button>
+  </div>
+
+  <div id="ipTournamentCard" class="ip-card ip-hidden">
+    <div class="ip-tournament-heading">
+      <h1 id="ipTournamentName" class="ip-tournament-name"></h1>
+      <button id="ipRefreshBtn" class="ip-btn" type="button">Refresh</button>
+    </div>
+    <div id="ipTournamentMeta" class="ip-meta ip-tournament-meta"></div>
   </div>
 
   <div id="ipStatus" class="ip-status"></div>
 
-  <div id="ipTournamentCard" class="ip-card">
-    <div class="ip-tournament-heading">
-      <h2 id="ipTournamentName" class="ip-tournament-name"></h2>
-      <div id="ipTournamentSwitcher" class="ip-city-picker ip-tournament-switcher ip-hidden">
-        <button
-          id="ipTournamentSwitchBtn"
-          class="ip-btn ip-tournament-switch-btn"
-          type="button"
-          aria-haspopup="listbox"
-          aria-expanded="false"
-        >
-          <span>Switch tournament</span>
-          <span aria-hidden="true">▾</span>
-        </button>
-        <div id="ipTournamentMenu" class="ip-city-picker-menu" role="listbox"></div>
-      </div>
-    </div>
-    <div id="ipTournamentMeta" class="ip-meta ip-tournament-meta"></div>
-  </div>
+  <div id="ipTournamentList" class="ip-tournament-list"></div>
 
   <div id="ipWorkspace" class="ip-hidden">
     <div class="ip-tabs" role="tablist">
@@ -1320,10 +1400,10 @@
     playerFormController: null,
   };
 
+  const tournamentList = document.getElementById("ipTournamentList");
+  const tournamentCard = document.getElementById("ipTournamentCard");
+  const pageHeader = document.getElementById("ipPageHeader");
   const tournamentName = document.getElementById("ipTournamentName");
-  const tournamentSwitcher = document.getElementById("ipTournamentSwitcher");
-  const tournamentSwitchBtn = document.getElementById("ipTournamentSwitchBtn");
-  const tournamentMenu = document.getElementById("ipTournamentMenu");
   const tournamentMeta = document.getElementById("ipTournamentMeta");
   const workspace = document.getElementById("ipWorkspace");
   const statusEl = document.getElementById("ipStatus");
@@ -1749,44 +1829,65 @@
     nameEn.input.focus();
   }
 
-  function closeTournamentMenu() {
-    tournamentMenu.classList.remove("open");
-    tournamentSwitchBtn.classList.remove("open");
-    tournamentSwitchBtn.setAttribute("aria-expanded", "false");
-  }
+  function renderTournamentList() {
+    const selected = selectedTournament();
+    const isDetailView = !!selected;
+    pageHeader.classList.toggle("ip-hidden", isDetailView);
+    tournamentList.classList.toggle("ip-hidden", isDetailView);
+    tournamentCard.classList.toggle("ip-hidden", !isDetailView);
+    tournamentList.innerHTML = "";
+    if (isDetailView) return;
 
-  function renderTournamentSwitcher() {
-    tournamentMenu.innerHTML = "";
+    workspace.classList.add("ip-hidden");
     if (!state.tournaments.length) {
-      tournamentName.textContent = "No In-Person tournaments available";
-      tournamentSwitcher.classList.add("ip-hidden");
-      tournamentMeta.textContent = "You are not assigned as an administrator of an active In-Person tournament.";
-      workspace.classList.add("ip-hidden");
+      const empty = document.createElement("div");
+      empty.className = "ip-empty ip-tournament-list-empty";
+      empty.textContent = "No In-Person tournaments available.";
+      tournamentList.appendChild(empty);
       return;
     }
-    const selected = selectedTournament();
-    tournamentName.textContent = selected?.name_local || selected?.name_en || "In-Person tournament";
-    tournamentSwitcher.classList.toggle("ip-hidden", state.tournaments.length <= 1);
+
     state.tournaments.forEach((tournament) => {
-      const option = document.createElement("button");
-      option.type = "button";
-      option.className = `ip-city-option${tournament.id === state.selectedTournamentId ? " active" : ""}`;
-      option.textContent = [
-        tournament.name_local || tournament.name_en,
+      const row = document.createElement("div");
+      row.className = "ip-tournament-list-row";
+
+      const icon = document.createElement("div");
+      icon.className = "ip-tournament-list-icon";
+      icon.textContent = "T";
+
+      const main = document.createElement("div");
+      main.className = "ip-tournament-list-main";
+      const title = document.createElement("div");
+      title.className = "ip-tournament-list-title";
+      title.textContent = tournament.name_local || tournament.name_en || tournament.id || "Tournament";
+      const meta = document.createElement("div");
+      meta.className = "ip-tournament-list-meta";
+      [
+        tournament.id,
         formatDates(tournament),
-      ].filter(Boolean).join(" • ");
-      option.setAttribute("role", "option");
-      option.setAttribute(
-        "aria-selected",
-        tournament.id === state.selectedTournamentId ? "true" : "false"
-      );
-      option.addEventListener("click", () => {
-        closeTournamentMenu();
-        if (tournament.id !== state.selectedTournamentId) selectTournament(tournament.id);
+        tournament.scope,
+        tournament.status,
+      ].filter(Boolean).forEach((value) => {
+        const chip = document.createElement("span");
+        chip.className = "ip-tournament-list-chip";
+        chip.textContent = String(value);
+        meta.appendChild(chip);
       });
-      tournamentMenu.appendChild(option);
+      main.appendChild(title);
+      main.appendChild(meta);
+
+      const viewUrl = new URL(window.location.href);
+      viewUrl.searchParams.set("tournament", tournament.id);
+      const view = document.createElement("a");
+      view.className = "ip-btn ip-tournament-view-btn";
+      view.href = viewUrl.toString();
+      view.textContent = "View";
+
+      row.appendChild(icon);
+      row.appendChild(main);
+      row.appendChild(view);
+      tournamentList.appendChild(row);
     });
-    closeTournamentMenu();
   }
 
   function renderTournamentMeta() {
@@ -3231,6 +3332,34 @@
     save.type = "submit";
     save.className = "ip-btn primary";
     save.textContent = "Save";
+    const resetResult = match.status === "completed"
+      ? createButton("Reset result", "ip-btn danger ip-reset-result-btn", async () => {
+        if (!window.confirm(`Reset the result for table ${match.table_number}?`)) return;
+        if (errorTarget) errorTarget.textContent = "";
+        saving = true;
+        resetResult.textContent = "Resetting...";
+        syncForm();
+        try {
+          const data = await apiJson(
+            tournamentUrl(`/${stage}/matches/${encodeURIComponent(match.id)}/result`),
+            { method: "DELETE" }
+          );
+          if (stage === "playoff") adoptPlayoffResponse(data);
+          else adoptSwissResponse(data);
+          renderWorkspace();
+          setStatus(`Result reset for table ${match.table_number}.`, "success");
+          if (typeof onSaved === "function") onSaved();
+        } catch (error) {
+          saving = false;
+          resetResult.textContent = "Reset result";
+          if (errorTarget) {
+            errorTarget.textContent = error.message || `Failed to reset table ${match.table_number}.`;
+          }
+          syncForm();
+        }
+      })
+      : null;
+    if (resetResult) actions.appendChild(resetResult);
     actions.appendChild(cancel);
     actions.appendChild(save);
 
@@ -3273,6 +3402,7 @@
       note.input.disabled = saving;
       noteToggle.disabled = saving;
       cancel.disabled = saving;
+      if (resetResult) resetResult.disabled = saving;
       save.disabled = saving
         || !starter.getValue()
         || !validScore(scoreA.input)
@@ -4489,7 +4619,7 @@
     if (state.selectedTournamentId) url.searchParams.set("tournament", state.selectedTournamentId);
     else url.searchParams.delete("tournament");
     window.history.replaceState({}, "", url.toString());
-    renderTournamentSwitcher();
+    renderTournamentList();
     renderTournamentMeta();
     setStatus("");
     try {
@@ -4516,13 +4646,10 @@
       state.tournaments = Array.isArray(accessibleData?.tournaments) ? accessibleData.tournaments : [];
       state.associations = Array.isArray(associationsData?.associations) ? associationsData.associations : [];
       const requestedId = new URL(window.location.href).searchParams.get("tournament") || "";
-      const preservedId = state.tournaments.some((item) => item.id === state.selectedTournamentId)
-        ? state.selectedTournamentId
-        : "";
       state.selectedTournamentId = state.tournaments.some((item) => item.id === requestedId)
         ? requestedId
-        : preservedId || state.tournaments[0]?.id || "";
-      renderTournamentSwitcher();
+        : "";
+      renderTournamentList();
       renderTournamentMeta();
       if (state.selectedTournamentId) await selectTournament(state.selectedTournamentId);
       else {
@@ -4537,7 +4664,10 @@
       state.overview = null;
       state.swiss = null;
       state.playoff = null;
-      renderTournamentSwitcher();
+      state.selectedTournamentId = "";
+      renderTournamentList();
+      renderTournamentMeta();
+      renderWorkspace();
       setStatus(
         error.status === 401 ? "Sign in to open In-Person tournaments." : error.message,
         "error"
@@ -4547,19 +4677,6 @@
     }
   }
 
-  tournamentSwitchBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    const isOpen = tournamentMenu.classList.contains("open");
-    closeTournamentMenu();
-    if (!isOpen) {
-      tournamentMenu.classList.add("open");
-      tournamentSwitchBtn.classList.add("open");
-      tournamentSwitchBtn.setAttribute("aria-expanded", "true");
-    }
-  });
-  document.addEventListener("click", (event) => {
-    if (!tournamentSwitcher.contains(event.target)) closeTournamentMenu();
-  });
   refreshBtn.addEventListener("click", loadAll);
   addPlayerBtn.addEventListener("click", () => openPlayerForm());
   addLatePlayerBtn.addEventListener("click", openLatePlayerForm);

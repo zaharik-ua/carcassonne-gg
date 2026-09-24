@@ -463,6 +463,17 @@ export function registerInPersonRoutes(app, {
       res.json({ ok: true, ...overview });
     }, logger)
   );
+  app.delete(
+    "/in-person-tournaments/:tournamentId/swiss/matches/:matchId/result",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.resetSwissMatchResult(
+        req.inPersonTournamentId,
+        req.params.matchId
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
   app.post(
     "/in-person-tournaments/:tournamentId/swiss/rounds/:roundId/complete",
     requireInPersonTournamentAdmin,
@@ -571,6 +582,17 @@ export function registerInPersonRoutes(app, {
         req.inPersonTournamentId,
         req.params.matchId,
         req.body || {}
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.delete(
+    "/in-person-tournaments/:tournamentId/playoff/matches/:matchId/result",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.resetPlayoffMatchResult(
+        req.inPersonTournamentId,
+        req.params.matchId
       );
       res.json({ ok: true, ...overview });
     }, logger)
