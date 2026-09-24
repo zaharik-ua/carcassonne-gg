@@ -5949,9 +5949,22 @@
     form.className = "cp-edit-form";
 
     const keyField = createTextRow("setting_key", item?.setting_key || "", { readOnly: true });
-    const valueField = item?.value_type === "date"
-      ? createDateRow("setting_value", item?.setting_value || "")
-      : createTextRow("setting_value", item?.setting_value || "");
+    let valueField;
+    if (item?.value_type === "date") {
+      valueField = createDateRow("setting_value", item?.setting_value || "");
+    } else if (item?.value_type === "integer") {
+      valueField = createNumberRow(
+        "setting_value",
+        item?.setting_value || "",
+        {
+          min: item?.min_value ?? 1,
+          max: item?.max_value,
+          step: 1,
+        }
+      );
+    } else {
+      valueField = createTextRow("setting_value", item?.setting_value || "");
+    }
 
     form.appendChild(keyField.row);
     form.appendChild(valueField.row);

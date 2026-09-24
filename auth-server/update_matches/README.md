@@ -110,7 +110,10 @@ same game; an expired lease can be reclaimed. A run performs at most three
 per available account and stop before each request whenever fresh work is due.
 
 The `initial`, `archive`, and `colors` transitions use one request per attempt.
-An absent archive is requested once and checked again after 15 minutes. A
+An absent archive is requested once and checked again after two minutes by
+default. The delay is stored in the `bga_replay_archive_retry_minutes` system
+setting and can be changed in `Admin` → `System Settings` without restarting
+the replay worker. A
 fallback replay is immediately marked ready and receives one color refresh
 after 15 minutes. A second fallback response keeps the stored replay unchanged
 and ends automatic retries.
@@ -160,7 +163,7 @@ The repository contains a shared template service and two independent timers:
 
 - `systemd/bga-replay-worker@.service`;
 - `systemd/bga-replay-fresh.timer` — every two minutes;
-- `systemd/bga-replay-historical.timer` — every 30 minutes;
+- `systemd/bga-replay-historical.timer` — every two minutes;
 - `systemd/bga-replay-worker.logrotate`.
 
 Install the units without enabling either timer first:
@@ -223,7 +226,9 @@ sudo systemctl list-timers --all \
 
 Timer frequency does not grant request capacity. Every service invocation still
 uses `--limit 3`, the worker state machine, the shared lock, fresh priority, and
-the persistent rolling budget. Both lanes write to
+the persistent rolling budget. Due archive rechecks run before untouched
+historical backlog so the configured two-minute archive window is meaningful.
+Both lanes write to
 `/var/log/carcassonne/bga-replay-worker.log`.
 
 ### Admin monitoring and overrides

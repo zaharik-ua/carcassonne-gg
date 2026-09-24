@@ -601,7 +601,7 @@ Replay-черга має спільний шаблонний service і два �
 
 - `systemd/bga-replay-worker@.service`;
 - `systemd/bga-replay-fresh.timer` — кожні 2 хвилини;
-- `systemd/bga-replay-historical.timer` — кожні 30 хвилин.
+- `systemd/bga-replay-historical.timer` — кожні 2 хвилини.
 
 Початкове встановлення навмисно не вмикає timers:
 
@@ -638,6 +638,11 @@ sudo systemctl enable --now bga-replay-historical.timer
 виконують більше трьох `logs.html` за один запуск. Лог записується до
 `/var/log/carcassonne/bga-replay-worker.log`. Детальні preview-запити до SQLite
 наведені в `update_matches/README.md`.
+
+Затримка повторної перевірки щойно замовленого BGA-архіву зберігається в
+`system_settings` під ключем `bga_replay_archive_retry_minutes`. Початкове
+значення — `2`, допустимий діапазон — `1–60`; змінити його можна в
+`Admin` → `System Settings`. Додавати цей параметр у `.env` не потрібно.
 
 ## 18) Admin monitoring для BGA replay
 

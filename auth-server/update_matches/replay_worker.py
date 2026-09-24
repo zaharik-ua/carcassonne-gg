@@ -31,7 +31,11 @@ RETRY_REASONS = frozenset({"initial", "archive", "colors"})
 DEFAULT_RUN_LIMIT = 3
 MAX_RUN_LIMIT = 3
 DEFAULT_LEASE_SECONDS = 300
-RETRY_DELAY_MINUTES = 15
+COLOR_RETRY_DELAY_MINUTES = 15
+TEMPORARY_RETRY_DELAY_MINUTES = 15
+DEFAULT_ARCHIVE_RETRY_DELAY_MINUTES = 2
+MAX_ARCHIVE_RETRY_DELAY_MINUTES = 60
+ARCHIVE_RETRY_DELAY_SETTING_KEY = "bga_replay_archive_retry_minutes"
 
 ReplayFetcher = Callable[..., dict[str, Any]]
 
@@ -320,7 +324,10 @@ def run_replay_worker(
         except ArchiveMissingError as exc:
             summary["requests"] += 1
             _remember_historical_account(path, job, historical_accounts_used)
-            if job.retry_reason == "initial" and exc.archive_requested:
+            if (
+                job.retry_reason in {"initial", "colors"}
+                and exc.archive_requested
+            ):
                 _defer_archive_job(path, job=job, now=run_now, error=str(exc))
                 summary["archives_requested"] += 1
                 summary["deferred"] += 1
@@ -467,6 +474,12 @@ def _claim_due_replay(
                   )
                   {excluded_sql}
                 ORDER BY
+                  CASE
+                    WHEN gr.retry_reason = 'archive' THEN 0
+                    WHEN gr.retry_reason = 'colors'
+                      AND gr.archive_requested_at IS NOT NULL THEN 0
+                    ELSE 1
+                  END,
                   datetime(gr.next_attempt_at),
                   datetime(COALESCE(gr.queued_at, gr.created_at)),
                   gr.game_id
@@ -569,7 +582,7 @@ def _complete_successful_job(
         and job.retry_reason != "colors"
     )
     next_attempt_at = (
-        _format_timestamp(now + timedelta(minutes=RETRY_DELAY_MINUTES))
+        _format_timestamp(now + timedelta(minutes=COLOR_RETRY_DELAY_MINUTES))
         if schedule_color_refresh
         else None
     )
@@ -617,12 +630,17 @@ def _defer_archive_job(
     now: datetime,
     error: str,
 ) -> None:
+    is_ready_color_refresh = (
+        job.retry_reason == "colors" and job.available_status == "ready"
+    )
     _update_job_state(
         db_path,
         job=job,
-        status="pending",
-        retry_reason="archive",
-        next_attempt_at=now + timedelta(minutes=RETRY_DELAY_MINUTES),
+        status="ready" if is_ready_color_refresh else "pending",
+        retry_reason="colors" if is_ready_color_refresh else "archive",
+        next_attempt_at=now + timedelta(
+            minutes=_archive_retry_delay_minutes(db_path)
+        ),
         now=now,
         last_error=error,
         mark_archive_requested=True,
@@ -641,7 +659,7 @@ def _defer_same_reason(
         job=job,
         status=job.available_status,
         retry_reason=job.retry_reason,
-        next_attempt_at=now + timedelta(minutes=RETRY_DELAY_MINUTES),
+        next_attempt_at=now + timedelta(minutes=TEMPORARY_RETRY_DELAY_MINUTES),
         now=now,
         last_error=error,
     )
@@ -782,6 +800,31 @@ def _default_lease_owner() -> str:
 def _optional_text(value: object) -> str | None:
     text = str(value or "").strip()
     return text or None
+
+
+def _archive_retry_delay_minutes(db_path: Path) -> int:
+    try:
+        with sqlite3.connect(db_path, timeout=5) as conn:
+            row = conn.execute(
+                """
+                SELECT setting_value
+                FROM system_settings
+                WHERE setting_key = ?
+                LIMIT 1
+                """,
+                (ARCHIVE_RETRY_DELAY_SETTING_KEY,),
+            ).fetchone()
+    except sqlite3.Error:
+        return DEFAULT_ARCHIVE_RETRY_DELAY_MINUTES
+
+    raw_value = row[0] if row else None
+    try:
+        value = int(str(raw_value).strip())
+    except (TypeError, ValueError):
+        return DEFAULT_ARCHIVE_RETRY_DELAY_MINUTES
+    if not 1 <= value <= MAX_ARCHIVE_RETRY_DELAY_MINUTES:
+        return DEFAULT_ARCHIVE_RETRY_DELAY_MINUTES
+    return value
 
 
 def _as_utc(value: datetime) -> datetime:

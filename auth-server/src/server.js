@@ -491,8 +491,30 @@ const SYSTEM_SETTING_DEFINITIONS = [
     default_value: null,
     sort_order: 30,
   },
+  {
+    key: "bga_replay_archive_retry_minutes",
+    label: "BGA replay archive retry delay",
+    description: "Minutes to wait before checking a BGA replay archive after requesting it.",
+    value_type: "integer",
+    default_value: "2",
+    min_value: 1,
+    max_value: 60,
+    sort_order: 40,
+  },
 ];
 const SYSTEM_SETTING_KEYS = new Set(SYSTEM_SETTING_DEFINITIONS.map((setting) => setting.key));
+
+function serializeSystemSetting(row) {
+  if (!row) return null;
+  const definition = SYSTEM_SETTING_DEFINITIONS.find(
+    (setting) => setting.key === row.setting_key
+  );
+  return {
+    ...row,
+    min_value: definition?.min_value ?? null,
+    max_value: definition?.max_value ?? null,
+  };
+}
 const PROFILE_GG_ELO_SCRIPT_ID = "profile-gg-elo";
 let profileGgEloScriptRunning = false;
 let profileGgEloAutoRunQueued = false;
@@ -13538,7 +13560,10 @@ app.get("/system-settings", requireAdmin, async (_req, res) => {
       `,
       SYSTEM_SETTING_DEFINITIONS.map((setting) => setting.key)
     );
-    return res.json({ ok: true, system_settings: rows || [] });
+    return res.json({
+      ok: true,
+      system_settings: (rows || []).map(serializeSystemSetting),
+    });
   } catch (error) {
     console.error("Failed to load system settings", error);
     return res.status(500).json({ ok: false, message: "Failed to load system settings" });
@@ -13553,13 +13578,34 @@ app.patch("/system-settings/:key", requireAdmin, async (req, res) => {
 
   const definition = SYSTEM_SETTING_DEFINITIONS.find((setting) => setting.key === settingKey);
   const rawValue = req.body?.setting_value ?? req.body?.value;
-  const settingValue = definition?.value_type === "date"
+  const valueWasProvided = rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== "";
+  let settingValue = definition?.value_type === "date"
     ? normalizeDateOnly(rawValue)
     : normalizeNullableText(rawValue);
-  const valueWasProvided = rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== "";
 
   if (definition?.value_type === "date" && valueWasProvided && !settingValue) {
     return res.status(400).json({ ok: false, message: "Date must use YYYY-MM-DD format" });
+  }
+  if (definition?.value_type === "integer") {
+    const normalizedInteger = normalizeNullableText(rawValue);
+    if (!normalizedInteger || !/^\d+$/.test(normalizedInteger)) {
+      return res.status(400).json({ ok: false, message: "Value must be a whole number" });
+    }
+    const integerValue = Number.parseInt(normalizedInteger, 10);
+    const minimum = definition.min_value == null ? null : Number(definition.min_value);
+    const maximum = definition.max_value == null ? null : Number(definition.max_value);
+    if (
+      (minimum !== null && Number.isFinite(minimum) && integerValue < minimum)
+      || (maximum !== null && Number.isFinite(maximum) && integerValue > maximum)
+    ) {
+      return res.status(400).json({
+        ok: false,
+        message: minimum !== null && maximum !== null
+          ? `Value must be between ${minimum} and ${maximum}`
+          : "Value is outside the allowed range",
+      });
+    }
+    settingValue = String(integerValue);
   }
 
   try {
@@ -13605,7 +13651,10 @@ app.patch("/system-settings/:key", requireAdmin, async (req, res) => {
       changes: buildAuditChanges(beforeRow, updatedRow),
       metadata: { setting_key: settingKey },
     });
-    return res.json({ ok: true, system_setting: updatedRow || null });
+    return res.json({
+      ok: true,
+      system_setting: serializeSystemSetting(updatedRow),
+    });
   } catch (error) {
     console.error("Failed to update system setting", error);
     return res.status(500).json({ ok: false, message: "Failed to update system setting" });

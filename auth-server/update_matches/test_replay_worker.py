@@ -178,17 +178,173 @@ class ReplayWorkerTest(unittest.TestCase):
             first_row["archive_requested_at"],
             "2026-09-24 12:00:00.000000",
         )
+        self.assertEqual(
+            first_row["next_attempt_at"],
+            "2026-09-24 12:02:00.000000",
+        )
         self.assertIn("archive_missing", first_row["last_error"])
 
         second = self._run(
             missing_archive,
-            now=self.now + timedelta(minutes=15),
+            now=self.now + timedelta(minutes=2),
         )
         second_row = self._replay("game-1")
         self.assertEqual(second["manual_required"], 1)
         self.assertEqual(second_row["status"], "error")
         self.assertIsNone(second_row["retry_reason"])
         self.assertIsNone(second_row["next_attempt_at"])
+
+    def test_archive_retry_delay_uses_system_setting(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE system_settings (
+                  setting_key TEXT PRIMARY KEY,
+                  setting_value TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO system_settings (setting_key, setting_value)
+                VALUES ('bga_replay_archive_retry_minutes', '5')
+                """
+            )
+
+        self._add_game("game-1", "101")
+        self._queue("game-1")
+
+        def missing_archive(*_args, **_kwargs):
+            raise ArchiveMissingError(
+                "Cannot find gamenotifs log file",
+                endpoint=LOGS_PATH,
+                archive_requested=True,
+            )
+
+        self._run(missing_archive)
+        row = self._replay("game-1")
+
+        self.assertEqual(
+            row["next_attempt_at"],
+            "2026-09-24 12:05:00.000000",
+        )
+
+    def test_color_refresh_waits_for_requested_archive_then_retries(self) -> None:
+        self._add_game("game-1", "101")
+        self._queue(
+            "game-1",
+            status="ready",
+            retry_reason="colors",
+            queue_class="historical",
+            color_source="fallback",
+        )
+        calls: list[str] = []
+
+        def archive_then_ready(_path, game_id, **_kwargs):
+            calls.append(game_id)
+            if len(calls) == 1:
+                raise ArchiveMissingError(
+                    "Cannot find gamenotifs log file",
+                    endpoint=LOGS_PATH,
+                    archive_requested=True,
+                )
+            return {
+                "color_source": "bga",
+                "account_label": "account-a",
+            }
+
+        first = self._run(
+            archive_then_ready,
+            queue_class="historical",
+        )
+        waiting = self._replay("game-1")
+
+        self.assertEqual(first["archives_requested"], 1)
+        self.assertEqual(first["deferred"], 1)
+        self.assertEqual(first["manual_required"], 0)
+        self.assertEqual(waiting["status"], "ready")
+        self.assertEqual(waiting["color_source"], "fallback")
+        self.assertEqual(waiting["retry_reason"], "colors")
+        self.assertEqual(waiting["color_refresh_count"], 0)
+        self.assertEqual(
+            waiting["archive_requested_at"],
+            "2026-09-24 12:00:00.000000",
+        )
+        self.assertEqual(
+            waiting["next_attempt_at"],
+            "2026-09-24 12:02:00.000000",
+        )
+
+        too_early = self._run(
+            archive_then_ready,
+            queue_class="historical",
+            now=self.now + timedelta(minutes=1),
+        )
+        self.assertEqual(too_early["processed"], 0)
+        self.assertEqual(calls, ["game-1"])
+
+        # Even though this untouched backlog row has an older next_attempt_at,
+        # the due archive recheck must run first while the BGA archive is fresh.
+        self._add_game("backlog", "102")
+        self._queue(
+            "backlog",
+            status="ready",
+            retry_reason="colors",
+            queue_class="historical",
+            color_source="fallback",
+        )
+
+        second = self._run(
+            archive_then_ready,
+            queue_class="historical",
+            limit=1,
+            now=self.now + timedelta(minutes=2),
+        )
+        completed = self._replay("game-1")
+
+        self.assertEqual(second["ready_bga_colors"], 1)
+        self.assertEqual(calls, ["game-1", "game-1"])
+        self.assertEqual(completed["status"], "ready")
+        self.assertEqual(completed["color_source"], "bga")
+        self.assertEqual(completed["color_refresh_count"], 1)
+        self.assertIsNone(completed["retry_reason"])
+        self.assertIsNone(completed["next_attempt_at"])
+
+    def test_color_refresh_becomes_manual_if_requested_archive_is_still_missing(self) -> None:
+        self._add_game("game-1", "101")
+        self._queue(
+            "game-1",
+            status="ready",
+            retry_reason="colors",
+            queue_class="historical",
+            color_source="fallback",
+        )
+        calls = 0
+
+        def missing_archive(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            raise ArchiveMissingError(
+                "Cannot find gamenotifs log file",
+                endpoint=LOGS_PATH,
+                archive_requested=calls == 1,
+            )
+
+        self._run(missing_archive, queue_class="historical")
+        second = self._run(
+            missing_archive,
+            queue_class="historical",
+            now=self.now + timedelta(minutes=2),
+        )
+        row = self._replay("game-1")
+
+        self.assertEqual(calls, 2)
+        self.assertEqual(second["manual_required"], 1)
+        self.assertEqual(row["status"], "ready")
+        self.assertEqual(row["color_source"], "fallback")
+        self.assertEqual(row["color_refresh_count"], 0)
+        self.assertIsNone(row["retry_reason"])
+        self.assertIsNone(row["next_attempt_at"])
 
     def test_temporary_error_is_deferred_but_access_error_is_manual(self) -> None:
         for game_id, table_id in (("temporary", "101"), ("access", "102")):

@@ -23,7 +23,7 @@ class ReplayWorkerSystemdTest(unittest.TestCase):
 
         self.assertIn("OnUnitInactiveSec=2min", fresh)
         self.assertIn("Unit=bga-replay-worker@fresh.service", fresh)
-        self.assertIn("OnUnitInactiveSec=30min", historical)
+        self.assertIn("OnUnitInactiveSec=2min", historical)
         self.assertIn("Unit=bga-replay-worker@historical.service", historical)
         self.assertIn("WantedBy=timers.target", fresh)
         self.assertIn("WantedBy=timers.target", historical)
@@ -31,4 +31,3 @@ class ReplayWorkerSystemdTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
