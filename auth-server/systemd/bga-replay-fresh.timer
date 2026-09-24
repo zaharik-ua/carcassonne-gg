@@ -1,0 +1,12 @@
+[Unit]
+Description=Process fresh Carcassonne GG BGA replay queue every 2 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+AccuracySec=10s
+Unit=bga-replay-worker@fresh.service
+
+[Install]
+WantedBy=timers.target
+

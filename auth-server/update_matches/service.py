@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from .config import MATCH_UPDATE_BATCH_SIZE
-from .game_replay import fetch_and_store_game_replay_with_account_rotation
 from .models import MatchUpdateRequest
 from .repository import KNOWN_TARGETS, MatchRepository
 
@@ -15,17 +14,10 @@ class MatchUpdateService:
         batch_size: int = MATCH_UPDATE_BATCH_SIZE,
         *,
         games_fetcher: Callable[[list[MatchUpdateRequest]], list] | None = None,
-        replay_fetcher: Callable[[str], object] | None = None,
     ) -> None:
         self.repository = repository
         self.batch_size = batch_size
         self.games_fetcher = games_fetcher or self._get_games_batch
-        db_path = str(getattr(repository, "db_path", "") or "").strip()
-        self.replay_fetcher = replay_fetcher
-        if self.replay_fetcher is None and db_path:
-            self.replay_fetcher = lambda game_id: (
-                fetch_and_store_game_replay_with_account_rotation(db_path, game_id)
-            )
 
     def run(
         self,
@@ -67,9 +59,8 @@ class MatchUpdateService:
             "processed": 0,
             "updated": 0,
             "failed": 0,
-            "replays_processed": 0,
+            "replays_scheduled": 0,
             "replays_ready": 0,
-            "replays_failed": 0,
         }
         remaining = total_limit
 
@@ -91,7 +82,7 @@ class MatchUpdateService:
                     if result.status == "success":
                         game_ids = self.repository.save_match_result(match, result)
                         summary["updated"] += 1
-                        self._fetch_created_game_replays(game_ids, summary)
+                        summary["replays_scheduled"] += len(game_ids or [])
                     else:
                         self.repository.save_match_error(match, result.message or "Unknown error")
                         summary["failed"] += 1
@@ -110,9 +101,8 @@ class MatchUpdateService:
             "processed": 0,
             "updated": 0,
             "failed": 0,
-            "replays_processed": 0,
+            "replays_scheduled": 0,
             "replays_ready": 0,
-            "replays_failed": 0,
         }
         if not batch:
             return summary
@@ -123,7 +113,7 @@ class MatchUpdateService:
             if result.status == "success":
                 game_ids = self.repository.save_match_result(match, result)
                 summary["updated"] += 1
-                self._fetch_created_game_replays(game_ids, summary)
+                summary["replays_scheduled"] += len(game_ids or [])
             else:
                 self.repository.save_match_error(match, result.message or "Unknown error")
                 summary["failed"] += 1
@@ -136,9 +126,8 @@ class MatchUpdateService:
             "processed": 0,
             "updated": 0,
             "failed": 0,
-            "replays_processed": 0,
+            "replays_scheduled": 0,
             "replays_ready": 0,
-            "replays_failed": 0,
         }
         if not batch:
             return summary
@@ -149,7 +138,7 @@ class MatchUpdateService:
             if result.status == "success":
                 game_ids = self.repository.save_match_result(match, result)
                 summary["updated"] += 1
-                self._fetch_created_game_replays(game_ids, summary)
+                summary["replays_scheduled"] += len(game_ids or [])
             else:
                 self.repository.save_match_error(match, result.message or "Unknown error")
                 summary["failed"] += 1
@@ -164,19 +153,3 @@ class MatchUpdateService:
         from .match_fetcher import get_games_batch
 
         return get_games_batch(batch)
-
-    def _fetch_created_game_replays(self, game_ids: list[str] | None, summary: dict) -> None:
-        if self.replay_fetcher is None:
-            return
-
-        for game_id in game_ids or []:
-            summary["replays_processed"] += 1
-            try:
-                self.replay_fetcher(game_id)
-                summary["replays_ready"] += 1
-            except Exception as exc:
-                summary["replays_failed"] += 1
-                print(
-                    f"⚠️ Replay sync failed for newly created game {game_id}: {exc}",
-                    flush=True,
-                )

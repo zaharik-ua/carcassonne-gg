@@ -3,23 +3,46 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from .replay_budget import (
+    ReplayBudgetLimits,
+    ReplayBudgetUnavailableError,
+    ensure_replay_budget_schema,
+    finish_replay_request_audit,
+    mark_replay_account_cooldown,
+    reserve_replay_request,
+    start_replay_request_audit,
+)
+
 
 LOGS_PATH = "/archive/archive/logs.html"
 ARCHIVE_REQUEST_PATH = "/gamereview/gamereview/requestTableArchive.html"
 MISSING_ARCHIVE_MESSAGE = "Cannot find gamenotifs log file"
+REPLAY_LIMIT_MESSAGE = "limit (replay)"
+REPLAY_OUTCOME_READY = "ready"
+REPLAY_OUTCOME_ARCHIVE_MISSING = "archive_missing"
+REPLAY_OUTCOME_LIMIT = "replay_limit"
+REPLAY_OUTCOME_ACCESS_ERROR = "access_error"
+REPLAY_OUTCOME_TEMPORARY_ERROR = "temporary_error"
+REPLAY_OUTCOME_BUDGET_EXHAUSTED = "budget_exhausted"
+COLOR_SOURCE_BGA = "bga"
+COLOR_SOURCE_FALLBACK = "fallback"
 CARCASSONNE_LAB_URL = "https://www.carcassonnelab.com/"
 CARCASSONNE_LAB_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 CARCASSONNE_LAB_BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 CARCASSONNE_LAB_TILE_TYPE_BASE = 24
 CARCASSONNE_LAB_STARTING_TILE_TYPE = 15
 CARCASSONNE_LAB_FALLBACK_COLORS = ("red", "green")
+FALLBACK_COLOR_HEXES = {
+    "red": "ff0000",
+    "green": "008000",
+}
 MEEPLE_COLOR_NAMES = {
     "000000": "black",
     "0000ff": "blue",
@@ -40,10 +63,28 @@ LEGACY_GAME_REPLAY_COLUMNS = (
     "meeple_count",
     "archive_requested",
 )
+GAME_REPLAY_ADDITIONAL_COLUMNS = (
+    ("carcassonne_lab_url", "TEXT"),
+    ("board_stats_json", "TEXT"),
+    ("meeple_stats_json", "TEXT"),
+    ("scoring_json", "TEXT"),
+    ("player_time_json", "TEXT"),
+    ("next_attempt_at", "TEXT"),
+    ("retry_reason", "TEXT"),
+    ("queue_class", "TEXT NOT NULL DEFAULT 'fresh'"),
+    ("queued_at", "TEXT"),
+    ("historical_batch_id", "TEXT"),
+    ("history_request_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("color_refresh_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("color_source", "TEXT"),
+    ("archive_requested_at", "TEXT"),
+    ("last_account_label", "TEXT"),
+    ("lease_owner", "TEXT"),
+    ("lease_until", "TEXT"),
+)
 
 RequestJson = Callable[..., dict[str, Any]]
 Authenticate = Callable[[], Any]
-Sleep = Callable[[float], None]
 
 
 class GameReplayError(RuntimeError):
@@ -55,7 +96,62 @@ class GameNotFoundError(GameReplayError):
 
 
 class BgaReplayError(GameReplayError):
-    pass
+    outcome = REPLAY_OUTCOME_TEMPORARY_ERROR
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        endpoint: str = LOGS_PATH,
+        archive_requested: bool = False,
+    ) -> None:
+        self.endpoint = endpoint
+        self.archive_requested = archive_requested
+        self.detail = str(message or self.__class__.__name__)
+        super().__init__(f"{self.outcome}: endpoint={endpoint}: {self.detail}")
+
+
+class ArchiveMissingError(BgaReplayError):
+    outcome = REPLAY_OUTCOME_ARCHIVE_MISSING
+
+
+class ReplayLimitError(BgaReplayError):
+    outcome = REPLAY_OUTCOME_LIMIT
+
+
+class ReplayAccessError(BgaReplayError):
+    outcome = REPLAY_OUTCOME_ACCESS_ERROR
+
+
+class TemporaryReplayError(BgaReplayError):
+    outcome = REPLAY_OUTCOME_TEMPORARY_ERROR
+
+
+class ReplayBudgetExceededError(GameReplayError):
+    outcome = REPLAY_OUTCOME_BUDGET_EXHAUSTED
+
+
+@dataclass(frozen=True)
+class ReplayFetchResult:
+    outcome: str
+    endpoint: str
+    logs: list[Any] | None = None
+    players: Any = None
+    message: str | None = None
+    archive_requested: bool = False
+
+    def to_error(self) -> BgaReplayError:
+        error_type = {
+            REPLAY_OUTCOME_ARCHIVE_MISSING: ArchiveMissingError,
+            REPLAY_OUTCOME_LIMIT: ReplayLimitError,
+            REPLAY_OUTCOME_ACCESS_ERROR: ReplayAccessError,
+            REPLAY_OUTCOME_TEMPORARY_ERROR: TemporaryReplayError,
+        }.get(self.outcome, TemporaryReplayError)
+        return error_type(
+            self.message or "BGA did not return replay logs",
+            endpoint=self.endpoint,
+            archive_requested=self.archive_requested,
+        )
 
 
 def ensure_game_replays_schema(conn: sqlite3.Connection) -> None:
@@ -76,6 +172,18 @@ def ensure_game_replays_schema(conn: sqlite3.Connection) -> None:
           fetched_at TEXT,
           last_attempt_at TEXT,
           last_error TEXT,
+          next_attempt_at TEXT,
+          retry_reason TEXT,
+          queue_class TEXT NOT NULL DEFAULT 'fresh',
+          queued_at TEXT,
+          historical_batch_id TEXT,
+          history_request_count INTEGER NOT NULL DEFAULT 0,
+          color_refresh_count INTEGER NOT NULL DEFAULT 0,
+          color_source TEXT,
+          archive_requested_at TEXT,
+          last_account_label TEXT,
+          lease_owner TEXT,
+          lease_until TEXT,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (game_id) REFERENCES games(id)
@@ -86,23 +194,256 @@ def ensure_game_replays_schema(conn: sqlite3.Connection) -> None:
           ON game_replays(bga_table_id);
         """
     )
+    ensure_replay_budget_schema(conn)
     columns = {
         str(row[1])
         for row in conn.execute("PRAGMA table_info(game_replays)").fetchall()
     }
-    text_columns = (
-        "carcassonne_lab_url",
-        "board_stats_json",
-        "meeple_stats_json",
-        "scoring_json",
-        "player_time_json",
-    )
-    for column in text_columns:
+    for column, definition in GAME_REPLAY_ADDITIONAL_COLUMNS:
         if column not in columns:
-            conn.execute(f"ALTER TABLE game_replays ADD COLUMN {column} TEXT")
+            conn.execute(
+                f"ALTER TABLE game_replays ADD COLUMN {column} {definition}"
+            )
+    if "archive_requested" in columns:
+        conn.execute(
+            """
+            UPDATE game_replays
+            SET archive_requested_at = COALESCE(
+              archive_requested_at,
+              last_attempt_at,
+              updated_at,
+              created_at,
+              CURRENT_TIMESTAMP
+            )
+            WHERE archive_requested = 1
+              AND archive_requested_at IS NULL
+            """
+        )
     for column in LEGACY_GAME_REPLAY_COLUMNS:
         if column in columns:
             conn.execute(f"ALTER TABLE game_replays DROP COLUMN {column}")
+
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_replays_due
+        ON game_replays(queue_class, status, retry_reason, next_attempt_at)
+        """
+    )
+
+    ready_rows = conn.execute(
+        """
+        SELECT game_id, players_json, events_json
+        FROM game_replays
+        WHERE status = 'ready'
+          AND (color_source IS NULL OR trim(color_source) = '')
+        """
+    ).fetchall()
+    # Migration records provenance only. Legacy rows are deliberately not
+    # scheduled for an automatic color refresh.
+    conn.executemany(
+        "UPDATE game_replays SET color_source = ? WHERE game_id = ?",
+        (
+            (
+                _infer_existing_color_source(row[1], row[2]),
+                row[0],
+            )
+            for row in ready_rows
+        ),
+    )
+
+
+def _infer_existing_color_source(players_json: Any, events_json: Any) -> str:
+    players = _from_json(players_json, [])
+    events = _from_json(events_json, [])
+    if not isinstance(players, list) or not isinstance(events, list):
+        return COLOR_SOURCE_FALLBACK
+    return (
+        COLOR_SOURCE_BGA
+        if _has_complete_bga_colors(events, players)
+        else COLOR_SOURCE_FALLBACK
+    )
+
+
+def enqueue_fresh_game_replay(
+    conn: sqlite3.Connection,
+    *,
+    game_id: str,
+    bga_table_id: str,
+) -> None:
+    """Schedule the first replay request without contacting BGA."""
+    conn.execute(
+        """
+        INSERT INTO game_replays (
+          game_id,
+          bga_table_id,
+          status,
+          retry_reason,
+          queue_class,
+          queued_at,
+          next_attempt_at,
+          historical_batch_id,
+          history_request_count,
+          color_refresh_count,
+          color_source,
+          archive_requested_at,
+          last_account_label,
+          lease_owner,
+          lease_until,
+          last_error,
+          updated_at
+        )
+        VALUES (
+          ?,
+          ?,
+          'pending',
+          'initial',
+          'fresh',
+          CURRENT_TIMESTAMP,
+          datetime('now', '+5 minutes'),
+          NULL,
+          0,
+          0,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          CURRENT_TIMESTAMP
+        )
+        ON CONFLICT(game_id) DO UPDATE SET
+          bga_table_id = excluded.bga_table_id,
+          status = 'pending',
+          retry_reason = 'initial',
+          queue_class = 'fresh',
+          queued_at = excluded.queued_at,
+          next_attempt_at = excluded.next_attempt_at,
+          historical_batch_id = NULL,
+          history_request_count = 0,
+          color_refresh_count = 0,
+          color_source = NULL,
+          archive_requested_at = NULL,
+          last_account_label = NULL,
+          lease_owner = NULL,
+          lease_until = NULL,
+          last_error = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        """,
+        (str(game_id), str(bga_table_id)),
+    )
+
+
+def _resolve_replay_account_labels(
+    *,
+    account_labels: list[str] | None,
+    account_label: str | None,
+    use_injected_account: bool,
+) -> list[str]:
+    if account_labels is not None:
+        return [str(label) for label in account_labels]
+    if _optional_text(account_label):
+        return [str(account_label)]
+    if use_injected_account:
+        return ["injected"]
+
+    from .bga_login import get_bga_credentials
+
+    return [credential.label for credential in get_bga_credentials()]
+
+
+def _build_audited_replay_request(
+    db_path: str | Path,
+    *,
+    request: RequestJson,
+    logs_request_id: int,
+    account_label: str,
+    table_id: str,
+    request_class: str,
+) -> tuple[RequestJson, dict[str, bool]]:
+    audit_state = {"logs_finished": False}
+
+    def audited_request(path: str, *args, **kwargs) -> dict[str, Any]:
+        if path == LOGS_PATH:
+            try:
+                payload = request(path, *args, **kwargs)
+            except Exception as exc:
+                result = _failure_result_from_exception(exc, endpoint=path)
+                finish_replay_request_audit(
+                    db_path,
+                    logs_request_id,
+                    outcome=result.outcome,
+                    error=result.message,
+                )
+                audit_state["logs_finished"] = True
+                raise
+
+            logs = _extract_logs(payload)
+            if logs is not None:
+                outcome = REPLAY_OUTCOME_READY
+                audit_error = None
+            else:
+                error_message = _response_error(payload)
+                if MISSING_ARCHIVE_MESSAGE in error_message:
+                    outcome = REPLAY_OUTCOME_ARCHIVE_MISSING
+                    audit_error = error_message
+                else:
+                    result = _failure_result_from_message(
+                        error_message or "BGA did not return replay logs",
+                        endpoint=path,
+                    )
+                    outcome = result.outcome
+                    audit_error = result.message
+            finish_replay_request_audit(
+                db_path,
+                logs_request_id,
+                outcome=outcome,
+                error=audit_error,
+            )
+            audit_state["logs_finished"] = True
+            return payload
+
+        if path != ARCHIVE_REQUEST_PATH:
+            return request(path, *args, **kwargs)
+
+        audit_id = start_replay_request_audit(
+            db_path,
+            account_label=account_label,
+            bga_table_id=table_id,
+            endpoint=path,
+            request_class=request_class,
+        )
+        try:
+            payload = request(path, *args, **kwargs)
+        except Exception as exc:
+            classified = _classify_replay_exception(exc, endpoint=path)
+            finish_replay_request_audit(
+                db_path,
+                audit_id,
+                outcome=classified.outcome,
+                error=str(classified),
+            )
+            raise
+
+        error_message = _response_error(payload)
+        if _is_failed_response(payload) and MISSING_ARCHIVE_MESSAGE not in error_message:
+            result = _failure_result_from_message(
+                error_message or "BGA rejected the archive request",
+                endpoint=path,
+            )
+            outcome = result.outcome
+            audit_error = result.message
+        else:
+            outcome = "archive_requested"
+            audit_error = None
+        finish_replay_request_audit(
+            db_path,
+            audit_id,
+            outcome=outcome,
+            error=audit_error,
+        )
+        return payload
+
+    return audited_request, audit_state
 
 
 def fetch_and_store_game_replay(
@@ -110,19 +451,19 @@ def fetch_and_store_game_replay(
     game_id: str,
     *,
     force: bool = False,
-    poll_attempts: int = 10,
-    poll_delay: float = 1.0,
+    request_class: str = "manual",
+    account_labels: list[str] | None = None,
+    account_label: str | None = None,
+    budget_limits: ReplayBudgetLimits | None = None,
+    budget_now: datetime | None = None,
+    color_refresh: bool = False,
+    preserve_existing_fallback: bool = False,
     request: RequestJson | None = None,
     authenticate: Authenticate | None = None,
-    sleep: Sleep = time.sleep,
 ) -> dict[str, Any]:
     normalized_game_id = str(game_id or "").strip()
     if not normalized_game_id:
         raise GameNotFoundError("games.id must not be empty")
-    if poll_attempts < 1:
-        raise ValueError("poll_attempts must be at least 1")
-    if poll_delay < 0:
-        raise ValueError("poll_delay must not be negative")
 
     path = Path(db_path).expanduser()
     with sqlite3.connect(path) as conn:
@@ -151,12 +492,16 @@ def fetch_and_store_game_replay(
             """
             SELECT game_id, bga_table_id, status, fetched_at, players_json,
                    carcassonne_lab_url, board_stats_json, meeple_stats_json,
-                   scoring_json, player_time_json, events_json
+                   scoring_json, player_time_json, events_json,
+                   archive_requested_at, color_source
             FROM game_replays
             WHERE game_id = ?
             """,
             (normalized_game_id,),
         ).fetchone()
+        preserve_ready_replay = bool(
+            cached is not None and cached["status"] == "ready"
+        )
         if cached is not None and cached["status"] == "ready" and not force:
             cached_values = dict(cached)
             stored_board_stats = _from_json(cached["board_stats_json"], {})
@@ -166,6 +511,7 @@ def fetch_and_store_game_replay(
             )
             stored_events = _from_json(cached["events_json"], [])
             stored_players = _from_json(cached["players_json"], [])
+            stored_meeple_stats = _from_json(cached["meeple_stats_json"], {})
             needs_update = False
 
             if not has_compact_board_stats and isinstance(stored_events, list):
@@ -179,13 +525,28 @@ def fetch_and_store_game_replay(
                 and isinstance(stored_events, list)
                 and isinstance(stored_players, list)
             ):
+                color_source = apply_replay_player_colors(
+                    stored_events,
+                    stored_players,
+                )
                 carcassonne_lab_url = build_carcassonne_lab_url(
                     stored_events,
                     stored_players,
                 )
+                cached_values["events_json"] = _to_json(stored_events)
+                cached_values["players_json"] = _to_json(stored_players)
+                cached_values["color_source"] = color_source
+                if isinstance(stored_meeple_stats, dict):
+                    _synchronize_meeple_stats_colors(
+                        stored_meeple_stats,
+                        stored_players,
+                    )
+                    cached_values["meeple_stats_json"] = _to_json(
+                        stored_meeple_stats
+                    )
+                needs_update = True
                 if carcassonne_lab_url:
                     cached_values["carcassonne_lab_url"] = carcassonne_lab_url
-                    needs_update = True
 
             if needs_update:
                 conn.execute(
@@ -193,12 +554,20 @@ def fetch_and_store_game_replay(
                     UPDATE game_replays
                     SET board_stats_json = ?,
                         carcassonne_lab_url = ?,
+                        events_json = ?,
+                        players_json = ?,
+                        meeple_stats_json = ?,
+                        color_source = ?,
                         updated_at = ?
                     WHERE game_id = ?
                     """,
                     (
                         cached_values["board_stats_json"],
                         cached_values["carcassonne_lab_url"],
+                        cached_values["events_json"],
+                        cached_values["players_json"],
+                        cached_values["meeple_stats_json"],
+                        cached_values["color_source"],
                         _utc_now(),
                         normalized_game_id,
                     ),
@@ -207,49 +576,152 @@ def fetch_and_store_game_replay(
 
             return _summary_from_row(cached_values, cached=True)
 
-        attempted_at = _utc_now()
-        conn.execute(
-            """
-            INSERT INTO game_replays (
-              game_id, bga_table_id, status, last_attempt_at, last_error, updated_at
-            ) VALUES (?, ?, 'fetching', ?, NULL, ?)
-            ON CONFLICT(game_id) DO UPDATE SET
-              bga_table_id = excluded.bga_table_id,
-              status = 'fetching',
-              last_attempt_at = excluded.last_attempt_at,
-              last_error = NULL,
-              updated_at = excluded.updated_at
-            """,
-            (normalized_game_id, table_id, attempted_at, attempted_at),
+    resolved_account_labels = _resolve_replay_account_labels(
+        account_labels=account_labels,
+        account_label=account_label,
+        use_injected_account=request is not None and authenticate is not None,
+    )
+    try:
+        reservation = reserve_replay_request(
+            path,
+            account_labels=resolved_account_labels,
+            bga_table_id=table_id,
+            request_class=request_class,
+            limits=budget_limits,
+            now=budget_now,
         )
-        conn.commit()
+    except ReplayBudgetUnavailableError as exc:
+        raise ReplayBudgetExceededError(str(exc)) from exc
 
-    if request is None or authenticate is None:
-        from .http_session import get_http_session, request_json
+    attempted_at = _utc_now()
+    try:
+        with sqlite3.connect(path) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute(
+                """
+                INSERT INTO game_replays (
+                  game_id, bga_table_id, status, last_attempt_at, last_error,
+                  last_account_label, history_request_count, updated_at
+                ) VALUES (?, ?, 'fetching', ?, NULL, ?, 1, ?)
+                ON CONFLICT(game_id) DO UPDATE SET
+                  bga_table_id = excluded.bga_table_id,
+                  status = CASE
+                    WHEN game_replays.status = 'ready' THEN 'ready'
+                    ELSE 'fetching'
+                  END,
+                  last_attempt_at = excluded.last_attempt_at,
+                  last_error = NULL,
+                  last_account_label = excluded.last_account_label,
+                  history_request_count = game_replays.history_request_count + 1,
+                  updated_at = excluded.updated_at
+                """,
+                (
+                    normalized_game_id,
+                    table_id,
+                    attempted_at,
+                    reservation.account_label,
+                    attempted_at,
+                ),
+            )
+            conn.commit()
+    except Exception as exc:
+        finish_replay_request_audit(
+            path,
+            reservation.request_id,
+            outcome=REPLAY_OUTCOME_TEMPORARY_ERROR,
+            error=str(exc) or exc.__class__.__name__,
+        )
+        raise
 
-        if request is None:
-            request = request_json
-        if authenticate is None:
-            authenticate = get_http_session
+    if request is None:
+        from .http_session import request_json
+
+        request = request_json
+    if authenticate is None:
+        from .http_session import get_http_session_for_account
+
+        authenticate = lambda: get_http_session_for_account(
+            reservation.account_label
+        )
+
+    audited_request, audit_state = _build_audited_replay_request(
+        path,
+        request=request,
+        logs_request_id=reservation.request_id,
+        account_label=reservation.account_label,
+        table_id=table_id,
+        request_class=request_class,
+    )
+    main_audit_finished = False
 
     try:
         authenticate()
-        logs, response_players = fetch_bga_replay(
+        fetch_result = fetch_bga_replay(
             table_id,
-            request=request,
-            poll_attempts=poll_attempts,
-            poll_delay=poll_delay,
-            sleep=sleep,
+            request=audited_request,
+            request_archive=(
+                cached is None or not _optional_text(cached["archive_requested_at"])
+            ),
         )
+        if not audit_state["logs_finished"]:
+            finish_replay_request_audit(
+                path,
+                reservation.request_id,
+                outcome=fetch_result.outcome,
+                error=(
+                    fetch_result.message
+                    if fetch_result.outcome != REPLAY_OUTCOME_READY
+                    else None
+                ),
+            )
+            audit_state["logs_finished"] = True
+        main_audit_finished = audit_state["logs_finished"]
+        if fetch_result.outcome == REPLAY_OUTCOME_LIMIT:
+            mark_replay_account_cooldown(
+                path,
+                account_label=reservation.account_label,
+                error=fetch_result.message or REPLAY_LIMIT_MESSAGE,
+                limits=budget_limits,
+                now=budget_now,
+            )
+        if fetch_result.outcome != REPLAY_OUTCOME_READY:
+            raise fetch_result.to_error()
+        logs = fetch_result.logs or []
+        response_players = fetch_result.players
         events = normalize_replay_events(logs)
         players = normalize_replay_players(logs, response_players, events)
-        _add_player_colors_to_events(events, players)
+        color_source = apply_replay_player_colors(events, players)
         carcassonne_lab_url = build_carcassonne_lab_url(events, players)
         board_stats = build_board_stats(events)
         meeple_stats = build_meeple_stats(events, players, logs)
         scoring = build_scoring_stats(logs, players)
         player_time = build_player_time_stats(logs, players)
         fetched_at = _utc_now()
+
+        if (
+            color_refresh
+            and preserve_existing_fallback
+            and preserve_ready_replay
+            and cached is not None
+            and cached["color_source"] == COLOR_SOURCE_FALLBACK
+            and color_source == COLOR_SOURCE_FALLBACK
+        ):
+            with sqlite3.connect(path) as conn:
+                conn.execute(
+                    """
+                    UPDATE game_replays
+                    SET color_refresh_count = color_refresh_count + 1,
+                        last_error = NULL,
+                        updated_at = ?
+                    WHERE game_id = ?
+                    """,
+                    (fetched_at, normalized_game_id),
+                )
+                conn.commit()
+            summary = _summary_from_row(cached, cached=False)
+            summary["account_label"] = reservation.account_label
+            summary["refresh_applied"] = False
+            return summary
 
         with sqlite3.connect(path) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
@@ -264,6 +736,8 @@ def fetch_and_store_game_replay(
                     meeple_stats_json = ?,
                     scoring_json = ?,
                     player_time_json = ?,
+                    color_source = ?,
+                    color_refresh_count = color_refresh_count + ?,
                     fetched_at = ?,
                     last_error = NULL,
                     updated_at = ?
@@ -277,6 +751,8 @@ def fetch_and_store_game_replay(
                     _to_json(meeple_stats),
                     _to_json(scoring),
                     _to_json(player_time),
+                    color_source,
+                    int(color_refresh),
                     fetched_at,
                     fetched_at,
                     normalized_game_id,
@@ -294,28 +770,93 @@ def fetch_and_store_game_replay(
             "meeple_stats": meeple_stats,
             "scoring": scoring,
             "player_time": player_time,
+            "color_source": color_source,
+            "account_label": reservation.account_label,
+            "refresh_applied": bool(color_refresh),
             "fetched_at": fetched_at,
             "cached": False,
         }
-    except Exception as exc:
-        error_message = str(exc) or exc.__class__.__name__
+    except Exception as caught_error:
+        replay_error = (
+            caught_error
+            if isinstance(caught_error, GameReplayError)
+            else _classify_replay_exception(caught_error, endpoint=LOGS_PATH)
+        )
+        error_message = str(replay_error) or replay_error.__class__.__name__
+        main_audit_finished = (
+            main_audit_finished or audit_state["logs_finished"]
+        )
+        if not main_audit_finished:
+            replay_outcome = getattr(
+                replay_error,
+                "outcome",
+                REPLAY_OUTCOME_TEMPORARY_ERROR,
+            )
+            finish_replay_request_audit(
+                path,
+                reservation.request_id,
+                outcome=replay_outcome,
+                error=error_message,
+            )
+            if replay_outcome == REPLAY_OUTCOME_LIMIT:
+                mark_replay_account_cooldown(
+                    path,
+                    account_label=reservation.account_label,
+                    error=error_message,
+                    limits=budget_limits,
+                    now=budget_now,
+                )
         failed_at = _utc_now()
+        archive_requested = bool(
+            isinstance(replay_error, BgaReplayError)
+            and replay_error.archive_requested
+        )
         with sqlite3.connect(path) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute(
                 """
                 UPDATE game_replays
-                SET status = 'error',
+                SET status = CASE WHEN ? THEN 'ready' ELSE 'error' END,
                     last_error = ?,
+                    archive_requested_at = CASE
+                      WHEN ? THEN COALESCE(archive_requested_at, ?)
+                      ELSE archive_requested_at
+                    END,
                     updated_at = ?
                 WHERE game_id = ?
                 """,
-                (error_message, failed_at, normalized_game_id),
+                (
+                    int(preserve_ready_replay),
+                    error_message,
+                    int(archive_requested),
+                    failed_at,
+                    failed_at,
+                    normalized_game_id,
+                ),
             )
             conn.commit()
-        if isinstance(exc, GameReplayError):
+        if isinstance(caught_error, GameReplayError):
             raise
-        raise GameReplayError(error_message) from exc
+        raise replay_error from caught_error
+
+
+def fetch_and_store_game_replay_with_budget(
+    db_path: str | Path,
+    game_id: str,
+    *,
+    force: bool = False,
+    request_class: str = "manual",
+    replay_fetcher: Callable[..., dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Fetch once through the shared persistent budget/account gateway."""
+    if replay_fetcher is None:
+        replay_fetcher = fetch_and_store_game_replay
+    return replay_fetcher(
+        db_path,
+        game_id,
+        force=force,
+        request_class=request_class,
+    )
 
 
 def fetch_and_store_game_replay_with_account_rotation(
@@ -323,88 +864,168 @@ def fetch_and_store_game_replay_with_account_rotation(
     game_id: str,
     *,
     force: bool = False,
-    poll_attempts: int = 10,
-    poll_delay: float = 1.0,
-    sleep: Sleep = time.sleep,
+    request_class: str = "manual",
     max_account_attempts: int | None = None,
     replay_fetcher: Callable[..., dict[str, Any]] | None = None,
     account_rotator: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
-    """Fetch a replay and rotate through configured BGA accounts on failure."""
-    if replay_fetcher is None:
-        replay_fetcher = fetch_and_store_game_replay
-    if account_rotator is None:
-        from .http_session import rotate_http_session
-
-        account_rotator = rotate_http_session
-    if max_account_attempts is None:
-        from .bga_login import get_bga_credentials
-
-        max_account_attempts = len(get_bga_credentials())
-    attempts = max_account_attempts
-    attempts = max(1, int(attempts or 1))
-
-    for attempt in range(attempts):
-        try:
-            return replay_fetcher(
-                db_path,
-                game_id,
-                force=force or attempt > 0,
-                poll_attempts=poll_attempts,
-                poll_delay=poll_delay,
-                sleep=sleep,
-            )
-        except GameReplayError as replay_error:
-            if attempt + 1 >= attempts:
-                raise
-            try:
-                account_rotator(
-                    reason=f"game_replay_retry_{attempt + 2}_of_{attempts}"
-                )
-            except Exception as rotation_error:
-                raise GameReplayError(
-                    f"{replay_error}; failed to switch BGA account: {rotation_error}"
-                ) from rotation_error
-
-    raise GameReplayError(f"Failed to fetch replay for game {game_id}")
+    """Deprecated compatibility alias; account cascading is intentionally disabled."""
+    del max_account_attempts, account_rotator
+    return fetch_and_store_game_replay_with_budget(
+        db_path,
+        game_id,
+        force=force,
+        request_class=request_class,
+        replay_fetcher=replay_fetcher,
+    )
 
 
 def fetch_bga_replay(
     table_id: str,
     *,
     request: RequestJson,
-    poll_attempts: int = 10,
-    poll_delay: float = 1.0,
-    sleep: Sleep = time.sleep,
-) -> tuple[list[Any], Any]:
+    request_archive: bool = True,
+) -> ReplayFetchResult:
     params = {"table": table_id, "translated": "true"}
-    payload = request(LOGS_PATH, params=params)
+    try:
+        payload = request(LOGS_PATH, params=params)
+    except Exception as exc:
+        return _failure_result_from_exception(exc, endpoint=LOGS_PATH)
     logs = _extract_logs(payload)
     if logs is not None:
-        return logs, _extract_players(payload)
+        return ReplayFetchResult(
+            outcome=REPLAY_OUTCOME_READY,
+            endpoint=LOGS_PATH,
+            logs=logs,
+            players=_extract_players(payload),
+        )
 
     error_message = _response_error(payload)
     if MISSING_ARCHIVE_MESSAGE not in error_message:
-        raise BgaReplayError(error_message or "BGA did not return replay logs")
+        return _failure_result_from_message(
+            error_message or "BGA did not return replay logs",
+            endpoint=LOGS_PATH,
+        )
 
-    archive_payload = request(ARCHIVE_REQUEST_PATH, params={"table": table_id})
+    if not request_archive:
+        return ReplayFetchResult(
+            outcome=REPLAY_OUTCOME_ARCHIVE_MISSING,
+            endpoint=LOGS_PATH,
+            message=(
+                f"{error_message}; archive was already requested via "
+                f"endpoint={ARCHIVE_REQUEST_PATH}"
+            ),
+        )
+
+    try:
+        archive_payload = request(ARCHIVE_REQUEST_PATH, params={"table": table_id})
+    except Exception as exc:
+        result = _failure_result_from_exception(exc, endpoint=ARCHIVE_REQUEST_PATH)
+        return ReplayFetchResult(
+            outcome=result.outcome,
+            endpoint=result.endpoint,
+            message=result.message,
+            archive_requested=True,
+        )
     archive_error = _response_error(archive_payload)
     if _is_failed_response(archive_payload) and MISSING_ARCHIVE_MESSAGE not in archive_error:
-        raise BgaReplayError(archive_error or "BGA rejected the archive request")
+        result = _failure_result_from_message(
+            archive_error or "BGA rejected the archive request",
+            endpoint=ARCHIVE_REQUEST_PATH,
+        )
+        return ReplayFetchResult(
+            outcome=result.outcome,
+            endpoint=result.endpoint,
+            message=result.message,
+            archive_requested=True,
+        )
 
-    last_error = error_message
-    for attempt in range(poll_attempts):
-        if attempt > 0 and poll_delay:
-            sleep(poll_delay)
-        payload = request(LOGS_PATH, params=params)
-        logs = _extract_logs(payload)
-        if logs is not None:
-            return logs, _extract_players(payload)
-        last_error = _response_error(payload) or "BGA did not return replay logs yet"
+    return ReplayFetchResult(
+        outcome=REPLAY_OUTCOME_ARCHIVE_MISSING,
+        endpoint=LOGS_PATH,
+        message=(
+            f"{error_message}; archive request sent to "
+            f"endpoint={ARCHIVE_REQUEST_PATH}; no polling was performed"
+        ),
+        archive_requested=True,
+    )
 
-    raise BgaReplayError(
-        f"Replay archive was requested but did not become available after "
-        f"{poll_attempts} attempts: {last_error}"
+
+def _failure_result_from_exception(
+    exc: Exception,
+    *,
+    endpoint: str,
+) -> ReplayFetchResult:
+    if isinstance(exc, BgaReplayError):
+        return ReplayFetchResult(
+            outcome=exc.outcome,
+            endpoint=exc.endpoint,
+            message=exc.detail,
+            archive_requested=exc.archive_requested,
+        )
+    classified = _classify_replay_exception(exc, endpoint=endpoint)
+    return ReplayFetchResult(
+        outcome=classified.outcome,
+        endpoint=classified.endpoint,
+        message=classified.detail,
+        archive_requested=classified.archive_requested,
+    )
+
+
+def _failure_result_from_message(
+    message: str,
+    *,
+    endpoint: str,
+) -> ReplayFetchResult:
+    error = _classify_replay_message(message, endpoint=endpoint)
+    return ReplayFetchResult(
+        outcome=error.outcome,
+        endpoint=error.endpoint,
+        message=error.detail,
+    )
+
+
+def _classify_replay_exception(
+    exc: Exception,
+    *,
+    endpoint: str,
+) -> BgaReplayError:
+    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+    message = str(exc) or exc.__class__.__name__
+    if status_code in (401, 403):
+        return ReplayAccessError(message, endpoint=endpoint)
+    return _classify_replay_message(message, endpoint=endpoint)
+
+
+def _classify_replay_message(
+    message: str,
+    *,
+    endpoint: str,
+) -> BgaReplayError:
+    normalized = str(message or "").strip()
+    lowered = normalized.lower()
+    if REPLAY_LIMIT_MESSAGE in lowered:
+        return ReplayLimitError(normalized, endpoint=endpoint)
+    access_markers = (
+        "access denied",
+        "permission denied",
+        "not allowed",
+        "not authorized",
+        "unauthorized",
+        "forbidden",
+        "authentication",
+        "authenticate",
+        "credentials",
+        "invalid session",
+        "session expired",
+        "log in",
+        "login",
+    )
+    if any(marker in lowered for marker in access_markers):
+        return ReplayAccessError(normalized, endpoint=endpoint)
+    return TemporaryReplayError(
+        normalized or "BGA did not return replay logs",
+        endpoint=endpoint,
     )
 
 
@@ -589,6 +1210,31 @@ def build_meeple_stats(
         "remaining_on_board_at_end": max(0, total_placements - total_returns),
         "players": player_rows,
     }
+
+
+def _synchronize_meeple_stats_colors(
+    meeple_stats: dict[str, Any],
+    players: list[dict[str, Any]],
+) -> None:
+    colors_by_id = {
+        player_id: (
+            _optional_text(player.get("color_hex")),
+            _optional_text(player.get("meeple_color")),
+        )
+        for player in players
+        if isinstance(player, dict)
+        and (player_id := _optional_text(player.get("player_id")))
+    }
+    player_rows = meeple_stats.get("players")
+    if not isinstance(player_rows, list):
+        return
+    for player_row in player_rows:
+        if not isinstance(player_row, dict):
+            continue
+        player_id = _optional_text(player_row.get("player_id"))
+        color_hex, meeple_color = colors_by_id.get(player_id, (None, None))
+        player_row["color_hex"] = color_hex
+        player_row["meeple_color"] = meeple_color
 
 
 def build_scoring_stats(
@@ -915,6 +1561,117 @@ def normalize_replay_players(
     return list(players_by_id.values())
 
 
+def apply_replay_player_colors(
+    events: list[dict[str, Any]],
+    players: list[dict[str, Any]],
+) -> str:
+    """Apply one complete BGA palette or one complete fallback palette."""
+    moving_player_ids = _moving_player_ids(events)
+    players_by_id = {
+        player_id: player
+        for player in players
+        if isinstance(player, dict)
+        and (player_id := _optional_text(player.get("player_id")))
+    }
+    for player_id in moving_player_ids:
+        if player_id in players_by_id:
+            continue
+        first_event = next(
+            (
+                event
+                for event in events
+                if _optional_text(event.get("player_id")) == player_id
+            ),
+            {},
+        )
+        player = {
+            "player_id": player_id,
+            "player_name": _optional_text(first_event.get("player_name")),
+            "color_hex": None,
+            "meeple_color": None,
+        }
+        players.append(player)
+        players_by_id[player_id] = player
+
+    if _has_complete_bga_colors(events, players):
+        for player_id in moving_player_ids:
+            player = players_by_id[player_id]
+            color_hex = _normalize_color_hex(player.get("color_hex"))
+            player["color_hex"] = color_hex
+            player["meeple_color"] = MEEPLE_COLOR_NAMES[color_hex]
+        color_source = COLOR_SOURCE_BGA
+    else:
+        # Never mix a real BGA color with a local fallback color.
+        for player in players:
+            if not isinstance(player, dict):
+                continue
+            player["color_hex"] = None
+            player["meeple_color"] = None
+
+        fallback_player_ids = list(moving_player_ids)
+        for player in players:
+            player_id = (
+                _optional_text(player.get("player_id"))
+                if isinstance(player, dict)
+                else None
+            )
+            if player_id and player_id not in fallback_player_ids:
+                fallback_player_ids.append(player_id)
+
+        for player_id, meeple_color in zip(
+            fallback_player_ids,
+            CARCASSONNE_LAB_FALLBACK_COLORS,
+        ):
+            player = players_by_id.get(player_id)
+            if player is None:
+                continue
+            player["color_hex"] = FALLBACK_COLOR_HEXES[meeple_color]
+            player["meeple_color"] = meeple_color
+        color_source = COLOR_SOURCE_FALLBACK
+
+    _add_player_colors_to_events(events, players)
+    return color_source
+
+
+def _moving_player_ids(events: list[dict[str, Any]]) -> list[str]:
+    player_ids: list[str] = []
+    for event in events:
+        if not isinstance(event, dict) or event.get("type") != "playTile":
+            continue
+        player_id = _optional_text(event.get("player_id"))
+        if player_id and player_id not in player_ids:
+            player_ids.append(player_id)
+    return player_ids
+
+
+def _has_complete_bga_colors(
+    events: list[dict[str, Any]],
+    players: list[dict[str, Any]],
+) -> bool:
+    moving_player_ids = _moving_player_ids(events)
+    if len(moving_player_ids) != 2:
+        return False
+
+    players_by_id = {
+        player_id: player
+        for player in players
+        if isinstance(player, dict)
+        and (player_id := _optional_text(player.get("player_id")))
+    }
+    color_hexes: list[str] = []
+    for player_id in moving_player_ids:
+        player = players_by_id.get(player_id)
+        color_hex = (
+            _normalize_color_hex(player.get("color_hex"))
+            if isinstance(player, dict)
+            else None
+        )
+        if color_hex not in MEEPLE_COLOR_NAMES:
+            return False
+        color_hexes.append(color_hex)
+    return len(set(color_hexes)) == 2
+
+
 def build_carcassonne_lab_url(
     events: list[dict[str, Any]],
     players: list[dict[str, Any]],
@@ -960,8 +1717,6 @@ def build_carcassonne_lab_url(
                 or player_id
             )
             player_color = _optional_text(details.get("meeple_color"))
-            if not player_color and len(player_ids) < len(CARCASSONNE_LAB_FALLBACK_COLORS):
-                player_color = CARCASSONNE_LAB_FALLBACK_COLORS[len(player_ids)]
             if not player_color:
                 return None
             player_ids.append(player_id)
@@ -1044,9 +1799,15 @@ def _add_player_colors_to_events(
     colors_by_id = {
         str(player["player_id"]): player
         for player in players
-        if player.get("player_id") and player.get("color_hex")
+        if (
+            player.get("player_id")
+            and player.get("color_hex")
+            and player.get("meeple_color")
+        )
     }
     for event in events:
+        event.pop("color_hex", None)
+        event.pop("meeple_color", None)
         player = colors_by_id.get(str(event.get("player_id") or ""))
         if not player:
             continue
@@ -1416,6 +2177,7 @@ def _summary_from_row(row: sqlite3.Row, *, cached: bool) -> dict[str, Any]:
         "meeple_stats": _from_json(row["meeple_stats_json"], {}),
         "scoring": _from_json(row["scoring_json"], {}),
         "player_time": _from_json(row["player_time_json"], {}),
+        "color_source": row["color_source"],
         "fetched_at": row["fetched_at"],
         "cached": cached,
     }

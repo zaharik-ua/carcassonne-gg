@@ -89,6 +89,9 @@ import {
   canManageTournamentAccessUsers,
   createRequireTournamentAdmin,
 } from "./tournament-admin-access.js";
+import { ensureGameReplaysSchema as ensureGameReplaysSchemaForDb } from "./bga-replay-schema.js";
+import { registerBgaReplayAdminRoutes } from "./bga-replay-admin.js";
+import { loadPublicGamesByDuelIds } from "./bga-replay-public.js";
 
 dotenv.config();
 
@@ -1988,46 +1991,7 @@ function loadDuelsByIds(duelIds, callback) {
 }
 
 function loadGamesByDuelIds(duelIds, callback) {
-  const normalizedIds = Array.from(new Set(
-    (Array.isArray(duelIds) ? duelIds : [])
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-  ));
-  if (!normalizedIds.length) {
-    callback(null, []);
-    return;
-  }
-  const placeholders = normalizedIds.map(() => "?").join(", ");
-  return db.all(
-    `
-      SELECT
-        g.id,
-        g.duel_id,
-        g.bga_table_id,
-        g.game_number,
-        g.player_1_score,
-        g.player_2_score,
-        g.player_1_rank,
-        g.player_2_rank,
-        g.player_1_clock,
-        g.player_2_clock,
-        g.status,
-        gr.carcassonne_lab_url,
-        gr.board_stats_json,
-        gr.meeple_stats_json,
-        gr.scoring_json,
-        gr.player_time_json
-      FROM games g
-      LEFT JOIN game_replays gr
-        ON gr.game_id = g.id
-       AND gr.status = 'ready'
-      WHERE trim(COALESCE(g.duel_id, '')) IN (${placeholders})
-        AND g.deleted_at IS NULL
-      ORDER BY g.duel_id COLLATE NOCASE ASC, g.game_number ASC, g.id ASC
-    `,
-    normalizedIds,
-    callback
-  );
+  return loadPublicGamesByDuelIds(db, duelIds, callback);
 }
 
 function dbGetAsync(sql, params = []) {
@@ -5867,66 +5831,8 @@ function ensureGamesSchema() {
 }
 
 function ensureGameReplaysSchema() {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS game_replays (
-      game_id TEXT PRIMARY KEY,
-      bga_table_id TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      events_json TEXT,
-      players_json TEXT,
-      carcassonne_lab_url TEXT,
-      board_stats_json TEXT,
-      meeple_stats_json TEXT,
-      scoring_json TEXT,
-      player_time_json TEXT,
-      fetched_at TEXT,
-      last_attempt_at TEXT,
-      last_error TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (game_id) REFERENCES games(id)
-        ON UPDATE CASCADE ON DELETE CASCADE
-    )
-  `, (createErr) => {
-    if (createErr) {
-      console.error("Failed to ensure game_replays schema", createErr);
-      return;
-    }
-    db.all("PRAGMA table_info(game_replays)", (pragmaErr, columns) => {
-      if (pragmaErr) {
-        console.error("Failed to inspect game_replays schema", pragmaErr);
-        return;
-      }
-      if (!Array.isArray(columns) || columns.length === 0) return;
-      addColumnIfMissing(columns, "game_replays", "carcassonne_lab_url", "TEXT");
-      addColumnIfMissing(columns, "game_replays", "board_stats_json", "TEXT");
-      addColumnIfMissing(columns, "game_replays", "meeple_stats_json", "TEXT");
-      addColumnIfMissing(columns, "game_replays", "scoring_json", "TEXT");
-      addColumnIfMissing(columns, "game_replays", "player_time_json", "TEXT");
-      [
-        "logs_json",
-        "event_count",
-        "tile_count",
-        "meeple_count",
-        "archive_requested",
-      ].forEach((columnName) => {
-        if (!columns.some((column) => column.name === columnName)) return;
-        db.run(
-          `ALTER TABLE game_replays DROP COLUMN ${quoteSqlIdentifier(columnName)}`,
-          (dropErr) => {
-            if (dropErr) {
-              console.error(`Failed to drop game_replays.${columnName}`, dropErr);
-            }
-          }
-        );
-      });
-    });
-    db.run(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_game_replays_bga_table_id ON game_replays(bga_table_id)",
-      (indexErr) => {
-        if (indexErr) console.error("Failed to ensure idx_game_replays_bga_table_id", indexErr);
-      }
-    );
+  ensureGameReplaysSchemaForDb(db).catch((error) => {
+    console.error("Failed to ensure game_replays schema", error);
   });
 }
 
@@ -8460,6 +8366,13 @@ registerInPersonRoutes(app, {
   requireAdmin,
   requireAuthenticated,
   requireInPersonTournamentAdmin,
+});
+
+registerBgaReplayAdminRoutes(app, {
+  db,
+  requireAdmin,
+  getAuditActor,
+  logAuditEvent,
 });
 
 function requireActorAuthenticated(req, res, next) {

@@ -594,3 +594,66 @@ status не змінилися чи BGA-запит завершився поми
 `bga_data_updated_at` порожнє або строго раніше заданого UTC date/time. Профілі,
 оновлені в момент відсічення або після нього, пропускаються. Порожня опція не
 застосовує фільтр за датою.
+
+## 17) Systemd timers для BGA replay
+
+Replay-черга має спільний шаблонний service і два незалежні timers:
+
+- `systemd/bga-replay-worker@.service`;
+- `systemd/bga-replay-fresh.timer` — кожні 2 хвилини;
+- `systemd/bga-replay-historical.timer` — кожні 30 хвилин.
+
+Початкове встановлення навмисно не вмикає timers:
+
+```bash
+cd /home/carcassonne-gg/auth-server
+sudo cp systemd/bga-replay-worker@.service /etc/systemd/system/
+sudo cp systemd/bga-replay-fresh.timer /etc/systemd/system/
+sudo cp systemd/bga-replay-historical.timer /etc/systemd/system/
+sudo cp systemd/bga-replay-worker.logrotate /etc/logrotate.d/bga-replay-worker
+sudo systemctl daemon-reload
+sudo systemctl disable --now bga-replay-fresh.timer bga-replay-historical.timer
+```
+
+Спочатку потрібно перевірити чергу й бюджет та виконати один ручний smoke test:
+
+```bash
+./.venv/bin/python retry_pending_game_replays.py \
+  --queue-class fresh --limit 1
+```
+
+Після перевірки спочатку вмикається тільки fresh:
+
+```bash
+sudo systemctl enable --now bga-replay-fresh.timer
+```
+
+Historical вмикається окремо після спостереження за fresh:
+
+```bash
+sudo systemctl enable --now bga-replay-historical.timer
+```
+
+Обидва режими використовують спільний lock, персистентний rolling budget і не
+виконують більше трьох `logs.html` за один запуск. Лог записується до
+`/var/log/carcassonne/bga-replay-worker.log`. Детальні preview-запити до SQLite
+наведені в `update_matches/README.md`.
+
+## 18) Admin monitoring для BGA replay
+
+У `gg-html/admin.html` глобальним адміністраторам доступний розділ
+`BGA Replay Queue`. Він показує fresh/historical черги, rolling-24h використання
+кожного BGA-акаунта, ефективні ліміти, cooldown-и та повну історію тимчасових
+budget override-ів.
+
+Внутрішній admin-only API:
+
+```text
+GET    /admin/bga-replay-budget
+POST   /admin/bga-replay-budget/overrides
+DELETE /admin/bga-replay-budget/overrides/{id}
+```
+
+Новий override атомарно відкликає попередній активний запис для вибраних
+акаунтів. Historical boost, тимчасовий total limit, expiry та причина
+перевіряються сервером; відкликані й прострочені записи не видаляються.

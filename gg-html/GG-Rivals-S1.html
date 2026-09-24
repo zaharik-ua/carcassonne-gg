@@ -4326,7 +4326,7 @@
         section.className = "group-section";
       }
 
-      // Header row: title (if any) on left, full view button on right
+      // Header row with an optional group title
       const headerRow = document.createElement("div");
       headerRow.className = "section-header";
 
@@ -4345,12 +4345,6 @@
         title.style.flex = "1";
       }
       headerRow.appendChild(title);
-
-      const fullViewBtn = document.createElement("button");
-      fullViewBtn.type = "button";
-      fullViewBtn.className = "fullview-btn";
-      fullViewBtn.textContent = "Full View";
-      headerRow.appendChild(fullViewBtn);
 
       section.appendChild(headerRow);
 
@@ -4633,24 +4627,6 @@
 
       renderStandingsTable();
 
-      const standingsColumns = isTeam
-        ? ['MP','MW','ML','DW','DL','GW','GL']
-        : (isBountyTprStandings
-          ? ['MP', 'MW', 'ML', 'Points']
-          : (isSwissStandings ? ['MP','MW','ML','GW','GL','OMW','OGD','OGW'] : ['MP','MW','ML','GW','GL']));
-      fullViewBtn.addEventListener('click', () => {
-        openTableFullscreen({
-          sourceTable: table,
-          participants: isBountyTprStandings ? [] : participants,
-          groupPlayers,
-          isTeam,
-          group,
-          stageFilter,
-          standingsColumns,
-          tournamentId,
-          tournamentContext: tournament
-        });
-      });
       container.appendChild(section);
     }
 

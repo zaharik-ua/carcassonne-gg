@@ -13,11 +13,11 @@ except ImportError:  # pragma: no cover
     def load_dotenv() -> None:
         return None
 
-from .game_replay import ensure_game_replays_schema
 from .manual_replay_batch import ReplayFetcher, process_manual_replay_games
+from .game_replay import ensure_game_replays_schema
 
 
-class MatchNotFoundError(RuntimeError):
+class DuelNotFoundError(RuntimeError):
     pass
 
 
@@ -27,55 +27,26 @@ def _default_db_path() -> Path:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch and store BGA replays for every game in a match."
+        description="Fetch BGA replays for active games of one exact duel."
     )
-    parser.add_argument("match_id", help="Exact id of the row in the matches table")
+    parser.add_argument("duel_id", help="Exact id of the row in the duels table")
     parser.add_argument(
         "--db-path",
         default=os.getenv("AUTH_SQLITE_PATH") or os.getenv("DB_PATH") or str(_default_db_path()),
-        help="Path to auth.sqlite (defaults to AUTH_SQLITE_PATH, DB_PATH, or data/auth.sqlite)",
+        help="Path to auth.sqlite",
     )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Fetch every replay again, including ready replays",
-    )
-    parser.add_argument(
-        "--include-pending",
-        action="store_true",
-        help="Fetch games whose replay is not ready yet",
-    )
-    parser.add_argument(
-        "--include-errors",
-        action="store_true",
-        help="Retry games whose replay is in an error state",
-    )
-    parser.add_argument(
-        "--include-fallback",
-        action="store_true",
-        help="Refresh ready replays that still use fallback colors",
-    )
-    parser.add_argument(
-        "--max-requests",
-        type=int,
-        default=3,
-        help="Hard limit for BGA logs requests in this run (default: 3)",
-    )
-    parser.add_argument(
-        "--max-failed-games",
-        type=int,
-        default=1,
-        help=(
-            "Stop after this many games fail through the shared replay gateway "
-            "(default: 1)"
-        ),
-    )
+    parser.add_argument("--max-requests", type=int, default=3)
+    parser.add_argument("--max-failed-games", type=int, default=1)
+    parser.add_argument("--include-pending", action="store_true")
+    parser.add_argument("--include-errors", action="store_true")
+    parser.add_argument("--include-fallback", action="store_true")
+    parser.add_argument("--force", action="store_true")
     return parser.parse_args()
 
 
-def fetch_and_store_match_game_replays(
+def fetch_and_store_duel_game_replays(
     db_path: str | Path,
-    match_id: str,
+    duel_id: str,
     *,
     force: bool = False,
     include_pending: bool = False,
@@ -85,52 +56,40 @@ def fetch_and_store_match_game_replays(
     max_failed_games: int = 1,
     replay_fetcher: ReplayFetcher | None = None,
 ) -> dict[str, Any]:
-    normalized_match_id = str(match_id or "").strip()
-    if not normalized_match_id:
-        raise ValueError("matches.id must not be empty")
-    if max_failed_games < 1:
-        raise ValueError("max_failed_games must be at least 1")
-
+    normalized_duel_id = str(duel_id or "").strip()
+    if not normalized_duel_id:
+        raise ValueError("duels.id must not be empty")
     path = Path(db_path).expanduser()
     with sqlite3.connect(path) as conn:
         conn.row_factory = sqlite3.Row
         ensure_game_replays_schema(conn)
-        match = conn.execute(
+        duel = conn.execute(
             """
             SELECT id
-            FROM matches
+            FROM duels
             WHERE trim(COALESCE(id, '')) = trim(?)
               AND trim(COALESCE(deleted_at, '')) = ''
             LIMIT 1
             """,
-            (normalized_match_id,),
+            (normalized_duel_id,),
         ).fetchone()
-        if match is None:
-            raise MatchNotFoundError(f"Match not found: matches.id={normalized_match_id}")
-
+        if duel is None:
+            raise DuelNotFoundError(f"Duel not found: duels.id={normalized_duel_id}")
         games = conn.execute(
             """
             SELECT
               g.id AS game_id,
+              g.duel_id,
               g.bga_table_id,
-              d.id AS duel_id,
               gr.status AS replay_status,
               gr.color_source
-            FROM duels d
-            JOIN games g
-              ON trim(COALESCE(g.duel_id, '')) = trim(COALESCE(d.id, ''))
+            FROM games g
             LEFT JOIN game_replays gr ON gr.game_id = g.id
-            WHERE trim(COALESCE(d.match_id, '')) = trim(?)
-              AND trim(COALESCE(d.deleted_at, '')) = ''
+            WHERE trim(COALESCE(g.duel_id, '')) = trim(?)
               AND trim(COALESCE(g.deleted_at, '')) = ''
-              AND trim(COALESCE(g.id, '')) <> ''
-            ORDER BY
-              COALESCE(d.duel_number, 999999) ASC,
-              d.id COLLATE NOCASE ASC,
-              COALESCE(g.game_number, 999999) ASC,
-              g.id COLLATE NOCASE ASC
+            ORDER BY COALESCE(g.game_number, 999999), g.id COLLATE NOCASE
             """,
-            (normalized_match_id,),
+            (normalized_duel_id,),
         ).fetchall()
 
     kwargs: dict[str, Any] = {}
@@ -147,7 +106,7 @@ def fetch_and_store_match_game_replays(
         max_failed_games=max_failed_games,
         **kwargs,
     )
-    summary["match_id"] = normalized_match_id
+    summary["duel_id"] = normalized_duel_id
     return summary
 
 
@@ -155,9 +114,9 @@ def main() -> int:
     load_dotenv()
     args = parse_args()
     try:
-        summary = fetch_and_store_match_game_replays(
+        summary = fetch_and_store_duel_game_replays(
             args.db_path,
-            args.match_id,
+            args.duel_id,
             force=args.force,
             include_pending=args.include_pending,
             include_errors=args.include_errors,
@@ -165,7 +124,7 @@ def main() -> int:
             max_requests=args.max_requests,
             max_failed_games=args.max_failed_games,
         )
-    except (MatchNotFoundError, OSError, sqlite3.Error, ValueError) as exc:
+    except (DuelNotFoundError, OSError, sqlite3.Error, ValueError) as exc:
         print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False, indent=2))
         return 1
 

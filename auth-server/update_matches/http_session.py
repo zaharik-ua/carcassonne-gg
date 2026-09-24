@@ -63,9 +63,20 @@ def _is_expired() -> bool:
     return (time.time() - _last_refresh) > TOKEN_TTL_SECONDS
 
 
-def _credential_cycle(credentials: list[BGACredential], *, rotate_account: bool) -> list[tuple[int, BGACredential]]:
+def _credential_cycle(
+    credentials: list[BGACredential],
+    *,
+    rotate_account: bool,
+    account_label: str | None = None,
+) -> list[tuple[int, BGACredential]]:
     if not credentials:
         return []
+    if account_label is not None:
+        return [
+            (index, credential)
+            for index, credential in enumerate(credentials)
+            if credential.label == account_label
+        ]
 
     start_index = _credential_index % len(credentials)
     if rotate_account and len(credentials) > 1:
@@ -83,6 +94,7 @@ def refresh_http_session(
     *,
     rotate_account: bool = False,
     require_login: bool = False,
+    account_label: str | None = None,
 ) -> tuple[requests.Session, str]:
     global _session, _token, _last_refresh, _credential_index, _credential_label
 
@@ -91,7 +103,13 @@ def refresh_http_session(
         raise RuntimeError("Missing BGA credentials. Configure BGA_EMAIL/BGA_PASSWORD and optional BGA_EMAIL_N/BGA_PASSWORD_N.")
 
     attempts = 3
-    cycle = _credential_cycle(credentials, rotate_account=rotate_account)
+    cycle = _credential_cycle(
+        credentials,
+        rotate_account=rotate_account,
+        account_label=account_label,
+    )
+    if account_label is not None and not cycle:
+        raise RuntimeError(f"Unknown BGA account label: {account_label}")
     last_error: Exception | None = None
 
     for cycle_position, (credential_index, credential) in enumerate(cycle):
@@ -99,7 +117,14 @@ def refresh_http_session(
         for attempt in range(1, attempts + 1):
             try:
                 with driver_manager.use_driver(f"http_refresh_{int(time.time())}") as driver:
-                    switching_account = rotate_account or cycle_position > 0
+                    switching_account = (
+                        rotate_account
+                        or cycle_position > 0
+                        or (
+                            account_label is not None
+                            and _credential_label != credential.label
+                        )
+                    )
                     if switching_account:
                         driver.get(BASE_URL)
                         try:
@@ -188,7 +213,7 @@ def refresh_http_session(
                 )
                 break
 
-        if len(credentials) > 1:
+        if account_label is None and len(credentials) > 1:
             print(
                 f"🔁 Switching BGA account after refresh failure ({reason}, account={credential.label})",
                 file=sys.stderr,
@@ -205,6 +230,30 @@ def get_http_session(force_refresh: bool = False) -> tuple[requests.Session, str
     with _lock:
         if _session is None or _token is None or force_refresh or _is_expired():
             refresh_http_session(reason="forced" if force_refresh else "expired")
+        return _session, _token
+
+
+def get_http_session_for_account(
+    account_label: str,
+    *,
+    force_refresh: bool = False,
+) -> tuple[requests.Session, str]:
+    global _session, _token
+    normalized_label = str(account_label or "").strip()
+    if not normalized_label:
+        raise ValueError("account_label must not be empty")
+    with _lock:
+        if (
+            _session is None
+            or _token is None
+            or force_refresh
+            or _is_expired()
+            or _credential_label != normalized_label
+        ):
+            refresh_http_session(
+                reason=("forced" if force_refresh else "selected_for_replay"),
+                account_label=normalized_label,
+            )
         return _session, _token
 
 
@@ -231,7 +280,11 @@ def request_json(
     retry_on_auth: bool = True,
 ) -> dict:
     _throttle()
-    session, token = get_http_session()
+    selected_account_label = current_account_label()
+    if selected_account_label:
+        session, token = get_http_session_for_account(selected_account_label)
+    else:
+        session, token = get_http_session()
     merged_headers = {
         "X-Requested-With": "XMLHttpRequest",
         "X-Request-Token": token,
@@ -250,8 +303,15 @@ def request_json(
     )
 
     if response.status_code in (401, 403) and retry_on_auth:
-        refresh_http_session(reason=f"http_{response.status_code}")
-        session, token = get_http_session()
+        selected_account_label = current_account_label()
+        if selected_account_label:
+            session, token = get_http_session_for_account(
+                selected_account_label,
+                force_refresh=True,
+            )
+        else:
+            refresh_http_session(reason=f"http_{response.status_code}")
+            session, token = get_http_session()
         merged_headers["X-Request-Token"] = token
         _throttle()
         response = session.request(

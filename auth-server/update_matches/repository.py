@@ -26,7 +26,7 @@ class MatchRepository(ABC):
 
     @abstractmethod
     def save_match_result(self, match: MatchUpdateRequest, result: MatchUpdateResult) -> list[str]:
-        """Persist a BGA result and return newly created games eligible for replay sync."""
+        """Persist a BGA result and return newly created games queued for replay sync."""
 
     @abstractmethod
     def save_match_error(self, match: MatchUpdateRequest, message: str) -> None:

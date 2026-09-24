@@ -10,19 +10,17 @@ from . import game_replay_cli
 
 
 class GameReplayCliTest(unittest.TestCase):
-    def test_manual_command_uses_account_rotation_and_forwards_options(self) -> None:
+    def test_manual_command_uses_shared_gateway_entry_point(self) -> None:
         args = SimpleNamespace(
             db_path="/tmp/auth.sqlite",
             game_id="game-1",
             force=True,
-            poll_attempts=7,
-            poll_delay=0.5,
         )
         with (
             patch.object(game_replay_cli, "parse_args", return_value=args),
             patch.object(
                 game_replay_cli,
-                "fetch_and_store_game_replay_with_account_rotation",
+                "fetch_and_store_game_replay_with_budget",
                 return_value={"status": "ready"},
             ) as fetch_replay,
             redirect_stdout(io.StringIO()),
@@ -34,8 +32,6 @@ class GameReplayCliTest(unittest.TestCase):
             "/tmp/auth.sqlite",
             "game-1",
             force=True,
-            poll_attempts=7,
-            poll_delay=0.5,
         )
 
 

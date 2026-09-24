@@ -247,11 +247,28 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
             tables=[self._table("987654321")],
         )
 
+        before = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
         first_game_ids = self.repository.save_match_result(self._request("challenge"), result)
+        first_replay = self._load_game_replay("challenge-987654321")
         second_game_ids = self.repository.save_match_result(self._request("challenge"), result)
+        second_replay = self._load_game_replay("challenge-987654321")
+        after = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
 
         self.assertEqual(first_game_ids, ["challenge-987654321"])
         self.assertEqual(second_game_ids, [])
+        self.assertEqual(first_replay, second_replay)
+        self.assertEqual(first_replay["bga_table_id"], "987654321")
+        self.assertEqual(first_replay["status"], "pending")
+        self.assertEqual(first_replay["retry_reason"], "initial")
+        self.assertEqual(first_replay["queue_class"], "fresh")
+        self.assertEqual(first_replay["history_request_count"], 0)
+        self.assertEqual(first_replay["color_refresh_count"], 0)
+        self.assertIsNone(first_replay["color_source"])
+        queued_at = datetime.fromisoformat(first_replay["queued_at"])
+        next_attempt_at = datetime.fromisoformat(first_replay["next_attempt_at"])
+        self.assertLessEqual(before, queued_at)
+        self.assertLessEqual(queued_at, after)
+        self.assertEqual((next_attempt_at - queued_at).total_seconds(), 300)
 
     def test_new_ranked_non_challenge_game_is_returned_for_replay_only_once(self) -> None:
         result = MatchUpdateResult(
@@ -282,6 +299,7 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
 
         self.assertEqual(game_ids, [])
         self.assertEqual(self._game_count("planned"), 1)
+        self.assertIsNone(self._load_game_replay("planned-987654323"))
 
     def test_ranked_done_transition_queues_one_gg_elo_recalculation(self) -> None:
         self.repository.save_match_result(
@@ -774,6 +792,28 @@ class SqliteMatchRepositoryTest(unittest.TestCase):
                     (duel_id,),
                 ).fetchone()[0]
             )
+
+    def _load_game_replay(self, game_id: str) -> dict[str, object] | None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT
+                  bga_table_id,
+                  status,
+                  retry_reason,
+                  queue_class,
+                  queued_at,
+                  next_attempt_at,
+                  history_request_count,
+                  color_refresh_count,
+                  color_source
+                FROM game_replays
+                WHERE game_id = ?
+                """,
+                (game_id,),
+            ).fetchone()
+        return dict(row) if row is not None else None
 
     @staticmethod
     def _format_utc(value: datetime) -> str:

@@ -735,6 +735,193 @@
     overflow-wrap: anywhere;
   }
 
+  .replay-dashboard {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .replay-toolbar,
+  .replay-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .replay-generated-at {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .replay-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .replay-metric {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: #fafbfd;
+  }
+
+  .replay-metric-label {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .replay-metric-value {
+    display: block;
+    margin-top: 4px;
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .replay-metric-hint {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.35;
+  }
+
+  .replay-warning {
+    padding: 9px 10px;
+    border: 1px solid #efc36d;
+    border-radius: 5px;
+    background: #fff8e6;
+    color: #7a4b00;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .replay-panel {
+    display: grid;
+    gap: 8px;
+  }
+
+  .replay-panel h3 {
+    margin: 0;
+    font-size: 14px;
+  }
+
+  .replay-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+  }
+
+  .replay-table {
+    width: 100%;
+    min-width: 840px;
+    border-collapse: collapse;
+    background: #fff;
+    font-size: 11px;
+  }
+
+  .replay-table th,
+  .replay-table td {
+    padding: 8px;
+    border-bottom: 1px solid #e5e9ef;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .replay-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .replay-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .replay-account-label {
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  .replay-muted,
+  .replay-cell-detail {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.35;
+  }
+
+  .replay-status-pill {
+    display: inline-flex;
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: #e4f4e9;
+    color: var(--ok);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .replay-status-pill.warning {
+    background: #fff0d6;
+    color: #8a5200;
+  }
+
+  .replay-status-pill.error {
+    background: #fbe8e8;
+    color: var(--danger);
+  }
+
+  .replay-account-picker {
+    display: grid;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #fafbfd;
+  }
+
+  .replay-account-option {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .replay-account-option input {
+    width: auto;
+    height: auto;
+    margin: 0;
+  }
+
+  .replay-override-preview {
+    grid-column: 1 / -1;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-line;
+  }
+
+  .replay-presets {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
   @media (max-width: 640px) {
     .cp-edit-form {
       grid-template-columns: 1fr;
@@ -767,6 +954,10 @@
 
     .in-person-inline-city {
       grid-template-columns: 1fr;
+    }
+
+    .replay-summary-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>
@@ -834,6 +1025,7 @@
   const SYSTEM_SETTINGS_URL = `${AUTH_BASE}/system-settings`;
   const PROFILE_GG_ELO_SCRIPT_URL = `${AUTH_BASE}/admin-scripts/profile-gg-elo`;
   const PROFILE_BGA_DATA_SCRIPT_URL = `${AUTH_BASE}/admin-scripts/profile-bga-data`;
+  const BGA_REPLAY_BUDGET_URL = `${AUTH_BASE}/admin/bga-replay-budget`;
   const STREAMER_SCOREBOARD_STYLE_OPTIONS = ["Default", "Nallerheim"];
 
   const SECTION_CONFIG = {
@@ -971,6 +1163,13 @@
         },
       ]),
     },
+    bgaReplayQueue: {
+      key: "bgaReplayQueue",
+      title: "BGA Replay Queue",
+      buttonLabel: "",
+      createLabel: "New override",
+      load: () => apiJson(BGA_REPLAY_BUDGET_URL, { method: "GET" }).then((data) => [data]),
+    },
     systemSettings: {
       key: "systemSettings",
       title: "System Settings",
@@ -1052,6 +1251,7 @@
     challengePeriods: [],
     duelFormats: [],
     maintenanceScripts: [],
+    bgaReplayQueue: [],
     systemSettings: [],
     matchesReference: [],
     profilesPublic: [],
@@ -2176,7 +2376,7 @@
   function parseUtcDate(value) {
     const raw = String(value || "").trim();
     if (!raw) return null;
-    const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)
+    const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(raw)
       ? raw.replace(" ", "T") + "Z"
       : raw;
     const date = new Date(normalized);
@@ -7027,6 +7227,560 @@
     });
   }
 
+  function replayElement(tagName, className, text) {
+    const element = document.createElement(tagName);
+    if (className) element.className = className;
+    if (text !== undefined && text !== null) element.textContent = String(text);
+    return element;
+  }
+
+  function formatReplayDate(value) {
+    const date = parseUtcDate(value);
+    if (!date) return String(value || "-");
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  }
+
+  function createReplayMetric(label, value, hint) {
+    const metric = replayElement("div", "replay-metric");
+    metric.appendChild(replayElement("span", "replay-metric-label", label));
+    metric.appendChild(replayElement("strong", "replay-metric-value", value));
+    if (hint) metric.appendChild(replayElement("span", "replay-metric-hint", hint));
+    return metric;
+  }
+
+  function createReplayTable(headers) {
+    const wrap = replayElement("div", "replay-table-wrap");
+    const table = replayElement("table", "replay-table");
+    const head = document.createElement("thead");
+    const row = document.createElement("tr");
+    headers.forEach((header) => row.appendChild(replayElement("th", "", header)));
+    head.appendChild(row);
+    table.appendChild(head);
+    table.appendChild(document.createElement("tbody"));
+    wrap.appendChild(table);
+    return { wrap, table, body: table.querySelector("tbody") };
+  }
+
+  function replayCell(primary, detail) {
+    const cell = document.createElement("td");
+    cell.appendChild(replayElement("span", "", primary));
+    if (detail) cell.appendChild(replayElement("span", "replay-cell-detail", detail));
+    return cell;
+  }
+
+  async function refreshBgaReplayQueue(message) {
+    if (message) setStatus(message, false);
+    const data = await apiJson(BGA_REPLAY_BUDGET_URL, { method: "GET" });
+    state.bgaReplayQueue = [data];
+    sectionForm.classList.add("hidden");
+    sectionForm.innerHTML = "";
+    renderBgaReplayQueue();
+    setStatus("Replay queue refreshed.", false);
+  }
+
+  async function revokeReplayBudgetOverride(override) {
+    const label = String(override?.account_label || "this account");
+    if (!window.confirm(`Revoke override #${override.id} for ${label}?`)) return;
+    try {
+      setStatus("Revoking override...", false);
+      const data = await apiJson(
+        `${BGA_REPLAY_BUDGET_URL}/overrides/${encodeURIComponent(override.id)}`,
+        { method: "DELETE" }
+      );
+      state.bgaReplayQueue = [data];
+      sectionForm.classList.add("hidden");
+      sectionForm.innerHTML = "";
+      renderBgaReplayQueue();
+      setStatus("Replay budget override revoked.", false);
+    } catch (error) {
+      setStatus(error?.message || "Failed to revoke replay budget override.", true);
+    }
+  }
+
+  function renderBgaReplayQueue() {
+    sectionTitle.textContent = "BGA Replay Queue";
+    sectionCreateBtn.classList.remove("hidden");
+    sectionCreateBtn.textContent = "New override";
+    sectionCreateBtn.onclick = openReplayBudgetOverrideForm;
+
+    const data = state.bgaReplayQueue?.[0];
+    if (!data) {
+      renderListEmpty("Replay budget data is unavailable.");
+      return;
+    }
+
+    sectionList.innerHTML = "";
+    const dashboard = replayElement("div", "replay-dashboard");
+    const toolbar = replayElement("div", "replay-toolbar");
+    toolbar.appendChild(replayElement(
+      "span",
+      "replay-generated-at",
+      `Rolling ${Number(data.window_hours) || 24}h • updated ${formatReplayDate(data.generated_at)}`
+    ));
+    const refreshButton = replayElement("button", "cp-btn cp-btn-secondary", "Refresh");
+    refreshButton.type = "button";
+    refreshButton.addEventListener("click", () => {
+      refreshBgaReplayQueue("Refreshing replay queue...").catch((error) => {
+        setStatus(error?.message || "Failed to refresh replay queue.", true);
+      });
+    });
+    toolbar.appendChild(refreshButton);
+    dashboard.appendChild(toolbar);
+
+    const queue = data.queue || {};
+    const fresh = queue.fresh || {};
+    const historical = queue.historical || {};
+    const summary = replayElement("div", "replay-summary-grid");
+    summary.appendChild(createReplayMetric(
+      "Fresh queue",
+      Number(fresh.due) || 0,
+      `${Number(fresh.scheduled) || 0} scheduled`
+        + (fresh.oldest_queued_at ? ` • oldest ${formatReplayDate(fresh.oldest_queued_at)}` : "")
+    ));
+    summary.appendChild(createReplayMetric(
+      "Historical queue",
+      Number(historical.due) || 0,
+      `${Number(historical.scheduled) || 0} scheduled`
+        + (historical.oldest_queued_at ? ` • oldest ${formatReplayDate(historical.oldest_queued_at)}` : "")
+    ));
+    summary.appendChild(createReplayMetric(
+      "Ready replays",
+      (Number(queue.ready_bga) || 0) + (Number(queue.ready_fallback) || 0),
+      `${Number(queue.ready_bga) || 0} BGA • ${Number(queue.ready_fallback) || 0} fallback`
+    ));
+    summary.appendChild(createReplayMetric(
+      "Manual required",
+      Number(queue.manual_required) || 0,
+      `${Number(queue.errors) || 0} error rows`
+    ));
+    dashboard.appendChild(summary);
+
+    if ((Number(fresh.due) || 0) > 0 || (Number(fresh.scheduled) || 0) > 0) {
+      dashboard.appendChild(replayElement(
+        "div",
+        "replay-warning",
+        `Fresh work exists: ${Number(fresh.due) || 0} due and ${Number(fresh.scheduled) || 0} scheduled. `
+          + "Historical overrides never change fresh-priority ordering."
+      ));
+    }
+
+    const accountPanel = replayElement("section", "replay-panel");
+    const accountHead = replayElement("div", "replay-panel-head");
+    accountHead.appendChild(replayElement("h3", "", "Account budget — rolling 24h"));
+    accountHead.appendChild(replayElement(
+      "span",
+      "replay-muted",
+      `Base total ${data.base_limits?.total_limit ?? 80} • historical ${data.base_limits?.historical_limit ?? 30}`
+    ));
+    accountPanel.appendChild(accountHead);
+    const accountTable = createReplayTable([
+      "Account",
+      "Fresh",
+      "Historical",
+      "Manual",
+      "Available now",
+      "Limits / reserve",
+      "State",
+      "Override",
+    ]);
+    (data.accounts || []).forEach((account) => {
+      const row = document.createElement("tr");
+      const accountCell = replayCell(account.account_label, account.configured ? "Configured" : "Historical record");
+      accountCell.firstChild.className = "replay-account-label";
+      row.appendChild(accountCell);
+      row.appendChild(replayCell(
+        `${account.usage?.fresh?.attempts || 0} attempts`,
+        `${account.usage?.fresh?.successful || 0} successful`
+      ));
+      row.appendChild(replayCell(
+        `${account.usage?.historical?.attempts || 0} attempts`,
+        `${account.usage?.historical?.successful || 0} successful`
+      ));
+      row.appendChild(replayCell(
+        `${account.usage?.manual?.attempts || 0} attempts`,
+        `${account.usage?.manual?.successful || 0} successful`
+      ));
+      row.appendChild(replayCell(
+        `${account.limits?.total_available_now || 0} total`,
+        `${account.limits?.historical_available_now || 0} historical`
+      ));
+      row.appendChild(replayCell(
+        `${account.usage?.total_attempts || 0} / ${account.limits?.effective_total_limit || 0} total`,
+        `${account.usage?.historical?.attempts || 0} / ${account.limits?.effective_historical_limit || 0} historical • `
+          + `${account.limits?.effective_fresh_reserve || 0} fresh reserve • `
+          + `${account.limits?.protected_non_historical_available_now || 0} protected now • `
+          + `${account.usage?.override_attempts || 0} via override`
+      ));
+      const stateCell = document.createElement("td");
+      const cooldown = account.cooldown || {};
+      stateCell.appendChild(replayElement(
+        "span",
+        `replay-status-pill${cooldown.active ? " error" : ""}`,
+        cooldown.active ? "Cooldown" : "Available"
+      ));
+      if (cooldown.active) {
+        stateCell.appendChild(replayElement(
+          "span",
+          "replay-cell-detail",
+          `until ${formatReplayDate(cooldown.until)}`
+        ));
+      }
+      if (Number(account.usage?.replay_limits) > 0 || Number(account.usage?.errors) > 0) {
+        stateCell.appendChild(replayElement(
+          "span",
+          "replay-cell-detail",
+          `${account.usage?.replay_limits || 0} limits • ${account.usage?.errors || 0} errors`
+        ));
+      }
+      row.appendChild(stateCell);
+
+      const overrideCell = document.createElement("td");
+      if (account.active_override) {
+        const active = account.active_override;
+        overrideCell.appendChild(replayElement(
+          "span",
+          "replay-status-pill warning",
+          `+${active.extra_historical_limit || 0} historical`
+        ));
+        overrideCell.appendChild(replayElement(
+          "span",
+          "replay-cell-detail",
+          `total ${active.total_limit_override || account.limits?.base_total_limit} • until ${formatReplayDate(active.expires_at)}`
+        ));
+        const revokeButton = replayElement("button", "cp-btn", "Revoke");
+        revokeButton.type = "button";
+        revokeButton.style.marginTop = "6px";
+        revokeButton.addEventListener("click", () => revokeReplayBudgetOverride({
+          ...active,
+          account_label: account.account_label,
+        }));
+        overrideCell.appendChild(revokeButton);
+      } else {
+        overrideCell.appendChild(replayElement("span", "replay-muted", "Base limits"));
+      }
+      row.appendChild(overrideCell);
+      accountTable.body.appendChild(row);
+    });
+    accountPanel.appendChild(accountTable.wrap);
+    dashboard.appendChild(accountPanel);
+
+    const historyPanel = replayElement("section", "replay-panel");
+    historyPanel.appendChild(replayElement("h3", "", "Override audit history"));
+    const historyTable = createReplayTable([
+      "ID",
+      "Account",
+      "Historical boost",
+      "Total limit",
+      "Period",
+      "Reason / actor",
+      "Status",
+    ]);
+    const historyRows = (data.overrides || []).slice(0, 25);
+    historyRows.forEach((override) => {
+      const row = document.createElement("tr");
+      row.appendChild(replayCell(`#${override.id}`));
+      row.appendChild(replayCell(override.account_label));
+      row.appendChild(replayCell(`+${override.extra_historical_limit || 0}`));
+      row.appendChild(replayCell(override.total_limit_override || "Base"));
+      row.appendChild(replayCell(
+        formatReplayDate(override.starts_at),
+        `to ${formatReplayDate(override.expires_at)}`
+      ));
+      row.appendChild(replayCell(override.reason || "-", override.created_by || "-"));
+      const status = override.active
+        ? "Active"
+        : override.revoked_at
+          ? "Revoked"
+          : "Expired";
+      const statusCell = document.createElement("td");
+      statusCell.appendChild(replayElement(
+        "span",
+        `replay-status-pill${override.active ? " warning" : ""}`,
+        status
+      ));
+      if (override.revoked_at) {
+        statusCell.appendChild(replayElement(
+          "span",
+          "replay-cell-detail",
+          formatReplayDate(override.revoked_at)
+        ));
+      }
+      row.appendChild(statusCell);
+      historyTable.body.appendChild(row);
+    });
+    if (!historyRows.length) {
+      const row = document.createElement("tr");
+      const cell = replayElement("td", "replay-muted", "No overrides yet.");
+      cell.colSpan = 7;
+      row.appendChild(cell);
+      historyTable.body.appendChild(row);
+    }
+    historyPanel.appendChild(historyTable.wrap);
+    dashboard.appendChild(historyPanel);
+    sectionList.appendChild(dashboard);
+  }
+
+  function replayOverrideInputRow(labelText, type, value) {
+    const row = replayElement("div", "cp-edit-row");
+    const label = replayElement("label", "", labelText);
+    const input = document.createElement("input");
+    input.type = type;
+    input.value = value ?? "";
+    row.appendChild(label);
+    row.appendChild(input);
+    return { row, input };
+  }
+
+  function localDateTimeInputValue(date) {
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+  }
+
+  function openReplayBudgetOverrideForm() {
+    const data = state.bgaReplayQueue?.[0];
+    const accounts = (data?.accounts || []).filter((account) => account.configured);
+    if (!accounts.length) {
+      setStatus("No configured BGA replay accounts are available.", true);
+      return;
+    }
+
+    sectionForm.innerHTML = "";
+    sectionForm.classList.remove("hidden");
+    sectionForm.classList.add("admin-create-form");
+    const form = replayElement("form", "cp-edit-form");
+
+    const accountRow = replayElement("div", "cp-edit-row cp-edit-row-full");
+    accountRow.appendChild(replayElement("label", "", "Accounts"));
+    const accountPicker = replayElement("div", "replay-account-picker");
+    const allOption = replayElement("label", "replay-account-option");
+    const allInput = document.createElement("input");
+    allInput.type = "checkbox";
+    allOption.appendChild(allInput);
+    allOption.appendChild(replayElement("span", "", "All configured accounts"));
+    accountPicker.appendChild(allOption);
+    const accountInputs = accounts.map((account, index) => {
+      const option = replayElement("label", "replay-account-option");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = account.account_label;
+      input.checked = index === 0;
+      option.appendChild(input);
+      option.appendChild(replayElement("span", "", account.account_label));
+      accountPicker.appendChild(option);
+      return input;
+    });
+    accountRow.appendChild(accountPicker);
+    form.appendChild(accountRow);
+
+    const extraField = replayOverrideInputRow("Extra historical limit", "number", "0");
+    extraField.input.min = "0";
+    extraField.input.step = "1";
+    form.appendChild(extraField.row);
+    const totalField = replayOverrideInputRow(
+      `Total limit override (${(data.base_limits?.total_limit || 80) + 1}–${data.base_limits?.max_total_limit || 100}, optional)`,
+      "number",
+      ""
+    );
+    totalField.input.min = String((data.base_limits?.total_limit || 80) + 1);
+    totalField.input.max = String(data.base_limits?.max_total_limit || 100);
+    totalField.input.step = "1";
+    form.appendChild(totalField.row);
+    const expiryField = replayOverrideInputRow(
+      "Expires at",
+      "datetime-local",
+      localDateTimeInputValue(new Date(Date.now() + 2 * 60 * 60 * 1000))
+    );
+    form.appendChild(expiryField.row);
+    const reasonField = replayOverrideInputRow("Reason", "text", "");
+    reasonField.row.classList.add("cp-edit-row-full");
+    reasonField.input.maxLength = 500;
+    form.appendChild(reasonField.row);
+
+    const presets = replayElement("div", "replay-presets");
+    [10, 20, 30].forEach((amount) => {
+      const button = replayElement("button", "cp-btn", `+${amount} historical`);
+      button.type = "button";
+      button.addEventListener("click", () => {
+        extraField.input.value = String(amount);
+        updatePreview();
+      });
+      presets.appendChild(button);
+    });
+    const maxHistoricalButton = replayElement("button", "cp-btn", "Max historical");
+    maxHistoricalButton.type = "button";
+    maxHistoricalButton.addEventListener("click", () => {
+      const total = Number(totalField.input.value) || Number(data.base_limits?.total_limit) || 80;
+      extraField.input.value = String(Math.max(0, total - (Number(data.base_limits?.historical_limit) || 30)));
+      updatePreview();
+    });
+    presets.appendChild(maxHistoricalButton);
+    const totalMaxButton = replayElement("button", "cp-btn", `Total ${data.base_limits?.max_total_limit || 100}`);
+    totalMaxButton.type = "button";
+    totalMaxButton.addEventListener("click", () => {
+      totalField.input.value = String(data.base_limits?.max_total_limit || 100);
+      updatePreview();
+    });
+    presets.appendChild(totalMaxButton);
+    form.appendChild(presets);
+
+    const preview = replayElement("div", "replay-override-preview");
+    form.appendChild(preview);
+    const actions = replayElement("div", "cp-edit-actions");
+    const saveButton = replayElement("button", "cp-btn cp-btn-primary", "Review and save");
+    saveButton.type = "submit";
+    const cancelButton = replayElement("button", "cp-btn", "Cancel");
+    cancelButton.type = "button";
+    cancelButton.addEventListener("click", () => {
+      sectionForm.classList.add("hidden");
+      sectionForm.innerHTML = "";
+      setStatus("", false);
+    });
+    actions.appendChild(saveButton);
+    actions.appendChild(cancelButton);
+    form.appendChild(actions);
+    sectionForm.appendChild(form);
+
+    function selectedAccounts() {
+      return accounts.filter((_account, index) => accountInputs[index].checked);
+    }
+
+    function proposalLines() {
+      const selected = selectedAccounts();
+      const base = data.base_limits || {};
+      const proposedTotal = Number(totalField.input.value) || Number(base.total_limit) || 80;
+      const extra = Number(extraField.input.value) || 0;
+      const historicalLimit = Math.min((Number(base.historical_limit) || 30) + extra, proposedTotal);
+      const freshReserve = proposedTotal - historicalLimit;
+      const lines = [];
+      selected.forEach((account) => {
+        const totalUsed = Number(account.usage?.total_attempts) || 0;
+        const historicalUsed = Number(account.usage?.historical?.attempts) || 0;
+        const currentTotalAvailable = Number(account.limits?.total_available_now) || 0;
+        const currentHistoricalAvailable = Number(account.limits?.historical_available_now) || 0;
+        const currentFreshReserve = account.limits?.effective_fresh_reserve
+          ?? base.fresh_reserve
+          ?? 50;
+        const totalAvailable = Math.max(0, proposedTotal - totalUsed);
+        const historicalAvailable = Math.max(
+          0,
+          Math.min(historicalLimit - historicalUsed, historicalLimit - totalUsed)
+        );
+        lines.push(account.account_label);
+        lines.push(
+          `  Total: ${totalUsed}/${account.limits?.effective_total_limit || base.total_limit}`
+          + ` (${currentTotalAvailable} available) → ${totalUsed}/${proposedTotal}`
+          + ` (${totalAvailable} available)`
+        );
+        lines.push(
+          `  Historical: ${historicalUsed}/${account.limits?.effective_historical_limit || base.historical_limit}`
+          + ` (${currentHistoricalAvailable} available) → ${historicalUsed}/${historicalLimit}`
+          + ` (${historicalAvailable} available)`
+        );
+        lines.push(
+          `  Fresh reserve: ${currentFreshReserve}`
+          + ` → ${freshReserve}`
+        );
+        lines.push(
+          `  Account state: ${account.cooldown?.active
+            ? `cooldown until ${formatReplayDate(account.cooldown.until)}`
+            : "available"}`
+        );
+        if (account.active_override) lines.push(`  Replaces active override #${account.active_override.id}`);
+      });
+      if ((Number(data.queue?.fresh?.due) || 0) > 0 || (Number(data.queue?.fresh?.scheduled) || 0) > 0) {
+        lines.push("");
+        lines.push(
+          `WARNING: fresh queue has ${Number(data.queue?.fresh?.due) || 0} due and `
+          + `${Number(data.queue?.fresh?.scheduled) || 0} scheduled.`
+        );
+      }
+      if (proposedTotal > Number(base.total_limit || 80)) {
+        lines.push(`WARNING: total limit increases above base ${base.total_limit || 80}.`);
+      }
+      if (freshReserve < Number(base.fresh_reserve || 50)) {
+        lines.push(`WARNING: protected fresh reserve decreases to ${freshReserve}.`);
+      }
+      return lines;
+    }
+
+    function updatePreview() {
+      const lines = proposalLines();
+      preview.textContent = lines.length ? lines.join("\n") : "Select at least one account.";
+    }
+
+    allInput.addEventListener("change", () => {
+      accountInputs.forEach((input) => {
+        input.checked = allInput.checked;
+      });
+      updatePreview();
+    });
+    accountInputs.forEach((input) => input.addEventListener("change", () => {
+      allInput.checked = accountInputs.every((candidate) => candidate.checked);
+      updatePreview();
+    }));
+    [extraField.input, totalField.input, expiryField.input, reasonField.input].forEach((input) => {
+      input.addEventListener("input", updatePreview);
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const selected = selectedAccounts();
+      if (!selected.length) {
+        setStatus("Select at least one replay account.", true);
+        return;
+      }
+      const expiresDate = new Date(expiryField.input.value);
+      if (Number.isNaN(expiresDate.getTime())) {
+        setStatus("Choose a valid expiry date/time.", true);
+        return;
+      }
+      const reason = String(reasonField.input.value || "").trim();
+      if (!reason) {
+        setStatus("Reason is required.", true);
+        return;
+      }
+      const lines = proposalLines();
+      if (!window.confirm(`Apply this replay budget override?\n\n${lines.join("\n")}\n\nReason: ${reason}`)) {
+        return;
+      }
+      saveButton.disabled = true;
+      try {
+        setStatus("Saving replay budget override...", false);
+        const response = await apiJson(`${BGA_REPLAY_BUDGET_URL}/overrides`, {
+          method: "POST",
+          body: JSON.stringify({
+            account_labels: selected.map((account) => account.account_label),
+            extra_historical_limit: Number(extraField.input.value || 0),
+            total_limit_override: String(totalField.input.value || "").trim()
+              ? Number(totalField.input.value)
+              : null,
+            expires_at: expiresDate.toISOString(),
+            reason,
+          }),
+        });
+        state.bgaReplayQueue = [response];
+        sectionForm.classList.add("hidden");
+        sectionForm.innerHTML = "";
+        renderBgaReplayQueue();
+        setStatus("Replay budget override saved.", false);
+      } catch (error) {
+        setStatus(error?.message || "Failed to save replay budget override.", true);
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+
+    updatePreview();
+    sectionForm.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
   function renderSystemSettings() {
     sectionTitle.textContent = "System Settings";
     sectionCreateBtn.classList.add("hidden");
@@ -7165,6 +7919,7 @@
     if (state.activeSection === "challengePeriods") renderChallengePeriods();
     if (state.activeSection === "duelFormats") renderDuelFormats();
     if (state.activeSection === "maintenanceScripts") renderMaintenanceScripts();
+    if (state.activeSection === "bgaReplayQueue") renderBgaReplayQueue();
     if (state.activeSection === "systemSettings") renderSystemSettings();
     if (state.activeSection === "users") renderUsers();
     if (state.activeSection === "auditTrail") renderAuditTrail();

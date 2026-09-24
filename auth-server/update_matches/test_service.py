@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from . import service as service_module
+from . import game_replay as game_replay_module
 from .models import MatchUpdateRequest, MatchUpdateResult
 from .repository import MatchRepository, TARGET_FINISHED_PENDING
 from .service import MatchUpdateService
@@ -49,29 +49,25 @@ class _ReplayRepository(MatchRepository):
 
 
 class MatchUpdateServiceReplayTest(unittest.TestCase):
-    def test_fetches_replays_only_for_games_returned_as_newly_created(self) -> None:
+    def test_reports_newly_queued_replays_without_fetching_them(self) -> None:
         repository = _ReplayRepository(["game-1", "game-2"])
-        calls: list[str] = []
-
-        def fetch_replay(game_id: str) -> None:
-            calls.append(game_id)
-            if game_id == "game-2":
-                raise RuntimeError("temporary BGA error")
-
         service = MatchUpdateService(
             repository,
             games_fetcher=lambda batch: [MatchUpdateResult(status="success")],
-            replay_fetcher=fetch_replay,
         )
-        summary = service.run(targets=[TARGET_FINISHED_PENDING], duel_id="duel-1")
+        with patch.object(
+            game_replay_module,
+            "fetch_and_store_game_replay_with_account_rotation",
+            side_effect=AssertionError("new games must not trigger a replay request"),
+        ) as fetch_replay:
+            summary = service.run(targets=[TARGET_FINISHED_PENDING], duel_id="duel-1")
 
-        self.assertEqual(calls, ["game-1", "game-2"])
+        fetch_replay.assert_not_called()
         self.assertFalse(repository.replay_scan_called)
         self.assertEqual(summary["processed"], 1)
         self.assertEqual(summary["updated"], 1)
-        self.assertEqual(summary["replays_processed"], 2)
-        self.assertEqual(summary["replays_ready"], 1)
-        self.assertEqual(summary["replays_failed"], 1)
+        self.assertEqual(summary["replays_scheduled"], 2)
+        self.assertEqual(summary["replays_ready"], 0)
         self.assertTrue(repository.finished)
 
     def test_does_not_scan_for_games_missing_replays(self) -> None:
@@ -79,22 +75,22 @@ class MatchUpdateServiceReplayTest(unittest.TestCase):
         service = MatchUpdateService(
             repository,
             games_fetcher=lambda batch: [],
-            replay_fetcher=lambda game_id: self.fail(f"unexpected replay fetch: {game_id}"),
         )
 
         summary = service.run(targets=[TARGET_FINISHED_PENDING])
 
         self.assertFalse(repository.replay_scan_called)
-        self.assertEqual(summary["replays_processed"], 0)
+        self.assertEqual(summary["replays_scheduled"], 0)
+        self.assertEqual(summary["replays_ready"], 0)
 
-    def test_sqlite_repository_path_enables_default_replay_fetcher(self) -> None:
+    def test_repository_path_does_not_enable_an_immediate_replay_fetcher(self) -> None:
         repository = _ReplayRepository(["game-1"])
         repository.db_path = "/tmp/auth.sqlite"
 
         with patch.object(
-            service_module,
+            game_replay_module,
             "fetch_and_store_game_replay_with_account_rotation",
-            return_value={"status": "ready"},
+            side_effect=AssertionError("new games must only be queued"),
         ) as fetch_replay:
             service = MatchUpdateService(
                 repository,
@@ -102,8 +98,9 @@ class MatchUpdateServiceReplayTest(unittest.TestCase):
             )
             summary = service.run(targets=[], duel_id="duel-1")
 
-        fetch_replay.assert_called_once_with("/tmp/auth.sqlite", "game-1")
-        self.assertEqual(summary["replays_ready"], 1)
+        fetch_replay.assert_not_called()
+        self.assertEqual(summary["replays_scheduled"], 1)
+        self.assertEqual(summary["replays_ready"], 0)
 
 
 if __name__ == "__main__":

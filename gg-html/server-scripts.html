@@ -1468,7 +1468,7 @@
         </div>
         <aside class="hero__meta" aria-label="Актуальність документації">
           <p class="hero__meta-label">Звірено з репозиторієм</p>
-          <p class="hero__meta-value">27 липня 2026</p>
+          <p class="hero__meta-value">24 вересня 2026</p>
           <p class="hero__meta-copy">
             Статуси нижче описують конфігурацію в Git. Live-стан сервера
             перевіряється командами в секції «Швидка перевірка».
@@ -1480,11 +1480,11 @@
     <section class="stats" aria-label="Огляд каталогу">
       <div class="shell stats__grid">
         <div class="stat">
-          <div class="stat__value" id="stat-total">25</div>
+          <div class="stat__value" id="stat-total">27</div>
           <div class="stat__label">операційні сценарії</div>
         </div>
         <div class="stat">
-          <div class="stat__value" id="stat-systemd">7</div>
+          <div class="stat__value" id="stat-systemd">9</div>
           <div class="stat__label">systemd-таймерів</div>
         </div>
         <div class="stat">
@@ -1587,13 +1587,15 @@ sudo systemctl list-timers --all \
   update-player-elo-daily.timer \
   update-player-elo-missing.timer \
   cleanup-chrome-tmp.timer \
-  server-alerts.timer
+  server-alerts.timer \
+  bga-replay-fresh.timer \
+  bga-replay-historical.timer
 
 sqlite3 ./data/auth.sqlite \
   "SELECT job_name,last_success_at,last_status FROM job_runs ORDER BY job_name;"
 
 crontab -l</code>
-              <button class="copy-button" type="button" data-copy="cd /home/carcassonne-gg/auth-server&#10;sudo systemctl list-timers --all update-duels.timer sync-wtcoc-matches.timer fix-matches-and-duels.timer update-player-elo-daily.timer update-player-elo-missing.timer cleanup-chrome-tmp.timer server-alerts.timer&#10;sqlite3 ./data/auth.sqlite &quot;SELECT job_name,last_success_at,last_status FROM job_runs ORDER BY job_name;&quot;&#10;crontab -l" aria-label="Скопіювати команди перевірки">
+              <button class="copy-button" type="button" data-copy="cd /home/carcassonne-gg/auth-server&#10;sudo systemctl list-timers --all update-duels.timer sync-wtcoc-matches.timer fix-matches-and-duels.timer update-player-elo-daily.timer update-player-elo-missing.timer cleanup-chrome-tmp.timer server-alerts.timer bga-replay-fresh.timer bga-replay-historical.timer&#10;sqlite3 ./data/auth.sqlite &quot;SELECT job_name,last_success_at,last_status FROM job_runs ORDER BY job_name;&quot;&#10;crontab -l" aria-label="Скопіювати команди перевірки">
                 <svg aria-hidden="true"><use href="#i-copy"></use></svg> Copy
               </button>
             </div>
@@ -1823,6 +1825,36 @@ crontab -l</code>
           source: "run_sync_wtcoc_matches.py --apply",
           safety: "Запис іде тільки для замаплених команд і підтверджених lineup.",
           updated: "02.07.2026"
+        },
+        {
+          group: "systemd",
+          title: "Fresh BGA replay queue",
+          path: "auth-server/systemd/bga-replay-fresh.timer",
+          status: "configured",
+          statusLabel: "Підготовлено",
+          description: "Обробляє due replay нових рейтингових ігор через спільний budget/account gateway.",
+          schedule: "Кожні 2 хв після окремого enable",
+          impact: "SQLite: game_replays, bga_replay_requests",
+          command: "cd /home/carcassonne-gg/auth-server\n./.venv/bin/python retry_pending_game_replays.py --queue-class fresh --limit 1",
+          inspect: "tail -f /var/log/carcassonne/bga-replay-worker.log",
+          source: "bga-replay-worker@fresh.service · limit 3",
+          safety: "Timer встановлюється вимкненим; спочатку виконати preview і ручний запуск із limit 1.",
+          updated: "24.09.2026"
+        },
+        {
+          group: "systemd",
+          title: "Historical BGA replay queue",
+          path: "auth-server/systemd/bga-replay-historical.timer",
+          status: "configured",
+          statusLabel: "Підготовлено",
+          description: "Поступово обробляє явно додані старі ігри, не використовуючи protected fresh reserve.",
+          schedule: "Кожні 30 хв після окремого enable",
+          impact: "SQLite: game_replays, bga_replay_requests",
+          command: "cd /home/carcassonne-gg/auth-server\n./.venv/bin/python retry_pending_game_replays.py --queue-class historical --limit 1",
+          inspect: "tail -f /var/log/carcassonne/bga-replay-worker.log",
+          source: "bga-replay-worker@historical.service · limit 3",
+          safety: "Вмикати лише після перевірки fresh; перед кожним запитом worker повторно перевіряє fresh due.",
+          updated: "24.09.2026"
         },
         {
           group: "systemd",

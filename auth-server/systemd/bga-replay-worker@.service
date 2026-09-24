@@ -1,0 +1,16 @@
+[Unit]
+Description=Process Carcassonne GG BGA replay queue (%i)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/home/carcassonne-gg/auth-server/data/auth.sqlite
+ConditionPathExists=/home/carcassonne-gg/auth-server/.venv/bin/python
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/carcassonne-gg/auth-server
+LogsDirectory=carcassonne
+StandardOutput=append:/var/log/carcassonne/bga-replay-worker.log
+StandardError=append:/var/log/carcassonne/bga-replay-worker.log
+ExecStart=/home/carcassonne-gg/auth-server/.venv/bin/python /home/carcassonne-gg/auth-server/retry_pending_game_replays.py --db-path /home/carcassonne-gg/auth-server/data/auth.sqlite --queue-class %i --limit 3
+TimeoutStartSec=5min
+

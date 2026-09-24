@@ -34,15 +34,24 @@ BGA_EMAIL_2=...
 BGA_PASSWORD_2=...
 BGA_EMAIL_3=...
 BGA_PASSWORD_3=...
+BGA_REPLAY_TOTAL_LIMIT=80
+BGA_REPLAY_FRESH_RESERVE=50
+BGA_REPLAY_HISTORICAL_LIMIT=30
+BGA_REPLAY_MAX_TOTAL_LIMIT=100
+BGA_REPLAY_COOLDOWN_HOURS=24
 CHROME_BINARY_PATH=/usr/bin/chromium
 CHROMEDRIVER_PATH=/usr/bin/chromedriver
 ```
 
 Notes:
 
-- `BGA_EMAIL` / `BGA_PASSWORD` are the primary account.
-- `BGA_EMAIL_2` / `BGA_PASSWORD_2`, `BGA_EMAIL_3` / `BGA_PASSWORD_3`, and so on are optional reserve accounts.
-- reserve accounts are used only when the current BGA account/session fails to return a valid response.
+- `BGA_EMAIL` / `BGA_PASSWORD` and the indexed credential pairs form one
+  shared replay-account pool.
+- Before every `logs.html` request, the gateway chooses an available account
+  with the lowest rolling-24h usage; ties use round-robin ordering.
+- The replay budget defaults to total `80`, historical `30`, and a protected
+  fresh/manual reserve of `50` per account. The values are configurable through
+  the variables above.
 
 ## Run
 
@@ -68,16 +77,197 @@ Manual test for one match:
 python3 run_update_matches.py --match-id 20250330UKRPRT
 ```
 
-## Automatic replay import for new ranked games
+## Automatic replay scheduling for new ranked games
 
 When `run_update_matches.py` receives a BGA game that is not yet present in
-`games`, it immediately imports that game's replay if the parent duel has
-`ranking = 1`. Updating an existing game does not fetch its replay again.
-Replay failures are logged and stored in `game_replays` without rolling back
-the successfully imported game or duel result.
+`games` and the parent duel has `ranking = 1`, it creates a persistent replay
+queue entry in the same database transaction. The entry has `status = pending`,
+`retry_reason = initial`, `queue_class = fresh`, and `next_attempt_at` five
+minutes after it was queued. Creating the game performs no BGA replay HTTP
+request. Updating an existing game does not enqueue its replay again.
 
-Periodic scanning and retrying of games without a ready replay is not part of
-this flow yet.
+The update summary reports newly queued entries as `replays_scheduled` and
+already available entries as `replays_ready`.
+
+## Replay queue worker
+
+Run due fresh work manually from the `auth-server` directory:
+
+```bash
+python3 retry_pending_game_replays.py --queue-class fresh --limit 3
+```
+
+Historical work uses the same engine and state machine:
+
+```bash
+python3 retry_pending_game_replays.py --queue-class historical --limit 3
+```
+
+The worker takes a non-blocking `flock` next to the SQLite database and also
+leases each selected row. This prevents overlapping runs from processing the
+same game; an expired lease can be reclaimed. A run performs at most three
+`logs.html` requests. Historical runs additionally perform at most one request
+per available account and stop before each request whenever fresh work is due.
+
+The `initial`, `archive`, and `colors` transitions use one request per attempt.
+An absent archive is requested once and checked again after 15 minutes. A
+fallback replay is immediately marked ready and receives one color refresh
+after 15 minutes. A second fallback response keeps the stored replay unchanged
+and ends automatic retries.
+
+Old games are not queued implicitly. Internal callers can idempotently add one
+explicit historical game without making an HTTP request:
+
+```python
+from update_matches.replay_worker import enqueue_historical_game_replay
+
+enqueue_historical_game_replay(
+    "data/auth.sqlite",
+    "GAME_ID",
+    historical_batch_id="batch-2026-09",
+)
+```
+
+### systemd timers
+
+The repository contains a shared template service and two independent timers:
+
+- `systemd/bga-replay-worker@.service`;
+- `systemd/bga-replay-fresh.timer` — every two minutes;
+- `systemd/bga-replay-historical.timer` — every 30 minutes;
+- `systemd/bga-replay-worker.logrotate`.
+
+Install the units without enabling either timer first:
+
+```bash
+sudo cp systemd/bga-replay-worker@.service /etc/systemd/system/
+sudo cp systemd/bga-replay-fresh.timer /etc/systemd/system/
+sudo cp systemd/bga-replay-historical.timer /etc/systemd/system/
+sudo cp systemd/bga-replay-worker.logrotate /etc/logrotate.d/bga-replay-worker
+sudo systemctl daemon-reload
+sudo systemctl disable --now bga-replay-fresh.timer bga-replay-historical.timer
+```
+
+Preview the due queue and rolling request usage without contacting BGA:
+
+```bash
+sqlite3 data/auth.sqlite "
+SELECT queue_class, status, retry_reason, COUNT(*) AS due
+FROM game_replays
+WHERE retry_reason IN ('initial','archive','colors')
+  AND next_attempt_at IS NOT NULL
+  AND datetime(next_attempt_at) <= datetime('now')
+GROUP BY queue_class, status, retry_reason
+ORDER BY queue_class, retry_reason;
+"
+
+sqlite3 data/auth.sqlite "
+SELECT account_label, request_class, COUNT(*) AS attempts_24h
+FROM bga_replay_requests
+WHERE endpoint = '/archive/archive/logs.html'
+  AND datetime(attempted_at) >= datetime('now', '-24 hours')
+GROUP BY account_label, request_class
+ORDER BY account_label, request_class;
+"
+```
+
+Perform the first smoke test with one request and inspect its JSON output and
+the database rows before enabling a timer:
+
+```bash
+./.venv/bin/python retry_pending_game_replays.py \
+  --queue-class fresh --limit 1
+```
+
+After checking queue transitions, budget rows, and logs, enable only fresh:
+
+```bash
+sudo systemctl enable --now bga-replay-fresh.timer
+sudo systemctl list-timers --all bga-replay-fresh.timer
+tail -n 100 /var/log/carcassonne/bga-replay-worker.log
+```
+
+Enable historical separately only after fresh has run successfully:
+
+```bash
+sudo systemctl enable --now bga-replay-historical.timer
+sudo systemctl list-timers --all \
+  bga-replay-fresh.timer bga-replay-historical.timer
+```
+
+Timer frequency does not grant request capacity. Every service invocation still
+uses `--limit 3`, the worker state machine, the shared lock, fresh priority, and
+the persistent rolling budget. Both lanes write to
+`/var/log/carcassonne/bga-replay-worker.log`.
+
+### Admin monitoring and overrides
+
+Global admins can open `BGA Replay Queue` in `gg-html/admin.html`. The section
+shows due/scheduled queue totals, ready/error/manual-required replay counts, and
+rolling-24h attempts and successful replays for `fresh`, `historical`, and
+`manual` per account. Account rows also show cooldown, effective limits,
+`historical_available_now`, and capacity currently protected from historical
+work.
+
+The protected API is:
+
+```text
+GET    /admin/bga-replay-budget
+POST   /admin/bga-replay-budget/overrides
+DELETE /admin/bga-replay-budget/overrides/{id}
+```
+
+An override can target one or all configured accounts, has a required expiry
+and reason, and can change the historical boost, total limit, or both. The total
+limit must be above the base total and no higher than the configured maximum;
+the historical boost is dynamically bounded by the effective total. Saving a
+new override revokes the previous active row for each selected account instead
+of stacking values. Revoked and expired rows remain visible in the audit
+history, and changes are also written to the general admin audit trail.
+
+Before confirmation, the UI shows the resulting total/historical limits,
+historical capacity available now, and fresh reserve for every selected
+account. It warns when fresh work exists, the total is raised above its base, or
+the protected fresh reserve is reduced. Refreshing this section performs no BGA
+request.
+
+### Automated replay regression suite
+
+Stage 9 is covered by isolated Python and Node tests. They use temporary SQLite
+databases and injected/mocked replay responses; the automated suite does not
+authenticate with BGA or spend the live replay quota.
+
+Run the Python replay and match-update tests from `auth-server`:
+
+```bash
+python3 -m unittest discover -s update_matches -t . -p 'test_*.py'
+```
+
+Run the Node schema, public-query, and admin tests in an environment with the
+project's Node dependencies installed:
+
+```bash
+npm test
+```
+
+The workflow scenarios are covered as follows:
+
+- scheduling and the five-minute delay: `test_sqlite_repository.py`,
+  `test_service.py`, `test_replay_worker.py`;
+- ready/fallback colors, archive retry, no polling, cache reuse, and cooldown:
+  `test_game_replay.py`, `test_replay_worker.py`;
+- immediate public availability of ready fallback data:
+  `src/bga-replay-public.test.js`;
+- per-run, rolling, concurrent, historical-reserve, account-selection, expiry,
+  revoke, and override-attribution rules: `test_replay_budget.py` and
+  `test_replay_worker.py`;
+- exact-duel manual selection: `test_duel_game_replay_cli.py`;
+- admin rolling metrics, override boundaries, replacement, revoke, and route
+  protection: `src/bga-replay-admin.test.js`.
+
+The complete suite should run before deployment and before enabling either
+systemd timer. A real BGA smoke test is separate and remains limited to one
+explicit request during staged rollout.
 
 ## Manual replay command
 
@@ -97,9 +287,29 @@ To fetch an already stored replay again:
 python3 get_game_replay.py '<games.id>' --force
 ```
 
-The manual command tries the primary account first and automatically switches
-through every configured `BGA_EMAIL_N` / `BGA_PASSWORD_N` reserve account when
-BGA rejects the replay request (for example, after `limit (replay)`).
+Each invocation performs at most one `logs.html` request for a game. If BGA has
+not prepared the replay yet, the command requests the archive once and exits
+without polling. A later invocation checks `logs.html` again but does not repeat
+`requestTableArchive.html` when `archive_requested_at` is already stored.
+
+The manual command uses the same persistent budget and shared account pool as
+automatic replay processing. One invocation selects one account and never
+cascades the same game through the remaining accounts. A replay-limit response
+stops the current operation immediately and puts the selected account into a
+24-hour cooldown.
+
+Every `logs.html` attempt is reserved before HTTP and recorded in
+`bga_replay_requests`, including failed and rate-limited attempts. Archive
+preparation requests are audited in the same table under their own endpoint but
+do not consume the `logs.html` budget. `fresh` and `manual` requests can use the
+effective total limit. `historical` requests must also fit within the historical
+limit and cannot consume the protected reserve.
+
+The gateway supports one active expiring override per account. An override can
+increase the historical allowance within the effective total and can separately
+raise the total limit from its base value up to the configured maximum of 100.
+Replacing an override revokes the previous row instead of stacking values; all
+rows remain available for audit.
 
 The database path is read from `AUTH_SQLITE_PATH`, then `DB_PATH`, and otherwise
 defaults to `auth-server/data/auth.sqlite`. It can also be provided explicitly:
@@ -108,28 +318,45 @@ defaults to `auth-server/data/auth.sqlite`. It can also be provided explicitly:
 python3 get_game_replay.py '<games.id>' --db-path /absolute/path/to/auth.sqlite
 ```
 
-To import replays for every active game in every active duel of one match, use
-the match primary key:
+To process selected replay states for every active game in every active duel of
+one match, use the match primary key. Pending, error, and fallback rows require
+explicit flags:
 
 ```bash
 cd /home/carcassonne-gg/auth-server
-./.venv/bin/python get_match_game_replays.py 'MATCH_ID'
+./.venv/bin/python get_match_game_replays.py 'MATCH_ID' \
+  --include-pending --include-errors --include-fallback --max-requests 3
 ```
 
-Ready replays are reused without another BGA request. Add `--force` to fetch
-them again. By default, the command stops as soon as one game has failed after
-trying every configured BGA account. Use `--max-failed-games N` to permit more
-failed games before stopping. It prints a JSON summary and exits with a non-zero
-status if any game failed or had no `bga_table_id`.
+The equivalent exact-duel command never selects games from a neighboring duel:
+
+```bash
+./.venv/bin/python get_duel_game_replays.py 'DUEL_ID' \
+  --include-pending --max-requests 3
+```
+
+Ready replays with BGA colors are reused without another request. `--force`
+selects all active games. Both batch commands default to three requests and
+accept `--max-failed-games N`; each selected game receives at most one
+`logs.html` request. A replay-limit response stops the entire command without
+trying the same game through another account. Their JSON summaries distinguish
+cached, deferred, failed, and remaining games.
 
 Raw BGA logs are parsed in memory and are not stored. `events_json` contains
 ordered `pickTile`, `playTile`, and `playPartisan` events. `players_json`
 contains player ids, names, BGA color hex values, and normalized meeple color
 names (`black`, `blue`, `green`, `red`, or `yellow`). `carcassonne_lab_url`
 contains the encoded CarcassonneLab replay URL when all required moves and
-player ids were found. If BGA does not provide colors, the URL uses `red` and
-`green` in first-move player order; the unknown fields in `players_json` remain
-`null`.
+player ids were found. If either player's BGA color is missing, unsupported, or
+duplicates the other color, both players receive the fallback pair `red` and
+`green` in first-move order. The same fallback is written to `players_json`,
+`events_json`, `meeple_stats_json`, and the CarcassonneLab URL, while
+`color_source = 'fallback'` preserves its provenance.
+
+A forced refresh keeps an existing ready replay available while the BGA request
+is in progress. When complete BGA colors arrive, the normalized players,
+events, meeple statistics, URL, and `color_source` are replaced together. A
+failed refresh leaves the ready fallback data unchanged.
 
 The replay import also stores compact derived history data:
 
@@ -147,7 +374,8 @@ The replay import also stores compact derived history data:
 The ordered tile/meeple events can reconstruct intermediate board states.
 `board_stats_json` stores only the final dimensions.
 
-Failures are saved as `status = 'error'` with `last_error`.
+Failures are saved as `status = 'error'` with a classified `last_error`. Every
+BGA error includes the endpoint that produced it.
 
 ## Selection rules
 

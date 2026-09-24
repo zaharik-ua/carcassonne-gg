@@ -7,6 +7,7 @@ from math import floor, isfinite
 from pathlib import Path
 from typing import Callable
 
+from .game_replay import enqueue_fresh_game_replay, ensure_game_replays_schema
 from .models import MatchUpdateRequest, MatchUpdateResult
 from .repository import MatchRepository, TARGET_EMPTY_FINISHED, TARGET_FINISHED_PENDING, TARGET_ONGOING
 
@@ -166,7 +167,7 @@ class SqliteMatchRepository(MatchRepository):
         return [self._row_to_request(row, target) for row in rows]
 
     def save_match_result(self, match: MatchUpdateRequest, result: MatchUpdateResult) -> list[str]:
-        created_replay_game_ids: list[str] = []
+        scheduled_replay_game_ids: list[str] = []
         with self._connect() as conn:
             current = conn.execute(
                 """
@@ -300,7 +301,12 @@ class SqliteMatchRepository(MatchRepository):
                     ),
                 )
                 if is_ranked and existing_game is None:
-                    created_replay_game_ids.append(game_id)
+                    enqueue_fresh_game_replay(
+                        conn,
+                        game_id=game_id,
+                        bga_table_id=str(table.id),
+                    )
+                    scheduled_replay_game_ids.append(game_id)
 
             if incoming_ids:
                 placeholders = ",".join(["?"] * len(incoming_ids))
@@ -333,7 +339,7 @@ class SqliteMatchRepository(MatchRepository):
             if transitioned_to_done and int(current["ranking"] or 0) == 1:
                 self._ranked_duel_completed = True
 
-        return created_replay_game_ids
+        return scheduled_replay_game_ids
 
     def finish_update_run(self) -> None:
         if not self._ranked_duel_completed:
@@ -1323,6 +1329,7 @@ class SqliteMatchRepository(MatchRepository):
                 conn.execute("ALTER TABLE matches ADD COLUMN gw2_import INTEGER")
             if "deleted_at" not in game_columns:
                 conn.execute("ALTER TABLE games ADD COLUMN deleted_at TEXT")
+            ensure_game_replays_schema(conn)
             conn.commit()
 
     @staticmethod

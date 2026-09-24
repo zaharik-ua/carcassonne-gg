@@ -14,7 +14,7 @@ except ImportError:  # pragma: no cover
 
 from .game_replay import (
     GameReplayError,
-    fetch_and_store_game_replay_with_account_rotation,
+    fetch_and_store_game_replay_with_budget,
 )
 
 
@@ -37,18 +37,6 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Fetch again even when a ready replay is already stored",
     )
-    parser.add_argument(
-        "--poll-attempts",
-        type=int,
-        default=10,
-        help="Number of log checks after asking BGA to prepare the archive",
-    )
-    parser.add_argument(
-        "--poll-delay",
-        type=float,
-        default=1.0,
-        help="Seconds between archive checks",
-    )
     return parser.parse_args()
 
 
@@ -56,12 +44,10 @@ def main() -> int:
     load_dotenv()
     args = parse_args()
     try:
-        summary = fetch_and_store_game_replay_with_account_rotation(
+        summary = fetch_and_store_game_replay_with_budget(
             args.db_path,
             args.game_id,
             force=args.force,
-            poll_attempts=args.poll_attempts,
-            poll_delay=args.poll_delay,
         )
     except (GameReplayError, OSError, sqlite3.Error, ValueError) as exc:
         print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False, indent=2))
