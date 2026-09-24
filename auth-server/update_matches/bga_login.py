@@ -23,6 +23,7 @@ class BGACredential:
     email: str
     password: str
     label: str
+    replay_standby: bool = False
 
 
 def _mask_email(email: str) -> str:
@@ -66,6 +67,7 @@ def get_bga_credentials() -> list[BGACredential]:
                 email=email,
                 password=password,
                 label=f"reserve{index}:{_mask_email(email)}",
+                replay_standby=index == 4,
             )
         )
 

@@ -203,6 +203,92 @@ class ReplayBudgetTest(unittest.TestCase):
         )
         self.assertEqual(recovered.account_label, "account-a")
 
+    def test_standby_is_not_selected_while_any_guard_account_is_available(self) -> None:
+        reservation = reserve_replay_request(
+            self.db_path,
+            account_labels=["account-a", "account-b", "account-c", "account-d"],
+            standby_account_labels=["account-d"],
+            standby_guard_account_labels=["account-a", "account-b", "account-c"],
+            bga_table_id="standby-blocked",
+            request_class="manual",
+            now=self.now,
+        )
+
+        self.assertEqual(reservation.account_label, "account-a")
+
+    def test_standby_remains_blocked_until_every_guard_account_is_in_cooldown(self) -> None:
+        for account_label in ("account-a", "account-b"):
+            mark_replay_account_cooldown(
+                self.db_path,
+                account_label=account_label,
+                error="limit (replay)",
+                now=self.now,
+            )
+
+        reservation = reserve_replay_request(
+            self.db_path,
+            account_labels=["account-c", "account-d"],
+            standby_account_labels=["account-d"],
+            standby_guard_account_labels=["account-a", "account-b", "account-c"],
+            bga_table_id="one-guard-available",
+            request_class="manual",
+            now=self.now + timedelta(minutes=1),
+        )
+
+        self.assertEqual(reservation.account_label, "account-c")
+
+    def test_standby_is_selected_when_every_guard_account_is_in_cooldown(self) -> None:
+        for account_label in ("account-a", "account-b", "account-c"):
+            mark_replay_account_cooldown(
+                self.db_path,
+                account_label=account_label,
+                error="limit (replay)",
+                now=self.now,
+            )
+
+        reservation = reserve_replay_request(
+            self.db_path,
+            # The worker may already have removed used guard accounts from the
+            # candidates, so the full guard set is supplied separately.
+            account_labels=["account-d"],
+            standby_account_labels=["account-d"],
+            standby_guard_account_labels=["account-a", "account-b", "account-c"],
+            bga_table_id="all-guards-cooldown",
+            request_class="manual",
+            now=self.now + timedelta(minutes=1),
+        )
+
+        self.assertEqual(reservation.account_label, "account-d")
+
+    def test_exhausted_guard_budget_does_not_unlock_standby(self) -> None:
+        limits = ReplayBudgetLimits(
+            total_limit=1,
+            fresh_reserve=0,
+            historical_limit=1,
+            max_total_limit=1,
+        )
+        for index, account_label in enumerate(("account-a", "account-b", "account-c")):
+            reserve_replay_request(
+                self.db_path,
+                account_labels=[account_label],
+                bga_table_id=f"guard-budget-{index}",
+                request_class="manual",
+                limits=limits,
+                now=self.now,
+            )
+
+        with self.assertRaises(ReplayBudgetUnavailableError):
+            reserve_replay_request(
+                self.db_path,
+                account_labels=["account-a", "account-b", "account-c", "account-d"],
+                standby_account_labels=["account-d"],
+                standby_guard_account_labels=["account-a", "account-b", "account-c"],
+                bga_table_id="standby-still-blocked",
+                request_class="manual",
+                limits=limits,
+                now=self.now + timedelta(minutes=1),
+            )
+
     def test_overrides_expand_only_the_configured_limits_and_replace_previous(self) -> None:
         limits = ReplayBudgetLimits(
             total_limit=8,

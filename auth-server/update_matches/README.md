@@ -34,6 +34,8 @@ BGA_EMAIL_2=...
 BGA_PASSWORD_2=...
 BGA_EMAIL_3=...
 BGA_PASSWORD_3=...
+BGA_EMAIL_4=...
+BGA_PASSWORD_4=...
 BGA_REPLAY_TOTAL_LIMIT=80
 BGA_REPLAY_FRESH_RESERVE=50
 BGA_REPLAY_HISTORICAL_LIMIT=30
@@ -45,10 +47,15 @@ CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
 Notes:
 
-- `BGA_EMAIL` / `BGA_PASSWORD` and the indexed credential pairs form one
-  shared replay-account pool.
+- Accounts 1–3 form the normal shared replay-account pool. Account 4 is a
+  standby: the replay gateway can select it only while all configured accounts
+  1–3 have an active cooldown. Exhausting their local request budgets does not
+  unlock account 4.
 - Before every `logs.html` request, the gateway chooses an available account
   with the lowest rolling-24h usage; ties use round-robin ordering.
+- During an HTTP-session refresh, Selenium waits up to 10 seconds for
+  `bgaConfig.requestToken`. A missing token triggers up to three complete
+  refresh attempts before the replay is deferred as a temporary error.
 - The replay budget defaults to total `80`, historical `30`, and a protected
   fresh/manual reserve of `50` per account. The values are configurable through
   the variables above.

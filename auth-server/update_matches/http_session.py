@@ -7,7 +7,12 @@ import time
 from typing import Optional
 
 import requests
-from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
+from selenium.common.exceptions import (
+    InvalidSessionIdException,
+    TimeoutException,
+    WebDriverException,
+)
+from selenium.webdriver.support.ui import WebDriverWait
 
 from .bga_login import BGACredential, get_bga_credentials, login_if_needed
 from .config import BASE_URL, MIN_INTERVAL_MS, REQUEST_TIMEOUT_SECONDS, TOKEN_TTL_SECONDS, USER_AGENT
@@ -20,6 +25,12 @@ _last_refresh: float = 0.0
 _last_request_ts: float = 0.0
 _credential_index: int = 0
 _credential_label: str | None = None
+REQUEST_TOKEN_WAIT_SECONDS = 10
+SESSION_REFRESH_ATTEMPTS = 3
+
+
+class RequestTokenUnavailableError(RuntimeError):
+    pass
 
 
 def _extract_request_token(html: str) -> Optional[str]:
@@ -36,6 +47,40 @@ def _extract_request_token(html: str) -> Optional[str]:
         if match:
             return match.group(1)
     return None
+
+
+def _request_token_from_driver(driver) -> str | None:
+    try:
+        token = driver.execute_script(
+            "return window.bgaConfig && bgaConfig.requestToken ? bgaConfig.requestToken : null;"
+        )
+    except Exception:
+        token = None
+    if token:
+        return str(token)
+
+    try:
+        return _extract_request_token(driver.page_source)
+    except Exception:
+        return None
+
+
+def _wait_for_request_token(
+    driver,
+    *,
+    timeout_seconds: int = REQUEST_TOKEN_WAIT_SECONDS,
+) -> str | None:
+    try:
+        return WebDriverWait(
+            driver,
+            timeout_seconds,
+            poll_frequency=0.25,
+        ).until(
+            lambda current_driver: _request_token_from_driver(current_driver)
+            or False
+        )
+    except TimeoutException:
+        return None
 
 
 def _cookies_to_session(cookies: list[dict]) -> requests.Session:
@@ -78,14 +123,29 @@ def _credential_cycle(
             if credential.label == account_label
         ]
 
-    start_index = _credential_index % len(credentials)
-    if rotate_account and len(credentials) > 1:
-        start_index = (start_index + 1) % len(credentials)
+    selectable = [
+        (index, credential)
+        for index, credential in enumerate(credentials)
+        if not credential.replay_standby
+    ]
+    if not selectable:
+        return []
+
+    start_position = next(
+        (
+            position
+            for position, (index, _credential) in enumerate(selectable)
+            if index == _credential_index
+        ),
+        0,
+    )
+    if rotate_account and len(selectable) > 1:
+        start_position = (start_position + 1) % len(selectable)
 
     ordered: list[tuple[int, BGACredential]] = []
-    for offset in range(len(credentials)):
-        index = (start_index + offset) % len(credentials)
-        ordered.append((index, credentials[index]))
+    for offset in range(len(selectable)):
+        position = (start_position + offset) % len(selectable)
+        ordered.append(selectable[position])
     return ordered
 
 
@@ -102,7 +162,7 @@ def refresh_http_session(
     if not credentials:
         raise RuntimeError("Missing BGA credentials. Configure BGA_EMAIL/BGA_PASSWORD and optional BGA_EMAIL_N/BGA_PASSWORD_N.")
 
-    attempts = 3
+    attempts = SESSION_REFRESH_ATTEMPTS
     cycle = _credential_cycle(
         credentials,
         rotate_account=rotate_account,
@@ -139,18 +199,12 @@ def refresh_http_session(
                         login_if_needed(driver, credential)
                         driver.get(f"{BASE_URL}/gamestats")
 
-                    token = None
-                    try:
-                        token = driver.execute_script(
-                            "return window.bgaConfig && bgaConfig.requestToken ? bgaConfig.requestToken : null;"
+                    token = _wait_for_request_token(driver)
+                    if not token:
+                        raise RequestTokenUnavailableError(
+                            "Failed to extract bgaConfig.requestToken from /gamestats "
+                            f"after waiting {REQUEST_TOKEN_WAIT_SECONDS} seconds"
                         )
-                    except Exception:
-                        token = None
-
-                    if not token:
-                        token = _extract_request_token(driver.page_source)
-                    if not token:
-                        raise RuntimeError("Failed to extract bgaConfig.requestToken from /gamestats")
 
                     sess = _cookies_to_session(driver.get_cookies())
                     _session = sess
@@ -181,6 +235,26 @@ def refresh_http_session(
             except DriverStartupError as exc:
                 last_error = exc
                 raise
+            except RequestTokenUnavailableError as exc:
+                last_error = exc
+                _session = None
+                _token = None
+                _last_refresh = 0.0
+                if attempt < attempts:
+                    print(
+                        f"⚠️ BGA request token unavailable ({reason}, account={credential.label}), "
+                        f"retrying session refresh ({attempt}/{attempts}): {exc}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    time.sleep(min(2, attempt))
+                    continue
+                print(
+                    f"⚠️ BGA HTTP session refresh failed ({reason}, account={credential.label}): {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                break
             except (InvalidSessionIdException, WebDriverException) as exc:
                 last_error = exc
                 try:

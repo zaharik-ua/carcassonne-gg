@@ -224,7 +224,11 @@ def run_replay_worker(
     path = Path(db_path).expanduser()
     run_now = _as_utc(now or datetime.now(timezone.utc))
     owner = lease_owner or _default_lease_owner()
-    configured_accounts = _resolve_account_labels(account_labels)
+    (
+        configured_accounts,
+        standby_accounts,
+        standby_guard_accounts,
+    ) = _resolve_account_configuration(account_labels)
     historical_accounts_used: set[str] = set()
     processed_game_ids: set[str] = set()
 
@@ -294,6 +298,8 @@ def run_replay_worker(
                 force=job.retry_reason == "colors",
                 request_class=job.queue_class,
                 account_labels=available_accounts,
+                standby_account_labels=standby_accounts,
+                standby_guard_account_labels=standby_guard_accounts,
                 color_refresh=job.retry_reason == "colors",
                 preserve_existing_fallback=job.retry_reason == "colors",
             )
@@ -795,12 +801,19 @@ def _stop_summary(summary: dict[str, Any], reason: str) -> None:
     summary["stop_reason"] = reason
 
 
-def _resolve_account_labels(account_labels: list[str] | None) -> list[str]:
+def _resolve_account_configuration(
+    account_labels: list[str] | None,
+) -> tuple[list[str], list[str], list[str]]:
     if account_labels is not None:
-        return [str(label).strip() for label in account_labels if str(label).strip()]
+        labels = [str(label).strip() for label in account_labels if str(label).strip()]
+        return labels, [], []
     from .bga_login import get_bga_credentials
 
-    return [credential.label for credential in get_bga_credentials()]
+    credentials = get_bga_credentials()
+    labels = [credential.label for credential in credentials]
+    standby = [credential.label for credential in credentials if credential.replay_standby]
+    guards = [credential.label for credential in credentials if not credential.replay_standby]
+    return labels, standby, guards
 
 
 def _normalize_worker_mode(value: str) -> str:

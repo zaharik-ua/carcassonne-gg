@@ -117,6 +117,8 @@ def reserve_replay_request(
     db_path: str | Path,
     *,
     account_labels: Iterable[str],
+    standby_account_labels: Iterable[str] = (),
+    standby_guard_account_labels: Iterable[str] = (),
     bga_table_id: str,
     request_class: str,
     limits: ReplayBudgetLimits | None = None,
@@ -124,6 +126,8 @@ def reserve_replay_request(
 ) -> ReplayRequestReservation:
     normalized_class = _normalize_request_class(request_class)
     normalized_labels = _normalize_account_labels(account_labels)
+    standby_labels = set(_normalize_account_labels(standby_account_labels))
+    standby_guard_labels = _normalize_account_labels(standby_guard_account_labels)
     if not normalized_labels:
         raise ReplayBudgetUnavailableError("No BGA replay accounts are configured")
 
@@ -135,7 +139,10 @@ def reserve_replay_request(
         ensure_replay_budget_schema(conn)
         conn.execute("BEGIN IMMEDIATE")
         try:
-            for label in normalized_labels:
+            state_labels = _normalize_account_labels(
+                [*normalized_labels, *standby_guard_labels]
+            )
+            for label in state_labels:
                 conn.execute(
                     """
                     INSERT INTO bga_replay_account_state (account_label)
@@ -145,8 +152,8 @@ def reserve_replay_request(
                     (label,),
                 )
 
-            candidates: list[tuple] = []
-            for label_index, label in enumerate(normalized_labels):
+            cooldown_by_label = {}
+            for label in state_labels:
                 state = conn.execute(
                     """
                     SELECT cooldown_until, last_selected_at
@@ -155,9 +162,21 @@ def reserve_replay_request(
                     """,
                     (label,),
                 ).fetchone()
-                if state is not None and _is_future_timestamp(
-                    state["cooldown_until"], attempted_at
-                ):
+                cooldown_by_label[label] = bool(
+                    state is not None
+                    and _is_future_timestamp(state["cooldown_until"], attempted_at)
+                )
+
+            standby_is_eligible = (
+                not standby_guard_labels
+                or all(cooldown_by_label.get(label, False) for label in standby_guard_labels)
+            )
+
+            candidates: list[tuple] = []
+            for label_index, label in enumerate(normalized_labels):
+                if label in standby_labels and not standby_is_eligible:
+                    continue
+                if cooldown_by_label.get(label, False):
                     continue
 
                 usage = conn.execute(

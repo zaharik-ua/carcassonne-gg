@@ -37,6 +37,8 @@ const ENV = {
   BGA_PASSWORD_2: "secret-2",
   BGA_EMAIL_3: "reserve3@example.com",
   BGA_PASSWORD_3: "secret-3",
+  BGA_EMAIL_4: "reserve4@example.com",
+  BGA_PASSWORD_4: "secret-4",
   BGA_REPLAY_TOTAL_LIMIT: "80",
   BGA_REPLAY_FRESH_RESERVE: "50",
   BGA_REPLAY_HISTORICAL_LIMIT: "30",
@@ -62,6 +64,7 @@ test("uses the same masked labels and configurable limits as the replay gateway"
     "primary:pr***@example.com",
     "reserve2:re***@example.com",
     "reserve3:re***@example.com",
+    "reserve4:re***@example.com",
   ]);
   assert.deepEqual(getReplayBudgetLimits(ENV), {
     total_limit: 80,

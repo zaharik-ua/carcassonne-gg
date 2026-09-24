@@ -70,6 +70,10 @@ function timestampIsActive(value, now) {
   return Number.isFinite(timestamp) && timestamp > now.getTime();
 }
 
+function isReplayStandbyAccountLabel(value) {
+  return /^reserve4:/.test(String(value || "").trim());
+}
+
 function timestampHasStarted(value, now) {
   if (!value) return false;
   const normalized = String(value).includes("T")
@@ -309,6 +313,13 @@ export async function loadReplayBudgetAdminState({
   const stateByAccount = new Map(
     accountStateRows.map((row) => [normalizeText(row.account_label), row])
   );
+  const configuredGuardLabels = configuredLabels.filter(
+    (label) => !isReplayStandbyAccountLabel(label)
+  );
+  const standbyEligible = configuredGuardLabels.length > 0
+    && configuredGuardLabels.every((label) => (
+      timestampIsActive(stateByAccount.get(label)?.cooldown_until, currentTime)
+    ));
   const activeOverrideByAccount = new Map();
   activeOverrideRows.forEach((row) => {
     const label = normalizeText(row.account_label);
@@ -333,6 +344,8 @@ export async function loadReplayBudgetAdminState({
     return {
       account_label: accountLabel,
       configured: configuredLabels.includes(accountLabel),
+      standby: isReplayStandbyAccountLabel(accountLabel),
+      standby_eligible: isReplayStandbyAccountLabel(accountLabel) && standbyEligible,
       usage,
       limits: {
         base_total_limit: baseLimits.total_limit,
