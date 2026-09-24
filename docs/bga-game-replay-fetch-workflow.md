@@ -1,138 +1,114 @@
-# Безпечне отримання BGA replay для нових та історичних ігор
+# BGA game replay: актуальна production-логіка
 
-## 1. Мета
+## 1. Призначення
 
-Цей документ описує цільовий процес отримання історії завершених партій Carcassonne з Board Game Arena та план адаптації чинної реалізації.
+Цей документ описує лише поточну реалізацію отримання, зберігання та
+оновлення BGA replay у Carcassonne GG. Тут немає старої polling-логіки,
+варіантів майбутньої реалізації або етапів упровадження.
 
-Основні цілі:
+Система:
 
-- не запитувати replay одразу після появи нового запису `games`, поки BGA може ще формувати архів;
-- уникнути багаторазового polling `archive/archive/logs.html` і неконтрольованого використання BGA replay-ліміту;
-- зберігати повну історію навіть тоді, коли BGA ще не повернув справжні кольори міплів;
-- тимчасово використовувати червоний і зелений кольори, а потім виконувати рівно одну відкладену спробу оновити їх;
-- мати жорсткий персистентний бюджет запитів, який не дозволить регулярному worker вичерпати всі BGA-акаунти;
-- використовувати спільний пул із усіх трьох BGA-акаунтів без окремого акаунта, зарезервованого для ручних операцій;
-- зберегти ручне отримання replay окремо для гри, дуелі або всього матчу;
-- поступово завантажувати replay старих ігор із нижчим пріоритетом та окремим підлімітом, не забираючи місткість у свіжих ігор;
-- дати глобальному адміністратору огляд використання трьох основних акаунтів і четвертого standby-акаунта, регульований тимчасовий historical boost і окреме тимчасове підняття загального ліміту з базових 80 до максимуму 100.
+- ставить replay нових рейтингових ігор у персистентну SQLite-чергу;
+- не робить replay-запит безпосередньо під час запису результату гри;
+- виконує не більше одного `logs.html` для однієї гри за один прохід;
+- не очікує підготовки BGA-архіву всередині HTTP-процесу;
+- зберігає готовий replay навіть із fallback-кольорами;
+- окремо планує оновлення кольорів і повторну перевірку замовленого архіву;
+- пропускає всі `logs.html` через спільний rolling budget;
+- надає основний пул акаунтів 1–3 і окремий standby-акаунт 4;
+- розділяє `fresh`, `historical` і `manual` використання;
+- показує чергу, бюджети, cooldown та overrides у `Admin → BGA Replay Queue`.
 
-Документ описує проєктне рішення. На цьому етапі зміни до коду та схеми БД не вносяться.
+Усі дати, записані worker у SQLite, є UTC.
 
-## 2. Поточний процес
+## 2. BGA endpoints
 
-Коли синхронізація результатів знаходить нову рейтингову гру, вона:
-
-1. Створює запис у `games`.
-2. Одразу запускає `fetch_and_store_game_replay_with_account_rotation`.
-3. Виконує:
-
-   ```text
-   GET /archive/archive/logs.html?table={id}&translated=true
-   ```
-
-4. Якщо BGA відповідає `Cannot find gamenotifs log file`, виконує:
-
-   ```text
-   GET /gamereview/gamereview/requestTableArchive.html?table={id}
-   ```
-
-5. Після запиту архіву до 10 разів повторює `logs.html` з інтервалом в одну секунду.
-6. Якщо спроба завершується `GameReplayError`, може повторити всю процедуру на резервних BGA-акаунтах.
-
-Поточна реалізація має такі ризики:
-
-- одна гра може спричинити 11 звернень до `logs.html` на одному акаунті;
-- якщо архів не готовий, та сама послідовність може повторитися на кожному резервному акаунті;
-- polling не припиняється одразу, якщо під час нього BGA вже повертає `limit (replay)`;
-- replay, отриманий одразу після завершення гри, може містити ходи, але ще не містити справжніх кольорів;
-- якщо історія без кольорів була записана зі статусом `ready`, чинний cache більше не запитує її повторно;
-- fallback `red`/`green` зараз використовується для CarcassonneLab URL, але відсутність справжніх кольорів не має окремої персистентної ознаки.
-
-## 3. BGA endpoints і ліміт
-
-### 3.1. Отримання історії
+### Отримання replay
 
 ```text
-GET /archive/archive/logs.html?table={id}&translated=true
+GET /archive/archive/logs.html?table={bga_table_id}&translated=true
 ```
 
-Саме цей endpoint вважається таким, що використовує BGA replay-ліміт. Кожне звернення до нього треба враховувати в локальному бюджеті незалежно від того, чи відповідь успішна.
+Кожне звернення до цього endpoint резервується до HTTP-запиту і витрачає одну
+одиницю локального rolling-бюджету незалежно від результату.
 
-### 3.2. Підготовка архіву
+### Замовлення архіву
 
 ```text
-GET /gamereview/gamereview/requestTableArchive.html?table={id}
+GET /gamereview/gamereview/requestTableArchive.html?table={bga_table_id}
 ```
 
-Цей endpoint дозволено викликати максимум один раз на гру. Він не повинен запускати polling у тому самому процесі.
+Цей endpoint викликається не більше одного разу для одного запису replay.
+Запит журналюється у `bga_replay_requests`, але не входить до бюджету
+`logs.html`. Після нього немає polling або `sleep`: перевірку виконує наступний
+запуск worker після `next_attempt_at`.
 
-Оскільки правила BGA не документовані достатньо точно, звернення до цього endpoint також треба журналювати, але окремо від лічильника `logs.html`.
+## 3. Дані у SQLite
 
-## 4. Принцип розділення готовності replay і готовності кольорів
+### `game_replays`
 
-Основний `game_replays.status` відповідає за доступність корисних replay-даних:
+Один запис відповідає одній грі з `games`.
 
-- `pending` — історію ще не отримано;
-- `fetching` — worker забрав запис в обробку;
-- `ready` — історія, похідна статистика та CarcassonneLab URL доступні;
-- `error` — автоматичне отримання завершено постійною помилкою або потрібне ручне втручання.
+Основні поля:
 
-Replay із повною історією, але fallback-кольорами, також має статус `ready`. Це потрібно для сумісності з поточним публічним API, який приєднує лише записи з `game_replays.status = 'ready'`.
+| Поле | Значення |
+|---|---|
+| `game_id` | Первинний ключ, посилання на `games.id` |
+| `bga_table_id` | Ідентифікатор BGA table |
+| `status` | `pending`, `fetching`, `ready` або `error` |
+| `events_json` | Нормалізовані `pickTile`, `playTile`, `playPartisan` |
+| `players_json` | Гравці та нормалізовані кольори |
+| `carcassonne_lab_url` | Закодований replay для CarcassonneLab |
+| `board_stats_json` | Фінальні `width` і `height` поля |
+| `meeple_stats_json` | Розміщення, повернення та залишок міплів |
+| `scoring_json` | Події та суми очок за типами об'єктів |
+| `player_time_json` | Тривалість гри й активний час гравців |
+| `fetched_at` | Час останнього успішного отримання replay |
+| `last_attempt_at` | Час останнього `logs.html` |
+| `last_error` | Остання класифікована помилка з endpoint |
+| `next_attempt_at` | Найраніший час наступної автоматичної спроби |
+| `retry_reason` | `initial`, `archive`, `colors` або `NULL` |
+| `queue_class` | `fresh` або `historical` |
+| `queued_at` | Час додавання до черги |
+| `historical_batch_id` | Необов'язковий ID historical-пакета |
+| `history_request_count` | Кількість виконаних `logs.html` для гри |
+| `color_refresh_count` | Кількість виконаних color-refresh |
+| `color_source` | `bga`, `fallback` або `NULL` до першого успіху |
+| `archive_requested_at` | Час одноразового `requestTableArchive` |
+| `last_account_label` | Акаунт останнього replay-запиту |
+| `lease_owner`, `lease_until` | Захоплення запису worker |
 
-Стан кольорів і потреба у відкладеній спробі зберігаються окремо:
+`status = ready` означає, що replay придатний для public API. Це справедливо і
+для `color_source = fallback`, навіть якщо `retry_reason = colors` ще
+запланований.
 
-- `color_source = 'bga'` — усі потрібні кольори отримано від BGA;
-- `color_source = 'fallback'` — використано локальні `red`/`green`;
-- `retry_reason = 'initial'` — очікується перше отримання історії;
-- `retry_reason = 'archive'` — архів був замовлений і очікується одна повторна перевірка;
-- `retry_reason = 'colors'` — історія вже записана, але очікується одна спроба замінити fallback справжніми кольорами;
-- `retry_reason = NULL` — автоматичні спроби більше не потрібні.
+Raw BGA logs не зберігаються: нормалізація та побудова похідних даних
+відбуваються в пам'яті.
 
-## 5. Запропоновані поля `game_replays`
+### Budget-таблиці
 
-Назви можуть бути уточнені під час реалізації, але схема має підтримувати щонайменше такі дані:
+`bga_replay_requests` містить кожен `logs.html` і кожен запит підготовки архіву:
 
-```sql
-next_attempt_at TEXT,
-retry_reason TEXT,
-queue_class TEXT NOT NULL DEFAULT 'fresh',
-queued_at TEXT,
-historical_batch_id TEXT,
-history_request_count INTEGER NOT NULL DEFAULT 0,
-color_refresh_count INTEGER NOT NULL DEFAULT 0,
-color_source TEXT,
-archive_requested_at TEXT,
-last_account_label TEXT,
-lease_owner TEXT,
-lease_until TEXT
-```
+- account label без пароля;
+- BGA table ID;
+- endpoint;
+- `request_class`: `fresh`, `historical` або `manual`;
+- час спроби;
+- результат або помилку;
+- `budget_override_id`, якщо запит став можливим завдяки override.
 
-Призначення:
+`bga_replay_account_state` містить `cooldown_until`, `last_limit_at`,
+`last_selected_at` і `last_error`.
 
-- `next_attempt_at` — найраніший час наступної автоматичної спроби;
-- `retry_reason` — причина, через яку запис потрапляє в чергу;
-- `queue_class` — клас пріоритету: `fresh` для нових ігор або `historical` для явно доданих старих ігор;
-- `queued_at` — час додавання завдання до черги, потрібний для стабільного FIFO всередині одного класу;
-- `historical_batch_id` — необов'язковий ідентифікатор порції історичних ігор для аудиту та прогресу;
-- `history_request_count` — загальна кількість виконаних для гри запитів `logs.html`;
-- `color_refresh_count` — кількість відкладених спроб замінити fallback-кольори;
-- `color_source` — джерело кольорів, які зараз записані в replay;
-- `archive_requested_at` — гарантує, що `requestTableArchive` не буде викликано повторно;
-- `last_account_label` — акаунт, яким виконано останній replay-запит;
-- `lease_owner` і `lease_until` — короткочасне атомарне захоплення запису worker без зміни доступності вже готового fallback replay.
+`bga_replay_budget_overrides` зберігає активні, прострочені та відкликані
+тимчасові зміни лімітів.
 
-Потрібен індекс для вибірки черги:
+## 4. Створення fresh-завдання
 
-```sql
-CREATE INDEX idx_game_replays_due
-ON game_replays(queue_class, status, retry_reason, next_attempt_at);
-```
+Коли result sync уперше додає нову рейтингову гру, він викликає
+`enqueue_fresh_game_replay` у тій самій SQLite-транзакції.
 
-## 6. Цільовий процес
-
-### 6.1. Створення нового `games`
-
-Після створення нової рейтингової гри процес не звертається до BGA replay endpoints. Він створює або оновлює `game_replays`:
+Створюється стан:
 
 ```text
 status = pending
@@ -142,554 +118,284 @@ queued_at = now
 next_attempt_at = now + 5 minutes
 history_request_count = 0
 color_refresh_count = 0
+color_source = NULL
 ```
 
-Таким чином створення гри запускає отримання replay через чергу, але не виконує передчасний HTTP-запит.
+Нерейтингові ігри автоматично в replay-чергу не додаються. До настання
+`next_attempt_at` BGA-запит не виконується.
 
-### 6.2. Перша спроба через 5 хвилин
+## 5. Результат одного replay-запиту
 
-Worker виконує рівно один запит `logs.html`.
+### Replay із повними BGA-кольорами
 
-#### Історія готова, справжні кольори присутні
-
-Worker:
-
-- нормалізує та записує `events_json` і `players_json`;
-- записує `board_stats_json`, `meeple_stats_json`, `scoring_json` і `player_time_json`;
-- створює CarcassonneLab URL зі справжніми кольорами;
-- встановлює:
-
-  ```text
-  status = ready
-  color_source = bga
-  retry_reason = NULL
-  next_attempt_at = NULL
-  ```
-
-#### Історія готова, але справжніх кольорів немає
-
-Worker не відкидає корисну історію. Він:
-
-- визначає порядок гравців за їхнім першим `playTile`;
-- призначає першому гравцю `red`, другому `green`;
-- записує replay, похідну статистику й CarcassonneLab URL із fallback-кольорами;
-- явно позначає походження кольорів, щоб fallback не сприймався як значення від BGA;
-- встановлює:
-
-  ```text
-  status = ready
-  color_source = fallback
-  retry_reason = colors
-  next_attempt_at = now + 15 minutes
-  color_refresh_count = 0
-  ```
-
-Fallback має бути послідовним у `players_json`, `events_json`, `meeple_stats_json` та CarcassonneLab URL. Під час реалізації чинний fallback CarcassonneLab потрібно розширити на нормалізовані player/event дані. Поле `color_source` зберігає інформацію, що це не справжні BGA-кольори.
-
-#### Архів історії ще не існує
-
-Якщо BGA повернув `Cannot find gamenotifs log file`, worker:
-
-- викликає `requestTableArchive` лише тоді, коли `archive_requested_at IS NULL`;
-- не виконує polling;
-- встановлює:
-
-  ```text
-  status = pending
-  retry_reason = archive
-  archive_requested_at = now
-  next_attempt_at = now + 2 minutes
-  ```
-
-Якщо архів замовляється під час оновлення кольорів готового fallback replay,
-`status = ready` і `retry_reason = colors` зберігаються, тому replay не зникає
-з public API. Повторна перевірка так само планується через 2 хвилини. Затримка
-налаштовується значенням `bga_replay_archive_retry_minutes` у
-`Admin` → `System Settings` (допустимо 1–60 хвилин) і не змінює окрему
-15-хвилинну затримку звичайного color refresh. Якщо налаштування ще не створене
-або база тимчасово недоступна, worker використовує безпечне значення 2 хвилини.
-
-### 6.3. Оновлення кольорів через 15 хвилин
-
-Для запису зі станом:
-
-```text
-status = ready
-color_source = fallback
-retry_reason = colors
-```
-
-worker виконує рівно один повторний `logs.html`.
-
-#### BGA повернув справжні кольори
-
-Worker заново нормалізує replay, атомарно замінює fallback-кольори у всіх похідних полях та встановлює:
+Worker записує replay та похідні дані й завершує автоматичний цикл:
 
 ```text
 status = ready
 color_source = bga
 retry_reason = NULL
 next_attempt_at = NULL
-color_refresh_count = 1
+last_error = NULL
 ```
 
-#### Кольорів знову немає
+### Replay без повних BGA-кольорів
 
-Worker залишає вже записану історію й fallback-кольори без змін та припиняє автоматичні спроби:
+Кольори вважаються повними, лише якщо знайдено обох гравців із ходами, обидва
+`color_hex` підтримуються, а нормалізовані кольори різні.
+
+Якщо умова не виконана, обом гравцям призначається узгоджена пара `red` і
+`green` у порядку першого `playTile`. Fallback одночасно записується в
+`players_json`, `events_json`, `meeple_stats_json` і CarcassonneLab URL.
+
+Після першого успішного fetch:
+
+```text
+status = ready
+color_source = fallback
+retry_reason = colors
+next_attempt_at = now + 15 minutes
+```
+
+Color-refresh не приховує готовий replay. Якщо повторна відповідь містить
+повні кольори, дані атомарно замінюються і `color_source` стає `bga`. Якщо
+кольори знову неповні, наявний fallback залишається без змін, збільшується
+`color_refresh_count`, а автоматичні color-refresh завершуються:
 
 ```text
 status = ready
 color_source = fallback
 retry_reason = NULL
 next_attempt_at = NULL
-color_refresh_count = 1
 ```
 
-Такий replay залишається повністю доступним користувачам. За потреби його можна оновити ручним запуском.
+### BGA-архів відсутній
 
-### 6.4. Повторна перевірка замовленого архіву
+Якщо `logs.html` повертає `Cannot find gamenotifs log file` і
+`archive_requested_at` порожній, система:
 
-Для запису зі станом `retry_reason = archive` worker через 2 хвилини виконує один `logs.html`.
+1. один раз викликає `requestTableArchive.html`;
+2. записує `archive_requested_at`;
+3. не робить polling;
+4. планує повторну перевірку.
 
-- Якщо історія готова — застосовуються правила з розділу 6.2 щодо справжніх або fallback-кольорів.
-- Якщо архів досі відсутній — автоматичні спроби припиняються, `status` стає `error`, а `last_error` пояснює необхідність ручного запуску.
-- `requestTableArchive` повторно не викликається.
-
-## 7. Перевірка повноти кольорів
-
-Для двох гравців кольори вважаються повними лише тоді, коли:
-
-- визначено обох унікальних гравців, які виконували ходи;
-- кожному знайдено валідний `color_hex` від BGA;
-- кожен `color_hex` можна відобразити у підтримуваний колір міпла;
-- кольори двох гравців різні.
-
-Якщо хоча б одна умова не виконана, не можна змішувати один справжній колір з одним fallback. Для обох гравців використовується узгоджена пара `red`/`green`, а `color_source` встановлюється в `fallback`.
-
-## 8. Безпечний worker
-
-Worker працює тільки з локальною чергою. Він не сканує BGA та не шукає нові ігри.
-
-Черга має дві смуги:
-
-- `fresh` — нові ігри та всі їхні відкладені переходи `initial`, `archive` і `colors`;
-- `historical` — лише старі ігри, які окремий зовнішній процес явно позначив для завантаження.
-
-### 8.1. Абсолютний пріоритет свіжих ігор
-
-Кожен due-запис `fresh` має оброблятися раніше за будь-який due-запис `historical`, незалежно від `next_attempt_at` історичної гри.
-
-Приклад пріоритетної вибірки:
-
-```sql
-SELECT *
-FROM game_replays
-WHERE retry_reason IS NOT NULL
-  AND next_attempt_at IS NOT NULL
-  AND datetime(next_attempt_at) <= datetime('now')
-  AND status IN ('pending', 'ready')
-ORDER BY
-  CASE queue_class WHEN 'fresh' THEN 0 ELSE 1 END,
-  datetime(next_attempt_at),
-  datetime(COALESCE(queued_at, created_at))
-LIMIT 3;
-```
-
-Практично краще запускати той самий worker у трьох режимах із загальним кодом обробки:
-
-- `--queue-class fresh` — раз на 2 хвилини, до трьох `logs.html` за запуск;
-- `--queue-class archive-follow-up` — щохвилини, але лише для due historical-записів з непорожнім `archive_requested_at`;
-- `--queue-class historical` — раз на 30 хвилин, до трьох `logs.html` за запуск і не більше одного запиту на кожен доступний акаунт.
-
-`archive-follow-up` є режимом виконання, а не новим класом черги. Він не змінює
-`game_replays.queue_class`, передає до budget gateway `request_class = historical`
-і не обробляє untouched historical backlog. Перед кожним його HTTP-запитом діє
-та сама перевірка абсолютного пріоритету fresh.
-
-Перед кожним історичним HTTP-запитом worker повторно перевіряє, чи не з'явився due-запис `fresh`. Якщо з'явився, історичний запуск завершується і звільняє lock. Навіть якщо історична гра чекала довше, вона не випереджає свіжу. За великого поточного навантаження історичні завдання можуть довго чекати — це свідома властивість процесу.
-
-### 8.2. Додавання історичних ігор
-
-Спосіб, яким адміністратор позначатиме порції старих ігор, не входить до поточного етапу. Механізм отримання replay має надати ідемпотентну операцію enqueue, яку згодом зможе викликати CLI, адмінка або окремий імпорт.
-
-Позначення старої гри саме по собі не виконує жодного BGA-запиту. Якщо корисної історії ще немає, воно створює або оновлює завдання:
+Для першого отримання replay:
 
 ```text
 status = pending
-retry_reason = initial
-queue_class = historical
-queued_at = now
-next_attempt_at = now
-historical_batch_id = <optional batch id>
+retry_reason = archive
+next_attempt_at = now + archive_retry_minutes
 ```
 
-Правила enqueue:
-
-- якщо replay зі справжніми BGA-кольорами вже `ready`, операція за замовчуванням нічого не робить;
-- якщо запису немає або історія ще не готова, гра потрапляє в `historical`;
-- для наявного `ready` replay із fallback-кольорами зберігається `status = ready`, а в чергу додається лише `retry_reason = colors` без втрати вже збереженої історії;
-- повторне позначення тієї самої гри не створює дубль і не скидає лічильники без явного `force`;
-- міграція не додає всі старі ігри автоматично: в чергу потрапляють лише явно позначені порції.
-
-Історична гра використовує той самий state machine, що й свіжа: один `logs.html`, за потреби один `requestTableArchive`, одна відкладена перевірка архіву та одна color-refresh спроба. Усі наступні спроби зберігають `queue_class = historical`, тому залишаються низькопріоритетними та враховуються в історичному підліміті.
-
-### 8.3. Загальні вимоги до worker
-
-Вимоги до worker:
-
-- максимум три `logs.html` за один запуск;
-- максимум один `logs.html` для однієї гри за один запуск;
-- жодних циклів polling або `sleep` між повторними HTTP-запитами;
-- атомарне захоплення запису через lease;
-- для `status = ready` під час color refresh не змінювати статус на `fetching`, щоб готовий fallback replay не зникав із публічного API на час HTTP-запиту;
-- один активний worker через `flock`;
-- автоматично звільняти прострочений lease після аварійного завершення;
-- за відсутності due-записів worker завершується без BGA-запитів.
-
-Рекомендовані systemd timers запускають fresh раз на 2 хвилини,
-`archive-follow-up` щохвилини, а звичайний historical раз на 30 хвилин. Частота
-archive timer не прискорює historical backlog: він бачить лише записи з уже
-замовленим архівом. Кількість BGA-запитів додатково обмежують `next_attempt_at`,
-per-run limit і персистентний historical budget.
-
-Якщо timer не встановлено або вимкнено, той самий worker можна запускати вручну. Черга залишається в SQLite і не втрачається між запусками.
-
-## 9. Персистентний бюджет BGA replay-запитів
-
-Потрібна окрема таблиця аудиту:
-
-```sql
-CREATE TABLE bga_replay_requests (
-  id INTEGER PRIMARY KEY,
-  account_label TEXT NOT NULL,
-  bga_table_id TEXT NOT NULL,
-  endpoint TEXT NOT NULL,
-  request_class TEXT NOT NULL,
-  budget_override_id INTEGER,
-  attempted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  outcome TEXT,
-  error TEXT
-);
-
-CREATE INDEX idx_bga_replay_requests_budget
-ON bga_replay_requests(account_label, endpoint, attempted_at, request_class);
-
-CREATE TABLE bga_replay_account_state (
-  account_label TEXT PRIMARY KEY,
-  cooldown_until TEXT,
-  last_limit_at TEXT,
-  last_selected_at TEXT,
-  last_error TEXT
-);
-
-CREATE TABLE bga_replay_budget_overrides (
-  id INTEGER PRIMARY KEY,
-  account_label TEXT NOT NULL,
-  extra_historical_limit INTEGER NOT NULL DEFAULT 0,
-  total_limit_override INTEGER,
-  starts_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  expires_at TEXT NOT NULL,
-  created_by TEXT NOT NULL,
-  reason TEXT,
-  revoked_at TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-Перед кожним `logs.html` worker атомарно перевіряє і резервує бюджет.
-
-`request_class` має значення `fresh`, `historical` або `manual` і дає змогу рахувати загальний бюджет та історичний підліміт незалежно.
-
-### 9.1. Базові обмеження
-
-Початкові консервативні обмеження для кожного з трьох акаунтів:
-
-- `TOTAL_LIMIT = 80` звернень до `logs.html` за рухомі 24 години;
-- `FRESH_RESERVE = 50` одиниць місткості, які історичний worker не може використати;
-- `HISTORICAL_LIMIT = 30` історичних звернень за рухомі 24 години;
-- усі три акаунти входять до одного пулу для автоматичних і ручних операцій;
-- окремого акаунта або окремої квоти для ручного режиму немає;
-- ручні команди за замовчуванням також дотримуються загального бюджету;
-- `requestTableArchive` журналюється окремо й дозволяється лише один раз на гру.
-
-Історичний запит дозволено зарезервувати лише тоді, коли одночасно виконано:
+Для вже готового fallback replay, який оновлює кольори:
 
 ```text
-historical_used_24h < 30
-total_used_24h < TOTAL_LIMIT - FRESH_RESERVE
+status = ready
+retry_reason = colors
+next_attempt_at = now + archive_retry_minutes
 ```
 
-Отже, якщо свіжі або ручні запити ще не використовували акаунт, історичний процес може витратити максимум 30 одиниць і залишить 50 для подальших актуальних матчів. Якщо, наприклад, уже виконано 12 свіжих запитів, історична смуга зможе використати не більше 18. Базова теоретична верхня межа історичного процесу для трьох акаунтів — 90 `logs.html` за рухомі 24 години, але за наявності поточного навантаження вона автоматично зменшується.
+Затримка береться із system setting
+`bga_replay_archive_retry_minutes`. Допустимий діапазон — 1–60 хвилин,
+значення за замовчуванням — 2 хвилини.
 
-Для `fresh` і `manual` перевіряється загальна умова `total_used_24h < 80`. Значення 80 не є твердженням про точний BGA-ліміт у 100; це локальна початкова межа із запасом безпеки. Усі числа мають бути конфігурацією, а не константами всередині fetch-функції.
+Якщо під час наступної перевірки архів досі відсутній, другий
+`requestTableArchive` не надсилається. Автоматичне опрацювання завершується:
 
-### 9.2. Тимчасові admin overrides
+- для replay без корисних даних: `status = error`;
+- для готового fallback replay: `status = ready`;
+- в обох випадках `retry_reason` і `next_attempt_at` очищуються, а
+  `last_error` пояснює причину.
 
-Глобальний адміністратор може тимчасово змінити для одного або одразу для всіх акаунтів два незалежні параметри:
+### Тимчасова помилка
 
-- додаткову historical-місткість `E` — регульоване ціле значення, а не фіксовані `+20`;
-- загальний rolling-ліміт — базово `80`, із можливістю тимчасово встановити значення до `100` включно.
+Auth/network та інші тимчасові помилки не запускають каскад акаунтів.
+Зберігається поточний `retry_reason`, а наступна спроба планується через
+15 хвилин. Готовий fallback replay залишається `ready`.
 
-`+20 historical` і `total 100` можна залишити в UI як швидкі presets, але вони не є єдиними доступними значеннями. Historical boost сам по собі не підвищує загальний ліміт; total-limit override задається й підтверджується окремо.
+Під час створення BGA HTTP-сесії Selenium очікує до 10 секунд появи
+`bgaConfig.requestToken`. Якщо token не з'явився, повне оновлення сесії
+повторюється до трьох разів. Після трьох невдалих спроб помилка вважається
+тимчасовою і replay відкладається.
 
-Для активних значень `E` і `T` ефективні межі одного акаунта обчислюються так:
+### Replay limit
+
+Явна відповідь `limit (replay)` завершує поточний worker, не перевіряє ту саму
+гру іншим акаунтом, ставить вибраний акаунт у cooldown на 24 години за
+замовчуванням і залишає завдання due для наступного безпечного запуску.
+
+### Постійна помилка доступу або некласифікована прикладна помилка
+
+Автоматичні спроби завершуються. Запис без готового replay отримує
+`status = error`; готовий fallback replay залишається `ready`. У будь-якому
+випадку `retry_reason = NULL`, `next_attempt_at = NULL`, а діагностика
+зберігається у `last_error`.
+
+## 6. Worker modes і пріоритети
+
+CLI `retry_pending_game_replays.py` має три режими. Усі вони використовують
+спільний код, один lock-файл, lease і rolling budget.
+
+| Mode | Що обробляє | systemd timer | Budget class |
+|---|---|---|---|
+| `fresh` | Due-записи `queue_class = fresh` | кожні 2 хвилини | `fresh` |
+| `archive-follow-up` | Due historical із `archive_requested_at IS NOT NULL` | щохвилини | `historical` |
+| `historical` | Звичайний due historical backlog | кожні 30 хвилин | `historical` |
+
+`archive-follow-up` — режим виконання, а не значення `queue_class`. Записи
+залишаються `historical`, тому цей режим не витрачає fresh reserve, не обробляє
+untouched historical backlog і в статистиці Admin входить до `Historical`.
+
+Fresh має абсолютний пріоритет. Перед кожним historical HTTP-запитом worker
+повторно перевіряє due fresh. Якщо fresh з'явився, historical-запис
+звільняється, а запуск завершується з `stop_reason = fresh_priority`.
+
+Загальні обмеження одного запуску:
+
+- `--limit` від 1 до 3;
+- максимум один `logs.html` для однієї гри;
+- у historical і `archive-follow-up` — максимум один успішно зарезервований
+  `logs.html` на один акаунт за запуск;
+- один активний replay-worker через `flock`;
+- lease за замовчуванням 300 секунд;
+- прострочений lease може бути підібраний наступним worker.
+
+Через правило «один historical-запит на акаунт за запуск» worker може
+зупинитися раніше за `--limit`. Якщо акаунти 1–3 у cooldown і доступний лише
+акаунт 4, один historical-запуск виконає через нього один запит. Наступний
+запис може бути повернутий у чергу з `stopped_by_budget = true`, хоча
+rolling-бюджет акаунта 4 ще не вичерпаний. Новий запуск знову може використати
+акаунт 4 один раз.
+
+`processed` у JSON summary означає кількість захоплених записів, а `requests` —
+фактичні `logs.html`. Тому при поверненні завдання у чергу `processed` може
+бути більшим за `requests`.
+
+## 7. Основний пул акаунтів і standby
+
+Credentials читаються з `.env`:
+
+```env
+BGA_EMAIL=...
+BGA_PASSWORD=...
+BGA_EMAIL_2=...
+BGA_PASSWORD_2=...
+BGA_EMAIL_3=...
+BGA_PASSWORD_3=...
+BGA_EMAIL_4=...
+BGA_PASSWORD_4=...
+```
+
+Акаунти 1–3 утворюють звичайний пул. Серед кандидатів без cooldown і з
+доступним бюджетом вибирається акаунт із найменшим використанням за останні
+24 години; при рівності враховується останній запит і порядок акаунтів.
+
+Акаунт 4 має роль standby:
+
+- не бере участі у звичайному балансуванні;
+- доступний лише тоді, коли всі налаштовані акаунти 1–3 одночасно мають
+  активний cooldown;
+- не розблоковується лише через вичерпання локального бюджету акаунтів 1–3;
+- виключений зі звичайної автоматичної ротації HTTP-сесій;
+- може бути явно вибраний replay gateway лише після перевірки standby-умови.
+
+В Admin акаунт 4 показується як `Standby`. Стан акаунта `Available` означає,
+що він не має власного cooldown; фактичний залишок rolling-бюджету показується
+окремо. Повторне використання в тому самому historical-запуску все одно
+заборонене per-run правилом.
+
+## 8. Rolling budget і overrides
+
+Базові значення на акаунт:
+
+```env
+BGA_REPLAY_TOTAL_LIMIT=80
+BGA_REPLAY_FRESH_RESERVE=50
+BGA_REPLAY_HISTORICAL_LIMIT=30
+BGA_REPLAY_MAX_TOTAL_LIMIT=100
+BGA_REPLAY_COOLDOWN_HOURS=24
+```
+
+Rolling-вікно — останні 24 години. Для `fresh` і `manual` діє:
 
 ```text
-effective_total_limit = T або TOTAL_LIMIT
-effective_historical_limit = min(HISTORICAL_LIMIT + E, effective_total_limit)
-effective_fresh_reserve = effective_total_limit - effective_historical_limit
-
-TOTAL_LIMIT <= effective_total_limit <= 100
-0 <= E <= effective_total_limit - HISTORICAL_LIMIT
+total_used_24h < effective_total_limit
 ```
 
-`T` відсутнє, якщо загальний ліміт не перевизначено, тому типовим значенням залишається `80`. Верхня межа для `E` не хардкодиться як `20`: вона динамічно випливає з ефективного загального ліміту. За базового total 80 допустимий діапазон `E` — від 0 до 50; за total 100 — від 0 до 70.
-
-Приклади:
-
-- `T = 80`, `E = 10`: historical limit 40, захищена неісторична місткість 40;
-- `T = 80`, `E = 20`: historical limit 50, захищена неісторична місткість 30;
-- `T = 100`, `E = 0`: historical limit залишається 30, а додаткові 20 доступні лише `fresh` і `manual`;
-- `T = 100`, `E = 20`: historical limit 50, захищена неісторична місткість 50;
-- `T = 100`, `E = 70`: historical може використати весь ліміт 100, якщо `fresh` і `manual` ще не витратили його частину.
-
-Під час активного override historical-запит дозволено, коли:
+Для `historical`, включно з `archive-follow-up`, одночасно діє:
 
 ```text
 historical_used_24h < effective_historical_limit
 total_used_24h < effective_total_limit - effective_fresh_reserve
 ```
 
-Для `fresh` і `manual` діє умова `total_used_24h < effective_total_limit`. Фактичний historical-залишок може бути меншим за номінальний, якщо частину rolling-бюджету вже використали `fresh` або `manual`. Admin UI має показувати `historical_available_now`, а не лише формулу `30 + E`.
+Перед HTTP-запитом gateway у `BEGIN IMMEDIATE` перевіряє cooldown і standby,
+рахує rolling usage, застосовує active override, вибирає акаунт і вставляє
+`bga_replay_requests` із `outcome = reserved`. Лише після commit виконується
+HTTP-запит. Тому невдалий або rate-limited `logs.html` також витрачає одиницю
+локального бюджету.
 
-Вимоги до override:
+Global admin може створити тимчасовий override для одного або кількох
+акаунтів: `extra_historical_limit = E`, необов'язковий
+`total_limit_override = T`, обов'язкові expiry та reason.
 
-- він створюється окремо для кожного акаунта; дія «для всіх» в одній транзакції відкликає попередні активні записи й створює три нові з однаковими параметрами;
-- на акаунт може діяти лише один override; повторне збереження замінює `E`, `T` і `expires_at`, а не додає нове значення до попереднього, при цьому старий запис зберігається для аудиту;
-- historical boost приймає будь-яке ціле `E` у динамічному безпечному діапазоні, а total-limit override — ціле значення від 81 до 100;
-- адміністратор обов'язково задає `expires_at`; рекомендоване максимальне вікно — 12 годин;
-- override можна відкликати раніше через `revoked_at`;
-- причина, автор, попередні й нові значення та час зберігаються для аудиту;
-- worker перевіряє актуальність override перед кожним `logs.html`;
-- після завершення або відкликання нові запити знову підкоряються базовим лімітам historical 30 і total 80;
-- вже виконані запити не скидаються й залишаються у rolling-вікні 24 години;
-- `fresh` завжди зберігає пріоритет над `historical`, навіть коли обидва override активні;
-- `budget_override_id` записується для запитів, дозволених хоча б одним активним override, щоб показувати фактичне використання додаткового пулу.
-
-Підняття total до 100 не означає, що BGA гарантовано дозволяє рівно 100 replay-запитів. Це свідоме тимчасове рішення адміністратора; явна відповідь `limit (replay)` усе одно негайно переводить акаунт у cooldown і зупиняє поточний worker.
-
-Акаунт обирається з основних акаунтів 1–3 за найменшим `total_used_24h`; при рівності застосовується round-robin. Акаунти в cooldown виключаються. Акаунт 4 є standby і допускається до вибору лише тоді, коли всі акаунти 1–3 мають активний cooldown; саме лише вичерпання локального бюджету його не активує. Одна гра не повинна каскадно перевірятися всіма доступними акаунтами в межах одного запуску.
-
-Перевірка й резервування виконуються в одній короткій SQLite-транзакції:
-
-1. `BEGIN IMMEDIATE`.
-2. Відкинути акаунти з активним `cooldown_until`.
-3. Порахувати `logs.html` за останні 24 години для кожного кандидата, а для historical також окремо `request_class = historical`.
-4. Вибрати акаунт, який задовольняє потрібні ліміти.
-5. До HTTP-запиту вставити рядок `bga_replay_requests` зі станом `reserved` і оновити `last_selected_at`.
-6. Зафіксувати транзакцію, виконати HTTP-запит і потім оновити `outcome` або `error` цього рядка.
-
-Для автоматичного запиту `request_class` дорівнює `queue_class`; прямий запуск команди для гри, дуелі або матчу записується як `manual`.
-
-Лічильник збільшується до виконання HTTP-запиту. Невдала, обірвана або rate-limited відповідь також використовує одну одиницю локального бюджету.
-
-Усі шляхи — синхронізація нових ігор, обидва workers і ручні CLI-команди — мають викликати `logs.html` лише через один спільний budget/account gateway. Інакше локальний лічильник не бачитиме частину фактичного використання. На першому deployment журнал не знає запитів, які акаунти виконали раніше, тому початкове ввімкнення робиться з малим тестовим бюджетом; повністю достовірним rolling-вікно стає через 24 години, якщо немає зовнішніх звернень в обхід gateway.
-
-## 10. Обробка помилок і ротація акаунтів
-
-Помилки потрібно розділити на окремі типи, а не обробляти будь-який `GameReplayError` однаково.
-
-### `Cannot find gamenotifs log file`
-
-- це очікуваний стан, а не постійна помилка;
-- один `requestTableArchive`;
-- одна відкладена повторна спроба;
-- без ротації акаунта.
-
-### `You have reached a limit (replay)`
-
-- негайно припинити поточний worker;
-- позначити акаунт недоступним для всіх replay-запитів на 24 години;
-- не повторювати поточну гру всіма акаунтами в межах того самого запуску;
-- залишити replay у черзі без збільшення його прикладного retry-ліміту.
-
-Якщо ліміт отримав історичний worker, історичний запуск припиняється повністю. Інші незаблоковані акаунти залишаються доступними насамперед для свіжих ігор у наступному запуску; історична гра не спричиняє негайної ротації.
-
-### Auth/network error
-
-- не запускати каскад повторів;
-- записати endpoint, акаунт і точний текст помилки;
-- залишити запис для наступного безпечного або ручного запуску;
-- застосувати обмежений backoff.
-
-### Постійна помилка доступу
-
-- встановити `status = error`;
-- очистити `retry_reason` і `next_attempt_at`;
-- вимагати явного ручного повтору.
-
-Повідомлення про помилку має містити endpoint. Це дозволить однозначно відрізняти ліміт `logs.html` від відмови `requestTableArchive.html`.
-
-## 11. Ручні сценарії
-
-### Гра
-
-`get_game_replay.py` має:
-
-- виконувати максимум один `logs.html` за запуск;
-- не робити polling;
-- дотримуватися бюджету;
-- обирати акаунт зі спільного пулу акаунтів 1–3, а акаунт 4 допускати лише коли всі основні акаунти мають активний cooldown;
-- дозволяти оновити replay із `color_source = fallback`;
-- не викликати повторно `requestTableArchive`, якщо `archive_requested_at` уже заповнено.
-
-### Дуель
-
-Потрібна окрема команда на зразок:
-
-```bash
-python3 get_duel_game_replays.py '<duels.id>' --max-requests 3
+```text
+effective_total_limit = T або base total
+effective_historical_limit = min(base historical + E, effective total)
+effective_fresh_reserve = effective total - effective historical
 ```
 
-Вона має:
+`T` має бути більшим за base total і не більшим за configured maximum 100.
+Новий override відкликає попередній active override для вибраного акаунта, а
+не додається до нього. Прострочені та відкликані записи зберігаються для
+аудиту. Вже виконані запити залишаються у rolling-вікні після завершення
+override.
 
-- приймати точний `duels.id`;
-- вибирати лише активні `games` цієї дуелі через `games.duel_id`;
-- обробляти їх у порядку `game_number`, не зачіпаючи інші дуелі батьківського матчу;
-- повторно використовувати `ready` replay зі справжніми кольорами;
-- включати pending/error/fallback replay лише відповідно до явних CLI-параметрів;
-- мати жорсткий `--max-requests` на один запуск;
-- виконувати максимум один `logs.html` для кожної гри та не робити polling;
-- балансувати ігри між усіма трьома доступними акаунтами;
-- повертати JSON summary з `duel_id`, `games_found`, `processed`, `ready`, `cached`, `deferred`, `failed` і `remaining`.
+## 9. Historical queue і legacy backfill
 
-### Матч
+Historical enqueue є ідемпотентним:
 
-`get_match_game_replays.py` має:
+- готовий replay із `color_source = bga` не додається повторно без `force`;
+- новий або неготовий replay отримує `retry_reason = initial`;
+- готовий fallback replay отримує `retry_reason = colors`, не втрачаючи даних;
+- уже запланований fresh або historical запис не дублюється;
+- fallback із уже виконаним color-refresh не планується повторно без `force`.
 
-- повторно використовувати `ready` replay зі справжніми кольорами;
-- включати pending/error/fallback replay лише відповідно до явних CLI-параметрів;
-- мати жорсткий `--max-requests` на один запуск;
-- не використовувати `--poll-attempts 10`;
-- балансувати послідовні ігри між усіма трьома доступними акаунтами;
-- зупинятися на replay-limit без повтору тієї самої гри іншими акаунтами в цьому запуску.
+Для historical зберігається `queue_class = historical`, тому всі наступні
+архівні та color-refresh переходи залишаються в historical budget.
 
-### Ручна обробка due-черги
+One-off `backfill_existing_game_replays.py` використовується лише для
+підготовки legacy-записів:
 
-Потрібна команда на зразок:
+- видаляє всі `status = error` при `--apply`;
+- проходить усі `status = ready`;
+- не змінює `color_source`, бо його поточне значення є авторитетним;
+- перебудовує доступні похідні поля;
+- ставить ready/fallback із `color_refresh_count < 1` у historical
+  color-refresh;
+- не переплановує fallback, для якого color-refresh уже виконувався;
+- dry-run є режимом за замовчуванням;
+- `--apply` виконує зміни однією транзакцією під replay lock.
 
-```bash
-python3 retry_pending_game_replays.py --limit 3
-```
+## 10. Admin → BGA Replay Queue
 
-Вона використовує ту саму логіку, основний пул акаунтів 1–3, standby-акаунт 4, бюджет і блокування, що й автоматичний worker. Ручний запуск не має прихованого обходу бюджету: акаунт 4 також доступний лише під час одночасного cooldown акаунтів 1–3.
+Розділ доступний global admin і показує:
 
-## 12. Сумісність з публічним API
+- due та scheduled для `fresh` і `historical`;
+- ready із BGA-кольорами та fallback-кольорами;
+- `error` і manual-required;
+- rolling-24h attempts та successful окремо для `fresh`, `historical`,
+  `manual`;
+- effective total/historical limits і fresh reserve;
+- `historical_available_now`;
+- cooldown та його завершення;
+- standby-роль та eligibility акаунта 4;
+- active і попередні overrides.
 
-Поточний Node API приєднує replay через умову:
+Відпрацювання `archive-follow-up` збільшує `Historical attempts` та, якщо
+успішне, `Historical successful`. Окремої категорії `archive-follow-up` в UI
+немає, тому конкретний режим запуску з агрегованої таблиці визначити не можна.
 
-```sql
-gr.status = 'ready'
-```
-
-Тому replay із fallback-кольорами повинен мати `status = ready`, навіть коли для нього заплановане оновлення кольорів.
-
-Публічну API-відповідь можна згодом доповнити необов’язковим полем:
-
-```json
-{
-  "replay_color_source": "bga"
-}
-```
-
-або:
-
-```json
-{
-  "replay_color_source": "fallback"
-}
-```
-
-Це не є обов'язковим для першого етапу, але корисне для діагностики.
-
-## 13. Спостережуваність
-
-### 13.1. Технічні логи та метрики
-
-Логи кожної спроби мають містити:
-
-- `game_id`;
-- `bga_table_id`;
-- endpoint;
-- account label без секретів;
-- queue class і request class;
-- retry reason;
-- номер history/color спроби;
-- результат: `ready_bga_colors`, `ready_fallback`, `archive_requested`, `archive_missing`, `replay_limit`, `auth_error`, `network_error`;
-- наступний запланований час;
-- залишок локального бюджету.
-
-У підсумку worker потрібно показувати:
-
-- due;
-- processed;
-- ready with BGA colors;
-- ready with fallback colors;
-- archives requested;
-- deferred;
-- manual required;
-- stopped by budget;
-- stopped by BGA limit.
-
-Підсумок і метрики мають окремо показувати `fresh`, `historical` і `manual`, а також для кожного акаунта:
-
-- загальне використання за рухомі 24 години;
-- історичне використання за рухомі 24 години;
-- залишок загального бюджету;
-- місткість, захищену від історичного worker;
-- cooldown і його час завершення.
-
-### 13.2. Admin UI для replay-пулу
-
-Потрібна окрема доступна лише глобальним адміністраторам сторінка, наприклад `Player Hub → BGA Replay Queue`. Вона не повинна бути частиною публічної статистики матчів.
-
-Основна таблиця містить один рядок на кожен із трьох BGA-акаунтів і показує:
-
-- fresh `logs.html` attempts за рухомі 24 години;
-- historical attempts за рухомі 24 години;
-- manual attempts за рухомі 24 години;
-- загалом використано, базовий `TOTAL_LIMIT = 80`, ефективний total limit і час завершення override;
-- базовий historical limit, активний historical boost та час його завершення;
-- `historical_available_now`, обчислений з урахуванням загального використання;
-- скільки додаткового пулу реально використано через `budget_override_id`;
-- fresh-резерв, який ще захищений від historical worker;
-- успішно підготовлені replay окремо для `fresh` і `historical`;
-- помилки та replay-limit responses;
-- стан акаунта: available або cooldown із часом завершення.
-
-Ліміт BGA витрачається запитами на рівні гри, тому основна одиниця пулу — `logs.html attempt`, а не матч. Для зручності поруч можна показувати кількість унікальних оброблених `games`, `duels` і батьківських `matches`, але ці числа не використовуються для budget enforcement.
-
-За замовчуванням сторінка показує те саме рухоме 24-годинне вікно, яке реально застосовує worker. Додатково можна перемикнутися на «сьогодні» у часовій зоні адміністратора, але цей календарний зріз є лише інформаційним.
-
-Над таблицею потрібен summary черги:
-
-- due і scheduled для `fresh`;
-- due і scheduled для `historical`;
-- найстаріший historical `queued_at`;
-- кількість `ready` із BGA-кольорами та fallback-кольорами;
-- кількість `error` і записів, що потребують ручного втручання.
-
-Admin UI має підтримувати такі операції:
-
-- встановити регульований `extra_historical_limit` для одного або всіх акаунтів; швидкі presets, наприклад `+10`, `+20`, `+30` і максимально допустиме значення, лише заповнюють числове поле;
-- тимчасово підняти загальний ліміт одного або всіх акаунтів із 80 до вибраного цілого значення не вище 100; `100` може бути швидким preset;
-- одним збереженням змінити один або обидва параметри з вибором `expires_at` і обов'язковою причиною;
-- достроково відкликати активний override;
-- refresh стану без запуску BGA-запитів.
-
-Перед підтвердженням діалог показує для кожного акаунта значення до і після: total limit, historical limit, `historical_available_now`, fresh reserve, загальне використання та cooldown. Окреме помітне попередження потрібне при піднятті total понад 80 і при зменшенні fresh reserve. Якщо є due/scheduled fresh-ігри, діалог також попереджає про них, але остаточне рішення залишається за глобальним адміністратором.
-
-Мінімальний внутрішній API:
+Admin API:
 
 ```text
 GET    /admin/bga-replay-budget
@@ -697,173 +403,409 @@ POST   /admin/bga-replay-budget/overrides
 DELETE /admin/bga-replay-budget/overrides/{id}
 ```
 
-`POST` приймає `account_labels`, `extra_historical_limit`, необов'язковий `total_limit_override`, `expires_at` і `reason`. Сервер перевіряє global-admin access, цілі значення, `80 < total_limit_override <= 100` та `0 <= extra_historical_limit <= effective_total_limit - HISTORICAL_LIMIT`, після чого в одній транзакції відкликає попередні активні записи й створює нові. Клієнт не передає обчислені залишки бюджету.
+Refresh сторінки не виконує BGA-запитів.
 
-## 14. План адаптації існуючого процесу
+## 11. systemd
 
-### Етап 1. Підготувати модель станів і міграцію
+Production використовує template service `bga-replay-worker@.service` і три
+timers:
 
-1. Додати нові поля до `game_replays` у Python schema helper.
-2. Додати ті самі поля до Node `ensureGameReplaysSchema`.
-3. Додати `queue_class`, `queued_at` та необов'язковий `historical_batch_id`.
-4. Створити індекс due-черги з урахуванням `queue_class`.
-5. Створити таблицю `bga_replay_requests` із `request_class`, `budget_override_id` та індекси для підрахунку загального й історичного рухомого 24-годинного бюджету.
-6. Створити `bga_replay_budget_overrides` для персистентних, обмежених у часі historical і total-limit overrides.
-7. Визначити безпечні значення для наявних записів:
+```text
+bga-replay-fresh.timer
+bga-replay-archive-follow-up.timer
+bga-replay-historical.timer
+```
 
-   - `ready` із відомими кольорами → `color_source = bga`;
-   - `ready` без відомих кольорів → `color_source = fallback`, без автоматичного масового retry під час міграції;
-   - старі `error` залишаються ручними, щоб deployment не створив несподівану чергу запитів;
-   - наявні старі ігри не додаються в `historical` автоматично; це робиться лише явними порціями після deployment.
+Фактичні інтервали:
 
-### Етап 2. Зробити replay fetch одноразовим
+- fresh: `OnUnitInactiveSec=2min`;
+- archive follow-up: `OnUnitInactiveSec=1min`;
+- historical: `OnUnitInactiveSec=30min`.
 
-1. Прибрати цикл із 10 polling-спроб.
-2. Розділити результати на `ready`, `archive_missing`, `replay_limit`, `access_error`, `temporary_error`.
-3. Додати endpoint до кожного повідомлення про помилку.
-4. Заборонити ротацію акаунта для `archive_missing` та звичайних тимчасових помилок.
-5. Негайно зупинятися на `replay_limit`.
+Кожен service запускає `retry_pending_game_replays.py` з відповідним
+`--queue-class` і `--limit 3`. Timeout одного запуску — 5 хвилин. Stdout і
+stderr додаються до:
 
-### Етап 3. Реалізувати перевірку та provenance кольорів
+```text
+/var/log/carcassonne/bga-replay-worker.log
+```
 
-1. Визначати повноту кольорів для всіх гравців із ходами.
-2. Якщо кольори неповні, застосовувати `red`/`green` до обох гравців у first-move order.
-3. Записувати fallback послідовно у normalized replay та CarcassonneLab URL.
-4. Зберігати `color_source`.
-5. Під час повторного fetch атомарно замінювати всі fallback-кольори справжніми.
+Усі режими використовують спільний lock:
 
-### Етап 4. Змінити реакцію на створення `games`
+```text
+data/auth.sqlite.bga-replay-worker.lock
+```
 
-1. Замість негайного fetch створювати `game_replays` зі статусом `pending`.
-2. Встановлювати `retry_reason = initial`.
-3. Встановлювати `queue_class = fresh`, `queued_at = now`.
-4. Встановлювати `next_attempt_at = now + 5 minutes`.
-5. Оновити summary синхронізації: розрізняти `replays_scheduled` і `replays_ready`.
+Наявність lock-файлу не означає, що lock зайнятий. Не треба видаляти цей файл
+під час роботи; власника перевіряють через `lsof` або `fuser`.
 
-### Етап 5. Реалізувати бюджет і safe account selection
+## 12. Ручні команди
 
-1. Журналювати всі replay-related requests.
-2. Перед `logs.html` атомарно резервувати бюджет.
-3. Додати конфігуровані `TOTAL_LIMIT = 80`, `FRESH_RESERVE = 50` і `HISTORICAL_LIMIT = 30` на акаунт за рухомі 24 години.
-4. Використовувати всі три акаунти в єдиному пулі для automatic і manual режимів.
-5. Обирати доступний акаунт із найменшим поточним використанням та round-robin при рівності.
-6. Зберігати cooldown після явного BGA replay-limit.
-7. Заборонити історичному worker використання захищених 50 одиниць кожного акаунта.
-8. Провести всі автоматичні та ручні `logs.html` через спільний budget/account gateway.
-9. Додати до gateway регульований historical boost у межах ефективного total limit.
-10. Додати окремий тимчасовий total-limit override: базово 80, максимум 100 на акаунт.
-11. Заборонити накопичення кількох одночасних overrides для одного акаунта; нове збереження замінює активні значення.
+Усі production-команди нижче запускаються з:
 
-### Етап 6. Реалізувати due worker і CLI
+```bash
+cd /home/carcassonne-gg/auth-server
+```
 
-1. Реалізувати режими `fresh`, `archive-follow-up` і `historical` на спільному worker engine.
-2. Додати блокування через `flock`.
-3. Реалізувати переходи `initial`, `archive` та `colors`.
-4. Додати ручну команду обробки due-черги.
-5. Адаптувати наявні команди гри та матчу до single-attempt semantics.
-6. Додати `get_duel_game_replays.py`, який обробляє лише ігри вказаної дуелі.
-7. Додати ідемпотентну внутрішню операцію enqueue для історичної гри без прив'язки до майбутнього UI або способу позначення.
-8. Перед кожним історичним запитом перевіряти відсутність due-записів `fresh`.
-9. Для історичного режиму обмежити один запуск трьома запитами — максимум по одному на доступний акаунт.
+### 12.1. Backup production SQLite
 
-### Етап 7. Додати systemd service/timer
+```bash
+backup_file="data/auth-$(date -u +%Y%m%dT%H%M%SZ).sqlite"
+sqlite3 data/auth.sqlite ".backup '$backup_file'"
+sqlite3 "$backup_file" "PRAGMA quick_check;"
+echo "$backup_file"
+```
 
-1. Створити replay worker service із режимами `fresh`, `archive-follow-up` і `historical`.
-2. Запускати `fresh` щохвилини або раз на кілька хвилин.
-3. Запускати `archive-follow-up` окремим timer щохвилини, а звичайний `historical` — раз на 30 хвилин.
-4. Не прив'язувати кількість HTTP-запитів до частоти timer.
-5. Спочатку встановити timers вимкненими або запустити в режимі preview.
-6. Після перевірки черги, бюджету та логів спочатку ввімкнути `fresh`, а потім окремо `historical`.
+Очікуваний результат `PRAGMA quick_check`: `ok`.
 
-### Етап 8. Додати admin monitoring і budget overrides
+### 12.2. Перевірити credentials без показу секретів
 
-1. Додати global-admin API для стану replay-бюджету та черги.
-2. Додати admin-only сторінку `BGA Replay Queue`.
-3. Показувати rolling-24h attempts і успішні replay окремо для `fresh`, `historical` та `manual` по кожному акаунту.
-4. Додати queue summary для fresh і historical.
-5. Додати регульований historical boost для одного або всіх акаунтів із `expires_at` і причиною.
-6. Додати тимчасове підняття total limit від базових 80 до вибраного значення не вище 100 для одного або всіх акаунтів.
-7. Додати заміну й відкликання override та повний audit trail попередніх і нових значень.
-8. Перед підтвердженням показувати фактично доступний додатковий пул, нові ефективні ліміти й попередження про due/scheduled fresh-ігри.
+```bash
+grep -E '^BGA_(EMAIL|PASSWORD)(_2|_3|_4)?=' .env \
+  | sed 's/=.*/=<set>/'
+```
 
-### Етап 9. Тести
+### 12.3. Подивитися due-чергу
 
-Потрібні щонайменше такі автоматичні сценарії:
+```bash
+sqlite3 -header -column data/auth.sqlite "
+SELECT queue_class, status, retry_reason, COUNT(*) AS due
+FROM game_replays
+WHERE retry_reason IN ('initial', 'archive', 'colors')
+  AND next_attempt_at IS NOT NULL
+  AND datetime(next_attempt_at) <= datetime('now')
+GROUP BY queue_class, status, retry_reason
+ORDER BY queue_class, retry_reason;
+"
+```
 
-1. Нова гра створює due-запис на `now + 5 minutes` без BGA HTTP-запиту.
-2. До `next_attempt_at` worker не виконує запит.
-3. Перша відповідь зі справжніми кольорами створює фінальний `ready`.
-4. Перша відповідь без кольорів записує fallback і планує `colors` на `now + 15 minutes`.
-5. Fallback replay одразу доступний через чинний public API.
-6. Відкладена відповідь зі справжніми кольорами замінює fallback у всіх полях.
-7. Друга відповідь без кольорів залишає fallback і більше не планує автоматичних спроб.
-8. Відсутній архів викликає `requestTableArchive` рівно один раз.
-9. Повторно відсутній архів переходить у ручний стан без polling.
-10. `limit (replay)` негайно зупиняє worker і не перебирає всі акаунти.
-11. Worker не перевищує per-run і rolling-24h budgets.
-12. Паралельні workers не можуть зарезервувати одну й ту саму одиницю бюджету або одну гру.
-13. Готовий replay зі справжніми кольорами не викликає BGA без `force`.
-14. Ручні команди за замовчуванням поважають бюджет.
-15. Історична гра додається до черги без BGA HTTP-запиту, а повторний enqueue не створює дубль.
-16. Будь-який due-запис `fresh` обробляється раніше за `historical`.
-17. Історичний worker зупиняється перед наступним запитом, якщо з'явився due-запис `fresh`.
-18. Без активного boost історичні запити не перевищують 30 на акаунт за рухомі 24 години і не можуть використати базовий `FRESH_RESERVE`.
-19. Якщо fresh або manual запити вже використали частину незахищеного бюджету, допустима кількість historical-запитів відповідно зменшується.
-20. Account selection розподіляє роботу між акаунтами 1–3, пропускає акаунти в cooldown і використовує standby-акаунт 4 лише коли всі три основні акаунти перебувають у cooldown.
-21. Replay-limit на історичній грі не запускає каскадний повтор іншими акаунтами.
-22. Ручний запуск для дуелі вибирає лише її активні ігри в порядку `game_number` і не зачіпає сусідні дуелі матчу.
-23. Admin budget view правильно розділяє fresh, historical і manual attempts для кожного акаунта.
-24. Historical boost коректно приймає різні значення, наприклад `+10`, `+20` і максимально допустиме для поточного effective total.
-25. За total 80 значення `E = 20` збільшує historical limit з 30 до 50 і зменшує захищений fresh reserve з 50 до 30.
-26. Total-limit override приймає значення від 81 до 100, а значення понад 100, нецілі та від'ємні значення відхиляються сервером.
-27. При `T = 100`, `E = 0` historical limit залишається 30; при `T = 100`, `E = 20` він стає 50; при `T = 100`, `E = 70` він стає 100.
-28. Зміна активного override замінює попередні `E`, `T` і `expires_at`, а не накопичує їх.
-29. Прострочений або відкликаний override не дозволяє нових запитів понад базові historical 30 і total 80.
-30. Запити, виконані через override, мають `budget_override_id` і залишаються в rolling-вікні після його завершення.
-31. Навіть з активними historical і total-limit overrides fresh due-запис обробляється раніше за historical.
-32. Явний BGA replay-limit зупиняє worker і ставить акаунт у cooldown, навіть якщо його локальний total limit піднято до 100.
+Historical archive follow-up:
 
-### Етап 10. Поетапне ввімкнення
+```bash
+sqlite3 -header -column data/auth.sqlite "
+SELECT
+  game_id, status, retry_reason, last_account_label,
+  archive_requested_at, next_attempt_at,
+  substr(last_error, 1, 120) AS last_error
+FROM game_replays
+WHERE queue_class = 'historical'
+  AND archive_requested_at IS NOT NULL
+  AND retry_reason IN ('archive', 'colors')
+ORDER BY datetime(next_attempt_at), game_id
+LIMIT 20;
+"
+```
 
-1. Розгорнути міграцію та код із вимкненим timer.
-2. Створити кілька тестових `fresh` due-записів.
-3. Запустити worker вручну з `--limit 1`.
-4. Перевірити переходи станів, кольори, URL та журнал бюджету.
-5. Перевірити вибір і балансування всіх трьох акаунтів вручну з `--limit 3`.
-6. Увімкнути `fresh` timer із низьким тестовим rolling-бюджетом для всіх трьох акаунтів.
-7. Після спостереження встановити цільовий загальний бюджет 80 на акаунт.
-8. Залишаючи `historical` timer вимкненим, явно додати невелику тестову порцію старих ігор і перевірити стан черги в preview.
-9. Увімкнути `historical` із малим тестовим підлімітом, наприклад 1–3 запити на акаунт.
-10. Перевірити пріоритет `fresh`, cooldown, метрики й захист резерву.
-11. Поступово підняти історичний підліміт до 30 на акаунт за рухомі 24 години.
-12. Увімкнути admin view у read-only режимі та звірити його показники з журналом запитів.
-13. Перевірити historical boost спочатку як `+1` для одного акаунта з коротким `expires_at`.
-14. Після перевірки аудиту, expiry та fresh-пріоритету дозволити регульовані значення historical boost для всіх трьох акаунтів.
-15. Окремо перевірити total-limit override спочатку зі значенням 81 для одного акаунта, а потім дозволити адміністратору тимчасово встановлювати до 100 для одного або всіх акаунтів.
+### 12.4. Smoke tests worker
 
-## 15. Критерії приймання
+Один fresh:
 
-Процес вважається адаптованим, коли:
+```bash
+./.venv/bin/python retry_pending_game_replays.py \
+  --db-path data/auth.sqlite \
+  --queue-class fresh \
+  --limit 1
+```
 
-- створення `games` не виконує негайний replay HTTP-запит;
-- перша спроба запланована через 5 хвилин;
-- немає циклів polling;
-- історія без кольорів зберігається як `ready` із `red`/`green`;
-- для fallback-кольорів існує рівно одна автоматична спроба оновлення через 15 хвилин;
-- справжні BGA-кольори атомарно замінюють fallback;
-- після невдалої color-refresh спроби fallback залишається доступним без нескінченних retry;
-- `requestTableArchive` викликається не більше одного разу на гру;
-- BGA replay-limit негайно зупиняє worker;
-- автоматичні запити не можуть перевищити встановлений rolling-бюджет;
-- усі три BGA-акаунти використовуються як єдиний пул без ручного резерву;
-- явно позначені історичні ігри потрапляють у персистентну низькопріоритетну чергу без негайного BGA-запиту;
-- усі fresh-завдання мають абсолютний пріоритет над historical-завданнями;
-- без активного boost historical-трафік обмежений 30 запитами на акаунт за рухомі 24 години та не може використати базову захищену місткість для свіжих ігор;
-- базовий максимальний historical-пул становить 90 запитів за рухомі 24 години для трьох акаунтів; регульований boost змінює його в межах поточних ефективних per-account total limits;
-- ручні сценарії існують окремо для гри, дуелі та матчу;
-- ручні команди використовують ту саму безпечну логіку й не обходять спільний журнал бюджету;
-- global admin бачить використання replay-пулу та успішно оброблені replay окремо для fresh і historical по кожному акаунту;
-- global admin може задати регульовану кількість додаткових historical-спроб для одного або всіх акаунтів із expiry, audit trail і можливістю відкликання;
-- базовий загальний ліміт залишається 80 на акаунт, а global admin може окремим тимчасовим override підняти його до вибраного значення не вище 100;
-- historical boost сам по собі не змінює total limit, а жоден override не змінює абсолютний пріоритет fresh-черги;
-- чинний public API продовжує бачити replay із fallback-кольорами.
+До трьох historical:
+
+```bash
+./.venv/bin/python retry_pending_game_replays.py \
+  --db-path data/auth.sqlite \
+  --queue-class historical \
+  --limit 3
+```
+
+Один historical після `requestTableArchive`:
+
+```bash
+./.venv/bin/python retry_pending_game_replays.py \
+  --db-path data/auth.sqlite \
+  --queue-class archive-follow-up \
+  --limit 1
+```
+
+Якщо доступний лише standby-акаунт 4, для кількох historical потрібні окремі
+запуски:
+
+```bash
+for run in 1 2 3; do
+  echo "===== Historical run $run/3 ====="
+  ./.venv/bin/python retry_pending_game_replays.py \
+    --db-path data/auth.sqlite \
+    --queue-class historical \
+    --limit 1
+done
+```
+
+`status = locked` означає, що інший worker утримує спільний `flock`. Lock-файл
+видаляти не потрібно.
+
+### 12.5. Перевірити останні змінені replay
+
+```bash
+sqlite3 -header -column data/auth.sqlite "
+SELECT
+  game_id, status, queue_class, retry_reason, color_source,
+  color_refresh_count, last_account_label, archive_requested_at,
+  next_attempt_at, substr(last_error, 1, 120) AS last_error, updated_at
+FROM game_replays
+ORDER BY datetime(updated_at) DESC
+LIMIT 20;
+"
+```
+
+Один конкретний запис:
+
+```bash
+sqlite3 -header -column data/auth.sqlite "
+SELECT * FROM game_replays WHERE game_id = 'GAME_ID';
+"
+```
+
+### 12.6. Останні BGA replay-запити та rolling usage
+
+```bash
+sqlite3 -header -column data/auth.sqlite "
+SELECT
+  id, account_label, bga_table_id, endpoint, request_class,
+  outcome, substr(error, 1, 120) AS error, attempted_at
+FROM bga_replay_requests
+ORDER BY id DESC
+LIMIT 30;
+"
+```
+
+```bash
+sqlite3 -header -column data/auth.sqlite "
+SELECT
+  account_label, request_class, COUNT(*) AS attempts_24h,
+  SUM(CASE WHEN outcome = 'ready' THEN 1 ELSE 0 END) AS successful_24h
+FROM bga_replay_requests
+WHERE endpoint = '/archive/archive/logs.html'
+  AND datetime(attempted_at) > datetime('now', '-24 hours')
+GROUP BY account_label, request_class
+ORDER BY account_label, request_class;
+"
+```
+
+### 12.7. Cooldown акаунтів
+
+```bash
+sqlite3 -header -column data/auth.sqlite "
+SELECT
+  account_label, cooldown_until, last_limit_at,
+  CASE
+    WHEN datetime(cooldown_until) > datetime('now') THEN 'Cooldown'
+    ELSE 'Available'
+  END AS state,
+  last_error
+FROM bga_replay_account_state
+ORDER BY account_label;
+"
+```
+
+### 12.8. Archive retry setting
+
+```bash
+sqlite3 -header -column data/auth.sqlite "
+SELECT setting_key, setting_value
+FROM system_settings
+WHERE setting_key = 'bga_replay_archive_retry_minutes';
+"
+```
+
+Змінювати значення рекомендовано через `Admin → System Settings`. Worker
+приймає лише ціле значення від 1 до 60 і використовує 2 при відсутньому або
+некоректному значенні.
+
+### 12.9. Ручне отримання конкретної гри
+
+```bash
+./.venv/bin/python get_game_replay.py 'GAME_ID' \
+  --db-path data/auth.sqlite
+```
+
+Примусово оновити ready replay:
+
+```bash
+./.venv/bin/python get_game_replay.py 'GAME_ID' \
+  --db-path data/auth.sqlite \
+  --force
+```
+
+Команда використовує `request_class = manual`, спільний budget і максимум
+один `logs.html`. Вона не каскадує запит через інші акаунти.
+
+### 12.10. Ручне отримання replay для дуелі або матчу
+
+```bash
+./.venv/bin/python get_duel_game_replays.py 'DUEL_ID' \
+  --db-path data/auth.sqlite \
+  --include-pending \
+  --include-errors \
+  --include-fallback \
+  --max-requests 3
+```
+
+```bash
+./.venv/bin/python get_match_game_replays.py 'MATCH_ID' \
+  --db-path data/auth.sqlite \
+  --include-pending \
+  --include-errors \
+  --include-fallback \
+  --max-requests 3
+```
+
+Без відповідних `--include-*` pending, error і fallback пропускаються.
+`--force` вибирає всі active games, включно з ready/BGA. Batch-команди
+зупиняються після `--max-failed-games` помилок, за замовчуванням після першої.
+
+### 12.11. Додати конкретну гру в historical queue
+
+```bash
+GAME_ID='GAME_ID' ./.venv/bin/python - <<'PY'
+import json
+import os
+from update_matches.replay_worker import enqueue_historical_game_replay
+
+result = enqueue_historical_game_replay(
+    'data/auth.sqlite',
+    os.environ['GAME_ID'],
+    historical_batch_id='manual-historical',
+)
+print(json.dumps(result, ensure_ascii=False, indent=2))
+PY
+```
+
+`force=True` скидає queue counters та `archive_requested_at`, тому перед ним
+потрібні backup, перевірка конкретного запису й усвідомлене рішення.
+
+### 12.12. One-off cleanup/backfill legacy replay
+
+Dry-run:
+
+```bash
+./.venv/bin/python backfill_existing_game_replays.py \
+  --db-path data/auth.sqlite
+```
+
+Після production backup:
+
+```bash
+./.venv/bin/python backfill_existing_game_replays.py \
+  --db-path data/auth.sqlite \
+  --apply \
+  --batch-id legacy-ready-backfill
+```
+
+`--apply` видаляє всі replay зі `status = error`; це одноразова destructive
+maintenance-операція, а не регулярний worker.
+
+### 12.13. Встановити, увімкнути та перевірити timers
+
+```bash
+sudo cp systemd/bga-replay-worker@.service /etc/systemd/system/
+sudo cp systemd/bga-replay-fresh.timer /etc/systemd/system/
+sudo cp systemd/bga-replay-archive-follow-up.timer /etc/systemd/system/
+sudo cp systemd/bga-replay-historical.timer /etc/systemd/system/
+sudo cp systemd/bga-replay-worker.logrotate /etc/logrotate.d/bga-replay-worker
+sudo systemctl daemon-reload
+```
+
+```bash
+sudo systemctl enable --now \
+  bga-replay-fresh.timer \
+  bga-replay-archive-follow-up.timer \
+  bga-replay-historical.timer
+```
+
+```bash
+sudo systemctl list-timers --all --no-pager \
+  bga-replay-fresh.timer \
+  bga-replay-archive-follow-up.timer \
+  bga-replay-historical.timer
+```
+
+```bash
+for timer in \
+  bga-replay-fresh.timer \
+  bga-replay-archive-follow-up.timer \
+  bga-replay-historical.timer
+do
+  echo "===== $timer ====="
+  sudo systemctl is-enabled "$timer"
+  sudo systemctl is-active "$timer"
+done
+```
+
+Нормальний стан timer: `enabled` і `active`. Oneshot service між запусками
+може бути `inactive (dead)` — це нормально, якщо останній результат
+`status=0/SUCCESS`.
+
+### 12.14. Логи й lock
+
+```bash
+sudo journalctl \
+  -u 'bga-replay-worker@fresh.service' \
+  -u 'bga-replay-worker@archive-follow-up.service' \
+  -u 'bga-replay-worker@historical.service' \
+  --since today \
+  --no-pager
+```
+
+```bash
+sudo tail -n 200 /var/log/carcassonne/bga-replay-worker.log
+```
+
+```bash
+sudo lsof data/auth.sqlite.bga-replay-worker.lock
+sudo fuser -v data/auth.sqlite.bga-replay-worker.lock
+ps aux | grep '[r]etry_pending_game_replays.py'
+```
+
+### 12.15. Автоматичні тести
+
+```bash
+python3 -m unittest discover -s update_matches -t . -p 'test_*.py'
+npm test
+```
+
+Тести використовують тимчасові SQLite-бази й mocked/injected BGA-відповіді;
+вони не витрачають production replay quota.
+
+## 13. Інтерпретація JSON summary
+
+| Поле | Значення |
+|---|---|
+| `status` | `ok`, `stopped`, `locked` або `error` |
+| `queue_class` | Запущений mode |
+| `due` | Due на початку запуску |
+| `processed` | Кількість захоплених записів |
+| `requests` | Фактичні `logs.html` |
+| `ready_bga_colors` | Успішні replay з BGA-кольорами |
+| `ready_fallback_colors` | Успішні replay з fallback-кольорами |
+| `archives_requested` | Надіслані `requestTableArchive` |
+| `deferred` | Записи, відкладені на наступну спробу |
+| `manual_required` | Записи, автоматичні спроби яких завершено |
+| `stopped_by_budget` | Немає доступного кандидата для reservation |
+| `stopped_by_bga_limit` | BGA повернула явний replay-limit |
+| `remaining` | Due після завершення запуску |
+| `errors` | Діагностика оброблених проблемних записів |
+| `stop_reason` | Причина дострокової зупинки |
+
+`errors` не завжди означає фінальний `status = error`. Наприклад,
+`archive_missing` після успішного `requestTableArchive` є очікуваною подією:
+запис отримує `deferred`, а наступну перевірку виконує timer.
+
+## 14. Public API
+
+Public replay доступний, коли:
+
+```sql
+game_replays.status = 'ready'
+```
+
+Тому готовий fallback replay залишається видимим під час очікування кольорів,
+архіву або тимчасового retry. `color_source` зберігає provenance і не дає
+сприймати fallback `red`/`green` як підтверджені BGA-кольори.
