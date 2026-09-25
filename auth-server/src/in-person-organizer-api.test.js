@@ -50,6 +50,7 @@ async function startApi(t) {
     organizer_name: "Organizer",
     swiss_rounds_count: 5,
     playoff_first_round: "semi_final",
+    is_test_tournament: true,
     admin_user_ids: [1],
   });
   const second = await service.createTournament({
@@ -193,6 +194,44 @@ test("participant API returns duplicate details and check-in readiness", async (
   assert.equal(readiness.response.status, 200);
   assert.equal(readiness.data.readiness.ready, true);
   assert.equal(readiness.data.counters.without_draw_number, 0);
+});
+
+test("organizer API resets a published test tournament to empty registration", async (t) => {
+  const { baseUrl, first } = await startApi(t);
+  for (const [index, name] of ["Reset One", "Reset Two"].entries()) {
+    const created = await api(baseUrl, `/in-person-tournaments/${first.id}/participants`, {
+      userId: 1,
+      method: "POST",
+      body: JSON.stringify({
+        name_en: name,
+        bga_nickname: `reset_${index + 1}`,
+        association_id: "UKR",
+      }),
+    });
+    assert.equal(created.response.status, 201);
+  }
+  const started = await api(baseUrl, `/in-person-tournaments/${first.id}/start-check-in`, {
+    userId: 1,
+    method: "POST",
+    body: "{}",
+  });
+  assert.equal(started.response.status, 200);
+
+  const reset = await api(baseUrl, `/in-person-tournaments/${first.id}/reset-test-data`, {
+    userId: 1,
+    method: "POST",
+    body: "{}",
+  });
+  assert.equal(reset.response.status, 200);
+  assert.equal(reset.data.deleted_players, 2);
+  assert.equal(reset.data.tournament.status, "registration");
+
+  const overview = await api(baseUrl, `/in-person-tournaments/${first.id}/participants`, {
+    userId: 1,
+  });
+  assert.equal(overview.response.status, 200);
+  assert.equal(overview.data.participants.length, 0);
+  assert.equal(overview.data.counters.checked_in, 0);
 });
 
 test("assigned organizer creates a city with the local tournament country enforced", async (t) => {

@@ -13,6 +13,21 @@ function exec(db, sql) {
   });
 }
 
+function run(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function onRun(error) {
+      if (error) reject(error);
+      else resolve(this);
+    });
+  });
+}
+
+function all(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (error, rows) => (error ? reject(error) : resolve(rows || [])));
+  });
+}
+
 async function createDatabase(t) {
   const db = new sqlite3.Database(":memory:");
   t.after(() => new Promise((resolve) => db.close(resolve)));
@@ -41,11 +56,12 @@ async function createDatabase(t) {
   await exec(db, `INSERT INTO associations (code, name) VALUES ${associationRows}`);
   await ensureInPersonSchema(db, { logger: silentLogger });
   let sequence = 0;
-  return createInPersonService({
+  const service = createInPersonService({
     db,
     idFactory: () => `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`,
     random: () => 0.37,
   });
+  return { db, service };
 }
 
 function tournamentPayload(overrides = {}) {
@@ -64,15 +80,23 @@ function tournamentPayload(overrides = {}) {
 }
 
 test("test tournaments add up to 60 random fixture players while manual additions remain unlimited", async (t) => {
-  const service = await createDatabase(t);
+  const { service } = await createDatabase(t);
   const regular = await service.createTournament(tournamentPayload({ slug: "regular-cup" }));
   await assert.rejects(
     service.addTestParticipants(regular.id, { count: 1 }),
     (error) => error?.code === "TEST_TOURNAMENT_REQUIRED"
   );
+  await assert.rejects(
+    service.resetTestTournamentData(regular.id),
+    (error) => error?.code === "TEST_TOURNAMENT_REQUIRED"
+  );
 
   const tournament = await service.createTournament(tournamentPayload({ is_test_tournament: true }));
   assert.equal(tournament.is_test_tournament, true);
+  await assert.rejects(
+    service.resetTestTournamentData(tournament.id),
+    (error) => error?.code === "TEST_TOURNAMENT_NOT_PUBLISHED"
+  );
   assert.equal((await service.getParticipantsOverview(tournament.id)).test_data.available_players, 60);
 
   assert.equal((await service.addTestParticipants(tournament.id, { count: 12 })).added, 12);
@@ -94,7 +118,7 @@ test("test tournaments add up to 60 random fixture players while manual addition
 });
 
 test("bulk test check-in selects remaining players and assigns unique random draw numbers", async (t) => {
-  const service = await createDatabase(t);
+  const { service } = await createDatabase(t);
   const draft = await service.createTournament(tournamentPayload({ is_test_tournament: true }));
   await service.addTestParticipants(draft.id, { count: 20 });
   await service.publishTournament(draft.id);
@@ -118,3 +142,119 @@ test("bulk test check-in selects remaining players and assigns unique random dra
   );
 });
 
+test("resetting a test tournament removes competition data and recreates an empty playoff structure", async (t) => {
+  const { db, service } = await createDatabase(t);
+  const draft = await service.createTournament(tournamentPayload({
+    slug: "reset-test-cup",
+    is_test_tournament: true,
+  }));
+  await service.addTestParticipants(draft.id, { count: 4 });
+  await service.publishTournament(draft.id);
+  await service.startCheckIn(draft.id);
+  await service.bulkCheckInTestParticipants(draft.id, { count: 4 });
+  const participants = (await service.getParticipantsOverview(draft.id)).participants;
+  const [playoffRound] = await all(
+    db,
+    "SELECT id FROM in_person_rounds WHERE tournament_id = ? AND stage = 'playoff' ORDER BY round_order",
+    [draft.id]
+  );
+  const [playoffMatch] = await all(
+    db,
+    "SELECT id FROM in_person_matches WHERE round_id = ? ORDER BY bracket_position",
+    [playoffRound.id]
+  );
+
+  await run(
+    db,
+    `INSERT INTO in_person_rounds (
+      id, tournament_id, stage, round_number, status, completed_at
+    ) VALUES ('reset-swiss-round', ?, 'swiss', 1, 'completed', CURRENT_TIMESTAMP)`,
+    [draft.id]
+  );
+  await run(
+    db,
+    `INSERT INTO in_person_matches (
+      id, round_id, table_number, participant_a_id, participant_b_id,
+      starting_participant_id, status, result_type, points_a, points_b,
+      winner_participant_id, loser_participant_id
+    ) VALUES (
+      'reset-swiss-match', 'reset-swiss-round', 1, ?, ?, ?,
+      'completed', 'points', 80, 70, ?, ?
+    )`,
+    [participants[0].id, participants[1].id, participants[0].id, participants[0].id, participants[1].id]
+  );
+  await run(
+    db,
+    `INSERT INTO in_person_standings (
+      tournament_id, revision, source_completed_round_id, participant_id, position, wins
+    ) VALUES (?, 1, 'reset-swiss-round', ?, 1, 1)`,
+    [draft.id, participants[0].id]
+  );
+  await run(
+    db,
+    `UPDATE in_person_rounds
+     SET status = 'published', published_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [playoffRound.id]
+  );
+  await run(
+    db,
+    `UPDATE in_person_matches
+     SET participant_a_id = ?, participant_b_id = ?, starting_participant_id = ?,
+         status = 'completed', result_type = 'points', points_a = 90, points_b = 75,
+         winner_participant_id = ?, loser_participant_id = ?
+     WHERE id = ?`,
+    [
+      participants[2].id,
+      participants[3].id,
+      participants[2].id,
+      participants[2].id,
+      participants[3].id,
+      playoffMatch.id,
+    ]
+  );
+  await run(
+    db,
+    "UPDATE in_person_tournaments SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [draft.id]
+  );
+
+  const result = await service.resetTestTournamentData(draft.id);
+  assert.equal(result.reset, true);
+  assert.equal(result.deleted_players, 4);
+  assert.equal(result.tournament.status, "registration");
+  assert.equal(result.tournament.completed_at, null);
+  assert.equal((await service.getParticipantsOverview(draft.id)).participants.length, 0);
+  assert.equal((await all(
+    db,
+    "SELECT id FROM in_person_rounds WHERE tournament_id = ? AND stage = 'swiss'",
+    [draft.id]
+  )).length, 0);
+  assert.equal((await all(
+    db,
+    "SELECT participant_id FROM in_person_standings WHERE tournament_id = ?",
+    [draft.id]
+  )).length, 0);
+  const playoffRounds = await all(
+    db,
+    "SELECT id, status FROM in_person_rounds WHERE tournament_id = ? AND stage = 'playoff'",
+    [draft.id]
+  );
+  assert.equal(playoffRounds.length, 3);
+  assert.ok(playoffRounds.every((round) => round.status === "draft"));
+  const playoffMatches = await all(
+    db,
+    `SELECT m.* FROM in_person_matches m
+     JOIN in_person_rounds r ON r.id = m.round_id
+     WHERE r.tournament_id = ? AND r.stage = 'playoff'`,
+    [draft.id]
+  );
+  assert.equal(playoffMatches.length, 4);
+  playoffMatches.forEach((match) => {
+    assert.equal(match.status, "scheduled");
+    assert.equal(match.participant_a_id, null);
+    assert.equal(match.participant_b_id, null);
+    assert.equal(match.result_type, null);
+    assert.equal(match.winner_participant_id, null);
+  });
+});

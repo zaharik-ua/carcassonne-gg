@@ -394,6 +394,14 @@ export function registerInPersonRoutes(app, {
       res.json({ ok: true, ...result });
     }, logger)
   );
+  app.post(
+    "/in-person-tournaments/:tournamentId/reset-test-data",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const result = await inPersonService.resetTestTournamentData(req.inPersonTournamentId);
+      res.json({ ok: true, ...result });
+    }, logger)
+  );
   app.get(
     "/in-person-tournaments/:tournamentId/check-in-readiness",
     requireInPersonTournamentAdmin,

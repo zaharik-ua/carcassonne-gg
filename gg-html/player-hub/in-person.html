@@ -13,6 +13,9 @@
     --ip-danger: #b42318;
     --ip-success: #19733d;
     --ip-warning-bg: #fff8e8;
+    --ip-test-dark: #9a3412;
+    --ip-test-light: #ffedd5;
+    --ip-test-line: #fdba74;
   }
 
    body {
@@ -148,6 +151,14 @@
 
   .ip-tournament-meta {
     margin-top: 5px;
+  }
+
+  .ip-test-tournament-label {
+    margin-top: 4px;
+    color: var(--ip-test-dark);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
   }
 
   .ip-tournament-list {
@@ -411,6 +422,18 @@
   .ip-btn.primary {
     border-color: var(--ip-primary);
     background: var(--ip-primary);
+    color: #fff;
+  }
+
+  .ip-btn.test-action {
+    border-color: var(--ip-test-line);
+    background: var(--ip-test-light);
+    color: var(--ip-test-dark);
+  }
+
+  .ip-btn.test-reset {
+    border-color: var(--ip-test-dark);
+    background: var(--ip-test-dark);
     color: #fff;
   }
 
@@ -885,6 +908,16 @@
     color: var(--ip-danger);
     font-size: 12px;
     line-height: 1.4;
+  }
+
+  .ip-reset-warning {
+    padding: 11px 12px;
+    border: 1px solid var(--ip-test-line);
+    border-radius: 6px;
+    background: #fff7ed;
+    color: #7c2d12;
+    font-size: 13px;
+    line-height: 1.5;
   }
 
   .ip-modal-actions {
@@ -1496,6 +1529,7 @@
 
   @media (max-width: 720px) {
     .ip-head,
+    .ip-tournament-heading,
     .ip-toolbar,
     .ip-row {
       align-items: stretch;
@@ -1572,10 +1606,14 @@
         <img id="ipTournamentLogo" class="ip-tournament-logo ip-hidden" alt="">
         <div class="ip-tournament-summary">
           <h1 id="ipTournamentName" class="ip-tournament-name"></h1>
+          <div id="ipTestTournamentLabel" class="ip-test-tournament-label ip-hidden">TEST TOURNAMENT</div>
           <div id="ipTournamentMeta" class="ip-meta ip-tournament-meta"></div>
         </div>
       </div>
-      <button id="ipRefreshBtn" class="ip-btn" type="button">Refresh</button>
+      <div class="ip-actions">
+        <button id="ipResetTestDataBtn" class="ip-btn test-reset ip-hidden" type="button">Reset data</button>
+        <button id="ipRefreshBtn" class="ip-btn" type="button">Refresh</button>
+      </div>
     </div>
     <div id="ipPlayoffCompletion" class="ip-tournament-completion"></div>
   </div>
@@ -1598,7 +1636,7 @@
         <strong>Players</strong>
         <div class="ip-actions">
           <button id="ipAddLatePlayerBtn" class="ip-btn primary ip-hidden" type="button">Add late player</button>
-          <button id="ipAddTestPlayersBtn" class="ip-btn ip-hidden" type="button">Add test players</button>
+          <button id="ipAddTestPlayersBtn" class="ip-btn test-action ip-hidden" type="button">Add test players</button>
           <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
         </div>
       </div>
@@ -1611,7 +1649,7 @@
       <div class="ip-toolbar">
         <strong>Check-in and draw numbers</strong>
         <div class="ip-actions">
-          <button id="ipBulkCheckInBtn" class="ip-btn ip-hidden" type="button">Bulk check-in</button>
+          <button id="ipBulkCheckInBtn" class="ip-btn test-action ip-hidden" type="button">Test check-in</button>
           <button id="ipStartCheckInBtn" class="ip-btn primary ip-hidden" type="button">Start check-in</button>
         </div>
       </div>
@@ -1680,6 +1718,7 @@
   const pageHeader = document.getElementById("ipPageHeader");
   const tournamentLogo = document.getElementById("ipTournamentLogo");
   const tournamentName = document.getElementById("ipTournamentName");
+  const testTournamentLabel = document.getElementById("ipTestTournamentLabel");
   const tournamentMeta = document.getElementById("ipTournamentMeta");
   const workspace = document.getElementById("ipWorkspace");
   const statusEl = document.getElementById("ipStatus");
@@ -1699,6 +1738,7 @@
   const bulkCheckInBtn = document.getElementById("ipBulkCheckInBtn");
   const startCheckInBtn = document.getElementById("ipStartCheckInBtn");
   const refreshBtn = document.getElementById("ipRefreshBtn");
+  const resetTestDataBtn = document.getElementById("ipResetTestDataBtn");
   const swissActions = document.getElementById("ipSwissActions");
   const swissSummary = document.getElementById("ipSwissSummary");
   const swissPreview = document.getElementById("ipSwissPreview");
@@ -2909,6 +2949,8 @@
       : selectedTournament();
     if (!tournament) {
       tournamentLogo.classList.add("ip-hidden");
+      testTournamentLabel.classList.add("ip-hidden");
+      resetTestDataBtn.classList.add("ip-hidden");
       tournamentLogo.removeAttribute("src");
       tournamentLogo.alt = "";
       tournamentName.textContent = "";
@@ -2917,7 +2959,11 @@
     }
     const displayName = tournament.name_local || tournament.name_en || "In-Person tournament";
     const logoUrl = String(tournament.logo_url || "").trim();
+    const isTestTournament = tournament.is_test_tournament === true;
     tournamentName.textContent = displayName;
+    testTournamentLabel.classList.toggle("ip-hidden", !isTestTournament);
+    resetTestDataBtn.classList.toggle("ip-hidden", !isTestTournament);
+    resetTestDataBtn.disabled = !tournament.published_at || tournament["status"] === "cancelled";
     tournamentLogo.classList.toggle("ip-hidden", !logoUrl);
     tournamentLogo.alt = logoUrl ? `${displayName} logo` : "";
     if (logoUrl && tournamentLogo.getAttribute("src") !== logoUrl) {
@@ -3604,6 +3650,79 @@
     document.body.appendChild(overlay);
     quantity.input.focus();
     quantity.input.select();
+  }
+
+  function openResetTestDataModal() {
+    const tournament = state.overview?.tournament;
+    if (tournament?.is_test_tournament !== true || !tournament?.published_at) return;
+    const overlay = document.createElement("div");
+    overlay.className = "ip-modal-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "ip-modal-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-labelledby", "ipResetTestDataTitle");
+    const title = document.createElement("div");
+    title.id = "ipResetTestDataTitle";
+    title.className = "ip-modal-title";
+    title.textContent = "Reset test tournament data?";
+    const warning = document.createElement("div");
+    warning.className = "ip-reset-warning";
+    warning.textContent = "This permanently deletes every player and check-in, all Swiss matches, results and standings, and clears every playoff match. The playoff structure will remain, and the tournament will return to Registration. This action cannot be undone.";
+    const error = document.createElement("div");
+    error.className = "ip-modal-warning";
+    error.setAttribute("role", "alert");
+    const actions = document.createElement("div");
+    actions.className = "ip-modal-actions";
+    const cancel = createButton("Cancel", "ip-btn", () => closeModal());
+    const confirm = createButton("Reset data", "ip-btn test-reset", resetData);
+    actions.appendChild(cancel);
+    actions.appendChild(confirm);
+    dialog.appendChild(title);
+    dialog.appendChild(warning);
+    dialog.appendChild(error);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+
+    let saving = false;
+    function closeModal() {
+      if (saving) return;
+      document.removeEventListener("keydown", handleEscape);
+      overlay.remove();
+    }
+    function handleEscape(event) {
+      if (event.key === "Escape") closeModal();
+    }
+    async function resetData() {
+      saving = true;
+      cancel.disabled = true;
+      confirm.disabled = true;
+      confirm.textContent = "Resetting...";
+      error.textContent = "";
+      try {
+        await apiJson(tournamentUrl("/reset-test-data"), {
+          method: "POST",
+          body: "{}",
+        });
+        await loadOverview();
+        saving = false;
+        closeModal();
+        setStatus("Test tournament data reset.", "success");
+      } catch (requestError) {
+        saving = false;
+        cancel.disabled = false;
+        confirm.disabled = false;
+        confirm.textContent = "Reset data";
+        error.textContent = requestError.message || "Failed to reset test tournament data.";
+      }
+    }
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal();
+    });
+    document.addEventListener("keydown", handleEscape);
+    document.body.appendChild(overlay);
+    cancel.focus();
   }
 
   function openCheckInModal(participant) {
@@ -5949,6 +6068,7 @@
   }
 
   refreshBtn.addEventListener("click", loadAll);
+  resetTestDataBtn.addEventListener("click", openResetTestDataModal);
   addPlayerBtn.addEventListener("click", () => openPlayerForm());
   addLatePlayerBtn.addEventListener("click", openLatePlayerForm);
   addTestPlayersBtn.addEventListener("click", () => {
@@ -5971,7 +6091,7 @@
   bulkCheckInBtn.addEventListener("click", () => {
     const maximum = Number(state.overview?.counters?.awaiting_check_in || 0);
     openTestQuantityModal({
-      titleText: "Bulk check-in",
+      titleText: "Test check-in",
       description: `Choose how many players to check in with random unique draw numbers. ${maximum} are available.`,
       maximum,
       submitText: "Check in players",

@@ -37,7 +37,9 @@ test("In-Person page contains participant registration and check-in flows", () =
     "In-Person Tournaments",
     "Add player",
     "Add test players",
-    "Bulk check-in",
+    "Test check-in",
+    "TEST TOURNAMENT",
+    "Reset data",
     "+ Add new city",
     "City name (English) *",
     "City name (local)",
@@ -95,7 +97,11 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.match(inPersonHtml, /\/check-in/);
   assert.match(inPersonHtml, /\/participants\/test-data/);
   assert.match(inPersonHtml, /\/check-in\/test-data/);
+  assert.match(inPersonHtml, /\/reset-test-data/);
   assert.match(inPersonHtml, /function openTestQuantityModal/);
+  assert.match(inPersonHtml, /function openResetTestDataModal/);
+  assert.match(inPersonHtml, /class="ip-btn test-action ip-hidden"/);
+  assert.match(inPersonHtml, /class="ip-btn test-reset ip-hidden"/);
   assert.match(inPersonHtml, /available_players/);
   assert.match(inPersonHtml, /confirm_duplicate: confirmDuplicate/);
   assert.match(inPersonHtml, /function openCheckInModal/);

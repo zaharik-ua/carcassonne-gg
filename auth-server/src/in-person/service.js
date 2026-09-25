@@ -1005,6 +1005,47 @@ export function createInPersonService({
     }));
   }
 
+  async function resetTestTournamentData(tournamentId) {
+    return enqueueMutation(() => transaction(async () => {
+      const tournament = await requireTournamentRow(tournamentId);
+      assertTestTournament(tournament);
+      if (!tournament.published_at || tournament.status === "draft") {
+        throw conflictError(
+          "TEST_TOURNAMENT_NOT_PUBLISHED",
+          "Publish the test tournament before resetting its data"
+        );
+      }
+      if (tournament.status === "cancelled") {
+        throw conflictError("TOURNAMENT_READ_ONLY", "A cancelled tournament cannot be reset");
+      }
+
+      const participantCountRow = await dbGet(
+        db,
+        "SELECT COUNT(*) AS count FROM in_person_participants WHERE tournament_id = ?",
+        [tournament.id]
+      );
+      await dbRun(db, "DELETE FROM in_person_standings WHERE tournament_id = ?", [tournament.id]);
+      await dbRun(db, "DELETE FROM in_person_rounds WHERE tournament_id = ?", [tournament.id]);
+      await dbRun(db, "DELETE FROM in_person_participants WHERE tournament_id = ?", [tournament.id]);
+      await dbRun(
+        db,
+        `
+          UPDATE in_person_tournaments
+          SET status = 'registration', completed_at = NULL, cancelled_at = NULL,
+              revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [tournament.id]
+      );
+      await createPersistentPlayoffStructure({ ...tournament, status: "registration" });
+      return {
+        reset: true,
+        deleted_players: Number(participantCountRow?.count || 0),
+        tournament: serializeOrganizerTournament(await requireTournamentRow(tournament.id)),
+      };
+    }));
+  }
+
   async function createParticipant(tournamentId, payload) {
     return enqueueMutation(() => transaction(async () => {
       const tournament = await requireTournamentRow(tournamentId);
@@ -4236,6 +4277,7 @@ export function createInPersonService({
     publishPlayoffRound,
     publishSwissRound,
     reopenSwissRound,
+    resetTestTournamentData,
     resetPlayoffMatchResult,
     resetPlayoff,
     resetSwissMatchResult,
