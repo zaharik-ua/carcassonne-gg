@@ -82,6 +82,19 @@ function normalizePositiveInteger(value, field) {
   return normalized;
 }
 
+function normalizeOptionalNonNegativeInteger(value, field) {
+  if (value === undefined || value === null || normalizeText(value) === "") return null;
+  const normalized = Number(value);
+  if (!Number.isInteger(normalized) || normalized < 0) {
+    throw validationError(
+      "INVALID_NON_NEGATIVE_INTEGER",
+      `${field} must be a non-negative integer`,
+      { field }
+    );
+  }
+  return normalized;
+}
+
 function normalizeSlug(value) {
   const slug = normalizeText(value).toLowerCase();
   if (!slug) throw validationError("SLUG_REQUIRED", "slug is required", { field: "slug" });
@@ -247,6 +260,29 @@ export function normalizeParticipantInput(payload, current = null, tournament = 
   const nameEn = normalizeText(selectValue(payload, current, "name_en"));
   const nameLocal = normalizeOptionalText(selectValue(payload, current, "name_local"));
   const bgaNickname = normalizeOptionalText(selectValue(payload, current, "bga_nickname"));
+  const currentElo = normalizeOptionalNonNegativeInteger(
+    selectValue(payload, current, "current_elo"),
+    "current_elo"
+  );
+  const averageElo = normalizeOptionalNonNegativeInteger(
+    selectValue(payload, current, "average_elo"),
+    "average_elo"
+  );
+  const maxElo = normalizeOptionalNonNegativeInteger(
+    selectValue(payload, current, "max_elo"),
+    "max_elo"
+  );
+  const numberOfGames = normalizeOptionalNonNegativeInteger(
+    selectValue(payload, current, "number_of_games"),
+    "number_of_games"
+  );
+  const playerInformation = normalizeOptionalText(
+    selectValue(payload, current, "player_information")
+  );
+  const playerPhoto = normalizeUrl(
+    selectValue(payload, current, "player_photo"),
+    "player_photo"
+  );
   const scope = normalizeText(tournament?.scope).toLowerCase();
   let associationId = normalizeOptionalText(selectValue(payload, current, "association_id"));
   let cityId = normalizeOptionalText(selectValue(payload, current, "city_id"));
@@ -282,6 +318,12 @@ export function normalizeParticipantInput(payload, current = null, tournament = 
     name_en: nameEn,
     name_local: nameLocal,
     bga_nickname: bgaNickname,
+    current_elo: currentElo,
+    average_elo: averageElo,
+    max_elo: maxElo,
+    number_of_games: numberOfGames,
+    player_information: playerInformation,
+    player_photo: playerPhoto,
     association_id: associationId,
     city_id: cityId,
   };

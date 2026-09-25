@@ -72,6 +72,12 @@ async function addCheckedInParticipants(service, tournamentId) {
       name_en: `Player ${index + 1}`,
       name_local: `Гравець ${index + 1}`,
       bga_nickname: `bga-${index + 1}`,
+      current_elo: index === 0 ? 1450 : null,
+      average_elo: index === 0 ? 1400 : null,
+      max_elo: index === 0 ? 1510 : null,
+      number_of_games: index === 0 ? 88 : null,
+      player_information: index === 0 ? "Player profile" : null,
+      player_photo: index === 0 ? "https://example.com/player.webp" : null,
       association_id: "UKR",
     }));
   }
@@ -195,6 +201,12 @@ test("public aggregate hides drafts, cancelled history and private result fields
     "the complete playoff bracket remains public after it starts"
   );
   assert.equal(aggregate.players[0].name_local?.startsWith("Гравець"), true);
+  assert.equal(aggregate.players[0].current_elo, 1450);
+  assert.equal(aggregate.players[0].average_elo, 1400);
+  assert.equal(aggregate.players[0].max_elo, 1510);
+  assert.equal(aggregate.players[0].number_of_games, 88);
+  assert.equal(aggregate.players[0].player_information, "Player profile");
+  assert.equal(aggregate.players[0].player_photo, "https://example.com/player.webp");
   assert.equal(aggregate.tournament.organizer_url, "https://example.com/organizer");
   assert.equal(aggregate.tournament.logo_url, "https://example.com/tournament-logo.png");
 });

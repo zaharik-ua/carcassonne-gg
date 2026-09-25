@@ -130,6 +130,61 @@ test("validates international and local participant locations", async (t) => {
   );
 });
 
+test("stores and updates participant rating, description and photo fields", async (t) => {
+  const { service } = await createDatabase(t);
+  const tournament = await createPublishedTournament(service, { slug: "participant-profile" });
+  const created = await service.createParticipant(tournament.id, {
+    name_en: "Profile Player",
+    association_id: "UKR",
+    current_elo: 1450,
+    average_elo: 1398,
+    max_elo: 1512,
+    number_of_games: 87,
+    player_information: "International championship participant.",
+    player_photo: "https://example.com/player.webp",
+  });
+  assert.deepEqual(
+    {
+      current_elo: created.current_elo,
+      average_elo: created.average_elo,
+      max_elo: created.max_elo,
+      number_of_games: created.number_of_games,
+      player_information: created.player_information,
+      player_photo: created.player_photo,
+    },
+    {
+      current_elo: 1450,
+      average_elo: 1398,
+      max_elo: 1512,
+      number_of_games: 87,
+      player_information: "International championship participant.",
+      player_photo: "https://example.com/player.webp",
+    }
+  );
+
+  const updated = await service.updateParticipant(tournament.id, created.id, {
+    current_elo: 1460,
+    average_elo: null,
+    player_information: "Updated description.",
+  });
+  assert.equal(updated.current_elo, 1460);
+  assert.equal(updated.average_elo, null);
+  assert.equal(updated.max_elo, 1512);
+  assert.equal(updated.number_of_games, 87);
+  assert.equal(updated.player_information, "Updated description.");
+  assert.equal(updated.player_photo, "https://example.com/player.webp");
+
+  await assert.rejects(
+    service.updateParticipant(tournament.id, created.id, { current_elo: 1450.5 }),
+    (error) => error?.code === "INVALID_NON_NEGATIVE_INTEGER"
+      && error?.details?.field === "current_elo"
+  );
+  await assert.rejects(
+    service.updateParticipant(tournament.id, created.id, { player_photo: "javascript:alert(1)" }),
+    (error) => error?.code === "INVALID_URL" && error?.details?.field === "player_photo"
+  );
+});
+
 test("creates a participant city in the local tournament association", async (t) => {
   const { service } = await createDatabase(t);
   const local = await createPublishedTournament(service, {

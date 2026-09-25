@@ -187,6 +187,17 @@ test("creates the in-person foundation without versioning or idempotency tables"
   );
   assert.equal(matchColumns.has("participant_a_placeholder"), true);
   assert.equal(matchColumns.has("participant_b_placeholder"), true);
+  const participantColumns = new Set(
+    (await all(db, "PRAGMA table_info(in_person_participants)")).map((column) => column.name)
+  );
+  [
+    "current_elo",
+    "average_elo",
+    "max_elo",
+    "number_of_games",
+    "player_information",
+    "player_photo",
+  ].forEach((columnName) => assert.equal(participantColumns.has(columnName), true));
   assert.deepEqual(
     await get(db, "SELECT name FROM in_person_schema_migrations WHERE version = 4"),
     { name: "tournament_logo_url" }
@@ -194,6 +205,10 @@ test("creates the in-person foundation without versioning or idempotency tables"
   assert.deepEqual(
     await get(db, "SELECT name FROM in_person_schema_migrations WHERE version = 5"),
     { name: "playoff_match_placeholders" }
+  );
+  assert.deepEqual(
+    await get(db, "SELECT name FROM in_person_schema_migrations WHERE version = 6"),
+    { name: "participant_profile_fields" }
   );
 });
 

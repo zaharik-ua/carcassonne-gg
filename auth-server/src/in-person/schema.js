@@ -245,6 +245,12 @@ async function ensureInPersonTables(db) {
         name_en TEXT NOT NULL CHECK (length(trim(name_en)) > 0),
         name_local TEXT,
         bga_nickname TEXT,
+        current_elo INTEGER,
+        average_elo INTEGER,
+        max_elo INTEGER,
+        number_of_games INTEGER,
+        player_information TEXT,
+        player_photo TEXT,
         association_id TEXT COLLATE NOCASE,
         city_id TEXT,
         status TEXT NOT NULL DEFAULT 'registered'
@@ -511,6 +517,40 @@ async function ensurePlayoffPlaceholderExtensions(db) {
     await dbExec(db, `
       INSERT OR IGNORE INTO in_person_schema_migrations (version, name)
       VALUES (5, 'playoff_match_placeholders');
+      COMMIT;
+    `);
+  } catch (error) {
+    await rollbackQuietly(db);
+    throw error;
+  }
+  return { addedColumns };
+}
+
+async function ensureParticipantProfileExtensions(db) {
+  const columnsToAdd = [
+    ["current_elo", "INTEGER"],
+    ["average_elo", "INTEGER"],
+    ["max_elo", "INTEGER"],
+    ["number_of_games", "INTEGER"],
+    ["player_information", "TEXT"],
+    ["player_photo", "TEXT"],
+  ];
+  const addedColumns = [];
+  try {
+    await dbExec(db, "BEGIN IMMEDIATE TRANSACTION");
+    const columns = await dbAll(db, "PRAGMA table_info(in_person_participants)");
+    for (const [columnName, columnType] of columnsToAdd) {
+      if (!columns.some((column) => String(column?.name || "") === columnName)) {
+        await dbExec(
+          db,
+          `ALTER TABLE in_person_participants ADD COLUMN ${columnName} ${columnType}`
+        );
+        addedColumns.push(columnName);
+      }
+    }
+    await dbExec(db, `
+      INSERT OR IGNORE INTO in_person_schema_migrations (version, name)
+      VALUES (6, 'participant_profile_fields');
       COMMIT;
     `);
   } catch (error) {
@@ -838,6 +878,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
   const playoffMedalTableMigration = await ensurePlayoffMedalTableAssignments(db);
   const tournamentLogoMigration = await ensureTournamentLogoExtension(db);
   const playoffPlaceholderMigration = await ensurePlayoffPlaceholderExtensions(db);
+  const participantProfileMigration = await ensureParticipantProfileExtensions(db);
   await ensureInPersonTriggersAndAccessIndexes(db);
   logger?.info?.("[in-person] Schema foundation ready", {
     accessTableMigrated: accessMigration.migrated,
@@ -846,11 +887,13 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
     tournamentLogoColumnAdded: tournamentLogoMigration.added,
     playoffMedalTablesUpdated: playoffMedalTableMigration.updatedRows,
     playoffPlaceholderColumnsAdded: playoffPlaceholderMigration.addedColumns,
+    participantProfileColumnsAdded: participantProfileMigration.addedColumns,
   });
   return {
     accessMigration,
     tournamentLogoMigration,
     playoffMedalTableMigration,
     playoffPlaceholderMigration,
+    participantProfileMigration,
   };
 }

@@ -41,6 +41,14 @@ test("In-Person page contains participant registration and check-in flows", () =
     "City name (local)",
     "City icon URL",
     "Country / association",
+    "Current Elo",
+    "Average Elo",
+    "Peak Elo",
+    "Number of games",
+    "Player description",
+    "Player photo",
+    "Select image",
+    "Choose image",
     "Check-in and draw numbers",
     "Possible duplicate:",
     "Ready to form the first Swiss round.",
@@ -56,6 +64,20 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.match(inPersonHtml, /flag\.className = "ip-association-flag"/);
   assert.match(inPersonHtml, /const nameLocal = tournament\.scope === "local" \? createField\("Name \(local\)"\) : null/);
   assert.match(inPersonHtml, /if \(nameLocal\) form\.appendChild\(nameLocal\.field\)/);
+  assert.match(inPersonHtml, /tournament\?\.scope === "international"[\s\S]*?participant\.name_en/);
+  assert.match(inPersonHtml, /function playerMeta\(participant, tournament\)/);
+  assert.match(inPersonHtml, /tournament\?\.scope === "international"[\s\S]*?\? ""[\s\S]*?participant\.city_name_local/);
+  assert.doesNotMatch(inPersonHtml, /participant\.city_name_local \|\| participant\.city_name_en \|\| "—"/);
+  assert.match(inPersonHtml, /current_elo: optionalInteger\(currentElo\.input\)/);
+  assert.match(inPersonHtml, /average_elo: optionalInteger\(averageElo\.input\)/);
+  assert.match(inPersonHtml, /max_elo: optionalInteger\(maxElo\.input\)/);
+  assert.match(inPersonHtml, /number_of_games: optionalInteger\(numberOfGames\.input\)/);
+  assert.match(inPersonHtml, /player_information: String\(playerInformation\.textarea\.value/);
+  assert.match(inPersonHtml, /player_photo: playerPhoto/);
+  assert.match(inPersonHtml, /function showImagePickerDialog/);
+  assert.match(inPersonHtml, /function createPlayerImageField/);
+  assert.match(inPersonHtml, /IMAGE_UPLOAD_URL/);
+  assert.match(inPersonHtml, /className = "ip-image-preview"/);
   assert.match(inPersonHtml, /function createMenuSelectField/);
   assert.match(inPersonHtml, /country\.input\.readOnly = true/);
   assert.match(inPersonHtml, /\/start-check-in/);

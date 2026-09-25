@@ -93,7 +93,8 @@
   }
 
   .ip-select,
-  .ip-input {
+  .ip-input,
+  .ip-textarea {
     width: 100%;
     min-height: 38px;
     box-sizing: border-box;
@@ -104,6 +105,12 @@
     color: var(--ip-text);
     font: inherit;
     font-size: 14px;
+  }
+
+  .ip-textarea {
+    min-height: 110px;
+    resize: vertical;
+    line-height: 1.45;
   }
 
   .ip-tournament-heading {
@@ -548,6 +555,192 @@
     color: #344054;
     font-size: 12px;
     font-weight: 600;
+  }
+
+  .ip-field-wide {
+    grid-column: 1 / -1;
+  }
+
+  .ip-image-upload {
+    display: grid;
+    gap: 6px;
+  }
+
+  .ip-image-select-btn {
+    justify-self: start;
+  }
+
+  .ip-image-preview {
+    display: block;
+    width: auto;
+    max-width: 260px;
+    max-height: 260px;
+    object-fit: contain;
+    border: 1px solid #d7dbe2;
+    border-radius: 4px;
+    background: #f3f4f6;
+  }
+
+  .ip-image-upload-status {
+    min-height: 16px;
+    color: var(--ip-muted);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .cp-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(24, 31, 41, 0.42);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 1000;
+  }
+
+  .cp-modal-dialog {
+    width: 100%;
+    max-width: 560px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
+    box-shadow: 0 16px 36px rgba(15, 28, 48, 0.22);
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .cp-modal-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #222;
+  }
+
+  .cp-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .cp-image-picker-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cp-image-picker-upload-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .cp-image-picker-actions-left {
+    margin-right: auto;
+  }
+
+  .cp-image-picker-status {
+    min-height: 16px;
+    color: #667085;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .cp-image-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 2px;
+  }
+
+  .cp-image-picker-option {
+    all: unset;
+    box-sizing: border-box;
+    aspect-ratio: 1;
+    border: 1px solid #d7dbe2;
+    border-radius: 6px;
+    background: #f3f4f6;
+    display: block;
+    cursor: pointer;
+    overflow: hidden;
+  }
+
+  .cp-image-picker-option:hover,
+  .cp-image-picker-option:focus-visible {
+    border-color: #1a73b7;
+    box-shadow: 0 0 0 2px rgba(26, 115, 183, 0.18);
+  }
+
+  .cp-image-picker-option.active {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.55), 0 0 0 6px rgba(26, 115, 183, 0.22);
+  }
+
+  .cp-image-picker-option img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+  }
+
+  .cp-image-picker-empty {
+    border: 1px dashed #d7dbe2;
+    border-radius: 6px;
+    padding: 14px;
+    color: #667085;
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: center;
+  }
+
+  .cp-btn {
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .cp-btn-primary {
+    background: #1a73b7;
+    color: #fff;
+    border-color: #1a73b7;
+  }
+
+  .cp-btn-secondary {
+    background: #eef2f6;
+    color: #333;
+  }
+
+  .cp-btn-danger {
+    background: #fff3f3;
+    border-color: #e6b4b4;
+    color: #a12a2a;
+    margin-left: auto;
+  }
+
+  .cp-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+  }
+
+  .cp-btn-danger:disabled {
+    background: #f3f4f6;
+    border-color: #d7dbe2;
+    color: #8c96a4;
   }
 
   .ip-form-actions {
@@ -1314,6 +1507,15 @@
       grid-template-columns: 1fr;
     }
 
+    .cp-image-picker-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .cp-image-picker-upload-actions {
+      justify-content: flex-start;
+    }
+
     .ip-draw-number {
       flex: 1 1 auto;
       width: auto;
@@ -1428,8 +1630,12 @@
 <script>
 (function () {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const ME_URL = `${AUTH_BASE}/auth/me`;
   const ACCESSIBLE_URL = `${AUTH_BASE}/in-person-tournaments/accessible`;
   const ASSOCIATIONS_URL = `${AUTH_BASE}/associations`;
+  const IMAGES_URL = `${AUTH_BASE}/images`;
+  const IMAGE_UPLOAD_URL = `${AUTH_BASE}/images/upload`;
+  const IMAGE_UPLOAD_MAX_BYTES = 64 * 1024 * 1024;
   const STARTING_PLAYER_ICON_URL = "https://carcassonne.gg/gallery/blue-mipple-no-bg-small.png";
 
   const state = {
@@ -1444,6 +1650,7 @@
     playoffSetupSlots: [],
     activeTab: "players",
     playerFormController: null,
+    currentUser: null,
   };
 
   const tournamentList = document.getElementById("ipTournamentList");
@@ -1511,6 +1718,373 @@
     statusEl.className = `ip-status${type ? ` ${type}` : ""}`;
   }
 
+  function toApiAbsoluteUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+    return `${AUTH_BASE}${raw.startsWith("/") ? "" : "/"}${raw}`;
+  }
+
+  function formatFileSize(value) {
+    const bytes = Number(value);
+    if (!Number.isFinite(bytes) || bytes <= 0) return "";
+    if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+    if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${Math.round(bytes)} B`;
+  }
+
+  function getImageUploadSizeError(file) {
+    const fileSize = Number(file?.size || 0);
+    if (!fileSize || fileSize <= IMAGE_UPLOAD_MAX_BYTES) return "";
+    return `Uploaded image is too large. Maximum allowed size is ${formatFileSize(IMAGE_UPLOAD_MAX_BYTES)}. Selected file size is ${formatFileSize(fileSize)}.`;
+  }
+
+  function toApiImageVariantUrl(value, variant) {
+    const absoluteUrl = toApiAbsoluteUrl(value);
+    const variantName = String(variant || "").trim();
+    if (!absoluteUrl || !variantName) return absoluteUrl;
+    try {
+      const url = new URL(absoluteUrl, window.location.href);
+      if (!/\/uploads\/images\/\d{4}\/\d{2}\/[^/]+\/[^/]+$/i.test(url.pathname)) {
+        return absoluteUrl;
+      }
+      url.pathname = url.pathname.replace(/\/[^/]+$/, `/${variantName}.webp`);
+      return url.toString();
+    } catch (_error) {
+      return absoluteUrl.replace(/\/[^/]+$/, `/${variantName}.webp`);
+    }
+  }
+
+  function getImageKeyFromUrl(value) {
+    const imageUrl = toApiAbsoluteUrl(value);
+    if (!imageUrl) return "";
+    try {
+      const url = new URL(imageUrl, window.location.href);
+      const match = url.pathname.match(/\/uploads\/images\/\d{4}\/\d{2}\/([^/]+)\//i);
+      return match ? String(match[1] || "").trim().toLowerCase() : "";
+    } catch (_error) {
+      const match = imageUrl.match(/\/uploads\/images\/\d{4}\/\d{2}\/([^/]+)\//i);
+      return match ? String(match[1] || "").trim().toLowerCase() : "";
+    }
+  }
+
+  function getImageDisplayName(image) {
+    return String(
+      image?.title
+      || image?.alt_text
+      || image?.original_filename
+      || image?.image_key
+      || (image?.id ? `Image #${image.id}` : "Player image")
+    ).trim();
+  }
+
+  function getImagePickerUrl(image, variant = "large") {
+    const source = String(image?.storage_path || image?.public_url || "").trim();
+    if (!source) return "";
+    return toApiImageVariantUrl(source, variant) || toApiAbsoluteUrl(source);
+  }
+
+  function normalizeUserId(value) {
+    const raw = String(value ?? "").trim();
+    return /^\d+$/.test(raw) ? String(Number(raw)) : raw;
+  }
+
+  function getAuthUserId(user) {
+    return normalizeUserId(user?.id ?? user?.user_id ?? user?.userId ?? "");
+  }
+
+  function imageWasAddedByUser(image, userId) {
+    const normalizedUserId = normalizeUserId(userId);
+    if (!normalizedUserId) return false;
+    return normalizeUserId(image?.owner_user_id ?? image?.ownerUserId ?? "") === normalizedUserId
+      || normalizeUserId(image?.uploaded_by_user_id ?? image?.uploadedByUserId ?? "") === normalizedUserId;
+  }
+
+  async function fetchCurrentImageUser() {
+    try {
+      const response = await fetch(ME_URL, { method: "GET", credentials: "include" });
+      const result = await response.json().catch(() => ({}));
+      return response.ok && result?.authenticated ? result.user || null : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async function fetchImageLibrary() {
+    const url = new URL(IMAGES_URL, window.location.href);
+    url.searchParams.set("status", "ready");
+    url.searchParams.set("visibility", "public");
+    const response = await fetch(url.toString(), { credentials: "include" });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.message || "Failed to load images.");
+    }
+    return Array.isArray(result?.images) ? result.images : [];
+  }
+
+  async function deleteLibraryImage(image) {
+    const imageId = String(image?.id || image?.image_key || "").trim();
+    if (!imageId) throw new Error("Select an image to delete.");
+    const response = await fetch(`${IMAGES_URL}/${encodeURIComponent(imageId)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.message || "Failed to delete image.");
+    }
+    return result;
+  }
+
+  function showImagePickerDialog(options = {}) {
+    const titleText = String(options.title || "Choose image").trim();
+    const chooseLabel = String(options.chooseLabel || "Choose").trim();
+    const uploadLabel = String(options.uploadLabel || "Upload new image").trim();
+    const currentImageKey = getImageKeyFromUrl(options.currentUrl || "");
+    const hasAdminOption = Object.prototype.hasOwnProperty.call(options, "isAdmin")
+      || Object.prototype.hasOwnProperty.call(options, "isGlobalAdmin");
+    let imagePickerUserId = normalizeUserId(
+      options.currentUserId ?? options.currentUserAuthId ?? options.userId ?? ""
+    );
+    let isGlobalAdmin = options.isAdmin === true || options.isGlobalAdmin === true;
+    let imagePickerScope = "mine";
+    let selectedImage = null;
+    let loadedImages = [];
+    let isDeleting = false;
+    let isClosed = false;
+
+    const overlay = document.createElement("div");
+    overlay.className = "cp-modal-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "cp-modal-dialog";
+    const title = document.createElement("div");
+    title.className = "cp-modal-title";
+    title.textContent = titleText || "Choose image";
+    const status = document.createElement("div");
+    status.className = "cp-image-picker-status";
+    status.textContent = "Loading images...";
+    const toolbar = document.createElement("div");
+    toolbar.className = "cp-image-picker-toolbar";
+    const uploadActions = document.createElement("div");
+    uploadActions.className = "cp-image-picker-upload-actions";
+    const grid = document.createElement("div");
+    grid.className = "cp-image-picker-grid";
+    const actions = document.createElement("div");
+    actions.className = "cp-modal-actions";
+    const actionsLeft = document.createElement("div");
+    actionsLeft.className = "cp-image-picker-actions-left";
+    const uploadBtn = document.createElement("button");
+    uploadBtn.type = "button";
+    uploadBtn.className = "cp-btn cp-btn-secondary";
+    uploadBtn.textContent = uploadLabel || "Upload new image";
+    const uploadSourceBtn = document.createElement("button");
+    uploadSourceBtn.type = "button";
+    uploadSourceBtn.className = "cp-btn cp-btn-secondary";
+    uploadSourceBtn.textContent = String(options.sourceUploadLabel || "Upload source").trim() || "Upload source";
+    const allImagesBtn = document.createElement("button");
+    allImagesBtn.type = "button";
+    allImagesBtn.className = "cp-btn cp-btn-secondary";
+    allImagesBtn.textContent = "All Images";
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "cp-btn cp-btn-danger";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.disabled = true;
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    const chooseBtn = document.createElement("button");
+    chooseBtn.type = "button";
+    chooseBtn.className = "cp-btn cp-btn-primary";
+    chooseBtn.textContent = chooseLabel || "Choose";
+    chooseBtn.disabled = true;
+
+    const closeModal = (reason = "cancel") => {
+      if (isClosed) return;
+      isClosed = true;
+      document.removeEventListener("keydown", handleKeyDown);
+      overlay.remove();
+      if (reason === "cancel" && typeof options.onCancel === "function") options.onCancel();
+    };
+    function handleKeyDown(event) {
+      if (event.key === "Escape") closeModal("cancel");
+    }
+    const setPickerStatus = (message, isError = false, statusOptions = {}) => {
+      const text = String(message || "").trim();
+      status.innerHTML = "";
+      status.style.color = isError ? "#c62828" : "#667085";
+      if (text) {
+        const label = document.createElement("span");
+        label.textContent = text;
+        status.appendChild(label);
+        return;
+      }
+      if (statusOptions.showAdminButton !== false && isGlobalAdmin && imagePickerScope !== "all") {
+        status.appendChild(allImagesBtn);
+      }
+    };
+    const setDeleting = (value) => {
+      isDeleting = value === true;
+      uploadBtn.disabled = isDeleting;
+      uploadSourceBtn.disabled = isDeleting;
+      cancelBtn.disabled = isDeleting;
+      chooseBtn.disabled = isDeleting || !selectedImage;
+      deleteBtn.disabled = isDeleting || !selectedImage;
+      deleteBtn.textContent = isDeleting ? "Deleting..." : "Delete";
+    };
+    const setSelectedImage = (image) => {
+      selectedImage = image || null;
+      grid.querySelectorAll(".cp-image-picker-option").forEach((node) => {
+        node.classList.toggle(
+          "active",
+          String(node.dataset.imageId || "") === String(selectedImage?.id || "")
+        );
+      });
+      chooseBtn.disabled = isDeleting || !selectedImage;
+      deleteBtn.disabled = isDeleting || !selectedImage;
+    };
+    const renderImages = (images) => {
+      if (isClosed) return;
+      grid.innerHTML = "";
+      loadedImages = Array.isArray(images) ? images : [];
+      const scopedImages = isGlobalAdmin && imagePickerScope === "all"
+        ? loadedImages
+        : loadedImages.filter((image) => imageWasAddedByUser(image, imagePickerUserId));
+      const rows = scopedImages.filter((image) => (
+        getImagePickerUrl(image, "thumb") || getImagePickerUrl(image, "original")
+      ));
+      if (!rows.length) {
+        const empty = document.createElement("div");
+        empty.className = "cp-image-picker-empty";
+        empty.textContent = "No uploaded images yet.";
+        grid.appendChild(empty);
+        setPickerStatus("");
+        setSelectedImage(null);
+        return;
+      }
+      rows.forEach((image) => {
+        const optionBtn = document.createElement("button");
+        optionBtn.type = "button";
+        optionBtn.className = "cp-image-picker-option";
+        optionBtn.dataset.imageId = String(image?.id || "");
+        optionBtn.title = getImageDisplayName(image);
+        const imageEl = document.createElement("img");
+        const thumbUrl = getImagePickerUrl(image, "thumb");
+        const fallbackUrl = getImagePickerUrl(image, "small") || getImagePickerUrl(image, "original");
+        imageEl.src = thumbUrl || fallbackUrl;
+        imageEl.alt = getImageDisplayName(image);
+        imageEl.loading = "lazy";
+        imageEl.addEventListener("error", () => {
+          if (fallbackUrl && imageEl.src !== fallbackUrl) imageEl.src = fallbackUrl;
+        }, { once: true });
+        optionBtn.appendChild(imageEl);
+        optionBtn.addEventListener("click", () => setSelectedImage(image));
+        optionBtn.addEventListener("dblclick", () => {
+          setSelectedImage(image);
+          chooseBtn.click();
+        });
+        grid.appendChild(optionBtn);
+        if (
+          !selectedImage
+          && currentImageKey
+          && currentImageKey === String(image?.image_key || "").trim().toLowerCase()
+        ) {
+          selectedImage = image;
+        }
+      });
+      setSelectedImage(selectedImage);
+      setPickerStatus("");
+    };
+
+    uploadBtn.addEventListener("click", () => {
+      closeModal("upload");
+      if (typeof options.onUploadNew === "function") options.onUploadNew();
+    });
+    uploadSourceBtn.addEventListener("click", () => {
+      closeModal("upload-source");
+      if (typeof options.onUploadSourceNew === "function") options.onUploadSourceNew();
+    });
+    allImagesBtn.addEventListener("click", () => {
+      imagePickerScope = "all";
+      setPickerStatus("");
+      renderImages(loadedImages);
+    });
+    deleteBtn.addEventListener("click", async () => {
+      if (!selectedImage || isDeleting) return;
+      if (!window.confirm("Delete this image permanently?")) return;
+      setPickerStatus("Deleting image...");
+      setDeleting(true);
+      try {
+        await deleteLibraryImage(selectedImage);
+        const deletedImageId = String(selectedImage?.id || "");
+        selectedImage = null;
+        renderImages(loadedImages.filter((image) => String(image?.id || "") !== deletedImageId));
+        setPickerStatus("Image deleted.");
+      } catch (error) {
+        setPickerStatus(error?.message || "Failed to delete image.", true);
+      } finally {
+        setDeleting(false);
+      }
+    });
+    cancelBtn.addEventListener("click", () => closeModal("cancel"));
+    chooseBtn.addEventListener("click", () => {
+      if (!selectedImage || typeof options.onChoose !== "function") return;
+      try {
+        options.onChoose(selectedImage);
+        closeModal("choose");
+      } catch (error) {
+        status.textContent = error?.message || "Failed to choose image.";
+        status.style.color = "#c62828";
+      }
+    });
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal("cancel");
+    });
+    document.addEventListener("keydown", handleKeyDown);
+
+    uploadActions.appendChild(uploadBtn);
+    if (options.canUploadSource === true && typeof options.onUploadSourceNew === "function") {
+      uploadActions.appendChild(uploadSourceBtn);
+    }
+    toolbar.appendChild(status);
+    toolbar.appendChild(uploadActions);
+    actionsLeft.appendChild(deleteBtn);
+    actions.appendChild(actionsLeft);
+    actions.appendChild(cancelBtn);
+    actions.appendChild(chooseBtn);
+    dialog.appendChild(title);
+    dialog.appendChild(toolbar);
+    dialog.appendChild(grid);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    Promise.all([
+      Promise.resolve((imagePickerUserId && hasAdminOption) ? null : fetchCurrentImageUser()),
+      fetchImageLibrary(),
+    ])
+      .then(([currentUser, images]) => {
+        if (currentUser) {
+          imagePickerUserId = getAuthUserId(currentUser);
+          isGlobalAdmin = isGlobalAdmin
+            || currentUser?.isAdmin === true
+            || Number(currentUser?.admin) === 1;
+        }
+        renderImages(images);
+      })
+      .catch((error) => {
+        if (isClosed) return;
+        grid.innerHTML = "";
+        const empty = document.createElement("div");
+        empty.className = "cp-image-picker-empty";
+        empty.textContent = error?.message || "Failed to load images.";
+        grid.appendChild(empty);
+        setPickerStatus("", false, { showAdminButton: false });
+      });
+  }
+
   function selectedTournament() {
     return state.tournaments.find((item) => item.id === state.selectedTournamentId) || null;
   }
@@ -1546,6 +2120,206 @@
     field.appendChild(label);
     field.appendChild(input);
     return { field, input };
+  }
+
+  function createTextareaField(labelText) {
+    const field = document.createElement("div");
+    field.className = "ip-field ip-field-wide";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const textarea = document.createElement("textarea");
+    textarea.className = "ip-textarea";
+    field.appendChild(label);
+    field.appendChild(textarea);
+    return { field, textarea };
+  }
+
+  function createPlayerImageField(participant, formController) {
+    let currentImageUrl = String(participant?.player_photo || "").trim();
+    let selectedImageFile = null;
+    let selectedImagePreserveSource = false;
+    let previewObjectUrl = "";
+
+    const field = document.createElement("div");
+    field.className = "ip-field ip-field-wide";
+    const label = document.createElement("label");
+    label.textContent = "Player photo";
+    const uploadWrap = document.createElement("div");
+    uploadWrap.className = "ip-image-upload";
+    const chooseButton = document.createElement("button");
+    chooseButton.type = "button";
+    chooseButton.className = "ip-btn ip-image-select-btn";
+    chooseButton.textContent = currentImageUrl ? "Change image" : "Select image";
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.className = "ip-hidden";
+    const preview = document.createElement("img");
+    preview.className = "ip-image-preview";
+    preview.alt = "Player photo preview";
+    preview.hidden = !currentImageUrl;
+    if (currentImageUrl) preview.src = currentImageUrl;
+    const uploadStatus = document.createElement("div");
+    uploadStatus.className = "ip-image-upload-status";
+    uploadStatus.textContent = currentImageUrl
+      ? "Current image will be kept unless a new file is selected."
+      : "";
+
+    const resetPreviewObjectUrl = () => {
+      if (!previewObjectUrl) return;
+      URL.revokeObjectURL(previewObjectUrl);
+      previewObjectUrl = "";
+    };
+    formController?.signal?.addEventListener("abort", resetPreviewObjectUrl, { once: true });
+
+    const chooseExistingImage = (image) => {
+      const imageUrl = getImagePickerUrl(image, "large")
+        || getImagePickerUrl(image, "medium")
+        || getImagePickerUrl(image, "original");
+      if (!imageUrl) throw new Error("Selected image has no public URL.");
+      resetPreviewObjectUrl();
+      selectedImageFile = null;
+      selectedImagePreserveSource = false;
+      fileInput.value = "";
+      currentImageUrl = imageUrl;
+      preview.src = currentImageUrl;
+      preview.hidden = false;
+      chooseButton.textContent = "Change image";
+      uploadStatus.textContent = "Existing image selected.";
+      setStatus("");
+    };
+
+    chooseButton.addEventListener("click", () => {
+      const currentUser = state.currentUser;
+      const isAdmin = currentUser?.isAdmin === true || Number(currentUser?.admin) === 1;
+      showImagePickerDialog({
+        title: "Choose image",
+        currentUrl: currentImageUrl,
+        chooseLabel: "Choose",
+        uploadLabel: "Upload new image",
+        canUploadSource: isAdmin,
+        currentUserId: getAuthUserId(currentUser),
+        isAdmin,
+        sourceUploadLabel: "Upload source",
+        onChoose: chooseExistingImage,
+        onUploadNew: () => {
+          selectedImagePreserveSource = false;
+          fileInput.value = "";
+          fileInput.click();
+        },
+        onUploadSourceNew: () => {
+          selectedImagePreserveSource = true;
+          fileInput.value = "";
+          fileInput.click();
+        },
+      });
+    });
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+      resetPreviewObjectUrl();
+      selectedImageFile = null;
+      if (!file) {
+        selectedImagePreserveSource = false;
+        preview.hidden = !currentImageUrl;
+        preview.src = currentImageUrl || "";
+        uploadStatus.textContent = currentImageUrl
+          ? "Current image will be kept unless a new file is selected."
+          : "";
+        return;
+      }
+      const sizeError = getImageUploadSizeError(file);
+      if (sizeError) {
+        fileInput.value = "";
+        selectedImagePreserveSource = false;
+        preview.hidden = !currentImageUrl;
+        preview.src = currentImageUrl || "";
+        uploadStatus.textContent = sizeError;
+        setStatus(sizeError, "error");
+        return;
+      }
+      if (!String(file.type || "").startsWith("image/")) {
+        fileInput.value = "";
+        selectedImagePreserveSource = false;
+        preview.hidden = !currentImageUrl;
+        preview.src = currentImageUrl || "";
+        uploadStatus.textContent = "Select an image file.";
+        setStatus("Select an image file.", "error");
+        return;
+      }
+      selectedImageFile = file;
+      setStatus("");
+      previewObjectUrl = URL.createObjectURL(file);
+      preview.src = previewObjectUrl;
+      preview.hidden = false;
+      chooseButton.textContent = "Change image";
+      uploadStatus.textContent = selectedImagePreserveSource
+        ? `${file.name} (source saved)`
+        : file.name;
+    });
+
+    const uploadSelectedImage = async (playerName) => {
+      if (!selectedImageFile) return currentImageUrl || null;
+      const sizeError = getImageUploadSizeError(selectedImageFile);
+      if (sizeError) throw new Error(sizeError);
+      const formData = new FormData();
+      formData.append("image", selectedImageFile);
+      formData.append("visibility", "public");
+      if (selectedImagePreserveSource) formData.append("preserve_original", "true");
+      const titleText = String(playerName || "").trim();
+      if (titleText) {
+        formData.append("title", titleText);
+        formData.append("alt_text", `${titleText} photo`);
+      }
+      let response = null;
+      try {
+        response = await fetch(IMAGE_UPLOAD_URL, {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        });
+      } catch (error) {
+        throw new Error(getImageUploadSizeError(selectedImageFile) || error?.message || "Failed to upload image.");
+      }
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.ok) {
+        if (response.status === 413) {
+          throw new Error(
+            result?.message
+            || `Uploaded image is too large. Maximum allowed size is ${formatFileSize(IMAGE_UPLOAD_MAX_BYTES)}.`
+          );
+        }
+        throw new Error(result?.message || "Failed to upload image.");
+      }
+      const variants = Array.isArray(result?.variants) ? result.variants : [];
+      const preferredVariant = variants.find((variant) => String(variant?.variant || "") === "large")
+        || variants.find((variant) => String(variant?.variant || "") === "medium")
+        || variants.find((variant) => String(variant?.variant || "") === "original")
+        || variants[0]
+        || null;
+      const uploadedUrl = toApiAbsoluteUrl(
+        preferredVariant?.public_url || preferredVariant?.storage_path || ""
+      );
+      if (!uploadedUrl) throw new Error("Image uploaded, but no public URL was returned.");
+      currentImageUrl = uploadedUrl;
+      selectedImageFile = null;
+      selectedImagePreserveSource = false;
+      fileInput.value = "";
+      resetPreviewObjectUrl();
+      preview.src = currentImageUrl;
+      preview.hidden = false;
+      chooseButton.textContent = "Change image";
+      uploadStatus.textContent = "Image uploaded.";
+      return currentImageUrl;
+    };
+
+    uploadWrap.appendChild(chooseButton);
+    uploadWrap.appendChild(fileInput);
+    uploadWrap.appendChild(preview);
+    uploadWrap.appendChild(uploadStatus);
+    field.appendChild(label);
+    field.appendChild(uploadWrap);
+    return { field, uploadSelectedImage };
   }
 
   function createSelectField(labelText, options, value) {
@@ -2166,9 +2940,12 @@
       || "—";
   }
 
-  function playerMeta(participant) {
+  function playerMeta(participant, tournament) {
+    const location = tournament?.scope === "international"
+      ? ""
+      : participant.city_name_local || participant.city_name_en || "";
     return [
-      participant.city_name_local || participant.city_name_en || "—",
+      location,
       participant.bga_nickname ? `BGA: ${participant.bga_nickname}` : "",
     ].filter(Boolean).join(" • ");
   }
@@ -2198,10 +2975,12 @@
       main.className = "ip-person";
       const name = document.createElement("div");
       name.className = "ip-person-name";
-      name.textContent = participant.name_local || participant.name_en;
+      name.textContent = tournament?.scope === "international"
+        ? participant.name_en
+        : participant.name_local || participant.name_en;
       const meta = document.createElement("div");
       meta.className = "ip-person-meta";
-      meta.textContent = playerMeta(participant);
+      meta.textContent = playerMeta(participant, tournament);
       main.appendChild(name);
       main.appendChild(meta);
       const actions = document.createElement("div");
@@ -2228,6 +3007,24 @@
     if (nameLocal) nameLocal.input.value = participant?.name_local || "";
     const bgaNickname = createField("BGA nickname");
     bgaNickname.input.value = participant?.bga_nickname || "";
+    const currentElo = createField("Current Elo", "number");
+    const averageElo = createField("Average Elo", "number");
+    const maxElo = createField("Peak Elo", "number");
+    const numberOfGames = createField("Number of games", "number");
+    [currentElo, averageElo, maxElo, numberOfGames].forEach(({ input }) => {
+      input.min = "0";
+      input.step = "1";
+      input.inputMode = "numeric";
+    });
+    currentElo.input.value = participant?.current_elo == null ? "" : String(participant.current_elo);
+    averageElo.input.value = participant?.average_elo == null ? "" : String(participant.average_elo);
+    maxElo.input.value = participant?.max_elo == null ? "" : String(participant.max_elo);
+    numberOfGames.input.value = participant?.number_of_games == null
+      ? ""
+      : String(participant.number_of_games);
+    const playerInformation = createTextareaField("Player description");
+    playerInformation.textarea.value = participant?.player_information || "";
+    const playerImage = createPlayerImageField(participant, formController);
     const cityInlineMount = document.createElement("div");
     cityInlineMount.className = "ip-city-inline-mount";
     let location;
@@ -2248,6 +3045,12 @@
     if (nameLocal) form.appendChild(nameLocal.field);
     form.appendChild(bgaNickname.field);
     form.appendChild(location.field);
+    form.appendChild(currentElo.field);
+    form.appendChild(averageElo.field);
+    form.appendChild(maxElo.field);
+    form.appendChild(numberOfGames.field);
+    form.appendChild(playerInformation.field);
+    form.appendChild(playerImage.field);
     if (tournament.scope === "local") form.appendChild(cityInlineMount);
     const actions = document.createElement("div");
     actions.className = "ip-form-actions";
@@ -2289,16 +3092,28 @@
     form.appendChild(actions);
 
     async function saveParticipant(confirmDuplicate) {
-      const payload = {
-        name_en: String(nameEn.input.value || "").trim(),
-        name_local: nameLocal ? String(nameLocal.input.value || "").trim() || null : null,
-        bga_nickname: String(bgaNickname.input.value || "").trim() || null,
-        association_id: tournament.scope === "international" ? getLocationValue() : null,
-        city_id: tournament.scope === "local" ? getLocationValue() : null,
-        confirm_duplicate: confirmDuplicate,
-      };
       save.disabled = true;
+      save.textContent = "Saving...";
       try {
+        const playerName = String(nameEn.input.value || "").trim();
+        const playerPhoto = await playerImage.uploadSelectedImage(playerName);
+        const optionalInteger = (input) => (
+          String(input.value || "").trim() === "" ? null : Number(input.value)
+        );
+        const payload = {
+          name_en: playerName,
+          name_local: nameLocal ? String(nameLocal.input.value || "").trim() || null : null,
+          bga_nickname: String(bgaNickname.input.value || "").trim() || null,
+          current_elo: optionalInteger(currentElo.input),
+          average_elo: optionalInteger(averageElo.input),
+          max_elo: optionalInteger(maxElo.input),
+          number_of_games: optionalInteger(numberOfGames.input),
+          player_information: String(playerInformation.textarea.value || "").trim() || null,
+          player_photo: playerPhoto,
+          association_id: tournament.scope === "international" ? getLocationValue() : null,
+          city_id: tournament.scope === "local" ? getLocationValue() : null,
+          confirm_duplicate: confirmDuplicate,
+        };
         await apiJson(
           participant
             ? tournamentUrl(`/participants/${encodeURIComponent(participant.id)}`)
@@ -2317,6 +3132,7 @@
           )).join("\n");
           if (window.confirm(`Possible duplicate:\n${candidates}\n\nAdd this person as a genuine namesake?`)) {
             save.disabled = false;
+            save.textContent = participant ? "Save" : "Create";
             await saveParticipant(true);
             return;
           }
@@ -2324,6 +3140,7 @@
           setStatus(error.message || "Failed to save player.", "error");
         }
         save.disabled = false;
+        save.textContent = participant ? "Save" : "Create";
       }
     }
 
@@ -2652,7 +3469,9 @@
 
     const player = document.createElement("div");
     player.className = "ip-modal-player";
-    player.textContent = participant.name_local || participant.name_en;
+    player.textContent = tournament?.scope === "international"
+      ? participant.name_en
+      : participant.name_local || participant.name_en;
 
     const fields = document.createElement("div");
     fields.className = "ip-modal-fields";
@@ -2816,10 +3635,12 @@
       main.className = "ip-person";
       const name = document.createElement("div");
       name.className = "ip-person-name";
-      name.textContent = participant.name_local || participant.name_en;
+      name.textContent = tournament?.scope === "international"
+        ? participant.name_en
+        : participant.name_local || participant.name_en;
       const meta = document.createElement("div");
       meta.className = "ip-person-meta";
-      meta.textContent = playerMeta(participant);
+      meta.textContent = playerMeta(participant, tournament);
       main.appendChild(name);
       main.appendChild(meta);
 
@@ -4929,12 +5750,14 @@
     refreshBtn.disabled = true;
     setStatus("Loading...");
     try {
-      const [accessibleData, associationsData] = await Promise.all([
+      const [accessibleData, associationsData, currentUser] = await Promise.all([
         apiJson(ACCESSIBLE_URL),
         apiJson(ASSOCIATIONS_URL),
+        fetchCurrentImageUser(),
       ]);
       state.tournaments = Array.isArray(accessibleData?.tournaments) ? accessibleData.tournaments : [];
       state.associations = Array.isArray(associationsData?.associations) ? associationsData.associations : [];
+      state.currentUser = currentUser;
       const requestedId = new URL(window.location.href).searchParams.get("tournament") || "";
       state.selectedTournamentId = state.tournaments.some((item) => item.id === requestedId)
         ? requestedId
@@ -4951,6 +5774,7 @@
       }
     } catch (error) {
       state.tournaments = [];
+      state.currentUser = null;
       state.overview = null;
       state.swiss = null;
       state.playoff = null;
