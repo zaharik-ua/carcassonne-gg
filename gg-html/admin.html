@@ -4522,6 +4522,11 @@
       ],
       isReadOnly
     );
+    const testTournamentField = createCheckboxRow(
+      "Test tournament",
+      item?.is_test_tournament === true || Number(item?.is_test_tournament) === 1,
+      "Enable automatic test data"
+    );
     const associationField = createSelectOptionsRow(
       "Country / association *",
       item?.association_id || "",
@@ -4725,6 +4730,7 @@
     form.appendChild(nameLocalField.row);
     form.appendChild(slugField.row);
     form.appendChild(scopeField.row);
+    form.appendChild(testTournamentField.row);
     form.appendChild(associationField.row);
     form.appendChild(localSubtypeField.row);
     form.appendChild(cityField.row);
@@ -4766,6 +4772,7 @@
       rulesUrlField.input,
       logoUrlField.input,
       swissRoundsField.input,
+      testTournamentField.input,
     ];
     if (isReadOnly) {
       editableControls.forEach((control) => { control.disabled = true; });
@@ -4902,6 +4909,7 @@
         organizer_url: String(organizerUrlField.input.value || "").trim() || null,
         rules_url: String(rulesUrlField.input.value || "").trim() || null,
         logo_url: String(logoUrlField.input.value || "").trim() || null,
+        is_test_tournament: testTournamentField.input.checked,
         swiss_rounds_count: Number(swissRoundsField.input.value),
         playoff_first_round: playoffFirstRoundField.select.value,
         admin_user_ids: adminsField.getValues(),

@@ -182,6 +182,7 @@ test("creates the in-person foundation without versioning or idempotency tables"
     (await all(db, "PRAGMA table_info(in_person_tournaments)")).map((column) => column.name)
   );
   assert.equal(tournamentColumns.has("logo_url"), true);
+  assert.equal(tournamentColumns.has("is_test_tournament"), true);
   const matchColumns = new Set(
     (await all(db, "PRAGMA table_info(in_person_matches)")).map((column) => column.name)
   );
@@ -209,6 +210,10 @@ test("creates the in-person foundation without versioning or idempotency tables"
   assert.deepEqual(
     await get(db, "SELECT name FROM in_person_schema_migrations WHERE version = 6"),
     { name: "participant_profile_fields" }
+  );
+  assert.deepEqual(
+    await get(db, "SELECT name FROM in_person_schema_migrations WHERE version = 7"),
+    { name: "test_tournament_flag" }
   );
 });
 
@@ -282,13 +287,18 @@ test("adds logo_url to an existing in-person tournament table without losing dat
 
   const firstResult = await ensureInPersonSchema(db, { logger: silentLogger });
   assert.equal(firstResult.tournamentLogoMigration.added, true);
+  assert.equal(firstResult.testTournamentMigration.added, true);
   assert.deepEqual(
-    await get(db, "SELECT id, name_en, logo_url FROM in_person_tournaments WHERE id = 'legacy-logo'"),
-    { id: "legacy-logo", name_en: "Legacy logo tournament", logo_url: null }
+    await get(
+      db,
+      "SELECT id, name_en, logo_url, is_test_tournament FROM in_person_tournaments WHERE id = 'legacy-logo'"
+    ),
+    { id: "legacy-logo", name_en: "Legacy logo tournament", logo_url: null, is_test_tournament: 0 }
   );
 
   const secondResult = await ensureInPersonSchema(db, { logger: silentLogger });
   assert.equal(secondResult.tournamentLogoMigration.added, false);
+  assert.equal(secondResult.testTournamentMigration.added, false);
 });
 
 test("repairs legacy Final and Bronze medal match table assignments", async (t) => {

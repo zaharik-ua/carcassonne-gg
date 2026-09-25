@@ -520,6 +520,24 @@
     flex: 1 1 auto;
   }
 
+  .ip-person-with-flag {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .ip-participant-flag {
+    width: 28px;
+    height: 19px;
+    flex: 0 0 28px;
+    border-radius: 2px;
+    object-fit: cover;
+  }
+
+  .ip-person-details {
+    min-width: 0;
+  }
+
   .ip-person-name {
     overflow: hidden;
     font-size: 14px;
@@ -1580,6 +1598,7 @@
         <strong>Players</strong>
         <div class="ip-actions">
           <button id="ipAddLatePlayerBtn" class="ip-btn primary ip-hidden" type="button">Add late player</button>
+          <button id="ipAddTestPlayersBtn" class="ip-btn ip-hidden" type="button">Add test players</button>
           <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
         </div>
       </div>
@@ -1591,7 +1610,10 @@
     <section id="ipCheckInPanel" class="ip-card ip-hidden">
       <div class="ip-toolbar">
         <strong>Check-in and draw numbers</strong>
-        <button id="ipStartCheckInBtn" class="ip-btn primary ip-hidden" type="button">Start check-in</button>
+        <div class="ip-actions">
+          <button id="ipBulkCheckInBtn" class="ip-btn ip-hidden" type="button">Bulk check-in</button>
+          <button id="ipStartCheckInBtn" class="ip-btn primary ip-hidden" type="button">Start check-in</button>
+        </div>
       </div>
       <div id="ipReadiness"></div>
       <div id="ipCheckInList" class="ip-list"></div>
@@ -1673,6 +1695,8 @@
   const readinessEl = document.getElementById("ipReadiness");
   const addPlayerBtn = document.getElementById("ipAddPlayerBtn");
   const addLatePlayerBtn = document.getElementById("ipAddLatePlayerBtn");
+  const addTestPlayersBtn = document.getElementById("ipAddTestPlayersBtn");
+  const bulkCheckInBtn = document.getElementById("ipBulkCheckInBtn");
   const startCheckInBtn = document.getElementById("ipStartCheckInBtn");
   const refreshBtn = document.getElementById("ipRefreshBtn");
   const swissActions = document.getElementById("ipSwissActions");
@@ -2950,6 +2974,49 @@
     ].filter(Boolean).join(" • ");
   }
 
+  function participantAssociation(participant) {
+    const associationId = String(participant?.association_id || "").trim();
+    const association = state.associations.find((candidate) => (
+      String(candidate?.id || candidate?.code || "").trim().toLowerCase() === associationId.toLowerCase()
+    ));
+    return {
+      name: participant?.association_name || association?.name || associationId,
+      flag: participant?.association_flag || association?.flag || "",
+    };
+  }
+
+  function createParticipantListPerson(participant, tournament) {
+    const main = document.createElement("div");
+    main.className = "ip-person";
+    const details = document.createElement("div");
+    details.className = "ip-person-details";
+    const name = document.createElement("div");
+    name.className = "ip-person-name";
+    name.textContent = tournament?.scope === "international"
+      ? participant.name_en
+      : participant.name_local || participant.name_en;
+    const meta = document.createElement("div");
+    meta.className = "ip-person-meta";
+    meta.textContent = playerMeta(participant, tournament);
+    details.appendChild(name);
+    details.appendChild(meta);
+
+    if (tournament?.scope === "international") {
+      const association = participantAssociation(participant);
+      if (association.flag) {
+        const flag = document.createElement("img");
+        flag.className = "ip-participant-flag";
+        flag.src = association.flag;
+        flag.alt = association.name ? `${association.name} flag` : "Country flag";
+        flag.addEventListener("error", () => flag.remove(), { once: true });
+        main.classList.add("ip-person-with-flag");
+        main.appendChild(flag);
+      }
+    }
+    main.appendChild(details);
+    return main;
+  }
+
   function renderPlayers() {
     state.playerFormController?.abort();
     state.playerFormController = null;
@@ -2959,6 +3026,18 @@
     const tournament = state.overview?.tournament;
     addPlayerBtn.disabled = !!tournament?.has_started_swiss
       || ["cancelled", "completed"].includes(String(tournament?.status || ""));
+    const isTestTournament = tournament?.is_test_tournament === true;
+    const testPlayersAvailable = Number(state.overview?.test_data?.available_players || 0);
+    addTestPlayersBtn.classList.toggle("ip-hidden", !isTestTournament);
+    addTestPlayersBtn.disabled = tournament?.scope !== "international"
+      || !!tournament?.has_started_swiss
+      || ["cancelled", "completed"].includes(String(tournament?.status || ""))
+      || testPlayersAvailable < 1;
+    addTestPlayersBtn.title = tournament?.scope !== "international"
+      ? "The supplied test-player countries require an international tournament."
+      : testPlayersAvailable < 1
+        ? "All 60 test players have already been added."
+        : `Up to ${testPlayersAvailable} test players are available.`;
     addLatePlayerBtn.classList.toggle("ip-hidden", !state.swiss?.can_add_late_participant);
     addLatePlayerBtn.disabled = !state.swiss?.can_add_late_participant;
     if (!participants.length) {
@@ -2971,18 +3050,7 @@
     participants.forEach((participant) => {
       const row = document.createElement("div");
       row.className = "ip-row";
-      const main = document.createElement("div");
-      main.className = "ip-person";
-      const name = document.createElement("div");
-      name.className = "ip-person-name";
-      name.textContent = tournament?.scope === "international"
-        ? participant.name_en
-        : participant.name_local || participant.name_en;
-      const meta = document.createElement("div");
-      meta.className = "ip-person-meta";
-      meta.textContent = playerMeta(participant, tournament);
-      main.appendChild(name);
-      main.appendChild(meta);
+      const main = createParticipantListPerson(participant, tournament);
       const actions = document.createElement("div");
       actions.className = "ip-actions";
       actions.appendChild(createButton("Edit", "ip-btn", () => openPlayerForm(participant)));
@@ -3448,6 +3516,96 @@
     readinessEl.appendChild(box);
   }
 
+  function openTestQuantityModal({ titleText, description, maximum, submitText, onSubmit }) {
+    if (!Number.isInteger(maximum) || maximum < 1) return;
+    const overlay = document.createElement("div");
+    overlay.className = "ip-modal-overlay";
+    const form = document.createElement("form");
+    form.className = "ip-modal-dialog";
+    form.setAttribute("role", "dialog");
+    form.setAttribute("aria-modal", "true");
+
+    const title = document.createElement("div");
+    title.className = "ip-modal-title";
+    title.textContent = titleText;
+    const hint = document.createElement("div");
+    hint.className = "ip-modal-player";
+    hint.textContent = description;
+    const quantity = createField("Number of players", "number");
+    quantity.input.min = "1";
+    quantity.input.max = String(maximum);
+    quantity.input.step = "1";
+    quantity.input.inputMode = "numeric";
+    quantity.input.value = String(Math.min(8, maximum));
+    const warning = document.createElement("div");
+    warning.className = "ip-modal-warning";
+    warning.setAttribute("role", "alert");
+    const actions = document.createElement("div");
+    actions.className = "ip-modal-actions";
+    const cancel = createButton("Cancel", "ip-btn", () => closeModal());
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "ip-btn primary";
+    submit.textContent = submitText;
+    actions.appendChild(cancel);
+    actions.appendChild(submit);
+    form.appendChild(title);
+    form.appendChild(hint);
+    form.appendChild(quantity.field);
+    form.appendChild(warning);
+    form.appendChild(actions);
+    overlay.appendChild(form);
+
+    let saving = false;
+    function closeModal() {
+      if (saving) return;
+      document.removeEventListener("keydown", handleEscape);
+      overlay.remove();
+    }
+    function handleEscape(event) {
+      if (event.key === "Escape") closeModal();
+    }
+    function validate() {
+      warning.textContent = "";
+      const value = Number(quantity.input.value);
+      if (!Number.isInteger(value) || value < 1 || value > maximum) {
+        warning.textContent = `Enter a whole number from 1 to ${maximum}.`;
+        return null;
+      }
+      return value;
+    }
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal();
+    });
+    document.addEventListener("keydown", handleEscape);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const count = validate();
+      if (count == null) return;
+      saving = true;
+      quantity.input.disabled = true;
+      cancel.disabled = true;
+      submit.disabled = true;
+      submit.textContent = "Working...";
+      try {
+        await onSubmit(count);
+        saving = false;
+        closeModal();
+      } catch (error) {
+        saving = false;
+        quantity.input.disabled = false;
+        cancel.disabled = false;
+        submit.disabled = false;
+        submit.textContent = submitText;
+        warning.textContent = error.message || "Failed to add test data.";
+      }
+    });
+    document.body.appendChild(overlay);
+    quantity.input.focus();
+    quantity.input.select();
+  }
+
   function openCheckInModal(participant) {
     const tournament = state.overview?.tournament;
     const editable = tournament?.status === "check_in" && !tournament?.has_started_swiss;
@@ -3619,6 +3777,16 @@
     ));
     startCheckInBtn.classList.toggle("ip-hidden", tournament?.status !== "registration");
     startCheckInBtn.disabled = (state.overview?.counters?.registered || 0) < 2;
+    const awaitingCheckIn = Number(state.overview?.counters?.awaiting_check_in || 0);
+    bulkCheckInBtn.classList.toggle("ip-hidden", tournament?.is_test_tournament !== true);
+    bulkCheckInBtn.disabled = tournament?.status !== "check_in"
+      || !!tournament?.has_started_swiss
+      || awaitingCheckIn < 1;
+    bulkCheckInBtn.title = tournament?.status === "registration"
+      ? "Start check-in first."
+      : awaitingCheckIn < 1
+        ? "Every active player is already checked in."
+        : `Up to ${awaitingCheckIn} players can be checked in.`;
     renderReadiness();
     if (!participants.length) {
       const empty = document.createElement("div");
@@ -3631,18 +3799,7 @@
     participants.forEach((participant) => {
       const row = document.createElement("div");
       row.className = "ip-row";
-      const main = document.createElement("div");
-      main.className = "ip-person";
-      const name = document.createElement("div");
-      name.className = "ip-person-name";
-      name.textContent = tournament?.scope === "international"
-        ? participant.name_en
-        : participant.name_local || participant.name_en;
-      const meta = document.createElement("div");
-      meta.className = "ip-person-meta";
-      meta.textContent = playerMeta(participant, tournament);
-      main.appendChild(name);
-      main.appendChild(meta);
+      const main = createParticipantListPerson(participant, tournament);
 
       const controls = document.createElement("div");
       controls.className = "ip-check-control";
@@ -5794,6 +5951,40 @@
   refreshBtn.addEventListener("click", loadAll);
   addPlayerBtn.addEventListener("click", () => openPlayerForm());
   addLatePlayerBtn.addEventListener("click", openLatePlayerForm);
+  addTestPlayersBtn.addEventListener("click", () => {
+    const maximum = Number(state.overview?.test_data?.available_players || 0);
+    openTestQuantityModal({
+      titleText: "Add test players",
+      description: `Choose how many random players to add. ${maximum} of 60 are still available.`,
+      maximum,
+      submitText: "Add players",
+      onSubmit: async (count) => {
+        const result = await apiJson(tournamentUrl("/participants/test-data"), {
+          method: "POST",
+          body: JSON.stringify({ count }),
+        });
+        await loadOverview();
+        setStatus(`${result.added} test player(s) added.`, "success");
+      },
+    });
+  });
+  bulkCheckInBtn.addEventListener("click", () => {
+    const maximum = Number(state.overview?.counters?.awaiting_check_in || 0);
+    openTestQuantityModal({
+      titleText: "Bulk check-in",
+      description: `Choose how many players to check in with random unique draw numbers. ${maximum} are available.`,
+      maximum,
+      submitText: "Check in players",
+      onSubmit: async (count) => {
+        const result = await apiJson(tournamentUrl("/check-in/test-data"), {
+          method: "POST",
+          body: JSON.stringify({ count }),
+        });
+        await loadOverview();
+        setStatus(`${result.checked_in} player(s) checked in.`, "success");
+      },
+    });
+  });
   startCheckInBtn.addEventListener("click", async () => {
     startCheckInBtn.disabled = true;
     try {

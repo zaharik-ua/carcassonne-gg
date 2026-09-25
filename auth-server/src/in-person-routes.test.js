@@ -87,7 +87,7 @@ test("always registers protected global and tournament routes", () => {
   });
 
   assert.deepEqual(result, { registered: true });
-  assert.equal(app.routes.length, 54);
+  assert.equal(app.routes.length, 56);
   const globalFoundation = app.routes.find((route) => (
     route.path === "/in-person-tournaments/_foundation"
   ));
@@ -123,6 +123,7 @@ test("always registers protected global and tournament routes", () => {
       && !route.path.includes("/participants")
       && !route.path.endsWith("/participant-cities")
       && !route.path.endsWith("/start-check-in")
+      && !route.path.includes("/check-in/")
       && !route.path.endsWith("/check-in-readiness")
       && !route.path.includes("/swiss")
       && !route.path.includes("/playoff")
@@ -136,6 +137,7 @@ test("always registers protected global and tournament routes", () => {
     route.path.includes("/participants")
     || route.path.endsWith("/participant-cities")
     || route.path.endsWith("/start-check-in")
+    || route.path.includes("/check-in/")
     || route.path.endsWith("/check-in-readiness")
     || route.path.includes("/swiss")
     || route.path.includes("/playoff")
@@ -148,6 +150,10 @@ test("always registers protected global and tournament routes", () => {
   });
   assert.ok(app.routes.some((route) => route.method === "GET" && route.path === "/cities"));
   assert.ok(app.routes.some((route) => route.method === "POST" && route.path === "/in-person-tournaments"));
+  assert.ok(app.routes.some((route) => route.method === "POST"
+    && route.path === "/in-person-tournaments/:tournamentId/participants/test-data"));
+  assert.ok(app.routes.some((route) => route.method === "POST"
+    && route.path === "/in-person-tournaments/:tournamentId/check-in/test-data"));
   assert.ok(app.routes.some((route) => route.method === "POST" && route.path.endsWith("/publish")));
   assert.ok(app.routes.some((route) => route.method === "PUT" && route.path.endsWith("/admins")));
   assert.ok(app.routes.some((route) => (

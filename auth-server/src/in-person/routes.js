@@ -284,6 +284,17 @@ export function registerInPersonRoutes(app, {
     }, logger)
   );
   app.post(
+    "/in-person-tournaments/:tournamentId/participants/test-data",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const result = await inPersonService.addTestParticipants(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.status(201).json({ ok: true, ...result });
+    }, logger)
+  );
+  app.post(
     "/in-person-tournaments/:tournamentId/participants/late/preview",
     requireInPersonTournamentAdmin,
     asyncHandler(async (req, res) => {
@@ -370,6 +381,17 @@ export function registerInPersonRoutes(app, {
         req.body || {}
       );
       res.json({ ok: true, participant });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/check-in/test-data",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const result = await inPersonService.bulkCheckInTestParticipants(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.json({ ok: true, ...result });
     }, logger)
   );
   app.get(

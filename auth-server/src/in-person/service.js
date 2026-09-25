@@ -22,6 +22,7 @@ import {
   serializePublicTournament,
 } from "./public.js";
 import { TOURNAMENT_ENTITY_TYPES } from "./schema.js";
+import { IN_PERSON_TEST_PLAYERS } from "./test-players.js";
 import {
   conflictError,
   InPersonError,
@@ -101,6 +102,7 @@ function serializeTournament(row, admins = []) {
     name_en: row.name_en,
     name_local: row.name_local || null,
     logo_url: row.logo_url || null,
+    is_test_tournament: Number(row.is_test_tournament) === 1,
     scope: row.scope,
     association_id: row.association_id || null,
     association_name: row.association_name || null,
@@ -392,7 +394,12 @@ const SWISS_MATCH_SELECT = `
 
 const PLAYOFF_MATCH_SELECT = SWISS_MATCH_SELECT;
 
-export function createInPersonService({ db, idFactory = randomUUID, faultInjector = null } = {}) {
+export function createInPersonService({
+  db,
+  idFactory = randomUUID,
+  faultInjector = null,
+  random = Math.random,
+} = {}) {
   if (!db) throw new Error("db is required");
   let mutationQueue = Promise.resolve();
 
@@ -691,6 +698,19 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     };
   }
 
+  function availableTestPlayers(participants) {
+    const existingNames = new Set(
+      participants.map((participant) => normalizeDuplicateValue(participant.name_en))
+    );
+    const existingBga = new Set(
+      participants.map((participant) => normalizeDuplicateValue(participant.bga_nickname)).filter(Boolean)
+    );
+    return IN_PERSON_TEST_PLAYERS.filter((player) => (
+      !existingNames.has(normalizeDuplicateValue(player.name_en))
+      && (!player.bga_nickname || !existingBga.has(normalizeDuplicateValue(player.bga_nickname)))
+    ));
+  }
+
   function firstRoundReadiness(tournament, participants) {
     const counters = participantCounters(participants);
     const missingDrawNumbers = participants
@@ -738,6 +758,10 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
       participants,
       counters: participantCounters(participants),
       readiness: firstRoundReadiness(tournament, participants),
+      test_data: tournament.is_test_tournament ? {
+        player_limit: IN_PERSON_TEST_PLAYERS.length,
+        available_players: availableTestPlayers(participants).length,
+      } : null,
     };
   }
 
@@ -817,6 +841,168 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
     if (["cancelled", "completed"].includes(tournament.status)) {
       throw conflictError("TOURNAMENT_READ_ONLY", "Cancelled or completed tournaments are read-only");
     }
+  }
+
+  function normalizeBulkCount(value, maximum, { available = maximum } = {}) {
+    const count = Number(value);
+    if (!Number.isInteger(count) || count <= 0 || count > maximum) {
+      throw validationError(
+        "INVALID_TEST_PLAYER_COUNT",
+        `count must be an integer between 1 and ${maximum}`,
+        { field: "count", maximum }
+      );
+    }
+    if (count > available) {
+      throw conflictError(
+        "NOT_ENOUGH_TEST_PLAYERS_AVAILABLE",
+        `Only ${available} test player(s) are available`,
+        { requested: count, available }
+      );
+    }
+    return count;
+  }
+
+  function shuffled(values) {
+    const result = [...values];
+    for (let index = result.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(random() * (index + 1));
+      [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+    }
+    return result;
+  }
+
+  function assertTestTournament(tournament) {
+    if (Number(tournament.is_test_tournament) !== 1) {
+      throw conflictError(
+        "TEST_TOURNAMENT_REQUIRED",
+        "Automatic test data is available only for test tournaments"
+      );
+    }
+  }
+
+  async function addTestParticipants(tournamentId, payload) {
+    return enqueueMutation(() => transaction(async () => {
+      const tournament = await requireTournamentRow(tournamentId);
+      assertParticipantMutationsAllowed(tournament);
+      assertTestTournament(tournament);
+      if (tournament.scope !== "international") {
+        throw conflictError(
+          "TEST_PLAYERS_REQUIRE_INTERNATIONAL_TOURNAMENT",
+          "The supplied test-player countries can be used only in an international tournament"
+        );
+      }
+      if (Number(tournament.has_started_swiss) === 1) {
+        throw conflictError(
+          "LATE_ENTRY_REQUIRED",
+          "Test players cannot be added after the first Swiss round is created"
+        );
+      }
+
+      const existing = (await loadParticipantRows(tournament.id)).map(serializeParticipant);
+      const available = availableTestPlayers(existing);
+      const count = normalizeBulkCount(payload?.count, IN_PERSON_TEST_PLAYERS.length, {
+        available: available.length,
+      });
+      const selected = shuffled(available).slice(0, count);
+      const associationCodes = [...new Set(selected.map((player) => player.association_id))];
+      const placeholders = associationCodes.map(() => "?").join(", ");
+      const associationRows = await dbAll(
+        db,
+        `SELECT code FROM associations WHERE upper(trim(code)) IN (${placeholders})`,
+        associationCodes.map((code) => code.toUpperCase())
+      );
+      const knownCodes = new Set(associationRows.map((row) => normalizeText(row.code).toUpperCase()));
+      const missingCodes = associationCodes.filter((code) => !knownCodes.has(code));
+      if (missingCodes.length) {
+        throw conflictError(
+          "TEST_PLAYER_ASSOCIATIONS_MISSING",
+          "Some test-player countries are not configured",
+          { association_ids: missingCodes }
+        );
+      }
+
+      const createdIds = [];
+      for (const player of selected) {
+        const participantId = `ipp_${idFactory()}`;
+        createdIds.push(participantId);
+        await dbRun(
+          db,
+          `
+            INSERT INTO in_person_participants (
+              id, tournament_id, name_en, bga_nickname, association_id,
+              status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 'registered', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `,
+          [
+            participantId,
+            tournament.id,
+            player.name_en,
+            player.bga_nickname,
+            player.association_id,
+          ]
+        );
+      }
+      await touchTournament(tournament.id);
+      return {
+        added: createdIds.length,
+        participants: (await loadParticipantRows(tournament.id)).map(serializeParticipant),
+      };
+    }));
+  }
+
+  async function bulkCheckInTestParticipants(tournamentId, payload) {
+    return enqueueMutation(() => transaction(async () => {
+      const tournament = await requireTournamentRow(tournamentId);
+      assertParticipantMutationsAllowed(tournament);
+      assertTestTournament(tournament);
+      if (tournament.status !== "check_in") {
+        throw conflictError("CHECK_IN_NOT_STARTED", "Start tournament check-in before confirming participants");
+      }
+      if (Number(tournament.has_started_swiss) === 1) {
+        throw conflictError(
+          "CHECK_IN_LOCKED",
+          "Check-in and draw numbers are locked after the first Swiss round is created"
+        );
+      }
+      const participantRows = await loadParticipantRows(tournament.id);
+      const registered = participantRows.filter((participant) => participant.status === "registered");
+      const count = normalizeBulkCount(payload?.count, participantRows.length, {
+        available: registered.length,
+      });
+      const selected = shuffled(registered).slice(0, count);
+      const activeCount = participantRows.filter((participant) => (
+        participant.status === "registered" || participant.status === "checked_in"
+      )).length;
+      const usedNumbers = new Set(
+        participantRows
+          .map((participant) => participant.draw_number)
+          .filter((value) => value != null)
+          .map(Number)
+      );
+      const availableNumbers = shuffled(
+        Array.from({ length: activeCount }, (_value, index) => index + 1)
+          .filter((drawNumber) => !usedNumbers.has(drawNumber))
+      );
+
+      for (let index = 0; index < selected.length; index += 1) {
+        await dbRun(
+          db,
+          `
+            UPDATE in_person_participants
+            SET status = 'checked_in', draw_number = ?,
+                checked_in_at = COALESCE(checked_in_at, CURRENT_TIMESTAMP),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND tournament_id = ?
+          `,
+          [availableNumbers[index], selected[index].id, tournament.id]
+        );
+      }
+      await touchTournament(tournament.id);
+      return {
+        checked_in: selected.length,
+        participants: (await loadParticipantRows(tournament.id)).map(serializeParticipant),
+      };
+    }));
   }
 
   async function createParticipant(tournamentId, payload) {
@@ -3765,11 +3951,11 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
         db,
         `
           INSERT INTO in_person_tournaments (
-            id, slug, name_en, name_local, logo_url, scope, association_id, local_subtype,
+            id, slug, name_en, name_local, logo_url, is_test_tournament, scope, association_id, local_subtype,
             qualifier_city_id, start_date, end_date, organizer_name, organizer_url,
             rules_url, swiss_rounds_count, playoff_first_round, draw_mode,
             swiss_tiebreak_profile, status, revision, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1,
             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [
@@ -3778,6 +3964,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           validated.name_en,
           validated.name_local,
           validated.logo_url,
+          validated.is_test_tournament ? 1 : 0,
           validated.scope,
           validated.association_id,
           validated.local_subtype,
@@ -3849,7 +4036,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
         db,
         `
           UPDATE in_person_tournaments
-          SET slug = ?, name_en = ?, name_local = ?, logo_url = ?, scope = ?, association_id = ?,
+          SET slug = ?, name_en = ?, name_local = ?, logo_url = ?, is_test_tournament = ?, scope = ?, association_id = ?,
               local_subtype = ?, qualifier_city_id = ?, start_date = ?, end_date = ?,
               organizer_name = ?, organizer_url = ?, rules_url = ?, swiss_rounds_count = ?,
               playoff_first_round = ?, draw_mode = ?, swiss_tiebreak_profile = ?,
@@ -3861,6 +4048,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           input.name_en,
           input.name_local,
           input.logo_url,
+          input.is_test_tournament ? 1 : 0,
           input.scope,
           input.association_id,
           input.local_subtype,
@@ -4012,8 +4200,10 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
   }
 
   return {
+    addTestParticipants,
     addTournamentAdmin,
     archiveCity: (cityId) => setCityArchived(cityId, true),
+    bulkCheckInTestParticipants,
     cancelSwissRound,
     cancelTournament,
     completePlayoff,

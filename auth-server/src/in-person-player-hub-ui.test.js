@@ -36,6 +36,8 @@ test("In-Person page contains participant registration and check-in flows", () =
   [
     "In-Person Tournaments",
     "Add player",
+    "Add test players",
+    "Bulk check-in",
     "+ Add new city",
     "City name (English) *",
     "City name (local)",
@@ -66,6 +68,15 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.match(inPersonHtml, /if \(nameLocal\) form\.appendChild\(nameLocal\.field\)/);
   assert.match(inPersonHtml, /tournament\?\.scope === "international"[\s\S]*?participant\.name_en/);
   assert.match(inPersonHtml, /function playerMeta\(participant, tournament\)/);
+  assert.match(inPersonHtml, /function createParticipantListPerson\(participant, tournament\)/);
+  assert.match(inPersonHtml, /participant\?\.association_flag \|\| association\?\.flag/);
+  assert.match(inPersonHtml, /flag\.className = "ip-participant-flag"/);
+  assert.match(inPersonHtml, /if \(tournament\?\.scope === "international"\)/);
+  assert.equal(
+    (inPersonHtml.match(/createParticipantListPerson\(participant, tournament\)/g) || []).length,
+    3,
+    "the shared participant renderer must be used by Players and Check-in"
+  );
   assert.match(inPersonHtml, /tournament\?\.scope === "international"[\s\S]*?\? ""[\s\S]*?participant\.city_name_local/);
   assert.doesNotMatch(inPersonHtml, /participant\.city_name_local \|\| participant\.city_name_en \|\| "—"/);
   assert.match(inPersonHtml, /current_elo: optionalInteger\(currentElo\.input\)/);
@@ -82,6 +93,10 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.match(inPersonHtml, /country\.input\.readOnly = true/);
   assert.match(inPersonHtml, /\/start-check-in/);
   assert.match(inPersonHtml, /\/check-in/);
+  assert.match(inPersonHtml, /\/participants\/test-data/);
+  assert.match(inPersonHtml, /\/check-in\/test-data/);
+  assert.match(inPersonHtml, /function openTestQuantityModal/);
+  assert.match(inPersonHtml, /available_players/);
   assert.match(inPersonHtml, /confirm_duplicate: confirmDuplicate/);
   assert.match(inPersonHtml, /function openCheckInModal/);
   assert.match(inPersonHtml, /checkedIn\.checked = true/);
