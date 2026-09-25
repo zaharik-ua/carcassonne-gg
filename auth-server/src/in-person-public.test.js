@@ -139,6 +139,19 @@ test("public aggregate hides drafts, cancelled history and private result fields
   let swiss = await service.confirmSwissRound(tournament.id, { round_number: 1 });
   let aggregate = await service.getPublicTournamentAggregate(tournament.id);
   assert.equal(aggregate.swiss.rounds.length, 0, "draft Swiss pairings stay private");
+  assert.deepEqual(
+    aggregate.playoff.rounds.map((round) => round.round_key),
+    ["semi_final", "bronze_medal_match", "final"],
+    "the published tournament exposes its configured playoff structure"
+  );
+  aggregate.playoff.rounds.forEach((round) => {
+    round.matches.forEach((match) => {
+      assert.equal(match.participant_a_id, null);
+      assert.equal(match.participant_b_id, null);
+      assert.equal(match.participant_a_placeholder, null);
+      assert.equal(match.participant_b_placeholder, null);
+    });
+  });
   const draftRevision = aggregate.revision;
 
   swiss = await service.publishSwissRound(tournament.id, swiss.current_round.id);
@@ -178,8 +191,8 @@ test("public aggregate hides drafts, cancelled history and private result fields
   aggregate = await service.getPublicTournamentAggregate(tournament.id);
   assert.deepEqual(
     aggregate.playoff.rounds.map((round) => round.round_key),
-    ["semi_final"],
-    "future draft playoff rounds stay private"
+    ["semi_final", "bronze_medal_match", "final"],
+    "the complete playoff bracket remains public after it starts"
   );
   assert.equal(aggregate.players[0].name_local?.startsWith("Гравець"), true);
   assert.equal(aggregate.tournament.organizer_url, "https://example.com/organizer");

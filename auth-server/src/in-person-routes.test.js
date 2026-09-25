@@ -62,6 +62,7 @@ function createService() {
     restoreCity: async () => ({}),
     saveSwissMatchResult: async () => ({}),
     savePlayoffMatchResult: async () => ({}),
+    setPlayoffMatchPlaceholders: async () => ({}),
     setPlayoffMatchTable: async () => ({}),
     setParticipantCheckIn: async () => ({}),
     setParticipantInactive: async () => ({}),
@@ -86,7 +87,7 @@ test("always registers protected global and tournament routes", () => {
   });
 
   assert.deepEqual(result, { registered: true });
-  assert.equal(app.routes.length, 53);
+  assert.equal(app.routes.length, 54);
   const globalFoundation = app.routes.find((route) => (
     route.path === "/in-person-tournaments/_foundation"
   ));
@@ -109,6 +110,12 @@ test("always registers protected global and tournament routes", () => {
   assert.notEqual(publicAggregateRoute.handlers[0], requireInPersonTournamentAdmin);
   const accessibleRoute = app.routes.find((route) => route.path === "/in-person-tournaments/accessible");
   assert.equal(accessibleRoute.handlers[0], requireAuthenticated);
+  const playoffPlaceholderRoute = app.routes.find((route) => (
+    route.method === "PATCH"
+    && route.path === "/in-person-tournaments/:tournamentId/playoff/matches/:matchId/placeholders"
+  ));
+  assert.ok(playoffPlaceholderRoute);
+  assert.equal(playoffPlaceholderRoute.handlers[0], requireInPersonTournamentAdmin);
   app.routes.filter((route) => (
     route.path.startsWith("/cities")
     || (

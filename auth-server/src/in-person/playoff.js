@@ -202,6 +202,36 @@ export function buildPlayoffBracket({
     normalizedFirstRound,
     participantIds
   );
+  const structure = buildPlayoffStructure({
+    first_round: normalizedFirstRound,
+    table_numbers: tableNumbers,
+  });
+  const firstRoundPlan = structure.rounds.find((round) => (
+    round.round_key === normalizedFirstRound
+  ));
+  firstRoundPlan.matches.forEach((match, index) => {
+    match.participant_a_id = normalizedParticipantIds[index * 2];
+    match.participant_b_id = normalizedParticipantIds[(index * 2) + 1];
+  });
+  return {
+    ...structure,
+    participant_ids: normalizedParticipantIds,
+  };
+}
+
+/**
+ * Builds the persistent playoff skeleton before participants are known.
+ * Stable database IDs are assigned by the service when the tournament is published.
+ */
+export function buildPlayoffStructure({
+  first_round: firstRound,
+  table_numbers: tableNumbers,
+} = {}) {
+  const normalizedFirstRound = String(firstRound || "").trim().toLowerCase();
+  const participantCount = FIRST_ROUND_PARTICIPANTS[normalizedFirstRound];
+  if (!participantCount) {
+    playoffError("INVALID_PLAYOFF_FIRST_ROUND", "The configured playoff first round is invalid");
+  }
   const firstMainIndex = MAIN_ROUND_KEYS.indexOf(normalizedFirstRound);
   const mainRoundKeys = MAIN_ROUND_KEYS.slice(firstMainIndex);
   const orderedRoundKeys = getPlayoffRoundKeys(normalizedFirstRound);
@@ -212,7 +242,7 @@ export function buildPlayoffBracket({
     let matchCount = 1;
     const mainIndex = mainRoundKeys.indexOf(roundKey);
     if (mainIndex >= 0) {
-      matchCount = normalizedParticipantIds.length / (2 ** (mainIndex + 1));
+      matchCount = participantCount / (2 ** (mainIndex + 1));
     }
     const matches = Array.from({ length: matchCount }, (_, matchIndex) => ({
       key: matchKey(roundKey, matchIndex + 1),
@@ -238,12 +268,6 @@ export function buildPlayoffBracket({
 
   applyConfiguredTableNumbers(roundsByKey, tableNumbers);
 
-  const firstRoundPlan = roundsByKey.get(normalizedFirstRound);
-  firstRoundPlan.matches.forEach((match, index) => {
-    match.participant_a_id = normalizedParticipantIds[index * 2];
-    match.participant_b_id = normalizedParticipantIds[(index * 2) + 1];
-  });
-
   mainRoundKeys.slice(0, -1).forEach((roundKey, mainIndex) => {
     const round = roundsByKey.get(roundKey);
     const nextRoundKey = mainRoundKeys[mainIndex + 1];
@@ -261,8 +285,7 @@ export function buildPlayoffBracket({
 
   return {
     first_round: normalizedFirstRound,
-    participant_count: normalizedParticipantIds.length,
-    participant_ids: normalizedParticipantIds,
+    participant_count: participantCount,
     rounds: orderedRoundKeys.map((roundKey) => roundsByKey.get(roundKey)),
   };
 }

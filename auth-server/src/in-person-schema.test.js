@@ -182,9 +182,18 @@ test("creates the in-person foundation without versioning or idempotency tables"
     (await all(db, "PRAGMA table_info(in_person_tournaments)")).map((column) => column.name)
   );
   assert.equal(tournamentColumns.has("logo_url"), true);
+  const matchColumns = new Set(
+    (await all(db, "PRAGMA table_info(in_person_matches)")).map((column) => column.name)
+  );
+  assert.equal(matchColumns.has("participant_a_placeholder"), true);
+  assert.equal(matchColumns.has("participant_b_placeholder"), true);
   assert.deepEqual(
     await get(db, "SELECT name FROM in_person_schema_migrations WHERE version = 4"),
     { name: "tournament_logo_url" }
+  );
+  assert.deepEqual(
+    await get(db, "SELECT name FROM in_person_schema_migrations WHERE version = 5"),
+    { name: "playoff_match_placeholders" }
   );
 });
 

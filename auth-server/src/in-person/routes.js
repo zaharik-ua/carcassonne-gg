@@ -551,6 +551,18 @@ export function registerInPersonRoutes(app, {
     }, logger)
   );
   app.patch(
+    "/in-person-tournaments/:tournamentId/playoff/matches/:matchId/placeholders",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.setPlayoffMatchPlaceholders(
+        req.inPersonTournamentId,
+        req.params.matchId,
+        req.body || {}
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.patch(
     "/in-person-tournaments/:tournamentId/playoff/matches/:matchId/table",
     requireInPersonTournamentAdmin,
     asyncHandler(async (req, res) => {

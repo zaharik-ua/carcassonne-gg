@@ -330,6 +330,8 @@ async function ensureInPersonTables(db) {
         table_number INTEGER CHECK (table_number IS NULL OR table_number > 0),
         participant_a_id TEXT,
         participant_b_id TEXT,
+        participant_a_placeholder TEXT,
+        participant_b_placeholder TEXT,
         starting_participant_id TEXT,
         status TEXT NOT NULL DEFAULT 'scheduled'
           CHECK (status IN ('scheduled', 'completed', 'cancelled')),
@@ -493,6 +495,29 @@ async function ensureTournamentLogoExtension(db) {
     throw error;
   }
   return { added };
+}
+
+async function ensurePlayoffPlaceholderExtensions(db) {
+  const addedColumns = [];
+  try {
+    await dbExec(db, "BEGIN IMMEDIATE TRANSACTION");
+    const columns = await dbAll(db, "PRAGMA table_info(in_person_matches)");
+    for (const columnName of ["participant_a_placeholder", "participant_b_placeholder"]) {
+      if (!columns.some((column) => String(column?.name || "") === columnName)) {
+        await dbExec(db, `ALTER TABLE in_person_matches ADD COLUMN ${columnName} TEXT`);
+        addedColumns.push(columnName);
+      }
+    }
+    await dbExec(db, `
+      INSERT OR IGNORE INTO in_person_schema_migrations (version, name)
+      VALUES (5, 'playoff_match_placeholders');
+      COMMIT;
+    `);
+  } catch (error) {
+    await rollbackQuietly(db);
+    throw error;
+  }
+  return { addedColumns };
 }
 
 async function ensurePlayoffMedalTableAssignments(db) {
@@ -812,6 +837,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
   await ensureCityExtensions(db);
   const playoffMedalTableMigration = await ensurePlayoffMedalTableAssignments(db);
   const tournamentLogoMigration = await ensureTournamentLogoExtension(db);
+  const playoffPlaceholderMigration = await ensurePlayoffPlaceholderExtensions(db);
   await ensureInPersonTriggersAndAccessIndexes(db);
   logger?.info?.("[in-person] Schema foundation ready", {
     accessTableMigrated: accessMigration.migrated,
@@ -819,6 +845,12 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
     accessRows: accessMigration.rowsAfter,
     tournamentLogoColumnAdded: tournamentLogoMigration.added,
     playoffMedalTablesUpdated: playoffMedalTableMigration.updatedRows,
+    playoffPlaceholderColumnsAdded: playoffPlaceholderMigration.addedColumns,
   });
-  return { accessMigration, tournamentLogoMigration, playoffMedalTableMigration };
+  return {
+    accessMigration,
+    tournamentLogoMigration,
+    playoffMedalTableMigration,
+    playoffPlaceholderMigration,
+  };
 }

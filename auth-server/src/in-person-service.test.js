@@ -213,7 +213,27 @@ test("publishes a draft, locks its slug and cancels only before Swiss starts", a
   const published = await service.publishTournament(created.id);
   assert.equal(published.status, "registration");
   assert.ok(published.published_at);
+  const publishedPlayoff = await service.getPlayoffOverview(created.id);
+  assert.deepEqual(
+    publishedPlayoff.rounds.map((round) => round.round_key),
+    ["quarter_final", "semi_final", "bronze_medal_match", "final"]
+  );
+  publishedPlayoff.rounds.forEach((round) => {
+    assert.equal(round.status, "draft");
+    round.matches.forEach((match) => {
+      assert.equal(match.participant_a_id, null);
+      assert.equal(match.participant_b_id, null);
+      assert.equal(match.participant_a_placeholder, null);
+      assert.equal(match.participant_b_placeholder, null);
+    });
+  });
+  const publishedRoundIds = publishedPlayoff.rounds.map((round) => round.id);
   assert.equal((await service.publishTournament(created.id)).status, "registration");
+  assert.deepEqual(
+    (await service.getPlayoffOverview(created.id)).rounds.map((round) => round.id),
+    publishedRoundIds,
+    "publishing retry must not create a second playoff structure"
+  );
 
   await assert.rejects(
     service.updateTournament(created.id, { slug: "changed-after-publish" }),
@@ -221,6 +241,12 @@ test("publishes a draft, locks its slug and cancels only before Swiss starts", a
   );
   const updated = await service.updateTournament(created.id, { name_en: "Updated name" });
   assert.equal(updated.name_en, "Updated name");
+  await service.updateTournament(created.id, { playoff_first_round: "semi_final" });
+  assert.deepEqual(
+    (await service.getPlayoffOverview(created.id)).rounds.map((round) => round.round_key),
+    ["semi_final", "bronze_medal_match", "final"],
+    "changing the published playoff format rebuilds the unplayed database structure"
+  );
 
   await run(
     db,

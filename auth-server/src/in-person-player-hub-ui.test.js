@@ -331,7 +331,7 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
   [
     /data-ip-tab="playoff"/,
     /function buildEmptyPlayoffRounds/,
-    /table_number: playoffSetupTableNumber\(roundKey, matchIndex \+ 1, matchIndex \+ 1\)/,
+    /const persistedRounds = state\.playoff\?\.rounds \|\| \[\]/,
     /function playoffSetupParticipantName/,
     /`#\$\{position\} • \$\{name\}`/,
     /function openPlayoffParticipantModal/,
@@ -339,7 +339,7 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     /Player 1 placeholder/,
     /function playoffSetupTableAssignments/,
     /table_numbers: tableNumbers/,
-    /window\.localStorage\.setItem/,
+    /\/playoff\/matches\/\$\{encodeURIComponent\(match\.id\)\}\/placeholders/,
     /swissPosition\(left\.id\) - swissPosition\(right\.id\)/,
     /function playoffSeedOrder/,
     /function seedPlayoffFromSwiss/,
@@ -361,6 +361,9 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     /\/streaming-table/,
     /\/playoff\/complete/,
   ].forEach((pattern) => assert.match(inPersonHtml, pattern));
+
+  assert.doesNotMatch(inPersonHtml, /Swiss stage \d+(?:st|nd|rd|th)(?: place)?/);
+  assert.doesNotMatch(inPersonHtml, /window\.localStorage\.(?:getItem|setItem|removeItem)/);
 
   assert.match(
     inPersonHtml,

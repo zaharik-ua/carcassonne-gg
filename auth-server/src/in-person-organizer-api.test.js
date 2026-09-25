@@ -509,6 +509,39 @@ test("organizer API runs a manual playoff through Final and technical Bronze", a
     body: "{}",
   });
 
+  const publishedPlayoff = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/playoff`,
+    { userId: 1 }
+  );
+  assert.equal(publishedPlayoff.response.status, 200);
+  assert.deepEqual(
+    publishedPlayoff.data.rounds.map((round) => round.round_key),
+    ["semi_final", "bronze_medal_match", "final"]
+  );
+  const configuredMatch = publishedPlayoff.data.rounds
+    .find((round) => round.round_key === "semi_final").matches[0];
+  assert.equal(configuredMatch.participant_a_placeholder, null);
+  assert.equal(configuredMatch.participant_b_placeholder, null);
+  const configuredPlaceholders = await api(
+    baseUrl,
+    `/in-person-tournaments/${tournamentId}/playoff/matches/${configuredMatch.id}/placeholders`,
+    {
+      userId: 1,
+      method: "PATCH",
+      body: JSON.stringify({
+        participant_a_placeholder: "Swiss stage 1st",
+        participant_b_placeholder: "Swiss stage 4th",
+      }),
+    }
+  );
+  assert.equal(configuredPlaceholders.response.status, 200);
+  const savedConfiguredMatch = configuredPlaceholders.data.rounds
+    .find((round) => round.round_key === "semi_final").matches
+    .find((match) => match.id === configuredMatch.id);
+  assert.equal(savedConfiguredMatch.participant_a_placeholder, "Swiss stage 1st");
+  assert.equal(savedConfiguredMatch.participant_b_placeholder, "Swiss stage 4th");
+
   const participantIds = [];
   for (let index = 0; index < 4; index += 1) {
     const created = await api(baseUrl, `/in-person-tournaments/${tournamentId}/participants`, {
@@ -607,7 +640,11 @@ test("organizer API runs a manual playoff through Final and technical Bronze", a
   );
   assert.equal(resetPlayoff.response.status, 200);
   assert.equal(resetPlayoff.data.tournament.status, "swiss");
-  assert.equal(resetPlayoff.data.rounds.length, 0);
+  assert.deepEqual(
+    resetPlayoff.data.rounds.map((round) => round.round_key),
+    ["semi_final", "bronze_medal_match", "final"]
+  );
+  resetPlayoff.data.rounds.forEach((round) => assert.equal(round.status, "draft"));
   assert.deepEqual(resetPlayoff.data.participant_ids, participantIds);
   const secondPreview = await api(
     baseUrl,

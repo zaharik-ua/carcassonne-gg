@@ -285,8 +285,17 @@ test("rolls back every partial row when Swiss generation fails", async (t) => {
     service.confirmSwissRound(tournament.id, { round_number: 1 }),
     /injected generation failure/
   );
-  assert.equal((await get(db, "SELECT COUNT(*) AS count FROM in_person_rounds")).count, 0);
-  assert.equal((await get(db, "SELECT COUNT(*) AS count FROM in_person_matches")).count, 0);
+  assert.equal((await get(
+    db,
+    "SELECT COUNT(*) AS count FROM in_person_rounds WHERE stage = 'swiss'"
+  )).count, 0);
+  assert.equal((await get(
+    db,
+    `SELECT COUNT(*) AS count
+     FROM in_person_matches m
+     JOIN in_person_rounds r ON r.id = m.round_id
+     WHERE r.stage = 'swiss'`
+  )).count, 0);
   assert.equal((await get(db, "SELECT status FROM in_person_tournaments WHERE id = ?", [tournament.id])).status, "check_in");
 
   fail = false;
@@ -318,7 +327,10 @@ test("rolls back round completion and standings together after a fault", async (
     service.completeSwissRound(tournament.id, overview.current_round.id),
     /injected standings failure/
   );
-  assert.equal((await get(db, "SELECT status FROM in_person_rounds LIMIT 1")).status, "published");
+  assert.equal((await get(
+    db,
+    "SELECT status FROM in_person_rounds WHERE stage = 'swiss' LIMIT 1"
+  )).status, "published");
   assert.equal((await get(db, "SELECT COUNT(*) AS count FROM in_person_standings")).count, 0);
 
   failCompletion = false;

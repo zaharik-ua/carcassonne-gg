@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import sqlite3 from "sqlite3";
 import { ensureInPersonSchema } from "./in-person/schema.js";
-import { buildPlayoffBracket } from "./in-person/playoff.js";
+import { buildPlayoffBracket, buildPlayoffStructure } from "./in-person/playoff.js";
 import { createInPersonService } from "./in-person/service.js";
 
 const silentLogger = { info() {} };
@@ -136,6 +136,66 @@ test("builds complete deterministic playoff structures for every supported first
   });
 });
 
+test("builds an empty playoff structure without generated participant placeholders", () => {
+  const structure = buildPlayoffStructure({ first_round: "semi_final" });
+  assert.deepEqual(
+    structure.rounds.map((round) => round.round_key),
+    ["semi_final", "bronze_medal_match", "final"]
+  );
+  structure.rounds.forEach((round) => {
+    round.matches.forEach((match) => {
+      assert.equal(match.participant_a_id, null);
+      assert.equal(match.participant_b_id, null);
+      assert.equal("participant_a_placeholder" in match, false);
+      assert.equal("participant_b_placeholder" in match, false);
+    });
+  });
+});
+
+test("persists manually configured playoff placeholders before Swiss is complete", async (t) => {
+  const { service } = await createContext(t);
+  const tournament = await service.createTournament({
+    slug: "playoff-persisted-placeholders",
+    name_en: "Persisted playoff placeholders",
+    scope: "international",
+    start_date: "2026-12-12",
+    end_date: "2026-12-12",
+    organizer_name: "Organizer",
+    swiss_rounds_count: 1,
+    playoff_first_round: "semi_final",
+    admin_user_ids: [1],
+  });
+  await service.publishTournament(tournament.id);
+
+  let overview = await service.getPlayoffOverview(tournament.id);
+  assert.equal(overview.swiss_complete, false);
+  assert.deepEqual(
+    overview.rounds.map((round) => round.round_key),
+    ["semi_final", "bronze_medal_match", "final"]
+  );
+  const semifinal = overview.rounds.find((round) => round.round_key === "semi_final");
+  const match = semifinal.matches[0];
+  assert.equal(match.participant_a_placeholder, null);
+  assert.equal(match.participant_b_placeholder, null);
+
+  overview = await service.setPlayoffMatchPlaceholders(tournament.id, match.id, {
+    participant_a_placeholder: "Swiss stage 1st",
+    participant_b_placeholder: "Wild card",
+  });
+  const savedMatch = overview.rounds
+    .find((round) => round.round_key === "semi_final")
+    .matches.find((entry) => entry.id === match.id);
+  assert.equal(savedMatch.participant_a_placeholder, "Swiss stage 1st");
+  assert.equal(savedMatch.participant_b_placeholder, "Wild card");
+
+  const publicAggregate = await service.getPublicTournamentAggregate(tournament.id);
+  const publicMatch = publicAggregate.playoff.rounds
+    .find((round) => round.round_key === "semi_final")
+    .matches.find((entry) => entry.id === match.id);
+  assert.equal(publicMatch.participant_a_placeholder, "Swiss stage 1st");
+  assert.equal(publicMatch.participant_b_placeholder, "Wild card");
+});
+
 test("rejects missing and duplicate manual first-round slots", () => {
   assert.throws(
     () => buildPlayoffBracket({
@@ -248,7 +308,17 @@ test("resets an unplayed playoff bracket and blocks reset after the first result
   );
   assert.equal(overview.reset, true);
   assert.equal(overview.tournament.status, "swiss");
-  assert.equal(overview.rounds.length, 0);
+  assert.deepEqual(
+    overview.rounds.map((round) => round.round_key),
+    ["semi_final", "bronze_medal_match", "final"]
+  );
+  overview.rounds.forEach((round) => {
+    assert.equal(round.status, "draft");
+    round.matches.forEach((match) => {
+      assert.equal(match.participant_a_id, null);
+      assert.equal(match.participant_b_id, null);
+    });
+  });
   assert.equal(overview.can_start, true);
   assert.deepEqual(overview.participant_ids, participantIds);
   const cancelledRounds = await all(
@@ -258,12 +328,13 @@ test("resets an unplayed playoff bracket and blocks reset after the first result
      WHERE tournament_id = ? AND stage = 'playoff'`,
     [tournament.id]
   );
-  assert.equal(cancelledRounds.length, 3);
-  cancelledRounds.forEach((round) => {
+  assert.equal(cancelledRounds.length, 6);
+  cancelledRounds.filter((round) => round.status === "cancelled").forEach((round) => {
     assert.equal(round.status, "cancelled");
     assert.equal(round.cancelled_by_user_id, 1);
     assert.equal(round.cancellation_reason, "Correct playoff setup");
   });
+  assert.equal(cancelledRounds.filter((round) => round.status === "cancelled").length, 3);
 
   preview = await service.previewPlayoff(tournament.id, { participant_ids: participantIds });
   overview = await service.confirmPlayoff(tournament.id, {
