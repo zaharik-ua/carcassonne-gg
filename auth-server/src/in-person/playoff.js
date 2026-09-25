@@ -108,12 +108,95 @@ function matchKey(roundKey, bracketPosition) {
   return `${roundKey}:${bracketPosition}`;
 }
 
+function applyConfiguredTableNumbers(roundsByKey, tableNumbers) {
+  if (tableNumbers === undefined || tableNumbers === null) return;
+  if (!Array.isArray(tableNumbers)) {
+    playoffError("INVALID_PLAYOFF_TABLES", "table_numbers must be an array", {
+      field: "table_numbers",
+    });
+  }
+  const configuredMatches = new Set();
+  tableNumbers.forEach((entry, index) => {
+    const roundKey = String(entry?.round_key || "").trim().toLowerCase();
+    const bracketPosition = Number(entry?.bracket_position);
+    const tableNumber = Number(entry?.table_number);
+    const round = roundsByKey.get(roundKey);
+    const match = round?.matches?.find((candidate) => (
+      candidate.bracket_position === bracketPosition
+    ));
+    if (!match) {
+      playoffError(
+        "INVALID_PLAYOFF_TABLE_MATCH",
+        "Every table assignment must reference a configured playoff match",
+        { field: `table_numbers[${index}]`, round_key: roundKey, bracket_position: bracketPosition }
+      );
+    }
+    if (!Number.isInteger(tableNumber) || tableNumber <= 0) {
+      playoffError(
+        "INVALID_PLAYOFF_TABLE_NUMBER",
+        "Every playoff table number must be a positive integer",
+        { field: `table_numbers[${index}].table_number` }
+      );
+    }
+    const key = matchKey(roundKey, bracketPosition);
+    if (configuredMatches.has(key)) {
+      playoffError(
+        "DUPLICATE_PLAYOFF_TABLE_ASSIGNMENT",
+        "A playoff match cannot have more than one table assignment",
+        { field: "table_numbers", round_key: roundKey, bracket_position: bracketPosition }
+      );
+    }
+    const fixedTableNumber = roundKey === "final"
+      ? 1
+      : roundKey === "bronze_medal_match"
+        ? 2
+        : null;
+    if (fixedTableNumber !== null && tableNumber !== fixedTableNumber) {
+      playoffError(
+        "PLAYOFF_MEDAL_TABLE_LOCKED",
+        `${getPlayoffRoundLabel(roundKey)} must use table ${fixedTableNumber}`,
+        { field: `table_numbers[${index}].table_number`, round_key: roundKey }
+      );
+    }
+    configuredMatches.add(key);
+    match.table_number = tableNumber;
+  });
+
+  roundsByKey.forEach((round) => {
+    const occupiedTables = new Set();
+    round.matches.forEach((match) => {
+      if (occupiedTables.has(match.table_number)) {
+        playoffError(
+          "DUPLICATE_PLAYOFF_TABLE_NUMBER",
+          "Table numbers must be unique within each playoff round",
+          { round_key: round.round_key, table_number: match.table_number }
+        );
+      }
+      occupiedTables.add(match.table_number);
+    });
+    if (
+      round.round_key !== "bronze_medal_match"
+      && !round.matches.some((match) => match.table_number === 1)
+    ) {
+      playoffError(
+        "PLAYOFF_STREAMING_TABLE_REQUIRED",
+        "Every main playoff round must have exactly one streaming table 1",
+        { round_key: round.round_key }
+      );
+    }
+  });
+}
+
 /**
  * Builds the complete deterministic single-elimination structure, including
  * Final and the mandatory Bronze medal match. Stable database IDs are assigned
  * by the service; this pure plan links matches by deterministic keys and slots.
  */
-export function buildPlayoffBracket({ first_round: firstRound, participant_ids: participantIds } = {}) {
+export function buildPlayoffBracket({
+  first_round: firstRound,
+  participant_ids: participantIds,
+  table_numbers: tableNumbers,
+} = {}) {
   const normalizedFirstRound = String(firstRound || "").trim().toLowerCase();
   const normalizedParticipantIds = validateParticipantSlots(
     normalizedFirstRound,
@@ -152,6 +235,8 @@ export function buildPlayoffBracket({ first_round: firstRound, participant_ids: 
       matches,
     });
   });
+
+  applyConfiguredTableNumbers(roundsByKey, tableNumbers);
 
   const firstRoundPlan = roundsByKey.get(normalizedFirstRound);
   firstRoundPlan.matches.forEach((match, index) => {

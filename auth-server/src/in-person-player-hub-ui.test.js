@@ -50,6 +50,12 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.match(inPersonHtml, /\/participant-cities/);
   assert.match(inPersonHtml, /method: "POST"/);
   assert.match(inPersonHtml, /function createCityPickerField/);
+  assert.match(inPersonHtml, /function createAssociationPickerField/);
+  assert.match(inPersonHtml, /Type to filter associations\.\.\./);
+  assert.match(inPersonHtml, /Select association/);
+  assert.match(inPersonHtml, /flag\.className = "ip-association-flag"/);
+  assert.match(inPersonHtml, /const nameLocal = tournament\.scope === "local" \? createField\("Name \(local\)"\) : null/);
+  assert.match(inPersonHtml, /if \(nameLocal\) form\.appendChild\(nameLocal\.field\)/);
   assert.match(inPersonHtml, /function createMenuSelectField/);
   assert.match(inPersonHtml, /country\.input\.readOnly = true/);
   assert.match(inPersonHtml, /\/start-check-in/);
@@ -209,7 +215,7 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   );
   const menuSelectField = inPersonHtml.slice(
     inPersonHtml.indexOf("function createMenuSelectField"),
-    inPersonHtml.indexOf("function cityLabel")
+    inPersonHtml.indexOf("function appendAssociationLabel")
   );
   assert.match(menuSelectField, /ip-city-picker-btn/);
   assert.match(menuSelectField, /ip-city-picker-menu/);
@@ -325,10 +331,15 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
   [
     /data-ip-tab="playoff"/,
     /function buildEmptyPlayoffRounds/,
-    /table_number: roundKey === "bronze_medal_match" \? 2 : matchIndex \+ 1/,
+    /table_number: playoffSetupTableNumber\(roundKey, matchIndex \+ 1, matchIndex \+ 1\)/,
     /function playoffSetupParticipantName/,
     /`#\$\{position\} • \$\{name\}`/,
     /function openPlayoffParticipantModal/,
+    /Players become available after every Swiss round is complete/,
+    /Player 1 placeholder/,
+    /function playoffSetupTableAssignments/,
+    /table_numbers: tableNumbers/,
+    /window\.localStorage\.setItem/,
     /swissPosition\(left\.id\) - swissPosition\(right\.id\)/,
     /function playoffSeedOrder/,
     /function seedPlayoffFromSwiss/,
@@ -363,6 +374,7 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     "Manual ${playoff.participant_count}-player bracket setup",
   ].forEach((text) => assert.ok(!inPersonHtml.includes(text), `obsolete playoff UI text: ${text}`));
   assert.ok(!inPersonHtml.includes("Click a first-round match to select its players."));
+  assert.ok(!inPersonHtml.includes("Complete every configured Swiss round to open the playoff bracket."));
   assert.ok(!inPersonHtml.includes("Tournament cannot be completed yet."));
   assert.ok(!inPersonHtml.includes("Final must be completed."));
   assert.ok(!inPersonHtml.includes("Bronze medal match must be completed."));
@@ -397,7 +409,11 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
   );
   assert.match(
     bracketMatchRenderer,
-    /isSetupMatch[\s\S]*?playoffSetupParticipantName\(participantId\)/
+    /isFirstRoundSetupMatch[\s\S]*?playoffSetupParticipantName\(participantId\)/
+  );
+  assert.match(
+    inPersonHtml,
+    /\.ip-playoff-match-placeholder\s*\{[\s\S]*?font-size: 11px;[\s\S]*?font-style: italic;/
   );
 
   const playoffLayout = inPersonHtml.slice(

@@ -156,6 +156,79 @@ test("rejects missing and duplicate manual first-round slots", () => {
   );
 });
 
+test("applies configured playoff tables and validates streaming-table assignments", () => {
+  const participantIds = ["p1", "p2", "p3", "p4"];
+  const tableNumbers = [
+    { round_key: "semi_final", bracket_position: 1, table_number: 2 },
+    { round_key: "semi_final", bracket_position: 2, table_number: 1 },
+    { round_key: "bronze_medal_match", bracket_position: 1, table_number: 2 },
+    { round_key: "final", bracket_position: 1, table_number: 1 },
+  ];
+  const bracket = buildPlayoffBracket({
+    first_round: "semi_final",
+    participant_ids: participantIds,
+    table_numbers: tableNumbers,
+  });
+  assert.deepEqual(
+    bracket.rounds.find((round) => round.round_key === "semi_final")
+      .matches.map((match) => match.table_number),
+    [2, 1]
+  );
+  assert.throws(
+    () => buildPlayoffBracket({
+      first_round: "semi_final",
+      participant_ids: participantIds,
+      table_numbers: tableNumbers.map((entry) => (
+        entry.round_key === "semi_final" ? { ...entry, table_number: 2 } : entry
+      )),
+    }),
+    (error) => error?.code === "DUPLICATE_PLAYOFF_TABLE_NUMBER"
+  );
+  assert.throws(
+    () => buildPlayoffBracket({
+      first_round: "semi_final",
+      participant_ids: participantIds,
+      table_numbers: [{
+        round_key: "final",
+        bracket_position: 1,
+        table_number: 3,
+      }],
+    }),
+    (error) => error?.code === "PLAYOFF_MEDAL_TABLE_LOCKED"
+  );
+});
+
+test("carries configured table numbers through playoff preview and confirmation", async (t) => {
+  const { service } = await createContext(t);
+  const { tournament, participants } = await createSwissCompleteTournament(
+    service,
+    "configured-tables"
+  );
+  const participantIds = participants.map((participant) => participant.id);
+  const tableNumbers = [
+    { round_key: "semi_final", bracket_position: 1, table_number: 2 },
+    { round_key: "semi_final", bracket_position: 2, table_number: 1 },
+    { round_key: "bronze_medal_match", bracket_position: 1, table_number: 2 },
+    { round_key: "final", bracket_position: 1, table_number: 1 },
+  ];
+  const preview = await service.previewPlayoff(tournament.id, {
+    participant_ids: participantIds,
+    table_numbers: tableNumbers,
+  });
+  assert.deepEqual(preview.rounds[0].matches.map((match) => match.table_number), [2, 1]);
+  const overview = await service.confirmPlayoff(tournament.id, {
+    participant_ids: participantIds,
+    table_numbers: tableNumbers,
+    expected_tournament_revision: preview.tournament_revision,
+    expected_standings_revision: preview.standings_revision,
+  });
+  assert.deepEqual(
+    overview.rounds.find((round) => round.round_key === "semi_final")
+      .matches.map((match) => match.table_number),
+    [2, 1]
+  );
+});
+
 test("resets an unplayed playoff bracket and blocks reset after the first result", async (t) => {
   const { db, service } = await createContext(t);
   const { tournament, participants } = await createSwissCompleteTournament(service, "reset");

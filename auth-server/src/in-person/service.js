@@ -2552,6 +2552,7 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
       bracket = buildPlayoffBracket({
         first_round: tournament.playoff_first_round,
         participant_ids: normalizePlayoffParticipantIds(payload),
+        table_numbers: payload?.table_numbers,
       });
     } catch (error) {
       if (error instanceof InPersonPlayoffError) {
@@ -2859,6 +2860,20 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           match.participant_a_id,
           match.participant_b_id,
         ]));
+        const tableNumbers = await dbAll(
+          db,
+          `
+            SELECT r.round_key, m.bracket_position, m.table_number
+            FROM in_person_matches m
+            JOIN in_person_rounds r ON r.id = m.round_id
+            WHERE r.tournament_id = ?
+              AND r.stage = 'playoff'
+              AND r.status <> 'cancelled'
+              AND m.status <> 'cancelled'
+            ORDER BY r.round_order, r.round_key, m.bracket_position, m.id
+          `,
+          [tournament.id]
+        );
         await dbRun(
           db,
           `
@@ -2894,7 +2909,15 @@ export function createInPersonService({ db, idFactory = randomUUID, faultInjecto
           [tournament.id]
         );
         await injectFault("playoff_reset_after_rounds", { tournament_id: tournament.id });
-        return { reset: true, participant_ids: participantIds };
+        return {
+          reset: true,
+          participant_ids: participantIds,
+          table_numbers: tableNumbers.map((match) => ({
+            round_key: match.round_key,
+            bracket_position: Number(match.bracket_position),
+            table_number: Number(match.table_number),
+          })),
+        };
       });
       return { ...(await getPlayoffOverview(tournamentId)), ...outcome };
     });
