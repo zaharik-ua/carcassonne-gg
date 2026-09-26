@@ -114,6 +114,40 @@ test("activates standby tiers only after every earlier configured tier is coolin
   assert.equal(secondStandby.standby_eligible, true);
 });
 
+test("activates the second standby when every earlier account is cooling down or has zero available", async (t) => {
+  const db = await createDatabase(t);
+  const now = new Date("2026-09-24T12:00:00Z");
+  const env = {
+    ...ENV,
+    BGA_REPLAY_TOTAL_LIMIT: "1",
+    BGA_REPLAY_FRESH_RESERVE: "0",
+    BGA_REPLAY_HISTORICAL_LIMIT: "1",
+    BGA_REPLAY_MAX_TOTAL_LIMIT: "1",
+  };
+  const labels = getConfiguredReplayAccountLabels(env);
+
+  for (const accountLabel of labels.slice(0, 3)) {
+    await new Promise((resolve, reject) => {
+      db.run(`
+        INSERT INTO bga_replay_account_state (account_label, cooldown_until)
+        VALUES (?, '2026-09-24 13:00:00')
+      `, [accountLabel], (error) => (error ? reject(error) : resolve()));
+    });
+  }
+  await new Promise((resolve, reject) => {
+    db.run(`
+      INSERT INTO bga_replay_requests (
+        account_label, bga_table_id, endpoint, request_class, attempted_at, outcome
+      ) VALUES (?, 'standby-budget', '/archive/archive/logs.html', 'manual',
+        '2026-09-24 11:00:00', 'success')
+    `, [labels[3]], (error) => (error ? reject(error) : resolve()));
+  });
+
+  const state = await loadReplayBudgetAdminState({ db, env, now });
+  const secondStandby = state.accounts.find((item) => item.account_label === labels[4]);
+  assert.equal(secondStandby.standby_eligible, true);
+});
+
 test("validates dynamic override limits, accounts, expiry and reason", () => {
   const limits = getReplayBudgetLimits(ENV);
   const now = new Date("2026-09-24T12:00:00Z");
@@ -335,6 +369,7 @@ test("registers global-admin routes and exposes the BGA Replay Queue in admin.ht
   assert.match(adminHtml, /title: "BGA Replay Queue"/);
   assert.match(adminHtml, /historical_available_now/);
   assert.match(adminHtml, /protected_non_historical_available_now/);
+  assert.match(adminHtml, /cooldown or 0 available/);
   assert.match(adminHtml, /Apply this replay budget override/);
   assert.match(adminHtml, /Fresh work exists/);
   assert.match(adminHtml, /method: "DELETE"/);

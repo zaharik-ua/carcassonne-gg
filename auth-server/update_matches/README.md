@@ -52,8 +52,9 @@ Notes:
 - Accounts 1–3 form the normal shared replay-account pool. Account 4 is the
   first standby and can be selected only while all configured accounts 1–3
   have an active cooldown. Account 5 is the second standby and can be selected
-  only while all configured accounts 1–4 have an active cooldown. Exhausting
-  an earlier tier's local request budget does not unlock the next tier.
+  only while every configured account 1–4 either has an active cooldown or has
+  zero total requests available in its rolling budget. Budget exhaustion does
+  not unlock account 4; its cooldown-only rule remains unchanged.
 - Before every `logs.html` request, the gateway chooses an available account
   with the lowest rolling-24h usage; ties use round-robin ordering.
 - During an HTTP-session refresh, Selenium waits up to 10 seconds for

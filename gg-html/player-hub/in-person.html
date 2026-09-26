@@ -607,6 +607,12 @@
     gap: 6px;
   }
 
+  .ip-image-upload-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
   .ip-image-select-btn {
     justify-self: start;
   }
@@ -1653,7 +1659,6 @@
           <button id="ipStartCheckInBtn" class="ip-btn primary ip-hidden" type="button">Start check-in</button>
         </div>
       </div>
-      <div id="ipReadiness"></div>
       <div id="ipCheckInList" class="ip-list"></div>
     </section>
 
@@ -1662,6 +1667,7 @@
         <strong>Swiss rounds</strong>
         <div id="ipSwissActions" class="ip-actions"></div>
       </div>
+      <div id="ipSwissReadiness"></div>
       <div id="ipSwissSummary" class="ip-swiss-summary"></div>
       <div id="ipSwissPreview" class="ip-swiss-preview"></div>
       <div id="ipSwissRecovery"></div>
@@ -1731,7 +1737,7 @@
   const playersList = document.getElementById("ipPlayersList");
   const checkInList = document.getElementById("ipCheckInList");
   const playerFormMount = document.getElementById("ipPlayerFormMount");
-  const readinessEl = document.getElementById("ipReadiness");
+  const swissReadinessEl = document.getElementById("ipSwissReadiness");
   const addPlayerBtn = document.getElementById("ipAddPlayerBtn");
   const addLatePlayerBtn = document.getElementById("ipAddLatePlayerBtn");
   const addTestPlayersBtn = document.getElementById("ipAddTestPlayersBtn");
@@ -2210,10 +2216,16 @@
     label.textContent = "Player photo";
     const uploadWrap = document.createElement("div");
     uploadWrap.className = "ip-image-upload";
+    const imageActions = document.createElement("div");
+    imageActions.className = "ip-image-upload-actions";
     const chooseButton = document.createElement("button");
     chooseButton.type = "button";
     chooseButton.className = "ip-btn ip-image-select-btn";
     chooseButton.textContent = currentImageUrl ? "Change image" : "Select image";
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = `ip-btn danger${currentImageUrl ? "" : " ip-hidden"}`;
+    removeButton.textContent = "Remove photo";
     const fileInput = document.createElement("input");
     fileInput.type = "file";
     fileInput.accept = "image/*";
@@ -2249,9 +2261,26 @@
       preview.src = currentImageUrl;
       preview.hidden = false;
       chooseButton.textContent = "Change image";
+      removeButton.classList.remove("ip-hidden");
       uploadStatus.textContent = "Existing image selected.";
       setStatus("");
     };
+
+    removeButton.addEventListener("click", () => {
+      resetPreviewObjectUrl();
+      selectedImageFile = null;
+      selectedImagePreserveSource = false;
+      currentImageUrl = "";
+      fileInput.value = "";
+      preview.hidden = true;
+      preview.removeAttribute("src");
+      chooseButton.textContent = "Select image";
+      removeButton.classList.add("ip-hidden");
+      uploadStatus.textContent = participant
+        ? "Photo will be removed when you save."
+        : "Photo removed.";
+      setStatus("");
+    });
 
     chooseButton.addEventListener("click", () => {
       const currentUser = state.currentUser;
@@ -2287,6 +2316,7 @@
         selectedImagePreserveSource = false;
         preview.hidden = !currentImageUrl;
         preview.src = currentImageUrl || "";
+        removeButton.classList.toggle("ip-hidden", !currentImageUrl);
         uploadStatus.textContent = currentImageUrl
           ? "Current image will be kept unless a new file is selected."
           : "";
@@ -2298,6 +2328,7 @@
         selectedImagePreserveSource = false;
         preview.hidden = !currentImageUrl;
         preview.src = currentImageUrl || "";
+        removeButton.classList.toggle("ip-hidden", !currentImageUrl);
         uploadStatus.textContent = sizeError;
         setStatus(sizeError, "error");
         return;
@@ -2307,6 +2338,7 @@
         selectedImagePreserveSource = false;
         preview.hidden = !currentImageUrl;
         preview.src = currentImageUrl || "";
+        removeButton.classList.toggle("ip-hidden", !currentImageUrl);
         uploadStatus.textContent = "Select an image file.";
         setStatus("Select an image file.", "error");
         return;
@@ -2317,6 +2349,7 @@
       preview.src = previewObjectUrl;
       preview.hidden = false;
       chooseButton.textContent = "Change image";
+      removeButton.classList.remove("ip-hidden");
       uploadStatus.textContent = selectedImagePreserveSource
         ? `${file.name} (source saved)`
         : file.name;
@@ -2373,11 +2406,14 @@
       preview.src = currentImageUrl;
       preview.hidden = false;
       chooseButton.textContent = "Change image";
+      removeButton.classList.remove("ip-hidden");
       uploadStatus.textContent = "Image uploaded.";
       return currentImageUrl;
     };
 
-    uploadWrap.appendChild(chooseButton);
+    imageActions.appendChild(chooseButton);
+    imageActions.appendChild(removeButton);
+    uploadWrap.appendChild(imageActions);
     uploadWrap.appendChild(fileInput);
     uploadWrap.appendChild(preview);
     uploadWrap.appendChild(uploadStatus);
@@ -3070,8 +3106,7 @@
     playersList.innerHTML = "";
     const participants = state.overview?.participants || [];
     const tournament = state.overview?.tournament;
-    addPlayerBtn.disabled = !!tournament?.has_started_swiss
-      || ["cancelled", "completed"].includes(String(tournament?.status || ""));
+    addPlayerBtn.disabled = playerCreationDisabled(tournament);
     const isTestTournament = tournament?.is_test_tournament === true;
     const testPlayersAvailable = Number(state.overview?.test_data?.available_players || 0);
     addTestPlayersBtn.classList.toggle("ip-hidden", !isTestTournament);
@@ -3106,9 +3141,15 @@
     });
   }
 
+  function playerCreationDisabled(tournament) {
+    return !!tournament?.has_started_swiss
+      || ["cancelled", "completed"].includes(String(tournament?.status || ""));
+  }
+
   function openPlayerForm(participant = null) {
     const tournament = state.overview?.tournament;
     if (!tournament) return;
+    addPlayerBtn.disabled = !participant || playerCreationDisabled(tournament);
     state.playerFormController?.abort();
     const formController = new AbortController();
     state.playerFormController = formController;
@@ -3177,6 +3218,7 @@
       formController.abort();
       if (state.playerFormController === formController) state.playerFormController = null;
       playerFormMount.innerHTML = "";
+      addPlayerBtn.disabled = playerCreationDisabled(tournament);
       setStatus("");
     }));
     if (participant) {
@@ -3203,7 +3245,8 @@
       deleteButton.disabled = participant.has_matches || !!tournament.has_started_swiss;
       actions.appendChild(deleteButton);
     }
-    form.appendChild(actions);
+    if (participant) form.appendChild(actions);
+    else form.insertBefore(actions, form.firstChild);
 
     async function saveParticipant(confirmDuplicate) {
       save.disabled = true;
@@ -3527,23 +3570,16 @@
   }
 
   function renderReadiness() {
-    readinessEl.innerHTML = "";
+    swissReadinessEl.innerHTML = "";
     const readiness = state.overview?.readiness;
-    if (!readiness) return;
+    if (!readiness || readiness.ready) return;
     const box = document.createElement("div");
     if (state.overview?.tournament?.has_started_swiss) {
-      box.className = "ip-readiness ready";
-      const locked = document.createElement("strong");
-      locked.textContent = "Check-in and draw numbers are locked after Swiss starts.";
-      box.appendChild(locked);
-      readinessEl.appendChild(box);
       return;
     }
-    box.className = `ip-readiness${readiness.ready ? " ready" : ""}`;
+    box.className = "ip-readiness";
     const title = document.createElement("strong");
-    title.textContent = readiness.ready
-      ? "Ready to form the first Swiss round."
-      : "Not ready for the first Swiss round.";
+    title.textContent = "Not ready for the first Swiss round.";
     box.appendChild(title);
     if (readiness.issues?.length) {
       const list = document.createElement("ul");
@@ -3559,7 +3595,7 @@
       });
       box.appendChild(list);
     }
-    readinessEl.appendChild(box);
+    swissReadinessEl.appendChild(box);
   }
 
   function openTestQuantityModal({ titleText, description, maximum, submitText, onSubmit }) {
@@ -3906,7 +3942,6 @@
       : awaitingCheckIn < 1
         ? "Every active player is already checked in."
         : `Up to ${awaitingCheckIn} players can be checked in.`;
-    renderReadiness();
     if (!participants.length) {
       const empty = document.createElement("div");
       empty.className = "ip-empty";
@@ -5035,6 +5070,7 @@
   function renderSwiss() {
     swissActions.innerHTML = "";
     swissRecovery.innerHTML = "";
+    renderReadiness();
     renderSwissSummary();
     renderSwissPreview();
     renderSwissMatches();

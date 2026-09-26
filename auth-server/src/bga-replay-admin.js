@@ -320,6 +320,12 @@ export async function loadReplayBudgetAdminState({
     if (!configuredLabelsByLevel.has(level)) configuredLabelsByLevel.set(level, []);
     configuredLabelsByLevel.get(level).push(label);
   });
+  const activeOverrideByAccount = new Map();
+  activeOverrideRows.forEach((row) => {
+    const label = normalizeText(row.account_label);
+    if (!label || activeOverrideByAccount.has(label)) return;
+    activeOverrideByAccount.set(label, row);
+  });
   const standbyEligibility = new Map();
   [1, 2].forEach((level) => {
     const guardLabels = Array.from(configuredLabelsByLevel.entries())
@@ -327,16 +333,19 @@ export async function loadReplayBudgetAdminState({
       .flatMap(([, labels]) => labels);
     standbyEligibility.set(
       level,
-      guardLabels.length > 0 && guardLabels.every((label) => (
-        timestampIsActive(stateByAccount.get(label)?.cooldown_until, currentTime)
-      ))
+      guardLabels.length > 0 && guardLabels.every((label) => {
+        if (timestampIsActive(stateByAccount.get(label)?.cooldown_until, currentTime)) {
+          return true;
+        }
+        if (level !== 2) return false;
+        const usage = usageByAccount.get(label) || emptyUsage();
+        const effective = calculateEffectiveLimits(
+          baseLimits,
+          activeOverrideByAccount.get(label) || null
+        );
+        return Math.max(0, effective.total_limit - usage.total_attempts) === 0;
+      })
     );
-  });
-  const activeOverrideByAccount = new Map();
-  activeOverrideRows.forEach((row) => {
-    const label = normalizeText(row.account_label);
-    if (!label || activeOverrideByAccount.has(label)) return;
-    activeOverrideByAccount.set(label, row);
   });
 
   const accounts = allLabels.map((accountLabel) => {

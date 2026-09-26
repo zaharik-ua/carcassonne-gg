@@ -7446,10 +7446,13 @@
       const standbyGuards = Number(account.standby_level) === 2
         ? "accounts 1–4"
         : "accounts 1–3";
+      const standbyGuardCondition = Number(account.standby_level) === 2
+        ? "cooldown or 0 available"
+        : "cooldown";
       const accountDetail = account.standby
         ? (account.standby_eligible
-          ? `Standby ${account.standby_level} • eligible (${standbyGuards} are in cooldown)`
-          : `Standby ${account.standby_level} • waiting for cooldown on ${standbyGuards}`)
+          ? `Standby ${account.standby_level} • eligible (${standbyGuards}: ${standbyGuardCondition})`
+          : `Standby ${account.standby_level} • waiting for ${standbyGuardCondition} on ${standbyGuards}`)
         : (account.configured ? "Configured" : "Historical record");
       const accountCell = replayCell(account.account_label, accountDetail);
       accountCell.firstChild.className = "replay-account-label";

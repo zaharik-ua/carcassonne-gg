@@ -52,10 +52,10 @@ test("In-Person page contains participant registration and check-in flows", () =
     "Player description",
     "Player photo",
     "Select image",
+    "Remove photo",
     "Choose image",
     "Check-in and draw numbers",
     "Possible duplicate:",
-    "Ready to form the first Swiss round.",
   ].forEach((text) => assert.ok(inPersonHtml.includes(text), `missing In-Person UI text: ${text}`));
 
   assert.match(inPersonHtml, /\/participants/);
@@ -89,6 +89,8 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.match(inPersonHtml, /player_photo: playerPhoto/);
   assert.match(inPersonHtml, /function showImagePickerDialog/);
   assert.match(inPersonHtml, /function createPlayerImageField/);
+  assert.match(inPersonHtml, /currentImageUrl = "";[\s\S]*?preview\.removeAttribute\("src"\)/);
+  assert.match(inPersonHtml, /player_photo: playerPhoto/);
   assert.match(inPersonHtml, /IMAGE_UPLOAD_URL/);
   assert.match(inPersonHtml, /className = "ip-image-preview"/);
   assert.match(inPersonHtml, /function createMenuSelectField/);
@@ -116,7 +118,19 @@ test("In-Person page contains participant registration and check-in flows", () =
     inPersonHtml.indexOf('id="ipPlayersPanel"'),
     inPersonHtml.indexOf('id="ipCheckInPanel"')
   );
+  const checkInPanelMarkup = inPersonHtml.slice(
+    inPersonHtml.indexOf('id="ipCheckInPanel"'),
+    inPersonHtml.indexOf('id="ipSwissPanel"')
+  );
+  const swissPanelMarkup = inPersonHtml.slice(
+    inPersonHtml.indexOf('id="ipSwissPanel"'),
+    inPersonHtml.indexOf('id="ipStandingsPanel"')
+  );
   assert.match(playerPanelMarkup, /id="ipCounters"/);
+  assert.doesNotMatch(checkInPanelMarkup, /ipSwissReadiness|ip-readiness/);
+  assert.match(swissPanelMarkup, /id="ipSwissReadiness"/);
+  assert.match(inPersonHtml, /function renderSwiss\(\)[\s\S]*?renderReadiness\(\)/);
+  assert.doesNotMatch(inPersonHtml, /Ready to form the first Swiss round\./);
   assert.equal((inPersonHtml.match(/id="ipCounters"/g) || []).length, 1);
 });
 
@@ -319,6 +333,16 @@ test("participant row actions are moved into the Edit form", () => {
     assert.equal(listRenderer.includes(`\"${label}\"`), false, `${label} must not be in the player row`);
     assert.equal(editForm.includes(`\"${label}\"`), true, `${label} must be in the Edit form`);
   });
+});
+
+test("the add-player form disables its launcher and keeps primary actions at the top", () => {
+  const addForm = inPersonHtml.slice(
+    inPersonHtml.indexOf("function openPlayerForm"),
+    inPersonHtml.indexOf("async function deletePlayer")
+  );
+  assert.match(addForm, /addPlayerBtn\.disabled = !participant \|\| playerCreationDisabled\(tournament\)/);
+  assert.match(addForm, /else form\.insertBefore\(actions, form\.firstChild\)/);
+  assert.match(addForm, /addPlayerBtn\.disabled = playerCreationDisabled\(tournament\)/);
 });
 
 test("In-Person page exposes Swiss rollback, inactive-player and late-entry recovery", () => {
