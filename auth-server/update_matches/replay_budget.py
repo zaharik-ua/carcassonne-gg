@@ -201,29 +201,16 @@ def reserve_replay_request(
             eligible_priority_labels: set[str] | None = None
             if priority_tiers:
                 eligible_priority_labels = set()
-                if len(priority_tiers) >= 3:
-                    # Account 5 is the second standby. Unlike account 4, it may
-                    # also take over when every earlier account has exhausted
-                    # its total rolling budget.
-                    second_standby_guards = [
-                        label
-                        for tier in priority_tiers[:2]
+                for tier in priority_tiers:
+                    tier_has_available_account = any(
+                        not cooldown_by_label.get(label, False)
+                        and int(budget_by_label[label][0]["total_used"] or 0)
+                        < budget_by_label[label][1].total_limit
                         for label in tier
-                    ]
-                    second_standby_eligible = bool(second_standby_guards) and all(
-                        cooldown_by_label.get(label, False)
-                        or int(budget_by_label[label][0]["total_used"] or 0)
-                        >= budget_by_label[label][1].total_limit
-                        for label in second_standby_guards
                     )
-                    if second_standby_eligible:
-                        eligible_priority_labels = set(priority_tiers[2])
-
-                if not eligible_priority_labels:
-                    for tier in priority_tiers:
-                        if any(not cooldown_by_label.get(label, False) for label in tier):
-                            eligible_priority_labels = set(tier)
-                            break
+                    if tier_has_available_account:
+                        eligible_priority_labels = set(tier)
+                        break
 
             candidates: list[tuple] = []
             for label_index, label in enumerate(normalized_labels):

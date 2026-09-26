@@ -337,7 +337,6 @@ export async function loadReplayBudgetAdminState({
         if (timestampIsActive(stateByAccount.get(label)?.cooldown_until, currentTime)) {
           return true;
         }
-        if (level !== 2) return false;
         const usage = usageByAccount.get(label) || emptyUsage();
         const effective = calculateEffectiveLimits(
           baseLimits,

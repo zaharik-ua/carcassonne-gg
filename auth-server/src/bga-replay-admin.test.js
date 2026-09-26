@@ -114,6 +114,38 @@ test("activates standby tiers only after every earlier configured tier is coolin
   assert.equal(secondStandby.standby_eligible, true);
 });
 
+test("activates the first standby when accounts 1-3 have zero available", async (t) => {
+  const db = await createDatabase(t);
+  const now = new Date("2026-09-24T12:00:00Z");
+  const env = {
+    ...ENV,
+    BGA_REPLAY_TOTAL_LIMIT: "1",
+    BGA_REPLAY_FRESH_RESERVE: "0",
+    BGA_REPLAY_HISTORICAL_LIMIT: "1",
+    BGA_REPLAY_MAX_TOTAL_LIMIT: "1",
+  };
+  const labels = getConfiguredReplayAccountLabels(env);
+
+  for (const [index, accountLabel] of labels.slice(0, 3).entries()) {
+    await new Promise((resolve, reject) => {
+      db.run(`
+        INSERT INTO bga_replay_requests (
+          account_label, bga_table_id, endpoint, request_class, attempted_at, outcome
+        ) VALUES (?, ?, '/archive/archive/logs.html', 'manual',
+          '2026-09-24 11:00:00', 'success')
+      `, [accountLabel, `primary-budget-${index}`], (error) => (
+        error ? reject(error) : resolve()
+      ));
+    });
+  }
+
+  const state = await loadReplayBudgetAdminState({ db, env, now });
+  const firstStandby = state.accounts.find((item) => item.account_label === labels[3]);
+  const secondStandby = state.accounts.find((item) => item.account_label === labels[4]);
+  assert.equal(firstStandby.standby_eligible, true);
+  assert.equal(secondStandby.standby_eligible, false);
+});
+
 test("activates the second standby when every earlier account is cooling down or has zero available", async (t) => {
   const db = await createDatabase(t);
   const now = new Date("2026-09-24T12:00:00Z");

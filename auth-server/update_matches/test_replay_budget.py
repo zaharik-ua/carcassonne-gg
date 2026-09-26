@@ -266,7 +266,7 @@ class ReplayBudgetTest(unittest.TestCase):
 
         self.assertEqual(reservation.account_label, "account-d")
 
-    def test_exhausted_guard_budget_does_not_unlock_standby(self) -> None:
+    def test_exhausted_guard_budget_unlocks_first_standby(self) -> None:
         limits = ReplayBudgetLimits(
             total_limit=1,
             fresh_reserve=0,
@@ -283,19 +283,19 @@ class ReplayBudgetTest(unittest.TestCase):
                 now=self.now,
             )
 
-        with self.assertRaises(ReplayBudgetUnavailableError):
-            reserve_replay_request(
-                self.db_path,
-                account_labels=["account-a", "account-b", "account-c", "account-d"],
-                account_priority_tiers=[
-                    ["account-a", "account-b", "account-c"],
-                    ["account-d"],
-                ],
-                bga_table_id="standby-still-blocked",
-                request_class="manual",
-                limits=limits,
-                now=self.now + timedelta(minutes=1),
-            )
+        first_standby = reserve_replay_request(
+            self.db_path,
+            account_labels=["account-a", "account-b", "account-c", "account-d"],
+            account_priority_tiers=[
+                ["account-a", "account-b", "account-c"],
+                ["account-d"],
+            ],
+            bga_table_id="standby-after-budget",
+            request_class="manual",
+            limits=limits,
+            now=self.now + timedelta(minutes=1),
+        )
+        self.assertEqual(first_standby.account_label, "account-d")
 
     def test_second_standby_requires_primary_and_first_standby_cooldown(self) -> None:
         tiers = [
