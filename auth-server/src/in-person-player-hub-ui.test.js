@@ -165,7 +165,7 @@ test("In-Person page lists accessible tournaments and opens a dedicated tourname
   );
   assert.match(tournamentCardMarkup, /id="ipTournamentLogo"/);
   assert.match(tournamentCardMarkup, /id="ipTournamentName"/);
-  assert.match(tournamentCardMarkup, /id="ipFullViewBtn"[\s\S]*?>Full View<\/button>/);
+  assert.match(tournamentCardMarkup, /id="ipFullViewBtn"[\s\S]*?aria-expanded="false"[\s\S]*?>Full View<\/button>/);
   assert.match(tournamentCardMarkup, /id="ipRefreshBtn"/);
   assert.match(tournamentCardMarkup, /id="ipPlayoffCompletion"/);
   const tournamentDetailMarkup = inPersonHtml.slice(
@@ -180,11 +180,15 @@ test("In-Person page lists accessible tournaments and opens a dedicated tourname
   assert.match(tournamentDetailMarkup, /data-ip-tab="playoff"/);
   assert.match(inPersonHtml, /function openTournamentFullView\(\)/);
   assert.match(inPersonHtml, /content\.appendChild\(tournamentDetail\)/);
-  assert.match(inPersonHtml, /fullViewBtn\.addEventListener\("click", openTournamentFullView\)/);
+  assert.match(inPersonHtml, /fullViewBtn\.addEventListener\("click", \(\) => \{[\s\S]*?if \(closeTournamentFullView\) closeTournamentFullView\(\);[\s\S]*?else openTournamentFullView\(\);/);
+  assert.match(inPersonHtml, /fullViewBtn\.textContent = "Close Full View"/);
+  assert.match(inPersonHtml, /fullViewBtn\.textContent = "Full View"/);
   assert.match(inPersonHtml, /\.ip-fullview-overlay\s*\{[\s\S]*?position: fixed;[\s\S]*?inset: 0;/);
-  assert.match(inPersonHtml, /--ip-site-menu-height: 45px;/);
+  assert.doesNotMatch(inPersonHtml, /--ip-site-menu-height/);
   assert.match(inPersonHtml, /\.ip-fullview-overlay\s*\{[\s\S]*?z-index: 2147483000;/);
-  assert.match(inPersonHtml, /padding: calc\(var\(--ip-site-menu-height\) \+ 12px\) 12px 12px;/);
+  assert.match(inPersonHtml, /\.ip-fullview-overlay\s*\{[\s\S]*?padding: 12px;/);
+  assert.match(inPersonHtml, /\.ip-fullview-close\s*\{[\s\S]*?top: 20px;/);
+  assert.doesNotMatch(inPersonHtml, /\.ip-fullview-content \.ip-fullview-btn\s*\{[\s\S]*?display: none;/);
   assert.ok(
     inPersonHtml.indexOf('id="ipTournamentCard"') < inPersonHtml.indexOf('id="ipStatus"'),
     "the selected tournament card must be above status and workspace content"
@@ -240,7 +244,7 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   ].forEach((pattern) => assert.match(inPersonHtml, pattern));
   assert.match(inPersonHtml, /data-ip-tab="swiss"/);
   assert.match(inPersonHtml, /data-ip-tab="standings"/);
-  assert.match(inPersonHtml, /"Auto-fill results"[\s\S]*?"ip-btn test-action"/);
+  assert.match(inPersonHtml, /"Auto-fill test results"[\s\S]*?"ip-btn test-action"/);
   assert.match(inPersonHtml, /is_test_tournament === true[\s\S]*?round\?\.status === "published"/);
   assert.match(inPersonHtml, /function createSwissTableCard/);
   assert.match(inPersonHtml, /function openSwissResultModal/);
@@ -248,11 +252,13 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.match(inPersonHtml, /function createMenuSelectField/);
   assert.match(inPersonHtml, /blue-mipple-no-bg-small\.png/);
   assert.match(inPersonHtml, /ip-swiss-table-card\.completed/);
+  assert.match(inPersonHtml, /\.ip-swiss-table-head\s*\{[\s\S]*?display: flex;[\s\S]*?justify-content: space-between;/);
   assert.match(inPersonHtml, /\.ip-swiss-table-number\s*\{[\s\S]*?font-size: 20px;[\s\S]*?font-weight: 700;/);
+  assert.match(inPersonHtml, /\.ip-swiss-table-admin-note\s*\{[\s\S]*?font-size: 9px;[\s\S]*?text-align: right;[\s\S]*?text-overflow: ellipsis;[\s\S]*?white-space: nowrap;/);
   assert.match(inPersonHtml, /table\.textContent = match\.is_bye \? "Bye" : String\(match\.table_number\)/);
   assert.match(inPersonHtml, /\.ip-starting-player-icon\s*\{[\s\S]*?width: 12px;[\s\S]*?height: 12px;[\s\S]*?display: inline-block;[\s\S]*?margin-right: 6px;/);
   assert.match(inPersonHtml, /\.ip-swiss-table-player-name\s*\{[\s\S]*?max-width: 100%;[\s\S]*?font-size: 16px;[\s\S]*?overflow-wrap: anywhere;[\s\S]*?text-align: center;[\s\S]*?white-space: normal;/);
-  assert.match(inPersonHtml, /\.ip-swiss-table-player-flag\s*\{[\s\S]*?width: 24px;[\s\S]*?height: 16px;/);
+  assert.match(inPersonHtml, /\.ip-swiss-table-player-flag\s*\{[\s\S]*?width: 21px;[\s\S]*?height: 14px;/);
   assert.match(inPersonHtml, /return participant\?\.name_local[\s\S]*?participant_\$\{side\}_name_local[\s\S]*?participant\?\.name_en/);
   const swissTablePlayerRenderer = inPersonHtml.slice(
     inPersonHtml.indexOf("function createSwissTablePlayer"),
@@ -267,6 +273,14 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.match(swissTablePlayerRenderer, /participantAssociation\(participant\)/);
   assert.match(swissTablePlayerRenderer, /if \(side === "a"\) player\.appendChild\(flag\)/);
   assert.match(swissTablePlayerRenderer, /if \(flag && side === "b"\) player\.appendChild\(flag\)/);
+  const swissTableCardRenderer = inPersonHtml.slice(
+    inPersonHtml.indexOf("function createSwissTableCard"),
+    inPersonHtml.indexOf("function createPairingCard")
+  );
+  assert.match(swissTableCardRenderer, /const adminNoteText = String\(match\.admin_note \|\| ""\)\.trim\(\)/);
+  assert.match(swissTableCardRenderer, /adminNote\.className = "ip-swiss-table-admin-note"/);
+  assert.match(swissTableCardRenderer, /adminNote\.textContent = adminNoteText/);
+  assert.match(swissTableCardRenderer, /adminNote\.title = adminNoteText/);
   const swissResultModal = inPersonHtml.slice(
     inPersonHtml.indexOf("function openSwissResultModal"),
     inPersonHtml.indexOf("function createSwissResultForm")
@@ -286,6 +300,7 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   ].forEach((text) => assert.ok(swissResultForm.includes(text), `missing Swiss score form text: ${text}`));
   assert.doesNotMatch(swissResultForm, /"Result type"|"Win \/ loss"|"Technical reason"/);
   assert.match(inPersonHtml, /\.ip-swiss-score-input\s*\{[\s\S]*?width: 112px;[\s\S]*?height: 112px;[\s\S]*?font-size: 36px;/);
+  assert.match(swissResultForm, /input\.addEventListener\("wheel", \(event\) => \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?\}, \{ passive: false \}\);/);
   assert.match(inPersonHtml, /\.ip-swiss-score-player-name\s*\{[\s\S]*?font-weight: 500;/);
   assert.match(inPersonHtml, /\.ip-swiss-score-won\s*\{[\s\S]*?font-size: 15px;/);
   assert.doesNotMatch(inPersonHtml, /\.ip-admin-note-toggle\s*\{[\s\S]*?text-decoration:\s*underline/);
@@ -329,6 +344,17 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.match(inPersonHtml, /function swissParticipantRecord\(participantId\)[\s\S]*?record\.wins \+= 1[\s\S]*?record\.losses \+= 1/);
   assert.match(inPersonHtml, /recordEl\.textContent = `\$\{record\.wins\} – \$\{record\.losses\}`/);
   assert.match(inPersonHtml, /recordEl\.title = "Wins – losses"/);
+  assert.match(inPersonHtml, /\.ip-standings-table\s*\{[\s\S]*?font-size: 14px;/);
+  assert.match(inPersonHtml, /\.ip-standings-table thead th\s*\{[\s\S]*?font-size: 12px;/);
+  assert.match(inPersonHtml, /\.ip-standings-player-flag\s*\{[\s\S]*?width: 21px;[\s\S]*?height: 14px;/);
+  const standingsRenderer = inPersonHtml.slice(
+    inPersonHtml.indexOf("function renderStandings()"),
+    inPersonHtml.indexOf("const PLAYOFF_MAIN_ROUNDS")
+  );
+  assert.match(standingsRenderer, /tournament\?\.scope === "international"/);
+  assert.match(standingsRenderer, /participantAssociation\(participant\)/);
+  assert.match(standingsRenderer, /flag\.className = "ip-standings-player-flag"/);
+  assert.match(standingsRenderer, /playerName\.textContent = standing\.participant_name_en/);
   assert.match(inPersonHtml, /round\.progress\.completed === round\.progress\.total/);
   const completeRoundFlow = inPersonHtml.slice(
     inPersonHtml.indexOf("async function completeSwissRound"),

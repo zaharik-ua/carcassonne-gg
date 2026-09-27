@@ -278,6 +278,7 @@ function createParticipantState(participant) {
   return {
     participant,
     participant_id: requireParticipantId(participant?.id ?? participant?.participant_id, "participant_id"),
+    played: 0,
     wins: 0,
     opponents: [],
     vp_difference: 0,
@@ -373,6 +374,8 @@ export function calculateSwissStandings({ participants = [], rounds = [] } = {})
         "participant_b_id"
       );
       startedParticipantIds.add(participantB.participant_id);
+      participantA.played += 1;
+      participantB.played += 1;
       participantA.opponents.push(participantB.participant_id);
       participantB.opponents.push(participantA.participant_id);
 
@@ -411,6 +414,7 @@ export function calculateSwissStandings({ participants = [], rounds = [] } = {})
       : 0;
     rows.push({
       participant_id: state.participant_id,
+      played: state.played,
       wins: state.wins,
       buchholz,
       solkoff1,

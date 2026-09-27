@@ -188,6 +188,7 @@ test("public aggregate hides drafts, cancelled history and private result fields
   const beforePlayoff = await service.getPublicTournamentAggregate(tournament.id);
   assert.ok(beforePlayoff.revision > aggregate.revision);
   assert.equal(beforePlayoff.swiss.standings.rows.length, 4);
+  assert.equal(beforePlayoff.swiss.standings.rows[0].played, 1);
   assert.equal("sonneborn_berger" in beforePlayoff.swiss.standings.rows[0], false);
   assert.equal("bye_count" in beforePlayoff.swiss.standings.rows[0], false);
 

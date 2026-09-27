@@ -433,6 +433,7 @@ async function ensureInPersonTables(db) {
         source_completed_round_id TEXT,
         participant_id TEXT NOT NULL,
         position INTEGER NOT NULL CHECK (position > 0),
+        played INTEGER NOT NULL DEFAULT 0 CHECK (played >= 0),
         wins INTEGER NOT NULL DEFAULT 0 CHECK (wins >= 0),
         buchholz INTEGER NOT NULL DEFAULT 0,
         solkoff1 INTEGER NOT NULL DEFAULT 0,
@@ -583,6 +584,56 @@ async function ensureParticipantProfileExtensions(db) {
     throw error;
   }
   return { addedColumns };
+}
+
+async function ensureStandingsPlayedExtension(db) {
+  let added = false;
+  try {
+    await dbExec(db, "BEGIN IMMEDIATE TRANSACTION");
+    const columns = await dbAll(db, "PRAGMA table_info(in_person_standings)");
+    const existingMigration = await dbGet(
+      db,
+      "SELECT version FROM in_person_schema_migrations WHERE version = 8"
+    );
+    if (!columns.some((column) => String(column?.name || "") === "played")) {
+      await dbExec(
+        db,
+        "ALTER TABLE in_person_standings ADD COLUMN played INTEGER NOT NULL DEFAULT 0 CHECK (played >= 0)"
+      );
+      added = true;
+    }
+    if (added || !existingMigration) {
+      await dbExec(db, `
+        UPDATE in_person_standings
+        SET played = (
+          SELECT COUNT(*)
+          FROM in_person_matches m
+          JOIN in_person_rounds r ON r.id = m.round_id
+          JOIN in_person_rounds source_round
+            ON source_round.id = in_person_standings.source_completed_round_id
+          WHERE r.tournament_id = in_person_standings.tournament_id
+            AND r.stage = 'swiss'
+            AND r.status = 'completed'
+            AND r.round_number <= source_round.round_number
+            AND m.status = 'completed'
+            AND m.is_bye = 0
+            AND in_person_standings.participant_id IN (
+              m.participant_a_id,
+              m.participant_b_id
+            )
+        )
+      `);
+    }
+    await dbExec(db, `
+      INSERT OR IGNORE INTO in_person_schema_migrations (version, name)
+      VALUES (8, 'standings_played');
+      COMMIT;
+    `);
+  } catch (error) {
+    await rollbackQuietly(db);
+    throw error;
+  }
+  return { added };
 }
 
 async function ensurePlayoffMedalTableAssignments(db) {
@@ -905,6 +956,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
   const testTournamentMigration = await ensureTestTournamentExtension(db);
   const playoffPlaceholderMigration = await ensurePlayoffPlaceholderExtensions(db);
   const participantProfileMigration = await ensureParticipantProfileExtensions(db);
+  const standingsPlayedMigration = await ensureStandingsPlayedExtension(db);
   await ensureInPersonTriggersAndAccessIndexes(db);
   logger?.info?.("[in-person] Schema foundation ready", {
     accessTableMigrated: accessMigration.migrated,
@@ -915,6 +967,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
     playoffMedalTablesUpdated: playoffMedalTableMigration.updatedRows,
     playoffPlaceholderColumnsAdded: playoffPlaceholderMigration.addedColumns,
     participantProfileColumnsAdded: participantProfileMigration.addedColumns,
+    standingsPlayedColumnAdded: standingsPlayedMigration.added,
   });
   return {
     accessMigration,
@@ -923,5 +976,6 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
     playoffMedalTableMigration,
     playoffPlaceholderMigration,
     participantProfileMigration,
+    standingsPlayedMigration,
   };
 }

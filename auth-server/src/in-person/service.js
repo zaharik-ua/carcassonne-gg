@@ -238,6 +238,7 @@ function serializeSwissStanding(row) {
     participant_name_local: row.participant_name_local || null,
     bga_nickname: row.bga_nickname || null,
     position: Number(row.position),
+    played: Number(row.played),
     wins: Number(row.wins),
     buchholz: Number(row.buchholz),
     solkoff1: Number(row.solkoff1),
@@ -2208,9 +2209,9 @@ export function createInPersonService({
             `
               INSERT INTO in_person_standings (
                 tournament_id, revision, source_completed_round_id, participant_id,
-                position, wins, buchholz, solkoff1, solkoff2, vp_difference,
-                sonneborn_berger, bye_count, calculated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                position, played, wins, buchholz, solkoff1, solkoff2,
+                vp_difference, sonneborn_berger, bye_count, calculated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             `,
             [
               tournament.id,
@@ -2218,6 +2219,7 @@ export function createInPersonService({
               round.id,
               standing.participant_id,
               standing.position,
+              standing.played,
               standing.wins,
               standing.buchholz,
               standing.solkoff1,

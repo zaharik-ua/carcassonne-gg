@@ -348,6 +348,7 @@ test("automatically gives a late bye or replaces the existing first-round bye", 
     overview.current_round.id
   );
   assert.equal(overview.standings.rows.length, 5);
+  assert.equal(overview.standings.rows.reduce((sum, row) => sum + row.played, 0), 4);
   assert.equal(overview.standings.rows.reduce((sum, row) => sum + row.bye_count, 0), 1);
 
   const pairedContext = await createContext(t);

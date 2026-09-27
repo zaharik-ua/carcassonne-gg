@@ -16,7 +16,6 @@
     --ip-test-dark: #9a3412;
     --ip-test-light: #ffedd5;
     --ip-test-line: #fdba74;
-    --ip-site-menu-height: 45px;
   }
 
    body {
@@ -174,7 +173,7 @@
     width: 100vw;
     height: 100vh;
     box-sizing: border-box;
-    padding: calc(var(--ip-site-menu-height) + 12px) 12px 12px;
+    padding: 12px;
     background: rgba(0, 0, 0, 0.75);
   }
 
@@ -193,13 +192,9 @@
     max-width: none;
   }
 
-  .ip-fullview-content .ip-fullview-btn {
-    display: none;
-  }
-
   .ip-fullview-close {
     position: fixed;
-    top: calc(var(--ip-site-menu-height) + 20px);
+    top: 20px;
     left: 20px;
     z-index: 2147483001;
     display: inline-flex;
@@ -1100,11 +1095,32 @@
     background: #effaf2;
   }
 
+  .ip-swiss-table-head {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
   .ip-swiss-table-number {
+    flex: 0 0 auto;
     color: var(--ip-muted);
     font-size: 20px;
     font-weight: 700;
     line-height: 1.2;
+  }
+
+  .ip-swiss-table-admin-note {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ip-muted);
+    font-size: 9px;
+    font-weight: 500;
+    line-height: 1.25;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .ip-swiss-table-players {
@@ -1145,9 +1161,9 @@
   }
 
   .ip-swiss-table-player-flag {
-    width: 24px;
-    height: 16px;
-    flex: 0 0 16px;
+    width: 21px;
+    height: 14px;
+    flex: 0 0 14px;
     border-radius: 2px;
     object-fit: cover;
   }
@@ -1493,7 +1509,7 @@
     min-width: 650px;
     border-collapse: collapse;
     background: #fff;
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .ip-standings-table th,
@@ -1508,7 +1524,7 @@
     border-top: 0;
     background: #f8fafc;
     color: #475467;
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
   }
 
@@ -1516,6 +1532,21 @@
   .ip-standings-table td:nth-child(2) {
     width: 100%;
     text-align: left;
+  }
+
+  .ip-standings-player {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .ip-standings-player-flag {
+    width: 21px;
+    height: 14px;
+    flex: 0 0 21px;
+    border-radius: 2px;
+    object-fit: cover;
   }
 
   .ip-tournament-completion {
@@ -1752,7 +1783,7 @@
           </div>
         </div>
         <div class="ip-actions">
-          <button id="ipFullViewBtn" class="ip-btn ip-fullview-btn" type="button">Full View</button>
+          <button id="ipFullViewBtn" class="ip-btn ip-fullview-btn" type="button" aria-expanded="false">Full View</button>
           <button id="ipResetTestDataBtn" class="ip-btn test-reset ip-hidden" type="button">Reset data</button>
           <button id="ipRefreshBtn" class="ip-btn" type="button">Refresh</button>
         </div>
@@ -1957,6 +1988,8 @@
     overlay.appendChild(content);
     document.body.appendChild(overlay);
     document.body.classList.add("ip-fullview-open");
+    fullViewBtn.textContent = "Close Full View";
+    fullViewBtn.setAttribute("aria-expanded", "true");
 
     const onKeyDown = (event) => {
       const isEscape = event.key === "Escape" || event.key === "Esc";
@@ -1971,6 +2004,8 @@
       overlay.remove();
       document.body.classList.remove("ip-fullview-open");
       closeTournamentFullView = null;
+      fullViewBtn.textContent = "Full View";
+      fullViewBtn.setAttribute("aria-expanded", "false");
       fullViewBtn.focus();
     };
 
@@ -4314,10 +4349,21 @@
       match.status === "completed" ? " completed" : ""
     }`;
 
+    const head = document.createElement("div");
+    head.className = "ip-swiss-table-head";
     const table = document.createElement("div");
     table.className = "ip-swiss-table-number";
     table.textContent = match.is_bye ? "Bye" : String(match.table_number);
-    card.appendChild(table);
+    head.appendChild(table);
+    const adminNoteText = String(match.admin_note || "").trim();
+    if (adminNoteText) {
+      const adminNote = document.createElement("div");
+      adminNote.className = "ip-swiss-table-admin-note";
+      adminNote.textContent = adminNoteText;
+      adminNote.title = adminNoteText;
+      head.appendChild(adminNote);
+    }
+    card.appendChild(head);
 
     const players = document.createElement("div");
     players.className = "ip-swiss-table-players";
@@ -4332,7 +4378,10 @@
     if (interactive) {
       card.setAttribute(
         "aria-label",
-        `Edit table ${match.table_number}: ${swissParticipantName(match, "a")} versus ${swissParticipantName(match, "b")}`
+        [
+          `Edit table ${match.table_number}: ${swissParticipantName(match, "a")} versus ${swissParticipantName(match, "b")}`,
+          adminNoteText ? `Admin note: ${adminNoteText}` : "",
+        ].filter(Boolean).join(". ")
       );
       card.addEventListener("click", onClick);
     }
@@ -4515,7 +4564,7 @@
     } catch (error) {
       setStatus(error.message || "Failed to auto-fill Swiss results.", "error");
       button.disabled = false;
-      button.textContent = "Auto-fill results";
+      button.textContent = "Auto-fill test results";
     }
   }
 
@@ -4864,6 +4913,9 @@
       input.autocomplete = "off";
       input.className = "ip-input ip-swiss-score-input";
       input.value = initialScore(side);
+      input.addEventListener("wheel", (event) => {
+        event.preventDefault();
+      }, { passive: false });
       summary.appendChild(name);
       return { participantId, summary, input, won };
     };
@@ -5402,7 +5454,7 @@
       && pendingMatches.length
     ) {
       const autoFill = createButton(
-        "Auto-fill results",
+        "Auto-fill test results",
         "ip-btn test-action",
         () => fillSwissRoundTestResults(round, autoFill)
       );
@@ -5493,11 +5545,43 @@
     });
     thead.appendChild(headRow);
     const tbody = document.createElement("tbody");
+    const tournament = state.overview?.tournament;
+    const participantsById = new Map(
+      (state.overview?.participants || []).map((participant) => (
+        [String(participant.id), participant]
+      ))
+    );
     rows.forEach((standing) => {
       const row = document.createElement("tr");
+      const position = document.createElement("td");
+      position.textContent = String(standing.position ?? "");
+      row.appendChild(position);
+
+      const playerCell = document.createElement("td");
+      const player = document.createElement("span");
+      player.className = "ip-standings-player";
+      const participant = participantsById.get(String(standing.participant_id ?? "")) || null;
+      if (tournament?.scope === "international" && participant) {
+        const association = participantAssociation(participant);
+        if (association.flag) {
+          const flag = document.createElement("img");
+          flag.className = "ip-standings-player-flag";
+          flag.src = association.flag;
+          flag.alt = association.name ? `${association.name} flag` : "Country flag";
+          flag.addEventListener("error", () => flag.remove(), { once: true });
+          player.appendChild(flag);
+        }
+      }
+      const playerName = document.createElement("span");
+      playerName.textContent = standing.participant_name_en
+        || standing.bga_nickname
+        || standing.participant_id
+        || "";
+      player.appendChild(playerName);
+      playerCell.appendChild(player);
+      row.appendChild(playerCell);
+
       const values = [
-        standing.position,
-        standing.participant_name_en || standing.bga_nickname || standing.participant_id,
         standing.wins,
         standing.solkoff1,
         standing.solkoff2,
@@ -6435,7 +6519,10 @@
   }
 
   refreshBtn.addEventListener("click", loadAll);
-  fullViewBtn.addEventListener("click", openTournamentFullView);
+  fullViewBtn.addEventListener("click", () => {
+    if (closeTournamentFullView) closeTournamentFullView();
+    else openTournamentFullView();
+  });
   resetTestDataBtn.addEventListener("click", openResetTestDataModal);
   addPlayerBtn.addEventListener("click", () => openPlayerForm());
   addLatePlayerBtn.addEventListener("click", openLatePlayerForm);

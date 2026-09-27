@@ -60,6 +60,7 @@ export function serializePublicStanding(row) {
     participant_name_en: row.participant_name_en || null,
     participant_name_local: row.participant_name_local || null,
     position: Number(row.position),
+    played: Number(row.played),
     wins: Number(row.wins),
     solkoff1: Number(row.solkoff1),
     solkoff2: Number(row.solkoff2),

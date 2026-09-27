@@ -48,6 +48,7 @@ function standingRows(ids, wins = {}) {
   return ids.map((id, index) => ({
     participant_id: id,
     position: index + 1,
+    played: 0,
     wins: wins[id] || 0,
     solkoff1: 0,
     solkoff2: 0,
@@ -289,6 +290,7 @@ test("calculates swiss_standard_v1 and ignores cancelled or incomplete rounds", 
   assert.deepEqual(standings, [
     {
       participant_id: "p3",
+      played: 1,
       wins: 2,
       buchholz: 1,
       solkoff1: 1,
@@ -301,6 +303,7 @@ test("calculates swiss_standard_v1 and ignores cancelled or incomplete rounds", 
     },
     {
       participant_id: "p1",
+      played: 2,
       wins: 1,
       buchholz: 3,
       solkoff1: 2,
@@ -313,6 +316,7 @@ test("calculates swiss_standard_v1 and ignores cancelled or incomplete rounds", 
     },
     {
       participant_id: "p2",
+      played: 1,
       wins: 1,
       buchholz: 1,
       solkoff1: 1,
@@ -417,6 +421,7 @@ test("reproduces all final CHU-2025 standings including legacy Sonneborn-Berger"
   const actual = calculateSwissStandings({ participants, rounds });
   const expected = fixture.standings.map((row) => ({
     participant_id: String(row.player_id),
+    played: 5 - Number(row.byes),
     wins: Number(row.wins),
     solkoff1: Number(row.solkoff1),
     solkoff2: Number(row.solkoff2),
