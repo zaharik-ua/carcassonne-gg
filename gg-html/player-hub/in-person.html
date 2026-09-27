@@ -16,6 +16,7 @@
     --ip-test-dark: #9a3412;
     --ip-test-light: #ffedd5;
     --ip-test-line: #fdba74;
+    --ip-site-menu-height: 45px;
   }
 
    body {
@@ -31,12 +32,20 @@
   }
 
   .ip-wrap > *,
+  #ipTournamentDetail,
   #ipWorkspace,
   #ipPlayoffPanel,
   #ipPlayoffBracket {
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
+  }
+
+  .ip-tournament-detail {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .ip-card {
@@ -151,6 +160,60 @@
 
   .ip-tournament-meta {
     margin-top: 5px;
+  }
+
+  body.ip-fullview-open {
+    overflow: hidden;
+  }
+
+  .ip-fullview-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    box-sizing: border-box;
+    padding: calc(var(--ip-site-menu-height) + 12px) 12px 12px;
+    background: rgba(0, 0, 0, 0.75);
+  }
+
+  .ip-fullview-content {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    overflow: auto;
+    padding: 48px 12px 12px;
+    border-radius: 6px;
+    background: var(--ip-bg);
+  }
+
+  .ip-fullview-content .ip-tournament-detail {
+    width: 100%;
+    max-width: none;
+  }
+
+  .ip-fullview-content .ip-fullview-btn {
+    display: none;
+  }
+
+  .ip-fullview-close {
+    position: fixed;
+    top: calc(var(--ip-site-menu-height) + 20px);
+    left: 20px;
+    z-index: 2147483001;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid #c8ced8;
+    border-radius: 3px;
+    background: #eef2f6;
+    color: #2f3947;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 1.4px 1.4px 2px rgba(0, 0, 0, 0.25);
   }
 
   .ip-test-tournament-label {
@@ -643,7 +706,7 @@
     align-items: center;
     justify-content: center;
     padding: 16px;
-    z-index: 1000;
+    z-index: 2147483200;
   }
 
   .cp-modal-dialog {
@@ -855,7 +918,7 @@
   .ip-modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 1000;
+    z-index: 2147483200;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1068,6 +1131,27 @@
     gap: 2px;
   }
 
+  .ip-swiss-table-player.with-flag {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ip-swiss-table-player-main {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .ip-swiss-table-player-flag {
+    width: 24px;
+    height: 16px;
+    flex: 0 0 16px;
+    border-radius: 2px;
+    object-fit: cover;
+  }
+
   .ip-swiss-player-record {
     color: var(--ip-muted);
     font-size: 11px;
@@ -1149,6 +1233,56 @@
     color: var(--ip-success);
     font-size: 16px;
     font-weight: 700;
+  }
+
+  .ip-swiss-round-heading {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .ip-swiss-round-toggle {
+    appearance: none;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    border: 1px solid #c9d5e2;
+    border-radius: 3px;
+    padding: 0;
+    background: linear-gradient(180deg, #fff 0%, #f3f7fb 100%);
+    box-shadow: 0 1px 2px rgba(15, 28, 48, 0.08);
+    color: #2f6f9f;
+    cursor: pointer;
+  }
+
+  .ip-swiss-round-toggle:hover,
+  .ip-swiss-round-toggle:focus-visible {
+    border-color: #88abc8;
+    background: #edf5fb;
+    color: var(--ip-primary);
+    outline: none;
+  }
+
+  .ip-swiss-round-toggle:focus-visible {
+    outline: 2px solid rgba(26, 115, 183, 0.24);
+    outline-offset: 2px;
+  }
+
+  .ip-swiss-round-toggle-icon {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.2s ease;
+  }
+
+  .ip-swiss-round-toggle[aria-expanded="true"] .ip-swiss-round-toggle-icon {
+    transform: rotate(180deg);
+  }
+
+  .ip-swiss-round-content[hidden] {
+    display: none;
   }
 
   .ip-match-result-dialog {
@@ -1606,91 +1740,95 @@
     </div>
   </div>
 
-  <div id="ipTournamentCard" class="ip-card ip-hidden">
-    <div class="ip-tournament-heading">
-      <div class="ip-tournament-brand">
-        <img id="ipTournamentLogo" class="ip-tournament-logo ip-hidden" alt="">
-        <div class="ip-tournament-summary">
-          <h1 id="ipTournamentName" class="ip-tournament-name"></h1>
-          <div id="ipTestTournamentLabel" class="ip-test-tournament-label ip-hidden">TEST TOURNAMENT</div>
-          <div id="ipTournamentMeta" class="ip-meta ip-tournament-meta"></div>
+  <div id="ipTournamentDetail" class="ip-tournament-detail">
+    <div id="ipTournamentCard" class="ip-card ip-hidden">
+      <div class="ip-tournament-heading">
+        <div class="ip-tournament-brand">
+          <img id="ipTournamentLogo" class="ip-tournament-logo ip-hidden" alt="">
+          <div class="ip-tournament-summary">
+            <h1 id="ipTournamentName" class="ip-tournament-name"></h1>
+            <div id="ipTestTournamentLabel" class="ip-test-tournament-label ip-hidden">TEST TOURNAMENT</div>
+            <div id="ipTournamentMeta" class="ip-meta ip-tournament-meta"></div>
+          </div>
+        </div>
+        <div class="ip-actions">
+          <button id="ipFullViewBtn" class="ip-btn ip-fullview-btn" type="button">Full View</button>
+          <button id="ipResetTestDataBtn" class="ip-btn test-reset ip-hidden" type="button">Reset data</button>
+          <button id="ipRefreshBtn" class="ip-btn" type="button">Refresh</button>
         </div>
       </div>
-      <div class="ip-actions">
-        <button id="ipResetTestDataBtn" class="ip-btn test-reset ip-hidden" type="button">Reset data</button>
-        <button id="ipRefreshBtn" class="ip-btn" type="button">Refresh</button>
-      </div>
+      <div id="ipPlayoffCompletion" class="ip-tournament-completion"></div>
     </div>
-    <div id="ipPlayoffCompletion" class="ip-tournament-completion"></div>
-  </div>
 
-  <div id="ipStatus" class="ip-status"></div>
+    <div id="ipStatus" class="ip-status"></div>
+
+    <div id="ipWorkspace" class="ip-hidden">
+      <div class="ip-tabs" role="tablist">
+        <button class="ip-tab active" type="button" data-ip-tab="players">Players</button>
+        <button class="ip-tab" type="button" data-ip-tab="check-in">Check-in</button>
+        <button class="ip-tab" type="button" data-ip-tab="swiss">Swiss</button>
+        <button class="ip-tab" type="button" data-ip-tab="standings">Standings</button>
+        <button class="ip-tab" type="button" data-ip-tab="playoff">Playoff</button>
+      </div>
+
+      <section id="ipPlayersPanel" class="ip-card">
+        <div class="ip-toolbar">
+          <strong>Players</strong>
+          <div class="ip-actions">
+            <button id="ipAddLatePlayerBtn" class="ip-btn primary ip-hidden" type="button">Add late player</button>
+            <button id="ipAddTestPlayersBtn" class="ip-btn test-action ip-hidden" type="button">Add test players</button>
+            <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
+          </div>
+        </div>
+        <div class="ip-counters ip-player-counters" id="ipCounters"></div>
+        <div id="ipPlayerFormMount"></div>
+        <div id="ipPlayersList" class="ip-list"></div>
+      </section>
+
+      <section id="ipCheckInPanel" class="ip-card ip-hidden">
+        <div class="ip-toolbar">
+          <strong>Check-in and draw numbers</strong>
+          <div class="ip-actions">
+            <button id="ipBulkCheckInBtn" class="ip-btn test-action ip-hidden" type="button">Test check-in</button>
+            <button id="ipStartCheckInBtn" class="ip-btn primary ip-hidden" type="button">Start check-in</button>
+          </div>
+        </div>
+        <div class="ip-counters ip-player-counters" id="ipCheckInCounters"></div>
+        <div id="ipCheckInList" class="ip-list"></div>
+      </section>
+
+      <section id="ipSwissPanel" class="ip-card ip-hidden">
+        <div class="ip-toolbar">
+          <strong>Swiss rounds</strong>
+          <div id="ipSwissActions" class="ip-actions"></div>
+        </div>
+        <div id="ipSwissReadiness"></div>
+        <div id="ipSwissSummary" class="ip-swiss-summary"></div>
+        <div id="ipSwissPreview" class="ip-swiss-preview"></div>
+        <div id="ipSwissRecovery"></div>
+        <div id="ipSwissMatches" class="ip-swiss-matches"></div>
+      </section>
+
+      <section id="ipStandingsPanel" class="ip-card ip-hidden">
+        <div class="ip-toolbar">
+          <div>
+            <strong>Swiss standings</strong>
+          </div>
+        </div>
+        <div id="ipStandings"></div>
+      </section>
+
+      <section id="ipPlayoffPanel" class="ip-card ip-hidden">
+        <div class="ip-toolbar">
+          <strong>Single-elimination playoff</strong>
+          <div id="ipPlayoffActions" class="ip-actions"></div>
+        </div>
+        <div id="ipPlayoffBracket"></div>
+      </section>
+    </div>
+  </div>
 
   <div id="ipTournamentList" class="ip-tournament-list"></div>
-
-  <div id="ipWorkspace" class="ip-hidden">
-    <div class="ip-tabs" role="tablist">
-      <button class="ip-tab active" type="button" data-ip-tab="players">Players</button>
-      <button class="ip-tab" type="button" data-ip-tab="check-in">Check-in</button>
-      <button class="ip-tab" type="button" data-ip-tab="swiss">Swiss</button>
-      <button class="ip-tab" type="button" data-ip-tab="standings">Standings</button>
-      <button class="ip-tab" type="button" data-ip-tab="playoff">Playoff</button>
-    </div>
-
-    <section id="ipPlayersPanel" class="ip-card">
-      <div class="ip-toolbar">
-        <strong>Players</strong>
-        <div class="ip-actions">
-          <button id="ipAddLatePlayerBtn" class="ip-btn primary ip-hidden" type="button">Add late player</button>
-          <button id="ipAddTestPlayersBtn" class="ip-btn test-action ip-hidden" type="button">Add test players</button>
-          <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
-        </div>
-      </div>
-      <div class="ip-counters ip-player-counters" id="ipCounters"></div>
-      <div id="ipPlayerFormMount"></div>
-      <div id="ipPlayersList" class="ip-list"></div>
-    </section>
-
-    <section id="ipCheckInPanel" class="ip-card ip-hidden">
-      <div class="ip-toolbar">
-        <strong>Check-in and draw numbers</strong>
-        <div class="ip-actions">
-          <button id="ipBulkCheckInBtn" class="ip-btn test-action ip-hidden" type="button">Test check-in</button>
-          <button id="ipStartCheckInBtn" class="ip-btn primary ip-hidden" type="button">Start check-in</button>
-        </div>
-      </div>
-      <div id="ipCheckInList" class="ip-list"></div>
-    </section>
-
-    <section id="ipSwissPanel" class="ip-card ip-hidden">
-      <div class="ip-toolbar">
-        <strong>Swiss rounds</strong>
-        <div id="ipSwissActions" class="ip-actions"></div>
-      </div>
-      <div id="ipSwissReadiness"></div>
-      <div id="ipSwissSummary" class="ip-swiss-summary"></div>
-      <div id="ipSwissPreview" class="ip-swiss-preview"></div>
-      <div id="ipSwissRecovery"></div>
-      <div id="ipSwissMatches" class="ip-swiss-matches"></div>
-    </section>
-
-    <section id="ipStandingsPanel" class="ip-card ip-hidden">
-      <div class="ip-toolbar">
-        <div>
-          <strong>Swiss standings</strong>
-        </div>
-      </div>
-      <div id="ipStandings"></div>
-    </section>
-
-    <section id="ipPlayoffPanel" class="ip-card ip-hidden">
-      <div class="ip-toolbar">
-        <strong>Single-elimination playoff</strong>
-        <div id="ipPlayoffActions" class="ip-actions"></div>
-      </div>
-      <div id="ipPlayoffBracket"></div>
-    </section>
-  </div>
 </div>
 
 <script>
@@ -1720,6 +1858,7 @@
   };
 
   const tournamentList = document.getElementById("ipTournamentList");
+  const tournamentDetail = document.getElementById("ipTournamentDetail");
   const tournamentCard = document.getElementById("ipTournamentCard");
   const pageHeader = document.getElementById("ipPageHeader");
   const tournamentLogo = document.getElementById("ipTournamentLogo");
@@ -1729,6 +1868,7 @@
   const workspace = document.getElementById("ipWorkspace");
   const statusEl = document.getElementById("ipStatus");
   const countersEl = document.getElementById("ipCounters");
+  const checkInCountersEl = document.getElementById("ipCheckInCounters");
   const playersPanel = document.getElementById("ipPlayersPanel");
   const checkInPanel = document.getElementById("ipCheckInPanel");
   const swissPanel = document.getElementById("ipSwissPanel");
@@ -1744,6 +1884,7 @@
   const bulkCheckInBtn = document.getElementById("ipBulkCheckInBtn");
   const startCheckInBtn = document.getElementById("ipStartCheckInBtn");
   const refreshBtn = document.getElementById("ipRefreshBtn");
+  const fullViewBtn = document.getElementById("ipFullViewBtn");
   const resetTestDataBtn = document.getElementById("ipResetTestDataBtn");
   const swissActions = document.getElementById("ipSwissActions");
   const swissSummary = document.getElementById("ipSwissSummary");
@@ -1754,6 +1895,7 @@
   const playoffActions = document.getElementById("ipPlayoffActions");
   const playoffBracket = document.getElementById("ipPlayoffBracket");
   const playoffCompletion = document.getElementById("ipPlayoffCompletion");
+  let closeTournamentFullView = null;
 
   tournamentLogo.addEventListener("error", () => {
     tournamentLogo.classList.add("ip-hidden");
@@ -1786,6 +1928,58 @@
   function setStatus(message, type = "") {
     statusEl.textContent = message || "";
     statusEl.className = `ip-status${type ? ` ${type}` : ""}`;
+  }
+
+  function openTournamentFullView() {
+    if (!state.selectedTournamentId || closeTournamentFullView) return;
+
+    const originalParent = tournamentDetail.parentNode;
+    const placeholder = document.createComment("In-Person tournament full view");
+    originalParent.insertBefore(placeholder, tournamentDetail);
+
+    const overlay = document.createElement("div");
+    overlay.className = "ip-fullview-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "ipTournamentName");
+
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "ip-fullview-close";
+    closeButton.setAttribute("aria-label", "Close full view");
+    closeButton.title = "Close (Esc)";
+    closeButton.innerHTML = '<i class="fas fa-xmark" aria-hidden="true"></i>';
+
+    const content = document.createElement("div");
+    content.className = "ip-fullview-content";
+    content.appendChild(tournamentDetail);
+    overlay.appendChild(closeButton);
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
+    document.body.classList.add("ip-fullview-open");
+
+    const onKeyDown = (event) => {
+      const isEscape = event.key === "Escape" || event.key === "Esc";
+      const nestedModalOpen = document.querySelector(".ip-modal-overlay, .cp-modal-overlay");
+      if (isEscape && !nestedModalOpen) closeTournamentFullView?.();
+    };
+
+    closeTournamentFullView = () => {
+      document.removeEventListener("keydown", onKeyDown);
+      placeholder.parentNode?.insertBefore(tournamentDetail, placeholder);
+      placeholder.remove();
+      overlay.remove();
+      document.body.classList.remove("ip-fullview-open");
+      closeTournamentFullView = null;
+      fullViewBtn.focus();
+    };
+
+    closeButton.addEventListener("click", () => closeTournamentFullView?.());
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeTournamentFullView?.();
+    });
+    document.addEventListener("keydown", onKeyDown);
+    closeButton.focus();
   }
 
   function toApiAbsoluteUrl(value) {
@@ -2909,6 +3103,7 @@
   function renderTournamentList() {
     const selected = selectedTournament();
     const isDetailView = !!selected;
+    if (!isDetailView && closeTournamentFullView) closeTournamentFullView();
     pageHeader.classList.toggle("ip-hidden", isDetailView);
     tournamentList.classList.toggle("ip-hidden", isDetailView);
     tournamentCard.classList.toggle("ip-hidden", !isDetailView);
@@ -3022,19 +3217,21 @@
       [counters.without_draw_number || 0, "Without number"],
       [counters.withdrawn_disqualified || 0, "Withdrawn / DQ"],
     ];
-    countersEl.innerHTML = "";
-    items.forEach(([value, label]) => {
-      const card = document.createElement("div");
-      card.className = "ip-counter";
-      const number = document.createElement("div");
-      number.className = "ip-counter-value";
-      number.textContent = String(value);
-      const text = document.createElement("div");
-      text.className = "ip-counter-label";
-      text.textContent = label;
-      card.appendChild(number);
-      card.appendChild(text);
-      countersEl.appendChild(card);
+    [countersEl, checkInCountersEl].forEach((container) => {
+      container.innerHTML = "";
+      items.forEach(([value, label]) => {
+        const card = document.createElement("div");
+        card.className = "ip-counter";
+        const number = document.createElement("div");
+        number.className = "ip-counter-value";
+        number.textContent = String(value);
+        const text = document.createElement("div");
+        text.className = "ip-counter-label";
+        text.textContent = label;
+        card.appendChild(number);
+        card.appendChild(text);
+        container.appendChild(card);
+      });
     });
   }
 
@@ -3980,9 +4177,16 @@
     });
   }
 
+  function swissParticipant(match, side) {
+    const id = match?.[`participant_${side}_id`];
+    return (state.overview?.participants || []).find((entry) => (
+      String(entry?.id || "") === String(id || "")
+    )) || null;
+  }
+
   function swissParticipantName(match, side) {
     const id = match?.[`participant_${side}_id`];
-    const participant = (state.overview?.participants || []).find((entry) => entry.id === id);
+    const participant = swissParticipant(match, side);
     return participant?.name_local
       || match?.[`participant_${side}_name_local`]
       || participant?.name_en
@@ -4042,10 +4246,27 @@
 
   function createSwissTablePlayer(match, side, { showRecord = false } = {}) {
     const participantId = match[`participant_${side}_id`];
+    const participant = swissParticipant(match, side);
     const player = document.createElement("div");
     player.className = `ip-swiss-table-player${
       match.status === "completed" && match.winner_participant_id === participantId ? " winner" : ""
     }${showRecord ? " with-record" : ""}`;
+    let flag = null;
+    if (state.overview?.tournament?.scope === "international" && participant) {
+      const association = participantAssociation(participant);
+      if (association.flag) {
+        flag = document.createElement("img");
+        flag.className = "ip-swiss-table-player-flag";
+        flag.src = association.flag;
+        flag.alt = association.name ? `${association.name} flag` : "Country flag";
+        flag.addEventListener("error", () => {
+          flag.remove();
+          player.classList.remove("with-flag");
+        }, { once: true });
+        player.classList.add("with-flag");
+        if (side === "a") player.appendChild(flag);
+      }
+    }
     if (showRecord) {
       const record = swissParticipantRecord(participantId);
       const recordEl = document.createElement("span");
@@ -4054,6 +4275,8 @@
       recordEl.title = "Wins – losses";
       player.appendChild(recordEl);
     }
+    const main = document.createElement("div");
+    main.className = "ip-swiss-table-player-main";
     const name = document.createElement("span");
     name.className = "ip-swiss-table-player-name";
     if (match.starting_participant_id === participantId) {
@@ -4065,7 +4288,7 @@
       name.appendChild(starter);
     }
     name.appendChild(document.createTextNode(swissParticipantName(match, side)));
-    player.appendChild(name);
+    main.appendChild(name);
     const lostOnTime = match.result_type === "time_forfeit"
       && (match.loser_participant_id === participantId
         || (!match.loser_participant_id
@@ -4076,8 +4299,10 @@
       clock.className = "ip-time-lost-icon";
       clock.title = "Lost on time";
       clock.setAttribute("aria-label", "Lost on time");
-      player.appendChild(clock);
+      main.appendChild(clock);
     }
+    player.appendChild(main);
+    if (flag && side === "b") player.appendChild(flag);
     return player;
   }
 
@@ -4270,6 +4495,27 @@
         "error"
       );
       button.disabled = false;
+    }
+  }
+
+  async function fillSwissRoundTestResults(round, button) {
+    button.disabled = true;
+    button.textContent = "Filling...";
+    try {
+      const data = await apiJson(
+        tournamentUrl(`/swiss/rounds/${encodeURIComponent(round.id)}/test-results`),
+        { method: "POST", body: "{}" }
+      );
+      adoptSwissResponse(data);
+      renderWorkspace();
+      setStatus(
+        `${data.filled} result(s) added: ${data.time_forfeits} time loss, ${data.ties} tied score.`,
+        "success"
+      );
+    } catch (error) {
+      setStatus(error.message || "Failed to auto-fill Swiss results.", "error");
+      button.disabled = false;
+      button.textContent = "Auto-fill results";
     }
   }
 
@@ -4749,10 +4995,7 @@
       noteToggle.disabled = saving;
       cancel.disabled = saving;
       if (resetResult) resetResult.disabled = saving;
-      save.disabled = saving
-        || !starter.getValue()
-        || !validScore(scoreA.input)
-        || !validScore(scoreB.input);
+      save.disabled = saving || !starter.getValue();
     };
 
     scoreA.input.addEventListener("input", () => syncForm());
@@ -4767,11 +5010,34 @@
         return;
       }
       const timeLostParticipantId = timeLost.getValue();
-      if (!validScore(scoreA.input) || !validScore(scoreB.input)) {
+      const hasScoreA = scoreA.input.value !== "";
+      const hasScoreB = scoreB.input.value !== "";
+      if (hasScoreA !== hasScoreB) {
+        if (errorTarget) errorTarget.textContent = "Enter a score for both players or leave both scores empty.";
+        return;
+      }
+      if (timeLostParticipantId && (!hasScoreA || !hasScoreB)) {
+        if (errorTarget) errorTarget.textContent = "Enter scores for both players when selecting Time lost.";
+        return;
+      }
+      if ((hasScoreA && !validScore(scoreA.input)) || (hasScoreB && !validScore(scoreB.input))) {
         if (errorTarget) errorTarget.textContent = "Enter a non-negative whole-number score for both players.";
         return;
       }
-      const payload = timeLostParticipantId
+      const starterOnly = stage === "swiss"
+        && !hasScoreA
+        && !hasScoreB
+        && !timeLostParticipantId;
+      if (!starterOnly && !hasScoreA && !hasScoreB) {
+        if (errorTarget) errorTarget.textContent = "Enter a non-negative whole-number score for both players.";
+        return;
+      }
+      const payload = starterOnly
+        ? {
+          starting_participant_id: starter.getValue(),
+          admin_note: String(note.input.value || "").trim() || null,
+        }
+        : timeLostParticipantId
         ? {
           starting_participant_id: starter.getValue(),
           result_type: "time_forfeit",
@@ -4801,7 +5067,12 @@
         if (stage === "playoff") adoptPlayoffResponse(data);
         else adoptSwissResponse(data);
         renderWorkspace();
-        setStatus(`Result saved for table ${match.table_number}.`, "success");
+        setStatus(
+          starterOnly
+            ? `Starting player saved for table ${match.table_number}.`
+            : `Result saved for table ${match.table_number}.`,
+          "success"
+        );
         if (typeof onSaved === "function") onSaved();
       } catch (error) {
         saving = false;
@@ -5044,9 +5315,53 @@
         section.className = "ip-swiss-round";
         const heading = document.createElement("div");
         heading.className = "ip-preview-head";
+        const headingMain = document.createElement("div");
+        headingMain.className = "ip-swiss-round-heading";
         const title = document.createElement("strong");
         title.textContent = `Round ${round.round_number} tables`;
-        heading.appendChild(title);
+        const content = document.createElement("div");
+        content.className = "ip-swiss-round-content";
+        const isCompletedRound = round.status === "completed";
+        if (isCompletedRound) {
+          const contentKey = String(round.id || round.round_number).replace(/[^a-zA-Z0-9_-]/g, "-");
+          content.id = `ipSwissRoundContent-${contentKey}`;
+          content.hidden = true;
+
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "ip-swiss-round-toggle";
+          toggle.setAttribute("aria-expanded", "false");
+          toggle.setAttribute("aria-controls", content.id);
+          toggle.setAttribute("aria-label", `Show round ${round.round_number} tables`);
+          toggle.title = `Show round ${round.round_number} tables`;
+
+          const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+          icon.classList.add("ip-swiss-round-toggle-icon");
+          icon.setAttribute("viewBox", "0 0 20 20");
+          icon.setAttribute("fill", "none");
+          icon.setAttribute("aria-hidden", "true");
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", "m5 7.5 5 5 5-5");
+          path.setAttribute("stroke", "currentColor");
+          path.setAttribute("stroke-width", "2");
+          path.setAttribute("stroke-linecap", "round");
+          path.setAttribute("stroke-linejoin", "round");
+          icon.appendChild(path);
+          toggle.appendChild(icon);
+          toggle.addEventListener("click", () => {
+            const expanded = toggle.getAttribute("aria-expanded") !== "true";
+            toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+            toggle.setAttribute(
+              "aria-label",
+              `${expanded ? "Hide" : "Show"} round ${round.round_number} tables`
+            );
+            toggle.title = `${expanded ? "Hide" : "Show"} round ${round.round_number} tables`;
+            content.hidden = !expanded;
+          });
+          headingMain.appendChild(toggle);
+        }
+        headingMain.appendChild(title);
+        heading.appendChild(headingMain);
         section.appendChild(heading);
         const grid = document.createElement("div");
         grid.className = "ip-swiss-table-grid";
@@ -5062,7 +5377,8 @@
               : null;
             grid.appendChild(createSwissTableCard(match, { onClick }));
           });
-        section.appendChild(grid);
+        content.appendChild(grid);
+        section.appendChild(content);
         swissMatches.appendChild(section);
       });
   }
@@ -5077,6 +5393,21 @@
     const swiss = state.swiss;
     if (!swiss || state.pairingPreview) return;
     const round = swiss.current_round;
+    const pendingMatches = (round?.matches || []).filter((match) => (
+      !match.is_bye && match.status !== "completed" && !match.result_type
+    ));
+    if (
+      state.overview?.tournament?.is_test_tournament === true
+      && round?.status === "published"
+      && pendingMatches.length
+    ) {
+      const autoFill = createButton(
+        "Auto-fill results",
+        "ip-btn test-action",
+        () => fillSwissRoundTestResults(round, autoFill)
+      );
+      swissActions.appendChild(autoFill);
+    }
     if (!round && swiss.can_generate_first_round && state.overview?.readiness?.ready) {
       swissActions.appendChild(createButton(
         "Preview first round",
@@ -6104,6 +6435,7 @@
   }
 
   refreshBtn.addEventListener("click", loadAll);
+  fullViewBtn.addEventListener("click", openTournamentFullView);
   resetTestDataBtn.addEventListener("click", openResetTestDataModal);
   addPlayerBtn.addEventListener("click", () => openPlayerForm());
   addLatePlayerBtn.addEventListener("click", openLatePlayerForm);

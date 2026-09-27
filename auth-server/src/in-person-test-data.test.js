@@ -90,6 +90,10 @@ test("test tournaments add up to 60 random fixture players while manual addition
     service.resetTestTournamentData(regular.id),
     (error) => error?.code === "TEST_TOURNAMENT_REQUIRED"
   );
+  await assert.rejects(
+    service.fillSwissRoundTestResults(regular.id, "missing-round"),
+    (error) => error?.code === "TEST_TOURNAMENT_REQUIRED"
+  );
 
   const tournament = await service.createTournament(tournamentPayload({ is_test_tournament: true }));
   assert.equal(tournament.is_test_tournament, true);
@@ -140,6 +144,62 @@ test("bulk test check-in selects remaining players and assigns unique random dra
     (error) => error?.code === "INVALID_TEST_PLAYER_COUNT"
       || error?.code === "NOT_ENOUGH_TEST_PLAYERS_AVAILABLE"
   );
+});
+
+test("auto-fills only pending Swiss matches with bounded scores and test-result quotas", async (t) => {
+  const { service } = await createDatabase(t);
+  const tournament = await service.createTournament(tournamentPayload({
+    slug: "automatic-swiss-results",
+    is_test_tournament: true,
+  }));
+  await service.addTestParticipants(tournament.id, { count: 60 });
+  await service.createParticipant(tournament.id, {
+    name_en: "Manual Test Player 61",
+    association_id: "UKR",
+  });
+  await service.createParticipant(tournament.id, {
+    name_en: "Manual Test Player 62",
+    association_id: "UKR",
+  });
+  await service.publishTournament(tournament.id);
+  await service.startCheckIn(tournament.id);
+  await service.bulkCheckInTestParticipants(tournament.id, { count: 62 });
+  let overview = await service.confirmSwissRound(tournament.id, {
+    round_number: 1,
+    publish: true,
+  });
+  const manualMatch = overview.current_round.matches[0];
+  await service.saveSwissMatchResult(tournament.id, manualMatch.id, {
+    starting_participant_id: manualMatch.starting_participant_id,
+    result_type: "points",
+    points_a: 111,
+    points_b: 72,
+    admin_note: "Manual result",
+  });
+
+  overview = await service.fillSwissRoundTestResults(
+    tournament.id,
+    overview.current_round.id
+  );
+  assert.equal(overview.filled, 30);
+  assert.equal(overview.time_forfeits, 2);
+  assert.equal(overview.ties, 3);
+  const matches = overview.current_round.matches.filter((match) => !match.is_bye);
+  assert.equal(matches.length, 31);
+  assert.ok(matches.every((match) => match.status === "completed"));
+  matches.forEach((match) => {
+    assert.ok(match.points_a >= 60 && match.points_a <= 130);
+    assert.ok(match.points_b >= 60 && match.points_b <= 130);
+  });
+  assert.equal(matches.filter((match) => match.result_type === "time_forfeit").length, 2);
+  assert.equal(matches.filter((match) => match.points_a === match.points_b).length, 3);
+  const preservedManualMatch = matches.find((match) => match.id === manualMatch.id);
+  assert.equal(preservedManualMatch.points_a, 111);
+  assert.equal(preservedManualMatch.points_b, 72);
+  assert.equal(preservedManualMatch.admin_note, "Manual result");
+
+  const retry = await service.fillSwissRoundTestResults(tournament.id, overview.current_round.id);
+  assert.equal(retry.filled, 0);
 });
 
 test("resetting a test tournament removes competition data and recreates an empty playoff structure", async (t) => {

@@ -254,8 +254,25 @@ test("lost-response retries return current publish and result state without new 
   assert.equal(publishRetry.current_round.status, "published");
 
   const match = publishRetry.current_round.matches.find((entry) => !entry.is_bye);
+  const updatedStarterId = match.starting_participant_id === match.participant_a_id
+    ? match.participant_b_id
+    : match.participant_a_id;
+  const starterSaved = await service.saveSwissMatchResult(tournament.id, match.id, {
+    starting_participant_id: updatedStarterId,
+  });
+  assert.equal(starterSaved.changed, true);
+  assert.equal(starterSaved.match.starting_participant_id, updatedStarterId);
+  assert.equal(starterSaved.match.status, "scheduled");
+  assert.equal(starterSaved.match.result_type, null);
+  const starterRevision = starterSaved.match.revision;
+  const starterRetry = await service.saveSwissMatchResult(tournament.id, match.id, {
+    starting_participant_id: updatedStarterId,
+  });
+  assert.equal(starterRetry.changed, false);
+  assert.equal(starterRetry.match.revision, starterRevision);
+
   const payload = {
-    starting_participant_id: match.starting_participant_id,
+    starting_participant_id: updatedStarterId,
     result_type: "points",
     points_a: 101,
     points_b: 84,

@@ -368,7 +368,26 @@ test("organizer API completes a Swiss round for 4, 5 and 8 participants", async 
       { userId: 1, method: "POST", body: "{}" }
     );
     assert.equal(publishedRound.response.status, 200);
-    for (const match of publishedRound.data.current_round.matches.filter((entry) => !entry.is_bye)) {
+    const playableMatches = publishedRound.data.current_round.matches.filter((entry) => !entry.is_bye);
+    const starterOnlyMatch = playableMatches[0];
+    const updatedStarterId = starterOnlyMatch.starting_participant_id === starterOnlyMatch.participant_a_id
+      ? starterOnlyMatch.participant_b_id
+      : starterOnlyMatch.participant_a_id;
+    const starterOnlyUpdate = await api(
+      baseUrl,
+      `/in-person-tournaments/${tournamentId}/swiss/matches/${starterOnlyMatch.id}/result`,
+      {
+        userId: 1,
+        method: "PUT",
+        body: JSON.stringify({ starting_participant_id: updatedStarterId }),
+      }
+    );
+    assert.equal(starterOnlyUpdate.response.status, 200);
+    assert.equal(starterOnlyUpdate.data.match.starting_participant_id, updatedStarterId);
+    assert.equal(starterOnlyUpdate.data.match.status, "scheduled");
+    assert.equal(starterOnlyUpdate.data.match.result_type, null);
+
+    for (const match of playableMatches) {
       const result = await api(
         baseUrl,
         `/in-person-tournaments/${tournamentId}/swiss/matches/${match.id}/result`,

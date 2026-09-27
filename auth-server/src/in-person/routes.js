@@ -457,6 +457,17 @@ export function registerInPersonRoutes(app, {
       res.json({ ok: true, ...overview });
     }, logger)
   );
+  app.post(
+    "/in-person-tournaments/:tournamentId/swiss/rounds/:roundId/test-results",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.fillSwissRoundTestResults(
+        req.inPersonTournamentId,
+        req.params.roundId
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
   app.get(
     "/in-person-tournaments/:tournamentId/swiss/rounds/:roundId/cancellation-preview",
     requireInPersonTournamentAdmin,

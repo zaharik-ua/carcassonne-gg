@@ -871,6 +871,11 @@ export function createInPersonService({
     return result;
   }
 
+  function randomInteger(minimum, maximum) {
+    const boundedRandom = Math.min(Math.max(Number(random()) || 0, 0), 0.9999999999999999);
+    return minimum + Math.floor(boundedRandom * (maximum - minimum + 1));
+  }
+
   function assertTestTournament(tournament) {
     if (Number(tournament.is_test_tournament) !== 1) {
       throw conflictError(
@@ -1719,6 +1724,131 @@ export function createInPersonService({
     });
   }
 
+  async function fillSwissRoundTestResults(tournamentId, roundId) {
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        assertTestTournament(tournament);
+        if (tournament.status !== "swiss") {
+          throw conflictError(
+            "INVALID_TOURNAMENT_STATUS",
+            "Automatic Swiss results are available only during the Swiss stage"
+          );
+        }
+        const round = await requireSwissRoundRow(tournament.id, roundId);
+        if (round.status !== "published") {
+          throw conflictError(
+            "INVALID_ROUND_STATUS",
+            "Automatic results can be added only to a published Swiss round"
+          );
+        }
+        const pendingMatches = await dbAll(
+          db,
+          `
+            SELECT m.*
+            FROM in_person_matches m
+            WHERE m.round_id = ?
+              AND m.status = 'scheduled'
+              AND m.is_bye = 0
+              AND m.result_type IS NULL
+            ORDER BY m.table_number, m.id
+          `,
+          [round.id]
+        );
+        if (!pendingMatches.length) {
+          return { filled: 0, time_forfeits: 0, ties: 0, round_id: round.id };
+        }
+
+        const orderedMatches = shuffled(pendingMatches);
+        const timeForfeitCount = Math.min(
+          orderedMatches.length,
+          Math.max(1, Math.floor(orderedMatches.length / 15))
+        );
+        const tieCount = Math.min(
+          orderedMatches.length,
+          Math.max(1, Math.floor(orderedMatches.length / 10))
+        );
+        const timeForfeitIds = new Set(
+          orderedMatches.slice(0, timeForfeitCount).map((match) => match.id)
+        );
+        const tieMatches = orderedMatches.slice(timeForfeitCount, timeForfeitCount + tieCount);
+        for (let index = tieMatches.length; index < tieCount; index += 1) {
+          tieMatches.push(orderedMatches[index % orderedMatches.length]);
+        }
+        const tieIds = new Set(tieMatches.map((match) => match.id));
+
+        for (const match of orderedMatches) {
+          const startingParticipantId = match.starting_participant_id
+            || (random() < 0.5 ? match.participant_a_id : match.participant_b_id);
+          const pointsA = randomInteger(60, 130);
+          let pointsB = tieIds.has(match.id) ? pointsA : randomInteger(60, 130);
+          if (!tieIds.has(match.id) && pointsA === pointsB) {
+            pointsB = pointsA === 130 ? 129 : pointsA + 1;
+          }
+          const isTimeForfeit = timeForfeitIds.has(match.id);
+          const payload = isTimeForfeit
+            ? {
+              result_type: "time_forfeit",
+              points_a: pointsA,
+              points_b: pointsB,
+              winner_participant_id: random() < 0.5
+                ? match.participant_a_id
+                : match.participant_b_id,
+              finish_reason: "time_forfeit",
+              admin_note: "Auto-filled test result",
+            }
+            : {
+              result_type: "points",
+              points_a: pointsA,
+              points_b: pointsB,
+              admin_note: "Auto-filled test result",
+            };
+          let canonical;
+          try {
+            canonical = validateMatchResult(
+              { ...match, starting_participant_id: startingParticipantId },
+              payload
+            );
+          } catch (error) {
+            throwEngineError(error);
+          }
+          await dbRun(
+            db,
+            `
+              UPDATE in_person_matches
+              SET starting_participant_id = ?, status = ?, is_bye = ?, result_type = ?,
+                  points_a = ?, points_b = ?, winner_participant_id = ?, loser_participant_id = ?,
+                  finish_reason = ?, admin_note = ?, revision = revision + 1,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND status = 'scheduled' AND result_type IS NULL
+            `,
+            [
+              startingParticipantId,
+              canonical.status,
+              canonical.is_bye ? 1 : 0,
+              canonical.result_type,
+              canonical.points_a,
+              canonical.points_b,
+              canonical.winner_participant_id,
+              canonical.loser_participant_id,
+              canonical.finish_reason,
+              canonical.admin_note,
+              match.id,
+            ]
+          );
+        }
+        await touchTournament(tournament.id);
+        return {
+          filled: orderedMatches.length,
+          time_forfeits: timeForfeitIds.size,
+          ties: tieIds.size,
+          round_id: round.id,
+        };
+      });
+      return { ...(await getSwissOverview(tournamentId)), ...outcome };
+    });
+  }
+
   function canonicalResultEquals(match, canonical, startingParticipantId) {
     const fields = [
       "status",
@@ -1775,17 +1905,60 @@ export function createInPersonService({
         const startingParticipantId = normalizeText(
           payload?.starting_participant_id ?? match.starting_participant_id
         );
-        let canonical;
-        try {
-          canonical = validateMatchResult(
-            { ...match, starting_participant_id: startingParticipantId },
-            payload
-          );
-        } catch (error) {
-          throwEngineError(error);
-        }
-        if (canonicalResultEquals(match, canonical, startingParticipantId)) {
-          return { changed: false, match_id: match.id };
+        const startingPlayerOnly = !normalizeOptionalText(payload?.result_type);
+        const starterOnlyAdminNote = Object.prototype.hasOwnProperty.call(payload, "admin_note")
+          ? normalizeOptionalText(payload.admin_note)
+          : match.admin_note || null;
+        let canonical = null;
+        if (startingPlayerOnly) {
+          const participantIds = [match.participant_a_id, match.participant_b_id]
+            .map((participantIdValue) => normalizeText(participantIdValue));
+          if (!startingParticipantId || !participantIds.includes(startingParticipantId)) {
+            throw validationError(
+              "INVALID_STARTING_PARTICIPANT",
+              "Starting player must be one of the players at this table",
+              { field: "starting_participant_id" }
+            );
+          }
+          const suppliedResultFields = [
+            "points_a",
+            "points_b",
+            "winner_participant_id",
+            "loser_participant_id",
+            "finish_reason",
+          ].filter((field) => normalizeText(payload?.[field]) !== "");
+          if (suppliedResultFields.length) {
+            throw validationError(
+              "RESULT_TYPE_REQUIRED",
+              "result_type is required when result fields are supplied",
+              { fields: suppliedResultFields }
+            );
+          }
+          if (match.status === "completed" || match.result_type) {
+            throw validationError(
+              "RESULT_TYPE_REQUIRED",
+              "A completed result must include result_type when it is edited",
+              { field: "result_type" }
+            );
+          }
+          if (
+            normalizeText(match.starting_participant_id) === startingParticipantId
+            && (match.admin_note || null) === starterOnlyAdminNote
+          ) {
+            return { changed: false, match_id: match.id };
+          }
+        } else {
+          try {
+            canonical = validateMatchResult(
+              { ...match, starting_participant_id: startingParticipantId },
+              payload
+            );
+          } catch (error) {
+            throwEngineError(error);
+          }
+          if (canonicalResultEquals(match, canonical, startingParticipantId)) {
+            return { changed: false, match_id: match.id };
+          }
         }
         if (match.round_status === "draft") {
           throw conflictError("ROUND_NOT_PUBLISHED", "Publish the Swiss round before entering results");
@@ -1811,30 +1984,43 @@ export function createInPersonService({
         } else if (match.round_status !== "published") {
           throw conflictError("INVALID_ROUND_STATUS", "Results can be saved only for a published round");
         }
-        await dbRun(
-          db,
-          `
-            UPDATE in_person_matches
-            SET starting_participant_id = ?, status = ?, is_bye = ?, result_type = ?,
-                points_a = ?, points_b = ?, winner_participant_id = ?, loser_participant_id = ?,
-                finish_reason = ?, admin_note = ?, revision = revision + 1,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-          `,
-          [
-            startingParticipantId,
-            canonical.status,
-            canonical.is_bye ? 1 : 0,
-            canonical.result_type,
-            canonical.points_a,
-            canonical.points_b,
-            canonical.winner_participant_id,
-            canonical.loser_participant_id,
-            canonical.finish_reason,
-            canonical.admin_note,
-            match.id,
-          ]
-        );
+        if (startingPlayerOnly) {
+          await dbRun(
+            db,
+            `
+              UPDATE in_person_matches
+              SET starting_participant_id = ?, admin_note = ?,
+                  revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `,
+            [startingParticipantId, starterOnlyAdminNote, match.id]
+          );
+        } else {
+          await dbRun(
+            db,
+            `
+              UPDATE in_person_matches
+              SET starting_participant_id = ?, status = ?, is_bye = ?, result_type = ?,
+                  points_a = ?, points_b = ?, winner_participant_id = ?, loser_participant_id = ?,
+                  finish_reason = ?, admin_note = ?, revision = revision + 1,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `,
+            [
+              startingParticipantId,
+              canonical.status,
+              canonical.is_bye ? 1 : 0,
+              canonical.result_type,
+              canonical.points_a,
+              canonical.points_b,
+              canonical.winner_participant_id,
+              canonical.loser_participant_id,
+              canonical.finish_reason,
+              canonical.admin_note,
+              match.id,
+            ]
+          );
+        }
         if (match.round_status === "completed") {
           await dbRun(
             db,
@@ -4257,6 +4443,7 @@ export function createInPersonService({
     createParticipant,
     createTournament,
     deleteParticipant,
+    fillSwissRoundTestResults,
     getCity,
     getParticipantsOverview,
     getPlayoffOverview,

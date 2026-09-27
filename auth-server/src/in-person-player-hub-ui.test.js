@@ -127,11 +127,14 @@ test("In-Person page contains participant registration and check-in flows", () =
     inPersonHtml.indexOf('id="ipStandingsPanel"')
   );
   assert.match(playerPanelMarkup, /id="ipCounters"/);
+  assert.match(checkInPanelMarkup, /id="ipCheckInCounters"/);
   assert.doesNotMatch(checkInPanelMarkup, /ipSwissReadiness|ip-readiness/);
   assert.match(swissPanelMarkup, /id="ipSwissReadiness"/);
   assert.match(inPersonHtml, /function renderSwiss\(\)[\s\S]*?renderReadiness\(\)/);
   assert.doesNotMatch(inPersonHtml, /Ready to form the first Swiss round\./);
   assert.equal((inPersonHtml.match(/id="ipCounters"/g) || []).length, 1);
+  assert.equal((inPersonHtml.match(/id="ipCheckInCounters"/g) || []).length, 1);
+  assert.match(inPersonHtml, /\[countersEl, checkInCountersEl\]\.forEach/);
 });
 
 test("In-Person page lists accessible tournaments and opens a dedicated tournament view", () => {
@@ -162,8 +165,26 @@ test("In-Person page lists accessible tournaments and opens a dedicated tourname
   );
   assert.match(tournamentCardMarkup, /id="ipTournamentLogo"/);
   assert.match(tournamentCardMarkup, /id="ipTournamentName"/);
+  assert.match(tournamentCardMarkup, /id="ipFullViewBtn"[\s\S]*?>Full View<\/button>/);
   assert.match(tournamentCardMarkup, /id="ipRefreshBtn"/);
   assert.match(tournamentCardMarkup, /id="ipPlayoffCompletion"/);
+  const tournamentDetailMarkup = inPersonHtml.slice(
+    inPersonHtml.indexOf('id="ipTournamentDetail"'),
+    inPersonHtml.indexOf('id="ipTournamentList"')
+  );
+  assert.match(tournamentDetailMarkup, /id="ipTournamentName"/);
+  assert.match(tournamentDetailMarkup, /data-ip-tab="players"/);
+  assert.match(tournamentDetailMarkup, /data-ip-tab="check-in"/);
+  assert.match(tournamentDetailMarkup, /data-ip-tab="swiss"/);
+  assert.match(tournamentDetailMarkup, /data-ip-tab="standings"/);
+  assert.match(tournamentDetailMarkup, /data-ip-tab="playoff"/);
+  assert.match(inPersonHtml, /function openTournamentFullView\(\)/);
+  assert.match(inPersonHtml, /content\.appendChild\(tournamentDetail\)/);
+  assert.match(inPersonHtml, /fullViewBtn\.addEventListener\("click", openTournamentFullView\)/);
+  assert.match(inPersonHtml, /\.ip-fullview-overlay\s*\{[\s\S]*?position: fixed;[\s\S]*?inset: 0;/);
+  assert.match(inPersonHtml, /--ip-site-menu-height: 45px;/);
+  assert.match(inPersonHtml, /\.ip-fullview-overlay\s*\{[\s\S]*?z-index: 2147483000;/);
+  assert.match(inPersonHtml, /padding: calc\(var\(--ip-site-menu-height\) \+ 12px\) 12px 12px;/);
   assert.ok(
     inPersonHtml.indexOf('id="ipTournamentCard"') < inPersonHtml.indexOf('id="ipStatus"'),
     "the selected tournament card must be above status and workspace content"
@@ -211,6 +232,7 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
     /\/swiss"/,
     /\/swiss\/rounds\/preview/,
     /\/swiss\/rounds\/confirm/,
+    /\/swiss\/rounds\/\$\{encodeURIComponent\(round\.id\)\}\/test-results/,
     /\/publish`/,
     /\/result`/,
     /\/complete`/,
@@ -218,6 +240,8 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   ].forEach((pattern) => assert.match(inPersonHtml, pattern));
   assert.match(inPersonHtml, /data-ip-tab="swiss"/);
   assert.match(inPersonHtml, /data-ip-tab="standings"/);
+  assert.match(inPersonHtml, /"Auto-fill results"[\s\S]*?"ip-btn test-action"/);
+  assert.match(inPersonHtml, /is_test_tournament === true[\s\S]*?round\?\.status === "published"/);
   assert.match(inPersonHtml, /function createSwissTableCard/);
   assert.match(inPersonHtml, /function openSwissResultModal/);
   assert.match(inPersonHtml, /function createSwissResultForm/);
@@ -228,6 +252,7 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.match(inPersonHtml, /table\.textContent = match\.is_bye \? "Bye" : String\(match\.table_number\)/);
   assert.match(inPersonHtml, /\.ip-starting-player-icon\s*\{[\s\S]*?width: 12px;[\s\S]*?height: 12px;[\s\S]*?display: inline-block;[\s\S]*?margin-right: 6px;/);
   assert.match(inPersonHtml, /\.ip-swiss-table-player-name\s*\{[\s\S]*?max-width: 100%;[\s\S]*?font-size: 16px;[\s\S]*?overflow-wrap: anywhere;[\s\S]*?text-align: center;[\s\S]*?white-space: normal;/);
+  assert.match(inPersonHtml, /\.ip-swiss-table-player-flag\s*\{[\s\S]*?width: 24px;[\s\S]*?height: 16px;/);
   assert.match(inPersonHtml, /return participant\?\.name_local[\s\S]*?participant_\$\{side\}_name_local[\s\S]*?participant\?\.name_en/);
   const swissTablePlayerRenderer = inPersonHtml.slice(
     inPersonHtml.indexOf("function createSwissTablePlayer"),
@@ -238,6 +263,10 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
       < swissTablePlayerRenderer.indexOf("name.appendChild(document.createTextNode"),
     "the starting-player icon must be inline immediately before the player name"
   );
+  assert.match(swissTablePlayerRenderer, /tournament\?\.scope === "international"/);
+  assert.match(swissTablePlayerRenderer, /participantAssociation\(participant\)/);
+  assert.match(swissTablePlayerRenderer, /if \(side === "a"\) player\.appendChild\(flag\)/);
+  assert.match(swissTablePlayerRenderer, /if \(flag && side === "b"\) player\.appendChild\(flag\)/);
   const swissResultModal = inPersonHtml.slice(
     inPersonHtml.indexOf("function openSwissResultModal"),
     inPersonHtml.indexOf("function createSwissResultForm")
@@ -261,6 +290,12 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.match(inPersonHtml, /\.ip-swiss-score-won\s*\{[\s\S]*?font-size: 15px;/);
   assert.doesNotMatch(inPersonHtml, /\.ip-admin-note-toggle\s*\{[\s\S]*?text-decoration:\s*underline/);
   assert.match(swissResultForm, /timeLost\.onChange\(\(\) => syncForm\(\)\)/);
+  assert.match(swissResultForm, /save\.disabled = saving \|\| !starter\.getValue\(\)/);
+  assert.match(swissResultForm, /if \(hasScoreA !== hasScoreB\)/);
+  assert.match(swissResultForm, /Enter a score for both players or leave both scores empty\./);
+  assert.match(swissResultForm, /Enter scores for both players when selecting Time lost\./);
+  assert.match(swissResultForm, /const starterOnly = stage === "swiss"/);
+  assert.match(swissResultForm, /starterOnly[\s\S]*?starting_participant_id: starter\.getValue\(\)/);
   assert.match(swissResultForm, /match\.status === "completed"[\s\S]*?"Reset result"/);
   assert.match(swissResultForm, /\{ method: "DELETE" \}/);
   assert.doesNotMatch(swissResultForm, /setForfeitScore|scoreLocked/);
@@ -308,6 +343,11 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   );
   assert.doesNotMatch(swissMatchesRenderer, /progress\.textContent|heading\.appendChild\(progress\)/);
   assert.doesNotMatch(swissMatchesRenderer, /showRecord: true/);
+  assert.match(swissMatchesRenderer, /const isCompletedRound = round\.status === "completed"/);
+  assert.match(swissMatchesRenderer, /content\.hidden = true/);
+  assert.match(swissMatchesRenderer, /className = "ip-swiss-round-toggle"/);
+  assert.match(swissMatchesRenderer, /toggle\.setAttribute\("aria-expanded", "false"\)/);
+  assert.match(swissMatchesRenderer, /content\.hidden = !expanded/);
   assert.match(
     swissMatchesRenderer,
     /\.sort\(\(left, right\) => Number\(right\.round_number\) - Number\(left\.round_number\)\)/
