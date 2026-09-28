@@ -2554,7 +2554,14 @@ async function retryBgaReplayError(gameId) {
     return payload;
   } catch (error) {
     const payload = parseScriptJsonOutput(error?.stdout);
-    const retryError = new Error(payload?.error || "Failed to retry BGA replay");
+    const errorMessage = String(payload?.error || "").trim();
+    if (errorMessage.startsWith("temporary_error:")) {
+      return {
+        status: "deferred",
+        error: errorMessage,
+      };
+    }
+    const retryError = new Error(errorMessage || "Failed to retry BGA replay");
     retryError.cause = error;
     throw retryError;
   }

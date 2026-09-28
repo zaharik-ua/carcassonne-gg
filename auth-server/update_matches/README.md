@@ -136,6 +136,12 @@ fallback replay is immediately marked ready and receives one color refresh
 after 15 minutes. A second fallback response keeps the stored replay unchanged
 and ends automatic retries.
 
+BGA HTTP-session refresh failures, including a temporarily missing active login
+email field, are classified as temporary. They are returned to the queue with a
+15-minute delay instead of being counted as replay error rows. Existing rows
+with this legacy `access_error` text are normalized the same way during schema
+startup.
+
 Old games are not queued implicitly. Internal callers can idempotently add one
 explicit historical game without making an HTTP request:
 

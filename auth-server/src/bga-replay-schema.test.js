@@ -201,3 +201,32 @@ test("legacy color provenance requires two distinct supported BGA colors", () =>
     "fallback"
   );
 });
+
+test("session refresh errors are migrated back to a delayed queue entry", async (t) => {
+  const db = new sqlite3.Database(":memory:");
+  t.after(() => close(db));
+  await exec(db, "CREATE TABLE games (id TEXT PRIMARY KEY)");
+  await ensureGameReplaysSchema(db);
+  await exec(db, `
+    INSERT INTO games (id) VALUES ('session-error');
+    INSERT INTO game_replays (
+      game_id, bga_table_id, status, last_error
+    ) VALUES (
+      'session-error',
+      '922490259',
+      'error',
+      'access_error: endpoint=/archive/archive/logs.html: Failed to refresh BGA HTTP session: No active email input found on BGA login page'
+    );
+  `);
+
+  await ensureGameReplaysSchema(db);
+  const [row] = await all(db, `
+    SELECT status, retry_reason, next_attempt_at, last_error
+    FROM game_replays
+    WHERE game_id = 'session-error'
+  `);
+  assert.equal(row.status, "pending");
+  assert.equal(row.retry_reason, "initial");
+  assert.ok(row.next_attempt_at);
+  assert.match(row.last_error, /Failed to refresh BGA HTTP session/);
+});

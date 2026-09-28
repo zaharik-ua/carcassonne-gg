@@ -7390,7 +7390,14 @@
       );
       state.bgaReplayQueue = [response];
       renderBgaReplayQueue();
-      setStatus(`Replay ${gameId} is ready.`, false);
+      if (response.retry_result?.status === "deferred") {
+        setStatus(
+          `Replay ${gameId} was deferred until ${formatReplayDate(response.retry_result.next_attempt_at)}.`,
+          false
+        );
+      } else {
+        setStatus(`Replay ${gameId} is ready.`, false);
+      }
     } catch (error) {
       button.disabled = false;
       button.textContent = originalLabel;
@@ -7485,17 +7492,26 @@
       ]);
       errorRows.forEach((errorRow) => {
         const row = document.createElement("tr");
-        row.appendChild(replayCell(
-          errorRow.game_id || "-",
-          errorRow.bga_table_id ? `BGA table ${errorRow.bga_table_id}` : "No BGA table id"
-        ));
+        const gameCell = replayCell(errorRow.game_id || "-");
+        if (errorRow.bga_table_id) {
+          const tableLink = replayElement(
+            "a",
+            "replay-cell-detail",
+            `BGA table ${errorRow.bga_table_id}`
+          );
+          tableLink.href = `https://boardgamearena.com/tableview?table=${encodeURIComponent(errorRow.bga_table_id)}`;
+          tableLink.target = "_blank";
+          tableLink.rel = "noopener noreferrer";
+          gameCell.appendChild(tableLink);
+        }
+        row.appendChild(gameCell);
         row.appendChild(replayCell(
           errorRow.queue_class || "fresh",
           errorRow.retry_reason
             ? `${errorRow.retry_reason}${errorRow.next_attempt_at
               ? ` • next ${formatReplayDate(errorRow.next_attempt_at)}`
               : ""}`
-            : "Manual required"
+            : ""
         ));
         row.appendChild(replayCell(
           formatReplayDate(errorRow.last_attempt_at || errorRow.updated_at),

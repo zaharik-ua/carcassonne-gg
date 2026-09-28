@@ -238,6 +238,28 @@ export async function ensureGameReplaysSchema(db) {
       ON game_replays(queue_class, status, retry_reason, next_attempt_at);
   `);
 
+  await dbRun(
+    db,
+    `
+      UPDATE game_replays
+      SET status = 'pending',
+          retry_reason = COALESCE(
+            retry_reason,
+            CASE WHEN archive_requested_at IS NULL THEN 'initial' ELSE 'archive' END
+          ),
+          queued_at = COALESCE(queued_at, CURRENT_TIMESTAMP),
+          next_attempt_at = datetime('now', '+15 minutes'),
+          lease_owner = NULL,
+          lease_until = NULL,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE status = 'error'
+        AND (
+          lower(COALESCE(last_error, '')) LIKE '%failed to refresh bga http session%'
+          OR lower(COALESCE(last_error, '')) LIKE '%no active email input found on bga login page%'
+        )
+    `
+  );
+
   const readyRows = await dbAll(
     db,
     `

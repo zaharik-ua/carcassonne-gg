@@ -229,6 +229,26 @@ def ensure_game_replays_schema(conn: sqlite3.Connection) -> None:
         ON game_replays(queue_class, status, retry_reason, next_attempt_at)
         """
     )
+    conn.execute(
+        """
+        UPDATE game_replays
+        SET status = 'pending',
+            retry_reason = COALESCE(
+              retry_reason,
+              CASE WHEN archive_requested_at IS NULL THEN 'initial' ELSE 'archive' END
+            ),
+            queued_at = COALESCE(queued_at, CURRENT_TIMESTAMP),
+            next_attempt_at = datetime('now', '+15 minutes'),
+            lease_owner = NULL,
+            lease_until = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE status = 'error'
+          AND (
+            lower(COALESCE(last_error, '')) LIKE '%failed to refresh bga http session%'
+            OR lower(COALESCE(last_error, '')) LIKE '%no active email input found on bga login page%'
+          )
+        """
+    )
 
     ready_rows = conn.execute(
         """
@@ -1027,6 +1047,12 @@ def _classify_replay_message(
     lowered = normalized.lower()
     if REPLAY_LIMIT_MESSAGE in lowered:
         return ReplayLimitError(normalized, endpoint=endpoint)
+    temporary_session_markers = (
+        "failed to refresh bga http session",
+        "no active email input found on bga login page",
+    )
+    if any(marker in lowered for marker in temporary_session_markers):
+        return TemporaryReplayError(normalized, endpoint=endpoint)
     access_markers = (
         "access denied",
         "permission denied",

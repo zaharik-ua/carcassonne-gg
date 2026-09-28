@@ -395,7 +395,7 @@ test("replacement revokes active rows while retaining history and supports revok
   assert.equal(revoked.after.revoked_at, "2026-09-24 13:00:00.000");
 });
 
-test("retries one current error row and returns the refreshed queue", async (t) => {
+test("retries or defers a current error row and returns the refreshed queue", async (t) => {
   const db = await createDatabase(t);
   await exec(db, `
     INSERT INTO games VALUES ('retry-error', '501', NULL);
@@ -406,6 +406,10 @@ test("retries one current error row and returns the refreshed queue", async (t) 
       'retry-error', '501', 'error', 'fresh', 'initial',
       '2026-09-24 11:00:00', 'temporary failure'
     );
+    INSERT INTO games VALUES ('deferred-error', '502', NULL);
+    INSERT INTO game_replays (
+      game_id, bga_table_id, status, queue_class, last_error
+    ) VALUES ('deferred-error', '502', 'error', 'fresh', 'session refresh failed');
   `);
 
   const routes = [];
@@ -418,8 +422,15 @@ test("retries one current error row and returns the refreshed queue", async (t) 
     db,
     requireAdmin: () => {},
     env: ENV,
+    now: () => new Date("2026-09-24T12:00:00Z"),
     retryReplayError: async (gameId) => {
       retried.push(gameId);
+      if (gameId === "deferred-error") {
+        return {
+          status: "deferred",
+          error: "temporary_error: Failed to refresh BGA HTTP session",
+        };
+      }
       await new Promise((resolve, reject) => {
         db.run(
           "UPDATE game_replays SET status = 'ready', last_error = NULL WHERE game_id = ?",
@@ -453,9 +464,29 @@ test("retries one current error row and returns the refreshed queue", async (t) 
   assert.equal(statusCode, 200);
   assert.deepEqual(retried, ["retry-error"]);
   assert.equal(responseBody.retry_result.status, "ready");
-  assert.equal(responseBody.queue.errors, 0);
+  assert.equal(responseBody.queue.errors, 1);
   assert.equal(responseBody.queue.fresh.due, 0);
+  assert.equal(responseBody.queue.error_rows[0].game_id, "deferred-error");
+
+  await route.handlers[1]({ params: { gameId: "deferred-error" }, user: {} }, response);
+  assert.equal(statusCode, 200);
+  assert.deepEqual(retried, ["retry-error", "deferred-error"]);
+  assert.equal(responseBody.retry_result.status, "deferred");
+  assert.equal(responseBody.retry_result.next_attempt_at, "2026-09-24 12:15:00.000");
+  assert.equal(responseBody.queue.errors, 0);
+  assert.equal(responseBody.queue.fresh.scheduled, 1);
   assert.deepEqual(responseBody.queue.error_rows, []);
+  const deferredRows = await all(db, `
+    SELECT status, retry_reason, next_attempt_at, last_error
+    FROM game_replays
+    WHERE game_id = 'deferred-error'
+  `);
+  assert.deepEqual(deferredRows, [{
+    status: "pending",
+    retry_reason: "initial",
+    next_attempt_at: "2026-09-24 12:15:00.000",
+    last_error: "temporary_error: Failed to refresh BGA HTTP session",
+  }]);
 });
 
 test("registers global-admin routes and exposes the BGA Replay Queue in admin.html", () => {
@@ -490,6 +521,8 @@ test("registers global-admin routes and exposes the BGA Replay Queue in admin.ht
   assert.match(adminHtml, /Fresh work exists/);
   assert.match(adminHtml, /Retry now/);
   assert.match(adminHtml, /errors\/\$\{encodeURIComponent\(gameId\)\}\/retry/);
+  assert.match(adminHtml, /https:\/\/boardgamearena\.com\/tableview\?table=/);
+  assert.doesNotMatch(adminHtml, /: "Manual required"/);
   assert.doesNotMatch(adminHtml, /Override audit history/);
   assert.doesNotMatch(adminHtml, /replayOverrideInputRow\("Reason"/);
   assert.match(adminHtml, /method: "DELETE"/);

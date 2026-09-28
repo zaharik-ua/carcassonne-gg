@@ -873,6 +873,51 @@ class GameReplayTest(unittest.TestCase):
                 self.assertEqual(result.outcome, expected_outcome)
                 self.assertEqual(result.endpoint, LOGS_PATH)
 
+        session_refresh = fetch_bga_replay(
+            "913515989",
+            request=lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError(
+                "Failed to refresh BGA HTTP session: "
+                "No active email input found on BGA login page"
+            )),
+        )
+        self.assertEqual(session_refresh.outcome, REPLAY_OUTCOME_TEMPORARY_ERROR)
+        self.assertEqual(session_refresh.endpoint, LOGS_PATH)
+
+    def test_schema_defers_existing_session_refresh_error(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            ensure_game_replays_schema(conn)
+            conn.execute(
+                "INSERT INTO games (id, bga_table_id, deleted_at) VALUES (?, ?, NULL)",
+                ("session-error", "922490259"),
+            )
+            conn.execute(
+                """
+                INSERT INTO game_replays (
+                  game_id, bga_table_id, status, last_error
+                ) VALUES (?, ?, 'error', ?)
+                """,
+                (
+                    "session-error",
+                    "922490259",
+                    "access_error: endpoint=/archive/archive/logs.html: "
+                    "Failed to refresh BGA HTTP session: "
+                    "No active email input found on BGA login page",
+                ),
+            )
+            ensure_game_replays_schema(conn)
+            row = conn.execute(
+                """
+                SELECT status, retry_reason, next_attempt_at, last_error
+                FROM game_replays
+                WHERE game_id = 'session-error'
+                """
+            ).fetchone()
+
+        self.assertEqual(row[0], "pending")
+        self.assertEqual(row[1], "initial")
+        self.assertIsNotNone(row[2])
+        self.assertIn("Failed to refresh BGA HTTP session", row[3])
+
     def test_archive_request_failure_reports_archive_endpoint(self) -> None:
         calls: list[str] = []
 

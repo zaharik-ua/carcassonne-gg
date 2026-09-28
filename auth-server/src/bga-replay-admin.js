@@ -766,6 +766,31 @@ export function registerBgaReplayAdminRoutes(app, {
           `,
           [gameId]
         );
+      } else if (retryResult?.status === "deferred") {
+        const deferredUntil = sqliteTimestamp(new Date(asDate(now()).getTime() + 15 * 60 * 1000));
+        await dbRun(
+          db,
+          `
+            UPDATE game_replays
+            SET status = 'pending',
+                retry_reason = COALESCE(
+                  retry_reason,
+                  CASE WHEN archive_requested_at IS NULL THEN 'initial' ELSE 'archive' END
+                ),
+                queued_at = COALESCE(queued_at, CURRENT_TIMESTAMP),
+                next_attempt_at = ?,
+                lease_owner = NULL,
+                lease_until = NULL,
+                last_error = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE game_id = ?
+          `,
+          [deferredUntil, normalizeText(retryResult.error), gameId]
+        );
+        retryResult = {
+          ...retryResult,
+          next_attempt_at: deferredUntil,
+        };
       }
 
       auditEvent(logAuditEvent, {
