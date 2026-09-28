@@ -309,7 +309,7 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.match(swissResultForm, /if \(hasScoreA !== hasScoreB\)/);
   assert.match(swissResultForm, /Enter a score for both players or leave both scores empty\./);
   assert.match(swissResultForm, /Enter scores for both players when selecting Time lost\./);
-  assert.match(swissResultForm, /const starterOnly = stage === "swiss"/);
+  assert.match(swissResultForm, /const starterOnly = !hasScoreA[\s\S]*?&& !hasScoreB/);
   assert.match(swissResultForm, /starterOnly[\s\S]*?starting_participant_id: starter\.getValue\(\)/);
   assert.match(swissResultForm, /match\.status === "completed"[\s\S]*?"Reset result"/);
   assert.match(swissResultForm, /\{ method: "DELETE" \}/);
@@ -487,13 +487,13 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     /\/playoff\/reset/,
     /\/playoff\/rounds\/\$\{encodeURIComponent\(round\.id\)\}\/publish/,
     /function openPlayoffResultModal/,
-    /function createPlayoffTableEditor/,
     /stage: "playoff"/,
     /tournamentUrl\(`\/\$\{stage\}\/matches\/\$\{encodeURIComponent\(match\.id\)\}\/result`\)/,
     /\/playoff\/matches\/\$\{encodeURIComponent\(match\.id\)\}\/table/,
-    /\/streaming-table/,
     /\/playoff\/complete/,
   ].forEach((pattern) => assert.match(inPersonHtml, pattern));
+
+  assert.doesNotMatch(inPersonHtml, /function createPlayoffTableEditor|Save table/);
 
   assert.doesNotMatch(inPersonHtml, /Swiss stage \d+(?:st|nd|rd|th)(?: place)?/);
   assert.doesNotMatch(inPersonHtml, /window\.localStorage\.(?:getItem|setItem|removeItem)/);
@@ -547,6 +547,15 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     bracketMatchRenderer,
     /isFirstRoundSetupMatch[\s\S]*?playoffSetupParticipantName\(participantId\)/
   );
+  assert.match(bracketMatchRenderer, /participantAssociation\(participant\)/);
+  assert.match(bracketMatchRenderer, /flag\.className = "ip-playoff-player-flag"/);
+  assert.ok(
+    bracketMatchRenderer.indexOf("name.appendChild(flag)")
+      < bracketMatchRenderer.indexOf("name.appendChild(nameText)")
+      && bracketMatchRenderer.indexOf("name.appendChild(nameText)")
+        < bracketMatchRenderer.indexOf("name.appendChild(starter)"),
+    "the playoff flag must be left of the name and the starting-player icon must be right of it"
+  );
   assert.match(
     inPersonHtml,
     /\.ip-playoff-match-placeholder\s*\{[\s\S]*?font-size: 11px;[\s\S]*?font-style: italic;/
@@ -565,10 +574,14 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     inPersonHtml.indexOf("function openMatchResultModal"),
     inPersonHtml.indexOf("function openSwissResultModal")
   );
-  assert.match(
-    resultModal,
-    /!\["final", "bronze_medal_match"\]\.includes\(round\.round_key\)/
+  assert.match(resultModal, /createSwissResultForm\(match, \{[\s\S]*?stage,[\s\S]*?round,/);
+  const sharedResultForm = inPersonHtml.slice(
+    inPersonHtml.indexOf("function createSwissResultForm"),
+    inPersonHtml.indexOf("function createResultForm")
   );
+  assert.match(sharedResultForm, /stage === "playoff" && round[\s\S]*?createField\("Table", "number"\)/);
+  assert.match(sharedResultForm, /tableChanged[\s\S]*?method: "PATCH"[\s\S]*?method: "PUT"/);
+  assert.match(sharedResultForm, /const starterOnly = !hasScoreA[\s\S]*?starting_participant_id: starter\.getValue\(\)/);
   const playoffActionsRenderer = inPersonHtml.slice(
     inPersonHtml.indexOf("function renderPlayoffActions"),
     inPersonHtml.indexOf("function renderPlayoffBracket")

@@ -1639,9 +1639,31 @@
 
   .ip-playoff-match-name {
     min-width: 0;
+    flex: 1 1 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .ip-playoff-match-name-text {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .ip-playoff-player-flag {
+    width: 21px;
+    height: 14px;
+    flex: 0 0 21px;
+    border-radius: 2px;
+    object-fit: cover;
+  }
+
+  .ip-playoff-match-name .ip-starting-player-icon {
+    flex: 0 0 12px;
+    margin: 0;
   }
 
   .ip-playoff-match-score {
@@ -1675,21 +1697,16 @@
     max-width: 520px;
   }
 
-  .ip-playoff-modal-table {
+  .ip-playoff-table-input-actions {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 8px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid #e4e8ef;
-  }
-
-  .ip-playoff-modal-table .ip-field {
-    width: 92px;
-  }
-
-  .ip-playoff-modal-table .ip-actions {
-    flex: 1 1 auto;
     flex-wrap: wrap;
+  }
+
+  .ip-playoff-table-input-actions .ip-input {
+    width: 92px;
+    flex: 0 0 92px;
   }
 
   .ip-streaming {
@@ -4770,19 +4787,13 @@
 
     const form = createSwissResultForm(match, {
       stage,
+      round,
       errorTarget: error,
       onCancel: closeModal,
       onSaved: closeModal,
       signal: pickerController.signal,
     });
     dialog.appendChild(title);
-    if (
-      stage === "playoff"
-      && round
-      && !["final", "bronze_medal_match"].includes(round.round_key)
-    ) {
-      dialog.appendChild(createPlayoffTableEditor(round, match, closeModal));
-    }
     dialog.appendChild(form);
     overlay.appendChild(dialog);
     overlay.addEventListener("click", (event) => {
@@ -4800,80 +4811,21 @@
   function openPlayoffResultModal(round, match) {
     openMatchResultModal(match, {
       stage: "playoff",
-      titleText: `${round.round_label} • Table ${match.table_number}`,
+      titleText: round.round_label,
       round,
     });
   }
 
-  function createPlayoffTableEditor(round, match, closeModal) {
-    const editor = document.createElement("div");
-    editor.className = "ip-playoff-modal-table";
-    const tableNumber = createField("Table", "number");
-    tableNumber.input.min = "1";
-    tableNumber.input.step = "1";
-    tableNumber.input.value = match.table_number == null ? "" : String(match.table_number);
-    const actions = document.createElement("div");
-    actions.className = "ip-actions";
-    const editable = state.playoff?.tournament?.status === "playoff"
-      && ["draft", "published"].includes(round.status)
-      && match.status !== "completed";
-    const save = createButton("Save table", "ip-btn", async () => {
-      const nextTableNumber = Number(tableNumber.input.value);
-      if (!Number.isInteger(nextTableNumber) || nextTableNumber <= 0) {
-        setStatus("Table number must be a positive integer.", "error");
-        return;
-      }
-      save.disabled = true;
-      try {
-        const data = await apiJson(
-          tournamentUrl(`/playoff/matches/${encodeURIComponent(match.id)}/table`),
-          { method: "PATCH", body: JSON.stringify({ table_number: nextTableNumber }) }
-        );
-        adoptPlayoffResponse(data);
-        renderWorkspace();
-        closeModal();
-        setStatus(`Table updated for ${round.round_label}.`, "success");
-      } catch (error) {
-        setStatus(error.message || "Failed to update the playoff table.", "error");
-        save.disabled = false;
-      }
-    });
-    save.disabled = !editable;
-    actions.appendChild(save);
-    if (match.table_number === 1) {
-      const marker = document.createElement("span");
-      marker.className = "ip-streaming";
-      marker.textContent = "Streaming table";
-      actions.appendChild(marker);
-    } else {
-      const streaming = createButton("Make streaming table", "ip-btn", async () => {
-        streaming.disabled = true;
-        try {
-          const data = await apiJson(
-            tournamentUrl(`/playoff/matches/${encodeURIComponent(match.id)}/streaming-table`),
-            { method: "POST", body: "{}" }
-          );
-          adoptPlayoffResponse(data);
-          renderWorkspace();
-          closeModal();
-          setStatus(`${round.round_label} streaming table updated.`, "success");
-        } catch (error) {
-          setStatus(error.message || "Failed to update the streaming table.", "error");
-          streaming.disabled = false;
-        }
-      });
-      streaming.disabled = !editable;
-      actions.appendChild(streaming);
-    }
-    tableNumber.input.disabled = !editable;
-    editor.appendChild(tableNumber.field);
-    editor.appendChild(actions);
-    return editor;
-  }
-
   function createSwissResultForm(
     match,
-    { stage = "swiss", errorTarget = null, onCancel = null, onSaved = null, signal = null } = {}
+    {
+      stage = "swiss",
+      round = null,
+      errorTarget = null,
+      onCancel = null,
+      onSaved = null,
+      signal = null,
+    } = {}
   ) {
     const form = document.createElement("form");
     form.className = "ip-swiss-result-form";
@@ -4955,6 +4907,45 @@
     timeLost.field.className = "ip-swiss-result-control";
     controls.appendChild(starter.field);
     controls.appendChild(timeLost.field);
+
+    const fixedPlayoffTable = stage === "playoff"
+      && ["final", "bronze_medal_match"].includes(round?.round_key);
+    const playoffTableEditable = stage === "playoff"
+      && !!round
+      && !fixedPlayoffTable
+      && state.playoff?.tournament?.status === "playoff"
+      && ["draft", "published"].includes(round.status)
+      && match.status !== "completed";
+    const tableNumber = stage === "playoff" && round
+      ? createField("Table", "number")
+      : null;
+    let streamingTableControl = null;
+    if (tableNumber) {
+      tableNumber.field.className = "ip-swiss-result-control";
+      tableNumber.input.min = "1";
+      tableNumber.input.step = "1";
+      tableNumber.input.value = match.table_number == null ? "" : String(match.table_number);
+      tableNumber.input.disabled = !playoffTableEditable;
+
+      const tableInputActions = document.createElement("div");
+      tableInputActions.className = "ip-playoff-table-input-actions";
+      tableInputActions.appendChild(tableNumber.input);
+      if (match.table_number === 1) {
+        const marker = document.createElement("span");
+        marker.className = "ip-streaming";
+        marker.textContent = "Streaming table";
+        tableInputActions.appendChild(marker);
+      } else if (!fixedPlayoffTable) {
+        streamingTableControl = createButton("Make streaming table", "ip-btn", () => {
+          tableNumber.input.value = "1";
+          tableNumber.input.focus();
+        });
+        streamingTableControl.disabled = !playoffTableEditable;
+        tableInputActions.appendChild(streamingTableControl);
+      }
+      tableNumber.field.appendChild(tableInputActions);
+      controls.appendChild(tableNumber.field);
+    }
 
     const note = createField("Admin note");
     note.field.className = "ip-swiss-admin-note";
@@ -5043,6 +5034,10 @@
       scoreB.input.disabled = saving;
       starter.setDisabled(saving);
       timeLost.setDisabled(saving);
+      if (tableNumber) tableNumber.input.disabled = saving || !playoffTableEditable;
+      if (streamingTableControl) {
+        streamingTableControl.disabled = saving || !playoffTableEditable;
+      }
       note.input.disabled = saving;
       noteToggle.disabled = saving;
       cancel.disabled = saving;
@@ -5061,6 +5056,11 @@
         if (errorTarget) errorTarget.textContent = "Select the starting player.";
         return;
       }
+      const nextTableNumber = tableNumber ? Number(tableNumber.input.value) : null;
+      if (tableNumber && (!Number.isInteger(nextTableNumber) || nextTableNumber <= 0)) {
+        if (errorTarget) errorTarget.textContent = "Table number must be a positive integer.";
+        return;
+      }
       const timeLostParticipantId = timeLost.getValue();
       const hasScoreA = scoreA.input.value !== "";
       const hasScoreB = scoreB.input.value !== "";
@@ -5076,14 +5076,9 @@
         if (errorTarget) errorTarget.textContent = "Enter a non-negative whole-number score for both players.";
         return;
       }
-      const starterOnly = stage === "swiss"
-        && !hasScoreA
+      const starterOnly = !hasScoreA
         && !hasScoreB
         && !timeLostParticipantId;
-      if (!starterOnly && !hasScoreA && !hasScoreB) {
-        if (errorTarget) errorTarget.textContent = "Enter a non-negative whole-number score for both players.";
-        return;
-      }
       const payload = starterOnly
         ? {
           starting_participant_id: starter.getValue(),
@@ -5112,6 +5107,16 @@
       save.textContent = "Saving...";
       syncForm();
       try {
+        const tableChanged = tableNumber
+          && playoffTableEditable
+          && nextTableNumber !== Number(match.table_number);
+        if (tableChanged) {
+          const tableData = await apiJson(
+            tournamentUrl(`/playoff/matches/${encodeURIComponent(match.id)}/table`),
+            { method: "PATCH", body: JSON.stringify({ table_number: nextTableNumber }) }
+          );
+          adoptPlayoffResponse(tableData);
+        }
         const data = await apiJson(
           tournamentUrl(`/${stage}/matches/${encodeURIComponent(match.id)}/result`),
           { method: "PUT", body: JSON.stringify(payload) }
@@ -5121,8 +5126,10 @@
         renderWorkspace();
         setStatus(
           starterOnly
-            ? `Starting player saved for table ${match.table_number}.`
-            : `Result saved for table ${match.table_number}.`,
+            ? stage === "playoff"
+              ? `Match settings saved for table ${nextTableNumber}.`
+              : `Starting player saved for table ${match.table_number}.`
+            : `Result saved for table ${nextTableNumber || match.table_number}.`,
           "success"
         );
         if (typeof onSaved === "function") onSaved();
@@ -5624,10 +5631,14 @@
   const PLAYOFF_HORIZONTAL_GAP = 42;
   const PLAYOFF_VERTICAL_GAP = 24;
 
-  function playoffParticipantName(participantId) {
-    const participant = (state.overview?.participants || []).find((entry) => (
-      entry.id === participantId
+  function playoffParticipant(participantId) {
+    return (state.overview?.participants || []).find((entry) => (
+      String(entry?.id || "") === String(participantId || "")
     ));
+  }
+
+  function playoffParticipantName(participantId) {
+    const participant = playoffParticipant(participantId);
     return participant?.name_local || participant?.name_en || participantId || "—";
   }
 
@@ -6110,6 +6121,7 @@
     card.style.height = `${PLAYOFF_MATCH_HEIGHT}px`;
     ["a", "b"].forEach((side) => {
       const participantId = match[`participant_${side}_id`];
+      const participant = participantId ? playoffParticipant(participantId) : null;
       const row = document.createElement("div");
       row.className = `ip-playoff-match-player${
         match.status === "completed" && match.winner_participant_id === participantId
@@ -6118,6 +6130,25 @@
       }`;
       const name = document.createElement("span");
       name.className = `ip-playoff-match-name${participantId ? "" : " ip-playoff-match-placeholder"}`;
+      if (participant) {
+        const association = participantAssociation(participant);
+        if (association.flag) {
+          const flag = document.createElement("img");
+          flag.className = "ip-playoff-player-flag";
+          flag.src = association.flag;
+          flag.alt = association.name ? `${association.name} flag` : "Country flag";
+          flag.addEventListener("error", () => flag.remove(), { once: true });
+          name.appendChild(flag);
+        }
+      }
+      const nameText = document.createElement("span");
+      nameText.className = "ip-playoff-match-name-text";
+      nameText.textContent = participantId
+        ? isFirstRoundSetupMatch
+          ? playoffSetupParticipantName(participantId)
+          : playoffParticipantName(participantId)
+        : playoffMatchPlaceholder(round, match, side);
+      name.appendChild(nameText);
       if (participantId && match.starting_participant_id === participantId) {
         const starter = document.createElement("img");
         starter.className = "ip-starting-player-icon";
@@ -6126,13 +6157,6 @@
         starter.title = "Starting player";
         name.appendChild(starter);
       }
-      name.appendChild(document.createTextNode(
-        participantId
-          ? isFirstRoundSetupMatch
-            ? playoffSetupParticipantName(participantId)
-            : playoffParticipantName(participantId)
-          : playoffMatchPlaceholder(round, match, side)
-      ));
       const score = document.createElement("span");
       score.className = "ip-playoff-match-score";
       score.textContent = participantId ? playoffMatchScore(match, participantId, side) : "";

@@ -3731,17 +3731,60 @@ export function createInPersonService({
         const startingParticipantId = normalizeText(
           payload?.starting_participant_id ?? match.starting_participant_id
         );
-        let canonical;
-        try {
-          canonical = validateMatchResult(
-            { ...match, starting_participant_id: startingParticipantId },
-            payload
-          );
-        } catch (error) {
-          throwEngineError(error);
-        }
-        if (canonicalResultEquals(match, canonical, startingParticipantId)) {
-          return { changed: false, match_id: match.id };
+        const startingPlayerOnly = !normalizeOptionalText(payload?.result_type);
+        const starterOnlyAdminNote = Object.prototype.hasOwnProperty.call(payload, "admin_note")
+          ? normalizeOptionalText(payload.admin_note)
+          : match.admin_note || null;
+        let canonical = null;
+        if (startingPlayerOnly) {
+          const participantIds = [match.participant_a_id, match.participant_b_id]
+            .map((participantIdValue) => normalizeText(participantIdValue));
+          if (!startingParticipantId || !participantIds.includes(startingParticipantId)) {
+            throw validationError(
+              "INVALID_STARTING_PARTICIPANT",
+              "Starting player must be one of the players at this table",
+              { field: "starting_participant_id" }
+            );
+          }
+          const suppliedResultFields = [
+            "points_a",
+            "points_b",
+            "winner_participant_id",
+            "loser_participant_id",
+            "finish_reason",
+          ].filter((field) => normalizeText(payload?.[field]) !== "");
+          if (suppliedResultFields.length) {
+            throw validationError(
+              "RESULT_TYPE_REQUIRED",
+              "result_type is required when result fields are supplied",
+              { fields: suppliedResultFields }
+            );
+          }
+          if (match.status === "completed" || match.result_type) {
+            throw validationError(
+              "RESULT_TYPE_REQUIRED",
+              "A completed result must include result_type when it is edited",
+              { field: "result_type" }
+            );
+          }
+          if (
+            normalizeText(match.starting_participant_id) === startingParticipantId
+            && (match.admin_note || null) === starterOnlyAdminNote
+          ) {
+            return { changed: false, match_id: match.id };
+          }
+        } else {
+          try {
+            canonical = validateMatchResult(
+              { ...match, starting_participant_id: startingParticipantId },
+              payload
+            );
+          } catch (error) {
+            throwEngineError(error);
+          }
+          if (canonicalResultEquals(match, canonical, startingParticipantId)) {
+            return { changed: false, match_id: match.id };
+          }
         }
         if (!["published", "completed"].includes(match.round_status)) {
           throw conflictError("ROUND_NOT_PUBLISHED", "Publish the playoff round before entering results");
@@ -3756,58 +3799,69 @@ export function createInPersonService({
             );
           }
         }
-        await dbRun(
-          db,
-          `
-            UPDATE in_person_matches
-            SET starting_participant_id = ?, status = ?, is_bye = 0, result_type = ?,
-                points_a = ?, points_b = ?, winner_participant_id = ?, loser_participant_id = ?,
-                finish_reason = ?, admin_note = ?, revision = revision + 1,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-          `,
-          [
-            startingParticipantId,
-            canonical.status,
-            canonical.result_type,
-            canonical.points_a,
-            canonical.points_b,
-            canonical.winner_participant_id,
-            canonical.loser_participant_id,
-            canonical.finish_reason,
-            canonical.admin_note,
-            match.id,
-          ]
-        );
-        await injectFault("playoff_result_after_match", {
-          tournament_id: tournament.id,
-          match_id: match.id,
-        });
-        await propagatePlayoffParticipant(
-          match.next_match_for_winner_id,
-          match.next_match_for_winner_slot,
-          canonical.winner_participant_id
-        );
-        await propagatePlayoffParticipant(
-          match.next_match_for_loser_id,
-          match.next_match_for_loser_slot,
-          canonical.loser_participant_id
-        );
-        const remaining = await dbGet(
-          db,
-          `SELECT COUNT(*) AS count FROM in_person_matches
-           WHERE round_id = ? AND status <> 'cancelled' AND status <> 'completed'`,
-          [match.round_id]
-        );
-        if (Number(remaining?.count || 0) === 0) {
+        if (startingPlayerOnly) {
           await dbRun(
             db,
-            `UPDATE in_person_rounds
-             SET status = 'completed', completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+            `UPDATE in_person_matches
+             SET starting_participant_id = ?, admin_note = ?,
                  revision = revision + 1, updated_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
+            [startingParticipantId, starterOnlyAdminNote, match.id]
+          );
+        } else {
+          await dbRun(
+            db,
+            `
+              UPDATE in_person_matches
+              SET starting_participant_id = ?, status = ?, is_bye = 0, result_type = ?,
+                  points_a = ?, points_b = ?, winner_participant_id = ?, loser_participant_id = ?,
+                  finish_reason = ?, admin_note = ?, revision = revision + 1,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `,
+            [
+              startingParticipantId,
+              canonical.status,
+              canonical.result_type,
+              canonical.points_a,
+              canonical.points_b,
+              canonical.winner_participant_id,
+              canonical.loser_participant_id,
+              canonical.finish_reason,
+              canonical.admin_note,
+              match.id,
+            ]
+          );
+          await injectFault("playoff_result_after_match", {
+            tournament_id: tournament.id,
+            match_id: match.id,
+          });
+          await propagatePlayoffParticipant(
+            match.next_match_for_winner_id,
+            match.next_match_for_winner_slot,
+            canonical.winner_participant_id
+          );
+          await propagatePlayoffParticipant(
+            match.next_match_for_loser_id,
+            match.next_match_for_loser_slot,
+            canonical.loser_participant_id
+          );
+          const remaining = await dbGet(
+            db,
+            `SELECT COUNT(*) AS count FROM in_person_matches
+             WHERE round_id = ? AND status <> 'cancelled' AND status <> 'completed'`,
             [match.round_id]
           );
+          if (Number(remaining?.count || 0) === 0) {
+            await dbRun(
+              db,
+              `UPDATE in_person_rounds
+               SET status = 'completed', completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+                   revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?`,
+              [match.round_id]
+            );
+          }
         }
         await touchTournament(tournament.id);
         return { changed: true, match_id: match.id };

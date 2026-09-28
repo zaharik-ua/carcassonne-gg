@@ -55,19 +55,41 @@
     color: #0b3a2a;
   }
 
-  .standings-advance-legend {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 0 0 8px;
-    color: #ffffff;
-    font-size: 13px;
+  #tab-swiss-content .standings-advance-legend {
+    display: inline-flex !important;
+    flex-flow: row nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 0 !important;
+    width: auto !important;
+    max-width: 100% !important;
+    margin: 0 0 10px !important;
+    padding: 0 !important;
+    color: #ffffff !important;
+    font-size: 13px !important;
+    line-height: 18px !important;
+    font-weight: 400 !important;
+    font-style: normal !important;
+    text-align: left !important;
+    white-space: nowrap !important;
   }
 
-  .standings-advance-legend .rank-badge {
-    width: 12px;
-    height: 12px;
-    border-radius: 2px;
+  #tab-swiss-content .standings-advance-legend::before {
+    content: "" !important;
+    display: inline-block !important;
+    position: static !important;
+    flex: 0 0 16px !important;
+    width: 16px !important;
+    min-width: 16px !important;
+    max-width: 16px !important;
+    height: 16px !important;
+    min-height: 16px !important;
+    margin: 0 9px 0 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 2px !important;
+    background-color: #85eebd !important;
+    box-sizing: border-box !important;
   }
 
   .standings-points {
@@ -427,6 +449,93 @@
   /* Generic score cell */
   .score-cell { white-space: nowrap; color: #ffffff; }
 
+  .rounds-score-part {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .rounds-time-lost-icon {
+    position: relative;
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    box-sizing: border-box;
+    border: 2px solid #b42318;
+    border-radius: 50%;
+  }
+
+  .rounds-time-lost-icon::before,
+  .rounds-time-lost-icon::after {
+    position: absolute;
+    content: "";
+    background: #b42318;
+  }
+
+  .rounds-time-lost-icon::before {
+    top: 2px;
+    left: 4px;
+    width: 2px;
+    height: 4px;
+  }
+
+  .rounds-time-lost-icon::after {
+    top: 5px;
+    left: 5px;
+    width: 4px;
+    height: 2px;
+    transform: rotate(25deg);
+    transform-origin: left center;
+  }
+
+  #tab-matches-content .rounds-starter-legend {
+    display: inline-flex !important;
+    flex-flow: row nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 6px !important;
+    width: auto !important;
+    max-width: 100% !important;
+    margin: 0 0 8px !important;
+    padding: 0 !important;
+    color: #ffffff !important;
+    font-size: 13px !important;
+    line-height: 18px !important;
+    text-align: left !important;
+  }
+
+  #tab-matches-content .rounds-starter-icon {
+    display: inline-block !important;
+    flex: 0 0 14px !important;
+    width: 14px !important;
+    min-width: 14px !important;
+    max-width: 14px !important;
+    height: 14px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    object-fit: contain !important;
+  }
+
+  #tab-matches-content .rounds-starter-text {
+    display: inline-block !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #ffffff !important;
+    font-size: 13px !important;
+    line-height: 18px !important;
+    font-weight: 400 !important;
+    white-space: nowrap !important;
+  }
+
+  .rounds-player-starter-icon {
+    width: 10px;
+    height: 10px;
+    object-fit: contain;
+  }
+
   /* Playoff board label (above match box) */
   .playoff-board-label {
     color: #ffffff;
@@ -590,6 +699,7 @@
   const VERTICAL_SPACING = 40;
   const HORIZONTAL_SPACING = 50;
   let THIRD_PLACE_VERTICAL_OFFSET = 80;
+  const STARTING_PLAYER_ICON_URL = "https://carcassonne.gg/gallery/yellow_mipple.png";
 
   function closePlayerPhotoModal() {
     if (!playerPhotoModal) return;
@@ -675,6 +785,24 @@
       if (value != null) return String(value);
     }
     return matchWinValue(match, match?.[`participant_${side}_id`]);
+  }
+
+  function matchTimeLostSide(match) {
+    if (![match?.result_type, match?.finish_reason].includes("time_forfeit")) return "";
+
+    const participantAId = String(match.participant_a_id || "");
+    const participantBId = String(match.participant_b_id || "");
+    const winnerParticipantId = String(match.winner_participant_id || "");
+    const loserParticipantId = String(
+      match.loser_participant_id
+      || (winnerParticipantId === participantAId
+        ? participantBId
+        : winnerParticipantId === participantBId ? participantAId : "")
+    );
+
+    if (loserParticipantId && loserParticipantId === participantAId) return "A";
+    if (loserParticipantId && loserParticipantId === participantBId) return "B";
+    return "";
   }
 
   // Keep compatibility with older API payloads that exposed only published
@@ -817,6 +945,7 @@
       status: match.status || round.status || "",
       scoreA: matchWinValue(match, match.participant_a_id),
       scoreB: match.participant_b_id ? matchWinValue(match, match.participant_b_id) : "",
+      timeLostSide: matchTimeLostSide(match),
       starter: match.starting_participant_id === match.participant_a_id
         ? "A"
         : match.starting_participant_id === match.participant_b_id ? "B" : ""
@@ -1379,10 +1508,7 @@
 
     const advanceLegend = document.createElement("div");
     advanceLegend.className = "standings-advance-legend";
-    advanceLegend.innerHTML = `
-      <span class="rank-badge rank-badge--green" aria-hidden="true"></span>
-      <span>Advance to the Playoffs</span>
-    `;
+    advanceLegend.textContent = "Advance to the Playoffs";
     container.appendChild(advanceLegend);
 
     const wrapper = document.createElement("div");
@@ -1478,6 +1604,14 @@
     const container = document.getElementById("tab-matches-content");
     // keep existing heading; do not clear container
     const list = Array.isArray(rounds) ? rounds : [];
+    const starterLegend = document.createElement("div");
+    starterLegend.className = "rounds-starter-legend";
+    starterLegend.innerHTML = `
+      <img class="rounds-starter-icon" src="${STARTING_PLAYER_ICON_URL}" alt="" aria-hidden="true">
+      <span class="rounds-starter-text">the starting player</span>
+    `;
+    container.appendChild(starterLegend);
+
     const grouped = {};
     list.forEach(m => {
       const key = String(m.round ?? '');
@@ -1494,6 +1628,15 @@
     )) || "";
 
     let openAccordion = null;
+    const syncOpenAccordionHeight = () => {
+      if (openAccordion) {
+        openAccordion.style.maxHeight = openAccordion.scrollHeight + "px";
+      }
+    };
+    const accordionResizeObserver = typeof ResizeObserver === "function"
+      ? new ResizeObserver(syncOpenAccordionHeight)
+      : null;
+
     roundKeys.forEach(round => {
       const section = document.createElement("div");
 
@@ -1537,9 +1680,13 @@
         const p1Avatar = p1ObjFull.avatar || p1ObjFull.flag || '';
         const p2Avatar = p2ObjFull.avatar || p2ObjFull.flag || '';
         const starter = String(g.starter || '').trim().toUpperCase();
-        const starterIcon = '<img src="https://carcassonne.gg/gallery/blue-mipple-no-bg-small.png" alt="Starts" title="Starting player" style="width:10px; height:10px;">';
+        const starterIcon = `<img src="${STARTING_PLAYER_ICON_URL}" alt="Starts" title="Starting player" class="rounds-player-starter-icon">`;
         const iconA = starter === 'A' ? starterIcon : '';
         const iconB = starter === 'B' ? starterIcon : '';
+        const timeLostSide = String(g.timeLostSide || '').trim().toUpperCase();
+        const timeLostIcon = '<span class="rounds-time-lost-icon" role="img" aria-label="Lost on time" title="Lost on time"></span>';
+        const timeLostIconA = timeLostSide === 'A' ? timeLostIcon : '';
+        const timeLostIconB = timeLostSide === 'B' ? timeLostIcon : '';
         row.innerHTML = `
           <td class="rounds-board">${g.board ? `<span class=\"data-normal\">Board: ${g.board}</span>${String(g.board) === '1' ? ' <img src=\"https://carcassonne.gg/gallery/YouTube_full-color_icon_(2017).svg-ts1700987678.png\" alt=\"YouTube\" class=\"yt-icon\">' : ''}` : ''}</td>
           <td class="player-cell">
@@ -1549,7 +1696,7 @@
               ${iconA}
             </div>
           </td>
-          <td class="score-cell"><span class="${isWinnerA ? 'data-winner' : 'data-normal'}">${pt1 ?? ''}</span> - <span class="${isWinnerB ? 'data-winner' : 'data-normal'}">${pt2 ?? ''}</span></td>
+          <td class="score-cell"><span class="rounds-score-part"><span class="${isWinnerA ? 'data-winner' : 'data-normal'}">${pt1 ?? ''}</span>${timeLostIconA}</span> - <span class="rounds-score-part"><span class="${isWinnerB ? 'data-winner' : 'data-normal'}">${pt2 ?? ''}</span>${timeLostIconB}</span></td>
           <td class="player-cell">
             <div style="display:flex; align-items:center; justify-content:center; gap:7px;">
               ${p2Avatar ? `<img src="${p2Avatar}" class="player-logo">` : ''}
@@ -1564,6 +1711,18 @@
       section.appendChild(toggle);
       section.appendChild(content);
       container.appendChild(section);
+
+      // Flags, icons, web fonts and responsive wrapping can change the table
+      // height after its initial render. Keep the open accordion in sync.
+      if (accordionResizeObserver) {
+        accordionResizeObserver.observe(table);
+      } else {
+        table.querySelectorAll("img").forEach(img => {
+          if (!img.complete) {
+            img.addEventListener("load", syncOpenAccordionHeight, { once: true });
+          }
+        });
+      }
 
       // Open the first unfinished round that still contains an unplayed match.
       if (round === defaultOpenRound) {

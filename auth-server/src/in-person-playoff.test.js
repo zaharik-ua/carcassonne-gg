@@ -380,7 +380,19 @@ test("runs the playoff, swaps streaming table, propagates corrections and requir
   assert.equal(semifinals.status, "published");
   assert.equal(overview.rounds.find((round) => round.round_key === "final").status, "draft");
 
-  const [semiOne, semiTwo] = semifinals.matches;
+  let [semiOne, semiTwo] = semifinals.matches;
+  overview = await service.savePlayoffMatchResult(tournament.id, semiOne.id, {
+    starting_participant_id: semiOne.participant_b_id,
+    admin_note: "Starter corrected before the match",
+  });
+  semiOne = overview.rounds
+    .find((round) => round.round_key === "semi_final")
+    .matches.find((match) => match.id === semiOne.id);
+  assert.equal(semiOne.starting_participant_id, semiOne.participant_b_id);
+  assert.equal(semiOne.status, "scheduled");
+  assert.equal(semiOne.result_type, null);
+  assert.equal(semiOne.admin_note, "Starter corrected before the match");
+
   overview = await service.setPlayoffMatchTable(tournament.id, semiTwo.id, { table_number: 1 });
   semifinals = overview.rounds.find((round) => round.round_key === "semi_final");
   assert.equal(semifinals.matches.find((match) => match.id === semiTwo.id).table_number, 1);
