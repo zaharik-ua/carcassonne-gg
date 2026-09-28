@@ -834,6 +834,10 @@
     vertical-align: top;
   }
 
+  .replay-table td {
+    overflow-wrap: anywhere;
+  }
+
   .replay-table th {
     background: #f8fafc;
     color: #475569;
@@ -4475,7 +4479,18 @@
   }
 
   function getInPersonUserPickerOptions() {
-    return state.userOptions.map((user) => {
+    return [...state.userOptions].sort((a, b) => {
+      const emailA = String(a?.email || "").trim();
+      const emailB = String(b?.email || "").trim();
+      if (emailA && !emailB) return -1;
+      if (!emailA && emailB) return 1;
+      const emailComparison = emailA.localeCompare(emailB, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
+      if (emailComparison !== 0) return emailComparison;
+      return Number(a?.id || 0) - Number(b?.id || 0);
+    }).map((user) => {
       const labelParts = [];
       if (user?.name) labelParts.push(String(user.name).trim());
       if (user?.bga_nickname) labelParts.push(`BGA: ${String(user.bga_nickname).trim()}`);
@@ -7355,6 +7370,34 @@
     }
   }
 
+  async function retryBgaReplayError(errorRow, button) {
+    const gameId = String(errorRow?.game_id || "").trim();
+    if (!gameId) return;
+    const tableId = String(errorRow?.bga_table_id || "").trim();
+    if (!window.confirm(
+      `Retry replay ${gameId}${tableId ? ` (BGA ${tableId})` : ""} now?\n\n`
+        + "This will use one manual replay request."
+    )) return;
+
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = "Retrying...";
+    try {
+      setStatus(`Retrying replay ${gameId}...`, false);
+      const response = await apiJson(
+        `${BGA_REPLAY_BUDGET_URL}/errors/${encodeURIComponent(gameId)}/retry`,
+        { method: "POST" }
+      );
+      state.bgaReplayQueue = [response];
+      renderBgaReplayQueue();
+      setStatus(`Replay ${gameId} is ready.`, false);
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = originalLabel;
+      setStatus(error?.message || `Failed to retry replay ${gameId}.`, true);
+    }
+  }
+
   function renderBgaReplayQueue() {
     sectionTitle.textContent = "BGA Replay Queue";
     sectionCreateBtn.classList.remove("hidden");
@@ -7420,6 +7463,55 @@
         `Fresh work exists: ${Number(fresh.due) || 0} due and ${Number(fresh.scheduled) || 0} scheduled. `
           + "Historical overrides never change fresh-priority ordering."
       ));
+    }
+
+    const errorRows = Array.isArray(queue.error_rows) ? queue.error_rows : [];
+    if (errorRows.length) {
+      const errorPanel = replayElement("section", "replay-panel");
+      const errorHead = replayElement("div", "replay-panel-head");
+      errorHead.appendChild(replayElement("h3", "", `Error rows (${errorRows.length})`));
+      errorHead.appendChild(replayElement(
+        "span",
+        "replay-muted",
+        "Retrying uses the manual replay budget."
+      ));
+      errorPanel.appendChild(errorHead);
+      const errorTable = createReplayTable([
+        "Game",
+        "Queue",
+        "Last attempt",
+        "Error",
+        "Action",
+      ]);
+      errorRows.forEach((errorRow) => {
+        const row = document.createElement("tr");
+        row.appendChild(replayCell(
+          errorRow.game_id || "-",
+          errorRow.bga_table_id ? `BGA table ${errorRow.bga_table_id}` : "No BGA table id"
+        ));
+        row.appendChild(replayCell(
+          errorRow.queue_class || "fresh",
+          errorRow.retry_reason
+            ? `${errorRow.retry_reason}${errorRow.next_attempt_at
+              ? ` • next ${formatReplayDate(errorRow.next_attempt_at)}`
+              : ""}`
+            : "Manual required"
+        ));
+        row.appendChild(replayCell(
+          formatReplayDate(errorRow.last_attempt_at || errorRow.updated_at),
+          errorRow.last_account_label || "No account recorded"
+        ));
+        row.appendChild(replayCell(errorRow.last_error || "Unknown replay error"));
+        const actionCell = document.createElement("td");
+        const retryButton = replayElement("button", "cp-btn cp-btn-primary", "Retry now");
+        retryButton.type = "button";
+        retryButton.addEventListener("click", () => retryBgaReplayError(errorRow, retryButton));
+        actionCell.appendChild(retryButton);
+        row.appendChild(actionCell);
+        errorTable.body.appendChild(row);
+      });
+      errorPanel.appendChild(errorTable.wrap);
+      dashboard.appendChild(errorPanel);
     }
 
     const accountPanel = replayElement("section", "replay-panel");
@@ -7533,59 +7625,6 @@
     accountPanel.appendChild(accountTable.wrap);
     dashboard.appendChild(accountPanel);
 
-    const historyPanel = replayElement("section", "replay-panel");
-    historyPanel.appendChild(replayElement("h3", "", "Override audit history"));
-    const historyTable = createReplayTable([
-      "ID",
-      "Account",
-      "Historical boost",
-      "Total limit",
-      "Period",
-      "Reason / actor",
-      "Status",
-    ]);
-    const historyRows = (data.overrides || []).slice(0, 25);
-    historyRows.forEach((override) => {
-      const row = document.createElement("tr");
-      row.appendChild(replayCell(`#${override.id}`));
-      row.appendChild(replayCell(override.account_label));
-      row.appendChild(replayCell(`+${override.extra_historical_limit || 0}`));
-      row.appendChild(replayCell(override.total_limit_override || "Base"));
-      row.appendChild(replayCell(
-        formatReplayDate(override.starts_at),
-        `to ${formatReplayDate(override.expires_at)}`
-      ));
-      row.appendChild(replayCell(override.reason || "-", override.created_by || "-"));
-      const status = override.active
-        ? "Active"
-        : override.revoked_at
-          ? "Revoked"
-          : "Expired";
-      const statusCell = document.createElement("td");
-      statusCell.appendChild(replayElement(
-        "span",
-        `replay-status-pill${override.active ? " warning" : ""}`,
-        status
-      ));
-      if (override.revoked_at) {
-        statusCell.appendChild(replayElement(
-          "span",
-          "replay-cell-detail",
-          formatReplayDate(override.revoked_at)
-        ));
-      }
-      row.appendChild(statusCell);
-      historyTable.body.appendChild(row);
-    });
-    if (!historyRows.length) {
-      const row = document.createElement("tr");
-      const cell = replayElement("td", "replay-muted", "No overrides yet.");
-      cell.colSpan = 7;
-      row.appendChild(cell);
-      historyTable.body.appendChild(row);
-    }
-    historyPanel.appendChild(historyTable.wrap);
-    dashboard.appendChild(historyPanel);
     sectionList.appendChild(dashboard);
   }
 
@@ -7660,11 +7699,6 @@
       localDateTimeInputValue(new Date(Date.now() + 2 * 60 * 60 * 1000))
     );
     form.appendChild(expiryField.row);
-    const reasonField = replayOverrideInputRow("Reason", "text", "");
-    reasonField.row.classList.add("cp-edit-row-full");
-    reasonField.input.maxLength = 500;
-    form.appendChild(reasonField.row);
-
     const presets = replayElement("div", "replay-presets");
     [10, 20, 30].forEach((amount) => {
       const button = replayElement("button", "cp-btn", `+${amount} historical`);
@@ -7787,7 +7821,7 @@
       allInput.checked = accountInputs.every((candidate) => candidate.checked);
       updatePreview();
     }));
-    [extraField.input, totalField.input, expiryField.input, reasonField.input].forEach((input) => {
+    [extraField.input, totalField.input, expiryField.input].forEach((input) => {
       input.addEventListener("input", updatePreview);
     });
 
@@ -7803,13 +7837,8 @@
         setStatus("Choose a valid expiry date/time.", true);
         return;
       }
-      const reason = String(reasonField.input.value || "").trim();
-      if (!reason) {
-        setStatus("Reason is required.", true);
-        return;
-      }
       const lines = proposalLines();
-      if (!window.confirm(`Apply this replay budget override?\n\n${lines.join("\n")}\n\nReason: ${reason}`)) {
+      if (!window.confirm(`Apply this replay budget override?\n\n${lines.join("\n")}`)) {
         return;
       }
       saveButton.disabled = true;
@@ -7824,7 +7853,6 @@
               ? Number(totalField.input.value)
               : null,
             expires_at: expiresDate.toISOString(),
-            reason,
           }),
         });
         state.bgaReplayQueue = [response];

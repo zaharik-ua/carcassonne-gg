@@ -275,15 +275,17 @@ The protected API is:
 GET    /admin/bga-replay-budget
 POST   /admin/bga-replay-budget/overrides
 DELETE /admin/bga-replay-budget/overrides/{id}
+POST   /admin/bga-replay-budget/errors/{gameId}/retry
 ```
 
-An override can target one or all configured accounts, has a required expiry
-and reason, and can change the historical boost, total limit, or both. The total
+An override can target one or all configured accounts, has a required expiry,
+and can change the historical boost, total limit, or both. The total
 limit must be above the base total and no higher than the configured maximum;
 the historical boost is dynamically bounded by the effective total. Saving a
 new override revokes the previous active row for each selected account instead
-of stacking values. Revoked and expired rows remain visible in the audit
-history, and changes are also written to the general admin audit trail.
+of stacking values. Changes are written to the general admin audit trail.
+Current error rows are listed with their latest failure and can be retried
+immediately through the manual replay budget.
 
 Before confirmation, the UI shows the resulting total/historical limits,
 historical capacity available now, and fresh reserve for every selected

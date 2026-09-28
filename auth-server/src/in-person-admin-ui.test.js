@@ -50,6 +50,13 @@ test("admin form contains conditional location, date period, format, admins and 
   assert.match(adminHtml, /"Tournament logo updated\."/);
 });
 
+test("tournament admin picker sorts users by email", () => {
+  assert.match(
+    adminHtml,
+    /function getInPersonUserPickerOptions\(\) \{[\s\S]*?emailA\.localeCompare\(emailB/,
+  );
+});
+
 test("the embedded admin script parses after In-Person UI changes", () => {
   const match = adminHtml.match(/<script>([\s\S]*?)<\/script>/);
   assert.ok(match, "admin script must exist");

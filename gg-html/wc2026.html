@@ -452,41 +452,18 @@
   .rounds-score-part {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
   }
 
-  .rounds-time-lost-icon {
-    position: relative;
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    flex: 0 0 14px;
-    box-sizing: border-box;
-    border: 2px solid #b42318;
-    border-radius: 50%;
-  }
-
-  .rounds-time-lost-icon::before,
-  .rounds-time-lost-icon::after {
-    position: absolute;
-    content: "";
-    background: #b42318;
-  }
-
-  .rounds-time-lost-icon::before {
-    top: 2px;
-    left: 4px;
-    width: 2px;
-    height: 4px;
-  }
-
-  .rounds-time-lost-icon::after {
-    top: 5px;
-    left: 5px;
-    width: 4px;
-    height: 2px;
-    transform: rotate(25deg);
-    transform-origin: left center;
+  .rounds-score-part--time-lost-left::before,
+  .rounds-score-part--time-lost-right::after {
+    content: "\f017";
+    flex: 0 0 auto;
+    color: #ef6a63;
+    font-family: "Font Awesome 6 Free";
+    font-size: 14px;
+    font-weight: 900;
+    line-height: 1;
   }
 
   #tab-matches-content .rounds-starter-legend {
@@ -620,9 +597,12 @@
     cursor: pointer;
     transition: background-color 0.2s ease;
     border-radius: 2px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.4);
     box-sizing: border-box;
     box-shadow: 1.4px 1.4px 2px #b2b2b2;
+  }
+
+  .round-accordion-section {
+    margin-bottom: 5px;
   }
 
   .accordion-toggle:hover {
@@ -640,10 +620,6 @@
 
   .accordion-toggle.open .chevron i {
     transform: rotate(180deg);
-  }
-
-  .accordion-toggle.open {
-    border-bottom-color: transparent;
   }
 
   .accordion-content {
@@ -1668,6 +1644,7 @@
 
     roundKeys.forEach(round => {
       const section = document.createElement("div");
+      section.className = "round-accordion-section";
 
       const toggle = document.createElement("div");
       toggle.className = "accordion-toggle";
@@ -1713,9 +1690,10 @@
         const iconA = starter === 'A' ? starterIcon : '';
         const iconB = starter === 'B' ? starterIcon : '';
         const timeLostSide = String(g.timeLostSide || '').trim().toUpperCase();
-        const timeLostIcon = '<span class="rounds-time-lost-icon" role="img" aria-label="Lost on time" title="Lost on time"></span>';
-        const timeLostIconA = timeLostSide === 'A' ? timeLostIcon : '';
-        const timeLostIconB = timeLostSide === 'B' ? timeLostIcon : '';
+        const timeLostClassA = timeLostSide === 'A' ? ' rounds-score-part--time-lost-left' : '';
+        const timeLostClassB = timeLostSide === 'B' ? ' rounds-score-part--time-lost-right' : '';
+        const timeLostTitleA = timeLostSide === 'A' ? ' title="Lost on time"' : '';
+        const timeLostTitleB = timeLostSide === 'B' ? ' title="Lost on time"' : '';
         row.innerHTML = `
           <td class="rounds-board">${g.board ? `<span class=\"data-normal\">Board: ${g.board}</span>${String(g.board) === '1' ? ' <img src=\"https://carcassonne.gg/gallery/YouTube_full-color_icon_(2017).svg-ts1700987678.png\" alt=\"YouTube\" class=\"yt-icon\">' : ''}` : ''}</td>
           <td class="player-cell">
@@ -1725,7 +1703,7 @@
               ${iconA}
             </div>
           </td>
-          <td class="score-cell"><span class="rounds-score-part"><span class="${isWinnerA ? 'data-winner' : 'data-normal'}">${pt1 ?? ''}</span>${timeLostIconA}</span> - <span class="rounds-score-part"><span class="${isWinnerB ? 'data-winner' : 'data-normal'}">${pt2 ?? ''}</span>${timeLostIconB}</span></td>
+          <td class="score-cell"><span class="rounds-score-part${timeLostClassA}"${timeLostTitleA}><span class="${isWinnerA ? 'data-winner' : 'data-normal'}">${pt1 ?? ''}</span></span> - <span class="rounds-score-part${timeLostClassB}"${timeLostTitleB}><span class="${isWinnerB ? 'data-winner' : 'data-normal'}">${pt2 ?? ''}</span></span></td>
           <td class="player-cell">
             <div style="display:flex; align-items:center; justify-content:center; gap:7px;">
               ${p2Avatar ? `<img src="${p2Avatar}" class="player-logo">` : ''}

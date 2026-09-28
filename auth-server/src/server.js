@@ -2527,6 +2527,39 @@ function parseScriptJsonOutput(output) {
   }
 }
 
+async function retryBgaReplayError(gameId) {
+  const authServerRoot = path.resolve(__dirname, "..");
+  const replayScriptPath = path.resolve(authServerRoot, "get_game_replay.py");
+  const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
+
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      pythonBin,
+      [replayScriptPath, String(gameId), "--db-path", dbFullPath],
+      {
+        cwd: authServerRoot,
+        env: process.env,
+        timeout: 5 * 60 * 1000,
+        maxBuffer: 1024 * 1024 * 10,
+      }
+    );
+    logUpdaterOutput(
+      `admin:bga-replay-error:${gameId}`,
+      [stdout, stderr].map((part) => String(part || "").trim()).filter(Boolean).join("\n")
+    );
+    const payload = parseScriptJsonOutput(stdout);
+    if (!payload || payload.status !== "ready") {
+      throw new Error(payload?.error || "Replay retry returned an invalid response");
+    }
+    return payload;
+  } catch (error) {
+    const payload = parseScriptJsonOutput(error?.stdout);
+    const retryError = new Error(payload?.error || "Failed to retry BGA replay");
+    retryError.cause = error;
+    throw retryError;
+  }
+}
+
 async function runProfileGgEloScript({ dryRun }) {
   const authServerRoot = path.resolve(__dirname, "..");
   const updateScriptPath = path.resolve(authServerRoot, "run_update_profile_gg_elo.py");
@@ -8395,6 +8428,7 @@ registerBgaReplayAdminRoutes(app, {
   requireAdmin,
   getAuditActor,
   logAuditEvent,
+  retryReplayError: retryBgaReplayError,
 });
 
 function requireActorAuthenticated(req, res, next) {

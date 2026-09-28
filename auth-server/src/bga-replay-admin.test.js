@@ -180,13 +180,12 @@ test("activates the second standby when every earlier account is cooling down or
   assert.equal(secondStandby.standby_eligible, true);
 });
 
-test("validates dynamic override limits, accounts, expiry and reason", () => {
+test("validates dynamic override limits, accounts and expiry without requiring a reason", () => {
   const limits = getReplayBudgetLimits(ENV);
   const now = new Date("2026-09-24T12:00:00Z");
   const basePayload = {
     account_labels: ["account-a"],
     expires_at: "2026-09-24T14:00:00Z",
-    reason: "Reviewed catch-up",
   };
   const normalized = normalizeReplayBudgetOverrideInput({
     ...basePayload,
@@ -200,6 +199,7 @@ test("validates dynamic override limits, accounts, expiry and reason", () => {
   assert.equal(normalized.extra_historical_limit, 20);
   assert.equal(normalized.total_limit_override, 100);
   assert.equal(normalized.starts_at, "2026-09-24 12:00:00.000");
+  assert.equal(normalized.reason, null);
 
   for (const extraHistoricalLimit of [10, 20, 50]) {
     const preset = normalizeReplayBudgetOverrideInput({
@@ -267,6 +267,7 @@ test("builds rolling account metrics, queue summary and effective availability",
     INSERT INTO games VALUES ('fresh-due', '101', NULL);
     INSERT INTO games VALUES ('historical-scheduled', '102', NULL);
     INSERT INTO games VALUES ('fallback', '103', NULL);
+    INSERT INTO games VALUES ('error-row', '104', NULL);
 
     INSERT INTO game_replays (
       game_id, bga_table_id, status, retry_reason, queue_class,
@@ -280,6 +281,13 @@ test("builds rolling account metrics, queue summary and effective availability",
       game_id, bga_table_id, status, retry_reason, queue_class,
       color_source, color_refresh_count
     ) VALUES ('fallback', '103', 'ready', NULL, 'fresh', 'fallback', 1);
+    INSERT INTO game_replays (
+      game_id, bga_table_id, status, retry_reason, queue_class,
+      last_attempt_at, last_account_label, last_error
+    ) VALUES (
+      'error-row', '104', 'error', NULL, 'fresh',
+      '2026-09-24 11:45:00', '${account}', 'archive unavailable'
+    );
   `);
   await new Promise((resolve, reject) => {
     const rows = [
@@ -333,7 +341,19 @@ test("builds rolling account metrics, queue summary and effective availability",
   assert.equal(state.queue.fresh.due, 1);
   assert.equal(state.queue.historical.scheduled, 1);
   assert.equal(state.queue.ready_fallback, 1);
-  assert.equal(state.queue.manual_required, 1);
+  assert.equal(state.queue.errors, 1);
+  assert.equal(state.queue.manual_required, 2);
+  assert.deepEqual(state.queue.error_rows, [{
+    game_id: "error-row",
+    bga_table_id: "104",
+    queue_class: "fresh",
+    retry_reason: null,
+    last_attempt_at: "2026-09-24 11:45:00",
+    next_attempt_at: null,
+    last_account_label: account,
+    last_error: "archive unavailable",
+    updated_at: state.queue.error_rows[0].updated_at,
+  }]);
 });
 
 test("replacement revokes active rows while retaining history and supports revoke", async (t) => {
@@ -375,6 +395,69 @@ test("replacement revokes active rows while retaining history and supports revok
   assert.equal(revoked.after.revoked_at, "2026-09-24 13:00:00.000");
 });
 
+test("retries one current error row and returns the refreshed queue", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, `
+    INSERT INTO games VALUES ('retry-error', '501', NULL);
+    INSERT INTO game_replays (
+      game_id, bga_table_id, status, queue_class, retry_reason,
+      next_attempt_at, last_error
+    ) VALUES (
+      'retry-error', '501', 'error', 'fresh', 'initial',
+      '2026-09-24 11:00:00', 'temporary failure'
+    );
+  `);
+
+  const routes = [];
+  const app = {};
+  ["get", "post", "delete"].forEach((method) => {
+    app[method] = (routePath, ...handlers) => routes.push({ method, path: routePath, handlers });
+  });
+  const retried = [];
+  registerBgaReplayAdminRoutes(app, {
+    db,
+    requireAdmin: () => {},
+    env: ENV,
+    retryReplayError: async (gameId) => {
+      retried.push(gameId);
+      await new Promise((resolve, reject) => {
+        db.run(
+          "UPDATE game_replays SET status = 'ready', last_error = NULL WHERE game_id = ?",
+          [gameId],
+          (error) => (error ? reject(error) : resolve())
+        );
+      });
+      return { game_id: gameId, status: "ready" };
+    },
+  });
+  const route = routes.find((item) => (
+    item.method === "post"
+    && item.path === "/admin/bga-replay-budget/errors/:gameId/retry"
+  ));
+  assert.ok(route);
+
+  let statusCode = 200;
+  let responseBody;
+  const response = {
+    status(value) {
+      statusCode = value;
+      return this;
+    },
+    json(value) {
+      responseBody = value;
+      return value;
+    },
+  };
+  await route.handlers[1]({ params: { gameId: "retry-error" }, user: {} }, response);
+
+  assert.equal(statusCode, 200);
+  assert.deepEqual(retried, ["retry-error"]);
+  assert.equal(responseBody.retry_result.status, "ready");
+  assert.equal(responseBody.queue.errors, 0);
+  assert.equal(responseBody.queue.fresh.due, 0);
+  assert.deepEqual(responseBody.queue.error_rows, []);
+});
+
 test("registers global-admin routes and exposes the BGA Replay Queue in admin.html", () => {
   const routes = [];
   const app = {};
@@ -392,6 +475,7 @@ test("registers global-admin routes and exposes the BGA Replay Queue in admin.ht
     [
       ["get", "/admin/bga-replay-budget"],
       ["post", "/admin/bga-replay-budget/overrides"],
+      ["post", "/admin/bga-replay-budget/errors/:gameId/retry"],
       ["delete", "/admin/bga-replay-budget/overrides/:id"],
     ]
   );
@@ -404,5 +488,9 @@ test("registers global-admin routes and exposes the BGA Replay Queue in admin.ht
   assert.match(adminHtml, /cooldown or 0 available/);
   assert.match(adminHtml, /Apply this replay budget override/);
   assert.match(adminHtml, /Fresh work exists/);
+  assert.match(adminHtml, /Retry now/);
+  assert.match(adminHtml, /errors\/\$\{encodeURIComponent\(gameId\)\}\/retry/);
+  assert.doesNotMatch(adminHtml, /Override audit history/);
+  assert.doesNotMatch(adminHtml, /replayOverrideInputRow\("Reason"/);
   assert.match(adminHtml, /method: "DELETE"/);
 });

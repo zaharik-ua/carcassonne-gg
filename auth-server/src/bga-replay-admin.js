@@ -199,6 +199,7 @@ export async function loadReplayBudgetAdminState({
     activeOverrideRows,
     queueRows,
     queueTotalsRow,
+    errorRows,
   ] = await Promise.all([
     dbAll(
       db,
@@ -285,6 +286,26 @@ export async function loadReplayBudgetAdminState({
         FROM game_replays gr
         JOIN games g ON g.id = gr.game_id
         WHERE trim(COALESCE(g.deleted_at, '')) = ''
+      `
+    ),
+    dbAll(
+      db,
+      `
+        SELECT
+          gr.game_id,
+          gr.bga_table_id,
+          gr.queue_class,
+          gr.retry_reason,
+          gr.last_attempt_at,
+          gr.next_attempt_at,
+          gr.last_account_label,
+          gr.last_error,
+          gr.updated_at
+        FROM game_replays gr
+        JOIN games g ON g.id = gr.game_id
+        WHERE gr.status = 'error'
+          AND trim(COALESCE(g.deleted_at, '')) = ''
+        ORDER BY datetime(COALESCE(gr.last_attempt_at, gr.updated_at)) DESC, gr.game_id
       `
     ),
   ]);
@@ -407,6 +428,17 @@ export async function loadReplayBudgetAdminState({
     ready_fallback: Number(queueTotalsRow?.ready_fallback) || 0,
     errors: Number(queueTotalsRow?.errors) || 0,
     manual_required: Number(queueTotalsRow?.manual_required) || 0,
+    error_rows: errorRows.map((row) => ({
+      game_id: row.game_id,
+      bga_table_id: row.bga_table_id,
+      queue_class: row.queue_class || "fresh",
+      retry_reason: row.retry_reason || null,
+      last_attempt_at: row.last_attempt_at || null,
+      next_attempt_at: row.next_attempt_at || null,
+      last_account_label: row.last_account_label || null,
+      last_error: row.last_error || null,
+      updated_at: row.updated_at || null,
+    })),
   };
   queueRows.forEach((row) => {
     const queueClass = normalizeText(row.queue_class);
@@ -484,8 +516,7 @@ export function normalizeReplayBudgetOverrideInput(payload, {
   }
 
   const reason = normalizeText(payload?.reason);
-  if (!reason) throw new Error("reason is required");
-  if (reason.length > 500) throw new Error("reason must be 500 characters or fewer");
+  if (reason && reason.length > 500) throw new Error("reason must be 500 characters or fewer");
   const currentTime = asDate(now);
   const expiresAt = asDate(payload?.expires_at, "expires_at");
   if (expiresAt.getTime() <= currentTime.getTime()) {
@@ -614,6 +645,7 @@ export function registerBgaReplayAdminRoutes(app, {
   logAuditEvent = null,
   logger = console,
   now = () => new Date(),
+  retryReplayError = null,
 }) {
   if (!app || !db || typeof requireAdmin !== "function") {
     throw new Error("app, db and requireAdmin are required");
@@ -675,6 +707,93 @@ export function registerBgaReplayAdminRoutes(app, {
     } catch (error) {
       logger.error?.("Failed to replace BGA replay budget overrides", error);
       return res.status(500).json({ ok: false, message: "Failed to save replay budget override" });
+    }
+  });
+
+  const activeErrorRetries = new Set();
+  app.post("/admin/bga-replay-budget/errors/:gameId/retry", requireAdmin, async (req, res) => {
+    const gameId = normalizeText(req.params?.gameId);
+    if (!gameId) {
+      return res.status(400).json({ ok: false, message: "Invalid replay game id" });
+    }
+    if (typeof retryReplayError !== "function") {
+      return res.status(503).json({ ok: false, message: "Replay retry is unavailable" });
+    }
+    if (activeErrorRetries.has(gameId)) {
+      return res.status(409).json({ ok: false, message: "This replay retry is already running" });
+    }
+
+    try {
+      const row = await dbGet(
+        db,
+        `
+          SELECT gr.game_id, gr.bga_table_id, gr.last_error
+          FROM game_replays gr
+          JOIN games g ON g.id = gr.game_id
+          WHERE gr.game_id = ?
+            AND gr.status = 'error'
+            AND trim(COALESCE(g.deleted_at, '')) = ''
+          LIMIT 1
+        `,
+        [gameId]
+      );
+      if (!row) {
+        return res.status(404).json({ ok: false, message: "Replay error row not found" });
+      }
+      if (activeErrorRetries.has(gameId)) {
+        return res.status(409).json({ ok: false, message: "This replay retry is already running" });
+      }
+
+      activeErrorRetries.add(gameId);
+      let retryResult;
+      try {
+        retryResult = await retryReplayError(gameId);
+      } finally {
+        activeErrorRetries.delete(gameId);
+      }
+      if (retryResult?.status === "ready") {
+        await dbRun(
+          db,
+          `
+            UPDATE game_replays
+            SET retry_reason = NULL,
+                next_attempt_at = NULL,
+                lease_owner = NULL,
+                lease_until = NULL,
+                last_error = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE game_id = ? AND status = 'ready'
+          `,
+          [gameId]
+        );
+      }
+
+      auditEvent(logAuditEvent, {
+        ...getAuditActor(req.user),
+        event_type: "bga_replay_error.retried",
+        entity_type: "game_replay",
+        action: "retry",
+        record_id: gameId,
+        changes: {
+          status: {
+            old: "error",
+            new: retryResult?.status || null,
+          },
+        },
+        metadata: {
+          bga_table_id: row.bga_table_id || null,
+          previous_error: row.last_error || null,
+        },
+      });
+      const state = await loadReplayBudgetAdminState({ db, env, now: now() });
+      return res.json({ ok: true, ...state, retry_result: retryResult || null });
+    } catch (error) {
+      activeErrorRetries.delete(gameId);
+      logger.error?.("Failed to retry BGA replay error", error);
+      return res.status(502).json({
+        ok: false,
+        message: error?.message || "Failed to retry BGA replay",
+      });
     }
   });
 
