@@ -654,6 +654,24 @@ test("runs the playoff, swaps streaming table, propagates corrections and requir
   assert.equal(overview.tournament.status, "completed");
   assert.equal(overview.placements.first, finalMatch.participant_a_id);
   assert.equal(overview.placements.third, bronzeMatch.participant_b_id);
+
+  overview = await service.reopenPlayoff(tournament.id);
+  assert.equal(overview.reopened, true);
+  assert.equal(overview.tournament.status, "playoff");
+  assert.equal(overview.tournament.completed_at, null);
+  assert.equal(overview.can_complete, true);
+  assert.equal(overview.placements.first, finalMatch.participant_a_id);
+  assert.equal(overview.placements.third, bronzeMatch.participant_b_id);
+
+  overview = await service.savePlayoffMatchResult(tournament.id, finalMatch.id, {
+    ...simpleResult(finalMatch, finalMatch.participant_b_id),
+    admin_note: "Corrected after reopening tournament",
+  });
+  const correctedFinal = overview.rounds
+    .find((round) => round.round_key === "final")
+    .matches[0];
+  assert.equal(correctedFinal.winner_participant_id, finalMatch.participant_b_id);
+  assert.equal(correctedFinal.admin_note, "Corrected after reopening tournament");
 });
 
 test("auto-fills every playoff round through the final and bronze match for test tournaments", async (t) => {

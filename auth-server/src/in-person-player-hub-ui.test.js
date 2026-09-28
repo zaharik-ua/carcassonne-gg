@@ -471,6 +471,8 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     "Click a published match to enter or correct its result.",
     "Bronze medal match",
     "Complete tournament",
+    "Undo complete tournament",
+    "Reopen the tournament to correct playoff match results.",
     "Reset result",
   ].forEach((text) => assert.ok(inPersonHtml.includes(text), `missing playoff UI text: ${text}`));
 
@@ -510,6 +512,7 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     /tournamentUrl\(`\/\$\{stage\}\/matches\/\$\{encodeURIComponent\(match\.id\)\}\/result`\)/,
     /\/playoff\/matches\/\$\{encodeURIComponent\(match\.id\)\}\/table/,
     /\/playoff\/complete/,
+    /\/playoff\/reopen/,
   ].forEach((pattern) => assert.match(inPersonHtml, pattern));
 
   assert.doesNotMatch(inPersonHtml, /function createPlayoffTableEditor|Save table/);

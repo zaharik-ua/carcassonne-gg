@@ -678,6 +678,14 @@ export function registerInPersonRoutes(app, {
       res.json({ ok: true, ...overview });
     }, logger)
   );
+  app.post(
+    "/in-person-tournaments/:tournamentId/playoff/reopen",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.reopenPlayoff(req.inPersonTournamentId);
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
 
   logger?.info?.("[in-person] Admin, participant, Swiss and playoff routes registered");
   return { registered: true };

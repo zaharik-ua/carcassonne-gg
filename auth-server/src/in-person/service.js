@@ -4270,6 +4270,38 @@ export function createInPersonService({
     });
   }
 
+  async function reopenPlayoff(tournamentId) {
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        if (tournament.status === "playoff") return { reopened: false };
+        if (tournament.status !== "completed") {
+          throw conflictError(
+            "INVALID_TOURNAMENT_STATUS",
+            "Only a completed tournament can be reopened"
+          );
+        }
+        const rounds = await loadPlayoffRounds(tournament.id);
+        if (!rounds.length) {
+          throw conflictError(
+            "PLAYOFF_NOT_STARTED",
+            "The tournament has no playoff bracket to reopen"
+          );
+        }
+        await dbRun(
+          db,
+          `UPDATE in_person_tournaments
+           SET status = 'playoff', completed_at = NULL,
+               revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [tournament.id]
+        );
+        return { reopened: true };
+      });
+      return { ...(await getPlayoffOverview(tournamentId)), ...outcome };
+    });
+  }
+
   async function listPublicTournaments() {
     const rows = await dbAll(
       db,
@@ -4820,6 +4852,7 @@ export function createInPersonService({
     publishTournament,
     publishPlayoffRound,
     publishSwissRound,
+    reopenPlayoff,
     reopenSwissRound,
     resetTestTournamentData,
     resetPlayoffMatchResult,

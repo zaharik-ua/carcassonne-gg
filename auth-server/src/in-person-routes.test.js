@@ -57,6 +57,7 @@ function createService() {
     publishTournament: async () => ({}),
     publishPlayoffRound: async () => ({}),
     publishSwissRound: async () => ({}),
+    reopenPlayoff: async () => ({}),
     reopenSwissRound: async () => ({}),
     resetPlayoffMatchResult: async () => ({}),
     resetSwissMatchResult: async () => ({}),
@@ -90,7 +91,7 @@ test("always registers protected global and tournament routes", () => {
   });
 
   assert.deepEqual(result, { registered: true });
-  assert.equal(app.routes.length, 59);
+  assert.equal(app.routes.length, 60);
   const globalFoundation = app.routes.find((route) => (
     route.path === "/in-person-tournaments/_foundation"
   ));
@@ -211,6 +212,9 @@ test("always registers protected global and tournament routes", () => {
   )));
   assert.ok(app.routes.some((route) => (
     route.method === "POST" && route.path.endsWith("/playoff/test-results")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/playoff/reopen")
   )));
   assert.ok(app.routes.some((route) => (
     route.method === "POST" && route.path.endsWith("/playoff/test-results/reset")

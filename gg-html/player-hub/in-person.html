@@ -6514,6 +6514,28 @@
       );
       playoffActions.appendChild(reset);
     }
+    if (playoff.tournament?.status === "completed") {
+      const reopen = createButton("Undo complete tournament", "ip-btn", async () => {
+        if (!window.confirm("Return this tournament to the active playoff stage? Existing match results will be kept.")) return;
+        reopen.disabled = true;
+        try {
+          const data = await apiJson(tournamentUrl("/playoff/reopen"), {
+            method: "POST",
+            body: "{}",
+          });
+          adoptPlayoffResponse(data);
+          renderWorkspace();
+          setStatus(
+            "Tournament reopened. Playoff match results can be corrected again.",
+            "success"
+          );
+        } catch (error) {
+          setStatus(error.message || "Failed to reopen the tournament.", "error");
+          reopen.disabled = false;
+        }
+      });
+      playoffActions.appendChild(reopen);
+    }
     const medalRoundKeys = new Set(["final", "bronze_medal_match"]);
     rounds
       .filter((round) => (
@@ -6577,7 +6599,9 @@
       ? playoff.swiss_complete
         ? "Select the first-round players and configure tables before starting the playoff."
         : "Add placeholders and configure table numbers now. Players unlock when the Swiss stage is complete."
-      : "Click a published match to enter or correct its result.";
+      : playoff.tournament?.status === "completed"
+        ? "Reopen the tournament to correct playoff match results."
+        : "Click a published match to enter or correct its result.";
     playoffBracket.appendChild(hint);
     const scroll = document.createElement("div");
     scroll.className = "ip-playoff-bracket-scroll";
