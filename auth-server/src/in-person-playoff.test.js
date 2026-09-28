@@ -707,6 +707,37 @@ test("auto-fills every playoff round through the final and bronze match for test
   assert.ok(overview.placements?.first);
   assert.ok(overview.placements?.third);
 
+  overview = await service.clearPlayoffTestResults(tournament.id);
+  assert.equal(overview.cleared, 8);
+  assert.equal(overview.can_complete, false);
+  assert.equal(overview.placements, null);
+  const firstRound = overview.rounds.find((round) => round.round_key === overview.first_round);
+  assert.equal(firstRound.status, "published");
+  firstRound.matches.forEach((match) => {
+    assert.equal(match.status, "scheduled");
+    assert.ok(match.participant_a_id);
+    assert.ok(match.participant_b_id);
+    assert.ok(match.starting_participant_id);
+    assert.equal(match.result_type, null);
+    assert.equal(match.admin_note, null);
+  });
+  overview.rounds
+    .filter((round) => round.round_key !== overview.first_round)
+    .forEach((round) => {
+      assert.equal(round.status, "draft");
+      round.matches.forEach((match) => {
+        assert.equal(match.status, "scheduled");
+        assert.equal(match.participant_a_id, null);
+        assert.equal(match.participant_b_id, null);
+        assert.equal(match.starting_participant_id, null);
+        assert.equal(match.result_type, null);
+      });
+    });
+
+  overview = await service.fillPlayoffTestResults(tournament.id);
+  assert.equal(overview.filled, 8);
+  assert.equal(overview.can_complete, true);
+
   overview = await service.fillPlayoffTestResults(tournament.id);
   assert.equal(overview.filled, 0);
   assert.equal(overview.published_rounds, 0);

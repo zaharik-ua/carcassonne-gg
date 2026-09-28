@@ -98,6 +98,10 @@ test("test tournaments add up to 60 random fixture players while manual addition
     service.fillPlayoffTestResults(regular.id),
     (error) => error?.code === "TEST_TOURNAMENT_REQUIRED"
   );
+  await assert.rejects(
+    service.clearPlayoffTestResults(regular.id),
+    (error) => error?.code === "TEST_TOURNAMENT_REQUIRED"
+  );
 
   const tournament = await service.createTournament(tournamentPayload({ is_test_tournament: true }));
   assert.equal(tournament.is_test_tournament, true);

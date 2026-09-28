@@ -21,6 +21,7 @@ function createService() {
     archiveCity: async () => ({}),
     cancelSwissRound: async () => ({}),
     cancelTournament: async () => ({}),
+    clearPlayoffTestResults: async () => ({}),
     completePlayoff: async () => ({}),
     completeSwissRound: async () => ({}),
     confirmLateParticipant: async () => ({}),
@@ -210,6 +211,9 @@ test("always registers protected global and tournament routes", () => {
   )));
   assert.ok(app.routes.some((route) => (
     route.method === "POST" && route.path.endsWith("/playoff/test-results")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/playoff/test-results/reset")
   )));
   assert.ok(app.routes.some((route) => (
     route.method === "POST" && route.path.endsWith("/streaming-table")

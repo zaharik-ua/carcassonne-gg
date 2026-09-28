@@ -6224,6 +6224,25 @@
     }
   }
 
+  async function clearPlayoffTestResults(button) {
+    if (!window.confirm("Clear all playoff match results?")) return;
+    button.disabled = true;
+    button.textContent = "Clearing...";
+    try {
+      const data = await apiJson(tournamentUrl("/playoff/test-results/reset"), {
+        method: "POST",
+        body: "{}",
+      });
+      adoptPlayoffResponse(data);
+      renderWorkspace();
+      setStatus(`${data.cleared} playoff result(s) cleared.`, "success");
+    } catch (error) {
+      setStatus(error.message || "Failed to clear playoff results.", "error");
+      button.disabled = false;
+      button.textContent = "Clear all results";
+    }
+  }
+
   async function returnPlayoffSetupToSwiss(button) {
     const round = state.swiss?.current_round;
     if (!round || !state.swiss?.can_reopen_current_round) return;
@@ -6466,14 +6485,26 @@
     if (
       playoff.tournament?.is_test_tournament === true
       && playoff.tournament?.status === "playoff"
-      && !playoff.can_complete
     ) {
-      const autoFill = createButton(
-        "Auto-fill test results",
-        "ip-btn test-action",
-        () => fillPlayoffTestResults(autoFill)
-      );
-      playoffActions.appendChild(autoFill);
+      if (!playoff.can_complete) {
+        const autoFill = createButton(
+          "Auto-fill test results",
+          "ip-btn test-action",
+          () => fillPlayoffTestResults(autoFill)
+        );
+        playoffActions.appendChild(autoFill);
+      }
+      const completedMatchCount = rounds.reduce((count, round) => (
+        count + (round.matches || []).filter((match) => match.status === "completed").length
+      ), 0);
+      if (completedMatchCount > 0) {
+        const clearResults = createButton(
+          "Clear all results",
+          "ip-btn test-action",
+          () => clearPlayoffTestResults(clearResults)
+        );
+        playoffActions.appendChild(clearResults);
+      }
     }
     if (playoff.can_reset) {
       const reset = createButton(

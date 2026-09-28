@@ -3531,6 +3531,77 @@ export function createInPersonService({
     });
   }
 
+  async function clearPlayoffTestResults(tournamentId) {
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        assertTestTournament(tournament);
+        if (tournament.status !== "playoff") {
+          throw conflictError(
+            "INVALID_TOURNAMENT_STATUS",
+            "Playoff test results can be cleared only during the playoff stage"
+          );
+        }
+
+        const completed = await dbGet(
+          db,
+          `SELECT COUNT(*) AS count
+           FROM in_person_matches m
+           JOIN in_person_rounds r ON r.id = m.round_id
+           WHERE r.tournament_id = ? AND r.stage = 'playoff'
+             AND r.status <> 'cancelled' AND m.status = 'completed'`,
+          [tournament.id]
+        );
+        const cleared = Number(completed?.count || 0);
+        if (!cleared) return { cleared: 0 };
+
+        await dbRun(
+          db,
+          `UPDATE in_person_matches
+           SET status = 'scheduled', result_type = NULL,
+               points_a = NULL, points_b = NULL,
+               winner_participant_id = NULL, loser_participant_id = NULL,
+               finish_reason = NULL, admin_note = NULL,
+               revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE round_id IN (
+             SELECT id FROM in_person_rounds
+             WHERE tournament_id = ? AND stage = 'playoff' AND status <> 'cancelled'
+           )`,
+          [tournament.id]
+        );
+        await dbRun(
+          db,
+          `UPDATE in_person_matches
+           SET participant_a_id = NULL, participant_b_id = NULL,
+               starting_participant_id = NULL,
+               revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE round_id IN (
+             SELECT id FROM in_person_rounds
+             WHERE tournament_id = ? AND stage = 'playoff'
+               AND status <> 'cancelled' AND round_key <> ?
+           )`,
+          [tournament.id, tournament.playoff_first_round]
+        );
+        await dbRun(
+          db,
+          `UPDATE in_person_rounds
+           SET status = CASE WHEN round_key = ? THEN 'published' ELSE 'draft' END,
+               published_at = CASE
+                 WHEN round_key = ? THEN COALESCE(published_at, CURRENT_TIMESTAMP)
+                 ELSE NULL
+               END,
+               completed_at = NULL,
+               revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE tournament_id = ? AND stage = 'playoff' AND status <> 'cancelled'`,
+          [tournament.playoff_first_round, tournament.playoff_first_round, tournament.id]
+        );
+        await touchTournament(tournament.id);
+        return { cleared };
+      });
+      return { ...(await getPlayoffOverview(tournamentId)), ...outcome };
+    });
+  }
+
   async function resetPlayoff(tournamentId, payload = {}, actor = null) {
     const reason = normalizeRequiredReason(payload?.reason, "reason");
     const actorUserId = normalizeActorUserId(actor);
@@ -4717,6 +4788,7 @@ export function createInPersonService({
     bulkCheckInTestParticipants,
     cancelSwissRound,
     cancelTournament,
+    clearPlayoffTestResults,
     completePlayoff,
     completeSwissRound,
     confirmLateParticipant,

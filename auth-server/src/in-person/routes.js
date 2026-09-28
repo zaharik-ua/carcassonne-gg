@@ -601,6 +601,16 @@ export function registerInPersonRoutes(app, {
       res.json({ ok: true, ...overview });
     }, logger)
   );
+  app.post(
+    "/in-person-tournaments/:tournamentId/playoff/test-results/reset",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.clearPlayoffTestResults(
+        req.inPersonTournamentId
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
   app.patch(
     "/in-person-tournaments/:tournamentId/playoff/matches/:matchId/placeholders",
     requireInPersonTournamentAdmin,

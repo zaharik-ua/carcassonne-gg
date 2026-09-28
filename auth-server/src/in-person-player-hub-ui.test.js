@@ -503,6 +503,7 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     /\/playoff\/confirm/,
     /\/playoff\/reset/,
     /\/playoff\/test-results/,
+    /\/playoff\/test-results\/reset/,
     /\/playoff\/rounds\/\$\{encodeURIComponent\(round\.id\)\}\/publish/,
     /function openPlayoffResultModal/,
     /stage: "playoff"/,
