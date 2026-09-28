@@ -3364,6 +3364,7 @@ export function createInPersonService({
             "Automatic playoff results are available only during the playoff stage"
           );
         }
+        const swissPositions = await loadSwissPositionsByParticipant(tournament.id);
 
         let filled = 0;
         let publishedRounds = 0;
@@ -3436,12 +3437,14 @@ export function createInPersonService({
               await propagatePlayoffParticipant(
                 match.next_match_for_winner_id,
                 match.next_match_for_winner_slot,
-                canonical.winner_participant_id
+                canonical.winner_participant_id,
+                swissPositions
               );
               await propagatePlayoffParticipant(
                 match.next_match_for_loser_id,
                 match.next_match_for_loser_slot,
-                canonical.loser_participant_id
+                canonical.loser_participant_id,
+                swissPositions
               );
               filled += 1;
             }
@@ -3832,7 +3835,34 @@ export function createInPersonService({
     return completed;
   }
 
-  async function propagatePlayoffParticipant(targetMatchId, targetSlot, participantId) {
+  async function loadSwissPositionsByParticipant(tournamentId) {
+    const standings = await loadLatestSwissStandings(tournamentId);
+    return new Map((standings.rows || []).map((standing) => (
+      [String(standing.participant_id), Number(standing.position)]
+    )));
+  }
+
+  function higherRankedSwissParticipant(participantAId, participantBId, swissPositions) {
+    if (!participantAId || !participantBId) return null;
+    const positionA = Number(swissPositions.get(String(participantAId)));
+    const positionB = Number(swissPositions.get(String(participantBId)));
+    if (
+      !Number.isInteger(positionA)
+      || positionA < 1
+      || !Number.isInteger(positionB)
+      || positionB < 1
+    ) {
+      return null;
+    }
+    return positionA <= positionB ? participantAId : participantBId;
+  }
+
+  async function propagatePlayoffParticipant(
+    targetMatchId,
+    targetSlot,
+    participantId,
+    swissPositions
+  ) {
     if (!targetMatchId || !targetSlot) return;
     if (!["participant_a", "participant_b"].includes(targetSlot)) {
       throw conflictError("INVALID_PLAYOFF_ROUTE", "The playoff bracket contains an invalid target slot");
@@ -3857,13 +3887,24 @@ export function createInPersonService({
       );
     }
     const column = `${targetSlot}_id`;
+    const participantAId = targetSlot === "participant_a"
+      ? participantId
+      : target.participant_a_id;
+    const participantBId = targetSlot === "participant_b"
+      ? participantId
+      : target.participant_b_id;
+    const startingParticipantId = higherRankedSwissParticipant(
+      participantAId,
+      participantBId,
+      swissPositions
+    );
     await dbRun(
       db,
       `UPDATE in_person_matches
-       SET ${column} = ?, starting_participant_id = NULL,
+       SET ${column} = ?, starting_participant_id = ?,
            revision = revision + 1, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [participantId, target.id]
+      [participantId, startingParticipantId, target.id]
     );
   }
 
@@ -3993,6 +4034,7 @@ export function createInPersonService({
             [startingParticipantId, starterOnlyAdminNote, match.id]
           );
         } else {
+          const swissPositions = await loadSwissPositionsByParticipant(tournament.id);
           await dbRun(
             db,
             `
@@ -4023,12 +4065,14 @@ export function createInPersonService({
           await propagatePlayoffParticipant(
             match.next_match_for_winner_id,
             match.next_match_for_winner_slot,
-            canonical.winner_participant_id
+            canonical.winner_participant_id,
+            swissPositions
           );
           await propagatePlayoffParticipant(
             match.next_match_for_loser_id,
             match.next_match_for_loser_slot,
-            canonical.loser_participant_id
+            canonical.loser_participant_id,
+            swissPositions
           );
           const remaining = await dbGet(
             db,

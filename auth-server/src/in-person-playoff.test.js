@@ -107,6 +107,15 @@ function simpleResult(match, winnerParticipantId, adminNote = null) {
   };
 }
 
+function higherRankedSwissParticipant(overview, participantAId, participantBId) {
+  const positions = new Map((overview.standings?.rows || []).map((standing) => (
+    [standing.participant_id, Number(standing.position)]
+  )));
+  return positions.get(participantAId) <= positions.get(participantBId)
+    ? participantAId
+    : participantBId;
+}
+
 test("builds complete deterministic playoff structures for every supported first round", () => {
   const cases = [
     ["round_of_32", 32, [16, 8, 4, 2, 1, 1]],
@@ -467,11 +476,19 @@ test("runs the playoff, swaps streaming table, propagates corrections and requir
   );
   assert.deepEqual(storedTables.map((row) => row.table_number), [1, 2]);
 
-  await service.savePlayoffMatchResult(
+  overview = await service.savePlayoffMatchResult(
     tournament.id,
     semiOne.id,
     simpleResult(semiOne, semiOne.participant_a_id)
   );
+  let partiallyFilledFinal = overview.rounds
+    .find((round) => round.round_key === "final")
+    .matches[0];
+  let partiallyFilledBronze = overview.rounds
+    .find((round) => round.round_key === "bronze_medal_match")
+    .matches[0];
+  assert.equal(partiallyFilledFinal.starting_participant_id, null);
+  assert.equal(partiallyFilledBronze.starting_participant_id, null);
   overview = await service.savePlayoffMatchResult(
     tournament.id,
     semiTwo.id,
@@ -497,6 +514,22 @@ test("runs the playoff, swaps streaming table, propagates corrections and requir
     [bronzeMatch.participant_a_id, bronzeMatch.participant_b_id],
     [semiOne.participant_b_id, semiTwo.participant_b_id]
   );
+  assert.equal(
+    finalMatch.starting_participant_id,
+    higherRankedSwissParticipant(
+      overview,
+      finalMatch.participant_a_id,
+      finalMatch.participant_b_id
+    )
+  );
+  assert.equal(
+    bronzeMatch.starting_participant_id,
+    higherRankedSwissParticipant(
+      overview,
+      bronzeMatch.participant_a_id,
+      bronzeMatch.participant_b_id
+    )
+  );
 
   overview = await service.resetPlayoffMatchResult(tournament.id, semiOne.id);
   const resetSemifinal = overview.rounds
@@ -513,6 +546,8 @@ test("runs the playoff, swaps streaming table, propagates corrections and requir
   bronzeMatch = overview.rounds.find((round) => round.round_key === "bronze_medal_match").matches[0];
   assert.equal(finalMatch.participant_a_id, null);
   assert.equal(bronzeMatch.participant_a_id, null);
+  assert.equal(finalMatch.starting_participant_id, null);
+  assert.equal(bronzeMatch.starting_participant_id, null);
 
   overview = await service.savePlayoffMatchResult(
     tournament.id,
@@ -533,6 +568,22 @@ test("runs the playoff, swaps streaming table, propagates corrections and requir
   bronzeMatch = overview.rounds.find((round) => round.round_key === "bronze_medal_match").matches[0];
   assert.equal(finalMatch.participant_a_id, semiOne.participant_b_id);
   assert.equal(bronzeMatch.participant_a_id, semiOne.participant_a_id);
+  assert.equal(
+    finalMatch.starting_participant_id,
+    higherRankedSwissParticipant(
+      overview,
+      finalMatch.participant_a_id,
+      finalMatch.participant_b_id
+    )
+  );
+  assert.equal(
+    bronzeMatch.starting_participant_id,
+    higherRankedSwissParticipant(
+      overview,
+      bronzeMatch.participant_a_id,
+      bronzeMatch.participant_b_id
+    )
+  );
 
   const finalRound = overview.rounds.find((round) => round.round_key === "final");
   overview = await service.publishPlayoffRound(tournament.id, finalRound.id);
@@ -640,6 +691,19 @@ test("auto-fills every playoff round through the final and bronze match for test
     assert.notEqual(match.points_a, match.points_b);
     assert.ok([match.participant_a_id, match.participant_b_id].includes(match.starting_participant_id));
   });
+  overview.rounds
+    .filter((round) => round.round_key !== overview.first_round)
+    .flatMap((round) => round.matches)
+    .forEach((match) => {
+      assert.equal(
+        match.starting_participant_id,
+        higherRankedSwissParticipant(
+          overview,
+          match.participant_a_id,
+          match.participant_b_id
+        )
+      );
+    });
   assert.ok(overview.placements?.first);
   assert.ok(overview.placements?.third);
 

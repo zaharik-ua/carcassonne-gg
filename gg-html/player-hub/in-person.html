@@ -1662,7 +1662,9 @@
   }
 
   .ip-playoff-match-name .ip-starting-player-icon {
-    flex: 0 0 12px;
+    width: 10px;
+    height: 10px;
+    flex: 0 0 10px;
     margin: 0;
   }
 
@@ -6218,7 +6220,7 @@
     } catch (error) {
       setStatus(error.message || "Failed to auto-fill playoff results.", "error");
       button.disabled = false;
-      button.textContent = "Auto-fill playoff results";
+      button.textContent = "Auto-fill test results";
     }
   }
 
@@ -6467,7 +6469,7 @@
       && !playoff.can_complete
     ) {
       const autoFill = createButton(
-        "Auto-fill playoff results",
+        "Auto-fill test results",
         "ip-btn test-action",
         () => fillPlayoffTestResults(autoFill)
       );

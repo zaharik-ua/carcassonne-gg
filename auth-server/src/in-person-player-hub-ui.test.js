@@ -466,7 +466,7 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     "Start playoff",
     "Back to Swiss",
     "Reset playoff bracket",
-    "Auto-fill playoff results",
+    "Auto-fill test results",
     "Publish medal round",
     "Click a published match to enter or correct its result.",
     "Bronze medal match",
