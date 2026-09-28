@@ -466,6 +466,7 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     "Start playoff",
     "Back to Swiss",
     "Reset playoff bracket",
+    "Auto-fill playoff results",
     "Publish medal round",
     "Click a published match to enter or correct its result.",
     "Bronze medal match",
@@ -501,6 +502,7 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     /\/playoff\/preview/,
     /\/playoff\/confirm/,
     /\/playoff\/reset/,
+    /\/playoff\/test-results/,
     /\/playoff\/rounds\/\$\{encodeURIComponent\(round\.id\)\}\/publish/,
     /function openPlayoffResultModal/,
     /stage: "playoff"/,
@@ -606,6 +608,10 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
   assert.match(playoffActionsRenderer, /"Publish medal round"/);
   assert.match(playoffActionsRenderer, /state\.swiss\?\.can_reopen_current_round/);
   assert.match(playoffActionsRenderer, /playoff\.can_reset/);
+  assert.match(
+    playoffActionsRenderer,
+    /is_test_tournament === true[\s\S]*?!playoff\.can_complete[\s\S]*?"ip-btn test-action"/
+  );
   assert.match(inPersonHtml, /Array\.isArray\(data\.participant_ids\)/);
 });
 

@@ -6201,6 +6201,27 @@
     }
   }
 
+  async function fillPlayoffTestResults(button) {
+    button.disabled = true;
+    button.textContent = "Filling...";
+    try {
+      const data = await apiJson(tournamentUrl("/playoff/test-results"), {
+        method: "POST",
+        body: "{}",
+      });
+      adoptPlayoffResponse(data);
+      renderWorkspace();
+      setStatus(
+        `${data.filled} playoff result(s) added through the Final and Bronze medal match.`,
+        "success"
+      );
+    } catch (error) {
+      setStatus(error.message || "Failed to auto-fill playoff results.", "error");
+      button.disabled = false;
+      button.textContent = "Auto-fill playoff results";
+    }
+  }
+
   async function returnPlayoffSetupToSwiss(button) {
     const round = state.swiss?.current_round;
     if (!round || !state.swiss?.can_reopen_current_round) return;
@@ -6439,6 +6460,18 @@
         playoffActions.appendChild(start);
       }
       return;
+    }
+    if (
+      playoff.tournament?.is_test_tournament === true
+      && playoff.tournament?.status === "playoff"
+      && !playoff.can_complete
+    ) {
+      const autoFill = createButton(
+        "Auto-fill playoff results",
+        "ip-btn test-action",
+        () => fillPlayoffTestResults(autoFill)
+      );
+      playoffActions.appendChild(autoFill);
     }
     if (playoff.can_reset) {
       const reset = createButton(

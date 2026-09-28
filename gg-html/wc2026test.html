@@ -536,6 +536,30 @@
     object-fit: contain;
   }
 
+  #tab-playoffs-content .playoff-starter-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 8px;
+    color: #ffffff;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .playoff-starter-legend__icon {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    object-fit: contain;
+  }
+
+  .playoff-player-starter-icon {
+    width: 10px;
+    height: 10px;
+    flex: 0 0 10px;
+    object-fit: contain;
+  }
+
   /* Playoff board label (above match box) */
   .playoff-board-label {
     color: #ffffff;
@@ -985,6 +1009,11 @@
         playerB_id: match.participant_b_id || "",
         playerB_name: matchParticipantName(match, "b"),
         playerB_is_placeholder: !match.participant_b_id && Boolean(String(match.participant_b_placeholder || "").trim()),
+        starter: match.starting_participant_id
+          && String(match.starting_participant_id) === String(match.participant_a_id)
+          ? "A"
+          : match.starting_participant_id
+            && String(match.starting_participant_id) === String(match.participant_b_id) ? "B" : "",
         result_note: match.finish_reason || "",
         round: meta.label,
         round_order: meta.order,
@@ -1953,6 +1982,14 @@
         player1Info.style.justifyContent = "flex-start";
         if (player1Logo) player1Info.appendChild(player1Logo);
         player1Info.appendChild(player1Link);
+        if (m.starter === "A") {
+          const starterIcon = document.createElement("img");
+          starterIcon.src = STARTING_PLAYER_ICON_URL;
+          starterIcon.alt = "Starts";
+          starterIcon.title = "Starting player";
+          starterIcon.className = "playoff-player-starter-icon";
+          player1Info.appendChild(starterIcon);
+        }
         const score1Span = document.createElement("span");
         score1Span.textContent = (m.score1 ?? '');
         score1Span.className = (wA > wB) ? "data-winner" : "data-normal";
@@ -1984,6 +2021,14 @@
         player2Info.style.justifyContent = "flex-start";
         if (player2Logo) player2Info.appendChild(player2Logo);
         player2Info.appendChild(player2Link);
+        if (m.starter === "B") {
+          const starterIcon = document.createElement("img");
+          starterIcon.src = STARTING_PLAYER_ICON_URL;
+          starterIcon.alt = "Starts";
+          starterIcon.title = "Starting player";
+          starterIcon.className = "playoff-player-starter-icon";
+          player2Info.appendChild(starterIcon);
+        }
         const score2Span = document.createElement("span");
         score2Span.textContent = (m.score2 ?? '');
         score2Span.className = (wB > wA) ? "data-winner" : "data-normal";
@@ -2162,6 +2207,16 @@
         });
       }
     });
+
+    if (containerOverride) {
+      const starterLegend = document.createElement("div");
+      starterLegend.className = "playoff-starter-legend";
+      starterLegend.innerHTML = `
+        <img class="playoff-starter-legend__icon" src="${STARTING_PLAYER_ICON_URL}" alt="" aria-hidden="true">
+        <span>the starting player</span>
+      `;
+      containerOverride.appendChild(starterLegend);
+    }
   }
 
 

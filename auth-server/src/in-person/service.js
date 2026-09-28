@@ -3353,6 +3353,181 @@ export function createInPersonService({
     });
   }
 
+  async function fillPlayoffTestResults(tournamentId) {
+    return enqueueMutation(async () => {
+      const outcome = await transaction(async () => {
+        const tournament = await requireTournamentRow(tournamentId);
+        assertTestTournament(tournament);
+        if (tournament.status !== "playoff") {
+          throw conflictError(
+            "INVALID_TOURNAMENT_STATUS",
+            "Automatic playoff results are available only during the playoff stage"
+          );
+        }
+
+        let filled = 0;
+        let publishedRounds = 0;
+        let steps = 0;
+        const maximumSteps = 32;
+        const medalRoundKeys = new Set(["final", "bronze_medal_match"]);
+
+        while (steps < maximumSteps) {
+          steps += 1;
+          const rounds = await loadPlayoffRounds(tournament.id);
+          const activeRound = rounds.find((round) => (
+            round.status === "published"
+            && round.matches.some((match) => match.status !== "completed")
+          ));
+
+          if (activeRound) {
+            const pendingMatches = activeRound.matches.filter((match) => (
+              match.status !== "completed"
+            ));
+            for (const match of pendingMatches) {
+              if (!match.participant_a_id || !match.participant_b_id) {
+                throw conflictError(
+                  "PLAYOFF_PARTICIPANTS_PENDING",
+                  "Both playoff participants must be known before adding automatic results",
+                  { match_id: match.id, round_key: activeRound.round_key }
+                );
+              }
+              const startingParticipantId = match.starting_participant_id
+                || (random() < 0.5 ? match.participant_a_id : match.participant_b_id);
+              const pointsA = randomInteger(60, 130);
+              let pointsB = randomInteger(60, 130);
+              if (pointsA === pointsB) pointsB = pointsA === 130 ? 129 : pointsA + 1;
+              let canonical;
+              try {
+                canonical = validateMatchResult(
+                  { ...match, starting_participant_id: startingParticipantId },
+                  {
+                    result_type: "points",
+                    points_a: pointsA,
+                    points_b: pointsB,
+                    admin_note: "Auto-filled test result",
+                  }
+                );
+              } catch (error) {
+                throwEngineError(error);
+              }
+              await dbRun(
+                db,
+                `
+                  UPDATE in_person_matches
+                  SET starting_participant_id = ?, status = ?, is_bye = 0, result_type = ?,
+                      points_a = ?, points_b = ?, winner_participant_id = ?, loser_participant_id = ?,
+                      finish_reason = ?, admin_note = ?, revision = revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                  WHERE id = ? AND status <> 'completed'
+                `,
+                [
+                  startingParticipantId,
+                  canonical.status,
+                  canonical.result_type,
+                  canonical.points_a,
+                  canonical.points_b,
+                  canonical.winner_participant_id,
+                  canonical.loser_participant_id,
+                  canonical.finish_reason,
+                  canonical.admin_note,
+                  match.id,
+                ]
+              );
+              await propagatePlayoffParticipant(
+                match.next_match_for_winner_id,
+                match.next_match_for_winner_slot,
+                canonical.winner_participant_id
+              );
+              await propagatePlayoffParticipant(
+                match.next_match_for_loser_id,
+                match.next_match_for_loser_slot,
+                canonical.loser_participant_id
+              );
+              filled += 1;
+            }
+
+            const remaining = await dbGet(
+              db,
+              `SELECT COUNT(*) AS count FROM in_person_matches
+               WHERE round_id = ? AND status <> 'cancelled' AND status <> 'completed'`,
+              [activeRound.id]
+            );
+            if (Number(remaining?.count || 0) === 0) {
+              await dbRun(
+                db,
+                `UPDATE in_person_rounds
+                 SET status = 'completed', completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+                     revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                [activeRound.id]
+              );
+            }
+            continue;
+          }
+
+          const publishableRound = rounds.find((round) => (
+            round.status === "draft" && round.can_publish
+          ));
+          if (publishableRound) {
+            const targetRounds = medalRoundKeys.has(publishableRound.round_key)
+              ? rounds.filter((round) => medalRoundKeys.has(round.round_key))
+              : [publishableRound];
+            if (medalRoundKeys.has(publishableRound.round_key) && targetRounds.length !== 2) {
+              throw conflictError(
+                "PLAYOFF_MEDAL_ROUND_INCOMPLETE",
+                "Final and Bronze medal match must be published together"
+              );
+            }
+            const draftRounds = targetRounds.filter((round) => round.status === "draft");
+            draftRounds.forEach(assertPlayoffRoundPublishable);
+            for (const round of draftRounds) {
+              await dbRun(
+                db,
+                `UPDATE in_person_rounds
+                 SET status = 'published', published_at = CURRENT_TIMESTAMP,
+                     revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                [round.id]
+              );
+            }
+            publishedRounds += draftRounds.length;
+            continue;
+          }
+          break;
+        }
+
+        const completedRounds = await loadPlayoffRounds(tournament.id);
+        const incompleteMedalRoundKeys = [...medalRoundKeys].filter((roundKey) => {
+          const round = completedRounds.find((candidate) => candidate.round_key === roundKey);
+          return !round
+            || !round.matches.length
+            || round.matches.some((match) => match.status !== "completed");
+        });
+        if (incompleteMedalRoundKeys.length) {
+          throw conflictError(
+            "PLAYOFF_TEST_RESULTS_BLOCKED",
+            "Automatic playoff results could not reach both medal matches",
+            {
+              rounds: incompleteMedalRoundKeys.map((roundKey) => {
+                const round = completedRounds.find((candidate) => (
+                  candidate.round_key === roundKey
+                ));
+                return {
+                  round_key: roundKey,
+                  status: round?.status || "missing",
+                  blockers: round?.publish_blockers || [],
+                };
+              }),
+            }
+          );
+        }
+        if (filled || publishedRounds) await touchTournament(tournament.id);
+        return { filled, published_rounds: publishedRounds };
+      });
+      return { ...(await getPlayoffOverview(tournamentId)), ...outcome };
+    });
+  }
+
   async function resetPlayoff(tournamentId, payload = {}, actor = null) {
     const reason = normalizeRequiredReason(payload?.reason, "reason");
     const actorUserId = normalizeActorUserId(actor);
@@ -4508,6 +4683,7 @@ export function createInPersonService({
     createParticipant,
     createTournament,
     deleteParticipant,
+    fillPlayoffTestResults,
     fillSwissRoundTestResults,
     getCity,
     getParticipantsOverview,

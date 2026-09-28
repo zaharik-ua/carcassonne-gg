@@ -52,7 +52,12 @@ async function createContext(t, { faultInjector = null } = {}) {
   return { db, service };
 }
 
-async function createSwissCompleteTournament(service, suffix, participantCount = 4) {
+async function createSwissCompleteTournament(
+  service,
+  suffix,
+  participantCount = 4,
+  { isTestTournament = false } = {}
+) {
   const tournament = await service.createTournament({
     slug: `playoff-${suffix}`,
     name_en: `Playoff ${suffix}`,
@@ -62,6 +67,7 @@ async function createSwissCompleteTournament(service, suffix, participantCount =
     organizer_name: "Organizer",
     swiss_rounds_count: 1,
     playoff_first_round: participantCount === 4 ? "semi_final" : "quarter_final",
+    is_test_tournament: isTestTournament,
     admin_user_ids: [1],
   });
   await service.publishTournament(tournament.id);
@@ -597,6 +603,49 @@ test("runs the playoff, swaps streaming table, propagates corrections and requir
   assert.equal(overview.tournament.status, "completed");
   assert.equal(overview.placements.first, finalMatch.participant_a_id);
   assert.equal(overview.placements.third, bronzeMatch.participant_b_id);
+});
+
+test("auto-fills every playoff round through the final and bronze match for test tournaments", async (t) => {
+  const { service } = await createContext(t);
+  const { tournament, participants } = await createSwissCompleteTournament(
+    service,
+    "automatic-results",
+    8,
+    { isTestTournament: true }
+  );
+  const participantIds = participants.map((participant) => participant.id);
+  const preview = await service.previewPlayoff(tournament.id, {
+    participant_ids: participantIds,
+  });
+  let overview = await service.confirmPlayoff(tournament.id, {
+    participant_ids: participantIds,
+    expected_tournament_revision: preview.tournament_revision,
+    expected_standings_revision: preview.standings_revision,
+  });
+
+  overview = await service.fillPlayoffTestResults(tournament.id);
+  assert.equal(overview.filled, 8);
+  assert.equal(overview.published_rounds, 3);
+  assert.equal(overview.tournament.status, "playoff");
+  assert.equal(overview.can_complete, true);
+  assert.ok(overview.rounds.every((round) => round.status === "completed"));
+  const matches = overview.rounds.flatMap((round) => round.matches);
+  assert.equal(matches.length, 8);
+  matches.forEach((match) => {
+    assert.equal(match.status, "completed");
+    assert.equal(match.result_type, "points");
+    assert.equal(match.admin_note, "Auto-filled test result");
+    assert.ok(match.points_a >= 60 && match.points_a <= 130);
+    assert.ok(match.points_b >= 60 && match.points_b <= 130);
+    assert.notEqual(match.points_a, match.points_b);
+    assert.ok([match.participant_a_id, match.participant_b_id].includes(match.starting_participant_id));
+  });
+  assert.ok(overview.placements?.first);
+  assert.ok(overview.placements?.third);
+
+  overview = await service.fillPlayoffTestResults(tournament.id);
+  assert.equal(overview.filled, 0);
+  assert.equal(overview.published_rounds, 0);
 });
 
 test("rejects inactive participants and rolls back partial winner propagation", async (t) => {
