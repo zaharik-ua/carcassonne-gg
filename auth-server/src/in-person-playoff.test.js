@@ -146,6 +146,7 @@ test("builds an empty playoff structure without generated participant placeholde
     round.matches.forEach((match) => {
       assert.equal(match.participant_a_id, null);
       assert.equal(match.participant_b_id, null);
+      assert.equal(match.starting_participant_id, null);
       assert.equal("participant_a_placeholder" in match, false);
       assert.equal("participant_b_placeholder" in match, false);
     });
@@ -258,7 +259,44 @@ test("applies configured playoff tables and validates streaming-table assignment
   );
 });
 
-test("carries configured table numbers through playoff preview and confirmation", async (t) => {
+test("defaults playoff starters to player one and validates manual starting-player assignments", () => {
+  const participantIds = ["p1", "p2", "p3", "p4"];
+  const defaults = buildPlayoffBracket({
+    first_round: "semi_final",
+    participant_ids: participantIds,
+  });
+  assert.deepEqual(
+    defaults.rounds.find((round) => round.round_key === "semi_final")
+      .matches.map((match) => match.starting_participant_id),
+    ["p1", "p3"]
+  );
+
+  const configured = buildPlayoffBracket({
+    first_round: "semi_final",
+    participant_ids: participantIds,
+    starting_participants: [
+      { round_key: "semi_final", bracket_position: 1, participant_id: "p2" },
+      { round_key: "semi_final", bracket_position: 2, participant_id: "p3" },
+    ],
+  });
+  assert.deepEqual(
+    configured.rounds.find((round) => round.round_key === "semi_final")
+      .matches.map((match) => match.starting_participant_id),
+    ["p2", "p3"]
+  );
+  assert.throws(
+    () => buildPlayoffBracket({
+      first_round: "semi_final",
+      participant_ids: participantIds,
+      starting_participants: [
+        { round_key: "semi_final", bracket_position: 1, participant_id: "p3" },
+      ],
+    }),
+    (error) => error?.code === "INVALID_PLAYOFF_STARTING_PARTICIPANT"
+  );
+});
+
+test("carries configured tables and starting players through playoff preview and confirmation", async (t) => {
   const { service } = await createContext(t);
   const { tournament, participants } = await createSwissCompleteTournament(
     service,
@@ -271,14 +309,24 @@ test("carries configured table numbers through playoff preview and confirmation"
     { round_key: "bronze_medal_match", bracket_position: 1, table_number: 2 },
     { round_key: "final", bracket_position: 1, table_number: 1 },
   ];
+  const startingParticipants = [
+    { round_key: "semi_final", bracket_position: 1, participant_id: participantIds[1] },
+    { round_key: "semi_final", bracket_position: 2, participant_id: participantIds[2] },
+  ];
   const preview = await service.previewPlayoff(tournament.id, {
     participant_ids: participantIds,
     table_numbers: tableNumbers,
+    starting_participants: startingParticipants,
   });
   assert.deepEqual(preview.rounds[0].matches.map((match) => match.table_number), [2, 1]);
+  assert.deepEqual(
+    preview.rounds[0].matches.map((match) => match.starting_participant_id),
+    [participantIds[1], participantIds[2]]
+  );
   const overview = await service.confirmPlayoff(tournament.id, {
     participant_ids: participantIds,
     table_numbers: tableNumbers,
+    starting_participants: startingParticipants,
     expected_tournament_revision: preview.tournament_revision,
     expected_standings_revision: preview.standings_revision,
   });
@@ -286,6 +334,11 @@ test("carries configured table numbers through playoff preview and confirmation"
     overview.rounds.find((round) => round.round_key === "semi_final")
       .matches.map((match) => match.table_number),
     [2, 1]
+  );
+  assert.deepEqual(
+    overview.rounds.find((round) => round.round_key === "semi_final")
+      .matches.map((match) => match.starting_participant_id),
+    [participantIds[1], participantIds[2]]
   );
 });
 
@@ -321,6 +374,10 @@ test("resets an unplayed playoff bracket and blocks reset after the first result
   });
   assert.equal(overview.can_start, true);
   assert.deepEqual(overview.participant_ids, participantIds);
+  assert.deepEqual(
+    overview.starting_participants.map((assignment) => assignment.participant_id),
+    [participantIds[0], participantIds[2]]
+  );
   const cancelledRounds = await all(
     db,
     `SELECT status, cancelled_by_user_id, cancellation_reason

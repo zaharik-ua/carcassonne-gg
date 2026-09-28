@@ -3116,6 +3116,7 @@ export function createInPersonService({
         first_round: tournament.playoff_first_round,
         participant_ids: normalizePlayoffParticipantIds(payload),
         table_numbers: payload?.table_numbers ?? persistedTableNumbers,
+        starting_participants: payload?.starting_participants,
       });
     } catch (error) {
       if (error instanceof InPersonPlayoffError) {
@@ -3252,7 +3253,7 @@ export function createInPersonService({
               `
                 UPDATE in_person_matches
                 SET table_number = ?, participant_a_id = ?, participant_b_id = ?,
-                    starting_participant_id = NULL, status = 'scheduled',
+                    starting_participant_id = ?, status = 'scheduled',
                     result_type = NULL, points_a = NULL, points_b = NULL,
                     winner_participant_id = NULL, loser_participant_id = NULL,
                     finish_reason = NULL, admin_note = NULL,
@@ -3263,6 +3264,7 @@ export function createInPersonService({
                 match.table_number,
                 match.participant_a_id,
                 match.participant_b_id,
+                match.starting_participant_id,
                 existingMatch.id,
               ]
             );
@@ -3403,7 +3405,8 @@ export function createInPersonService({
         const firstRoundMatches = await dbAll(
           db,
           `
-            SELECT m.participant_a_id, m.participant_b_id
+            SELECT m.bracket_position, m.participant_a_id, m.participant_b_id,
+                   m.starting_participant_id
             FROM in_person_matches m
             JOIN in_person_rounds r ON r.id = m.round_id
             WHERE r.tournament_id = ?
@@ -3419,6 +3422,11 @@ export function createInPersonService({
           match.participant_a_id,
           match.participant_b_id,
         ]));
+        const startingParticipants = firstRoundMatches.map((match) => ({
+          round_key: tournament.playoff_first_round,
+          bracket_position: Number(match.bracket_position),
+          participant_id: match.starting_participant_id,
+        }));
         const tableNumbers = await dbAll(
           db,
           `
@@ -3481,6 +3489,7 @@ export function createInPersonService({
         return {
           reset: true,
           participant_ids: participantIds,
+          starting_participants: startingParticipants,
           table_numbers: normalizedTableNumbers,
         };
       });

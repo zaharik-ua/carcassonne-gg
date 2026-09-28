@@ -187,6 +187,64 @@ function applyConfiguredTableNumbers(roundsByKey, tableNumbers) {
   });
 }
 
+function applyConfiguredStartingParticipants(firstRoundPlan, startingParticipants) {
+  firstRoundPlan.matches.forEach((match) => {
+    match.starting_participant_id = match.participant_a_id;
+  });
+  if (startingParticipants === undefined || startingParticipants === null) return;
+  if (!Array.isArray(startingParticipants)) {
+    playoffError(
+      "INVALID_PLAYOFF_STARTING_PARTICIPANTS",
+      "starting_participants must be an array",
+      { field: "starting_participants" }
+    );
+  }
+  const configuredMatches = new Set();
+  startingParticipants.forEach((entry, index) => {
+    const roundKey = String(entry?.round_key || "").trim().toLowerCase();
+    const bracketPosition = Number(entry?.bracket_position);
+    const participantId = normalizeParticipantId(entry?.participant_id);
+    const match = roundKey === firstRoundPlan.round_key
+      ? firstRoundPlan.matches.find((candidate) => (
+        candidate.bracket_position === bracketPosition
+      ))
+      : null;
+    if (!match) {
+      playoffError(
+        "INVALID_PLAYOFF_STARTING_MATCH",
+        "Every starting-player assignment must reference a first-round playoff match",
+        {
+          field: `starting_participants[${index}]`,
+          round_key: roundKey,
+          bracket_position: bracketPosition,
+        }
+      );
+    }
+    const key = matchKey(roundKey, bracketPosition);
+    if (configuredMatches.has(key)) {
+      playoffError(
+        "DUPLICATE_PLAYOFF_STARTING_ASSIGNMENT",
+        "A playoff match cannot have more than one starting-player assignment",
+        { field: "starting_participants", round_key: roundKey, bracket_position: bracketPosition }
+      );
+    }
+    if (![match.participant_a_id, match.participant_b_id].includes(participantId)) {
+      playoffError(
+        "INVALID_PLAYOFF_STARTING_PARTICIPANT",
+        "The starting player must be one of the players in that playoff match",
+        {
+          field: `starting_participants[${index}].participant_id`,
+          round_key: roundKey,
+          bracket_position: bracketPosition,
+          participant_id: participantId,
+        }
+      );
+    }
+    configuredMatches.add(key);
+    match.starting_participant_id = participantId;
+  });
+}
+
 /**
  * Builds the complete deterministic single-elimination structure, including
  * Final and the mandatory Bronze medal match. Stable database IDs are assigned
@@ -196,6 +254,7 @@ export function buildPlayoffBracket({
   first_round: firstRound,
   participant_ids: participantIds,
   table_numbers: tableNumbers,
+  starting_participants: startingParticipants,
 } = {}) {
   const normalizedFirstRound = String(firstRound || "").trim().toLowerCase();
   const normalizedParticipantIds = validateParticipantSlots(
@@ -213,9 +272,15 @@ export function buildPlayoffBracket({
     match.participant_a_id = normalizedParticipantIds[index * 2];
     match.participant_b_id = normalizedParticipantIds[(index * 2) + 1];
   });
+  applyConfiguredStartingParticipants(firstRoundPlan, startingParticipants);
   return {
     ...structure,
     participant_ids: normalizedParticipantIds,
+    starting_participants: firstRoundPlan.matches.map((match) => ({
+      round_key: firstRoundPlan.round_key,
+      bracket_position: match.bracket_position,
+      participant_id: match.starting_participant_id,
+    })),
   };
 }
 
@@ -251,6 +316,7 @@ export function buildPlayoffStructure({
       table_number: roundKey === "bronze_medal_match" ? 2 : matchIndex + 1,
       participant_a_id: null,
       participant_b_id: null,
+      starting_participant_id: null,
       next_match_for_winner_key: null,
       next_match_for_winner_slot: null,
       next_match_for_loser_key: null,

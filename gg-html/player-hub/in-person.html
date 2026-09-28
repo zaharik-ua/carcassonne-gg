@@ -1900,6 +1900,7 @@
     playoff: null,
     pairingPreview: null,
     playoffSetupSlots: [],
+    playoffSetupStarters: {},
     activeTab: "players",
     playerFormController: null,
     currentUser: null,
@@ -1977,6 +1978,19 @@
     statusEl.textContent = message || "";
     statusEl.className = `ip-status${type ? ` ${type}` : ""}`;
   }
+
+  function preventNumberInputWheelChange(event) {
+    const input = event.target;
+    if (
+      input instanceof HTMLInputElement
+      && input.type === "number"
+      && document.activeElement === input
+    ) {
+      event.preventDefault();
+    }
+  }
+
+  document.addEventListener("wheel", preventNumberInputWheelChange, { passive: false });
 
   function openTournamentFullView() {
     if (!state.selectedTournamentId || closeTournamentFullView) return;
@@ -2711,7 +2725,7 @@
     const menu = document.createElement("div");
     menu.className = "ip-city-picker-menu";
     menu.setAttribute("role", "listbox");
-    const normalizedOptions = (options || []).map((entry) => ({
+    let normalizedOptions = (options || []).map((entry) => ({
       value: String(entry.value ?? ""),
       label: String(entry.label ?? entry.value ?? ""),
     }));
@@ -2767,6 +2781,15 @@
       button.disabled = disabled;
       if (disabled) close();
     };
+    const setOptions = (nextOptions, nextValue = value) => {
+      normalizedOptions = (nextOptions || []).map((entry) => ({
+        value: String(entry.value ?? ""),
+        label: String(entry.label ?? entry.value ?? ""),
+      }));
+      value = String(nextValue ?? "");
+      renderButton();
+      renderOptions();
+    };
 
     button.addEventListener("click", () => {
       if (menu.classList.contains("open")) close();
@@ -2787,6 +2810,7 @@
       button,
       getValue: () => value,
       setValue,
+      setOptions,
       setDisabled,
       onChange: (listener) => changeListeners.push(listener),
     };
@@ -4550,8 +4574,24 @@
         { method: "POST", body: "{}" }
       );
       adoptSwissResponse(data);
+      let playoffRefreshError = null;
+      if (data.swiss_complete) {
+        try {
+          const playoffData = await apiJson(tournamentUrl("/playoff"));
+          adoptPlayoffResponse(playoffData);
+        } catch (error) {
+          playoffRefreshError = error;
+        }
+      }
       renderWorkspace();
-      setStatus(`Swiss round ${round.round_number} completed. Standings updated.`, "success");
+      if (playoffRefreshError) {
+        setStatus(
+          `Swiss round ${round.round_number} completed, but Playoff controls could not be refreshed.`,
+          "error"
+        );
+      } else {
+        setStatus(`Swiss round ${round.round_number} completed. Standings updated.`, "success");
+      }
     } catch (error) {
       const missing = error.details?.missing_table_numbers || [];
       setStatus(
@@ -4865,9 +4905,6 @@
       input.autocomplete = "off";
       input.className = "ip-input ip-swiss-score-input";
       input.value = initialScore(side);
-      input.addEventListener("wheel", (event) => {
-        event.preventDefault();
-      }, { passive: false });
       summary.appendChild(name);
       return { participantId, summary, input, won };
     };
@@ -5664,6 +5701,35 @@
     return tableNumber;
   }
 
+  function playoffSetupMatchKey(roundKey, bracketPosition) {
+    return `${roundKey}:${Number(bracketPosition)}`;
+  }
+
+  function playoffSetupStartingParticipant(roundKey, match, participantAId, participantBId) {
+    const playerIds = [participantAId, participantBId].filter(Boolean);
+    const configuredId = state.playoffSetupStarters[
+      playoffSetupMatchKey(roundKey, match.bracket_position)
+    ];
+    if (playerIds.includes(configuredId)) return configuredId;
+    if (playerIds.includes(match.starting_participant_id)) {
+      return match.starting_participant_id;
+    }
+    return participantAId || participantBId || null;
+  }
+
+  function adoptPlayoffSetupStartingAssignments(assignments) {
+    state.playoffSetupStarters = {};
+    (Array.isArray(assignments) ? assignments : []).forEach((assignment) => {
+      const participantId = String(assignment?.participant_id || "").trim();
+      const roundKey = String(assignment?.round_key || "").trim();
+      const bracketPosition = Number(assignment?.bracket_position);
+      if (!participantId || !roundKey || !Number.isInteger(bracketPosition)) return;
+      state.playoffSetupStarters[
+        playoffSetupMatchKey(roundKey, bracketPosition)
+      ] = participantId;
+    });
+  }
+
   function ensurePlayoffSetupSlots() {
     const participantCount = Number(state.playoff?.participant_count || 0);
     if (state.playoffSetupSlots.length !== participantCount) {
@@ -5700,6 +5766,12 @@
           setupMatch.participant_b_id = playersUnlocked
             ? slots[setupMatch.setup_slot_b_index] || null
             : null;
+          setupMatch.starting_participant_id = playoffSetupStartingParticipant(
+            round.round_key,
+            match,
+            setupMatch.participant_a_id,
+            setupMatch.participant_b_id
+          );
         }
         return setupMatch;
       }),
@@ -5778,8 +5850,27 @@
     state.playoffSetupSlots = playoffSeedOrder(participantCount).map((seed) => (
       rankedParticipantIds[seed - 1]
     ));
+    const standingsPositions = new Map(
+      (state.playoff?.standings?.rows || []).map((standing) => (
+        [standing.participant_id, Number(standing.position)]
+      ))
+    );
+    const firstRound = String(state.playoff?.first_round || "");
+    state.playoffSetupStarters = {};
+    for (let slotIndex = 0; slotIndex < state.playoffSetupSlots.length; slotIndex += 2) {
+      const participantAId = state.playoffSetupSlots[slotIndex];
+      const participantBId = state.playoffSetupSlots[slotIndex + 1];
+      const positionA = standingsPositions.get(participantAId) || Number.MAX_SAFE_INTEGER;
+      const positionB = standingsPositions.get(participantBId) || Number.MAX_SAFE_INTEGER;
+      state.playoffSetupStarters[
+        playoffSetupMatchKey(firstRound, (slotIndex / 2) + 1)
+      ] = positionA <= positionB ? participantAId : participantBId;
+    }
     renderPlayoff();
-    setStatus("Playoff matches seeded from Swiss standings.", "success");
+    setStatus(
+      "Playoff matches seeded from Swiss standings. Higher-ranked players start.",
+      "success"
+    );
   }
 
   function openPlayoffParticipantModal(round, match) {
@@ -5808,6 +5899,7 @@
         : "Configure the table for this playoff match.";
     let playerA = null;
     let playerB = null;
+    let startingPlayer = null;
     if (canSelectPlayers) {
       const options = playoffParticipantOptions([slotAIndex, slotBIndex]);
       playerA = createMenuSelectField(
@@ -5822,6 +5914,41 @@
         state.playoffSetupSlots[slotBIndex],
         { signal: pickerController.signal }
       );
+      const selectedPlayerOptions = () => {
+        const participantIds = [playerA.getValue(), playerB.getValue()].filter(Boolean);
+        return participantIds
+          .filter((participantId, index) => participantIds.indexOf(participantId) === index)
+          .map((participantId) => ({
+            value: participantId,
+            label: playoffSetupParticipantName(participantId),
+          }));
+      };
+      startingPlayer = createMenuSelectField(
+        "Starting player",
+        selectedPlayerOptions(),
+        match.starting_participant_id || playerA.getValue() || playerB.getValue(),
+        { signal: pickerController.signal }
+      );
+      let preserveStartingPlayer = Object.prototype.hasOwnProperty.call(
+        state.playoffSetupStarters,
+        playoffSetupMatchKey(round.round_key, match.bracket_position)
+      );
+      const syncStartingPlayerOptions = () => {
+        const optionsForPlayers = selectedPlayerOptions();
+        const participantIds = optionsForPlayers.map((option) => option.value);
+        const currentStarter = startingPlayer.getValue();
+        const nextStarter = preserveStartingPlayer && participantIds.includes(currentStarter)
+          ? currentStarter
+          : playerA.getValue() || playerB.getValue() || "";
+        startingPlayer.setOptions(optionsForPlayers, nextStarter);
+        startingPlayer.setDisabled(!optionsForPlayers.length);
+      };
+      playerA.onChange(syncStartingPlayerOptions);
+      playerB.onChange(syncStartingPlayerOptions);
+      startingPlayer.onChange(() => {
+        preserveStartingPlayer = true;
+      });
+      syncStartingPlayerOptions();
     }
     const placeholderA = hasPlayerSlots ? createField("Player 1 placeholder") : null;
     const placeholderB = hasPlayerSlots ? createField("Player 2 placeholder") : null;
@@ -5859,6 +5986,9 @@
       const clear = createButton("Clear match", "ip-btn danger", () => {
         state.playoffSetupSlots[slotAIndex] = "";
         state.playoffSetupSlots[slotBIndex] = "";
+        delete state.playoffSetupStarters[
+          playoffSetupMatchKey(round.round_key, match.bracket_position)
+        ];
         closeModal();
         renderPlayoff();
         setStatus("");
@@ -5879,6 +6009,7 @@
     if (playerA) {
       form.appendChild(playerA.field);
       form.appendChild(playerB.field);
+      form.appendChild(startingPlayer.field);
     }
     if (placeholderA) {
       form.appendChild(placeholderA.field);
@@ -5896,8 +6027,16 @@
       }
       const participantAId = playerA?.getValue() || "";
       const participantBId = playerB?.getValue() || "";
+      const startingParticipantId = startingPlayer?.getValue() || "";
       if (participantAId && participantAId === participantBId) {
         error.textContent = "Select two different players.";
+        return;
+      }
+      if (
+        startingParticipantId
+        && ![participantAId, participantBId].includes(startingParticipantId)
+      ) {
+        error.textContent = "Starting player must be one of the selected players.";
         return;
       }
       const occupiedMatch = !fixedTable
@@ -5926,6 +6065,12 @@
       if (canSelectPlayers) {
         state.playoffSetupSlots[slotAIndex] = participantAId;
         state.playoffSetupSlots[slotBIndex] = participantBId;
+        const setupMatchKey = playoffSetupMatchKey(round.round_key, match.bracket_position);
+        if (startingParticipantId) {
+          state.playoffSetupStarters[setupMatchKey] = startingParticipantId;
+        } else {
+          delete state.playoffSetupStarters[setupMatchKey];
+        }
       }
       try {
         if (placeholdersChanged) {
@@ -5980,6 +6125,16 @@
     ));
   }
 
+  function playoffSetupStartingAssignments() {
+    const firstRound = String(state.playoff?.first_round || "");
+    const round = buildEmptyPlayoffRounds().find((entry) => entry.round_key === firstRound);
+    return (round?.matches || []).map((match) => ({
+      round_key: firstRound,
+      bracket_position: match.bracket_position,
+      participant_id: match.starting_participant_id,
+    }));
+  }
+
   async function startPlayoffFromBracket(button) {
     const participantIds = ensurePlayoffSetupSlots().slice();
     if (participantIds.some((participantId) => !participantId)) {
@@ -5989,9 +6144,14 @@
     button.disabled = true;
     try {
       const tableNumbers = playoffSetupTableAssignments();
+      const startingParticipants = playoffSetupStartingAssignments();
       const previewData = await apiJson(tournamentUrl("/playoff/preview"), {
         method: "POST",
-        body: JSON.stringify({ participant_ids: participantIds, table_numbers: tableNumbers }),
+        body: JSON.stringify({
+          participant_ids: participantIds,
+          table_numbers: tableNumbers,
+          starting_participants: startingParticipants,
+        }),
       });
       const preview = previewData.preview;
       const data = await apiJson(tournamentUrl("/playoff/confirm"), {
@@ -5999,12 +6159,14 @@
         body: JSON.stringify({
           participant_ids: preview.participant_ids,
           table_numbers: tableNumbers,
+          starting_participants: preview.starting_participants,
           expected_tournament_revision: preview.tournament_revision,
           expected_standings_revision: preview.standings_revision,
         }),
       });
       adoptPlayoffResponse(data);
       state.playoffSetupSlots = [];
+      state.playoffSetupStarters = {};
       renderWorkspace();
       setStatus("Playoff started and the first round was published.", "success");
     } catch (error) {
@@ -6052,6 +6214,7 @@
         { method: "POST", body: "{}" }
       );
       state.playoffSetupSlots = [];
+      state.playoffSetupStarters = {};
       state.activeTab = "swiss";
       await loadOverview();
       setStatus(`Swiss round ${round.round_number} reopened.`, "success");
@@ -6076,6 +6239,7 @@
       if (Array.isArray(data.participant_ids)) {
         state.playoffSetupSlots = data.participant_ids;
       }
+      adoptPlayoffSetupStartingAssignments(data.starting_participants);
       renderWorkspace();
       setStatus("Playoff bracket reset. Configure the matches again.", "success");
     } catch (error) {
@@ -6453,6 +6617,7 @@
       state.playoff = null;
       state.pairingPreview = null;
       state.playoffSetupSlots = [];
+      state.playoffSetupStarters = {};
       renderWorkspace();
       return;
     }
@@ -6475,6 +6640,7 @@
   async function selectTournament(tournamentId) {
     if (String(tournamentId || "") !== state.selectedTournamentId) {
       state.playoffSetupSlots = [];
+      state.playoffSetupStarters = {};
     }
     state.selectedTournamentId = String(tournamentId || "");
     const url = new URL(window.location.href);
@@ -6492,6 +6658,7 @@
       state.playoff = null;
       state.pairingPreview = null;
       state.playoffSetupSlots = [];
+      state.playoffSetupStarters = {};
       renderWorkspace();
       setStatus(error.message || "Failed to load tournament.", "error");
     }

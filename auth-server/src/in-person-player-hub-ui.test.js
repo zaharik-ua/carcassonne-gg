@@ -111,6 +111,14 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.match(inPersonHtml, /DRAW_NUMBER_TAKEN/);
   assert.match(inPersonHtml, /ip-draw-number-display/);
   assert.match(inPersonHtml, /ip-draw-number::-webkit-inner-spin-button/);
+  assert.match(
+    inPersonHtml,
+    /function preventNumberInputWheelChange\(event\)[\s\S]*?input instanceof HTMLInputElement[\s\S]*?input\.type === "number"[\s\S]*?document\.activeElement === input[\s\S]*?event\.preventDefault\(\)/
+  );
+  assert.match(
+    inPersonHtml,
+    /document\.addEventListener\("wheel", preventNumberInputWheelChange, \{ passive: false \}\)/
+  );
   assert.doesNotMatch(inPersonHtml, /Gaps and a missing #1 are allowed\./);
   assert.match(inPersonHtml, /@media \(max-width: 720px\)/);
   assert.match(inPersonHtml, /min-height: 44px/);
@@ -300,7 +308,6 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   ].forEach((text) => assert.ok(swissResultForm.includes(text), `missing Swiss score form text: ${text}`));
   assert.doesNotMatch(swissResultForm, /"Result type"|"Win \/ loss"|"Technical reason"/);
   assert.match(inPersonHtml, /\.ip-swiss-score-input\s*\{[\s\S]*?width: 112px;[\s\S]*?height: 112px;[\s\S]*?font-size: 36px;/);
-  assert.match(swissResultForm, /input\.addEventListener\("wheel", \(event\) => \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?\}, \{ passive: false \}\);/);
   assert.match(inPersonHtml, /\.ip-swiss-score-player-name\s*\{[\s\S]*?font-weight: 500;/);
   assert.match(inPersonHtml, /\.ip-swiss-score-won\s*\{[\s\S]*?font-size: 15px;/);
   assert.doesNotMatch(inPersonHtml, /\.ip-admin-note-toggle\s*\{[\s\S]*?text-decoration:\s*underline/);
@@ -361,6 +368,10 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
     inPersonHtml.indexOf("function cancellationResultLabel")
   );
   assert.doesNotMatch(completeRoundFlow, /window\.confirm/);
+  assert.match(
+    completeRoundFlow,
+    /adoptSwissResponse\(data\);[\s\S]*?if \(data\.swiss_complete\)[\s\S]*?tournamentUrl\("\/playoff"\)[\s\S]*?adoptPlayoffResponse\(playoffData\);[\s\S]*?renderWorkspace\(\);/
+  );
   assert.match(inPersonHtml, /function swissTableProgress\(round\)[\s\S]*?filter\(\(match\) => !match\.is_bye\)/);
   assert.match(inPersonHtml, /const rounds = state\.swiss\?\.rounds \|\| \[\];[\s\S]*?rounds\.forEach\(\(round\) =>/);
   const swissMatchesRenderer = inPersonHtml.slice(
@@ -449,6 +460,7 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
   [
     "Single-elimination playoff",
     "Select both players for this first-round match.",
+    "Starting player",
     "Save players",
     "Auto-seed",
     "Start playoff",
@@ -468,10 +480,14 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     /function playoffSetupParticipantName/,
     /`#\$\{position\} • \$\{name\}`/,
     /function openPlayoffParticipantModal/,
+    /function playoffSetupStartingAssignments/,
     /Players become available after every Swiss round is complete/,
     /Player 1 placeholder/,
     /function playoffSetupTableAssignments/,
     /table_numbers: tableNumbers/,
+    /starting_participants: startingParticipants/,
+    /Higher-ranked players start/,
+    /positionA <= positionB \? participantAId : participantBId/,
     /\/playoff\/matches\/\$\{encodeURIComponent\(match\.id\)\}\/placeholders/,
     /swissPosition\(left\.id\) - swissPosition\(right\.id\)/,
     /function playoffSeedOrder/,
