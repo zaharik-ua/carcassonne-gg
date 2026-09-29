@@ -486,7 +486,7 @@
   <aside class="gg-mobile-nav__drawer" id="ggMobileNavDrawer" aria-hidden="true">
     <div class="gg-mobile-nav__drawer-header">
       <div class="gg-mobile-nav__auth">
-        <button id="ggAuthSignInButton" class="gg-mobile-nav__auth-button" type="button">Sign in</button>
+        <button id="ggAuthSignInButton" class="gg-mobile-nav__auth-button gg-mobile-nav__hidden" type="button">Sign in</button>
 
         <div id="ggAuthUser" class="gg-mobile-nav__auth-user">
           <button id="ggAuthUserTrigger" class="gg-mobile-nav__auth-user-trigger" type="button" aria-expanded="false" aria-controls="ggAuthUserMenu">
@@ -577,6 +577,90 @@
     const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
     const MOBILE_MENU_URL = AUTH_BASE + "/public/mobile-menu-items";
 
+    function installApiFetchRecovery(apiBase) {
+      if (window.__ggApiFetchRecoveryInstalled) return;
+
+      const apiOrigin = new URL(apiBase, window.location.href).origin;
+      const nativeFetch = window.fetch.bind(window);
+      const retryDelaysMs = [500, 1000, 2000, 3000, 5000, 5000, 5000, 5000];
+      const retryableStatuses = new Set([502, 503, 504]);
+      let apiReadyPromise = null;
+
+      const wait = (delayMs) => new Promise((resolve) => {
+        window.setTimeout(resolve, delayMs);
+      });
+
+      const getRequestDetails = (input, init) => {
+        const isRequest = typeof Request === "function" && input instanceof Request;
+        const rawUrl = isRequest ? input.url : input;
+        let url = null;
+        try {
+          url = new URL(String(rawUrl || ""), window.location.href);
+        } catch (_error) {
+          return null;
+        }
+        return {
+          url,
+          method: String(init?.method || (isRequest ? input.method : "GET")).toUpperCase(),
+          signal: init?.signal || (isRequest ? input.signal : null),
+        };
+      };
+
+      const waitForApi = () => {
+        if (apiReadyPromise) return apiReadyPromise;
+        apiReadyPromise = (async () => {
+          let lastError = new Error("API is temporarily unavailable");
+          for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+            if (attempt > 0) {
+              const baseDelay = retryDelaysMs[attempt - 1];
+              const jitteredDelay = Math.round(baseDelay * (0.85 + Math.random() * 0.3));
+              await wait(jitteredDelay);
+            }
+            try {
+              const response = await nativeFetch(`${apiOrigin}/health`, {
+                method: "GET",
+                credentials: "omit",
+                cache: "no-store",
+              });
+              if (response.ok) return;
+              lastError = new Error(`API health check returned ${response.status}`);
+            } catch (error) {
+              lastError = error;
+            }
+          }
+          throw lastError;
+        })().finally(() => {
+          apiReadyPromise = null;
+        });
+        return apiReadyPromise;
+      };
+
+      window.fetch = async (input, init) => {
+        const details = getRequestDetails(input, init);
+        const canRecover = details
+          && details.url.origin === apiOrigin
+          && ["GET", "HEAD"].includes(details.method);
+        if (!canRecover) return nativeFetch(input, init);
+
+        try {
+          const response = await nativeFetch(input, init);
+          if (!retryableStatuses.has(response.status)) return response;
+        } catch (error) {
+          if (details.signal?.aborted || error?.name === "AbortError") throw error;
+        }
+
+        await waitForApi();
+        if (details.signal?.aborted) {
+          throw new DOMException("The operation was aborted.", "AbortError");
+        }
+        return nativeFetch(input, init);
+      };
+
+      window.__ggApiFetchRecoveryInstalled = true;
+    }
+
+    installApiFetchRecovery(AUTH_BASE);
+
     const navRoot = document.getElementById("ggMobileNav");
     const navBar = navRoot.querySelector(".gg-mobile-nav__bar");
     const drawerBody = navRoot.querySelector(".gg-mobile-nav__drawer-body");
@@ -605,6 +689,7 @@
     const exitImpersonationButton = document.getElementById("ggAuthExitImpersonationButton");
 
     let lastAuthStateKey = null;
+    let sessionRetryTimer = null;
 
     function toBool(value) {
       if (typeof value === "boolean") return value;
@@ -744,6 +829,11 @@
       emitAuthStateChange(user, impersonation);
     }
 
+    function scheduleSessionRetry() {
+      window.clearTimeout(sessionRetryTimer);
+      sessionRetryTimer = window.setTimeout(fetchSession, 5000);
+    }
+
     async function fetchSession() {
       try {
         const response = await fetch(AUTH_BASE + "/auth/me", {
@@ -751,19 +841,22 @@
           credentials: "include"
         });
 
-        if (!response.ok) {
+        if (response.status === 401) {
+          window.clearTimeout(sessionRetryTimer);
           setLoggedOutUI();
           return;
         }
+        if (!response.ok) throw new Error("Session check failed (" + response.status + ")");
 
         const data = await response.json();
+        window.clearTimeout(sessionRetryTimer);
         if (data.authenticated && data.user) {
           setLoggedInUI(data.user, data.impersonation);
         } else {
           setLoggedOutUI();
         }
       } catch (error) {
-        setLoggedOutUI();
+        scheduleSessionRetry();
       }
     }
 

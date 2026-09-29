@@ -94,6 +94,7 @@ import {
 import { ensureGameReplaysSchema as ensureGameReplaysSchemaForDb } from "./bga-replay-schema.js";
 import { registerBgaReplayAdminRoutes } from "./bga-replay-admin.js";
 import { loadPublicGamesByDuelIds } from "./bga-replay-public.js";
+import { ensureMatchIdReferenceSync } from "./match-id-sync.js";
 
 dotenv.config();
 
@@ -8070,8 +8071,9 @@ function scheduleApplicationSchemas() {
   ensureAssociationsSchema();
   ensureMatchesSchema();
   ensureDuelsSchema();
-  ensureSecretLineupsSchema(db).catch((error) => {
+  const secretLineupsSchemaReady = ensureSecretLineupsSchema(db).catch((error) => {
     console.error("Failed to ensure secret lineups schema", error);
+    throw error;
   });
   ensureDuelFormatsSchema();
   ensureSystemSettingsSchema();
@@ -8094,10 +8096,17 @@ function scheduleApplicationSchemas() {
   ensureStreamsSchema();
   ensureMobileMenuItemsSchema();
   ensureAuditTrailSchema();
-  ensureTournamentCasesSchema(db).catch((error) => {
+  const tournamentCasesSchemaReady = ensureTournamentCasesSchema(db).catch((error) => {
     console.error("Failed to ensure tournament_cases schema", error);
+    throw error;
   });
-  scheduleInPersonSchema();
+  Promise.all([secretLineupsSchemaReady, tournamentCasesSchemaReady])
+    .then(() => ensureMatchIdReferenceSync(db))
+    .then(() => scheduleInPersonSchema())
+    .catch((error) => {
+      console.error("Failed to initialize required match schemas", error);
+      failInPersonSchema(error);
+    });
 }
 
 db.serialize(() => {
@@ -24445,11 +24454,17 @@ app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req,
     const lineupDeadlineUtc = isBlindLineup
       ? new Date(Date.parse(proposedTimeUtc) - lineupDeadlineHours * 60 * 60 * 1000).toISOString()
       : null;
+    const nextMatchId = buildGeneratedMatchId(
+      proposedTimeUtc,
+      match.team_1,
+      match.team_2,
+    ) || matchId;
 
     await dbRunAsync(
       `
         UPDATE matches
         SET
+          id = ?,
           time_utc = ?,
           proposed_time_status = ?,
           lineup_deadline_h = ?,
@@ -24461,6 +24476,7 @@ app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req,
           AND lower(trim(COALESCE(status, ''))) = 'planned'
       `,
       [
+        nextMatchId,
         proposedTimeUtc,
         MATCH_TIME_PROPOSAL_STATUSES.ACCEPTED,
         lineupDeadlineHours,
@@ -24473,17 +24489,18 @@ app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req,
       `
         UPDATE duels
         SET
+          match_id = ?,
           time_utc = ?,
           updated_by = ?,
           updated_at = CURRENT_TIMESTAMP
-        WHERE match_id = ?
+        WHERE trim(COALESCE(match_id, '')) IN (trim(?), trim(?))
           AND deleted_at IS NULL
           AND COALESCE(custom_time, 0) = 0
           AND lower(trim(COALESCE(status, ''))) NOT IN ('done', 'error', 'no show', 'in progress')
       `,
-      [proposedTimeUtc, actorPlayerId, matchId]
+      [nextMatchId, proposedTimeUtc, actorPlayerId, matchId, nextMatchId]
     );
-    const updatedMatch = await dbGetAsync("SELECT * FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1", [matchId]);
+    const updatedMatch = await dbGetAsync("SELECT * FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1", [nextMatchId]);
     await dbRunAsync("COMMIT");
     transactionOpen = false;
 
@@ -24492,15 +24509,22 @@ app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req,
       event_type: "match.time_proposal.accepted",
       entity_type: "match",
       action: "update",
-      record_id: matchId,
+      record_id: nextMatchId,
       changes: buildAuditChanges(match, updatedMatch, MATCH_AUDIT_FIELDS),
-      metadata: { accepted_by_team_id: captainTeamId, proposed_by_team_id: proposedByTeamId },
+      metadata: {
+        accepted_by_team_id: captainTeamId,
+        proposed_by_team_id: proposedByTeamId,
+        previous_record_id: matchId !== nextMatchId ? matchId : null,
+      },
     });
     return res.json({ ok: true, match: updatedMatch });
   } catch (error) {
     if (transactionOpen) await dbRunAsync("ROLLBACK").catch(() => {});
     if (error?.httpStatus) {
       return res.status(error.httpStatus).json({ ok: false, message: error.message });
+    }
+    if (String(error?.code || "") === "SQLITE_CONSTRAINT" || String(error?.message || "").includes("UNIQUE")) {
+      return res.status(409).json({ ok: false, message: "A match with the accepted date and teams already exists" });
     }
     console.error("Failed to accept match time proposal", error);
     return res.status(500).json({ ok: false, message: "Failed to accept match time proposal" });
