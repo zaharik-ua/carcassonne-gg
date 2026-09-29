@@ -867,6 +867,103 @@ export function registerBgaReplayAdminRoutes(app, {
     }
   });
 
+  app.post("/admin/bga-replay-budget/fallback/enqueue-all", requireAdmin, async (req, res) => {
+    const requestNow = asDate(now());
+    const queuedAt = sqliteTimestamp(requestNow);
+    const batchId = `admin-fallback-${requestNow.getTime()}`;
+    let transactionOpen = false;
+    try {
+      await ensureGameReplaysSchema(db);
+      await dbRun(db, "BEGIN IMMEDIATE");
+      transactionOpen = true;
+      const rows = await dbAll(
+        db,
+        `
+          SELECT gr.game_id, gr.bga_table_id
+          FROM game_replays gr
+          JOIN games g ON g.id = gr.game_id
+          WHERE gr.status = 'ready'
+            AND gr.color_source = 'fallback'
+            AND gr.retry_reason IS NULL
+            AND trim(COALESCE(g.deleted_at, '')) = ''
+          ORDER BY gr.game_id
+        `
+      );
+
+      if (rows.length) {
+        await dbRun(
+          db,
+          `
+            UPDATE game_replays
+            SET status = 'ready',
+                retry_reason = 'colors',
+                queue_class = 'historical',
+                queued_at = ?,
+                next_attempt_at = ?,
+                historical_batch_id = ?,
+                history_request_count = 0,
+                color_refresh_count = 0,
+                archive_requested_at = NULL,
+                lease_owner = NULL,
+                lease_until = NULL,
+                last_error = NULL,
+                updated_at = ?
+            WHERE status = 'ready'
+              AND color_source = 'fallback'
+              AND retry_reason IS NULL
+              AND EXISTS (
+                SELECT 1
+                FROM games g
+                WHERE g.id = game_replays.game_id
+                  AND trim(COALESCE(g.deleted_at, '')) = ''
+              )
+          `,
+          [queuedAt, queuedAt, batchId, queuedAt]
+        );
+      }
+      await dbRun(db, "COMMIT");
+      transactionOpen = false;
+
+      auditEvent(logAuditEvent, {
+        ...getAuditActor(req.user),
+        event_type: "bga_replay_fallback.enqueued_all",
+        entity_type: "game_replay",
+        action: "enqueue",
+        record_id: batchId,
+        changes: {
+          queue_class: { old: null, new: "historical" },
+          retry_reason: { old: null, new: "colors" },
+        },
+        metadata: {
+          batch_id: batchId,
+          game_ids: rows.map((row) => row.game_id),
+          bga_table_ids: rows.map((row) => row.bga_table_id),
+          count: rows.length,
+        },
+      });
+      const state = await loadReplayBudgetAdminState({ db, env, now: now() });
+      return res.json({
+        ok: true,
+        ...state,
+        enqueued_count: rows.length,
+        historical_batch_id: batchId,
+      });
+    } catch (error) {
+      if (transactionOpen) {
+        try {
+          await dbRun(db, "ROLLBACK");
+        } catch (_rollbackError) {
+          // Preserve the original enqueue error.
+        }
+      }
+      logger.error?.("Failed to enqueue BGA fallback replays", error);
+      return res.status(500).json({
+        ok: false,
+        message: "Failed to enqueue fallback replays",
+      });
+    }
+  });
+
   app.post("/admin/bga-replay-budget/fallback/:gameId/retry", requireAdmin, async (req, res) => {
     const gameId = normalizeText(req.params?.gameId);
     if (!gameId) {

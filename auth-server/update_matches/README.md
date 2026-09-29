@@ -282,6 +282,7 @@ GET    /admin/bga-replay-budget
 POST   /admin/bga-replay-budget/overrides
 DELETE /admin/bga-replay-budget/overrides/{id}
 POST   /admin/bga-replay-budget/errors/{gameId}/retry
+POST   /admin/bga-replay-budget/fallback/enqueue-all
 POST   /admin/bga-replay-budget/fallback/{gameId}/retry
 ```
 
@@ -294,8 +295,9 @@ of stacking values. Changes are written to the general admin audit trail.
 Current error rows are listed with their latest failure and can be retried
 immediately through the manual replay budget. Ready rows that still use fallback
 colors after their automatic color refresh are listed separately. Admins can
-force-refresh one or all of them through the manual budget; the existing ready
-replay remains available if the forced refresh fails or is deferred.
+force-refresh one of them through the manual budget or enqueue all of them as
+due historical color refreshes. Enqueuing performs no immediate BGA request,
+and the existing ready replay remains available throughout processing.
 
 Before confirmation, the UI shows the resulting total/historical limits,
 historical capacity available now, and fresh reserve for every selected
