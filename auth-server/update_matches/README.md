@@ -282,6 +282,7 @@ GET    /admin/bga-replay-budget
 POST   /admin/bga-replay-budget/overrides
 DELETE /admin/bga-replay-budget/overrides/{id}
 POST   /admin/bga-replay-budget/errors/{gameId}/retry
+POST   /admin/bga-replay-budget/fallback/{gameId}/retry
 ```
 
 An override can target one or all configured accounts, has a required expiry,
@@ -291,7 +292,10 @@ the historical boost is dynamically bounded by the effective total. Saving a
 new override revokes the previous active row for each selected account instead
 of stacking values. Changes are written to the general admin audit trail.
 Current error rows are listed with their latest failure and can be retried
-immediately through the manual replay budget.
+immediately through the manual replay budget. Ready rows that still use fallback
+colors after their automatic color refresh are listed separately. Admins can
+force-refresh one or all of them through the manual budget; the existing ready
+replay remains available if the forced refresh fails or is deferred.
 
 Before confirmation, the UI shows the resulting total/historical limits,
 historical capacity available now, and fresh reserve for every selected

@@ -668,9 +668,14 @@ budget override-ів.
 ```text
 GET    /admin/bga-replay-budget
 POST   /admin/bga-replay-budget/overrides
+POST   /admin/bga-replay-budget/errors/{gameId}/retry
+POST   /admin/bga-replay-budget/fallback/{gameId}/retry
 DELETE /admin/bga-replay-budget/overrides/{id}
 ```
 
 Новий override атомарно відкликає попередній активний запис для вибраних
 акаунтів. Historical boost, тимчасовий total limit, expiry та причина
 перевіряються сервером; відкликані й прострочені записи не видаляються.
+Error-записи та готові реплеї, що залишилися на fallback-кольорах після
+автоматичного оновлення, можна повторно запустити вручну. Примусове оновлення
+fallback не приховує вже готовий реплей у разі невдалої або відкладеної спроби.

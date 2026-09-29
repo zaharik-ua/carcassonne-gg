@@ -342,6 +342,8 @@ test("builds rolling account metrics, queue summary and effective availability",
   assert.equal(state.queue.historical.scheduled, 1);
   assert.equal(state.queue.ready_fallback, 1);
   assert.equal(state.queue.errors, 1);
+  assert.equal(state.queue.manual_errors, 1);
+  assert.equal(state.queue.manual_fallback, 1);
   assert.equal(state.queue.manual_required, 2);
   assert.deepEqual(state.queue.error_rows, [{
     game_id: "error-row",
@@ -353,6 +355,17 @@ test("builds rolling account metrics, queue summary and effective availability",
     last_account_label: account,
     last_error: "archive unavailable",
     updated_at: state.queue.error_rows[0].updated_at,
+  }]);
+  assert.deepEqual(state.queue.fallback_rows, [{
+    game_id: "fallback",
+    bga_table_id: "103",
+    queue_class: "fresh",
+    last_attempt_at: null,
+    last_account_label: null,
+    last_error: null,
+    color_refresh_count: 1,
+    fetched_at: null,
+    updated_at: state.queue.fallback_rows[0].updated_at,
   }]);
 });
 
@@ -489,6 +502,98 @@ test("retries or defers a current error row and returns the refreshed queue", as
   }]);
 });
 
+test("force-refreshes a manual fallback row while keeping it ready", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, `
+    INSERT INTO games VALUES ('retry-fallback', '601', NULL);
+    INSERT INTO games VALUES ('deferred-fallback', '602', NULL);
+    INSERT INTO game_replays (
+      game_id, bga_table_id, status, queue_class, retry_reason,
+      color_source, color_refresh_count
+    ) VALUES
+      (
+        'retry-fallback', '601', 'ready', 'fresh', NULL,
+        'fallback', 1
+      ),
+      (
+        'deferred-fallback', '602', 'ready', 'fresh', NULL,
+        'fallback', 1
+      );
+  `);
+
+  const routes = [];
+  const app = {};
+  ["get", "post", "delete"].forEach((method) => {
+    app[method] = (routePath, ...handlers) => routes.push({ method, path: routePath, handlers });
+  });
+  const retries = [];
+  registerBgaReplayAdminRoutes(app, {
+    db,
+    requireAdmin: () => {},
+    env: ENV,
+    now: () => new Date("2026-09-24T12:00:00Z"),
+    retryReplayError: async (gameId, options) => {
+      retries.push({ gameId, options });
+      if (gameId === "deferred-fallback") {
+        return { status: "deferred", error: "temporary_error: session refresh failed" };
+      }
+      await new Promise((resolve, reject) => {
+        db.run(
+          "UPDATE game_replays SET color_source = 'bga', last_error = NULL WHERE game_id = ?",
+          [gameId],
+          (error) => (error ? reject(error) : resolve())
+        );
+      });
+      return { game_id: gameId, status: "ready", color_source: "bga" };
+    },
+  });
+  const route = routes.find((item) => (
+    item.method === "post"
+    && item.path === "/admin/bga-replay-budget/fallback/:gameId/retry"
+  ));
+  assert.ok(route);
+
+  let statusCode = 200;
+  let responseBody;
+  const response = {
+    status(value) {
+      statusCode = value;
+      return this;
+    },
+    json(value) {
+      responseBody = value;
+      return value;
+    },
+  };
+  await route.handlers[1]({ params: { gameId: "retry-fallback" }, user: {} }, response);
+
+  assert.equal(statusCode, 200);
+  assert.deepEqual(retries, [{ gameId: "retry-fallback", options: { force: true } }]);
+  assert.equal(responseBody.retry_result.color_source, "bga");
+  assert.equal(responseBody.queue.ready_fallback, 1);
+  assert.equal(responseBody.queue.manual_fallback, 1);
+  assert.deepEqual(
+    responseBody.queue.fallback_rows.map((row) => row.game_id),
+    ["deferred-fallback"]
+  );
+
+  await route.handlers[1]({ params: { gameId: "deferred-fallback" }, user: {} }, response);
+  assert.equal(statusCode, 200);
+  assert.equal(responseBody.retry_result.status, "deferred");
+  const deferredRows = await all(db, `
+    SELECT status, color_source, retry_reason, next_attempt_at, last_error
+    FROM game_replays
+    WHERE game_id = 'deferred-fallback'
+  `);
+  assert.deepEqual(deferredRows, [{
+    status: "ready",
+    color_source: "fallback",
+    retry_reason: null,
+    next_attempt_at: null,
+    last_error: "temporary_error: session refresh failed",
+  }]);
+});
+
 test("registers global-admin routes and exposes the BGA Replay Queue in admin.html", () => {
   const routes = [];
   const app = {};
@@ -507,6 +612,7 @@ test("registers global-admin routes and exposes the BGA Replay Queue in admin.ht
       ["get", "/admin/bga-replay-budget"],
       ["post", "/admin/bga-replay-budget/overrides"],
       ["post", "/admin/bga-replay-budget/errors/:gameId/retry"],
+      ["post", "/admin/bga-replay-budget/fallback/:gameId/retry"],
       ["delete", "/admin/bga-replay-budget/overrides/:id"],
     ]
   );
@@ -521,6 +627,9 @@ test("registers global-admin routes and exposes the BGA Replay Queue in admin.ht
   assert.match(adminHtml, /Fresh work exists/);
   assert.match(adminHtml, /Retry now/);
   assert.match(adminHtml, /errors\/\$\{encodeURIComponent\(gameId\)\}\/retry/);
+  assert.match(adminHtml, /fallback\/\$\{encodeURIComponent\(gameId\)\}\/retry/);
+  assert.match(adminHtml, /Fallback colors — manual retry/);
+  assert.match(adminHtml, /Retry all/);
   assert.match(adminHtml, /https:\/\/boardgamearena\.com\/tableview\?table=/);
   assert.doesNotMatch(adminHtml, /: "Manual required"/);
   assert.doesNotMatch(adminHtml, /Override audit history/);

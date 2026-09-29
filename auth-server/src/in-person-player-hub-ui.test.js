@@ -108,6 +108,7 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.match(inPersonHtml, /confirm_duplicate: confirmDuplicate/);
   assert.match(inPersonHtml, /function openCheckInModal/);
   assert.match(inPersonHtml, /checkedIn\.checked = true/);
+  assert.match(inPersonHtml, /drawNumber\.input\.focus\(\);[\s\S]*?drawNumber\.input\.select\(\);/);
   assert.match(inPersonHtml, /DRAW_NUMBER_TAKEN/);
   assert.match(inPersonHtml, /ip-draw-number-display/);
   assert.match(inPersonHtml, /ip-draw-number::-webkit-inner-spin-button/);
@@ -300,7 +301,7 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   );
   [
     '"Starting player:"',
-    '"Time lost:"',
+    '"Lost on time:"',
     'won.textContent = "Won"',
     'createButton("Add admin note"',
     'result_type: "points"',
@@ -315,7 +316,7 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.match(swissResultForm, /save\.disabled = saving \|\| !starter\.getValue\(\)/);
   assert.match(swissResultForm, /if \(hasScoreA !== hasScoreB\)/);
   assert.match(swissResultForm, /Enter a score for both players or leave both scores empty\./);
-  assert.match(swissResultForm, /Enter scores for both players when selecting Time lost\./);
+  assert.match(swissResultForm, /Enter scores for both players when selecting Lost on time\./);
   assert.match(swissResultForm, /const starterOnly = !hasScoreA[\s\S]*?&& !hasScoreB/);
   assert.match(swissResultForm, /starterOnly[\s\S]*?starting_participant_id: starter\.getValue\(\)/);
   assert.match(swissResultForm, /match\.status === "completed"[\s\S]*?"Reset result"/);
@@ -342,12 +343,16 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
     inPersonHtml.indexOf("function renderSwissPreview()"),
     inPersonHtml.indexOf("function renderSwissMatches()")
   );
-  assert.ok(
-    swissPreviewRenderer.indexOf("swissPreview.appendChild(actions)")
-      < swissPreviewRenderer.indexOf("(preview.matches || []).forEach"),
-    "Swiss preview actions must be rendered above the tables"
-  );
+  assert.doesNotMatch(swissPreviewRenderer, /Confirm and publish|Discard preview|ip-swiss-action-row/);
   assert.match(swissPreviewRenderer, /createSwissTableCard\(match, \{ showRecord: true \}\)/);
+  const swissRenderer = inPersonHtml.slice(
+    inPersonHtml.indexOf("function renderSwiss()"),
+    inPersonHtml.indexOf("function renderStandings()")
+  );
+  assert.match(swissRenderer, /if \(state\.pairingPreview\)[\s\S]*?"Confirm and publish"/);
+  assert.match(swissRenderer, /if \(state\.pairingPreview\)[\s\S]*?"Discard preview"/);
+  assert.match(swissRenderer, /swissActions\.appendChild\(confirm\)/);
+  assert.match(swissRenderer, /swissActions\.appendChild\(discard\)/);
   assert.match(inPersonHtml, /function swissParticipantRecord\(participantId\)[\s\S]*?record\.wins \+= 1[\s\S]*?record\.losses \+= 1/);
   assert.match(inPersonHtml, /recordEl\.textContent = `\$\{record\.wins\} – \$\{record\.losses\}`/);
   assert.match(inPersonHtml, /recordEl\.title = "Wins – losses"/);
@@ -381,10 +386,13 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.doesNotMatch(swissMatchesRenderer, /progress\.textContent|heading\.appendChild\(progress\)/);
   assert.doesNotMatch(swissMatchesRenderer, /showRecord: true/);
   assert.match(swissMatchesRenderer, /const isCompletedRound = round\.status === "completed"/);
-  assert.match(swissMatchesRenderer, /content\.hidden = true/);
+  assert.match(swissMatchesRenderer, /const defaultVisibleRound = currentRound \|\| lastCompletedRound/);
+  assert.match(swissMatchesRenderer, /content\.hidden = !isDefaultVisibleRound/);
   assert.match(swissMatchesRenderer, /className = "ip-swiss-round-toggle"/);
-  assert.match(swissMatchesRenderer, /toggle\.setAttribute\("aria-expanded", "false"\)/);
-  assert.match(swissMatchesRenderer, /content\.hidden = !expanded/);
+  assert.match(swissMatchesRenderer, /setRoundExpanded\(roundView, isDefaultVisibleRound\)/);
+  assert.match(swissMatchesRenderer, /"Show all rounds"/);
+  assert.match(swissMatchesRenderer, /"Hide all rounds"/);
+  assert.match(swissMatchesRenderer, /completedRoundViews\.forEach\(\(view\) => setRoundExpanded\(view, expandAll\)\)/);
   assert.match(
     swissMatchesRenderer,
     /\.sort\(\(left, right\) => Number\(right\.round_number\) - Number\(left\.round_number\)\)/
@@ -467,6 +475,7 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     "Back to Swiss",
     "Reset playoff bracket",
     "Auto-fill test results",
+    "Clear playoff results",
     "Publish medal round",
     "Click a published match to enter or correct its result.",
     "Bronze medal match",
@@ -571,6 +580,8 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
   );
   assert.match(bracketMatchRenderer, /participantAssociation\(participant\)/);
   assert.match(bracketMatchRenderer, /flag\.className = "ip-playoff-player-flag"/);
+  assert.match(bracketMatchRenderer, /participantLostOnTime\(match, participantId\)/);
+  assert.match(bracketMatchRenderer, /result\.appendChild\(clock\)[\s\S]*?result\.appendChild\(score\)/);
   assert.ok(
     bracketMatchRenderer.indexOf("name.appendChild(flag)")
       < bracketMatchRenderer.indexOf("name.appendChild(nameText)")

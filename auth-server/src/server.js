@@ -2527,7 +2527,7 @@ function parseScriptJsonOutput(output) {
   }
 }
 
-async function retryBgaReplayError(gameId) {
+async function retryBgaReplayError(gameId, { force = false } = {}) {
   const authServerRoot = path.resolve(__dirname, "..");
   const replayScriptPath = path.resolve(authServerRoot, "get_game_replay.py");
   const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
@@ -2535,7 +2535,13 @@ async function retryBgaReplayError(gameId) {
   try {
     const { stdout, stderr } = await execFileAsync(
       pythonBin,
-      [replayScriptPath, String(gameId), "--db-path", dbFullPath],
+      [
+        replayScriptPath,
+        String(gameId),
+        "--db-path",
+        dbFullPath,
+        ...(force ? ["--force"] : []),
+      ],
       {
         cwd: authServerRoot,
         env: process.env,
@@ -2544,7 +2550,7 @@ async function retryBgaReplayError(gameId) {
       }
     );
     logUpdaterOutput(
-      `admin:bga-replay-error:${gameId}`,
+      `admin:bga-replay-retry:${gameId}`,
       [stdout, stderr].map((part) => String(part || "").trim()).filter(Boolean).join("\n")
     );
     const payload = parseScriptJsonOutput(stdout);

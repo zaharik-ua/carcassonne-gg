@@ -1301,6 +1301,28 @@
     display: none;
   }
 
+  .ip-swiss-rounds-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .ip-swiss-rounds-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ip-swiss-rounds-toggle-icon {
+    width: 13px;
+    height: 13px;
+    transition: transform 0.2s ease;
+  }
+
+  .ip-swiss-rounds-toggle[aria-expanded="true"] .ip-swiss-rounds-toggle-icon {
+    transform: rotate(180deg);
+  }
+
   .ip-match-result-dialog {
     max-width: 520px;
   }
@@ -1433,8 +1455,7 @@
 
   .ip-preview-head,
   .ip-match-head,
-  .ip-match-players,
-  .ip-swiss-action-row {
+  .ip-match-players {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1671,6 +1692,13 @@
   .ip-playoff-match-score {
     flex: 0 0 auto;
     font-weight: 700;
+  }
+
+  .ip-playoff-match-result {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
 
   .ip-playoff-match-placeholder {
@@ -4196,7 +4224,8 @@
 
     document.body.appendChild(overlay);
     syncForm();
-    checkedIn.focus();
+    drawNumber.input.focus();
+    drawNumber.input.select();
   }
 
   function renderCheckIn() {
@@ -4322,6 +4351,14 @@
     return record;
   }
 
+  function participantLostOnTime(match, participantId) {
+    return match.result_type === "time_forfeit"
+      && (match.loser_participant_id === participantId
+        || (!match.loser_participant_id
+          && match.winner_participant_id
+          && match.winner_participant_id !== participantId));
+  }
+
   function createSwissTablePlayer(match, side, { showRecord = false } = {}) {
     const participantId = match[`participant_${side}_id`];
     const participant = swissParticipant(match, side);
@@ -4367,12 +4404,7 @@
     }
     name.appendChild(document.createTextNode(swissParticipantName(match, side)));
     main.appendChild(name);
-    const lostOnTime = match.result_type === "time_forfeit"
-      && (match.loser_participant_id === participantId
-        || (!match.loser_participant_id
-          && match.winner_participant_id
-          && match.winner_participant_id !== participantId));
-    if (lostOnTime) {
+    if (participantLostOnTime(match, participantId)) {
       const clock = document.createElement("span");
       clock.className = "ip-time-lost-icon";
       clock.title = "Lost on time";
@@ -4938,7 +4970,7 @@
           : match.participant_a_id)
       : "";
     const timeLost = createMenuSelectField(
-      "Time lost:",
+      "Lost on time:",
       [{ value: "", label: "—" }].concat(playerOptions),
       initialTimeLostParticipantId,
       { signal }
@@ -5108,7 +5140,7 @@
         return;
       }
       if (timeLostParticipantId && (!hasScoreA || !hasScoreB)) {
-        if (errorTarget) errorTarget.textContent = "Enter scores for both players when selecting Time lost.";
+        if (errorTarget) errorTarget.textContent = "Enter scores for both players when selecting Lost on time.";
         return;
       }
       if ((hasScoreA && !validScore(scoreA.input)) || (hasScoreB && !validScore(scoreB.input))) {
@@ -5374,17 +5406,6 @@
       header.appendChild(warningBadge);
     }
     swissPreview.appendChild(header);
-    const actions = document.createElement("div");
-    actions.className = "ip-swiss-action-row";
-    const confirm = createButton("Confirm and publish", "ip-btn primary", () => confirmSwissPreview(confirm));
-    const cancel = createButton("Discard preview", "ip-btn", () => {
-      state.pairingPreview = null;
-      renderSwiss();
-      setStatus("");
-    });
-    actions.appendChild(confirm);
-    actions.appendChild(cancel);
-    swissPreview.appendChild(actions);
     const grid = document.createElement("div");
     grid.className = "ip-swiss-table-grid";
     (preview.matches || []).forEach((match) => {
@@ -5405,10 +5426,74 @@
       swissMatches.appendChild(empty);
       return;
     }
-    rounds
+    const sortedRounds = rounds
       .slice()
-      .sort((left, right) => Number(right.round_number) - Number(left.round_number))
-      .forEach((round) => {
+      .sort((left, right) => Number(right.round_number) - Number(left.round_number));
+    const currentRound = state.swiss?.current_round || null;
+    const lastCompletedRound = sortedRounds.find((round) => round.status === "completed") || null;
+    const defaultVisibleRound = currentRound || lastCompletedRound;
+    const defaultVisibleRoundKey = String(
+      defaultVisibleRound?.id || defaultVisibleRound?.round_number || ""
+    );
+    const completedRoundViews = [];
+    const completedRounds = sortedRounds.filter((round) => round.status === "completed");
+    let allRoundsToggle = null;
+
+    const setRoundExpanded = (view, expanded) => {
+      view.toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+      view.toggle.setAttribute(
+        "aria-label",
+        `${expanded ? "Hide" : "Show"} round ${view.round.round_number} tables`
+      );
+      view.toggle.title = `${expanded ? "Hide" : "Show"} round ${view.round.round_number} tables`;
+      view.content.hidden = !expanded;
+    };
+    const updateAllRoundsToggle = () => {
+      if (!allRoundsToggle || !completedRoundViews.length) return;
+      const allExpanded = completedRoundViews.every((view) => (
+        view.toggle.getAttribute("aria-expanded") === "true"
+      ));
+      allRoundsToggle.setAttribute("aria-expanded", allExpanded ? "true" : "false");
+      allRoundsToggle.querySelector("span").textContent = allExpanded
+        ? "Hide all rounds"
+        : "Show all rounds";
+    };
+
+    if (completedRounds.length) {
+      const toggleRow = document.createElement("div");
+      toggleRow.className = "ip-swiss-rounds-toggle-row";
+      allRoundsToggle = document.createElement("button");
+      allRoundsToggle.type = "button";
+      allRoundsToggle.className = "ip-btn ip-swiss-rounds-toggle";
+      allRoundsToggle.setAttribute("aria-expanded", "false");
+      const toggleLabel = document.createElement("span");
+      toggleLabel.textContent = "Show all rounds";
+      const toggleIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      toggleIcon.classList.add("ip-swiss-rounds-toggle-icon");
+      toggleIcon.setAttribute("viewBox", "0 0 20 20");
+      toggleIcon.setAttribute("fill", "none");
+      toggleIcon.setAttribute("aria-hidden", "true");
+      const togglePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      togglePath.setAttribute("d", "m5 7.5 5 5 5-5");
+      togglePath.setAttribute("stroke", "currentColor");
+      togglePath.setAttribute("stroke-width", "2");
+      togglePath.setAttribute("stroke-linecap", "round");
+      togglePath.setAttribute("stroke-linejoin", "round");
+      toggleIcon.appendChild(togglePath);
+      allRoundsToggle.appendChild(toggleLabel);
+      allRoundsToggle.appendChild(toggleIcon);
+      allRoundsToggle.addEventListener("click", () => {
+        const expandAll = !completedRoundViews.every((view) => (
+          view.toggle.getAttribute("aria-expanded") === "true"
+        ));
+        completedRoundViews.forEach((view) => setRoundExpanded(view, expandAll));
+        updateAllRoundsToggle();
+      });
+      toggleRow.appendChild(allRoundsToggle);
+      swissMatches.appendChild(toggleRow);
+    }
+
+    sortedRounds.forEach((round) => {
         const section = document.createElement("section");
         section.className = "ip-swiss-round";
         const heading = document.createElement("div");
@@ -5421,17 +5506,16 @@
         content.className = "ip-swiss-round-content";
         const isCompletedRound = round.status === "completed";
         if (isCompletedRound) {
+          const roundKey = String(round.id || round.round_number);
+          const isDefaultVisibleRound = roundKey === defaultVisibleRoundKey;
           const contentKey = String(round.id || round.round_number).replace(/[^a-zA-Z0-9_-]/g, "-");
           content.id = `ipSwissRoundContent-${contentKey}`;
-          content.hidden = true;
+          content.hidden = !isDefaultVisibleRound;
 
           const toggle = document.createElement("button");
           toggle.type = "button";
           toggle.className = "ip-swiss-round-toggle";
-          toggle.setAttribute("aria-expanded", "false");
           toggle.setAttribute("aria-controls", content.id);
-          toggle.setAttribute("aria-label", `Show round ${round.round_number} tables`);
-          toggle.title = `Show round ${round.round_number} tables`;
 
           const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
           icon.classList.add("ip-swiss-round-toggle-icon");
@@ -5446,15 +5530,13 @@
           path.setAttribute("stroke-linejoin", "round");
           icon.appendChild(path);
           toggle.appendChild(icon);
+          const roundView = { round, toggle, content };
+          completedRoundViews.push(roundView);
+          setRoundExpanded(roundView, isDefaultVisibleRound);
           toggle.addEventListener("click", () => {
             const expanded = toggle.getAttribute("aria-expanded") !== "true";
-            toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
-            toggle.setAttribute(
-              "aria-label",
-              `${expanded ? "Hide" : "Show"} round ${round.round_number} tables`
-            );
-            toggle.title = `${expanded ? "Hide" : "Show"} round ${round.round_number} tables`;
-            content.hidden = !expanded;
+            setRoundExpanded(roundView, expanded);
+            updateAllRoundsToggle();
           });
           headingMain.appendChild(toggle);
         }
@@ -5479,6 +5561,7 @@
         section.appendChild(content);
         swissMatches.appendChild(section);
       });
+    updateAllRoundsToggle();
   }
 
   function renderSwiss() {
@@ -5489,7 +5572,22 @@
     renderSwissPreview();
     renderSwissMatches();
     const swiss = state.swiss;
-    if (!swiss || state.pairingPreview) return;
+    if (!swiss) return;
+    if (state.pairingPreview) {
+      const confirm = createButton(
+        "Confirm and publish",
+        "ip-btn primary",
+        () => confirmSwissPreview(confirm)
+      );
+      const discard = createButton("Discard preview", "ip-btn", () => {
+        state.pairingPreview = null;
+        renderSwiss();
+        setStatus("");
+      });
+      swissActions.appendChild(confirm);
+      swissActions.appendChild(discard);
+      return;
+    }
     const round = swiss.current_round;
     const pendingMatches = (round?.matches || []).filter((match) => (
       !match.is_bye && match.status !== "completed" && !match.result_type
@@ -6239,7 +6337,7 @@
     } catch (error) {
       setStatus(error.message || "Failed to clear playoff results.", "error");
       button.disabled = false;
-      button.textContent = "Clear all results";
+      button.textContent = "Clear playoff results";
     }
   }
 
@@ -6366,8 +6464,18 @@
       const score = document.createElement("span");
       score.className = "ip-playoff-match-score";
       score.textContent = participantId ? playoffMatchScore(match, participantId, side) : "";
+      const result = document.createElement("span");
+      result.className = "ip-playoff-match-result";
+      if (participantId && participantLostOnTime(match, participantId)) {
+        const clock = document.createElement("span");
+        clock.className = "ip-time-lost-icon";
+        clock.title = "Lost on time";
+        clock.setAttribute("aria-label", "Lost on time");
+        result.appendChild(clock);
+      }
+      result.appendChild(score);
       row.appendChild(name);
-      row.appendChild(score);
+      row.appendChild(result);
       card.appendChild(row);
     });
     if (isSetupMatch) {
@@ -6499,7 +6607,7 @@
       ), 0);
       if (completedMatchCount > 0) {
         const clearResults = createButton(
-          "Clear all results",
+          "Clear playoff results",
           "ip-btn test-action",
           () => clearPlayoffTestResults(clearResults)
         );

@@ -21,7 +21,6 @@
   }
 
   .admin-wrap {
-    max-width: 940px;
     margin: 0 auto;
     padding: 16px 10px 24px;
     display: grid;
@@ -7405,6 +7404,83 @@
     }
   }
 
+  async function retryBgaReplayFallback(fallbackRow, button) {
+    const gameId = String(fallbackRow?.game_id || "").trim();
+    if (!gameId) return;
+    const tableId = String(fallbackRow?.bga_table_id || "").trim();
+    if (!window.confirm(
+      `Refresh fallback colors for replay ${gameId}${tableId ? ` (BGA ${tableId})` : ""} now?\n\n`
+        + "This uses one manual replay request. The current ready replay stays available if the refresh fails."
+    )) return;
+
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = "Refreshing...";
+    try {
+      setStatus(`Refreshing fallback colors for replay ${gameId}...`, false);
+      const response = await apiJson(
+        `${BGA_REPLAY_BUDGET_URL}/fallback/${encodeURIComponent(gameId)}/retry`,
+        { method: "POST" }
+      );
+      state.bgaReplayQueue = [response];
+      renderBgaReplayQueue();
+      if (response.retry_result?.status === "deferred") {
+        setStatus(
+          `Replay ${gameId} could not be refreshed yet; its current fallback replay remains available.`,
+          true
+        );
+      } else if (response.retry_result?.color_source === "bga") {
+        setStatus(`Replay ${gameId} now uses BGA colors.`, false);
+      } else {
+        setStatus(`Replay ${gameId} was refreshed, but BGA still returned incomplete colors.`, false);
+      }
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = originalLabel;
+      setStatus(error?.message || `Failed to refresh replay ${gameId}.`, true);
+    }
+  }
+
+  async function retryAllBgaReplayFallbacks(fallbackRows, button) {
+    const rows = Array.isArray(fallbackRows) ? fallbackRows.slice() : [];
+    if (!rows.length) return;
+    if (!window.confirm(
+      `Refresh all ${rows.length} fallback replay${rows.length === 1 ? "" : "s"} now?\n\n`
+        + `This can use up to ${rows.length} manual replay request${rows.length === 1 ? "" : "s"}. `
+        + "Current ready replays remain available if a refresh fails."
+    )) return;
+
+    button.disabled = true;
+    let upgraded = 0;
+    let stillFallback = 0;
+    let failed = 0;
+    for (const [index, fallbackRow] of rows.entries()) {
+      const gameId = String(fallbackRow?.game_id || "").trim();
+      if (!gameId) continue;
+      button.textContent = `Refreshing ${index + 1}/${rows.length}...`;
+      setStatus(`Refreshing fallback replay ${index + 1} of ${rows.length}: ${gameId}...`, false);
+      try {
+        const response = await apiJson(
+          `${BGA_REPLAY_BUDGET_URL}/fallback/${encodeURIComponent(gameId)}/retry`,
+          { method: "POST" }
+        );
+        state.bgaReplayQueue = [response];
+        if (response.retry_result?.status === "deferred") failed += 1;
+        else if (response.retry_result?.color_source === "bga") upgraded += 1;
+        else stillFallback += 1;
+      } catch (_error) {
+        failed += 1;
+      }
+    }
+
+    renderBgaReplayQueue();
+    setStatus(
+      `Fallback refresh finished: ${upgraded} upgraded to BGA colors, `
+        + `${stillFallback} still fallback, ${failed} failed or deferred.`,
+      failed > 0
+    );
+  }
+
   function renderBgaReplayQueue() {
     sectionTitle.textContent = "BGA Replay Queue";
     sectionCreateBtn.classList.remove("hidden");
@@ -7459,7 +7535,7 @@
     summary.appendChild(createReplayMetric(
       "Manual required",
       Number(queue.manual_required) || 0,
-      `${Number(queue.errors) || 0} error rows`
+      `${Number(queue.manual_errors) || 0} errors • ${Number(queue.manual_fallback) || 0} fallback colors`
     ));
     dashboard.appendChild(summary);
 
@@ -7528,6 +7604,76 @@
       });
       errorPanel.appendChild(errorTable.wrap);
       dashboard.appendChild(errorPanel);
+    }
+
+    const fallbackRows = Array.isArray(queue.fallback_rows) ? queue.fallback_rows : [];
+    if (fallbackRows.length) {
+      const fallbackPanel = replayElement("section", "replay-panel");
+      const fallbackHead = replayElement("div", "replay-panel-head");
+      const fallbackTitle = replayElement("div", "");
+      fallbackTitle.appendChild(replayElement(
+        "h3",
+        "",
+        `Fallback colors — manual retry (${fallbackRows.length})`
+      ));
+      fallbackTitle.appendChild(replayElement(
+        "span",
+        "replay-muted",
+        "These replays are ready, but BGA did not provide two distinct supported player colors."
+      ));
+      const retryAllButton = replayElement("button", "cp-btn cp-btn-primary", "Retry all");
+      retryAllButton.type = "button";
+      retryAllButton.addEventListener("click", () => (
+        retryAllBgaReplayFallbacks(fallbackRows, retryAllButton)
+      ));
+      fallbackHead.appendChild(fallbackTitle);
+      fallbackHead.appendChild(retryAllButton);
+      fallbackPanel.appendChild(fallbackHead);
+
+      const fallbackTable = createReplayTable([
+        "Game",
+        "Queue",
+        "Last replay request",
+        "State",
+        "Action",
+      ]);
+      fallbackRows.forEach((fallbackRow) => {
+        const row = document.createElement("tr");
+        const gameCell = replayCell(fallbackRow.game_id || "-");
+        if (fallbackRow.bga_table_id) {
+          const tableLink = replayElement(
+            "a",
+            "replay-cell-detail",
+            `BGA table ${fallbackRow.bga_table_id}`
+          );
+          tableLink.href = `https://boardgamearena.com/tableview?table=${encodeURIComponent(fallbackRow.bga_table_id)}`;
+          tableLink.target = "_blank";
+          tableLink.rel = "noopener noreferrer";
+          gameCell.appendChild(tableLink);
+        }
+        row.appendChild(gameCell);
+        row.appendChild(replayCell(fallbackRow.queue_class || "fresh", "manual request required"));
+        row.appendChild(replayCell(
+          formatReplayDate(fallbackRow.last_attempt_at || fallbackRow.fetched_at || fallbackRow.updated_at),
+          fallbackRow.last_account_label || "No account recorded"
+        ));
+        row.appendChild(replayCell(
+          "Ready with fallback colors",
+          fallbackRow.last_error
+            || `${Number(fallbackRow.color_refresh_count) || 0} automatic color refreshes`
+        ));
+        const actionCell = document.createElement("td");
+        const retryButton = replayElement("button", "cp-btn cp-btn-primary", "Retry now");
+        retryButton.type = "button";
+        retryButton.addEventListener("click", () => (
+          retryBgaReplayFallback(fallbackRow, retryButton)
+        ));
+        actionCell.appendChild(retryButton);
+        row.appendChild(actionCell);
+        fallbackTable.body.appendChild(row);
+      });
+      fallbackPanel.appendChild(fallbackTable.wrap);
+      dashboard.appendChild(fallbackPanel);
     }
 
     const accountPanel = replayElement("section", "replay-panel");
