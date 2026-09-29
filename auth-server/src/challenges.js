@@ -2,6 +2,20 @@ export const DEFAULT_MAX_MATCHES_PER_PLAYER = 1;
 export const DEFAULT_MAX_PENDING_REQUESTS_PER_PLAYER = 3;
 export const DEFAULT_TPR_TARGET_GAMES = 10;
 
+const CHALLENGE_AUTO_CLOSED_COMMENTS = Object.freeze({
+  another_match_accepted: "Automatically closed: another match was accepted.",
+  match_cancelled: "Automatically closed: linked match was cancelled.",
+  match_limit_reached: "Automatically closed: match limit reached.",
+  match_removed: "Automatically closed: linked match was removed.",
+  period_closed: "Automatically closed: challenge period is closed.",
+  player_unavailable: "Automatically closed: a player became unavailable.",
+});
+
+export function getChallengeAutoClosedComment(reason) {
+  return CHALLENGE_AUTO_CLOSED_COMMENTS[String(reason || "").trim().toLowerCase()]
+    || "Automatically closed.";
+}
+
 export const CHALLENGE_PERIOD_STATUSES = new Set([
   "draft",
   "planning_open",
@@ -485,6 +499,16 @@ export async function closeChallengePendingRequestsAfterAccept(db, options = {})
   const targetRequestIds = targetRequests
     .map((request) => normalizeChallengeIdentifier(request?.id))
     .filter(Boolean);
+  const matchLimitRequestIds = targetRequests
+    .filter((request) => (
+      normalizeChallengeIdentifier(request?.period_id) === periodId
+      && saturatedPlayerIds.some((playerId) => (
+        normalizeChallengeIdentifier(request?.player_1_id) === playerId
+        || normalizeChallengeIdentifier(request?.player_2_id) === playerId
+      ))
+    ))
+    .map((request) => normalizeChallengeIdentifier(request?.id))
+    .filter(Boolean);
   if (!targetRequestIds.length) {
     return {
       auto_cancelled_request_ids: [],
@@ -494,6 +518,19 @@ export async function closeChallengePendingRequestsAfterAccept(db, options = {})
   }
 
   const requestPlaceholders = targetRequestIds.map(() => "?").join(", ");
+  const requestCommentExpression = matchLimitRequestIds.length
+    ? `CASE
+        WHEN id IN (${matchLimitRequestIds.map(() => "?").join(", ")}) THEN ?
+        ELSE ?
+      END`
+    : "?";
+  const requestCommentParams = matchLimitRequestIds.length
+    ? [
+      ...matchLimitRequestIds,
+      getChallengeAutoClosedComment("match_limit_reached"),
+      getChallengeAutoClosedComment("another_match_accepted"),
+    ]
+    : [getChallengeAutoClosedComment("another_match_accepted")];
   const duelResult = await dbRun(
     db,
     `
@@ -536,11 +573,14 @@ export async function closeChallengePendingRequestsAfterAccept(db, options = {})
     db,
     `
       UPDATE challenge_requests
-      SET status = 'auto_cancelled', updated_at = CURRENT_TIMESTAMP
+      SET
+        status = 'auto_cancelled',
+        comment = ${requestCommentExpression},
+        updated_at = CURRENT_TIMESTAMP
       WHERE id IN (${requestPlaceholders})
         AND status = 'pending'
     `,
-    targetRequestIds
+    [...requestCommentParams, ...targetRequestIds]
   );
 
   return {

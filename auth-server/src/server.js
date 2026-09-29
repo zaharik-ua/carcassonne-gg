@@ -42,6 +42,7 @@ import {
   didChallengeDuelTransitionToDone,
   ensureChallengePeriodConfigurationSchema,
   ensureChallengePeriodPlayersSchema,
+  getChallengeAutoClosedComment,
   isChallengeMatchSlotStatus,
   isChallengePendingRequestLimitReached,
   isChallengePlayerRequestEligibleStatus,
@@ -5911,6 +5912,7 @@ function expirePendingChallengeRequestsForClosedPeriods() {
       UPDATE challenge_requests
       SET
         status = 'expired',
+        comment = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE status = 'pending'
         AND period_id IN (
@@ -5919,7 +5921,7 @@ function expirePendingChallengeRequestsForClosedPeriods() {
           WHERE status IN (${expiringStatuses.map(() => "?").join(", ")})
         )
     `,
-    expiringStatuses,
+    [getChallengeAutoClosedComment("period_closed"), ...expiringStatuses],
     function onExpireClosedPeriodRequests(expireErr) {
       if (expireErr) {
         console.error("Failed to expire pending Challenge requests for closed periods", expireErr);
@@ -11572,12 +11574,15 @@ app.patch("/challenge-periods/:id/matches/:duelId/resolve-issue", requireAuthent
         await dbRunAsync(
           `
             UPDATE challenge_requests
-            SET status = 'auto_cancelled', updated_at = CURRENT_TIMESTAMP
+            SET
+              status = 'auto_cancelled',
+              comment = ?,
+              updated_at = CURRENT_TIMESTAMP
             WHERE period_id = ?
               AND id = ?
               AND status = 'accepted'
           `,
-          [periodId, requestId]
+          [getChallengeAutoClosedComment("match_cancelled"), periodId, requestId]
         );
       }
       if (resolution === "player_no_show") {
@@ -11777,6 +11782,11 @@ app.patch("/challenge-periods/:id/matches/:duelId", requireAdmin, async (req, re
             allows_bo5 = ?,
             accepted_time_utc = ?,
             accepted_format = ?,
+            comment = CASE
+              WHEN ? = 'auto_cancelled' THEN ?
+              WHEN comment = ? THEN NULL
+              ELSE comment
+            END,
             updated_at = CURRENT_TIMESTAMP
           WHERE period_id = ? AND id = ?
         `,
@@ -11791,6 +11801,9 @@ app.patch("/challenge-periods/:id/matches/:duelId", requireAdmin, async (req, re
           duelFormat === "Bo5" ? 1 : 0,
           requestStatus === "accepted" ? timeUtc : null,
           requestStatus === "accepted" ? duelFormat : null,
+          requestStatus,
+          getChallengeAutoClosedComment("match_cancelled"),
+          getChallengeAutoClosedComment("match_cancelled"),
           periodId,
           requestId,
         ]
@@ -11891,10 +11904,14 @@ app.delete("/challenge-periods/:id/matches/:duelId", requireAdmin, async (req, r
         await dbRunAsync(
           `
             UPDATE challenge_requests
-            SET status = 'auto_cancelled', hidden_by_creator_at = COALESCE(hidden_by_creator_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
+            SET
+              status = 'auto_cancelled',
+              comment = ?,
+              hidden_by_creator_at = COALESCE(hidden_by_creator_at, CURRENT_TIMESTAMP),
+              updated_at = CURRENT_TIMESTAMP
             WHERE period_id = ? AND id = ?
           `,
-          [periodId, requestId]
+          [getChallengeAutoClosedComment("match_removed"), periodId, requestId]
         );
       }
       await dbRunAsync("COMMIT");
@@ -13121,12 +13138,13 @@ app.patch("/challenge-periods/:id/player-status", requireAuthenticated, async (r
             UPDATE challenge_requests
             SET
               status = 'auto_cancelled',
+              comment = ?,
               updated_at = CURRENT_TIMESTAMP
             WHERE period_id = ?
               AND status = 'pending'
               AND (player_1_id = ? OR player_2_id = ?)
           `,
-          [periodId, playerId, playerId]
+          [getChallengeAutoClosedComment("player_unavailable"), periodId, playerId, playerId]
         );
       }
 
@@ -13389,12 +13407,13 @@ app.patch("/challenge-periods/:id", requireAdmin, async (req, res) => {
             UPDATE challenge_requests
             SET
               status = 'expired',
+              comment = ?,
               updated_at = CURRENT_TIMESTAMP
             WHERE period_id = ?
               AND status = 'pending'
               AND id IN (${requestIds.map(() => "?").join(", ")})
           `,
-          [periodId, ...requestIds]
+          [getChallengeAutoClosedComment("period_closed"), periodId, ...requestIds]
         );
         const afterExpiredRequests = await dbAllAsync(
           `

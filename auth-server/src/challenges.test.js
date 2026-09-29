@@ -15,6 +15,7 @@ import {
   didChallengeDuelTransitionToDone,
   ensureChallengePeriodConfigurationSchema,
   ensureChallengePeriodPlayersSchema,
+  getChallengeAutoClosedComment,
   getChallengeFormatDurationMinutes,
   isChallengeMatchSlotStatus,
   isChallengePendingRequestLimitReached,
@@ -77,6 +78,7 @@ async function ensureChallengeAcceptanceTestSchema(db) {
         player_1_id TEXT NOT NULL,
         player_2_id TEXT NOT NULL,
         status TEXT NOT NULL,
+        comment TEXT,
         updated_at TEXT
       );
       CREATE TABLE duels (
@@ -215,6 +217,34 @@ test("normalizes Challenge period limits with stable defaults", () => {
   assert.equal(resolveMaxPendingRequestsPerPlayer(undefined), DEFAULT_MAX_PENDING_REQUESTS_PER_PLAYER);
   assert.equal(resolveMaxPendingRequestsPerPlayer("5"), 5);
   assert.equal(resolveMaxPendingRequestsPerPlayer(""), null);
+});
+
+test("provides a system comment for every automatic Challenge closure reason", () => {
+  assert.equal(
+    getChallengeAutoClosedComment("another_match_accepted"),
+    "Automatically closed: another match was accepted."
+  );
+  assert.equal(
+    getChallengeAutoClosedComment("match_cancelled"),
+    "Automatically closed: linked match was cancelled."
+  );
+  assert.equal(
+    getChallengeAutoClosedComment("match_limit_reached"),
+    "Automatically closed: match limit reached."
+  );
+  assert.equal(
+    getChallengeAutoClosedComment("match_removed"),
+    "Automatically closed: linked match was removed."
+  );
+  assert.equal(
+    getChallengeAutoClosedComment("period_closed"),
+    "Automatically closed: challenge period is closed."
+  );
+  assert.equal(
+    getChallengeAutoClosedComment("player_unavailable"),
+    "Automatically closed: a player became unavailable."
+  );
+  assert.equal(getChallengeAutoClosedComment("unknown"), "Automatically closed.");
 });
 
 test("tracks a player's completed matches against the linked tournament TPR target", () => {
@@ -621,14 +651,22 @@ test("auto-cancels Rivals pair duplicates and only saturated players' other requ
     cancelled_duel_count: 2,
   });
   assert.deepEqual(
-    await all(db, "SELECT id, status FROM challenge_requests ORDER BY id"),
+    await all(db, "SELECT id, status, comment FROM challenge_requests ORDER BY id"),
     [
-      { id: "accepted", status: "accepted" },
-      { id: "free-b", status: "pending" },
-      { id: "limit-a", status: "auto_cancelled" },
-      { id: "pair-other-rivals", status: "pending" },
-      { id: "pair-rivals", status: "auto_cancelled" },
-      { id: "unrelated", status: "pending" },
+      { id: "accepted", status: "accepted", comment: null },
+      { id: "free-b", status: "pending", comment: null },
+      {
+        id: "limit-a",
+        status: "auto_cancelled",
+        comment: getChallengeAutoClosedComment("match_limit_reached"),
+      },
+      { id: "pair-other-rivals", status: "pending", comment: null },
+      {
+        id: "pair-rivals",
+        status: "auto_cancelled",
+        comment: getChallengeAutoClosedComment("another_match_accepted"),
+      },
+      { id: "unrelated", status: "pending", comment: null },
     ]
   );
   assert.deepEqual(
@@ -671,13 +709,85 @@ test("keeps other pending requests open below the limit while cancelling the Riv
 
   assert.deepEqual(result.auto_cancelled_request_ids, ["pair-rivals"]);
   assert.deepEqual(
-    await all(db, "SELECT id, status FROM challenge_requests ORDER BY id"),
+    await all(db, "SELECT id, status, comment FROM challenge_requests ORDER BY id"),
     [
-      { id: "accepted", status: "accepted" },
-      { id: "other-a", status: "pending" },
-      { id: "other-b", status: "pending" },
-      { id: "pair-rivals", status: "auto_cancelled" },
+      { id: "accepted", status: "accepted", comment: null },
+      { id: "other-a", status: "pending", comment: null },
+      { id: "other-b", status: "pending", comment: null },
+      {
+        id: "pair-rivals",
+        status: "auto_cancelled",
+        comment: getChallengeAutoClosedComment("another_match_accepted"),
+      },
     ]
+  );
+});
+
+test("closes remaining requests with a system comment when the tenth match fills the limit", async (t) => {
+  const db = await createChallengeAcceptanceDatabase(t);
+  await exec(
+    db,
+    `
+      INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player)
+      VALUES ('period-1', 'RIVALS-1', 10);
+      INSERT INTO challenge_requests (id, period_id, player_1_id, player_2_id, status, comment) VALUES
+        ('accepted', 'period-1', 'A', 'B', 'accepted', NULL),
+        ('remaining', 'period-1', 'A', 'C', 'pending', 'Original player comment');
+      INSERT INTO duels (
+        id,
+        challenge_period_id,
+        challenge_request_id,
+        source_type,
+        player_1_id,
+        player_2_id,
+        status
+      ) VALUES
+        ('match-01', 'period-1', NULL, 'challenge', 'A', 'P01', 'Done'),
+        ('match-02', 'period-1', NULL, 'challenge', 'A', 'P02', 'Done'),
+        ('match-03', 'period-1', NULL, 'challenge', 'A', 'P03', 'Done'),
+        ('match-04', 'period-1', NULL, 'challenge', 'A', 'P04', 'Done'),
+        ('match-05', 'period-1', NULL, 'challenge', 'A', 'P05', 'Done'),
+        ('match-06', 'period-1', NULL, 'challenge', 'A', 'P06', 'Done'),
+        ('match-07', 'period-1', NULL, 'challenge', 'A', 'P07', 'Done'),
+        ('match-08', 'period-1', NULL, 'challenge', 'A', 'P08', 'Done'),
+        ('match-09', 'period-1', NULL, 'challenge', 'A', 'P09', 'Done'),
+        ('match-10', 'period-1', 'accepted', 'challenge', 'A', 'B', 'Planned'),
+        ('remaining-draft', 'period-1', 'remaining', 'challenge', 'A', 'C', 'Draft');
+    `
+  );
+
+  const capacities = await loadChallengeMatchCapacities(db, {
+    periodId: "period-1",
+    playerIds: ["A", "B"],
+    maxMatchesPerPlayer: 10,
+  });
+  assert.equal(capacities.A?.matches_count, 10);
+  assert.equal(capacities.A?.is_match_limit_reached, true);
+
+  const result = await closeChallengePendingRequestsAfterAccept(db, {
+    periodId: "period-1",
+    rivalsTournamentId: "RIVALS-1",
+    acceptedRequestId: "accepted",
+    player1Id: "A",
+    player2Id: "B",
+    saturatedPlayerIds: ["A"],
+    actorPlayerId: "B",
+  });
+
+  assert.equal(result.auto_cancelled_request_count, 1);
+  assert.deepEqual(
+    await get(db, "SELECT status, comment FROM challenge_requests WHERE id = 'remaining'"),
+    {
+      status: "auto_cancelled",
+      comment: getChallengeAutoClosedComment("match_limit_reached"),
+    }
+  );
+  assert.deepEqual(
+    await get(db, "SELECT status, cancellation_reason FROM duels WHERE id = 'remaining-draft'"),
+    {
+      status: "Cancelled",
+      cancellation_reason: "another_match_accepted",
+    }
   );
 });
 
