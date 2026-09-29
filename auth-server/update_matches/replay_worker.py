@@ -63,8 +63,15 @@ def enqueue_historical_game_replay(
     *,
     historical_batch_id: str | None = None,
     force: bool = False,
+    reset_color_source: bool = False,
     now: datetime | None = None,
 ) -> dict[str, Any]:
+    """Idempotently add one game to the historical replay queue.
+
+    ``reset_color_source`` is for inconsistent rows that the worker would
+    otherwise treat as already recovered. Ready rows are marked as fallback so
+    schema startup does not infer BGA provenance again before the refresh runs.
+    """
     normalized_game_id = str(game_id or "").strip()
     if not normalized_game_id:
         raise ValueError("games.id must not be empty")
@@ -162,6 +169,11 @@ def enqueue_historical_game_replay(
                             history_request_count = CASE WHEN ? THEN 0 ELSE history_request_count END,
                             color_refresh_count = CASE WHEN ? THEN 0 ELSE color_refresh_count END,
                             archive_requested_at = CASE WHEN ? THEN NULL ELSE archive_requested_at END,
+                            color_source = CASE
+                              WHEN ? AND ? = 'ready' THEN 'fallback'
+                              WHEN ? THEN NULL
+                              ELSE color_source
+                            END,
                             lease_owner = NULL,
                             lease_until = NULL,
                             last_error = CASE WHEN ? THEN NULL ELSE last_error END,
@@ -178,6 +190,9 @@ def enqueue_historical_game_replay(
                             int(force),
                             int(force),
                             int(force),
+                            int(reset_color_source),
+                            next_status,
+                            int(reset_color_source),
                             int(force),
                             queued_at,
                             normalized_game_id,

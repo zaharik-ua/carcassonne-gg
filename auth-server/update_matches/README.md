@@ -155,6 +155,27 @@ enqueue_historical_game_replay(
 )
 ```
 
+To preview all missing or incomplete replays belonging to tournament
+`ETCOC-2026`, run the dedicated manual queue-population script. A replay is
+complete only when it is ready and has two distinct BGA player colors confirmed
+by replay events. The command does not contact BGA:
+
+```bash
+./.venv/bin/python enqueue_etcoc_2026_game_replays.py
+```
+
+Apply the reported changes after reviewing the preview:
+
+```bash
+./.venv/bin/python enqueue_etcoc_2026_game_replays.py \
+  --apply \
+  --batch-id ETCOC-2026-initial
+```
+
+Missing rows are created in the `historical` queue. Incomplete rows are moved
+there while complete BGA-colored replays and games from other tournaments are
+left unchanged. Re-running the command does not reset active historical jobs.
+
 ### One-off existing replay backfill
 
 After deploying the replay queue schema, preview the one-off cleanup/backfill:
