@@ -556,13 +556,22 @@
     justify-content: center;
   }
 
-  .challenge-modal.challenge-availability-dialog {
+  .challenge-opponents-calendar-btn {
+    flex: 0 0 auto;
+    min-height: 27px;
+    border-radius: 4px;
+    padding-inline: 9px;
+  }
+
+  .challenge-modal.challenge-availability-dialog,
+  .challenge-modal.challenge-opponents-calendar-dialog {
     width: min(1180px, calc(100vw - 32px));
     display: grid;
     gap: 5px;
   }
 
-  .challenge-availability-dialog:focus {
+  .challenge-availability-dialog:focus,
+  .challenge-opponents-calendar-dialog:focus {
     outline: none;
   }
 
@@ -703,7 +712,7 @@
   }
 
   .challenge-calendar-day-header {
-    min-width: 130px;
+    min-width: var(--challenge-calendar-day-width, 130px);
     padding: 8px 5px;
     border-right: 1px solid #e1e5ea;
     color: #344054;
@@ -716,7 +725,7 @@
   .challenge-calendar-times,
   .challenge-calendar-day-column {
     position: relative;
-    height: 528px;
+    height: var(--challenge-calendar-height, 528px);
   }
 
   .challenge-calendar-times {
@@ -736,14 +745,14 @@
   }
 
   .challenge-calendar-day-column {
-    min-width: 130px;
+    min-width: var(--challenge-calendar-day-width, 130px);
     border-right: 1px solid #e1e5ea;
     background: repeating-linear-gradient(
       to bottom,
       #fff 0,
-      #fff 21px,
-      #e9edf2 21px,
-      #e9edf2 22px
+      #fff calc(var(--challenge-calendar-hour-height, 22px) - 1px),
+      #e9edf2 calc(var(--challenge-calendar-hour-height, 22px) - 1px),
+      #e9edf2 var(--challenge-calendar-hour-height, 22px)
     );
     box-sizing: border-box;
     cursor: crosshair;
@@ -755,7 +764,7 @@
     position: absolute;
     left: 0;
     right: 0;
-    height: 22px;
+    height: var(--challenge-calendar-hour-height, 22px);
     box-sizing: border-box;
   }
 
@@ -775,7 +784,7 @@
     left: 3px;
     right: 3px;
     z-index: 3;
-    min-height: 22px;
+    min-height: var(--challenge-calendar-hour-height, 22px);
     overflow: visible;
     border: 1px solid #63b98c;
     border-left: 4px solid #21a366;
@@ -815,6 +824,87 @@
   .challenge-calendar-event.is-selected {
     z-index: 6;
     box-shadow: 0 0 0 2px rgba(26, 115, 183, 0.28);
+  }
+
+  .challenge-opponents-calendar-event {
+    position: absolute;
+    z-index: 3;
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 70px;
+    overflow: hidden;
+    border: 1px solid hsl(var(--challenge-opponent-calendar-hue, 205) 55% 55%);
+    border-left: 4px solid hsl(var(--challenge-opponent-calendar-hue, 205) 72% 42%);
+    border-radius: 4px;
+    background: hsl(var(--challenge-opponent-calendar-hue, 205) 68% 91%);
+    color: #263548;
+    padding: 1px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.25;
+    box-sizing: border-box;
+    pointer-events: auto;
+    cursor: default;
+    user-select: none;
+  }
+
+  .challenge-opponents-calendar-event-flag {
+    flex: 0 0 auto;
+    width: 12px;
+    height: 12px;
+    margin-top: 0;
+    border-radius: 2px;
+    object-fit: contain;
+  }
+
+  .challenge-opponents-calendar-event-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .challenge-opponents-calendar-event.is-two-hours .challenge-opponents-calendar-event-name {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+
+  .challenge-opponents-calendar-event.is-long .challenge-opponents-calendar-event-name {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .challenge-opponents-calendar-event.is-past {
+    border-color: #d5dae1;
+    border-left-color: #b7bec8;
+    background: #f1f3f5;
+    color: #7a8492;
+  }
+
+  .challenge-opponents-calendar-event.is-past .challenge-opponents-calendar-event-flag {
+    filter: grayscale(1);
+    opacity: 0.55;
+  }
+
+  .challenge-calendar-day-column.challenge-opponents-calendar-day-column {
+    cursor: default;
+    touch-action: auto;
+  }
+
+  .challenge-calendar-scroll-btn.challenge-opponents-calendar-scroll-btn {
+    display: inline-flex;
+  }
+
+  .challenge-calendar-scroll-btn.challenge-opponents-calendar-scroll-btn[hidden] {
+    display: none;
   }
 
   .challenge-calendar-event-label {
@@ -1215,7 +1305,6 @@
 
   .challenge-opponents-body {
     display: grid;
-    gap: 7px;
   }
 
   .challenge-requests-panel {
@@ -1736,13 +1825,12 @@
     gap: 12px;
     align-items: center;
     min-height: 46px;
-    padding: 9px 0;
+    padding: 7px 0;
     border-top: 1px solid #edf1f6;
   }
 
   .challenge-opponent-row:first-child {
     border-top: none;
-    padding-top: 0;
   }
 
   .challenge-opponent-avatar {
@@ -1822,7 +1910,7 @@
 
   .challenge-opponent-ratings {
     display: grid;
-    gap: 4px;
+    gap: 2px;
     justify-items: end;
     color: #333;
     font-size: 12px;
@@ -1844,12 +1932,52 @@
     font-weight: 500;
   }
 
+  .challenge-opponent-tournament-line {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 7px;
+    max-width: 100%;
+  }
+
+  .challenge-opponent-tournament-title {
+    min-width: 0;
+    overflow: hidden;
+    color: #333;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .challenge-opponent-tournament-record {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    flex: 0 0 auto;
+  }
+
+  .challenge-opponent-tournament-wins,
+  .challenge-opponent-tournament-losses {
+    font-weight: 700;
+  }
+
+  .challenge-opponent-tournament-wins {
+    color: #166534;
+  }
+
+  .challenge-opponent-tournament-losses {
+    color: #991b1b;
+  }
+
+  .challenge-opponent-tournament-separator {
+    color: #667085;
+  }
+
   .challenge-opponent-potential-bounty-line {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 4px;
-    min-height: 22px;
+    min-height: 20px;
     width: 100%;
   }
 
@@ -3317,6 +3445,10 @@
       justify-content: flex-start;
     }
 
+    .challenge-opponent-tournament-line {
+      justify-content: flex-start;
+    }
+
     .challenge-opponent-row > .challenge-btn {
       grid-column: 2;
       grid-row: 1 / span 2;
@@ -3397,13 +3529,14 @@
       padding: 14px;
     }
 
-    .challenge-availability-dialog {
+    .challenge-availability-dialog,
+    .challenge-opponents-calendar-dialog {
       padding: 12px;
     }
 
     .challenge-calendar-day-header,
     .challenge-calendar-day-column {
-      min-width: 108px;
+      min-width: var(--challenge-calendar-day-width, 108px);
     }
 
     .challenge-calendar-day-header {
@@ -6487,6 +6620,43 @@
     return value;
   }
 
+  function createOpponentTournamentRecordLine(period, opponent) {
+    const tournamentId = String(period?.rivals_tournament_id || "").trim();
+    if (!tournamentId) return null;
+
+    const tournamentTitle = String(
+      period?.rivals_tournament_short_title || tournamentId
+    ).trim();
+    const wins = Math.max(0, parseNullableInt(opponent?.tournament_wins) || 0);
+    const losses = Math.max(0, parseNullableInt(opponent?.tournament_losses) || 0);
+    const line = document.createElement("div");
+    line.className = "challenge-opponent-tournament-line";
+    line.setAttribute("aria-label", `${tournamentTitle}: ${wins} wins, ${losses} losses`);
+
+    const title = document.createElement("span");
+    title.className = "challenge-opponent-tournament-title";
+    title.textContent = tournamentTitle;
+    title.title = tournamentTitle;
+    line.appendChild(title);
+
+    const record = document.createElement("span");
+    record.className = "challenge-opponent-tournament-record";
+    const winsEl = document.createElement("span");
+    winsEl.className = "challenge-opponent-tournament-wins";
+    winsEl.textContent = String(wins);
+    const separator = document.createElement("span");
+    separator.className = "challenge-opponent-tournament-separator";
+    separator.textContent = "-";
+    const lossesEl = document.createElement("span");
+    lossesEl.className = "challenge-opponent-tournament-losses";
+    lossesEl.textContent = String(losses);
+    record.appendChild(winsEl);
+    record.appendChild(separator);
+    record.appendChild(lossesEl);
+    line.appendChild(record);
+    return line;
+  }
+
   async function fetchGgRatingsById() {
     if (ggRatingsPromise) return ggRatingsPromise;
     ggRatingsPromise = (async () => {
@@ -8121,6 +8291,9 @@
     bgaLine.appendChild(createRatingValue(formatEloValue(opponent?.bga_elo)));
     ratings.appendChild(bgaLine);
 
+    const tournamentRecordLine = createOpponentTournamentRecordLine(period, opponent);
+    if (tournamentRecordLine) ratings.appendChild(tournamentRecordLine);
+
     if (isCurrentPlayer) {
       return row;
     }
@@ -8221,7 +8394,9 @@
   function setOpponentsState(panel, text, isError) {
     const countEl = panel.querySelector("[data-opponents-count]");
     const bodyEl = panel.querySelector("[data-opponents-body]");
+    const calendarButton = panel.querySelector("[data-opponents-calendar]");
     if (countEl) countEl.textContent = "";
+    if (calendarButton) calendarButton.disabled = true;
     if (!bodyEl) return;
     bodyEl.innerHTML = "";
     const state = document.createElement("div");
@@ -8250,6 +8425,8 @@
   function renderOpponentsForPeriod(item) {
     const panel = item?.panel;
     if (!panel) return;
+    const calendarButton = panel.querySelector("[data-opponents-calendar]");
+    if (calendarButton) calendarButton.disabled = !item?.baseLoaded;
     const viewMode = item.viewMode === "all" ? "all" : "available";
     panel.querySelectorAll("[data-opponents-view]").forEach((button) => {
       button.setAttribute("aria-pressed", button.dataset.opponentsView === viewMode ? "true" : "false");
@@ -8460,6 +8637,8 @@
           "matches_limit",
           "matches_remaining",
           "is_match_limit_reached",
+          "rivals_tournament_id",
+          "rivals_tournament_short_title",
           "tournament_matches_played_count",
           "tpr_target_games",
           "tournament_matches_remaining",
@@ -9049,6 +9228,8 @@
           "matches_limit",
           "matches_remaining",
           "is_match_limit_reached",
+          "rivals_tournament_id",
+          "rivals_tournament_short_title",
           "tournament_matches_played_count",
           "tpr_target_games",
           "tournament_matches_remaining",
@@ -9240,15 +9421,9 @@
     return slots;
   }
 
-  function openChallengeAvailabilityDialog(period, onSaved) {
-    const timezone = getPlayerTimezone(period?.player_time_context);
-    const slots = buildChallengeAvailabilitySlots(period, timezone);
-    const hourHeight = 22;
-    const calendarHeight = hourHeight * 24;
-    const dayColumnWidth = window.matchMedia("(max-width: 720px)").matches ? 108 : 150;
-    const minDayColumnWidth = Math.round(dayColumnWidth * 13 / 15);
+  function buildChallengeAvailabilityDayGroups(slots, timezone) {
     const dayGroups = [];
-    slots.forEach((slot) => {
+    (Array.isArray(slots) ? slots : []).forEach((slot) => {
       let group = dayGroups[dayGroups.length - 1];
       if (!group || group.key !== slot.dayKey) {
         group = { key: slot.dayKey, label: slot.dayLabel, slots: [] };
@@ -9269,6 +9444,349 @@
         slot,
       ]));
     });
+    return dayGroups;
+  }
+
+  function getChallengeCalendarViewportMetrics() {
+    const compactViewport = window.matchMedia("(max-width: 720px)").matches;
+    const maxDialogHeight = Math.min(
+      760,
+      Math.max(0, window.innerHeight - 44 - (compactViewport ? 20 : 32))
+    );
+    return {
+      maxDialogWidth: Math.min(1180, Math.max(0, window.innerWidth - 32)),
+      hourHeight: Math.max(20, Math.min(25, Math.floor((maxDialogHeight - 148) / 24))),
+    };
+  }
+
+  function assignChallengeOpponentCalendarLanes(events) {
+    const sortedEvents = [...events].sort((left, right) => (
+      left.startHour - right.startHour
+      || left.endHour - right.endHour
+      || left.name.localeCompare(right.name, undefined, { sensitivity: "base" })
+    ));
+    const clusters = [];
+    let cluster = [];
+    let clusterEnd = -1;
+    sortedEvents.forEach((event) => {
+      if (cluster.length && event.startHour >= clusterEnd) {
+        clusters.push(cluster);
+        cluster = [];
+        clusterEnd = -1;
+      }
+      cluster.push(event);
+      clusterEnd = Math.max(clusterEnd, event.endHour);
+    });
+    if (cluster.length) clusters.push(cluster);
+
+    let maxLaneCount = 1;
+    clusters.forEach((clusterEvents) => {
+      const laneEnds = [];
+      clusterEvents.forEach((event) => {
+        let laneIndex = laneEnds.findIndex((laneEnd) => laneEnd <= event.startHour);
+        if (laneIndex < 0) {
+          laneIndex = laneEnds.length;
+          laneEnds.push(event.endHour);
+        } else {
+          laneEnds[laneIndex] = event.endHour;
+        }
+        event.laneIndex = laneIndex;
+      });
+      const laneCount = Math.max(laneEnds.length, 1);
+      maxLaneCount = Math.max(maxLaneCount, laneCount);
+      clusterEvents.forEach((event) => {
+        event.laneCount = laneCount;
+      });
+    });
+    return { events: sortedEvents, maxLaneCount };
+  }
+
+  function getChallengeOpponentCalendarHue(value) {
+    const text = String(value || "opponent");
+    let hash = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      hash = ((hash << 5) - hash + text.charCodeAt(index)) | 0;
+    }
+    return Math.abs(hash) % 360;
+  }
+
+  function openChallengeOpponentsCalendarDialog(period, opponents) {
+    const timezone = getPlayerTimezone(period?.player_time_context);
+    const eligibleOpponents = (Array.isArray(opponents) ? opponents : []).filter((opponent) => (
+      opponent?.can_invite === true
+      && Array.isArray(opponent?.availability)
+      && opponent.availability.length > 0
+    ));
+    const slots = buildChallengeAvailabilitySlots(period, timezone);
+    const dayGroups = buildChallengeAvailabilityDayGroups(slots, timezone);
+    const laneMinWidth = 70;
+    const laneGap = 4;
+    const dayPadding = 6;
+    const { hourHeight } = getChallengeCalendarViewportMetrics();
+    const calendarHeight = hourHeight * 24;
+    const currentTime = Date.now();
+
+    dayGroups.forEach((group) => {
+      const events = [];
+      eligibleOpponents.forEach((opponent) => {
+        opponent.availability.forEach((range) => {
+          const rangeStart = parseUtcDate(range?.start_utc);
+          const rangeEnd = parseUtcDate(range?.end_utc);
+          if (!rangeStart || !rangeEnd || rangeStart >= rangeEnd) return;
+          const coveredSlots = group.slots.filter((slot) => (
+            slot.start < rangeEnd && slot.end > rangeStart
+          ));
+          if (!coveredSlots.length) return;
+          const firstSlot = coveredSlots[0];
+          const lastSlot = coveredSlots[coveredSlots.length - 1];
+          const crossesDay = getChallengeLocalDateKey(lastSlot.start, timezone)
+            !== getChallengeLocalDateKey(lastSlot.end, timezone);
+          events.push({
+            opponent,
+            name: getOpponentDisplayName(opponent),
+            startHour: getChallengeAvailabilityHour(firstSlot.start, timezone),
+            endHour: crossesDay ? 24 : getChallengeAvailabilityHour(lastSlot.end, timezone),
+            endTime: lastSlot.end.getTime(),
+          });
+        });
+      });
+      const laneLayout = assignChallengeOpponentCalendarLanes(events);
+      group.events = laneLayout.events;
+      group.laneCount = laneLayout.maxLaneCount;
+      group.width = Math.max(
+        125,
+        (dayPadding * 2) + (group.laneCount * laneMinWidth) + ((group.laneCount - 1) * laneGap)
+      );
+    });
+
+    const dayWidths = dayGroups.length ? dayGroups.map((group) => group.width) : [125];
+    const calendarContentWidth = 56 + dayWidths.reduce((sum, width) => sum + width, 0);
+    const shownPlayerIds = new Set(
+      dayGroups.flatMap((group) => group.events || [])
+        .map((event) => String(event?.opponent?.player_id || "").trim())
+        .filter(Boolean)
+    );
+
+    const overlay = document.createElement("div");
+    overlay.className = "challenge-modal-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "challenge-modal challenge-opponents-calendar-dialog";
+    dialog.style.width = `min(calc(100vw - 32px), ${Math.min(
+      1180,
+      Math.max(360, 92 + calendarContentWidth - 56)
+    )}px)`;
+    dialog.tabIndex = -1;
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    overlay.appendChild(dialog);
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "challenge-availability-title-row";
+    const title = document.createElement("div");
+    title.className = "challenge-request-title";
+    title.textContent = "When can opponents play?";
+    titleRow.appendChild(title);
+    dialog.appendChild(titleRow);
+
+    const calendarShell = document.createElement("div");
+    calendarShell.className = "challenge-calendar-shell";
+    dialog.appendChild(calendarShell);
+    const calendar = document.createElement("div");
+    calendar.className = "challenge-availability-calendar";
+    calendarShell.appendChild(calendar);
+
+    const previousDaysBtn = document.createElement("button");
+    previousDaysBtn.type = "button";
+    previousDaysBtn.className = "challenge-calendar-scroll-btn challenge-opponents-calendar-scroll-btn is-prev";
+    previousDaysBtn.setAttribute("aria-label", "Scroll to previous days");
+    previousDaysBtn.textContent = "‹";
+    previousDaysBtn.hidden = true;
+    calendarShell.appendChild(previousDaysBtn);
+    const nextDaysBtn = document.createElement("button");
+    nextDaysBtn.type = "button";
+    nextDaysBtn.className = "challenge-calendar-scroll-btn challenge-opponents-calendar-scroll-btn is-next";
+    nextDaysBtn.setAttribute("aria-label", "Scroll to next days");
+    nextDaysBtn.textContent = "›";
+    nextDaysBtn.hidden = true;
+    calendarShell.appendChild(nextDaysBtn);
+
+    const calendarInner = document.createElement("div");
+    calendarInner.className = "challenge-calendar-inner";
+    calendarInner.style.minWidth = `${calendarContentWidth}px`;
+    calendarInner.style.setProperty("--challenge-calendar-hour-height", `${hourHeight}px`);
+    calendarInner.style.setProperty("--challenge-calendar-height", `${calendarHeight}px`);
+    calendar.appendChild(calendarInner);
+
+    const gridColumns = dayWidths.map((width) => `${width}px`).join(" ");
+    const header = document.createElement("div");
+    header.className = "challenge-calendar-header";
+    calendarInner.appendChild(header);
+    const headerSpacer = document.createElement("div");
+    headerSpacer.className = "challenge-calendar-header-spacer";
+    header.appendChild(headerSpacer);
+    const dayHeaders = document.createElement("div");
+    dayHeaders.className = "challenge-calendar-day-headers";
+    dayHeaders.style.gridTemplateColumns = gridColumns;
+    header.appendChild(dayHeaders);
+    dayGroups.forEach((group) => {
+      const dayHeader = document.createElement("div");
+      dayHeader.className = "challenge-calendar-day-header";
+      dayHeader.style.minWidth = `${group.width}px`;
+      dayHeader.textContent = group.label;
+      dayHeaders.appendChild(dayHeader);
+    });
+
+    const body = document.createElement("div");
+    body.className = "challenge-calendar-body";
+    calendarInner.appendChild(body);
+    const times = document.createElement("div");
+    times.className = "challenge-calendar-times";
+    body.appendChild(times);
+    for (let hour = 1; hour < 24; hour += 1) {
+      const label = document.createElement("div");
+      label.className = "challenge-calendar-time-label";
+      label.style.top = `${hour * hourHeight}px`;
+      label.textContent = `${String(hour).padStart(2, "0")}:00`;
+      times.appendChild(label);
+    }
+
+    const dayColumns = document.createElement("div");
+    dayColumns.className = "challenge-calendar-day-columns";
+    dayColumns.style.gridTemplateColumns = gridColumns;
+    body.appendChild(dayColumns);
+    dayGroups.forEach((group) => {
+      const column = document.createElement("div");
+      column.className = "challenge-calendar-day-column challenge-opponents-calendar-day-column";
+      column.style.minWidth = `${group.width}px`;
+      for (let hour = 0; hour < 24; hour += 1) {
+        const cell = document.createElement("div");
+        cell.className = `challenge-calendar-hour-cell${group.slotByHour.has(hour) ? "" : " is-blocked"}`;
+        cell.style.top = `${hour * hourHeight}px`;
+        column.appendChild(cell);
+      }
+      const eventLayer = document.createElement("div");
+      eventLayer.className = "challenge-calendar-event-layer";
+      (group.events || []).forEach((event) => {
+        const durationHours = Math.max(1, event.endHour - event.startHour);
+        const isPast = Number.isFinite(event.endTime) && event.endTime <= currentTime;
+        const laneCount = Math.max(event.laneCount || 1, 1);
+        const laneWidth = laneCount === 1
+          ? group.width * 0.9
+          : (
+            group.width - (dayPadding * 2) - ((laneCount - 1) * laneGap)
+          ) / laneCount;
+        const laneLeft = laneCount === 1
+          ? (group.width - laneWidth) / 2
+          : dayPadding + (event.laneIndex * (laneWidth + laneGap));
+        const eventEl = document.createElement("div");
+        const durationClassName = (
+          durationHours === 1
+            ? "is-one-hour"
+            : durationHours === 2
+              ? "is-two-hours"
+              : "is-long"
+        );
+        eventEl.className = `challenge-opponents-calendar-event ${durationClassName}${isPast ? " is-past" : ""}`;
+        eventEl.style.left = `${laneLeft}px`;
+        eventEl.style.width = `${laneWidth}px`;
+        eventEl.style.top = `${event.startHour * hourHeight + 1}px`;
+        eventEl.style.height = `${Math.max(18, (event.endHour - event.startHour) * hourHeight - 2)}px`;
+        eventEl.style.setProperty(
+          "--challenge-opponent-calendar-hue",
+          String(getChallengeOpponentCalendarHue(event.opponent?.player_id || event.name))
+        );
+        eventEl.title = `${event.name}: ${String(event.startHour).padStart(2, "0")}:00–${String(event.endHour).padStart(2, "0")}:00`;
+        eventEl.setAttribute("role", "group");
+        eventEl.setAttribute("aria-label", eventEl.title);
+        const flag = createFlagImg(
+          event.opponent?.association?.flag || event.opponent?.flag,
+          "challenge-opponents-calendar-event-flag"
+        );
+        if (flag) eventEl.appendChild(flag);
+        const name = document.createElement("span");
+        name.className = "challenge-opponents-calendar-event-name";
+        name.textContent = event.name;
+        eventEl.appendChild(name);
+        eventLayer.appendChild(eventEl);
+      });
+      column.appendChild(eventLayer);
+      dayColumns.appendChild(column);
+    });
+
+    const footer = document.createElement("div");
+    footer.className = "challenge-calendar-footer";
+    const timezoneNote = document.createElement("div");
+    timezoneNote.className = "challenge-calendar-timezone";
+    timezoneNote.textContent = `Times in ${timezone}`;
+    footer.appendChild(timezoneNote);
+    const message = document.createElement("div");
+    message.className = "challenge-request-message";
+    message.textContent = shownPlayerIds.size
+      ? `${shownPlayerIds.size} ${shownPlayerIds.size === 1 ? "opponent" : "opponents"} with playing times.`
+      : "No eligible opponents have added playing times yet.";
+    footer.appendChild(message);
+    dialog.appendChild(footer);
+
+    const actions = document.createElement("div");
+    actions.className = "challenge-info-actions";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "challenge-btn challenge-btn-secondary";
+    closeBtn.textContent = "Close";
+    actions.appendChild(closeBtn);
+    dialog.appendChild(actions);
+
+    const updateScrollButtons = () => {
+      const maxScrollLeft = Math.max(0, calendar.scrollWidth - calendar.clientWidth);
+      const hasOverflow = maxScrollLeft > 1;
+      previousDaysBtn.hidden = !hasOverflow;
+      nextDaysBtn.hidden = !hasOverflow;
+      previousDaysBtn.disabled = calendar.scrollLeft <= 1;
+      nextDaysBtn.disabled = calendar.scrollLeft >= maxScrollLeft - 1;
+    };
+    const scrollDistance = () => Math.max(125, Math.floor(calendar.clientWidth * 0.75));
+    previousDaysBtn.addEventListener("click", () => {
+      calendar.scrollBy({ left: -scrollDistance(), behavior: "smooth" });
+    });
+    nextDaysBtn.addEventListener("click", () => {
+      calendar.scrollBy({ left: scrollDistance(), behavior: "smooth" });
+    });
+    calendar.addEventListener("scroll", updateScrollButtons, { passive: true });
+
+    const closeDialog = () => {
+      document.removeEventListener("keydown", onKeyDown);
+      overlay.remove();
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") closeDialog();
+    };
+    closeBtn.addEventListener("click", closeDialog);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeDialog();
+    });
+    document.addEventListener("keydown", onKeyDown);
+    document.body.appendChild(overlay);
+    window.requestAnimationFrame(updateScrollButtons);
+    dialog.focus({ preventScroll: true });
+  }
+
+  function openChallengeAvailabilityDialog(period, onSaved) {
+    const timezone = getPlayerTimezone(period?.player_time_context);
+    const slots = buildChallengeAvailabilitySlots(period, timezone);
+    const minDayColumnWidth = 125;
+    const maxDayColumnWidth = 150;
+    const dialogHorizontalChrome = 92;
+    const { maxDialogWidth, hourHeight } = getChallengeCalendarViewportMetrics();
+    const calendarHeight = hourHeight * 24;
+    const dayGroups = buildChallengeAvailabilityDayGroups(slots, timezone);
+    const dayColumnCount = Math.max(dayGroups.length, 1);
+    const dayColumnWidth = Math.max(
+      minDayColumnWidth,
+      Math.min(
+        maxDayColumnWidth,
+        Math.floor((maxDialogWidth - dialogHorizontalChrome) / dayColumnCount)
+      )
+    );
 
     let ranges = (Array.isArray(period?.availability) ? period.availability : [])
       .map((range) => {
@@ -9289,7 +9807,7 @@
     overlay.className = "challenge-modal-overlay";
     const dialog = document.createElement("div");
     dialog.className = "challenge-modal challenge-availability-dialog";
-    dialog.style.width = `min(calc(100vw - 32px), ${Math.min(1180, 92 + Math.max(dayGroups.length, 1) * dayColumnWidth)}px)`;
+    dialog.style.width = `min(calc(100vw - 32px), ${Math.min(1180, dialogHorizontalChrome + dayColumnCount * dayColumnWidth)}px)`;
     dialog.tabIndex = -1;
     dialog.setAttribute("role", "dialog");
     dialog.setAttribute("aria-modal", "true");
@@ -9345,7 +9863,10 @@
     calendar.addEventListener("scroll", updateCalendarScrollButtons, { passive: true });
     const calendarInner = document.createElement("div");
     calendarInner.className = "challenge-calendar-inner";
-    calendarInner.style.minWidth = `${56 + Math.max(dayGroups.length, 1) * dayColumnWidth}px`;
+    calendarInner.style.minWidth = `${56 + dayColumnCount * dayColumnWidth}px`;
+    calendarInner.style.setProperty("--challenge-calendar-day-width", `${dayColumnWidth}px`);
+    calendarInner.style.setProperty("--challenge-calendar-hour-height", `${hourHeight}px`);
+    calendarInner.style.setProperty("--challenge-calendar-height", `${calendarHeight}px`);
     calendar.appendChild(calendarInner);
 
     const header = document.createElement("div");
@@ -9356,7 +9877,7 @@
     header.appendChild(headerSpacer);
     const dayHeaders = document.createElement("div");
     dayHeaders.className = "challenge-calendar-day-headers";
-    dayHeaders.style.gridTemplateColumns = `repeat(${Math.max(dayGroups.length, 1)}, minmax(${minDayColumnWidth}px, ${dayColumnWidth}px))`;
+    dayHeaders.style.gridTemplateColumns = `repeat(${dayColumnCount}, ${dayColumnWidth}px)`;
     header.appendChild(dayHeaders);
     dayGroups.forEach((group) => {
       const dayHeader = document.createElement("div");
@@ -9381,7 +9902,7 @@
 
     const dayColumns = document.createElement("div");
     dayColumns.className = "challenge-calendar-day-columns";
-    dayColumns.style.gridTemplateColumns = `repeat(${Math.max(dayGroups.length, 1)}, minmax(${minDayColumnWidth}px, ${dayColumnWidth}px))`;
+    dayColumns.style.gridTemplateColumns = `repeat(${dayColumnCount}, ${dayColumnWidth}px)`;
     body.appendChild(dayColumns);
     const columns = [];
     const eventLayers = [];
@@ -9967,6 +10488,14 @@
     count.dataset.opponentsCount = "true";
     controls.appendChild(count);
 
+    const calendarButton = document.createElement("button");
+    calendarButton.type = "button";
+    calendarButton.className = "challenge-btn challenge-btn-secondary challenge-opponents-calendar-btn";
+    calendarButton.dataset.opponentsCalendar = "true";
+    calendarButton.textContent = "Calendar";
+    calendarButton.disabled = true;
+    controls.appendChild(calendarButton);
+
     const filterToggle = document.createElement("button");
     filterToggle.type = "button";
     filterToggle.className = "challenge-opponents-filter-toggle";
@@ -10091,6 +10620,10 @@
     };
     availableViewButton.addEventListener("click", () => setViewMode("available"));
     allViewButton.addEventListener("click", () => setViewMode("all"));
+    calendarButton.addEventListener("click", () => {
+      if (!item.baseLoaded) return;
+      openChallengeOpponentsCalendarDialog(period, item.opponentsByView.available);
+    });
 
     const applyTimeFilter = () => {
       item.matchStart = parseChallengeDatetimeLocal(timeInput.value, timezone);

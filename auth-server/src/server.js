@@ -51,6 +51,7 @@ import {
   loadChallengeMatchCapacities,
   loadChallengeScheduleConflict,
   loadChallengeTournamentProgress,
+  loadChallengeTournamentRecords,
   resolveMaxMatchesPerPlayer,
   resolveMaxPendingRequestsPerPlayer,
   shouldCloseChallengeRequestsForPlayerStatus,
@@ -9752,6 +9753,17 @@ async function loadChallengePeriodById(periodId) {
         description,
         logo,
         rivals_tournament_id,
+        (
+          SELECT COALESCE(
+            NULLIF(trim(rivals_tournament.short_title), ''),
+            NULLIF(trim(rivals_tournament.name), ''),
+            rivals_tournament.id
+          )
+          FROM tournaments rivals_tournament
+          WHERE upper(trim(COALESCE(rivals_tournament.id, '')))
+            = upper(trim(COALESCE(challenge_periods.rivals_tournament_id, '')))
+          LIMIT 1
+        ) AS rivals_tournament_short_title,
         max_matches_per_player,
         max_pending_requests_per_player,
         status,
@@ -9936,6 +9948,8 @@ function mapChallengeOpponent(row) {
     is_same_association: Number(row?.is_same_association) === 1,
     has_rivals_match: Number(row?.has_rivals_match) === 1,
     can_invite: Number(row?.can_invite) === 1,
+    tournament_wins: Math.max(0, Math.trunc(Number(row?.tournament_wins) || 0)),
+    tournament_losses: Math.max(0, Math.trunc(Number(row?.tournament_losses) || 0)),
     ...capacity,
     ...tournamentProgress,
   };
@@ -10410,6 +10424,7 @@ function mapChallengePeriodForPlayer(row) {
     description: row.description,
     logo: row.logo,
     rivals_tournament_id: row.rivals_tournament_id || null,
+    rivals_tournament_short_title: normalizeNullableText(row?.rivals_tournament_short_title),
     max_matches_per_player: normalizePositiveInteger(row.max_matches_per_player) || 1,
     max_pending_requests_per_player: normalizePositiveInteger(row.max_pending_requests_per_player) || 3,
     status: row.status,
@@ -10483,6 +10498,11 @@ app.get("/challenge-periods/player", async (req, res) => {
           cp.description,
           cp.logo,
           cp.rivals_tournament_id,
+          COALESCE(
+            NULLIF(trim(rivals_tournament.short_title), ''),
+            NULLIF(trim(rivals_tournament.name), ''),
+            rivals_tournament.id
+          ) AS rivals_tournament_short_title,
           cp.max_matches_per_player,
           cp.max_pending_requests_per_player,
           cp.status,
@@ -10707,50 +10727,9 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         `,
         [periodId, playerId, playerId]
       ) : Promise.resolve([]),
-      period.rivals_tournament_id ? dbAllAsync(
-        `
-          SELECT tournament_player.player_id, COUNT(*) AS tournament_matches_played_count
-          FROM (
-            SELECT trim(tournament_duel.player_1_id) AS player_id
-            FROM duels tournament_duel
-            LEFT JOIN matches tournament_match
-              ON trim(COALESCE(tournament_match.id, '')) = trim(COALESCE(tournament_duel.match_id, ''))
-             AND tournament_match.deleted_at IS NULL
-            WHERE upper(trim(COALESCE(
-                NULLIF(trim(tournament_duel.tournament_id), ''),
-                tournament_match.tournament_id,
-                ''
-              ))) = upper(trim(?))
-              AND lower(trim(COALESCE(tournament_duel.status, ''))) = 'done'
-              AND tournament_duel.deleted_at IS NULL
-              AND tournament_duel.dw1 IS NOT NULL
-              AND tournament_duel.dw2 IS NOT NULL
-              AND trim(COALESCE(tournament_duel.player_1_id, '')) <> ''
-              AND trim(COALESCE(tournament_duel.player_2_id, '')) <> ''
-              AND trim(tournament_duel.player_1_id) <> trim(tournament_duel.player_2_id)
-            UNION ALL
-            SELECT trim(tournament_duel.player_2_id) AS player_id
-            FROM duels tournament_duel
-            LEFT JOIN matches tournament_match
-              ON trim(COALESCE(tournament_match.id, '')) = trim(COALESCE(tournament_duel.match_id, ''))
-             AND tournament_match.deleted_at IS NULL
-            WHERE upper(trim(COALESCE(
-                NULLIF(trim(tournament_duel.tournament_id), ''),
-                tournament_match.tournament_id,
-                ''
-              ))) = upper(trim(?))
-              AND lower(trim(COALESCE(tournament_duel.status, ''))) = 'done'
-              AND tournament_duel.deleted_at IS NULL
-              AND tournament_duel.dw1 IS NOT NULL
-              AND tournament_duel.dw2 IS NOT NULL
-              AND trim(COALESCE(tournament_duel.player_1_id, '')) <> ''
-              AND trim(COALESCE(tournament_duel.player_2_id, '')) <> ''
-              AND trim(tournament_duel.player_1_id) <> trim(tournament_duel.player_2_id)
-          ) tournament_player
-          GROUP BY tournament_player.player_id
-        `,
-        [period.rivals_tournament_id, period.rivals_tournament_id]
-      ) : Promise.resolve([]),
+      period.rivals_tournament_id ? loadChallengeTournamentRecords(db, {
+        tournamentId: period.rivals_tournament_id,
+      }) : Promise.resolve([]),
     ]);
 
     const pairOpponentIds = new Set();
@@ -10769,10 +10748,14 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         pendingRequestByOpponentId.set(opponentId, normalizeNullableText(row?.id));
       }
     });
-    const tournamentMatchesPlayedByPlayerId = new Map(
+    const tournamentResultsByPlayerId = new Map(
       (tournamentProgressRows || []).map((row) => [
         normalizeNullableText(row?.player_id),
-        Math.max(0, Number(row?.tournament_matches_played_count) || 0),
+        {
+          tournament_matches_played_count: Math.max(0, Number(row?.tournament_matches_played_count) || 0),
+          tournament_wins: Math.max(0, Number(row?.tournament_wins) || 0),
+          tournament_losses: Math.max(0, Number(row?.tournament_losses) || 0),
+        },
       ])
     );
 
@@ -10800,8 +10783,13 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       const hasRivalsMatch = pairOpponentIds.has(opponentId);
       const pendingRequestId = pendingRequestByOpponentId.get(opponentId) || null;
       const capacity = buildChallengeMatchCapacity(row?.matches_count, period.max_matches_per_player);
+      const tournamentResult = tournamentResultsByPlayerId.get(opponentId) || {
+        tournament_matches_played_count: 0,
+        tournament_wins: 0,
+        tournament_losses: 0,
+      };
       const tournamentProgress = buildChallengeTournamentProgress(
-        tournamentMatchesPlayedByPlayerId.get(opponentId) || 0,
+        tournamentResult.tournament_matches_played_count,
         currentTournamentProgress.tpr_target_games,
         currentTournamentProgress.tpr_target_games !== null
       );
@@ -10818,6 +10806,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       const mappedOpponent = mapChallengeOpponent({
         ...row,
         ...tournamentProgress,
+        ...tournamentResult,
         matches_limit: period.max_matches_per_player,
         pending_request_id: pendingRequestId,
         is_current_player: isCurrentPlayer ? 1 : 0,
@@ -10863,6 +10852,10 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       current_player: currentProfile ? mapChallengeOpponent({
         ...currentProfile,
         ...currentTournamentProgress,
+        ...(tournamentResultsByPlayerId.get(playerId) || {
+          tournament_wins: 0,
+          tournament_losses: 0,
+        }),
         period_player_status: currentStatus,
         matches_count: currentMatchesCount,
         matches_limit: period.max_matches_per_player,

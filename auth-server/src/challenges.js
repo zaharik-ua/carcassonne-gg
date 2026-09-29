@@ -268,6 +268,69 @@ export async function loadChallengeTournamentProgress(db, options = {}) {
   );
 }
 
+export async function loadChallengeTournamentRecords(db, options = {}) {
+  const tournamentId = normalizeChallengeIdentifier(options.tournamentId);
+  if (!tournamentId) return [];
+
+  const rows = await dbAll(
+    db,
+    `
+      WITH completed_tournament_duels AS (
+        SELECT
+          trim(tournament_duel.player_1_id) AS player_1_id,
+          trim(tournament_duel.player_2_id) AS player_2_id,
+          CAST(tournament_duel.dw1 AS REAL) AS dw1,
+          CAST(tournament_duel.dw2 AS REAL) AS dw2
+        FROM duels tournament_duel
+        LEFT JOIN matches tournament_match
+          ON trim(COALESCE(tournament_match.id, '')) = trim(COALESCE(tournament_duel.match_id, ''))
+         AND tournament_match.deleted_at IS NULL
+        WHERE upper(trim(COALESCE(
+            NULLIF(trim(tournament_duel.tournament_id), ''),
+            tournament_match.tournament_id,
+            ''
+          ))) = upper(trim(?))
+          AND lower(trim(COALESCE(tournament_duel.status, ''))) = 'done'
+          AND tournament_duel.deleted_at IS NULL
+          AND tournament_duel.dw1 IS NOT NULL
+          AND tournament_duel.dw2 IS NOT NULL
+          AND trim(COALESCE(tournament_duel.player_1_id, '')) <> ''
+          AND trim(COALESCE(tournament_duel.player_2_id, '')) <> ''
+          AND trim(tournament_duel.player_1_id) <> trim(tournament_duel.player_2_id)
+      ),
+      player_results AS (
+        SELECT
+          player_1_id AS player_id,
+          CASE WHEN dw1 > dw2 THEN 1 ELSE 0 END AS is_win,
+          CASE WHEN dw1 < dw2 THEN 1 ELSE 0 END AS is_loss
+        FROM completed_tournament_duels
+        UNION ALL
+        SELECT
+          player_2_id AS player_id,
+          CASE WHEN dw2 > dw1 THEN 1 ELSE 0 END AS is_win,
+          CASE WHEN dw2 < dw1 THEN 1 ELSE 0 END AS is_loss
+        FROM completed_tournament_duels
+      )
+      SELECT
+        player_id,
+        COUNT(*) AS tournament_matches_played_count,
+        COALESCE(SUM(is_win), 0) AS tournament_wins,
+        COALESCE(SUM(is_loss), 0) AS tournament_losses
+      FROM player_results
+      GROUP BY player_id
+      ORDER BY player_id COLLATE NOCASE ASC
+    `,
+    [tournamentId]
+  );
+
+  return (rows || []).map((row) => ({
+    player_id: normalizeChallengeIdentifier(row?.player_id),
+    tournament_matches_played_count: Math.max(0, Number(row?.tournament_matches_played_count) || 0),
+    tournament_wins: Math.max(0, Number(row?.tournament_wins) || 0),
+    tournament_losses: Math.max(0, Number(row?.tournament_losses) || 0),
+  })).filter((row) => row.player_id);
+}
+
 function normalizeChallengeIdentifier(value) {
   const normalized = String(value ?? "").trim();
   return normalized || null;

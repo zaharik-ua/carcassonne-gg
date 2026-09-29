@@ -1032,6 +1032,68 @@
   .sim-table td.rank-cell {
     font-size: 14px;
   }
+  .standings-country-filter-toggle {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-size: 14px;
+    justify-content: center;
+    min-height: 22px;
+    min-width: 22px;
+    padding: 2px;
+    transition: color 0.2s ease, transform 0.2s ease;
+  }
+  .standings-country-filter-toggle:hover,
+  .standings-country-filter-toggle:focus-visible,
+  .standings-country-filter-toggle.active {
+    color: #dbe7f4;
+    outline: none;
+    transform: scale(1.05);
+  }
+  .standings-country-filter {
+    align-items: center;
+    background: #f4f8fb;
+    border: 1px solid #d7e1ea;
+    border-radius: 3px;
+    display: none;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 0 0 6px;
+    padding: 6px 8px;
+  }
+  .standings-country-filter.open {
+    display: flex;
+  }
+  .standings-country-filter__flag {
+    align-items: center;
+    background: transparent;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    justify-content: center;
+    padding: 2px;
+  }
+  .standings-country-filter__flag:hover,
+  .standings-country-filter__flag:focus-visible {
+    background: #e7f0f7;
+    outline: none;
+  }
+  .standings-country-filter__flag.active {
+    border-color: #0277BD;
+  }
+  .standings-country-filter__flag img {
+    height: 18px;
+    object-fit: contain;
+    width: 18px;
+  }
+  .group-table tr.player-row.tournament-matches-complete td {
+    background-color: #f2faf5;
+  }
   .rank-badge {
     display: inline-flex;
     align-items: center;
@@ -3170,6 +3232,7 @@
             association_flag: String(row.association_flag || playerDetails?.flag || "").trim(),
             association_name: String(row.association_name || playerDetails?.country || "").trim(),
             matches_played: row.mp ?? 0,
+            target_matches: data.tpr_target_games ?? null,
             matches_won: row.mw ?? 0,
             matches_lost: row.ml ?? 0,
             duels_won: row.dw ?? 0,
@@ -4410,6 +4473,56 @@
         groupPlayers = applyExplicitPositions(groupPlayers);
       }
 
+      const getStandingCountryKey = rowData => {
+        const countryName = String(rowData?.association_name || "").trim().toLocaleLowerCase();
+        if (countryName) return countryName;
+        return String(rowData?.association_flag || "").trim();
+      };
+      const countryOptionsByKey = new Map();
+      if (!isTeam) {
+        (groupPlayers || []).forEach(rowData => {
+          const value = getStandingCountryKey(rowData);
+          const flag = String(rowData?.association_flag || "").trim();
+          if (!value || !flag || countryOptionsByKey.has(value)) return;
+          countryOptionsByKey.set(value, {
+            value,
+            label: String(rowData?.association_name || "Country").trim(),
+            flag
+          });
+        });
+      }
+      const countryOptions = Array.from(countryOptionsByKey.values())
+        .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+      let selectedCountry = "";
+      let isCountryFilterOpen = false;
+
+      const countryFilter = document.createElement("div");
+      countryFilter.className = "standings-country-filter";
+      countryFilter.setAttribute("aria-label", "Filter standings by country");
+      countryOptions.forEach(option => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "standings-country-filter__flag";
+        button.dataset.country = option.value;
+        button.setAttribute("aria-label", `Filter by ${option.label}`);
+        button.title = option.label;
+
+        const flag = document.createElement("img");
+        flag.src = option.flag;
+        flag.alt = option.label;
+        button.appendChild(flag);
+
+        button.addEventListener("click", () => {
+          selectedCountry = selectedCountry === option.value ? "" : option.value;
+          countryFilter.querySelectorAll(".standings-country-filter__flag").forEach(flagButton => {
+            flagButton.classList.toggle("active", flagButton.dataset.country === selectedCountry);
+          });
+          renderStandingsTable();
+        });
+        countryFilter.appendChild(button);
+      });
+      if (countryOptions.length) section.appendChild(countryFilter);
+
       // Single table with dynamic columns depending on toggle
       const table = document.createElement("table");
       table.className = "group-table";
@@ -4444,7 +4557,21 @@
         const headTr = document.createElement('tr');
         const thPos = document.createElement('th');
         thPos.className = 'rank-cell';
-        thPos.textContent = '';
+        if (countryOptions.length) {
+          const filterButton = document.createElement('button');
+          filterButton.type = 'button';
+          filterButton.className = `standings-country-filter-toggle${selectedCountry ? ' active' : ''}`;
+          filterButton.setAttribute('aria-label', 'Filter standings by country');
+          filterButton.setAttribute('aria-expanded', isCountryFilterOpen ? 'true' : 'false');
+          filterButton.title = 'Filter by country';
+          filterButton.innerHTML = '<i class="fa fa-sliders-h" aria-hidden="true"></i>';
+          filterButton.addEventListener('click', () => {
+            isCountryFilterOpen = !isCountryFilterOpen;
+            countryFilter.classList.toggle('open', isCountryFilterOpen);
+            filterButton.setAttribute('aria-expanded', isCountryFilterOpen ? 'true' : 'false');
+          });
+          thPos.appendChild(filterButton);
+        }
         const thName = document.createElement('th');
         thName.textContent = isTeam ? 'Team' : 'Player';
         headTr.appendChild(thPos);
@@ -4458,6 +4585,7 @@
         table.appendChild(headTr);
 
         (groupPlayers || []).forEach((rowData, index) => {
+          if (selectedCountry && getStandingCountryKey(rowData) !== selectedCountry) return;
           const tr = document.createElement('tr');
           const tdIdx = document.createElement('td');
           tdIdx.className = 'rank-cell';
@@ -4529,6 +4657,18 @@
           tr.appendChild(tdName);
 
           tr.classList.add('player-row');
+          const targetMatches = Number(rowData?.target_matches);
+          const matchesPlayed = Number(rowData?.matches_played);
+          if (
+            isBountyTprStandings
+            && Number.isFinite(targetMatches)
+            && targetMatches > 0
+            && Number.isFinite(matchesPlayed)
+            && matchesPlayed >= targetMatches
+          ) {
+            tr.classList.add('tournament-matches-complete');
+            tr.title = `All ${targetMatches} tournament matches completed`;
+          }
           if (isTeam) {
             const values = [
               rowData.matches_played,
@@ -4882,6 +5022,25 @@
     return value === 1 || value === true || String(value || "").trim() === "1";
   }
 
+  function getChallengeGameWinner(game) {
+    if (game.player1Clock !== game.player2Clock) {
+      return game.player1Clock ? 2 : 1;
+    }
+
+    const player1RankWon = isTruthyOne(game.player1Rank);
+    const player2RankWon = isTruthyOne(game.player2Rank);
+    if (player1RankWon !== player2RankWon) {
+      return player1RankWon ? 1 : 2;
+    }
+
+    const player1Score = Number(game.player1Score);
+    const player2Score = Number(game.player2Score);
+    if (!Number.isFinite(player1Score) || !Number.isFinite(player2Score)) return null;
+    if (player1Score > player2Score) return 1;
+    if (player2Score > player1Score) return 2;
+    return null;
+  }
+
   function getCarcassonneLabUrl(value) {
     const raw = String(value || "").trim();
     if (!raw) return "";
@@ -4908,11 +5067,22 @@
         const tableId = String(game?.bga_table_id || "").trim();
         const player1Clock = isTruthyOne(game?.player_1_clock);
         const player2Clock = isTruthyOne(game?.player_2_clock);
+        const player1Rank = game?.player_1_rank;
+        const player2Rank = game?.player_2_rank;
         const carcassonneLabUrl = getCarcassonneLabUrl(game?.carcassonne_lab_url);
         const hasPlayer1Score = player1Score !== null && player1Score !== undefined && String(player1Score).trim() !== "";
         const hasPlayer2Score = player2Score !== null && player2Score !== undefined && String(player2Score).trim() !== "";
         return hasPlayer1Score && hasPlayer2Score
-          ? { player1Score, player2Score, player1Clock, player2Clock, tableId, carcassonneLabUrl }
+          ? {
+              player1Score,
+              player2Score,
+              player1Clock,
+              player2Clock,
+              player1Rank,
+              player2Rank,
+              tableId,
+              carcassonneLabUrl
+            }
           : null;
       })
       .filter(Boolean);
@@ -4925,16 +5095,9 @@
     let score2 = hasMatchScore ? match.gw2 : 0;
     if (!hasMatchScore) {
       games.forEach((game) => {
-        if (game.player1Clock !== game.player2Clock) {
-          if (game.player1Clock) score2 += 1;
-          if (game.player2Clock) score1 += 1;
-          return;
-        }
-        const gameScore1 = Number(game.player1Score);
-        const gameScore2 = Number(game.player2Score);
-        if (!Number.isFinite(gameScore1) || !Number.isFinite(gameScore2)) return;
-        if (gameScore1 > gameScore2) score1 += 1;
-        if (gameScore2 > gameScore1) score2 += 1;
+        const winner = getChallengeGameWinner(game);
+        if (winner === 1) score1 += 1;
+        if (winner === 2) score2 += 1;
       });
     }
 
@@ -4982,6 +5145,7 @@
         const badge = document.createElement(game.tableId ? "a" : "span");
         badge.className = "challenge-match-result__game";
         const hasClockLoss = game.player1Clock !== game.player2Clock;
+        const winner = getChallengeGameWinner(game);
         if (hasClockLoss) {
           badge.classList.add("challenge-match-result__game--clock");
           const clock = document.createElement("i");
@@ -4991,15 +5155,8 @@
           badge.appendChild(clock);
           badge.appendChild(clockScore);
         } else {
-          const player1Score = Number(game.player1Score);
-          const player2Score = Number(game.player2Score);
-          if (Number.isFinite(player1Score) && Number.isFinite(player2Score)) {
-            if (player1Score > player2Score) {
-              badge.classList.add("challenge-match-result__game--player-1");
-            } else if (player2Score > player1Score) {
-              badge.classList.add("challenge-match-result__game--player-2");
-            }
-          }
+          if (winner === 1) badge.classList.add("challenge-match-result__game--player-1");
+          if (winner === 2) badge.classList.add("challenge-match-result__game--player-2");
           badge.textContent = `${game.player1Score}:${game.player2Score}`;
         }
         if (game.tableId) {

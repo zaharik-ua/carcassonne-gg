@@ -25,6 +25,7 @@ import {
   loadChallengeMatchCapacities,
   loadChallengeScheduleConflict,
   loadChallengeTournamentProgress,
+  loadChallengeTournamentRecords,
   resolveMaxMatchesPerPlayer,
   resolveMaxPendingRequestsPerPlayer,
   shouldCloseChallengeRequestsForPlayerStatus,
@@ -327,6 +328,30 @@ test("counts only scored Done matches in the linked tournament toward its TPR ta
       tournament_matches_remaining: null,
       is_tpr_target_reached: false,
     }
+  );
+
+  assert.deepEqual(
+    await loadChallengeTournamentRecords(db, { tournamentId: "rivals-1" }),
+    [
+      {
+        player_id: "p1",
+        tournament_matches_played_count: 2,
+        tournament_wins: 2,
+        tournament_losses: 0,
+      },
+      {
+        player_id: "p2",
+        tournament_matches_played_count: 1,
+        tournament_wins: 0,
+        tournament_losses: 1,
+      },
+      {
+        player_id: "p3",
+        tournament_matches_played_count: 1,
+        tournament_wins: 0,
+        tournament_losses: 1,
+      },
+    ]
   );
 });
 
