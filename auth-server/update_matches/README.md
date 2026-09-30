@@ -176,6 +176,23 @@ Missing rows are created in the `historical` queue. Incomplete rows are moved
 there while complete BGA-colored replays and games from other tournaments are
 left unchanged. Re-running the command does not reset active historical jobs.
 
+The same workflow is available for active duels where
+`source_type = challenge` and `status = Done`:
+
+```bash
+# Preview only
+./.venv/bin/python enqueue_done_challenge_game_replays.py
+
+# Apply
+./.venv/bin/python enqueue_done_challenge_game_replays.py \
+  --apply \
+  --batch-id challenge-done-initial
+```
+
+Only games linked to matching, non-deleted duels are selected. Deleted games,
+other duel sources/statuses, complete replays, and already active historical
+jobs are left unchanged.
+
 ### One-off existing replay backfill
 
 After deploying the replay queue schema, preview the one-off cleanup/backfill:

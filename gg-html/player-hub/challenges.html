@@ -557,10 +557,19 @@
   }
 
   .challenge-opponents-calendar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     flex: 0 0 auto;
     min-height: 27px;
     border-radius: 4px;
     padding-inline: 9px;
+  }
+
+  .challenge-opponents-calendar-icon {
+    color: #f0183a;
+    font-size: 15px;
+    line-height: 1;
   }
 
   .challenge-modal.challenge-availability-dialog,
@@ -10495,7 +10504,10 @@
     calendarButton.type = "button";
     calendarButton.className = "challenge-btn challenge-btn-secondary challenge-opponents-calendar-btn";
     calendarButton.dataset.opponentsCalendar = "true";
-    calendarButton.textContent = "Calendar";
+    const calendarIcon = document.createElement("i");
+    calendarIcon.className = "fa-solid fa-calendar-days challenge-opponents-calendar-icon";
+    calendarIcon.setAttribute("aria-hidden", "true");
+    calendarButton.append(calendarIcon, document.createTextNode("Calendar"));
     calendarButton.disabled = true;
     controls.appendChild(calendarButton);
 

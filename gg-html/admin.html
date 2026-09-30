@@ -123,6 +123,70 @@
     overflow: hidden;
   }
 
+  .admin-mobile-menu-area {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 12px;
+    border-top: 1px solid #cbd5e1;
+    background: #eef4f9;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .admin-mobile-menu-area:first-child {
+    border-top: none;
+  }
+
+  .admin-mobile-menu-area-count {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .admin-mobile-menu-row {
+    --mobile-menu-depth: 0;
+  }
+
+  .admin-mobile-menu-row .cp-teams {
+    padding-left: calc(var(--mobile-menu-depth) * 28px);
+  }
+
+  .admin-mobile-menu-row--child .cp-team-row::before {
+    content: "\21B3";
+    color: #94a3b8;
+    flex: 0 0 auto;
+    font-size: 16px;
+  }
+
+  .admin-mobile-menu-row--group {
+    background: #fafcff;
+  }
+
+  .admin-mobile-menu-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .admin-mobile-menu-row--group .admin-mobile-menu-title-label {
+    font-weight: 700;
+  }
+
+  .admin-mobile-menu-order {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 2px 6px;
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
   .cp-match-row {
     display: flex;
     align-items: center;
@@ -7012,45 +7076,103 @@
       return;
     }
 
+    const compareItems = (left, right) => (
+      Number(left?.sort_order || 0) - Number(right?.sort_order || 0)
+      || Number(left?.id || 0) - Number(right?.id || 0)
+    );
     const byId = new Map();
-    state.mobileMenuItems.forEach((item) => byId.set(Number(item.id), item));
-    const sortedItems = state.mobileMenuItems.slice().sort((left, right) => {
-      const areaOrder = (String(left?.menu_area || "") === "top" ? 0 : 1)
-        - (String(right?.menu_area || "") === "top" ? 0 : 1);
-      if (areaOrder) return areaOrder;
-      const leftParent = Number(left?.parent_id || left?.id || 0);
-      const rightParent = Number(right?.parent_id || right?.id || 0);
-      if (leftParent !== rightParent) return leftParent - rightParent;
-      if (!!left?.parent_id !== !!right?.parent_id) return left?.parent_id ? 1 : -1;
-      return Number(left?.sort_order || 0) - Number(right?.sort_order || 0)
-        || Number(left?.id || 0) - Number(right?.id || 0);
+    const childrenByParent = new Map();
+    state.mobileMenuItems.forEach((item) => {
+      byId.set(Number(item.id), item);
+      const parentId = Number(item?.parent_id) || 0;
+      if (!parentId) return;
+      if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+      childrenByParent.get(parentId).push(item);
     });
+    childrenByParent.forEach((children) => children.sort(compareItems));
 
-    sectionList.innerHTML = "";
-    sortedItems.forEach((item) => {
+    const createTitleNode = (item) => {
+      const title = document.createElement("span");
+      title.className = "admin-mobile-menu-title";
+
+      const order = document.createElement("span");
+      order.className = "admin-mobile-menu-order";
+      order.textContent = `sort ${Number(item?.sort_order) || 0}`;
+
+      const label = document.createElement("span");
+      label.className = "admin-mobile-menu-title-label";
+      label.textContent = item?.label || `Menu item #${item?.id}`;
+
+      title.appendChild(order);
+      title.appendChild(label);
+      return title;
+    };
+
+    const renderItem = (item, depth, visited, area) => {
+      const itemId = Number(item?.id) || 0;
+      if (visited.has(itemId)) return;
+      visited.add(itemId);
+
+      const children = (childrenByParent.get(itemId) || []).filter((child) => (
+        (String(child?.menu_area || "drawer") === "top" ? "top" : "drawer") === area
+      ));
+      const isGroup = String(item?.item_type || "link") === "group";
       const parent = item?.parent_id ? byId.get(Number(item.parent_id)) : null;
-      const childCount = state.mobileMenuItems.filter((entry) => Number(entry?.parent_id) === Number(item?.id)).length;
-      const subtitleParts = [
-        getMobileMenuAreaLabel(item.menu_area),
-        getMobileMenuItemTypeLabel(item.item_type),
-      ];
+      const subtitleParts = [getMobileMenuItemTypeLabel(item.item_type)];
       if (parent) subtitleParts.push(`Group: ${String(parent.label || parent.id).trim()}`);
-      if (String(item?.item_type || "link") === "group") subtitleParts.push(`${childCount} item${childCount === 1 ? "" : "s"}`);
-      if (String(item?.item_type || "link") === "link") {
+      if (isGroup) subtitleParts.push(`${children.length} item${children.length === 1 ? "" : "s"}`);
+      if (!isGroup) {
         subtitleParts.push(Number(item?.open_in_new_tab) === 1 ? "New tab" : "Same tab");
         if (item?.url) subtitleParts.push(String(item.url).trim());
       }
       if (Number(item?.is_visible) === 0) subtitleParts.push("Hidden");
 
-      sectionList.appendChild(createListRow({
+      const row = createListRow({
         imageSrc: "",
         imageAlt: item.label,
         imageRound: false,
-        title: `${parent ? "  " : ""}${item.label || `Menu item #${item.id}`}`,
+        titleNode: createTitleNode(item),
         subtitle: subtitleParts.join(" • "),
         buttonLabel: "Edit",
-        onClick: (row) => openMobileMenuItemForm("edit", item, row),
-      }));
+        onClick: (anchorRow) => openMobileMenuItemForm("edit", item, anchorRow),
+      });
+      row.classList.add("admin-mobile-menu-row");
+      if (depth > 0) row.classList.add("admin-mobile-menu-row--child");
+      if (isGroup) row.classList.add("admin-mobile-menu-row--group");
+      row.style.setProperty("--mobile-menu-depth", String(depth));
+      sectionList.appendChild(row);
+
+      children.forEach((child) => renderItem(child, depth + 1, visited, area));
+    };
+
+    sectionList.innerHTML = "";
+    ["top", "drawer"].forEach((area) => {
+      const areaItems = state.mobileMenuItems.filter((item) => (
+        (String(item?.menu_area || "drawer") === "top" ? "top" : "drawer") === area
+      ));
+      if (!areaItems.length) return;
+
+      const areaHeader = document.createElement("div");
+      areaHeader.className = "admin-mobile-menu-area";
+      const areaLabel = document.createElement("span");
+      areaLabel.textContent = getMobileMenuAreaLabel(area);
+      const areaCount = document.createElement("span");
+      areaCount.className = "admin-mobile-menu-area-count";
+      areaCount.textContent = `${areaItems.length} record${areaItems.length === 1 ? "" : "s"}`;
+      areaHeader.appendChild(areaLabel);
+      areaHeader.appendChild(areaCount);
+      sectionList.appendChild(areaHeader);
+
+      const areaIds = new Set(areaItems.map((item) => Number(item.id)));
+      const roots = areaItems
+        .filter((item) => !item?.parent_id || !areaIds.has(Number(item.parent_id)))
+        .sort(compareItems);
+      const visited = new Set();
+      roots.forEach((item) => renderItem(item, 0, visited, area));
+      areaItems
+        .filter((item) => !visited.has(Number(item.id)))
+        .sort(compareItems)
+        .forEach((item) => renderItem(item, 0, visited, area));
     });
   }
 
