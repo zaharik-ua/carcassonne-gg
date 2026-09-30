@@ -3326,7 +3326,7 @@
     cancelButton.textContent = "Cancel";
     const confirmButton = document.createElement("button");
     confirmButton.type = "button";
-    confirmButton.className = "cp-btn cp-btn-primary";
+    confirmButton.className = "cp-btn cp-btn-danger";
     confirmButton.textContent = String(confirmLabel || "Continue");
     actions.appendChild(cancelButton);
     actions.appendChild(confirmButton);
@@ -3354,7 +3354,7 @@
     }, { signal: controller.signal });
   }
 
-  function openMatchTimeProposalModal(match, teamsById, captainTeamId) {
+  function openMatchTimeProposalModal(match, teamsById, captainTeamId, options = {}) {
     const team1Id = readMatchTeam1(match);
     const team2Id = readMatchTeam2(match);
     const team1 = teamsById.get(team1Id) || { id: team1Id, name: team1Id };
@@ -3365,6 +3365,12 @@
     const isIncomingProposal = hasActiveProposal && proposedByTeamId !== captainTeamId;
     const isOwnProposal = hasActiveProposal && proposedByTeamId === captainTeamId;
     const hasMatchTime = hasValue(match?.time_utc ?? match?.time);
+    const hasLineupsToReset = (
+      options.hasExistingLineups === true
+      || isTruthyOne(match?.team_1_lineup_added)
+      || isTruthyOne(match?.team_2_lineup_added)
+      || hasValue(match?.lineups_published_at)
+    );
     const localPreviewTeams = captainTeamId === team2Id
       ? [[team2, team2Id], [team1, team1Id]]
       : [[team1, team1Id], [team2, team2Id]];
@@ -3531,10 +3537,10 @@
         setError("Choose a match time in the future.");
         return;
       }
-      if (hasMatchTime && !warningConfirmed) {
+      if (hasMatchTime && hasLineupsToReset && !warningConfirmed) {
         openMatchTimeLineupResetWarning({
           message: "If this time change is accepted, all existing lineups will be deleted. Both teams will need to submit their lineups again.",
-          confirmLabel: isOwnProposal ? "Update proposal" : "Send proposal",
+          confirmLabel: "Confirm lineup deletion",
           onConfirm: () => sendProposal(true),
         });
         return;
@@ -3564,10 +3570,10 @@
     };
     const acceptProposal = async (warningConfirmed = false) => {
       setError("");
-      if (hasMatchTime && !warningConfirmed) {
+      if (hasMatchTime && hasLineupsToReset && !warningConfirmed) {
         openMatchTimeLineupResetWarning({
           message: "Accepting this time change will delete all existing lineups. Both teams will need to submit their lineups again.",
-          confirmLabel: "Accept time",
+          confirmLabel: "Confirm lineup deletion",
           onConfirm: () => acceptProposal(true),
         });
         return;
@@ -4805,7 +4811,9 @@
       }
       scheduleBtn.dataset.proposalStatus = proposalStatus;
       scheduleBtn.addEventListener("click", () => {
-        openMatchTimeProposalModal(match, teamsById, captainTeamId);
+        openMatchTimeProposalModal(match, teamsById, captainTeamId, {
+          hasExistingLineups: matchLineups.length > 0,
+        });
       });
       right.appendChild(scheduleBtn);
 
