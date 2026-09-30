@@ -7,6 +7,7 @@
     "start": "node src/server.js",
     "publish:blind-lineups": "node src/publish-secret-lineups.js",
     "publish:secret-lineups": "node src/publish-secret-lineups.js",
+    "reset:match-lineups-time-change": "node src/reset-match-lineups-after-time-change.js",
     "test": "node --test src/*.test.js"
   },
   "dependencies": {

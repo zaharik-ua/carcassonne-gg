@@ -84,3 +84,20 @@ test("Past opponent availability segments use a light-grey state", () => {
     /\.challenge-opponents-calendar-event\.is-past \{[\s\S]*?background: #f1f3f5;[\s\S]*?color: #7a8492;/
   );
 });
+
+test("Select time options uses the adaptive 20-25px overview hour height", () => {
+  const source = getFunctionSource("openChallengeTimeOptionsDialog");
+  assert.match(
+    source,
+    /const \{ hourHeight: overviewHourHeight \} = getChallengeCalendarViewportMetrics\(\)/
+  );
+  assert.match(source, /const overviewCalendarHeight = overviewHourHeight \* 24/);
+  assert.match(
+    source,
+    /frame\.inner\.style\.setProperty\("--challenge-calendar-hour-height", `\$\{overviewHourHeight\}px`\)/
+  );
+  assert.match(
+    source,
+    /frame\.inner\.style\.setProperty\("--challenge-calendar-height", `\$\{overviewCalendarHeight\}px`\)/
+  );
+});

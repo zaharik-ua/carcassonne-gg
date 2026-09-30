@@ -25,9 +25,11 @@ import {
 } from "./impersonation.js";
 import {
   SECRET_LINEUP_SIZE,
+  calculateLineupDeadlineUtc,
   ensureSecretLineupsSchema,
   isBlindLineupType,
   publishSecretLineupMatchInTransaction,
+  softDeleteMatchLineupDataInTransaction,
 } from "./secret-lineups.js";
 import {
   CHALLENGE_MATCH_SLOT_DUEL_STATUSES,
@@ -2087,6 +2089,7 @@ async function syncMatchLineupAddedFlags(matchId, actorPlayerId = null) {
             FROM match_lineup_submissions s
             WHERE trim(COALESCE(s.match_id, '')) = trim(COALESCE(matches.id, ''))
               AND upper(trim(COALESCE(s.team_id, ''))) = upper(trim(COALESCE(matches.team_1, '')))
+              AND s.deleted_at IS NULL
           ) THEN 1 ELSE 0 END
           ELSE CASE WHEN EXISTS (
             SELECT 1
@@ -2102,6 +2105,7 @@ async function syncMatchLineupAddedFlags(matchId, actorPlayerId = null) {
             FROM match_lineup_submissions s
             WHERE trim(COALESCE(s.match_id, '')) = trim(COALESCE(matches.id, ''))
               AND upper(trim(COALESCE(s.team_id, ''))) = upper(trim(COALESCE(matches.team_2, '')))
+              AND s.deleted_at IS NULL
           ) THEN 1 ELSE 0 END
           ELSE CASE WHEN EXISTS (
             SELECT 1
@@ -22947,9 +22951,18 @@ async function loadMatchTimeProposalContext(matchId, user) {
         lineup_type,
         lineup_deadline_h,
         lineup_deadline_utc,
+        lineups_published_at,
+        team_1_lineup_added,
+        team_2_lineup_added,
         team_1,
         team_2,
-        status
+        status,
+        dw1,
+        dw2,
+        gw1,
+        gw2,
+        rating,
+        gg_rating
       FROM matches
       WHERE id = ?
         AND deleted_at IS NULL
@@ -23082,6 +23095,7 @@ async function loadSecretLineupCaptainContext(matchId, user, options = {}) {
       FROM match_lineup_submissions
       WHERE trim(COALESCE(match_id, '')) = trim(?)
         AND upper(trim(COALESCE(team_id, ''))) = upper(trim(?))
+        AND deleted_at IS NULL
       LIMIT 1
     `,
     [normalizedMatchId, captainTeamId]
@@ -23093,6 +23107,7 @@ async function loadSecretLineupCaptainContext(matchId, user, options = {}) {
           FROM match_lineup_entries
           WHERE trim(COALESCE(match_id, '')) = trim(?)
             AND upper(trim(COALESCE(team_id, ''))) = upper(trim(?))
+            AND deleted_at IS NULL
           ORDER BY position ASC
         `,
         [normalizedMatchId, captainTeamId]
@@ -23229,13 +23244,24 @@ app.put("/matches/:id/my-lineup", requireAuthenticated, async (req, res) => {
           first_submitted_at,
           submitted_by,
           revision,
+          deleted_by,
+          deleted_at,
           created_at,
           updated_at
         )
-        VALUES (?, ?, CURRENT_TIMESTAMP, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, CURRENT_TIMESTAMP, ?, 1, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(match_id, team_id) DO UPDATE SET
+          first_submitted_at = CASE
+            WHEN match_lineup_submissions.deleted_at IS NOT NULL THEN CURRENT_TIMESTAMP
+            ELSE match_lineup_submissions.first_submitted_at
+          END,
           submitted_by = excluded.submitted_by,
-          revision = match_lineup_submissions.revision + 1,
+          revision = CASE
+            WHEN match_lineup_submissions.deleted_at IS NOT NULL THEN 1
+            ELSE match_lineup_submissions.revision + 1
+          END,
+          deleted_by = NULL,
+          deleted_at = NULL,
           updated_at = CURRENT_TIMESTAMP
       `,
       [context.match.id, context.captainTeamId, actorPlayerId]
@@ -23256,10 +23282,12 @@ app.put("/matches/:id/my-lineup", requireAuthenticated, async (req, res) => {
             team_id,
             position,
             player_id,
+            deleted_by,
+            deleted_at,
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [context.match.id, context.captainTeamId, index + 1, playerIds[index]]
       );
@@ -23353,13 +23381,6 @@ app.post("/matches", (req, res) => {
     if (!Number.isFinite(ts)) return null;
     return new Date(ts).toISOString();
   };
-  const computeDeadlineUtc = (timeIso, hours) => {
-    const ts = Date.parse(String(timeIso || "").trim());
-    const h = Number(hours);
-    if (!Number.isFinite(ts) || !Number.isFinite(h) || h <= 0) return null;
-    return new Date(ts - h * 60 * 60 * 1000).toISOString();
-  };
-
   const tournamentId = normalizeText(payload.tournament_id) || "Friendly-Matches";
   const team1 = normalizeCode(payload.team_1);
   const team2 = normalizeCode(payload.team_2);
@@ -23458,7 +23479,7 @@ app.post("/matches", (req, res) => {
     }
     const lineupDeadlineUtc = lineupType === "Open"
       ? null
-      : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
+      : calculateLineupDeadlineUtc(timeUtc, lineupDeadlineHours);
     if (lineupType === "Blind" && timeUtc && !lineupDeadlineUtc) {
       return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
     }
@@ -23867,13 +23888,6 @@ app.patch("/matches/:id", (req, res) => {
     if (!Number.isFinite(ts)) return null;
     return new Date(ts).toISOString();
   };
-  const computeDeadlineUtc = (timeIso, hours) => {
-    const ts = Date.parse(String(timeIso || "").trim());
-    const h = Number(hours);
-    if (!Number.isFinite(ts) || !Number.isFinite(h) || h <= 0) return null;
-    return new Date(ts - h * 60 * 60 * 1000).toISOString();
-  };
-
   return db.get(
     `
       SELECT
@@ -23992,7 +24006,7 @@ app.patch("/matches/:id", (req, res) => {
       }
       const lineupDeadlineUtc = lineupType === "Open"
         ? null
-        : computeDeadlineUtc(timeUtc, lineupDeadlineHours);
+        : calculateLineupDeadlineUtc(timeUtc, lineupDeadlineHours);
       if (lineupType === "Blind" && timeUtc && !lineupDeadlineUtc) {
         return res.status(400).json({ ok: false, message: "Failed to calculate lineup_deadline_utc" });
       }
@@ -24444,6 +24458,8 @@ app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req,
       error.httpStatus = 409;
       throw error;
     }
+    const currentMatchTimeUtc = normalizeUtcTimestamp(match.time_utc);
+    const isMatchTimeChange = !!currentMatchTimeUtc && currentMatchTimeUtc !== proposedTimeUtc;
 
     const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
     const isBlindLineup = isBlindLineupType(match.lineup_type);
@@ -24452,7 +24468,7 @@ app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req,
       ? ([6, 12, 24, 48].includes(storedDeadlineHours) ? storedDeadlineHours : 24)
       : null;
     const lineupDeadlineUtc = isBlindLineup
-      ? new Date(Date.parse(proposedTimeUtc) - lineupDeadlineHours * 60 * 60 * 1000).toISOString()
+      ? calculateLineupDeadlineUtc(proposedTimeUtc, lineupDeadlineHours)
       : null;
     const nextMatchId = buildGeneratedMatchId(
       proposedTimeUtc,
@@ -24469,6 +24485,15 @@ app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req,
           proposed_time_status = ?,
           lineup_deadline_h = ?,
           lineup_deadline_utc = ?,
+          lineups_published_at = CASE WHEN ? = 1 THEN NULL ELSE lineups_published_at END,
+          team_1_lineup_added = CASE WHEN ? = 1 THEN 0 ELSE team_1_lineup_added END,
+          team_2_lineup_added = CASE WHEN ? = 1 THEN 0 ELSE team_2_lineup_added END,
+          dw1 = CASE WHEN ? = 1 THEN NULL ELSE dw1 END,
+          dw2 = CASE WHEN ? = 1 THEN NULL ELSE dw2 END,
+          gw1 = CASE WHEN ? = 1 THEN NULL ELSE gw1 END,
+          gw2 = CASE WHEN ? = 1 THEN NULL ELSE gw2 END,
+          rating = CASE WHEN ? = 1 THEN NULL ELSE rating END,
+          gg_rating = CASE WHEN ? = 1 THEN NULL ELSE gg_rating END,
           updated_by = ?,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
@@ -24481,25 +24506,39 @@ app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req,
         MATCH_TIME_PROPOSAL_STATUSES.ACCEPTED,
         lineupDeadlineHours,
         lineupDeadlineUtc,
+        isMatchTimeChange ? 1 : 0,
+        isMatchTimeChange ? 1 : 0,
+        isMatchTimeChange ? 1 : 0,
+        isMatchTimeChange ? 1 : 0,
+        isMatchTimeChange ? 1 : 0,
+        isMatchTimeChange ? 1 : 0,
+        isMatchTimeChange ? 1 : 0,
+        isMatchTimeChange ? 1 : 0,
+        isMatchTimeChange ? 1 : 0,
         actorPlayerId,
         matchId,
       ]
     );
-    await dbRunAsync(
-      `
-        UPDATE duels
-        SET
-          match_id = ?,
-          time_utc = ?,
-          updated_by = ?,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE trim(COALESCE(match_id, '')) IN (trim(?), trim(?))
-          AND deleted_at IS NULL
-          AND COALESCE(custom_time, 0) = 0
-          AND lower(trim(COALESCE(status, ''))) NOT IN ('done', 'error', 'no show', 'in progress')
-      `,
-      [nextMatchId, proposedTimeUtc, actorPlayerId, matchId, nextMatchId]
-    );
+    let lineupReset = null;
+    if (isMatchTimeChange) {
+      lineupReset = await softDeleteMatchLineupDataInTransaction(db, nextMatchId, actorPlayerId);
+    } else {
+      await dbRunAsync(
+        `
+          UPDATE duels
+          SET
+            match_id = ?,
+            time_utc = ?,
+            updated_by = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE trim(COALESCE(match_id, '')) IN (trim(?), trim(?))
+            AND deleted_at IS NULL
+            AND COALESCE(custom_time, 0) = 0
+            AND lower(trim(COALESCE(status, ''))) NOT IN ('done', 'error', 'no show', 'in progress')
+        `,
+        [nextMatchId, proposedTimeUtc, actorPlayerId, matchId, nextMatchId]
+      );
+    }
     const updatedMatch = await dbGetAsync("SELECT * FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1", [nextMatchId]);
     await dbRunAsync("COMMIT");
     transactionOpen = false;
@@ -24515,6 +24554,7 @@ app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req,
         accepted_by_team_id: captainTeamId,
         proposed_by_team_id: proposedByTeamId,
         previous_record_id: matchId !== nextMatchId ? matchId : null,
+        lineup_reset: lineupReset,
       },
     });
     return res.json({ ok: true, match: updatedMatch });
@@ -26098,6 +26138,7 @@ app.get("/profiles/:playerId/delete-check", (req, res) => {
           SELECT player_id
           FROM match_lineup_entries
           WHERE trim(COALESCE(player_id, '')) = trim(?)
+            AND deleted_at IS NULL
         ) assigned_lineups
         LIMIT 1
       `,
@@ -26182,6 +26223,7 @@ app.delete("/profiles/:playerId", (req, res) => {
           SELECT player_id
           FROM match_lineup_entries
           WHERE trim(COALESCE(player_id, '')) = trim(?)
+            AND deleted_at IS NULL
         ) assigned_lineups
         LIMIT 1
       `,

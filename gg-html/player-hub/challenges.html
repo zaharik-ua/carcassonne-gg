@@ -7036,7 +7036,8 @@
         end: parseUtcDate(range?.end_utc),
       }))
       .filter((range) => range.start && range.end && range.start < range.end);
-    const overviewHourHeight = 22;
+    const { hourHeight: overviewHourHeight } = getChallengeCalendarViewportMetrics();
+    const overviewCalendarHeight = overviewHourHeight * 24;
     const detailHourHeight = 58;
     const dayColumnWidth = window.matchMedia("(max-width: 720px)").matches ? 108 : 150;
     const minDayColumnWidth = Math.round(dayColumnWidth * 13 / 15);
@@ -7230,6 +7231,8 @@
       overview.innerHTML = "";
       const frame = createCalendarFrame("challenge-time-overview-calendar");
       frame.inner.style.minWidth = `${56 + Math.max(days.length, 1) * dayColumnWidth}px`;
+      frame.inner.style.setProperty("--challenge-calendar-hour-height", `${overviewHourHeight}px`);
+      frame.inner.style.setProperty("--challenge-calendar-height", `${overviewCalendarHeight}px`);
       frame.dayHeaders.style.gridTemplateColumns = `repeat(${Math.max(days.length, 1)}, minmax(${minDayColumnWidth}px, ${dayColumnWidth}px))`;
       frame.dayColumns.style.gridTemplateColumns = `repeat(${Math.max(days.length, 1)}, minmax(${minDayColumnWidth}px, ${dayColumnWidth}px))`;
       appendCalendarTimeLabels(frame.times, overviewHourHeight, 0, 24);

@@ -6,10 +6,21 @@ import test from "node:test";
 import sqlite3 from "sqlite3";
 import {
   SECRET_LINEUP_SIZE,
+  calculateLineupDeadlineUtc,
   ensureSecretLineupsSchema,
   publishDueSecretLineups,
   publishSecretLineupMatch,
+  softDeleteMatchLineupDataInTransaction,
 } from "./secret-lineups.js";
+
+test("calculates a lineup deadline from the current match time", () => {
+  assert.equal(
+    calculateLineupDeadlineUtc("2026-10-01T20:30:00.000Z", 24),
+    "2026-09-30T20:30:00.000Z"
+  );
+  assert.equal(calculateLineupDeadlineUtc(null, 24), null);
+  assert.equal(calculateLineupDeadlineUtc("2026-10-01T20:30:00.000Z", null), null);
+});
 
 function exec(db, sql) {
   return new Promise((resolve, reject) => {
@@ -97,6 +108,11 @@ async function createDatabase(t) {
       deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE games (
+      id TEXT PRIMARY KEY,
+      duel_id TEXT NOT NULL,
+      deleted_at TEXT
     );
   `);
   await ensureSecretLineupsSchema(db);
@@ -200,6 +216,39 @@ test("backfills the per-team lineup-added flags from private submissions", async
 
   assert.equal(match.team_1_lineup_added, 1);
   assert.equal(match.team_2_lineup_added, 0);
+});
+
+test("soft-deletes private submissions, entries, published duels, and their games", async (t) => {
+  const db = await createDatabase(t);
+  const matchId = "rescheduled-match";
+  await seedMatch(db, matchId, new Date(Date.now() + 60 * 60 * 1000).toISOString());
+  await seedLineup(db, matchId, "AAA", "a");
+  await run(
+    db,
+    `
+      INSERT INTO duels (
+        id, tournament_id, match_id, duel_number, status, deleted_at
+      ) VALUES ('rescheduled-duel', 'TOURNAMENT', ?, 1, 'Planned', NULL)
+    `,
+    [matchId]
+  );
+  await run(db, "INSERT INTO games (id, duel_id) VALUES ('rescheduled-game', 'rescheduled-duel')");
+
+  await run(db, "BEGIN IMMEDIATE TRANSACTION");
+  const result = await softDeleteMatchLineupDataInTransaction(db, matchId, "captain-b");
+  await run(db, "COMMIT");
+
+  assert.deepEqual(result, { duels: 1, entries: 5, submissions: 1, games: 1, streams: 0 });
+  assert.equal((await get(db, "SELECT deleted_by FROM duels WHERE id = 'rescheduled-duel'")).deleted_by, "captain-b");
+  assert.ok((await get(db, "SELECT deleted_at FROM games WHERE id = 'rescheduled-game'")).deleted_at);
+  assert.equal(
+    (await get(db, "SELECT COUNT(*) AS count FROM match_lineup_submissions WHERE match_id = ? AND deleted_at IS NULL", [matchId])).count,
+    0
+  );
+  assert.equal(
+    (await get(db, "SELECT COUNT(*) AS count FROM match_lineup_entries WHERE match_id = ? AND deleted_at IS NULL", [matchId])).count,
+    0
+  );
 });
 
 test("does not run the private publisher for Open lineups", async (t) => {

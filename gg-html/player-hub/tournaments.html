@@ -717,6 +717,16 @@
     line-height: 1.4;
   }
 
+  .cp-lineup-reset-warning {
+    padding: 10px 12px;
+    border: 1px solid #e5b94f;
+    border-radius: 6px;
+    background: #fff8e1;
+    color: #704b00;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
   .cp-time-local-preview {
     display: grid;
     gap: 6px;
@@ -3297,6 +3307,53 @@
     parent.appendChild(line);
   }
 
+  function openMatchTimeLineupResetWarning({ message, confirmLabel, onConfirm }) {
+    const overlay = document.createElement("div");
+    overlay.className = "cp-team-modal-overlay";
+    const modal = document.createElement("div");
+    modal.className = "cp-team-modal";
+    const title = document.createElement("div");
+    title.className = "cp-team-modal-title";
+    title.textContent = "Warning";
+    const warning = document.createElement("div");
+    warning.className = "cp-lineup-reset-warning";
+    warning.textContent = String(message || "");
+    const actions = document.createElement("div");
+    actions.className = "cp-team-modal-actions";
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "cp-btn cp-btn-secondary";
+    cancelButton.textContent = "Cancel";
+    const confirmButton = document.createElement("button");
+    confirmButton.type = "button";
+    confirmButton.className = "cp-btn cp-btn-primary";
+    confirmButton.textContent = String(confirmLabel || "Continue");
+    actions.appendChild(cancelButton);
+    actions.appendChild(confirmButton);
+    modal.appendChild(title);
+    modal.appendChild(warning);
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const controller = new AbortController();
+    const close = () => {
+      controller.abort();
+      overlay.remove();
+    };
+    cancelButton.addEventListener("click", close, { signal: controller.signal });
+    confirmButton.addEventListener("click", () => {
+      close();
+      Promise.resolve(typeof onConfirm === "function" ? onConfirm() : null);
+    }, { signal: controller.signal });
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) close();
+    }, { signal: controller.signal });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") close();
+    }, { signal: controller.signal });
+  }
+
   function openMatchTimeProposalModal(match, teamsById, captainTeamId) {
     const team1Id = readMatchTeam1(match);
     const team2Id = readMatchTeam2(match);
@@ -3463,7 +3520,7 @@
       close();
       initCaptainPage();
     };
-    const sendProposal = async () => {
+    const sendProposal = async (warningConfirmed = false) => {
       setError("");
       const proposedTimeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
       if (!proposedTimeUtc) {
@@ -3472,6 +3529,14 @@
       }
       if (Date.parse(proposedTimeUtc) <= Date.now()) {
         setError("Choose a match time in the future.");
+        return;
+      }
+      if (hasMatchTime && !warningConfirmed) {
+        openMatchTimeLineupResetWarning({
+          message: "If this time change is accepted, all existing lineups will be deleted. Both teams will need to submit their lineups again.",
+          confirmLabel: isOwnProposal ? "Update proposal" : "Send proposal",
+          onConfirm: () => sendProposal(true),
+        });
         return;
       }
       setSaving(true);
@@ -3497,8 +3562,16 @@
         setSaving(false);
       }
     };
-    const acceptProposal = async () => {
+    const acceptProposal = async (warningConfirmed = false) => {
       setError("");
+      if (hasMatchTime && !warningConfirmed) {
+        openMatchTimeLineupResetWarning({
+          message: "Accepting this time change will delete all existing lineups. Both teams will need to submit their lineups again.",
+          confirmLabel: "Accept time",
+          onConfirm: () => acceptProposal(true),
+        });
+        return;
+      }
       setSaving(true);
       try {
         const response = await fetch(
@@ -3532,9 +3605,12 @@
       }, { signal: controller.signal });
     }
     if (sendProposalButton) {
-      sendProposalButton.addEventListener("click", sendProposal, { signal: controller.signal });
+      sendProposalButton.addEventListener("click", () => sendProposal(), { signal: controller.signal });
     }
-    primaryButton.addEventListener("click", isIncomingProposal ? acceptProposal : sendProposal, { signal: controller.signal });
+    primaryButton.addEventListener("click", () => {
+      if (isIncomingProposal) acceptProposal();
+      else sendProposal();
+    }, { signal: controller.signal });
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) close();
     }, { signal: controller.signal });
