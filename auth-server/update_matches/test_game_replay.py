@@ -33,6 +33,7 @@ from .game_replay import (
     ensure_game_replays_schema,
     fetch_and_store_game_replay,
     fetch_bga_replay,
+    normalize_replay_events,
 )
 from .replay_budget import ReplayBudgetLimits, replace_replay_budget_overrides
 
@@ -508,6 +509,97 @@ class GameReplayTest(unittest.TestCase):
         self.assertEqual(timing["source"], "gameStateChange.active_player/time")
         self.assertEqual(timing["players"][0]["duration_seconds"], 15)
         self.assertEqual(timing["players"][1]["duration_seconds"], 15)
+
+    def test_fetches_and_stores_discarded_tiles_in_lab_url(self) -> None:
+        payload = self._successful_payload()
+        notifications = payload["data"]["logs"][0]["data"]
+        notifications[2:2] = [
+            {"type": "pickTile", "args": {"id": 1, "type": 1}},
+            {"type": "cantPlay", "args": {"tile_id": "1", "id": "72"}},
+        ]
+        notifications[7:7] = [
+            {"type": "pickTile", "args": {"id": 47, "type": 16}},
+            {"type": "cantPlay", "args": [{"tile_id": None, "id": "47"}]},
+            {"type": "pickTile", "args": {"id": 48, "type": 17}},
+            {"type": "cantPlay", "args": {"tile_id": "48"}},
+        ]
+        notifications[-1:-1] = [
+            {"type": "pickTile", "args": {"id": 72, "type": 24}},
+            {"type": "cantPlay", "args": {"id": "72"}},
+        ]
+
+        result = fetch_and_store_game_replay(
+            self.db_path,
+            "game-row-1",
+            request=lambda *_args, **_kwargs: payload,
+            authenticate=lambda: None,
+        )
+
+        self.assertEqual(
+            result["carcassonne_lab_url"],
+            "https://www.carcassonnelab.com/#/0/0.0.1.1.2/CfzE5f/34L523H0"
+            "?players=Alpha,Beta&colors=red,blue",
+        )
+        self.assertEqual(
+            self._stored_replay_value("carcassonne_lab_url"),
+            result["carcassonne_lab_url"],
+        )
+        events = json.loads(self._stored_replay_value("events_json"))
+        self.assertEqual([event["seq"] for event in events], list(range(1, 13)))
+        self.assertEqual(
+            [(event["tile_id"], event["tile_type"]) for event in events
+             if event["type"] == "cantPlay"],
+            [(1, 1), (47, 16), (48, 17), (72, 24)],
+        )
+        self.assertEqual(events[4]["tile_event_seq"], events[3]["seq"])
+        self.assertEqual(result["board_stats"], {"width": 3, "height": 4})
+        self.assertEqual(result["meeple_stats"]["total_placements"], 1)
+
+    def test_lab_url_records_discards_before_between_and_after_moves(self) -> None:
+        payload = self._successful_payload()
+        notifications = payload["data"]["logs"][0]["data"]
+        players = [
+            {"player_id": "100", "meeple_color": "red"},
+            {"player_id": "200", "meeple_color": "blue"},
+        ]
+        cases = [
+            (3, [{"id": 1}], "0.0/vWD"),
+            (5, [{"tile_id": 72}], "0.1/xor"),
+            (5, [{"id": 47}, {"id": 48}], "0.1.1/SmND"),
+            (6, [{"id": 72}], "0.2/xhf"),
+        ]
+        for index, discards, expected_path in cases:
+            with self.subTest(expected_path=expected_path):
+                logs = [{"data": [
+                    *notifications[:index],
+                    *({"type": "cantPlay", "args": args} for args in discards),
+                    *notifications[index:],
+                ]}]
+
+                url = build_carcassonne_lab_url(normalize_replay_events(logs), players)
+
+                self.assertEqual(
+                    url,
+                    f"https://www.carcassonnelab.com/#/0/{expected_path}/34L523H0"
+                    "?players=Alpha,Beta&colors=red,blue",
+                )
+
+    def test_lab_url_is_unavailable_for_unknown_discarded_tile_ids(self) -> None:
+        payload = self._successful_payload()
+        players = [
+            {"player_id": "100", "meeple_color": "red"},
+            {"player_id": "200", "meeple_color": "blue"},
+        ]
+        for tile_id in (None, 0, -1, 73, "unknown", "1.5", True):
+            with self.subTest(tile_id=tile_id):
+                logs = [
+                    *payload["data"]["logs"],
+                    {"data": [{"type": "cantPlay", "args": {"tile_id": tile_id}}]},
+                ]
+
+                self.assertIsNone(
+                    build_carcassonne_lab_url(normalize_replay_events(logs), players)
+                )
 
     def test_lab_url_uses_first_move_player_order_and_matching_colors(self) -> None:
         events = [

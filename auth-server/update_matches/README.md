@@ -455,8 +455,9 @@ trying the same game through another account. Their JSON summaries distinguish
 cached, deferred, failed, and remaining games.
 
 Raw BGA logs are parsed in memory and are not stored. `events_json` contains
-ordered `pickTile`, `playTile`, and `playPartisan` events. `players_json`
-contains player ids, names, BGA color hex values, and normalized meeple color
+ordered `pickTile`, `playTile`, `playPartisan`, and `cantPlay` events. Discarded
+tiles retain their BGA tile id and the corresponding base-game tile type.
+`players_json` contains player ids, names, BGA color hex values, and normalized meeple color
 names (`black`, `blue`, `green`, `red`, or `yellow`). `carcassonne_lab_url`
 contains the encoded CarcassonneLab replay URL when all required moves and
 player ids were found. If either player's BGA color is missing, unsupported, or
@@ -464,6 +465,14 @@ duplicates the other color, both players receive the fallback pair `red` and
 `green` in first-move order. The same fallback is written to `players_json`,
 `events_json`, `meeple_stats_json`, and the CarcassonneLab URL, while
 `color_source = 'fallback'` preserves its provenance.
+
+The CarcassonneLab tile stack includes discarded tiles in log order. The URL's
+position segment starts at move zero and records the number of played moves
+before each discard (for example, `0.1.1` for two discards after the first move).
+Discarded tiles do not add movements, and `pickTile` notifications do not add
+duplicate draws. An unknown discarded tile id leaves the URL unavailable.
+This applies to newly generated URLs; existing populated URLs are reused
+without an automatic backfill.
 
 A forced refresh keeps an existing ready replay available while the BGA request
 is in progress. When complete BGA colors arrive, the normalized players,

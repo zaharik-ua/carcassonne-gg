@@ -56,7 +56,7 @@ GET /gamereview/gamereview/requestTableArchive.html?table={bga_table_id}
 | `game_id` | Первинний ключ, посилання на `games.id` |
 | `bga_table_id` | Ідентифікатор BGA table |
 | `status` | `pending`, `fetching`, `ready` або `error` |
-| `events_json` | Нормалізовані `pickTile`, `playTile`, `playPartisan` |
+| `events_json` | Нормалізовані `pickTile`, `playTile`, `playPartisan`, `cantPlay` |
 | `players_json` | Гравці та нормалізовані кольори |
 | `carcassonne_lab_url` | Закодований replay для CarcassonneLab |
 | `board_stats_json` | Фінальні `width` і `height` поля |
@@ -84,6 +84,14 @@ GET /gamereview/gamereview/requestTableArchive.html?table={bga_table_id}
 
 Raw BGA logs не зберігаються: нормалізація та побудова похідних даних
 відбуваються в пам'яті.
+
+Для нових генерацій CarcassonneLab URL події `cantPlay` зберігають ID скинутого
+тайла (`tile_id` або `id`) і тип за відповідністю BGA ID 1–72. Скинуті тайли
+додаються до закодованого стосу в порядку логів, а сегмент позиції містить `0`
+та кількість зіграних ходів перед кожним скиданням через крапку. Наприклад,
+`0.1.1` означає два скидання після першого ходу. Скидання не додають рухів;
+`pickTile` не дублює тайли в стосі. Для невідомого ID скинутого тайла URL
+залишається порожнім. Автоматичного перегенерування вже заповнених URL немає.
 
 ### Budget-таблиці
 

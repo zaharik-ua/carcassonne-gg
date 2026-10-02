@@ -38,6 +38,13 @@ CARCASSONNE_LAB_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrst
 CARCASSONNE_LAB_BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 CARCASSONNE_LAB_TILE_TYPE_BASE = 24
 CARCASSONNE_LAB_STARTING_TILE_TYPE = 15
+# BGA base-game tile ids 1 through 72, including tiles discarded by cantPlay.
+CARCASSONNE_LAB_TILE_TYPES_BY_ID = (
+    1, 2, 2, 3, 3, 3, 4, 4, 5, 5, 5, 6, 6, 7, 8, 8, 9, 9, 10, 10, 10, 11, 11,
+    11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15, 15, 15, 16, 16, 16,
+    16, 16, 16, 16, 16, 17, 17, 17, 17, 17, 17, 17, 17, 17, 18, 18, 18, 18, 19,
+    20, 20, 20, 20, 21, 21, 22, 23, 23, 23, 24,
+)
 CARCASSONNE_LAB_FALLBACK_COLORS = ("red", "green")
 FALLBACK_COLOR_HEXES = {
     "red": "ff0000",
@@ -1096,10 +1103,35 @@ def normalize_replay_events(logs: list[Any]) -> list[dict[str, Any]]:
                         or active_player_id
                     )
             continue
-        if event_type not in {"pickTile", "playTile", "playPartisan"}:
+        if event_type not in {"pickTile", "playTile", "playPartisan", "cantPlay"}:
             continue
 
         for args in _event_args(raw_event.get("args")):
+            if event_type == "cantPlay":
+                tile_id = _optional_int(
+                    args.get("tile_id")
+                    if args.get("tile_id") is not None
+                    else args.get("id")
+                )
+                events.append(
+                    {
+                        "seq": len(events) + 1,
+                        "type": "cantPlay",
+                        "player_id": (
+                            _optional_text(args.get("player_id"))
+                            or active_player_id
+                        ),
+                        "tile_id": tile_id,
+                        "tile_type": (
+                            CARCASSONNE_LAB_TILE_TYPES_BY_ID[tile_id - 1]
+                            if tile_id is not None
+                            and 1 <= tile_id <= len(CARCASSONNE_LAB_TILE_TYPES_BY_ID)
+                            else None
+                        ),
+                    }
+                )
+                continue
+
             if event_type == "pickTile":
                 events.append(
                     {
@@ -1733,9 +1765,17 @@ def build_carcassonne_lab_url(
     player_colors: list[str] = []
     tile_types = [CARCASSONNE_LAB_STARTING_TILE_TYPE]
     movements: list[dict[str, int]] = []
+    discard_positions: list[int] = []
 
     for event in events:
         event_type = str(event.get("type") or "")
+        if event_type == "cantPlay":
+            tile_type = _optional_int(event.get("tile_type"))
+            if tile_type is None or not 1 <= tile_type <= CARCASSONNE_LAB_TILE_TYPE_BASE:
+                return None
+            tile_types.append(tile_type)
+            discard_positions.append(len(movements))
+            continue
         if event_type == "playPartisan":
             if not movements:
                 continue
@@ -1794,8 +1834,9 @@ def build_carcassonne_lab_url(
 
     encoded_players = ",".join(_encode_uri_component(name) for name in player_names)
     encoded_colors = ",".join(_encode_uri_component(color) for color in player_colors)
+    position = ".".join(str(index) for index in [0, *discard_positions])
     return (
-        f"{CARCASSONNE_LAB_URL}#/0/0/{encoded_tiles}/{encoded_movements}"
+        f"{CARCASSONNE_LAB_URL}#/0/{position}/{encoded_tiles}/{encoded_movements}"
         f"?players={encoded_players}&colors={encoded_colors}"
     )
 
