@@ -265,6 +265,34 @@ missing `events_json` appears in `errors` without stopping the scan. Exit codes
 are `0` for a complete report (including when matches exist), `2` for a report
 with row errors, and `1` for a source/database error.
 
+### One-off fresh refresh of reviewed tile-count mismatches
+
+Queue the games in the reviewed inspection report, from `auth-server`:
+
+```bash
+./.venv/bin/python requeue_discarded_replay_tiles.py \
+  --db-path data/auth.sqlite \
+  --report-file tile-count-mismatches.json \
+  --apply
+```
+
+Omit `--apply` for a read-only preview. Only report entries that are still
+`ready` and still have unequal per-type draw/placement counts are queued.
+Duplicate game ids are deduplicated; missing/deleted games, changed table ids,
+active leases, non-ready replays, and already corrected events are reported
+as skipped. Invalid current events and source-report errors yield exit code 2.
+Entries without game/table ids (such as an events-file inspection) are rejected.
+
+Apply takes the standard replay worker lock and uses one transaction. It sets
+`status = 'pending'`, `queue_class = 'fresh'`, `retry_reason = 'initial'`, and
+`next_attempt_at = CURRENT_TIMESTAMP`. The standard fresh enqueue helper clears
+previous color provenance, counters, archive state, historical batch metadata,
+account, lease, and error fields so the worker actually fetches again. Stored
+events and URLs remain until a successful BGA response replaces them; derived
+replay statistics are refreshed by the existing fetcher as well. The command
+only queues jobs; the regular fresh worker performs the BGA requests under its
+normal budgets and limits. Rerunning the same report skips pending jobs.
+
 ### systemd timers
 
 The repository contains a shared template service and three independent timers:
