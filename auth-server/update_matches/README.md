@@ -219,6 +219,43 @@ Derived values recoverable from normalized events and players are rebuilt.
 Existing scoring and player-time JSON are preserved because those values cannot
 be reconstructed exactly after legacy raw logs have been removed.
 
+### One-off CarcassonneLab URL update
+
+Preview all existing replay rows whose `carcassonne_lab_url` is nonempty:
+
+```bash
+./.venv/bin/python update_carcassonne_lab_urls.py --db-path data/auth.sqlite
+```
+
+Apply the update:
+
+```bash
+./.venv/bin/python update_carcassonne_lab_urls.py --db-path data/auth.sqlite --apply
+```
+
+Both modes use previously saved SQLite data exclusively, with no BGA login,
+requests, or budget consumption. `events_json` and `players_json` are reused;
+legacy `logs_json` is also supported if that column still exists. Dry-run
+computes the proposed URL changes without writing.
+
+Legacy `events_json` omitted `cantPlay` but retained `pickTile`. When each
+placement has a matching saved draw, an unplayed draw followed by another draw
+is reconstructed as a discard. Explicit `cantPlay` events are used directly.
+Incomplete draw history, repeated draw ids, conflicting types, or a final draw
+without an explicit discard are reported as insufficient/invalid data and
+preserve the existing URL. A final unplayed draw could belong to an abandoned
+turn, so it is not assumed to be discarded.
+
+Apply changes only the URL and `updated_at` in one SQLite transaction,
+preserving the original player query parameters and all other replay fields.
+NULL, empty, and whitespace-only URLs are excluded regardless of replay status.
+Active worker leases are deferred; the transaction prevents concurrent writes
+while the saved rows are processed. Rerunning is idempotent and needs no
+checkpoint file. The summary includes `would_update`, `updated`, `unchanged`,
+`inferred_discards`, `insufficient_data`, `failed`, and per-game `errors`.
+Exit code 0 means success, 2 means some rows were skipped, and 1 means a fatal
+error; a fatal SQL error rolls back the entire batch.
+
 ### systemd timers
 
 The repository contains a shared template service and three independent timers:
