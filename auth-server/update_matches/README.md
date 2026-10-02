@@ -238,23 +238,26 @@ Optional filters: `--table-id ID`, `--player-id ID`, and `--with-url` (only rows
 with populated CarcassonneLab URLs). A saved event array can be inspected via
 `--events-file /path/to/temp.json` instead of a database.
 
-### One-off inspection of odd tile counts
+### One-off inspection of tile draw/placement counts
 
 Find only `game_replays` with `status = 'ready'` where at least one `tile_type`
-occurs an odd number of times in `events_json`:
+has different counts of `pickTile` and `playTile` events in `events_json`:
 
 ```bash
 ./.venv/bin/python inspect_discarded_replay_tiles.py --db-path data/auth.sqlite \
-  > odd-tile-replays.json
+  > tile-count-mismatches.json
 ```
 
 Run from `auth-server`. The SQLite connection is read-only. The script makes
 no BGA requests and does not change statuses, events, URLs, or the replay queue.
-Every event object with a non-null `tile_type` counts, regardless of event type:
-eight occurrences of type 18 pass, seven flag the replay. Missing/null
-`tile_type` values are ignored. The report includes game/table ids, BGA and
-CarcassonneLab links, odd counts, and counts by event type. This is a parity
-check; two discarded tiles of the same type may still yield an even count.
+Only `pickTile` and `playTile` events with a non-null `tile_type` count;
+`cantPlay`, `playPartisan`, and other event types are ignored. Four draws and
+four placements of type 4 pass; four draws and two placements flag the replay,
+even though the combined count is even. Missing/null `tile_type` values are
+ignored. The report includes game/table ids, BGA and CarcassonneLab links, and
+`tile_count_mismatches` with `tile_type`, `pick_count`, `play_count`, and
+`difference` (draws minus placements). Both positive and negative differences
+are reported. `replays_with_tile_count_mismatches` gives the number of matches.
 
 Use `--table-id ID` to inspect one ready replay, or
 `--events-file ../924153644-old.json` to check a saved event array. Invalid or
