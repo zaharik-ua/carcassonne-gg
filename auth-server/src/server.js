@@ -13945,6 +13945,7 @@ app.get("/public/tournaments/:id", (req, res, next) => {
       SELECT
         id,
         short_title,
+        logo,
         COALESCE(ranking, 1) AS ranking,
         registration_ends_at,
         COALESCE(is_test, 0) AS is_test,
