@@ -1,0 +1,212 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  .small-standings {
+    --standings-color: gold;
+    --standings-hover-color: #e6c200;
+    font-family: 'Montserrat', sans-serif;
+    color: #333;
+  }
+  .small-standings-title {
+    margin: 0 0 10px;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .small-standings-group-title {
+    margin: 0 0 3px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #222;
+  }
+  .small-standings-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    overflow: hidden;
+  }
+  .small-standings-table th,
+  .small-standings-table td {
+    padding: 6px;
+    font-size: 15px;
+    line-height: 17px;
+    text-align: center;
+  }
+  .small-standings-table th {
+    background: var(--standings-color);
+    font-weight: 600;
+  }
+  .small-standings-table td {
+    background: white;
+    border-top: 1px solid #ccc;
+  }
+  .small-standings-table th:nth-child(2),
+  .small-standings-table td:nth-child(2) { text-align: left; }
+  .small-standings-table th:first-child,
+  .small-standings-table td:first-child { width: 28px; }
+  .small-standings-table th:nth-child(n+3),
+  .small-standings-table td:nth-child(n+3) { width: 40px; }
+  .small-standings-table th:last-child,
+  .small-standings-table td:last-child { font-weight: 700; }
+  .small-standings-link {
+    display: block;
+    padding: 9px 12px;
+    background: var(--standings-color);
+    color: #333;
+    border-radius: 2px;
+    text-align: center;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .small-standings-link:hover { background: var(--standings-hover-color); }
+  .small-standings-link:focus-visible { outline: 2px solid #333; outline-offset: 3px; }
+</style>
+
+<div class="small-standings" id="etcoc-small-standings">
+  <h2 class="small-standings-title">ETCOC 2026</h2>
+  <div class="small-standings-groups" aria-live="polite">Loading standings…</div>
+  <a class="small-standings-link" href="https://carcassonne.gg/etcoc-2026/?tab=stage1" target="_self">Full Standings</a>
+</div>
+
+<script>
+(() => {
+  const tournamentId = 'ETCOC-2026';
+  const apiBase = window.AUTH_BASE_URL || 'https://api.carcassonne.gg';
+  const root = document.getElementById('etcoc-small-standings');
+  const groupsContainer = root.querySelector('.small-standings-groups');
+  const normalizeId = value => String(value || '').trim().toUpperCase();
+  const isStage1 = stage => ['', 'stage 1', 'groups stage'].includes(String(stage || '').trim().toLowerCase());
+  const number = value => Number(value) || 0;
+  const hasScore = value => value !== null && value !== undefined && String(value).trim() !== '';
+
+  async function fetchJson(path, params = {}) {
+    const url = new URL(`${apiBase}${path}`);
+    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+    const response = await fetch(url.toString());
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+    return response.json();
+  }
+
+  // Keep the full standings' team tiebreakers, including opponents' results.
+  function sortGroup(rows, matches, teamsById, group) {
+    const teamNames = new Map(rows.map(row => [
+      normalizeId(row.team_id), teamsById.get(normalizeId(row.team_id))?.team_name || row.team_id
+    ]));
+    const stats = new Map(rows.map(row => [normalizeId(row.team_id), {
+      mw: number(row.mw), dw: number(row.dw), dl: number(row.dl),
+      gw: number(row.gw), gl: number(row.gl), omw: 0, odd: 0, odw: 0,
+      opponents: new Set()
+    }]));
+    const idsByName = new Map(Array.from(teamNames, ([id, name]) => [normalizeId(name), id]));
+    matches.forEach(match => {
+      if (normalizeId(match.tournament_id) !== normalizeId(tournamentId) || !isStage1(match.stage)) return;
+      if (group && match.group && match.group !== group) return;
+      if (!hasScore(match.duels_won1 ?? match.dw1) || !hasScore(match.duels_won2 ?? match.dw2)) return;
+      const first = normalizeId(match.team_1 || match.team1_id)
+        || idsByName.get(normalizeId(match.team1 || match.team_1_name));
+      const second = normalizeId(match.team_2 || match.team2_id)
+        || idsByName.get(normalizeId(match.team2 || match.team_2_name));
+      if (!stats.has(first) || !stats.has(second) || first === second) return;
+      stats.get(first).opponents.add(second);
+      stats.get(second).opponents.add(first);
+    });
+    stats.forEach(stat => stat.opponents.forEach(id => {
+      const opponent = stats.get(id);
+      stat.omw += opponent.mw;
+      stat.odd += opponent.dw - opponent.dl;
+      stat.odw += opponent.dw;
+    }));
+    const metrics = stat => [stat.mw, stat.dw - stat.dl, stat.dw, stat.gw - stat.gl, stat.gw, stat.omw, stat.odd, stat.odw];
+    const sorted = [...rows].sort((left, right) => {
+      const a = metrics(stats.get(normalizeId(left.team_id)));
+      const b = metrics(stats.get(normalizeId(right.team_id)));
+      for (let i = 0; i < a.length; i++) {
+        if (b[i] !== a[i]) return b[i] - a[i];
+      }
+      return 0;
+    });
+    // Manual position overrides occupy their slots; fill the rest in sorted order.
+    const result = new Array(sorted.length).fill(null);
+    sorted.map((row, index) => ({ row, index, position: Math.floor(Number(row.position_override)) }))
+      .filter(entry => entry.position > 0)
+      .sort((a, b) => a.position - b.position || a.index - b.index)
+      .forEach(({ row, position }) => {
+        if (position <= result.length && !result[position - 1]) result[position - 1] = row;
+      });
+    const placed = new Set(result.filter(Boolean));
+    const remaining = sorted.filter(row => !placed.has(row));
+    let index = 0;
+    return result.map(row => row || remaining[index++]);
+  }
+
+  function renderGroups(rows, teams, matches) {
+    groupsContainer.replaceChildren();
+    const teamsById = new Map(teams.map(team => [normalizeId(team.team_id), team]));
+    const groups = new Map();
+    rows.filter(row => row && row.team_id && isStage1(row.stage)).forEach(row => {
+      const group = String(row.group || '').trim();
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push(row);
+    });
+    if (!groups.size) {
+      groupsContainer.textContent = 'Standings are not available yet.';
+      return;
+    }
+    Array.from(groups.keys()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).forEach(group => {
+      const section = document.createElement('section');
+      const title = document.createElement('h3');
+      title.className = 'small-standings-group-title';
+      title.textContent = group ? `Group ${group}` : 'Groups Stage';
+      const table = document.createElement('table');
+      table.className = 'small-standings-table';
+      table.setAttribute('aria-label', `${title.textContent} standings`);
+      const head = table.createTHead().insertRow();
+      ['#', 'Team', 'MP', 'MW'].forEach(label => {
+        const cell = document.createElement('th');
+        cell.scope = 'col';
+        cell.textContent = label;
+        head.appendChild(cell);
+      });
+      const body = table.createTBody();
+      sortGroup(groups.get(group), matches, teamsById, group).forEach((row, index) => {
+        const team = teamsById.get(normalizeId(row.team_id));
+        const name = String(team?.team_short_name || '').trim()
+          || String(team?.team_name || '').trim() || row.team_id;
+        const tr = body.insertRow();
+        [index + 1, name, number(row.mp), number(row.mw)].forEach(value => {
+          tr.insertCell().textContent = String(value);
+        });
+      });
+      section.append(title, table);
+      groupsContainer.appendChild(section);
+    });
+  }
+
+  async function load() {
+    try {
+      const [standingsData, teamsData, matchesData] = await Promise.all([
+        fetchJson('/standings', { tournament_id: tournamentId, stage: 'Stage 1' }),
+        fetchJson('/public/tournament-teams', { tournament_id: tournamentId }),
+        fetchJson('/public/main-page-matches', { tournament_id: tournamentId })
+      ]);
+      renderGroups(standingsData.standings || [], teamsData.tournament_teams || [], matchesData.matches || []);
+    } catch (error) {
+      console.error('Failed to load compact ETCOC standings', error);
+      groupsContainer.textContent = 'Unable to load standings.';
+    }
+    try {
+      const data = await fetchJson(`/public/tournaments/${tournamentId}`);
+      const shortTitle = String(data.tournament?.short_title || '').trim();
+      if (shortTitle) root.querySelector('.small-standings-title').textContent = shortTitle;
+    } catch (error) {
+      console.error('Failed to load ETCOC short title', error);
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load, { once: true });
+  else load();
+})();
+</script>

@@ -3591,6 +3591,7 @@ async function loadTournamentTeamById(recordId) {
         tt.team_id,
         tt.captain_id,
         tm.name AS team_name,
+        tm.short_name AS team_short_name,
         COALESCE(NULLIF(trim(tm.flag), ''), NULLIF(trim(tm.logo), '')) AS team_flag,
         p.bga_nickname AS captain_bga_nickname,
         p.name AS captain_name,
@@ -3625,6 +3626,7 @@ async function loadTournamentTeams(tournamentId = null) {
         tt.team_id,
         tt.captain_id,
         tm.name AS team_name,
+        tm.short_name AS team_short_name,
         COALESCE(NULLIF(trim(tm.flag), ''), NULLIF(trim(tm.logo), '')) AS team_flag,
         p.bga_nickname AS captain_bga_nickname,
         p.name AS captain_name,
@@ -4444,6 +4446,7 @@ async function loadTournamentPlayersForAccess(access) {
         tt.team_id,
         tt.captain_id,
         tm.name AS team_name,
+        tm.short_name AS team_short_name,
         COALESCE(NULLIF(trim(tm.flag), ''), NULLIF(trim(tm.logo), '')) AS team_flag,
         p.bga_nickname AS captain_bga_nickname,
         p.name AS captain_name,
@@ -6185,6 +6188,7 @@ function ensureTeamsSchema() {
     CREATE TABLE IF NOT EXISTS teams (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      short_name TEXT,
       logo TEXT,
       flag TEXT,
       type TEXT,
@@ -6204,6 +6208,7 @@ function ensureTeamsSchema() {
       }
       if (!Array.isArray(columns) || columns.length === 0) return;
       addColumnIfMissing(columns, "teams", "name", "TEXT");
+      addColumnIfMissing(columns, "teams", "short_name", "TEXT");
       addColumnIfMissing(columns, "teams", "logo", "TEXT");
       addColumnIfMissing(columns, "teams", "flag", "TEXT");
       addColumnIfMissing(columns, "teams", "type", "TEXT");
@@ -13939,6 +13944,7 @@ app.get("/public/tournaments/:id", (req, res, next) => {
     `
       SELECT
         id,
+        short_title,
         COALESCE(ranking, 1) AS ranking,
         registration_ends_at,
         COALESCE(is_test, 0) AS is_test,
@@ -15038,6 +15044,7 @@ app.get("/public/tournament-teams", async (req, res) => {
         tournament_id: team.tournament_id,
         team_id: team.team_id,
         team_name: team.team_name,
+        team_short_name: team.team_short_name,
         team_flag: team.team_flag,
         players: (team.players || []).map((player) => ({
           id: player.id,
@@ -15505,6 +15512,7 @@ app.get("/teams", (_req, res, next) => {
       SELECT
         id,
         name,
+        short_name,
         COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS logo,
         COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS flag,
         type,
@@ -15522,6 +15530,7 @@ app.get("/teams", (_req, res, next) => {
 app.post("/teams", requireAdmin, (req, res) => {
   const id = normalizeEntityId(req.body?.id);
   const name = String(req.body?.name || "").trim();
+  const shortName = String(req.body?.short_name || "").trim() || null;
   const flag = String(req.body?.flag || "").trim() || null;
   const type = String(req.body?.type || "").trim() || "National";
   const timezone = String(req.body?.timezone || "").trim() || null;
@@ -15556,10 +15565,10 @@ app.post("/teams", requireAdmin, (req, res) => {
 
       return db.run(
         `
-          INSERT INTO teams (id, name, logo, flag, type, timezone, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          INSERT INTO teams (id, name, short_name, logo, flag, type, timezone, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
-        [id, name, flag, flag, type, timezone],
+        [id, name, shortName, flag, flag, type, timezone],
         (insertErr) => {
           if (insertErr) {
             if (String(insertErr.message || "").includes("UNIQUE")) {
@@ -15573,6 +15582,7 @@ app.post("/teams", requireAdmin, (req, res) => {
               SELECT
                 id,
                 name,
+                short_name,
                 COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS logo,
                 COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS flag,
                 type,
@@ -15599,6 +15609,7 @@ app.patch("/teams/:id", requireAdmin, (req, res) => {
   const teamId = normalizeEntityId(req.params.id);
   const payloadId = normalizeEntityId(req.body?.id);
   const name = String(req.body?.name || "").trim();
+  const shortName = String(req.body?.short_name || "").trim() || null;
   const flag = String(req.body?.flag || "").trim() || null;
   const type = String(req.body?.type || "").trim() || "National";
   const timezone = String(req.body?.timezone || "").trim() || null;
@@ -15618,7 +15629,7 @@ app.patch("/teams/:id", requireAdmin, (req, res) => {
   }
 
   return db.get(
-    "SELECT id FROM teams WHERE upper(trim(id)) = upper(?) LIMIT 1",
+    "SELECT id, short_name FROM teams WHERE upper(trim(id)) = upper(?) LIMIT 1",
     [teamId],
     (rowErr, currentRow) => {
       if (rowErr) {
@@ -15654,6 +15665,7 @@ app.patch("/teams/:id", requireAdmin, (req, res) => {
               SET
                 id = ?,
                 name = ?,
+                short_name = ?,
                 logo = ?,
                 flag = ?,
                 type = ?,
@@ -15661,7 +15673,7 @@ app.patch("/teams/:id", requireAdmin, (req, res) => {
                 updated_at = CURRENT_TIMESTAMP
               WHERE upper(trim(id)) = upper(?)
             `,
-            [teamId, name, flag, flag, type, timezone, teamId],
+            [teamId, name, req.body?.short_name === undefined ? currentRow.short_name : shortName, flag, flag, type, timezone, teamId],
             function onUpdate(err) {
               if (err) {
                 if (String(err.message || "").includes("UNIQUE")) {
@@ -15678,6 +15690,7 @@ app.patch("/teams/:id", requireAdmin, (req, res) => {
                   SELECT
                     id,
                     name,
+                    short_name,
                     COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS logo,
                     COALESCE(NULLIF(trim(flag), ''), NULLIF(trim(logo), '')) AS flag,
                     type,

@@ -3510,12 +3510,14 @@
 
     const idField = createTextRow("id", item?.id || "", { readOnly: mode === "edit" });
     const nameField = createTextRow("name", item?.name || "");
+    const shortNameField = createTextRow("short name (optional)", item?.short_name || "");
     const flagField = createTextRow("flag", item?.flag || item?.logo || "");
     const typeField = createSelectRow("type", item?.type || "National", ["National", "Club"], false);
     const timezoneField = createTextRow("timezone", item?.timezone || "");
 
     form.appendChild(idField.row);
     form.appendChild(nameField.row);
+    form.appendChild(shortNameField.row);
     form.appendChild(flagField.row);
     form.appendChild(typeField.row);
     form.appendChild(timezoneField.row);
@@ -3551,6 +3553,7 @@
       const payload = {
         id: normalizeEntityId(idField.input.value),
         name: String(nameField.input.value || "").trim(),
+        short_name: String(shortNameField.input.value || "").trim(),
         flag: String(flagField.input.value || "").trim(),
         type: String(typeField.select.value || "National"),
         timezone: String(timezoneField.input.value || "").trim(),
