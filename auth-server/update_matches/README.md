@@ -219,42 +219,48 @@ Derived values recoverable from normalized events and players are rebuilt.
 Existing scoring and player-time JSON are preserved because those values cannot
 be reconstructed exactly after legacy raw logs have been removed.
 
-### One-off CarcassonneLab URL update
+### Inspect repeated tile draws
 
-Preview all existing replay rows whose `carcassonne_lab_url` is nonempty:
-
-```bash
-./.venv/bin/python update_carcassonne_lab_urls.py --db-path data/auth.sqlite
-```
-
-Apply the update:
+Inspect saved replay events without changing them:
 
 ```bash
-./.venv/bin/python update_carcassonne_lab_urls.py --db-path data/auth.sqlite --apply
+./.venv/bin/python inspect_replay_tile_draws.py --db-path data/auth.sqlite
 ```
 
-Both modes use previously saved SQLite data exclusively, with no BGA login,
-requests, or budget consumption. `events_json` and `players_json` are reused;
-legacy `logs_json` is also supported if that column still exists. Dry-run
-computes the proposed URL changes without writing.
+The read-only report finds runs of two or more `pickTile` events for the same
+`player_id`, reset only by that player's `playTile`. Other players' draws and
+placements, `playPartisan`, and `cantPlay` do not reset the run. Missing player
+ids are counted as unattributed and are not grouped. Output includes table and
+game ids, full pick records, intervening event context, and the following
+placement when present. It does not infer or persist discards or change URLs.
 
-Legacy `events_json` omitted `cantPlay` but retained `pickTile`. When each
-placement has a matching saved draw, an unplayed draw followed by another draw
-is reconstructed as a discard. Explicit `cantPlay` events are used directly.
-Incomplete draw history, repeated draw ids, conflicting types, or a final draw
-without an explicit discard are reported as insufficient/invalid data and
-preserve the existing URL. A final unplayed draw could belong to an abandoned
-turn, so it is not assumed to be discarded.
+Optional filters: `--table-id ID`, `--player-id ID`, and `--with-url` (only rows
+with populated CarcassonneLab URLs). A saved event array can be inspected via
+`--events-file /path/to/temp.json` instead of a database.
 
-Apply changes only the URL and `updated_at` in one SQLite transaction,
-preserving the original player query parameters and all other replay fields.
-NULL, empty, and whitespace-only URLs are excluded regardless of replay status.
-Active worker leases are deferred; the transaction prevents concurrent writes
-while the saved rows are processed. Rerunning is idempotent and needs no
-checkpoint file. The summary includes `would_update`, `updated`, `unchanged`,
-`inferred_discards`, `insufficient_data`, `failed`, and per-game `errors`.
-Exit code 0 means success, 2 means some rows were skipped, and 1 means a fatal
-error; a fatal SQL error rolls back the entire batch.
+### One-off inspection of odd tile counts
+
+Find only `game_replays` with `status = 'ready'` where at least one `tile_type`
+occurs an odd number of times in `events_json`:
+
+```bash
+./.venv/bin/python inspect_discarded_replay_tiles.py --db-path data/auth.sqlite \
+  > odd-tile-replays.json
+```
+
+Run from `auth-server`. The SQLite connection is read-only. The script makes
+no BGA requests and does not change statuses, events, URLs, or the replay queue.
+Every event object with a non-null `tile_type` counts, regardless of event type:
+eight occurrences of type 18 pass, seven flag the replay. Missing/null
+`tile_type` values are ignored. The report includes game/table ids, BGA and
+CarcassonneLab links, odd counts, and counts by event type. This is a parity
+check; two discarded tiles of the same type may still yield an even count.
+
+Use `--table-id ID` to inspect one ready replay, or
+`--events-file ../924153644-old.json` to check a saved event array. Invalid or
+missing `events_json` appears in `errors` without stopping the scan. Exit codes
+are `0` for a complete report (including when matches exist), `2` for a report
+with row errors, and `1` for a source/database error.
 
 ### systemd timers
 
