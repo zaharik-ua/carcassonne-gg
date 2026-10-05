@@ -2368,9 +2368,10 @@ async function recomputeMatchAggregates(matchId, actorPlayerId = null) {
     ]
   );
 
-  const transitionedToDone = String(previousMatch?.status || "").trim().toLowerCase() !== "done"
-    && nextStatus === "Done";
-  if (transitionedToDone && previousMatch?.tournament_id) {
+  // Rebuild for completed result edits and when a completed match is reopened.
+  const affectsStandings = String(previousMatch?.status || "").trim().toLowerCase() === "done"
+    || nextStatus === "Done";
+  if (affectsStandings && previousMatch?.tournament_id) {
     await recalculateTournamentStandings(previousMatch.tournament_id);
   }
 }
@@ -24220,13 +24221,13 @@ app.patch("/matches/:id", (req, res) => {
             }
           }
 
-          const transitionedToDone = String(existingRow.status || "").trim().toLowerCase() !== "done"
-            && status === "Done";
-          if (transitionedToDone) {
+          const affectsStandings = String(existingRow.status || "").trim().toLowerCase() === "done"
+            || status === "Done";
+          if (affectsStandings) {
             try {
               await recalculateTournamentStandings(tournament.id);
             } catch (standingsError) {
-              console.error("Failed to recalculate standings after match completion", standingsError);
+              console.error("Failed to recalculate standings after match update", standingsError);
               return res.status(500).json({
                 ok: false,
                 message: "Match updated, but failed to recalculate standings",

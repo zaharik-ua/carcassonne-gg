@@ -310,6 +310,49 @@
     text-align: center;
   }
 
+  .teams-toolbar {
+    margin-bottom: 12px;
+  }
+
+  .teams-statistics {
+    display: grid;
+    gap: 20px;
+    width: 100%;
+  }
+
+  .teams-statistics > div {
+    min-width: 0;
+  }
+
+  .team-statistics-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .team-statistics-table th:first-child,
+  .team-statistics-table td:first-child {
+    width: 50%;
+    text-align: left;
+  }
+
+  .team-statistics-table tr:first-child th:nth-child(n+2) {
+    width: 10%;
+    min-width: 0;
+    text-align: center;
+  }
+
+  @media (max-width: 480px) {
+    .team-statistics-table th,
+    .team-statistics-table td {
+      padding: 5px 3px;
+      font-size: 12px;
+    }
+  }
+
   .group-table td {
     padding: 6px;
     font-size: 15px;
@@ -319,6 +362,10 @@
   }
 
   .group-table tr:nth-child(n+2) {
+    background-color: white;
+  }
+
+  #tab-teams-content .group-table tbody tr {
     background-color: white;
   }
 
@@ -1587,6 +1634,7 @@
   let tournamentsById = {};
   let teamsLoaded = false;
   let teamsLoadFailed = false;
+  let showTeamStatistics = false;
 
   // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
   const BRACKET_MARGIN = 15;
@@ -2235,6 +2283,37 @@
     rulesContainer.appendChild(rulesContent);
   }
 
+  function buildTeamPlayerStatistics() {
+    const statistics = new Map();
+    duels.forEach(duel => {
+      if (duel.tournament_id !== currentTournamentId) return;
+      if (!["DONE", "ERROR"].includes(String(duel.status || "").trim().toUpperCase())) return;
+      if ([duel.score1, duel.score2].some(score => (
+        score === null || score === undefined || String(score).trim() === ""
+      ))) return;
+
+      const score1 = Number(duel.score1);
+      const score2 = Number(duel.score2);
+      if (!Number.isInteger(score1) || !Number.isInteger(score2) || score1 < 0 || score2 < 0) return;
+      // A completed duel must have a winner; ignore unplayed 0–0 placeholders.
+      if (score1 === score2) return;
+
+      [[duel.player1_id, score1, score2], [duel.player2_id, score2, score1]]
+        .forEach(([playerId, won, lost]) => {
+          const key = String(playerId || "").trim();
+          if (!key) return;
+          const stats = statistics.get(key) || { p: 0, w: 0, l: 0, gw: 0, gl: 0 };
+          stats.p += 1;
+          stats.w += won > lost ? 1 : 0;
+          stats.l += won < lost ? 1 : 0;
+          stats.gw += won;
+          stats.gl += lost;
+          statistics.set(key, stats);
+        });
+    });
+    return statistics;
+  }
+
   function renderTeamsContent() {
     const teamsContainer = document.getElementById("tab-teams-content");
     if (!teamsContainer) return;
@@ -2256,6 +2335,21 @@
       return;
     }
 
+    const toolbar = document.createElement("div");
+    toolbar.className = "teams-toolbar";
+    const statisticsButton = document.createElement("button");
+    statisticsButton.type = "button";
+    statisticsButton.className = "fullview-btn";
+    statisticsButton.textContent = showTeamStatistics ? "Hide statistics" : "Show statistics";
+    statisticsButton.setAttribute("aria-pressed", String(showTeamStatistics));
+    statisticsButton.addEventListener("click", () => {
+      showTeamStatistics = !showTeamStatistics;
+      renderTeamsContent();
+      teamsContainer.querySelector(".teams-toolbar button").focus();
+    });
+    toolbar.appendChild(statisticsButton);
+    teamsContainer.appendChild(toolbar);
+
     const groupedPlayers = {};
     tournament_players
       .filter(player => player.tournament_id === currentTournamentId)
@@ -2267,16 +2361,21 @@
       });
 
     const wrapper = document.createElement("div");
-    wrapper.style.display = "flex";
-    wrapper.style.flexWrap = "wrap";
-    wrapper.style.gap = "20px";
-    wrapper.style.alignItems = "flex-start";
+    if (showTeamStatistics) {
+      wrapper.className = "teams-statistics";
+    } else {
+      wrapper.style.display = "flex";
+      wrapper.style.flexWrap = "wrap";
+      wrapper.style.gap = "20px";
+      wrapper.style.alignItems = "flex-start";
+    }
+    const playerStatistics = showTeamStatistics ? buildTeamPlayerStatistics() : new Map();
 
     teams.forEach(teamEntry => {
       const teamName = teamEntry.team;
       const teamTable = document.createElement("table");
-      teamTable.className = "group-table";
-      teamTable.style.width = "300px";
+      teamTable.className = showTeamStatistics ? "group-table team-statistics-table" : "group-table";
+      teamTable.style.width = showTeamStatistics ? "100%" : "300px";
       teamTable.style.tableLayout = "fixed";
 
       const headerRow = document.createElement("tr");
@@ -2284,7 +2383,8 @@
       headerCell.colSpan = 2;
       headerCell.style.textAlign = "left";
 
-      const headerContent = document.createElement("div");
+      const headerContent = document.createElement(showTeamStatistics ? "h3" : "div");
+      if (showTeamStatistics) headerContent.className = "team-statistics-title";
       headerContent.style.display = "flex";
       headerContent.style.alignItems = "center";
       headerContent.style.gap = "8px";
@@ -2300,9 +2400,28 @@
       const teamNameElement = document.createElement("span");
       teamNameElement.textContent = teamName;
       headerContent.appendChild(teamNameElement);
-      headerCell.appendChild(headerContent);
-      headerRow.appendChild(headerCell);
-      teamTable.appendChild(headerRow);
+      if (showTeamStatistics) {
+        const tableHead = document.createElement("thead");
+        const columnTitles = {
+          Player: "Player", P: "Duels played", W: "Duels won", L: "Duels lost",
+          GW: "Games won", GL: "Games lost"
+        };
+        Object.entries(columnTitles).forEach(([label, title]) => {
+          const columnHeader = document.createElement("th");
+          columnHeader.scope = "col";
+          columnHeader.textContent = label;
+          columnHeader.title = title;
+          headerRow.appendChild(columnHeader);
+        });
+        tableHead.appendChild(headerRow);
+        teamTable.appendChild(tableHead);
+      } else {
+        headerCell.appendChild(headerContent);
+        headerRow.appendChild(headerCell);
+        teamTable.appendChild(headerRow);
+      }
+      const tableBody = document.createElement("tbody");
+      teamTable.appendChild(tableBody);
 
       const teamKey = String(teamEntry.team_id || teamName).trim().toUpperCase();
       const sortedPlayers = (groupedPlayers[teamKey] || [])
@@ -2314,7 +2433,7 @@
         const avatarUrl = buildBgaAvatarUrl(playerEntry.player_id, player?.avatar);
         const playerRow = document.createElement("tr");
         const playerCell = document.createElement("td");
-        playerCell.colSpan = 2;
+        playerCell.colSpan = showTeamStatistics ? 1 : 2;
         playerCell.style.textAlign = "left";
         playerCell.style.padding = "4px 6px";
 
@@ -2350,11 +2469,21 @@
 
         playerCell.appendChild(playerContent);
         playerRow.appendChild(playerCell);
-        teamTable.appendChild(playerRow);
+        if (showTeamStatistics) {
+          const stats = playerStatistics.get(String(playerEntry.player_id || "").trim())
+            || { p: 0, w: 0, l: 0, gw: 0, gl: 0 };
+          [stats.p, stats.w, stats.l, stats.gw, stats.gl].forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            playerRow.appendChild(cell);
+          });
+        }
+        tableBody.appendChild(playerRow);
       });
 
       const tableWrapper = document.createElement("div");
       tableWrapper.style.flex = "none";
+      if (showTeamStatistics) tableWrapper.appendChild(headerContent);
       tableWrapper.appendChild(teamTable);
       wrapper.appendChild(tableWrapper);
     });
