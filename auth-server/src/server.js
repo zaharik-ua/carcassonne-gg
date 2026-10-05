@@ -12076,6 +12076,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/decline", requireAuthentic
   const periodId = normalizeNullableText(req.params.id);
   const requestId = normalizeNullableText(req.params.requestId);
   const playerId = normalizeNullableText(req.user?.player_id);
+  const comment = normalizeNullableText(req.body?.comment);
 
   if (!playerId) return res.status(403).json({ ok: false, code: "profile_required", message: "Linked player profile is required" });
   if (!periodId || !requestId) return res.status(400).json({ ok: false, message: "Invalid Challenge request id" });
@@ -12100,12 +12101,12 @@ app.patch("/challenge-periods/:id/requests/:requestId/decline", requireAuthentic
       await dbRunAsync(
         `
           UPDATE challenge_requests
-          SET status = 'declined', updated_at = CURRENT_TIMESTAMP
+          SET status = 'declined', comment = ?, updated_at = CURRENT_TIMESTAMP
           WHERE period_id = ?
             AND id = ?
             AND status = 'pending'
         `,
-        [periodId, requestId]
+        [comment, periodId, requestId]
       );
       if (["Draft", "Requested new time"].includes(beforeDuel?.status)) {
         await dbRunAsync(

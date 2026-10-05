@@ -7554,6 +7554,67 @@
     };
   }
 
+  function createChallengeTimeOptionsControl(period, currentPlayer, getOpponent, onChange) {
+    const currentOption = {
+      ...currentPlayer,
+      flag: currentPlayer?.flag || currentPlayer?.association?.flag || period?.player_time_context?.association_flag || "",
+      timezone: currentPlayer?.timezone || currentPlayer?.association?.timezone || period?.player_time_context?.timezone || "UTC",
+    };
+    const createLocalLine = (player, timeUtc) => {
+      const line = document.createElement("span");
+      line.className = "challenge-request-local-line";
+      const flag = createFlagImg(player?.flag || player?.association?.flag, "cp-dd-flag");
+      if (flag) line.appendChild(flag);
+      const text = document.createElement("span");
+      text.textContent = formatLocalWeekdayClock(
+        timeUtc, player?.timezone || player?.association?.timezone || "UTC"
+      ) || "-";
+      line.appendChild(text);
+      return line;
+    };
+    let selectedTimeOptions = [];
+    const root = document.createElement("div");
+    root.className = "challenge-time-options-control";
+    const summary = document.createElement("div");
+    summary.className = "challenge-time-options-summary";
+    root.appendChild(summary);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "challenge-btn challenge-btn-primary challenge-time-options-button";
+    root.appendChild(button);
+
+    const render = () => {
+      const opponent = getOpponent();
+      const hasSelectedTime = selectedTimeOptions.length > 0;
+      summary.innerHTML = "";
+      selectedTimeOptions.forEach((timeUtc) => {
+        const item = document.createElement("div");
+        item.className = "challenge-time-option-summary";
+        item.appendChild(createLocalLine(currentOption, timeUtc));
+        if (opponent) item.appendChild(createLocalLine(opponent, timeUtc));
+        summary.appendChild(item);
+      });
+      button.classList.toggle("challenge-btn-primary", !hasSelectedTime);
+      button.classList.toggle("challenge-btn-secondary", hasSelectedTime);
+      button.textContent = hasSelectedTime ? "Change time option" : "Select time option";
+    };
+    button.addEventListener("click", () => {
+      openChallengeTimeOptionsDialog(period, selectedTimeOptions, currentOption, getOpponent(), (nextOptions) => {
+        selectedTimeOptions = nextOptions;
+        render();
+        if (typeof onChange === "function") onChange();
+        button.focus({ preventScroll: true });
+      });
+    });
+    render();
+    return {
+      root,
+      render,
+      getValue: () => selectedTimeOptions.slice(0, 3),
+      setDisabled: (disabled) => { button.disabled = !!disabled; },
+    };
+  }
+
   function openChallengeRequestForm(period, opponent, currentPlayer) {
     const overlay = document.createElement("div");
     overlay.className = "challenge-modal-overlay";
@@ -7631,70 +7692,19 @@
         placeholderLabel: "Select player",
         onChange: (nextValue) => {
           selectedOpponent = profileById.get(String(nextValue || "").trim()) || null;
-          renderSelectedTimeOptions();
+          timeOptionsControl.render();
         },
       });
       addChallengeFormRow(form, "Opponent", opponentDropdown.root, { required: true });
 
-      const createLocalLine = (player, timeUtc) => {
-        const line = document.createElement("span");
-        line.className = "challenge-request-local-line";
-        if (player?.flag) {
-          const flag = document.createElement("img");
-          flag.className = "cp-dd-flag";
-          flag.src = String(player.flag || "");
-          flag.alt = "";
-          line.appendChild(flag);
-        }
-        const text = document.createElement("span");
-        text.textContent = formatLocalWeekdayClock(timeUtc, player?.timezone || "UTC") || "-";
-        line.appendChild(text);
-        return line;
-      };
-      let selectedTimeOptions = [];
-      const timeOptionsControl = document.createElement("div");
-      timeOptionsControl.className = "challenge-time-options-control";
-      const timeOptionsSummary = document.createElement("div");
-      timeOptionsSummary.className = "challenge-time-options-summary";
-      timeOptionsControl.appendChild(timeOptionsSummary);
-      const timeOptionsBtn = document.createElement("button");
-      timeOptionsBtn.type = "button";
-      timeOptionsBtn.className = "challenge-btn challenge-btn-primary challenge-time-options-button";
-      timeOptionsControl.appendChild(timeOptionsBtn);
-      addChallengeFormRow(form, "Time options", timeOptionsControl, { required: true });
       let submitBtn = null;
-
-      function renderSelectedTimeOptions() {
-        const hasSelectedTime = selectedTimeOptions.length > 0;
-        timeOptionsSummary.innerHTML = "";
-        selectedTimeOptions.forEach((timeUtc) => {
-          const item = document.createElement("div");
-          item.className = "challenge-time-option-summary";
-          item.appendChild(createLocalLine(currentOption, timeUtc));
-          if (selectedOpponent) item.appendChild(createLocalLine(selectedOpponent, timeUtc));
-          timeOptionsSummary.appendChild(item);
-        });
-        timeOptionsBtn.classList.toggle("challenge-btn-primary", !hasSelectedTime);
-        timeOptionsBtn.classList.toggle("challenge-btn-secondary", hasSelectedTime);
-        timeOptionsBtn.textContent = hasSelectedTime
-          ? "Change time option"
-          : "Select time option";
-        if (submitBtn) submitBtn.disabled = !hasSelectedTime;
-      }
-      timeOptionsBtn.addEventListener("click", () => {
-        openChallengeTimeOptionsDialog(
-          period,
-          selectedTimeOptions,
-          currentOption,
-          selectedOpponent,
-          (nextOptions) => {
-            selectedTimeOptions = nextOptions;
-            renderSelectedTimeOptions();
-            setMessage("", "");
-          }
-        );
-      });
-      renderSelectedTimeOptions();
+      const timeOptionsControl = createChallengeTimeOptionsControl(
+        period, currentOption, () => selectedOpponent, () => {
+          if (submitBtn) submitBtn.disabled = timeOptionsControl.getValue().length === 0;
+          setMessage("", "");
+        }
+      );
+      addChallengeFormRow(form, "Time options", timeOptionsControl.root, { required: true });
 
       const formatWrap = document.createElement("div");
       formatWrap.className = "challenge-request-formats";
@@ -7731,7 +7741,7 @@
       submitBtn.type = "submit";
       submitBtn.className = "challenge-btn challenge-btn-primary";
       submitBtn.textContent = "Send invite";
-      submitBtn.disabled = selectedTimeOptions.length === 0;
+      submitBtn.disabled = timeOptionsControl.getValue().length === 0;
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";
       cancelBtn.className = "challenge-btn challenge-btn-secondary";
@@ -7753,10 +7763,10 @@
         return baseMessage;
       };
       const setSaving = (isSaving) => {
-        submitBtn.disabled = !!isSaving || selectedTimeOptions.length === 0;
+        submitBtn.disabled = !!isSaving || timeOptionsControl.getValue().length === 0;
         cancelBtn.disabled = !!isSaving;
         opponentDropdown.setDisabled(!!isSaving);
-        timeOptionsBtn.disabled = !!isSaving;
+        timeOptionsControl.setDisabled(isSaving);
         bo3Input.disabled = !!isSaving;
         bo5Input.disabled = !!isSaving;
         commentInput.disabled = !!isSaving;
@@ -7766,7 +7776,7 @@
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const player2Id = opponentDropdown.getValue();
-        const timeOptionValues = selectedTimeOptions.slice(0, 3);
+        const timeOptionValues = timeOptionsControl.getValue();
         if (!player2Id) {
           setMessage("Choose an opponent.", "error");
           return;
@@ -8007,40 +8017,19 @@
     }));
     addChallengeFormRow(form, "Opponent", opponentBox);
 
-    const minTime = toDatetimeLocalFromUtc(period?.play_starts_at);
-    const maxTime = toDatetimeLocalFromUtc(period?.play_ends_at);
-    const createLocalLine = (player, timeUtc) => {
-      const line = document.createElement("span");
-      line.className = "challenge-request-local-line";
-      const flag = createFlagImg(player?.association?.flag || player?.flag, "cp-dd-flag");
-      if (flag) line.appendChild(flag);
-      const text = document.createElement("span");
-      text.textContent = formatLocalWeekdayClock(timeUtc, player?.association?.timezone || player?.timezone || "UTC") || "-";
-      line.appendChild(text);
-      return line;
-    };
-    const refreshLocalRow = (input, local) => {
-      local.innerHTML = "";
-      const timeUtc = toUtcIsoFromDatetimeLocal(input.value);
-      if (!timeUtc) return;
-      local.appendChild(createLocalLine(currentPlayer, timeUtc));
-      local.appendChild(createLocalLine(otherPlayer, timeUtc));
-    };
-    const timeInputs = [1, 2, 3].map((number) => {
-      const input = document.createElement("input");
-      input.type = "datetime-local";
-      input.min = minTime;
-      input.max = maxTime;
-      input.required = number === 1;
-      const row = addChallengeFormRow(form, `Time option ${number}, UTC`, input, { required: number === 1 });
-      const local = document.createElement("div");
-      local.className = "challenge-request-local-time";
-      row.appendChild(local);
-      const refreshLocal = () => refreshLocalRow(input, local);
-      input.addEventListener("input", refreshLocal);
-      input.addEventListener("change", refreshLocal);
-      return input;
-    });
+    let submitBtn = null;
+    const timeOptionsControl = createChallengeTimeOptionsControl(
+      period, currentPlayer, () => {
+        const opponents = opponentPanels.get(String(period?.id || ""))?.opponentsByView?.all || [];
+        return opponents.find((player) => (
+          String(player?.player_id || "") === String(otherPlayer?.player_id || "")
+        )) || otherPlayer;
+      }, () => {
+        if (submitBtn) submitBtn.disabled = timeOptionsControl.getValue().length === 0;
+        setMessage("", "");
+      }
+    );
+    addChallengeFormRow(form, "Time options", timeOptionsControl.root, { required: true });
 
     const formatWrap = document.createElement("div");
     formatWrap.className = "challenge-request-formats";
@@ -8076,10 +8065,11 @@
 
     const actions = document.createElement("div");
     actions.className = "challenge-request-actions";
-    const submitBtn = document.createElement("button");
+    submitBtn = document.createElement("button");
     submitBtn.type = "submit";
     submitBtn.className = "challenge-btn challenge-btn-primary";
     submitBtn.textContent = options.submitText || "Send";
+    submitBtn.disabled = timeOptionsControl.getValue().length === 0;
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.className = "challenge-btn challenge-btn-secondary";
@@ -8101,11 +8091,9 @@
       return baseMessage;
     };
     const setSaving = (isSaving) => {
-      submitBtn.disabled = !!isSaving;
+      submitBtn.disabled = !!isSaving || timeOptionsControl.getValue().length === 0;
       cancelBtn.disabled = !!isSaving;
-      timeInputs.forEach((input) => {
-        input.disabled = !!isSaving;
-      });
+      timeOptionsControl.setDisabled(isSaving);
       bo3Input.disabled = !!isSaving;
       bo5Input.disabled = !!isSaving;
       if (commentInput) commentInput.disabled = !!isSaving;
@@ -8114,13 +8102,9 @@
     cancelBtn.addEventListener("click", closeModal);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const timeOptionValues = timeInputs.map((input) => toUtcIsoFromDatetimeLocal(input.value));
+      const timeOptionValues = timeOptionsControl.getValue();
       if (!timeOptionValues[0]) {
-        setMessage("First time option is required.", "error");
-        return;
-      }
-      if (timeOptionValues[2] && !timeOptionValues[1]) {
-        setMessage("Second time option is required before adding a third option.", "error");
+        setMessage("Select at least one time option.", "error");
         return;
       }
       const filledTimes = timeOptionValues.filter(Boolean);
@@ -8699,10 +8683,13 @@
     bodyEl.appendChild(state);
   }
 
-  async function patchChallengeRequestAction(period, request, action) {
+  async function patchChallengeRequestAction(period, request, action, payload) {
     return apiJson(
       `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(String(period?.id || ""))}/requests/${encodeURIComponent(String(request?.id || ""))}/${action}`,
-      { method: "PATCH" }
+      {
+        method: "PATCH",
+        ...(payload !== undefined ? { body: JSON.stringify(payload) } : {}),
+      }
     );
   }
 
@@ -8725,19 +8712,88 @@
     }
   }
 
-  async function openDeclineRequestDialog(period, request, button) {
-    const confirmed = await showChallengeConfirmDialog(
-      "Decline request",
-      "Are you sure you want to decline this Challenge request?",
-      {
-        note: "The request will be closed. Your opponent will need to send a new request if they still want to play.",
-        confirmText: "Decline",
-        confirmClassName: "challenge-btn-danger",
-        cancelText: "Back",
+  function openDeclineRequestDialog(period, request) {
+    const overlay = document.createElement("div");
+    overlay.className = "challenge-modal-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "challenge-modal";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", "Decline request");
+    overlay.appendChild(dialog);
+
+    const form = document.createElement("form");
+    form.className = "challenge-request-form";
+    dialog.appendChild(form);
+    const title = document.createElement("div");
+    title.className = "challenge-request-title";
+    title.textContent = "Decline request";
+    form.appendChild(title);
+    const text = document.createElement("div");
+    text.className = "challenge-info-text";
+    text.textContent = "Are you sure you want to decline this Challenge request?";
+    form.appendChild(text);
+    const note = document.createElement("div");
+    note.className = "challenge-info-note";
+    note.textContent = "The request will be closed. Your opponent will need to send a new request if they still want to play.";
+    form.appendChild(note);
+
+    const commentInput = document.createElement("textarea");
+    commentInput.className = "challenge-request-comment-input";
+    commentInput.rows = 3;
+    addChallengeFormRow(form, "Comment", commentInput);
+    const message = document.createElement("div");
+    message.className = "challenge-request-message";
+    form.appendChild(message);
+
+    const actions = document.createElement("div");
+    actions.className = "challenge-request-actions";
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "submit";
+    submitBtn.className = "challenge-btn challenge-btn-danger";
+    submitBtn.textContent = "Decline";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "challenge-btn challenge-btn-secondary";
+    cancelBtn.textContent = "Back";
+    actions.appendChild(submitBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    let saving = false;
+    const closeModal = () => overlay.remove();
+    const setSaving = (nextSaving) => {
+      saving = !!nextSaving;
+      submitBtn.disabled = saving;
+      cancelBtn.disabled = saving;
+      commentInput.disabled = saving;
+      submitBtn.textContent = saving ? "Saving..." : "Decline";
+    };
+    cancelBtn.addEventListener("click", closeModal);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay && !saving) closeModal();
+    });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (saving) return;
+      setSaving(true);
+      message.className = "challenge-request-message";
+      message.textContent = "Saving...";
+      try {
+        await patchChallengeRequestAction(period, request, "decline", {
+          comment: String(commentInput.value || "").trim() || null,
+        });
+        closeModal();
+        refreshRequestPanel(period?.id);
+        refreshOpponentPanel(period?.id);
+      } catch (error) {
+        setSaving(false);
+        message.className = "challenge-request-message is-error";
+        message.textContent = error?.message || "Failed to decline request.";
       }
-    );
-    if (!confirmed) return;
-    await runChallengeRequestAction(period, request, "decline", button);
+    });
+    document.body.appendChild(overlay);
+    commentInput.focus({ preventScroll: true });
   }
 
   async function openCancelChallengeMatchDialog(period, request) {
@@ -8891,8 +8947,8 @@
           openCounterRequestForm(period, request, currentPlayerId);
         }));
       }
-      actions.appendChild(createActionButton("Decline", "challenge-btn-danger", (event) => {
-        openDeclineRequestDialog(period, request, event.currentTarget);
+      actions.appendChild(createActionButton("Decline", "challenge-btn-danger", () => {
+        openDeclineRequestDialog(period, request);
       }));
     }
     if (canAct && !isAwaitingCurrentPlayer) {
