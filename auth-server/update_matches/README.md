@@ -528,6 +528,42 @@ accept `--max-failed-games N`; each selected game receives at most one
 trying the same game through another account. Their JSON summaries distinguish
 cached, deferred, failed, and remaining games.
 
+### Manual CSV export of ready replays
+
+```bash
+cd /home/carcassonne-gg/auth-server
+./.venv/bin/python export_game_replays.py
+# Explicit database and output paths:
+./.venv/bin/python export_game_replays.py \
+  --db-path /absolute/path/to/auth.sqlite --output /absolute/path/to/replays.csv
+```
+
+The default output is `auth-server/export/game_replays.csv`. Each run replaces
+the CSV with a fresh snapshot of **every** `game_replays` row whose status is
+`ready`, including rows linked to soft-deleted records. Repeated runs do not
+append duplicates. The database is opened read-only; no BGA requests are made.
+The previous CSV is replaced only after the new export finishes successfully.
+
+Columns, in order:
+
+| CSV column | Source |
+| --- | --- |
+| Game ID | `game_replays.bga_table_id` |
+| Tournament | `tournaments.category` |
+| Edition | `tournaments.short_title` |
+| Round | `matches.round_name`; for `duels.source_type = 'challenge'`, `challenge_periods.short_name` via `duels.challenge_period_id` |
+| PlayerId1 / PlayerId2 | `duels.player_1_id` / `duels.player_2_id` |
+| PlayerName1 / PlayerName2 | Corresponding `profiles.bga_nickname` |
+| Date | `duels.time_utc`, falling back to `matches.time_utc` when empty; UTC as stored |
+| URL | `game_replays.carcassonne_lab_url` |
+
+The tournament is resolved from `duels.tournament_id`, then
+`matches.tournament_id`, then the challenge period's `rivals_tournament_id`.
+Missing values remain empty without dropping the replay row. Player order
+follows the duel's player 1 and player 2. The file uses comma-separated CSV
+with UTF-8 BOM for Excel; commas, quotes, and newlines in values are escaped.
+The command prints the output path and exported row count as JSON.
+
 Raw BGA logs are parsed in memory and are not stored. `events_json` contains
 ordered `pickTile`, `playTile`, `playPartisan`, and `cantPlay` events. Discarded
 tiles retain their BGA tile id and the corresponding base-game tile type.
