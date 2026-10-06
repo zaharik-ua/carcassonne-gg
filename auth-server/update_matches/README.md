@@ -99,6 +99,14 @@ request. Updating an existing game does not enqueue its replay again.
 The update summary reports newly queued entries as `replays_scheduled` and
 already available entries as `replays_ready`.
 
+Saving match result edits through `/duels/:id/games/save` also queues newly
+added games with a 9- or 10-digit BGA Table ID. These result-editor imports
+are queued regardless of the duel's `ranking` value, with the same `fresh`,
+`pending`, `initial`, and five-minute delay settings. The game and replay queue
+entry are saved in one transaction. No-show games are excluded, and saving an
+existing game again does not create or reset a replay. Loading a Table ID result
+before pressing Save creates no queue entry.
+
 ## Replay queue worker
 
 Run due fresh work manually from the `auth-server` directory:

@@ -19206,6 +19206,28 @@ app.post("/duels/:id/games/save", (req, res) => {
             );
           }
 
+          for (const item of sanitizedGames) {
+            if (
+              existingGamesById.has(item.id)
+              || !/^\d{9,10}$/.test(String(item.bga_table_id || ""))
+              || String(item.status || "").trim().toLowerCase() === "no show"
+            ) continue;
+            // Result-editor imports join the same fresh queue as BGA updater
+            // imports. Preserve any existing replay and commit with the game.
+            await dbRunAsync(
+              `
+                INSERT INTO game_replays (
+                  game_id, bga_table_id, status, retry_reason, queue_class,
+                  queued_at, next_attempt_at
+                )
+                VALUES (?, ?, 'pending', 'initial', 'fresh',
+                  CURRENT_TIMESTAMP, datetime('now', '+5 minutes'))
+                ON CONFLICT DO NOTHING
+              `,
+              [item.id, item.bga_table_id]
+            );
+          }
+
           const recomputedDuel = await recomputeDuelAggregates(duelId, actorPlayerId);
           if (recomputedDuel?.matchId) {
             await recomputeMatchAggregates(recomputedDuel.matchId, actorPlayerId);

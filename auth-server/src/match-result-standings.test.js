@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import sqlite3 from "sqlite3";
+import { ensureGameReplaysSchema } from "./bga-replay-schema.js";
 
 const source = readFileSync(new URL("./server.js", import.meta.url), "utf8");
 function serverFunction(name) {
@@ -43,7 +44,7 @@ async function createContext(t) {
   const schema = (name) => source.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${name} \\([\\s\\S]*?\\n    \\)`))[0];
   await run(source.match(/CREATE TABLE matches \([\s\S]*?\n        \);/)[0]);
   for (const name of ["duels", "games", "standings"]) await run(schema(name));
-  await run("CREATE TABLE game_replays (game_id TEXT PRIMARY KEY, bga_table_id TEXT, status TEXT)");
+  await ensureGameReplaysSchema(db);
   await run(`CREATE TABLE tournaments (
     id TEXT PRIMARY KEY, standings_scoring TEXT DEFAULT 'standard',
     tpr_target_games INTEGER, tpr_smoothing REAL, tpr_benchmark_percentile REAL
@@ -215,7 +216,7 @@ test("failed standings recalculation rolls back saved games, duel and match resu
 
 test("deleting a saved game removes its replay and leaves other replays intact", async (t) => {
   const ctx = await createContext(t);
-  await ctx.run("INSERT INTO game_replays VALUES ('game', '123456789', 'ready'), ('other-game', '987654321', 'pending')");
+  await ctx.run("INSERT INTO game_replays (game_id, bga_table_id, status) VALUES ('game', '123456789', 'ready'), ('other-game', '987654321', 'pending')");
   const result = await ctx.saveRawGames([]);
   assert.equal(result.ok, true, result.message);
   assert.ok((await ctx.get("SELECT deleted_at FROM games WHERE id = 'game'")).deleted_at);
@@ -225,7 +226,7 @@ test("deleting a saved game removes its replay and leaves other replays intact",
 
 test("failed save restores both a deleted game and its replay", async (t) => {
   const ctx = await createContext(t);
-  await ctx.run("INSERT INTO game_replays VALUES ('game', '123456789', 'ready')");
+  await ctx.run("INSERT INTO game_replays (game_id, bga_table_id, status) VALUES ('game', '123456789', 'ready')");
   await ctx.run("CREATE TRIGGER fail_duel_update BEFORE UPDATE ON duels BEGIN SELECT RAISE(ABORT, 'duel unavailable'); END");
   assert.equal((await ctx.saveRawGames([])).status, 500);
   assert.equal((await ctx.get("SELECT deleted_at FROM games WHERE id = 'game'")).deleted_at, null);
@@ -234,7 +235,7 @@ test("failed save restores both a deleted game and its replay", async (t) => {
 
 test("replacement game with the same number keeps its own BGA scores and accepts a 10-digit table", async (t) => {
   const ctx = await createContext(t);
-  await ctx.run("INSERT INTO game_replays VALUES ('game', '123456789', 'ready')");
+  await ctx.run("INSERT INTO game_replays (game_id, bga_table_id, status) VALUES ('game', '123456789', 'ready')");
   const result = await ctx.saveRawGames([{ id: "new-game", game_number: 1, bga_table_id: "1234567890",
     player_1_score: 80, player_2_score: 110, player_1_rank: 0, player_2_rank: 1 }]);
   assert.equal(result.ok, true, result.message);
@@ -253,4 +254,74 @@ test("saving a new game rejects table IDs with letters or the wrong length", asy
     assert.equal(result.status, 400);
     assert.match(result.message, /9 or 10 digits/);
   }
+});
+
+const importedGame = {
+  id: "imported-game", game_number: 1, bga_table_id: "1234567890",
+  player_1_score: 100, player_2_score: 90, player_1_rank: 1, player_2_rank: 0,
+};
+
+for (const ranking of [0, 1]) {
+  test(`new Table ID result imports enqueue a fresh replay for ranking=${ranking}`, async (t) => {
+    const ctx = await createContext(t);
+    await ctx.run("UPDATE duels SET ranking = ? WHERE id = 'duel'", [ranking]);
+    const result = await ctx.saveRawGames([importedGame]);
+    assert.equal(result.ok, true, result.message);
+    const replay = await ctx.get("SELECT * FROM game_replays WHERE game_id = 'imported-game'");
+    assert.equal(replay.bga_table_id, importedGame.bga_table_id);
+    assert.equal(replay.status, "pending");
+    assert.equal(replay.queue_class, "fresh");
+    assert.equal(replay.retry_reason, "initial");
+    assert.equal(Date.parse(`${replay.next_attempt_at}Z`) - Date.parse(`${replay.queued_at}Z`), 5 * 60 * 1000);
+    assert.equal(replay.history_request_count, 0);
+    assert.equal(replay.color_refresh_count, 0);
+    assert.equal(replay.lease_owner, null);
+    assert.equal(replay.last_error, null);
+  });
+}
+
+test("repeated Save preserves queued and ready replays without resetting their schedule or data", async (t) => {
+  const ctx = await createContext(t);
+  assert.equal((await ctx.saveRawGames([importedGame])).ok, true);
+  const queued = await ctx.get("SELECT * FROM game_replays WHERE game_id = 'imported-game'");
+  assert.equal((await ctx.saveRawGames([importedGame])).ok, true);
+  assert.deepEqual(await ctx.get("SELECT * FROM game_replays WHERE game_id = 'imported-game'"), queued);
+  await ctx.run(`UPDATE game_replays SET status = 'ready', events_json = '[{"type":"playTile"}]',
+    queue_class = 'historical', retry_reason = NULL, next_attempt_at = NULL WHERE game_id = 'imported-game'`);
+  const ready = await ctx.get("SELECT * FROM game_replays WHERE game_id = 'imported-game'");
+  assert.equal((await ctx.saveRawGames([importedGame])).ok, true);
+  assert.deepEqual(await ctx.get("SELECT * FROM game_replays WHERE game_id = 'imported-game'"), ready);
+  assert.equal((await ctx.get("SELECT COUNT(*) AS count FROM game_replays")).count, 1);
+});
+
+test("editing an existing game does not queue a replay", async (t) => {
+  const ctx = await createContext(t);
+  assert.equal((await ctx.saveGames(captain)).ok, true);
+  assert.equal((await ctx.get("SELECT COUNT(*) AS count FROM game_replays")).count, 0);
+});
+
+test("new No show games do not queue replays even if a Table ID is supplied", async (t) => {
+  const ctx = await createContext(t);
+  for (const tableId of [null, "1234567890"]) {
+    const result = await ctx.saveRawGames([{ ...importedGame, id: `no-show-${tableId}`, bga_table_id: tableId, status: "No show" }]);
+    assert.equal(result.ok, true, result.message);
+    assert.equal((await ctx.get("SELECT COUNT(*) AS count FROM game_replays")).count, 0);
+  }
+});
+
+test("failed result aggregation rolls back the new game and its queued replay", async (t) => {
+  const ctx = await createContext(t);
+  await ctx.run("CREATE TRIGGER fail_duel_update BEFORE UPDATE ON duels BEGIN SELECT RAISE(ABORT, 'duel unavailable'); END");
+  assert.equal((await ctx.saveRawGames([importedGame])).status, 500);
+  assert.equal(await ctx.get("SELECT * FROM games WHERE id = 'imported-game'"), null);
+  assert.equal(await ctx.get("SELECT * FROM game_replays WHERE game_id = 'imported-game'"), null);
+  assert.equal((await ctx.get("SELECT deleted_at FROM games WHERE id = 'game'")).deleted_at, null);
+});
+
+test("replay queue failure rolls back the game save", async (t) => {
+  const ctx = await createContext(t);
+  await ctx.run("CREATE TRIGGER fail_replay_insert BEFORE INSERT ON game_replays BEGIN SELECT RAISE(ABORT, 'queue unavailable'); END");
+  assert.equal((await ctx.saveRawGames([importedGame])).status, 500);
+  assert.equal(await ctx.get("SELECT * FROM games WHERE id = 'imported-game'"), null);
+  assert.equal((await ctx.get("SELECT deleted_at FROM games WHERE id = 'game'")).deleted_at, null);
 });
