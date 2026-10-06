@@ -59,6 +59,7 @@ import {
   shouldCloseChallengeRequestsForPlayerStatus,
 } from "./challenges.js";
 import { ensureTournamentCasesSchema } from "./tournament-cases.js";
+import { registerDuelGameBgaResultRoutes } from "./duel-game-bga-result.js";
 import { ensureInPersonSchema } from "./in-person/schema.js";
 import { createRequireInPersonTournamentAdmin } from "./in-person/access.js";
 import { registerInPersonRoutes } from "./in-person/routes.js";
@@ -8464,6 +8465,23 @@ registerBgaReplayAdminRoutes(app, {
   getAuditActor,
   logAuditEvent,
   retryReplayError: retryBgaReplayError,
+});
+
+registerDuelGameBgaResultRoutes(app, {
+  dbGetAsync,
+  loadTournamentAccessForUser,
+  canUserEditMatchResults,
+  isCompletedMatchStatus,
+  async fetchBgaGameResult(tableId, player1Id, player2Id) {
+    const authServerRoot = path.resolve(__dirname, "..");
+    const { stdout } = await execFileAsync(
+      String(process.env.PYTHON_BIN || "python3").trim() || "python3",
+      [path.join(authServerRoot, "get_bga_game_result.py"), "--table-id", String(tableId),
+        "--player-1-id", String(player1Id), "--player-2-id", String(player2Id)],
+      { cwd: authServerRoot, env: process.env, timeout: 120000, maxBuffer: 1024 * 1024 }
+    );
+    return JSON.parse(stdout);
+  },
 });
 
 function requireActorAuthenticated(req, res, next) {
@@ -19060,9 +19078,11 @@ app.post("/duels/:id/games/save", (req, res) => {
           if (!gameNumber) {
             return res.status(400).json({ ok: false, message: "game_number must be a positive integer" });
           }
-          const id = normalizeNullableText(item.id) || `${duelId}-${gameNumber}`;
+          const suppliedId = normalizeNullableText(item.id);
+          const id = suppliedId || `${duelId}-${gameNumber}`;
           const bgaTableId = normalizeNullableText(item.bga_table_id);
-          const existingGame = existingGamesById.get(id) || existingGamesByNumber.get(gameNumber) || null;
+          const existingGame = existingGamesById.get(id)
+            || (!suppliedId ? existingGamesByNumber.get(gameNumber) : null) || null;
           const shouldLockExistingScores = !isAdmin && !isChallengeDuel && !!existingGame;
           const player1Score = shouldLockExistingScores
             ? normalizeIntegerOrNull(existingGame.player_1_score)
@@ -19083,8 +19103,8 @@ app.post("/duels/:id/games/save", (req, res) => {
             if (!bgaTableId) {
               return res.status(400).json({ ok: false, message: "Table ID is required." });
             }
-            if (!/^\d{9}$/.test(String(bgaTableId))) {
-              return res.status(400).json({ ok: false, message: "Table ID must be exactly 9 digits." });
+            if (!/^\d{9,10}$/.test(String(bgaTableId))) {
+              return res.status(400).json({ ok: false, message: "Table ID must contain 9 or 10 digits." });
             }
           }
 
@@ -19171,6 +19191,10 @@ app.post("/duels/:id/games/save", (req, res) => {
             .filter((id) => id && !incomingGameIds.has(id));
 
           if (gameIdsToSoftDelete.length) {
+            await dbRunAsync(
+              `DELETE FROM game_replays WHERE game_id IN (${gameIdsToSoftDelete.map(() => "?").join(", ")})`,
+              gameIdsToSoftDelete
+            );
             await dbRunAsync(
               `
                 UPDATE games

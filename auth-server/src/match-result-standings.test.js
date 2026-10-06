@@ -43,6 +43,7 @@ async function createContext(t) {
   const schema = (name) => source.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${name} \\([\\s\\S]*?\\n    \\)`))[0];
   await run(source.match(/CREATE TABLE matches \([\s\S]*?\n        \);/)[0]);
   for (const name of ["duels", "games", "standings"]) await run(schema(name));
+  await run("CREATE TABLE game_replays (game_id TEXT PRIMARY KEY, bga_table_id TEXT, status TEXT)");
   await run(`CREATE TABLE tournaments (
     id TEXT PRIMARY KEY, standings_scoring TEXT DEFAULT 'standard',
     tpr_target_games INTEGER, tpr_smoothing REAL, tpr_benchmark_percentile REAL
@@ -109,6 +110,7 @@ async function createContext(t) {
       games: [{ id: "game", game_number: 1, bga_table_id: "123456789", player_1_score: 100, player_2_score: 90,
         player_1_rank: ranks[0], player_2_rank: ranks[1] }],
     }, "duel"),
+    saveRawGames: (games) => request("/duels/:id/games/save", captain, { games }, "duel"),
     updateMatch: (payload) => request("/matches/:id", tournamentAdmin, {
       id: "20261005UAFR", team_1: "UA", team_2: "FR", time_utc: "2026-10-05T12:00:00.000Z", lineup_type: "Open",
       number_of_duels: 1, status: "Done", stage: "Stage 1", ...payload,
@@ -209,4 +211,46 @@ test("failed standings recalculation rolls back saved games, duel and match resu
   assert.equal((await ctx.get("SELECT dw1 FROM duels WHERE id = 'duel'")).dw1, 1);
   assert.equal((await ctx.get("SELECT dw1 FROM matches WHERE id = '20261005UAFR'")).dw1, 1);
   assert.deepEqual(await ctx.standings(), before);
+});
+
+test("deleting a saved game removes its replay and leaves other replays intact", async (t) => {
+  const ctx = await createContext(t);
+  await ctx.run("INSERT INTO game_replays VALUES ('game', '123456789', 'ready'), ('other-game', '987654321', 'pending')");
+  const result = await ctx.saveRawGames([]);
+  assert.equal(result.ok, true, result.message);
+  assert.ok((await ctx.get("SELECT deleted_at FROM games WHERE id = 'game'")).deleted_at);
+  assert.equal(await ctx.get("SELECT * FROM game_replays WHERE game_id = 'game'"), null);
+  assert.equal((await ctx.get("SELECT status FROM game_replays WHERE game_id = 'other-game'")).status, "pending");
+});
+
+test("failed save restores both a deleted game and its replay", async (t) => {
+  const ctx = await createContext(t);
+  await ctx.run("INSERT INTO game_replays VALUES ('game', '123456789', 'ready')");
+  await ctx.run("CREATE TRIGGER fail_duel_update BEFORE UPDATE ON duels BEGIN SELECT RAISE(ABORT, 'duel unavailable'); END");
+  assert.equal((await ctx.saveRawGames([])).status, 500);
+  assert.equal((await ctx.get("SELECT deleted_at FROM games WHERE id = 'game'")).deleted_at, null);
+  assert.equal((await ctx.get("SELECT status FROM game_replays WHERE game_id = 'game'")).status, "ready");
+});
+
+test("replacement game with the same number keeps its own BGA scores and accepts a 10-digit table", async (t) => {
+  const ctx = await createContext(t);
+  await ctx.run("INSERT INTO game_replays VALUES ('game', '123456789', 'ready')");
+  const result = await ctx.saveRawGames([{ id: "new-game", game_number: 1, bga_table_id: "1234567890",
+    player_1_score: 80, player_2_score: 110, player_1_rank: 0, player_2_rank: 1 }]);
+  assert.equal(result.ok, true, result.message);
+  const game = await ctx.get("SELECT * FROM games WHERE id = 'new-game'");
+  assert.equal(game.player_1_score, 80);
+  assert.equal(game.player_2_score, 110);
+  assert.equal(game.bga_table_id, "1234567890");
+  assert.equal(await ctx.get("SELECT * FROM game_replays WHERE game_id = 'game'"), null);
+});
+
+test("saving a new game rejects table IDs with letters or the wrong length", async (t) => {
+  const ctx = await createContext(t);
+  for (const tableId of ["12345678", "12345678901", "12345678a"]) {
+    const result = await ctx.saveRawGames([{ id: "new-game", game_number: 1, bga_table_id: tableId,
+      player_1_rank: 1, player_2_rank: 0 }]);
+    assert.equal(result.status, 400);
+    assert.match(result.message, /9 or 10 digits/);
+  }
 });
