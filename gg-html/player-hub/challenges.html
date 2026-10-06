@@ -2592,7 +2592,7 @@
     position: absolute;
     left: 4px;
     right: 4px;
-    z-index: 5;
+    z-index: 1;
     display: grid;
     place-items: center;
     border: 0;
@@ -2711,12 +2711,16 @@
     z-index: 4;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 2px;
-    height: 22px;
+    min-height: 22px;
     pointer-events: none;
   }
 
   .challenge-time-selected-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     flex: 0 0 auto;
     border-radius: 3px;
     background: var(--blue);
@@ -2727,6 +2731,29 @@
     line-height: 1.2;
     text-align: center;
     white-space: nowrap;
+  }
+
+  .challenge-time-selected-remove {
+    appearance: none;
+    display: inline-grid;
+    place-items: center;
+    width: 12px;
+    height: 14px;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    pointer-events: auto;
+  }
+
+  .challenge-time-selected-remove:hover,
+  .challenge-time-selected-remove:focus-visible {
+    background: rgba(255, 255, 255, 0.25);
+    outline: 1px solid #fff;
   }
 
   .challenge-time-detail-calendar {
@@ -7226,17 +7253,31 @@
       selectedSlotsByHour.forEach((selectedSlots, hour) => {
         const badgesRow = document.createElement("div");
         badgesRow.className = "challenge-time-selected-badges-row";
-        badgesRow.style.top = `${hour * overviewHourHeight}px`;
+        if (hour === 23) badgesRow.style.bottom = "0px";
+        else badgesRow.style.top = `${hour * overviewHourHeight}px`;
         selectedSlots.forEach((slot) => {
           const badge = document.createElement("span");
           badge.className = "challenge-time-selected-badge";
           badge.textContent = slot.label;
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "challenge-time-selected-remove";
+          removeBtn.textContent = "×";
+          removeBtn.setAttribute("aria-label", `Remove ${day.label}, ${slot.label}`);
+          removeBtn.title = `Remove ${slot.label}`;
+          removeBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (!selectedOptions.has(slot.id) || !toggleSlot(slot)) return;
+            renderOverview();
+          });
+          badge.appendChild(removeBtn);
           badgesRow.appendChild(badge);
         });
         layer.appendChild(badgesRow);
       });
     };
     const renderOverview = () => {
+      const scrollLeft = overview.querySelector(".challenge-availability-calendar")?.scrollLeft || 0;
       overview.innerHTML = "";
       const frame = createCalendarFrame("challenge-time-overview-calendar");
       frame.inner.style.minWidth = `${56 + Math.max(days.length, 1) * dayColumnWidth}px`;
@@ -7337,6 +7378,7 @@
       });
       frame.calendar.addEventListener("scroll", updateScrollButtons, { passive: true });
       overview.appendChild(frame.shell);
+      frame.calendar.scrollLeft = scrollLeft;
       window.requestAnimationFrame(updateScrollButtons);
     };
     const renderDetail = () => {

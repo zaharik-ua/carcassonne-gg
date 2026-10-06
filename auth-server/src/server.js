@@ -17635,6 +17635,7 @@ app.get("/streams", (req, res, next) => {
             m.id AS team_match_id,
             d.id AS duel_id,
             m.tournament_id,
+            t.logo AS tournament_logo,
             d.challenge_period_id,
             cp.name AS challenge_period_name,
             cp.logo AS challenge_period_logo,
@@ -17659,6 +17660,8 @@ app.get("/streams", (req, res, next) => {
             ON s.entity_type = 'match'
            AND m.id = s.entity_id
            AND m.deleted_at IS NULL
+          LEFT JOIN tournaments t
+            ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(m.tournament_id, '')))
           LEFT JOIN duels d
             ON s.entity_type = 'duel'
            AND d.id = s.entity_id
