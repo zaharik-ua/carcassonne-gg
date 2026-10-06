@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Event
+from unittest.mock import patch
 
 from .game_replay import (
     LOGS_PATH,
@@ -22,7 +23,7 @@ from .replay_worker import (
     replay_worker_lock,
     run_replay_worker,
 )
-from .replay_budget import replace_replay_budget_overrides
+from .replay_budget import replace_replay_budget_overrides, reserve_replay_request
 
 
 class ReplayWorkerTest(unittest.TestCase):
@@ -605,6 +606,60 @@ class ReplayWorkerTest(unittest.TestCase):
         self.assertEqual(summary["status"], "stopped")
         self.assertEqual(summary["stop_reason"], "fresh_priority")
         self.assertEqual(summary["requests"], 1)
+
+    def test_historical_modes_use_all_five_accounts_across_runs(self) -> None:
+        labels = ["account-a", "account-b", "account-c", "account-d", "account-e"]
+        tiers = [labels[:3], labels[3:4], labels[4:]]
+
+        for mode_index, mode in enumerate(("historical", "archive-follow-up")):
+            with self.subTest(mode=mode):
+                selected = []
+                for index in range(5):
+                    game_id = f"{mode}-{index}"
+                    self._add_game(game_id, str(100 + mode_index * 10 + index))
+                    self._queue(
+                        game_id,
+                        queue_class="historical",
+                        archive_requested_at=(
+                            self.now - timedelta(minutes=2)
+                            if mode == "archive-follow-up"
+                            else None
+                        ),
+                    )
+
+                def budgeted_fetch(db_path, game_id, **kwargs):
+                    reservation = reserve_replay_request(
+                        db_path,
+                        account_labels=kwargs["account_labels"],
+                        account_priority_tiers=kwargs["account_priority_tiers"],
+                        bga_table_id=game_id,
+                        request_class=kwargs["request_class"],
+                        now=self.now,
+                    )
+                    selected.append(reservation.account_label)
+                    return {
+                        "color_source": "bga",
+                        "account_label": reservation.account_label,
+                    }
+
+                with patch(
+                    "update_matches.replay_worker._resolve_account_configuration",
+                    return_value=(labels, tiers),
+                ):
+                    summaries = [
+                        run_replay_worker(
+                            self.db_path,
+                            queue_class=mode,
+                            limit=3,
+                            replay_fetcher=budgeted_fetch,
+                            now=self.now,
+                        )
+                        for _ in range(2)
+                    ]
+
+                self.assertEqual(selected, labels)
+                self.assertEqual([item["requests"] for item in summaries], [3, 2])
+                self.assertEqual(summaries[-1]["remaining"], 0)
 
     def test_fresh_priority_is_unchanged_by_active_budget_overrides(self) -> None:
         replace_replay_budget_overrides(

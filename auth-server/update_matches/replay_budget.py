@@ -199,7 +199,9 @@ def reserve_replay_request(
                 budget_by_label[label] = (usage, effective)
 
             eligible_priority_labels: set[str] | None = None
-            if priority_tiers:
+            # Historical requests share all configured accounts; standby tiers
+            # protect accounts 4 and 5 only for fresh and manual requests.
+            if priority_tiers and normalized_class != "historical":
                 eligible_priority_labels = set()
                 for tier in priority_tiers:
                     tier_has_available_account = any(

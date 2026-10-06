@@ -99,6 +99,99 @@ class ReplayBudgetTest(unittest.TestCase):
         )
         self.assertEqual(reservation.total_used_before, 0)
 
+    def test_fresh_keeps_primary_then_first_and_second_standby_order(self) -> None:
+        labels = ["account-a", "account-b", "account-c", "account-d", "account-e"]
+        tiers = [labels[:3], labels[3:4], labels[4:]]
+        limits = ReplayBudgetLimits(
+            total_limit=2,
+            fresh_reserve=1,
+            historical_limit=1,
+            max_total_limit=2,
+        )
+        selected = []
+        for index in range(10):
+            reservation = reserve_replay_request(
+                self.db_path,
+                account_labels=labels,
+                account_priority_tiers=tiers,
+                bga_table_id=f"fresh-{index}",
+                request_class="fresh",
+                limits=limits,
+                now=self.now + timedelta(seconds=index),
+            )
+            selected.append(reservation.account_label)
+
+        self.assertEqual(selected, labels[:3] * 2 + ["account-d"] * 2 + ["account-e"] * 2)
+
+    def test_historical_balances_all_five_accounts_and_preserves_fresh_reserve(self) -> None:
+        labels = ["account-a", "account-b", "account-c", "account-d", "account-e"]
+        tiers = [labels[:3], labels[3:4], labels[4:]]
+        limits = ReplayBudgetLimits(
+            total_limit=3,
+            fresh_reserve=1,
+            historical_limit=2,
+            max_total_limit=3,
+        )
+        selected = []
+        for index in range(10):
+            reservation = reserve_replay_request(
+                self.db_path,
+                account_labels=labels,
+                account_priority_tiers=tiers,
+                bga_table_id=f"historical-{index}",
+                request_class="historical",
+                limits=limits,
+                now=self.now + timedelta(seconds=index),
+            )
+            selected.append(reservation.account_label)
+
+        self.assertEqual(selected, labels * 2)
+        with self.assertRaises(ReplayBudgetUnavailableError):
+            reserve_replay_request(
+                self.db_path,
+                account_labels=labels,
+                account_priority_tiers=tiers,
+                bga_table_id="historical-blocked",
+                request_class="historical",
+                limits=limits,
+                now=self.now + timedelta(minutes=1),
+            )
+        fresh = reserve_replay_request(
+            self.db_path,
+            account_labels=labels,
+            account_priority_tiers=tiers,
+            bga_table_id="fresh-reserve",
+            request_class="fresh",
+            limits=limits,
+            now=self.now + timedelta(minutes=1),
+        )
+        self.assertEqual(fresh.account_label, "account-a")
+        self.assertEqual(fresh.total_used_before, 2)
+
+    def test_historical_skips_cooldown_without_waiting_for_standby_guards(self) -> None:
+        labels = ["account-a", "account-b", "account-c", "account-d", "account-e"]
+        for label in ("account-a", "account-d"):
+            mark_replay_account_cooldown(
+                self.db_path,
+                account_label=label,
+                error="limit (replay)",
+                now=self.now,
+            )
+
+        selected = []
+        for index in range(3):
+            reservation = reserve_replay_request(
+                self.db_path,
+                account_labels=labels,
+                account_priority_tiers=[labels[:3], labels[3:4], labels[4:]],
+                bga_table_id=f"historical-cooldown-{index}",
+                request_class="historical",
+                now=self.now + timedelta(seconds=index + 1),
+            )
+            selected.append(reservation.account_label)
+
+        self.assertEqual(selected, ["account-b", "account-c", "account-e"])
+
     def test_historical_requests_cannot_consume_the_fresh_reserve(self) -> None:
         limits = ReplayBudgetLimits(
             total_limit=8,
