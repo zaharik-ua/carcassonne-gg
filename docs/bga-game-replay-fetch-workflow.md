@@ -425,11 +425,19 @@ Admin API:
 
 ```text
 GET    /admin/bga-replay-budget
+POST   /admin/bga-replay-budget/enqueue
 POST   /admin/bga-replay-budget/overrides
 DELETE /admin/bga-replay-budget/overrides/{id}
 ```
 
 Refresh сторінки не виконує BGA-запитів.
+
+Форма `Add replay by table ID` приймає BGA table ID наявної, не видаленої
+гри. `POST /admin/bga-replay-budget/enqueue` з `{ "bga_table_id": "1234567890" }`
+створює відсутній `game_replays` зі `status = 'pending'`,
+`retry_reason = 'initial'`, `queue_class = 'fresh'` і `next_attempt_at = now`.
+Чергу обробляє звичайний fresh worker. Відсутня гра повертає `404`, а вже
+наявний реплей — `409`; повторне додавання зберігає наявний реплей.
 
 ## 11. systemd
 

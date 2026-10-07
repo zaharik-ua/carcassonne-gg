@@ -706,6 +706,100 @@ export function registerBgaReplayAdminRoutes(app, {
     }
   });
 
+  app.post("/admin/bga-replay-budget/enqueue", requireAdmin, async (req, res) => {
+    const value = req.body?.bga_table_id;
+    const tableId = typeof value === "string" || typeof value === "number"
+      ? String(value).trim()
+      : "";
+    if (!/^[1-9]\d*$/.test(tableId)
+      || (typeof value === "number" && !Number.isSafeInteger(value))) {
+      return res.status(400).json({
+        ok: false,
+        message: "BGA table ID must be a positive integer",
+      });
+    }
+
+    try {
+      await ensureGameReplaysSchema(db);
+      const game = await dbGet(
+        db,
+        `
+          SELECT id FROM games
+          WHERE bga_table_id = ?
+            AND trim(COALESCE(deleted_at, '')) = ''
+          LIMIT 1
+        `,
+        [tableId]
+      );
+      if (!game) {
+        return res.status(404).json({
+          ok: false,
+          message: `Game with BGA table ID ${tableId} not found`,
+        });
+      }
+
+      const queuedAt = sqliteTimestamp(now());
+      // The conditional insert and unique indexes preserve existing replays,
+      // including when concurrent requests enqueue the same table.
+      const inserted = await dbRun(
+        db,
+        `
+          INSERT INTO game_replays (
+            game_id, bga_table_id, status, retry_reason, queue_class,
+            queued_at, next_attempt_at, created_at, updated_at
+          )
+          SELECT id, bga_table_id, 'pending', 'initial', 'fresh', ?, ?, ?, ?
+          FROM games
+          WHERE id = ? AND bga_table_id = ?
+            AND trim(COALESCE(deleted_at, '')) = ''
+          ON CONFLICT DO NOTHING
+        `,
+        [queuedAt, queuedAt, queuedAt, queuedAt, game.id, tableId]
+      );
+      if (!inserted.changes) {
+        const existingReplay = await dbGet(
+          db,
+          "SELECT status FROM game_replays WHERE game_id = ? OR bga_table_id = ? LIMIT 1",
+          [game.id, tableId]
+        );
+        return res.status(existingReplay ? 409 : 404).json({
+          ok: false,
+          message: existingReplay
+            ? `Replay for BGA table ID ${tableId} already exists (status: ${existingReplay.status})`
+            : `Game with BGA table ID ${tableId} not found`,
+        });
+      }
+
+      auditEvent(logAuditEvent, {
+        ...getAuditActor(req.user),
+        event_type: "bga_replay.enqueued",
+        entity_type: "game_replay",
+        action: "create",
+        record_id: game.id,
+        changes: {
+          status: { old: null, new: "pending" },
+          queue_class: { old: null, new: "fresh" },
+        },
+        metadata: { bga_table_id: tableId },
+      });
+      const state = await loadReplayBudgetAdminState({ db, env, now: now() });
+      return res.status(201).json({
+        ok: true,
+        ...state,
+        enqueued_replay: {
+          game_id: game.id,
+          bga_table_id: tableId,
+          status: "pending",
+          queue_class: "fresh",
+          next_attempt_at: queuedAt,
+        },
+      });
+    } catch (error) {
+      logger.error?.("Failed to enqueue BGA replay", error);
+      return res.status(500).json({ ok: false, message: "Failed to enqueue BGA replay" });
+    }
+  });
+
   app.post("/admin/bga-replay-budget/overrides", requireAdmin, async (req, res) => {
     let state;
     let input;

@@ -61,6 +61,161 @@ async function createDatabase(t) {
   return db;
 }
 
+function createEnqueueRequest(db, options = {}) {
+  let handler;
+  const app = { get() {}, delete() {} };
+  app.post = (routePath, ...handlers) => {
+    if (routePath === "/admin/bga-replay-budget/enqueue") handler = handlers[1];
+  };
+  registerBgaReplayAdminRoutes(app, {
+    db,
+    requireAdmin: () => {},
+    env: ENV,
+    now: () => new Date("2026-09-24T12:00:00Z"),
+    logger: { error() {} },
+    ...options,
+  });
+  assert.ok(handler);
+  return async (tableId) => {
+    let status = 200;
+    let body;
+    const response = {
+      status(value) { status = value; return this; },
+      json(value) { body = value; return value; },
+    };
+    await handler({ body: { bga_table_id: tableId }, user: {} }, response);
+    return { status, body };
+  };
+}
+
+test("creates a missing replay by table ID as due fresh work without making BGA requests", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, "INSERT INTO games VALUES ('existing-game', '1234567890', NULL)");
+  const auditEvents = [];
+  const enqueue = createEnqueueRequest(db, {
+    getAuditActor: () => ({ actor_user_id: 7 }),
+    logAuditEvent: (entry) => auditEvents.push(entry),
+    retryReplayError: () => assert.fail("enqueue must not fetch a replay"),
+  });
+  const response = await enqueue(" 1234567890 ");
+  assert.equal(response.status, 201);
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.queue.fresh.due, 1);
+  assert.equal(response.body.queue.fresh.scheduled, 0);
+  assert.equal(response.body.queue.historical.due, 0);
+  assert.deepEqual(response.body.enqueued_replay, {
+    game_id: "existing-game",
+    bga_table_id: "1234567890",
+    status: "pending",
+    queue_class: "fresh",
+    next_attempt_at: "2026-09-24 12:00:00.000",
+  });
+  const [row] = await all(db, "SELECT * FROM game_replays");
+  assert.equal(row.retry_reason, "initial");
+  assert.equal(row.queued_at, "2026-09-24 12:00:00.000");
+  assert.equal(row.next_attempt_at, row.queued_at);
+  assert.equal(row.history_request_count, 0);
+  assert.equal(row.color_refresh_count, 0);
+  assert.equal(row.lease_owner, null);
+  assert.equal(row.last_error, null);
+  assert.deepEqual(await all(db, "SELECT * FROM bga_replay_requests"), []);
+  assert.equal(auditEvents.length, 1);
+  assert.equal(auditEvents[0].actor_user_id, 7);
+  assert.equal(auditEvents[0].event_type, "bga_replay.enqueued");
+  assert.equal(auditEvents[0].record_id, "existing-game");
+  assert.equal(auditEvents[0].metadata.bga_table_id, "1234567890");
+});
+
+test("rejects invalid table IDs, missing games and deleted games without enqueueing", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, "INSERT INTO games VALUES ('deleted-game', '1234567890', '2026-09-23')");
+  const enqueue = createEnqueueRequest(db);
+  for (const value of [undefined, null, true, false, "", " ", "0", "-1", "1.5",
+    "1e9", "123abc", [1234567890], {}, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    const response = await enqueue(value);
+    assert.equal(response.status, 400, `invalid table ID: ${String(value)}`);
+    assert.equal(response.body.ok, false);
+  }
+  for (const value of ["1234567890", 987654321]) {
+    const response = await enqueue(value);
+    assert.equal(response.status, 404);
+    assert.match(response.body.message, /Game .* not found/);
+  }
+  assert.deepEqual(await all(db, "SELECT * FROM game_replays"), []);
+});
+
+test("preserves existing replays in every status and prevents game or table ID conflicts", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, `
+    INSERT INTO games VALUES
+      ('pending-game', '1234567801', NULL),
+      ('ready-game', '1234567802', NULL),
+      ('error-game', '1234567803', NULL),
+      ('fetching-game', '1234567804', NULL),
+      ('changed-table-game', '1234567805', NULL),
+      ('table-conflict-game', '1234567806', NULL);
+    INSERT INTO game_replays (
+      game_id, bga_table_id, status, queue_class, events_json,
+      next_attempt_at, retry_reason, lease_owner, lease_until, last_error
+    ) VALUES
+      ('pending-game', '1234567801', 'pending', 'historical', NULL,
+        '2099-01-01', 'initial', NULL, NULL, NULL),
+      ('ready-game', '1234567802', 'ready', 'fresh', '[{"type":"playTile"}]',
+        NULL, NULL, NULL, NULL, NULL),
+      ('error-game', '1234567803', 'error', 'fresh', NULL,
+        NULL, NULL, NULL, NULL, 'manual required'),
+      ('fetching-game', '1234567804', 'fetching', 'fresh', NULL,
+        '2099-01-01', 'initial', 'worker', '2099-01-01', NULL),
+      ('changed-table-game', '1234567899', 'pending', 'fresh', NULL,
+        '2099-01-01', 'initial', NULL, NULL, NULL),
+      ('other-game', '1234567806', 'pending', 'fresh', NULL,
+        '2099-01-01', 'initial', NULL, NULL, NULL);
+  `);
+  // Settle the existing schema's color-source inference before taking a snapshot.
+  await ensureGameReplaysSchema(db);
+  const before = await all(db, "SELECT * FROM game_replays ORDER BY game_id");
+  const enqueue = createEnqueueRequest(db);
+  for (const tableId of ["1234567801", "1234567802", "1234567803", "1234567804",
+    "1234567805", "1234567806"]) {
+    const response = await enqueue(tableId);
+    assert.equal(response.status, 409);
+    assert.match(response.body.message, /Replay .* already exists/);
+  }
+  assert.deepEqual(await all(db, "SELECT * FROM game_replays ORDER BY game_id"), before);
+});
+
+test("concurrent requests create a single fresh replay", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, "INSERT INTO games VALUES ('concurrent-game', '1234567890', NULL)");
+  const auditEvents = [];
+  const enqueue = createEnqueueRequest(db, {
+    logAuditEvent: (entry) => auditEvents.push(entry),
+  });
+  const responses = await Promise.all([enqueue("1234567890"), enqueue(1234567890)]);
+  assert.deepEqual(responses.map((response) => response.status).sort(), [201, 409]);
+  const rows = await all(db, "SELECT game_id, status, queue_class FROM game_replays");
+  assert.deepEqual(rows, [{ game_id: "concurrent-game", status: "pending", queue_class: "fresh" }]);
+  assert.equal(auditEvents.length, 1);
+});
+
+test("reports an enqueue database failure without creating a replay or an audit event", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, `
+    INSERT INTO games VALUES ('existing-game', '1234567890', NULL);
+    CREATE TRIGGER fail_replay_insert BEFORE INSERT ON game_replays
+    BEGIN SELECT RAISE(ABORT, 'queue unavailable'); END;
+  `);
+  const auditEvents = [];
+  const enqueue = createEnqueueRequest(db, {
+    logAuditEvent: (entry) => auditEvents.push(entry),
+  });
+  const response = await enqueue("1234567890");
+  assert.equal(response.status, 500);
+  assert.equal(response.body.ok, false);
+  assert.deepEqual(await all(db, "SELECT * FROM game_replays"), []);
+  assert.deepEqual(auditEvents, []);
+});
+
 test("uses the same masked labels and configurable limits as the replay gateway", () => {
   assert.deepEqual(getConfiguredReplayAccountLabels(ENV), [
     "primary:pr***@example.com",
@@ -708,6 +863,7 @@ test("registers global-admin routes and exposes the BGA Replay Queue in admin.ht
     routes.map((route) => [route.method, route.path]),
     [
       ["get", "/admin/bga-replay-budget"],
+      ["post", "/admin/bga-replay-budget/enqueue"],
       ["post", "/admin/bga-replay-budget/overrides"],
       ["post", "/admin/bga-replay-budget/errors/:gameId/retry"],
       ["post", "/admin/bga-replay-budget/fallback/enqueue-all"],
@@ -719,6 +875,10 @@ test("registers global-admin routes and exposes the BGA Replay Queue in admin.ht
 
   const adminHtml = readFileSync(new URL("../../gg-html/admin.html", import.meta.url), "utf8");
   assert.match(adminHtml, /title: "BGA Replay Queue"/);
+  assert.match(adminHtml, /Add replay by table ID/);
+  assert.match(adminHtml, /Add to fresh queue/);
+  assert.match(adminHtml, /\$\{BGA_REPLAY_BUDGET_URL\}\/enqueue/);
+  assert.match(adminHtml, /bga_table_id: tableId/);
   assert.match(adminHtml, /historical_available_now/);
   assert.match(adminHtml, /protected_non_historical_available_now/);
   assert.match(adminHtml, /cooldown or 0 available/);

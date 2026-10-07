@@ -818,6 +818,22 @@
     font-size: 11px;
   }
 
+  .replay-enqueue-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .replay-enqueue-form .cp-edit-row {
+    flex: 1 1 200px;
+    max-width: 320px;
+  }
+
+  .replay-enqueue-form .cp-btn {
+    min-height: 32px;
+  }
+
   .replay-summary-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -7475,6 +7491,36 @@
     setStatus("Replay queue refreshed.", false);
   }
 
+  async function enqueueBgaReplayByTableId(input, button) {
+    if (button.disabled) return;
+    const tableId = input.value.trim();
+    if (!/^[1-9]\d*$/.test(tableId)) {
+      setStatus("Enter a valid BGA table ID (a positive integer).", true);
+      input.focus();
+      return;
+    }
+
+    button.disabled = true;
+    input.disabled = true;
+    button.textContent = "Adding...";
+    try {
+      setStatus(`Adding replay for BGA table ${tableId}...`, false);
+      const response = await apiJson(`${BGA_REPLAY_BUDGET_URL}/enqueue`, {
+        method: "POST",
+        body: JSON.stringify({ bga_table_id: tableId }),
+      });
+      state.bgaReplayQueue = [response];
+      renderBgaReplayQueue();
+      setStatus(`Replay for BGA table ${tableId} created and added to the fresh queue.`, false);
+    } catch (error) {
+      setStatus(error?.message || "Failed to add replay to the fresh queue.", true);
+    } finally {
+      button.disabled = false;
+      input.disabled = false;
+      button.textContent = "Add to fresh queue";
+    }
+  }
+
   async function revokeReplayBudgetOverride(override) {
     const label = String(override?.account_label || "this account");
     if (!window.confirm(`Revoke override #${override.id} for ${label}?`)) return;
@@ -7625,6 +7671,36 @@
     });
     toolbar.appendChild(refreshButton);
     dashboard.appendChild(toolbar);
+
+    const enqueuePanel = replayElement("section", "replay-panel");
+    enqueuePanel.appendChild(replayElement("h3", "", "Add replay by table ID"));
+    const enqueueForm = replayElement("form", "replay-enqueue-form");
+    const tableIdField = replayOverrideInputRow("BGA table ID", "text", "");
+    tableIdField.input.id = "replayEnqueueTableId";
+    tableIdField.row.querySelector("label").htmlFor = tableIdField.input.id;
+    tableIdField.input.name = "bga_table_id";
+    tableIdField.input.inputMode = "numeric";
+    tableIdField.input.pattern = "[1-9][0-9]*";
+    tableIdField.input.required = true;
+    tableIdField.input.placeholder = "e.g. 1234567890";
+    tableIdField.input.setAttribute("aria-describedby", "replayEnqueueHint");
+    enqueueForm.appendChild(tableIdField.row);
+    const enqueueButton = replayElement("button", "cp-btn cp-btn-primary", "Add to fresh queue");
+    enqueueButton.type = "submit";
+    enqueueForm.appendChild(enqueueButton);
+    enqueueForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      enqueueBgaReplayByTableId(tableIdField.input, enqueueButton);
+    });
+    enqueuePanel.appendChild(enqueueForm);
+    const enqueueHint = replayElement(
+      "span",
+      "replay-muted",
+      "Enter the BGA table ID of an existing game. A missing replay will be created and queued for processing."
+    );
+    enqueueHint.id = "replayEnqueueHint";
+    enqueuePanel.appendChild(enqueueHint);
+    dashboard.appendChild(enqueuePanel);
 
     const queue = data.queue || {};
     const fresh = queue.fresh || {};
