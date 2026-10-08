@@ -876,7 +876,7 @@ test("registers global-admin routes and exposes the BGA Replay Queue in admin.ht
   const adminHtml = readFileSync(new URL("../../gg-html/admin.html", import.meta.url), "utf8");
   assert.match(adminHtml, /title: "BGA Replay Queue"/);
   assert.match(adminHtml, /Add replay by table ID/);
-  assert.match(adminHtml, /Add to fresh queue/);
+  assert.match(adminHtml, /"Add replay"/);
   assert.match(adminHtml, /\$\{BGA_REPLAY_BUDGET_URL\}\/enqueue/);
   assert.match(adminHtml, /bga_table_id: tableId/);
   assert.match(adminHtml, /historical_available_now/);

@@ -18,21 +18,28 @@ from .manual_replay_queue import populate_replay_queue
 from .replay_worker import ReplayWorkerAlreadyRunningError
 
 
-TOURNAMENT_ID = "ETCOC-2026"
+TOURNAMENT_IDS = (
+    "Asian-Cup-2026",
+    "Copa-America-2026",
+    "WTCOC-2026",
+)
 
 
 def _default_db_path() -> Path:
     return Path(__file__).resolve().parents[1] / "data" / "auth.sqlite"
 
 
-def _load_tournament_games(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def _load_team_tournament_games(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    placeholders = ", ".join("?" for _ in TOURNAMENT_IDS)
     return conn.execute(
-        """
+        f"""
         SELECT
           g.id AS game_id,
           g.duel_id,
           g.bga_table_id,
           g.game_number,
+          m.id AS match_id,
+          m.tournament_id,
           gr.game_id AS replay_game_id,
           gr.status AS replay_status,
           gr.events_json,
@@ -41,24 +48,29 @@ def _load_tournament_games(conn: sqlite3.Connection) -> list[sqlite3.Row]:
           gr.queue_class,
           gr.retry_reason,
           gr.next_attempt_at
-        FROM games g
+        FROM matches m
         JOIN duels d
-          ON trim(COALESCE(d.id, '')) = trim(COALESCE(g.duel_id, ''))
+          ON trim(COALESCE(d.match_id, '')) = trim(COALESCE(m.id, ''))
+        JOIN games g
+          ON trim(COALESCE(g.duel_id, '')) = trim(COALESCE(d.id, ''))
         LEFT JOIN game_replays gr ON gr.game_id = g.id
-        WHERE upper(trim(COALESCE(d.tournament_id, ''))) = upper(trim(?))
+        WHERE upper(trim(COALESCE(m.tournament_id, ''))) IN ({placeholders})
+          AND trim(COALESCE(m.deleted_at, '')) = ''
           AND trim(COALESCE(d.deleted_at, '')) = ''
           AND trim(COALESCE(g.deleted_at, '')) = ''
           AND trim(COALESCE(g.id, '')) <> ''
         ORDER BY
+          m.tournament_id COLLATE NOCASE ASC,
+          m.id COLLATE NOCASE ASC,
           d.id COLLATE NOCASE ASC,
           COALESCE(g.game_number, 999999) ASC,
           g.id COLLATE NOCASE ASC
         """,
-        (TOURNAMENT_ID,),
+        tuple(tournament_id.upper() for tournament_id in TOURNAMENT_IDS),
     ).fetchall()
 
 
-def populate_etcoc_2026_replay_queue(
+def populate_2026_team_tournaments_replay_queue(
     db_path: str | Path,
     *,
     apply: bool = False,
@@ -67,10 +79,13 @@ def populate_etcoc_2026_replay_queue(
 ) -> dict[str, Any]:
     return populate_replay_queue(
         db_path,
-        load_games=_load_tournament_games,
-        required_columns={"duels": {"tournament_id"}},
-        summary_fields={"tournament_id": TOURNAMENT_ID},
-        batch_prefix=f"{TOURNAMENT_ID}-replay-queue",
+        load_games=_load_team_tournament_games,
+        required_columns={
+            "matches": {"id", "tournament_id", "deleted_at"},
+            "duels": {"match_id"},
+        },
+        summary_fields={"tournament_ids": list(TOURNAMENT_IDS)},
+        batch_prefix="team-tournaments-2026-replay-queue",
         apply=apply,
         batch_id=batch_id,
         now=now,
@@ -80,8 +95,9 @@ def populate_etcoc_2026_replay_queue(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            f"Populate the historical BGA replay queue for {TOURNAMENT_ID}. "
-            "Dry-run is the default; pass --apply to write changes."
+            "Populate the historical BGA replay queue for every active match "
+            "in Asian-Cup-2026, Copa-America-2026, and WTCOC-2026. Dry-run is "
+            "the default; pass --apply to write changes."
         )
     )
     parser.add_argument(
@@ -109,7 +125,7 @@ def main() -> int:
     load_dotenv()
     args = parse_args()
     try:
-        summary = populate_etcoc_2026_replay_queue(
+        summary = populate_2026_team_tournaments_replay_queue(
             args.db_path,
             apply=args.apply,
             batch_id=args.batch_id,

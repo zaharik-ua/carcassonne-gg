@@ -201,6 +201,22 @@ Only games linked to matching, non-deleted duels are selected. Deleted games,
 other duel sources/statuses, complete replays, and already active historical
 jobs are left unchanged.
 
+To populate the queue for every active match in `Asian-Cup-2026`,
+`Copa-America-2026`, and `WTCOC-2026`:
+
+```bash
+# Preview only
+./.venv/bin/python enqueue_2026_team_tournament_game_replays.py
+
+# Apply
+./.venv/bin/python enqueue_2026_team_tournament_game_replays.py \
+  --apply \
+  --batch-id team-tournaments-2026-initial
+```
+
+The selection follows `matches.tournament_id` through duels to games. Deleted
+matches, duels, and games are excluded. The command does not contact BGA.
+
 ### One-off existing replay backfill
 
 After deploying the replay queue schema, preview the one-off cleanup/backfill:

@@ -70,7 +70,7 @@ def populate_done_challenge_replay_queue(
     return populate_replay_queue(
         db_path,
         load_games=_load_done_challenge_games,
-        required_duel_columns={"source_type", "status"},
+        required_columns={"duels": {"source_type", "status"}},
         summary_fields={
             "duel_source_type": DUEL_SOURCE_TYPE,
             "duel_status": DUEL_STATUS,

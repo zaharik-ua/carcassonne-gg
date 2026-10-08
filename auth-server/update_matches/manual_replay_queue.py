@@ -44,7 +44,7 @@ def populate_replay_queue(
     db_path: str | Path,
     *,
     load_games: GameLoader,
-    required_duel_columns: set[str],
+    required_columns: Mapping[str, set[str]],
     summary_fields: Mapping[str, Any],
     batch_prefix: str,
     apply: bool = False,
@@ -90,7 +90,7 @@ def populate_replay_queue(
             if apply:
                 ensure_game_replays_schema(conn)
                 conn.commit()
-            _validate_schema(conn, required_duel_columns=required_duel_columns)
+            _validate_schema(conn, additional_required_columns=required_columns)
             games = load_games(conn)
 
         summary["games_found"] = len(games)
@@ -223,13 +223,14 @@ def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
 def _validate_schema(
     conn: sqlite3.Connection,
     *,
-    required_duel_columns: set[str],
+    additional_required_columns: Mapping[str, set[str]],
 ) -> None:
     required_columns = {
         table_name: set(columns)
         for table_name, columns in BASE_REQUIRED_COLUMNS.items()
     }
-    required_columns["duels"].update(required_duel_columns)
+    for table_name, columns in additional_required_columns.items():
+        required_columns.setdefault(table_name, set()).update(columns)
     tables = {
         str(row[0]).strip()
         for row in conn.execute(

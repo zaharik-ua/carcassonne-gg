@@ -7669,10 +7669,18 @@
         setStatus(error?.message || "Failed to refresh replay queue.", true);
       });
     });
-    toolbar.appendChild(refreshButton);
+    const toolbarActions = replayElement("div", "admin-section-actions");
+    toolbarActions.appendChild(refreshButton);
+    const toggleEnqueueButton = replayElement("button", "cp-btn cp-btn-primary", "Add replay");
+    toggleEnqueueButton.type = "button";
+    toggleEnqueueButton.setAttribute("aria-expanded", "false");
+    toggleEnqueueButton.setAttribute("aria-controls", "replayEnqueuePanel");
+    toolbarActions.appendChild(toggleEnqueueButton);
+    toolbar.appendChild(toolbarActions);
     dashboard.appendChild(toolbar);
 
-    const enqueuePanel = replayElement("section", "replay-panel");
+    const enqueuePanel = replayElement("section", "replay-panel hidden");
+    enqueuePanel.id = "replayEnqueuePanel";
     enqueuePanel.appendChild(replayElement("h3", "", "Add replay by table ID"));
     const enqueueForm = replayElement("form", "replay-enqueue-form");
     const tableIdField = replayOverrideInputRow("BGA table ID", "text", "");
@@ -7701,6 +7709,11 @@
     enqueueHint.id = "replayEnqueueHint";
     enqueuePanel.appendChild(enqueueHint);
     dashboard.appendChild(enqueuePanel);
+    toggleEnqueueButton.addEventListener("click", () => {
+      const isHidden = enqueuePanel.classList.toggle("hidden");
+      toggleEnqueueButton.setAttribute("aria-expanded", String(!isHidden));
+      if (!isHidden) tableIdField.input.focus();
+    });
 
     const queue = data.queue || {};
     const fresh = queue.fresh || {};

@@ -1060,7 +1060,8 @@
     border-radius: 2px;
   }
   
-  .match-box a {
+  .match-box a,
+  .match-box .match-player-placeholder {
     color: #333333;
     text-decoration: none;
     white-space: nowrap;
@@ -1069,6 +1070,11 @@
   }
   .match-box a:hover {
     color: #0277BD;
+  }
+  .match-box .match-player-placeholder {
+    font-size: 13px;
+    font-style: italic;
+    color: #777;
   }
 
   .match-row-winner {
@@ -3882,7 +3888,7 @@
 
           // додаємо плейофф матчі з гравцями
           opponent1Div.className = m.score1 > m.score2 ? "match-row-winner" : "match-row-loser";
-          // Player 1: logo + link
+          // Player 1: logo + name
           let player1Logo = null;
           const player1Avatar = players.find(pl => pl.player_id === m.player1_id)?.avatar;
           if (player1Avatar) {
@@ -3890,22 +3896,23 @@
             player1Logo.src = player1Avatar;
             player1Logo.className = "player-logo";
           }
-          const player1Link = document.createElement("a");
-          if (m.player1_id) {
-            player1Link.href = `https://boardgamearena.com/player?id=${m.player1_id}`;
-            player1Link.target = "_blank";
-          } else {
-            player1Link.removeAttribute("href");
+          const player1IsPlaceholder = String(m.player1_id || "").trim().toUpperCase() === "NO ID";
+          const player1Name = document.createElement(player1IsPlaceholder ? "span" : "a");
+          if (player1IsPlaceholder) {
+            player1Name.className = "match-player-placeholder";
+          } else if (m.player1_id) {
+            player1Name.href = `https://boardgamearena.com/player?id=${m.player1_id}`;
+            player1Name.target = "_blank";
           }
-          player1Link.textContent = m.player1;
+          player1Name.textContent = m.player1;
           // Add maxWidth and display for truncation
-          player1Link.style.maxWidth = `${MATCH_WIDTH - 60}px`;
-          player1Link.style.display = "inline-block";
+          player1Name.style.maxWidth = `${MATCH_WIDTH - 60}px`;
+          player1Name.style.display = "inline-block";
           const player1Info = document.createElement("div");
           player1Info.style.display = "flex";
           player1Info.style.alignItems = "center";
           if (player1Logo) player1Info.appendChild(player1Logo);
-          player1Info.appendChild(player1Link);
+          player1Info.appendChild(player1Name);
           const score1Span = document.createElement("span");
           score1Span.textContent = m.score1;
           opponent1Div.appendChild(player1Info);
@@ -3914,7 +3921,7 @@
           opponent1Div.setAttribute("data-opponent-name", m.player1);
           
           opponent2Div.className = m.score1 < m.score2 ? "match-row-winner" : "match-row-loser";
-          // Player 2: logo + link
+          // Player 2: logo + name
           let player2Logo = null;
           const player2Avatar = players.find(pl => pl.player_id === m.player2_id)?.avatar;
           if (player2Avatar) {
@@ -3922,22 +3929,23 @@
             player2Logo.src = player2Avatar;
             player2Logo.className = "player-logo";
           }
-          const player2Link = document.createElement("a");
-          if (m.player2_id) {
-            player2Link.href = `https://boardgamearena.com/player?id=${m.player2_id}`;
-            player2Link.target = "_blank";
-          } else {
-            player2Link.removeAttribute("href");
+          const player2IsPlaceholder = String(m.player2_id || "").trim().toUpperCase() === "NO ID";
+          const player2Name = document.createElement(player2IsPlaceholder ? "span" : "a");
+          if (player2IsPlaceholder) {
+            player2Name.className = "match-player-placeholder";
+          } else if (m.player2_id) {
+            player2Name.href = `https://boardgamearena.com/player?id=${m.player2_id}`;
+            player2Name.target = "_blank";
           }
-          player2Link.textContent = m.player2;
+          player2Name.textContent = m.player2;
           // Add maxWidth and display for truncation
-          player2Link.style.maxWidth = `${MATCH_WIDTH - 60}px`;
-          player2Link.style.display = "inline-block";
+          player2Name.style.maxWidth = `${MATCH_WIDTH - 60}px`;
+          player2Name.style.display = "inline-block";
           const player2Info = document.createElement("div");
           player2Info.style.display = "flex";
           player2Info.style.alignItems = "center";
           if (player2Logo) player2Info.appendChild(player2Logo);
-          player2Info.appendChild(player2Link);
+          player2Info.appendChild(player2Name);
           const score2Span = document.createElement("span");
           score2Span.textContent = m.score2;
           opponent2Div.appendChild(player2Info);
