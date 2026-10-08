@@ -127,6 +127,9 @@ class TournamentReplayQueueTest(unittest.TestCase):
         self.assertEqual(summary["already_historical"], 1)
         self.assertEqual(summary["invalid_bga_table_id"], 1)
         self.assertEqual(summary["changed"], 0)
+        self.assertNotIn("items", summary)
+        self.assertNotIn("errors", summary)
+        self.assertNotIn("items_truncated", summary)
         with sqlite3.connect(self.db_path) as conn:
             self.assertIsNone(
                 conn.execute(

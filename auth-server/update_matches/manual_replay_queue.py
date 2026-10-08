@@ -21,7 +21,6 @@ from .replay_worker import (
 )
 
 
-DEFAULT_PREVIEW_LIMIT = 100
 BASE_REQUIRED_COLUMNS = {
     "duels": {"id", "deleted_at"},
     "games": {"id", "duel_id", "bga_table_id", "game_number", "deleted_at"},
@@ -80,8 +79,6 @@ def populate_replay_queue(
         "invalid_bga_table_id": 0,
         "changed": 0,
         "failed": 0,
-        "items": [],
-        "errors": [],
     }
 
     with lock_context:
@@ -111,20 +108,10 @@ def populate_replay_queue(
 
             if not table_id or not table_id.isdigit():
                 summary["invalid_bga_table_id"] += 1
-                _append_item(
-                    summary,
-                    {
-                        "game_id": game_id,
-                        "bga_table_id": table_id or None,
-                        "action": "skip_invalid_bga_table_id",
-                        "reasons": reasons or ["missing_replay"],
-                    },
-                )
                 continue
 
             if not has_replay:
                 summary["create_historical"] += 1
-                planned_action = "create_historical"
                 force = False
                 reset_color_source = False
             else:
@@ -139,28 +126,11 @@ def populate_replay_queue(
                 )
                 if _is_active_historical(row) and not reset_color_source:
                     summary["already_historical"] += 1
-                    _append_item(
-                        summary,
-                        {
-                            "game_id": game_id,
-                            "bga_table_id": table_id,
-                            "action": "already_historical",
-                            "reasons": reasons,
-                        },
-                    )
                     continue
                 summary["requeue_historical"] += 1
-                planned_action = "requeue_historical"
                 force = True
 
-            item = {
-                "game_id": game_id,
-                "bga_table_id": table_id,
-                "action": planned_action,
-                "reasons": reasons or ["missing_replay"],
-            }
             if not apply:
-                _append_item(summary, item)
                 continue
 
             try:
@@ -173,20 +143,11 @@ def populate_replay_queue(
                     now=run_now,
                 )
                 summary["changed"] += int(result["action"] == "queued")
-                item["result"] = result["action"]
-                _append_item(summary, item)
-            except (OSError, sqlite3.Error, ValueError) as exc:
+            except (OSError, sqlite3.Error, ValueError):
                 summary["failed"] += 1
-                summary["errors"].append(
-                    {"game_id": game_id, "error": str(exc) or exc.__class__.__name__}
-                )
 
     if summary["failed"] or summary["invalid_bga_table_id"]:
         summary["status"] = "partial"
-    summary["items_truncated"] = (
-        summary["games_found"] - summary["complete_replays"]
-        > len(summary["items"])
-    )
     return summary
 
 
@@ -309,8 +270,3 @@ def _is_active_historical(row: sqlite3.Row) -> bool:
         and _text(row["retry_reason"]).lower() in RETRY_REASONS
         and bool(_text(row["next_attempt_at"]))
     )
-
-
-def _append_item(summary: dict[str, Any], item: dict[str, Any]) -> None:
-    if len(summary["items"]) < DEFAULT_PREVIEW_LIMIT:
-        summary["items"].append(item)

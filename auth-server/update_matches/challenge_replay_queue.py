@@ -44,7 +44,7 @@ def _load_done_challenge_games(conn: sqlite3.Connection) -> list[sqlite3.Row]:
           gr.next_attempt_at
         FROM games g
         JOIN duels d
-          ON trim(COALESCE(d.id, '')) = trim(COALESCE(g.duel_id, ''))
+          ON d.id = g.duel_id
         LEFT JOIN game_replays gr ON gr.game_id = g.id
         WHERE lower(trim(COALESCE(d.source_type, ''))) = lower(trim(?))
           AND lower(trim(COALESCE(d.status, ''))) = lower(trim(?))

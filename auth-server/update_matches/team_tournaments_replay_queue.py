@@ -50,9 +50,9 @@ def _load_team_tournament_games(conn: sqlite3.Connection) -> list[sqlite3.Row]:
           gr.next_attempt_at
         FROM matches m
         JOIN duels d
-          ON trim(COALESCE(d.match_id, '')) = trim(COALESCE(m.id, ''))
+          ON d.match_id = m.id
         JOIN games g
-          ON trim(COALESCE(g.duel_id, '')) = trim(COALESCE(d.id, ''))
+          ON g.duel_id = d.id
         LEFT JOIN game_replays gr ON gr.game_id = g.id
         WHERE upper(trim(COALESCE(m.tournament_id, ''))) IN ({placeholders})
           AND trim(COALESCE(m.deleted_at, '')) = ''

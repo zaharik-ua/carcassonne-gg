@@ -215,7 +215,9 @@ To populate the queue for every active match in `Asian-Cup-2026`,
 ```
 
 The selection follows `matches.tournament_id` through duels to games. Deleted
-matches, duels, and games are excluded. The command does not contact BGA.
+matches, duels, and games are excluded. The command does not contact BGA. All
+manual queue-population scripts print aggregate counts only; they do not include
+per-game details in their JSON result.
 
 ### One-off existing replay backfill
 
