@@ -22011,10 +22011,22 @@ app.get("/public/team-official-matches", async (req, res, next) => {
             d.time_utc,
             d.player_1_id,
             COALESCE(NULLIF(trim(p1.bga_nickname), ''), trim(d.player_1_id)) AS player_1_name,
+            p1.name AS player_1_real_name,
+            p1.avatar AS player_1_avatar,
             p1.bga_elo AS player_1_elo,
+            p1.gg_elo AS player_1_gg_elo,
+            p1.gg_rating_position AS player_1_gg_rank,
+            association1.name AS player_1_association_name,
+            COALESCE(NULLIF(trim(association1.flag), ''), NULLIF(trim(association1.logo), '')) AS player_1_association_flag,
             d.player_2_id,
             COALESCE(NULLIF(trim(p2.bga_nickname), ''), trim(d.player_2_id)) AS player_2_name,
+            p2.name AS player_2_real_name,
+            p2.avatar AS player_2_avatar,
             p2.bga_elo AS player_2_elo,
+            p2.gg_elo AS player_2_gg_elo,
+            p2.gg_rating_position AS player_2_gg_rank,
+            association2.name AS player_2_association_name,
+            COALESCE(NULLIF(trim(association2.flag), ''), NULLIF(trim(association2.logo), '')) AS player_2_association_flag,
             d.dw1,
             d.dw2,
             d.rating,
@@ -22024,6 +22036,10 @@ app.get("/public/team-official-matches", async (req, res, next) => {
             ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
           LEFT JOIN profiles p2
             ON trim(COALESCE(p2.id, '')) = trim(COALESCE(d.player_2_id, ''))
+          LEFT JOIN teams association1
+            ON upper(trim(COALESCE(association1.id, ''))) = upper(trim(COALESCE(p1.association, '')))
+          LEFT JOIN teams association2
+            ON upper(trim(COALESCE(association2.id, ''))) = upper(trim(COALESCE(p2.association, '')))
           WHERE d.deleted_at IS NULL
             AND trim(COALESCE(d.match_id, '')) IN (${placeholders})
           ORDER BY
@@ -22053,6 +22069,23 @@ app.get("/public/team-official-matches", async (req, res, next) => {
       }
     }
 
+    const streamRows = await new Promise((resolve, reject) => {
+      loadStreamsByMatchIds(normalizedMatchIds, (streamsErr, rows) => {
+        if (streamsErr) {
+          reject(streamsErr);
+          return;
+        }
+        resolve(rows || []);
+      });
+    });
+    const streamsByMatchId = new Map();
+    streamRows.forEach(row => {
+      const matchId = normalizeText(row?.entity_id);
+      if (!matchId) return;
+      if (!streamsByMatchId.has(matchId)) streamsByMatchId.set(matchId, []);
+      streamsByMatchId.get(matchId).push(row);
+    });
+
     const gamesByDuelId = new Map();
     (gameRows || []).forEach((row) => {
       const duelId = String(row?.duel_id || "").trim();
@@ -22072,6 +22105,7 @@ app.get("/public/team-official-matches", async (req, res, next) => {
         player_1_clock: row.player_1_clock,
         player_2_clock: row.player_2_clock,
         status: row.status,
+        carcassonne_lab_url: row.carcassonne_lab_url || null,
       });
     });
 
@@ -22116,6 +22150,8 @@ app.get("/public/team-official-matches", async (req, res, next) => {
         gw1: row.gw1,
         gw2: row.gw2,
         rating: row.rating,
+        streams: (streamsByMatchId.get(normalizeText(row.id)) || []).map(stream => stream.link),
+        streamers: (streamsByMatchId.get(normalizeText(row.id)) || []).map(stream => stream.streamer_avatar),
         tournament_name: row.tournament_name,
         tournament_short_title: row.tournament_short_title,
         tournament_logo: row.tournament_logo,
@@ -22131,10 +22167,22 @@ app.get("/public/team-official-matches", async (req, res, next) => {
         time_utc: row.time_utc,
         player_1_id: row.player_1_id,
         player_1_name: row.player_1_name,
+        player_1_real_name: row.player_1_real_name,
+        player_1_avatar: row.player_1_avatar,
         player_1_elo: row.player_1_elo,
+        player_1_gg_elo: row.player_1_gg_elo,
+        player_1_gg_rank: row.player_1_gg_rank,
+        player_1_association_name: row.player_1_association_name,
+        player_1_association_flag: row.player_1_association_flag,
         player_2_id: row.player_2_id,
         player_2_name: row.player_2_name,
+        player_2_real_name: row.player_2_real_name,
+        player_2_avatar: row.player_2_avatar,
         player_2_elo: row.player_2_elo,
+        player_2_gg_elo: row.player_2_gg_elo,
+        player_2_gg_rank: row.player_2_gg_rank,
+        player_2_association_name: row.player_2_association_name,
+        player_2_association_flag: row.player_2_association_flag,
         dw1: row.dw1,
         dw2: row.dw2,
         rating: row.rating,
