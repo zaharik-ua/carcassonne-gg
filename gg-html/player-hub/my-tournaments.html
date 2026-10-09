@@ -1512,6 +1512,51 @@
     min-width: 0;
   }
 
+  .cp-rank-colors-stage {
+    max-width: 220px;
+  }
+
+  .cp-rank-colors-header,
+  .cp-rank-colors-row {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr) 26px;
+    align-items: center;
+    gap: 8px;
+    max-width: 440px;
+  }
+
+  .cp-rank-colors-header {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .cp-rank-colors-legend-title {
+    margin: 6px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .cp-rank-colors-legend-row {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cp-rank-colors-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .cp-rank-colors-swatch {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    border-radius: 3px;
+  }
+
   .cp-tournament-config-input {
     width: 100%;
     border: 1px solid #c8ced8;
@@ -6984,6 +7029,213 @@
     return { row, input };
   }
 
+  function createTournamentRankColorsEditor(initialSettings) {
+    const colors = [
+      ["blue", "#a3ccf9"], ["green", "#85eebd"], ["red", "#f6b3b3"],
+      ["orange", "#ffd29a"], ["gold", "#c9a227"], ["silver", "#8e949b"], ["bronze", "#9b5b33"],
+    ].map(([value, background]) => ({
+      value, background, label: value[0].toUpperCase() + value.slice(1),
+      logo: `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"><rect width="18" height="18" rx="3" fill="${background}"/></svg>`)}`,
+    }));
+    let saved = initialSettings || {};
+    if (typeof saved === "string") {
+      try { saved = JSON.parse(saved); } catch (_error) { saved = {}; }
+    }
+    const stages = new Map(["Stage 1", "Stage 2", "Stage 3"].map(stage => {
+      const settings = (saved.stages || saved)[stage] || {};
+      return [stage, {
+        places: Object.entries(settings.rankColors || {})
+          .sort(([first], [second]) => Number(first) - Number(second))
+          .map(([place, color]) => ({ place, color })),
+        legend: { ...settings.rankColorLegend },
+      }];
+    }));
+    let selectedStage = "Stage 1";
+    let disabled = false;
+    let invalidPlace = null;
+    let colorControls = [];
+
+    const root = document.createElement("section");
+    root.className = "cp-tournament-section cp-rank-colors-editor";
+    const title = document.createElement("div");
+    title.className = "cp-tournament-section-title";
+    title.textContent = "Rank colors and legend";
+    const hint = document.createElement("div");
+    hint.className = "cp-tournament-section-hint";
+    hint.textContent = "Choose a color for each place. Add optional legend text to explain what each color means.";
+    const stageField = createTournamentFormRow("Stage", selectedStage, {
+      selectOptions: Array.from(stages.keys()),
+    });
+    stageField.row.classList.add("cp-rank-colors-stage");
+    stageField.input.root.querySelector("button").setAttribute("aria-label", "Rank colors stage");
+    const list = document.createElement("div");
+    list.className = "cp-tournament-config-list";
+    const addButton = document.createElement("button");
+    addButton.type = "button";
+    addButton.className = "cp-btn cp-btn-secondary cp-tournament-add-row";
+    addButton.textContent = "Add place";
+    const legendTitle = document.createElement("div");
+    legendTitle.className = "cp-rank-colors-legend-title";
+    legendTitle.textContent = "Legend (optional)";
+    const legendList = document.createElement("div");
+    legendList.className = "cp-tournament-config-list";
+
+    const renderLegend = () => {
+      legendList.innerHTML = "";
+      const settings = stages.get(selectedStage);
+      const usedColors = new Set(settings.places.map(entry => entry.color));
+      colors.filter(color => usedColors.has(color.value)).forEach(color => {
+        const row = document.createElement("div");
+        row.className = "cp-rank-colors-legend-row";
+        const label = document.createElement("label");
+        label.className = "cp-rank-colors-label";
+        const swatch = document.createElement("span");
+        swatch.className = "cp-rank-colors-swatch";
+        swatch.style.backgroundColor = color.background;
+        swatch.setAttribute("aria-hidden", "true");
+        label.appendChild(swatch);
+        label.appendChild(document.createTextNode(color.label));
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "cp-tournament-config-input";
+        input.id = `rank-legend-${selectedStage.replace(/ /g, "-")}-${color.value}`;
+        input.value = settings.legend[color.value] || "";
+        input.placeholder = "e.g. Advance to the Final";
+        input.disabled = disabled;
+        label.htmlFor = input.id;
+        input.addEventListener("input", () => { settings.legend[color.value] = input.value; });
+        row.appendChild(label);
+        row.appendChild(input);
+        legendList.appendChild(row);
+      });
+      legendTitle.classList.toggle("cp-hidden", !usedColors.size);
+    };
+
+    const render = () => {
+      list.innerHTML = "";
+      colorControls = [];
+      const settings = stages.get(selectedStage);
+      if (!settings.places.length) {
+        const empty = document.createElement("div");
+        empty.className = "cp-tournament-config-empty";
+        empty.textContent = "No places colored in this stage.";
+        list.appendChild(empty);
+      } else {
+        const header = document.createElement("div");
+        header.className = "cp-rank-colors-header";
+        ["Place", "Color", ""].forEach(text => {
+          const cell = document.createElement("div");
+          cell.textContent = text;
+          header.appendChild(cell);
+        });
+        list.appendChild(header);
+      }
+      settings.places.forEach((entry, index) => {
+        const row = document.createElement("div");
+        row.className = "cp-rank-colors-row";
+        const input = document.createElement("input");
+        input.type = "number";
+        input.className = "cp-tournament-config-input";
+        input.min = "1";
+        input.step = "1";
+        input.required = true;
+        input.value = entry.place;
+        input.disabled = disabled;
+        input.setAttribute("aria-label", `Place in ${selectedStage}, row ${index + 1}`);
+        input.addEventListener("input", () => {
+          entry.place = input.value;
+          remove.setAttribute("aria-label", `Remove place ${entry.place}`);
+        });
+        const color = createTournamentDropdown(entry.color, colors, { showLogo: true });
+        color.setDisabled(disabled);
+        color.root.querySelector("button").setAttribute("aria-label", `Place color in ${selectedStage}, row ${index + 1}`);
+        color.addEventListener("change", () => {
+          entry.color = color.value;
+          renderLegend();
+        });
+        colorControls.push(color);
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "cp-btn cp-btn-secondary cp-tournament-remove-row";
+        remove.textContent = "×";
+        remove.setAttribute("aria-label", `Remove place ${entry.place}`);
+        remove.disabled = disabled;
+        remove.addEventListener("click", () => {
+          settings.places.splice(index, 1);
+          render();
+          (list.querySelectorAll("input")[Math.min(index, settings.places.length - 1)] || addButton).focus();
+        });
+        row.appendChild(input);
+        row.appendChild(color.root);
+        row.appendChild(remove);
+        list.appendChild(row);
+      });
+      renderLegend();
+    };
+    stageField.input.addEventListener("change", () => {
+      selectedStage = stageField.input.value;
+      render();
+    });
+    addButton.addEventListener("click", () => {
+      const places = stages.get(selectedStage).places;
+      const usedPlaces = new Set(places.map(entry => Number(entry.place)));
+      let nextPlace = 1;
+      while (usedPlaces.has(nextPlace)) nextPlace += 1;
+      places.push({ place: String(nextPlace), color: places.at(-1)?.color || "blue" });
+      render();
+      list.querySelectorAll("input")[places.length - 1].focus();
+    });
+    [title, hint, stageField.row, list, addButton, legendTitle, legendList].forEach(node => root.appendChild(node));
+    render();
+    return {
+      root,
+      setDisabled(isDisabled) {
+        disabled = !!isDisabled;
+        stageField.input.setDisabled(disabled);
+        colorControls.forEach(control => control.setDisabled(disabled));
+        root.querySelectorAll("input, button").forEach(control => { control.disabled = disabled; });
+      },
+      getValidationError() {
+        invalidPlace = null;
+        for (const [stage, settings] of stages) {
+          const used = new Set();
+          for (const [index, entry] of settings.places.entries()) {
+            const place = Number(entry.place);
+            if (!Number.isSafeInteger(place) || place < 1 || used.has(place)) {
+              invalidPlace = { stage, index };
+              return `Rank colors: ${stage} places must be unique positive whole numbers.`;
+            }
+            used.add(place);
+          }
+        }
+        return "";
+      },
+      focusInvalid() {
+        if (!invalidPlace) return;
+        selectedStage = invalidPlace.stage;
+        stageField.input.value = selectedStage;
+        render();
+        list.querySelectorAll("input")[invalidPlace.index]?.focus();
+      },
+      getValues() {
+        const result = {};
+        for (const [stage, settings] of stages) {
+          if (!settings.places.length) continue;
+          const rankColors = {};
+          settings.places.forEach(entry => { rankColors[String(Number(entry.place))] = entry.color; });
+          const rankColorLegend = {};
+          new Set(settings.places.map(entry => entry.color)).forEach(color => {
+            const label = String(settings.legend[color] || "").trim();
+            if (label) rankColorLegend[color] = label;
+          });
+          result[stage] = { rankColors };
+          if (Object.keys(rankColorLegend).length) result[stage].rankColorLegend = rankColorLegend;
+        }
+        return Object.keys(result).length ? { stages: result } : null;
+      },
+    };
+  }
+
   function getTournamentUserLabel(user) {
     return String(
       user?.bga_nickname
@@ -8028,6 +8280,7 @@
       tournament?.is_test === true || Number(tournament?.is_test) === 1,
       { type: "checkbox" }
     );
+    const rankColorsEditor = createTournamentRankColorsEditor(tournament?.rank_colors);
 
     [
       nameField,
@@ -8086,6 +8339,7 @@
       registrationEndsAtField,
       isTestField,
     ].forEach((field) => advancedFieldsWrap.appendChild(field.row));
+    advancedFieldsWrap.appendChild(rankColorsEditor.root);
 
     const aboutField = createTournamentRichTextField("About", tournament?.about || "", {
       placeholder: "Write formatted tournament information...",
@@ -8210,11 +8464,12 @@
 
     const setBusy = (busy, action = "") => {
       isBusy = !!busy;
-      Array.from(form.querySelectorAll("input, select, button")).forEach((control) => {
+      Array.from(form.querySelectorAll("input, textarea, select, button")).forEach((control) => {
         control.disabled = isBusy;
       });
       aboutEditor.setDisabled(isBusy);
       rulesEditor.setDisabled(isBusy);
+      rankColorsEditor.setDisabled(isBusy);
       saveButton.textContent = isBusy && action === "save" ? "Saving..." : "Save";
       recalculateButton.textContent = isBusy && action === "recalculate"
         ? "Recalculating..."
@@ -8296,6 +8551,7 @@
         is_test: isTestField.input.checked,
         about: aboutEditor.getHtml(),
         rules: rulesEditor.getHtml(),
+        rank_colors: rankColorsEditor.getValues(),
       };
       if (canManageAccessUsers) {
         payload.access_users = isOfficial ? accessUsersEditor.getValues() : [];
@@ -8362,6 +8618,14 @@
         }
       }
 
+      const rankColorsError = rankColorsEditor.getValidationError();
+      if (rankColorsError) {
+        setStatus(rankColorsError);
+        setAdvancedExpanded(true);
+        rankColorsEditor.focusInvalid();
+        return;
+      }
+
       setBusy(true, "save");
       try {
         await requestTournamentJson(`${TOURNAMENTS_URL}/${encodeURIComponent(payload.id)}`, {
@@ -8388,6 +8652,10 @@
       } catch (error) {
         setStatus(error?.message || "Failed to update tournament.");
         setBusy(false);
+        if (String(error?.message || "").startsWith("Rank colors:")) {
+          setAdvancedExpanded(true);
+          rankColorsEditor.root.querySelector("input, button")?.focus();
+        }
       }
     });
 

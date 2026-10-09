@@ -1787,7 +1787,8 @@
     stage2_name: "Playoffs",
     stage2_format: "Single Elimination",
     about: "",
-    rules: ""
+    rules: "",
+    rankColors: null
   };
 
   // --- Dynamic tournament theme colors ---
@@ -2265,10 +2266,12 @@
       currentTournament.rules = typeof tournamentRecord?.rules === "string"
         ? tournamentRecord.rules.trim()
         : "";
+      currentTournament.rankColors = tournamentRecord?.rank_colors ?? null;
     } catch (error) {
-      console.error("Failed to load ETCOC About and Rules", error);
+      console.error("Failed to load ETCOC tournament settings", error);
       currentTournament.about = "";
       currentTournament.rules = "";
+      currentTournament.rankColors = null;
     }
   }
 

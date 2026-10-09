@@ -89,6 +89,7 @@ import {
   isCompletedRankedDuel,
 } from "./profile-gg-elo-trigger.js";
 import { normalizeTournamentLineupType, resolveTournamentTextPatch } from "./tournament-update.js";
+import { normalizeTournamentRankColors, resolveTournamentRankColorsPatch } from "./tournament-rank-colors.js";
 import { getTournamentRosterUpdateError } from "./tournament-roster.js";
 import {
   canManageTournamentAccessUsers,
@@ -3157,6 +3158,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         COALESCE(t.is_test, 0) AS is_test,
         t.about,
         t.rules,
+        t.rank_colors,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(t.tournament_type), ''), ?) AS tournament_type,
@@ -3454,6 +3456,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         COALESCE(is_test, 0) AS is_test,
         about,
         rules,
+        rank_colors,
         COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(tournament_type), ''), ?) AS tournament_type,
@@ -6428,6 +6431,7 @@ function ensureTournamentsSchema() {
       is_test BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1)),
       about TEXT,
       rules TEXT,
+      rank_colors TEXT,
       tournament_type TEXT NOT NULL DEFAULT 'Teams',
       team_type TEXT NOT NULL DEFAULT 'National',
       category TEXT,
@@ -6471,6 +6475,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "is_test", "BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1))");
       addColumnIfMissing(columns, "tournaments", "about", "TEXT");
       addColumnIfMissing(columns, "tournaments", "rules", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "rank_colors", "TEXT");
       addColumnIfMissing(columns, "tournaments", "tournament_type", "TEXT NOT NULL DEFAULT 'Teams'");
       addColumnIfMissing(columns, "tournaments", "team_type", "TEXT NOT NULL DEFAULT 'National'");
       addColumnIfMissing(columns, "tournaments", "category", "TEXT");
@@ -13970,7 +13975,8 @@ app.get("/public/tournaments/:id", (req, res, next) => {
         registration_ends_at,
         COALESCE(is_test, 0) AS is_test,
         about,
-        rules
+        rules,
+        rank_colors
       FROM tournaments
       WHERE ${buildTournamentLookupWhereClause("id")}
       LIMIT 1
@@ -14065,6 +14071,7 @@ app.get("/tournaments", (req, res, next) => {
         COALESCE(t.is_test, 0) AS is_test,
         t.about,
         t.rules,
+        t.rank_colors,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
         COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS subtype,
         COALESCE(NULLIF(trim(t.tournament_type), ''), ?) AS tournament_type,
@@ -14253,6 +14260,7 @@ app.get("/tournaments", (req, res, next) => {
                 is_test: normalizeBooleanInt(row.is_test) === 1,
                 about: row.about,
                 rules: row.rules,
+                rank_colors: row.rank_colors,
                 access_type: normalizeTournamentAccessType(row.access_type),
                 subtype: row.subtype ? normalizeTournamentAccessType(row.subtype) : null,
                 tournament_type: normalizeTournamentType(row.tournament_type),
@@ -14319,6 +14327,12 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   const isTest = normalizeBooleanInt(req.body?.is_test);
   const about = String(req.body?.about || "").trim() || null;
   const rules = String(req.body?.rules || "").trim() || null;
+  let rankColors;
+  try {
+    rankColors = normalizeTournamentRankColors(req.body?.rank_colors);
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message });
+  }
   const standingsScoring = normalizeStandingsScoring(req.body?.standings_scoring);
   const tprTargetGames = Math.max(1, Number.parseInt(req.body?.tpr_target_games, 10) || 10);
   const tprSmoothing = Math.max(0, bountyTprNumber(req.body?.tpr_smoothing, 0.5));
@@ -14417,6 +14431,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   is_test,
                   about,
                   rules,
+                  rank_colors,
                   tournament_type,
                   team_type,
                   category,
@@ -14438,7 +14453,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
               [
                 id,
@@ -14451,6 +14466,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                 isTest,
                 about,
                 rules,
+                rankColors,
                 tournamentType,
                 teamType,
                 category,
@@ -14592,6 +14608,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
         registration_ends_at,
         about,
         rules,
+        rank_colors,
         lineup_type,
         COALESCE(team_size, 10) AS team_size,
         tournament_format,
@@ -14628,6 +14645,12 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
       // The compact admin editor does not send the rich-text fields managed in My Tournaments.
       const about = resolveTournamentTextPatch(req.body, currentRow, "about");
       const rules = resolveTournamentTextPatch(req.body, currentRow, "rules");
+      let rankColors;
+      try {
+        rankColors = resolveTournamentRankColorsPatch(req.body, currentRow);
+      } catch (error) {
+        return res.status(400).json({ ok: false, message: error.message });
+      }
       const teamSize = normalizeTournamentTeamSize(
         hasTeamSizeUpdate ? req.body.team_size : currentRow.team_size
       );
@@ -14682,6 +14705,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                   is_test = ?,
                   about = ?,
                   rules = ?,
+                  rank_colors = ?,
                   tournament_type = ?,
                   team_type = ?,
                   category = ?,
@@ -14714,6 +14738,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                 isTest,
                 about,
                 rules,
+                rankColors,
                 tournamentType,
                 teamType,
                 category,
