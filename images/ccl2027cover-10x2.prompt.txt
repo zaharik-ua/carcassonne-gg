@@ -1,0 +1,24 @@
+Tool: built-in image_gen (ImageGen)
+Final asset: ccl2027cover-10x2.png
+Final dimensions: 2165 x 433 pixels, exact 10:2 / 5:1.
+Original artwork: ccl2027cover-temp1.png (preserved).
+Generation reference 1: recomposed 5:1 artwork on a white-padded 3:1 transport canvas.
+Generation reference 2: original artwork, authoritative color and style reference.
+Only delivery padding was removed from the final minimalist generation to export the banner.
+
+Final edit prompt:
+
+Use case: precise-object-edit
+Asset type: Carcassonne Champions League 2027 tournament cover, finished art 10:2 (5:1).
+
+Image 1 is the EDIT TARGET: it is a 3:1 transport canvas containing a 5:1 illustrated banner in the middle, with plain white delivery padding above and below.
+Image 2 is the authoritative COLOR AND STYLE REFERENCE: the user's original cover.
+
+Primary request: make only the ARTWORK in image 1 more minimalist and restrained, matching image 2's subdued colors. The user explicitly requests NO INCREASE IN BRIGHTNESS or saturation and a minimalist composition. The current image 1 has too much detailed foliage, landscape texture and decorative scenic activity. Simplify these while retaining the complete important objects.
+
+Preserve image 1's wide layout, exact relative positions and scale of the blue meeple and gold rim on the left, the floating blue and gold triangles, the centered gold emblem with navy meeple/crown/laurels, BOTH title lines and slim gold accent rules, the full castle skyline on the right, gold arched bridge and winding river. Preserve each of these fully visible inside the artwork. Text remains verbatim "CARCASSONNE CHAMPIONS" and "LEAGUE 2027", bold navy, clean and perfectly readable.
+
+Make the background minimal: a few broad softly layered blue hill silhouettes, calm cream sky with just sparse broad cloud shapes, a simple pale winding river, and only a few understated tree silhouettes. Remove dense foreground shrubs, individual foliage details, tiny villages/houses and ornamental plant texture. Keep just subtle paper-grain texture, especially much quieter than image 1. Simplify the castle into clean blue and muted-gold architectural shapes while retaining its towers, flags and identity. Keep the emblem detailed enough to identify the crown and laurels. Use the original image 2's calm dusty blue, navy, warm off-white and soft muted ochre/gold colors. No bright cyan, no vivid yellow, no boosted highlights or glow. Maintain or slightly reduce the original reference brightness and saturation. Understated, spacious, clean, visually quiet artwork, still the same original illustration family.
+
+CRITICAL: preserve the existing plain WHITE top and bottom padding bands and the exact narrow 5:1 art panel boundaries in image 1. Do not extend art into the white areas. Keep the output at the same 3:1 transport-canvas ratio. The art panel fills the middle 60% of canvas height and the full canvas width, with white bands of 20% above and 20% below. All edits occur ONLY inside this existing art panel. No additional text, no watermark, no frame.
+

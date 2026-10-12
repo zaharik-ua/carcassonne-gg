@@ -1,0 +1,25 @@
+Tool: built-in image_gen (ImageGen)
+Final asset: GG-left-right-covers-blue.png
+Dimensions: 800 x 800 px, opaque sRGB PNG.
+Original reference: GG-left-right-covers.png (preserved).
+Style reference: ccl2027cover-10x2.3-variant1.png.
+Export: proportionally resized square generation to 800 x 800.
+Color finishing: preserve rows 0–479; smoothly blend rows 480–655 into RGB(21,21,21) with smoothstep; rows 656–799 are exactly #151515.
+Verified: upper image colors preserved; all 115200 pixels in the bottom 144 rows are exactly #151515.
+
+Generation prompt:
+
+Use case: precise-object-edit
+Asset type: square website side-background artwork, used along the left and right sides of a Carcassonne tournament website. Final deliverable 800 x 800 px, opaque PNG.
+
+Input image 1 is the EDIT TARGET: the existing brown square GG-left-right-covers background, with outline triangles in its upper half and a downward fade to dark charcoal.
+Input image 2 is the STYLE AND PALETTE REFERENCE: our newly illustrated blue Carcassonne tournament cover.
+
+Redesign image 1 into a more beautiful, tasteful BLUE version that belongs to image 2's restrained visual family. Retain its purpose as subtle peripheral website background, its square format, top-weighted decorative composition and vertical fade to the page background. Remove ALL triangles completely.
+
+BACKGROUND: a soft, subdued dusty navy-blue at the top, approximately #28485F / #24465F, with very subtle paper-grain texture like the blue cover. Smoothly and continuously fade the entire background downward to EXACT #151515 (RGB 21,21,21). The bottom 18% of the image must be uniformly #151515, with absolutely no texture, ornament, colored pixels, border or visible band there. Above this solid bottom region, make a long gentle seamless vertical gradient, without banding or abrupt transitions.
+
+DECORATION replacing the triangles: a sparse, coherent understated ornamental pattern drawn in fine slightly textured lines, inspired by Carcassonne and medieval heraldry. Include well-proportioned symmetric classic meeple OUTLINES, rounded square game-tile contours with simple curved road/river paths or stone arch details inside, and small elegant laurel/leaf sprigs. Avoid literal illustrations of large landscapes. Use only these three closely related motif families. Arrange a few larger motifs partly entering from the top and side edges and smaller well-spaced motifs drifting lower, just as the original background arranged its triangles. Vary scale and rotation tastefully, but keep the shapes clean and recognizable. They should feel intentionally composed and refined, not a random icon sheet. Maintain plenty of quiet negative space and low contrast so they do not compete with page content.
+
+Motif colors: soft muted desaturated blue outlines, with very occasional restrained antique-gold accents borrowed from image 2. No bright gold, no cream field, no neon, no glowing outlines or halos, no glossy 3D, no oversaturated cyan. Subtle natural linework and paper texture, not scratchy heavy grunge. Concentrate ornament within the upper half; progressively reduce its contrast and size toward the middle, disappearing fully by about 65% image height. Minimalist but visually interesting. No text, no letters, no logos, no watermark, no additional triangles, no central hero figure. Opaque background.
+

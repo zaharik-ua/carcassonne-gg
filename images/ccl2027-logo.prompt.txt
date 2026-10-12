@@ -1,0 +1,20 @@
+Tool: built-in image_gen (ImageGen)
+Final asset: ccl2027-logo.png
+Final dimensions: 1024 x 1024 px.
+Source artwork: ccl2027cover-10x2.3-variant1.png.
+Input emblem crop: x=960, y=62, width=180, height=160.
+Output: only the tournament emblem on a square PNG with transparent outer background; no text.
+
+Generation/edit prompt:
+
+Use case: background-extraction
+Asset type: standalone tournament logo PNG, square 1:1 canvas, ideally 1024 x 1024 pixels, transparent outside the logo.
+
+Input image 1 is the EDIT TARGET: the exact gold-and-navy tournament emblem cropped from ccl2027cover-10x2.3-variant1.png.
+
+Extract and faithfully reproduce ONLY this existing emblem as a clean high-resolution square logo. It consists of the muted gold textured tile with gently rounded corners, the centered navy-blue classic Carcassonne meeple, the navy crown directly above its head, and the balanced navy laurel branches on both sides. Preserve the existing shapes, visual identity, navy/gold colors, subtle paper-cut/watercolor texture and soft shading. Do not invent or redesign the emblem. Do not brighten or increase saturation.
+
+Make the gold tile itself a true square, with equal overall width and height. Keep the blue meeple, crown and laurels proportional and unchanged; if necessary, naturally extend the gold texture slightly above and below rather than stretching any blue symbol. Center the emblem on the square canvas, occupying about 95% of canvas width and height. Preserve its rounded corners, with genuine alpha transparency outside those corners and the small outer safety margin. No cream background, no landscape, no clouds or hills, no other objects, no frame or shadow outside the tile.
+
+Absolutely no text, captions, numbers, letters, tournament name, year or watermark. Only the existing tournament logo. Sharp clean edges and faithful details suitable for an avatar or website logo.
+

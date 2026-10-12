@@ -1,0 +1,46 @@
+Tool: built-in image_gen (ImageGen)
+Final asset: ccl2027cover-10x2.3.png
+Final dimensions: 2100 x 483 pixels, exact 10:2.3 / 100:23.
+Original artwork: ccl2027cover-temp1.png (preserved).
+Final export from the generated transport canvas: x=34, y=110, width=2100, height=483.
+Revision goals: proportional frontal meeple; tree and shrub clusters as in the original; more sky above the emblem; subdued palette and restrained detail.
+
+Composition revision prompt:
+
+Use case: precise-object-edit
+Asset type: illustrated Carcassonne Champions League 2027 tournament cover, final aspect ratio EXACTLY 10:2.3 (100:23, approximately 4.348:1).
+
+INPUT ROLES:
+Image 1 is the EDIT TARGET, the previous narrow banner on a white transport canvas. Its left meeple is misshapen, vegetation is too sparse, and the logo is too close to the art's upper edge; fix these.
+Image 2 is the user's ORIGINAL COVER and authoritative reference for the restrained colors, paper-cut/watercolor style, clustered trees, hills, castle, bridge and atmosphere. Match image 2 closely.
+
+Make a thoughtful revision with these FOUR specific corrections:
+1. LEFT MEEPLE: replace the crooked left figure with a well-proportioned, upright, classic Carcassonne meeple. Use the symmetric navy meeple INSIDE THE CENTRAL EMBLEM as the silhouette blueprint, uniformly enlarged: centered rounded head, equal broad arms/shoulders, balanced narrow waist, two equal splayed legs and feet. Both halves of the FRONT FACE are geometrically balanced; no leaning, skewing, warped anatomy, stretched head, unequal arms or exaggerated perspective. A subtle dark blue side thickness and thin muted gold edge are allowed, but the frontal silhouette stays proportional. Keep the large foreground meeple as the left anchor, with its head and both arms fully visible. Its feet may be naturally seated behind the low foreground hill. Keep the small nearby blue and gold triangles.
+2. TREES: restore the vegetation language of ORIGINAL IMAGE 2. There must be modest GROUPS of rounded/scalloped leafy tree and shrub silhouettes layered across the lower hills and river banks, with some taller pointed trees near the castle and bridge. These are stylized European wooded hills, not desert, no isolated cactus-like spikes. Use broad calm clusters, not dense individual leaf detail, not tiny villages or new buildings. Aim for the same amount of trees and the same restrained treatment as image 2.
+3. LOGO TOP MARGIN: give the complete central gold emblem generous clean cream sky above it. Its top should sit approximately 12–14% of the FINAL ART PANEL HEIGHT below the panel's top edge (about 60–70 pixels within a 506px tall panel). Do not let clouds or decorations clutter this clear margin. Preserve its gold square, navy meeple, crown and laurels. Keep a comfortable gap to the title below.
+4. TALLER FORMAT: recompose and paint additional sky and foreground as needed so the FINISHED ART PANEL is 10:2.3, taller than the previous 10:2. Do not vertically stretch any objects. Keep all important scene details intact.
+
+LAYOUT / TRANSPORT:
+Output the same roughly 3:1 canvas as image 1, ideally 2200 x 734 pixels. The finished banner is a 2200 x 506 rectangle spanning the full width, y=114 through y=619. Top 114 pixels and bottom 114 pixels are solid pure WHITE transport padding. Thus the art fills the central 69% of the canvas height with white delivery bands about 15.5% above and below. Paint the expanded art fully edge to edge horizontally; remove the narrow white side strips currently in image 1. All key objects must fit within the banner, with at least 4% horizontal safety space for the foreground meeple and tallest castle towers. Do not paint into the white top/bottom padding. The padding will be removed to export the complete art panel.
+
+Keep the castle at right, every main tower top and flag, gold arched bridge, winding pale river, blue layered hills, original subtle paper texture. Center bold navy title text, verbatim:
+"CARCASSONNE CHAMPIONS"
+"LEAGUE 2027"
+Keep the slim muted gold rules flanking line 2. No text changes, no new slogans, no watermark.
+
+PALETTE AND SIMPLICITY: use the ORIGINAL image 2's subdued dusty blue, navy, warm off-white and muted ochre/gold. Do not increase brightness or saturation, no luminous cyan, bright yellow, glow, polished 3D shine or dramatic highlights. Minimalism means broad tidy shapes, restrained texture and uncluttered composition, while retaining the original's natural groups of trees. Do not strip the landscape bare.
+
+Localized meeple correction prompt:
+
+Use case: precise-object-edit.
+Image 1 is the edit target: a tournament banner on a white-padded transport canvas.
+Image 2 is a SHAPE REFERENCE only, cropped from the original emblem.
+
+Make ONE localized correction: completely replace the large foreground blue meeple on the LEFT of image 1 with an upright FRONT-FACING, perfectly balanced classic Carcassonne meeple. The exact canonical outline is the blue meeple INSIDE image 2. Enlarge that silhouette proportionally, without changing its shape. Do not copy the gold square, crown or laurel leaves from image 2 into the left figure.
+
+Erase the current left meeple and its asymmetric side extrusion and glowing thick gold edge. Paint a NEW flat frontal blue meeple with no 3D perspective or visible side thickness. Its outline must have a centered rounded head, equally sloping shoulder/arm lobes, matching narrow waist on both sides, and two equal outward-splayed legs. The left and right halves of the body silhouette must mirror each other around a vertical central axis, just like the blue symbol in image 2. No leaning, twisting, skew, swollen right arm, offset head or uneven legs. Use a subtle blue watercolor/paper texture, and only a very fine subdued gold outline if desired; no thick gold rim, no glow. Place it in the same left foreground role, approximately the same overall size; fully show the head and both equal arms, let the feet sit naturally behind the low foreground hill.
+
+Keep EVERYTHING ELSE in image 1 exactly as it is: all trees and shrub clusters, hills, river, castle, bridge, existing small blue/gold triangles, the centered gold emblem, its improved generous top margin, the typography and gold horizontal rules. Exact unchanged text "CARCASSONNE CHAMPIONS" and "LEAGUE 2027". Do not change colors, saturation, brightness, or add scenic detail. Preserve the same composition, restrained original palette and subtle texture.
+
+Preserve the pure white delivery padding above and below the artwork, and the same approximately 3:1 transport-canvas dimensions. The final exported art will be 10:2.3; do not rearrange or crop the scene during this localized correction. No extra text or watermark.
+

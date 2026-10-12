@@ -10527,6 +10527,7 @@ async function loadChallengePlayerTimeContext(playerId) {
 
 app.get("/challenge-periods/player", async (req, res) => {
   const playerId = normalizeNullableText(req.user?.player_id);
+  const includeHistory = req.query.include_history === "1";
   const slotStatuses = Array.from(CHALLENGE_MATCH_SLOT_DUEL_STATUSES);
 
   try {
@@ -10615,7 +10616,7 @@ app.get("/challenge-periods/player", async (req, res) => {
          AND cpp.player_id = ?
         LEFT JOIN tournaments rivals_tournament
           ON upper(trim(COALESCE(rivals_tournament.id, ''))) = upper(trim(COALESCE(cp.rivals_tournament_id, '')))
-        WHERE cp.status IN ('draft', 'planning_open', 'active', 'result_review')
+        WHERE (? = 1 OR cp.status IN ('draft', 'planning_open', 'active', 'result_review'))
         ORDER BY datetime(cp.planning_starts_at) DESC, datetime(cp.play_starts_at) DESC, cp.id ASC
       `,
       [
@@ -10628,6 +10629,7 @@ app.get("/challenge-periods/player", async (req, res) => {
         playerId,
         playerId,
         playerId,
+        includeHistory ? 1 : 0,
       ]
     );
     return res.json({
