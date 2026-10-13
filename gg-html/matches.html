@@ -65,7 +65,53 @@ code {
     justify-content: space-between;
 }
 
-/* Sort toggle on Today row */
+/* Day toggle beside the schedule sorting controls */
+.section-title--daily {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.section-title--daily .sort-toggle {
+  margin-left: auto;
+}
+.day-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 2px;
+  background: none;
+}
+.day-toggle__option {
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: #555;
+  font: inherit;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+.day-toggle__option:hover {
+  background: #f3f3f3;
+}
+.day-toggle__option.active {
+  background: #fff;
+  color: #222;
+  box-shadow: 0 0 0 1px #ccc inset;
+}
+.day-toggle__option:focus-visible {
+  outline: 2px solid #2C6DA3;
+  outline-offset: 2px;
+}
+.schedule-empty {
+  margin-bottom: 20px;
+  padding: 12px 8px;
+  color: #666;
+  font-size: 13px;
+}
+/* Sort toggle on the daily schedule row */
 .sort-toggle {
   display: flex;
   align-items: center;
@@ -94,6 +140,42 @@ code {
   background: #fff;
   color: #111;
   box-shadow: 0 0 0 1px #ddd inset;
+}
+
+.matches-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: #555;
+  font-size: 12px;
+  cursor: pointer;
+}
+.matches-refresh:hover {
+  background: #f3f3f3;
+  color: #222;
+}
+.matches-refresh:focus-visible {
+  outline: 2px solid #2C6DA3;
+  outline-offset: 2px;
+}
+.matches-refresh:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.matches-refresh.is-loading i {
+  animation: matches-refresh-spin 0.8s linear infinite;
+}
+@keyframes matches-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .matches-refresh.is-loading i { animation: none; }
 }
 
 /* Rating help (star + info) on Today row */
@@ -3120,9 +3202,15 @@ function collectFlagInfos(matches) {
 }
 
 
-let todaySortBy = "event"; // Single UI state controlling Today + Upcoming
+let selectedScheduleDay = "today";
+let todaySortBy = "event"; // Single UI state controlling Today / Yesterday + Upcoming
 let lastData = null; // cache of last fetched data for re-rendering without refetch
 let tournamentFilterIdCounter = 0;
+let matchesFetchPromise = null;
+
+function isMatchInProgress(match) {
+  return String(match?.status || "").trim().toUpperCase() === "IN PROGRESS";
+}
 
 function isMatchHidden(match) {
   if (!match) return false;
@@ -3149,6 +3237,27 @@ function parseUtcTimestamp(timeValue) {
   const [day, month, year] = (datePart || "").split(".").map(Number);
   const [hour, minute, second] = (timePart || "").split(":").map(Number);
   return Date.UTC(year || 0, (month || 1) - 1, day || 1, hour || 0, minute || 0, second || 0);
+}
+
+function getYesterdayMatches(matches) {
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
+  return getRenderableMatches(matches).filter((match) => {
+    const timestamp = parseUtcTimestamp(match.time);
+    return timestamp >= startYesterday && timestamp < startToday;
+  });
+}
+
+function getTodayMatches(matches) {
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+  return getRenderableMatches(matches).filter((match) => {
+    if (isMatchInProgress(match)) return true;
+    const timestamp = parseUtcTimestamp(match.time);
+    return timestamp >= startToday && timestamp < startTomorrow;
+  });
 }
 
 function hasLegacyMatchTime(timeValue) {
@@ -3262,13 +3371,33 @@ function renderMainEventCards(container, matches, tournaments, options = {}) {
   });
 }
 
+function createMatchesRefreshButton() {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "matches-refresh";
+  button.title = "Refresh matches";
+  button.setAttribute("aria-label", "Refresh matches");
+  const isLoading = Boolean(matchesFetchPromise);
+  button.disabled = isLoading;
+  button.classList.toggle("is-loading", isLoading);
+  button.setAttribute("aria-busy", String(isLoading));
+
+  const icon = document.createElement("i");
+  icon.className = "fa-solid fa-rotate-right";
+  icon.setAttribute("aria-hidden", "true");
+  button.appendChild(icon);
+  button.addEventListener("click", () => fetchAndRenderMatches({ refreshPlayerDetails: true }));
+  return button;
+}
+
 function renderSection(container, title, tournaments, matches, events, options = {}) {
-  const { renderEventsLast = false, showScheduleControls = false } = options;
+  const { renderEventsLast = false, showScheduleControls = false, showDayToggle = false, showRefreshButton = false, onDayChange } = options;
   const visibleMatches = getRenderableMatches(matches);
   const visibleEvents = Array.isArray(events) ? events : [];
-  if (visibleMatches.length === 0 && visibleEvents.length === 0) return;
-  const isToday = title === "Today";
+  if (visibleMatches.length === 0 && visibleEvents.length === 0 && !showDayToggle) return;
+  const isDaily = title === "Today" || title === "Yesterday";
   const isUpcoming = title === "Upcoming Matches";
+  const isSchedule = isDaily || isUpcoming;
   const isLastResults = title === "Last Results";
   const sortMatchesForSection = (list) => {
     const copy = (Array.isArray(list) ? list.slice() : []);
@@ -3276,16 +3405,16 @@ function renderSection(container, title, tournaments, matches, events, options =
     if (isLastResults) {
       return copy.sort((a, b) => compareSourcePriority(a, b) || (parseUtcTimestamp(b.time) - parseUtcTimestamp(a.time)));
     }
-    if (isToday || isUpcoming) {
+    if (isSchedule) {
       return copy.sort((a, b) => compareSourcePriority(a, b) || (parseUtcTimestamp(a.time) - parseUtcTimestamp(b.time)));
     }
     return copy;
   };
   const sortedVisibleMatches = sortMatchesForSection(visibleMatches);
-  const mainEventMatches = (isToday || isUpcoming)
+  const mainEventMatches = isSchedule
     ? sortedVisibleMatches.filter(isMainEventMatch)
     : [];
-  const regularMatches = (isToday || isUpcoming)
+  const regularMatches = isSchedule
     ? sortedVisibleMatches.filter((match) => !isMainEventMatch(match))
     : sortedVisibleMatches;
   const tournamentsWithSortTime = (tournaments || []).map((tournament) => {
@@ -3298,7 +3427,7 @@ function renderSection(container, title, tournaments, matches, events, options =
       : Number.POSITIVE_INFINITY;
     return { tournament, sortTime, sourcePriority };
   });
-  const sortedTournaments = (isToday || isUpcoming)
+  const sortedTournaments = isSchedule
     ? tournamentsWithSortTime
         .slice()
         .sort((a, b) => (b.sourcePriority - a.sourcePriority) || (a.sortTime - b.sortTime))
@@ -3307,11 +3436,34 @@ function renderSection(container, title, tournaments, matches, events, options =
 
   const sectionTitle = document.createElement("div");
   sectionTitle.className = "section-title";
-  // Left side: title text
-  const titleSpan = document.createElement("span");
-  titleSpan.textContent = title;
-  sectionTitle.appendChild(titleSpan);
-  // Right side: single toggle affects both Today and Upcoming.
+  if (showDayToggle) {
+    sectionTitle.classList.add("section-title--daily");
+    const dayToggle = document.createElement("div");
+    dayToggle.className = "day-toggle";
+    dayToggle.setAttribute("role", "group");
+    dayToggle.setAttribute("aria-label", "Match day");
+    ["today", "yesterday"].forEach((day) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "day-toggle__option" + (selectedScheduleDay === day ? " active" : "");
+      button.dataset.day = day;
+      button.textContent = day === "today" ? "Today" : "Yesterday";
+      button.setAttribute("aria-pressed", String(selectedScheduleDay === day));
+      button.addEventListener("click", () => {
+        if (selectedScheduleDay === day) return;
+        selectedScheduleDay = day;
+        onDayChange();
+        container.querySelector(`.day-toggle__option[data-day="${day}"]`)?.focus({ preventScroll: true });
+      });
+      dayToggle.appendChild(button);
+    });
+    sectionTitle.appendChild(dayToggle);
+  } else {
+    const titleSpan = document.createElement("span");
+    titleSpan.textContent = title;
+    sectionTitle.appendChild(titleSpan);
+  }
+  // Right side: single sort toggle affects the daily schedule and Upcoming.
   if (showScheduleControls) {
     const toggle = document.createElement("div");
     toggle.className = "sort-toggle";
@@ -3406,23 +3558,44 @@ function renderSection(container, title, tournaments, matches, events, options =
       e.stopPropagation();
     });
     // Close when clicking anywhere outside the tooltip/ratingHelp block
-    document.addEventListener("click", (e) => {
+    const closeRatingTooltip = (e) => {
+      if (!ratingHelp.isConnected) {
+        document.removeEventListener("click", closeRatingTooltip);
+        return;
+      }
       if (!ratingHelp.contains(e.target)) {
         tooltip.style.display = "none";
       }
-    });
+    };
+    document.addEventListener("click", closeRatingTooltip);
 
     toggle.appendChild(ratingHelp);
     sectionTitle.appendChild(toggle);
   }
+  if (showRefreshButton) {
+    let controls = sectionTitle.querySelector(".sort-toggle");
+    if (!controls) {
+      controls = document.createElement("div");
+      controls.className = "sort-toggle";
+      sectionTitle.appendChild(controls);
+    }
+    controls.appendChild(createMatchesRefreshButton());
+  }
   container.appendChild(sectionTitle);
-  renderMainEventCards(container, mainEventMatches, tournaments, { isToday });
+  if (visibleMatches.length === 0 && visibleEvents.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "schedule-empty";
+    empty.textContent = title === "Yesterday" ? "No matches yesterday." : "No matches today.";
+    container.appendChild(empty);
+    return;
+  }
+  renderMainEventCards(container, mainEventMatches, tournaments, { isToday: isDaily });
   if (!renderEventsLast) {
     renderEventsCard(container, visibleEvents);
   }
 
   // Time mode — single block, all tournaments merged and sorted by time
-  if ((isToday || isUpcoming) && todaySortBy === "time") {
+  if (isSchedule && todaySortBy === "time") {
     const card = document.createElement("div");
     card.className = "tournament-card time-mode";
 
@@ -3447,11 +3620,11 @@ function renderSection(container, title, tournaments, matches, events, options =
       const tType = (tObj && tObj.type) || match.tournament_type;
       let el;
       if (isDuelTournament(tType)) {
-        // Show rating for Today and Upcoming duel matches in Time mode
-        el = createDuelElement(match, { showRating: true, isToday });
+        // Show ratings for daily and upcoming duel matches in Time mode
+        el = createDuelElement(match, { showRating: true, isToday: isDaily });
       } else {
         // TEAM: also show rating in Time mode
-        el = createMatchElement(match, { showRating: true, isToday });
+        el = createMatchElement(match, { showRating: true, isToday: isDaily });
       }
       card.appendChild(el);
     });
@@ -3705,21 +3878,21 @@ function renderSection(container, title, tournaments, matches, events, options =
         card.appendChild(collapsible);
       }
     } else {
-      // Other sections: Today / Upcoming Matches
+      // Other sections: Today / Yesterday / Upcoming Matches
       filtered.forEach(match => {
         const tType = tournament.type || match.tournament_type;
-        // For Today and Upcoming + duel tournaments add rating above time
+        // For schedule duel matches add rating above time
         if (isDuelTournament(tType)) {
-          const showRating = (title === "Today" || title === "Upcoming Matches");
+          const showRating = isSchedule;
           const el = createDuelElement(match, {
             showRating,
-            isToday,
+            isToday: isDaily,
           });
           card.appendChild(el);
         } else {
-          // TEAM: show rating on Today/Upcoming like duel tournaments
-          const showRating = (title === "Today" || title === "Upcoming Matches");
-          const el = createMatchElement(match, { showRating, isToday });
+          // TEAM: show schedule ratings like duel tournaments
+          const showRating = isSchedule;
+          const el = createMatchElement(match, { showRating, isToday: isDaily });
           if ((tournament.type || match.tournament_type) === "TEAM") {
             registerTeamMatchElement(el, match);
           }
@@ -3758,7 +3931,7 @@ async function fetchPrimaryWithRetry(url, { retries = 2, delayMs = 500, timeout 
   while (true) {
     attempt += 1;
     try {
-      const res = await fetchWithTimeout(url, { timeout });
+      const res = await fetchWithTimeout(url, { timeout, cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       console.info(`✅ Data loaded from primaryURL (attempt ${attempt})`);
@@ -4405,7 +4578,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
     const timeUtc = String(duel?.time_utc || "").trim();
     if (!timeUtc || !Number.isFinite(Date.parse(timeUtc))) return;
 
-    const sectionKey = getFriendlySectionKeyByLocalTime(timeUtc);
+    const sectionKey = isMatchInProgress(duel) ? "today" : getFriendlySectionKeyByLocalTime(timeUtc);
     if (sectionKey === "finished" && !isFriendlyFinishedWithinLastDays(timeUtc, 7)) return;
 
     const periodId = String(duel?.challenge_period_id || "").trim();
@@ -4475,7 +4648,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
     if (!timeUtc || !Number.isFinite(Date.parse(timeUtc))) {
       return;
     }
-    const sectionKey = getFriendlySectionKeyByLocalTime(match?.time_utc);
+    const sectionKey = isMatchInProgress(match) ? "today" : getFriendlySectionKeyByLocalTime(match?.time_utc);
     if (sectionKey === "finished" && !isFriendlyFinishedWithinLastDays(match?.time_utc, 7)) {
       return;
     }
@@ -4588,11 +4761,16 @@ function applySourcePriority(matches, priority) {
 
   function setLoading(visible) {
     const el = document.getElementById("matches-loading");
-    if (!el) return;
-    el.style.display = visible ? "flex" : "none";
+    if (el) el.style.display = visible ? "flex" : "none";
+    document.querySelectorAll(".matches-refresh").forEach((button) => {
+      button.disabled = visible;
+      button.classList.toggle("is-loading", visible);
+      button.setAttribute("aria-busy", String(visible));
+    });
   }
 
-  function fetchAndRenderMatches() {
+  function fetchAndRenderMatches({ refreshPlayerDetails = false } = {}) {
+  if (matchesFetchPromise) return matchesFetchPromise;
   setLoading(true);
   const primaryURL = "https://api.carcassonne.com.ua/public/matches";
   const fallbackURL = "https://zaharik-ua.github.io/carcassonne-gg/json-data/matches.json";
@@ -4603,7 +4781,7 @@ function applySourcePriority(matches, priority) {
   const baseMatchesPromise = fetchPrimaryWithRetry(primaryURL, { retries: 2, delayMs: 500, timeout: 10000 })
     .catch(err => {
       console.warn("⚠️ Primary failed, using fallback:", err && err.message ? err.message : err);
-      return fetch(fallbackURL)
+      return fetch(fallbackURL, { cache: "no-store" })
         .then(res => res.json())
         .then(data => {
           console.info("ℹ️ Data loaded from fallbackURL");
@@ -4611,7 +4789,7 @@ function applySourcePriority(matches, priority) {
         });
     });
 
-  const dbMatchesPromise = fetch(dbMatchesURL)
+  const dbMatchesPromise = fetch(dbMatchesURL, { cache: "no-store" })
     .then(res => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
@@ -4621,9 +4799,10 @@ function applySourcePriority(matches, priority) {
       return null;
     });
 
-  const fetchOptionalJson = (url) => fetch(url)
+  const fetchOptionalJson = (url) => fetch(url, { cache: "no-store" })
     .then(res => res.ok ? res.json() : {})
     .catch(() => ({}));
+  if (refreshPlayerDetails) challengePlayerDetailsCachePromise = null;
   if (!challengePlayerDetailsCachePromise) {
     challengePlayerDetailsCachePromise = Promise.all([
       fetchOptionalJson(profilesURL),
@@ -4634,16 +4813,19 @@ function applySourcePriority(matches, priority) {
   }
   const challengePlayerDetailsPromise = challengePlayerDetailsCachePromise;
 
-  Promise.all([baseMatchesPromise, dbMatchesPromise, challengePlayerDetailsPromise])
+  matchesFetchPromise = Promise.all([baseMatchesPromise, dbMatchesPromise, challengePlayerDetailsPromise])
     .then(([baseData, dbMatchesData, challengePlayerDetails]) => {
       lastData = { baseData, dbMatchesData, challengePlayerDetails };
       renderAllSectionsFromData(lastData);
-      setLoading(false);
     })
     .catch(err => {
       console.error("❌ Failed to load any match data:", err);
+    })
+    .finally(() => {
+      matchesFetchPromise = null;
       setLoading(false);
     });
+  return matchesFetchPromise;
   }
 
   function renderAllSectionsFromData(dataBundle) {
@@ -4652,20 +4834,58 @@ function applySourcePriority(matches, priority) {
       dataBundle?.dbMatchesData || {},
       dataBundle?.challengePlayerDetails || new Map()
     );
-    const mergedTodayTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_today || []), ...(baseData.tournaments_today || [])]);
     const mergedScheduledTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_scheduled || []), ...(baseData.tournaments_scheduled || [])]);
     const mergedFinishedTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_finished || []), ...(baseData.tournaments_finished || [])]);
-    const mergedTodayMatches = dedupeMatchesById([
-      ...applySourcePriority(dbMatchesData.matches_today || [], 2),
-      ...applySourcePriority(baseData.matches_today || [], 1),
-    ]);
     const mergedScheduledMatches = dedupeMatchesById([
       ...applySourcePriority(dbMatchesData.matches_scheduled || [], 2),
       ...applySourcePriority(baseData.matches_scheduled || [], 1),
-    ]);
+    ]).filter((match) => !isMatchInProgress(match));
     const mergedFinishedMatches = dedupeMatchesById([
       ...applySourcePriority(dbMatchesData.matches_finished || [], 2),
       ...applySourcePriority(baseData.matches_finished || [], 1),
+    ]).filter((match) => !isMatchInProgress(match));
+    const allMatches = dedupeMatchesById([
+      ...applySourcePriority([
+        ...(dbMatchesData.matches_today || []),
+        ...(dbMatchesData.matches_scheduled || []),
+        ...(dbMatchesData.matches_finished || []),
+      ], 2),
+      ...applySourcePriority([
+        ...(baseData.matches_today || []),
+        ...(baseData.matches_scheduled || []),
+        ...(baseData.matches_finished || []),
+      ], 1),
+    ]);
+    const todayMatchIds = new Set([
+      ...(dbMatchesData.matches_today || []),
+      ...(baseData.matches_today || []),
+    ].map((match) => String(match?.id || "").trim()));
+    const mergedTodayMatches = getTodayMatches(allMatches.filter((match) => (
+      isMatchInProgress(match) || todayMatchIds.has(String(match?.id || "").trim())
+    )));
+    const mergedTodayTournaments = dedupeTournamentsByIdentity([
+      ...(dbMatchesData.tournaments_today || []),
+      ...(baseData.tournaments_today || []),
+      ...mergedScheduledTournaments,
+      ...mergedFinishedTournaments,
+      ...mergedTodayMatches.map((match) => ({
+        name: match.tournament,
+        logo: match.tournament_logo,
+        link: match.tournament_link,
+        type: match.tournament_type,
+      })),
+    ]);
+    const mergedYesterdayMatches = getYesterdayMatches(allMatches);
+    const mergedYesterdayTournaments = dedupeTournamentsByIdentity([
+      ...mergedTodayTournaments,
+      ...mergedScheduledTournaments,
+      ...mergedFinishedTournaments,
+      ...mergedYesterdayMatches.map((match) => ({
+        name: match.tournament,
+        logo: match.tournament_logo,
+        link: match.tournament_link,
+        type: match.tournament_type,
+      })),
     ]);
 
     const container = document.getElementById("matches-container");
@@ -4673,18 +4893,30 @@ function applySourcePriority(matches, priority) {
 
     const showScheduleControlsInToday = hasRenderableMatches(mergedTodayMatches);
     const showScheduleControlsInUpcoming = !showScheduleControlsInToday && hasRenderableMatches(mergedScheduledMatches);
+    const showScheduleControlsInDaily = showScheduleControlsInToday
+      || (!showScheduleControlsInUpcoming && mergedYesterdayMatches.length > 0);
 
-    renderSection(
-      container,
-      "Today",
-      mergedTodayTournaments,
-      mergedTodayMatches,
-      baseData.events_today || [],
-      {
-        renderEventsLast: true,
-        showScheduleControls: showScheduleControlsInToday,
-      }
-    );
+    const dailyContainer = document.createElement("div");
+    container.appendChild(dailyContainer);
+    const renderSelectedDay = () => {
+      dailyContainer.innerHTML = "";
+      const showToday = selectedScheduleDay === "today";
+      renderSection(
+        dailyContainer,
+        showToday ? "Today" : "Yesterday",
+        showToday ? mergedTodayTournaments : mergedYesterdayTournaments,
+        showToday ? mergedTodayMatches : mergedYesterdayMatches,
+        showToday ? (baseData.events_today || []) : [],
+        {
+          renderEventsLast: true,
+          showScheduleControls: showScheduleControlsInDaily,
+          showDayToggle: true,
+          showRefreshButton: !showScheduleControlsInUpcoming,
+          onDayChange: renderSelectedDay,
+        }
+      );
+    };
+    renderSelectedDay();
     renderSection(
       container,
       "Upcoming Matches",
@@ -4694,6 +4926,7 @@ function applySourcePriority(matches, priority) {
       {
         renderEventsLast: true,
         showScheduleControls: showScheduleControlsInUpcoming,
+        showRefreshButton: showScheduleControlsInUpcoming,
       }
     );
     renderSection(

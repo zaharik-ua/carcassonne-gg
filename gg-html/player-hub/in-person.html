@@ -660,6 +660,84 @@
     grid-column: 1 / -1;
   }
 
+  .ip-form.ip-bulk-player-form {
+    grid-template-columns: 1fr;
+  }
+
+  .ip-bulk-player-fields {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .ip-bulk-player-heading,
+  .ip-bulk-player-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 32px;
+    align-items: start;
+    gap: 8px 12px;
+  }
+
+  .ip-bulk-player-heading {
+    color: #344054;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .ip-bulk-player-rows {
+    display: grid;
+    gap: 10px;
+  }
+
+  .ip-bulk-player-row .ip-field {
+    min-width: 0;
+  }
+
+  .ip-bulk-player-row > .ip-field > label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ip-bulk-player-row > .ip-city-inline-mount:empty {
+    display: none;
+  }
+
+  .ip-btn.ip-bulk-player-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    min-height: 38px;
+    padding: 0;
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #e57373;
+  }
+
+  .ip-btn.ip-bulk-player-remove:hover {
+    background: #fee2e2;
+  }
+
+  .ip-bulk-player-error {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--ip-danger);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .ip-bulk-player-row [aria-invalid="true"] {
+    border-color: var(--ip-danger);
+  }
+
   .ip-image-upload {
     display: grid;
     gap: 6px;
@@ -1773,6 +1851,35 @@
       grid-template-columns: 1fr;
     }
 
+    .ip-bulk-player-heading {
+      display: none;
+    }
+
+    .ip-bulk-player-row {
+      grid-template-columns: minmax(0, 1fr) 32px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--ip-line);
+    }
+
+    .ip-bulk-player-row .ip-field {
+      grid-column: 1;
+    }
+
+    .ip-bulk-player-row > .ip-field > label {
+      position: static;
+      width: auto;
+      height: auto;
+      overflow: visible;
+      clip-path: none;
+      white-space: normal;
+    }
+
+    .ip-bulk-player-remove {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: end;
+    }
+
     .ip-inline-city {
       grid-template-columns: 1fr;
     }
@@ -1855,6 +1962,7 @@
           <div class="ip-actions">
             <button id="ipAddLatePlayerBtn" class="ip-btn primary ip-hidden" type="button">Add late player</button>
             <button id="ipAddTestPlayersBtn" class="ip-btn test-action ip-hidden" type="button">Add test players</button>
+            <button id="ipAddPlayersBulkBtn" class="ip-btn" type="button">Bulk add players</button>
             <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
           </div>
         </div>
@@ -1958,6 +2066,7 @@
   const playerFormMount = document.getElementById("ipPlayerFormMount");
   const swissReadinessEl = document.getElementById("ipSwissReadiness");
   const addPlayerBtn = document.getElementById("ipAddPlayerBtn");
+  const addPlayersBulkBtn = document.getElementById("ipAddPlayersBulkBtn");
   const addLatePlayerBtn = document.getElementById("ipAddLatePlayerBtn");
   const addTestPlayersBtn = document.getElementById("ipAddTestPlayersBtn");
   const bulkCheckInBtn = document.getElementById("ipBulkCheckInBtn");
@@ -2861,7 +2970,7 @@
     container.appendChild(text);
   }
 
-  function createAssociationPickerField(initialValue, { signal } = {}) {
+  function createAssociationPickerField(initialValue, { signal, onChange } = {}) {
     const field = document.createElement("div");
     field.className = "ip-field";
     const label = document.createElement("label");
@@ -2920,6 +3029,7 @@
       value = findAssociation(nextValue) ? String(nextValue) : "";
       renderButton();
       renderOptions();
+      if (typeof onChange === "function") onChange(value);
     };
     const createOption = (association) => {
       const option = document.createElement("button");
@@ -3016,7 +3126,7 @@
     container.appendChild(text);
   }
 
-  function createCityPickerField(initialValue, { onAddNew, signal } = {}) {
+  function createCityPickerField(initialValue, { onAddNew, signal, onChange } = {}) {
     const field = document.createElement("div");
     field.className = "ip-field";
     const label = document.createElement("label");
@@ -3063,6 +3173,7 @@
       value = findCity(nextValue) ? String(nextValue) : "";
       renderButton();
       renderOptions();
+      if (typeof onChange === "function") onChange(value);
     };
     const createOption = (city) => {
       const option = document.createElement("button");
@@ -3410,6 +3521,7 @@
     const participants = state.overview?.participants || [];
     const tournament = state.overview?.tournament;
     addPlayerBtn.disabled = playerCreationDisabled(tournament);
+    addPlayersBulkBtn.disabled = playerCreationDisabled(tournament);
     const isTestTournament = tournament?.is_test_tournament === true;
     const testPlayersAvailable = Number(state.overview?.test_data?.available_players || 0);
     addTestPlayersBtn.classList.toggle("ip-hidden", !isTestTournament);
@@ -3449,10 +3561,248 @@
       || ["cancelled", "completed"].includes(String(tournament?.status || ""));
   }
 
+  function openBulkPlayerForm() {
+    const tournament = state.overview?.tournament;
+    if (!tournament || playerCreationDisabled(tournament)) return;
+    state.playerFormController?.abort();
+    const formController = new AbortController();
+    state.playerFormController = formController;
+    playerFormMount.innerHTML = "";
+    setStatus("");
+    addPlayerBtn.disabled = true;
+    addPlayersBulkBtn.disabled = true;
+
+    const isInternational = tournament.scope === "international";
+    const locationLabel = isInternational ? "Country" : "City";
+    const locationField = isInternational ? "association_id" : "city_id";
+    const bulkUrl = `${AUTH_BASE}/in-person-tournaments/${encodeURIComponent(tournament.id)}/participants/bulk`;
+    const form = document.createElement("form");
+    form.className = "ip-form ip-bulk-player-form";
+    form.noValidate = true;
+    form.setAttribute("aria-label", "Bulk add players");
+    const fields = document.createElement("fieldset");
+    fields.className = "ip-bulk-player-fields";
+    const heading = document.createElement("div");
+    heading.className = "ip-bulk-player-heading";
+    heading.setAttribute("aria-hidden", "true");
+    ["Name (Eng) *", "BGA nickname", `${locationLabel} *`].forEach((labelText) => {
+      const label = document.createElement("span");
+      label.textContent = labelText;
+      heading.appendChild(label);
+    });
+    fields.appendChild(heading);
+    const rowsMount = document.createElement("div");
+    rowsMount.className = "ip-bulk-player-rows";
+    fields.appendChild(rowsMount);
+    const rows = [];
+    let rowSequence = 0;
+
+    const clearErrors = () => {
+      rows.forEach((row) => {
+        row.error.textContent = "";
+        row.error.classList.add("ip-hidden");
+        [row.nameEn.input, row.bgaNickname.input, row.locationButton].forEach((input) => {
+          input.removeAttribute("aria-invalid");
+          input.removeAttribute("aria-describedby");
+        });
+      });
+    };
+    const resetValidation = () => {
+      clearErrors();
+      setStatus("");
+    };
+    const showRowError = (row, message, invalidFields = []) => {
+      row.error.textContent = message;
+      row.error.classList.remove("ip-hidden");
+      invalidFields.forEach((input) => {
+        input.setAttribute("aria-invalid", "true");
+        input.setAttribute("aria-describedby", row.error.id);
+      });
+    };
+    const closeForm = () => {
+      formController.abort();
+      if (state.playerFormController === formController) state.playerFormController = null;
+      playerFormMount.innerHTML = "";
+      addPlayerBtn.disabled = playerCreationDisabled(state.overview?.tournament);
+      addPlayersBulkBtn.disabled = playerCreationDisabled(state.overview?.tournament);
+    };
+    const addRow = () => {
+      const rowController = new AbortController();
+      formController.signal.addEventListener("abort", () => rowController.abort(), {
+        once: true,
+        signal: rowController.signal,
+      });
+      const element = document.createElement("div");
+      element.className = "ip-bulk-player-row";
+      const nameEn = createField("Name (Eng) *");
+      const bgaNickname = createField("BGA nickname");
+      nameEn.input.required = true;
+      nameEn.input.addEventListener("input", resetValidation);
+      bgaNickname.input.addEventListener("input", resetValidation);
+      const cityInlineMount = document.createElement("div");
+      cityInlineMount.className = "ip-city-inline-mount";
+      const location = isInternational
+        ? createAssociationPickerField("", {
+          signal: rowController.signal,
+          onChange: resetValidation,
+        })
+        : createCityPickerField("", {
+          signal: rowController.signal,
+          onChange: resetValidation,
+          onAddNew: () => mountInlineCityCreator(tournament, location, cityInlineMount),
+        });
+      location.field.querySelector("label").textContent = `${locationLabel} *`;
+      const locationButton = location.field.querySelector("button");
+      locationButton.setAttribute("aria-required", "true");
+      const rowId = `ipBulkPlayerRow${++rowSequence}`;
+      [nameEn, bgaNickname].forEach(({ field, input }, index) => {
+        input.id = `${rowId}Input${index}`;
+        field.querySelector("label").htmlFor = input.id;
+      });
+      locationButton.id = `${rowId}Location`;
+      location.field.querySelector("label").htmlFor = locationButton.id;
+      element.appendChild(nameEn.field);
+      element.appendChild(bgaNickname.field);
+      element.appendChild(location.field);
+      const error = document.createElement("p");
+      error.id = `${rowId}Error`;
+      error.className = "ip-bulk-player-error ip-hidden";
+      error.setAttribute("role", "alert");
+      const row = { element, nameEn, bgaNickname, location, locationButton, error };
+      if (rows.length) {
+        const remove = createButton("", "ip-btn ip-bulk-player-remove", () => {
+          rowController.abort();
+          rows.splice(rows.indexOf(row), 1);
+          element.remove();
+          clearErrors();
+          setStatus("");
+        });
+        remove.setAttribute("aria-label", "Remove player row");
+        remove.title = "Remove row";
+        const icon = document.createElement("i");
+        icon.className = "fa-solid fa-trash-can";
+        icon.setAttribute("aria-hidden", "true");
+        remove.appendChild(icon);
+        element.appendChild(remove);
+      }
+      element.appendChild(error);
+      if (!isInternational) element.appendChild(cityInlineMount);
+      rows.push(row);
+      rowsMount.appendChild(element);
+      return row;
+    };
+    const addRowActions = document.createElement("div");
+    addRowActions.className = "ip-form-actions";
+    addRowActions.appendChild(createButton("+ Add row", "ip-btn", () => addRow().nameEn.input.focus()));
+    fields.appendChild(addRowActions);
+    const actions = document.createElement("div");
+    actions.className = "ip-form-actions";
+    const create = document.createElement("button");
+    create.type = "submit";
+    create.className = "ip-btn primary";
+    create.textContent = "Create";
+    actions.appendChild(create);
+    actions.appendChild(createButton("Cancel", "ip-btn", () => {
+      closeForm();
+      setStatus("");
+    }));
+    fields.appendChild(actions);
+    form.appendChild(fields);
+
+    const normalizeDuplicateValue = (value) => String(value || "")
+      .trim().toLocaleLowerCase("en").replace(/\s+/g, " ");
+    const duplicateKey = (participant) => JSON.stringify([
+      normalizeDuplicateValue(participant.name_en),
+      normalizeDuplicateValue(participant[locationField]),
+    ]);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (fields.disabled) return;
+      clearErrors();
+      setStatus("");
+      const seen = new Map((state.overview?.participants || []).map((participant) => (
+        [duplicateKey(participant), { existing: true }]
+      )));
+      const participants = [];
+      let firstInvalid = null;
+      rows.forEach((row, index) => {
+        const participant = {
+          name_en: row.nameEn.input.value.trim(),
+          bga_nickname: row.bgaNickname.input.value.trim() || null,
+          [locationField]: row.location.getValue(),
+        };
+        const missing = [];
+        if (!participant.name_en) missing.push(row.nameEn.input);
+        if (!participant[locationField]) missing.push(row.locationButton);
+        if (missing.length) {
+          showRowError(row, `Row ${index + 1}: Name and ${locationLabel.toLowerCase()} are required.`, missing);
+          firstInvalid ||= missing[0];
+          return;
+        }
+        const key = duplicateKey(participant);
+        const duplicate = seen.get(key);
+        if (duplicate) {
+          const message = duplicate.existing
+            ? `Row ${index + 1}: This name and ${locationLabel.toLowerCase()} are already registered.`
+            : `Row ${index + 1}: This name and ${locationLabel.toLowerCase()} duplicate row ${duplicate.rowNumber}.`;
+          showRowError(row, message, [row.nameEn.input, row.locationButton]);
+          firstInvalid ||= row.nameEn.input;
+        } else {
+          seen.set(key, { rowNumber: index + 1 });
+        }
+        participants.push(participant);
+      });
+      if (firstInvalid) {
+        firstInvalid.focus();
+        setStatus("Correct the highlighted rows before creating players.", "error");
+        return;
+      }
+      fields.disabled = true;
+      create.textContent = "Creating...";
+      let result;
+      try {
+        result = await apiJson(bulkUrl, {
+          method: "POST",
+          body: JSON.stringify({ participants }),
+        });
+      } catch (error) {
+        if (formController.signal.aborted) return;
+        const rowNumber = Number(error.details?.row_number);
+        const row = rows[rowNumber - 1];
+        if (row) {
+          const invalid = error.code === "DUPLICATE_PARTICIPANT"
+            ? [row.nameEn.input, row.locationButton]
+            : [error.details?.field === "name_en" ? row.nameEn.input : row.locationButton];
+          showRowError(row, `Row ${rowNumber}: ${error.message}`, invalid);
+          fields.disabled = false;
+          invalid[0].focus();
+        }
+        setStatus(error.message || "Failed to create players.", "error");
+        return;
+      } finally {
+        fields.disabled = false;
+        create.textContent = "Create";
+      }
+      if (formController.signal.aborted) return;
+      closeForm();
+      const message = `${result.created_count} player(s) added.`;
+      try {
+        await loadOverview();
+        setStatus(message, "success");
+      } catch (error) {
+        setStatus(`${message} Refresh to reload the player list. ${error.message}`, "error");
+      }
+    });
+    const firstRow = addRow();
+    playerFormMount.appendChild(form);
+    firstRow.nameEn.input.focus();
+  }
+
   function openPlayerForm(participant = null) {
     const tournament = state.overview?.tournament;
     if (!tournament) return;
     addPlayerBtn.disabled = !participant || playerCreationDisabled(tournament);
+    addPlayersBulkBtn.disabled = !participant || playerCreationDisabled(tournament);
     state.playerFormController?.abort();
     const formController = new AbortController();
     state.playerFormController = formController;
@@ -3522,6 +3872,7 @@
       if (state.playerFormController === formController) state.playerFormController = null;
       playerFormMount.innerHTML = "";
       addPlayerBtn.disabled = playerCreationDisabled(tournament);
+      addPlayersBulkBtn.disabled = playerCreationDisabled(tournament);
       setStatus("");
     }));
     if (participant) {
@@ -6914,6 +7265,7 @@
   });
   resetTestDataBtn.addEventListener("click", openResetTestDataModal);
   addPlayerBtn.addEventListener("click", () => openPlayerForm());
+  addPlayersBulkBtn.addEventListener("click", openBulkPlayerForm);
   addLatePlayerBtn.addEventListener("click", openLatePlayerForm);
   addTestPlayersBtn.addEventListener("click", () => {
     const maximum = Number(state.overview?.test_data?.available_players || 0);

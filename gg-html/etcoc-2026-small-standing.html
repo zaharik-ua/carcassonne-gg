@@ -79,6 +79,25 @@
     padding-right: 3px;
   }
   .small-standings-table td:last-child { font-weight: 700; }
+  .small-standings-rank-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 4px;
+    background-color: #e6e6e6;
+    color: #222;
+  }
+  .small-standings-rank-badge--green { background-color: #85eebd; color: #0b3a2a; }
+  .small-standings-rank-badge--blue { background-color: #a3ccf9; color: #0b2f55; }
+  .small-standings-rank-badge--red { background-color: #f6b3b3; color: #5b1111; }
+  .small-standings-rank-badge--orange { background-color: #ffd29a; color: #7a3c00; }
+  .small-standings-rank-badge--gold { background-color: #c9a227; color: #fff; font-weight: 500; }
+  .small-standings-rank-badge--silver { background-color: #8e949b; color: #fff; font-weight: 500; }
+  .small-standings-rank-badge--bronze { background-color: #9b5b33; color: #fff; font-weight: 500; }
   .small-standings-team {
     display: flex;
     align-items: center;
@@ -129,6 +148,66 @@
     const response = await fetch(url.toString());
     if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
     return response.json();
+  }
+
+  function parseRankColorsField(rankColorsValue) {
+    if (!rankColorsValue) return null;
+    if (typeof rankColorsValue === 'object') return rankColorsValue;
+    if (typeof rankColorsValue !== 'string') return null;
+    const raw = rankColorsValue.trim();
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      // fall through
+    }
+    // Minimal YAML-like support (e.g. "stages: {Stage 1: {rankColors: {1: orange}}}")
+    try {
+      let jsonish = raw;
+      if (!jsonish.startsWith('{') && !jsonish.startsWith('[')) {
+        jsonish = `{${jsonish}}`;
+      }
+      jsonish = jsonish.replace(/([{,]\s*)([A-Za-z0-9 _-]+)\s*:/g, (m, p1, p2) => {
+        return `${p1}"${String(p2).trim()}":`;
+      });
+      jsonish = jsonish.replace(/:\s*([A-Za-z_][A-Za-z0-9 _-]*)/g, (m, p1) => {
+        const v = String(p1).trim();
+        if (v === 'true' || v === 'false' || v === 'null') return `: ${v}`;
+        return `: "${v}"`;
+      });
+      return JSON.parse(jsonish);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function normalizeRankColor(colorValue) {
+    if (!colorValue) return null;
+    const normalized = String(colorValue).trim().toLowerCase();
+    const allowed = new Set(['green', 'blue', 'red', 'orange', 'gold', 'silver', 'bronze']);
+    return allowed.has(normalized) ? normalized : null;
+  }
+
+  function getRankColorForStage(tournament, stageFilter, rankValue) {
+    const parsed = parseRankColorsField(tournament && tournament.rank_colors);
+    if (!parsed) return null;
+    const stages = (parsed && parsed.stages && typeof parsed.stages === 'object') ? parsed.stages : parsed;
+    if (!stages || typeof stages !== 'object') return null;
+    const stageKey = stageFilter || 'Stage 1';
+    const stageEntry = stages[stageKey] || stages[String(stageKey)];
+    const rankColors = stageEntry && typeof stageEntry === 'object' ? (stageEntry.rankColors || stageEntry.rankcolors) : null;
+    if (!rankColors || typeof rankColors !== 'object') return null;
+    const raw = rankColors[String(rankValue)];
+    return normalizeRankColor(raw);
+  }
+
+  function createRankBadge(rankValue, tournament, stageFilter) {
+    const color = getRankColorForStage(tournament, stageFilter, rankValue);
+    if (!color) return null;
+    const badge = document.createElement('span');
+    badge.className = `small-standings-rank-badge small-standings-rank-badge--${color}`;
+    badge.textContent = String(rankValue);
+    return badge;
   }
 
   // Keep the full standings' team tiebreakers, including opponents' results.
@@ -183,7 +262,7 @@
     return result.map(row => row || remaining[index++]);
   }
 
-  function renderGroups(rows, teams, matches) {
+  function renderGroups(rows, teams, matches, tournament) {
     groupsContainer.replaceChildren();
     const teamsById = new Map(teams.map(team => [normalizeId(team.team_id), team]));
     const groups = new Map();
@@ -217,7 +296,11 @@
         const name = String(team?.team_short_name || '').trim()
           || String(team?.team_name || '').trim() || row.team_id;
         const tr = body.insertRow();
-        tr.insertCell().textContent = String(index + 1);
+        const rankCell = tr.insertCell();
+        const rankValue = index + 1;
+        const badge = createRankBadge(rankValue, tournament, 'Stage 1');
+        if (badge) rankCell.appendChild(badge);
+        else rankCell.textContent = String(rankValue);
         const teamCell = tr.insertCell();
         const teamContent = document.createElement('div');
         teamContent.className = 'small-standings-team';
@@ -243,19 +326,24 @@
   }
 
   async function load() {
+    const tournamentPromise = fetchJson(`/public/tournaments/${tournamentId}`).catch(error => {
+      console.error('Failed to load ETCOC tournament settings', error);
+      return {};
+    });
     try {
-      const [standingsData, teamsData, matchesData] = await Promise.all([
+      const [standingsData, teamsData, matchesData, tournamentData] = await Promise.all([
         fetchJson('/standings', { tournament_id: tournamentId, stage: 'Stage 1' }),
         fetchJson('/public/tournament-teams', { tournament_id: tournamentId }),
-        fetchJson('/public/main-page-matches', { tournament_id: tournamentId })
+        fetchJson('/public/main-page-matches', { tournament_id: tournamentId }),
+        tournamentPromise
       ]);
-      renderGroups(standingsData.standings || [], teamsData.tournament_teams || [], matchesData.matches || []);
+      renderGroups(standingsData.standings || [], teamsData.tournament_teams || [], matchesData.matches || [], tournamentData.tournament);
     } catch (error) {
       console.error('Failed to load compact ETCOC standings', error);
       groupsContainer.textContent = 'Unable to load standings.';
     }
     try {
-      const data = await fetchJson(`/public/tournaments/${tournamentId}`);
+      const data = await tournamentPromise;
       const shortTitle = String(data.tournament?.short_title || '').trim();
       if (shortTitle) root.querySelector('.small-standings-title-text').textContent = shortTitle;
       const logo = String(data.tournament?.logo || '').trim();

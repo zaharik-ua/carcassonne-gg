@@ -318,6 +318,17 @@ export function registerInPersonRoutes(app, {
     }, logger)
   );
   app.post(
+    "/in-person-tournaments/:tournamentId/participants/bulk",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const result = await inPersonService.createParticipantsBulk(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.status(201).json({ ok: true, ...result });
+    }, logger)
+  );
+  app.post(
     "/in-person-tournaments/:tournamentId/participants",
     requireInPersonTournamentAdmin,
     asyncHandler(async (req, res) => {

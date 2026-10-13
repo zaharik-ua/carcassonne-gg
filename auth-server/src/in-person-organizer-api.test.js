@@ -147,6 +147,41 @@ test("accessible endpoint and participant mutations enforce organizer access", a
   assert.equal(globalAdmin.response.status, 200);
 });
 
+test("bulk participant API enforces organizer access and returns row validation details", async (t) => {
+  const { baseUrl, first, second } = await startApi(t);
+  const payload = {
+    participants: [
+      { name_en: "Bulk Player One", association_id: "UKR", bga_nickname: "bga-one" },
+      { name_en: "Bulk Player Two", association_id: "UKR" },
+    ],
+  };
+  const options = { method: "POST", body: JSON.stringify(payload) };
+  const path = `/in-person-tournaments/${first.id}/participants/bulk`;
+  assert.equal((await api(baseUrl, path, options)).response.status, 401);
+  assert.equal((await api(baseUrl, `/in-person-tournaments/${second.id}/participants/bulk`, {
+    ...options, userId: 1,
+  })).response.status, 403);
+  const created = await api(baseUrl, path, { ...options, userId: 1 });
+  assert.equal(created.response.status, 201);
+  assert.equal(created.data.created_count, 2);
+  assert.equal(created.data.participants[0].bga_nickname, "bga-one");
+
+  const duplicate = await api(baseUrl, path, {
+    userId: 1,
+    method: "POST",
+    body: JSON.stringify({ participants: [
+      { name_en: "New Bulk Player", association_id: "UKR" },
+      { name_en: " bulk   player ONE ", association_id: "ukr" },
+    ] }),
+  });
+  assert.equal(duplicate.response.status, 409);
+  assert.equal(duplicate.data.details.row_number, 2);
+  assert.equal(duplicate.data.details.candidates[0].id, created.data.participants[0].id);
+  assert.equal((await api(baseUrl, `/in-person-tournaments/${first.id}/participants`, {
+    userId: 1,
+  })).data.counters.total, 2);
+});
+
 test("participant API returns duplicate details and check-in readiness", async (t) => {
   const { baseUrl, first } = await startApi(t);
   const playerIds = [];

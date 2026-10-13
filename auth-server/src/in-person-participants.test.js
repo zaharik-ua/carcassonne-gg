@@ -249,6 +249,148 @@ test("warns about duplicate participants and supports an explicit namesake confi
   );
 });
 
+test("bulk registration creates players together and allows the same name in different countries", async (t) => {
+  const { service } = await createDatabase(t);
+  const tournament = await createPublishedTournament(service, { slug: "bulk-create" });
+  await service.createParticipant(tournament.id, { name_en: "Same Name", association_id: "UKR" });
+  const before = await service.getParticipantsOverview(tournament.id);
+
+  const result = await service.createParticipantsBulk(tournament.id, {
+    participants: [
+      { name_en: " Same Name ", association_id: "pol", bga_nickname: " bga-player " },
+      { name_en: "New Player", association_id: "UKR" },
+    ],
+  });
+  assert.equal(result.created_count, 2);
+  assert.deepEqual(result.participants.map((player) => [
+    player.name_en, player.association_id, player.bga_nickname, player.status,
+  ]), [
+    ["Same Name", "POL", "bga-player", "registered"],
+    ["New Player", "UKR", null, "registered"],
+  ]);
+  assert.notEqual(result.participants[0].id, result.participants[1].id);
+  const after = await service.getParticipantsOverview(tournament.id);
+  assert.equal(after.counters.total, 3);
+  assert.equal(after.tournament.revision, before.tournament.revision + 1);
+});
+
+test("bulk registration rejects normalized name and country duplicates within the batch and tournament", async (t) => {
+  const { service } = await createDatabase(t);
+  const tournament = await createPublishedTournament(service, { slug: "bulk-duplicates" });
+  const existing = await service.createParticipant(tournament.id, {
+    name_en: "Existing Player", association_id: "UKR",
+  });
+  const before = await service.getParticipantsOverview(tournament.id);
+
+  await assert.rejects(service.createParticipantsBulk(tournament.id, {
+    participants: [
+      { name_en: "Same Name", association_id: "POL", bga_nickname: "one" },
+      { name_en: " same   name ", association_id: "pol", bga_nickname: "two", confirm_duplicate: true },
+    ],
+  }), (error) => error?.code === "DUPLICATE_PARTICIPANT"
+    && error.status === 409
+    && error.details.row_number === 2
+    && error.details.duplicate_row_number === 1);
+  await assert.rejects(service.createParticipantsBulk(tournament.id, {
+    participants: [
+      { name_en: "New Player", association_id: "POL" },
+      { name_en: " existing   PLAYER ", association_id: "ukr" },
+    ],
+  }), (error) => error?.code === "DUPLICATE_PARTICIPANT"
+    && error.details.row_number === 2
+    && error.details.candidates[0].id === existing.id);
+  assert.deepEqual(await service.getParticipantsOverview(tournament.id), before);
+});
+
+test("bulk registration validates every row without partially creating players", async (t) => {
+  const { service } = await createDatabase(t);
+  const tournament = await createPublishedTournament(service, { slug: "bulk-validation" });
+  const before = await service.getParticipantsOverview(tournament.id);
+  for (const participants of [undefined, [], {}, "players"]) {
+    await assert.rejects(service.createParticipantsBulk(tournament.id, { participants }),
+      (error) => error?.code === "PARTICIPANTS_REQUIRED");
+  }
+  for (const [invalid, expectedCode] of [
+    [{ name_en: "   ", association_id: "UKR" }, "PARTICIPANT_NAME_REQUIRED"],
+    [{ name_en: "No Country" }, "PARTICIPANT_ASSOCIATION_REQUIRED"],
+    [{ name_en: "Unknown Country", association_id: "XXX" }, "UNKNOWN_ASSOCIATION"],
+  ]) {
+    await assert.rejects(service.createParticipantsBulk(tournament.id, {
+      participants: [{ name_en: "Valid Player", association_id: "UKR" }, invalid],
+    }), (error) => error?.code === expectedCode && error.details.row_number === 2);
+  }
+  assert.deepEqual(await service.getParticipantsOverview(tournament.id), before);
+});
+
+test("bulk local registration uses city and checks name and city duplicates", async (t) => {
+  const { service } = await createDatabase(t);
+  const kyiv = await service.createCity({ name_en: "Kyiv", association_id: "UKR" });
+  const lviv = await service.createCity({ name_en: "Lviv", association_id: "UKR" });
+  const warsaw = await service.createCity({ name_en: "Warsaw", association_id: "POL" });
+  const tournament = await createPublishedTournament(service, {
+    slug: "bulk-local", scope: "local", association_id: "UKR", local_subtype: "final",
+  });
+  const result = await service.createParticipantsBulk(tournament.id, {
+    participants: [
+      { name_en: "Same Name", city_id: kyiv.id },
+      { name_en: "Same Name", city_id: lviv.id },
+    ],
+  });
+  assert.deepEqual(result.participants.map((player) => [player.city_id, player.association_id]), [
+    [kyiv.id, null], [lviv.id, null],
+  ]);
+  await assert.rejects(service.createParticipantsBulk(tournament.id, {
+    participants: [{ name_en: " same   name ", city_id: lviv.id }],
+  }), (error) => error?.code === "DUPLICATE_PARTICIPANT" && error.details.row_number === 1);
+  for (const [cityId, expectedCode] of [
+    [undefined, "PARTICIPANT_CITY_REQUIRED"],
+    ["unknown", "UNKNOWN_PARTICIPANT_CITY"],
+    [warsaw.id, "PARTICIPANT_CITY_ASSOCIATION_MISMATCH"],
+  ]) {
+    await assert.rejects(service.createParticipantsBulk(tournament.id, {
+      participants: [{ name_en: "Local Player", city_id: cityId }],
+    }), (error) => error?.code === expectedCode && error.details.row_number === 1);
+  }
+  await service.archiveCity(kyiv.id);
+  await assert.rejects(service.createParticipantsBulk(tournament.id, {
+    participants: [{ name_en: "Archived City Player", city_id: kyiv.id }],
+  }), (error) => error?.code === "CITY_ARCHIVED" && error.details.row_number === 1);
+  assert.equal((await service.getParticipantsOverview(tournament.id)).counters.total, 2);
+});
+
+test("bulk registration rolls back earlier inserts if a later insert fails", async (t) => {
+  const { db, service } = await createDatabase(t);
+  const tournament = await createPublishedTournament(service, { slug: "bulk-rollback" });
+  const before = await service.getParticipantsOverview(tournament.id);
+  await exec(db, `
+    CREATE TRIGGER reject_bulk_player BEFORE INSERT ON in_person_participants
+    WHEN NEW.name_en = 'Rejected Player'
+    BEGIN SELECT RAISE(ABORT, 'Injected insert failure'); END;
+  `);
+  await assert.rejects(service.createParticipantsBulk(tournament.id, {
+    participants: [
+      { name_en: "Valid Player", association_id: "UKR" },
+      { name_en: "Rejected Player", association_id: "POL" },
+    ],
+  }), /Injected insert failure/);
+  assert.deepEqual(await service.getParticipantsOverview(tournament.id), before);
+});
+
+test("bulk registration follows read-only and late-entry restrictions", async (t) => {
+  const { db, service } = await createDatabase(t);
+  const tournament = await createPublishedTournament(service, { slug: "bulk-locked" });
+  const payload = { participants: [{ name_en: "Player", association_id: "UKR" }] };
+  await run(db, `INSERT INTO in_person_rounds (id, tournament_id, stage, round_number, status)
+    VALUES ('bulk-locked-round', ?, 'swiss', 1, 'draft')`, [tournament.id]);
+  await assert.rejects(service.createParticipantsBulk(tournament.id, payload),
+    (error) => error?.code === "LATE_ENTRY_REQUIRED");
+  const cancelled = await createPublishedTournament(service, { slug: "bulk-cancelled" });
+  await service.cancelTournament(cancelled.id);
+  await assert.rejects(service.createParticipantsBulk(cancelled.id, payload),
+    (error) => error?.code === "TOURNAMENT_READ_ONLY");
+  assert.equal((await service.getParticipantsOverview(tournament.id)).counters.total, 0);
+});
+
 test("supports check-in with sparse draw numbers including a missing number one", async (t) => {
   const { service } = await createDatabase(t);
   const tournament = await createPublishedTournament(service, { slug: "check-in" });

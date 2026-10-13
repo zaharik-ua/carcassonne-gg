@@ -4,8 +4,8 @@
 <!-- СТИЛІ -->
 <style>
   :root {
-    --main-bg-color: #A47864;
-    --hover-bg-color: #8F6553;
+    --main-bg-color: #15375c;
+    --hover-bg-color: #0e2c4d;
     --accent-text-color: #fff;
   }
 
@@ -69,9 +69,9 @@
   }
 
   .filter-chip {
-    border: 1px solid #8F6553;
+    border: 1px solid var(--main-bg-color);
     background-color: #fff;
-    color: #8F6553;
+    color: var(--main-bg-color);
     border-radius: 2px;
     padding: 1px 6px;
     font-size: 12px;
@@ -81,13 +81,16 @@
   }
 
   .filter-chip.active {
-    background-color: #8F6553;
-    color: #fff;
+    background-color: var(--hover-bg-color);
+    border-color: var(--hover-bg-color);
+    color: var(--accent-text-color);
   }
 
-  .filter-chip:hover {
-    background-color: #7A5746;
-    color: #fff;
+  .filter-chip:hover,
+  .filter-chip:active {
+    background-color: var(--hover-bg-color);
+    border-color: var(--hover-bg-color);
+    color: var(--accent-text-color);
   }
 
   .group-table {
@@ -251,8 +254,7 @@
 <script>
   
   // --- TOURNAMENT ID ---
-  // Determine currentTournamentId either from test default or from the page URL
-  const currentTournamentId = "CCL-2026Q";
+  const currentTournamentId = "CCL-2027Q";
   let players = [];
   let tournament_players = [];
   let tournaments = [];
@@ -264,7 +266,7 @@
   };
 
   function fetchTournamentsAndInit() {
-    const dataUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-done/CCL-2026Q.json";
+    const dataUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json";
 
     fetch(dataUrl)
       .then(r => {
@@ -429,8 +431,6 @@
       if (label === "Qualified by") {
         th.classList.add("qualified-cell");
       }
-      th.style.backgroundColor = "#A47864";
-      th.style.color = "#ffffff";
       headTr.appendChild(th);
     });
     table.appendChild(headTr);

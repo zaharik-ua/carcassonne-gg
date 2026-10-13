@@ -1052,16 +1052,51 @@ export function createInPersonService({
     }));
   }
 
+  function assertParticipantCreationAllowed(tournament) {
+    assertParticipantMutationsAllowed(tournament);
+    if (Number(tournament.has_started_swiss) === 1) {
+      throw conflictError(
+        "LATE_ENTRY_REQUIRED",
+        "After the first Swiss round is created, use the dedicated late participant operation"
+      );
+    }
+  }
+
+  async function insertParticipant(tournamentId, input) {
+    const participantId = `ipp_${idFactory()}`;
+    await dbRun(
+      db,
+      `
+        INSERT INTO in_person_participants (
+          id, tournament_id, name_en, name_local, bga_nickname,
+          current_elo, average_elo, max_elo, number_of_games,
+          player_information, player_photo,
+          association_id, city_id, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'registered', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [
+        participantId,
+        tournamentId,
+        input.name_en,
+        input.name_local,
+        input.bga_nickname,
+        input.current_elo,
+        input.average_elo,
+        input.max_elo,
+        input.number_of_games,
+        input.player_information,
+        input.player_photo,
+        input.association_id,
+        input.city_id,
+      ]
+    );
+    return serializeParticipant(await requireParticipantRow(tournamentId, participantId));
+  }
+
   async function createParticipant(tournamentId, payload) {
     return enqueueMutation(() => transaction(async () => {
       const tournament = await requireTournamentRow(tournamentId);
-      assertParticipantMutationsAllowed(tournament);
-      if (Number(tournament.has_started_swiss) === 1) {
-        throw conflictError(
-          "LATE_ENTRY_REQUIRED",
-          "After the first Swiss round is created, use the dedicated late participant operation"
-        );
-      }
+      assertParticipantCreationAllowed(tournament);
       const input = await validateParticipantRelations(
         normalizeParticipantInput(payload, null, tournament),
         tournament
@@ -1069,35 +1104,72 @@ export function createInPersonService({
       await validateParticipantDuplicate(tournament.id, input, {
         confirmed: payload?.confirm_duplicate === true,
       });
-      const participantId = `ipp_${idFactory()}`;
-      await dbRun(
-        db,
-        `
-          INSERT INTO in_person_participants (
-            id, tournament_id, name_en, name_local, bga_nickname,
-            current_elo, average_elo, max_elo, number_of_games,
-            player_information, player_photo,
-            association_id, city_id, status, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'registered', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        `,
-        [
-          participantId,
-          tournament.id,
-          input.name_en,
-          input.name_local,
-          input.bga_nickname,
-          input.current_elo,
-          input.average_elo,
-          input.max_elo,
-          input.number_of_games,
-          input.player_information,
-          input.player_photo,
-          input.association_id,
-          input.city_id,
-        ]
-      );
+      const participant = await insertParticipant(tournament.id, input);
       await touchTournament(tournament.id);
-      return serializeParticipant(await requireParticipantRow(tournament.id, participantId));
+      return participant;
+    }));
+  }
+
+  async function createParticipantsBulk(tournamentId, payload) {
+    return enqueueMutation(() => transaction(async () => {
+      const tournament = await requireTournamentRow(tournamentId);
+      assertParticipantCreationAllowed(tournament);
+      if (!Array.isArray(payload?.participants) || !payload.participants.length) {
+        throw validationError(
+          "PARTICIPANTS_REQUIRED",
+          "Enter at least one player.",
+          { field: "participants" }
+        );
+      }
+
+      const locationField = tournament.scope === "international" ? "association_id" : "city_id";
+      const locationLabel = tournament.scope === "international" ? "country" : "city";
+      const duplicateKey = (participant) => JSON.stringify([
+        normalizeDuplicateValue(participant.name_en),
+        normalizeDuplicateValue(participant[locationField]),
+      ]);
+      const seen = new Map((await loadParticipantRows(tournament.id)).map((participant) => (
+        [duplicateKey(participant), { participant }]
+      )));
+      const inputs = [];
+      for (const [index, participantPayload] of payload.participants.entries()) {
+        const rowNumber = index + 1;
+        try {
+          const input = await validateParticipantRelations(
+            normalizeParticipantInput(participantPayload, null, tournament),
+            tournament
+          );
+          const key = duplicateKey(input);
+          const duplicate = seen.get(key);
+          if (duplicate) {
+            throw conflictError(
+              "DUPLICATE_PARTICIPANT",
+              duplicate.row_number
+                ? `This name and ${locationLabel} duplicate row ${duplicate.row_number}.`
+                : `A player with this name and ${locationLabel} is already registered.`,
+              {
+                duplicate_fields: ["name_en", locationField],
+                duplicate_row_number: duplicate.row_number || null,
+                candidates: duplicate.participant ? [serializeParticipant(duplicate.participant)] : [],
+              }
+            );
+          }
+          seen.set(key, { row_number: rowNumber });
+          inputs.push(input);
+        } catch (error) {
+          if (error instanceof InPersonError) {
+            error.details = { ...error.details, row_number: rowNumber };
+          }
+          throw error;
+        }
+      }
+
+      const participants = [];
+      for (const input of inputs) {
+        participants.push(await insertParticipant(tournament.id, input));
+      }
+      await touchTournament(tournament.id);
+      return { participants, created_count: participants.length };
     }));
   }
 
@@ -4829,6 +4901,7 @@ export function createInPersonService({
     createCity,
     createParticipantCity,
     createParticipant,
+    createParticipantsBulk,
     createTournament,
     deleteParticipant,
     fillPlayoffTestResults,
