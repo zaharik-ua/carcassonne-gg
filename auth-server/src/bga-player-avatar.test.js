@@ -7,7 +7,7 @@ function context(fetch = async (player) => ({ ok: true, player_id: player, avata
   let clock = 1000;
   const calls = [];
   registerBgaPlayerAvatarRoutes({ get(path, callback) {
-    assert.equal(path, "/bga/player-avatar");
+    assert.deepEqual(path, ["/profiles/bga-player-avatar", "/bga/player-avatar"]);
     handler = callback;
   } }, {
     now: () => clock,

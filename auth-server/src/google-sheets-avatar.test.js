@@ -15,7 +15,7 @@ function context({ profiles = [], ggCode = 200, fallback } = {}) {
       const isGg = url.endsWith("/profiles/public");
       const result = isGg ? { code: ggCode, data: { ok: ggCode === 200, profiles } }
         : fallback(new URL(url).searchParams.get("player"));
-      return { getResponseCode: () => result.code ?? 200, getContentText: () => JSON.stringify(result.data) };
+      return { getResponseCode: () => result.code ?? 200, getContentText: () => result.body ?? JSON.stringify(result.data) };
     } },
     CacheService: { getScriptCache: () => ({
       get: key => cache.get(key) ?? null,
@@ -41,7 +41,7 @@ test("the missing ID from the reported Sheets error falls back to BGA and is cac
   const expected = "https://x.boardgamearena.net/data/avatar/0/95/95236/95236669_184.jpg?h=photo-hash";
   assert.equal(ctx.get(95236669), expected);
   assert.equal(ctx.get("95236669"), expected);
-  assert.equal(ctx.calls.filter(url => url.includes("/bga/player-avatar?")).length, 1);
+  assert.equal(ctx.calls.filter(url => url.includes("/profiles/bga-player-avatar?")).length, 1);
 });
 
 test("empty saved avatars use the profile ID and duplicate range entries share one lookup", () => {
@@ -77,6 +77,14 @@ test("one busy BGA request is retried; failures and invalid payloads remain visi
     const failing = context({ fallback: () => ({ data }) });
     assert.throws(() => failing.get("123"), /Аватар гравця/);
   }
+});
+
+test("an HTML 404 identifies an unavailable endpoint, while a JSON 404 keeps the BGA error", () => {
+  const unavailable = context({ fallback: () => ({ code: 404, body: '<html>404 Not Found</html>' }) });
+  assert.throws(() => unavailable.get("85654109"), /endpoint \/profiles\/bga-player-avatar недоступний.*Оновіть auth-server/);
+  assert.ok(unavailable.calls[1].includes("/profiles/bga-player-avatar?player=85654109"));
+  const missingPlayer = context({ fallback: () => ({ code: 404, data: { ok: false, message: "Player not found in BGA" } }) });
+  assert.throws(() => missingPlayer.get("85654109"), /HTTP 404: Player not found in BGA/);
 });
 
 test("blank cells make no requests and avatar URLs match the site's existing builder", () => {

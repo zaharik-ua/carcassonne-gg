@@ -5,7 +5,7 @@ const BGA_AVATAR_API_BASE = 'https://api.carcassonne.gg';
  * Повертає посилання на BGA-аватар за ID або ніком гравця.
  * Спочатку шукає збережений avatar у /profiles/public.
  * Якщо профілю/аватара немає або цей endpoint недоступний, запитує BGA
- * через /bga/player-avatar (потрібна оновлена версія auth-server).
+ * через /profiles/bga-player-avatar (потрібна оновлена версія auth-server).
  * Порожня клітинка або відсутній avatar у BGA повертає порожній рядок.
  * Результати BGA кешуються на годину. Для холодних BGA-запитів використовуйте
  * невеликі діапазони: custom function у Sheets має обмежений час виконання.
@@ -81,7 +81,7 @@ function fetchUserAvatarFromBga_(player) {
   const cached = cache.get(cacheKey);
   if (cached !== null) return JSON.parse(cached);
 
-  const data = fetchBgaAvatarApiJson_(`/bga/player-avatar?player=${encodeURIComponent(player)}`);
+  const data = fetchBgaAvatarApiJson_(`/profiles/bga-player-avatar?player=${encodeURIComponent(player)}`);
   const id = normalizeBgaAvatarPlayer_(data.player_id);
   if (!/^\d+$/.test(id)) throw new Error('BGA: у відповіді відсутній ID гравця');
   if (!Object.prototype.hasOwnProperty.call(data, 'avatar')) {
@@ -100,7 +100,7 @@ function fetchBgaAvatarApiJson_(path) {
   };
   let response = UrlFetchApp.fetch(url, options);
   // Резервні BGA-запити сервер обробляє по одному, щоб не перевантажувати сесію.
-  if (response.getResponseCode() === 429 && path.indexOf('/bga/player-avatar?') === 0) {
+  if (response.getResponseCode() === 429 && path.indexOf('/profiles/bga-player-avatar?') === 0) {
     Utilities.sleep(2000);
     response = UrlFetchApp.fetch(url, options);
   }
@@ -110,6 +110,9 @@ function fetchBgaAvatarApiJson_(path) {
   try {
     data = JSON.parse(body);
   } catch (_error) {
+    if (code === 404 && path.indexOf('/profiles/bga-player-avatar?') === 0) {
+      throw new Error('Резервний endpoint /profiles/bga-player-avatar недоступний. Оновіть auth-server і перезапустіть його');
+    }
     throw new Error(`Avatar API HTTP ${code}: відповідь сервера не є JSON`);
   }
   if (code !== 200 || !data || data.ok !== true) {
