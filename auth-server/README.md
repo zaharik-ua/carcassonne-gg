@@ -599,7 +599,7 @@ status не змінилися чи BGA-запит завершився поми
 
 `google-sheets-scritps/getUserAvatar.gs` спочатку бере збережений аватар із
 `GET /profiles/public`. Якщо профілю/аватара немає або запит не вдався, він
-використовує `GET /profiles/bga-player-avatar?player=95236669` (ID або точний BGA-нік).
+використовує `GET /bga/player-avatar?player=95236669` (ID або точний BGA-нік).
 Резервний endpoint читає BGA через наявну авторизовану BGA-сесію й не створює
 та не змінює профілі в SQLite. Аватар повертається в початковому форматі BGA;
 Apps Script формує URL за тією самою логікою, що й сайт.
@@ -609,12 +609,18 @@ Apps Script формує URL за тією самою логікою, що й с
 auth-server. Використовуються поточні `PYTHON_BIN`, BGA credentials та Python
 dependencies сервера; окремий токен для Sheets не потрібен.
 
-Шлях `/profiles/bga-player-avatar` використовує вже проксований nginx prefix
-`/profiles/`. Початковий `/bga/player-avatar` залишається alias у Express, але
-для нього потрібне окреме правило nginx для `/bga/`.
-HTML-відповідь 404 означає, що endpoint недоступний через проксі або ще не
-розгорнутий. JSON-відповідь 404 із повідомленням BGA означає, що запит дійшов
-до endpoint, але гравця не знайдено.
+Для `/bga/player-avatar` додайте правило всередині nginx `server` для
+`api.carcassonne.gg`, перед `location / { return 404; }`:
+
+```nginx
+location = /bga/player-avatar { proxy_pass http://127.0.0.1:3100; proxy_http_version 1.1; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }
+```
+
+Після збереження перевірте конфіг і застосуйте його:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
 
 Endpoint публічний, кешує успішні відповіді на годину та допускає лише один
 активний BGA lookup. Зайнятість повертає HTTP 429 з `Retry-After: 2`.

@@ -5,9 +5,7 @@ export function registerBgaPlayerAvatarRoutes(app, { fetchBgaPlayerAvatar, now =
   let lastStartedAt = -Infinity;
   const ttlMs = 60 * 60 * 1000;
 
-  // /profiles/ already passes through the production nginx proxy.
-  // Keep the earlier path as an alias for installations that proxy /bga/ too.
-  app.get(["/profiles/bga-player-avatar", "/bga/player-avatar"], async (req, res) => {
+  app.get("/bga/player-avatar", async (req, res) => {
     if (typeof req.query?.player !== "string") {
       return res.status(400).json({ ok: false, message: "Provide a BGA player ID or nickname" });
     }
