@@ -60,6 +60,7 @@ import {
 } from "./challenges.js";
 import { ensureTournamentCasesSchema } from "./tournament-cases.js";
 import { registerDuelGameBgaResultRoutes } from "./duel-game-bga-result.js";
+import { registerBgaPlayerAvatarRoutes } from "./bga-player-avatar.js";
 import { ensureInPersonSchema } from "./in-person/schema.js";
 import { createRequireInPersonTournamentAdmin } from "./in-person/access.js";
 import { registerInPersonRoutes } from "./in-person/routes.js";
@@ -8484,6 +8485,18 @@ registerDuelGameBgaResultRoutes(app, {
       [path.join(authServerRoot, "get_bga_game_result.py"), "--table-id", String(tableId),
         "--player-1-id", String(player1Id), "--player-2-id", String(player2Id)],
       { cwd: authServerRoot, env: process.env, timeout: 120000, maxBuffer: 1024 * 1024 }
+    );
+    return JSON.parse(stdout);
+  },
+});
+
+registerBgaPlayerAvatarRoutes(app, {
+  async fetchBgaPlayerAvatar(player) {
+    const authServerRoot = path.resolve(__dirname, "..");
+    const { stdout } = await execFileAsync(
+      String(process.env.PYTHON_BIN || "python3").trim() || "python3",
+      [path.join(authServerRoot, "get_bga_player_avatar.py"), "--player", player],
+      { cwd: authServerRoot, env: process.env, timeout: 25000, maxBuffer: 1024 * 1024 }
     );
     return JSON.parse(stdout);
   },

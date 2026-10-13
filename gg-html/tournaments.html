@@ -1142,6 +1142,20 @@
       main: '#d85c5c',
       hover: '#c64a4b'
     },
+    rose: {
+      main: '#E28B9D',
+      hover: '#cf7589',
+      text: '#333'
+    },
+    purple: {
+      main: '#5E1E98',
+      hover: '#4d187d'
+    },
+    orange: {
+      main: '#E69951',
+      hover: '#cf843e',
+      text: '#333'
+    },
     green: {
       main: '#197457',
       hover: '#145c44'
@@ -1177,6 +1191,14 @@
     el.style.setProperty('--accent-text-color', theme.text || '#fff');
   }
 
+  function copyElementTheme(el, sourceEl) {
+    if (!el || !sourceEl) return;
+    const sourceStyle = window.getComputedStyle(sourceEl);
+    ['--main-bg-color', '--hover-bg-color', '--accent-text-color'].forEach(property => {
+      el.style.setProperty(property, sourceStyle.getPropertyValue(property));
+    });
+  }
+
   function buildBgaAvatarUrl(playerId, avatar) {
     const playerIdText = String(playerId || "").trim();
     const avatarText = String(avatar || "").trim();
@@ -1202,7 +1224,7 @@
     const playerIdNumber = Number(playerIdText);
     if (!Number.isFinite(playerIdNumber)) return "";
 
-    const firstFolder = String(Math.floor(playerIdNumber / 100000000));
+    const firstFolder = String(Math.floor(playerIdNumber / 1000000000));
     const secondFolder = String(Math.floor(playerIdNumber / 1000000));
     const thirdFolder = String(Math.floor(playerIdNumber / 1000));
 
@@ -1716,7 +1738,13 @@
           || league.tournament_id;
         const leagueAlias = `league${idx + 1}`;
         const tabId = `league-${league.tournament_id}`;
-        tabDefs.push({ id: tabId, label: leagueLabel, leagueId: league.tournament_id, alias: leagueAlias });
+        tabDefs.push({
+          id: tabId,
+          label: leagueLabel,
+          leagueId: league.tournament_id,
+          alias: leagueAlias,
+          style: leagueTournament?.style || league.style
+        });
         leagueTabAliases[leagueAlias] = tabId;
         tabUrlParams[tabId] = leagueAlias;
         const contentDiv = document.createElement("div");
@@ -1766,6 +1794,9 @@
       tabEl.className = "tab" + (idx === 0 ? " active" : "");
       tabEl.dataset.tab = tab.id;
       tabEl.textContent = tab.label;
+      if (tab.leagueId) {
+        applyElementTheme(tabEl, tab.style, currentTournament.style);
+      }
       tabContainer.appendChild(tabEl);
     });
 
@@ -4309,6 +4340,8 @@
     if (!participants.length || !groupPlayers.length) {
       const overlay = document.createElement('div');
       overlay.className = 'fullscreen-overlay';
+      applyElementTheme(overlay, contextTournament?.style, currentTournament?.style);
+      copyElementTheme(overlay, sourceTable);
       const closeBtn = document.createElement('button');
       closeBtn.className = 'fullscreen-close-btn';
       closeBtn.title = 'Close (Esc)';
@@ -4330,6 +4363,8 @@
 
     const overlay = document.createElement('div');
     overlay.className = 'fullscreen-overlay';
+    applyElementTheme(overlay, contextTournament?.style, currentTournament?.style);
+    copyElementTheme(overlay, sourceTable);
     const closeBtn = document.createElement('button');
     closeBtn.className = 'fullscreen-close-btn';
     closeBtn.title = 'Close (Esc)';
@@ -5040,6 +5075,7 @@
     try {
       const overlay = document.createElement('div');
       overlay.className = 'fullscreen-overlay';
+      copyElementTheme(overlay, sourceWrapper);
 
       // Close button (top-left, icon only)
       const closeBtn = document.createElement('button');

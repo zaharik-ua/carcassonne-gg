@@ -2127,7 +2127,7 @@ function buildBgaAvatarUrl(playerId, avatarValue) {
   if (!/^\d+$/.test(playerIdText)) return "";
   const playerIdNumber = Number(playerIdText);
   if (!Number.isFinite(playerIdNumber)) return "";
-  const firstFolder = String(Math.floor(playerIdNumber / 100000000));
+  const firstFolder = String(Math.floor(playerIdNumber / 1000000000));
   const secondFolder = String(Math.floor(playerIdNumber / 1000000));
   const thirdFolder = String(Math.floor(playerIdNumber / 1000));
   return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;

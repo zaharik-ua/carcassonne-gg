@@ -975,7 +975,7 @@
     const playerIdNumber = Number(playerIdText);
     if (!Number.isFinite(playerIdNumber)) return "";
 
-    const firstFolder = String(Math.floor(playerIdNumber / 100000000));
+    const firstFolder = String(Math.floor(playerIdNumber / 1000000000));
     const secondFolder = String(Math.floor(playerIdNumber / 1000000));
     const thirdFolder = String(Math.floor(playerIdNumber / 1000));
 

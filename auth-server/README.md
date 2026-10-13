@@ -595,6 +595,35 @@ status не змінилися чи BGA-запит завершився поми
 оновлені в момент відсічення або після нього, пропускаються. Порожня опція не
 застосовує фільтр за датою.
 
+### Аватари для Google Sheets
+
+`google-sheets-scritps/getUserAvatar.gs` спочатку бере збережений аватар із
+`GET /profiles/public`. Якщо профілю/аватара немає або запит не вдався, він
+використовує `GET /bga/player-avatar?player=95236669` (ID або точний BGA-нік).
+Резервний endpoint читає BGA через наявну авторизовану BGA-сесію й не створює
+та не змінює профілі в SQLite. Аватар повертається в початковому форматі BGA;
+Apps Script формує URL за тією самою логікою, що й сайт.
+
+Для резервного шляху потрібно розгорнути `src/server.js`,
+`src/bga-player-avatar.js` і `get_bga_player_avatar.py` та перезапустити
+auth-server. Використовуються поточні `PYTHON_BIN`, BGA credentials та Python
+dependencies сервера; окремий токен для Sheets не потрібен.
+
+Endpoint публічний, кешує успішні відповіді на годину та допускає лише один
+активний BGA lookup. Зайнятість повертає HTTP 429 з `Retry-After: 2`.
+Apps Script повторює такий запит один раз через 2 секунди й також кешує BGA URL
+на годину. Для діапазонів робиться один запит до `/profiles/public`, повторні
+гравці використовують спільний резервний результат. Для гравців без кешу
+використовуйте невеликі діапазони через обмежений час виконання Sheets.
+
+```excel
+=getUserAvatar(A2)
+=getUserAvatar("ep45")
+=getUserAvatar(95236669)
+=getUserAvatar(A2:A10)
+=IMAGE(getUserAvatar(A2))
+```
+
 ## 17) Systemd timers для BGA replay
 
 Replay-черга має спільний шаблонний service і три незалежні timers:
