@@ -1,6 +1,70 @@
 // Auth-server: збережені профілі та резервний запит до BGA через його сесію.
 const BGA_AVATAR_API_BASE = 'https://api.carcassonne.gg';
 
+// Налаштування ручного запуску fillUserAvatars з редактора Apps Script.
+const BGA_AVATAR_BATCH_SHEET = 'test';
+const BGA_AVATAR_BATCH_RANGE = 'B70:B80';
+const BGA_AVATAR_BATCH_RESULT_OFFSET = 1; // Сусідня колонка праворуч: B → C.
+const BGA_AVATAR_BATCH_DELAY_MS = 1000;
+
+/**
+ * Послідовно отримує аватари для однієї колонки й записує URL праворуч.
+ * У редакторі Apps Script виберіть fillUserAvatars і натисніть «Виконати».
+ * За замовчуванням: вкладка test, B70:B80 → C70:C80 у поточному файлі.
+ * Можна викликати з іншої функції: fillUserAvatars('test', 'B70:B80', 1).
+ * Порожні вхідні клітинки очищують результат; помилки записуються як текст
+ * ERROR: … і не переривають обробку наступних рядків.
+ * Для великих діапазонів запускайте кілька менших пачок.
+ *
+ * @param {string} sheetName Назва вкладки.
+ * @param {string} rangeA1 Діапазон ID/ніків в одній колонці.
+ * @param {number} resultOffset Зсув колонки результату праворуч (1 = сусідня).
+ * @return {Object} Кількість успішних, порожніх рядків та помилок.
+ */
+function fillUserAvatars(
+  sheetName = BGA_AVATAR_BATCH_SHEET,
+  rangeA1 = BGA_AVATAR_BATCH_RANGE,
+  resultOffset = BGA_AVATAR_BATCH_RESULT_OFFSET
+) {
+  if (!Number.isInteger(resultOffset) || resultOffset < 1) {
+    throw new Error('Зсув колонки результату має бути додатним цілим числом');
+  }
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) throw new Error(`Вкладку "${sheetName}" не знайдено`);
+  const range = sheet.getRange(rangeA1);
+  if (range.getNumColumns() !== 1) {
+    throw new Error('Виберіть діапазон в одній колонці, наприклад B70:B80');
+  }
+
+  const values = range.getValues();
+  const startRow = range.getRow();
+  const resultColumn = range.getColumn() + resultOffset;
+  const summary = { succeeded: 0, blank: 0, failed: 0 };
+
+  for (let index = 0; index < values.length; index++) {
+    const player = normalizeBgaAvatarPlayer_(values[index][0]);
+    let result = '';
+    if (!player) {
+      summary.blank++;
+    } else {
+      try {
+        result = getUserAvatar(player);
+        summary.succeeded++;
+      } catch (error) {
+        result = 'ERROR: ' + error.message;
+        summary.failed++;
+        Logger.log(`${sheetName}, рядок ${startRow + index}: ${result}`);
+      }
+    }
+    sheet.getRange(startRow + index, resultColumn).setValue(result);
+    SpreadsheetApp.flush();
+    if (player && index < values.length - 1) Utilities.sleep(BGA_AVATAR_BATCH_DELAY_MS);
+  }
+
+  Logger.log(`Аватари ${sheetName}!${rangeA1}: ${JSON.stringify(summary)}`);
+  return summary;
+}
+
 /**
  * Повертає посилання на BGA-аватар за ID або ніком гравця.
  * Спочатку шукає збережений avatar у /profiles/public.

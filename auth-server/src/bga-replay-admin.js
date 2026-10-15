@@ -98,11 +98,11 @@ export function getReplayBudgetLimits(env = process.env) {
   const totalLimit = Math.max(1, envInteger(env, "BGA_REPLAY_TOTAL_LIMIT", 80));
   const historicalLimit = Math.min(
     totalLimit,
-    Math.max(0, envInteger(env, "BGA_REPLAY_HISTORICAL_LIMIT", 30))
+    Math.max(0, envInteger(env, "BGA_REPLAY_HISTORICAL_LIMIT", 50))
   );
   const freshReserve = Math.min(
     totalLimit,
-    Math.max(0, envInteger(env, "BGA_REPLAY_FRESH_RESERVE", 50))
+    Math.max(0, envInteger(env, "BGA_REPLAY_FRESH_RESERVE", 30))
   );
   const maxTotalLimit = Math.max(
     totalLimit,

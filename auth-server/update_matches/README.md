@@ -39,8 +39,8 @@ BGA_PASSWORD_4=...
 BGA_EMAIL_5=...
 BGA_PASSWORD_5=...
 BGA_REPLAY_TOTAL_LIMIT=80
-BGA_REPLAY_FRESH_RESERVE=50
-BGA_REPLAY_HISTORICAL_LIMIT=30
+BGA_REPLAY_FRESH_RESERVE=30
+BGA_REPLAY_HISTORICAL_LIMIT=50
 BGA_REPLAY_MAX_TOTAL_LIMIT=100
 BGA_REPLAY_COOLDOWN_HOURS=24
 CHROME_BINARY_PATH=/usr/bin/chromium
@@ -59,8 +59,8 @@ Notes:
 - During an HTTP-session refresh, Selenium waits up to 10 seconds for
   `bgaConfig.requestToken`. A missing token triggers up to three complete
   refresh attempts before the replay is deferred as a temporary error.
-- The replay budget defaults to total `80`, historical `30`, and a protected
-  fresh/manual reserve of `50` per account. The values are configurable through
+- The replay budget defaults to total `80`, historical `50`, and a protected
+  fresh/manual reserve of `30` per account. The values are configurable through
   the variables above.
 
 ## Run

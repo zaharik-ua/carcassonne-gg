@@ -627,8 +627,8 @@ class ReplayBudgetTest(unittest.TestCase):
         )
 
         self.assertEqual(reservation.effective_total_limit, 80)
-        self.assertEqual(reservation.effective_historical_limit, 50)
-        self.assertEqual(reservation.effective_fresh_reserve, 30)
+        self.assertEqual(reservation.effective_historical_limit, 70)
+        self.assertEqual(reservation.effective_fresh_reserve, 10)
 
     def test_expired_override_restores_base_limits_and_keeps_request_audit(self) -> None:
         limits = ReplayBudgetLimits(
@@ -758,9 +758,9 @@ class ReplayBudgetTest(unittest.TestCase):
     def test_total_and_historical_overrides_are_independent(self) -> None:
         limits = ReplayBudgetLimits()
         expected = {
-            "account-a": (0, 100, 30, 70),
-            "account-b": (20, 100, 50, 50),
-            "account-c": (70, 100, 100, 0),
+            "account-a": (0, 100, 50, 50),
+            "account-b": (20, 100, 70, 30),
+            "account-c": (50, 100, 100, 0),
         }
         for account_label, (extra, total, _historical, _reserve) in expected.items():
             replace_replay_budget_overrides(

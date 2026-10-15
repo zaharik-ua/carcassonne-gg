@@ -1145,7 +1145,7 @@
     rose: {
       main: '#E28B9D',
       hover: '#cf7589',
-      text: '#333'
+      text: '#fff'
     },
     purple: {
       main: '#5E1E98',
@@ -1154,7 +1154,7 @@
     orange: {
       main: '#E69951',
       hover: '#cf843e',
-      text: '#333'
+      text: '#fff'
     },
     green: {
       main: '#197457',
@@ -2994,8 +2994,7 @@
     if (rankLegend) {
       const legendWrap = document.createElement("div");
       legendWrap.className = "rank-legend";
-      const colorOrder = ['gold', 'silver', 'bronze', 'green', 'blue', 'orange', 'red'];
-      const keys = Object.keys(rankLegend).sort((a, b) => colorOrder.indexOf(a) - colorOrder.indexOf(b));
+      const keys = Object.keys(rankLegend);
       keys.forEach(color => {
         const item = document.createElement("div");
         item.className = "rank-legend-item";

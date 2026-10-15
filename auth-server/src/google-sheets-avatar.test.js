@@ -117,3 +117,48 @@ test("the first avatar folder changes at one billion, not one hundred million", 
       `https://x.boardgamearena.net/data/avatar/${path}/${id}_184.jpg?h=n61jaaNUiQ`);
   }
 });
+
+test("manual batches write each neighboring cell before looking up the next row and continue after errors", () => {
+  const events = [];
+  const values = [["First"], ["Broken"], [""], ["Last"]];
+  const sheet = { getRange(...args) {
+    if (typeof args[0] === "string") {
+      assert.equal(args[0], "B70:B80");
+      return { getNumColumns: () => 1, getValues: () => values, getRow: () => 70, getColumn: () => 2 };
+    }
+    return { setValue: value => events.push(["write", ...args, value]) };
+  } };
+  const ctx = vm.createContext({
+    SpreadsheetApp: {
+      getActiveSpreadsheet: () => ({ getSheetByName(name) { assert.equal(name, "test"); return sheet; } }),
+      flush: () => events.push(["flush"]),
+    },
+    Utilities: { sleep: ms => events.push(["sleep", ms]) },
+    Logger: { log() {} },
+  });
+  vm.runInContext(source, ctx);
+  ctx.getUserAvatar = player => {
+    events.push(["lookup", player]);
+    if (player === "Broken") throw new Error("BGA failed");
+    return "https://example.com/" + player + ".jpg";
+  };
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.fillUserAvatars())), { succeeded: 2, blank: 1, failed: 1 });
+  assert.deepEqual(events, [
+    ["lookup", "First"], ["write", 70, 3, "https://example.com/First.jpg"], ["flush"], ["sleep", 1000],
+    ["lookup", "Broken"], ["write", 71, 3, "ERROR: BGA failed"], ["flush"], ["sleep", 1000],
+    ["write", 72, 3, ""], ["flush"],
+    ["lookup", "Last"], ["write", 73, 3, "https://example.com/Last.jpg"], ["flush"],
+  ]);
+});
+
+test("manual batches reject missing sheets, multi-column input and offsets that would overwrite input", () => {
+  let sheet;
+  const ctx = vm.createContext({
+    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: () => sheet }) },
+  });
+  vm.runInContext(source, ctx);
+  assert.throws(() => ctx.fillUserAvatars(), /Вкладку "test" не знайдено/);
+  for (const offset of [0, -1, 0.5]) assert.throws(() => ctx.fillUserAvatars("test", "B70:B80", offset), /додатним цілим/);
+  sheet = { getRange: () => ({ getNumColumns: () => 2 }) };
+  assert.throws(() => ctx.fillUserAvatars("test", "B70:C80"), /в одній колонці/);
+});

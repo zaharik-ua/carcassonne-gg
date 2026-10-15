@@ -665,7 +665,7 @@ class ReplayWorkerTest(unittest.TestCase):
         replace_replay_budget_overrides(
             self.db_path,
             account_labels=["account-a", "account-b", "account-c"],
-            extra_historical_limit=70,
+            extra_historical_limit=50,
             total_limit_override=100,
             starts_at=self.now,
             expires_at=self.now + timedelta(hours=2),

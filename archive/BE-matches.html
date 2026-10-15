@@ -1472,12 +1472,6 @@ function collectFlagInfos(matches) {
 let todaySortBy = "time"; // Single UI state controlling Today + Upcoming
 let lastData = null; // cache of last fetched data for re-rendering without refetch
 let tournamentFilterIdCounter = 0;
-const ALLOWED_TOURNAMENTS = new Set([
-  "BCL-2026S-ML",
-  "BCL-2026S-GL",
-  "BCL-2026S-SL",
-  "BCL-2026S-BL"
-]);
 
 function normalizeTextValue(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -1486,7 +1480,8 @@ function normalizeTextValue(value) {
 function isBelTeamValue(value) {
   const normalized = normalizeTextValue(value).toLowerCase();
   if (!normalized) return false;
-  return normalized === "bel" || normalized === "belgium" || normalized.includes("belgium.png");
+  return normalized === "be" || normalized === "bel" || normalized === "belgium"
+    || /(?:^|[\/_-])belgium(?:[._/?#-]|$)/i.test(normalized);
 }
 
 function isBelTeamMatch(match) {
@@ -1502,11 +1497,23 @@ function isBelTeamMatch(match) {
   ].some(isBelTeamValue);
 }
 
-function filterMatchesByAllowedTournaments(matches) {
-  return (matches || []).filter(match => {
+function isBelPlayerDuel(duel) {
+  return [1, 2].some(side => [
+    duel?.[`player_${side}_association_id`],
+    duel?.[`player_${side}_association_name`],
+    duel?.[`player_${side}_association`],
+    duel?.[`player_${side}_association_flag`],
+    duel?.[`player_${side}_country`],
+  ].some(isBelTeamValue));
+}
+
+function filterBelgiumMatches(matches) {
+  return (Array.isArray(matches) ? matches : []).filter(match => {
     if (!match) return false;
-    const tournamentId = normalizeTextValue(match.tournament_id);
-    return ALLOWED_TOURNAMENTS.has(tournamentId) || isBelTeamMatch(match);
+    if (isBelTeamMatch(match)) return true;
+    if (!isDuelTournament(match.tournament_type)) return false;
+    return match.source_type === "db_individual"
+      || normalizeTextValue(match.country).toLowerCase() === "belgium";
   });
 }
 
@@ -2465,6 +2472,54 @@ function adaptDbMainPageMatchesData(data) {
     duelsByMatchId.get(matchId).push(duel);
   });
 
+  (Array.isArray(data?.challenge_duels) ? data.challenge_duels : []).forEach((duel) => {
+    if (!isBelPlayerDuel(duel)) return;
+    const timeUtc = String(duel?.time_utc || "").trim();
+    if (!timeUtc || !Number.isFinite(Date.parse(timeUtc))) return;
+
+    const sectionKey = getFriendlySectionKeyByLocalTime(timeUtc);
+    if (sectionKey === "finished" && !isFriendlyFinishedWithinLastDays(timeUtc, 7)) return;
+
+    const periodId = String(duel?.challenge_period_id || "").trim();
+    const periodName = String(duel?.challenge_period_name || periodId || "Challenges").trim();
+    const periodLogo = String(duel?.challenge_period_logo || "").trim();
+    const tournamentLink = "https://carcassonne.gg/player-hub/challenges/";
+    const tournamentKey = `${periodName}||${tournamentLink}`;
+    if (!tournamentsByKey[sectionKey].has(tournamentKey)) {
+      tournamentsByKey[sectionKey].set(tournamentKey, {
+        id: periodId,
+        name: periodName,
+        logo: periodLogo,
+        link: tournamentLink,
+        type: "Individual",
+      });
+    }
+
+    result[`matches_${sectionKey}`].push({
+      id: String(duel?.id || "").trim(),
+      tournament_id: periodId,
+      tournament: periodName,
+      tournament_logo: periodLogo,
+      tournament_link: tournamentLink,
+      tournament_type: "Individual",
+      time: formatUtcIsoAsLegacyTime(timeUtc),
+      team1: String(duel?.player_1_name || duel?.player_1_id || "").trim(),
+      team2: String(duel?.player_2_name || duel?.player_2_id || "").trim(),
+      opponent1_id: String(duel?.player_1_id || "").trim(),
+      opponent2_id: String(duel?.player_2_id || "").trim(),
+      flag1: String(duel?.player_1_association_flag || duel?.player_1_avatar || "").trim(),
+      flag2: String(duel?.player_2_association_flag || duel?.player_2_avatar || "").trim(),
+      format: String(duel?.duel_format || "").trim(),
+      status: String(duel?.status || "").trim(),
+      gw1: duel?.dw1,
+      gw2: duel?.dw2,
+      rating: duel?.gg_rating ?? duel?.rating,
+      streams: Array.isArray(duel?.streams) ? duel.streams : [],
+      streamers: Array.isArray(duel?.streamers) ? duel.streamers : [],
+      source_type: "db_individual",
+    });
+  });
+
   (Array.isArray(data?.matches) ? data.matches : []).forEach((match) => {
     const timeUtc = String(match?.time_utc || "").trim();
     if (!timeUtc || !Number.isFinite(Date.parse(timeUtc))) {
@@ -2614,9 +2669,9 @@ function applySourcePriority(matches, priority) {
       ...applySourcePriority(dbMatchesData.matches_finished || [], 2),
       ...applySourcePriority(baseData.matches_finished || [], 1),
     ]);
-    const filteredTodayMatches = filterMatchesByAllowedTournaments(mergedTodayMatches);
-    const filteredScheduledMatches = filterMatchesByAllowedTournaments(mergedScheduledMatches);
-    const filteredFinishedMatches = filterMatchesByAllowedTournaments(mergedFinishedMatches);
+    const filteredTodayMatches = filterBelgiumMatches(mergedTodayMatches);
+    const filteredScheduledMatches = filterBelgiumMatches(mergedScheduledMatches);
+    const filteredFinishedMatches = filterBelgiumMatches(mergedFinishedMatches);
     const mergedTodayTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_today || []), ...(baseData.tournaments_today || [])]);
     const mergedScheduledTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_scheduled || []), ...(baseData.tournaments_scheduled || [])]);
     const mergedFinishedTournaments = dedupeTournamentsByIdentity([...(dbMatchesData.tournaments_finished || []), ...(baseData.tournaments_finished || [])]);

@@ -7890,7 +7890,7 @@
     accountHead.appendChild(replayElement(
       "span",
       "replay-muted",
-      `Base total ${data.base_limits?.total_limit ?? 80} • historical ${data.base_limits?.historical_limit ?? 30}`
+      `Base total ${data.base_limits?.total_limit ?? 80} • historical ${data.base_limits?.historical_limit ?? 50}`
     ));
     accountPanel.appendChild(accountHead);
     accountPanel.appendChild(replayElement(
@@ -8092,7 +8092,7 @@
     maxHistoricalButton.type = "button";
     maxHistoricalButton.addEventListener("click", () => {
       const total = Number(totalField.input.value) || Number(data.base_limits?.total_limit) || 80;
-      extraField.input.value = String(Math.max(0, total - (Number(data.base_limits?.historical_limit) || 30)));
+      extraField.input.value = String(Math.max(0, total - (Number(data.base_limits?.historical_limit) || 50)));
       updatePreview();
     });
     presets.appendChild(maxHistoricalButton);
@@ -8131,7 +8131,7 @@
       const base = data.base_limits || {};
       const proposedTotal = Number(totalField.input.value) || Number(base.total_limit) || 80;
       const extra = Number(extraField.input.value) || 0;
-      const historicalLimit = Math.min((Number(base.historical_limit) || 30) + extra, proposedTotal);
+      const historicalLimit = Math.min((Number(base.historical_limit) || 50) + extra, proposedTotal);
       const freshReserve = proposedTotal - historicalLimit;
       const lines = [];
       selected.forEach((account) => {
@@ -8141,7 +8141,7 @@
         const currentHistoricalAvailable = Number(account.limits?.historical_available_now) || 0;
         const currentFreshReserve = account.limits?.effective_fresh_reserve
           ?? base.fresh_reserve
-          ?? 50;
+          ?? 30;
         const totalAvailable = Math.max(0, proposedTotal - totalUsed);
         const historicalAvailable = Math.max(
           0,
@@ -8179,7 +8179,7 @@
       if (proposedTotal > Number(base.total_limit || 80)) {
         lines.push(`WARNING: total limit increases above base ${base.total_limit || 80}.`);
       }
-      if (freshReserve < Number(base.fresh_reserve || 50)) {
+      if (freshReserve < Number(base.fresh_reserve || 30)) {
         lines.push(`WARNING: protected fresh reserve decreases to ${freshReserve}.`);
       }
       return lines;

@@ -217,6 +217,13 @@ test("reports an enqueue database failure without creating a replay or an audit 
 });
 
 test("uses the same masked labels and configurable limits as the replay gateway", () => {
+  assert.deepEqual(getReplayBudgetLimits({}), {
+    total_limit: 80,
+    historical_limit: 50,
+    fresh_reserve: 30,
+    max_total_limit: 100,
+    window_hours: 24,
+  });
   assert.deepEqual(getConfiguredReplayAccountLabels(ENV), [
     "primary:pr***@example.com",
     "reserve2:re***@example.com",
