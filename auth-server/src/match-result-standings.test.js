@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import sqlite3 from "sqlite3";
 import { ensureGameReplaysSchema } from "./bga-replay-schema.js";
+import { getTournamentAccessType } from "./tournament-classification.js";
 
 const source = readFileSync(new URL("./server.js", import.meta.url), "utf8");
 function serverFunction(name) {
@@ -68,6 +69,7 @@ async function createContext(t) {
   }
   const handlers = {};
   const dependencies = {
+    getTournamentAccessType,
     db, dbRunAsync: run, dbAllAsync: all, dbGetAsync: get,
     app: {
       post: (path, handler) => { handlers[path] = handler; },

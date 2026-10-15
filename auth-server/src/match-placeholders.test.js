@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import sqlite3 from "sqlite3";
+import * as classification from "./tournament-classification.js";
+import { calculateLineupDeadlineUtc } from "./secret-lineups.js";
 
 const source = readFileSync(new URL("./server.js", import.meta.url), "utf8");
 const between = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
@@ -34,7 +36,7 @@ async function createContext(t) {
   }));
   await exec(`
     ${source.match(/CREATE TABLE matches \([\s\S]*?\n        \);/)[0]}
-    CREATE TABLE tournaments (id TEXT PRIMARY KEY, name TEXT, short_title TEXT, logo TEXT, link TEXT, tournament_type TEXT);
+    CREATE TABLE tournaments (id TEXT PRIMARY KEY, name TEXT, short_title TEXT, logo TEXT, link TEXT, tournament_type TEXT, category TEXT);
     CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, flag TEXT, logo TEXT);
     CREATE TABLE news (id TEXT, match_id TEXT, title TEXT, short_title TEXT, time_utc TEXT, status TEXT, deleted_at TEXT, updated_at TEXT);
     CREATE TABLE job_runs (job_name TEXT, last_success_at TEXT);
@@ -46,6 +48,8 @@ async function createContext(t) {
   let publicDuelRows = [];
   const emptyRelatedRows = (_ids, done) => done(null, []);
   const dependencies = {
+    ...classification,
+    calculateLineupDeadlineUtc,
     app: {
       post: (path, handler) => { handlers[`POST ${path}`] = handler; },
       patch: (path, handler) => { handlers[`PATCH ${path}`] = handler; },

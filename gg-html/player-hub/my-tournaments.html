@@ -1748,6 +1748,10 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
+  .cp-tournament-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+  .cp-tournament-filters label { display: grid; gap: 4px; font-size: 12px; }
+  .cp-tournament-filters select { padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #111827; font: inherit; }
+
 </style>
 
 <div class="captain-wrap">
@@ -6765,6 +6769,7 @@
 
   const tournamentEditorCache = {
     tournaments: [],
+    filters: { type: "", category: "" },
     currentUserAuthId: "",
     isGlobalAdmin: false,
   };
@@ -6793,7 +6798,7 @@
   let openTournamentDropdown = null;
 
   function createTournamentDropdown(initialValue, options, config = {}) {
-    const normalizedOptions = (Array.isArray(options) ? options : [])
+    const normalizeOptions = (items) => (Array.isArray(items) ? items : [])
       .map((option) => {
         if (option && typeof option === "object") {
           return {
@@ -6805,6 +6810,7 @@
         const value = String(option ?? "").trim();
         return { value, label: value, logo: "" };
       });
+    let normalizedOptions = normalizeOptions(options);
     let value = String(initialValue ?? "").trim();
     if (!normalizedOptions.some((option) => option.value === value)) {
       value = normalizedOptions[0]?.value || "";
@@ -6905,6 +6911,15 @@
         if (openTournamentDropdown === api) openTournamentDropdown = null;
       },
       getValue: () => value,
+      setOptions(options, nextValue = value) {
+        normalizedOptions = normalizeOptions(options);
+        value = normalizedOptions.some((option) => option.value === nextValue) ? nextValue : (normalizedOptions[0]?.value || "");
+        api.close();
+        filterQuery = "";
+        if (searchInput) searchInput.value = "";
+        renderButton();
+        renderMenu();
+      },
       setValue(nextValue, trigger = false) {
         const next = String(nextValue ?? "").trim();
         if (!normalizedOptions.some((option) => option.value === next)) return;
@@ -7914,13 +7929,90 @@
     return section;
   }
 
+  function getTournamentClassification(tournament = {}) {
+    const rawType = String(tournament?.type || tournament?.tournament_type || "Teams").trim().toLowerCase();
+    const type = ["individual", "individuals", "national", "nationals"].includes(rawType) ? "Individuals" : "Teams";
+    let category = String(tournament?.category || "").trim();
+    if (category.toLowerCase() === "koc") category = "King of Carcassonne";
+    if (!category && ["national", "nationals"].includes(rawType)) category = "National";
+    if (!category && (["club", "clubs"].includes(rawType) || (type === "Teams" && tournament?.team_type === "Club"))) category = "Clubs";
+    const legacyMode = String(tournament?.subtype || tournament?.access_type || "").trim().toLowerCase();
+    const legacyOfficial = ["official", "closed", "2"].includes(legacyMode);
+    if (!category && type === "Teams" && !legacyOfficial && !tournament?.type) category = "Friendly";
+    const categoryKey = category.toLowerCase();
+    const isOfficial = type === "Teams" && (
+      ["wtcoc", "etcoc", "asian cup", "copa america"].includes(categoryKey)
+      || (!category && legacyOfficial)
+    );
+    return {
+      type, category, isOfficial,
+      teamType: categoryKey === "clubs" ? "Club" : "National",
+      supportsTeamTools: type === "Teams" && (isOfficial || categoryKey === "friendly"),
+    };
+  }
+
+  function filterTournamentsByClassification(tournaments, filters) {
+    return tournaments.filter((tournament) => {
+      const classification = getTournamentClassification(tournament);
+      return (!filters.type || classification.type === filters.type)
+        && (!filters.category || classification.category === filters.category);
+    });
+  }
+
+  function createTournamentFilters(tournaments, filters, onChange) {
+    const root = document.createElement("div");
+    root.className = "cp-tournament-filters";
+    const categories = Array.from(new Set(filterTournamentsByClassification(tournaments, { type: filters.type })
+      .map((tournament) => getTournamentClassification(tournament).category).filter(Boolean))).sort();
+    if (filters.category && !categories.includes(filters.category)) filters.category = "";
+    const addSelect = (labelText, field, values) => {
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", labelText);
+      [{ value: "", label: `All ${field === "type" ? "types" : "categories"}` }]
+        .concat(values.map((value) => ({ value, label: value }))).forEach((entry) => {
+          const option = document.createElement("option");
+          option.value = entry.value;
+          option.textContent = entry.label;
+          option.selected = entry.value === filters[field];
+          select.appendChild(option);
+        });
+      select.addEventListener("change", () => {
+        filters[field] = select.value;
+        if (field === "type") filters.category = "";
+        onChange();
+      });
+      label.appendChild(select);
+      root.appendChild(label);
+    };
+    addSelect("Type", "type", ["Teams", "Individuals"]);
+    addSelect("Category", "category", categories);
+    return root;
+  }
+
+  function getTournamentCategoryValues(categories, type) {
+    return (Array.isArray(categories) ? categories : [])
+      .filter((category) => Number(category?.is_tournament) === 1 && category?.tournament_type === type)
+      .slice()
+      .sort((left, right) => (Number(left?.sort_order) || 0) - (Number(right?.sort_order) || 0)
+        || String(left?.name || "").localeCompare(String(right?.name || "")))
+      .map((category) => String(category?.name || "").trim())
+      .filter(Boolean);
+  }
+
   function renderMyTournamentsList(tournaments) {
     setPageHeading("My Tournaments");
     clearFilters();
     hintEl.textContent = "";
     addButtonEl.classList.add("cp-hidden");
     addButtonEl.onclick = null;
-    const rows = Array.isArray(tournaments) ? tournaments : [];
+    const allRows = Array.isArray(tournaments) ? tournaments : [];
+    if (filtersEl && allRows.length) {
+      filtersEl.classList.remove("cp-hidden");
+      filtersEl.appendChild(createTournamentFilters(allRows, tournamentEditorCache.filters, () => renderMyTournamentsList(allRows)));
+    }
+    const rows = filterTournamentsByClassification(allRows, tournamentEditorCache.filters);
     countEl.textContent = `${rows.length} tournament${rows.length === 1 ? "" : "s"}`;
 
     if (!rows.length) {
@@ -7956,10 +8048,8 @@
       meta.className = "cp-news-meta";
       [
         item?.id,
-        item?.tournament_type,
-        item?.team_type,
-        item?.category,
-        item?.subtype || item?.access_type,
+        getTournamentClassification(item).type,
+        getTournamentClassification(item).category,
         item?.player_hub_visibility,
       ].filter(Boolean).forEach((value) => {
         const chip = document.createElement("span");
@@ -7986,6 +8076,7 @@
   }
 
   async function openMyTournamentEditor(tournament) {
+    clearFilters();
     setPageHeading("Edit Tournament");
     countEl.textContent = String(tournament?.id || "");
     hintEl.textContent = "";
@@ -7998,6 +8089,7 @@
       const teamParams = new URLSearchParams({ tournament_id: tournamentId });
       const standingsParams = new URLSearchParams({ tournament_id: tournamentId, stage: "Stage 1" });
       const canManageAccessUsers = tournamentEditorCache.isGlobalAdmin;
+      const supportsTeamTools = getTournamentClassification(tournament).supportsTeamTools;
       const [usersData, teamsData, profilesData, categoriesData, iconsData, tournamentTeamsData, standingsData] = await Promise.all([
         canManageAccessUsers
           ? requestTournamentJson(USER_OPTIONS_URL, { method: "GET" })
@@ -8006,8 +8098,12 @@
         requestTournamentJson(PROFILES_PUBLIC_URL, { method: "GET" }),
         requestTournamentJson(CATEGORIES_URL, { method: "GET" }),
         requestTournamentJson(ICONS_URL, { method: "GET" }),
-        requestTournamentJson(`${TOURNAMENT_TEAMS_URL}?${teamParams.toString()}`, { method: "GET" }),
-        requestTournamentJson(`${STANDINGS_URL}?${standingsParams.toString()}`, { method: "GET" }),
+        supportsTeamTools
+          ? requestTournamentJson(`${TOURNAMENT_TEAMS_URL}?${teamParams.toString()}`, { method: "GET" })
+          : Promise.resolve({ tournament_teams: [] }),
+        supportsTeamTools
+          ? requestTournamentJson(`${STANDINGS_URL}?${standingsParams.toString()}`, { method: "GET" })
+          : Promise.resolve({ standings: [] }),
       ]);
       renderMyTournamentEditForm(tournament, {
         users: Array.isArray(usersData?.users) ? usersData.users : [],
@@ -8095,15 +8191,8 @@
     form.className = "cp-edit-form cp-tournament-form";
     const tournamentId = String(tournament?.id || "").trim();
     const canManageAccessUsers = references.canManageAccessUsers === true;
-    const tournamentCategories = (references.categories || [])
-      .filter((category) => Number(category?.is_tournament) === 1)
-      .slice()
-      .sort((left, right) => {
-        const orderDelta = (Number(left?.sort_order) || 0) - (Number(right?.sort_order) || 0);
-        return orderDelta || String(left?.name || "").localeCompare(String(right?.name || ""));
-      })
-      .map((category) => String(category?.name || "").trim())
-      .filter(Boolean);
+    const initialClassification = getTournamentClassification(tournament);
+    const tournamentCategories = getTournamentCategoryValues(references.categories, initialClassification.type);
     const currentLogo = toApiAbsoluteUrl(tournament?.logo || "");
     const tournamentIconOptions = (Array.isArray(references.icons) ? references.icons : [])
       .map((icon) => {
@@ -8160,16 +8249,9 @@
       showLogo: true,
     });
     const linkField = createTournamentFormRow("Link", tournament?.link || "");
-    const tournamentTypeField = createTournamentFormRow(
-      "Tournament type",
-      tournament?.tournament_type || "Teams",
-      { selectOptions: ["Individuals", "Teams", "Clubs", "National"] }
-    );
-    const teamTypeField = createTournamentFormRow(
-      "Team type",
-      tournament?.team_type || "National",
-      { selectOptions: ["National", "Club"] }
-    );
+    const tournamentTypeField = createTournamentFormRow("Type", initialClassification.type, {
+      selectOptions: ["Teams", "Individuals"],
+    });
     const teamSizeField = createTournamentFormRow(
       "Team size",
       tournament?.team_size ?? 10,
@@ -8177,14 +8259,17 @@
     );
     const categoryField = createTournamentFormRow(
       "Category",
-      tournament?.category || "",
-      { selectOptions: [{ value: "", label: "No category" }].concat(tournamentCategories) }
+      initialClassification.category,
+      { selectOptions: [{ value: "", label: "Select category" }].concat(tournamentCategories) }
     );
-    const subtypeField = createTournamentFormRow(
-      "Subtype",
-      tournament?.subtype || tournament?.access_type || "Friendly",
-      { selectOptions: ["Friendly", "Official"] }
-    );
+    const updateCategoryOptions = () => {
+      const type = tournamentTypeField.input.value;
+      const values = getTournamentCategoryValues(references.categories, type);
+      if (type === initialClassification.type && initialClassification.category && !values.includes(initialClassification.category)) {
+        values.push(initialClassification.category);
+      }
+      categoryField.input.setOptions([{ value: "", label: "Select category" }].concat(values), categoryField.input.value);
+    };
     const visibilityField = createTournamentFormRow(
       "Player Hub visibility",
       tournament?.player_hub_visibility || "Visible",
@@ -8319,10 +8404,8 @@
 
     [
       tournamentTypeField,
-      teamTypeField,
-      teamSizeField,
       categoryField,
-      subtypeField,
+      teamSizeField,
       visibilityField,
       lineupTypeField,
       lineupSizeTypeField,
@@ -8368,7 +8451,7 @@
       references.teams,
       references.profiles,
       references.tournamentTeams,
-      teamTypeField.input.value
+      initialClassification.teamType
     );
     const standingsEditor = createTournamentStandingsEditor(
       references.teams,
@@ -8390,32 +8473,29 @@
     const syncConditionalFields = () => {
       const tournamentType = tournamentTypeField.input.value;
       const tournamentFormat = tournamentFormatField.input.value;
-      const isTeams = tournamentType === "Teams";
+      const classification = getTournamentClassification({ type: tournamentType, category: categoryField.input.value });
+      const isTeams = classification.supportsTeamTools;
       const isFreePlay = tournamentFormat === "Free Play";
       const hasStage2 = !isFreePlay && tournamentFormat !== "1 Stage";
-      const supportsCategory = tournamentType === "Individuals" || isTeams;
       const isRivalsCategory = String(categoryField.input.value || "").trim().toLowerCase() === "rivals";
-      const supportsLineup = isTeams || tournamentType === "Clubs";
+      const supportsLineup = isTeams;
       const isFixedLineup = lineupSizeTypeField.input.value === "1";
-      const isOfficial = isTeams && subtypeField.input.value === "Official";
-      const supportsStage1Standings = isTeams
+      const isOfficial = classification.isOfficial;
+      const supportsStage1Standings = isTeams && !isFreePlay
         && ["Round-robin", "Swiss"].includes(stage1FormatField.input.value);
       const hasStage1Standings = standingsEditor.getValues().length > 0;
       const usesBountyTpr = String(standingsScoringField.input.value || "").trim().toLowerCase() === "bounty_tpr";
       const savedWithBountyTpr = String(tournament?.standings_scoring || "").trim().toLowerCase() === "bounty_tpr";
 
-      teamTypeField.row.classList.toggle("cp-hidden", !isTeams);
       teamSizeField.row.classList.toggle("cp-hidden", !isTeams);
-      subtypeField.row.classList.toggle("cp-hidden", !isTeams);
-      categoryField.row.classList.toggle("cp-hidden", !supportsCategory);
-      challengePeriodsSection.classList.toggle("cp-hidden", !supportsCategory || !isRivalsCategory);
+      challengePeriodsSection.classList.toggle("cp-hidden", tournamentType !== "Individuals" || !isRivalsCategory);
       lineupTypeField.row.classList.toggle("cp-hidden", !supportsLineup);
       lineupSizeTypeField.row.classList.toggle("cp-hidden", !supportsLineup);
       lineupSizeField.row.classList.toggle("cp-hidden", !(supportsLineup && isFixedLineup));
       stage1GroupsField.row.classList.toggle("cp-hidden", isFreePlay);
       stage1FormatField.row.classList.toggle("cp-hidden", isFreePlay);
       stage2FormatField.row.classList.toggle("cp-hidden", !hasStage2);
-      accessUsersEditor.root.classList.toggle("cp-hidden", !canManageAccessUsers || !isTeams);
+      accessUsersEditor.root.classList.toggle("cp-hidden", !canManageAccessUsers || !isOfficial);
       tournamentTeamsEditor.root.classList.toggle("cp-hidden", !isTeams);
       standingsEditor.root.classList.toggle("cp-hidden", !supportsStage1Standings);
       tprTargetGamesField.row.classList.toggle("cp-hidden", !usesBountyTpr);
@@ -8423,10 +8503,8 @@
       tprBenchmarkPercentileField.row.classList.toggle("cp-hidden", !usesBountyTpr);
       recalculateButton.classList.toggle("cp-hidden", !savedWithBountyTpr && !hasStage1Standings);
 
-      teamTypeField.input.disabled = isBusy || !isTeams;
       teamSizeField.input.disabled = isBusy || !isTeams;
-      subtypeField.input.disabled = isBusy || !isTeams;
-      categoryField.input.disabled = isBusy || !supportsCategory;
+      categoryField.input.disabled = isBusy;
       lineupTypeField.input.disabled = isBusy || !supportsLineup;
       lineupSizeTypeField.input.disabled = isBusy || !supportsLineup;
       lineupSizeField.input.disabled = isBusy || !supportsLineup || !isFixedLineup;
@@ -8445,16 +8523,17 @@
       lineupSizeField.input.required = supportsLineup && isFixedLineup;
       teamSizeField.input.required = isTeams;
       accessUsersEditor.setOfficial(isOfficial);
-      accessUsersEditor.setDisabled(isBusy || !canManageAccessUsers);
-      tournamentTeamsEditor.setTeamType(teamTypeField.input.value);
+      accessUsersEditor.setDisabled(isBusy || !canManageAccessUsers || !isOfficial);
+      if (isTeams) tournamentTeamsEditor.setTeamType(classification.teamType);
       tournamentTeamsEditor.setDisabled(isBusy || !isTeams);
       standingsEditor.setDisabled(isBusy || !supportsStage1Standings);
     };
 
-    tournamentTypeField.input.addEventListener("change", syncConditionalFields);
-    teamTypeField.input.addEventListener("change", syncConditionalFields);
+    tournamentTypeField.input.addEventListener("change", () => {
+      updateCategoryOptions();
+      syncConditionalFields();
+    });
     categoryField.input.addEventListener("change", syncConditionalFields);
-    subtypeField.input.addEventListener("change", syncConditionalFields);
     lineupSizeTypeField.input.addEventListener("change", syncConditionalFields);
     tournamentFormatField.input.addEventListener("change", syncConditionalFields);
     standingsScoringField.input.addEventListener("change", syncConditionalFields);
@@ -8512,13 +8591,13 @@
 
       const tournamentType = tournamentTypeField.input.value;
       const tournamentFormat = tournamentFormatField.input.value;
-      const isTeams = tournamentType === "Teams";
+      const classification = getTournamentClassification({ type: tournamentType, category: categoryField.input.value });
+      const isTeams = classification.supportsTeamTools;
       const isFreePlay = tournamentFormat === "Free Play";
       const hasStage2 = !isFreePlay && tournamentFormat !== "1 Stage";
-      const isOfficial = isTeams && subtypeField.input.value === "Official";
-      const supportsCategory = tournamentType === "Individuals" || isTeams;
-      const supportsLineup = isTeams || tournamentType === "Clubs";
-      const supportsStage1Standings = isTeams
+      const isOfficial = classification.isOfficial;
+      const supportsLineup = isTeams;
+      const supportsStage1Standings = isTeams && !isFreePlay
         && ["Round-robin", "Swiss"].includes(stage1FormatField.input.value);
       const lineupSizeType = supportsLineup && lineupSizeTypeField.input.value === "1" ? 1 : 2;
       const lineupSize = Number.parseInt(lineupSizeField.input.value, 10);
@@ -8529,10 +8608,8 @@
         short_title: String(shortTitleField.input.value || "").trim(),
         logo: String(logoField.input.value || "").trim(),
         link: String(linkField.input.value || "").trim(),
-        tournament_type: tournamentType,
-        team_type: isTeams ? teamTypeField.input.value : "National",
-        category: supportsCategory ? categoryField.input.value : null,
-        subtype: isTeams ? subtypeField.input.value : null,
+        type: tournamentType,
+        category: categoryField.input.value,
         player_hub_visibility: visibilityField.input.value,
         lineup_type: supportsLineup ? lineupTypeField.input.value : "Open",
         lineup_size_type: lineupSizeType,
@@ -8553,8 +8630,24 @@
         rules: rulesEditor.getHtml(),
         rank_colors: rankColorsEditor.getValues(),
       };
-      if (canManageAccessUsers) {
-        payload.access_users = isOfficial ? accessUsersEditor.getValues() : [];
+      if (canManageAccessUsers && isOfficial) {
+        payload.access_users = accessUsersEditor.getValues();
+      }
+      const unchangedUnmappedClassification = payload.type === initialClassification.type
+        && payload.category === initialClassification.category && !tournamentCategories.includes(initialClassification.category);
+      if (unchangedUnmappedClassification) {
+        delete payload.type;
+        delete payload.category;
+      } else if (!getTournamentCategoryValues(references.categories, payload.type).includes(payload.category)) {
+        setStatus("Select a category for this tournament type.");
+        setAdvancedExpanded(true);
+        return;
+      }
+      if (!supportsLineup) {
+        delete payload.lineup_type;
+        delete payload.lineup_size_type;
+        delete payload.lineup_size;
+        delete payload.team_size;
       }
       const tournamentTeams = isTeams ? tournamentTeamsEditor.getValues() : [];
       const stage1Standings = supportsStage1Standings ? standingsEditor.getValues() : [];
@@ -8632,21 +8725,18 @@
           method: "PATCH",
           body: JSON.stringify(payload),
         });
-        await requestTournamentJson(TOURNAMENT_TEAMS_URL, {
-          method: "PUT",
-          body: JSON.stringify({
-            tournament_id: payload.id,
-            teams: tournamentTeams,
-          }),
-        });
-        await requestTournamentJson(STANDINGS_URL, {
-          method: "PUT",
-          body: JSON.stringify({
-            tournament_id: payload.id,
-            stage: "Stage 1",
-            standings: stage1Standings,
-          }),
-        });
+        if (isTeams) {
+          await requestTournamentJson(TOURNAMENT_TEAMS_URL, {
+            method: "PUT",
+            body: JSON.stringify({ tournament_id: payload.id, teams: tournamentTeams }),
+          });
+        }
+        if (supportsStage1Standings) {
+          await requestTournamentJson(STANDINGS_URL, {
+            method: "PUT",
+            body: JSON.stringify({ tournament_id: payload.id, stage: "Stage 1", standings: stage1Standings }),
+          });
+        }
         setStatus("Tournament updated.", true);
         await initMyTournamentsPage();
       } catch (error) {

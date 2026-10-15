@@ -1043,6 +1043,10 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
+  .cp-tournament-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+  .cp-tournament-filters label { display: grid; gap: 4px; font-size: 12px; }
+  .cp-tournament-filters select { padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #111827; font: inherit; }
+
 </style>
 
 <div class="admin-wrap">
@@ -1329,6 +1333,7 @@
     newsEditorsHideAuto: false,
     mobileMenuItems: [],
     tournaments: [],
+    tournamentFilters: { type: "", category: "" },
     inPersonTournaments: [],
     cities: [],
     challengePeriods: [],
@@ -2560,16 +2565,34 @@
       .filter(Boolean);
   }
 
-  function getTournamentCategoryValues() {
-    return (Array.isArray(state.categories) ? state.categories : [])
-      .filter((category) => Number(category?.is_tournament) === 1)
+  function getTournamentClassification(tournament = {}) {
+    const rawType = String(tournament?.type || tournament?.tournament_type || "Teams").trim().toLowerCase();
+    const type = ["individual", "individuals", "national", "nationals"].includes(rawType) ? "Individuals" : "Teams";
+    let category = String(tournament?.category || "").trim();
+    if (category.toLowerCase() === "koc") category = "King of Carcassonne";
+    if (!category && ["national", "nationals"].includes(rawType)) category = "National";
+    if (!category && (["club", "clubs"].includes(rawType) || (type === "Teams" && tournament?.team_type === "Club"))) category = "Clubs";
+    const legacyMode = String(tournament?.subtype || tournament?.access_type || "").trim().toLowerCase();
+    const legacyOfficial = ["official", "closed", "2"].includes(legacyMode);
+    if (!category && type === "Teams" && !legacyOfficial && !tournament?.type) category = "Friendly";
+    const categoryKey = category.toLowerCase();
+    const isOfficial = type === "Teams" && (
+      ["wtcoc", "etcoc", "asian cup", "copa america"].includes(categoryKey)
+      || (!category && legacyOfficial)
+    );
+    return {
+      type, category, isOfficial,
+      teamType: categoryKey === "clubs" ? "Club" : "National",
+      supportsTeamTools: type === "Teams" && (isOfficial || categoryKey === "friendly"),
+    };
+  }
+
+  function getTournamentCategoryValues(categories, type) {
+    return (Array.isArray(categories) ? categories : [])
+      .filter((category) => Number(category?.is_tournament) === 1 && category?.tournament_type === type)
       .slice()
-      .sort((left, right) => {
-        const leftOrder = Number(left?.sort_order) || 0;
-        const rightOrder = Number(right?.sort_order) || 0;
-        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-        return String(left?.name || "").localeCompare(String(right?.name || ""));
-      })
+      .sort((left, right) => (Number(left?.sort_order) || 0) - (Number(right?.sort_order) || 0)
+        || String(left?.name || "").localeCompare(String(right?.name || "")))
       .map((category) => String(category?.name || "").trim())
       .filter(Boolean);
   }
@@ -2579,9 +2602,8 @@
     return !!normalized && getCategoryValues().some((category) => category.toLowerCase() === normalized);
   }
 
-  function hasTournamentCategory(value) {
-    const normalized = String(value || "").trim().toLowerCase();
-    return !!normalized && getTournamentCategoryValues().some((category) => category.toLowerCase() === normalized);
+  function hasTournamentCategory(value, type) {
+    return getTournamentCategoryValues(state.categories, type).includes(value);
   }
 
   function loadAuditReferenceData() {
@@ -4038,6 +4060,7 @@
   }
 
   function openCategoryForm(mode, item, anchorRow) {
+    const isReadOnly = mode === "edit" && item?.is_read_only === true;
     const form = document.createElement("form");
     form.className = "cp-edit-form";
 
@@ -4046,11 +4069,20 @@
     const sortOrderField = createNumberRow("sort_order", item?.sort_order ?? 0);
     const tournamentField = createCheckboxRow("Tournament", Number(item?.is_tournament) === 1, "Available in tournaments");
     sortOrderField.input.min = "0";
+    [nameField, sortOrderField, tournamentField].forEach((field) => {
+      field.input.disabled = isReadOnly;
+    });
 
     if (mode === "edit") form.appendChild(idField.row);
     form.appendChild(nameField.row);
     form.appendChild(sortOrderField.row);
     form.appendChild(tournamentField.row);
+    if (isReadOnly) {
+      const hint = document.createElement("p");
+      hint.className = "admin-inline-value";
+      hint.textContent = "System category. Read-only.";
+      form.appendChild(hint);
+    }
 
     const actions = document.createElement("div");
     actions.className = "cp-edit-actions";
@@ -4063,7 +4095,7 @@
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.className = "cp-btn cp-btn-secondary";
-    cancelBtn.textContent = "Cancel";
+    cancelBtn.textContent = isReadOnly ? "Close" : "Cancel";
     cancelBtn.addEventListener("click", () => {
       if (mode === "create") {
         sectionForm.classList.add("hidden");
@@ -4080,7 +4112,7 @@
     deleteBtn.textContent = "Delete";
     deleteBtn.classList.toggle("hidden", mode !== "edit");
     deleteBtn.addEventListener("click", async () => {
-      if (!item?.id) return;
+      if (isReadOnly || !item?.id) return;
       if (!window.confirm("Delete this category?")) return;
       try {
         await apiJson(`${CATEGORIES_URL}/${encodeURIComponent(item.id)}`, { method: "DELETE" });
@@ -4093,13 +4125,14 @@
       }
     });
 
-    actions.appendChild(saveBtn);
+    if (!isReadOnly) actions.appendChild(saveBtn);
     actions.appendChild(cancelBtn);
-    if (mode === "edit") actions.appendChild(deleteBtn);
+    if (mode === "edit" && !isReadOnly) actions.appendChild(deleteBtn);
     form.appendChild(actions);
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (isReadOnly) return;
       const payload = {
         id: Number.parseInt(String(idField.input.value || "").trim(), 10),
         name: String(nameField.input.value || "").trim().replace(/\s+/g, " "),
@@ -5082,7 +5115,7 @@
         ensureTeamsLoaded(),
         ensureProfilesPublicLoaded(),
       ]);
-      if (mode === "edit" && item?.id) {
+      if (mode === "edit" && item?.id && getTournamentClassification(item).supportsTeamTools) {
         const params = new URLSearchParams({ tournament_id: String(item.id) });
         const data = await apiJson(`${TOURNAMENT_TEAMS_URL}?${params.toString()}`, { method: "GET" });
         tournamentTeams = Array.isArray(data?.tournament_teams) ? data.tournament_teams : [];
@@ -5094,38 +5127,33 @@
 
     const form = document.createElement("form");
     form.className = "cp-edit-form";
-    const categoryValues = getTournamentCategoryValues();
+    const initialClassification = getTournamentClassification(item || { type: "Teams", category: "" });
+    const categoryValues = getTournamentCategoryValues(state.categories, initialClassification.type);
 
     const idField = createTextRow("id", item?.id || "", { readOnly: mode === "edit" });
     const nameField = createTextRow("name", item?.name || "");
     const shortTitleField = createTextRow("short_title", item?.short_title || "");
     const logoField = createTextRow("logo", item?.logo || "");
     const linkField = createTextRow("link", item?.link || "");
-    const tournamentTypeField = createSelectRow(
-      "tournament_type",
-      String(item?.tournament_type || item?.type || "Teams"),
-      ["Individuals", "Teams", "Clubs", "National"],
-      false
-    );
-    const teamTypeField = createSelectRow(
-      "team_type",
-      String(item?.team_type || "National"),
-      ["National", "Club"],
-      false
-    );
-    const categoryField = createSelectRow(
-      "category",
-      String(item?.category || ""),
-      [""].concat(categoryValues),
-      false
-    );
-    if (categoryField.select.options[0]) categoryField.select.options[0].textContent = "No category";
-    const subtypeField = createSelectRow(
-      "subtype",
-      String(item?.subtype || item?.access_type || "Friendly"),
-      ["Friendly", "Official"],
-      false
-    );
+    const tournamentTypeField = createSelectRow("type", initialClassification.type, ["Teams", "Individuals"], false);
+    const categoryField = createSelectRow("category", initialClassification.category, [], false);
+    const updateCategoryOptions = () => {
+      const type = tournamentTypeField.select.value;
+      const values = getTournamentCategoryValues(state.categories, type);
+      const selected = categoryField.select.value || (type === initialClassification.type ? initialClassification.category : "");
+      if (type === initialClassification.type && initialClassification.category && !values.includes(initialClassification.category)) {
+        values.push(initialClassification.category);
+      }
+      categoryField.select.innerHTML = "";
+      [""].concat(values).forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value || "Select category";
+        categoryField.select.appendChild(option);
+      });
+      categoryField.select.value = values.includes(selected) ? selected : "";
+    };
+    updateCategoryOptions();
     const playerHubVisibilityField = createSelectRow(
       "player_hub_visibility",
       String(item?.player_hub_visibility || "Visible"),
@@ -5227,7 +5255,7 @@
           };
         }),
       tournamentTeams,
-      teamTypeField.select.value
+      initialClassification.teamType
     );
     const tournamentTeamsHint = document.createElement("p");
     tournamentTeamsHint.className = "admin-inline-value";
@@ -5238,9 +5266,7 @@
     form.appendChild(logoField.row);
     form.appendChild(linkField.row);
     form.appendChild(tournamentTypeField.row);
-    form.appendChild(teamTypeField.row);
     form.appendChild(categoryField.row);
-    form.appendChild(subtypeField.row);
     form.appendChild(playerHubVisibilityField.row);
     form.appendChild(lineupSizeTypeField.row);
     form.appendChild(lineupSizeField.row);
@@ -5257,60 +5283,37 @@
     tournamentTeamsField.row.classList.add("cp-edit-row-full");
     tournamentTeamsField.row.appendChild(tournamentTeamsHint);
 
+    const selectedClassification = () => getTournamentClassification({
+      type: tournamentTypeField.select.value, category: categoryField.select.value,
+    });
     const toggleAccessUsersState = () => {
-      const isTeams = String(tournamentTypeField.select.value || "").trim() === "Teams";
-      const isOfficial = String(subtypeField.select.value || "").trim() === "Official";
-      teamTypeField.row.classList.toggle("hidden", !isTeams);
-      teamTypeField.select.disabled = !isTeams;
-      subtypeField.row.classList.toggle("hidden", !isTeams);
-      accessUsersField.row.classList.toggle("hidden", !isTeams);
-      accessUsersField.setDisabled(!(isTeams && isOfficial));
-      tournamentTeamsField.row.classList.toggle("hidden", !isTeams);
-      tournamentTeamsField.setDisabled(!isTeams);
-      tournamentTeamsField.setTeamType(teamTypeField.select.value);
-      accessUsersHint.textContent = !isTeams
-        ? "Subtype is used only for team tournaments."
-        : isOfficial
-          ? "Select users who will have access to this official tournament and assign role: admin or captain."
-          : "Friendly tournaments are available to all captains.";
-      tournamentTeamsHint.textContent = teamTypeField.select.value === "National"
-        ? "Select National teams. If selected, a captain must belong to the same association as the team."
-        : "Select Club teams. An optional captain may belong to any association.";
+      const classification = selectedClassification();
+      accessUsersField.row.classList.toggle("hidden", !classification.isOfficial);
+      accessUsersField.setDisabled(!classification.isOfficial);
+      tournamentTeamsField.row.classList.toggle("hidden", !classification.supportsTeamTools);
+      tournamentTeamsField.setDisabled(!classification.supportsTeamTools);
+      if (classification.supportsTeamTools) tournamentTeamsField.setTeamType(classification.teamType);
+      accessUsersHint.textContent = "Select users and assign role: admin or captain.";
+      tournamentTeamsHint.textContent = "Select National teams. A captain must belong to the same association as the team.";
     };
-    tournamentTypeField.select.addEventListener("change", toggleAccessUsersState);
-    subtypeField.select.addEventListener("change", toggleAccessUsersState);
-    teamTypeField.select.addEventListener("change", toggleAccessUsersState);
+    tournamentTypeField.select.addEventListener("change", () => {
+      updateCategoryOptions();
+      toggleAccessUsersState();
+    });
+    categoryField.select.addEventListener("change", toggleAccessUsersState);
     toggleAccessUsersState();
 
-    const toggleCategoryState = () => {
-      const tournamentType = String(tournamentTypeField.select.value || "").trim();
-      const supportsCategory = tournamentType === "Individuals" || tournamentType === "Teams";
-      categoryField.row.classList.toggle("hidden", !supportsCategory);
-      categoryField.select.disabled = !supportsCategory;
-      if (!supportsCategory) {
-        categoryField.select.value = "";
-      }
-    };
-    tournamentTypeField.select.addEventListener("change", toggleCategoryState);
-    toggleCategoryState();
-
     const toggleLineupSizeState = () => {
-      const tournamentType = String(tournamentTypeField.select.value || "").trim();
-      const supportsLineupSize = tournamentType === "Teams" || tournamentType === "Clubs";
+      const supportsLineupSize = selectedClassification().supportsTeamTools;
       const isFixed = String(lineupSizeTypeField.select.value || "2") === "1";
       lineupSizeTypeField.row.classList.toggle("hidden", !supportsLineupSize);
       lineupSizeTypeField.select.disabled = !supportsLineupSize;
       lineupSizeField.input.disabled = !supportsLineupSize || !isFixed;
       lineupSizeField.input.required = supportsLineupSize && isFixed;
       lineupSizeField.row.classList.toggle("hidden", !supportsLineupSize || !isFixed);
-      if (!supportsLineupSize) {
-        lineupSizeTypeField.select.value = "2";
-        lineupSizeField.input.value = "";
-      } else if (!isFixed) {
-        lineupSizeField.input.value = "";
-      }
     };
     tournamentTypeField.select.addEventListener("change", toggleLineupSizeState);
+    categoryField.select.addEventListener("change", toggleLineupSizeState);
     lineupSizeTypeField.select.addEventListener("change", toggleLineupSizeState);
     toggleLineupSizeState();
 
@@ -5354,16 +5357,15 @@
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const rawTournamentId = String(idField.input.value || "").trim();
+      const classification = selectedClassification();
       const payload = {
         id: rawTournamentId,
         name: String(nameField.input.value || "").trim(),
         short_title: String(shortTitleField.input.value || "").trim(),
         logo: String(logoField.input.value || "").trim(),
         link: String(linkField.input.value || "").trim(),
-        tournament_type: String(tournamentTypeField.select.value || "Teams").trim(),
-        team_type: String(teamTypeField.select.value || "National").trim(),
-        category: String(categoryField.select.value || "").trim(),
-        subtype: String(subtypeField.select.value || "Friendly").trim(),
+        type: tournamentTypeField.select.value,
+        category: categoryField.select.value,
         player_hub_visibility: String(playerHubVisibilityField.select.value || "Visible").trim(),
         lineup_size_type: Number.parseInt(String(lineupSizeTypeField.select.value || "2"), 10) === 1 ? 1 : 2,
         lineup_size: Number.parseInt(String(lineupSizeField.input.value || "").trim(), 10),
@@ -5373,9 +5375,9 @@
         tpr_benchmark_percentile: Number(String(tprBenchmarkPercentileField.input.value || "").trim()),
         ranking: rankingField.input.checked,
         is_test: isTestField.input.checked,
-        access_users: accessUsersField.getValues(),
       };
-      const tournamentTeamsPayload = payload.tournament_type === "Teams"
+      if (classification.isOfficial) payload.access_users = accessUsersField.getValues();
+      const tournamentTeamsPayload = classification.supportsTeamTools
         ? tournamentTeamsField.getValues()
         : [];
       if (!payload.id) {
@@ -5386,25 +5388,20 @@
         setStatus("Tournament name is required.", true);
         return;
       }
-      if (payload.tournament_type !== "Teams") {
-        payload.team_type = "National";
-        payload.subtype = null;
-        payload.access_users = [];
-      } else if (payload.subtype !== "Official") {
-        payload.access_users = [];
-      }
-      if (payload.tournament_type !== "Individuals" && payload.tournament_type !== "Teams") {
-        payload.category = null;
-      }
-      if (payload.category && !hasTournamentCategory(payload.category)) {
-        setStatus("Select a valid tournament category.", true);
+      const unchangedUnmappedClassification = mode === "edit"
+        && payload.type === initialClassification.type && payload.category === initialClassification.category
+        && !categoryValues.includes(initialClassification.category);
+      if (unchangedUnmappedClassification) {
+        delete payload.type;
+        delete payload.category;
+      } else if (!hasTournamentCategory(payload.category, payload.type)) {
+        setStatus("Select a category for this tournament type.", true);
         return;
       }
-      if (payload.tournament_type !== "Teams" && payload.tournament_type !== "Clubs") {
-        payload.lineup_size_type = 2;
-        payload.lineup_size = null;
-      }
-      if (payload.lineup_size_type === 2) {
+      if (!classification.supportsTeamTools) {
+        delete payload.lineup_size_type;
+        delete payload.lineup_size;
+      } else if (payload.lineup_size_type === 2) {
         payload.lineup_size = null;
       } else if (!Number.isInteger(payload.lineup_size) || payload.lineup_size <= 0) {
         setStatus("Lineup size must be a positive integer for fixed lineup size.", true);
@@ -5457,13 +5454,12 @@
             body: JSON.stringify(payload),
           });
         }
-        await apiJson(TOURNAMENT_TEAMS_URL, {
-          method: "PUT",
-          body: JSON.stringify({
-            tournament_id: payload.id,
-            teams: tournamentTeamsPayload,
-          }),
-        });
+        if (classification.supportsTeamTools) {
+          await apiJson(TOURNAMENT_TEAMS_URL, {
+            method: "PUT",
+            body: JSON.stringify({ tournament_id: payload.id, teams: tournamentTeamsPayload }),
+          });
+        }
         setStatus(mode === "create" ? "Tournament created." : "Tournament updated.", false);
         if (mode === "create") {
           sectionForm.classList.add("hidden");
@@ -7043,8 +7039,9 @@
           subtitle: [
             `Sort order: ${Number(item?.sort_order) || 0}`,
             Number(item?.is_tournament) === 1 ? "Tournament" : "",
+            item?.is_read_only === true ? "Read-only" : "",
           ].filter(Boolean).join(" • "),
-          buttonLabel: "Edit",
+          buttonLabel: item?.is_read_only === true ? "View" : "Edit",
           onClick: (row) => openCategoryForm("edit", item, row),
         }));
       });
@@ -7268,6 +7265,46 @@
     });
   }
 
+  function filterTournamentsByClassification(tournaments, filters) {
+    return tournaments.filter((tournament) => {
+      const classification = getTournamentClassification(tournament);
+      return (!filters.type || classification.type === filters.type)
+        && (!filters.category || classification.category === filters.category);
+    });
+  }
+
+  function createTournamentFilters(tournaments, filters, onChange) {
+    const root = document.createElement("div");
+    root.className = "cp-tournament-filters";
+    const categories = Array.from(new Set(filterTournamentsByClassification(tournaments, { type: filters.type })
+      .map((tournament) => getTournamentClassification(tournament).category).filter(Boolean))).sort();
+    if (filters.category && !categories.includes(filters.category)) filters.category = "";
+    const addSelect = (labelText, field, values) => {
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", labelText);
+      [{ value: "", label: `All ${field === "type" ? "types" : "categories"}` }]
+        .concat(values.map((value) => ({ value, label: value }))).forEach((entry) => {
+          const option = document.createElement("option");
+          option.value = entry.value;
+          option.textContent = entry.label;
+          option.selected = entry.value === filters[field];
+          select.appendChild(option);
+        });
+      select.addEventListener("change", () => {
+        filters[field] = select.value;
+        if (field === "type") filters.category = "";
+        onChange();
+      });
+      label.appendChild(select);
+      root.appendChild(label);
+    };
+    addSelect("Type", "type", ["Teams", "Individuals"]);
+    addSelect("Category", "category", categories);
+    return root;
+  }
+
   function renderTournaments() {
     sectionTitle.textContent = "Tournaments";
     sectionCreateBtn.textContent = "Create";
@@ -7280,18 +7317,24 @@
     }
 
     sectionList.innerHTML = "";
-    state.tournaments.forEach((item) => {
+    sectionList.appendChild(createTournamentFilters(state.tournaments, state.tournamentFilters, () => {
+      closeInlineForm();
+      renderTournaments();
+    }));
+    const rows = filterTournamentsByClassification(state.tournaments, state.tournamentFilters);
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "admin-empty";
+      empty.textContent = "No tournaments match the selected filters.";
+      sectionList.appendChild(empty);
+    }
+    rows.forEach((item) => {
       const subtitleParts = [];
-      const tournamentType = String(item?.tournament_type || item?.type || "").trim();
-      const teamType = String(item?.team_type || "").trim();
-      const category = String(item?.category || "").trim();
-      const subtype = String(item?.subtype || item?.access_type || "").trim();
+      const { type: tournamentType, category } = getTournamentClassification(item);
       const playerHubVisibility = String(item?.player_hub_visibility || "").trim();
       if (item.short_title) subtitleParts.push(String(item.short_title).trim());
       if (tournamentType) subtitleParts.push(tournamentType);
-      if (tournamentType === "Teams" && teamType) subtitleParts.push(teamType);
       if (category) subtitleParts.push(category);
-      if (tournamentType === "Teams" && subtype) subtitleParts.push(subtype);
       if (playerHubVisibility) subtitleParts.push(playerHubVisibility);
       if (item?.is_test === true || Number(item?.is_test) === 1) subtitleParts.push("Test");
       sectionList.appendChild(createListRow({

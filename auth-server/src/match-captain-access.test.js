@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
+import { getTournamentAccessType } from "./tournament-classification.js";
 
 const source = readFileSync(new URL("./server.js", import.meta.url), "utf8");
 function serverFunction(name) {
@@ -21,6 +22,7 @@ function createContext(tournamentOverrides = {}, matchOverrides = {}) {
     ...matchOverrides,
   };
   const context = vm.createContext({
+    getTournamentAccessType,
     TOURNAMENT_ACCESS_TYPES: { OFFICIAL: "Official", FRIENDLY: "Friendly" },
     TOURNAMENT_ACCESS_ROLES: { ADMIN: "admin", CAPTAIN: "captain" },
     dbGetAsync: async () => match,

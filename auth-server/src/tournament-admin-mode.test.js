@@ -14,7 +14,7 @@ function pageFunction(name) {
 const context = vm.createContext({
   normalizeCode: (value) => String(value || "").trim().toUpperCase(),
 });
-for (const name of ["normalizeTournamentAccessUsers", "normalizeTournamentCaptainTeamIds", "getTournamentAccessState", "getTournamentAdminMode"]) {
+for (const name of ["getTournamentClassification", "normalizeTournamentAccessUsers", "normalizeTournamentCaptainTeamIds", "getTournamentAccessState", "getTournamentAdminMode"]) {
   vm.runInContext(pageFunction(name), context);
 }
 const official = { id: "cup", subtype: "official", access_role: "admin", captain_team_ids: [] };

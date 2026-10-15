@@ -19,7 +19,7 @@ test("My Tournaments loads the assigned-admin scope and keeps Access users globa
     /canManageAccessUsers[\s\S]*?requestTournamentJson\(USER_OPTIONS_URL[\s\S]*?Promise\.resolve\(\{ users: \[\] \}\)/
   );
   assert.match(myTournamentsHtml, /if \(canManageAccessUsers\) form\.appendChild\(accessUsersEditor\.root\)/);
-  assert.match(myTournamentsHtml, /if \(canManageAccessUsers\) \{[\s\S]*?payload\.access_users/);
+  assert.match(myTournamentsHtml, /if \(canManageAccessUsers && isOfficial\) \{[\s\S]*?payload\.access_users/);
   assert.match(myTournamentsHtml, /canUploadSource: tournamentEditorCache\.isGlobalAdmin/);
   assert.match(myTournamentsHtml, /isAdmin: tournamentEditorCache\.isGlobalAdmin/);
 
@@ -39,5 +39,5 @@ test("tournament editing routes use tournament-admin authorization", () => {
 
   assert.match(serverSource, /requestedScope === "my-tournaments"/);
   assert.match(serverSource, /Only global admins can edit tournament access users/);
-  assert.match(serverSource, /if \(!canManageAccessUsers\) \{[\s\S]*?return commitTournamentUpdate\(\)/);
+  assert.match(serverSource, /if \(!canManageAccessUsers \|\| !includesAccessUsersUpdate\) \{[\s\S]*?return commitTournamentUpdate\(\)/);
 });

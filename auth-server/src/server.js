@@ -100,6 +100,16 @@ import { ensureGameReplaysSchema as ensureGameReplaysSchemaForDb } from "./bga-r
 import { registerBgaReplayAdminRoutes } from "./bga-replay-admin.js";
 import { loadPublicGamesByDuelIds } from "./bga-replay-public.js";
 import { ensureMatchIdReferenceSync } from "./match-id-sync.js";
+import { ensureCategoriesSchema, isSystemTournamentCategory, serializeCategory } from "./categories.js";
+import {
+  getTournamentAccessType,
+  getTournamentType,
+  resolveTournamentClassificationInput,
+  tournamentAccessTypeSql,
+  tournamentCategorySql,
+  tournamentTeamTypeSql,
+  tournamentTypeSql,
+} from "./tournament-classification.js";
 
 dotenv.config();
 
@@ -417,22 +427,6 @@ const TEAM_TYPES = {
   NATIONAL: "National",
   CLUB: "Club",
 };
-const DEFAULT_CATEGORIES = [
-  { name: "Players", sort_order: 10 },
-  { name: "GG", sort_order: 20 },
-  { name: "Local", sort_order: 30 },
-  { name: "Local Website", sort_order: 35 },
-  { name: "WTCOC", sort_order: 40 },
-  { name: "ETCOC", sort_order: 50 },
-  { name: "Asian Cup", sort_order: 60 },
-  { name: "Copa America", sort_order: 70 },
-  { name: "CCL", sort_order: 80 },
-  { name: "MSO", sort_order: 90 },
-  { name: "KoC", sort_order: 100 },
-  { name: "World Championship", sort_order: 110 },
-  { name: "YouTube", sort_order: 120 },
-  { name: "Arena", sort_order: 130 },
-];
 const TOURNAMENT_ACCESS_ROLES = {
   ADMIN: "admin",
   CAPTAIN: "captain",
@@ -1510,7 +1504,7 @@ async function loadIconById(iconId) {
 async function loadCategoryById(categoryId) {
   const normalizedId = normalizePositiveInteger(categoryId);
   if (!normalizedId) return null;
-  return dbGetAsync(
+  const row = await dbGetAsync(
     `
       SELECT
         id,
@@ -1525,6 +1519,7 @@ async function loadCategoryById(categoryId) {
     `,
     [normalizedId]
   );
+  return serializeCategory(row);
 }
 
 async function countCategoryReferences(categoryName) {
@@ -2408,7 +2403,7 @@ function canUserEditMatchResults({ tournament, user, matchRow }) {
   const team1 = String(matchRow.team_1 || "").trim().toUpperCase();
   const team2 = String(matchRow.team_2 || "").trim().toUpperCase();
   const isOwnMatch = !!userAssociation && (userAssociation === team1 || userAssociation === team2);
-  const isClosedTournament = normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) === TOURNAMENT_ACCESS_TYPES.OFFICIAL;
+  const isClosedTournament = getTournamentAccessType(tournament) === TOURNAMENT_ACCESS_TYPES.OFFICIAL;
   const isClosedAdmin = tournament.has_access && tournament.access_role === TOURNAMENT_ACCESS_ROLES.ADMIN;
   if (isClosedAdmin) {
     return { allowed: true, expired: false };
@@ -3160,11 +3155,11 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         t.about,
         t.rules,
         t.rank_colors,
-        COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
-        COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS subtype,
-        COALESCE(NULLIF(trim(t.tournament_type), ''), ?) AS tournament_type,
-        t.team_type,
-        NULLIF(trim(t.category), '') AS category,
+        COALESCE(${tournamentAccessTypeSql("t")}, ?) AS access_type,
+        COALESCE(${tournamentAccessTypeSql("t")}, ?) AS subtype,
+        COALESCE(${tournamentTypeSql("t")}, ?) AS tournament_type,
+        ${tournamentTeamTypeSql("t")} AS team_type,
+        ${tournamentCategorySql("t")} AS category,
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
         t.lineup_type,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
@@ -3206,7 +3201,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         END AS access_role,
         CASE
           WHEN ? = 1 THEN 1
-          WHEN COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) = ? THEN 1
+          WHEN COALESCE(${tournamentAccessTypeSql("t")}, ?) = ? THEN 1
           WHEN ? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau
@@ -3293,6 +3288,7 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         rules: row.rules,
         access_type: normalizeTournamentAccessType(row.access_type),
         subtype: normalizeTournamentAccessType(row.subtype),
+        type: normalizeTournamentType(row.tournament_type),
         tournament_type: normalizeTournamentType(row.tournament_type),
         team_type: normalizeTeamType(row.team_type),
         category: normalizeTournamentCategory(row.tournament_type, row.category),
@@ -3332,7 +3328,7 @@ function normalizeTournamentCaptainTeamIds(value) {
 }
 
 function canClosedTournamentCaptainAccessMatch(tournament, userAssociation, team1, team2) {
-  if (normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) !== TOURNAMENT_ACCESS_TYPES.OFFICIAL) return false;
+  if (getTournamentAccessType(tournament) !== TOURNAMENT_ACCESS_TYPES.OFFICIAL) return false;
   if (tournament?.access_role !== TOURNAMENT_ACCESS_ROLES.CAPTAIN) return false;
   const normalizedTeam1 = String(team1 || "").trim().toUpperCase();
   const normalizedTeam2 = String(team2 || "").trim().toUpperCase();
@@ -3458,11 +3454,11 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         about,
         rules,
         rank_colors,
-        COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), ''), ?) AS access_type,
-        COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), ''), ?) AS subtype,
-        COALESCE(NULLIF(trim(tournament_type), ''), ?) AS tournament_type,
-        team_type,
-        NULLIF(trim(category), '') AS category,
+        COALESCE(${tournamentAccessTypeSql()}, ?) AS access_type,
+        COALESCE(${tournamentAccessTypeSql()}, ?) AS subtype,
+        COALESCE(${tournamentTypeSql()}, ?) AS tournament_type,
+        ${tournamentTeamTypeSql()} AS team_type,
+        ${tournamentCategorySql()} AS category,
         COALESCE(NULLIF(trim(player_hub_visibility), ''), ?) AS player_hub_visibility,
         lineup_type,
         COALESCE(lineup_size_type, ?) AS lineup_size_type,
@@ -3508,6 +3504,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         is_test: normalizeBooleanInt(row.is_test) === 1,
         access_type: normalizeTournamentAccessType(row.access_type),
         subtype: normalizeTournamentAccessType(row.subtype),
+        type: normalizeTournamentType(row.tournament_type),
         tournament_type: normalizeTournamentType(row.tournament_type),
         team_type: normalizeTeamType(row.team_type),
         category: normalizeTournamentCategory(row.tournament_type, row.category),
@@ -3537,7 +3534,7 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
             AND upper(trim(tournament_id)) = upper(trim(?))
           ORDER BY user_id ASC
         `,
-        [TOURNAMENT_ACCESS_ROLES.CAPTAIN, normalizedTournamentId],
+        [TOURNAMENT_ACCESS_ROLES.CAPTAIN, row.id],
         (accessErr, rows) => {
           if (accessErr) {
             done(accessErr);
@@ -4530,7 +4527,7 @@ async function resolveTournamentTeamReferences(tournamentId, teamId, captainId, 
   const [tournament, team, captain] = await Promise.all([
     dbGetAsync(
       `
-        SELECT id, tournament_type, team_type
+        SELECT id, ${tournamentTypeSql()} AS tournament_type, ${tournamentTeamTypeSql()} AS team_type
         FROM tournaments
         WHERE upper(trim(id)) = upper(trim(?))
         LIMIT 1
@@ -6433,6 +6430,7 @@ function ensureTournamentsSchema() {
       about TEXT,
       rules TEXT,
       rank_colors TEXT,
+      type TEXT CHECK (type IN ('Teams', 'Individuals')),
       tournament_type TEXT NOT NULL DEFAULT 'Teams',
       team_type TEXT NOT NULL DEFAULT 'National',
       category TEXT,
@@ -6477,6 +6475,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "about", "TEXT");
       addColumnIfMissing(columns, "tournaments", "rules", "TEXT");
       addColumnIfMissing(columns, "tournaments", "rank_colors", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "type", "TEXT CHECK (type IN ('Teams', 'Individuals'))");
       addColumnIfMissing(columns, "tournaments", "tournament_type", "TEXT NOT NULL DEFAULT 'Teams'");
       addColumnIfMissing(columns, "tournaments", "team_type", "TEXT NOT NULL DEFAULT 'National'");
       addColumnIfMissing(columns, "tournaments", "category", "TEXT");
@@ -6499,6 +6498,8 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "tpr_calculated_at", "TEXT");
       addColumnIfMissing(columns, "tournaments", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "tournaments", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+      // Preserve raw classification for the explicit migration and its journal.
+      // API writes synchronize the new type and legacy fields; startup must not rewrite them.
       db.run(
         `
           UPDATE tournaments
@@ -6510,26 +6511,6 @@ function ensureTournamentsSchema() {
             is_test = CASE
               WHEN lower(trim(COALESCE(is_test, ''))) IN ('1', 'true', 'yes', 'on') THEN 1
               ELSE 0
-            END,
-            tournament_type = COALESCE(NULLIF(trim(tournament_type), ''), 'Teams'),
-            team_type = CASE
-              WHEN lower(trim(COALESCE(team_type, ''))) = 'club' THEN 'Club'
-              ELSE 'National'
-            END,
-            category = CASE
-              WHEN COALESCE(NULLIF(trim(category), ''), '') = '' THEN NULL
-              WHEN lower(trim(tournament_type)) IN ('individuals', 'individual', 'teams', 'team') THEN category
-              ELSE NULL
-            END,
-            subtype = CASE
-              WHEN COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), '')) IS NULL THEN NULL
-              WHEN lower(trim(COALESCE(NULLIF(subtype, ''), access_type))) IN ('2', 'closed', 'official') THEN 'Official'
-              ELSE 'Friendly'
-            END,
-            access_type = CASE
-              WHEN COALESCE(NULLIF(trim(subtype), ''), NULLIF(trim(access_type), '')) IS NULL THEN 'Friendly'
-              WHEN lower(trim(COALESCE(NULLIF(subtype, ''), access_type))) IN ('2', 'closed', 'official') THEN 'Official'
-              ELSE 'Friendly'
             END,
             player_hub_visibility = CASE
               WHEN lower(trim(COALESCE(player_hub_visibility, ''))) = 'hidden' THEN 'Hidden'
@@ -7446,90 +7427,6 @@ function ensureIconsSchema() {
   });
 }
 
-async function seedDefaultCategoriesIfNeeded() {
-  for (const category of DEFAULT_CATEGORIES) {
-    await dbRunAsync(
-      `
-        INSERT OR IGNORE INTO categories (name, sort_order, created_at, updated_at)
-        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `,
-      [category.name, category.sort_order]
-    );
-  }
-
-  const seedFromTable = async (tableName) => {
-    const tableRow = await dbGetAsync(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
-      [tableName]
-    );
-    if (!tableRow) return;
-    await dbRunAsync(
-      `
-        INSERT OR IGNORE INTO categories (name, sort_order, created_at, updated_at)
-        SELECT DISTINCT trim(category), 1000, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-        FROM ${tableName}
-        WHERE trim(COALESCE(category, '')) <> ''
-      `
-    );
-  };
-
-  await seedFromTable("icons");
-  await seedFromTable("news");
-  await seedFromTable("tournaments");
-}
-
-function ensureCategoriesSchema() {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      is_tournament INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `, (createErr) => {
-    if (createErr) {
-      console.error("Failed to ensure categories schema", createErr);
-      return;
-    }
-
-    db.all("PRAGMA table_info(categories)", (pragmaErr, columns) => {
-      if (pragmaErr) {
-        console.error("Failed to inspect categories schema", pragmaErr);
-        return;
-      }
-      if (!Array.isArray(columns) || columns.length === 0) return;
-      addColumnIfMissing(columns, "categories", "name", "TEXT");
-      addColumnIfMissing(columns, "categories", "sort_order", "INTEGER NOT NULL DEFAULT 0");
-      addColumnIfMissing(columns, "categories", "is_tournament", "INTEGER NOT NULL DEFAULT 0");
-      addColumnIfMissing(columns, "categories", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-      addColumnIfMissing(columns, "categories", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-
-      db.run(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_unique ON categories(lower(trim(name)))",
-        (indexErr) => {
-          if (indexErr) {
-            console.error("Failed to ensure unique index for categories.name", indexErr);
-            return;
-          }
-          seedDefaultCategoriesIfNeeded().catch((seedErr) => {
-            console.error("Failed to seed default categories", seedErr);
-          });
-        }
-      );
-      db.run(
-        "CREATE INDEX IF NOT EXISTS idx_categories_order ON categories(sort_order ASC, name COLLATE NOCASE ASC)",
-        (indexErr) => {
-          if (indexErr) {
-            console.error("Failed to ensure index for categories order", indexErr);
-          }
-        }
-      );
-    });
-  });
-}
-
 function ensureStreamsSchema() {
   db.run(`
     CREATE TABLE IF NOT EXISTS streams (
@@ -8108,7 +8005,6 @@ function scheduleApplicationSchemas() {
   ensureNewsEditorsSchema();
   ensureNewsSchema();
   ensureIconsSchema();
-  ensureCategoriesSchema();
   ensureImagesSchema({ db, addColumnIfMissing });
   ensureStreamsSchema();
   ensureMobileMenuItemsSchema();
@@ -9538,7 +9434,7 @@ app.get("/categories", (_req, res, next) => {
     `,
     (err, rows) => {
       if (err) return next(err);
-      return res.json({ ok: true, categories: rows || [] });
+      return res.json({ ok: true, categories: (rows || []).map(serializeCategory) });
     }
   );
 });
@@ -9550,6 +9446,9 @@ app.post("/categories", requireAdmin, async (req, res) => {
     const isTournament = Number(req.body?.is_tournament ?? req.body?.isTournament ?? req.body?.tournament) === 1 ? 1 : 0;
     if (!name) {
       return res.status(400).json({ ok: false, message: "name is required" });
+    }
+    if (isSystemTournamentCategory(name)) {
+      return res.status(409).json({ ok: false, code: "SYSTEM_CATEGORY_RESERVED", message: "This name is reserved for a system tournament category" });
     }
 
     const insertResult = await dbRunAsync(
@@ -9591,6 +9490,12 @@ app.patch("/categories/:id", requireAdmin, async (req, res) => {
     const beforeRow = await loadCategoryById(categoryId);
     if (!beforeRow) {
       return res.status(404).json({ ok: false, message: "Category not found" });
+    }
+    if (isSystemTournamentCategory(beforeRow.name)) {
+      return res.status(403).json({ ok: false, code: "SYSTEM_CATEGORY_READ_ONLY", message: "System tournament categories are read-only, including for global admins" });
+    }
+    if (isSystemTournamentCategory(name)) {
+      return res.status(409).json({ ok: false, code: "SYSTEM_CATEGORY_RESERVED", message: "This name is reserved for a system tournament category" });
     }
 
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
@@ -9642,6 +9547,9 @@ app.delete("/categories/:id", requireAdmin, async (req, res) => {
     const category = await loadCategoryById(categoryId);
     if (!category) {
       return res.status(404).json({ ok: false, message: "Category not found" });
+    }
+    if (isSystemTournamentCategory(category.name)) {
+      return res.status(403).json({ ok: false, code: "SYSTEM_CATEGORY_READ_ONLY", message: "System tournament categories are read-only, including for global admins" });
     }
     const usage = await countCategoryReferences(category.name);
     if (usage.total > 0) {
@@ -9879,7 +9787,7 @@ async function resolveChallengePeriodRivalsTournamentId(value) {
 
   const tournament = await dbGetAsync(
     `
-      SELECT id, category
+      SELECT id, ${tournamentTypeSql()} AS type, ${tournamentCategorySql()} AS category
       FROM tournaments
       WHERE upper(trim(COALESCE(id, ''))) = upper(trim(?))
       LIMIT 1
@@ -9889,7 +9797,7 @@ async function resolveChallengePeriodRivalsTournamentId(value) {
   if (!tournament) {
     return { id: null, error: "Selected Rivals tournament was not found" };
   }
-  if (String(tournament.category || "").trim().toLowerCase() !== "rivals") {
+  if (tournament.type !== "Individuals" || tournament.category !== "Rivals") {
     return { id: null, error: "Selected tournament must have the Rivals category" };
   }
   return { id: normalizeNullableText(tournament.id), error: "" };
@@ -14042,7 +13950,7 @@ app.get("/tournaments", (req, res, next) => {
         (
           COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) = ?
           AND (
-            COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) = ?
+            COALESCE(${tournamentAccessTypeSql("t")}, ?) = ?
           OR (? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau_filter
@@ -14087,11 +13995,11 @@ app.get("/tournaments", (req, res, next) => {
         t.about,
         t.rules,
         t.rank_colors,
-        COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS access_type,
-        COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) AS subtype,
-        COALESCE(NULLIF(trim(t.tournament_type), ''), ?) AS tournament_type,
-        t.team_type,
-        NULLIF(trim(t.category), '') AS category,
+        COALESCE(${tournamentAccessTypeSql("t")}, ?) AS access_type,
+        COALESCE(${tournamentAccessTypeSql("t")}, ?) AS subtype,
+        COALESCE(${tournamentTypeSql("t")}, ?) AS tournament_type,
+        ${tournamentTeamTypeSql("t")} AS team_type,
+        ${tournamentCategorySql("t")} AS category,
         COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) AS player_hub_visibility,
         t.lineup_type,
         COALESCE(t.lineup_size_type, ?) AS lineup_size_type,
@@ -14278,6 +14186,7 @@ app.get("/tournaments", (req, res, next) => {
                 rank_colors: row.rank_colors,
                 access_type: normalizeTournamentAccessType(row.access_type),
                 subtype: row.subtype ? normalizeTournamentAccessType(row.subtype) : null,
+                type: normalizeTournamentType(row.tournament_type),
                 tournament_type: normalizeTournamentType(row.tournament_type),
                 team_type: normalizeTeamType(row.team_type),
                 category: normalizeTournamentCategory(row.tournament_type, row.category),
@@ -14355,14 +14264,17 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
     1,
     Math.max(0, bountyTprNumber(req.body?.tpr_benchmark_percentile, 0.75))
   );
-  const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
+  let classification;
+  try {
+    classification = resolveTournamentClassificationInput(req.body);
+  } catch (error) {
+    return res.status(error.httpStatus || 400).json({ ok: false, code: error.code, message: error.message });
+  }
+  const { type: tournamentType, team_type: teamType, subtype, access_type: accessType } = classification;
   const lineupType = normalizeTournamentLineupType(tournamentType, req.body?.lineup_type);
   const requestedTeamType = normalizeNullableText(req.body?.team_type);
-  const teamType = normalizeTeamType(requestedTeamType);
-  const requestedCategory = normalizeCategoryName(req.body?.category);
-  const subtype = normalizeTournamentSubtypeForType(tournamentType, req.body?.subtype ?? req.body?.access_type);
+  const requestedCategory = classification.category;
   const playerHubVisibility = normalizeTournamentPlayerHubVisibility(req.body?.player_hub_visibility);
-  const accessType = subtype || TOURNAMENT_ACCESS_TYPES.FRIENDLY;
   const lineupSizeType = normalizeTournamentLineupSizeType(req.body?.lineup_size_type);
   const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
     ? normalizeTournamentLineupSize(req.body?.lineup_size)
@@ -14447,6 +14359,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   about,
                   rules,
                   rank_colors,
+                  type,
                   tournament_type,
                   team_type,
                   category,
@@ -14468,7 +14381,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
               [
                 id,
@@ -14482,6 +14395,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                 about,
                 rules,
                 rankColors,
+                tournamentType,
                 tournamentType,
                 teamType,
                 category,
@@ -14542,27 +14456,12 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
 app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
   const tournamentId = normalizeNullableText(req.params.id);
   const payloadId = normalizeNullableText(req.body?.id);
-  const name = String(req.body?.name || "").trim();
-  const shortTitle = String(req.body?.short_title || "").trim() || null;
-  const logo = String(req.body?.logo || "").trim() || null;
-  const link = String(req.body?.link || "").trim() || null;
   const requestedRanking = req.body?.ranking;
   const hasRegistrationEndsAtUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, "registration_ends_at");
   const requestedRegistrationEndsAt = normalizeUtcTimestamp(req.body?.registration_ends_at);
   if (normalizeNullableText(req.body?.registration_ends_at) && !requestedRegistrationEndsAt) {
     return res.status(400).json({ ok: false, message: "registration_ends_at must be a valid date and time" });
   }
-  const isTest = normalizeBooleanInt(req.body?.is_test);
-  const tournamentType = normalizeTournamentType(req.body?.tournament_type ?? req.body?.type);
-  const requestedTeamType = normalizeNullableText(req.body?.team_type);
-  const requestedCategory = normalizeCategoryName(req.body?.category);
-  const subtype = normalizeTournamentSubtypeForType(tournamentType, req.body?.subtype ?? req.body?.access_type);
-  const playerHubVisibility = normalizeTournamentPlayerHubVisibility(req.body?.player_hub_visibility);
-  const accessType = subtype || TOURNAMENT_ACCESS_TYPES.FRIENDLY;
-  const lineupSizeType = normalizeTournamentLineupSizeType(req.body?.lineup_size_type);
-  const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
-    ? normalizeTournamentLineupSize(req.body?.lineup_size)
-    : null;
   const hasTeamSizeUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, "team_size");
   const canManageAccessUsers = canManageTournamentAccessUsers(req.user);
   const includesAccessUsersUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, "access_users")
@@ -14570,7 +14469,6 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
   const requestedAccessUsers = canManageAccessUsers
     ? normalizeTournamentAccessUsers(req.body?.access_users, req.body?.access_user_ids)
     : [];
-  let category = null;
 
   if (!canManageAccessUsers && includesAccessUsersUpdate) {
     return res.status(403).json({
@@ -14579,61 +14477,20 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
     });
   }
 
-  try {
-    category = await resolveTournamentCategory(tournamentType, requestedCategory);
-  } catch (error) {
-    console.error("Failed to resolve tournament category", error);
-    return res.status(500).json({ ok: false, message: "Failed to validate category" });
-  }
-
   if (!tournamentId) {
     return res.status(400).json({ ok: false, message: "Invalid tournament id" });
   }
   if (payloadId && payloadId !== tournamentId) {
     return res.status(400).json({ ok: false, message: "Tournament id cannot be changed" });
   }
-  if (!name) {
-    return res.status(400).json({ ok: false, message: "name is required" });
-  }
-  if (tournamentType === TOURNAMENT_TYPES.TEAMS && requestedTeamType && !isValidTeamType(requestedTeamType)) {
-    return res.status(400).json({ ok: false, message: "team_type must be National or Club" });
-  }
-  if (lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED && !lineupSize) {
-    return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
-  }
   if (hasTeamSizeUpdate && !isValidTournamentTeamSize(req.body?.team_size)) {
     return res.status(400).json({ ok: false, message: "team_size must be a positive integer" });
   }
-  if (
-    requestedCategory
-    && (tournamentType === TOURNAMENT_TYPES.INDIVIDUALS || tournamentType === TOURNAMENT_TYPES.TEAMS)
-    && !category
-  ) {
-    return res.status(400).json({ ok: false, message: "category must reference a tournament category" });
-  }
-
   const [rawTournamentId, normalizedTournamentId] = getTournamentLookupVariants(tournamentId);
 
   return db.get(
     `
-      SELECT
-        id,
-        team_type,
-        COALESCE(ranking, 1) AS ranking,
-        registration_ends_at,
-        about,
-        rules,
-        rank_colors,
-        lineup_type,
-        COALESCE(team_size, 10) AS team_size,
-        tournament_format,
-        COALESCE(stage1_groups, 0) AS stage1_groups,
-        stage1_format,
-        stage2_format,
-        COALESCE(NULLIF(lower(trim(standings_scoring)), ''), 'standard') AS standings_scoring,
-        COALESCE(tpr_target_games, 10) AS tpr_target_games,
-        COALESCE(tpr_smoothing, 0.5) AS tpr_smoothing,
-        COALESCE(tpr_benchmark_percentile, 0.75) AS tpr_benchmark_percentile
+      SELECT *
       FROM tournaments
       WHERE ${buildTournamentLookupWhereClause("id")}
       LIMIT 1
@@ -14646,6 +14503,26 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
       if (!currentRow) {
         return res.status(404).json({ ok: false, message: "Tournament not found" });
       }
+      let classification;
+      try {
+        classification = resolveTournamentClassificationInput(req.body, currentRow);
+      } catch (error) {
+        return res.status(error.httpStatus || 400).json({ ok: false, code: error.code, message: error.message });
+      }
+      const { type: tournamentType, category, team_type: teamType, subtype, access_type: accessType } = classification;
+      const name = resolveTournamentTextPatch(req.body, currentRow, "name");
+      if (!name) return res.status(400).json({ ok: false, message: "name is required" });
+      const shortTitle = resolveTournamentTextPatch(req.body, currentRow, "short_title");
+      const logo = resolveTournamentTextPatch(req.body, currentRow, "logo");
+      const link = resolveTournamentTextPatch(req.body, currentRow, "link");
+      const isTest = normalizeBooleanInt(req.body?.is_test ?? currentRow.is_test);
+      const playerHubVisibility = normalizeTournamentPlayerHubVisibility(req.body?.player_hub_visibility ?? currentRow.player_hub_visibility);
+      const lineupSizeType = normalizeTournamentLineupSizeType(req.body?.lineup_size_type ?? currentRow.lineup_size_type);
+      const lineupSize = lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
+        ? normalizeTournamentLineupSize(req.body?.lineup_size ?? currentRow.lineup_size) : null;
+      if (lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED && !lineupSize) {
+        return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
+      }
       const lineupType = normalizeTournamentLineupType(
         tournamentType,
         req.body?.lineup_type ?? currentRow.lineup_type
@@ -14653,7 +14530,6 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
       const registrationEndsAt = hasRegistrationEndsAtUpdate
         ? requestedRegistrationEndsAt
         : currentRow.registration_ends_at;
-      const teamType = normalizeTeamType(requestedTeamType || currentRow.team_type);
       const ranking = requestedRanking === undefined
         ? normalizeBooleanInt(currentRow.ranking)
         : normalizeBooleanInt(requestedRanking);
@@ -14721,6 +14597,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                   about = ?,
                   rules = ?,
                   rank_colors = ?,
+                  type = ?,
                   tournament_type = ?,
                   team_type = ?,
                   category = ?,
@@ -14754,6 +14631,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                 about,
                 rules,
                 rankColors,
+                tournamentType,
                 tournamentType,
                 teamType,
                 category,
@@ -14802,7 +14680,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                   });
                 });
 
-                if (!canManageAccessUsers) {
+                if (!canManageAccessUsers || !includesAccessUsersUpdate) {
                   return commitTournamentUpdate();
                 }
 
@@ -15242,7 +15120,7 @@ app.put("/tournament-teams", requireTournamentAdmin, async (req, res) => {
   try {
     const tournament = await dbGetAsync(
       `
-        SELECT id, tournament_type
+        SELECT id, ${tournamentTypeSql()} AS tournament_type
         FROM tournaments
         WHERE upper(trim(id)) = upper(trim(?))
         LIMIT 1
@@ -19013,7 +18891,7 @@ app.get("/duels", (req, res, next) => {
           return res.status(403).json({ ok: false, message: "Forbidden" });
         }
         if (
-          normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) === TOURNAMENT_ACCESS_TYPES.OFFICIAL
+          getTournamentAccessType(tournament) === TOURNAMENT_ACCESS_TYPES.OFFICIAL
           && tournament.access_role === TOURNAMENT_ACCESS_ROLES.CAPTAIN
           && !canClosedTournamentCaptainAccessMatch(tournament, userAssociation, matchRow.team_1, matchRow.team_2)
         ) {
@@ -20131,7 +20009,7 @@ app.post("/duels/bulk-upsert", async (req, res) => {
           return res.status(404).json({ ok: false, message: "Tournament not found" });
         }
 
-        const isClosedTournament = normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) === TOURNAMENT_ACCESS_TYPES.OFFICIAL;
+        const isClosedTournament = getTournamentAccessType(tournament) === TOURNAMENT_ACCESS_TYPES.OFFICIAL;
         const closedCaptainCanAccessMatch = canClosedTournamentCaptainAccessMatch(
           tournament,
           userAssociation,
@@ -20454,7 +20332,7 @@ app.get("/matches", (req, res, next) => {
         FROM tournaments t
         WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
           AND (
-            COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?) = ?
+            COALESCE(${tournamentAccessTypeSql("t")}, ?) = ?
             OR (? > 0 AND EXISTS (
               SELECT 1
               FROM tournament_access_users tau
@@ -20476,7 +20354,7 @@ app.get("/matches", (req, res, next) => {
     : `
       AND (
         COALESCE((
-          SELECT COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?)
+          SELECT COALESCE(${tournamentAccessTypeSql("t")}, ?)
           FROM tournaments t
           WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
           LIMIT 1
@@ -20622,7 +20500,7 @@ app.get("/matches", (req, res, next) => {
         COALESCE(m.is_test, 0) AS is_test,
         m.metadata,
         (
-          SELECT COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?)
+          SELECT COALESCE(${tournamentAccessTypeSql("t")}, ?)
           FROM tournaments t
           WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
           LIMIT 1
@@ -20833,7 +20711,7 @@ app.get("/matches", (req, res, next) => {
         COALESCE(m.is_test, 0) AS is_test,
         m.metadata,
         (
-          SELECT COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), ?)
+          SELECT COALESCE(${tournamentAccessTypeSql("t")}, ?)
           FROM tournaments t
           WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
           LIMIT 1
@@ -21149,9 +21027,9 @@ function publicMainPageMatchesHandler(req, res, next) {
         t.logo AS tournament_logo,
         t.link AS tournament_link,
         CASE
-          WHEN lower(trim(COALESCE(t.tournament_type, ''))) IN ('team', 'teams') THEN 'TEAM'
-          WHEN lower(trim(COALESCE(t.tournament_type, ''))) IN ('individual', 'individuals') THEN 'Individual'
-          ELSE COALESCE(NULLIF(trim(t.tournament_type), ''), 'TEAM')
+          WHEN lower(${tournamentTypeSql("t")}) IN ('team', 'teams') THEN 'TEAM'
+          WHEN lower(${tournamentTypeSql("t")}) IN ('individual', 'individuals') THEN 'Individual'
+          ELSE COALESCE(${tournamentTypeSql("t")}, 'TEAM')
         END AS tournament_type
       FROM matches m
       LEFT JOIN tournaments t
@@ -21693,7 +21571,7 @@ app.get("/public/player-official-duels", async (req, res, next) => {
           t.short_title AS tournament_short_title,
           t.logo AS tournament_logo,
           t.link AS tournament_link,
-          t.tournament_type,
+          ${tournamentTypeSql("t")} AS tournament_type,
           cp.name AS challenge_period_name,
           cp.logo AS challenge_period_logo
         FROM duels d
@@ -21879,8 +21757,8 @@ app.get("/public/team-official-matches", async (req, res, next) => {
   const resultsBeforeIso = hasResultsPagination ? new Date(resultsBeforeTs).toISOString() : null;
   const matchFilterClauses = [
     "m.deleted_at IS NULL",
-    "lower(trim(COALESCE(NULLIF(trim(t.tournament_type), ''), 'Teams'))) IN ('team', 'teams')",
-    "lower(trim(COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), 'Friendly'))) IN ('2', 'closed', 'official')",
+    `${tournamentTypeSql("t")} = 'Teams'`,
+    `${tournamentAccessTypeSql("t")} = 'Official'`,
   ];
   const matchFilterParams = [];
 
@@ -21953,7 +21831,7 @@ app.get("/public/team-official-matches", async (req, res, next) => {
       t.short_title AS tournament_short_title,
       t.logo AS tournament_logo,
       t.link AS tournament_link,
-      COALESCE(NULLIF(trim(t.tournament_type), ''), 'Teams') AS tournament_type
+      ${tournamentTypeSql("t")} AS tournament_type
     FROM matches m
     JOIN tournaments t
       ON upper(trim(COALESCE(t.id, ''))) = upper(trim(COALESCE(m.tournament_id, '')))
@@ -22237,8 +22115,8 @@ app.get("/public/team-official-matches", async (req, res, next) => {
 
 app.get("/public/team-official-matches/filters", async (_req, res, next) => {
   const officialTeamTournamentWhereSql = `
-    lower(trim(COALESCE(NULLIF(trim(t.tournament_type), ''), 'Teams'))) IN ('team', 'teams')
-    AND lower(trim(COALESCE(NULLIF(trim(t.subtype), ''), NULLIF(trim(t.access_type), ''), 'Friendly'))) IN ('2', 'closed', 'official')
+    ${tournamentTypeSql("t")} = 'Teams'
+    AND ${tournamentAccessTypeSql("t")} = 'Official'
   `;
 
   try {
@@ -23063,7 +22941,7 @@ app.get("/public/friendly-matches/players", async (req, res, next) => {
 });
 
 function resolveOfficialMatchCaptainTeamId(tournament, userAssociation, team1Value, team2Value) {
-  if (normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) !== TOURNAMENT_ACCESS_TYPES.OFFICIAL) {
+  if (getTournamentAccessType(tournament) !== TOURNAMENT_ACCESS_TYPES.OFFICIAL) {
     return null;
   }
   if (!tournament?.has_access) {
@@ -23135,7 +23013,7 @@ async function loadMatchTimeProposalContext(matchId, user) {
     error.httpStatus = 404;
     throw error;
   }
-  if (normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) !== TOURNAMENT_ACCESS_TYPES.OFFICIAL) {
+  if (getTournamentAccessType(tournament) !== TOURNAMENT_ACCESS_TYPES.OFFICIAL) {
     const error = new Error("Time proposals are available only for official tournaments");
     error.httpStatus = 403;
     throw error;
@@ -23592,8 +23470,11 @@ app.post("/matches", (req, res) => {
     if (!tournament) {
       return res.status(404).json({ ok: false, message: "Tournament not found" });
     }
+    if (getTournamentType(tournament) !== "Teams") {
+      return res.status(400).json({ ok: false, message: "Team matches require a Teams tournament" });
+    }
 
-    const isClosedTournament = normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) === TOURNAMENT_ACCESS_TYPES.OFFICIAL;
+    const isClosedTournament = getTournamentAccessType(tournament) === TOURNAMENT_ACCESS_TYPES.OFFICIAL;
     const canManageClosedTournamentMatches = tournament.access_role === TOURNAMENT_ACCESS_ROLES.ADMIN;
     if (isClosedTournament) {
       if (!tournament.has_access || !canManageClosedTournamentMatches) {
@@ -24115,7 +23996,7 @@ app.patch("/matches/:id", (req, res) => {
           && (existingTeam1 === userAssociation || existingTeam2 === userAssociation);
         const canUseOpenTournamentRules = isAdmin || isTeamCaptain;
         const canManageClosedTournamentMatches = tournament.access_role === TOURNAMENT_ACCESS_ROLES.ADMIN;
-        const canEdit = normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) === TOURNAMENT_ACCESS_TYPES.OFFICIAL
+        const canEdit = getTournamentAccessType(tournament) === TOURNAMENT_ACCESS_TYPES.OFFICIAL
           ? (tournament.has_access && canManageClosedTournamentMatches)
           : (canUseOpenTournamentRules && (isAdmin || captainCanEdit));
         if (!canEdit) {
@@ -24131,7 +24012,7 @@ app.patch("/matches/:id", (req, res) => {
         ? normalizeText(payload.team_2_hint)
         : normalizeText(existingRow.team_2_hint);
       const canSaveMatchWithMissingTeams = isAdmin || (
-        normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) === TOURNAMENT_ACCESS_TYPES.OFFICIAL
+        getTournamentAccessType(tournament) === TOURNAMENT_ACCESS_TYPES.OFFICIAL
         && canManageClosedTournamentMatches
       );
       if ((!team1 || !team2) && !canSaveMatchWithMissingTeams) {
@@ -24787,7 +24668,7 @@ app.delete("/matches/:id", (req, res) => {
           && (team1 === userAssociation || team2 === userAssociation);
         const canUseOpenTournamentRules = isAdmin || isTeamCaptain;
         const canManageClosedTournamentMatches = tournament.access_role === TOURNAMENT_ACCESS_ROLES.ADMIN;
-        const canDelete = normalizeTournamentAccessType(tournament?.subtype ?? tournament?.access_type) === TOURNAMENT_ACCESS_TYPES.OFFICIAL
+        const canDelete = getTournamentAccessType(tournament) === TOURNAMENT_ACCESS_TYPES.OFFICIAL
           ? (tournament.has_access && canManageClosedTournamentMatches)
           : (canUseOpenTournamentRules && (isAdmin || captainCanDelete));
         if (!canDelete) {
@@ -26447,13 +26328,14 @@ app.post("/auth/logout", (req, res, next) => {
 });
 
 inPersonSchemaReady
+  .then(() => ensureCategoriesSchema(db))
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Auth server running on port ${PORT}`);
     });
   })
   .catch((error) => {
-    console.error("Failed to initialize in-person schema; server will not start", error);
+    console.error("Failed to initialize required schemas; server will not start", error);
     process.exitCode = 1;
     db.close(() => {});
   });

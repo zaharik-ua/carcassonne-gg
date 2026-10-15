@@ -4119,6 +4119,28 @@
     ).trim();
   }
 
+  function getTournamentClassification(tournament = {}) {
+    const rawType = String(tournament?.type || tournament?.tournament_type || "Teams").trim().toLowerCase();
+    const type = ["individual", "individuals", "national", "nationals"].includes(rawType) ? "Individuals" : "Teams";
+    let category = String(tournament?.category || "").trim();
+    if (category.toLowerCase() === "koc") category = "King of Carcassonne";
+    if (!category && ["national", "nationals"].includes(rawType)) category = "National";
+    if (!category && (["club", "clubs"].includes(rawType) || (type === "Teams" && tournament?.team_type === "Club"))) category = "Clubs";
+    const legacyMode = String(tournament?.subtype || tournament?.access_type || "").trim().toLowerCase();
+    const legacyOfficial = ["official", "closed", "2"].includes(legacyMode);
+    if (!category && type === "Teams" && !legacyOfficial && !tournament?.type) category = "Friendly";
+    const categoryKey = category.toLowerCase();
+    const isOfficial = type === "Teams" && (
+      ["wtcoc", "etcoc", "asian cup", "copa america"].includes(categoryKey)
+      || (!category && legacyOfficial)
+    );
+    return {
+      type, category, isOfficial,
+      teamType: categoryKey === "clubs" ? "Club" : "National",
+      supportsTeamTools: type === "Teams" && (isOfficial || categoryKey === "friendly"),
+    };
+  }
+
   function normalizeTournamentAccessUsers(value) {
     if (!Array.isArray(value)) return [];
     return value
@@ -4149,10 +4171,8 @@
   }
 
   function getTournamentAccessState(tournament, authState = {}) {
-    const subtypeRaw = String(tournament?.subtype || tournament?.access_type || "").trim().toLowerCase();
-    const accessType = (subtypeRaw === "official" || subtypeRaw === "closed" || subtypeRaw === "2")
-      ? "Official"
-      : "Friendly";
+    const classification = getTournamentClassification(tournament);
+    const accessType = classification.isOfficial ? "Official" : "Friendly";
     const accessRole = String(tournament?.access_role || "").trim().toLowerCase();
     const isAdminUser = !!authState.isAdminUser;
     const accessUsers = normalizeTournamentAccessUsers(
@@ -4184,8 +4204,8 @@
       accessViaAccessUsers,
       captainTeamIds,
       hasClosedAccess,
-      canSee,
-      canManage,
+      canSee: canSee && classification.supportsTeamTools,
+      canManage: canManage && classification.supportsTeamTools,
     };
   }
 
@@ -5084,7 +5104,7 @@
     const canTriggerResultsRefresh = isGlobalAdmin && !isCreateMode;
     const allProfiles = Array.isArray(editContext?.profiles) ? editContext.profiles : [];
     const currentTournament = editContext?.tournament || null;
-    const isTournamentBlindLineup = ["Teams", "Clubs"].includes(currentTournament?.tournament_type)
+    const isTournamentBlindLineup = getTournamentClassification(currentTournament).supportsTeamTools
       && isBlindLineupType(currentTournament?.lineup_type);
     const isLineupTypeLockedByTournament = isCreateMode && isTournamentBlindLineup;
     const isLineupsOnly = editContext?.lineupsOnly === true;
@@ -8803,9 +8823,11 @@
         && !currentTournamentAccess.canSee
       ) {
         renderRestrictedSectionMessage(
-          currentTournamentAccess.accessType === "Official"
-            ? "This official tournament is available only to users added to access_users or assigned as team captains."
-            : "This tournament is available only for captains."
+          !getTournamentClassification(currentTournament).supportsTeamTools
+            ? "Team match management is not available for this tournament category."
+            : currentTournamentAccess.accessType === "Official"
+              ? "This official tournament is available only to users added to access_users or assigned as team captains."
+              : "This tournament is available only for captains."
         );
         return;
       }

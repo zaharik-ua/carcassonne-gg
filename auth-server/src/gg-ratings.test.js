@@ -73,6 +73,18 @@ test("schema migration is repeatable; aggregates exclude deleted duels and requi
   assert.equal(await updateMatchGgRating(db, 'm'), null);
 });
 
+test("match ratings follow category classification when a legacy type is stale", async (t) => {
+  const db = await database(t);
+  await exec(db, `
+    ALTER TABLE tournaments ADD COLUMN category TEXT;
+    UPDATE tournaments SET category = 'National' WHERE id = 'T';
+    UPDATE tournaments SET category = 'WTCOC' WHERE id = 'I';
+    INSERT INTO duels (id,match_id,gg_rating_full) VALUES ('national-duel','m',6),('team-duel','individual',6);
+  `);
+  assert.equal(await updateMatchGgRating(db, "m"), null);
+  assert.equal(await updateMatchGgRating(db, "individual"), 6);
+});
+
 test("both bulk-upsert paths fill planned ratings and preserve completed snapshots", async (t) => {
   const db = await database(t);
   const source = readFileSync(new URL('./server.js', import.meta.url), 'utf8');

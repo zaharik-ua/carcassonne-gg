@@ -296,6 +296,28 @@
     ).trim();
   }
 
+  function getTournamentClassification(tournament = {}) {
+    const rawType = String(tournament?.type || tournament?.tournament_type || "Teams").trim().toLowerCase();
+    const type = ["individual", "individuals", "national", "nationals"].includes(rawType) ? "Individuals" : "Teams";
+    let category = String(tournament?.category || "").trim();
+    if (category.toLowerCase() === "koc") category = "King of Carcassonne";
+    if (!category && ["national", "nationals"].includes(rawType)) category = "National";
+    if (!category && (["club", "clubs"].includes(rawType) || (type === "Teams" && tournament?.team_type === "Club"))) category = "Clubs";
+    const legacyMode = String(tournament?.subtype || tournament?.access_type || "").trim().toLowerCase();
+    const legacyOfficial = ["official", "closed", "2"].includes(legacyMode);
+    if (!category && type === "Teams" && !legacyOfficial && !tournament?.type) category = "Friendly";
+    const categoryKey = category.toLowerCase();
+    const isOfficial = type === "Teams" && (
+      ["wtcoc", "etcoc", "asian cup", "copa america"].includes(categoryKey)
+      || (!category && legacyOfficial)
+    );
+    return {
+      type, category, isOfficial,
+      teamType: categoryKey === "clubs" ? "Club" : "National",
+      supportsTeamTools: type === "Teams" && (isOfficial || categoryKey === "friendly"),
+    };
+  }
+
   function normalizeTournamentAccessUsers(value) {
     if (!Array.isArray(value)) return [];
     return value
@@ -309,8 +331,7 @@
   }
 
   function getTournamentSubtype(tournament) {
-    const raw = String(tournament?.subtype || tournament?.access_type || "").trim().toLowerCase();
-    return (raw === "official" || raw === "closed" || raw === "2") ? "Official" : "Friendly";
+    return getTournamentClassification(tournament).isOfficial ? "Official" : "Friendly";
   }
 
   function isTournamentHiddenInPlayerHub(tournament) {
@@ -318,7 +339,7 @@
   }
 
   function canSeeTournament(tournament, authState = {}) {
-    if (isTournamentHiddenInPlayerHub(tournament)) return false;
+    if (isTournamentHiddenInPlayerHub(tournament) || !getTournamentClassification(tournament).supportsTeamTools) return false;
     if (!authState.isAuthenticatedUser) return false;
     if (!authState.hasLinkedBgaId) return false;
     const accessType = getTournamentSubtype(tournament);

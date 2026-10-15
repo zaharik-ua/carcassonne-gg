@@ -2,6 +2,10 @@
 
 Мінімальний сервер авторизації через Google з сесіями та SQLite.
 
+Міграція класифікації турнірів `type / category`: `npm run migrate:tournament-classification`
+за замовчуванням виконує read-only dry-run. Порядок backup, застосування перевіреного
+плану та відкату: [runbook](../docs/tournament-classification-migration.md).
+
 ## 1) Що робить
 
 - `GET /auth/google` - починає Google OAuth

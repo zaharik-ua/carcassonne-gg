@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import sqlite3 from "sqlite3";
 import { loadPublicGamesByDuelIds } from "./bga-replay-public.js";
+import { tournamentTypeSql, tournamentAccessTypeSql } from "./tournament-classification.js";
 
 const source = readFileSync(new URL("./server.js", import.meta.url), "utf8");
 function between(start, end) {
@@ -20,7 +21,7 @@ async function createApi(t) {
   await new Promise((resolve, reject) => db.exec(`
     CREATE TABLE tournaments (
       id TEXT, name TEXT, short_title TEXT, logo TEXT, link TEXT,
-      tournament_type TEXT, subtype TEXT, access_type TEXT
+      tournament_type TEXT, subtype TEXT, access_type TEXT, category TEXT, team_type TEXT
     );
     CREATE TABLE teams (id TEXT, name TEXT, flag TEXT, logo TEXT);
     CREATE TABLE matches (
@@ -100,9 +101,9 @@ async function createApi(t) {
     db.get(sql, params, (error, row) => error ? reject(error) : resolve(row));
   });
   let handler;
-  new Function("app", "db", "dbAllAsync", "dbGetAsync", "loadGamesByDuelIds", `${streamsHelper}\n${route}`)(
+  new Function("app", "db", "dbAllAsync", "dbGetAsync", "loadGamesByDuelIds", "tournamentTypeSql", "tournamentAccessTypeSql", `${streamsHelper}\n${route}`)(
     { get: (_path, callback) => { handler = callback; } }, db, dbAllAsync, dbGetAsync,
-    (ids, callback) => loadPublicGamesByDuelIds(db, ids, callback)
+    (ids, callback) => loadPublicGamesByDuelIds(db, ids, callback), tournamentTypeSql, tournamentAccessTypeSql
   );
   return (query = {}) => new Promise((resolve, reject) => {
     handler({ query }, { json: resolve }, reject);

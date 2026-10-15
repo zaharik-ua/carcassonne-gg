@@ -1,3 +1,5 @@
+import { getTournamentType } from "./tournament-classification.js";
+
 function percentileInclusive(sortedValues, percentile) {
   if (!Array.isArray(sortedValues) || !sortedValues.length) return null;
   const position = (sortedValues.length - 1) * percentile;
@@ -101,7 +103,7 @@ export async function loadGgRatingContext(db) {
 
 export async function updateMatchGgRating(db, matchId) {
   const [match] = await all(db, `
-    SELECT m.id, t.ranking, t.tournament_type
+    SELECT t.*, m.id AS match_id
     FROM matches m
     LEFT JOIN tournaments t
       ON upper(trim(t.id)) = upper(trim(m.tournament_id))
@@ -110,7 +112,7 @@ export async function updateMatchGgRating(db, matchId) {
   if (!match) return null;
   let ggRating = null;
   if (Number(match.ranking) === 1
-      && ["team", "teams"].includes(String(match.tournament_type || "Teams").trim().toLowerCase())) {
+      && getTournamentType(match) === "Teams") {
     const duels = await all(db, `
       SELECT gg_rating_full FROM duels
       WHERE trim(match_id) = trim(?) AND deleted_at IS NULL

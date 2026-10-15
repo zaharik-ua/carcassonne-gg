@@ -4,6 +4,7 @@ import {
   loadGgRatingContext,
   updateMatchGgRating,
 } from "./gg-ratings.js";
+import { getTournamentType } from "./tournament-classification.js";
 
 const all = (db, sql) => new Promise((resolve, reject) => {
   db.all(sql, (error, rows) => error ? reject(error) : resolve(rows));
@@ -39,15 +40,15 @@ export async function updatePlannedTournamentGgRatings(db, { dryRun = false } = 
       if (ggRatingFull !== null) calculatedDuels += 1;
     }
     const matches = await all(db, `
-      SELECT m.id FROM matches m
+      SELECT t.*, m.id AS match_id FROM matches m
       JOIN tournaments t ON upper(trim(t.id)) = upper(trim(m.tournament_id))
       WHERE m.deleted_at IS NULL AND t.ranking = 1
-        AND lower(trim(COALESCE(NULLIF(trim(t.tournament_type), ''), 'Teams'))) IN ('team', 'teams')
         AND lower(trim(COALESCE(m.status, ''))) = 'planned'
     `);
     let calculatedMatches = 0;
-    for (const match of matches) {
-      if (await updateMatchGgRating(db, match.id) !== null) calculatedMatches += 1;
+    const teamMatches = matches.filter((match) => getTournamentType(match) === "Teams");
+    for (const match of teamMatches) {
+      if (await updateMatchGgRating(db, match.match_id) !== null) calculatedMatches += 1;
     }
     // Preview uses the same calculations, then rolls back schema and data together.
     await run(db, dryRun ? "ROLLBACK" : "COMMIT");
@@ -56,9 +57,9 @@ export async function updatePlannedTournamentGgRatings(db, { dryRun = false } = 
       selected_duels: duels.length,
       calculated_duels: calculatedDuels,
       duels_without_player_gg_elo: duels.length - calculatedDuels,
-      selected_matches: matches.length,
+      selected_matches: teamMatches.length,
       calculated_matches: calculatedMatches,
-      matches_without_complete_ratings: matches.length - calculatedMatches,
+      matches_without_complete_ratings: teamMatches.length - calculatedMatches,
       anchors: { low: context.lowAnchor, high: context.highAnchor },
     };
   } catch (error) {

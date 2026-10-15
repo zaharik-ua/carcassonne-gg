@@ -5,6 +5,7 @@ import vm from "node:vm";
 import sqlite3 from "sqlite3";
 import { normalizeTournamentLineupType, resolveTournamentTextPatch } from "./tournament-update.js";
 import { normalizeTournamentRankColors, resolveTournamentRankColorsPatch } from "./tournament-rank-colors.js";
+import { resolveTournamentClassificationInput } from "./tournament-classification.js";
 
 const expected = { stages: { "Stage 1": {
   rankColors: { 1: "blue", 2: "blue", 3: "green", 4: "green" },
@@ -61,6 +62,7 @@ async function createApi(t) {
   const handlers = new Map();
   const nullable = value => String(value ?? "").trim() || null;
   const context = vm.createContext({
+    resolveTournamentClassificationInput,
     db,
     app: Object.fromEntries(["get", "post", "patch"].map(method => [method, (path, ...callbacks) => {
       handlers.set(`${method} ${path}`, callbacks.at(-1));
@@ -74,7 +76,7 @@ async function createApi(t) {
     bountyTprNumber: (value, fallback) => value == null ? fallback : Number(value),
     normalizeTournamentType: value => value || "Teams",
     normalizeTeamType: value => value || "National", isValidTeamType: () => true,
-    normalizeCategoryName: nullable, resolveTournamentCategory: async () => null,
+    normalizeCategoryName: nullable, resolveTournamentCategory: async (_type, category) => category,
     normalizeTournamentSubtypeForType: () => "Friendly",
     normalizeTournamentPlayerHubVisibility: () => "Visible",
     normalizeTournamentLineupSizeType: () => 2, normalizeTournamentLineupSize: () => null,
@@ -106,7 +108,7 @@ async function createApi(t) {
 
 test("SQLite API persists, updates, publishes and clears rank settings without losing partial updates", async t => {
   const request = await createApi(t);
-  const created = await request("post", { id: "ETCOC-2026", name: "ETCOC", rank_colors: expected });
+  const created = await request("post", { id: "ETCOC-2026", name: "ETCOC", type: "Teams", category: "ETCOC", rank_colors: expected });
   assert.equal(created.statusCode, 200);
   assert.deepEqual(JSON.parse(created.tournament.rank_colors), expected);
   const renamed = await request("patch", { name: "Renamed ETCOC" });
