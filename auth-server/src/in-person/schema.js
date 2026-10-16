@@ -246,6 +246,9 @@ async function ensureInPersonTables(db) {
         name_en TEXT NOT NULL CHECK (length(trim(name_en)) > 0),
         name_local TEXT,
         bga_nickname TEXT,
+        bga_id TEXT,
+        gg_elo INTEGER,
+        gg_rank INTEGER,
         current_elo INTEGER,
         average_elo INTEGER,
         max_elo INTEGER,
@@ -554,6 +557,9 @@ async function ensurePlayoffPlaceholderExtensions(db) {
 
 async function ensureParticipantProfileExtensions(db) {
   const columnsToAdd = [
+    ["bga_id", "TEXT"],
+    ["gg_elo", "INTEGER"],
+    ["gg_rank", "INTEGER"],
     ["current_elo", "INTEGER"],
     ["average_elo", "INTEGER"],
     ["max_elo", "INTEGER"],

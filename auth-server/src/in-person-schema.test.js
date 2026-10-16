@@ -192,6 +192,9 @@ test("creates the in-person foundation without versioning or idempotency tables"
     (await all(db, "PRAGMA table_info(in_person_participants)")).map((column) => column.name)
   );
   [
+    "bga_id",
+    "gg_elo",
+    "gg_rank",
     "current_elo",
     "average_elo",
     "max_elo",

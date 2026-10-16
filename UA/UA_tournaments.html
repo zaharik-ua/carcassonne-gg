@@ -568,7 +568,7 @@
   /* Meta chips above bracket match boxes */
   .match-meta-wrapper {
     position: absolute;
-    width: 200px;  /* will be overridden inline to MATCH_WIDTH */
+    width: 215px;  /* will be overridden inline to MATCH_WIDTH */
     text-align: left;
     font-size: 11px;
     line-height: 13px;
@@ -840,7 +840,7 @@
   // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
   const BRACKET_MARGIN = 15;
   const MATCH_HEIGHT = 60;
-  let MATCH_WIDTH = 200;
+  const MATCH_WIDTH = 215;
   const ROUND_TITLE_TO_MATCH_SPACING = 60;
   const VERTICAL_SPACING = 25;
   const HORIZONTAL_SPACING = 30;
@@ -3220,16 +3220,6 @@
       }
     }
 
-    // Optionally override MATCH_WIDTH from currentTournament (ignore null/empty)
-    if (currentTournament && currentTournament.hasOwnProperty('match_width')) {
-      const mw = currentTournament.match_width;
-      if (mw !== null && mw !== "" && mw !== undefined) {
-        const parsedMw = Number(mw);
-        if (!Number.isNaN(parsedMw)) {
-          MATCH_WIDTH = parsedMw;
-        }
-      }
-    }
     // Build layout and UI for playoff bracket including match positions, labels, and connectors
     let container;
     let bracketDiv;
@@ -3319,16 +3309,6 @@
       }
     }
 
-    // Optionally override MATCH_WIDTH from currentTournament (ignore null/empty)
-    if (currentTournament && currentTournament.hasOwnProperty('match_width')) {
-      const mw = currentTournament.match_width;
-      if (mw !== null && mw !== "" && mw !== undefined) {
-        const parsedMw = Number(mw);
-        if (!Number.isNaN(parsedMw)) {
-          MATCH_WIDTH = parsedMw;
-        }
-      }
-    }
     // Build layout and UI for playoff bracket including match positions, labels, and connectors
     let container;
     let bracketDiv;

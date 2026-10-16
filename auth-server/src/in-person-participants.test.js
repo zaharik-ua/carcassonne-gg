@@ -135,6 +135,9 @@ test("stores and updates participant rating, description and photo fields", asyn
   const tournament = await createPublishedTournament(service, { slug: "participant-profile" });
   const created = await service.createParticipant(tournament.id, {
     name_en: "Profile Player",
+    bga_id: "123456789",
+    gg_elo: 1650,
+    gg_rank: 42,
     association_id: "UKR",
     current_elo: 1450,
     average_elo: 1398,
@@ -145,6 +148,9 @@ test("stores and updates participant rating, description and photo fields", asyn
   });
   assert.deepEqual(
     {
+      bga_id: created.bga_id,
+      gg_elo: created.gg_elo,
+      gg_rank: created.gg_rank,
       current_elo: created.current_elo,
       average_elo: created.average_elo,
       max_elo: created.max_elo,
@@ -153,6 +159,9 @@ test("stores and updates participant rating, description and photo fields", asyn
       player_photo: created.player_photo,
     },
     {
+      bga_id: "123456789",
+      gg_elo: 1650,
+      gg_rank: 42,
       current_elo: 1450,
       average_elo: 1398,
       max_elo: 1512,
@@ -163,16 +172,37 @@ test("stores and updates participant rating, description and photo fields", asyn
   );
 
   const updated = await service.updateParticipant(tournament.id, created.id, {
+    bga_id: "987654321",
+    gg_elo: 1675,
+    gg_rank: 38,
     current_elo: 1460,
     average_elo: null,
     player_information: "Updated description.",
   });
+  assert.equal(updated.bga_id, "987654321");
+  assert.equal(updated.gg_elo, 1675);
+  assert.equal(updated.gg_rank, 38);
   assert.equal(updated.current_elo, 1460);
   assert.equal(updated.average_elo, null);
   assert.equal(updated.max_elo, 1512);
   assert.equal(updated.number_of_games, 87);
   assert.equal(updated.player_information, "Updated description.");
   assert.equal(updated.player_photo, "https://example.com/player.webp");
+
+  for (const [field, value] of [["bga_id", "abc"], ["bga_id", "0"], ["gg_elo", -1], ["gg_rank", 0], ["gg_rank", 1.5]]) {
+    await assert.rejects(
+      service.updateParticipant(tournament.id, created.id, { [field]: value }),
+      (error) => error?.details?.field === field
+    );
+  }
+  const cleared = await service.updateParticipant(tournament.id, created.id, {
+    bga_id: null,
+    gg_elo: null,
+    gg_rank: null,
+  });
+  assert.equal(cleared.bga_id, null);
+  assert.equal(cleared.gg_elo, null);
+  assert.equal(cleared.gg_rank, null);
 
   await assert.rejects(
     service.updateParticipant(tournament.id, created.id, { current_elo: 1450.5 }),

@@ -265,6 +265,18 @@ export function normalizeParticipantInput(payload, current = null, tournament = 
   const nameEn = normalizeText(selectValue(payload, current, "name_en"));
   const nameLocal = normalizeOptionalText(selectValue(payload, current, "name_local"));
   const bgaNickname = normalizeOptionalText(selectValue(payload, current, "bga_nickname"));
+  const bgaId = normalizeOptionalText(selectValue(payload, current, "bga_id"));
+  if (bgaId !== null && !/^[0-9]*[1-9][0-9]*$/.test(bgaId)) {
+    throw validationError("INVALID_BGA_ID", "bga_id must be a positive numeric ID", { field: "bga_id" });
+  }
+  const ggElo = normalizeOptionalNonNegativeInteger(
+    selectValue(payload, current, "gg_elo"),
+    "gg_elo"
+  );
+  const ggRankValue = selectValue(payload, current, "gg_rank");
+  const ggRank = ggRankValue == null || normalizeText(ggRankValue) === ""
+    ? null
+    : normalizePositiveInteger(ggRankValue, "gg_rank");
   const currentElo = normalizeOptionalNonNegativeInteger(
     selectValue(payload, current, "current_elo"),
     "current_elo"
@@ -323,6 +335,9 @@ export function normalizeParticipantInput(payload, current = null, tournament = 
     name_en: nameEn,
     name_local: nameLocal,
     bga_nickname: bgaNickname,
+    bga_id: bgaId,
+    gg_elo: ggElo,
+    gg_rank: ggRank,
     current_elo: currentElo,
     average_elo: averageElo,
     max_elo: maxElo,

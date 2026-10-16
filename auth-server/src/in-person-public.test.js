@@ -72,6 +72,9 @@ async function addCheckedInParticipants(service, tournamentId) {
       name_en: `Player ${index + 1}`,
       name_local: `Гравець ${index + 1}`,
       bga_nickname: `bga-${index + 1}`,
+      bga_id: index === 0 ? "123456789" : null,
+      gg_elo: index === 0 ? 1650 : null,
+      gg_rank: index === 0 ? 42 : null,
       current_elo: index === 0 ? 1450 : null,
       average_elo: index === 0 ? 1400 : null,
       max_elo: index === 0 ? 1510 : null,
@@ -202,6 +205,9 @@ test("public aggregate hides drafts, cancelled history and private result fields
     "the complete playoff bracket remains public after it starts"
   );
   assert.equal(aggregate.players[0].name_local?.startsWith("Гравець"), true);
+  assert.equal(aggregate.players[0].bga_id, "123456789");
+  assert.equal(aggregate.players[0].gg_elo, 1650);
+  assert.equal(aggregate.players[0].gg_rank, 42);
   assert.equal(aggregate.players[0].current_elo, 1450);
   assert.equal(aggregate.players[0].average_elo, 1400);
   assert.equal(aggregate.players[0].max_elo, 1510);

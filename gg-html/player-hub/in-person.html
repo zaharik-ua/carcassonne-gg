@@ -3815,15 +3815,24 @@
     if (nameLocal) nameLocal.input.value = participant?.name_local || "";
     const bgaNickname = createField("BGA nickname");
     bgaNickname.input.value = participant?.bga_nickname || "";
-    const currentElo = createField("Current Elo", "number");
-    const averageElo = createField("Average Elo", "number");
-    const maxElo = createField("Peak Elo", "number");
+    const bgaId = createField("BGA ID");
+    bgaId.input.inputMode = "numeric";
+    bgaId.input.pattern = "[0-9]*[1-9][0-9]*";
+    bgaId.input.value = participant?.bga_id || "";
+    const ggElo = createField("GG Elo", "number");
+    const ggRank = createField("GG Rank", "number");
+    ggElo.input.value = participant?.gg_elo == null ? "" : String(participant.gg_elo);
+    ggRank.input.value = participant?.gg_rank == null ? "" : String(participant.gg_rank);
+    const currentElo = createField("Current BGA Elo", "number");
+    const averageElo = createField("Average BGA Elo", "number");
+    const maxElo = createField("Peak BGA Elo", "number");
     const numberOfGames = createField("Number of games", "number");
-    [currentElo, averageElo, maxElo, numberOfGames].forEach(({ input }) => {
+    [currentElo, averageElo, maxElo, numberOfGames, ggElo, ggRank].forEach(({ input }) => {
       input.min = "0";
       input.step = "1";
       input.inputMode = "numeric";
     });
+    ggRank.input.min = "1";
     currentElo.input.value = participant?.current_elo == null ? "" : String(participant.current_elo);
     averageElo.input.value = participant?.average_elo == null ? "" : String(participant.average_elo);
     maxElo.input.value = participant?.max_elo == null ? "" : String(participant.max_elo);
@@ -3853,6 +3862,9 @@
     if (nameLocal) form.appendChild(nameLocal.field);
     form.appendChild(bgaNickname.field);
     form.appendChild(location.field);
+    form.appendChild(bgaId.field);
+    form.appendChild(ggElo.field);
+    form.appendChild(ggRank.field);
     form.appendChild(currentElo.field);
     form.appendChild(averageElo.field);
     form.appendChild(maxElo.field);
@@ -3915,6 +3927,9 @@
           name_en: playerName,
           name_local: nameLocal ? String(nameLocal.input.value || "").trim() || null : null,
           bga_nickname: String(bgaNickname.input.value || "").trim() || null,
+          bga_id: String(bgaId.input.value || "").trim() || null,
+          gg_elo: optionalInteger(ggElo.input),
+          gg_rank: optionalInteger(ggRank.input),
           current_elo: optionalInteger(currentElo.input),
           average_elo: optionalInteger(averageElo.input),
           max_elo: optionalInteger(maxElo.input),
