@@ -1180,28 +1180,51 @@ export function createInPersonService({
       const tournament = await requireTournamentRow(tournamentId);
       assertParticipantMutationsAllowed(tournament);
       const matches = await dbAll(db, `
-        SELECT DISTINCT p.id AS participant_id, g.id AS bga_id
+        SELECT DISTINCT p.id AS participant_id, p.bga_id AS existing_bga_id,
+          p.gg_elo AS existing_gg_elo, p.gg_rank AS existing_gg_rank,
+          p.current_elo AS existing_current_elo,
+          g.id AS bga_id, g.gg_elo, g.gg_rating_position AS gg_rank, g.bga_elo AS current_elo
         FROM in_person_participants p
-        JOIN profiles g ON g.bga_nickname COLLATE BINARY = p.bga_nickname COLLATE BINARY
+        JOIN profiles g ON (
+          (p.bga_id IS NOT NULL AND trim(p.bga_id) <> '' AND g.id = p.bga_id)
+          OR ((p.bga_id IS NULL OR trim(p.bga_id) = '')
+            AND p.bga_nickname IS NOT NULL AND trim(p.bga_nickname) <> ''
+            AND g.bga_nickname COLLATE BINARY = p.bga_nickname COLLATE BINARY)
+        )
         WHERE p.tournament_id = ?
-          AND (p.bga_id IS NULL OR trim(p.bga_id) = '')
-          AND p.bga_nickname IS NOT NULL AND trim(p.bga_nickname) <> ''
       `, [tournament.id]);
-      const idsByParticipant = new Map();
+      const matchesByParticipant = new Map();
       for (const match of matches) {
-        const ids = idsByParticipant.get(match.participant_id) || new Set();
-        ids.add(String(match.bga_id ?? ""));
-        idsByParticipant.set(match.participant_id, ids);
+        const candidates = matchesByParticipant.get(match.participant_id) || [];
+        candidates.push(match);
+        matchesByParticipant.set(match.participant_id, candidates);
       }
+      const validMetric = (value, { integer = true, minimum = 0 } = {}) => {
+        if (value == null || String(value).trim() === '') return null;
+        const number = Number(value);
+        return Number.isFinite(number) && number >= minimum && (!integer || Number.isInteger(number))
+          ? number
+          : null;
+      };
       let updatedCount = 0;
-      for (const [participantId, ids] of idsByParticipant) {
-        if (ids.size !== 1) continue;
-        const [bgaId] = ids;
+      for (const [participantId, candidates] of matchesByParticipant) {
+        // Conflicting profiles must never assign an arbitrary ID or rating.
+        if (candidates.length !== 1) continue;
+        const [match] = candidates;
+        const bgaId = String(match.bga_id ?? "");
         if (!/^[0-9]*[1-9][0-9]*$/.test(bgaId)) continue;
+        const next = {
+          bga_id: match.existing_bga_id || bgaId,
+          gg_elo: validMetric(match.gg_elo, { integer: false }) ?? match.existing_gg_elo,
+          gg_rank: validMetric(match.gg_rank, { minimum: 1 }) ?? match.existing_gg_rank,
+          current_elo: validMetric(match.current_elo) ?? match.existing_current_elo,
+        };
+        if (Object.entries(next).every(([field, value]) => value === match[`existing_${field}`])) continue;
         const result = await dbRun(db, `
-          UPDATE in_person_participants SET bga_id = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ? AND tournament_id = ? AND (bga_id IS NULL OR trim(bga_id) = '')
-        `, [bgaId, participantId, tournament.id]);
+          UPDATE in_person_participants
+          SET bga_id = ?, gg_elo = ?, gg_rank = ?, current_elo = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND tournament_id = ?
+        `, [next.bga_id, next.gg_elo, next.gg_rank, next.current_elo, participantId, tournament.id]);
         updatedCount += result.changes;
       }
       if (updatedCount) await touchTournament(tournament.id);

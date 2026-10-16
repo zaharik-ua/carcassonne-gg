@@ -661,5 +661,5 @@ test("Players links BGA nicknames only when the participant has a BGA ID", () =>
   assert.equal(plainMeta.textContent, "BGA: MissingId");
   assert.equal(plainMeta.children.length, 0);
   assert.match(inPersonHtml, /id="ipAddPlayersBulkBtn"[^>]*>Bulk add<\/button>/);
-  assert.match(inPersonHtml, /id="ipFillBgaIdsBtn"/);
+  assert.match(inPersonHtml, /id="ipFillBgaIdsBtn"[^>]*>Update players<\/button>/);
 });

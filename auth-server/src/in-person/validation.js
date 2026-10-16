@@ -269,10 +269,11 @@ export function normalizeParticipantInput(payload, current = null, tournament = 
   if (bgaId !== null && !/^[0-9]*[1-9][0-9]*$/.test(bgaId)) {
     throw validationError("INVALID_BGA_ID", "bga_id must be a positive numeric ID", { field: "bga_id" });
   }
-  const ggElo = normalizeOptionalNonNegativeInteger(
-    selectValue(payload, current, "gg_elo"),
-    "gg_elo"
-  );
+  const ggEloValue = selectValue(payload, current, "gg_elo");
+  const ggElo = ggEloValue == null || normalizeText(ggEloValue) === "" ? null : Number(ggEloValue);
+  if (ggElo !== null && (!Number.isFinite(ggElo) || ggElo < 0)) {
+    throw validationError("INVALID_GG_ELO", "gg_elo must be a non-negative number", { field: "gg_elo" });
+  }
   const ggRankValue = selectValue(payload, current, "gg_rank");
   const ggRank = ggRankValue == null || normalizeText(ggRankValue) === ""
     ? null

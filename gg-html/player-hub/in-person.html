@@ -1983,7 +1983,7 @@
             <button id="ipAddLatePlayerBtn" class="ip-btn primary ip-hidden" type="button">Add late player</button>
             <button id="ipAddTestPlayersBtn" class="ip-btn test-action ip-hidden" type="button">Add test players</button>
             <button id="ipAddPlayersBulkBtn" class="ip-btn" type="button">Bulk add</button>
-            <button id="ipFillBgaIdsBtn" class="ip-btn" type="button" title="Fill missing BGA IDs by exact nickname match in the GG database">Fill BGA IDs</button>
+            <button id="ipFillBgaIdsBtn" class="ip-btn" type="button" title="Update BGA ID, GG Rank, GG Elo and Current BGA Elo from the GG database">Update players</button>
             <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
           </div>
         </div>
@@ -3566,7 +3566,7 @@
     addPlayerBtn.disabled = playerCreationDisabled(tournament);
     addPlayersBulkBtn.disabled = playerCreationDisabled(tournament);
     fillBgaIdsBtn.disabled = ["cancelled", "completed"].includes(String(tournament?.status || ""))
-      || !participants.some((participant) => !participant.bga_id && participant.bga_nickname);
+      || !participants.some((participant) => participant.bga_id || participant.bga_nickname);
     const isTestTournament = tournament?.is_test_tournament === true;
     const testPlayersAvailable = Number(state.overview?.test_data?.available_players || 0);
     addTestPlayersBtn.classList.toggle("ip-hidden", !isTestTournament);
@@ -3877,6 +3877,7 @@
       input.inputMode = "numeric";
     });
     ggRank.input.min = "1";
+    ggElo.input.step = "any";
     currentElo.input.value = participant?.current_elo == null ? "" : String(participant.current_elo);
     maxElo.input.value = participant?.max_elo == null ? "" : String(participant.max_elo);
     const playerInformation = createTextareaField("Player description");
@@ -7319,21 +7320,21 @@
   addPlayersBulkBtn.addEventListener("click", openBulkPlayerForm);
   fillBgaIdsBtn.addEventListener("click", async () => {
     fillBgaIdsBtn.disabled = true;
-    fillBgaIdsBtn.textContent = "Filling...";
+    fillBgaIdsBtn.textContent = "Updating...";
     try {
       const result = await apiJson(tournamentUrl("/participants/fill-bga-ids"), {
         method: "POST",
         body: "{}",
       });
       await loadOverview();
-      setStatus(`Filled BGA IDs for ${result.updated_count} player(s).`, "success");
+      setStatus(`Updated data for ${result.updated_count} player(s).`, "success");
     } catch (error) {
-      setStatus(error.message || "Failed to fill BGA IDs.", "error");
+      setStatus(error.message || "Failed to update player data.", "error");
     } finally {
-      fillBgaIdsBtn.textContent = "Fill BGA IDs";
+      fillBgaIdsBtn.textContent = "Update players";
       const tournament = state.overview?.tournament;
       fillBgaIdsBtn.disabled = ["cancelled", "completed"].includes(String(tournament?.status || ""))
-        || !(state.overview?.participants || []).some((participant) => !participant.bga_id && participant.bga_nickname);
+        || !(state.overview?.participants || []).some((participant) => participant.bga_id || participant.bga_nickname);
     }
   });
   addLatePlayerBtn.addEventListener("click", openLatePlayerForm);

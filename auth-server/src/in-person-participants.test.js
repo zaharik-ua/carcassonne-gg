@@ -33,7 +33,7 @@ async function createDatabase(t) {
       name TEXT,
       admin INTEGER NOT NULL DEFAULT 0
     );
-    CREATE TABLE profiles (id TEXT PRIMARY KEY, bga_nickname TEXT);
+    CREATE TABLE profiles (id TEXT PRIMARY KEY, bga_nickname TEXT, gg_elo REAL, gg_rating_position INTEGER, bga_elo INTEGER);
     CREATE TABLE associations (
       code TEXT UNIQUE COLLATE NOCASE,
       name TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -576,4 +576,56 @@ test("fills only missing BGA IDs from unique exact nickname matches in this tour
   assert.equal((await service.getParticipantsOverview(tournament.id)).tournament.revision, revision);
   await service.cancelTournament(tournament.id);
   await assert.rejects(service.fillParticipantBgaIds(tournament.id), (error) => error?.code === "TOURNAMENT_READ_ONLY");
+});
+
+
+test("updates player ratings by existing BGA ID or exact nickname and keeps missing source values", async (t) => {
+  const { db, service } = await createDatabase(t);
+  await exec(db, `
+    INSERT INTO profiles (id, bga_nickname, gg_elo, gg_rating_position, bga_elo) VALUES
+      ('86771532', 'NewNick', 1650.75, 42, 555),
+      ('100', 'OldNick', 999, 99, 999),
+      ('101', 'NoData', NULL, NULL, NULL),
+      ('102', 'ZeroRating', 0, 1, 0);
+  `);
+  const tournament = await createPublishedTournament(service, { slug: "update-player-data" });
+  const create = (name, nickname, bgaId = null) => service.createParticipant(tournament.id, {
+    name_en: name, association_id: "UKR", bga_nickname: nickname, bga_id: bgaId,
+    gg_elo: 100.5, gg_rank: 5, current_elo: 123, max_elo: 600, confirm_duplicate: true,
+  });
+  const existing = await create("Existing", "OldNick", "86771532");
+  const missing = await create("Missing", "NewNick");
+  const noData = await create("No Data", "NoData");
+  const zero = await create("Zero", "ZeroRating");
+  const unknownId = await create("Unknown ID", "NewNick", "9999");
+  assert.deepEqual(await service.fillParticipantBgaIds(tournament.id), { updated_count: 4 });
+  const overview = await service.getParticipantsOverview(tournament.id);
+  const byId = new Map(overview.participants.map((player) => [player.id, player]));
+  for (const participant of [existing, missing]) {
+    const updated = byId.get(participant.id);
+    assert.equal(updated.bga_id, "86771532");
+    assert.equal(updated.gg_elo, 1650.75);
+    assert.equal(updated.gg_rank, 42);
+    assert.equal(updated.current_elo, 555);
+    assert.equal(updated.max_elo, 600);
+  }
+  assert.equal(byId.get(existing.id).bga_nickname, "OldNick");
+  assert.equal(byId.get(noData.id).bga_id, "101");
+  for (const participant of [noData, unknownId]) {
+    const updated = byId.get(participant.id);
+    assert.equal(updated.gg_elo, 100.5);
+    assert.equal(updated.gg_rank, 5);
+    assert.equal(updated.current_elo, 123);
+  }
+  assert.equal(byId.get(unknownId.id).bga_id, "9999");
+  assert.equal(byId.get(zero.id).gg_elo, 0);
+  assert.equal(byId.get(zero.id).current_elo, 0);
+  assert.equal(byId.get(zero.id).gg_rank, 1);
+  assert.deepEqual(await service.fillParticipantBgaIds(tournament.id), { updated_count: 0 });
+  await exec(db, "UPDATE profiles SET gg_elo = 1675.25, gg_rating_position = 38, bga_elo = 570 WHERE id = '86771532'");
+  assert.deepEqual(await service.fillParticipantBgaIds(tournament.id), { updated_count: 2 });
+  const refreshed = await service.getParticipantsOverview(tournament.id);
+  assert.equal(refreshed.participants.find((player) => player.id === existing.id).gg_elo, 1675.25);
+  const edited = await service.updateParticipant(tournament.id, existing.id, { player_information: "Updated" });
+  assert.equal(edited.gg_elo, 1675.25);
 });

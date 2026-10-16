@@ -26,7 +26,7 @@ async function startApi(t) {
       name TEXT,
       admin INTEGER NOT NULL DEFAULT 0
     );
-    CREATE TABLE profiles (id TEXT PRIMARY KEY, bga_nickname TEXT);
+    CREATE TABLE profiles (id TEXT PRIMARY KEY, bga_nickname TEXT, gg_elo REAL, gg_rating_position INTEGER, bga_elo INTEGER);
     CREATE TABLE associations (
       code TEXT UNIQUE COLLATE NOCASE,
       name TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -879,9 +879,9 @@ test("public tournament API is anonymous, cache-revalidated and revision-aware",
 });
 
 
-test("fill BGA IDs API requires tournament admin access and persists matched profile IDs", async (t) => {
+test("player data update API requires tournament admin access and persists profile IDs and ratings", async (t) => {
   const { db, baseUrl, first, second } = await startApi(t);
-  await exec(db, "INSERT INTO profiles (id, bga_nickname) VALUES ('86771532', 'ExactNick')");
+  await exec(db, "INSERT INTO profiles (id, bga_nickname, gg_elo, gg_rating_position, bga_elo) VALUES ('86771532', 'ExactNick', 1650.75, 42, 555)");
   const created = await api(baseUrl, `/in-person-tournaments/${first.id}/participants`, {
     userId: 1, method: "POST",
     body: JSON.stringify({ name_en: "Player", association_id: "UKR", bga_nickname: "ExactNick" }),
@@ -898,4 +898,7 @@ test("fill BGA IDs API requires tournament admin access and persists matched pro
   assert.equal(filled.data.updated_count, 1);
   const overview = await api(baseUrl, `/in-person-tournaments/${first.id}/participants`, { userId: 1 });
   assert.equal(overview.data.participants[0].bga_id, "86771532");
+  assert.equal(overview.data.participants[0].gg_elo, 1650.75);
+  assert.equal(overview.data.participants[0].gg_rank, 42);
+  assert.equal(overview.data.participants[0].current_elo, 555);
 });
