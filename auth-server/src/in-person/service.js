@@ -1179,6 +1179,40 @@ export function createInPersonService({
     }));
   }
 
+  async function fillParticipantBgaIds(tournamentId) {
+    return enqueueMutation(() => transaction(async () => {
+      const tournament = await requireTournamentRow(tournamentId);
+      assertParticipantMutationsAllowed(tournament);
+      const matches = await dbAll(db, `
+        SELECT DISTINCT p.id AS participant_id, g.id AS bga_id
+        FROM in_person_participants p
+        JOIN profiles g ON g.bga_nickname COLLATE BINARY = p.bga_nickname COLLATE BINARY
+        WHERE p.tournament_id = ?
+          AND (p.bga_id IS NULL OR trim(p.bga_id) = '')
+          AND p.bga_nickname IS NOT NULL AND trim(p.bga_nickname) <> ''
+      `, [tournament.id]);
+      const idsByParticipant = new Map();
+      for (const match of matches) {
+        const ids = idsByParticipant.get(match.participant_id) || new Set();
+        ids.add(String(match.bga_id ?? ""));
+        idsByParticipant.set(match.participant_id, ids);
+      }
+      let updatedCount = 0;
+      for (const [participantId, ids] of idsByParticipant) {
+        if (ids.size !== 1) continue;
+        const [bgaId] = ids;
+        if (!/^[0-9]*[1-9][0-9]*$/.test(bgaId)) continue;
+        const result = await dbRun(db, `
+          UPDATE in_person_participants SET bga_id = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND tournament_id = ? AND (bga_id IS NULL OR trim(bga_id) = '')
+        `, [bgaId, participantId, tournament.id]);
+        updatedCount += result.changes;
+      }
+      if (updatedCount) await touchTournament(tournament.id);
+      return { updated_count: updatedCount };
+    }));
+  }
+
   async function updateParticipant(tournamentId, participantId, payload) {
     return enqueueMutation(() => transaction(async () => {
       const tournament = await requireTournamentRow(tournamentId);
@@ -4916,6 +4950,7 @@ export function createInPersonService({
     createParticipantsBulk,
     createTournament,
     deleteParticipant,
+    fillParticipantBgaIds,
     fillPlayoffTestResults,
     fillSwissRoundTestResults,
     getCity,

@@ -634,6 +634,26 @@
     font-size: 11px;
   }
 
+  .ip-bga-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #1a73b7;
+    text-decoration: none;
+    vertical-align: middle;
+  }
+
+  .ip-bga-link:hover {
+    color: #165e93;
+    text-decoration: underline;
+  }
+
+  .ip-bga-link img {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+  }
+
   .ip-form {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1962,7 +1982,8 @@
           <div class="ip-actions">
             <button id="ipAddLatePlayerBtn" class="ip-btn primary ip-hidden" type="button">Add late player</button>
             <button id="ipAddTestPlayersBtn" class="ip-btn test-action ip-hidden" type="button">Add test players</button>
-            <button id="ipAddPlayersBulkBtn" class="ip-btn" type="button">Bulk add players</button>
+            <button id="ipAddPlayersBulkBtn" class="ip-btn" type="button">Bulk add</button>
+            <button id="ipFillBgaIdsBtn" class="ip-btn" type="button" title="Fill missing BGA IDs by exact nickname match in the GG database">Fill BGA IDs</button>
             <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
           </div>
         </div>
@@ -2067,6 +2088,7 @@
   const swissReadinessEl = document.getElementById("ipSwissReadiness");
   const addPlayerBtn = document.getElementById("ipAddPlayerBtn");
   const addPlayersBulkBtn = document.getElementById("ipAddPlayersBulkBtn");
+  const fillBgaIdsBtn = document.getElementById("ipFillBgaIdsBtn");
   const addLatePlayerBtn = document.getElementById("ipAddLatePlayerBtn");
   const addTestPlayersBtn = document.getElementById("ipAddTestPlayersBtn");
   const bulkCheckInBtn = document.getElementById("ipBulkCheckInBtn");
@@ -3513,6 +3535,27 @@
     return main;
   }
 
+  function linkParticipantBgaNickname(main, participant, tournament) {
+    if (!participant.bga_id || !participant.bga_nickname) return;
+    const meta = main.querySelector(".ip-person-meta");
+    meta.textContent = "";
+    const location = tournament?.scope === "international"
+      ? ""
+      : participant.city_name_local || participant.city_name_en || "";
+    if (location) meta.appendChild(document.createTextNode(`${location} • `));
+    const link = document.createElement("a");
+    link.className = "ip-bga-link";
+    link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(participant.bga_id)}`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    const logo = document.createElement("img");
+    logo.src = "https://carcassonne.gg/gallery/bga-logo.png";
+    logo.alt = "BGA";
+    link.appendChild(logo);
+    link.appendChild(document.createTextNode(participant.bga_nickname));
+    meta.appendChild(link);
+  }
+
   function renderPlayers() {
     state.playerFormController?.abort();
     state.playerFormController = null;
@@ -3522,6 +3565,8 @@
     const tournament = state.overview?.tournament;
     addPlayerBtn.disabled = playerCreationDisabled(tournament);
     addPlayersBulkBtn.disabled = playerCreationDisabled(tournament);
+    fillBgaIdsBtn.disabled = ["cancelled", "completed"].includes(String(tournament?.status || ""))
+      || !participants.some((participant) => !participant.bga_id && participant.bga_nickname);
     const isTestTournament = tournament?.is_test_tournament === true;
     const testPlayersAvailable = Number(state.overview?.test_data?.available_players || 0);
     addTestPlayersBtn.classList.toggle("ip-hidden", !isTestTournament);
@@ -3547,6 +3592,7 @@
       const row = document.createElement("div");
       row.className = "ip-row";
       const main = createParticipantListPerson(participant, tournament);
+      linkParticipantBgaNickname(main, participant, tournament);
       const actions = document.createElement("div");
       actions.className = "ip-actions";
       actions.appendChild(createButton("Edit", "ip-btn", () => openPlayerForm(participant)));
@@ -7281,6 +7327,25 @@
   resetTestDataBtn.addEventListener("click", openResetTestDataModal);
   addPlayerBtn.addEventListener("click", () => openPlayerForm());
   addPlayersBulkBtn.addEventListener("click", openBulkPlayerForm);
+  fillBgaIdsBtn.addEventListener("click", async () => {
+    fillBgaIdsBtn.disabled = true;
+    fillBgaIdsBtn.textContent = "Filling...";
+    try {
+      const result = await apiJson(tournamentUrl("/participants/fill-bga-ids"), {
+        method: "POST",
+        body: "{}",
+      });
+      await loadOverview();
+      setStatus(`Filled BGA IDs for ${result.updated_count} player(s).`, "success");
+    } catch (error) {
+      setStatus(error.message || "Failed to fill BGA IDs.", "error");
+    } finally {
+      fillBgaIdsBtn.textContent = "Fill BGA IDs";
+      const tournament = state.overview?.tournament;
+      fillBgaIdsBtn.disabled = ["cancelled", "completed"].includes(String(tournament?.status || ""))
+        || !(state.overview?.participants || []).some((participant) => !participant.bga_id && participant.bga_nickname);
+    }
+  });
   addLatePlayerBtn.addEventListener("click", openLatePlayerForm);
   addTestPlayersBtn.addEventListener("click", () => {
     const maximum = Number(state.overview?.test_data?.available_players || 0);

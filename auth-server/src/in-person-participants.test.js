@@ -547,3 +547,42 @@ test("locks check-in changes after the first Swiss round exists", async (t) => {
     (error) => error?.code === "CHECK_IN_LOCKED"
   );
 });
+
+
+test("fills only missing BGA IDs from unique exact nickname matches in this tournament", async (t) => {
+  const { db, service } = await createDatabase(t);
+  await exec(db, `
+    INSERT INTO profiles (id, bga_nickname) VALUES
+      ('86771532', 'ExactNick'), ('100', 'OtherNick'),
+      ('101', 'Ambiguous'), ('102', 'Ambiguous'), ('invalid', 'InvalidId');
+  `);
+  const tournament = await createPublishedTournament(service, { slug: "fill-bga-ids" });
+  const other = await createPublishedTournament(service, { slug: "other-fill-bga-ids" });
+  const create = (name, nickname, bgaId = null, tournamentId = tournament.id) => service.createParticipant(tournamentId, {
+    name_en: name, association_id: "UKR", bga_nickname: nickname, bga_id: bgaId, confirm_duplicate: true,
+  });
+  const exact = await create("Exact", "ExactNick");
+  const existing = await create("Existing", "OtherNick", "999");
+  const wrongCase = await create("Wrong Case", "exactnick");
+  const partial = await create("Partial", "Exact");
+  const unknown = await create("Unknown", "UnknownNick");
+  const noNickname = await create("No Nickname", null);
+  const ambiguous = await create("Ambiguous", "Ambiguous");
+  const invalid = await create("Invalid ID", "InvalidId");
+  const otherPlayer = await create("Other Tournament", "ExactNick", null, other.id);
+  assert.deepEqual(await service.fillParticipantBgaIds(tournament.id), { updated_count: 1 });
+  const overview = await service.getParticipantsOverview(tournament.id);
+  const ids = new Map(overview.participants.map((player) => [player.id, player.bga_id]));
+  assert.equal(ids.get(exact.id), "86771532");
+  assert.equal(ids.get(existing.id), "999");
+  for (const player of [wrongCase, partial, unknown, noNickname, ambiguous, invalid]) {
+    assert.equal(ids.get(player.id), null);
+  }
+  const otherOverview = await service.getParticipantsOverview(other.id);
+  assert.equal(otherOverview.participants.find((player) => player.id === otherPlayer.id).bga_id, null);
+  const revision = overview.tournament.revision;
+  assert.deepEqual(await service.fillParticipantBgaIds(tournament.id), { updated_count: 0 });
+  assert.equal((await service.getParticipantsOverview(tournament.id)).tournament.revision, revision);
+  await service.cancelTournament(tournament.id);
+  await assert.rejects(service.fillParticipantBgaIds(tournament.id), (error) => error?.code === "TOURNAMENT_READ_ONLY");
+});

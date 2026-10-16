@@ -638,3 +638,31 @@ test("all Player Hub scripts parse after the In-Person additions", () => {
   assertEmbeddedScriptsParse(hubHtml, "Player Hub landing");
   assertEmbeddedScriptsParse(inPersonHtml, "In-Person page");
 });
+
+
+test("Players links BGA nicknames only when the participant has a BGA ID", () => {
+  const createNode = (tag) => ({
+    tag, children: [], textContent: "",
+    appendChild(child) { this.children.push(child); },
+  });
+  const document = { createElement: createNode, createTextNode: (text) => ({ textContent: text }) };
+  const source = inPersonHtml.match(/  function linkParticipantBgaNickname\([\s\S]*?\n  }/)[0];
+  const linkNickname = new Function("document", `${source}; return linkParticipantBgaNickname;`)(document);
+  const meta = createNode("div");
+  const main = { querySelector: () => meta };
+  linkNickname(main, { bga_nickname: "ExactNick", bga_id: "86771532", city_name_en: "Kyiv" }, { scope: "local" });
+  assert.equal(meta.children[0].textContent, "Kyiv • ");
+  const link = meta.children[1];
+  assert.equal(link.tag, "a");
+  assert.equal(link.href, "https://boardgamearena.com/player?id=86771532");
+  assert.equal(link.rel, "noopener noreferrer");
+  assert.equal(link.children[0].src, "https://carcassonne.gg/gallery/bga-logo.png");
+  assert.equal(link.children[1].textContent, "ExactNick");
+  const plainMeta = createNode("div");
+  plainMeta.textContent = "BGA: MissingId";
+  linkNickname({ querySelector: () => plainMeta }, { bga_nickname: "MissingId" }, { scope: "international" });
+  assert.equal(plainMeta.textContent, "BGA: MissingId");
+  assert.equal(plainMeta.children.length, 0);
+  assert.match(inPersonHtml, /id="ipAddPlayersBulkBtn"[^>]*>Bulk add<\/button>/);
+  assert.match(inPersonHtml, /id="ipFillBgaIdsBtn"/);
+});

@@ -101,6 +101,7 @@ async function startApi(t) {
     await new Promise((resolve) => db.close(resolve));
   });
   return {
+    db,
     baseUrl: `http://127.0.0.1:${server.address().port}`,
     first,
     second,
@@ -875,4 +876,26 @@ test("public tournament API is anonymous, cache-revalidated and revision-aware",
   const refreshedData = await refreshed.json();
   assert.ok(refreshedData.revision > initial.data.revision);
   assert.equal(refreshedData.players.length, 1);
+});
+
+
+test("fill BGA IDs API requires tournament admin access and persists matched profile IDs", async (t) => {
+  const { db, baseUrl, first, second } = await startApi(t);
+  await exec(db, "INSERT INTO profiles (id, bga_nickname) VALUES ('86771532', 'ExactNick')");
+  const created = await api(baseUrl, `/in-person-tournaments/${first.id}/participants`, {
+    userId: 1, method: "POST",
+    body: JSON.stringify({ name_en: "Player", association_id: "UKR", bga_nickname: "ExactNick" }),
+  });
+  assert.equal(created.response.status, 201);
+  const path = `/in-person-tournaments/${first.id}/participants/fill-bga-ids`;
+  const options = { method: "POST", body: "{}" };
+  assert.equal((await api(baseUrl, path, options)).response.status, 401);
+  assert.equal((await api(baseUrl, `/in-person-tournaments/${second.id}/participants/fill-bga-ids`, {
+    ...options, userId: 1,
+  })).response.status, 403);
+  const filled = await api(baseUrl, path, { ...options, userId: 1 });
+  assert.equal(filled.response.status, 200);
+  assert.equal(filled.data.updated_count, 1);
+  const overview = await api(baseUrl, `/in-person-tournaments/${first.id}/participants`, { userId: 1 });
+  assert.equal(overview.data.participants[0].bga_id, "86771532");
 });

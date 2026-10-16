@@ -318,6 +318,14 @@ export function registerInPersonRoutes(app, {
     }, logger)
   );
   app.post(
+    "/in-person-tournaments/:tournamentId/participants/fill-bga-ids",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const result = await inPersonService.fillParticipantBgaIds(req.inPersonTournamentId);
+      res.json({ ok: true, ...result });
+    }, logger)
+  );
+  app.post(
     "/in-person-tournaments/:tournamentId/participants/bulk",
     requireInPersonTournamentAdmin,
     asyncHandler(async (req, res) => {

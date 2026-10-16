@@ -33,6 +33,7 @@ function createService() {
     createParticipantsBulk: async () => ({}),
     createTournament: async () => ({}),
     deleteParticipant: async () => ({}),
+    fillParticipantBgaIds: async () => ({}),
     fillPlayoffTestResults: async () => ({}),
     fillSwissRoundTestResults: async () => ({}),
     getParticipantsOverview: async () => ({
@@ -92,7 +93,7 @@ test("always registers protected global and tournament routes", () => {
   });
 
   assert.deepEqual(result, { registered: true });
-  assert.equal(app.routes.length, 62);
+  assert.equal(app.routes.length, 63);
   const globalFoundation = app.routes.find((route) => (
     route.path === "/in-person-tournaments/_foundation"
   ));
