@@ -66,6 +66,9 @@ async function api(t) {
   ]) vm.runInContext(serverFunction(name), context);
   const start = source.indexOf('app.get("/tournaments",');
   vm.runInContext(source.slice(start, source.indexOf('app.get("/tournament-teams",', start)), context);
+  await run(source.match(/CREATE TABLE matches \([\s\S]*?\n        \);/)[0]);
+  const matchesStart = source.indexOf('app.get("/matches",');
+  vm.runInContext(source.slice(matchesStart, source.indexOf("function publicMainPageMatchesHandler(", matchesStart)), context);
 
   const request = (method, { id, body = {}, user = globalAdmin, query = {} } = {}) => new Promise((resolve, reject) => {
     const callbacks = handlers.get(`${method} /tournaments${id === undefined ? "" : "/:id"}`);
@@ -80,7 +83,13 @@ async function api(t) {
     next();
   });
   const access = (id, user) => new Promise((resolve, reject) => context.loadTournamentAccessForUser(id, user, (error, row) => error ? reject(error) : resolve(row)));
-  return { db, run, all, context, request, access };
+  const matches = (user, query = {}) => new Promise((resolve, reject) => {
+    const [handler] = handlers.get("get /matches");
+    try {
+      Promise.resolve(handler({ user, query }, { json: (data) => resolve(JSON.parse(JSON.stringify(data))) }, reject)).catch(reject);
+    } catch (error) { reject(error); }
+  });
+  return { db, run, all, context, request, access, matches };
 }
 
 test("new tournament API writes only canonical pairs and derives compatible response fields", async (t) => {
@@ -231,4 +240,38 @@ test("Rivals patches retain TPR settings and linked Challenges after legacy colu
   assert.equal((await context.resolveChallengePeriodRivalsTournamentId("rivals")).id, "rivals");
   const list = (await request("get")).data.tournaments;
   assert.equal(list.find((row) => row.id === "rivals").challenge_periods[0].id, "period");
+});
+
+test("official captains can open View for the same matches returned by the paginated list", async (t) => {
+  const { request, run, matches } = await api(t);
+  await request("post", { body: { id: "ETCOC-2026", name: "ETCOC", type: "Teams", category: "ETCOC" } });
+  // Assignment can differ from the captain's profile association.
+  await run("INSERT INTO tournament_teams VALUES ('ETCOC-2026', 'ROU', 'captain')");
+  await run(`INSERT INTO matches (id, tournament_id, team_1, team_2, status, time_utc) VALUES
+    ('20261011ROUHRV', 'ETCOC-2026', 'ROU', 'HRV', 'Done', '2026-10-11T12:00:00Z'),
+    ('other-match', 'ETCOC-2026', 'FR', 'DE', 'Done', '2026-10-11T13:00:00Z')`);
+  const query = { tournament_id: "ETCOC-2026", section: "finished", today_start: "2026-10-16T00:00:00Z" };
+  const listed = await matches(captain, query);
+  assert.deepEqual(listed.matches.map((row) => row.id), ["20261011ROUHRV"]);
+  const opened = await matches(captain);
+  assert.deepEqual(opened.matches.map((row) => row.id), listed.matches.map((row) => row.id));
+  assert.equal((await matches(otherCaptain)).matches.length, 0);
+  assert.equal((await matches(otherCaptain, query)).matches.length, 0);
+  assert.equal((await matches(globalAdmin)).matches.length, 2);
+});
+
+test("View retains legacy access-user captain restrictions and tournament-admin access", async (t) => {
+  const { request, run, matches } = await api(t);
+  await request("post", { body: { id: "ETCOC-2026", name: "ETCOC", type: "Teams", category: "ETCOC",
+    access_users: [{ user_id: 2, role: "admin" }, { user_id: 3, role: "captain" }] } });
+  await run(`INSERT INTO matches (id, tournament_id, team_1, team_2, status, time_utc) VALUES
+    ('own', 'ETCOC-2026', 'UA', 'FR', 'Done', '2026-10-11T12:00:00Z'),
+    ('other', 'ETCOC-2026', 'ROU', 'HRV', 'Done', '2026-10-11T13:00:00Z')`);
+  const query = { tournament_id: "ETCOC-2026", section: "finished", today_start: "2026-10-16T00:00:00Z" };
+  for (const user of [captain, tournamentAdmin, otherCaptain, globalAdmin]) {
+    const opened = (await matches(user)).matches.map((row) => row.id).sort();
+    const listed = (await matches(user, query)).matches.map((row) => row.id).sort();
+    assert.deepEqual(opened, listed);
+    assert.deepEqual(opened, user === captain ? ["own"] : user === otherCaptain ? [] : ["other", "own"]);
+  }
 });

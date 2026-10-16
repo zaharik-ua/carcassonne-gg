@@ -20674,6 +20674,18 @@ app.get("/matches", (req, res, next) => {
         COALESCE(m.is_test, 0) AS is_test,
         m.metadata,
         (
+          SELECT ${tournamentTypeSql("t")}
+          FROM tournaments t
+          WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
+          LIMIT 1
+        ) AS tournament_type,
+        (
+          SELECT ${tournamentCategorySql("t")}
+          FROM tournaments t
+          WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
+          LIMIT 1
+        ) AS tournament_category,
+        (
           SELECT COALESCE(${tournamentAccessTypeSql("t")}, ?)
           FROM tournaments t
           WHERE upper(trim(t.id)) = upper(trim(m.tournament_id))
@@ -20760,7 +20772,8 @@ app.get("/matches", (req, res, next) => {
         if (tournamentAccessRole === TOURNAMENT_ACCESS_ROLES.ADMIN) return true;
         return canClosedTournamentCaptainAccessMatch(
           {
-            access_type: tournamentAccessType,
+            type: row.tournament_type,
+            category: row.tournament_category,
             access_role: tournamentAccessRole,
             access_via_access_users: Number(row?.tournament_access_via_access_users) === 1,
             captain_team_ids: normalizeTournamentCaptainTeamIds(row?.tournament_captain_team_ids_csv),
