@@ -83,7 +83,7 @@ async function api(t) {
   return { db, run, all, context, request, access };
 }
 
-test("new tournament API writes canonical pairs with synchronized legacy fields and rejects invalid pairs", async (t) => {
+test("new tournament API writes only canonical pairs and derives compatible response fields", async (t) => {
   const { request, all } = await api(t);
   for (const category of classification.TOURNAMENT_CATEGORIES) {
     const result = await request("post", { body: { id: category.name, name: category.name, type: category.type, category: category.name } });
@@ -91,9 +91,10 @@ test("new tournament API writes canonical pairs with synchronized legacy fields 
     assert.equal(result.data.tournament.type, category.type);
     assert.equal(result.data.tournament.category, category.name);
     const [stored] = await all("SELECT * FROM tournaments WHERE id = ?", [category.name]);
-    assert.equal(stored.tournament_type, category.type);
+    assert.equal(Object.hasOwn(stored, "tournament_type"), false);
     assert.equal(stored.type, category.type);
-    assert.equal(stored.subtype, category.type === "Teams" ? (category.mode === "official" ? "Official" : "Friendly") : null);
+    assert.equal(Object.hasOwn(stored, "subtype"), false);
+    assert.equal(result.data.tournament.access_type, category.mode === "official" ? "Official" : "Friendly");
   }
   for (const body of [
     { type: "Individuals", category: "WTCOC" }, { type: "Teams", category: "Other" },
@@ -117,14 +118,14 @@ test("existing forms and legacy National remain compatible with the new API", as
   }
 });
 
-test("all ten supplied legacy tournaments expose their intended classification and visibility without rewriting rows", async (t) => {
+test("all ten migrated tournaments expose their classification and visibility without rewriting rows", async (t) => {
   const { request, run, all } = await api(t);
   const fixtures = [
     ["Asian-Cup-2026", "Teams", "Asian Cup", "Official", "Hidden"],
     ["CCL-2027-Q", "Individuals", "CCL", null, "Visible"],
     ["Copa-America-2026", "Teams", "Copa America", "Official", "Hidden"],
     ["ETCOC-2026", "Teams", "ETCOC", "Official", "Visible"],
-    ["Friendly-Matches", "Teams", null, "Friendly", "Visible"],
+    ["Friendly-Matches", "Teams", "Friendly", "Friendly", "Visible"],
     ["Rivals-S1", "Individuals", "Rivals", null, "Hidden"],
     ["KoC", "Individuals", "King of Carcassonne", null, "Hidden"],
     ["MSO-2026", "Individuals", "MSO", null, "Hidden"],
@@ -133,8 +134,8 @@ test("all ten supplied legacy tournaments expose their intended classification a
   ];
   // IDs other than Friendly-Matches are fixture IDs, to be checked against the live DB in stage 4.
   for (const [id, type, category, subtype, visibility] of fixtures) {
-    await run(`INSERT INTO tournaments (id, name, tournament_type, category, subtype, player_hub_visibility)
-      VALUES (?, ?, ?, ?, ?, ?)`, [id, id, type, category, subtype, visibility]);
+    await run(`INSERT INTO tournaments (id, name, type, category, player_hub_visibility)
+      VALUES (?, ?, ?, ?, ?)`, [id, id, type, category, visibility]);
   }
   const before = await all("SELECT * FROM tournaments ORDER BY id");
   const result = await request("get");
@@ -196,7 +197,9 @@ test("official access, assigned captains, Friendly access and hidden visibility 
       access_users: category === "Friendly" ? [] : [{ user_id: 2, role: "admin" }] } });
     if (category !== "Friendly") await run("INSERT INTO tournament_teams VALUES (?, 'UA', 'captain')", [id]);
   }
-  // Even a stale legacy subtype cannot open an official category to outsiders.
+  // During rollout the old columns may still exist, but must not control access.
+  await run("ALTER TABLE tournaments ADD COLUMN subtype TEXT");
+  await run("ALTER TABLE tournaments ADD COLUMN access_type TEXT");
   await run("UPDATE tournaments SET subtype = 'Friendly', access_type = 'Friendly' WHERE id = 'cup'");
   assert.equal((await access("cup", globalAdmin)).access_role, "admin");
   assert.equal((await access("cup", tournamentAdmin)).access_role, "admin");
@@ -215,7 +218,7 @@ test("official access, assigned captains, Friendly access and hidden visibility 
   assert.equal((await access("hidden", captain)).has_access, true);
 });
 
-test("Rivals patches retain TPR settings and linked Challenges; reading legacy rows does not migrate them", async (t) => {
+test("Rivals patches retain TPR settings and linked Challenges after legacy columns are removed", async (t) => {
   const { request, run, all, context } = await api(t);
   await request("post", { body: { id: "rivals", name: "Rivals", type: "Individuals", category: "Rivals",
     standings_scoring: "bounty_tpr", tpr_target_games: 17, tpr_smoothing: 0.8, tpr_benchmark_percentile: 0.9 } });
@@ -228,9 +231,4 @@ test("Rivals patches retain TPR settings and linked Challenges; reading legacy r
   assert.equal((await context.resolveChallengePeriodRivalsTournamentId("rivals")).id, "rivals");
   const list = (await request("get")).data.tournaments;
   assert.equal(list.find((row) => row.id === "rivals").challenge_periods[0].id, "period");
-  await run("INSERT INTO tournaments (id, name, tournament_type) VALUES ('national', 'National Cup', 'National')");
-  const legacy = (await request("get")).data.tournaments.find((row) => row.id === "national");
-  assert.equal(legacy.type, "Individuals");
-  assert.equal(legacy.category, "National");
-  assert.equal((await all("SELECT tournament_type FROM tournaments WHERE id = 'national'"))[0].tournament_type, "National");
 });

@@ -2,7 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, unlink } from "node:fs/promises";
 import path from "node:path";
 import sqlite3 from "sqlite3";
-import { getTournamentCategory, readTournamentClassification, TOURNAMENT_CATEGORIES } from "./tournament-classification.js";
+import { getTournamentCategory, TOURNAMENT_CATEGORIES } from "./tournament-classification.js";
+
+import { readLegacyTournamentClassification } from "./tournament-classification-legacy.js";
 
 const VERSION = "tournament-classification-v1";
 const RUNS = "tournament_classification_migrations";
@@ -87,7 +89,7 @@ function legacyProfile(row) {
 }
 
 function planRow(row) {
-  const target = readTournamentClassification(row);
+  const target = readLegacyTournamentClassification(row);
   const after = { type: target.type, tournament_type: target.type, team_type: target.team_type,
     category: target.category, subtype: target.subtype, access_type: target.access_type };
   const before = pick(row);
@@ -117,6 +119,9 @@ function planHash(plan) {
 
 async function inspectPlan(db, { rollback = false } = {}) {
   const columns = await tableColumns(db, "tournaments");
+  if (columns.length && !columns.some((column) => column.name === "tournament_type")) {
+    throw failure("LEGACY_COLUMNS_REMOVED", "Legacy columns have been removed; v1 apply/rollback is no longer available. Use the cleanup backup if recovery is needed.");
+  }
   for (const field of ["id", "name", ...FIELDS.filter((field) => field !== "type")]) {
     if (!columns.some((column) => column.name === field)) throw failure("MISSING_SCHEMA", `Missing tournaments.${field}; use the actual auth-server database`);
   }
@@ -176,7 +181,7 @@ export async function buildTournamentClassificationPlan(db, options = {}) {
   } catch (error) { await run(db, "ROLLBACK").catch(() => {}); throw error; }
 }
 
-async function onlineBackup(db, filename) {
+export async function createClassificationBackup(db, filename) {
   await mkdir(path.dirname(filename), { recursive: true });
   const handle = await open(filename, "wx", 0o600);
   await handle.close();
@@ -209,7 +214,7 @@ export async function applyTournamentClassificationPlan(db, plan, { backupDir } 
   assertReady(current);
   const backupPath = path.join(backupDir || path.join(path.dirname(plan.database_path), "backups"),
     `${VERSION}-${plan.direction}-${new Date().toISOString().replaceAll(":", "-")}-${randomUUID()}.sqlite`);
-  await onlineBackup(db, backupPath);
+  await createClassificationBackup(db, backupPath);
   const backup = await openClassificationDatabase(backupPath);
   try {
     const copied = await buildTournamentClassificationPlan(backup, options);

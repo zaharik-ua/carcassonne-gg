@@ -1,0 +1,38 @@
+-- Historical v1 schema, retained for migration tests only.
+
+    CREATE TABLE IF NOT EXISTS tournaments (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      short_title TEXT,
+      logo TEXT,
+      link TEXT,
+      ranking BOOLEAN NOT NULL DEFAULT 1 CHECK (ranking IN (0, 1)),
+      registration_ends_at TEXT,
+      is_test BOOLEAN NOT NULL DEFAULT 0 CHECK (is_test IN (0, 1)),
+      about TEXT,
+      rules TEXT,
+      rank_colors TEXT,
+      tournament_type TEXT NOT NULL DEFAULT 'Teams',
+      team_type TEXT NOT NULL DEFAULT 'National',
+      category TEXT,
+      subtype TEXT,
+      access_type TEXT NOT NULL DEFAULT 'Friendly',
+      player_hub_visibility TEXT NOT NULL DEFAULT 'Visible',
+      lineup_type TEXT NOT NULL DEFAULT 'Open' CHECK (lineup_type IN ('Open', 'Blind')),
+      lineup_size_type INTEGER NOT NULL DEFAULT 2,
+      lineup_size INTEGER,
+      team_size INTEGER NOT NULL DEFAULT 10 CHECK (team_size > 0),
+      tournament_format TEXT NOT NULL DEFAULT 'Free Play',
+      stage1_groups BOOLEAN NOT NULL DEFAULT 0 CHECK (stage1_groups IN (0, 1)),
+      stage1_format TEXT NOT NULL DEFAULT '',
+      stage2_format TEXT NOT NULL DEFAULT '',
+      standings_scoring TEXT NOT NULL DEFAULT 'standard' CHECK (standings_scoring IN ('standard', 'bounty_tpr')),
+      tpr_target_games INTEGER NOT NULL DEFAULT 10 CHECK (tpr_target_games > 0),
+      tpr_smoothing REAL NOT NULL DEFAULT 0.5 CHECK (tpr_smoothing >= 0),
+      tpr_benchmark_percentile REAL NOT NULL DEFAULT 0.75 CHECK (tpr_benchmark_percentile >= 0 AND tpr_benchmark_percentile <= 1),
+      current_tpr_benchmark REAL,
+      tpr_calculated_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  ;

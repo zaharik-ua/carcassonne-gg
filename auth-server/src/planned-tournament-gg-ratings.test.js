@@ -13,7 +13,7 @@ async function fixture(t) {
     CREATE TABLE profiles (id TEXT PRIMARY KEY, gg_elo REAL, deleted_at TEXT);
     INSERT INTO profiles VALUES ('a',1800,NULL), ('b',1800,NULL);
     -- tournaments has no deleted_at column in the production schema.
-    CREATE TABLE tournaments (id TEXT PRIMARY KEY, ranking INTEGER, tournament_type TEXT);
+    CREATE TABLE tournaments (id TEXT PRIMARY KEY, ranking INTEGER, type TEXT);
     INSERT INTO tournaments VALUES ('T',1,'Teams'),('U',0,'Teams'),('I',1,'Individuals');
     CREATE TABLE matches (id TEXT PRIMARY KEY, tournament_id TEXT, status TEXT, deleted_at TEXT, updated_at TEXT DEFAULT 'old', updated_by TEXT DEFAULT 'keeper');
     INSERT INTO matches (id,tournament_id,status,deleted_at) VALUES

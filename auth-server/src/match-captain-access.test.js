@@ -13,7 +13,7 @@ function serverFunction(name) {
 
 function createContext(tournamentOverrides = {}, matchOverrides = {}) {
   const tournament = {
-    subtype: "Official", has_access: true, access_role: "admin",
+    type: "Teams", category: "ETCOC", has_access: true, access_role: "admin",
     captain_team_ids: ["UA"], access_via_access_users: true,
     ...tournamentOverrides,
   };
@@ -67,7 +67,7 @@ test("captain actions still reject ambiguous teams, missing access and friendly 
   for (const overrides of [
     { captain_team_ids: ["UA", "FR"] },
     { has_access: false },
-    { subtype: "Friendly" },
+    { type: "Teams", category: "Friendly" },
   ]) {
     const { context } = createContext(overrides);
     await assert.rejects(context.loadMatchTimeProposalContext("match", { association: "UA" }), { httpStatus: 403 });

@@ -37,26 +37,16 @@ function categoryClassification(category) {
   };
 }
 
-// Read old rows without modifying them. Unmapped historical categories retain
-// their old access mode until the explicit migration audit resolves them.
+// Legacy response fields are computed here; they are never read from storage.
 export function readTournamentClassification(row = {}) {
+  const type = key(row.type) === "teams" ? "Teams" : key(row.type) === "individuals" ? "Individuals" : null;
   const category = getTournamentCategory(row.category);
-  if (category) return categoryClassification(category);
-  const oldType = key(row.type || row.tournament_type);
-  if (["national", "nationals"].includes(oldType)) return categoryClassification(getTournamentCategory("National"));
-  if (["club", "clubs"].includes(oldType)
-      || (!["individual", "individuals"].includes(oldType) && key(row.team_type) === "club")) {
-    return categoryClassification(getTournamentCategory("Clubs"));
-  }
-  const type = ["individual", "individuals"].includes(oldType) ? "Individuals" : "Teams";
-  const accessType = legacyAccessType(row);
-  if (type === "Teams" && !key(row.category) && accessType === "Friendly") {
-    return categoryClassification(getTournamentCategory("Friendly"));
-  }
+  const categoryName = category?.name || String(row.category || "").trim() || null;
+  const accessType = type === "Teams" && category?.mode === "official" ? "Official" : "Friendly";
   return {
     type,
-    category: String(row.category || "").trim() || null,
-    team_type: key(row.team_type) === "club" ? "Club" : "National",
+    category: categoryName,
+    team_type: categoryName === "Clubs" ? "Club" : "National",
     subtype: type === "Teams" ? accessType : null,
     access_type: accessType,
   };
@@ -129,51 +119,28 @@ export function resolveTournamentClassificationInput(payload = {}, current = nul
   return result;
 }
 
-function columns(alias) {
+function column(alias, name) {
   if (alias && !/^[a-z_][a-z0-9_]*$/i.test(alias)) throw new Error("Invalid tournament SQL alias");
-  const prefix = alias ? `${alias}.` : "";
-  return Object.fromEntries(["category", "tournament_type", "team_type", "subtype", "access_type"].map((name) =>
-    [name, `lower(trim(COALESCE(${prefix}${name}, '')))`]));
+  return `${alias ? `${alias}.` : ""}${name}`;
 }
 const literal = (value) => `'${value.replaceAll("'", "''")}'`;
-function categoryCases(column, select) {
-  return [...categories].map(([name, category]) => `WHEN ${column} = ${literal(name)} THEN ${literal(select(category))}`).join("\n");
-}
-function legacyAccessSql(c) {
-  return `CASE WHEN COALESCE(NULLIF(${c.subtype}, ''), ${c.access_type}) IN ('official', 'closed', '2') THEN 'Official' ELSE 'Friendly' END`;
-}
 
-// These expressions use existing columns; no data migration is needed in stage 3.
+// All runtime SQL uses only the two stored classification columns.
 export function tournamentTypeSql(alias = "") {
-  const c = columns(alias);
-  return `(CASE ${categoryCases(c.category, (category) => category.type)}
-    WHEN ${c.tournament_type} IN ('individual', 'individuals', 'national', 'nationals') THEN 'Individuals'
-    ELSE 'Teams' END)`;
-}
-
-export function tournamentTeamTypeSql(alias = "") {
-  const c = columns(alias);
-  return `(CASE ${categoryCases(c.category, (category) => category.name === "Clubs" ? "Club" : "National")}
-    WHEN ${c.tournament_type} IN ('national', 'nationals') THEN 'National'
-    WHEN ${c.team_type} = 'club' OR ${c.tournament_type} IN ('club', 'clubs') THEN 'Club' ELSE 'National' END)`;
-}
-
-export function tournamentAccessTypeSql(alias = "") {
-  const c = columns(alias);
-  return `(CASE ${categoryCases(c.category, (category) => category.mode === "official" ? "Official" : "Friendly")}
-    WHEN ${c.tournament_type} IN ('national', 'nationals', 'club', 'clubs')
-      OR (${c.tournament_type} NOT IN ('individual', 'individuals') AND ${c.team_type} = 'club') THEN 'Friendly'
-    ELSE ${legacyAccessSql(c)} END)`;
+  return `(CASE lower(trim(${column(alias, "type")})) WHEN 'teams' THEN 'Teams' WHEN 'individuals' THEN 'Individuals' END)`;
 }
 
 export function tournamentCategorySql(alias = "") {
-  const c = columns(alias);
-  const prefix = alias ? `${alias}.` : "";
-  return `(CASE ${categoryCases(c.category, (category) => category.name)}
-    WHEN ${c.tournament_type} IN ('national', 'nationals') THEN 'National'
-    WHEN ${c.tournament_type} IN ('club', 'clubs')
-      OR (${c.tournament_type} NOT IN ('individual', 'individuals') AND ${c.team_type} = 'club') THEN 'Clubs'
-    WHEN ${c.category} = '' AND ${c.tournament_type} NOT IN ('individual', 'individuals')
-      AND ${legacyAccessSql(c)} = 'Friendly' THEN 'Friendly'
-    ELSE NULLIF(trim(${prefix}category), '') END)`;
+  const category = column(alias, "category");
+  const cases = [...categories].map(([name, rule]) => `WHEN ${literal(name)} THEN ${literal(rule.name)}`).join(" ");
+  return `(CASE lower(trim(${category})) ${cases} ELSE NULLIF(trim(${category}), '') END)`;
+}
+
+export function tournamentTeamTypeSql(alias = "") {
+  return `(CASE WHEN ${tournamentCategorySql(alias)} = 'Clubs' THEN 'Club' ELSE 'National' END)`;
+}
+
+export function tournamentAccessTypeSql(alias = "") {
+  const official = TOURNAMENT_CATEGORIES.filter((rule) => rule.mode === "official").map((rule) => literal(rule.name)).join(", ");
+  return `(CASE WHEN ${tournamentTypeSql(alias)} = 'Teams' AND ${tournamentCategorySql(alias)} IN (${official}) THEN 'Official' ELSE 'Friendly' END)`;
 }

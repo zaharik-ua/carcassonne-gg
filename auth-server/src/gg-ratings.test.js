@@ -20,7 +20,7 @@ async function database(t) {
   t.after(() => new Promise((resolve) => db.close(resolve)));
   await exec(db, `
     CREATE TABLE profiles (id TEXT PRIMARY KEY, gg_elo REAL, deleted_at TEXT);
-    CREATE TABLE tournaments (id TEXT PRIMARY KEY, ranking INTEGER, tournament_type TEXT);
+    CREATE TABLE tournaments (id TEXT PRIMARY KEY, ranking INTEGER, type TEXT);
     CREATE TABLE matches (id TEXT PRIMARY KEY, tournament_id TEXT, deleted_at TEXT, updated_at TEXT DEFAULT 'old');
     CREATE TABLE duels (
       id TEXT PRIMARY KEY, tournament_id TEXT, match_id TEXT, is_test INTEGER,
@@ -73,12 +73,13 @@ test("schema migration is repeatable; aggregates exclude deleted duels and requi
   assert.equal(await updateMatchGgRating(db, 'm'), null);
 });
 
-test("match ratings follow category classification when a legacy type is stale", async (t) => {
+test("match ratings use canonical type while obsolete stored values are ignored", async (t) => {
   const db = await database(t);
   await exec(db, `
     ALTER TABLE tournaments ADD COLUMN category TEXT;
-    UPDATE tournaments SET category = 'National' WHERE id = 'T';
-    UPDATE tournaments SET category = 'WTCOC' WHERE id = 'I';
+    ALTER TABLE tournaments ADD COLUMN tournament_type TEXT DEFAULT 'Teams';
+    UPDATE tournaments SET type = 'Individuals', category = 'National' WHERE id = 'T';
+    UPDATE tournaments SET type = 'Teams', category = 'WTCOC', tournament_type = 'Individuals' WHERE id = 'I';
     INSERT INTO duels (id,match_id,gg_rating_full) VALUES ('national-duel','m',6),('team-duel','individual',6);
   `);
   assert.equal(await updateMatchGgRating(db, "m"), null);

@@ -3029,14 +3029,6 @@ function normalizeTournamentAccessUsers(value, fallbackUserIds) {
   return Array.from(byUserId.values()).sort((a, b) => a.user_id - b.user_id);
 }
 
-function normalizeTournamentSubtypeForType(typeValue, subtypeValue) {
-  const tournamentType = normalizeTournamentType(typeValue);
-  if (tournamentType !== TOURNAMENT_TYPES.TEAMS) {
-    return null;
-  }
-  return normalizeTournamentAccessType(subtypeValue);
-}
-
 function normalizeTournamentLineupSizeType(value) {
   const normalized = Number.parseInt(String(value ?? "").trim(), 10);
   return normalized === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED
@@ -6431,11 +6423,7 @@ function ensureTournamentsSchema() {
       rules TEXT,
       rank_colors TEXT,
       type TEXT CHECK (type IN ('Teams', 'Individuals')),
-      tournament_type TEXT NOT NULL DEFAULT 'Teams',
-      team_type TEXT NOT NULL DEFAULT 'National',
       category TEXT,
-      subtype TEXT,
-      access_type TEXT NOT NULL DEFAULT 'Friendly',
       player_hub_visibility TEXT NOT NULL DEFAULT 'Visible',
       lineup_type TEXT NOT NULL DEFAULT 'Open' CHECK (lineup_type IN ('Open', 'Blind')),
       lineup_size_type INTEGER NOT NULL DEFAULT 2,
@@ -6476,11 +6464,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "rules", "TEXT");
       addColumnIfMissing(columns, "tournaments", "rank_colors", "TEXT");
       addColumnIfMissing(columns, "tournaments", "type", "TEXT CHECK (type IN ('Teams', 'Individuals'))");
-      addColumnIfMissing(columns, "tournaments", "tournament_type", "TEXT NOT NULL DEFAULT 'Teams'");
-      addColumnIfMissing(columns, "tournaments", "team_type", "TEXT NOT NULL DEFAULT 'National'");
       addColumnIfMissing(columns, "tournaments", "category", "TEXT");
-      addColumnIfMissing(columns, "tournaments", "subtype", "TEXT");
-      addColumnIfMissing(columns, "tournaments", "access_type", "TEXT NOT NULL DEFAULT 'Friendly'");
       addColumnIfMissing(columns, "tournaments", "player_hub_visibility", "TEXT NOT NULL DEFAULT 'Visible'");
       addColumnIfMissing(columns, "tournaments", "lineup_type", "TEXT NOT NULL DEFAULT 'Open' CHECK (lineup_type IN ('Open', 'Blind'))");
       addColumnIfMissing(columns, "tournaments", "lineup_size_type", "INTEGER NOT NULL DEFAULT 2");
@@ -6498,8 +6482,7 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "tpr_calculated_at", "TEXT");
       addColumnIfMissing(columns, "tournaments", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "tournaments", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-      // Preserve raw classification for the explicit migration and its journal.
-      // API writes synchronize the new type and legacy fields; startup must not rewrite them.
+      // Classification is managed only by explicit migrations and type/category API writes.
       db.run(
         `
           UPDATE tournaments
@@ -14270,9 +14253,8 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   } catch (error) {
     return res.status(error.httpStatus || 400).json({ ok: false, code: error.code, message: error.message });
   }
-  const { type: tournamentType, team_type: teamType, subtype, access_type: accessType } = classification;
+  const { type: tournamentType, subtype } = classification;
   const lineupType = normalizeTournamentLineupType(tournamentType, req.body?.lineup_type);
-  const requestedTeamType = normalizeNullableText(req.body?.team_type);
   const requestedCategory = classification.category;
   const playerHubVisibility = normalizeTournamentPlayerHubVisibility(req.body?.player_hub_visibility);
   const lineupSizeType = normalizeTournamentLineupSizeType(req.body?.lineup_size_type);
@@ -14302,9 +14284,6 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   }
   if (!name) {
     return res.status(400).json({ ok: false, message: "name is required" });
-  }
-  if (tournamentType === TOURNAMENT_TYPES.TEAMS && requestedTeamType && !isValidTeamType(requestedTeamType)) {
-    return res.status(400).json({ ok: false, message: "team_type must be National or Club" });
   }
   if (lineupSizeType === TOURNAMENT_LINEUP_SIZE_TYPES.FIXED && !lineupSize) {
     return res.status(400).json({ ok: false, message: "lineup_size is required for fixed lineup size" });
@@ -14360,11 +14339,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   rules,
                   rank_colors,
                   type,
-                  tournament_type,
-                  team_type,
                   category,
-                  subtype,
-                  access_type,
                   player_hub_visibility,
                   lineup_type,
                   lineup_size_type,
@@ -14381,7 +14356,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
               [
                 id,
@@ -14396,11 +14371,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                 rules,
                 rankColors,
                 tournamentType,
-                tournamentType,
-                teamType,
                 category,
-                subtype,
-                accessType,
                 playerHubVisibility,
                 lineupType,
                 lineupSizeType,
@@ -14509,7 +14480,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
       } catch (error) {
         return res.status(error.httpStatus || 400).json({ ok: false, code: error.code, message: error.message });
       }
-      const { type: tournamentType, category, team_type: teamType, subtype, access_type: accessType } = classification;
+      const { type: tournamentType, category, subtype } = classification;
       const name = resolveTournamentTextPatch(req.body, currentRow, "name");
       if (!name) return res.status(400).json({ ok: false, message: "name is required" });
       const shortTitle = resolveTournamentTextPatch(req.body, currentRow, "short_title");
@@ -14598,11 +14569,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                   rules = ?,
                   rank_colors = ?,
                   type = ?,
-                  tournament_type = ?,
-                  team_type = ?,
                   category = ?,
-                  subtype = ?,
-                  access_type = ?,
                   player_hub_visibility = ?,
                   lineup_type = ?,
                   lineup_size_type = ?,
@@ -14632,11 +14599,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                 rules,
                 rankColors,
                 tournamentType,
-                tournamentType,
-                teamType,
                 category,
-                subtype,
-                accessType,
                 playerHubVisibility,
                 lineupType,
                 lineupSizeType,

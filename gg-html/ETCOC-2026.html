@@ -15,6 +15,17 @@
   body {
     font-family: 'Montserrat', sans-serif;
   }
+
+  .tournament-loading {
+    padding: 20px;
+    text-align: center;
+  }
+
+  .tournament-loading img {
+    width: 32px;
+    height: 32px;
+  }
+
   .tab-container {
     display: flex;
     gap: 0px;
@@ -1756,6 +1767,9 @@
 
 <!-- HTML -->
 <div id="tournament-title" style="font-size:18px; font-weight:700; line-height:20px; padding:0 0 10px;"></div>
+<div id="tournament-loading" class="tournament-loading" role="status" aria-label="Loading tournament data">
+  <img src="https://carcassonne.gg/gallery/loading-red.gif" alt="">
+</div>
 <div class="tab-container" id="tab-container"></div>
 <div id="tab-overview-content" style="display:none;"></div>
 <div id="tab-players-content" style="display:none;"></div>
@@ -6965,14 +6979,18 @@
   runWhenReady(async () => {
     document.getElementById("tournament-title").textContent = currentTournament.name;
     applyTournamentTheme(currentTournament.style);
-    await Promise.all([
-      loadTournamentHtmlFromDatabase(),
-      loadTournamentTeamsFromDatabase(),
-      loadTournamentMatchesFromDatabase(),
-      loadLineupPlayerDetailsFromDatabase()
-    ]);
-    await loadStandingsFromDatabase();
-    initAndRenderTournamentContent(currentTournament);
+    try {
+      await Promise.all([
+        loadTournamentHtmlFromDatabase(),
+        loadTournamentTeamsFromDatabase(),
+        loadTournamentMatchesFromDatabase(),
+        loadLineupPlayerDetailsFromDatabase()
+      ]);
+      await loadStandingsFromDatabase();
+      initAndRenderTournamentContent(currentTournament);
+    } finally {
+      document.getElementById("tournament-loading").hidden = true;
+    }
   });
 
   // Opens a fullscreen overlay that shows only the bracket block

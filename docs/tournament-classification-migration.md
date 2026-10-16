@@ -1,57 +1,33 @@
-# Міграція турнірів
+# Очищення старих колонок
 
-БД: `/home/carcassonne-gg/auth-server/data/auth.sqlite`.
-Виконуй блоки по черзі. При помилці зупинись.
+Перехід на `type/category` уже виконано. Повторно запускати стару міграцію не потрібно.
 
-## 1. Резервна копія
+Новий backend готовий до видалення `tournament_type`, `team_type`, `subtype`, `access_type` з `tournaments`.
+**Спочатку залий новий backend і перезапусти його. HTML оновлювати не потрібно.**
+
+На сервері — перевірка без змін БД:
 
 ```bash
 cd /home/carcassonne-gg/auth-server
 umask 077
 mkdir -p backups
-sqlite3 -readonly data/auth.sqlite ".backup 'backups/auth-before-migration-$(date -u +%Y%m%dT%H%M%SZ).sqlite'"
+node src/cleanup-tournament-classification.js --db-path data/auth.sqlite \
+  --report backups/classification-cleanup.json > backups/classification-cleanup.log &&
+node -e 'const p=require("./backups/classification-cleanup.json"); console.log(p.summary, p.issues)'
 ```
 
-Якщо новий backend ще не опублікований — зроби deploy **після цієї копії**
-і дочекайся його успішного запуску. Далі потрібен код етапів 2–4.
-
-## 2. Перевірка
-
-Призупини фонові імпорти/таймери, які пишуть у БД, і дочекайся завершення їхніх завдань.
+Якщо `blocked: 0`, `issues: []`, `columns_to_remove: 4` — застосувати:
 
 ```bash
-test -f src/migrate-tournament-classification.js
-systemctl stop carcassonne-auth.service
-node src/migrate-tournament-classification.js --db-path data/auth.sqlite \
-  --report backups/tournament-plan.json > backups/tournament-dry-run.log
-node -e '
-const p = require("./backups/tournament-plan.json");
-console.log({issues: p.issues, ...p.summary});
-console.table(p.rows.map(r => ({id: r.id, type: r.after.type, category: r.after.category, errors: r.blockers.join(", ")})));
-'
+node src/cleanup-tournament-classification.js --db-path data/auth.sqlite \
+  --apply --plan backups/classification-cleanup.json --backup-dir backups
 ```
 
-Продовжуй, якщо `issues: []`, `blocked: 0` і пари type/category правильні.
-Якщо є `CATALOG_NOT_READY` — підготовка довідника новим backend ще не завершилась.
+Бекап створюється й перевіряється автоматично. Дані та зв'язки перевіряються в транзакції;
+помилка або зміна БД після перевірки скасовує видалення. При `STALE_PLAN` повтори перевірку.
+Backend і таймери можна залишити запущеними. `already_applied: true` означає, що колонки вже видалені.
 
-## 3. Міграція
+Після видалення старий backend і старий `--rollback` несумісні зі схемою.
+Для аварійного відновлення потрібен новий бекап, шлях до якого виводить команда.
 
-```bash
-node src/migrate-tournament-classification.js --db-path data/auth.sqlite \
-  --apply --plan backups/tournament-plan.json --backup-dir backups
-```
-
-Очікується `applied: true` або `already_applied: true`.
-Скрипт сам створить перевірений backup; матчі, результати й ролі збережуться.
-
-## 4. Запуск
-
-```bash
-systemctl start carcassonne-auth.service
-curl -fsS --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:3100/health
-```
-
-Віднови призупинені таймери. Перевір турніри, доступи, Friendly та Rivals.
-
-При `STALE_PLAN` повтори крок 2. При іншій помилці запусти backend командою
-`systemctl start carcassonne-auth.service` і збережи повідомлення помилки.
+[Попередня міграція та перевірки](./tournament-classification.md#11-результат-етапу-6).

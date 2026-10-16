@@ -44,8 +44,7 @@ async function fixture(t) {
   await run(db, "PRAGMA journal_mode = WAL");
   await run(db, "PRAGMA wal_autocheckpoint = 0");
   await run(db, "PRAGMA foreign_keys = ON");
-  const schema = source.match(/function ensureTournamentsSchema\(\) \{\s*db.run\(`([\s\S]*?)`/)[1]
-    .replace("      type TEXT CHECK (type IN ('Teams', 'Individuals')),\n", "");
+  const schema = readFileSync(new URL("./fixtures/tournaments-legacy.sql", import.meta.url), "utf8");
   await run(db, schema);
   await ensureCategoriesSchema(db);
   for (const [id, name, type, category, subtype, visibility] of fixtures) {

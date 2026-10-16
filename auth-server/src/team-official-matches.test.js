@@ -21,7 +21,7 @@ async function createApi(t) {
   await new Promise((resolve, reject) => db.exec(`
     CREATE TABLE tournaments (
       id TEXT, name TEXT, short_title TEXT, logo TEXT, link TEXT,
-      tournament_type TEXT, subtype TEXT, access_type TEXT, category TEXT, team_type TEXT
+      type TEXT, category TEXT
     );
     CREATE TABLE teams (id TEXT, name TEXT, flag TEXT, logo TEXT);
     CREATE TABLE matches (
@@ -58,8 +58,8 @@ async function createApi(t) {
       board_stats_json TEXT, meeple_stats_json TEXT,
       scoring_json TEXT, player_time_json TEXT
     );
-    INSERT INTO tournaments (id, name, tournament_type, subtype) VALUES
-      ('CUP', 'Official Cup', 'Teams', 'Official'),
+    INSERT INTO tournaments (id, name, type, category) VALUES
+      ('CUP', 'Official Cup', 'Teams', 'ETCOC'),
       ('FRIENDLY', 'Friendly', 'Teams', 'Friendly');
     INSERT INTO teams VALUES
       ('JP', 'Japan', 'japan.svg', NULL), ('CN', 'China', NULL, 'china.svg');

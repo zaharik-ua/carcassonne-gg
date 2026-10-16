@@ -36,11 +36,11 @@ async function createContext(t) {
   }));
   await exec(`
     ${source.match(/CREATE TABLE matches \([\s\S]*?\n        \);/)[0]}
-    CREATE TABLE tournaments (id TEXT PRIMARY KEY, name TEXT, short_title TEXT, logo TEXT, link TEXT, tournament_type TEXT, category TEXT);
+    CREATE TABLE tournaments (id TEXT PRIMARY KEY, name TEXT, short_title TEXT, logo TEXT, link TEXT, type TEXT, category TEXT);
     CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, flag TEXT, logo TEXT);
     CREATE TABLE news (id TEXT, match_id TEXT, title TEXT, short_title TEXT, time_utc TEXT, status TEXT, deleted_at TEXT, updated_at TEXT);
     CREATE TABLE job_runs (job_name TEXT, last_success_at TEXT);
-    INSERT INTO tournaments (id, name, tournament_type) VALUES ('T', 'Test Cup', 'Teams'), ('Friendly-Matches', 'Friendly', 'Teams');
+    INSERT INTO tournaments (id, name, type) VALUES ('T', 'Test Cup', 'Teams'), ('Friendly-Matches', 'Friendly', 'Teams');
     INSERT INTO teams (id, name) VALUES ('UKR', 'Ukraine'), ('POL', 'Poland');
   `);
   const handlers = {};
@@ -68,7 +68,7 @@ async function createContext(t) {
     randomUUID,
     loadTournamentAccessForUser(id, user, done) {
       done(null, {
-        id, subtype: id === "T" ? "Official" : "Friendly", tournament_type: "Teams", lineup_type: "Open",
+        id, type: "Teams", category: id === "T" ? "ETCOC" : "Friendly", lineup_type: "Open",
         has_access: !!(user.admin || user.role), access_role: user.admin ? "admin" : user.role,
       });
     },

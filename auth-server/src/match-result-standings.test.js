@@ -80,7 +80,7 @@ async function createContext(t) {
     STANDINGS_SCORING: { STANDARD: "standard", BOUNTY_TPR: "bounty_tpr" },
     loadTournamentAccessForUser(id, user, done) {
       done(null, {
-        id, subtype: "Official", has_access: !!(user.admin || user.role),
+        id, type: "Teams", category: "ETCOC", has_access: !!(user.admin || user.role),
         access_role: user.admin ? "admin" : user.role, captain_team_ids: ["UA"],
       });
     },

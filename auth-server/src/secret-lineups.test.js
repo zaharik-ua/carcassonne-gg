@@ -66,7 +66,7 @@ async function createDatabase(t) {
     CREATE TABLE tournaments (
       id TEXT PRIMARY KEY,
       ranking INTEGER NOT NULL DEFAULT 1,
-      tournament_type TEXT DEFAULT 'Teams'
+      type TEXT DEFAULT 'Teams'
     );
     CREATE TABLE matches (
       id TEXT PRIMARY KEY,
