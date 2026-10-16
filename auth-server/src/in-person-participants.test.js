@@ -140,9 +140,7 @@ test("stores and updates participant rating, description and photo fields", asyn
     gg_rank: 42,
     association_id: "UKR",
     current_elo: 1450,
-    average_elo: 1398,
     max_elo: 1512,
-    number_of_games: 87,
     player_information: "International championship participant.",
     player_photo: "https://example.com/player.webp",
   });
@@ -152,9 +150,7 @@ test("stores and updates participant rating, description and photo fields", asyn
       gg_elo: created.gg_elo,
       gg_rank: created.gg_rank,
       current_elo: created.current_elo,
-      average_elo: created.average_elo,
       max_elo: created.max_elo,
-      number_of_games: created.number_of_games,
       player_information: created.player_information,
       player_photo: created.player_photo,
     },
@@ -163,9 +159,7 @@ test("stores and updates participant rating, description and photo fields", asyn
       gg_elo: 1650,
       gg_rank: 42,
       current_elo: 1450,
-      average_elo: 1398,
       max_elo: 1512,
-      number_of_games: 87,
       player_information: "International championship participant.",
       player_photo: "https://example.com/player.webp",
     }
@@ -176,16 +170,13 @@ test("stores and updates participant rating, description and photo fields", asyn
     gg_elo: 1675,
     gg_rank: 38,
     current_elo: 1460,
-    average_elo: null,
     player_information: "Updated description.",
   });
   assert.equal(updated.bga_id, "987654321");
   assert.equal(updated.gg_elo, 1675);
   assert.equal(updated.gg_rank, 38);
   assert.equal(updated.current_elo, 1460);
-  assert.equal(updated.average_elo, null);
   assert.equal(updated.max_elo, 1512);
-  assert.equal(updated.number_of_games, 87);
   assert.equal(updated.player_information, "Updated description.");
   assert.equal(updated.player_photo, "https://example.com/player.webp");
 

@@ -286,7 +286,14 @@
     gap: 12px;
   }
 
+  .player-photo-wrapper {
+    flex: 0 0 auto;
+    max-width: 200px;
+  }
+
   .player-details__photo {
+    display: block;
+    max-width: 100%;
     max-height: 200px;
     width: auto;
     border-radius: 4px;
@@ -295,7 +302,26 @@
   }
 
   .player-details__text {
-    white-space: pre-line;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .player-details__ratings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .player-details__group-title {
+    margin: 0 0 8px;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .player-details__description {
+    margin-top: 12px;
+    overflow-wrap: anywhere;
   }
 
   .player-details__label {
@@ -330,6 +356,11 @@
 
     .player-details__photo {
       max-width: 100%;
+    }
+
+    .player-details__text {
+      flex: 0 0 auto;
+      width: 100%;
     }
   }
 
@@ -923,9 +954,9 @@
       bga_id: player.bga_id || "",
       rating: player.rating ?? player.max_elo ?? null,
       current_elo: player.current_elo ?? null,
-      average_elo: player.average_elo ?? null,
       max_elo: player.max_elo ?? null,
-      number_of_games: player.number_of_games ?? null,
+      gg_elo: player.gg_elo ?? null,
+      gg_rank: player.gg_rank ?? null,
       player_photo: player.player_photo || "",
       player_information: player.player_information || ""
     }));
@@ -1407,11 +1438,22 @@
         photoWrap.appendChild(zoomIcon);
         contentWrap.appendChild(photoWrap);
       }
-      const metaEntries = [
-        { label: "Current Elo", value: formatMetric(p.current_elo) },
-        { label: "Average Elo", value: formatMetric(p.average_elo) },
-        { label: "Peak Elo", value: formatMetric(p.max_elo) },
-        { label: "Number of games", value: formatMetric(p.number_of_games) }
+      const ratingGroups = [
+        {
+          title: "BGA",
+          entries: [
+            { label: "BGA ID", value: formatMetric(p.bga_id) },
+            { label: "Current Elo", value: formatMetric(p.current_elo) },
+            { label: "Peak Elo", value: formatMetric(p.max_elo) }
+          ]
+        },
+        {
+          title: "GG",
+          entries: [
+            { label: "Elo", value: formatMetric(p.gg_elo) },
+            { label: "Rank", value: formatMetric(p.gg_rank) }
+          ]
+        }
       ];
 
       const extraInfoRaw = p.player_information !== null && p.player_information !== undefined
@@ -1421,29 +1463,38 @@
       const textBlock = document.createElement("div");
       textBlock.className = "player-details__text";
 
-      const metaBlock = document.createElement("div");
-      metaEntries.forEach(entry => {
-        const metric = document.createElement("div");
-        metric.className = "player-details__metric";
+      const ratings = document.createElement("div");
+      ratings.className = "player-details__ratings";
+      ratingGroups.forEach(group => {
+        const column = document.createElement("div");
+        const groupTitle = document.createElement("h3");
+        groupTitle.className = "player-details__group-title";
+        groupTitle.textContent = group.title;
+        column.appendChild(groupTitle);
 
-        const label = document.createElement("span");
-        label.className = "player-details__label";
-        label.textContent = entry.label;
+        group.entries.forEach(entry => {
+          const metric = document.createElement("div");
+          metric.className = "player-details__metric";
 
-        const valueLine = document.createElement("span");
-        valueLine.className = "player-details__value";
-        valueLine.textContent = entry.value;
+          const label = document.createElement("span");
+          label.className = "player-details__label";
+          label.textContent = entry.label;
 
-        metric.appendChild(label);
-        metric.appendChild(valueLine);
-        metaBlock.appendChild(metric);
+          const valueLine = document.createElement("span");
+          valueLine.className = "player-details__value";
+          valueLine.textContent = entry.value;
+
+          metric.appendChild(label);
+          metric.appendChild(valueLine);
+          column.appendChild(metric);
+        });
+        ratings.appendChild(column);
       });
-      textBlock.appendChild(metaBlock);
+      textBlock.appendChild(ratings);
 
       if (extraInfoRaw) {
         const infoBlock = document.createElement("div");
-        infoBlock.className = "player-details__value";
-        infoBlock.style.marginTop = "7px";
+        infoBlock.className = "player-details__value player-details__description";
         infoBlock.textContent = extraInfoRaw;
         textBlock.appendChild(infoBlock);
       }

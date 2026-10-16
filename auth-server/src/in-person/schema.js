@@ -250,9 +250,7 @@ async function ensureInPersonTables(db) {
         gg_elo INTEGER,
         gg_rank INTEGER,
         current_elo INTEGER,
-        average_elo INTEGER,
         max_elo INTEGER,
-        number_of_games INTEGER,
         player_information TEXT,
         player_photo TEXT,
         association_id TEXT COLLATE NOCASE,
@@ -561,9 +559,7 @@ async function ensureParticipantProfileExtensions(db) {
     ["gg_elo", "INTEGER"],
     ["gg_rank", "INTEGER"],
     ["current_elo", "INTEGER"],
-    ["average_elo", "INTEGER"],
     ["max_elo", "INTEGER"],
-    ["number_of_games", "INTEGER"],
     ["player_information", "TEXT"],
     ["player_photo", "TEXT"],
   ];
@@ -590,6 +586,29 @@ async function ensureParticipantProfileExtensions(db) {
     throw error;
   }
   return { addedColumns };
+}
+
+async function removeUnusedParticipantProfileFields(db) {
+  const removedColumns = [];
+  try {
+    await dbExec(db, "BEGIN IMMEDIATE TRANSACTION");
+    const columns = await dbAll(db, "PRAGMA table_info(in_person_participants)");
+    for (const columnName of ["average_elo", "number_of_games"]) {
+      if (columns.some((column) => column.name === columnName)) {
+        await dbExec(db, `ALTER TABLE in_person_participants DROP COLUMN ${columnName}`);
+        removedColumns.push(columnName);
+      }
+    }
+    await dbExec(db, `
+      INSERT OR IGNORE INTO in_person_schema_migrations (version, name)
+      VALUES (9, 'remove_unused_participant_profile_fields');
+      COMMIT;
+    `);
+  } catch (error) {
+    await rollbackQuietly(db);
+    throw error;
+  }
+  return { removedColumns };
 }
 
 async function ensureStandingsPlayedExtension(db) {
@@ -962,6 +981,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
   const testTournamentMigration = await ensureTestTournamentExtension(db);
   const playoffPlaceholderMigration = await ensurePlayoffPlaceholderExtensions(db);
   const participantProfileMigration = await ensureParticipantProfileExtensions(db);
+  const participantProfileCleanupMigration = await removeUnusedParticipantProfileFields(db);
   const standingsPlayedMigration = await ensureStandingsPlayedExtension(db);
   await ensureInPersonTriggersAndAccessIndexes(db);
   logger?.info?.("[in-person] Schema foundation ready", {
@@ -973,6 +993,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
     playoffMedalTablesUpdated: playoffMedalTableMigration.updatedRows,
     playoffPlaceholderColumnsAdded: playoffPlaceholderMigration.addedColumns,
     participantProfileColumnsAdded: participantProfileMigration.addedColumns,
+    participantProfileColumnsRemoved: participantProfileCleanupMigration.removedColumns,
     standingsPlayedColumnAdded: standingsPlayedMigration.added,
   });
   return {
@@ -982,6 +1003,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
     playoffMedalTableMigration,
     playoffPlaceholderMigration,
     participantProfileMigration,
+    participantProfileCleanupMigration,
     standingsPlayedMigration,
   };
 }

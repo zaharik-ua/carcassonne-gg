@@ -153,9 +153,7 @@ function serializeParticipant(row) {
     gg_elo: row.gg_elo == null ? null : Number(row.gg_elo),
     gg_rank: row.gg_rank == null ? null : Number(row.gg_rank),
     current_elo: row.current_elo == null ? null : Number(row.current_elo),
-    average_elo: row.average_elo == null ? null : Number(row.average_elo),
     max_elo: row.max_elo == null ? null : Number(row.max_elo),
-    number_of_games: row.number_of_games == null ? null : Number(row.number_of_games),
     player_information: row.player_information || null,
     player_photo: row.player_photo || null,
     association_id: row.association_id || null,
@@ -1072,10 +1070,10 @@ export function createInPersonService({
       `
         INSERT INTO in_person_participants (
           id, tournament_id, name_en, name_local, bga_nickname, bga_id, gg_elo, gg_rank,
-          current_elo, average_elo, max_elo, number_of_games,
+          current_elo, max_elo,
           player_information, player_photo,
           association_id, city_id, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'registered', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'registered', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
       [
         participantId,
@@ -1087,9 +1085,7 @@ export function createInPersonService({
         input.gg_elo,
         input.gg_rank,
         input.current_elo,
-        input.average_elo,
         input.max_elo,
-        input.number_of_games,
         input.player_information,
         input.player_photo,
         input.association_id,
@@ -1235,7 +1231,7 @@ export function createInPersonService({
         `
           UPDATE in_person_participants
           SET name_en = ?, name_local = ?, bga_nickname = ?, bga_id = ?, gg_elo = ?, gg_rank = ?,
-              current_elo = ?, average_elo = ?, max_elo = ?, number_of_games = ?,
+              current_elo = ?, max_elo = ?,
               player_information = ?, player_photo = ?, association_id = ?, city_id = ?,
               updated_at = CURRENT_TIMESTAMP
           WHERE id = ? AND tournament_id = ?
@@ -1248,9 +1244,7 @@ export function createInPersonService({
           input.gg_elo,
           input.gg_rank,
           input.current_elo,
-          input.average_elo,
           input.max_elo,
-          input.number_of_games,
           input.player_information,
           input.player_photo,
           input.association_id,
@@ -2843,11 +2837,11 @@ export function createInPersonService({
           `
             INSERT INTO in_person_participants (
               id, tournament_id, name_en, name_local, bga_nickname, bga_id, gg_elo, gg_rank,
-              current_elo, average_elo, max_elo, number_of_games,
+              current_elo, max_elo,
               player_information, player_photo,
               association_id, city_id, status, draw_number, checked_in_at,
               is_late_entry, late_entry_mode, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'checked_in', ?, CURRENT_TIMESTAMP,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'checked_in', ?, CURRENT_TIMESTAMP,
               1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           `,
           [
@@ -2860,9 +2854,7 @@ export function createInPersonService({
             participant.gg_elo,
             participant.gg_rank,
             participant.current_elo,
-            participant.average_elo,
             participant.max_elo,
-            participant.number_of_games,
             participant.player_information,
             participant.player_photo,
             participant.association_id,

@@ -3870,21 +3870,15 @@
     ggElo.input.value = participant?.gg_elo == null ? "" : String(participant.gg_elo);
     ggRank.input.value = participant?.gg_rank == null ? "" : String(participant.gg_rank);
     const currentElo = createField("Current BGA Elo", "number");
-    const averageElo = createField("Average BGA Elo", "number");
     const maxElo = createField("Peak BGA Elo", "number");
-    const numberOfGames = createField("Number of games", "number");
-    [currentElo, averageElo, maxElo, numberOfGames, ggElo, ggRank].forEach(({ input }) => {
+    [currentElo, maxElo, ggElo, ggRank].forEach(({ input }) => {
       input.min = "0";
       input.step = "1";
       input.inputMode = "numeric";
     });
     ggRank.input.min = "1";
     currentElo.input.value = participant?.current_elo == null ? "" : String(participant.current_elo);
-    averageElo.input.value = participant?.average_elo == null ? "" : String(participant.average_elo);
     maxElo.input.value = participant?.max_elo == null ? "" : String(participant.max_elo);
-    numberOfGames.input.value = participant?.number_of_games == null
-      ? ""
-      : String(participant.number_of_games);
     const playerInformation = createTextareaField("Player description");
     playerInformation.textarea.value = participant?.player_information || "";
     const playerImage = createPlayerImageField(participant, formController);
@@ -3912,9 +3906,7 @@
     form.appendChild(ggElo.field);
     form.appendChild(ggRank.field);
     form.appendChild(currentElo.field);
-    form.appendChild(averageElo.field);
     form.appendChild(maxElo.field);
-    form.appendChild(numberOfGames.field);
     form.appendChild(playerInformation.field);
     form.appendChild(playerImage.field);
     if (tournament.scope === "local") form.appendChild(cityInlineMount);
@@ -3977,9 +3969,7 @@
           gg_elo: optionalInteger(ggElo.input),
           gg_rank: optionalInteger(ggRank.input),
           current_elo: optionalInteger(currentElo.input),
-          average_elo: optionalInteger(averageElo.input),
           max_elo: optionalInteger(maxElo.input),
-          number_of_games: optionalInteger(numberOfGames.input),
           player_information: String(playerInformation.textarea.value || "").trim() || null,
           player_photo: playerPhoto,
           association_id: tournament.scope === "international" ? getLocationValue() : null,

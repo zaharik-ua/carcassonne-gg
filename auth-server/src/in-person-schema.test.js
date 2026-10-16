@@ -196,9 +196,7 @@ test("creates the in-person foundation without versioning or idempotency tables"
     "gg_elo",
     "gg_rank",
     "current_elo",
-    "average_elo",
     "max_elo",
-    "number_of_games",
     "player_information",
     "player_photo",
   ].forEach((columnName) => assert.equal(participantColumns.has(columnName), true));
@@ -493,4 +491,38 @@ test("enforces active round, table, draw number and participant invariants", asy
     `INSERT INTO in_person_rounds (id, tournament_id, stage, round_number)
      VALUES ('round-1-regenerated', 'ipt-1', 'swiss', 1)`
   );
+});
+
+
+test("removes obsolete participant columns from existing databases and keeps remaining data", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, "INSERT INTO associations (code, name) VALUES ('UKR', 'Ukraine')");
+  await ensureInPersonSchema(db, { logger: silentLogger });
+  await insertInternationalTournament(db, "ipt-cleanup");
+  await exec(db, `
+    DELETE FROM in_person_schema_migrations WHERE version = 9;
+    ALTER TABLE in_person_participants ADD COLUMN average_elo INTEGER;
+    ALTER TABLE in_person_participants ADD COLUMN number_of_games INTEGER;
+    INSERT INTO in_person_participants (
+      id, tournament_id, name_en, association_id, bga_id, current_elo, max_elo,
+      gg_elo, gg_rank, status, draw_number, average_elo, number_of_games
+    ) VALUES ('p-cleanup', 'ipt-cleanup', 'Player', 'UKR', '86771532', 450, 510,
+      1650, 42, 'checked_in', 7, 400, 88);
+  `);
+  const before = await get(db, "SELECT * FROM in_person_participants WHERE id = 'p-cleanup'");
+  delete before.average_elo;
+  delete before.number_of_games;
+  const migration = await ensureInPersonSchema(db, { logger: silentLogger });
+  assert.deepEqual(migration.participantProfileCleanupMigration.removedColumns, ["average_elo", "number_of_games"]);
+  const columns = (await all(db, "PRAGMA table_info(in_person_participants)")).map((column) => column.name);
+  assert.equal(columns.includes("average_elo"), false);
+  assert.equal(columns.includes("number_of_games"), false);
+  assert.deepEqual(await get(db, "SELECT * FROM in_person_participants WHERE id = 'p-cleanup'"), before);
+  assert.deepEqual(await all(db, "PRAGMA foreign_key_check"), []);
+  assert.deepEqual(await get(db, "SELECT name FROM in_person_schema_migrations WHERE version = 9"), {
+    name: "remove_unused_participant_profile_fields",
+  });
+  const repeated = await ensureInPersonSchema(db, { logger: silentLogger });
+  assert.deepEqual(repeated.participantProfileCleanupMigration.removedColumns, []);
+  assert.deepEqual(await get(db, "SELECT * FROM in_person_participants WHERE id = 'p-cleanup'"), before);
 });

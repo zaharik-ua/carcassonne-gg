@@ -76,9 +76,7 @@ async function addCheckedInParticipants(service, tournamentId) {
       gg_elo: index === 0 ? 1650 : null,
       gg_rank: index === 0 ? 42 : null,
       current_elo: index === 0 ? 1450 : null,
-      average_elo: index === 0 ? 1400 : null,
       max_elo: index === 0 ? 1510 : null,
-      number_of_games: index === 0 ? 88 : null,
       player_information: index === 0 ? "Player profile" : null,
       player_photo: index === 0 ? "https://example.com/player.webp" : null,
       association_id: "UKR",
@@ -208,10 +206,10 @@ test("public aggregate hides drafts, cancelled history and private result fields
   assert.equal(aggregate.players[0].bga_id, "123456789");
   assert.equal(aggregate.players[0].gg_elo, 1650);
   assert.equal(aggregate.players[0].gg_rank, 42);
+  assert.equal(Object.hasOwn(aggregate.players[0], "average_elo"), false);
+  assert.equal(Object.hasOwn(aggregate.players[0], "number_of_games"), false);
   assert.equal(aggregate.players[0].current_elo, 1450);
-  assert.equal(aggregate.players[0].average_elo, 1400);
   assert.equal(aggregate.players[0].max_elo, 1510);
-  assert.equal(aggregate.players[0].number_of_games, 88);
   assert.equal(aggregate.players[0].player_information, "Player profile");
   assert.equal(aggregate.players[0].player_photo, "https://example.com/player.webp");
   assert.equal(aggregate.tournament.organizer_url, "https://example.com/organizer");

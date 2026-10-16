@@ -281,17 +281,9 @@ export function normalizeParticipantInput(payload, current = null, tournament = 
     selectValue(payload, current, "current_elo"),
     "current_elo"
   );
-  const averageElo = normalizeOptionalNonNegativeInteger(
-    selectValue(payload, current, "average_elo"),
-    "average_elo"
-  );
   const maxElo = normalizeOptionalNonNegativeInteger(
     selectValue(payload, current, "max_elo"),
     "max_elo"
-  );
-  const numberOfGames = normalizeOptionalNonNegativeInteger(
-    selectValue(payload, current, "number_of_games"),
-    "number_of_games"
   );
   const playerInformation = normalizeOptionalText(
     selectValue(payload, current, "player_information")
@@ -339,9 +331,7 @@ export function normalizeParticipantInput(payload, current = null, tournament = 
     gg_elo: ggElo,
     gg_rank: ggRank,
     current_elo: currentElo,
-    average_elo: averageElo,
     max_elo: maxElo,
-    number_of_games: numberOfGames,
     player_information: playerInformation,
     player_photo: playerPhoto,
     association_id: associationId,

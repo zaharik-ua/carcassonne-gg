@@ -33,6 +33,7 @@ test("Player Hub exposes managed sections to their assigned admins", () => {
 });
 
 test("In-Person page contains participant registration and check-in flows", () => {
+  assert.doesNotMatch(inPersonHtml, /Average BGA Elo|Number of games|average_elo|number_of_games/);
   [
     "In-Person Tournaments",
     "Add player",
@@ -49,9 +50,7 @@ test("In-Person page contains participant registration and check-in flows", () =
     "GG Elo",
     "GG Rank",
     "Current BGA Elo",
-    "Average BGA Elo",
     "Peak BGA Elo",
-    "Number of games",
     "Player description",
     "Player photo",
     "Select image",
@@ -85,9 +84,7 @@ test("In-Person page contains participant registration and check-in flows", () =
   assert.match(inPersonHtml, /tournament\?\.scope === "international"[\s\S]*?\? ""[\s\S]*?participant\.city_name_local/);
   assert.doesNotMatch(inPersonHtml, /participant\.city_name_local \|\| participant\.city_name_en \|\| "—"/);
   assert.match(inPersonHtml, /current_elo: optionalInteger\(currentElo\.input\)/);
-  assert.match(inPersonHtml, /average_elo: optionalInteger\(averageElo\.input\)/);
   assert.match(inPersonHtml, /max_elo: optionalInteger\(maxElo\.input\)/);
-  assert.match(inPersonHtml, /number_of_games: optionalInteger\(numberOfGames\.input\)/);
   assert.match(inPersonHtml, /player_information: String\(playerInformation\.textarea\.value/);
   assert.match(inPersonHtml, /player_photo: playerPhoto/);
   assert.match(inPersonHtml, /function showImagePickerDialog/);
