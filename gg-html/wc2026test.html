@@ -101,6 +101,78 @@
     border-bottom: 1px solid #888;
   }
 
+  /* Swiss standings: click a player to expand their match history. */
+  #tab-swiss-content .player-row {
+    cursor: pointer;
+  }
+
+  #tab-swiss-content .player-row:hover,
+  #tab-swiss-content .player-row:focus-visible {
+    background-color: #074e99;
+  }
+
+  #tab-swiss-content .player-matches-row > td {
+    padding: 0;
+    text-align: left;
+  }
+
+  #tab-swiss-content .player-matches {
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+    background-color: #012f61;
+    transition: height 0.3s ease, opacity 0.3s ease;
+  }
+
+  #tab-swiss-content .player-matches.open {
+    opacity: 1;
+  }
+
+  #tab-swiss-content .player-matches-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    color: #ffffff;
+    font-size: 14px;
+    line-height: 18px;
+  }
+
+  #tab-swiss-content .player-matches-entry {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  #tab-swiss-content .player-matches-round {
+    color: #9ad4ff;
+    font-size: 12px;
+    margin-right: 4px;
+  }
+
+  #tab-swiss-content .player-matches-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
+  #tab-swiss-content .player-matches-flag {
+    width: 14px;
+    height: auto;
+    flex: 0 0 14px;
+    object-fit: contain;
+  }
+
+  #tab-swiss-content .player-matches-score {
+    min-width: 44px;
+    text-align: center;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
   /* Unified bounded container */
   .bounded {
     width: 100%;
@@ -123,8 +195,44 @@
   /* Players table: allow multi-line rows */
   .players-table .data-row { height: auto; }
 
-  .players-table .col-elo {
+  .players-table .col-elo,
+  .players-table .col-gg-rank {
     text-align: center;
+  }
+
+  .players-table .col-gg-rank {
+    white-space: nowrap;
+  }
+
+  .player-rank-hash {
+    font-size: 0.75em;
+  }
+
+  .player-rank-number {
+    font-weight: 600;
+  }
+
+  .players-sort-button {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .players-sort-button:hover,
+  .players-sort-button:focus-visible {
+    color: #9ad4ff;
+    text-decoration: underline;
+  }
+
+  .players-table th[aria-sort="ascending"] .players-sort-button::after {
+    content: " ↑";
+  }
+
+  .players-table th[aria-sort="descending"] .players-sort-button::after {
+    content: " ↓";
   }
 
   .players-filter {
@@ -286,7 +394,14 @@
     gap: 12px;
   }
 
+  .player-photo-wrapper {
+    flex: 0 0 auto;
+    max-width: 200px;
+  }
+
   .player-details__photo {
+    display: block;
+    max-width: 100%;
     max-height: 200px;
     width: auto;
     border-radius: 4px;
@@ -295,7 +410,26 @@
   }
 
   .player-details__text {
-    white-space: pre-line;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .player-details__ratings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .player-details__group-title {
+    margin: 0 0 8px;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .player-details__description {
+    margin-top: 12px;
+    overflow-wrap: anywhere;
   }
 
   .player-details__label {
@@ -330,6 +464,11 @@
 
     .player-details__photo {
       max-width: 100%;
+    }
+
+    .player-details__text {
+      flex: 0 0 auto;
+      width: 100%;
     }
   }
 
@@ -923,9 +1062,9 @@
       bga_id: player.bga_id || "",
       rating: player.rating ?? player.max_elo ?? null,
       current_elo: player.current_elo ?? null,
-      average_elo: player.average_elo ?? null,
       max_elo: player.max_elo ?? null,
-      number_of_games: player.number_of_games ?? null,
+      gg_elo: player.gg_elo ?? null,
+      gg_rank: player.gg_rank ?? null,
       player_photo: player.player_photo || "",
       player_information: player.player_information || ""
     }));
@@ -1112,6 +1251,7 @@
     });
 
     const playerRows = [];
+    let activeSortField = null;
     let activeFlagKey = null;
     let showPhotoOnly = false;
     const applyPlayersFilter = () => {
@@ -1227,9 +1367,27 @@
     thBga.textContent = "BGA nickname";
     thBga.style.textAlign = "left";
     headTr.appendChild(thBga);
+    const thGgRank = document.createElement("th");
+    thGgRank.className = "data-header col-gg-rank";
+    thGgRank.setAttribute("aria-sort", "none");
+    const rankSortButton = document.createElement("button");
+    rankSortButton.type = "button";
+    rankSortButton.className = "players-sort-button";
+    rankSortButton.textContent = "GG Rank";
+    rankSortButton.title = "Sort by GG Rank, lowest number first";
+    rankSortButton.addEventListener("click", () => sortPlayers(activeSortField === "gg_rank" ? null : "gg_rank"));
+    thGgRank.appendChild(rankSortButton);
+    headTr.appendChild(thGgRank);
     const thElo = document.createElement("th");
     thElo.className = "data-header col-elo";
-    thElo.textContent = "Peak Elo";
+    thElo.setAttribute("aria-sort", "none");
+    const eloSortButton = document.createElement("button");
+    eloSortButton.type = "button";
+    eloSortButton.className = "players-sort-button";
+    eloSortButton.textContent = "BGA Peak Elo";
+    eloSortButton.title = "Sort by BGA Peak Elo, highest first";
+    eloSortButton.addEventListener("click", () => sortPlayers(activeSortField === "max_elo" ? null : "max_elo"));
+    thElo.appendChild(eloSortButton);
     headTr.appendChild(thElo);
     const thInfo = document.createElement("th");
     thInfo.className = "data-header player-info-cell";
@@ -1237,22 +1395,51 @@
     headTr.appendChild(thInfo);
     table.appendChild(headTr);
 
-    const sorted = [...tp].sort((a, b) => {
-      const hasRA = a.rating !== null && a.rating !== undefined && String(a.rating).trim() !== "" && !isNaN(Number(a.rating));
-      const hasRB = b.rating !== null && b.rating !== undefined && String(b.rating).trim() !== "" && !isNaN(Number(b.rating));
-      if (hasRA && hasRB) {
-        const diff = Number(b.rating) - Number(a.rating);
-        if (diff !== 0) return diff;
-        return (a.player_name || "").localeCompare(b.player_name || "", undefined, { sensitivity: "base" });
-      }
-      if (hasRA && !hasRB) return -1;
-      if (!hasRA && hasRB) return 1;
-      return (a.player_name || "").localeCompare(b.player_name || "", undefined, { sensitivity: "base" });
-    });
+    function sortPlayers(field) {
+      activeSortField = field;
+      const orderField = field;
+      const sortValue = (player) => {
+        if (!orderField) return null;
+        const raw = player[orderField];
+        if (raw == null || String(raw).trim() === "") return null;
+        const value = Number(raw);
+        if (!Number.isFinite(value)) return null;
+        if (orderField === "gg_rank" && (!Number.isInteger(value) || value <= 0)) return null;
+        return value;
+      };
+      playerRows.sort((left, right) => {
+        const a = sortValue(left.player);
+        const b = sortValue(right.player);
+        if (a === null && b !== null) return 1;
+        if (a !== null && b === null) return -1;
+        if (a !== null && b !== null && a !== b) return orderField === "gg_rank" ? a - b : b - a;
+        return (left.player.player_name_en || left.player.player_name || "").localeCompare(
+          right.player.player_name_en || right.player.player_name || "",
+          undefined, { sensitivity: "base" }
+        );
+      });
+      playerRows.forEach(({ row, detailsRow }) => {
+        table.appendChild(row);
+        table.appendChild(detailsRow);
+      });
+      thGgRank.setAttribute("aria-sort", field === "gg_rank" ? "ascending" : "none");
+      thElo.setAttribute("aria-sort", field === "max_elo" ? "descending" : "none");
+    }
 
     const formatMetric = (val) => {
       const str = val === null || val === undefined ? "" : String(val).trim();
       return str || "-";
+    };
+
+    const formatRank = (val) => {
+      const rank = Number(val);
+      return Number.isInteger(rank) && rank > 0 ? `#${rank}` : "-";
+    };
+
+    const formatGgElo = (val) => {
+      if (val == null || String(val).trim() === "") return "-";
+      const elo = Number(val);
+      return Number.isFinite(elo) ? String(Math.round(elo)) : "-";
     };
 
     const resolvePlayerPhotoUrl = (rawUrl) => {
@@ -1271,7 +1458,7 @@
       return s;
     };
 
-    sorted.forEach(p => {
+    tp.forEach(p => {
       const tr = document.createElement("tr");
       tr.classList.add("data-row");
 
@@ -1343,6 +1530,27 @@
       }
       tr.appendChild(tdBga);
 
+      const tdGgRank = document.createElement("td");
+      tdGgRank.className = "col-gg-rank";
+      tdGgRank.style.padding = "4px 6px";
+      const rankSpan = document.createElement("span");
+      rankSpan.className = "data-normal";
+      const rankText = formatRank(p.gg_rank);
+      if (rankText.startsWith("#")) {
+        const hash = document.createElement("span");
+        hash.className = "player-rank-hash";
+        hash.textContent = "#";
+        const number = document.createElement("span");
+        number.className = "player-rank-number";
+        number.textContent = rankText.slice(1);
+        rankSpan.appendChild(hash);
+        rankSpan.appendChild(number);
+      } else {
+        rankSpan.textContent = rankText;
+      }
+      tdGgRank.appendChild(rankSpan);
+      tr.appendChild(tdGgRank);
+
       const tdElo = document.createElement("td");
       tdElo.className = "col-elo";
       tdElo.style.textAlign = "center";
@@ -1367,7 +1575,7 @@
       const detailsRow = document.createElement("tr");
       detailsRow.className = "player-details-row";
       const detailsTd = document.createElement("td");
-      detailsTd.colSpan = 5;
+      detailsTd.colSpan = 6;
       const detailsWrap = document.createElement("div");
       detailsWrap.className = "player-details";
       const detailsInner = document.createElement("div");
@@ -1387,9 +1595,6 @@
         photoImg.src = photoUrl;
         photoImg.alt = `${p.player_name_en || p.player_name || "Player"} photo`;
 
-        const zoomIcon = document.createElement("i");
-        zoomIcon.className = "player-photo-zoom fas fa-magnifying-glass-plus";
-
         const openPhoto = (event) => {
           event.stopPropagation();
           openPlayerPhotoModal(photoUrl, photoImg.alt);
@@ -1404,14 +1609,23 @@
         });
 
         photoWrap.appendChild(photoImg);
-        photoWrap.appendChild(zoomIcon);
         contentWrap.appendChild(photoWrap);
       }
-      const metaEntries = [
-        { label: "Current Elo", value: formatMetric(p.current_elo) },
-        { label: "Average Elo", value: formatMetric(p.average_elo) },
-        { label: "Peak Elo", value: formatMetric(p.max_elo) },
-        { label: "Number of games", value: formatMetric(p.number_of_games) }
+      const ratingGroups = [
+        {
+          title: "BGA",
+          entries: [
+            { label: "Current Elo", value: formatMetric(p.current_elo) },
+            { label: "BGA Peak Elo", value: formatMetric(p.max_elo) }
+          ]
+        },
+        {
+          title: "GG",
+          entries: [
+            { label: "Elo", value: formatGgElo(p.gg_elo) },
+            { label: "Rank", value: formatRank(p.gg_rank) }
+          ]
+        }
       ];
 
       const extraInfoRaw = p.player_information !== null && p.player_information !== undefined
@@ -1421,29 +1635,38 @@
       const textBlock = document.createElement("div");
       textBlock.className = "player-details__text";
 
-      const metaBlock = document.createElement("div");
-      metaEntries.forEach(entry => {
-        const metric = document.createElement("div");
-        metric.className = "player-details__metric";
+      const ratings = document.createElement("div");
+      ratings.className = "player-details__ratings";
+      ratingGroups.forEach(group => {
+        const column = document.createElement("div");
+        const groupTitle = document.createElement("h3");
+        groupTitle.className = "player-details__group-title";
+        groupTitle.textContent = group.title;
+        column.appendChild(groupTitle);
 
-        const label = document.createElement("span");
-        label.className = "player-details__label";
-        label.textContent = entry.label;
+        group.entries.forEach(entry => {
+          const metric = document.createElement("div");
+          metric.className = "player-details__metric";
 
-        const valueLine = document.createElement("span");
-        valueLine.className = "player-details__value";
-        valueLine.textContent = entry.value;
+          const label = document.createElement("span");
+          label.className = "player-details__label";
+          label.textContent = entry.label;
 
-        metric.appendChild(label);
-        metric.appendChild(valueLine);
-        metaBlock.appendChild(metric);
+          const valueLine = document.createElement("span");
+          valueLine.className = "player-details__value";
+          valueLine.textContent = entry.value;
+
+          metric.appendChild(label);
+          metric.appendChild(valueLine);
+          column.appendChild(metric);
+        });
+        ratings.appendChild(column);
       });
-      textBlock.appendChild(metaBlock);
+      textBlock.appendChild(ratings);
 
       if (extraInfoRaw) {
         const infoBlock = document.createElement("div");
-        infoBlock.className = "player-details__value";
-        infoBlock.style.marginTop = "7px";
+        infoBlock.className = "player-details__value player-details__description";
         infoBlock.textContent = extraInfoRaw;
         textBlock.appendChild(infoBlock);
       }
@@ -1490,15 +1713,78 @@
         }
       });
 
-      playerRows.push({ row: tr, detailsRow, flagKey: normalizedFlagKey, detailsWrap, toggleBtn: infoToggle, hasPhoto });
+      playerRows.push({ player: p, row: tr, detailsRow, flagKey: normalizedFlagKey, detailsWrap, toggleBtn: infoToggle, hasPhoto });
       table.appendChild(tr);
       table.appendChild(detailsRow);
     });
 
+    sortPlayers(null);
     applyPlayersFilter();
 
     section.appendChild(table);
     playersContainer.appendChild(section);
+  }
+
+  function buildSwissPlayerMatchesBlock(playerId) {
+    const pid = String(playerId ?? "");
+    const playerMatches = (Array.isArray(rounds) ? rounds : [])
+      .filter(match => pid && (
+        String(match.playerA_id ?? "") === pid || String(match.playerB_id ?? "") === pid
+      ))
+      .sort((a, b) => String(a.round ?? "").localeCompare(String(b.round ?? ""), undefined, { numeric: true }));
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "player-matches";
+    const list = document.createElement("div");
+    list.className = "player-matches-list";
+
+    if (!playerMatches.length) {
+      list.textContent = "No matches yet.";
+    }
+
+    playerMatches.forEach(match => {
+      const entry = document.createElement("div");
+      entry.className = "player-matches-entry";
+      const roundLabel = document.createElement("span");
+      roundLabel.className = "player-matches-round";
+      roundLabel.textContent = match.round ? `Round ${match.round}` : "";
+      entry.appendChild(roundLabel);
+
+      const appendPlayer = (side) => {
+        const participantId = String(match[`player${side}_id`] ?? "");
+        const player = players.find(p => String(p.player_id) === participantId);
+        const name = document.createElement("span");
+        name.className = "player-matches-name";
+        if (Number(match[`score${side}`]) === 1) name.style.fontWeight = "650";
+        const flagUrl = player?.avatar || player?.flag;
+        if (flagUrl) {
+          const flag = document.createElement("img");
+          flag.className = "player-matches-flag";
+          flag.src = flagUrl;
+          flag.alt = "";
+          name.appendChild(flag);
+        }
+        name.appendChild(document.createTextNode(
+          player?.player_name_en || player?.player_name || match[`player${side}_name`] || (side === "B" && !participantId ? "Bye" : "")
+        ));
+        entry.appendChild(name);
+      };
+
+      appendPlayer("A");
+      const score = document.createElement("span");
+      score.className = "player-matches-score";
+      const hasScore = value => value != null && String(value).trim() !== "";
+      const isBye = !match.playerB_id;
+      score.textContent = hasScore(match.pointsA) && hasScore(match.pointsB)
+        ? `${match.pointsA} - ${match.pointsB}`
+        : isBye && hasScore(match.scoreA) ? String(match.scoreA) : "vs";
+      entry.appendChild(score);
+      appendPlayer("B");
+      list.appendChild(entry);
+    });
+
+    wrapper.appendChild(list);
+    return wrapper;
   }
 
   function renderStandingsData(standings_list, containerOverride) {
@@ -1556,6 +1842,41 @@
         <td><span class=\"data-normal\">${row.vp_diff ?? ''}</span></td>
       `;
       table.appendChild(tr);
+
+      const matchesRow = document.createElement("tr");
+      matchesRow.className = "player-matches-row";
+      const matchesCell = document.createElement("td");
+      matchesCell.colSpan = 7;
+      const matchesBlock = buildSwissPlayerMatchesBlock(row.player_id);
+      matchesBlock.id = `swiss-player-matches-${i}`;
+      matchesCell.appendChild(matchesBlock);
+      matchesRow.appendChild(matchesCell);
+      table.appendChild(matchesRow);
+
+      tr.classList.add("player-row");
+      tr.tabIndex = 0;
+      tr.setAttribute("aria-expanded", "false");
+      tr.setAttribute("aria-controls", matchesBlock.id);
+      const toggleMatches = () => {
+        const shouldOpen = !matchesBlock.classList.contains("open");
+        matchesBlock.style.height = `${matchesBlock.getBoundingClientRect().height}px`;
+        void matchesBlock.offsetHeight;
+        matchesBlock.classList.toggle("open", shouldOpen);
+        tr.setAttribute("aria-expanded", String(shouldOpen));
+        matchesBlock.style.height = shouldOpen ? `${matchesBlock.scrollHeight}px` : "0px";
+      };
+      matchesBlock.addEventListener("transitionend", event => {
+        if (event.target === matchesBlock && event.propertyName === "height" && matchesBlock.classList.contains("open")) {
+          matchesBlock.style.height = "auto";
+        }
+      });
+      tr.addEventListener("click", toggleMatches);
+      tr.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggleMatches();
+        }
+      });
     });
 
     wrapper.appendChild(table);

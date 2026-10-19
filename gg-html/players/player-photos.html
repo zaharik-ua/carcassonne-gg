@@ -37,6 +37,7 @@
   }
 
   .cp-modal-dialog {
+    box-sizing: border-box;
     width: 100%;
     max-width: 560px;
     max-height: calc(100vh - 32px);
@@ -91,9 +92,145 @@
     line-height: 16px;
   }
 
+  .cp-image-picker-status:empty {
+    display: none;
+  }
+
+  .cp-image-picker-toolbar.cp-image-picker-toolbar--all {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .cp-image-picker-toolbar--all .cp-image-picker-status {
+    flex-basis: 100%;
+    order: 1;
+  }
+
+  .cp-image-picker-toolbar--all .cp-image-picker-upload-actions {
+    flex: 0 0 auto;
+  }
+
+  .cp-image-picker-uploader {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .cp-image-picker-uploader[hidden] {
+    display: none;
+  }
+
+  .cp-image-picker-uploader-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    height: 30px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    font-size: 14px;
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .cp-image-picker-uploader-btn:hover,
+  .cp-image-picker-uploader-btn:focus-visible,
+  .cp-image-picker-uploader-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .cp-image-picker-uploader-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cp-image-picker-uploader-chevron {
+    color: #6f7785;
+    font-size: 10px;
+    transition: transform 0.18s ease;
+  }
+
+  .cp-image-picker-uploader-btn.open .cp-image-picker-uploader-chevron {
+    transform: rotate(180deg);
+  }
+
+  .cp-image-picker-uploader-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    z-index: 20;
+    min-width: 100%;
+    width: max-content;
+    max-width: min(320px, calc(100vw - 68px));
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+  }
+
+  .cp-image-picker-uploader-search {
+    position: sticky;
+    top: 0;
+    padding: 6px 8px;
+    border-bottom: 1px solid #edf1f6;
+    background: #fff;
+  }
+
+  .cp-image-picker-uploader-search input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 28px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 13px;
+  }
+
+  .cp-image-picker-uploader-option {
+    all: unset;
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    padding: 5px 8px;
+    border-top: 1px solid #edf1f6;
+    color: #2f3947;
+    font-size: 13px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  .cp-image-picker-uploader-option:hover,
+  .cp-image-picker-uploader-option:focus-visible {
+    background: #f5f5f5;
+  }
+
+  .cp-image-picker-uploader-option.active {
+    background: #e4f0fb;
+  }
+
+  .cp-image-picker-uploader-empty {
+    padding: 8px;
+    color: #667085;
+    font-size: 13px;
+  }
+
   .cp-image-picker-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+    grid-auto-rows: max-content;
+    align-content: start;
     gap: 8px;
     max-height: 320px;
     overflow-y: auto;
@@ -103,6 +240,8 @@
   .cp-image-picker-option {
     all: unset;
     box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
     aspect-ratio: 1;
     border: 1px solid #d7dbe2;
     border-radius: 6px;
@@ -127,7 +266,7 @@
     width: 100%;
     height: 100%;
     display: block;
-    object-fit: cover;
+    object-fit: contain;
   }
 
   .cp-image-picker-empty {
@@ -319,6 +458,124 @@
     const grid = document.createElement("div");
     grid.className = "cp-image-picker-grid";
 
+    const uploaderFilter = document.createElement("div");
+    uploaderFilter.className = "cp-image-picker-uploader";
+    uploaderFilter.hidden = true;
+    const uploaderButton = document.createElement("button");
+    uploaderButton.type = "button";
+    uploaderButton.className = "cp-image-picker-uploader-btn";
+    uploaderButton.setAttribute("aria-label", "Filter images by player");
+    uploaderButton.setAttribute("aria-haspopup", "listbox");
+    uploaderButton.setAttribute("aria-expanded", "false");
+    const uploaderValue = document.createElement("span");
+    uploaderValue.className = "cp-image-picker-uploader-value";
+    uploaderValue.textContent = "All players";
+    const uploaderChevron = document.createElement("span");
+    uploaderChevron.className = "cp-image-picker-uploader-chevron";
+    uploaderChevron.textContent = "▾";
+    uploaderChevron.setAttribute("aria-hidden", "true");
+    uploaderButton.append(uploaderValue, uploaderChevron);
+    const uploaderMenu = document.createElement("div");
+    uploaderMenu.className = "cp-image-picker-uploader-menu";
+    uploaderMenu.hidden = true;
+    const uploaderSearchWrap = document.createElement("div");
+    uploaderSearchWrap.className = "cp-image-picker-uploader-search";
+    const uploaderSearch = document.createElement("input");
+    uploaderSearch.type = "text";
+    uploaderSearch.placeholder = "Type to filter...";
+    uploaderSearch.setAttribute("aria-label", "Search players");
+    uploaderSearchWrap.appendChild(uploaderSearch);
+    const uploaderOptions = document.createElement("div");
+    uploaderOptions.setAttribute("role", "listbox");
+    uploaderOptions.setAttribute("aria-label", "Players who uploaded images");
+    uploaderMenu.append(uploaderSearchWrap, uploaderOptions);
+    uploaderFilter.append(uploaderButton, uploaderMenu);
+
+    let selectedUploaderId = "";
+    let uploaders = [];
+    const imageUploaderId = (image) => normalizeUserId(
+      image?.uploaded_by_user_id ?? image?.uploadedByUserId
+      ?? image?.owner_user_id ?? image?.ownerUserId ?? ""
+    ) || "unknown";
+    const closeUploaderMenu = () => {
+      uploaderMenu.hidden = true;
+      uploaderButton.classList.remove("open");
+      uploaderButton.setAttribute("aria-expanded", "false");
+    };
+    const renderUploaderOptions = () => {
+      uploaderOptions.replaceChildren();
+      const query = uploaderSearch.value.trim().toLocaleLowerCase();
+      const visibleUploaders = [{ id: "", name: "All players" }, ...uploaders]
+        .filter((uploader) => !query || uploader.name.toLocaleLowerCase().includes(query));
+      visibleUploaders.forEach((uploader) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "cp-image-picker-uploader-option";
+        option.classList.toggle("active", uploader.id === selectedUploaderId);
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", String(uploader.id === selectedUploaderId));
+        option.textContent = uploader.name;
+        option.addEventListener("click", () => {
+          selectedUploaderId = uploader.id;
+          setSelectedImage(null);
+          closeUploaderMenu();
+          renderImages(loadedImages);
+          grid.scrollTop = 0;
+          uploaderButton.focus({ preventScroll: true });
+        });
+        uploaderOptions.appendChild(option);
+      });
+      if (!visibleUploaders.length) {
+        const empty = document.createElement("div");
+        empty.className = "cp-image-picker-uploader-empty";
+        empty.textContent = "Nothing found.";
+        uploaderOptions.appendChild(empty);
+      }
+    };
+    const refreshUploaders = () => {
+      const byId = new Map();
+      loadedImages.forEach((image) => {
+        const id = imageUploaderId(image);
+        const ownerId = normalizeUserId(image?.owner_user_id ?? image?.ownerUserId ?? "");
+        const name = String(
+          image?.uploaded_by_name || image?.uploadedByName
+          || (id === ownerId ? image?.owner_name : "")
+          || image?.uploaded_by_email
+          || (id === ownerId ? image?.owner_email : "")
+          || (id === "unknown" ? "Unknown player" : `Player #${id}`)
+        ).trim();
+        if (!byId.has(id)) byId.set(id, { id, name });
+      });
+      uploaders = [...byId.values()].sort((left, right) => left.name.localeCompare(right.name));
+      if (selectedUploaderId && !byId.has(selectedUploaderId)) selectedUploaderId = "";
+      uploaderValue.textContent = uploaders.find((uploader) => uploader.id === selectedUploaderId)?.name
+        || "All players";
+      renderUploaderOptions();
+    };
+    uploaderButton.addEventListener("click", () => {
+      if (!uploaderMenu.hidden) {
+        closeUploaderMenu();
+        return;
+      }
+      uploaderSearch.value = "";
+      renderUploaderOptions();
+      uploaderMenu.hidden = false;
+      uploaderMenu.scrollTop = 0;
+      uploaderButton.classList.add("open");
+      uploaderButton.setAttribute("aria-expanded", "true");
+      uploaderSearch.focus({ preventScroll: true });
+    });
+    uploaderSearch.addEventListener("input", renderUploaderOptions);
+    uploaderSearch.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        uploaderOptions.querySelector("button")?.focus();
+      }
+    });
+    overlay.addEventListener("click", (event) => {
+      if (!uploaderFilter.contains(event.target)) closeUploaderMenu();
+    });
+
     const actions = document.createElement("div");
     actions.className = "cp-modal-actions";
 
@@ -368,7 +625,13 @@
     };
 
     function handleKeyDown(event) {
-      if (event.key === "Escape") closeModal("cancel");
+      if (event.key !== "Escape") return;
+      if (!uploaderMenu.hidden) {
+        closeUploaderMenu();
+        uploaderButton.focus({ preventScroll: true });
+      } else {
+        closeModal("cancel");
+      }
     }
 
     const setPickerStatus = (message, isError = false, statusOptions = {}) => {
@@ -388,6 +651,8 @@
 
     const setDeleting = (value) => {
       isDeleting = value === true;
+      uploaderButton.disabled = isDeleting;
+      if (isDeleting) closeUploaderMenu();
       uploadBtn.disabled = isDeleting;
       uploadSourceBtn.disabled = isDeleting;
       cancelBtn.disabled = isDeleting;
@@ -409,11 +674,15 @@
       if (isClosed) return;
       grid.innerHTML = "";
       loadedImages = Array.isArray(images) ? images : [];
+      refreshUploaders();
       const scopedImages = isGlobalAdmin && imagePickerScope === "all"
-        ? loadedImages
+        ? loadedImages.filter((image) => !selectedUploaderId || imageUploaderId(image) === selectedUploaderId)
         : loadedImages.filter((image) => imageWasAddedByUser(image, imagePickerUserId));
       const rows = scopedImages
-        .filter((image) => getImagePickerUrl(image, "thumb", authBase) || getImagePickerUrl(image, "original", authBase));
+        .filter((image) => getImagePickerUrl(image, "small", authBase) || getImagePickerUrl(image, "original", authBase));
+      if (selectedImage && !rows.some((image) => String(image.id) === String(selectedImage.id))) {
+        selectedImage = null;
+      }
       if (!rows.length) {
         const empty = document.createElement("div");
         empty.className = "cp-image-picker-empty";
@@ -432,9 +701,9 @@
         optionBtn.title = getImageDisplayName(image);
 
         const imageEl = document.createElement("img");
-        const thumbUrl = getImagePickerUrl(image, "thumb", authBase);
-        const fallbackUrl = getImagePickerUrl(image, "small", authBase) || getImagePickerUrl(image, "original", authBase);
-        imageEl.src = thumbUrl || fallbackUrl;
+        const previewUrl = getImagePickerUrl(image, "small", authBase);
+        const fallbackUrl = getImagePickerUrl(image, "original", authBase);
+        imageEl.src = previewUrl || fallbackUrl;
         imageEl.alt = getImageDisplayName(image);
         imageEl.loading = "lazy";
         imageEl.addEventListener("error", () => {
@@ -476,6 +745,8 @@
     });
     allImagesBtn.addEventListener("click", () => {
       imagePickerScope = "all";
+      uploaderFilter.hidden = false;
+      toolbar.classList.add("cp-image-picker-toolbar--all");
       setPickerStatus("");
       renderImages(loadedImages);
     });
@@ -522,6 +793,7 @@
     if (options.canUploadSource === true && typeof options.onUploadSourceNew === "function") {
       uploadActions.appendChild(uploadSourceBtn);
     }
+    toolbar.appendChild(uploaderFilter);
     toolbar.appendChild(status);
     toolbar.appendChild(uploadActions);
     actionsLeft.appendChild(deleteBtn);

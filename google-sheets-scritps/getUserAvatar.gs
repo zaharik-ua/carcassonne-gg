@@ -192,8 +192,16 @@ function buildBgaAvatarUrl_(playerId, avatar) {
   const avatarText = normalizeBgaAvatarPlayer_(avatar);
   if (!avatarText) return '';
 
-  // Готові URL зберігаємо разом з розміром зображення та query-параметрами.
-  if (/^https?:\/\//i.test(avatarText)) return avatarText;
+  if (/^https?:\/\//i.test(avatarText)) {
+    // Repair saved BGA photo URLs that use the old 100-million folder boundary.
+    return avatarText.replace(
+      /^(https?:\/\/x\.boardgamearena\.net\/data\/avatar\/)\d+\/\d+\/\d+\/(\d+)(_\d+\.[a-z0-9]+)(?=[?#]|$)/i,
+      (_match, base, photoPlayerId, imageSuffix) => {
+        const id = Number(photoPlayerId);
+        return `${base}${Math.floor(id / 1000000000)}/${Math.floor(id / 1000000)}/${Math.floor(id / 1000)}/${photoPlayerId}${imageSuffix}`;
+      }
+    );
+  }
 
   if (avatarText === 'x00000') {
     return 'https://x.boardgamearena.net/data/avatar/default_184.jpg';

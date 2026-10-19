@@ -162,3 +162,45 @@ test("manual batches reject missing sheets, multi-column input and offsets that 
   sheet = { getRange: () => ({ getNumColumns: () => 2 }) };
   assert.throws(() => ctx.fillUserAvatars("test", "B70:C80"), /в одній колонці/);
 });
+
+
+test("all active pages and Sheets repair saved BGA avatar paths and preserve image URLs", () => {
+  const files = [
+    "matches.html", "players/player-card.html", "player-hub/challenges.html", "GG-Rivals-S1.html",
+    "tournaments.html",
+    "admin.html",
+    "ETCOC-2026.html",
+    "player-hub/tournaments.html",
+    "player-hub/streams.html",
+    "player-hub/players.html",
+    "challenges/challenges-matches.html",
+    "official-matches/team-official-matches.html",
+  ];
+  const expected = "https://x.boardgamearena.net/data/avatar/0/100/100188/100188806_184.jpg?h=03oxUAUcAS";
+  const wrong = expected.replace("/avatar/0/", "/avatar/1/");
+  const builders = [["Google Sheets", context().build]];
+  for (const file of files) {
+    const html = fs.readFileSync(new URL(`../../gg-html/${file}`, import.meta.url), "utf8");
+    const builder = html.match(/^([ \t]*)function buildBgaAvatarUrl\([^]*?^\1}/m);
+    assert.ok(builder, file);
+    const ctx = vm.createContext({});
+    vm.runInContext(builder[0], ctx);
+    builders.push([file, ctx.buildBgaAvatarUrl]);
+  }
+  for (const [file, build] of builders) {
+    assert.equal(build("100188806", "03oxUAUcAS"), expected, file);
+    assert.equal(build("100188806", wrong), expected, file);
+    assert.equal(build("100188806", expected), expected, file);
+    assert.equal(build("", wrong), expected, file);
+    assert.equal(build("100188806", wrong.replace("_184.jpg", "_32.png") + "&v=1#photo"),
+      expected.replace("_184.jpg", "_32.png") + "&v=1#photo", file);
+    const billion = "https://x.boardgamearena.net/data/avatar/1/1000/1000000/1000000000_184.jpg?h=hash";
+    assert.equal(build("1000000000", "hash"), billion, file);
+    assert.equal(build("1000000000", billion), billion, file);
+    for (const untouched of [
+      "https://x.boardgamearena.net/data/avatar/default_184.jpg",
+      "https://x.boardgamearena.net/data/avatar/defaults/default-2276.jpg",
+      "https://example.com/data/avatar/1/100/100188/100188806_184.jpg?h=hash",
+    ]) assert.equal(build("100188806", untouched), untouched, file);
+  }
+});

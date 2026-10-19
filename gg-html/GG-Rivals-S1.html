@@ -15,6 +15,17 @@
   body {
     font-family: 'Montserrat', sans-serif;
   }
+
+  .tournament-loading {
+    padding: 20px;
+    text-align: center;
+  }
+
+  .tournament-loading img {
+    width: 32px;
+    height: 32px;
+  }
+
   .tab-container {
     display: flex;
     gap: 0px;
@@ -2002,6 +2013,9 @@
 
 <!-- HTML -->
 <div id="tournament-title" style="font-size:18px; font-weight:700; line-height:20px; padding:0 0 10px;"></div>
+<div id="tournament-loading" class="tournament-loading" role="status" aria-label="Loading tournament data">
+  <img src="https://carcassonne.gg/gallery/loading-red.gif" alt="">
+</div>
 <div class="tab-container" id="tab-container"></div>
 <div id="tab-overview-content" style="display:none;"></div>
 <div id="tab-players-content" style="display:none;"></div>
@@ -2090,7 +2104,14 @@
     if (!avatarText) return "";
 
     if (/^https?:\/\//i.test(avatarText)) {
-      return avatarText;
+      // Repair saved BGA photo URLs that use the old 100-million folder boundary.
+      return avatarText.replace(
+        /^(https?:\/\/x\.boardgamearena\.net\/data\/avatar\/)\d+\/\d+\/\d+\/(\d+)(_\d+\.[a-z0-9]+)(?=[?#]|$)/i,
+        (_match, base, photoPlayerId, imageSuffix) => {
+          const id = Number(photoPlayerId);
+          return `${base}${Math.floor(id / 1000000000)}/${Math.floor(id / 1000000)}/${Math.floor(id / 1000)}/${photoPlayerId}${imageSuffix}`;
+        }
+      );
     }
 
     if (avatarText === "x00000") {
@@ -7425,13 +7446,17 @@
   runWhenReady(async () => {
     document.getElementById("tournament-title").textContent = currentTournament.name;
     applyTournamentTheme(currentTournament.style);
-    await Promise.all([
-      loadTournamentHtmlFromDatabase(),
-      loadTournamentTeamsFromDatabase(),
-      loadTournamentMatchesFromDatabase()
-    ]);
-    await loadStandingsFromDatabase();
-    initAndRenderTournamentContent(currentTournament);
+    try {
+      await Promise.all([
+        loadTournamentHtmlFromDatabase(),
+        loadTournamentTeamsFromDatabase(),
+        loadTournamentMatchesFromDatabase()
+      ]);
+      await loadStandingsFromDatabase();
+      initAndRenderTournamentContent(currentTournament);
+    } finally {
+      document.getElementById("tournament-loading").hidden = true;
+    }
   });
 
   // Opens a fullscreen overlay that shows only the bracket block
