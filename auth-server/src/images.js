@@ -1568,12 +1568,20 @@ export function registerImageRoutes(app, deps) {
             owner.email AS owner_email,
             owner.name AS owner_name,
             uploader.email AS uploaded_by_email,
-            uploader.name AS uploaded_by_name
+            uploader.name AS uploaded_by_name,
+            owner_profile.bga_nickname AS owner_bga_nickname,
+            uploader_profile.bga_nickname AS uploaded_by_bga_nickname
           FROM images i
           LEFT JOIN users owner
             ON owner.id = i.owner_user_id
           LEFT JOIN users uploader
             ON uploader.id = i.uploaded_by_user_id
+          LEFT JOIN profiles owner_profile
+            ON owner_profile.id = owner.bga_id
+           AND owner_profile.deleted_at IS NULL
+          LEFT JOIN profiles uploader_profile
+            ON uploader_profile.id = uploader.bga_id
+           AND uploader_profile.deleted_at IS NULL
           ${filters.length ? `WHERE ${filters.join(" AND ")}` : ""}
           ORDER BY datetime(i.updated_at) DESC, i.id DESC
         `,

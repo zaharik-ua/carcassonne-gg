@@ -1339,12 +1339,13 @@
     all: unset;
     box-sizing: border-box;
     width: 100%;
-    height: 30px;
+    height: 22px;
     border: 1px solid #c8ced8;
     border-radius: 4px;
     background: #fff;
     color: #2f3947;
-    font-size: 14px;
+    font-size: 12px;
+    line-height: 1;
     padding: 4px 8px;
     display: flex;
     align-items: center;
@@ -2157,19 +2158,38 @@
         uploaderOptions.appendChild(empty);
       }
     };
+    const uploaderNicknamesById = new Map();
+    const imageUploaderNickname = (image) => {
+      const id = imageUploaderId(image);
+      const ownerId = normalizeUserId(image?.owner_user_id ?? image?.ownerUserId ?? "");
+      return [
+        image?.uploaded_by_bga_nickname,
+        image?.uploadedByBgaNickname,
+        id === ownerId ? image?.owner_bga_nickname : "",
+        uploaderNicknamesById.get(id),
+      ].map((value) => String(value || "").trim()).find(Boolean) || "";
+    };
+    const loadUploaderNicknames = async () => {
+      if (!loadedImages.some((image) => imageUploaderId(image) !== "unknown" && !imageUploaderNickname(image))) return;
+      setPickerStatus("Loading BGA nicknames...");
+      const response = await fetch(`${AUTH_BASE}/users/options`, { credentials: "include" });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.ok || !Array.isArray(result.users)) {
+        throw new Error(result?.message || "Failed to load BGA nicknames.");
+      }
+      result.users.forEach((user) => {
+        const id = normalizeUserId(user?.id ?? user?.user_id ?? user?.userId ?? "");
+        const nickname = String(user?.bga_nickname || user?.bgaNickname || "").trim();
+        if (id && nickname) uploaderNicknamesById.set(id, nickname);
+      });
+    };
     const refreshUploaders = () => {
       const byId = new Map();
       loadedImages.forEach((image) => {
         const id = imageUploaderId(image);
-        const ownerId = normalizeUserId(image?.owner_user_id ?? image?.ownerUserId ?? "");
-        const name = String(
-          image?.uploaded_by_name || image?.uploadedByName
-          || (id === ownerId ? image?.owner_name : "")
-          || image?.uploaded_by_email
-          || (id === ownerId ? image?.owner_email : "")
-          || (id === "unknown" ? "Unknown player" : `Player #${id}`)
-        ).trim();
-        if (!byId.has(id)) byId.set(id, { id, name });
+        const nickname = imageUploaderNickname(image);
+        const name = nickname || (id === "unknown" ? "Unknown player" : `Player #${id}`);
+        if (!byId.has(id) || nickname) byId.set(id, { id, name });
       });
       uploaders = [...byId.values()].sort((left, right) => left.name.localeCompare(right.name));
       if (selectedUploaderId && !byId.has(selectedUploaderId)) selectedUploaderId = "";
@@ -2368,12 +2388,23 @@
         options.onUploadSourceNew();
       }
     });
-    allImagesBtn.addEventListener("click", () => {
+    allImagesBtn.addEventListener("click", async () => {
       imagePickerScope = "all";
       uploaderFilter.hidden = false;
       toolbar.classList.add("cp-image-picker-toolbar--all");
-      setPickerStatus("");
       renderImages(loadedImages);
+      uploaderButton.disabled = true;
+      try {
+        await loadUploaderNicknames();
+        if (isClosed) return;
+        refreshUploaders();
+        setPickerStatus("");
+      } catch (error) {
+        if (isClosed) return;
+        setPickerStatus(error?.message || "Failed to load BGA nicknames.", true);
+      } finally {
+        if (!isClosed) uploaderButton.disabled = isDeleting;
+      }
     });
     deleteBtn.addEventListener("click", async () => {
       if (!selectedImage || isDeleting) return;
