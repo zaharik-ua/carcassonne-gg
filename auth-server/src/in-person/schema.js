@@ -195,6 +195,7 @@ async function ensureInPersonTables(db) {
         organizer_name TEXT NOT NULL CHECK (length(trim(organizer_name)) > 0),
         organizer_url TEXT,
         rules_url TEXT,
+        max_elo_note TEXT,
         swiss_rounds_count INTEGER NOT NULL CHECK (swiss_rounds_count > 0),
         playoff_first_round TEXT NOT NULL
           CHECK (playoff_first_round IN ('round_of_32', 'round_of_16', 'quarter_final', 'semi_final')),
@@ -521,6 +522,27 @@ async function ensureTestTournamentExtension(db) {
     await dbExec(db, `
       INSERT OR IGNORE INTO in_person_schema_migrations (version, name)
       VALUES (7, 'test_tournament_flag');
+      COMMIT;
+    `);
+  } catch (error) {
+    await rollbackQuietly(db);
+    throw error;
+  }
+  return { added };
+}
+
+async function ensureTournamentMaxEloNoteExtension(db) {
+  let added = false;
+  try {
+    await dbExec(db, "BEGIN IMMEDIATE TRANSACTION");
+    const columns = await dbAll(db, "PRAGMA table_info(in_person_tournaments)");
+    if (!columns.some((column) => String(column?.name || "") === "max_elo_note")) {
+      await dbExec(db, "ALTER TABLE in_person_tournaments ADD COLUMN max_elo_note TEXT");
+      added = true;
+    }
+    await dbExec(db, `
+      INSERT OR IGNORE INTO in_person_schema_migrations (version, name)
+      VALUES (10, 'tournament_max_elo_note');
       COMMIT;
     `);
   } catch (error) {
@@ -979,6 +1001,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
   const playoffMedalTableMigration = await ensurePlayoffMedalTableAssignments(db);
   const tournamentLogoMigration = await ensureTournamentLogoExtension(db);
   const testTournamentMigration = await ensureTestTournamentExtension(db);
+  const maxEloNoteMigration = await ensureTournamentMaxEloNoteExtension(db);
   const playoffPlaceholderMigration = await ensurePlayoffPlaceholderExtensions(db);
   const participantProfileMigration = await ensureParticipantProfileExtensions(db);
   const participantProfileCleanupMigration = await removeUnusedParticipantProfileFields(db);
@@ -990,6 +1013,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
     accessRows: accessMigration.rowsAfter,
     tournamentLogoColumnAdded: tournamentLogoMigration.added,
     testTournamentColumnAdded: testTournamentMigration.added,
+    maxEloNoteColumnAdded: maxEloNoteMigration.added,
     playoffMedalTablesUpdated: playoffMedalTableMigration.updatedRows,
     playoffPlaceholderColumnsAdded: playoffPlaceholderMigration.addedColumns,
     participantProfileColumnsAdded: participantProfileMigration.addedColumns,
@@ -1000,6 +1024,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
     accessMigration,
     tournamentLogoMigration,
     testTournamentMigration,
+    maxEloNoteMigration,
     playoffMedalTableMigration,
     playoffPlaceholderMigration,
     participantProfileMigration,

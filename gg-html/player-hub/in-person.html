@@ -510,6 +510,26 @@
     opacity: 0.55;
   }
 
+  #ipPlayersPanel > .ip-toolbar > .ip-actions {
+    flex-wrap: wrap;
+  }
+
+  .ip-players-filter {
+    display: grid;
+    align-self: stretch;
+    flex: 0 0 auto;
+    width: 174px;
+  }
+
+  .ip-players-filter .ip-city-picker-btn {
+    height: 100%;
+    min-height: 23px;
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
   .ip-badge {
     display: inline-flex;
     align-items: center;
@@ -584,6 +604,14 @@
     border: 1px solid var(--ip-line);
     border-radius: 6px;
     background: #fff;
+  }
+
+  #ipPlayersList:has(> .ip-form) {
+    overflow: visible;
+  }
+
+  #ipPlayersList > .ip-form {
+    margin: 0 9px 9px;
   }
 
   .ip-row {
@@ -2003,6 +2031,14 @@
       min-height: 44px;
     }
 
+    .ip-players-filter {
+      flex: 1 1 174px;
+    }
+
+    .ip-players-filter .ip-city-picker-btn {
+      min-height: 44px;
+    }
+
     .ip-counters {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -2122,6 +2158,7 @@
           <div class="ip-actions">
             <button id="ipAddLatePlayerBtn" class="ip-btn primary ip-hidden" type="button">Add late player</button>
             <button id="ipAddTestPlayersBtn" class="ip-btn test-action ip-hidden" type="button">Add test players</button>
+            <div id="ipPlayersFilter" class="ip-players-filter"></div>
             <button id="ipAddPlayersBulkBtn" class="ip-btn" type="button">Bulk add</button>
             <button id="ipFillBgaIdsBtn" class="ip-btn" type="button" title="Update BGA ID, GG Rank, GG Elo and Current BGA Elo from the GG database">Update players</button>
             <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
@@ -2575,38 +2612,17 @@
         uploaderOptions.appendChild(empty);
       }
     };
-    const uploaderNicknamesById = new Map();
-    const imageUploaderNickname = (image) => {
-      const id = imageUploaderId(image);
-      const ownerId = normalizeUserId(image?.owner_user_id ?? image?.ownerUserId ?? "");
-      return [
-        image?.uploaded_by_bga_nickname,
-        image?.uploadedByBgaNickname,
-        id === ownerId ? image?.owner_bga_nickname : "",
-        uploaderNicknamesById.get(id),
-      ].map((value) => String(value || "").trim()).find(Boolean) || "";
-    };
-    const loadUploaderNicknames = async () => {
-      if (!loadedImages.some((image) => imageUploaderId(image) !== "unknown" && !imageUploaderNickname(image))) return;
-      setPickerStatus("Loading BGA nicknames...");
-      const response = await fetch(`${AUTH_BASE}/users/options`, { credentials: "include" });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result?.ok || !Array.isArray(result.users)) {
-        throw new Error(result?.message || "Failed to load BGA nicknames.");
-      }
-      result.users.forEach((user) => {
-        const id = normalizeUserId(user?.id ?? user?.user_id ?? user?.userId ?? "");
-        const nickname = String(user?.bga_nickname || user?.bgaNickname || "").trim();
-        if (id && nickname) uploaderNicknamesById.set(id, nickname);
-      });
-    };
     const refreshUploaders = () => {
       const byId = new Map();
       loadedImages.forEach((image) => {
         const id = imageUploaderId(image);
-        const nickname = imageUploaderNickname(image);
+        const ownerId = normalizeUserId(image?.owner_user_id ?? image?.ownerUserId ?? "");
+        const nickname = String(
+          image?.uploaded_by_bga_nickname || image?.uploadedByBgaNickname
+          || (id === ownerId ? image?.owner_bga_nickname : "") || ""
+        ).trim();
         const name = nickname || (id === "unknown" ? "Unknown player" : `Player #${id}`);
-        if (!byId.has(id) || nickname) byId.set(id, { id, name });
+        if (!byId.has(id)) byId.set(id, { id, name });
       });
       uploaders = [...byId.values()].sort((left, right) => left.name.localeCompare(right.name));
       if (selectedUploaderId && !byId.has(selectedUploaderId)) selectedUploaderId = "";
@@ -2786,23 +2802,12 @@
       closeModal("upload-source");
       if (typeof options.onUploadSourceNew === "function") options.onUploadSourceNew();
     });
-    allImagesBtn.addEventListener("click", async () => {
+    allImagesBtn.addEventListener("click", () => {
       imagePickerScope = "all";
       uploaderFilter.hidden = false;
       toolbar.classList.add("cp-image-picker-toolbar--all");
+      setPickerStatus("");
       renderImages(loadedImages);
-      uploaderButton.disabled = true;
-      try {
-        await loadUploaderNicknames();
-        if (isClosed) return;
-        refreshUploaders();
-        setPickerStatus("");
-      } catch (error) {
-        if (isClosed) return;
-        setPickerStatus(error?.message || "Failed to load BGA nicknames.", true);
-      } finally {
-        if (!isClosed) uploaderButton.disabled = isDeleting;
-      }
     });
     deleteBtn.addEventListener("click", async () => {
       if (!selectedImage || isDeleting) return;
@@ -3267,7 +3272,7 @@
     renderOptions();
     root.appendChild(button);
     root.appendChild(menu);
-    field.appendChild(label);
+    if (labelText) field.appendChild(label);
     field.appendChild(root);
     return {
       field,
@@ -3884,21 +3889,32 @@
         : `Up to ${testPlayersAvailable} test players are available.`;
     addLatePlayerBtn.classList.toggle("ip-hidden", !state.swiss?.can_add_late_participant);
     addLatePlayerBtn.disabled = !state.swiss?.can_add_late_participant;
-    if (!participants.length) {
+    const visibleParticipants = participants.filter((participant) => {
+      if (playersFilter.getValue() === "without-photo") {
+        return !String(participant.player_photo || "").trim();
+      }
+      if (playersFilter.getValue() === "without-description") {
+        return !String(participant.player_information || "").trim();
+      }
+      return true;
+    });
+    if (!visibleParticipants.length) {
       const empty = document.createElement("div");
       empty.className = "ip-empty";
-      empty.textContent = "No players registered yet.";
+      empty.textContent = participants.length
+        ? "No players match this filter."
+        : "No players registered yet.";
       playersList.appendChild(empty);
       return;
     }
-    participants.forEach((participant) => {
+    visibleParticipants.forEach((participant) => {
       const row = document.createElement("div");
       row.className = "ip-row";
       const main = createParticipantListPerson(participant, tournament);
       linkParticipantBgaNickname(main, participant, tournament);
       const actions = document.createElement("div");
       actions.className = "ip-actions";
-      actions.appendChild(createButton("Edit", "ip-btn", () => openPlayerForm(participant)));
+      actions.appendChild(createButton("Edit", "ip-btn", () => openPlayerForm(participant, row)));
       row.appendChild(main);
       row.appendChild(actions);
       playersList.appendChild(row);
@@ -4147,7 +4163,7 @@
     firstRow.nameEn.input.focus();
   }
 
-  function openPlayerForm(participant = null) {
+  function openPlayerForm(participant = null, row = null) {
     const tournament = state.overview?.tournament;
     if (!tournament) return;
     addPlayerBtn.disabled = !participant || playerCreationDisabled(tournament);
@@ -4158,6 +4174,7 @@
     playerFormMount.innerHTML = "";
     const form = document.createElement("form");
     form.className = "ip-form";
+    formController.signal.addEventListener("abort", () => form.remove(), { once: true });
     const nameEn = createField("Name (English) *");
     nameEn.input.value = participant?.name_en || "";
     const nameLocal = tournament.scope === "local" ? createField("Name (local)") : null;
@@ -4318,8 +4335,9 @@
       }
       await saveParticipant(false);
     });
-    playerFormMount.appendChild(form);
-    nameEn.input.focus();
+    if (participant && row?.parentNode === playersList) row.after(form);
+    else playerFormMount.appendChild(form);
+    nameEn.input.focus({ preventScroll: !!participant });
   }
 
   async function deletePlayer(participant) {
@@ -7612,6 +7630,15 @@
       refreshBtn.disabled = false;
     }
   }
+
+  const playersFilter = createMenuSelectField("", [
+    { value: "all", label: "All players" },
+    { value: "without-photo", label: "Without photo" },
+    { value: "without-description", label: "Without description" },
+  ], "all");
+  playersFilter.button.setAttribute("aria-label", "Filter players");
+  playersFilter.onChange(renderPlayers);
+  document.getElementById("ipPlayersFilter").appendChild(playersFilter.field);
 
   refreshBtn.addEventListener("click", loadAll);
   fullViewBtn.addEventListener("click", () => {

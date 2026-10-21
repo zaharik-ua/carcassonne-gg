@@ -116,6 +116,7 @@ test("public serializers use an allowlist and exclude admin-only tournament fiel
     slug: "public",
     name_en: "Public",
     logo_url: "https://example.com/tournament-logo.png",
+    max_elo_note: "Player's peak BGA Elo in 2026",
     scope: "international",
     start_date: "2026-01-01",
     end_date: "2026-01-01",
@@ -130,6 +131,7 @@ test("public serializers use an allowlist and exclude admin-only tournament fiel
   });
   const json = JSON.stringify(serialized);
   assert.equal(serialized.logo_url, "https://example.com/tournament-logo.png");
+  assert.equal(serialized.max_elo_note, "Player's peak BGA Elo in 2026");
   assert.doesNotMatch(json, /admin_user_ids|admins|private@example|cancellation_reason/);
 });
 

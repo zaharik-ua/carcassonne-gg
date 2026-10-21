@@ -151,6 +151,7 @@ export function normalizeTournamentInput(payload, current = null) {
     "organizer_url"
   );
   const rulesUrl = normalizeUrl(selectValue(payload, current, "rules_url"), "rules_url");
+  const maxEloNote = normalizeOptionalText(selectValue(payload, current, "max_elo_note"));
   const swissRoundsCount = normalizePositiveInteger(
     selectValue(payload, current, "swiss_rounds_count"),
     "swiss_rounds_count"
@@ -227,6 +228,7 @@ export function normalizeTournamentInput(payload, current = null) {
     organizer_name: organizerName,
     organizer_url: organizerUrl,
     rules_url: rulesUrl,
+    max_elo_note: maxEloNote,
     swiss_rounds_count: swissRoundsCount,
     playoff_first_round: playoffFirstRound,
     draw_mode: IN_PERSON_DRAW_MODE,

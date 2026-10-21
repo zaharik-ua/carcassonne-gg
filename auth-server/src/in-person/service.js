@@ -116,6 +116,7 @@ function serializeTournament(row, admins = []) {
     organizer_name: row.organizer_name,
     organizer_url: row.organizer_url || null,
     rules_url: row.rules_url || null,
+    max_elo_note: row.max_elo_note || null,
     swiss_rounds_count: Number(row.swiss_rounds_count),
     playoff_first_round: row.playoff_first_round,
     playoff_preview: getPlayoffPreview(row.playoff_first_round),
@@ -4700,9 +4701,9 @@ export function createInPersonService({
           INSERT INTO in_person_tournaments (
             id, slug, name_en, name_local, logo_url, is_test_tournament, scope, association_id, local_subtype,
             qualifier_city_id, start_date, end_date, organizer_name, organizer_url,
-            rules_url, swiss_rounds_count, playoff_first_round, draw_mode,
+            rules_url, max_elo_note, swiss_rounds_count, playoff_first_round, draw_mode,
             swiss_tiebreak_profile, status, revision, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1,
             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
         [
@@ -4721,6 +4722,7 @@ export function createInPersonService({
           validated.organizer_name,
           validated.organizer_url,
           validated.rules_url,
+          validated.max_elo_note,
           validated.swiss_rounds_count,
           validated.playoff_first_round,
           validated.draw_mode,
@@ -4785,7 +4787,7 @@ export function createInPersonService({
           UPDATE in_person_tournaments
           SET slug = ?, name_en = ?, name_local = ?, logo_url = ?, is_test_tournament = ?, scope = ?, association_id = ?,
               local_subtype = ?, qualifier_city_id = ?, start_date = ?, end_date = ?,
-              organizer_name = ?, organizer_url = ?, rules_url = ?, swiss_rounds_count = ?,
+              organizer_name = ?, organizer_url = ?, rules_url = ?, max_elo_note = ?, swiss_rounds_count = ?,
               playoff_first_round = ?, draw_mode = ?, swiss_tiebreak_profile = ?,
               revision = revision + 1, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
@@ -4805,6 +4807,7 @@ export function createInPersonService({
           input.organizer_name,
           input.organizer_url,
           input.rules_url,
+          input.max_elo_note,
           input.swiss_rounds_count,
           input.playoff_first_round,
           input.draw_mode,

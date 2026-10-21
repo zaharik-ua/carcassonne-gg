@@ -83,6 +83,7 @@ function tournamentPayload(overrides = {}) {
     organizer_url: "https://carcassonne.com.ua",
     rules_url: "https://carcassonne.com.ua/rules",
     logo_url: "https://carcassonne.gg/gallery/asian-cup-logo.png",
+    max_elo_note: "Player's peak BGA Elo in 2026",
     swiss_rounds_count: 6,
     playoff_first_round: "quarter_final",
     admin_user_ids: [1, 2],
@@ -144,6 +145,7 @@ test("creates international, local final and local qualifier tournament configur
   assert.equal(international.status, "draft");
   assert.equal(international.association_id, null);
   assert.equal(international.logo_url, "https://carcassonne.gg/gallery/asian-cup-logo.png");
+  assert.equal(international.max_elo_note, "Player's peak BGA Elo in 2026");
   assert.equal(international.admins.length, 2);
   assert.deepEqual(international.playoff_preview, {
     participant_count: 8,

@@ -21,6 +21,7 @@ export function serializePublicTournament(row) {
     organizer_name: row.organizer_name,
     organizer_url: row.organizer_url || null,
     rules_url: row.rules_url || null,
+    max_elo_note: row.max_elo_note || null,
     swiss_rounds_count: Number(row.swiss_rounds_count),
     playoff_first_round: row.playoff_first_round,
     status: row.status,

@@ -432,6 +432,13 @@
     overflow-wrap: anywhere;
   }
 
+  .players-elo-note {
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: #9ad4ff;
+    overflow-wrap: anywhere;
+  }
+
   .player-details__label {
     font-size: 12px;
     font-weight: 600;
@@ -1229,6 +1236,9 @@
     const tp = Array.isArray(players) ? players : [];
     if (!tp.length) return;
 
+    const maxEloNote = String(currentTournament?.max_elo_note || "").trim();
+    const peakEloLabel = maxEloNote ? "BGA Peak Elo *" : "BGA Peak Elo";
+
     const flagMap = new Map();
     tp.forEach(p => {
       const rawFlag = p.flag || p.avatar || "";
@@ -1384,7 +1394,7 @@
     const eloSortButton = document.createElement("button");
     eloSortButton.type = "button";
     eloSortButton.className = "players-sort-button";
-    eloSortButton.textContent = "BGA Peak Elo";
+    eloSortButton.textContent = peakEloLabel;
     eloSortButton.title = "Sort by BGA Peak Elo, highest first";
     eloSortButton.addEventListener("click", () => sortPlayers(activeSortField === "max_elo" ? null : "max_elo"));
     thElo.appendChild(eloSortButton);
@@ -1616,7 +1626,7 @@
           title: "BGA",
           entries: [
             { label: "Current Elo", value: formatMetric(p.current_elo) },
-            { label: "BGA Peak Elo", value: formatMetric(p.max_elo) }
+            { label: peakEloLabel, value: formatMetric(p.max_elo) }
           ]
         },
         {
@@ -1722,6 +1732,12 @@
     applyPlayersFilter();
 
     section.appendChild(table);
+    if (maxEloNote) {
+      const eloNote = document.createElement("p");
+      eloNote.className = "players-elo-note";
+      eloNote.textContent = `* ${maxEloNote}`;
+      section.appendChild(eloNote);
+    }
     playersContainer.appendChild(section);
   }
 

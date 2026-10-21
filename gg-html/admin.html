@@ -4697,6 +4697,8 @@
     const logoUrlField = createTextRow("Tournament logo URL", item?.logo_url || "");
     logoUrlField.input.type = "url";
     logoUrlField.input.placeholder = "https://carcassonne.gg/gallery/asian-cup-logo.png";
+    const maxEloNoteField = createTextRow("Peak BGA Elo note", item?.max_elo_note || "");
+    maxEloNoteField.input.placeholder = "Player's peak BGA Elo in 2026";
     const swissRoundsField = createNumberRow(
       "Swiss rounds count *",
       item?.swiss_rounds_count || 5,
@@ -4880,6 +4882,7 @@
     form.appendChild(organizerUrlField.row);
     form.appendChild(rulesUrlField.row);
     form.appendChild(logoUrlField.row);
+    form.appendChild(maxEloNoteField.row);
     form.appendChild(swissRoundsField.row);
     form.appendChild(playoffFirstRoundField.row);
     form.appendChild(playoffPreview);
@@ -4910,6 +4913,7 @@
       organizerUrlField.input,
       rulesUrlField.input,
       logoUrlField.input,
+      maxEloNoteField.input,
       swissRoundsField.input,
       testTournamentField.input,
     ];
@@ -5048,6 +5052,7 @@
         organizer_url: String(organizerUrlField.input.value || "").trim() || null,
         rules_url: String(rulesUrlField.input.value || "").trim() || null,
         logo_url: String(logoUrlField.input.value || "").trim() || null,
+        max_elo_note: String(maxEloNoteField.input.value || "").trim() || null,
         is_test_tournament: testTournamentField.input.checked,
         swiss_rounds_count: Number(swissRoundsField.input.value),
         playoff_first_round: playoffFirstRoundField.select.value,
