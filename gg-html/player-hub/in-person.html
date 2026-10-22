@@ -1322,24 +1322,32 @@
   }
 
   .ip-import-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
     color: #344054;
     font-size: 12px;
     font-weight: 600;
   }
 
+  .ip-import-summary:has(> span:empty) {
+    display: none;
+  }
+
   .ip-import-rows {
     display: grid;
-    gap: 6px;
+    gap: 4px;
   }
 
   .ip-import-head,
   .ip-import-row {
     display: grid;
-    grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 90px;
+    grid-template-columns: 36px minmax(0, 1fr) minmax(0, 1fr) 76px;
     grid-template-areas:
       "table first second result"
       "message message message message";
-    gap: 4px 8px;
+    gap: 0 8px;
     align-items: center;
   }
 
@@ -1352,7 +1360,7 @@
   }
 
   .ip-import-row {
-    padding: 6px 8px;
+    padding: 3px 8px;
     border: 1px solid var(--ip-line);
     border-radius: 6px;
   }
@@ -1375,9 +1383,10 @@
   }
 
   .ip-import-player {
-    display: grid;
-    gap: 2px;
     min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .ip-import-player.first {
@@ -1388,29 +1397,84 @@
     grid-area: second;
   }
 
-  .ip-import-player .ip-select {
-    min-height: 32px;
-    padding: 4px 6px;
+  .ip-import-starter,
+  .ip-import-starter-spacer {
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .ip-import-starter {
+    display: inline-grid;
+    place-items: center;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    opacity: 0.22;
+  }
+
+  .ip-import-starter:hover,
+  .ip-import-starter:focus-visible {
+    border-color: var(--ip-line);
+    background: #fff;
+    opacity: 0.7;
+  }
+
+  .ip-import-starter.active {
+    cursor: default;
+    opacity: 1;
+  }
+
+  .ip-import-starter.active:hover {
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .ip-import-starter img {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+  }
+
+  .ip-import-picker {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ip-import-picker .ip-city-picker-btn {
+    min-height: 30px;
+    padding: 3px 8px;
     font-size: 13px;
   }
 
-  .ip-import-player .ip-select.review {
+  .ip-import-picker.review .ip-city-picker-btn {
     border-color: #d99a00;
   }
 
-  .ip-import-player .ip-select.invalid {
+  .ip-import-picker.invalid .ip-city-picker-btn {
     border-color: var(--ip-danger);
   }
 
-  .ip-import-player-source {
-    overflow: hidden;
-    color: var(--ip-muted);
-    font-size: 11px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .ip-import-picker .ip-city-icon {
+    width: 18px;
+    height: 18px;
+    flex-basis: 18px;
+  }
+
+  .ip-import-picker .ip-city-picker-menu {
+    max-height: 260px;
+  }
+
+  .ip-city-picker-menu.up {
+    top: auto;
+    bottom: calc(100% + 4px);
   }
 
   .ip-import-player-bye {
+    padding-left: 28px;
     color: #344054;
     font-size: 13px;
     font-weight: 600;
@@ -1424,19 +1488,46 @@
     text-align: center;
   }
 
+  .ip-import-result.tie {
+    cursor: help;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+  }
+
   .ip-import-row-message {
     grid-area: message;
-    color: var(--ip-danger);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    padding: 3px 0 1px 44px;
     font-size: 11px;
     line-height: 1.4;
   }
 
-  .ip-import-row-message.review {
+  .ip-import-row-message:empty {
+    display: none;
+  }
+
+  .ip-import-error {
+    color: var(--ip-danger);
+  }
+
+  .ip-import-review {
     color: #7a4b00;
   }
 
-  .ip-import-row-message:empty {
-    display: none;
+  .ip-import-note {
+    color: var(--ip-muted);
+  }
+
+  .ip-btn.ip-import-approve {
+    min-height: 20px;
+    padding: 1px 8px;
+    border-color: #d99a00;
+    background: #fff;
+    color: #7a4b00;
+    font-size: 11px;
   }
 
   .ip-import-complete {
@@ -2169,6 +2260,11 @@
         "first first"
         "second second"
         "message message";
+      gap: 3px 8px;
+    }
+
+    .ip-import-row-message {
+      padding-left: 0;
     }
 
     .ip-head,
@@ -5679,9 +5775,32 @@
     return result.winner === 0 ? "1 : 0" : "0 : 1";
   }
 
+  function appendImportParticipantLabel(container, participant, fallbackText) {
+    container.innerHTML = "";
+    const international = state.overview?.tournament?.scope === "international";
+    const iconUrl = !participant
+      ? ""
+      : international
+        ? participantAssociation(participant).flag
+        : String(participant.city_icon_url || "").trim();
+    if (iconUrl) {
+      const icon = document.createElement("img");
+      icon.className = international ? "ip-association-flag" : "ip-city-icon";
+      icon.src = iconUrl;
+      icon.alt = "";
+      icon.addEventListener("error", () => icon.remove(), { once: true });
+      container.appendChild(icon);
+    }
+    const text = document.createElement("span");
+    text.textContent = participant ? importParticipantLabel(participant) : fallbackText;
+    container.appendChild(text);
+    container.style.color = participant ? "" : "#999";
+  }
+
   /**
-   * mode "pairings" creates the next round from external pairings (the first player starts);
+   * mode "pairings" creates the next round from external pairings;
    * mode "results" fills results of the published round, matching tables by their two players.
+   * The first pasted player starts unless the organizer moves the starting-player marker.
    */
   function openSwissImportModal(mode) {
     const swiss = state.swiss;
@@ -5703,6 +5822,7 @@
     const draftKey = `${state.selectedTournamentId}:${mode}:${roundNumber}`;
     const draft = state.swissImportDraft?.key === draftKey ? state.swissImportDraft : null;
     const overrides = new Map(draft?.overrides || []);
+    const starterOverrides = new Map(draft?.starterOverrides || []);
 
     const overlay = document.createElement("div");
     overlay.className = "ip-modal-overlay";
@@ -5720,23 +5840,29 @@
     const hint = document.createElement("div");
     hint.className = "ip-modal-player";
     hint.textContent = isResults
-      ? "Paste one table per line: table number, first player, second player, result. Tables are matched by their two players; results are read in the pasted player order (70−75, 1−0, 0−1, +−, −+)."
-      : "Paste one table per line: table number, first player, second player, result (optional). The first player of each pair starts the game. Results: 70−75, 1−0, 0−1, +−, −+. Write “bye” instead of the second player for a bye.";
+      ? "Paste one table per line: table number, first player, second player, result. Tables are matched by their two players; scores are read in the pasted player order (70−75, 1−0, 0−1, +−, −+). Click the meeple to change who started."
+      : "Paste one table per line: table number, first player, second player, result (optional). The first player starts by default; click the meeple to change who starts. Results: 70−75, 1−0, 0−1, +−, −+. Write “bye” instead of the second player for a bye.";
     const source = createTextareaField("Pasted data");
     source.textarea.classList.add("ip-import-textarea");
     source.textarea.placeholder = "Nr\tWhite\tBlack\tResult\n1\tTimofei Gretšenko\tGeorgios Kyriazidis\t70−75";
     source.textarea.spellcheck = false;
     source.textarea.value = draft?.text || "";
-    const summary = document.createElement("div");
-    summary.className = "ip-import-summary";
+    const summaryRow = document.createElement("div");
+    summaryRow.className = "ip-import-summary";
+    const summary = document.createElement("span");
+    const approveAll = createButton("Approve all", "ip-btn ip-import-approve ip-hidden", () => {
+      rows.forEach(approveRow);
+      render();
+    });
+    summaryRow.appendChild(summary);
+    summaryRow.appendChild(approveAll);
     const head = document.createElement("div");
     head.className = "ip-import-head";
-    ["Table", "First player (starts)", "Second player", "Result"].forEach((labelText) => {
+    ["Table", "Player 1", "Player 2", "Result"].forEach((labelText) => {
       const label = document.createElement("span");
       label.textContent = labelText;
       head.appendChild(label);
     });
-    if (isResults) head.children[1].textContent = "First player";
     const rowsMount = document.createElement("div");
     rowsMount.className = "ip-import-rows";
     const unpaired = document.createElement("div");
@@ -5760,13 +5886,15 @@
     );
     actions.appendChild(cancel);
     actions.appendChild(submit);
-    [title, hint, source.field, summary, head, rowsMount, unpaired, completeLabel, error, actions]
+    [title, hint, source.field, summaryRow, head, rowsMount, unpaired, completeLabel, error, actions]
       .forEach((element) => dialog.appendChild(element));
     overlay.appendChild(dialog);
 
     let rows = [];
     let saving = false;
     let parseTimer = null;
+    let renderController = null;
+    let closeOpenPicker = null;
 
     function resolveName(rawName) {
       const key = normalizeImportName(rawName);
@@ -5779,12 +5907,15 @@
         const isBye = !parsed.second || IMPORT_BYE_NAMES.has(parsed.second.trim().toLowerCase());
         return {
           ...parsed,
+          key: `${normalizeImportName(parsed.first)}|${normalizeImportName(parsed.second)}`,
           isBye,
           resultRaw: parsed.result,
           result: parseImportResult(parsed.result),
           firstPlayer: resolveName(parsed.first),
           secondPlayer: isBye ? null : resolveName(parsed.second),
+          starterSide: "first",
           errors: [],
+          pending: [],
           notes: [],
           match: null,
         };
@@ -5812,39 +5943,174 @@
               rowByParticipantId.set(player.participantId, label);
             }
             if (player.confidence === "likely") {
-              row.notes.push(
-                `Check “${player.raw}” → ${importParticipantLabel(participantById.get(player.participantId))}.`
+              row.pending.push(
+                `“${player.raw}” → ${importParticipantLabel(participantById.get(player.participantId))}`
               );
             }
           }
         });
         if (row.result?.invalid) row.errors.push(`Result “${row.resultRaw}” is not recognised.`);
-        if (row.isBye && row.result && !row.result.invalid) {
-          row.notes.push("A bye always counts as a win; the result is ignored.");
+        if (row.isBye) {
+          if (row.result && !row.result.invalid) {
+            row.notes.push("A bye always counts as a win; the result is ignored.");
+          }
+          return;
         }
-        if (!isResults) return;
         const firstId = row.firstPlayer.participantId;
-        const secondId = row.secondPlayer?.participantId;
-        if (!firstId || !secondId) return;
-        row.match = roundMatches.find((match) => (
-          [match.participant_a_id, match.participant_b_id].sort().join("|")
-          === [firstId, secondId].sort().join("|")
-        )) || null;
-        if (!row.match) {
-          row.errors.push(`These players do not share a table in round ${roundNumber}.`);
-        } else if (!row.result) {
-          row.notes.push("No result: this table is skipped.");
-        } else if (
-          row.result.result_type === "points"
-          && row.result.points[0] === row.result.points[1]
-          && row.match.starting_participant_id !== firstId
-        ) {
-          const starter = participantById.get(row.match.starting_participant_id);
-          row.notes.push(
-            `Tied score: ${starter ? importParticipantLabel(starter) : "the recorded starting player"} started this table, so the other player wins.`
-          );
+        const secondId = row.secondPlayer.participantId;
+        if (isResults && firstId && secondId) {
+          row.match = roundMatches.find((match) => (
+            [match.participant_a_id, match.participant_b_id].sort().join("|")
+            === [firstId, secondId].sort().join("|")
+          )) || null;
+          if (!row.match) row.errors.push(`These players do not share a table in round ${roundNumber}.`);
+          else if (!row.result) row.notes.push("No result: this table is skipped.");
+          if (row.match?.starting_participant_id === secondId) row.starterSide = "second";
+        }
+        if (starterOverrides.has(row.key)) row.starterSide = starterOverrides.get(row.key);
+        if (row.result?.result_type === "points" && row.result.points[0] === row.result.points[1]) {
+          const winner = participantById.get(row.starterSide === "first" ? secondId : firstId);
+          row.resultTitle = `Tied score: ${winner ? importParticipantLabel(winner) : "the second player"} wins as the player who did not start.`;
         }
       });
+    }
+
+    function approveRow(row) {
+      [row.firstPlayer, row.secondPlayer].forEach((player) => {
+        if (player?.confidence === "likely") {
+          overrides.set(normalizeImportName(player.raw), player.participantId);
+        }
+      });
+    }
+
+    function createParticipantPicker(player, { label, onSelect }) {
+      const root = document.createElement("div");
+      root.className = `ip-city-picker ip-import-picker${
+        !player.participantId ? " invalid" : player.confidence === "likely" ? " review" : ""
+      }`;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ip-city-picker-btn";
+      button.setAttribute("aria-haspopup", "listbox");
+      button.setAttribute("aria-expanded", "false");
+      button.setAttribute("aria-label", label);
+      button.title = player.raw ? `Pasted: ${player.raw}` : "";
+      const value = document.createElement("span");
+      value.className = "ip-city-picker-value";
+      appendImportParticipantLabel(value, participantById.get(player.participantId), "Choose player");
+      const chevron = document.createElement("span");
+      chevron.textContent = "▾";
+      button.appendChild(value);
+      button.appendChild(chevron);
+
+      const menu = document.createElement("div");
+      menu.className = "ip-city-picker-menu";
+      menu.setAttribute("role", "listbox");
+      const searchWrap = document.createElement("div");
+      searchWrap.className = "ip-city-search";
+      const search = document.createElement("input");
+      search.type = "text";
+      search.className = "ip-input";
+      search.placeholder = "Type to filter players...";
+      search.setAttribute("aria-label", "Search players");
+      searchWrap.appendChild(search);
+      const options = document.createElement("div");
+      menu.appendChild(searchWrap);
+      menu.appendChild(options);
+
+      const close = () => {
+        menu.classList.remove("open", "up");
+        button.classList.remove("open");
+        button.setAttribute("aria-expanded", "false");
+        if (closeOpenPicker === close) closeOpenPicker = null;
+      };
+      const renderOptions = () => {
+        options.innerHTML = "";
+        const query = normalizeImportName(search.value);
+        const visible = candidates.filter((participant) => (
+          !query
+          || normalizeImportName(importParticipantLabel(participant)).includes(query)
+          || normalizeImportName(participant.bga_nickname).includes(query)
+        ));
+        visible.forEach((participant) => {
+          const option = document.createElement("button");
+          option.type = "button";
+          option.className = `ip-city-option${participant.id === player.participantId ? " active" : ""}`;
+          option.setAttribute("role", "option");
+          option.setAttribute("aria-selected", participant.id === player.participantId ? "true" : "false");
+          const optionLabel = document.createElement("span");
+          optionLabel.className = "ip-city-option-label";
+          appendImportParticipantLabel(optionLabel, participant, participant.id);
+          option.appendChild(optionLabel);
+          option.addEventListener("click", (event) => {
+            event.stopPropagation();
+            close();
+            onSelect(participant.id);
+          });
+          options.appendChild(option);
+        });
+        if (!visible.length) {
+          const empty = document.createElement("div");
+          empty.className = "ip-empty";
+          empty.textContent = "Nothing found.";
+          empty.style.padding = "9px";
+          options.appendChild(empty);
+        }
+      };
+      const open = () => {
+        closeOpenPicker?.();
+        search.value = "";
+        renderOptions();
+        const buttonRect = button.getBoundingClientRect();
+        const bounds = dialog.getBoundingClientRect();
+        const spaceBelow = bounds.bottom - buttonRect.bottom;
+        const spaceAbove = buttonRect.top - bounds.top;
+        menu.classList.toggle("up", spaceBelow < 260 && spaceAbove > spaceBelow);
+        menu.classList.add("open");
+        button.classList.add("open");
+        button.setAttribute("aria-expanded", "true");
+        closeOpenPicker = close;
+        search.focus({ preventScroll: true });
+      };
+
+      search.addEventListener("click", (event) => event.stopPropagation());
+      search.addEventListener("input", renderOptions);
+      search.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        options.querySelector("button")?.click();
+      });
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (menu.classList.contains("open")) close();
+        else open();
+      });
+      document.addEventListener("click", (event) => {
+        if (!root.contains(event.target)) close();
+      }, { signal: renderController.signal });
+      root.appendChild(button);
+      root.appendChild(menu);
+      return root;
+    }
+
+    function createStarterToggle(row, side) {
+      const active = row.starterSide === side;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `ip-import-starter${active ? " active" : ""}`;
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+      button.title = active ? "Starting player" : "Make this player start";
+      button.setAttribute("aria-label", button.title);
+      const icon = document.createElement("img");
+      icon.src = STARTING_PLAYER_ICON_URL;
+      icon.alt = "";
+      button.appendChild(icon);
+      button.addEventListener("click", () => {
+        if (active) return;
+        starterOverrides.set(row.key, side);
+        render();
+      });
+      return button;
     }
 
     function createPlayerCell(row, side) {
@@ -5858,49 +6124,40 @@
         cell.appendChild(bye);
         return cell;
       }
-      const select = document.createElement("select");
-      select.className = "ip-select";
-      select.setAttribute("aria-label", `${side === "first" ? "First" : "Second"} player for “${player.raw}”`);
-      const empty = document.createElement("option");
-      empty.value = "";
-      empty.textContent = "Choose player";
-      select.appendChild(empty);
-      candidates.forEach((participant) => {
-        const option = document.createElement("option");
-        option.value = participant.id;
-        option.textContent = importParticipantLabel(participant);
-        if (participant.id === player.participantId) option.selected = true;
-        select.appendChild(option);
-      });
-      if (!player.participantId) select.classList.add("invalid");
-      else if (player.confidence === "likely") select.classList.add("review");
-      select.addEventListener("change", () => {
-        overrides.set(normalizeImportName(player.raw), select.value);
-        render();
-      });
-      const sourceName = document.createElement("div");
-      sourceName.className = "ip-import-player-source";
-      sourceName.textContent = player.raw || "—";
-      sourceName.title = player.raw || "";
-      cell.appendChild(select);
-      cell.appendChild(sourceName);
+      if (row.isBye) {
+        const spacer = document.createElement("span");
+        spacer.className = "ip-import-starter-spacer";
+        cell.appendChild(spacer);
+      } else {
+        cell.appendChild(createStarterToggle(row, side));
+      }
+      cell.appendChild(createParticipantPicker(player, {
+        label: `${side === "first" ? "Player 1" : "Player 2"} for “${player.raw}”`,
+        onSelect: (participantId) => {
+          overrides.set(normalizeImportName(player.raw), participantId);
+          render();
+        },
+      }));
       return cell;
     }
 
     function canComplete() {
-      if (!rows.length || rows.some((row) => row.errors.length)) return false;
+      if (!rows.length || rows.some((row) => row.errors.length || row.pending.length)) return false;
       if (!isResults) return rows.every((row) => row.isBye || (row.result && !row.result.invalid));
       const covered = new Set(rows.filter((row) => row.match && row.result).map((row) => row.match.id));
       return roundMatches.every((match) => match.status === "completed" || covered.has(match.id));
     }
 
     function render() {
+      renderController?.abort();
+      renderController = new AbortController();
+      closeOpenPicker = null;
       resolveRows();
       rowsMount.innerHTML = "";
       rows.forEach((row) => {
         const element = document.createElement("div");
         element.className = `ip-import-row${
-          row.errors.length ? " has-error" : row.notes.length ? " needs-review" : ""
+          row.errors.length ? " has-error" : row.pending.length ? " needs-review" : ""
         }`;
         const table = document.createElement("div");
         table.className = "ip-import-row-table";
@@ -5908,9 +6165,34 @@
         const result = document.createElement("div");
         result.className = "ip-import-result";
         result.textContent = swissImportResultLabel(row.result);
+        if (row.resultTitle) {
+          result.classList.add("tie");
+          result.title = row.resultTitle;
+        }
         const message = document.createElement("div");
-        message.className = `ip-import-row-message${row.errors.length ? "" : " review"}`;
-        message.textContent = [...row.errors, ...row.notes].join(" ");
+        message.className = "ip-import-row-message";
+        if (row.errors.length) {
+          const errorText = document.createElement("span");
+          errorText.className = "ip-import-error";
+          errorText.textContent = row.errors.join(" ");
+          message.appendChild(errorText);
+        }
+        if (row.pending.length) {
+          const reviewText = document.createElement("span");
+          reviewText.className = "ip-import-review";
+          reviewText.textContent = `Check: ${row.pending.join("; ")}.`;
+          message.appendChild(reviewText);
+          message.appendChild(createButton("Approve", "ip-btn ip-import-approve", () => {
+            approveRow(row);
+            render();
+          }));
+        }
+        if (row.notes.length) {
+          const noteText = document.createElement("span");
+          noteText.className = "ip-import-note";
+          noteText.textContent = row.notes.join(" ");
+          message.appendChild(noteText);
+        }
         element.appendChild(table);
         element.appendChild(createPlayerCell(row, "first"));
         element.appendChild(createPlayerCell(row, "second"));
@@ -5921,16 +6203,18 @@
         rowsMount.appendChild(element);
       });
       const errorCount = rows.filter((row) => row.errors.length).length;
-      const reviewCount = rows.filter((row) => !row.errors.length && row.notes.length).length;
+      const pendingCount = rows.filter((row) => row.pending.length).length;
       const resultCount = rows.filter((row) => !row.isBye && row.result && !row.result.invalid).length;
       summary.textContent = rows.length
         ? [
           `${rows.length} ${rows.length === 1 ? "line" : "lines"}`,
           `${resultCount} with results`,
           errorCount ? `${errorCount} to fix` : "",
-          reviewCount ? `${reviewCount} to check` : "",
+          pendingCount ? `${pendingCount} to approve` : "",
         ].filter(Boolean).join(" · ")
         : "";
+      approveAll.classList.toggle("ip-hidden", !pendingCount);
+      approveAll.textContent = `Approve all (${pendingCount})`;
       head.classList.toggle("ip-hidden", !rows.length);
       if (!isResults && rows.length) {
         const paired = new Set(rows.flatMap((row) => (
@@ -5946,9 +6230,16 @@
       const completable = canComplete();
       completeInput.disabled = !completable;
       if (!completable) completeInput.checked = false;
-      submit.disabled = saving || !rows.length || errorCount > 0
+      submit.disabled = saving || !rows.length || errorCount > 0 || pendingCount > 0
         || (isResults && !rows.some((row) => row.match && row.result));
+      submit.title = pendingCount ? "Approve the highlighted matches first." : "";
       error.textContent = "";
+    }
+
+    function starterIdOf(row) {
+      return row.starterSide === "second"
+        ? row.secondPlayer.participantId
+        : row.firstPlayer.participantId;
     }
 
     function buildPayload() {
@@ -5965,7 +6256,11 @@
               if (result.result_type === "points" && row.match.participant_a_id !== firstId) {
                 [result.points_a, result.points_b] = [result.points_b, result.points_a];
               }
-              return { match_id: row.match.id, ...result };
+              return {
+                match_id: row.match.id,
+                starting_participant_id: starterIdOf(row),
+                ...result,
+              };
             }),
           },
         };
@@ -5979,11 +6274,16 @@
             const firstId = row.firstPlayer.participantId;
             if (row.isBye) return { participant_a_id: firstId, is_bye: true };
             const secondId = row.secondPlayer.participantId;
+            const result = swissImportApiResult(row.result, firstId, secondId);
+            const secondStarts = row.starterSide === "second";
+            if (secondStarts && result?.result_type === "points") {
+              [result.points_a, result.points_b] = [result.points_b, result.points_a];
+            }
             return {
               table_number: /^\d+\.?$/.test(row.table) ? Number.parseInt(row.table, 10) : null,
-              participant_a_id: firstId,
-              participant_b_id: secondId,
-              result: swissImportApiResult(row.result, firstId, secondId),
+              participant_a_id: secondStarts ? secondId : firstId,
+              participant_b_id: secondStarts ? firstId : secondId,
+              result,
             };
           }),
         },
@@ -5995,19 +6295,27 @@
         key: draftKey,
         text: source.textarea.value,
         overrides: Array.from(overrides.entries()),
+        starterOverrides: Array.from(starterOverrides.entries()),
       };
     }
 
-    function closeModal() {
-      if (saving) return;
-      saveDraft();
+    function removeModal() {
+      renderController?.abort();
       clearTimeout(parseTimer);
       document.removeEventListener("keydown", handleEscape);
       overlay.remove();
     }
 
+    function closeModal() {
+      if (saving) return;
+      saveDraft();
+      removeModal();
+    }
+
     function handleEscape(event) {
-      if (event.key === "Escape") closeModal();
+      if (event.key !== "Escape") return;
+      if (closeOpenPicker) closeOpenPicker();
+      else closeModal();
     }
 
     async function submitImport() {
@@ -6028,8 +6336,7 @@
           state.swissImportDraft = null;
           const playoffRefreshError = await refreshPlayoffIfSwissComplete(data);
           saving = false;
-          document.removeEventListener("keydown", handleEscape);
-          overlay.remove();
+          removeModal();
           renderWorkspace();
           setStatus(
             playoffRefreshError
@@ -6045,8 +6352,7 @@
         });
         saving = false;
         saveDraft();
-        document.removeEventListener("keydown", handleEscape);
-        overlay.remove();
+        removeModal();
         state.pairingPreview = { ...data.preview, import_payload: body };
         renderSwiss();
         setStatus(`Round ${roundNumber} import is ready to confirm.`, "success");
@@ -6058,8 +6364,11 @@
         const failedRow = payloadRows[Number(requestError.details?.row_number) - 1];
         if (failedRow?.element) {
           failedRow.element.className = "ip-import-row has-error";
-          failedRow.messageEl.className = "ip-import-row-message";
-          failedRow.messageEl.textContent = requestError.message;
+          failedRow.messageEl.innerHTML = "";
+          const errorText = document.createElement("span");
+          errorText.className = "ip-import-error";
+          errorText.textContent = requestError.message;
+          failedRow.messageEl.appendChild(errorText);
           failedRow.element.scrollIntoView({ block: "nearest" });
         }
         error.textContent = requestError.message || "Failed to import Swiss data.";

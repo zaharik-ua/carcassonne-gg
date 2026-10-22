@@ -641,13 +641,21 @@ test("In-Person page imports external Swiss pairings and results from pasted tex
     "Confirm import",
     "Edit import",
     "Complete the round after import",
-    "First player (starts)",
+    "Approve all",
+    "Make this player start",
   ].forEach((text) => assert.ok(inPersonHtml.includes(text), `missing Swiss import UI text: ${text}`));
   [
     /\/swiss\/rounds\/import\/preview/,
     /\/swiss\/rounds\/import\/confirm/,
     /\/swiss\/rounds\/\$\{encodeURIComponent\(round\.id\)\}\/results\/import/,
   ].forEach((pattern) => assert.match(inPersonHtml, pattern));
+  const importModal = inPersonHtml.slice(
+    inPersonHtml.indexOf("function openSwissImportModal"),
+    inPersonHtml.indexOf("async function refreshPlayoffIfSwissComplete")
+  );
+  assert.doesNotMatch(importModal, /createElement\("select"\)/, "player pickers use the custom picker");
+  assert.match(importModal, /submit\.disabled = [\s\S]*?pendingCount > 0/, "unapproved matches block the import");
+  assert.match(importModal, /starting_participant_id: starterIdOf\(row\)/);
 
   const start = inPersonHtml.indexOf("  const IMPORT_BYE_NAMES");
   const end = inPersonHtml.indexOf("  function importParticipantLabel");

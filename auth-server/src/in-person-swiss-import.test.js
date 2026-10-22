@@ -286,6 +286,40 @@ test("imports a later round with rematch warnings, then imports its results in b
   );
 });
 
+test("imported results can change the starting player, which decides a tied score", async (t) => {
+  const { service } = await createContext(t);
+  const { tournament, participants: [p1, p2] } = await createCheckedInTournament(service, 2, "starter");
+  let overview = await service.confirmImportedSwissRound(tournament.id, {
+    matches: [{ participant_a_id: p1.id, participant_b_id: p2.id }],
+  });
+  const [match] = overview.current_round.matches;
+  assert.equal(match.starting_participant_id, p1.id);
+  await assert.rejects(
+    service.importSwissRoundResults(tournament.id, overview.current_round.id, {
+      results: [{
+        match_id: match.id,
+        starting_participant_id: "ipp_other",
+        result_type: "points",
+        points_a: 80,
+        points_b: 80,
+      }],
+    }),
+    (error) => error?.code === "INVALID_STARTING_PARTICIPANT"
+  );
+  overview = await service.importSwissRoundResults(tournament.id, overview.current_round.id, {
+    results: [{
+      match_id: match.id,
+      starting_participant_id: p2.id,
+      result_type: "points",
+      points_a: 80,
+      points_b: 80,
+    }],
+  });
+  const [saved] = overview.current_round.matches;
+  assert.equal(saved.starting_participant_id, p2.id);
+  assert.equal(saved.winner_participant_id, p1.id, "the second player wins a tie");
+});
+
 test("reports checked-in players missing from an imported round", async (t) => {
   const { service } = await createContext(t);
   const { tournament, participants: [p1, p2, p3] } = await createCheckedInTournament(

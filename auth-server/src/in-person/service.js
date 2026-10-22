@@ -2191,18 +2191,27 @@ export function createInPersonService({
             );
           }
           rowByMatchId.set(match.id, rowNumber);
+          const startingParticipantId = normalizeText(entry?.starting_participant_id)
+            || match.starting_participant_id;
+          if (![match.participant_a_id, match.participant_b_id].includes(startingParticipantId)) {
+            throw validationError(
+              "INVALID_STARTING_PARTICIPANT",
+              `Row ${rowNumber}: the starting player must be one of the players at this table`,
+              { row_number: rowNumber, field: "starting_participant_id" }
+            );
+          }
           const canonical = validateImportedResult(
-            match,
+            { ...match, starting_participant_id: startingParticipantId },
             { ...entry, admin_note: entry?.admin_note ?? match.admin_note },
             rowNumber
           );
-          return { match, canonical };
+          return { match, canonical, startingParticipantId };
         });
 
         let updatedCount = 0;
-        for (const { match, canonical } of updates) {
-          if (canonicalResultEquals(match, canonical, match.starting_participant_id)) continue;
-          await writeSwissMatchResult(match.id, match.starting_participant_id, canonical);
+        for (const { match, canonical, startingParticipantId } of updates) {
+          if (canonicalResultEquals(match, canonical, startingParticipantId)) continue;
+          await writeSwissMatchResult(match.id, startingParticipantId, canonical);
           updatedCount += 1;
         }
         let completed = false;
