@@ -29,6 +29,7 @@ import {
   normalizeAdminUserIds,
   normalizeCityInput,
   normalizeDrawNumber,
+  normalizeImportAliasKey,
   normalizeOptionalText,
   normalizeParticipantInput,
   normalizeRequiredBoolean,
@@ -1034,6 +1035,7 @@ export function createInPersonService({
       );
       await dbRun(db, "DELETE FROM in_person_standings WHERE tournament_id = ?", [tournament.id]);
       await dbRun(db, "DELETE FROM in_person_rounds WHERE tournament_id = ?", [tournament.id]);
+      await dbRun(db, "DELETE FROM in_person_participant_aliases WHERE tournament_id = ?", [tournament.id]);
       await dbRun(db, "DELETE FROM in_person_participants WHERE tournament_id = ?", [tournament.id]);
       await dbRun(
         db,
@@ -1293,6 +1295,11 @@ export function createInPersonService({
           "A participant cannot be deleted after the first round or after appearing in a match"
         );
       }
+      await dbRun(
+        db,
+        "DELETE FROM in_person_participant_aliases WHERE participant_id = ?",
+        [current.id]
+      );
       await dbRun(
         db,
         `DELETE FROM in_person_participants WHERE id = ? AND tournament_id = ?`,
@@ -1694,9 +1701,10 @@ export function createInPersonService({
 
   async function getSwissOverview(tournamentId) {
     const tournamentRow = await requireTournamentRow(tournamentId);
-    const [rounds, standings] = await Promise.all([
+    const [rounds, standings, importAliases] = await Promise.all([
       loadSwissRounds(tournamentRow.id),
       loadLatestSwissStandings(tournamentRow.id),
+      loadImportAliases(tournamentRow.id),
     ]);
     assertSwissRoundSequence(rounds);
     const currentRound = rounds.length ? rounds[rounds.length - 1] : null;
@@ -1728,6 +1736,7 @@ export function createInPersonService({
         && tournamentRow.status === "swiss",
       can_cancel_current_round: !!currentRound && tournamentRow.status === "swiss",
       swiss_complete: completedRounds >= swissRoundsCount,
+      import_aliases: importAliases,
     };
   }
 
@@ -1873,6 +1882,65 @@ export function createInPersonService({
     });
   }
 
+  async function loadImportAliases(tournamentId) {
+    const rows = await dbAll(
+      db,
+      `
+        SELECT alias, alias_key, participant_id
+        FROM in_person_participant_aliases
+        WHERE tournament_id = ?
+        ORDER BY alias_key
+      `,
+      [tournamentId]
+    );
+    return rows.map((row) => ({
+      alias: row.alias,
+      alias_key: row.alias_key,
+      participant_id: row.participant_id,
+    }));
+  }
+
+  /** Runs inside an open transaction; remembers which roster player an external name means. */
+  async function saveImportAliases(tournamentId, aliases) {
+    if (aliases == null) return 0;
+    if (!Array.isArray(aliases)) {
+      throw validationError("INVALID_ALIASES", "aliases must be an array", { field: "aliases" });
+    }
+    let saved = 0;
+    for (const entry of aliases) {
+      const alias = normalizeText(entry?.alias).slice(0, 200);
+      const aliasKey = normalizeImportAliasKey(alias);
+      const participantId = normalizeText(entry?.participant_id);
+      if (!aliasKey || !participantId) continue;
+      const participant = await dbGet(
+        db,
+        "SELECT id FROM in_person_participants WHERE id = ? AND tournament_id = ?",
+        [participantId, tournamentId]
+      );
+      if (!participant) {
+        throw validationError(
+          "ALIAS_PARTICIPANT_NOT_FOUND",
+          `“${alias}” points to a player outside this tournament`,
+          { field: "aliases", alias }
+        );
+      }
+      await dbRun(
+        db,
+        `
+          INSERT INTO in_person_participant_aliases (tournament_id, alias_key, alias, participant_id)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(tournament_id, alias_key) DO UPDATE SET
+            alias = excluded.alias,
+            participant_id = excluded.participant_id,
+            updated_at = CURRENT_TIMESTAMP
+        `,
+        [tournamentId, aliasKey, alias, participantId]
+      );
+      saved += 1;
+    }
+    return saved;
+  }
+
   function validateImportedResult(match, result, rowNumber) {
     try {
       return validateMatchResult(match, result);
@@ -1903,6 +1971,9 @@ export function createInPersonService({
     }
     const participantById = new Map(participants.map((participant) => [participant.id, participant]));
     const rowByParticipantId = new Map();
+    // The first round may be imported straight from check-in: listed registered players get checked in.
+    const allowsCheckIn = roundNumber === 1 && tournament.status === "check_in";
+    const checkInParticipantIds = [];
     const requireImportedParticipant = (value, rowNumber) => {
       const id = normalizeText(value);
       if (!id) {
@@ -1917,7 +1988,9 @@ export function createInPersonService({
           participant_id: id,
         });
       }
-      if (participant.status !== "checked_in") {
+      if (allowsCheckIn && participant.status === "registered") {
+        checkInParticipantIds.push(id);
+      } else if (participant.status !== "checked_in") {
         throw conflictError(
           "PARTICIPANT_NOT_ACTIVE",
           `Row ${rowNumber}: ${participant.name_en} is not checked in`,
@@ -2062,6 +2135,7 @@ export function createInPersonService({
       complete_round: completeRound,
       results_count: matches.filter((match) => !match.is_bye && match.status === "completed").length,
       unpaired_participant_ids: unpairedParticipantIds,
+      check_in_participant_ids: checkInParticipantIds,
       ...enrichPairingPlan({
         matches,
         bye_participant_id: matches.find((match) => match.is_bye)?.participant_a_id || null,
@@ -2079,6 +2153,19 @@ export function createInPersonService({
       const outcome = await transaction(async () => {
         const tournament = await requireTournamentRow(tournamentId);
         const plan = await buildImportedSwissRoundPlan(tournament.id, payload);
+        for (const participantId of plan.check_in_participant_ids) {
+          await dbRun(
+            db,
+            `
+              UPDATE in_person_participants
+              SET status = 'checked_in', checked_in_at = COALESCE(checked_in_at, CURRENT_TIMESTAMP),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND tournament_id = ? AND status = 'registered'
+            `,
+            [participantId, tournament.id]
+          );
+        }
+        const aliasesSaved = await saveImportAliases(tournament.id, payload?.aliases);
         const roundId = `ipr_${idFactory()}`;
         await dbRun(
           db,
@@ -2140,6 +2227,8 @@ export function createInPersonService({
           completed: completion.completed,
           round_id: roundId,
           results_count: plan.results_count,
+          checked_in_count: plan.check_in_participant_ids.length,
+          aliases_saved: aliasesSaved,
         };
       });
       return { ...(await getSwissOverview(tournamentId)), ...outcome };
@@ -2208,6 +2297,7 @@ export function createInPersonService({
           return { match, canonical, startingParticipantId };
         });
 
+        const aliasesSaved = await saveImportAliases(tournament.id, payload?.aliases);
         let updatedCount = 0;
         for (const { match, canonical, startingParticipantId } of updates) {
           if (canonicalResultEquals(match, canonical, startingParticipantId)) continue;
@@ -2224,7 +2314,12 @@ export function createInPersonService({
         } else if (updatedCount) {
           await touchTournament(tournament.id);
         }
-        return { round_id: round.id, updated_count: updatedCount, completed };
+        return {
+          round_id: round.id,
+          updated_count: updatedCount,
+          completed,
+          aliases_saved: aliasesSaved,
+        };
       });
       return { ...(await getSwissOverview(tournamentId)), ...outcome };
     });

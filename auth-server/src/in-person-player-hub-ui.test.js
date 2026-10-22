@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { normalizeImportAliasKey } from "./in-person/validation.js";
 
 const menuHtml = readFileSync(
   new URL("../../gg-html/player-hub/player-hub-menu.html", import.meta.url),
@@ -660,9 +661,29 @@ test("In-Person page imports external Swiss pairings and results from pasted tex
   const start = inPersonHtml.indexOf("  const IMPORT_BYE_NAMES");
   const end = inPersonHtml.indexOf("  function importParticipantLabel");
   assert.ok(start > 0 && end > start, "import parser helpers must stay together");
-  const { parseSwissImportText, matchImportParticipant, parseImportResult } = new Function(
-    `${inPersonHtml.slice(start, end)}; return { parseSwissImportText, matchImportParticipant, parseImportResult };`
+  const {
+    parseSwissImportText,
+    matchImportParticipant,
+    parseImportResult,
+    normalizeImportName,
+  } = new Function(
+    `${inPersonHtml.slice(start, end)}; return { parseSwissImportText, matchImportParticipant, parseImportResult, normalizeImportName };`
   )();
+  [
+    "Timofei Gretšenko",
+    "Hogne Jørgensen",
+    "André Namay−Quiñones−Salomon",
+    "Edzus Kauķis",
+    "Yu-Syuan  PENG",
+    "Олександр Ткаченко",
+    "",
+  ].forEach((name) => assert.equal(
+    normalizeImportName(name),
+    normalizeImportAliasKey(name),
+    `page and server alias keys differ for "${name}"`
+  ));
+  assert.match(inPersonHtml, /storedAliases\.has\(key\)/, "stored aliases resolve pasted names");
+  assert.match(inPersonHtml, /aliases: importAliases\(\)/);
   const candidates = [
     { id: "p1", name_en: "Timofei Gretšenko" },
     { id: "p2", name_en: "Georgios Kyriazidis" },

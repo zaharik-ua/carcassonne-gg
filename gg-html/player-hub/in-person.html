@@ -1484,8 +1484,13 @@
     grid-area: result;
     color: #344054;
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 400;
     text-align: center;
+  }
+
+  .ip-import-result .winner,
+  .ip-import-picker.winner .ip-city-picker-value span {
+    font-weight: 600;
   }
 
   .ip-import-result.tie {
@@ -4878,6 +4883,10 @@
       });
       box.appendChild(list);
     }
+    const importHint = document.createElement("div");
+    importHint.className = "ip-hint";
+    importHint.textContent = "External pairings can still be imported with “Import round 1”: draw numbers are not needed, and listed registered players are checked in automatically.";
+    box.appendChild(importHint);
     swissReadinessEl.appendChild(box);
   }
 
@@ -5767,12 +5776,20 @@
     };
   }
 
-  function swissImportResultLabel(result) {
-    if (!result) return "—";
-    if (result.invalid) return "?";
-    if (result.result_type === "points") return `${result.points[0]} : ${result.points[1]}`;
-    if (result.result_type === "technical") return result.winner === 0 ? "+ : −" : "− : +";
-    return result.winner === 0 ? "1 : 0" : "0 : 1";
+  /** Returns [first, second] score labels, or null when there is nothing to split. */
+  function swissImportResultParts(result) {
+    if (!result || result.invalid) return null;
+    if (result.result_type === "points") return result.points.map(String);
+    if (result.result_type === "technical") return result.winner === 0 ? ["+", "−"] : ["−", "+"];
+    return result.winner === 0 ? ["1", "0"] : ["0", "1"];
+  }
+
+  function swissImportWinnerSide(result, starterSide) {
+    if (!result || result.invalid) return "";
+    if (result.result_type !== "points") return result.winner === 0 ? "first" : "second";
+    const [first, second] = result.points;
+    if (first !== second) return first > second ? "first" : "second";
+    return starterSide === "first" ? "second" : "first";
   }
 
   function appendImportParticipantLabel(container, participant, fallbackText) {
@@ -5813,12 +5830,21 @@
     const roundParticipantIds = new Set(roundMatches.flatMap((match) => (
       [match.participant_a_id, match.participant_b_id]
     )));
+    // Round 1 may be imported straight from check-in: listed registered players get checked in.
+    const allowsCheckIn = !isResults
+      && roundNumber === 1
+      && state.overview?.tournament?.status === "check_in";
     const candidates = allParticipants
-      .filter((participant) => (
-        isResults ? roundParticipantIds.has(participant.id) : participant.status === "checked_in"
-      ))
+      .filter((participant) => {
+        if (isResults) return roundParticipantIds.has(participant.id);
+        return participant.status === "checked_in"
+          || (allowsCheckIn && participant.status === "registered");
+      })
       .sort((left, right) => importParticipantLabel(left).localeCompare(importParticipantLabel(right)));
     const participantById = new Map(candidates.map((participant) => [participant.id, participant]));
+    const storedAliases = new Map((state.swiss?.import_aliases || [])
+      .filter((alias) => participantById.has(alias.participant_id))
+      .map((alias) => [alias.alias_key, alias.participant_id]));
     const draftKey = `${state.selectedTournamentId}:${mode}:${roundNumber}`;
     const draft = state.swissImportDraft?.key === draftKey ? state.swissImportDraft : null;
     const overrides = new Map(draft?.overrides || []);
@@ -5899,6 +5925,9 @@
     function resolveName(rawName) {
       const key = normalizeImportName(rawName);
       if (overrides.has(key)) return { raw: rawName, participantId: overrides.get(key), confidence: "manual" };
+      if (storedAliases.has(key)) {
+        return { raw: rawName, participantId: storedAliases.get(key), confidence: "alias" };
+      }
       return { raw: rawName, ...matchImportParticipant(rawName, candidates) };
     }
 
@@ -5968,6 +5997,7 @@
           if (row.match?.starting_participant_id === secondId) row.starterSide = "second";
         }
         if (starterOverrides.has(row.key)) row.starterSide = starterOverrides.get(row.key);
+        row.winnerSide = swissImportWinnerSide(row.result, row.starterSide);
         if (row.result?.result_type === "points" && row.result.points[0] === row.result.points[1]) {
           const winner = participantById.get(row.starterSide === "first" ? secondId : firstId);
           row.resultTitle = `Tied score: ${winner ? importParticipantLabel(winner) : "the second player"} wins as the player who did not start.`;
@@ -5983,11 +6013,11 @@
       });
     }
 
-    function createParticipantPicker(player, { label, onSelect }) {
+    function createParticipantPicker(player, { label, winner, onSelect }) {
       const root = document.createElement("div");
       root.className = `ip-city-picker ip-import-picker${
         !player.participantId ? " invalid" : player.confidence === "likely" ? " review" : ""
-      }`;
+      }${winner ? " winner" : ""}`;
       const button = document.createElement("button");
       button.type = "button";
       button.className = "ip-city-picker-btn";
@@ -6133,6 +6163,7 @@
       }
       cell.appendChild(createParticipantPicker(player, {
         label: `${side === "first" ? "Player 1" : "Player 2"} for “${player.raw}”`,
+        winner: row.winnerSide === side,
         onSelect: (participantId) => {
           overrides.set(normalizeImportName(player.raw), participantId);
           render();
@@ -6164,7 +6195,18 @@
         table.textContent = row.isBye ? "Bye" : (row.table || "—");
         const result = document.createElement("div");
         result.className = "ip-import-result";
-        result.textContent = swissImportResultLabel(row.result);
+        const scoreParts = swissImportResultParts(row.result);
+        if (scoreParts) {
+          ["first", "second"].forEach((side, index) => {
+            if (index) result.appendChild(document.createTextNode(" : "));
+            const score = document.createElement("span");
+            score.textContent = scoreParts[index];
+            if (row.winnerSide === side) score.className = "winner";
+            result.appendChild(score);
+          });
+        } else {
+          result.textContent = row.result?.invalid ? "?" : "—";
+        }
         if (row.resultTitle) {
           result.classList.add("tie");
           result.title = row.resultTitle;
@@ -6220,10 +6262,20 @@
         const paired = new Set(rows.flatMap((row) => (
           [row.firstPlayer.participantId, row.secondPlayer?.participantId].filter(Boolean)
         )));
-        const missing = candidates.filter((participant) => !paired.has(participant.id));
-        unpaired.textContent = missing.length
-          ? `Checked-in players not in this import (they will sit out the round): ${missing.map(importParticipantLabel).join(", ")}.`
-          : "";
+        const missing = candidates.filter((participant) => (
+          participant.status === "checked_in" && !paired.has(participant.id)
+        ));
+        const toCheckIn = candidates.filter((participant) => (
+          participant.status === "registered" && paired.has(participant.id)
+        ));
+        unpaired.textContent = [
+          toCheckIn.length
+            ? `${toCheckIn.length} registered player(s) will be checked in on confirm: ${toCheckIn.map(importParticipantLabel).join(", ")}.`
+            : "",
+          missing.length
+            ? `Checked-in players not in this import (they will sit out the round): ${missing.map(importParticipantLabel).join(", ")}.`
+            : "",
+        ].filter(Boolean).join(" ");
       } else {
         unpaired.textContent = "";
       }
@@ -6242,6 +6294,21 @@
         : row.firstPlayer.participantId;
     }
 
+    /** Manual choices and approvals are remembered so the same external names match next round. */
+    function importAliases() {
+      const aliases = new Map();
+      rows.forEach((row) => {
+        [row.firstPlayer, row.secondPlayer].forEach((player) => {
+          if (player?.confidence !== "manual" || !player.participantId || !player.raw) return;
+          aliases.set(normalizeImportName(player.raw), {
+            alias: player.raw,
+            participant_id: player.participantId,
+          });
+        });
+      });
+      return Array.from(aliases.values());
+    }
+
     function buildPayload() {
       if (isResults) {
         const payloadRows = rows.filter((row) => row.match && row.result);
@@ -6249,6 +6316,7 @@
           payloadRows,
           body: {
             complete_round: completeInput.checked,
+            aliases: importAliases(),
             results: payloadRows.map((row) => {
               const firstId = row.firstPlayer.participantId;
               const secondId = row.secondPlayer.participantId;
@@ -6270,6 +6338,7 @@
         body: {
           round_number: roundNumber,
           complete_round: completeInput.checked,
+          aliases: importAliases(),
           matches: rows.map((row) => {
             const firstId = row.firstPlayer.participantId;
             if (row.isBye) return { participant_a_id: firstId, is_bye: true };
@@ -6409,21 +6478,26 @@
       });
       adoptSwissResponse(data);
       state.swissImportDraft = null;
-      const playoffRefreshError = await refreshPlayoffIfSwissComplete(data);
-      renderWorkspace();
-      if (playoffRefreshError) {
+      try {
+        // Reload players too: the import may have checked some of them in.
+        await loadOverview();
+      } catch (_error) {
+        renderWorkspace();
         setStatus(
-          `Round ${preview.round_number} imported, but Playoff controls could not be refreshed.`,
+          `Round ${preview.round_number} imported, but the page could not be refreshed. Use Refresh.`,
           "error"
         );
-      } else {
-        setStatus(
+        return;
+      }
+      setStatus(
+        [
           data.completed
             ? `Round ${preview.round_number} imported and completed. Standings updated.`
             : `Round ${preview.round_number} imported and published.`,
-          "success"
-        );
-      }
+          data.checked_in_count ? `${data.checked_in_count} player(s) checked in.` : "",
+        ].filter(Boolean).join(" "),
+        "success"
+      );
     } catch (error) {
       setStatus(error.message || "Failed to import the Swiss round.", "error");
       button.disabled = false;
@@ -7288,8 +7362,11 @@
       details.textContent = [
         `${tableCount} tables`,
         `${preview.results_count || 0} results`,
+        preview.check_in_participant_ids?.length
+          ? `${preview.check_in_participant_ids.length} player(s) will be checked in`
+          : "",
         preview.complete_round ? "the round will be completed on confirm" : "the round will be published on confirm",
-      ].join(" · ");
+      ].filter(Boolean).join(" · ");
       swissPreview.appendChild(details);
       if (warningCount > 0) {
         const nameOf = (participantId) => importParticipantLabel(
@@ -7312,9 +7389,15 @@
     }
     const grid = document.createElement("div");
     grid.className = "ip-swiss-table-grid";
-    (preview.matches || []).forEach((match) => {
-      grid.appendChild(createSwissTableCard(match, { showRecord: true }));
-    });
+    (preview.matches || [])
+      .slice()
+      .sort((left, right) => (
+        Number(left.table_number ?? Number.MAX_SAFE_INTEGER)
+        - Number(right.table_number ?? Number.MAX_SAFE_INTEGER)
+      ))
+      .forEach((match) => {
+        grid.appendChild(createSwissTableCard(match, { showRecord: true }));
+      });
     swissPreview.appendChild(grid);
   }
 

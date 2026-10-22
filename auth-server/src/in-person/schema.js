@@ -683,6 +683,44 @@ async function ensureStandingsPlayedExtension(db) {
   return { added };
 }
 
+async function ensureParticipantImportAliases(db) {
+  const existingMigration = await dbGet(
+    db,
+    "SELECT version FROM in_person_schema_migrations WHERE version = 11"
+  );
+  try {
+    await dbExec(db, `
+      BEGIN IMMEDIATE TRANSACTION;
+
+      CREATE TABLE IF NOT EXISTS in_person_participant_aliases (
+        tournament_id TEXT NOT NULL,
+        alias_key TEXT NOT NULL CHECK (length(alias_key) > 0),
+        alias TEXT NOT NULL,
+        participant_id TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (tournament_id, alias_key),
+        FOREIGN KEY (tournament_id) REFERENCES in_person_tournaments(id)
+          ON UPDATE CASCADE ON DELETE CASCADE,
+        FOREIGN KEY (participant_id) REFERENCES in_person_participants(id)
+          ON UPDATE CASCADE ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_in_person_participant_aliases_participant
+        ON in_person_participant_aliases(participant_id);
+
+      INSERT OR IGNORE INTO in_person_schema_migrations (version, name)
+      VALUES (11, 'participant_import_aliases');
+
+      COMMIT;
+    `);
+  } catch (error) {
+    await rollbackQuietly(db);
+    throw error;
+  }
+  return { created: !existingMigration };
+}
+
 async function ensurePlayoffMedalTableAssignments(db) {
   const existingMigration = await dbGet(
     db,
@@ -1006,6 +1044,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
   const participantProfileMigration = await ensureParticipantProfileExtensions(db);
   const participantProfileCleanupMigration = await removeUnusedParticipantProfileFields(db);
   const standingsPlayedMigration = await ensureStandingsPlayedExtension(db);
+  const participantAliasMigration = await ensureParticipantImportAliases(db);
   await ensureInPersonTriggersAndAccessIndexes(db);
   logger?.info?.("[in-person] Schema foundation ready", {
     accessTableMigrated: accessMigration.migrated,
@@ -1019,6 +1058,7 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
     participantProfileColumnsAdded: participantProfileMigration.addedColumns,
     participantProfileColumnsRemoved: participantProfileCleanupMigration.removedColumns,
     standingsPlayedColumnAdded: standingsPlayedMigration.added,
+    participantAliasTableCreated: participantAliasMigration.created,
   });
   return {
     accessMigration,
@@ -1030,5 +1070,6 @@ export async function ensureInPersonSchema(db, { logger = console } = {}) {
     participantProfileMigration,
     participantProfileCleanupMigration,
     standingsPlayedMigration,
+    participantAliasMigration,
   };
 }

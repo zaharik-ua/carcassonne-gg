@@ -1,0 +1,27 @@
+Nr	White	Black	Result
+1	Daniel Angelats	Satoshi Kitamura	
+2	David Faraci	Timofei Gretšenko	
+3	Vladimir Kovalev	Adrian Hackl	
+4	Pedro Antunes	Qin Xiangyu	
+5	Naoki Yamaguchi	Marlon Marquez	
+6	Matt Tucker	Tim Stratmann	
+7	Roey Chalatzy	Horacio Mastandrea	
+8	Sotaro Nagai	André Namay−Quiñones−Salomon	
+9	Stefan Jonsson	Edzus Kaukis	
+10	Giulio Tomao	Jozsef Tihon	
+11	Hogne Jorgensen	Yi Liu	
+12	Nopphon Charoenkham	Tatiana Usenko	
+13	Tomasz Preuss	Osvaldo del Arco	
+14	Nahuel Vignatti	Tomislav Buhinicek	
+15	Raf Mesotten	Núria Casanovas	
+16	Carman Tang	Erick Matheus	
+17	Borislav Aymaliyev	Otto Ikonen	
+18	Malin Malmberg	Kęstutis Kurienius	
+19	Gert Versteeg	Kyrylo Manakhov	
+20	Bogdan Curcan	Vladimir Chendev	
+21	Mikhail Lapushynski	Yu−Syuan Peng	
+22	Auste Idaite	Daniel Ayala	
+23	Zvonimir Vlaic	Aleksejs Pegusevs	
+24	Sergio Antolinez	Óscar Méndez	
+25	Pavel Raus	Arpad Gere	
+26	Georgios Kyriazidis	Matthieu Hingant	

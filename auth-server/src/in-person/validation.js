@@ -36,6 +36,24 @@ export function normalizeText(value) {
   return String(value ?? "").trim();
 }
 
+/** Mirrors normalizeImportName in gg-html/player-hub/in-person.html: both must build the same alias keys. */
+export function normalizeImportAliasKey(value) {
+  return String(value || "")
+    .replace(/[øØ]/g, "o")
+    .replace(/[æÆ]/g, "ae")
+    .replace(/ß/g, "ss")
+    .replace(/[đĐ]/g, "d")
+    .replace(/[łŁ]/g, "l")
+    .replace(/ı/g, "i")
+    .replace(/[þÞ]/g, "th")
+    .replace(/[œŒ]/g, "oe")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
 export function normalizeOptionalText(value) {
   const normalized = normalizeText(value);
   return normalized || null;

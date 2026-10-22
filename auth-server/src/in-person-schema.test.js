@@ -142,6 +142,7 @@ test("creates the in-person foundation without versioning or idempotency tables"
   const expectedTables = [
     "cities",
     "in_person_matches",
+    "in_person_participant_aliases",
     "in_person_participants",
     "in_person_rounds",
     "in_person_schema_migrations",
@@ -228,6 +229,10 @@ test("creates the in-person foundation without versioning or idempotency tables"
   assert.deepEqual(
     await get(db, "SELECT name FROM in_person_schema_migrations WHERE version = 10"),
     { name: "tournament_max_elo_note" }
+  );
+  assert.deepEqual(
+    await get(db, "SELECT name FROM in_person_schema_migrations WHERE version = 11"),
+    { name: "participant_import_aliases" }
   );
 });
 

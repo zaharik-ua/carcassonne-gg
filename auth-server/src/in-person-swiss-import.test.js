@@ -45,7 +45,7 @@ async function createContext(t) {
 }
 
 /** Check-in without draw numbers: imported pairings do not need them. */
-async function createCheckedInTournament(service, participantCount, suffix) {
+async function createCheckedInTournament(service, participantCount, suffix, checkedInCount = participantCount) {
   const tournament = await service.createTournament({
     slug: `swiss-import-${suffix}`,
     name_en: `Swiss import ${suffix}`,
@@ -66,7 +66,7 @@ async function createCheckedInTournament(service, participantCount, suffix) {
     }));
   }
   await service.startCheckIn(tournament.id);
-  for (const participant of participants) {
+  for (const participant of participants.slice(0, checkedInCount)) {
     await service.setParticipantCheckIn(tournament.id, participant.id, { checked_in: true });
   }
   return { tournament, participants };
@@ -126,7 +126,7 @@ test("imports a first round with results, a bye and the first player as starter"
   assert.deepEqual(winners, new Set([p2.id, p3.id, p5.id]));
 });
 
-test("rejects imported pairings with duplicate, unknown or inactive players", async (t) => {
+test("rejects imported pairings with duplicate or unknown players and invalid results", async (t) => {
   const { service } = await createContext(t);
   const { tournament, participants: [p1, p2, p3, p4] } = await createCheckedInTournament(
     service,
@@ -191,12 +191,10 @@ test("rejects imported pairings with duplicate, unknown or inactive players", as
   assert.equal(untouched.rounds.length, 0, "a rejected import must not create a round");
 
   await service.setParticipantCheckIn(tournament.id, p4.id, { checked_in: false });
-  await assert.rejects(
-    service.previewImportedSwissRound(tournament.id, {
-      matches: [{ participant_a_id: p3.id, participant_b_id: p4.id }],
-    }),
-    (error) => error?.code === "PARTICIPANT_NOT_ACTIVE"
-  );
+  const withRegistered = await service.previewImportedSwissRound(tournament.id, {
+    matches: [{ participant_a_id: p3.id, participant_b_id: p4.id }],
+  });
+  assert.deepEqual(withRegistered.check_in_participant_ids, [p4.id]);
 });
 
 test("imports a later round with rematch warnings, then imports its results in bulk", async (t) => {
@@ -335,4 +333,96 @@ test("reports checked-in players missing from an imported round", async (t) => {
     preview.warnings.find((warning) => warning.code === "not_paired")?.participant_ids,
     [p3.id]
   );
+});
+
+test("checks in registered players listed in an imported first round only", async (t) => {
+  const { service } = await createContext(t);
+  const { tournament, participants: [p1, p2, p3, p4, p5] } = await createCheckedInTournament(
+    service,
+    5,
+    "auto-check-in",
+    2
+  );
+  const firstRound = {
+    complete_round: true,
+    matches: [
+      {
+        participant_a_id: p1.id,
+        participant_b_id: p3.id,
+        result: { result_type: "simple", winner_participant_id: p1.id },
+      },
+      {
+        participant_a_id: p4.id,
+        participant_b_id: p2.id,
+        result: { result_type: "simple", winner_participant_id: p2.id },
+      },
+    ],
+  };
+  const preview = await service.previewImportedSwissRound(tournament.id, firstRound);
+  assert.deepEqual(preview.check_in_participant_ids, [p3.id, p4.id]);
+  assert.deepEqual(preview.unpaired_participant_ids, [], "registered players outside the import stay registered");
+
+  const overview = await service.confirmImportedSwissRound(tournament.id, firstRound);
+  assert.equal(overview.checked_in_count, 2);
+  assert.equal(overview.completed, true);
+  const statuses = new Map(
+    (await service.getParticipantsOverview(tournament.id)).participants.map((participant) => (
+      [participant.id, participant.status]
+    ))
+  );
+  assert.deepEqual(
+    [p1, p2, p3, p4, p5].map((participant) => statuses.get(participant.id)),
+    ["checked_in", "checked_in", "checked_in", "checked_in", "registered"]
+  );
+
+  await assert.rejects(
+    service.previewImportedSwissRound(tournament.id, {
+      matches: [{ participant_a_id: p1.id, participant_b_id: p5.id }],
+    }),
+    (error) => error?.code === "PARTICIPANT_NOT_ACTIVE",
+    "only the first round can check players in"
+  );
+});
+
+test("remembers external names as aliases for later rounds", async (t) => {
+  const { service } = await createContext(t);
+  const { tournament, participants: [p1, p2, p3, p4] } = await createCheckedInTournament(
+    service,
+    4,
+    "aliases"
+  );
+  const matches = [
+    { participant_a_id: p1.id, participant_b_id: p2.id },
+    { participant_a_id: p3.id, participant_b_id: p4.id },
+  ];
+  await assert.rejects(
+    service.confirmImportedSwissRound(tournament.id, {
+      matches,
+      aliases: [{ alias: "Somebody", participant_id: "ipp_missing" }],
+    }),
+    (error) => error?.code === "ALIAS_PARTICIPANT_NOT_FOUND"
+  );
+  assert.equal((await service.getSwissOverview(tournament.id)).rounds.length, 0);
+
+  let overview = await service.confirmImportedSwissRound(tournament.id, {
+    matches,
+    aliases: [
+      { alias: "Timofei Gretšenko", participant_id: p1.id },
+      { alias: "  ", participant_id: p2.id },
+    ],
+  });
+  assert.equal(overview.aliases_saved, 1);
+  assert.deepEqual(overview.import_aliases, [
+    { alias: "Timofei Gretšenko", alias_key: "timofei gretsenko", participant_id: p1.id },
+  ]);
+
+  const [tableOne] = overview.current_round.matches;
+  overview = await service.importSwissRoundResults(tournament.id, overview.current_round.id, {
+    aliases: [{ alias: "TIMOFEI GRETSENKO", participant_id: p2.id }],
+    results: [{ match_id: tableOne.id, result_type: "simple", winner_participant_id: p1.id }],
+  });
+  assert.deepEqual(overview.import_aliases, [
+    { alias: "TIMOFEI GRETSENKO", alias_key: "timofei gretsenko", participant_id: p2.id },
+  ], "a later choice for the same name replaces the earlier one");
+
 });

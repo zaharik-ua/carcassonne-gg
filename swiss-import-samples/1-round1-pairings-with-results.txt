@@ -1,0 +1,27 @@
+Nr	White	Black	Result
+1	Georgios Kyriazidis	Matthieu Hingant	70−75
+2	Borislav Aymaliyev	Qin Xiangyu	68−76
+3	David Faraci	Tomasz Preuss	101−97
+4	Kęstutis Kurienius	Nopphon Charoenkham	98−97
+5	Gert Versteeg	Stefan Jonsson	111−111
+6	Giulio Tomao	Naoki Yamaguchi	88−88
+7	Bogdan Curcan	Zvonimir Vlaic	62−101
+8	Tim Stratmann	Auste Idaite	+−
+9	Óscar Méndez	Otto Ikonen	68−90
+10	Daniel Ayala	Tatiana Usenko	101−93
+11	Pavel Raus	Edzus Kaukis	75−87
+12	Timofei Gretšenko	Sergio Antolinez	84−86
+13	Yu−Syuan Peng	André Namay−Quiñones−Salomon	94−102
+14	Matt Tucker	Pedro Antunes	0−1
+15	Osvaldo del Arco	Kyrylo Manakhov	+−
+16	Núria Casanovas	Vladimir Kovalev	80−91
+17	Carman Tang	Arpad Gere	103−107
+18	Daniel Angelats	Nahuel Vignatti	81−63
+19	Hogne Jorgensen	Mikhail Lapushynski	85−85
+20	Aleksejs Pegusevs	Horacio Mastandrea	67−87
+21	Roey Chalatzy	Erick Matheus	97−93
+22	Tomislav Buhinicek	Jozsef Tihon	89−94
+23	Malin Malmberg	Satoshi Kitamura	100−93
+24	Marlon Marquez	Adrian Hackl	95−78
+25	Vladimir Chendev	Raf Mesotten	98−92
+26	Yi Liu	Sotaro Nagai	63−98
